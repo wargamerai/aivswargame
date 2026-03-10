@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+body { background:#f5f5fa; color:#222; font-family:monospace; padding:12px; font-size:0.95em; overflow-y:auto; }
+h3 { color:#1a5a8a; margin-bottom:8px; }
+h4 { color:#1a5a8a; margin:10px 0 5px; border-bottom:1px solid #ccc; padding-bottom:3px; }
+.report { background:#f0f0f0; border:1px solid #bbb; border-radius:4px; padding:10px; margin:8px 0; }
+table { width:100%; border-collapse:collapse; font-size:0.9em; margin-top:5px; }
+th { background:#e0e8f0; color:#444; padding:4px 6px; border:1px solid #ccc; text-align:left; }
+td { padding:4px 6px; border:1px solid #ddd; }
+.ok     { color:#2a8a2a; }
+.light  { color:#aa8800; }
+.medium { color:#cc6600; }
+.heavy  { color:#cc2200; }
+.sunk   { color:#cc0000; font-weight:bold; }
+.crit   { color:#aa00aa; font-size:0.85em; }
+.jp { color:#cc3311; } .us { color:#2255cc; }
+#scoreBox { background:#f0f0f0; border:1px solid #bbb; padding:10px; border-radius:4px; margin:10px 0; font-size:1em; }
+.score-line { margin:4px 0; }
+.winner { color:#8a6a00; font-size:1.15em; font-weight:bold; }
+button {
+  background:#dde4f0; color:#334; border:1px solid #99a;
+  padding:6px 12px; font-size:0.95em; cursor:pointer; border-radius:3px; margin:5px 3px 0 0; font-weight:bold;
+}
+button:hover { background:#c8d4ee; }
+button.send { background:#d0f0d0; border-color:#2a8a2a; color:#1a5a1a; }
+button.send:hover { background:#b8e8b8; }
+</style>
+</head>
+<body>
+<h3>戦闘レポート</h3>
+
+<div id="reportContent"></div>
+
+<div id="actionButtons" style="margin-top:12px;">
+  <button onclick="goNextTurn()" id="btnNextTurn">次のターンへ</button>
+  <button class="send" onclick="sendToCampaign()">キャンペーンに戻る（戦闘終了）</button>
+</div>
+
+<script>
+let state = null;
+
+function statusLabel(s) {
+  return {ok:'無傷',light:'小破',medium:'中破',heavy:'大破',sunk:'沈没',exited:'離脱'}[s]||s;
+}
+
+// 霧モード用：自軍損害を曖昧表示
+function fuzzyStatus(s) {
+  if (s.status === 'sunk')   return '沈没確認';
+  if (s.status === 'heavy')  return '大損傷か？';
+  if (s.status === 'medium') return '損傷中';
+  if (s.status === 'light')  return '被弾あり';
+  return '異常なし？';
+}
+function statusClass(s) {
+  return {ok:'ok',light:'light',medium:'medium',heavy:'heavy',sunk:'sunk',exited:'sunk'}[s]||'ok';
+}
+
+function calcVP(fleet, enemySide) {
+  let vp = 0;
+  for (const s of fleet) {
+    if (s.status==='sunk') {
+      vp += (s.capG + s.capM) * s.vp;
+    } else {
+      vp += ((s.dmgG||0) + (s.dmgM||0)) * s.vp;
+    }
+  }
+  return vp;
+}
+
+function init() {
+  const raw = localStorage.getItem('hubState');
+  if (!raw) { document.getElementById('reportContent').textContent='データなし'; return; }
+  state = JSON.parse(raw);
+  renderReport();
+  // 10ターン経過 → 次ターンボタン無効化
+  if (state.combatTurn >= 10) {
+    const btn = document.getElementById('btnNextTurn');
+    if (btn) { btn.disabled = true; btn.textContent = '戦闘終了（10ターン経過）'; }
+  }
+}
+
+function renderReport() {
+  const jp = state.jpFleet || [];
+  const us = state.usFleet || [];
+
+  const jpSunk    = jp.filter(s=>s.status==='sunk');
+  const jpHeavy   = jp.filter(s=>s.status==='heavy');
+  const jpMedium  = jp.filter(s=>s.status==='medium');
+  const jpLight   = jp.filter(s=>s.status==='light');
+  const jpOk      = jp.filter(s=>s.status==='ok');
+
+  const usSunk    = us.filter(s=>s.status==='sunk');
+  const usHeavy   = us.filter(s=>s.status==='heavy');
+  const usMedium  = us.filter(s=>s.status==='medium');
+  const usLight   = us.filter(s=>s.status==='light');
+  const usOk      = us.filter(s=>s.status==='ok');
+
+  // VP: each side earns points for damage dealt to enemy
+  const jpEarned = calcVP(us, 'jp'); // damage on US = JP earns
+  const usEarned = calcVP(jp, 'us'); // damage on JP = US earns
+
+  const combatTurn = state.combatTurn || 0;
+
+  let html = '';
+
+  // Summary
+  html += `<div class="report">`;
+  html += `<h4>戦闘概要</h4>`;
+  html += `<div>戦闘ターン数: <strong>${combatTurn}</strong></div>`;
+  html += `<div>視認距離: ${state.spotRange||'-'} hex</div>`;
+  html += `<div>先攻: ${state.initiative==='jp'?'<span class="jp">日本軍</span>':'<span class="us">米軍</span>'}</div>`;
+  html += `</div>`;
+
+  // Score
+  html += `<div id="scoreBox">`;
+  html += `<div class="score-line jp">🎌 日本軍獲得得点: <strong>${jpEarned}</strong> pt</div>`;
+  html += `<div class="score-line us">🦅 米軍獲得得点: <strong>${usEarned}</strong> pt</div>`;
+  const winner = jpEarned > usEarned ? '日本軍勝利' : jpEarned < usEarned ? '米軍勝利' : '引き分け';
+  const wc = jpEarned > usEarned ? 'jp' : jpEarned < usEarned ? 'us' : 'ok';
+  html += `<div class="winner ${wc}">→ ${winner}</div>`;
+  html += `</div>`;
+
+  // JP fleet table
+  html += `<div class="report">`;
+  html += `<h4 class="jp">🎌 日本軍艦隊</h4>`;
+  const fog = !!state.fogMode;
+  html += `<table><tr><th>艦名</th><th>艦種</th><th>G損害</th><th>M損害</th><th>状態</th><th>クリティカル</th></tr>`;
+  for (const s of jp) {
+    const sc = statusClass(s.status);
+    const gd = fog ? '???' : `${s.dmgG||0}/${s.capG}`;
+    const md = fog ? '???' : `${s.dmgM||0}/${s.capM}`;
+    const st = fog ? fuzzyStatus(s) : statusLabel(s.status);
+    const crits = (s.crits && s.crits.length > 0) ? `<span class="crit">${s.crits.join(', ')}</span>` : '-';
+    html += `<tr><td>${s.name}</td><td>${s.type}</td>
+      <td>${gd}</td><td>${md}</td>
+      <td class="${sc}">${st}</td><td>${fog ? '???' : crits}</td></tr>`;
+  }
+  html += `</table>`;
+  html += `<div style="margin-top:4px;color:#889;font-size:0.75em">`;
+  if (jpSunk.length)   html += `沈没: ${jpSunk.map(s=>s.name).join(', ')}<br>`;
+  if (jpHeavy.length)  html += `大破: ${jpHeavy.map(s=>s.name).join(', ')}<br>`;
+  if (jpMedium.length) html += `中破: ${jpMedium.map(s=>s.name).join(', ')}<br>`;
+  if (jpLight.length)  html += `小破: ${jpLight.map(s=>s.name).join(', ')}`;
+  html += `</div></div>`;
+
+  // US fleet table
+  html += `<div class="report">`;
+  html += `<h4 class="us">🦅 米軍艦隊</h4>`;
+  html += `<table><tr><th>艦名</th><th>艦種</th><th>状態（推定）</th><th>クリティカル</th></tr>`;
+  for (const s of us) {
+    const sc = statusClass(s.status);
+    if (fog) {
+      // 霧モード：敵の損害は沈没のみ確実。他は目撃談
+      const est = s.status==='sunk' ? '<span class="sunk">沈没目撃</span>'
+        : s.onFire ? '<span class="heavy">炎上中</span>'
+        : '不明';
+      const fogCrit = s.onFire ? '<span class="crit">炎上</span>' : '不明';
+      html += `<tr><td>${s.name}</td><td>???</td><td>${est}</td><td>${fogCrit}</td></tr>`;
+    } else {
+      const crits = (s.crits && s.crits.length > 0) ? `<span class="crit">${s.crits.join(', ')}</span>` : '-';
+      html += `<tr><td>${s.name}</td><td>${s.type}</td>
+        <td class="${sc}">${statusLabel(s.status)} (G:${s.dmgG||0} M:${s.dmgM||0})</td><td>${crits}</td></tr>`;
+    }
+  }
+  html += `</table>`;
+  html += `<div style="margin-top:4px;color:#889;font-size:0.75em">`;
+  if (usSunk.length)   html += `沈没: ${usSunk.map(s=>s.name).join(', ')}<br>`;
+  if (usHeavy.length)  html += `大破: ${usHeavy.map(s=>s.name).join(', ')}<br>`;
+  if (usMedium.length) html += `中破: ${usMedium.map(s=>s.name).join(', ')}<br>`;
+  if (usLight.length)  html += `小破: ${usLight.map(s=>s.name).join(', ')}`;
+  html += `</div></div>`;
+
+  document.getElementById('reportContent').innerHTML = html;
+
+  // Save result for campaign
+  const allFleet = [...jp, ...us];
+  const result = allFleet.map(s => ({
+    name:   s.name,
+    dmgG:   s.dmgG || 0,
+    dmgM:   s.dmgM || 0,
+    status: s.status,
+  }));
+  localStorage.setItem('battleResult', JSON.stringify(result));
+}
+
+function sendToCampaign() {
+  const raw = localStorage.getItem('battleResult');
+  if (!raw) { alert('データなし'); return; }
+  const data = JSON.parse(raw);
+  const forCampaign = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status}));
+  localStorage.setItem('battleResultForCampaign', JSON.stringify(forCampaign));
+  // キャンペーン画面を開く（同じタブで遷移）
+  window.top.location.href = 'campaign.html';
+}
+
+function goNextTurn() {
+  // hubのnextTurn()を呼んで次ターンへ
+  parent.postMessage({type:'NEXT_TURN'}, '*');
+}
+
+init();
+</script>
+</body>
+</html>

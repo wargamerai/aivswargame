@@ -1,0 +1,3326 @@
+{
+  "JP_d2_e0_f1_s2_t0_b0_h0": {
+    "charge_nearest": 158.06448052348492,
+    "charge_priority": 159.75543260102907,
+    "flank": 148.66569741532697,
+    "support_friend": 166.40165129145785,
+    "defend_position": 164.14646062800898,
+    "retreat": 163.23074777953505,
+    "destroy_bridge": 206.57372291782286
+  },
+  "JP_d3_e0_f0_s2_t1_b0_h0": {
+    "charge_nearest": 235.23066747491023,
+    "charge_priority": 230.13922641640707,
+    "flank": 228.82852944669207,
+    "support_friend": 229.95629213337517,
+    "defend_position": 238.76906559226913,
+    "retreat": 233.33116261548915,
+    "destroy_bridge": 196.64027002501598
+  },
+  "JP_d4_e0_f0_s2_t1_b0_h0": {
+    "charge_nearest": 228.8121928459389,
+    "charge_priority": 201.76644009282057,
+    "flank": 223.42318061462865,
+    "support_friend": 228.69461879695743,
+    "defend_position": 231.05730410959615,
+    "retreat": 233.96443563200796,
+    "destroy_bridge": 201.94023366511937
+  },
+  "JP_d4_e0_f2_s2_t0_b0_h0": {
+    "charge_nearest": 181.54343745454764,
+    "charge_priority": 0.0,
+    "flank": 29.49953822607887,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 22.690692437704293,
+    "destroy_bridge": 20.34791986359766
+  },
+  "JP_d4_e0_f2_s2_t1_b0_h0": {
+    "charge_nearest": 220.71614683879676,
+    "charge_priority": 68.25965206580251,
+    "flank": 44.20216416114708,
+    "support_friend": 84.68706015059797,
+    "defend_position": 49.09277381663865,
+    "retreat": 72.49786440021383,
+    "destroy_bridge": 58.85416387442432
+  },
+  "SOV_d4_e0_f1_s2_t0_b0_h0": {
+    "charge_nearest": 168.32525064950963,
+    "charge_priority": 161.11025019588965,
+    "flank": 165.3643643309778,
+    "support_friend": 155.0226191631679,
+    "defend_position": 171.28463511313205,
+    "retreat": 193.36108369904917
+  },
+  "SOV_d4_e0_f1_s2_t1_b0_h0": {
+    "charge_nearest": 101.36429420197634,
+    "charge_priority": 98.05052635652777,
+    "flank": 121.54546444434466,
+    "support_friend": 121.69085686319544,
+    "defend_position": 98.01140442264276,
+    "retreat": 124.40993317883576
+  },
+  "SOV_d4_e0_f0_s1_t0_b0_h1": {
+    "charge_nearest": 145.29579372739403,
+    "charge_priority": 163.18865960413032,
+    "flank": 145.62564815681787,
+    "support_friend": 204.19776510473045,
+    "defend_position": 158.02086911385396,
+    "retreat": 162.69373897602281
+  },
+  "JP_d4_e0_f1_s2_t1_b0_h0": {
+    "charge_nearest": 216.1457316904087,
+    "charge_priority": 173.07738271804735,
+    "flank": 188.55694444973912,
+    "support_friend": 209.65346249967868,
+    "defend_position": 210.74162488891022,
+    "retreat": 211.74327168498343,
+    "destroy_bridge": 199.17858111450698
+  },
+  "JP_d4_e0_f0_s2_t0_b0_h1": {
+    "charge_nearest": 105.51694848985007,
+    "charge_priority": 90.59327828465736,
+    "flank": 76.89034526498635,
+    "support_friend": 21.058914960958745,
+    "defend_position": -1.4329458094185057,
+    "retreat": 47.1722284927967,
+    "destroy_bridge": 248.41165209605953
+  },
+  "SOV_d3_e0_f1_s2_t0_b0_h0": {
+    "charge_nearest": 169.70823489222497,
+    "charge_priority": 211.41818608922134,
+    "flank": 177.54026792641704,
+    "support_friend": 170.93977181988922,
+    "defend_position": 181.54905578138718,
+    "retreat": 182.9990463059034
+  },
+  "SOV_d4_e0_f0_s2_t1_b0_h0": {
+    "charge_nearest": 113.77171591167753,
+    "charge_priority": 127.57983750295068,
+    "flank": 131.51838537439426,
+    "support_friend": 123.75339535492051,
+    "defend_position": 151.15880442777546,
+    "retreat": 128.53193159005184
+  },
+  "SOV_d3_e0_f0_s1_t0_b0_h1": {
+    "charge_nearest": 139.43055105442332,
+    "charge_priority": 141.31096996812835,
+    "flank": 140.4069764334996,
+    "support_friend": 149.07866451733238,
+    "defend_position": 193.31083105529595,
+    "retreat": 148.68869817496233
+  },
+  "SOV_d1_e1_f1_s2_t0_b0_h0": {
+    "charge_nearest": 122.29804237269032,
+    "charge_priority": 109.2337233082883,
+    "flank": 102.34428197770912,
+    "support_friend": 35.39871643898377,
+    "defend_position": 122.29995132967515,
+    "retreat": 171.63943444936191
+  },
+  "SOV_d2_e0_f1_s2_t1_b0_h0": {
+    "charge_nearest": 58.02030139660896,
+    "charge_priority": 111.75371846051755,
+    "flank": 117.61635428234611,
+    "support_friend": 98.35705879452996,
+    "defend_position": 99.4032957813224,
+    "retreat": 177.59348206102118
+  },
+  "JP_d3_e0_f0_s2_t0_b0_h1": {
+    "charge_nearest": 214.21632891595186,
+    "charge_priority": 205.81546245745798,
+    "flank": 104.99639347807235,
+    "support_friend": 91.89361630843494,
+    "defend_position": 146.30150864348937,
+    "retreat": 106.16076603130244,
+    "destroy_bridge": 129.71560722327683
+  },
+  "JP_d1_e1_f0_s1_t1_b0_h0": {
+    "charge_nearest": -19.44642369334523,
+    "charge_priority": -23.56144274998163,
+    "flank": -47.79786526852642,
+    "support_friend": -46.861061441891735,
+    "defend_position": -30.3077838842658,
+    "retreat": 109.76690693161723,
+    "destroy_bridge": -16.376772011245066
+  },
+  "JP_d2_e0_f1_s2_t1_b0_h0": {
+    "charge_nearest": 176.47470221023923,
+    "charge_priority": 189.03700322015024,
+    "flank": 227.2628875559143,
+    "support_friend": 236.9199156363308,
+    "defend_position": 226.73856840693145,
+    "retreat": 253.1203916335792,
+    "destroy_bridge": 211.45335689702046
+  },
+  "JP_d3_e0_f0_s2_t0_b0_h0": {
+    "charge_nearest": 101.97843223855942,
+    "charge_priority": 115.30745291077744,
+    "flank": 136.05034534968493,
+    "support_friend": 143.68678672506832,
+    "defend_position": 142.6621190163336,
+    "retreat": 149.97764359940982,
+    "destroy_bridge": 106.9239548045829
+  },
+  "JP_d2_e0_f0_s1_t1_b0_h0": {
+    "charge_nearest": 46.75744554005675,
+    "charge_priority": 13.96553703966847,
+    "flank": -8.330612032372624,
+    "support_friend": 58.76656210412314,
+    "defend_position": 90.10698848212041,
+    "retreat": 36.223651008956985,
+    "destroy_bridge": 117.8559535705237
+  },
+  "JP_d1_e1_f0_s2_t1_b0_h0": {
+    "charge_nearest": 173.73025472905223,
+    "charge_priority": 179.5680041238959,
+    "flank": 188.57814485426292,
+    "support_friend": 136.5273781860377,
+    "defend_position": 122.24164797713522,
+    "retreat": 144.1773750618572,
+    "destroy_bridge": 179.07356371074746
+  },
+  "SOV_d1_e1_f0_s1_t0_b0_h0": {
+    "charge_nearest": 38.41811728866186,
+    "charge_priority": 32.2428027829791,
+    "flank": -10.1199520046419,
+    "support_friend": 10.13648275655919,
+    "defend_position": 73.72437049267582,
+    "retreat": 116.23571785723473
+  },
+  "JP_d4_e0_f0_s1_t1_b0_h0": {
+    "charge_nearest": -59.447571571764385,
+    "charge_priority": 13.5890013150036,
+    "flank": 54.911200689670885,
+    "support_friend": -1.506717154850179,
+    "defend_position": 123.97728421379915,
+    "retreat": 127.18429859543991,
+    "destroy_bridge": 124.13029339612997
+  },
+  "JP_d4_e0_f1_s2_t0_b0_h0": {
+    "charge_nearest": 152.56590591063497,
+    "charge_priority": 139.62707072666507,
+    "flank": 147.49424758902052,
+    "support_friend": 156.5527685184027,
+    "defend_position": 98.5342214414367,
+    "retreat": 123.42283462962808,
+    "destroy_bridge": 165.98876668403886
+  },
+  "SOV_d3_e0_f0_s2_t1_b0_h0": {
+    "charge_nearest": 142.7008759149816,
+    "charge_priority": 137.43814466771792,
+    "flank": 134.2136236953129,
+    "support_friend": 132.48039520093266,
+    "defend_position": 138.23341258148662,
+    "retreat": 143.72097247952004
+  },
+  "SOV_d3_e0_f1_s2_t1_b0_h0": {
+    "charge_nearest": 124.12883113727773,
+    "charge_priority": 123.3556575956847,
+    "flank": 125.68736378210991,
+    "support_friend": 125.84400584778199,
+    "defend_position": 135.21029023002163,
+    "retreat": 87.99485868529948
+  },
+  "JP_d3_e0_f1_s2_t0_b0_h0": {
+    "charge_nearest": 203.69388491372894,
+    "charge_priority": 184.85395383094894,
+    "flank": 177.49498754501238,
+    "support_friend": 154.51343118705995,
+    "defend_position": 180.80006379794955,
+    "retreat": 175.74675464646495,
+    "destroy_bridge": 179.9514543884448
+  },
+  "JP_d3_e0_f1_s2_t1_b0_h0": {
+    "charge_nearest": 189.53300164431238,
+    "charge_priority": 199.16416730830696,
+    "flank": 202.11113062859746,
+    "support_friend": 208.2616904083655,
+    "defend_position": 205.4362769160977,
+    "retreat": 205.3234521196839,
+    "destroy_bridge": 186.51210284794155
+  },
+  "SOV_d2_e0_f1_s2_t0_b0_h0": {
+    "charge_nearest": 161.33705385160943,
+    "charge_priority": 214.35207639537364,
+    "flank": 150.20168374436574,
+    "support_friend": 150.01989766736108,
+    "defend_position": 130.4277615521217,
+    "retreat": 160.52578662563477
+  },
+  "SOV_d1_e1_f1_s1_t1_b0_h0": {
+    "charge_nearest": 45.641807450512104,
+    "charge_priority": 48.835119609385906,
+    "flank": 37.1792252918616,
+    "support_friend": 70.38838004759494,
+    "defend_position": 60.37107500841548,
+    "retreat": 60.47540135885133
+  },
+  "SOV_d2_e0_f0_s1_t0_b0_h0": {
+    "charge_nearest": 45.56203709904959,
+    "charge_priority": 73.3029592655003,
+    "flank": 29.23938739980072,
+    "support_friend": 165.3587708516019,
+    "defend_position": 189.5982071510505,
+    "retreat": 119.72650417608591
+  },
+  "SOV_d4_e0_f1_s1_t0_b0_h1": {
+    "charge_nearest": 110.30791666054799,
+    "charge_priority": 109.72219180067476,
+    "flank": 110.49936978701894,
+    "support_friend": 107.28004737049928,
+    "defend_position": 111.81297698830485,
+    "retreat": 109.8593482265488
+  },
+  "SOV_d4_e0_f1_s2_t0_b0_h1": {
+    "charge_nearest": 182.28817129496295,
+    "charge_priority": 167.08755774118035,
+    "flank": 150.5369183679832,
+    "support_friend": 159.84041990003558,
+    "defend_position": 142.99049111810862,
+    "retreat": 128.0812969735448
+  },
+  "SOV_d1_e1_f0_s1_t1_b0_h0": {
+    "charge_nearest": 46.56995849378038,
+    "charge_priority": 12.08006727919573,
+    "flank": -8.547093286781177,
+    "support_friend": 19.141698663808793,
+    "defend_position": -4.218907724205458,
+    "retreat": 80.04158224769184
+  },
+  "JP_d2_e0_f0_s2_t1_b0_h0": {
+    "charge_nearest": 216.38914651719026,
+    "charge_priority": 197.57052285741815,
+    "flank": 217.97524087312786,
+    "support_friend": 206.40246974690416,
+    "defend_position": 224.99050769004123,
+    "retreat": 250.85661895250922,
+    "destroy_bridge": 206.26072529674187
+  },
+  "JP_d1_e1_f1_s1_t1_b0_h0": {
+    "charge_nearest": -2.901142141851743,
+    "charge_priority": 33.03279567313495,
+    "flank": 31.742780632087065,
+    "support_friend": 133.67983786008423,
+    "defend_position": 9.166105521064154,
+    "retreat": 34.694475123023,
+    "destroy_bridge": 14.01874442636595
+  },
+  "JP_d4_e0_f1_s1_t1_b0_h0": {
+    "charge_nearest": 63.9405313627591,
+    "charge_priority": 118.01433645407936,
+    "flank": 61.84491469280589,
+    "support_friend": 49.396726623989096,
+    "defend_position": 52.03541064813385,
+    "retreat": 67.44338606276229,
+    "destroy_bridge": 50.53357284947367
+  },
+  "SOV_d3_e0_f0_s2_t0_b0_h0": {
+    "charge_nearest": 143.95511722509463,
+    "charge_priority": 176.91679527943123,
+    "flank": 149.90950018076015,
+    "support_friend": 116.71396527107825,
+    "defend_position": 149.08815853186042,
+    "retreat": 150.3856848158385
+  },
+  "SOV_d2_e0_f0_s2_t0_b0_h0": {
+    "charge_nearest": 164.9728804390466,
+    "charge_priority": 153.90138427388408,
+    "flank": 158.97222848750158,
+    "support_friend": 118.58775214675697,
+    "defend_position": 166.9140610666639,
+    "retreat": 168.84481575495917
+  },
+  "SOV_d1_e2_f0_s2_t0_b0_h0": {
+    "charge_nearest": 13.394225622008031,
+    "charge_priority": 0.0,
+    "flank": 5.880239145,
+    "support_friend": 188.13925377537893,
+    "defend_position": 39.77985993558716,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f0_s2_t0_b0_h0": {
+    "charge_nearest": 175.1658338194584,
+    "charge_priority": 83.11211210551309,
+    "flank": 67.16182218429539,
+    "support_friend": 65.88103517111183,
+    "defend_position": 12.571546612565832,
+    "retreat": 56.6961388930935,
+    "destroy_bridge": 128.5529132368829
+  },
+  "JP_d4_e0_f1_s1_t0_b0_h0": {
+    "charge_nearest": 61.151243671124156,
+    "charge_priority": 64.83834566541552,
+    "flank": 60.107583658426705,
+    "support_friend": 56.15643337540806,
+    "defend_position": 54.284243588762706,
+    "retreat": 13.869871124462588,
+    "destroy_bridge": 64.31035055200692
+  },
+  "JP_d3_e0_f0_s1_t1_b0_h0": {
+    "charge_nearest": -133.83691450195047,
+    "charge_priority": -68.57727532450959,
+    "flank": 33.2314849916692,
+    "support_friend": 44.300084725034395,
+    "defend_position": 76.13149550334573,
+    "retreat": 92.22434356620384,
+    "destroy_bridge": 129.35510967197806
+  },
+  "JP_d3_e0_f1_s1_t1_b0_h0": {
+    "charge_nearest": -64.78562945124582,
+    "charge_priority": -22.383635231482664,
+    "flank": 20.77003826981774,
+    "support_friend": 115.63395544306107,
+    "defend_position": 33.59556988396794,
+    "retreat": 68.32200786506228,
+    "destroy_bridge": 20.152885443897688
+  },
+  "JP_d3_e0_f1_s1_t0_b0_h0": {
+    "charge_nearest": 76.75813268833659,
+    "charge_priority": 75.28281214275151,
+    "flank": 63.861858356782115,
+    "support_friend": 69.23542245878168,
+    "defend_position": 39.72887999357394,
+    "retreat": 31.102200773135447,
+    "destroy_bridge": 14.9311236593459
+  },
+  "SOV_d1_e1_f0_s1_t0_b0_h1": {
+    "charge_nearest": -201.71645757445032,
+    "charge_priority": -166.31855011681415,
+    "flank": -197.8652115954987,
+    "support_friend": 158.05670258107824,
+    "defend_position": -141.1250219054565,
+    "retreat": -160.64077687866333
+  },
+  "SOV_d2_e0_f0_s1_t0_b0_h1": {
+    "charge_nearest": 148.89381246242397,
+    "charge_priority": 147.25376595648038,
+    "flank": 135.94898541816372,
+    "support_friend": 160.68542923277622,
+    "defend_position": 152.74362213513584,
+    "retreat": 197.06910294641827
+  },
+  "JP_d3_e0_f1_s2_t1_b1_h0": {
+    "charge_nearest": 98.01312083006337,
+    "charge_priority": 185.49240573979597,
+    "flank": 109.02168778842419,
+    "support_friend": 134.46680250844227,
+    "defend_position": 135.7900290690009,
+    "retreat": 134.03044627334813
+  },
+  "JP_d4_e0_f0_s2_t1_b1_h0": {
+    "charge_nearest": 133.0747230404514,
+    "charge_priority": 112.35123582030621,
+    "flank": 110.30862545895889,
+    "support_friend": 54.037399391962296,
+    "defend_position": 131.74221798678434,
+    "retreat": 194.72679060495292
+  },
+  "JP_d2_e0_f1_s2_t0_b1_h0": {
+    "charge_nearest": 154.6723231985778,
+    "charge_priority": 141.43376959702402,
+    "flank": 266.5386237234048,
+    "support_friend": 119.34189799206702,
+    "defend_position": 111.58341661258834,
+    "retreat": 146.4730375987428
+  },
+  "JP_d2_e0_f1_s2_t1_b1_h0": {
+    "charge_nearest": 169.6189584047603,
+    "charge_priority": 165.0017816829429,
+    "flank": 156.89161287659488,
+    "support_friend": 173.93264026603416,
+    "defend_position": 203.55720667637414,
+    "retreat": 172.21719676738778
+  },
+  "SOV_d4_e0_f1_s2_t0_b1_h0": {
+    "charge_nearest": 132.25909181607457,
+    "charge_priority": 141.29016962033035,
+    "flank": 112.12953545160421,
+    "support_friend": 125.9248595379766,
+    "defend_position": 127.26483828678671,
+    "retreat": 139.12431925531038
+  },
+  "SOV_d4_e0_f0_s2_t1_b1_h0": {
+    "charge_nearest": 142.12994085116475,
+    "charge_priority": 141.16191092007244,
+    "flank": 137.62480336374455,
+    "support_friend": 146.17595278468448,
+    "defend_position": 127.77463583933678,
+    "retreat": 143.9041122382792
+  },
+  "SOV_d2_e0_f0_s1_t0_b1_h0": {
+    "charge_nearest": 24.59350349933807,
+    "charge_priority": 63.35118739763152,
+    "flank": 48.01754555113417,
+    "support_friend": 77.10593460670383,
+    "defend_position": 69.13942376783444,
+    "retreat": 192.11040828855357
+  },
+  "SOV_d4_e0_f0_s1_t0_b1_h1": {
+    "charge_nearest": 96.70498013257131,
+    "charge_priority": 95.64649700665124,
+    "flank": 76.55142042685424,
+    "support_friend": 164.90294679062015,
+    "defend_position": 95.14401749410884,
+    "retreat": 93.6044737173674
+  },
+  "SOV_d1_e1_f1_s2_t0_b1_h0": {
+    "charge_nearest": 151.19821352399646,
+    "charge_priority": 71.30915343879965,
+    "flank": 81.045496822259,
+    "support_friend": 60.26360565976517,
+    "defend_position": 58.400737133237115,
+    "retreat": 122.58804984355609
+  },
+  "SOV_d1_e1_f1_s1_t1_b1_h0": {
+    "charge_nearest": 73.34743345685445,
+    "charge_priority": 38.188961223534285,
+    "flank": 89.95729092459825,
+    "support_friend": 73.26371508557935,
+    "defend_position": 46.21241847595784,
+    "retreat": 118.85610464332716
+  },
+  "JP_d3_e0_f0_s2_t0_b1_h0": {
+    "charge_nearest": 115.8935048040477,
+    "charge_priority": 96.00361031256766,
+    "flank": 175.49276657658055,
+    "support_friend": 120.73983633744929,
+    "defend_position": 125.12996806513519,
+    "retreat": 107.73641999175332
+  },
+  "JP_d1_e2_f1_s2_t1_b1_h0": {
+    "charge_nearest": 222.7754667257125,
+    "charge_priority": 89.32437520652965,
+    "flank": 92.53497712006124,
+    "support_friend": 71.47562212691798,
+    "defend_position": 107.9806610375062,
+    "retreat": 22.733472011770672
+  },
+  "JP_d3_e0_f0_s2_t1_b1_h0": {
+    "charge_nearest": 117.18328420748578,
+    "charge_priority": 133.11324906968372,
+    "flank": 93.83215192112922,
+    "support_friend": 201.27952919909228,
+    "defend_position": 161.4233993368722,
+    "retreat": 160.20169866885834
+  },
+  "JP_d1_e1_f1_s2_t0_b1_h0": {
+    "charge_nearest": 216.51996930888907,
+    "charge_priority": 5.301554048782204,
+    "flank": -31.719578708256236,
+    "support_friend": 64.11797130399927,
+    "defend_position": 48.860327166928684,
+    "retreat": 67.18543964751498
+  },
+  "JP_d1_e1_f1_s2_t1_b1_h0": {
+    "charge_nearest": 166.06452364273957,
+    "charge_priority": 148.5417053866294,
+    "flank": 225.7577437871746,
+    "support_friend": 144.05468567045037,
+    "defend_position": 168.85771505676243,
+    "retreat": 168.25208805138962
+  },
+  "SOV_d1_e2_f0_s1_t1_b1_h0": {
+    "charge_nearest": 58.218522462583316,
+    "charge_priority": 0.0,
+    "flank": 3.333333333333334,
+    "support_friend": 126.54417128045759,
+    "defend_position": 25.52878601169157,
+    "retreat": 56.10621753504888
+  },
+  "SOV_d1_e1_f0_s1_t1_b1_h0": {
+    "charge_nearest": 72.47323709637935,
+    "charge_priority": 95.71143398124987,
+    "flank": 65.9563263353627,
+    "support_friend": 78.54977173314532,
+    "defend_position": 52.83240435369635,
+    "retreat": 70.42732608265001
+  },
+  "JP_d4_e0_f0_s2_t0_b1_h0": {
+    "charge_nearest": 222.20763278738775,
+    "charge_priority": 107.82292523917968,
+    "flank": 75.70259066079375,
+    "support_friend": 113.30769121593053,
+    "defend_position": 84.98883613496724,
+    "retreat": 82.92062366508242
+  },
+  "JP_d2_e0_f0_s2_t1_b1_h0": {
+    "charge_nearest": 80.08754507791875,
+    "charge_priority": 59.574603734772936,
+    "flank": 31.706708262744833,
+    "support_friend": 115.62861608034653,
+    "defend_position": 141.64106142135367,
+    "retreat": 282.3569966769738
+  },
+  "SOV_d2_e0_f0_s1_t0_b1_h1": {
+    "charge_nearest": 104.94658484705839,
+    "charge_priority": 89.022939826117,
+    "flank": 74.519189968665,
+    "support_friend": 115.20083279373873,
+    "defend_position": 113.74321417636871,
+    "retreat": 113.55538661821801
+  },
+  "JP_d4_e0_f1_s2_t1_b1_h0": {
+    "charge_nearest": 176.64295128367667,
+    "charge_priority": 99.9934571165098,
+    "flank": 120.05912090916698,
+    "support_friend": 133.83700265837356,
+    "defend_position": 133.26130341656648,
+    "retreat": 133.39275215213453
+  },
+  "JP_d1_e1_f0_s2_t1_b1_h0": {
+    "charge_nearest": 6.235023106346372,
+    "charge_priority": -78.26360176236255,
+    "flank": 20.128091079552892,
+    "support_friend": 198.87984663175968,
+    "defend_position": -23.19243033292458,
+    "retreat": -21.732061347059883
+  },
+  "SOV_d1_e1_f0_s1_t0_b1_h1": {
+    "charge_nearest": -401.44993152185606,
+    "charge_priority": -370.2273210359837,
+    "flank": -445.28925324609145,
+    "support_friend": -314.6606586581813,
+    "defend_position": -364.42905956450204,
+    "retreat": -364.4199539493015
+  },
+  "SOV_d1_e1_f0_s1_t0_b1_h0": {
+    "charge_nearest": -205.46325271756123,
+    "charge_priority": 74.16587135500706,
+    "flank": -82.79717950807448,
+    "support_friend": -105.22523407399281,
+    "defend_position": -116.1222033996216,
+    "retreat": -73.29604419150736
+  },
+  "JP_d1_e1_f0_s1_t1_b1_h0": {
+    "charge_nearest": -267.01114546336635,
+    "charge_priority": -203.84546492475263,
+    "flank": 78.10052189705742,
+    "support_friend": -253.60237049296657,
+    "defend_position": -253.81179116143696,
+    "retreat": -213.27934888676037
+  },
+  "SOV_d1_e1_f0_s2_t0_b0_h0": {
+    "charge_nearest": 161.90400389651035,
+    "charge_priority": 190.8803916563046,
+    "flank": 80.34301943080087,
+    "support_friend": 87.80939359296481,
+    "defend_position": 118.229201514239,
+    "retreat": 123.75456667944181
+  },
+  "JP_d2_e0_f1_s1_t0_b0_h0": {
+    "charge_nearest": 43.30449504641131,
+    "charge_priority": 46.86503859397817,
+    "flank": 41.51175752709084,
+    "support_friend": 11.367294018431949,
+    "defend_position": 9.916654082764842,
+    "retreat": -22.88170651370474,
+    "destroy_bridge": 47.38706966278067
+  },
+  "JP_d2_e0_f1_s1_t1_b0_h0": {
+    "charge_nearest": -16.537260412803548,
+    "charge_priority": -1.1386278891425858,
+    "flank": -12.710881605315532,
+    "support_friend": 18.228184987622846,
+    "defend_position": 110.32593347124582,
+    "retreat": 56.56663664844728,
+    "destroy_bridge": 135.85759125614484
+  },
+  "JP_d4_e0_f0_s1_t0_b0_h0": {
+    "charge_nearest": 59.93726154889749,
+    "charge_priority": 61.46073603327968,
+    "flank": 61.273956881409006,
+    "support_friend": 61.577639028520025,
+    "defend_position": 61.35506139883992,
+    "retreat": 35.52334355668833,
+    "destroy_bridge": 60.34164578493848
+  },
+  "JP_d4_e0_f2_s1_t0_b0_h0": {
+    "charge_nearest": 7.020144413569733,
+    "charge_priority": 16.678364162367934,
+    "flank": 8.306751011692358,
+    "support_friend": 1.5373215491037018,
+    "defend_position": 0.0,
+    "retreat": 86.21512873164862,
+    "destroy_bridge": 5.601373130852309
+  },
+  "SOV_d4_e0_f1_s2_t1_b0_h1": {
+    "charge_nearest": 147.54626538323873,
+    "charge_priority": 138.97199652310255,
+    "flank": 133.60674068318863,
+    "support_friend": 134.92772917140383,
+    "defend_position": 124.791828249005,
+    "retreat": 128.73483044690164
+  },
+  "SOV_d4_e0_f1_s2_t1_b1_h1": {
+    "charge_nearest": 148.54900394384552,
+    "charge_priority": 131.36308668739727,
+    "flank": 154.217801450466,
+    "support_friend": 94.76244764173242,
+    "defend_position": 149.60866025227318,
+    "retreat": 148.51592006173206
+  },
+  "SOV_d2_e0_f0_s2_t1_b1_h0": {
+    "charge_nearest": 132.48997578990958,
+    "charge_priority": 136.57973757166528,
+    "flank": 136.31209593582489,
+    "support_friend": 99.21662932079101,
+    "defend_position": 98.56610481511836,
+    "retreat": 140.14350295650934
+  },
+  "JP_d2_e0_f1_s1_t0_b1_h0": {
+    "charge_nearest": 29.506646803460434,
+    "charge_priority": 22.20037444720078,
+    "flank": 65.09376141161007,
+    "support_friend": -14.036386320304828,
+    "defend_position": 19.316197435155473,
+    "retreat": 21.974612559115258
+  },
+  "SOV_d1_e1_f0_s2_t1_b1_h0": {
+    "charge_nearest": 157.25864003767094,
+    "charge_priority": 203.6423338117446,
+    "flank": 123.79417015782887,
+    "support_friend": 162.8903957696569,
+    "defend_position": 58.2473880256974,
+    "retreat": 156.23331194807994
+  },
+  "SOV_d2_e0_f0_s1_t1_b1_h0": {
+    "charge_nearest": 60.25043599197411,
+    "charge_priority": 82.69220011078022,
+    "flank": 49.60313149300157,
+    "support_friend": 93.07288649995269,
+    "defend_position": 69.55994635937665,
+    "retreat": 51.20533014145829
+  },
+  "JP_d1_e1_f1_s2_t0_b0_h0": {
+    "charge_nearest": 75.92911962952533,
+    "charge_priority": 100.95196797018997,
+    "flank": 73.77338715850162,
+    "support_friend": 74.2352777359142,
+    "defend_position": 249.7371872603933,
+    "retreat": 120.00714174971446,
+    "destroy_bridge": 108.47895097688576
+  },
+  "SOV_d1_e2_f1_s2_t1_b0_h0": {
+    "charge_nearest": 118.7867892643583,
+    "charge_priority": 13.827797794385715,
+    "flank": 5.0,
+    "support_friend": 0.0,
+    "defend_position": 29.34311067166469,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f2_s2_t0_b0_h0": {
+    "charge_nearest": 208.0671630423937,
+    "charge_priority": 17.324168436118082,
+    "flank": 79.90958874945844,
+    "support_friend": 52.926216574431066,
+    "defend_position": 38.59218535773735,
+    "retreat": 36.70389671921696,
+    "destroy_bridge": 21.180731751040838
+  },
+  "JP_d2_e0_f2_s2_t1_b0_h0": {
+    "charge_nearest": 213.60271583299058,
+    "charge_priority": 95.788397365321,
+    "flank": 53.47132956962276,
+    "support_friend": 112.27090899202038,
+    "defend_position": 48.6925475848754,
+    "retreat": 109.86445068917914,
+    "destroy_bridge": 40.22360584477122
+  },
+  "JP_d2_e0_f0_s2_t0_b0_h0": {
+    "charge_nearest": 151.1867807483254,
+    "charge_priority": 157.24168244201502,
+    "flank": 153.75217430995536,
+    "support_friend": 165.04283113069937,
+    "defend_position": 157.11901645367388,
+    "retreat": 118.82750594668056,
+    "destroy_bridge": 115.8645843030746
+  },
+  "SOV_d2_e0_f1_s1_t1_b0_h0": {
+    "charge_nearest": 75.6893978758975,
+    "charge_priority": 76.56854218692759,
+    "flank": 31.211465914360232,
+    "support_friend": 110.25093506481008,
+    "defend_position": 77.29296908659971,
+    "retreat": 77.49035808681829
+  },
+  "SOV_d2_e0_f2_s2_t1_b0_h0": {
+    "charge_nearest": 0.46080254080193445,
+    "charge_priority": 30.89250825907938,
+    "flank": 0.0,
+    "support_friend": 96.16637249460086,
+    "defend_position": 0.0,
+    "retreat": 26.166194364858338
+  },
+  "SOV_d2_e0_f1_s1_t0_b0_h0": {
+    "charge_nearest": 74.68916119056158,
+    "charge_priority": 99.79711018410488,
+    "flank": 57.08253692763137,
+    "support_friend": 86.41465056219965,
+    "defend_position": 51.87725025427767,
+    "retreat": 169.7233762007871
+  },
+  "SOV_d3_e0_f0_s1_t0_b0_h0": {
+    "charge_nearest": 143.59273238614222,
+    "charge_priority": 138.82735982319417,
+    "flank": 127.63707313443204,
+    "support_friend": 149.32476948595098,
+    "defend_position": 162.04470005366608,
+    "retreat": 149.77209011029294
+  },
+  "SOV_d2_e0_f2_s1_t0_b0_h0": {
+    "charge_nearest": 98.0446373073197,
+    "charge_priority": 13.188963347776422,
+    "flank": 30.2587690947821,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f0_s1_t0_b0_h0": {
+    "charge_nearest": 83.83521661077233,
+    "charge_priority": 112.80541582858177,
+    "flank": 129.27330980796083,
+    "support_friend": 134.7307487543222,
+    "defend_position": 123.07128552296959,
+    "retreat": 108.41496692530554
+  },
+  "JP_d1_e2_f0_s2_t0_b0_h0": {
+    "charge_nearest": 111.4322835605442,
+    "charge_priority": 11.06493783726633,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 17.72626146892773,
+    "destroy_bridge": 3.8057403776064627
+  },
+  "SOV_d1_e2_f0_s1_t0_b0_h0": {
+    "charge_nearest": -10.187416355717275,
+    "charge_priority": -45.92552758486588,
+    "flank": 1.1041730906982012,
+    "support_friend": -66.81364589977458,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f0_s1_t0_b0_h0": {
+    "charge_nearest": 27.226337958456966,
+    "charge_priority": -4.868544306224048,
+    "flank": 33.08958207540929,
+    "support_friend": -29.568460300126368,
+    "defend_position": 67.87924316516734,
+    "retreat": 32.550137219374534,
+    "destroy_bridge": 9.300576705750423
+  },
+  "SOV_d3_e0_f0_s1_t1_b0_h0": {
+    "charge_nearest": 30.995083757487166,
+    "charge_priority": 19.840201659737588,
+    "flank": 55.211453718964734,
+    "support_friend": 25.675124949773675,
+    "defend_position": 35.19292253716023,
+    "retreat": 130.95470846684708
+  },
+  "JP_d1_e2_f2_s1_t1_b0_h0": {
+    "charge_nearest": 47.840733952461456,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d1_e1_f1_s2_t1_b0_h0": {
+    "charge_nearest": 208.54604381791543,
+    "charge_priority": 199.16073804812928,
+    "flank": 218.08713081168764,
+    "support_friend": 218.23861880483764,
+    "defend_position": 253.84245587018006,
+    "retreat": 189.85989318867615,
+    "destroy_bridge": 196.74370806337373
+  },
+  "SOV_d2_e0_f0_s1_t1_b0_h0": {
+    "charge_nearest": 34.49325873916999,
+    "charge_priority": 45.59353443620339,
+    "flank": 20.850343570801783,
+    "support_friend": 24.891131545964594,
+    "defend_position": 56.12594977662057,
+    "retreat": 69.9165610100878
+  },
+  "SOV_d2_e0_f0_s2_t0_b1_h0": {
+    "charge_nearest": 115.71753389145113,
+    "charge_priority": 119.28093096737913,
+    "flank": 120.02100768533658,
+    "support_friend": 149.453378158137,
+    "defend_position": 76.45907324160227,
+    "retreat": 119.98037796514589
+  },
+  "JP_d3_e0_f0_s1_t0_b0_h1": {
+    "charge_nearest": 8.552392388194363,
+    "charge_priority": 0.0,
+    "flank": -5.633539578162315,
+    "support_friend": 21.330358730971213,
+    "defend_position": 3.639040034648943,
+    "retreat": 10.073970092627935,
+    "destroy_bridge": 105.93930469097464
+  },
+  "SOV_d2_e0_f2_s1_t1_b0_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 72.18721188604798
+  },
+  "SOV_d3_e0_f1_s1_t1_b0_h0": {
+    "charge_nearest": 3.333333333333334,
+    "charge_priority": 20.933333333333334,
+    "flank": 68.52837402815146,
+    "support_friend": 0.3728623062433954,
+    "defend_position": 16.395338967941782,
+    "retreat": 15.650491238507282
+  },
+  "SOV_d1_e1_f1_s1_t0_b0_h0": {
+    "charge_nearest": 41.87331703600539,
+    "charge_priority": 65.92396246965131,
+    "flank": 77.95943058007092,
+    "support_friend": 100.83187252642648,
+    "defend_position": 129.74477813066488,
+    "retreat": 88.28920730799481
+  },
+  "JP_d3_e0_f2_s2_t0_b0_h0": {
+    "charge_nearest": 199.0782610466654,
+    "charge_priority": 0.0,
+    "flank": 45.16761680720723,
+    "support_friend": 10.817421090040485,
+    "defend_position": 37.48806648592414,
+    "retreat": 22.18542158894069,
+    "destroy_bridge": -1.247233333333332
+  },
+  "JP_d4_e0_f0_s2_t0_b0_h0": {
+    "charge_nearest": 152.8175798603263,
+    "charge_priority": 167.4757346979202,
+    "flank": 134.6244276081272,
+    "support_friend": 157.986679802158,
+    "defend_position": 132.63726788352835,
+    "retreat": 159.08069921310633,
+    "destroy_bridge": 83.57119412648989
+  },
+  "SOV_d2_e0_f0_s2_t1_b0_h0": {
+    "charge_nearest": 130.0706571467565,
+    "charge_priority": 125.41666506317235,
+    "flank": 172.45023456123798,
+    "support_friend": 131.75017383362587,
+    "defend_position": 135.83718428459406,
+    "retreat": 120.25349826679292
+  },
+  "JP_d3_e0_f2_s1_t1_b0_h0": {
+    "charge_nearest": -15.221721709224866,
+    "charge_priority": 2.68190414392285,
+    "flank": 50.770647923815766,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d1_e2_f0_s2_t1_b0_h0": {
+    "charge_nearest": 34.079710694285865,
+    "charge_priority": 166.38848044400467,
+    "flank": 3.6849502203521456,
+    "support_friend": 48.69862658580417,
+    "defend_position": 11.324459977605818,
+    "retreat": 13.372742098088583
+  },
+  "JP_d1_e1_f2_s2_t0_b0_h0": {
+    "charge_nearest": 105.47727521293088,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 58.612929156602874,
+    "defend_position": 0.0,
+    "retreat": 55.70892458415494,
+    "destroy_bridge": 29.531068838540563
+  },
+  "SOV_d1_e1_f1_s2_t1_b0_h0": {
+    "charge_nearest": 84.31432792429533,
+    "charge_priority": 33.7744722293755,
+    "flank": 134.9118112683338,
+    "support_friend": 155.57437843033014,
+    "defend_position": 53.752573008631025,
+    "retreat": 22.24766025456394
+  },
+  "JP_d2_e0_f2_s2_t1_b1_h0": {
+    "charge_nearest": 185.87001820815578,
+    "charge_priority": 35.80186788956421,
+    "flank": 152.79522470927168,
+    "support_friend": 90.96360753734578,
+    "defend_position": 90.32231094513357,
+    "retreat": 89.25888199596635
+  },
+  "JP_d1_e1_f2_s2_t1_b1_h0": {
+    "charge_nearest": 73.00538780314749,
+    "charge_priority": 87.3004332892562,
+    "flank": 192.90509399697055,
+    "support_friend": 99.38142799381392,
+    "defend_position": 78.16755677403239,
+    "retreat": 62.50372288231362
+  },
+  "JP_d3_e0_f1_s2_t0_b1_h0": {
+    "charge_nearest": 199.81722088151895,
+    "charge_priority": 149.33919706733343,
+    "flank": 161.64906139025092,
+    "support_friend": 144.07801847438353,
+    "defend_position": 134.30290023217918,
+    "retreat": 118.58110575463054
+  },
+  "JP_d1_e2_f0_s2_t1_b1_h0": {
+    "charge_nearest": 52.04449788054149,
+    "charge_priority": 46.27191308043483,
+    "flank": 111.0326212747717,
+    "support_friend": 0.5658685522803921,
+    "defend_position": 76.7668531846529,
+    "retreat": 167.00489195817218
+  },
+  "SOV_d2_e0_f1_s2_t0_b1_h0": {
+    "charge_nearest": 139.95197575379112,
+    "charge_priority": 187.4843531061899,
+    "flank": 139.2438248656088,
+    "support_friend": 159.61576768091402,
+    "defend_position": 78.24082218450637,
+    "retreat": 133.47723412216118
+  },
+  "SOV_d3_e0_f1_s1_t1_b1_h0": {
+    "charge_nearest": 50.62228183399354,
+    "charge_priority": 3.385621769675737,
+    "flank": 46.65876298190109,
+    "support_friend": 63.10376242896909,
+    "defend_position": 106.64535951814065,
+    "retreat": 55.005539982849164
+  },
+  "JP_d2_e0_f0_s2_t0_b1_h1": {
+    "charge_nearest": 163.35676953219124,
+    "charge_priority": 259.4091341776053,
+    "flank": 124.58028654864208,
+    "support_friend": 162.42869751495522,
+    "defend_position": 140.47578125826269,
+    "retreat": 131.1375415088886
+  },
+  "SOV_d1_e1_f0_s2_t0_b1_h0": {
+    "charge_nearest": 191.6209371903667,
+    "charge_priority": 155.55154617429508,
+    "flank": 150.81073940344933,
+    "support_friend": 158.9340654738984,
+    "defend_position": 148.78217259810515,
+    "retreat": 134.71842708822146
+  },
+  "SOV_d3_e0_f0_s1_t1_b1_h0": {
+    "charge_nearest": 48.83721007540478,
+    "charge_priority": 64.29925915930639,
+    "flank": 59.982522321759916,
+    "support_friend": 51.993848676621454,
+    "defend_position": 54.78247059514753,
+    "retreat": 105.40945708123444
+  },
+  "SOV_d2_e0_f1_s1_t1_b1_h0": {
+    "charge_nearest": 43.31591676919844,
+    "charge_priority": 65.24958516487244,
+    "flank": 42.20033176636027,
+    "support_friend": 73.06045808536349,
+    "defend_position": 142.12299275879934,
+    "retreat": 56.47699751673697
+  },
+  "JP_d1_e1_f1_s1_t1_b1_h0": {
+    "charge_nearest": 0.43489524469282514,
+    "charge_priority": 19.280256874946353,
+    "flank": 26.220849167256908,
+    "support_friend": 28.440591192692224,
+    "defend_position": 38.19645763073689,
+    "retreat": 165.2624223631927
+  },
+  "SOV_d4_e0_f0_s2_t0_b0_h0": {
+    "charge_nearest": 148.49216775565802,
+    "charge_priority": 159.51748663775538,
+    "flank": 117.78030277795568,
+    "support_friend": 189.20746840086048,
+    "defend_position": 121.72262366849863,
+    "retreat": 98.0452598965403
+  },
+  "JP_d3_e0_f0_s2_t1_b0_h1": {
+    "charge_nearest": 165.50488900793744,
+    "charge_priority": 32.85805943670723,
+    "flank": 118.48717778279351,
+    "support_friend": 67.07873248380292,
+    "defend_position": 140.95321280485626,
+    "retreat": 273.4193095025631,
+    "destroy_bridge": 71.99418162078331
+  },
+  "JP_d1_e2_f0_s1_t1_b0_h0": {
+    "charge_nearest": -28.036694917810387,
+    "charge_priority": -62.079237558360795,
+    "flank": -47.561939415026096,
+    "support_friend": 107.7623242131663,
+    "defend_position": -48.07973965499389,
+    "retreat": -13.05408154462571,
+    "destroy_bridge": -142.8734199255302
+  },
+  "JP_d2_e0_f0_s1_t1_b0_h1": {
+    "charge_nearest": -134.97637980695418,
+    "charge_priority": -207.53820246378518,
+    "flank": -201.0,
+    "support_friend": -228.0,
+    "defend_position": 25.327536203229208,
+    "retreat": 222.91787897617266,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d4_e0_f1_s1_t1_b0_h0": {
+    "charge_nearest": 19.891896428901997,
+    "charge_priority": 49.66714034816359,
+    "flank": 79.83755540143275,
+    "support_friend": 41.27569389965923,
+    "defend_position": 28.01231896191796,
+    "retreat": 37.92275581285539
+  },
+  "JP_d1_e1_f0_s1_t1_b0_h1": {
+    "charge_nearest": -93.7,
+    "charge_priority": -226.7833423401982,
+    "flank": -81.97687097074535,
+    "support_friend": -78.8699199565511,
+    "defend_position": -117.69909698982161,
+    "retreat": -74.0915881057532,
+    "destroy_bridge": -66.75488325590214
+  },
+  "SOV_d1_e1_f1_s1_t0_b0_h1": {
+    "charge_nearest": 147.78797315357735,
+    "charge_priority": 10.0,
+    "flank": 28.176783632250302,
+    "support_friend": -4.4957061682693364,
+    "defend_position": 0.0,
+    "retreat": -27.73012807867216
+  },
+  "JP_d1_e2_f1_s2_t1_b0_h0": {
+    "charge_nearest": 10.615285733527568,
+    "charge_priority": 30.01053503029221,
+    "flank": 0.41960629769593705,
+    "support_friend": 46.32079304131686,
+    "defend_position": 35.710575592047746,
+    "retreat": 313.05410986292856,
+    "destroy_bridge": 34.17203461280642
+  },
+  "JP_d4_e0_f1_s1_t0_b1_h0": {
+    "charge_nearest": 31.140366217051145,
+    "charge_priority": 47.40510104387302,
+    "flank": -14.946221198494065,
+    "support_friend": 47.16985923992944,
+    "defend_position": 50.47563973981657,
+    "retreat": 47.338180160247404
+  },
+  "SOV_d3_e0_f1_s2_t0_b1_h0": {
+    "charge_nearest": 123.88258169143155,
+    "charge_priority": 194.41113695162198,
+    "flank": 125.40574093383839,
+    "support_friend": 127.96477035087173,
+    "defend_position": 118.34308185468637,
+    "retreat": 121.3601567898232
+  },
+  "SOV_d2_e0_f1_s2_t1_b1_h0": {
+    "charge_nearest": 138.2822964915464,
+    "charge_priority": 219.02145909900923,
+    "flank": 127.12507714783796,
+    "support_friend": 138.40583917298093,
+    "defend_position": 135.7908596524813,
+    "retreat": 126.2734539869115
+  },
+  "JP_d3_e0_f0_s1_t0_b1_h1": {
+    "charge_nearest": 154.59831715115163,
+    "charge_priority": 37.084667769309945,
+    "flank": 107.87647522637093,
+    "support_friend": 53.10254063345145,
+    "defend_position": 1.905290777169233,
+    "retreat": 78.10232005331332
+  },
+  "SOV_d1_e1_f1_s2_t1_b1_h0": {
+    "charge_nearest": 199.2994304904903,
+    "charge_priority": 105.79364008285614,
+    "flank": 134.78100607874404,
+    "support_friend": 138.6666625109098,
+    "defend_position": 65.88036795386161,
+    "retreat": 135.50849602567018
+  },
+  "SOV_d1_e1_f1_s1_t0_b1_h0": {
+    "charge_nearest": 21.50661983893537,
+    "charge_priority": 62.30797636341988,
+    "flank": 67.46102475069077,
+    "support_friend": 82.93719777295588,
+    "defend_position": 60.19817296448721,
+    "retreat": 108.91589071667141
+  },
+  "JP_d2_e0_f0_s1_t0_b1_h1": {
+    "charge_nearest": 16.00836371069625,
+    "charge_priority": 19.23764466670653,
+    "flank": 68.07557132106454,
+    "support_friend": 46.22163950192743,
+    "defend_position": 35.42229162357499,
+    "retreat": 86.91719951708106
+  },
+  "JP_d1_e2_f1_s1_t1_b1_h0": {
+    "charge_nearest": -11.633333333333333,
+    "charge_priority": 4.832207944868869,
+    "flank": -6.666666666666668,
+    "support_friend": 25.090978362730382,
+    "defend_position": 48.47367633643667,
+    "retreat": 122.23531497566071
+  },
+  "JP_d2_e0_f0_s1_t0_b1_h0": {
+    "charge_nearest": 19.03457573004567,
+    "charge_priority": 3.229294009468272,
+    "flank": 21.91268027793044,
+    "support_friend": -11.592050451262372,
+    "defend_position": 22.24783969914065,
+    "retreat": 61.317432765523186
+  },
+  "JP_d3_e0_f1_s2_t0_b1_h1": {
+    "charge_nearest": 202.2664175489499,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.14346388366962579,
+    "retreat": 9.572241389329411
+  },
+  "SOV_d3_e0_f1_s2_t1_b1_h0": {
+    "charge_nearest": 121.23991658048467,
+    "charge_priority": 105.22108202637963,
+    "flank": 137.44534489294938,
+    "support_friend": 110.23293276770107,
+    "defend_position": 136.5353243440309,
+    "retreat": 156.52662467743627
+  },
+  "JP_d4_e0_f1_s2_t0_b1_h1": {
+    "charge_nearest": 60.635317031119754,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 10.288861209142581,
+    "retreat": 18.34085597474251
+  },
+  "JP_d2_e0_f0_s2_t0_b0_h1": {
+    "charge_nearest": 88.81957849577833,
+    "charge_priority": 104.17526053176108,
+    "flank": 246.0560325376982,
+    "support_friend": 77.46898339791662,
+    "defend_position": 48.740542443934515,
+    "retreat": 97.42998503668798,
+    "destroy_bridge": 98.49685934832155
+  },
+  "SOV_d3_e0_f0_s2_t1_b1_h0": {
+    "charge_nearest": 201.5625767524989,
+    "charge_priority": 149.66885244278836,
+    "flank": 157.32210211602023,
+    "support_friend": 137.15816592808892,
+    "defend_position": 146.65815019207201,
+    "retreat": 109.21718383998461
+  },
+  "SOV_d2_e0_f1_s1_t0_b1_h0": {
+    "charge_nearest": 45.03461428339105,
+    "charge_priority": 78.69144207972582,
+    "flank": 82.03283514107673,
+    "support_friend": 128.4832032149884,
+    "defend_position": 75.430080936512,
+    "retreat": 65.88227326211825
+  },
+  "JP_d2_e0_f0_s2_t0_b1_h0": {
+    "charge_nearest": 113.99998009494247,
+    "charge_priority": 108.94196350581437,
+    "flank": 242.90642455868013,
+    "support_friend": 96.82832387109228,
+    "defend_position": 144.6791418626656,
+    "retreat": 141.3540829960026
+  },
+  "SOV_d1_e2_f0_s2_t0_b1_h0": {
+    "charge_nearest": 167.4459219572158,
+    "charge_priority": 53.85640881856324,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 27.856669609443987,
+    "retreat": 39.76502844404533
+  },
+  "JP_d2_e0_f1_s1_t1_b1_h0": {
+    "charge_nearest": 22.64368131466063,
+    "charge_priority": 71.22514621222555,
+    "flank": 19.74516996940909,
+    "support_friend": 94.83471308038713,
+    "defend_position": 147.69617024246799,
+    "retreat": 100.22487786105793
+  },
+  "JP_d4_e0_f0_s1_t1_b1_h0": {
+    "charge_nearest": 38.30897421649709,
+    "charge_priority": 32.379289608322566,
+    "flank": -57.85469480116528,
+    "support_friend": -3.956681901537479,
+    "defend_position": 68.96674631296031,
+    "retreat": 67.69434056470213
+  },
+  "SOV_d4_e0_f0_s2_t0_b1_h0": {
+    "charge_nearest": 143.0845859656438,
+    "charge_priority": 111.71145114297697,
+    "flank": 123.94751358652847,
+    "support_friend": 113.14809257471913,
+    "defend_position": 118.94788883694905,
+    "retreat": 78.45863541899983
+  },
+  "JP_d2_e0_f0_s1_t1_b1_h0": {
+    "charge_nearest": -91.4395554761715,
+    "charge_priority": 9.621604381481143,
+    "flank": -377.9822304700931,
+    "support_friend": 14.414239691208653,
+    "defend_position": -1.3668914939460706,
+    "retreat": 124.58173481651968
+  },
+  "JP_d1_e1_f0_s2_t0_b1_h0": {
+    "charge_nearest": 154.05370402813176,
+    "charge_priority": 242.6669102509879,
+    "flank": 61.609106284895944,
+    "support_friend": 92.07343957317873,
+    "defend_position": 140.62953269395598,
+    "retreat": 114.2175379412026
+  },
+  "JP_d2_e0_f2_s1_t0_b0_h0": {
+    "charge_nearest": 110.22754068454739,
+    "charge_priority": 0.0,
+    "flank": 8.523532858308544,
+    "support_friend": 4.9835806401443845,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d1_e1_f1_s1_t0_b0_h0": {
+    "charge_nearest": 28.882478137739934,
+    "charge_priority": 19.801232772181763,
+    "flank": 21.678369922664473,
+    "support_friend": 26.336037762042448,
+    "defend_position": 61.511239211015514,
+    "retreat": 24.3806525420422,
+    "destroy_bridge": 21.852327140511534
+  },
+  "JP_d3_e0_f0_s1_t1_b0_h1": {
+    "charge_nearest": -96.45690000000002,
+    "charge_priority": -109.47000000000001,
+    "flank": -10.0,
+    "support_friend": 199.77321373274683,
+    "defend_position": 16.19662536733991,
+    "retreat": 24.98348053799083,
+    "destroy_bridge": 9.028714640519032
+  },
+  "JP_d3_e0_f0_s1_t0_b0_h0": {
+    "charge_nearest": 51.97389315018845,
+    "charge_priority": 69.40283537602473,
+    "flank": -28.544203634349202,
+    "support_friend": 33.44921940587922,
+    "defend_position": 69.51961197952858,
+    "retreat": 78.76568777536906,
+    "destroy_bridge": 63.93744172108752
+  },
+  "SOV_d3_e0_f1_s1_t0_b0_h0": {
+    "charge_nearest": 25.01793733237902,
+    "charge_priority": 58.550854109442504,
+    "flank": 96.82831845857629,
+    "support_friend": 96.15631459589359,
+    "defend_position": 146.92600227035464,
+    "retreat": 83.58551954194327
+  },
+  "SOV_d3_e0_f0_s2_t1_b0_h1": {
+    "charge_nearest": 8.266343173083552,
+    "charge_priority": 224.2094695656162,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 16.15752527759689,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f0_s2_t1_b0_h1": {
+    "charge_nearest": 64.24287719518234,
+    "charge_priority": 28.97005200951612,
+    "flank": 249.66109979951352,
+    "support_friend": 9.878028229214815,
+    "defend_position": 31.81101603217104,
+    "retreat": 47.88036958474165,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d1_e1_f1_s1_t1_b0_h1": {
+    "charge_nearest": 148.76038948915928,
+    "charge_priority": 0.0,
+    "flank": -5.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d4_e0_f1_s1_t0_b0_h1": {
+    "charge_nearest": 5.270543820424052,
+    "charge_priority": 0.0,
+    "flank": 17.909489182783283,
+    "support_friend": 83.49868250685228,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d2_e0_f0_s2_t1_b0_h1": {
+    "charge_nearest": -40.05513231353903,
+    "charge_priority": 312.25798422243827,
+    "flank": 46.7179910176846,
+    "support_friend": 1.1575150515249533,
+    "defend_position": 90.3250267275556,
+    "retreat": 142.75048265077837,
+    "destroy_bridge": 97.76807379228505
+  },
+  "SOV_d4_e0_f1_s1_t0_b0_h0": {
+    "charge_nearest": 137.319589905156,
+    "charge_priority": 129.90850975698865,
+    "flank": 170.3287731811584,
+    "support_friend": 117.91204986882394,
+    "defend_position": 137.58491206275212,
+    "retreat": 129.34119171872757
+  },
+  "SOV_d1_e1_f0_s2_t1_b0_h0": {
+    "charge_nearest": 123.83400464677898,
+    "charge_priority": 176.21011454312088,
+    "flank": 131.9894445158836,
+    "support_friend": 129.4651755176065,
+    "defend_position": 129.63321344150987,
+    "retreat": 140.11764971553956
+  },
+  "JP_d2_e0_f1_s2_t0_b0_h1": {
+    "charge_nearest": 313.0572214016004,
+    "charge_priority": 4.567500000000001,
+    "flank": -20.859426586929075,
+    "support_friend": 26.878285642340856,
+    "defend_position": -60.0,
+    "retreat": 1.2852501981229079,
+    "destroy_bridge": -18.698824402874628
+  },
+  "JP_d3_e0_f2_s2_t1_b1_h0": {
+    "charge_nearest": 194.79251601188633,
+    "charge_priority": 112.51827093016595,
+    "flank": 45.440173796672624,
+    "support_friend": 59.512621324832736,
+    "defend_position": 88.75527650669954,
+    "retreat": 67.48393754197758
+  },
+  "SOV_d3_e0_f0_s1_t0_b1_h0": {
+    "charge_nearest": 73.1479031535019,
+    "charge_priority": 84.92374867541677,
+    "flank": 68.82462796721381,
+    "support_friend": 121.63233773026154,
+    "defend_position": 56.970287499467915,
+    "retreat": 52.42945318559633
+  },
+  "JP_d4_e0_f1_s2_t0_b1_h0": {
+    "charge_nearest": 179.55164128071226,
+    "charge_priority": 133.95752401268754,
+    "flank": 130.41147237479703,
+    "support_friend": 149.63812879062317,
+    "defend_position": 149.3506549520199,
+    "retreat": 87.40227454143717
+  },
+  "JP_d3_e0_f0_s1_t1_b1_h0": {
+    "charge_nearest": -230.63150214523847,
+    "charge_priority": -98.35916489487691,
+    "flank": -206.95908055161613,
+    "support_friend": 5.175952651003655,
+    "defend_position": -11.90222752839162,
+    "retreat": 145.03862403840776
+  },
+  "SOV_d3_e0_f0_s1_t0_b1_h1": {
+    "charge_nearest": 104.17368257744059,
+    "charge_priority": 97.57614411787237,
+    "flank": 101.89462322102551,
+    "support_friend": 108.59152595178632,
+    "defend_position": 108.4361280411161,
+    "retreat": 143.90185434065748
+  },
+  "SOV_d1_e2_f1_s1_t1_b0_h0": {
+    "charge_nearest": -2.9538693356793218,
+    "charge_priority": -9.681497314216637,
+    "flank": 87.04913632383052,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s2_t1_b0_h0": {
+    "charge_nearest": 154.1220702267345,
+    "charge_priority": 118.36044710207892,
+    "flank": 65.51198530924609,
+    "support_friend": 236.08227275275658,
+    "defend_position": 59.82140789884123,
+    "retreat": 53.33333333333334,
+    "destroy_bridge": 26.411717867906848
+  },
+  "JP_d2_e0_f2_s2_t0_b1_h0": {
+    "charge_nearest": 190.99228137943956,
+    "charge_priority": 34.76562508325327,
+    "flank": 0.0,
+    "support_friend": 44.99122013777167,
+    "defend_position": 53.438684533793136,
+    "retreat": 44.96608332700477
+  },
+  "SOV_d4_e0_f0_s1_t1_b1_h0": {
+    "charge_nearest": 87.83510767132627,
+    "charge_priority": 49.20825454413813,
+    "flank": 69.11889106638881,
+    "support_friend": 53.40151398456515,
+    "defend_position": 25.745919468491664,
+    "retreat": 19.64299321520892
+  },
+  "SOV_d4_e0_f1_s1_t0_b1_h1": {
+    "charge_nearest": 79.42043102237531,
+    "charge_priority": 79.28754425335251,
+    "flank": 109.91141330277553,
+    "support_friend": 78.69636799028142,
+    "defend_position": 79.46473550837004,
+    "retreat": 78.32943303626962
+  },
+  "SOV_d4_e0_f1_s1_t1_b1_h0": {
+    "charge_nearest": 26.130809864155786,
+    "charge_priority": 36.6910674049486,
+    "flank": 37.049292171198125,
+    "support_friend": 5.7982924349142735,
+    "defend_position": 46.22924391703844,
+    "retreat": 92.88695562964774
+  },
+  "SOV_d4_e0_f1_s1_t1_b1_h1": {
+    "charge_nearest": 43.62948738176608,
+    "charge_priority": 111.31070536525799,
+    "flank": 40.85296974257332,
+    "support_friend": -1.4111645493146039,
+    "defend_position": 40.59622009611837,
+    "retreat": 45.83032455320651
+  },
+  "SOV_d2_e0_f1_s1_t1_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 15.450000000000001,
+    "flank": 112.03183333313407,
+    "support_friend": 5.732703245026306,
+    "defend_position": 0.0,
+    "retreat": 10.019254183667504
+  },
+  "SOV_d2_e0_f0_s1_t1_b1_h1": {
+    "charge_nearest": -3.333333333333334,
+    "charge_priority": 167.49355610305014,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 11.251554845889943,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f0_s2_t0_b1_h0": {
+    "charge_nearest": 112.83109790851601,
+    "charge_priority": 125.6167499636876,
+    "flank": 126.17284307926093,
+    "support_friend": 111.22211001290569,
+    "defend_position": 125.2923375627243,
+    "retreat": 127.09772521893173
+  },
+  "SOV_d1_e2_f0_s2_t1_b1_h0": {
+    "charge_nearest": 122.76123086820566,
+    "charge_priority": 17.216125705243474,
+    "flank": 71.82043251397991,
+    "support_friend": 22.82800543736916,
+    "defend_position": 24.80798975611843,
+    "retreat": 65.52077186094105
+  },
+  "JP_d1_e1_f2_s1_t1_b1_h0": {
+    "charge_nearest": 25.81613861169044,
+    "charge_priority": 13.841269203203318,
+    "flank": -28.296713487471735,
+    "support_friend": 137.7886057458743,
+    "defend_position": 18.330656479523814,
+    "retreat": 14.279649146975471
+  },
+  "JP_d3_e0_f1_s1_t1_b0_h1": {
+    "charge_nearest": -10.0,
+    "charge_priority": -54.58545778254321,
+    "flank": -60.0,
+    "support_friend": 69.66182306840116,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f0_s1_t1_b0_h1": {
+    "charge_nearest": -22.082560688055125,
+    "charge_priority": -45.0,
+    "flank": 88.24611736706598,
+    "support_friend": 9.56871229519295,
+    "defend_position": 2.4661532062006213,
+    "retreat": 0.0,
+    "destroy_bridge": 3.492756168875075
+  },
+  "JP_d1_e1_f2_s2_t1_b0_h0": {
+    "charge_nearest": 247.73615286847425,
+    "charge_priority": 40.02570190197757,
+    "flank": 28.38455115216748,
+    "support_friend": 92.12660457149994,
+    "defend_position": 28.25630631011224,
+    "retreat": 107.84473181797331,
+    "destroy_bridge": 23.471971807451965
+  },
+  "JP_d2_e0_f0_s1_t0_b0_h1": {
+    "charge_nearest": 13.504672499566613,
+    "charge_priority": 96.01027474547152,
+    "flank": -31.05666666666667,
+    "support_friend": 24.839126480641557,
+    "defend_position": 27.485411051957502,
+    "retreat": -53.60858749541956,
+    "destroy_bridge": 34.33196508895633
+  },
+  "SOV_d1_e2_f1_s2_t0_b0_h0": {
+    "charge_nearest": 27.01548351674022,
+    "charge_priority": 135.63263063220109,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f1_s1_t0_b0_h1": {
+    "charge_nearest": 69.99762176498741,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": -47.95697001691259,
+    "defend_position": -60.0,
+    "retreat": 2.48747436,
+    "destroy_bridge": -60.0
+  },
+  "SOV_d1_e1_f2_s1_t1_b0_h0": {
+    "charge_nearest": 10.0,
+    "charge_priority": 60.36828459839515,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f1_s1_t1_b0_h0": {
+    "charge_nearest": 29.02023803730704,
+    "charge_priority": 51.25708011876152,
+    "flank": 12.585041468524427,
+    "support_friend": 0.0,
+    "defend_position": 6.684813223668359,
+    "retreat": 28.276887940239984,
+    "destroy_bridge": 35.6825414339048
+  },
+  "SOV_d1_e2_f1_s1_t0_b0_h0": {
+    "charge_nearest": -0.7349999999999994,
+    "charge_priority": -0.40062579999999937,
+    "flank": -5.0,
+    "support_friend": -19.05525050584575,
+    "defend_position": 19.936818697252452,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f0_s1_t0_b0_h0": {
+    "charge_nearest": 49.96229059515615,
+    "charge_priority": 15.747445754413796,
+    "flank": -4.364225667715742,
+    "support_friend": 24.50921515038535,
+    "defend_position": 27.46836630943932,
+    "retreat": 70.48460117151994,
+    "destroy_bridge": 7.415982441051668
+  },
+  "JP_d3_e0_f1_s2_t0_b0_h1": {
+    "charge_nearest": 207.81055527457414,
+    "charge_priority": 2.116615908454226,
+    "flank": 0.0,
+    "support_friend": 35.022461028497275,
+    "defend_position": 37.6671928762012,
+    "retreat": 30.45204227336071,
+    "destroy_bridge": 30.59146374320345
+  },
+  "JP_d3_e0_f1_s1_t1_b1_h0": {
+    "charge_nearest": 65.90485114765029,
+    "charge_priority": 83.82234097947062,
+    "flank": 26.21391811332314,
+    "support_friend": 80.53460362200552,
+    "defend_position": 94.14209361937735,
+    "retreat": 121.05535698513383
+  },
+  "SOV_d1_e2_f0_s1_t1_b0_h0": {
+    "charge_nearest": 40.96510492532359,
+    "charge_priority": 16.271112947660992,
+    "flank": 36.66666666666667,
+    "support_friend": 24.709653704223825,
+    "defend_position": 12.834431488322815,
+    "retreat": 101.48661662395111
+  },
+  "JP_d1_e1_f0_s2_t0_b1_h1": {
+    "charge_nearest": 323.14249322435467,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 26.299066542425972,
+    "defend_position": 35.470836619065885,
+    "retreat": 0.0
+  },
+  "JP_d3_e0_f1_s1_t0_b1_h0": {
+    "charge_nearest": 27.424315811010175,
+    "charge_priority": 42.61693056597608,
+    "flank": 14.245585813805349,
+    "support_friend": 67.27971975547538,
+    "defend_position": 51.630599982980115,
+    "retreat": 33.19716275364455
+  },
+  "JP_d4_e0_f1_s1_t1_b1_h0": {
+    "charge_nearest": 25.889348438772615,
+    "charge_priority": 56.96226619587692,
+    "flank": 57.40687431587971,
+    "support_friend": 76.71694778595217,
+    "defend_position": 83.50321233655833,
+    "retreat": 82.48780188086803
+  },
+  "JP_d4_e0_f0_s1_t0_b1_h1": {
+    "charge_nearest": 73.78840840471796,
+    "charge_priority": 58.1482249671577,
+    "flank": 54.354842114828244,
+    "support_friend": 47.21039660962962,
+    "defend_position": 76.00073736144927,
+    "retreat": 50.19666955247035
+  },
+  "JP_d1_e1_f0_s1_t0_b1_h0": {
+    "charge_nearest": -26.146063165622344,
+    "charge_priority": 39.093049109502246,
+    "flank": -15.604950375798794,
+    "support_friend": -20.924379192790916,
+    "defend_position": 5.568880988357748,
+    "retreat": -19.619793329376616
+  },
+  "JP_d4_e0_f0_s2_t0_b1_h1": {
+    "charge_nearest": 59.57764775215033,
+    "charge_priority": 90.92054002123933,
+    "flank": 122.7599488369962,
+    "support_friend": 157.70498313842444,
+    "defend_position": 330.30097931138107,
+    "retreat": 87.2547293429965
+  },
+  "JP_d3_e0_f0_s2_t0_b1_h1": {
+    "charge_nearest": 235.1572903117725,
+    "charge_priority": 362.1911243821993,
+    "flank": 196.35417406891116,
+    "support_friend": 120.17208487360526,
+    "defend_position": 122.50326300559742,
+    "retreat": 175.18253305575146
+  },
+  "SOV_d3_e0_f1_s1_t0_b1_h1": {
+    "charge_nearest": 92.90364533584273,
+    "charge_priority": 96.35090260719443,
+    "flank": 80.24639167087453,
+    "support_friend": 114.40602384470715,
+    "defend_position": 103.35265019846493,
+    "retreat": 104.94602349483095
+  },
+  "SOV_d4_e0_f1_s1_t0_b1_h0": {
+    "charge_nearest": 76.71856787626427,
+    "charge_priority": 90.48746247660884,
+    "flank": 77.51495935124036,
+    "support_friend": 86.91123702266003,
+    "defend_position": 88.25823518578494,
+    "retreat": 96.52769956583275
+  },
+  "JP_d2_e0_f2_s1_t1_b1_h0": {
+    "charge_nearest": 22.89854532457867,
+    "charge_priority": -0.8576666666666668,
+    "flank": 3.333333333333334,
+    "support_friend": 156.2226415620605,
+    "defend_position": 31.17818138978773,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f0_s1_t0_b1_h0": {
+    "charge_nearest": 78.68138258919244,
+    "charge_priority": 37.01099137405928,
+    "flank": 101.84778276398528,
+    "support_friend": 29.825115116111768,
+    "defend_position": 88.59850515143073,
+    "retreat": 77.15644382296382
+  },
+  "SOV_d2_e0_f0_s2_t1_b1_h1": {
+    "charge_nearest": -10.0,
+    "charge_priority": 154.2354679150568,
+    "flank": 65.0,
+    "support_friend": 32.39601430808335,
+    "defend_position": 17.65639740375748,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s1_t0_b0_h0": {
+    "charge_nearest": 2.311431839083289,
+    "charge_priority": -17.69827801864765,
+    "flank": 72.95706759360235,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d4_e0_f0_s1_t1_b0_h0": {
+    "charge_nearest": 39.34525150281447,
+    "charge_priority": 69.00002133236066,
+    "flank": 38.25993867914431,
+    "support_friend": 20.651813797476194,
+    "defend_position": 118.21158261919291,
+    "retreat": 40.90440271009996
+  },
+  "JP_d2_e0_f1_s2_t1_b0_h1": {
+    "charge_nearest": 4.066310735582714,
+    "charge_priority": -8.734579490910917,
+    "flank": -35.18731900428961,
+    "support_friend": -1.4389792195147635,
+    "defend_position": 45.02927681540042,
+    "retreat": 249.9918836648311,
+    "destroy_bridge": 0.0
+  },
+  "JP_d3_e0_f1_s2_t1_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 333.65863128222685,
+    "flank": 0.0,
+    "support_friend": 19.937227779703463,
+    "defend_position": 15.656259508528692,
+    "retreat": 46.397511181640084,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f0_s2_t1_b0_h1": {
+    "charge_nearest": 231.08552205821957,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 34.85666237972738,
+    "defend_position": 51.775915008486564,
+    "retreat": 0.0,
+    "destroy_bridge": 5.928084698545038
+  },
+  "JP_d3_e0_f0_s1_t0_b1_h0": {
+    "charge_nearest": 53.93986418263658,
+    "charge_priority": 26.274581262415175,
+    "flank": 18.945663539510104,
+    "support_friend": 4.559019168986282,
+    "defend_position": 21.48193415548942,
+    "retreat": 20.52044706463202
+  },
+  "JP_d1_e1_f1_s2_t0_b0_h1": {
+    "charge_nearest": -55.25,
+    "charge_priority": 113.79136129367018,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d3_e0_f1_s2_t1_b0_h1": {
+    "charge_nearest": 173.283209148398,
+    "charge_priority": 0.0,
+    "flank": 36.66666666666667,
+    "support_friend": 1.2695309734832962,
+    "defend_position": 9.14378593138525,
+    "retreat": 51.7609351752765
+  },
+  "SOV_d3_e0_f1_s1_t0_b0_h1": {
+    "charge_nearest": 82.17828320422836,
+    "charge_priority": 119.63876207877189,
+    "flank": 64.50847064373006,
+    "support_friend": 110.67851203612821,
+    "defend_position": 104.173478064505,
+    "retreat": 169.15221144600963
+  },
+  "JP_d3_e0_f2_s2_t1_b0_h0": {
+    "charge_nearest": 222.62518499295228,
+    "charge_priority": 71.3413717471488,
+    "flank": 36.28316595503892,
+    "support_friend": 86.22817872319446,
+    "defend_position": 41.20911039124394,
+    "retreat": 31.294805288677942,
+    "destroy_bridge": 55.90724666256933
+  },
+  "SOV_d2_e0_f1_s2_t1_b0_h1": {
+    "charge_nearest": 127.1085373165666,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 10.169495280724448
+  },
+  "SOV_d2_e0_f1_s1_t0_b0_h1": {
+    "charge_nearest": 37.33648148635073,
+    "charge_priority": 61.266258692502504,
+    "flank": 45.67081441409232,
+    "support_friend": 28.001628537452568,
+    "defend_position": 96.87901621010695,
+    "retreat": -74.43507508537402
+  },
+  "SOV_d1_e2_f0_s1_t0_b1_h0": {
+    "charge_nearest": -10.451265394233602,
+    "charge_priority": 5.08470621966722,
+    "flank": 6.894989092511203,
+    "support_friend": -99.5001413004126,
+    "defend_position": 35.60657667050111,
+    "retreat": -31.45353727003669
+  },
+  "SOV_d3_e0_f1_s1_t0_b1_h0": {
+    "charge_nearest": 99.51776469062908,
+    "charge_priority": 109.71767478952646,
+    "flank": 58.013119815480486,
+    "support_friend": 119.9009330774672,
+    "defend_position": 68.58518081928213,
+    "retreat": 109.59054987663971
+  },
+  "JP_d1_e1_f1_s1_t0_b1_h0": {
+    "charge_nearest": -33.522149640452604,
+    "charge_priority": 26.445203232622255,
+    "flank": -4.280641305239943,
+    "support_friend": 98.4096691753845,
+    "defend_position": 40.04073122630389,
+    "retreat": -39.01233250188648
+  },
+  "JP_d1_e1_f0_s1_t1_b1_h1": {
+    "charge_nearest": -51.62265684373109,
+    "charge_priority": -36.28650414166807,
+    "flank": 1.7925542697367536,
+    "support_friend": 0.0,
+    "defend_position": 36.92700465521718,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f1_s1_t1_b1_h1": {
+    "charge_nearest": -6.666666666666668,
+    "charge_priority": 87.4571391931211,
+    "flank": 29.741058765841252,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f1_s1_t1_b1_h1": {
+    "charge_nearest": 5.333333333333336,
+    "charge_priority": 0.0,
+    "flank": 11.633860613684016,
+    "support_friend": 0.0,
+    "defend_position": 54.8032835355864,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f0_s1_t1_b1_h1": {
+    "charge_nearest": -227.72817399141135,
+    "charge_priority": -34.122306644377105,
+    "flank": -1.3330740770235536,
+    "support_friend": -32.62157646767493,
+    "defend_position": 35.20700237643931,
+    "retreat": -8.446922123504748
+  },
+  "JP_d1_e1_f0_s1_t0_b0_h1": {
+    "charge_nearest": 54.73344517212415,
+    "charge_priority": 24.38286415339827,
+    "flank": 22.726188267179637,
+    "support_friend": -58.056188423680574,
+    "defend_position": 22.115796054903328,
+    "retreat": 0.0,
+    "destroy_bridge": 1.5126047141321735
+  },
+  "JP_d4_e0_f0_s1_t0_b1_h0": {
+    "charge_nearest": 30.425687210692743,
+    "charge_priority": 28.46402284630827,
+    "flank": -3.2727905060287874,
+    "support_friend": 65.75860503935937,
+    "defend_position": 36.064766676405426,
+    "retreat": 34.144056072281835
+  },
+  "JP_d3_e0_f2_s1_t0_b0_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 104.23346578700037,
+    "defend_position": 7.852330868046199,
+    "retreat": 13.869380129618648,
+    "destroy_bridge": 9.241062196881753
+  },
+  "SOV_d2_e0_f1_s1_t0_b1_h1": {
+    "charge_nearest": 114.06050353942915,
+    "charge_priority": 108.61017184369877,
+    "flank": 67.29163339127551,
+    "support_friend": 159.72149250888816,
+    "defend_position": 101.39855897920225,
+    "retreat": 96.89788482390453
+  },
+  "JP_d1_e1_f2_s1_t1_b0_h0": {
+    "charge_nearest": -65.59966666666668,
+    "charge_priority": 86.6031838555427,
+    "flank": -9.5,
+    "support_friend": 44.31038380508694,
+    "defend_position": 84.32588920006394,
+    "retreat": 60.18380458277811,
+    "destroy_bridge": 16.46714473335406
+  },
+  "JP_d4_e0_f2_s2_t1_b1_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 154.410145970523,
+    "flank": 88.6911146057141,
+    "support_friend": 59.7965402587712,
+    "defend_position": 17.46872776800455,
+    "retreat": 33.21346466105714
+  },
+  "SOV_d1_e2_f1_s1_t1_b1_h0": {
+    "charge_nearest": 134.0050267282096,
+    "charge_priority": 6.106169794436713,
+    "flank": 0.0,
+    "support_friend": 57.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d4_e0_f0_s1_t0_b0_h1": {
+    "charge_nearest": -60.0,
+    "charge_priority": 23.841727437431828,
+    "flank": 34.23118828946191,
+    "support_friend": 56.68117084060402,
+    "defend_position": 25.054426459312396,
+    "retreat": 0.0,
+    "destroy_bridge": 4.411568526459587
+  },
+  "SOV_d4_e0_f1_s2_t1_b1_h0": {
+    "charge_nearest": 130.15724383158303,
+    "charge_priority": 134.5345384605682,
+    "flank": 135.89542334098851,
+    "support_friend": 106.3585146391326,
+    "defend_position": 152.492185014201,
+    "retreat": 126.05291089822096
+  },
+  "SOV_d1_e1_f1_s1_t0_b1_h1": {
+    "charge_nearest": -72.57419258441531,
+    "charge_priority": -45.51718793554565,
+    "flank": -77.5698012980065,
+    "support_friend": -50.82130874141726,
+    "defend_position": 25.966142549545488,
+    "retreat": -35.93687274470437
+  },
+  "SOV_d4_e0_f2_s1_t0_b0_h1": {
+    "charge_nearest": 21.195108918097002,
+    "charge_priority": 13.354027850166009,
+    "flank": 27.46006107697973,
+    "support_friend": 48.89540993351995,
+    "defend_position": 24.077436426693797,
+    "retreat": 19.622330491089727
+  },
+  "SOV_d4_e0_f2_s2_t0_b0_h1": {
+    "charge_nearest": 1.9413288304390623,
+    "charge_priority": 31.969342819507098,
+    "flank": 31.18807694082563,
+    "support_friend": 41.387519667006245,
+    "defend_position": 231.31683182720292,
+    "retreat": 23.453745731585258
+  },
+  "SOV_d4_e0_f2_s2_t1_b0_h0": {
+    "charge_nearest": 57.2237605021821,
+    "charge_priority": 25.02183514726894,
+    "flank": 157.68351189142535,
+    "support_friend": 12.76761283701786,
+    "defend_position": 34.90387706134583,
+    "retreat": 14.44465297502969
+  },
+  "JP_d1_e2_f1_s1_t0_b0_h0": {
+    "charge_nearest": -40.5,
+    "charge_priority": -40.54786772847869,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 13.067616888175634,
+    "retreat": 122.22091497244394,
+    "destroy_bridge": -10.0
+  },
+  "SOV_d3_e0_f0_s2_t0_b0_h1": {
+    "charge_nearest": 64.15947028975702,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f0_s2_t0_b0_h1": {
+    "charge_nearest": 79.47371120090308,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f0_s2_t0_b0_h1": {
+    "charge_nearest": 261.0431304866312,
+    "charge_priority": 21.003417444623423,
+    "flank": -62.5,
+    "support_friend": 24.521445115058544,
+    "defend_position": 57.617759423677825,
+    "retreat": 36.3264971730161,
+    "destroy_bridge": 1.8
+  },
+  "SOV_d3_e0_f1_s2_t0_b0_h1": {
+    "charge_nearest": 246.42739629298927,
+    "charge_priority": 70.43932654514252,
+    "flank": 0.0,
+    "support_friend": 21.56656701667906,
+    "defend_position": 26.732863068275122,
+    "retreat": 24.461023879691723
+  },
+  "JP_d2_e0_f0_s2_t1_b1_h1": {
+    "charge_nearest": 9.670861270536747,
+    "charge_priority": 244.2997841888739,
+    "flank": 39.65524279083237,
+    "support_friend": 60.5231733492781,
+    "defend_position": 34.14053234857189,
+    "retreat": 41.81554504670727
+  },
+  "JP_d1_e1_f0_s1_t0_b1_h1": {
+    "charge_nearest": 20.790692587954915,
+    "charge_priority": -4.28093074120451,
+    "flank": 163.26543722630416,
+    "support_friend": 52.1696368625724,
+    "defend_position": 16.67445777235073,
+    "retreat": -26.080468115896146
+  },
+  "JP_d2_e0_f2_s1_t1_b0_h0": {
+    "charge_nearest": -11.527076151776143,
+    "charge_priority": 0.0,
+    "flank": 23.752263500838076,
+    "support_friend": 18.611646495679835,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 143.3361308337277
+  },
+  "SOV_d2_e0_f0_s2_t1_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 19.914322490669534,
+    "flank": 187.005327956721,
+    "support_friend": 0.0,
+    "defend_position": 12.183770177282046,
+    "retreat": 7.968023060334197
+  },
+  "SOV_d4_e0_f2_s1_t0_b1_h1": {
+    "charge_nearest": 13.731821423114177,
+    "charge_priority": 20.281151784759583,
+    "flank": 54.795573283375724,
+    "support_friend": 27.30954337603055,
+    "defend_position": 20.585971791441434,
+    "retreat": 26.0182932465541
+  },
+  "SOV_d4_e0_f1_s2_t0_b1_h1": {
+    "charge_nearest": 148.58648300911375,
+    "charge_priority": 116.58360985338926,
+    "flank": 135.6616563559539,
+    "support_friend": 64.03252248215081,
+    "defend_position": 136.78989656823114,
+    "retreat": 133.61430724624705
+  },
+  "SOV_d3_e0_f1_s2_t0_b1_h1": {
+    "charge_nearest": 70.86966608161104,
+    "charge_priority": 131.3302952194932,
+    "flank": 48.69142096006669,
+    "support_friend": 23.110162145296258,
+    "defend_position": 20.638650079309468,
+    "retreat": 23.13431434640338
+  },
+  "SOV_d1_e1_f0_s2_t1_b1_h1": {
+    "charge_nearest": 11.566666666666666,
+    "charge_priority": 178.15446909057772,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f0_s1_t1_b1_h1": {
+    "charge_nearest": 14.334519087539974,
+    "charge_priority": 87.5649325370442,
+    "flank": 0.0,
+    "support_friend": 10.871665095289629,
+    "defend_position": 9.735025088031186,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f0_s1_t1_b1_h1": {
+    "charge_nearest": 9.365369860165572,
+    "charge_priority": -10.0,
+    "flank": 104.75964237188346,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 7.118144620786531
+  },
+  "JP_d2_e0_f1_s1_t0_b1_h1": {
+    "charge_nearest": 99.74064476320255,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d3_e0_f0_s1_t1_b1_h1": {
+    "charge_nearest": -191.55224872258765,
+    "charge_priority": -56.681264500265016,
+    "flank": -205.07999999999998,
+    "support_friend": -128.05432842405168,
+    "defend_position": 48.48634700430293,
+    "retreat": -29.712853594809687
+  },
+  "SOV_d3_e0_f2_s2_t1_b1_h0": {
+    "charge_nearest": 174.61494941332725,
+    "charge_priority": 0.0,
+    "flank": 46.80203677343917,
+    "support_friend": 2.9792049962259077,
+    "defend_position": 15.755911664365875,
+    "retreat": 12.992762974196005
+  },
+  "JP_d1_e1_f1_s2_t1_b0_h1": {
+    "charge_nearest": -2.5,
+    "charge_priority": 31.230740004727004,
+    "flank": 27.36000174899391,
+    "support_friend": 204.37522709885118,
+    "defend_position": -11.66793255670279,
+    "retreat": 0.0,
+    "destroy_bridge": 15.100299146717346
+  },
+  "SOV_d1_e2_f0_s1_t0_b0_h1": {
+    "charge_nearest": -36.09973834000001,
+    "charge_priority": -70.94145654076694,
+    "flank": -120.0,
+    "support_friend": -98.16954170376738,
+    "defend_position": -20.6805350881546,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s1_t0_b1_h0": {
+    "charge_nearest": -34.735239101857466,
+    "charge_priority": 2.565708889383222,
+    "flank": -6.666666666666668,
+    "support_friend": 0.0,
+    "defend_position": 60.01739216759769,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f0_s1_t1_b0_h1": {
+    "charge_nearest": -6.666666666666668,
+    "charge_priority": 178.95985039232744,
+    "flank": 36.7817431420075,
+    "support_friend": 21.5408018495027,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f0_s2_t1_b0_h1": {
+    "charge_nearest": 157.70275817501818,
+    "charge_priority": 26.067674228332965,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 63.63557452845875,
+    "retreat": 0.0
+  },
+  "JP_d3_e0_f1_s1_t0_b0_h1": {
+    "charge_nearest": 56.28758564477618,
+    "charge_priority": 0.0,
+    "flank": 14.182601429527953,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": -0.9826000000000001
+  },
+  "SOV_d3_e0_f2_s2_t1_b0_h0": {
+    "charge_nearest": 202.89097213493955,
+    "charge_priority": 0.0,
+    "flank": 16.05617489593014,
+    "support_friend": 16.12164198025952,
+    "defend_position": 21.75306509360746,
+    "retreat": 25.594329803081692
+  },
+  "JP_d1_e2_f1_s2_t0_b1_h0": {
+    "charge_nearest": 92.2193051049297,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d4_e0_f1_s2_t0_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 172.24699578330805,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d1_e2_f0_s1_t0_b0_h1": {
+    "charge_nearest": -12.5,
+    "charge_priority": -70.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d2_e0_f2_s1_t0_b0_h1": {
+    "charge_nearest": 97.52624438950133,
+    "charge_priority": 0.0,
+    "flank": 3.9694248775798044,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 9.349817420184236
+  },
+  "SOV_d1_e1_f2_s1_t0_b0_h0": {
+    "charge_nearest": 44.94310392251359,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 35.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d3_e0_f0_s2_t1_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 140.05818800610243,
+    "flank": 102.06586763644789,
+    "support_friend": 283.3361271691163,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f0_s2_t1_b1_h1": {
+    "charge_nearest": 157.92019906417968,
+    "charge_priority": 26.574121204790657,
+    "flank": 65.0,
+    "support_friend": 0.0,
+    "defend_position": -7.5,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f1_s2_t1_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": -1.4983313071989457,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f1_s2_t1_b0_h1": {
+    "charge_nearest": 63.440691285142165,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f1_s1_t1_b0_h1": {
+    "charge_nearest": -60.0,
+    "charge_priority": -45.0,
+    "flank": -37.354941084029164,
+    "support_friend": 35.51570619518058,
+    "defend_position": 0.0,
+    "retreat": 103.04750107070619,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f0_s2_t1_b1_h1": {
+    "charge_nearest": -2.5,
+    "charge_priority": -1.4756815201415077,
+    "flank": -30.719153014549633,
+    "support_friend": 153.16831474846177,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s1_t1_b1_h0": {
+    "charge_nearest": -111.93966666666668,
+    "charge_priority": -111.41359387358273,
+    "flank": -26.470436932256277,
+    "support_friend": -128.542707819278,
+    "defend_position": -22.92666666666667,
+    "retreat": 89.89505162171736
+  },
+  "JP_d1_e2_f2_s1_t1_b1_h0": {
+    "charge_nearest": 6.666666666666668,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 8.73910154063452,
+    "retreat": 69.78640043452138
+  },
+  "JP_d4_e0_f1_s2_t1_b0_h1": {
+    "charge_nearest": 109.31193212801364,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 66.57639962520331,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f1_s1_t1_b0_h1": {
+    "charge_nearest": -6.666666666666668,
+    "charge_priority": 0.9311725582637504,
+    "flank": 0.0,
+    "support_friend": 7.253573432180838,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d4_e0_f1_s1_t1_b0_h1": {
+    "charge_nearest": 87.9010316184911,
+    "charge_priority": 25.41078163230858,
+    "flank": 7.932595921830952,
+    "support_friend": 21.308239662727566,
+    "defend_position": 17.370021578070038,
+    "retreat": 0.9338244383555496
+  },
+  "JP_d3_e0_f2_s2_t0_b1_h0": {
+    "charge_nearest": 204.78899611831653,
+    "charge_priority": 0.0,
+    "flank": 15.19237287096575,
+    "support_friend": 0.0,
+    "defend_position": 54.867697318830636,
+    "retreat": 59.17657858400415
+  },
+  "SOV_d1_e1_f0_s2_t1_b0_h1": {
+    "charge_nearest": 234.4971043306798,
+    "charge_priority": 17.624323115846405,
+    "flank": -2.5,
+    "support_friend": 8.97931333507236,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f1_s2_t1_b1_h1": {
+    "charge_nearest": 221.6140765407472,
+    "charge_priority": 63.1256457153537,
+    "flank": 67.57535042174851,
+    "support_friend": 48.292592895295925,
+    "defend_position": 0.0,
+    "retreat": 28.078875991154902
+  },
+  "SOV_d1_e2_f0_s1_t0_b1_h1": {
+    "charge_nearest": -120.0,
+    "charge_priority": -58.13477308723512,
+    "flank": 12.533546211319717,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f2_s1_t0_b0_h0": {
+    "charge_nearest": 111.61367349601214,
+    "charge_priority": 20.10153768989756,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f0_s1_t1_b1_h1": {
+    "charge_nearest": 4.858029515268328,
+    "charge_priority": -118.30028277536233,
+    "flank": -89.38987673944432,
+    "support_friend": 62.361874832445295,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f0_s2_t0_b1_h1": {
+    "charge_nearest": 204.87171508032438,
+    "charge_priority": 32.531468730824606,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f0_s2_t0_b1_h1": {
+    "charge_nearest": 120.1970322833985,
+    "charge_priority": 15.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 34.05347040069513,
+    "retreat": 0.15000000000000002
+  },
+  "SOV_d3_e0_f1_s1_t1_b1_h1": {
+    "charge_nearest": 56.9067779470011,
+    "charge_priority": 9.125700936911203,
+    "flank": 152.86107214939076,
+    "support_friend": 52.6658100557472,
+    "defend_position": 8.263022671770257,
+    "retreat": 17.777318072497682
+  },
+  "JP_d2_e0_f1_s1_t1_b0_h1": {
+    "charge_nearest": -37.45867707028687,
+    "charge_priority": 17.546606171463782,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f2_s1_t1_b1_h0": {
+    "charge_nearest": 93.65464069074247,
+    "charge_priority": 5.021742786507848,
+    "flank": 0.0,
+    "support_friend": 24.92464495408606,
+    "defend_position": 23.23685202911932,
+    "retreat": 46.24900262556797
+  },
+  "JP_d3_e0_f2_s1_t0_b1_h0": {
+    "charge_nearest": 12.635570897965813,
+    "charge_priority": 92.13077773445312,
+    "flank": 7.797343946157386,
+    "support_friend": 0.0,
+    "defend_position": 21.000520952631447,
+    "retreat": 5.127612012329193
+  },
+  "JP_d3_e0_f2_s1_t1_b1_h0": {
+    "charge_nearest": 32.40240957240998,
+    "charge_priority": 12.336634634954626,
+    "flank": 18.233505688679116,
+    "support_friend": 127.47961376300955,
+    "defend_position": 8.584384213546052,
+    "retreat": 34.581271642082676
+  },
+  "JP_d4_e0_f2_s1_t0_b1_h0": {
+    "charge_nearest": 55.17058178976159,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 20.397104183432777,
+    "defend_position": 23.515444287432842,
+    "retreat": 37.74912683634521
+  },
+  "SOV_d2_e0_f1_s2_t0_b1_h1": {
+    "charge_nearest": -58.5,
+    "charge_priority": -51.57212356023632,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 2.089781943370261,
+    "retreat": 0.0
+  },
+  "SOV_d1_e2_f1_s2_t0_b1_h0": {
+    "charge_nearest": 60.30960810906754,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f1_s1_t0_b1_h0": {
+    "charge_nearest": 9.666564698679823,
+    "charge_priority": 0.0,
+    "flank": -10.0,
+    "support_friend": 17.660107316934216,
+    "defend_position": 0.0,
+    "retreat": 7.361445891707527
+  },
+  "SOV_d4_e0_f0_s2_t1_b1_h1": {
+    "charge_nearest": 172.87170983273853,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 33.604603271514186,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f0_s2_t1_b1_h1": {
+    "charge_nearest": 134.48789706396246,
+    "charge_priority": 21.937983643481836,
+    "flank": 19.859900517381707,
+    "support_friend": 50.922456683599606,
+    "defend_position": 13.178395174238766,
+    "retreat": 0.0
+  },
+  "SOV_d1_e2_f1_s2_t1_b1_h0": {
+    "charge_nearest": 158.7103852733909,
+    "charge_priority": 0.0,
+    "flank": 33.75,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s1_t1_b1_h0": {
+    "charge_nearest": 62.51520092285439,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 5.172318999274008
+  },
+  "SOV_d2_e0_f2_s1_t1_b1_h0": {
+    "charge_nearest": 66.48428980693214,
+    "charge_priority": 0.0,
+    "flank": -52.400000000000006,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f0_s1_t1_b0_h1": {
+    "charge_nearest": 105.70413995704118,
+    "charge_priority": 17.23581778568411,
+    "flank": 0.0,
+    "support_friend": 24.940481092488724,
+    "defend_position": 4.284868304459319,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f0_s1_t1_b0_h1": {
+    "charge_nearest": 131.221732431211,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d4_e0_f1_s1_t0_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 9.947957130385532,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f0_s1_t1_b1_h1": {
+    "charge_nearest": -6.666666666666668,
+    "charge_priority": 0.0,
+    "flank": 7.70492376509937,
+    "support_friend": 83.07115149765008,
+    "defend_position": 7.816179408168947,
+    "retreat": 9.332750458117129
+  },
+  "JP_d1_e1_f2_s2_t0_b1_h0": {
+    "charge_nearest": 149.4159681712337,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f1_s2_t1_b1_h1": {
+    "charge_nearest": 7.612292179197261,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f2_s1_t0_b0_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": -0.486060272407026,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f2_s2_t0_b1_h0": {
+    "charge_nearest": 202.01186824001576,
+    "charge_priority": 31.978999226755906,
+    "flank": 54.08051358642393,
+    "support_friend": 26.022323399480417,
+    "defend_position": 52.75284022663296,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f1_s2_t0_b0_h0": {
+    "charge_nearest": 83.04467798234441,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 19.25844085879801,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d1_e2_f1_s1_t0_b1_h0": {
+    "charge_nearest": 150.10129542730942,
+    "charge_priority": 0.0,
+    "flank": -0.8534362235851232,
+    "support_friend": 38.87923832474931,
+    "defend_position": 11.144695157971134,
+    "retreat": 21.001799482448696
+  },
+  "JP_d1_e2_f2_s2_t1_b1_h0": {
+    "charge_nearest": -2.819555553383363,
+    "charge_priority": 4.272697828219603,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 120.78023874715164,
+    "retreat": 25.183385238868897
+  },
+  "SOV_d1_e1_f2_s2_t1_b0_h0": {
+    "charge_nearest": 52.63825231574808,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s2_t1_b1_h0": {
+    "charge_nearest": 154.89368737745795,
+    "charge_priority": 64.95004544076049,
+    "flank": 22.309871908229077,
+    "support_friend": 8.081140372942691,
+    "defend_position": 0.0,
+    "retreat": 21.204305434283413
+  },
+  "JP_d1_e2_f0_s2_t1_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 67.7307828820173,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d2_e0_f2_s1_t0_b1_h0": {
+    "charge_nearest": 30.05761647407276,
+    "charge_priority": 7.891560005762344,
+    "flank": 2.160541542899474,
+    "support_friend": 148.0883228041424,
+    "defend_position": 1.1252732867843491,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s2_t0_b1_h0": {
+    "charge_nearest": 143.40651664376765,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f1_s1_t1_b0_h1": {
+    "charge_nearest": 123.78642821212829,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s1_t0_b1_h0": {
+    "charge_nearest": 71.26122845051421,
+    "charge_priority": 87.66552768382003,
+    "flank": 14.374678761346884,
+    "support_friend": 42.08222533641718,
+    "defend_position": 93.85644211172472,
+    "retreat": 35.82731907147267
+  },
+  "SOV_d4_e0_f2_s2_t0_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 166.81308801112382,
+    "support_friend": 18.957241310704042,
+    "defend_position": 30.636960331004207,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s2_t0_b1_h1": {
+    "charge_nearest": -2.0772769819939434,
+    "charge_priority": 113.11278764156457,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 24.814147613823923,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s1_t0_b1_h0": {
+    "charge_nearest": 31.1,
+    "charge_priority": 142.23934240467872,
+    "flank": 0.0,
+    "support_friend": 11.882581712149978,
+    "defend_position": -10.985070733301017,
+    "retreat": 11.235352218821795
+  },
+  "SOV_d1_e1_f2_s1_t0_b1_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 164.97186091644903,
+    "flank": 0.0,
+    "support_friend": 47.281582998036406,
+    "defend_position": 21.496723412534603,
+    "retreat": 10.159656323404683
+  },
+  "SOV_d3_e0_f2_s1_t0_b1_h0": {
+    "charge_nearest": 6.147898580880089,
+    "charge_priority": -21.04626352334281,
+    "flank": 6.86344519902347,
+    "support_friend": 108.04861355977643,
+    "defend_position": 0.0,
+    "retreat": 43.156371747469166
+  },
+  "SOV_d3_e0_f2_s1_t0_b1_h1": {
+    "charge_nearest": 21.121650891360087,
+    "charge_priority": 89.00309383329468,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 14.3303655045753,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f2_s1_t0_b1_h0": {
+    "charge_nearest": 103.14711582773728,
+    "charge_priority": 0.0,
+    "flank": 25.899764482239817,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d4_e0_f2_s1_t1_b0_h0": {
+    "charge_nearest": 5.680301934985567,
+    "charge_priority": 0.0,
+    "flank": 86.8924945004373,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d3_e0_f2_s2_t0_b1_h0": {
+    "charge_nearest": 156.45400942874477,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f2_s1_t0_b1_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f1_s2_t1_b1_h1": {
+    "charge_nearest": 167.30946571306205,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 1.7224958480199122
+  },
+  "JP_d1_e2_f2_s2_t0_b1_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f2_s1_t1_b1_h0": {
+    "charge_nearest": 110.64621976150508,
+    "charge_priority": 0.0,
+    "flank": 5.5311998499819985,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f1_s1_t1_b0_h1": {
+    "charge_nearest": 20.32243585496189,
+    "charge_priority": 0.0,
+    "flank": 106.63837198012672,
+    "support_friend": 4.747404720222835,
+    "defend_position": -60.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s2_t0_b1_h0": {
+    "charge_nearest": 150.9101829984739,
+    "charge_priority": 14.610445982173644,
+    "flank": 12.166149426719574,
+    "support_friend": 17.337800487047257,
+    "defend_position": 0.0,
+    "retreat": 14.0851006964157
+  },
+  "SOV_d3_e0_f2_s1_t1_b1_h0": {
+    "charge_nearest": 3.333333333333334,
+    "charge_priority": 0.0,
+    "flank": 20.1565800956229,
+    "support_friend": 46.36259484603972,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s2_t0_b1_h0": {
+    "charge_nearest": 114.13227539784907,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f2_s2_t0_b1_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s1_t0_b0_h0": {
+    "charge_nearest": 20.062126136714415,
+    "charge_priority": 17.96497246441775,
+    "flank": 31.946382297447016,
+    "support_friend": 27.780320878560598,
+    "defend_position": 11.889134527099273,
+    "retreat": 121.63835093993936
+  },
+  "SOV_d4_e0_f2_s2_t1_b1_h1": {
+    "charge_nearest": 0.9448374756867232,
+    "charge_priority": 19.528434065834922,
+    "flank": 2.3174708027098987,
+    "support_friend": 71.91030742785165,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s2_t1_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 24.273385441008312,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f2_s1_t0_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 4.88295474859296,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 41.74438030827015,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s1_t1_b0_h0": {
+    "charge_nearest": 59.77165236612085,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 7.527069606873406
+  },
+  "JP_d3_e0_f1_s1_t1_b1_h1": {
+    "charge_nearest": 45.97861246467692,
+    "charge_priority": -24.892621088347695,
+    "flank": -69.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s1_t1_b0_h1": {
+    "charge_nearest": -120.0,
+    "charge_priority": -6.666666666666668,
+    "flank": -10.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d2_e0_f2_s2_t1_b1_h0": {
+    "charge_nearest": 189.9994901302673,
+    "charge_priority": 0.0,
+    "flank": 69.53072669205775,
+    "support_friend": 0.0,
+    "defend_position": 39.058851053844975,
+    "retreat": 68.62598644345853
+  },
+  "SOV_d4_e0_f2_s1_t1_b1_h1": {
+    "charge_nearest": 32.54340121288878,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 3.0406719374318296,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s1_t0_b1_h1": {
+    "charge_nearest": -24.952869001666667,
+    "charge_priority": 93.85974299720925,
+    "flank": 14.192265245901735,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f0_s1_t1_b0_h1": {
+    "charge_nearest": -23.86515532597986,
+    "charge_priority": -0.9459763528311358,
+    "flank": -3.4457757227747834,
+    "support_friend": 62.170430643249375,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d3_e0_f1_s2_t1_b1_h1": {
+    "charge_nearest": 209.08513266221553,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 20.85761114601934
+  },
+  "JP_d1_e1_f1_s2_t0_b1_h1": {
+    "charge_nearest": 18.629117495302662,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f0_s2_t0_b1_h1": {
+    "charge_nearest": 63.97030136894428,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f0_s2_t0_b1_h1": {
+    "charge_nearest": 137.6859152196337,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 16.968221873653626,
+    "retreat": 0.0
+  },
+  "JP_d3_e0_f1_s1_t0_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 75.13660126531573
+  },
+  "JP_d1_e1_f1_s1_t0_b1_h1": {
+    "charge_nearest": 5.930000000000007,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 18.20475778034597,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f2_s1_t0_b1_h1": {
+    "charge_nearest": -14.43326158704377,
+    "charge_priority": -8.164866216513033,
+    "flank": -46.66666666666667,
+    "support_friend": -22.5,
+    "defend_position": 19.274078314874487,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f2_s2_t1_b1_h0": {
+    "charge_nearest": 53.013923017988446,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s2_t0_b0_h0": {
+    "charge_nearest": 93.60993546012942,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s2_t0_b0_h0": {
+    "charge_nearest": 17.716002681118336,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 98.79563931882001
+  },
+  "SOV_d2_e0_f1_s2_t0_b0_h1": {
+    "charge_nearest": 39.619195015226246,
+    "charge_priority": 0.0,
+    "flank": 87.93644913131017,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f1_s2_t1_b1_h1": {
+    "charge_nearest": 93.41669378317523,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f0_s2_t0_b0_h1": {
+    "charge_nearest": 162.24385109727507,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s1_t0_b0_h0": {
+    "charge_nearest": -12.666666666666668,
+    "charge_priority": 8.025997213741583,
+    "flank": 99.20294229623215,
+    "support_friend": 5.414638133974902,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d4_e0_f1_s2_t1_b1_h1": {
+    "charge_nearest": 131.47423221983195,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s1_t0_b0_h1": {
+    "charge_nearest": -5.0,
+    "charge_priority": 2.3386311988897432,
+    "flank": 2.089424755148383,
+    "support_friend": 0.0,
+    "defend_position": 50.1031993526529,
+    "retreat": -0.8716377666145023
+  },
+  "JP_d2_e0_f1_s2_t0_b1_h1": {
+    "charge_nearest": 64.2853120720177,
+    "charge_priority": 0.0,
+    "flank": 9.168518170353204,
+    "support_friend": -46.204244028746224,
+    "defend_position": 4.0343897005416265,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s2_t1_b0_h1": {
+    "charge_nearest": 29.577192873272335,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s2_t1_b1_h1": {
+    "charge_nearest": -6.666666666666668,
+    "charge_priority": 36.300000000000004,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s2_t1_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 18.83809994523618,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s1_t1_b1_h1": {
+    "charge_nearest": 11.78878863407373,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d4_e0_f2_s1_t1_b0_h1": {
+    "charge_nearest": 13.804277395097062,
+    "charge_priority": 0.6449914068583675,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e1_f2_s2_t0_b0_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 40.71428042181792,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s2_t1_b0_h1": {
+    "charge_nearest": 46.66666666666667,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s2_t0_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 48.36685630805051,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f1_s1_t1_b1_h1": {
+    "charge_nearest": 68.48884937784263,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f1_s1_t1_b1_h1": {
+    "charge_nearest": -8.333333333333334,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f2_s2_t0_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d2_e0_f2_s2_t0_b0_h1": {
+    "charge_nearest": 2.6501315643999286,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s2_t1_b1_h1": {
+    "charge_nearest": 26.41501365276418,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f0_s2_t0_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f1_s1_t0_b0_h1": {
+    "charge_nearest": -49.91351369502182,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d1_e2_f0_s2_t0_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d4_e0_f1_s1_t1_b1_h1": {
+    "charge_nearest": -6.666666666666668,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s1_t1_b0_h1": {
+    "charge_nearest": -40.0,
+    "charge_priority": 4.474165578108894,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s1_t1_b0_h1": {
+    "charge_nearest": 1.0058608569047753,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e2_f0_s1_t1_b0_h1": {
+    "charge_nearest": 40.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e2_f0_s2_t1_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d3_e0_f2_s2_t0_b0_h0": {
+    "charge_nearest": 0.0,
+    "charge_priority": 111.29587658941628,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e2_f0_s1_t1_b1_h1": {
+    "charge_nearest": 28.80169513438839,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e2_f2_s2_t1_b0_h0": {
+    "charge_nearest": 139.21426286444313,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d3_e0_f2_s1_t1_b0_h0": {
+    "charge_nearest": 55.02458870968273,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s2_t0_b1_h1": {
+    "charge_nearest": -46.66666666666667,
+    "charge_priority": -22.5,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f2_s2_t1_b0_h1": {
+    "charge_nearest": 24.578068213216234,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d2_e0_f2_s1_t1_b0_h1": {
+    "charge_nearest": -2.061636522721805,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "JP_d1_e2_f0_s1_t0_b1_h1": {
+    "charge_nearest": 5.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d1_e2_f1_s1_t0_b0_h1": {
+    "charge_nearest": 27.49708006765981,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d2_e0_f2_s2_t1_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  },
+  "SOV_d1_e1_f1_s2_t0_b0_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f0_s2_t0_b0_h1": {
+    "charge_nearest": 115.444191053813,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "SOV_d2_e0_f2_s1_t1_b1_h1": {
+    "charge_nearest": 0.0,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 8.455176161153853,
+    "defend_position": 0.0,
+    "retreat": 0.0
+  },
+  "JP_d1_e1_f2_s1_t1_b0_h1": {
+    "charge_nearest": 6.666666666666668,
+    "charge_priority": 0.0,
+    "flank": 0.0,
+    "support_friend": 0.0,
+    "defend_position": 0.0,
+    "retreat": 0.0,
+    "destroy_bridge": 0.0
+  }
+}

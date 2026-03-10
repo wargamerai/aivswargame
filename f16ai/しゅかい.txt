@@ -1,0 +1,97 @@
+import math
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import numpy as np
+
+# 日本語フォント設定
+try:
+    import japanize_matplotlib
+except ImportError:
+    import os
+    os.system('pip install japanize_matplotlib')
+    import japanize_matplotlib
+
+fig, ax = plt.subplots(figsize=(10, 10))
+hex_size = 20
+cx, cy = 0, 0
+
+def get_flat_top_hex_points(hx, hy, size):
+    angles = [math.radians(60 * i) for i in range(6)]
+    return [(hx + size * math.cos(a), hy + size * math.sin(a)) for a in angles]
+
+# 全6方向の色定義
+colors = {
+    "前方": "#FF9999",       # 赤
+    "後方": "#99FF99",       # 緑
+    "前方右側面": "#FFCC99", # オレンジ
+    "前方左側面": "#FFCC99", # オレンジ
+    "後方右側面": "#99CCFF", # 青
+    "後方左側面": "#99CCFF", # 青
+    "自機": "white"
+}
+
+radius = 8
+eps = 1e-9  # 境界判定用
+
+for r in range(-radius, radius + 1):
+    for q in range(-radius, radius + 1):
+        s = -q - r
+        if abs(s) > radius:
+            continue
+
+        hx = cx + hex_size * 1.5 * q
+        hy = cy + hex_size * math.sqrt(3) * (r + q / 2.0)
+
+        if q == 0 and r == 0:
+            color = colors["自機"]
+            edge_color = 'black'
+            lw = 2
+        else:
+            dx = hx - cx
+            dy = -(hy - cy) 
+            
+            angle = math.degrees(math.atan2(dy, dx))
+            rel_angle = (90 - angle) % 360
+            
+            # --- 判定ロジック ---
+            # 1. 前方・後方 (各60度、境界含む)
+            if rel_angle >= 330 - eps or rel_angle <= 30 + eps:
+                color = colors["前方"]
+            elif 150 - eps <= rel_angle <= 210 + eps:
+                color = colors["後方"]
+            
+            # 2. 右側面 (30度〜150度)
+            elif 30 + eps < rel_angle < 150 - eps:
+                if rel_angle >= 90 - eps: # 90度以上は後方側面
+                    color = colors["後方右側面"]
+                else:
+                    color = colors["前方右側面"]
+            
+            # 3. 左側面 (210度〜330度)
+            elif 210 + eps < rel_angle < 330 - eps:
+                if rel_angle <= 270 + eps: # 270度(真横)以下は後方側面
+                    color = colors["後方左側面"]
+                else:
+                    color = colors["前方左側面"]
+            else:
+                color = "white"
+
+            edge_color = 'gray'
+            lw = 0.5
+
+        hex_patch = patches.Polygon(get_flat_top_hex_points(hx, hy, hex_size), 
+                                    closed=True, fill=True, color=color, ec=edge_color, lw=lw)
+        ax.add_patch(hex_patch)
+
+# 自機シルエット
+plane_points = np.array([[0, -12], [6, -1], [2, 1], [4, 10], [-4, 10], [-2, 1], [-6, -1]])
+plane = patches.Polygon(plane_points, closed=True, fill=True, color='blue', alpha=0.9)
+ax.add_patch(plane)
+
+ax.set_xlim(-250, 250)
+ax.set_ylim(250, -250)
+ax.set_aspect('equal')
+plt.axis('off')
+plt.title("全6方向 射界判定マップ（90度境界ルール適用）", fontsize=16)
+
+plt.show()

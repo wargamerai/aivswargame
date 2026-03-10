@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>対AI Panzer Waffe 西部戦線1944 ©IED 2026</title>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; overscroll-behavior-x: none; }
+        .container { display: flex; flex-direction: column; height: 100vh; }
+
+        #fixed-dashboard {
+            height: 45vh;
+            flex: none;   
+            background: #111;
+            color: #00ff00;
+            padding: 15px;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.2;
+            min-height: 100px;
+        }
+
+        #drag-handle {
+            height: 10px;
+            background: #444;
+            cursor: row-resize;
+            border-top: 1px solid #666;
+            border-bottom: 1px solid #666;
+            flex: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #drag-handle::after {
+            content: "|||";
+            color: #888;
+            font-size: 8px;
+            letter-spacing: 2px;
+        }
+        #drag-handle:hover { background: #666; }
+
+        #scroll-log {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 15px;
+            color: #fff;
+            background: #000;
+            font-size: 14px;
+        }
+
+        #input-area { background: #222; padding: 10px; display: flex; border-top: 1px solid #555; }
+        input { flex: 1; background: #000; color: #fff; border: 1px solid #00ff00; padding: 8px; outline: none; }
+        button { background:#000; color:#00ff00; border:1px solid #00ff00; padding:0 15px; margin-left:5px; cursor:pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="fixed-dashboard">システム起動中... MCTSエンジンを初期化しています...</div>
+    
+    <div id="drag-handle"></div>
+    
+    <div id="scroll-log"><div id="output-area"></div></div>
+    <div id="input-area">
+        <span style="color:#00ff00; padding-right:5px;">></span>
+        <input type="text" id="user-input" autocomplete="off" placeholder="番号を入力...">
+        <button id="submit-btn" type="button">送信</button>
+    </div>
+</div>
+
+<script>
+    const handle = document.getElementById('drag-handle');
+    const topBox = document.getElementById('fixed-dashboard');
+    let isDragging = false;
+
+    handle.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        document.body.style.cursor = 'row-resize';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        let newHeight = e.clientY;
+        if (newHeight < 50) newHeight = 50;
+        if (newHeight > window.innerHeight - 100) newHeight = window.innerHeight - 100;
+        topBox.style.height = newHeight + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        document.body.style.cursor = 'default';
+    });
+
+    handle.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        e.preventDefault();
+    });
+    document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        let newHeight = e.touches[0].clientY;
+        if (newHeight < 50) newHeight = 50;
+        if (newHeight > window.innerHeight - 100) newHeight = window.innerHeight - 100;
+        topBox.style.height = newHeight + 'px';
+    }, { passive: false });
+    document.addEventListener('touchend', () => { isDragging = false; });
+</script>
+
+<py-config>
+    packages = ["pandas"]
+    [[fetch]]
+    files = ["main.py", "ai_system.py", "cards_west.csv"]
+</py-config>
+
+<script type="py">
+    import js
+    import main 
+    try:
+        main.main()
+    except Exception as e:
+        js.console.error(f"実行エラーが発生しました: {e}")
+</script>
+
+</body>
+</html>
