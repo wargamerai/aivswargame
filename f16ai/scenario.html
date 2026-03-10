@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>シナリオ選択 - Air Combat Game</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: sans-serif;
+            background-color: #2a2a2a;
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+        }
+
+        /* ── タブ ── */
+        #tabs {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 0;
+            width: 100%;
+            max-width: 680px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 10px 0;
+            font-size: 15px;
+            font-weight: bold;
+            background: #3a3a3a;
+            color: #aaa;
+            border: 2px solid #555;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            transition: 0.15s;
+        }
+        .tab-btn:hover { background: #484848; color: #ddd; }
+        .tab-btn.active {
+            background: #1e3a2e;
+            color: #00ffcc;
+            border-color: #00ffcc;
+        }
+
+        /* ── メインカード ── */
+        #card {
+            width: 100%;
+            max-width: 680px;
+            background: #1e1e1e;
+            border: 2px solid #00ffcc;
+            border-radius: 0 6px 6px 6px;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* ── シナリオ詳細 ── */
+        .scenario-info {
+            font-size: 13px;
+            line-height: 1.7;
+            color: #ccc;
+        }
+        .scenario-info h2 {
+            font-size: 17px;
+            color: #00ffcc;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #444;
+        }
+        .scenario-info p { margin-bottom: 3px; }
+        .team-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 10px;
+        }
+        .team-box {
+            flex: 1;
+            padding: 10px 14px;
+            border-radius: 5px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .team-blue { background: #1a2a3a; border-left: 4px solid #4169e1; }
+        .team-red  { background: #3a1a1a; border-left: 4px solid #dc143c; }
+
+        /* ── 区切り ── */
+        hr { border: none; border-top: 1px solid #444; }
+
+        /* ── AI機体数セレクト ── */
+        #red-count-input {
+            padding: 4px 8px;
+            background: #111;
+            color: #ff9999;
+            border: 1px solid #dc143c;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* ── モード選択 ── */
+        .mode-section h3 {
+            font-size: 14px;
+            color: #00ffcc;
+            margin-bottom: 8px;
+        }
+        .mode-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .mode-label {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 10px 12px;
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.15s;
+            font-size: 13px;
+        }
+        .mode-label:hover  { background: #333; border-color: #00ffcc; }
+        .mode-label input  { margin-top: 3px; flex-shrink: 0; accent-color: #00ffcc; }
+        .mode-name { font-weight: bold; font-size: 13px; display: block; margin-bottom: 2px; }
+        .mode-desc { color: #888; font-size: 12px; line-height: 1.4; }
+
+        /* ── スタートボタン ── */
+        #start-btn {
+            padding: 13px;
+            font-size: 17px;
+            font-weight: bold;
+            background: #4169e1;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.15s;
+            width: 100%;
+        }
+        #start-btn:hover    { background: #2a52c0; }
+        #start-btn:disabled { background: #555; color: #888; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <!-- タブ -->
+    <div id="tabs">
+        <button class="tab-btn" onclick="selectTab(0, this)">🇰🇷 朝鮮半島上空</button>
+        <button class="tab-btn" onclick="selectTab(1, this)">🆓 フリーシナリオ</button>
+    </div>
+
+    <!-- メインカード -->
+    <div id="card">
+        <!-- シナリオ詳細 -->
+        <div class="scenario-info" id="scenario-info"></div>
+
+        <hr>
+
+        <!-- モード選択（機体数入力を2番目の枠に組み込み） -->
+        <div class="mode-section">
+            <h3>🎮 プレイモード</h3>
+            <div class="mode-grid">
+                <label class="mode-label">
+                    <input type="radio" name="playMode" value="BLUE" checked>
+                    <span>
+                        <span class="mode-name">🟦 米軍をプレイ</span>
+                        <span class="mode-desc">自機で米軍を操作。ソ連軍はAIが行動。</span>
+                    </span>
+                </label>
+                <!-- ソ連機体数入力（ソ連プレイの代わり） -->
+                <div class="mode-label" style="cursor:default; align-items:center;">
+                    <span style="font-size:18px;">🟥</span>
+                    <span style="flex:1;">
+                        <span class="mode-name" style="margin-bottom:6px; display:block;">ソ連軍（AI）機体数</span>
+                        <span style="display:flex; align-items:center; gap:8px;">
+                            <select id="red-count-input">
+                                <option value="2">2機</option>
+                                <option value="3">3機</option>
+                                <option value="4">4機</option>
+                                <option value="5">5機</option>
+                            </select>
+                            <span class="mode-desc">2〜5機</span>
+                        </span>
+                    </span>
+                </div>
+                <label class="mode-label">
+                    <input type="radio" name="playMode" value="WATCH_NORMAL">
+                    <span>
+                        <span class="mode-name">🤖 AI観戦（通常）</span>
+                        <span class="mode-desc">両軍AIで通常速度の観戦モード。</span>
+                    </span>
+                </label>
+                <label class="mode-label">
+                    <input type="radio" name="playMode" value="WATCH_FAST">
+                    <span>
+                        <span class="mode-name">⏩ AI観戦（高速）</span>
+                        <span class="mode-desc">アニメーション省略で高速シミュレーション。</span>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <!-- スタートボタン -->
+        <button id="start-btn" onclick="startGame()">▶ 出撃 (START)</button>
+    </div>
+
+    <script>
+        const scenarios = [
+            {
+                name:            "朝鮮半島上空",
+                map:             "20 × 20 ヘクス（固定）",
+                mapMaxC:         19,
+                mapMaxR:         19,
+                fixedMap:        true,
+                turns:           15,
+                firstMove:       "ソ連軍",
+                victory:         "撃墜: 3点 / 損害付与: 1点　得点多い方の勝ち",
+                defaultRedCount: 2,
+                blueForce:  "F-86 × 2機<br><small>初期高度: 10+1D6（友軍同高度）／ 機関砲10発（eチャート）</small>",
+                redForce:   "MiG-15 × <span id='red-preview-0'>2</span>機（AI）<br><small>初期高度: 10+1D6（友軍同高度）／ 機関砲4発（fチャート）</small>"
+            },
+            {
+                name:            "フリーシナリオ",
+                map:             "54 × 28 ヘクス",
+                mapMaxC:         27,
+                mapMaxR:         53,
+                fixedMap:        false,
+                turns:           25,
+                firstMove:       "ソ連軍",
+                victory:         "撃墜: 3点 / 損害付与: 1点　得点多い方の勝ち",
+                defaultRedCount: 3,
+                blueForce:  "F-4 × 2機<br><small>初期高度: 25（固定）／ 機関砲3発(a), HSミサイル×4, RHミサイル×4</small>",
+                redForce:   "MiG-21 × <span id='red-preview-1'>3</span>機（AI）<br><small>初期高度: 20（固定）／ 機関砲5発(b), HSミサイル×2</small>"
+            }
+        ];
+
+        let currentIndex = 0;
+
+        function selectTab(index, btn) {
+            currentIndex = index;
+
+            // タブの見た目
+            document.querySelectorAll('.tab-btn').forEach((b, i) => {
+                b.classList.toggle('active', i === index);
+            });
+
+            // 詳細表示
+            const sc = scenarios[index];
+            document.getElementById('scenario-info').innerHTML = `
+                <h2>${sc.name}</h2>
+                <p><strong>マップ:</strong> ${sc.map}${sc.fixedMap ? '　<span style="color:#ffaa44;font-size:12px;">⚠ マップ外に出た機体は除去</span>' : ''}</p>
+                <p><strong>制限ターン:</strong> ${sc.turns}ターン　（先行: ${sc.firstMove}）</p>
+                <p><strong>勝利条件:</strong> ${sc.victory}</p>
+                <div class="team-row">
+                    <div class="team-box team-blue"><strong>【米軍 🟦】</strong><br>${sc.blueForce}</div>
+                    <div class="team-box team-red"><strong>【ソ連軍 🟥】</strong><br>${sc.redForce}</div>
+                </div>
+            `;
+
+            // AI機体数のデフォルト設定
+            document.getElementById('red-count-input').value = String(sc.defaultRedCount);
+        }
+
+        // 機体数変更 → 赤プレビュー更新
+        document.getElementById('red-count-input').addEventListener('change', function() {
+            const el = document.getElementById(`red-preview-${currentIndex}`);
+            if (el) el.textContent = this.value;
+        });
+
+        function startGame() {
+            const sc = scenarios[currentIndex];
+            const mode = document.querySelector('input[name="playMode"]:checked').value;
+            let redCount = parseInt(document.getElementById('red-count-input').value) || sc.defaultRedCount;
+            if (redCount < 2) redCount = 2;
+            if (redCount > 5) redCount = 5;
+
+            sessionStorage.setItem('airCombatConfig', JSON.stringify({
+                scenario: sc.name,
+                mode:     mode,
+                redCount: redCount,
+                mapMaxC:  sc.mapMaxC,
+                mapMaxR:  sc.mapMaxR,
+                fixedMap: sc.fixedMap
+            }));
+            window.location.href = 'index.html';
+        }
+
+        // 初期表示：最初のタブを選択
+        selectTab(0, document.querySelectorAll('.tab-btn')[0]);
+    </script>
+</body>
+</html>

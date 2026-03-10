@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>決戦連合艦隊 移動フェーズ</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f5f5fa; color: #222; font-family: monospace; display: flex; height: 100vh; overflow: hidden; }
+
+#sidebar {
+  width: 250px; min-width: 250px;
+  background: #f0f0f5;
+  border-right: 2px solid #bbc;
+  display: flex; flex-direction: column;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+#maparea {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: #050510;
+}
+
+h2 { color: #1a5a8a; font-size: 1em; margin-bottom: 8px; border-bottom: 2px solid #bbc; padding-bottom: 4px; }
+
+#turnSeq {
+  font-size: 0.88em;
+  line-height: 1.8;
+  margin-bottom: 12px;
+}
+#turnSeq .active { color: #8a6a00; font-weight: bold; }
+#turnSeq .done { color: #999; }
+#turnSeq .pending { color: #777; }
+
+#infoBox {
+  font-size: 0.92em;
+  background: #e8f0e8;
+  border: 1px solid #8a8;
+  padding: 8px;
+  margin-bottom: 10px;
+  min-height: 64px;
+}
+
+#fleetList { font-size: 0.88em; margin-bottom: 10px; }
+.ship-item { padding: 3px 6px; cursor: pointer; border-radius: 2px; }
+.ship-item.selected { background: #d0e0f0; color: #1a5a8a; }
+.ship-item.jp { color: #cc3311; }
+.ship-item.us { color: #2255cc; }
+.ship-item.lead { font-weight: bold; }
+
+button {
+  background: #dde4f0; color: #334; border: 1px solid #99a;
+  padding: 6px 10px; font-size: 0.92em; cursor: pointer;
+  border-radius: 3px; margin-bottom: 5px; width: 100%; font-weight: bold;
+}
+button:hover { background: #c8d4ee; }
+button.danger { background: #f0d0c0; border-color: #cc8866; color: #aa4400; }
+button:disabled { background: #e8e8e8; color: #999; cursor: default; }
+
+#movePoints { font-size: 0.95em; color: #8a6a00; font-weight: bold; margin-bottom: 8px; }
+
+#canvas { display: block; }
+
+.modal {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5); display: flex;
+  align-items: center; justify-content: center; z-index: 100;
+}
+.modal-inner {
+  background: #fff; border: 1px solid #bbb;
+  padding: 22px; border-radius: 8px; min-width: 360px;
+  max-width: 520px; color: #222;
+}
+.modal-inner h3 { color: #1a5a8a; margin-bottom: 14px; }
+.modal-inner textarea {
+  width: 100%; height: 130px; background: #f0f0f0;
+  color: #222; border: 1px solid #bbb; font-family: monospace;
+  font-size: 0.92em; padding: 8px;
+}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h2>決戦連合艦隊</h2>
+
+  <div id="turnSeq">
+    <div id="seq0" class="pending">① イニシアチブ決定</div>
+    <div id="seq1" class="pending">② 先攻側移動</div>
+    <div id="seq2" class="pending">③ 第一砲撃</div>
+    <div id="seq3" class="pending">④ 雷撃</div>
+    <div id="seq4" class="pending">⑤ 後攻側移動</div>
+    <div id="seq5" class="pending">⑥ 第二砲撃</div>
+    <div id="seq6" class="pending">⑦ 修理</div>
+  </div>
+
+  <div id="infoBox">準備中...</div>
+
+  <div id="movePoints"></div>
+
+  <div id="fleetList"></div>
+
+  <button onclick="doInitiative()" id="btnInit">イニシアチブ決定</button>
+  <button onclick="endMove()" id="btnEndMove" disabled>移動終了</button>
+  <button onclick="exportJSON()" id="btnExport" disabled>JSON出力</button>
+  <button onclick="showImport()">JSONインポート</button>
+  <button onclick="showSetup()">初期配置</button>
+</div>
+
+<div id="maparea">
+  <canvas id="canvas"></canvas>
+</div>
+
+<!-- Import Modal -->
+<div id="importModal" class="modal" style="display:none">
+  <div class="modal-inner">
+    <h3>フリートJSONインポート</h3>
+    <textarea id="importText" placeholder='{"turn":1,"jpFleet":[...],"usFleet":[...]}'></textarea>
+    <br><br>
+    <button onclick="doImport()">インポート</button>
+    <button onclick="closeImport()">キャンセル</button>
+  </div>
+</div>
+
+<!-- Setup Modal -->
+<div id="setupModal" class="modal" style="display:none">
+  <div class="modal-inner">
+    <h3>初期配置設定</h3>
+    <p style="font-size:0.8em;color:#aaa;margin-bottom:10px">
+      艦をドラッグしてマップに配置するか、JSONインポートで自動配置できます。<br>
+      列の先頭艦をクリックして「先頭に設定」で指定してください。
+    </p>
+    <button onclick="autoPlace()">自動配置（JSON読み込み済み）</button>
+    <button onclick="closeSetup()">閉じる</button>
+  </div>
+</div>
+
+<script>
+// ========== HEX GRID SETTINGS ==========
+const COLS = 36;
+const ROWS = 28;
+const HEX_SIZE = 22; // hex radius
+const HEX_W = HEX_SIZE * 2;
+const HEX_H = Math.sqrt(3) * HEX_SIZE;
+const OFFSET_X = 30;
+const OFFSET_Y = 20;
+
+// Flat-top hex pixel positions
+function hexToPixel(col, row) {
+  const x = OFFSET_X + col * HEX_SIZE * 1.5;
+  const y = OFFSET_Y + row * HEX_H + (col % 2 === 1 ? HEX_H / 2 : 0);
+  return { x, y };
+}
+
+function hexCorners(cx, cy) {
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.PI / 180 * (60 * i);
+    pts.push({ x: cx + HEX_SIZE * Math.cos(angle), y: cy + HEX_SIZE * Math.sin(angle) });
+  }
+  return pts;
+}
+
+// Numpad direction -> hex neighbor (flat-top, even-col offset)
+// Numpad: 9=NE, 6=E, 3=SE, 1=SW, 4=W, 7=NW
+function hexNeighbor(col, row, dir) {
+  // flat-top offset coords
+  const even = col % 2 === 0;
+  const dirs = {
+    6:  [+1,  0],
+    4:  [-1,  0],
+    9:  [+1, -1],
+    3:  [+1,  0+1],
+    7:  [-1, -1],
+    1:  [-1,  0+1],
+  };
+  // offset differs by parity
+  const offsets = {
+    6:  { e: [+1, 0],  o: [+1, 0] },
+    4:  { e: [-1, 0],  o: [-1, 0] },
+    9:  { e: [+1,-1],  o: [+1,-1] },
+    3:  { e: [+1, 0],  o: [+1, 0] }, // will fix below
+    7:  { e: [-1,-1],  o: [-1,-1] },
+    1:  { e: [-1, 0],  o: [-1, 0] },
+  };
+
+  // Standard flat-top offset hex neighbors
+  // even col: NE=(+1,-1), E=(+1,0)? No...
+  // Let me use axial coords internally
+  const axial = offsetToAxial(col, row);
+  const axialDirs = {
+    6: [+1, 0],   // E
+    4: [-1, 0],   // W
+    9: [+1,-1],   // NE
+    3: [0, +1],   // SE  (axial)
+    7: [0, -1],   // NW  (axial)
+    1: [-1,+1],   // SW
+  };
+  if (!axialDirs[dir]) return null;
+  const [dq, dr] = axialDirs[dir];
+  const nAxial = { q: axial.q + dq, r: axial.r + dr };
+  return axialToOffset(nAxial.q, nAxial.r);
+}
+
+function offsetToAxial(col, row) {
+  const q = col;
+  const r = row - (col - (col & 1)) / 2;
+  return { q, r };
+}
+
+function axialToOffset(q, r) {
+  const col = q;
+  const row = r + (q - (q & 1)) / 2;
+  return { col, row };
+}
+
+function dirToAngle(dir) {
+  const a = { 6:0, 9:300, 3:60, 4:180, 7:240, 1:120 };
+  return a[dir] !== undefined ? a[dir] : 0;
+}
+
+// ========== GAME STATE ==========
+let gameState = {
+  turn: 1,
+  phase: 'init', // init, jp_move, us_move, done
+  initiative: null, // 'jp' or 'us'
+  spotRange: 0,
+  jpFleet: [],
+  usFleet: [],
+  selectedShip: null,
+  movingShip: null,
+  remainingMove: 0,
+  lastDir: null,
+  turnCount: 0, // turns used this move
+  combatTurn: 0,
+  battleStarted: false,
+};
+
+// Ship structure:
+// { name, type, col, row, dir(1/3/4/6/7/9), side('jp'/'us'),
+//   capG, capM, dmgG, dmgM, vp, speed, isLead, colIndex(0/1),
+//   path:[], torpedo, radar, status }
+
+// ========== CANVAS ==========
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const totalW = OFFSET_X * 2 + COLS * HEX_SIZE * 1.5 + HEX_SIZE;
+  const totalH = OFFSET_Y * 2 + ROWS * HEX_H + HEX_H / 2;
+  canvas.width = totalW;
+  canvas.height = totalH;
+}
+
+function getShipAt(col, row) {
+  const all = [...gameState.jpFleet, ...gameState.usFleet];
+  return all.find(s => s.col === col && s.row === row && s.status !== 'sunk');
+}
+
+function isVisible(ship) {
+  if (!gameState.battleStarted) return ship.side === 'jp';
+  const enemies = ship.side === 'jp' ? gameState.usFleet : gameState.jpFleet;
+  for (const e of enemies) {
+    if (e.status === 'sunk') continue;
+    const dist = hexDistance(ship.col, ship.row, e.col, e.row);
+    if (dist <= gameState.spotRange) return true;
+    // Radar (US ships, BB/CA/CL)
+    if (e.radar && dist <= 20) return true;
+  }
+  return false;
+}
+
+function hexDistance(c1, r1, c2, r2) {
+  const a1 = offsetToAxial(c1, r1);
+  const a2 = offsetToAxial(c2, r2);
+  return Math.max(Math.abs(a1.q-a2.q), Math.abs(a1.r-a2.r), Math.abs((a1.q+a1.r)-(a2.q+a2.r)));
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw hexes
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const { x, y } = hexToPixel(c, r);
+      const corners = hexCorners(x, y);
+
+      // Determine if in spotting range of any JP ship
+      let inRange = false;
+      for (const s of gameState.jpFleet) {
+        if (s.status === 'sunk') continue;
+        if (hexDistance(c, r, s.col, s.row) <= gameState.spotRange) { inRange = true; break; }
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+      ctx.closePath();
+
+      // Fill
+      if (inRange) {
+        ctx.fillStyle = '#081828';
+      } else {
+        ctx.fillStyle = '#030810';
+      }
+      ctx.fill();
+
+      ctx.strokeStyle = inRange ? '#1a3a5a' : '#0d1a2a';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      // Coord label (every 5)
+      if (c % 5 === 0 && r % 5 === 0) {
+        ctx.fillStyle = '#224';
+        ctx.font = '8px monospace';
+        ctx.fillText(`${c},${r}`, x - 10, y + 3);
+      }
+    }
+  }
+
+  // Draw exit sides indicator
+  ctx.strokeStyle = '#ff6666';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  // East side (Japan exit)
+  const e1 = hexToPixel(COLS-1, 0);
+  const e2 = hexToPixel(COLS-1, ROWS-1);
+  ctx.beginPath(); ctx.moveTo(e1.x + HEX_SIZE, e1.y); ctx.lineTo(e2.x + HEX_SIZE, e2.y + HEX_H); ctx.stroke();
+  // West side (US exit)
+  const w1 = hexToPixel(0, 0);
+  const w2 = hexToPixel(0, ROWS-1);
+  ctx.beginPath(); ctx.moveTo(w1.x - HEX_SIZE, w1.y); ctx.lineTo(w2.x - HEX_SIZE, w2.y + HEX_H); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw ships
+  const allShips = [...gameState.jpFleet, ...gameState.usFleet];
+  for (const ship of allShips) {
+    if (ship.status === 'sunk') continue;
+    if (ship.col < 0 || ship.row < 0) continue;
+
+    const visible = isVisible(ship);
+    const { x, y } = hexToPixel(ship.col, ship.row);
+    const isSelected = gameState.selectedShip === ship;
+
+    if (ship.side === 'us' && !visible && !ship.faceUp) continue; // hidden enemy
+
+    drawShip(ctx, x, y, ship, isSelected);
+  }
+
+  // Highlight selected ship's movable hexes if moving
+  if (gameState.movingShip && gameState.remainingMove > 0) {
+    const s = gameState.movingShip;
+    const { x, y } = hexToPixel(s.col, s.row);
+    ctx.beginPath();
+    ctx.arc(x, y, HEX_SIZE - 4, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffee44';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function drawShip(ctx, x, y, ship, selected) {
+  const jpColor = '#ff6666';
+  const usColor = '#6688ff';
+  const color = ship.side === 'jp' ? jpColor : usColor;
+  const size = ['BB','OBB'].includes(ship.type) ? 10 : (ship.type === 'CA' ? 8 : 6);
+
+  // Ship body (rotated rectangle)
+  const angle = dirToAngle(ship.dir || 6) * Math.PI / 180;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  if (selected) {
+    ctx.shadowColor = '#ffee44';
+    ctx.shadowBlur = 10;
+  }
+
+  ctx.fillStyle = color;
+  ctx.fillRect(-size * 1.5, -size * 0.4, size * 3, size * 0.8);
+  // Bow indicator
+  ctx.fillStyle = selected ? '#ffee44' : '#fff';
+  ctx.fillRect(size * 1.2, -size * 0.2, size * 0.5, size * 0.4);
+
+  // Lead marker
+  if (ship.isLead) {
+    ctx.fillStyle = '#ffee44';
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.8, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Type label
+  ctx.fillStyle = selected ? '#ffee44' : color;
+  ctx.font = 'bold 7px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(ship.type, x, y + size + 8);
+}
+
+// ========== INITIATIVE ==========
+function doInitiative() {
+  const jpRoll = Math.floor(Math.random() * 6) + 1;
+  const usRoll = Math.floor(Math.random() * 6) + 1;
+  const spotDice = Math.floor(Math.random() * 6) + 1;
+  gameState.spotRange = spotDice + 4;
+
+  if (jpRoll >= usRoll) {
+    gameState.initiative = 'jp';
+    setInfo(`イニシアチブ: 日本軍(${jpRoll}) vs 米軍(${usRoll})\n→ 日本軍先攻\n視認距離: ${gameState.spotRange}ヘックス`);
+    gameState.phase = 'jp_move';
+    updateSeq(1);
+  } else {
+    gameState.initiative = 'us';
+    setInfo(`イニシアチブ: 日本軍(${jpRoll}) vs 米軍(${usRoll})\n→ 米軍先攻\n視認距離: ${gameState.spotRange}ヘックス`);
+    gameState.phase = 'us_move';
+    updateSeq(4);
+    setTimeout(doAIMove, 800);
+  }
+
+  document.getElementById('btnInit').disabled = true;
+  document.getElementById('btnEndMove').disabled = false;
+  draw();
+}
+
+// ========== SEQUENCE DISPLAY ==========
+function updateSeq(activeIdx) {
+  for (let i = 0; i <= 6; i++) {
+    const el = document.getElementById('seq' + i);
+    if (i < activeIdx) el.className = 'done';
+    else if (i === activeIdx) el.className = 'active';
+    else el.className = 'pending';
+  }
+}
+
+function setInfo(msg) {
+  document.getElementById('infoBox').innerText = msg;
+}
+
+// ========== MOVEMENT ==========
+function startMoveShip(ship) {
+  if (gameState.phase !== 'jp_move') return;
+  if (ship.side !== 'jp') return;
+  if (!ship.isLead) return;
+
+  gameState.movingShip = ship;
+  gameState.selectedShip = ship;
+  gameState.lastDir = ship.dir;
+  gameState.turnCount = 0;
+
+  let spd = getSpeed(ship);
+  if (ship.dmgM >= ship.capM / 2) spd = Math.ceil(spd / 2);
+  gameState.remainingMove = spd;
+
+  setInfo(`移動中: ${ship.name}\nテンキーで方向入力\n残り移動力: ${spd}`);
+  updateMoveDisplay();
+  draw();
+}
+
+function getSpeed(ship) {
+  // クリティカルで速力変更済みならそちらを使用
+  if (ship.speed !== undefined && ship.speed !== null) return ship.speed;
+  if (ship.type === 'OBB') return 3;
+  const speeds = { BB:4, CA:5, CL:6, CLAA:5, DD:6 };
+  return speeds[ship.type] || 4;
+}
+
+function moveLeadShip(dir) {
+  const ship = gameState.movingShip;
+  if (!ship) return;
+  if (gameState.remainingMove <= 0) return;
+
+  let cost = 0;
+
+  // Turn cost
+  if (ship.dir !== dir) {
+    if (ship.cannotTurn) {
+      setInfo('操舵室被弾 — 回頭不能！');
+      return;
+    }
+    // Check same hex double turn
+    if (gameState.turnCount > 0) {
+      setInfo(`同じヘックスで2回目の回頭はできません！\n先に直進してください。`);
+      return;
+    }
+    cost += 1;
+    gameState.turnCount++;
+    ship.dir = dir;
+    gameState.remainingMove -= 1;
+    if (gameState.remainingMove <= 0) {
+      updateMoveDisplay();
+      draw();
+      return;
+    }
+  }
+
+  // Move forward
+  const next = hexNeighbor(ship.col, ship.row, dir);
+  if (!next) return;
+  if (next.col < 0 || next.col >= COLS || next.row < 0 || next.row >= ROWS) {
+    handleExit(ship);
+    return;
+  }
+
+  const occupant = getShipAt(next.col, next.row);
+  if (occupant) {
+    setInfo(`${next.col},${next.row} は占有されています`);
+    return;
+  }
+
+  // Record path
+  ship.path.push({ col: ship.col, row: ship.row, dir: ship.dir });
+  ship.col = next.col;
+  ship.row = next.row;
+  gameState.turnCount = 0; // reset turn counter after moving
+  gameState.remainingMove -= 1;
+
+  // Move followers
+  moveFollowers(ship);
+
+  updateMoveDisplay();
+  draw();
+
+  if (gameState.remainingMove <= 0) {
+    setInfo(`${ship.name} 移動完了\n次の先頭艦を選択してください`);
+    gameState.movingShip = null;
+  }
+}
+
+function moveFollowers(lead) {
+  // Find followers in same column (colIndex), sorted by order
+  const col = lead.colIndex;
+  const fleet = gameState.jpFleet.filter(s => s.colIndex === col && !s.isLead);
+  // Sort by followOrder
+  fleet.sort((a,b) => a.followOrder - b.followOrder);
+
+  for (const follower of fleet) {
+    if (lead.path.length === 0) break;
+    const target = lead.path[lead.path.length - 1];
+    // Each follower follows the ship ahead
+    const ahead = getAhead(follower, fleet, lead);
+    if (ahead && ahead.path.length > 0) {
+      const t = ahead.path[0];
+      follower.path.push({ col: follower.col, row: follower.row, dir: follower.dir });
+      follower.col = t.col;
+      follower.row = t.row;
+      follower.dir = t.dir;
+      ahead.path.shift();
+    }
+  }
+}
+
+function getAhead(ship, fleet, lead) {
+  if (ship.followOrder === 1) return lead;
+  return fleet.find(s => s.followOrder === ship.followOrder - 1) || lead;
+}
+
+function handleExit(ship) {
+  if (ship.dir === 4 && gameState.phase === 'jp_move') {
+    setInfo(`${ship.name} が西側(米軍側)へ脱出 → 沈没扱い`);
+    ship.status = 'sunk';
+  } else if (ship.dir === 6 && gameState.phase === 'jp_move') {
+    setInfo(`${ship.name} が東側(自軍側)から離脱`);
+    ship.status = 'exited';
+  }
+  gameState.movingShip = null;
+  draw();
+}
+
+function updateMoveDisplay() {
+  const el = document.getElementById('movePoints');
+  if (gameState.movingShip) {
+    el.textContent = `残り移動力: ${gameState.remainingMove}`;
+  } else {
+    el.textContent = '';
+  }
+}
+
+function endMove() {
+  gameState.movingShip = null;
+  gameState.remainingMove = 0;
+
+  if (gameState.phase === 'jp_move') {
+    setInfo('日本軍移動終了\n第一砲撃フェイズへ（別プログラム）');
+    updateSeq(2);
+    gameState.phase = 'combat1';
+    document.getElementById('btnExport').disabled = false;
+  } else if (gameState.phase === 'us_move') {
+    setInfo('米軍移動終了\n第一砲撃フェイズへ（別プログラム）');
+    updateSeq(2);
+    gameState.phase = 'combat1';
+    document.getElementById('btnExport').disabled = false;
+  }
+  draw();
+}
+
+// ========== AI MOVEMENT ==========
+function doAIMove() {
+  setInfo('米軍移動中...');
+  for (const ship of gameState.usFleet) {
+    if (!ship.isLead || ship.status === 'sunk') continue;
+    const steps = getSpeed(ship);
+    for (let i = 0; i < steps; i++) {
+      // Simple AI: move toward center/japan fleet
+      const targetDir = getAIDir(ship);
+      ship.dir = targetDir;
+      const next = hexNeighbor(ship.col, ship.row, targetDir);
+      if (!next || next.col < 0 || next.col >= COLS || next.row < 0 || next.row >= ROWS) break;
+      if (getShipAt(next.col, next.row)) break;
+      ship.path.push({ col: ship.col, row: ship.row, dir: ship.dir });
+      ship.col = next.col;
+      ship.row = next.row;
+      moveFollowers(ship);
+    }
+  }
+  gameState.phase = 'jp_move';
+  updateSeq(1);
+  setInfo('米軍移動完了\n日本軍が移動してください\nテンキーで先頭艦を操作');
+  document.getElementById('btnEndMove').disabled = false;
+  draw();
+}
+
+function getAIDir(ship) {
+  // Move east (toward japan)
+  if (ship.col < COLS - 10) return 6;
+  // If far enough, hold
+  return ship.dir || 6;
+}
+
+// ========== KEYBOARD ==========
+document.addEventListener('keydown', (e) => {
+  const numDirs = { '6':6, '4':4, '9':9, '3':3, '7':7, '1':1 };
+  const dir = numDirs[e.key];
+  if (dir && gameState.movingShip) {
+    e.preventDefault();
+    moveLeadShip(dir);
+    return;
+  }
+
+  // Select lead ships with Tab
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    selectNextLead();
+  }
+});
+
+function selectNextLead() {
+  const leads = gameState.jpFleet.filter(s => s.isLead && s.status !== 'sunk');
+  if (leads.length === 0) return;
+  const cur = gameState.movingShip || gameState.selectedShip;
+  const idx = leads.indexOf(cur);
+  const next = leads[(idx + 1) % leads.length];
+  startMoveShip(next);
+}
+
+// ========== CANVAS CLICK ==========
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const hex = pixelToHex(mx, my);
+  if (!hex) return;
+  const ship = getShipAt(hex.col, hex.row);
+  if (ship && ship.side === 'jp') {
+    if (ship.isLead) {
+      startMoveShip(ship);
+    } else {
+      gameState.selectedShip = ship;
+      setInfo(`${ship.name} (${ship.type})\n列${ship.colIndex+1} 順番${ship.followOrder}\n速力: ${getSpeed(ship)}`);
+      draw();
+    }
+  }
+});
+
+function pixelToHex(px, py) {
+  // Rough approximation
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const { x, y } = hexToPixel(c, r);
+      const dx = px - x, dy = py - y;
+      if (dx*dx + dy*dy < HEX_SIZE * HEX_SIZE * 0.75) {
+        return { col: c, row: r };
+      }
+    }
+  }
+  return null;
+}
+
+// ========== FLEET LIST ==========
+function renderFleetList() {
+  const el = document.getElementById('fleetList');
+  let html = '<h2>艦隊</h2>';
+
+  const jpLeads = gameState.jpFleet.filter(s => s.isLead);
+  html += '<div style="color:#ff8888;font-weight:bold;margin-bottom:4px">🎌 日本軍</div>';
+  for (const ship of gameState.jpFleet) {
+    const cls = `ship-item jp ${ship.isLead?'lead':''} ${gameState.selectedShip===ship?'selected':''}`;
+    const status = ship.status !== 'ok' ? ` [${ship.status}]` : '';
+    html += `<div class="${cls}" onclick="onShipClick('${ship.name}','jp')">${ship.isLead?'★':' '} ${ship.name} (${ship.type})${status}</div>`;
+  }
+
+  html += '<div style="color:#8888ff;font-weight:bold;margin:6px 0 4px">🦅 米軍</div>';
+  for (const ship of gameState.usFleet) {
+    const cls = `ship-item us ${ship.isLead?'lead':''}`;
+    html += `<div class="${cls}">${ship.isLead?'★':' '} ${ship.name} (${ship.type})</div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function onShipClick(name, side) {
+  const fleet = side === 'jp' ? gameState.jpFleet : gameState.usFleet;
+  const ship = fleet.find(s => s.name === name);
+  if (!ship) return;
+  if (ship.isLead && side === 'jp') startMoveShip(ship);
+  else {
+    gameState.selectedShip = ship;
+    draw();
+  }
+}
+
+// ========== IMPORT / EXPORT ==========
+function showImport() { document.getElementById('importModal').style.display = 'flex'; }
+function closeImport() { document.getElementById('importModal').style.display = 'none'; }
+function showSetup() { document.getElementById('setupModal').style.display = 'flex'; }
+function closeSetup() { document.getElementById('setupModal').style.display = 'none'; }
+
+function doImport() {
+  try {
+    const data = JSON.parse(document.getElementById('importText').value);
+    buildFleets(data);
+    closeImport();
+    autoPlace();
+    renderFleetList();
+    draw();
+    setInfo('インポート完了！\n「初期配置」→「自動配置」で配置します');
+  } catch(e) {
+    alert('JSONエラー: ' + e.message);
+  }
+}
+
+function buildFleets(data) {
+  gameState.jpFleet = [];
+  gameState.usFleet = [];
+
+  const typeData = {
+    BB:  { speed:4, torpedo:'-' },
+    OBB: { speed:3, torpedo:'-' },
+    CA:  { speed:5, torpedo:'TT' },
+    CL:  { speed:6, torpedo:'TT' },
+    CLAA:{ speed:5, torpedo:'T' },
+    DD:  { speed:6, torpedo:'TT' },
+  };
+
+  (data.jpFleet || []).forEach((s, i) => {
+    const td = typeData[s.type] || typeData.DD;
+    gameState.jpFleet.push({
+      name: s.name, type: s.type, side: 'jp',
+      col: -1, row: -1, dir: 4, // facing west
+      capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
+      vp: s.vp, speed: td.speed, torpedo: td.torpedo,
+      isLead: false, colIndex: 0, followOrder: i,
+      path: [], status: 'ok', faceUp: false,
+      radar: false,
+    });
+  });
+
+  (data.usFleet || []).forEach((s, i) => {
+    const td = typeData[s.type] || typeData.DD;
+    const radar = ['BB','CA','CL','CLAA'].includes(s.type);
+    gameState.usFleet.push({
+      name: s.name, type: s.type, side: 'us',
+      col: -1, row: -1, dir: 6, // facing east
+      capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
+      vp: s.vp, speed: td.speed, torpedo: td.torpedo,
+      isLead: false, colIndex: 0, followOrder: i,
+      path: [], status: 'ok', faceUp: false,
+      radar: radar,
+    });
+  });
+
+  // Default: first ship of each side is lead
+  if (gameState.jpFleet.length > 0) {
+    gameState.jpFleet[0].isLead = true;
+    gameState.jpFleet[0].followOrder = 0;
+    gameState.jpFleet.forEach((s,i) => { s.followOrder = i; });
+  }
+  if (gameState.usFleet.length > 0) {
+    gameState.usFleet[0].isLead = true;
+    gameState.usFleet[0].followOrder = 0;
+    gameState.usFleet.forEach((s,i) => { s.followOrder = i; });
+  }
+}
+
+function autoPlace() {
+  // Place JP fleet on east side (col 32-33), facing west
+  const jpMid = Math.floor(ROWS / 2);
+  gameState.jpFleet.forEach((s, i) => {
+    s.col = 33;
+    s.row = Math.min(ROWS - 1, jpMid - Math.floor(gameState.jpFleet.length/2) + i);
+    s.dir = 4; // west
+  });
+
+  // Place US fleet on west side (col 2-3), facing east
+  const usMid = Math.floor(ROWS / 2);
+  gameState.usFleet.forEach((s, i) => {
+    s.col = 2;
+    s.row = Math.min(ROWS - 1, usMid - Math.floor(gameState.usFleet.length/2) + i);
+    s.dir = 6; // east
+  });
+
+  closeSetup();
+  renderFleetList();
+  draw();
+  setInfo('配置完了！\n「イニシアチブ決定」を押してください');
+}
+
+function exportJSON() {
+  const out = {
+    turn: gameState.turn,
+    phase: 'combat',
+    spotRange: gameState.spotRange,
+    jpFleet: gameState.jpFleet.map(s => ({
+      name: s.name, type: s.type, col: s.col, row: s.row, dir: s.dir,
+      capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM,
+      vp: s.vp, status: s.status, faceUp: s.faceUp,
+    })),
+    usFleet: gameState.usFleet.map(s => ({
+      name: s.name, type: s.type, col: s.col, row: s.row, dir: s.dir,
+      capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM,
+      vp: s.vp, status: s.status, faceUp: s.faceUp, radar: s.radar,
+    })),
+  };
+  const str = JSON.stringify(out, null, 2);
+  const blob = new Blob([str], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `battle_turn${gameState.turn}_positions.json`;
+  a.click();
+  setInfo('JSON出力完了！\n砲撃プログラムへ渡してください');
+}
+
+// ========== INIT ==========
+resizeCanvas();
+draw();
+setInfo('JSONインポートまたは初期配置から始めてください');
+</script>
+</body>
+</html>

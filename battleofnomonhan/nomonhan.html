@@ -1,0 +1,2051 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>ノモンハンの戦い - 完全統合版(通常対戦 ＆ AI学習シミュレータ)</title>
+    <style>
+        body { background: #1a1a1a; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+        #game-wrapper { position: relative; width: 1000px; height: 600px; border: 2px solid #555; overflow: hidden; background: #222;}
+        #bg-map { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('map.png'); background-size: 100% 100%; z-index: 1; }
+        #game-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; }
+        
+        #ui-panel { width: 1000px; background: #333; color: white; display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; box-sizing: border-box; border: 2px solid #555; border-bottom: none; height: 60px; }
+        #status-banner { width: 1000px; background: #ffcc00; color: #000; font-weight: bold; font-size: 18px; text-align: center; padding: 8px 0; border: 2px solid #555; border-bottom: none; box-sizing: border-box; }
+        
+        .action-btn { padding: 6px 12px; font-size: 15px; font-weight: bold; cursor: pointer; background: #d32f2f; color: white; border: 1px solid #fff; border-radius: 4px; margin-left: 8px; }
+        .action-btn:hover { background: #b71c1c; }
+        #declare-btn { background: #2f2fd3; } #declare-btn:hover { background: #1c1cb7; }
+        #step-btn { background: #4CAF50; border-color: #fff; } #step-btn:hover { background: #388E3C; }
+        #auto-btn { background: #9C27B0; border-color: #fff; } #auto-btn:hover { background: #7B1FA2; }
+        
+        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 200; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; }
+        .mode-group { margin: 15px 0; padding: 15px; border: 1px solid #555; border-radius: 8px; background: rgba(255,255,255,0.1); text-align: center; width: 80%; display: flex; flex-direction: column; align-items: center; }
+        .mode-btn { margin: 5px; padding: 12px 24px; font-size: 16px; font-weight: bold; cursor: pointer; background: #0066cc; color: white; border: 2px solid #fff; border-radius: 8px; }
+        .mode-btn:hover { background: #004499; }
+        .logic-section { background:rgba(255,255,255,0.05); border:1px solid #444; border-radius:6px; padding:12px 16px; margin-bottom:12px; }
+        .logic-section-title { color:#ffcc00; margin:0 0 10px 0; font-size:16px; font-family:'Courier New',monospace; letter-spacing:1px; }
+        .logic-row { display:flex; align-items:center; margin-bottom:10px; gap:10px; flex-wrap:wrap; }
+        .logic-row label { color:#ccc; font-size:15px; min-width:200px; }
+        .logic-row input[type=range] { width:160px; accent-color:#ffcc00; }
+        .logic-row input[type=number] { width:64px; background:#222; color:#ffcc00; border:1px solid #666; border-radius:4px; padding:3px 6px; font-size:15px; font-family:'Courier New',monospace; font-weight:bold; text-align:center; }
+        .logic-row .val-display { color:#ffcc00; font-weight:bold; font-family:'Courier New',monospace; min-width:50px; text-align:right; }
+        .logic-row .val-desc { color:#888; font-size:12px; }
+        .logic-toggle { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+        .logic-toggle label { color:#ccc; font-size:15px; }
+        .logic-toggle input[type=checkbox] { width:18px; height:18px; accent-color:#ffcc00; }
+        
+        #sim-report { display: none; background: rgba(0,0,0,0.95); position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; z-index: 300; color: #0f0; padding: 20px; box-sizing: border-box; border: 3px solid #ffcc00; border-radius: 10px; overflow-y: auto; font-family: monospace; font-size: 16px; line-height: 1.6;}
+        #result-text { font-size: 24px; font-weight: bold; color: #ffcc00; margin-bottom: 20px; text-align: center; line-height: 1.5; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; border: 2px solid #ffcc00;}
+        
+        #phase-popup { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: #fff; padding: 40px 60px; border: 4px solid #ffcc00; border-radius: 12px; font-size: 36px; font-weight: bold; z-index: 500; text-align: center; box-shadow: 0 0 20px rgba(255, 204, 0, 0.5); text-shadow: 2px 2px 4px #000; }
+
+        .hex-cell { fill: transparent; stroke: rgba(255,255,255,0.1); stroke-width: 1; cursor: pointer; }
+        .hex-cell:hover { fill: rgba(255,255,0,0.2); }
+        .zoc-cell { fill: rgba(255, 0, 0, 0.1); }
+        .movable { fill: rgba(255, 255, 0, 0.5) !important; stroke: #ff0; stroke-width: 3; }
+        .attackable { fill: rgba(255, 0, 0, 0.4) !important; stroke: #f00; stroke-width: 3; cursor: crosshair; }
+        .selected-target { fill: rgba(255, 100, 100, 0.5) !important; stroke: #f00; stroke-width: 4; }
+        .selected-attacker { fill: rgba(100, 255, 100, 0.5) !important; stroke: #0f0; stroke-width: 4; }
+        
+        .unit-rect { cursor: pointer; stroke: #fff; stroke-width: 2; rx: 4; transition: all 0.2s; }
+        .unit-rect.acted { stroke: #555; stroke-dasharray: 4; } 
+        .unit-rect.retreating { stroke: #ff6600; stroke-width: 4; stroke-dasharray: 6,2; filter: drop-shadow(0 0 6px #ff6600); }
+        .unit-text { pointer-events: none; font-weight: bold; text-shadow: 1px 1px 2px #000; }
+        .log { width: 1000px; height: 120px; background: #000; color: #0f0; overflow-y: scroll; padding: 10px; font-family: monospace; font-size: 13px; border: 2px solid #555; border-top: none; box-sizing: border-box; line-height: 1.4; display: none; }
+        .log.active { display: block; height: 160px; font-size: 15px; }
+
+        #combat-result-modal { display: none; position: absolute; right: 10px; top: 80px; background: rgba(30, 30, 30, 0.95); border: 2px solid #aaa; color: white; padding: 0 0 15px 0; z-index: 100; min-width: 350px; max-width: 370px; border-radius: 8px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.8); }
+        #modal-header { cursor: move; font-size: 16px; font-weight: bold; background: #444; border-bottom: 1px solid #777; padding: 10px; margin-bottom: 10px; border-radius: 8px 8px 0 0; user-select: none; }
+        #combat-details { font-size: 15px; text-align: left; display: inline-block; margin-bottom: 10px; line-height: 1.5; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 4px; width: 90%; box-sizing: border-box;}
+        .combat-outcome { font-size: 18px; font-weight: bold; margin: 10px 0; color: #ffcc00; }
+        .ai-declaration { color: #00ff00; font-style: italic; font-weight: bold; margin-bottom: 10px; font-size: 15px; border-left: 4px solid #00ff00; padding-left: 8px; text-align: left; margin: 0 15px 10px 15px;}
+        .dice-result { font-family: monospace; color: #0cf; font-size: 16px; letter-spacing: 2px;}
+    </style>
+</head>
+<body>
+
+<div id="ui-panel">
+    <div style="display:flex; align-items:center;">
+        <div id="turn-info" style="font-weight:bold; font-size: 16px; margin-right: 20px;">初期化中...</div>
+        <div style="font-size: 14px;">主導権: <span id="initiative-label" style="background:#ffcc00; color:black; padding:4px 8px; font-weight:bold; border-radius:4px;">日本軍</span> 得点: <span id="vp-label" style="background:#555; padding:4px 8px; font-weight:bold; border-radius:4px; border:1px solid #fff;">日本 0 - 0 ソ連</span> <span id="q-status" style="background:#333; padding:4px 8px; font-weight:bold; border-radius:4px; border:1px solid #4CAF50; font-size:12px; display:none;">🧠 Q学習</span></div>
+    </div>
+    <div style="display:flex; align-items:center;">
+        <button id="destroy-bridge-btn" class="action-btn" style="background:#ff8c00; display:none;" onclick="destroyBridge()">軍橋を破壊</button>
+        <button id="declare-btn" style="display:none;" class="action-btn" onclick="confirmCombination()">この組み合わせを確定</button>
+        <button id="cancel-btn" style="display:none;" class="action-btn" onclick="cancelCombination()" style="background:#888;">選択をキャンセル</button>
+        <button id="phase-btn" class="action-btn" style="display:none;" onclick="nextPhase()">移動終了（戦闘フェイズへ）</button>
+        <button id="step-btn" class="action-btn" style="display:none;" onclick="resumeStep()">▶️ AIを進める</button>
+        <button id="auto-btn" class="action-btn" style="display:none;" onclick="switchToAuto()">⏩ 全自動にする</button>
+    </div>
+</div>
+<div id="status-banner">【待機中】システムを初期化しています...</div>
+
+<div id="game-wrapper">
+    <div id="start-screen">
+        <h1 style="color:#ffcc00; margin-bottom:10px; font-family:'Courier New',monospace; letter-spacing:3px; text-shadow:0 0 20px rgba(255,204,0,0.5);">ノモンハンの戦い</h1>
+        <div id="result-text" style="display:none;"></div>
+
+        <div id="main-menu">
+            <div class="mode-group">
+                <h3 style="margin-top:0; color:#ffcc00;">🎮 対戦</h3>
+                <button class="mode-btn" onclick="startGame('PvE_JP')" style="background:#ff9900; color:#000;">🇯🇵 日本軍で戦う <span style="font-size:12px; display:block; font-weight:normal;">あなた=日本軍 vs ソ連AIロジック</span></button>
+                <button class="mode-btn" onclick="startGame('PvE_SOV')" style="background:#cc0000;">🚩 ソ連軍で戦う <span style="font-size:12px; display:block; font-weight:normal;">あなた=ソ連軍 vs 日本AIロジック</span></button>
+            </div>
+            <div class="mode-group" style="border-color:#4CAF50;">
+                <h3 style="margin-top:0; color:#4CAF50;">🧠 Q学習AI（200万回学習）</h3>
+                <button id="q-toggle-btn" class="mode-btn" onclick="toggleQTable()" style="background:#555; border-color:#4CAF50;">🧠 Q学習AI: OFF</button>
+                <span style="font-size:12px; color:#aaa;">ONにすると46MBのデータを読み込みます。対戦・シミュレーション両方に適用されます。</span>
+            </div>
+            <div class="mode-group" style="border-color:#4a9eff;">
+                <h3 style="margin-top:0; color:#4a9eff;">⚙️ AIロジック編集</h3>
+                <button class="mode-btn" onclick="openLogicEditor('JP')" style="background:#1a3a5c; border-color:#4a9eff;">🇯🇵 日本軍AIロジックを編集</button>
+                <button class="mode-btn" onclick="openLogicEditor('SOV')" style="background:#5c1a1a; border-color:#ff4444;">🚩 ソ連軍AIロジックを編集</button>
+            </div>
+        </div>
+
+        <!-- ロジック編集パネル -->
+        <div id="logic-editor" style="display:none; width:90%; max-height:80vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2 id="editor-title" style="color:#ffcc00; margin:0; font-family:'Courier New',monospace;"></h2>
+                <button onclick="closeLogicEditor()" style="background:#555; color:white; border:1px solid #888; padding:6px 16px; cursor:pointer; border-radius:4px;">✕ 閉じる</button>
+            </div>
+
+            <!-- 作者・説明 -->
+            <div class="logic-section">
+                <h4 class="logic-section-title">📋 ロジック情報</h4>
+                <div class="logic-row">
+                    <label>作者名</label>
+                    <input type="text" id="logic-author" placeholder="あなたの名前" style="width:200px; background:#333; color:white; border:1px solid #666; padding:4px 8px; border-radius:3px;">
+                </div>
+                <div class="logic-row">
+                    <label>説明</label>
+                    <input type="text" id="logic-desc" placeholder="例：積極攻撃型" style="width:300px; background:#333; color:white; border:1px solid #666; padding:4px 8px; border-radius:3px;">
+                </div>
+            </div>
+
+            <!-- 攻撃系 -->
+            <div class="logic-section">
+                <h4 class="logic-section-title">⚔️ 攻撃・包囲パラメータ</h4>
+                <div id="attack-params"></div>
+            </div>
+
+            <!-- 前進系 -->
+            <div class="logic-section">
+                <h4 class="logic-section-title">🏃 戦闘後前進パラメータ</h4>
+                <div id="defense-params"></div>
+            </div>
+
+            <!-- 橋破壊（日本軍のみ） -->
+            <div class="logic-section" id="bridge-section" style="display:none;">
+                <h4 class="logic-section-title">💥 橋破壊判断</h4>
+                <div id="bridge-params"></div>
+            </div>
+
+            <!-- 移動系 -->
+            <div class="logic-section">
+                <h4 class="logic-section-title">🗺️ 移動・陣形パラメータ</h4>
+                <div id="common-params"></div>
+            </div>
+
+            <!-- ボタン群 -->
+            <div style="display:flex; gap:10px; margin-top:20px; justify-content:center; flex-wrap:wrap;">
+                <button onclick="applyLogic()" style="padding:10px 24px; background:#4CAF50; color:white; border:2px solid #88ff88; font-size:15px; font-weight:bold; cursor:pointer; border-radius:6px;">✅ このロジックでゲーム開始</button>
+                <button onclick="saveLogic()" style="padding:10px 24px; background:#ff8c00; color:white; border:2px solid #ffcc00; font-size:15px; font-weight:bold; cursor:pointer; border-radius:6px;">💾 JSONファイルに保存</button>
+                <button onclick="loadLogicFile()" style="padding:10px 24px; background:#1a3a6c; color:white; border:2px solid #4a9eff; font-size:15px; font-weight:bold; cursor:pointer; border-radius:6px;">📂 JSONファイルを読み込む</button>
+                <button onclick="resetLogic()" style="padding:10px 24px; background:#555; color:white; border:2px solid #888; font-size:15px; cursor:pointer; border-radius:6px;">🔄 デフォルトに戻す</button>
+                <input type="file" id="logic-file-input" accept=".json" style="display:none;" onchange="onLogicFileLoad(event)">
+            </div>
+        </div>
+    </div>
+
+    <div id="sim-report"></div>
+    <div id="phase-popup"></div>
+    <div id="bg-map"></div>
+    <svg id="game-svg"></svg>
+    
+    <div id="combat-result-modal">
+        <div id="modal-header">⚔️ 戦闘レポート (ここを掴んで移動)</div>
+        <div id="combat-details"></div>
+        <div id="combat-outcome" class="combat-outcome"></div>
+        <div id="ai-declaration" class="ai-declaration" style="display:none;"></div>
+        <div id="combat-actions"></div>
+    </div>
+</div>
+<div class="log" id="game-log">>> 【システム】司令官の指示による戦術アップデート（防衛強化、渋滞解消、前進制御、描画修正）を完了しました。</div>
+
+<script>
+const gameData = {
+    initialUnits: [
+        { id: 'jp1', side: 'JP', label: '4-2', r: 3, c: 8, atk: 4, def: 4, mov: 2, steps: 2, maxSteps: 2, acted: false, color: '#ffcc00', backLabel: '2-2', backAtk: 2, backDef: 2, backMov: 2, isTank: false },
+        { id: 'jp2', side: 'JP', label: '2-1-3', r: 4, c: 8, atk: 2, def: 1, mov: 3, steps: 2, maxSteps: 2, acted: false, color: '#ffcc00', backLabel: '1-1-3', backAtk: 1, backDef: 1, backMov: 3, isTank: true }, 
+        { id: 'jp3', side: 'JP', label: '3-1-3', r: 6, c: 8, atk: 3, def: 1, mov: 3, steps: 2, maxSteps: 2, acted: false, color: '#ffcc00', backLabel: '1-1-3', backAtk: 1, backDef: 1, backMov: 3, isTank: true }, 
+        { id: 'sv1', side: 'SOV', label: '2-3', r: 4, c: 2, atk: 2, def: 2, mov: 3, steps: 2, maxSteps: 2, acted: false, color: '#d32f2f', backLabel: '1-3', backAtk: 1, backDef: 1, backMov: 3, isTank: false }, 
+        { id: 'sv2', side: 'SOV', label: '3-1-4', r: 5, c: 3, atk: 3, def: 1, mov: 4, steps: 2, maxSteps: 2, acted: false, color: '#d32f2f', backLabel: '2-1-4', backAtk: 2, backDef: 1, backMov: 4, isTank: true },
+        { id: 'sv3', side: 'SOV', label: '1-3', r: 1, c: 7, atk: 1, def: 1, mov: 3, steps: 1, maxSteps: 1, acted: false, color: '#d32f2f', isTank: false }, 
+        { id: 'sv4', side: 'SOV', label: '1-0', r: 1, c: 2, atk: 1, def: 1, mov: 0, steps: 1, maxSteps: 1, acted: false, color: '#d32f2f', isTank: false }  
+    ],
+    reinforcements: {
+        turn2JP: { id: "jp_r1", side: "JP", label: "2-2-2", atk: 2, def: 2, mov: 2, steps: 2, maxSteps: 2, acted: false, color: "#ffcc00", backLabel: "1-1-2", backAtk: 1, backDef: 1, backMov: 2, isTank: false, spawns: [{r:4,c:8}, {r:5,c:8}] },
+        turn3SOV: { id: "sv_r1", side: "SOV", label: "4-2-4", atk: 4, def: 2, mov: 4, steps: 2, maxSteps: 2, acted: false, color: "#d32f2f", backLabel: "2-1-4", backAtk: 2, backDef: 1, backMov: 4, isTank: true, spawns: [{r:1,c:1}, {r:1,c:3}] },
+        turn4SOV: { id: "sv_r2", side: "SOV", label: "2-2-3", atk: 2, def: 2, mov: 3, steps: 2, maxSteps: 2, acted: false, color: "#d32f2f", backLabel: "1-1-3", backAtk: 1, backDef: 1, backMov: 3, isTank: false, spawns: [{r:1,c:1}, {r:1,c:3}] }
+    }
+};
+
+let simulationData = { simulationStats: { totalRuns: 0, results: {}, tacticalData: {} }, actionLogs: [] };
+
+// ===== Q学習テーブル v2（特徴ベース・ユニット単位） =====
+let qTable = null;
+let useQTable = false;
+let qTableLoading = false;
+let qHitCount = 0;
+let qMissCount = 0;
+
+function loadQTable() {
+    if (qTable || qTableLoading) return;
+    qTableLoading = true;
+    updateQToggleUI();
+    const script = document.createElement('script');
+    script.src = 'nomonhan_q_v2_data.js';
+    script.onload = function() {
+        qTable = window.Q_TABLE_V2;
+        qTableLoading = false;
+        log(`🧠 Q学習v2読み込み完了 (${Object.keys(qTable).length.toLocaleString()} 特徴状態)`);
+        updateQToggleUI();
+    };
+    script.onerror = function() {
+        qTableLoading = false;
+        qTable = null;
+        useQTable = false;
+        log('❌ Q学習v2読み込み失敗: nomonhan_q_v2_data.js が見つかりません');
+        updateQToggleUI();
+    };
+    document.head.appendChild(script);
+}
+
+// ユニットの局所特徴量を計算（Python train_nomonhan_v2.py と同じロジック）
+function computeUnitFeatures(unit) {
+    const side = unit.side === 'JP' ? 'JP' : 'SOV';
+    const enemies = units.filter(u => u.side !== unit.side && u.steps > 0);
+    const friends = units.filter(u => u.side === unit.side && u.steps > 0 && u.id !== unit.id);
+
+    // 最寄り敵距離（4+は同一扱い）
+    let neDist = 99;
+    enemies.forEach(e => {
+        const d = getPathCost(unit, {r: e.r, c: e.c});
+        if (d < neDist) neDist = d;
+    });
+    neDist = Math.min(neDist, 4);
+
+    // 隣接敵数（2+は同一扱い）
+    let adjE = 0;
+    enemies.forEach(e => {
+        if (isAdjacent(unit, e)) adjE++;
+    });
+    adjE = Math.min(adjE, 2);
+
+    // 隣接友軍数
+    let adjF = 0;
+    friends.forEach(f => {
+        if (isAdjacent(unit, f)) adjF++;
+    });
+    adjF = Math.min(adjF, 2);
+
+    const steps = unit.steps;
+    const isTank = unit.isTank ? 1 : 0;
+    const bridge = militaryBridgeDestroyed ? 1 : 0;
+    const onHill = isHill(unit.r, unit.c) ? 1 : 0;
+
+    return `${side}_d${neDist}_e${adjE}_f${adjF}_s${steps}_t${isTank}_b${bridge}_h${onHill}`;
+}
+
+// ユニットごとにQ-tableから最適行動を取得
+function getUnitQAction(unit) {
+    if (!useQTable || !qTable) return null;
+    const fkey = computeUnitFeatures(unit);
+    const entry = qTable[fkey];
+    if (!entry) { qMissCount++; return null; }
+    qHitCount++;
+    const best = Object.entries(entry).reduce((a, b) => a[1] > b[1] ? a : b);
+    return best[0];
+}
+
+// v2のユニット行動に応じた重み調整を返す
+function getQWeightModsV2(qAction) {
+    if (!qAction) return null;
+    switch (qAction) {
+        case 'charge_nearest':
+            return { approachMod: +25, encircleMod: +50, isolatedMod: -20, stayPenalty: 100 };
+        case 'charge_priority':
+            return { approachMod: +20, encircleMod: +80, isolatedMod: -10, stayPenalty: 80, priorityTarget: true };
+        case 'flank':
+            return { approachMod: +15, encircleMod: +200, isolatedMod: -40, stayPenalty: 60 };
+        case 'support_friend':
+            return { approachMod: -5, encircleMod: +30, isolatedMod: +50, stayPenalty: 40, supportFriend: true };
+        case 'defend_position':
+            return { approachMod: -20, encircleMod: 0, isolatedMod: +40, stayPenalty: -50, hillBonus: 80 };
+        case 'retreat':
+            return { approachMod: -40, encircleMod: -50, isolatedMod: +30, stayPenalty: 30, retreatMode: true };
+        case 'destroy_bridge':
+            return null; // 橋破壊は特殊処理
+        default:
+            return null;
+    }
+}
+
+// 後方互換：グローバルQ-action（旧v1 API）
+function getQAction(side) {
+    return null; // v2ではユニット単位なので旧APIは無効
+}
+function getQWeightMods(qAction) {
+    return null; // v2ではユニット単位なので旧APIは無効
+}
+
+function toggleQTable() {
+    useQTable = !useQTable;
+    qHitCount = 0; qMissCount = 0;
+    if (useQTable && !qTable) loadQTable();
+    updateQToggleUI();
+}
+
+function updateQToggleUI() {
+    const btn = document.getElementById('q-toggle-btn');
+    if (!btn) return;
+    if (qTableLoading) {
+        btn.textContent = '🧠 Q学習AI: 読み込み中…';
+        btn.style.background = '#666';
+    } else if (useQTable && qTable) {
+        btn.textContent = '🧠 Q学習v2: ON ✓';
+        btn.style.background = '#4CAF50';
+    } else {
+        btn.textContent = '🧠 Q学習AI: OFF';
+        btn.style.background = '#555';
+    }
+}
+const HEX_SIZE = 60.3; const width = HEX_SIZE * Math.sqrt(3); const height = HEX_SIZE * 2; const xSpacing = width; const ySpacing = height * 0.75; const OFFSET_X = 15.0 + (xSpacing / 2); const OFFSET_Y = 69.0;
+const svg = document.getElementById('game-svg');
+let units = []; let spawnedReinforcements = {}; let militaryBridgeDestroyed = false; let gameEnded = false;
+
+// ===== AIロジック定義 =====
+const DEFAULT_LOGIC_JP = {
+    version: "2.0", side: "JP", author: "", description: "",
+    attack: {
+        encircleBonus:    300,
+        tankPriority:      80,
+        isolatedPenalty:   80,
+    },
+    advance: {
+        advanceBonus:      80,
+    },
+    move: {
+        diag2BonusPaired:  90,
+        diag2BonusAttack:  60,
+        northApproach:     40,
+        southApproach:     30,
+    },
+    bridge: {
+        enabled:           true,
+        earliestTurn:      4,
+    },
+};
+
+const DEFAULT_LOGIC_SOV = {
+    version: "2.0", side: "SOV", author: "", description: "",
+    attack: {
+        encircleBonus:    300,
+        tankPriority:      80,
+        isolatedPenalty:   80,
+    },
+    advance: {
+        advanceBonus:      80,
+    },
+    move: {
+        diag2BonusPaired:  90,
+        diag2BonusAttack:  60,
+        northApproach:     40,
+        southApproach:     30,
+    },
+};
+
+let logicJP  = JSON.parse(JSON.stringify(DEFAULT_LOGIC_JP));
+let logicSOV = JSON.parse(JSON.stringify(DEFAULT_LOGIC_SOV));
+let currentEditSide = 'JP';
+
+let aiParams = {
+    isolatedPenalty: 80, encircleBonus: 300,
+    tankPriority: 80, advanceBonus: 80,
+};
+
+function getActiveLogic(side) { return side === 'JP' ? logicJP : logicSOV; }
+
+// ===== ロジックエディタUI =====
+const PARAM_DEFS = {
+    JP: {
+        attack: [
+            { key:'encircleBonus',   label:'包囲ボーナス',   min:0, max:600, desc:'敵の退路を断った時のボーナス' },
+            { key:'tankPriority',    label:'戦車優先度',     min:0, max:300, desc:'高いほど戦車を優先して狙う' },
+            { key:'isolatedPenalty', label:'孤立ペナルティ', min:0, max:300, desc:'高いほど孤立を嫌う' },
+        ],
+        advance: [
+            { key:'advanceBonus', label:'前進積極性', min:0, max:200, desc:'高いほど戦闘後に積極前進' },
+        ],
+        move: [
+            { key:'diag2BonusPaired', label:'斜め陣形ボーナス（防御）', min:0, max:200, desc:'ペア済み・防御時の斜め2ヘクスボーナス' },
+            { key:'diag2BonusAttack', label:'斜め陣形ボーナス（攻撃）', min:0, max:200, desc:'攻撃モード時の斜め2ヘクスボーナス' },
+            { key:'northApproach',    label:'北側接近係数',             min:0, max:100, desc:'川北に渡った時の敵への接近度' },
+            { key:'southApproach',    label:'南側接近係数（未ペア）',   min:0, max:100, desc:'未ペア時の敵への接近度' },
+        ],
+        bridge: [
+            { key:'enabled',      label:'橋破壊を試みる',         type:'bool' },
+            { key:'earliestTurn', label:'破壊を試みる最早ターン', min:1, max:8, desc:'何ターン目から判断するか' },
+        ],
+    },
+    SOV: {
+        attack: [
+            { key:'encircleBonus',   label:'包囲ボーナス',   min:0, max:600, desc:'敵の退路を断った時のボーナス' },
+            { key:'tankPriority',    label:'戦車狩り優先度', min:0, max:300, desc:'高いほど日本戦車を集中攻撃' },
+            { key:'isolatedPenalty', label:'孤立ペナルティ', min:0, max:300, desc:'高いほど孤立を嫌う' },
+        ],
+        advance: [
+            { key:'advanceBonus', label:'前進積極性', min:0, max:200, desc:'高いほど戦闘後に積極前進' },
+        ],
+        move: [
+            { key:'diag2BonusPaired', label:'斜め陣形ボーナス（防御）', min:0, max:200, desc:'ペア済み・防御時の斜め2ヘクスボーナス' },
+            { key:'diag2BonusAttack', label:'斜め陣形ボーナス（攻撃）', min:0, max:200, desc:'攻撃モード時の斜め2ヘクスボーナス' },
+            { key:'northApproach',    label:'北側接近係数',             min:0, max:100, desc:'川北に渡った時の敵への接近度' },
+            { key:'southApproach',    label:'南側接近係数（未ペア）',   min:0, max:100, desc:'未ペア時の敵への接近度' },
+        ],
+    },
+};
+
+// ===== ロジックエディタUI =====
+function openLogicEditor(side) {
+    currentEditSide = side;
+    document.getElementById('main-menu').style.display = 'none';
+    document.getElementById('logic-editor').style.display = 'block';
+    document.getElementById('editor-title').textContent = side === 'JP' ? '🇯🇵 日本軍AIロジック編集' : '🚩 ソ連軍AIロジック編集';
+    document.getElementById('bridge-section').style.display = side === 'JP' ? 'block' : 'none';
+    const logic = getActiveLogic(side);
+    document.getElementById('logic-author').value = logic.author || '';
+    document.getElementById('logic-desc').value   = logic.description || '';
+    renderParams('attack-params',  PARAM_DEFS[side].attack,  logic.attack);
+    renderParams('defense-params', PARAM_DEFS[side].advance, logic.advance);
+    renderParams('common-params',  PARAM_DEFS[side].move,    logic.move);
+    if (side === 'JP') renderParams('bridge-params', PARAM_DEFS[side].bridge, logic.bridge);
+}
+
+function renderParams(containerId, defs, values) {
+    const el = document.getElementById(containerId);
+    if (!el || !defs) return;
+    el.innerHTML = defs.map(d => {
+        if (d.type === 'bool') {
+            return `<div class="logic-toggle">
+                <input type="checkbox" id="p_${d.key}" ${values[d.key] ? 'checked' : ''} onchange="updateLogicValue('${d.key}', this.checked)">
+                <label for="p_${d.key}">${d.label}</label>
+            </div>`;
+        }
+        const v = values[d.key] ?? d.min;
+        return `<div class="logic-row">
+            <label>${d.label}</label>
+            <input type="range" id="p_${d.key}" min="${d.min}" max="${d.max}" value="${v}"
+                oninput="updateLogicValue('${d.key}', +this.value); document.getElementById('v_${d.key}').value=this.value">
+            <input type="number" id="v_${d.key}" min="${d.min}" max="${d.max}" value="${v}"
+                oninput="updateLogicValue('${d.key}', +this.value); document.getElementById('p_${d.key}').value=this.value">
+            <span class="val-desc">${d.desc || ''}</span>
+        </div>`;
+    }).join('');
+}
+
+function updateLogicValue(key, val) {
+    const logic = getActiveLogic(currentEditSide);
+    const defs = PARAM_DEFS[currentEditSide];
+    ['attack','advance','move','bridge'].forEach(sec => {
+        if (defs[sec] && defs[sec].some(d => d.key === key)) logic[sec][key] = val;
+    });
+}
+
+function closeLogicEditor() {
+    document.getElementById('logic-editor').style.display = 'none';
+    document.getElementById('main-menu').style.display = 'block';
+}
+
+function applyLogic() {
+    const logic = getActiveLogic(currentEditSide);
+    logic.author = document.getElementById('logic-author').value;
+    logic.description = document.getElementById('logic-desc').value;
+    syncAiParams(currentEditSide);
+    closeLogicEditor();
+    startGame(currentEditSide === 'JP' ? 'PvE_SOV' : 'PvE_JP');
+}
+
+function syncAiParams(side) {
+    const l = getActiveLogic(side);
+    aiParams.encircleBonus   = l.attack.encircleBonus   ?? 300;
+    aiParams.tankPriority    = l.attack.tankPriority    ?? 80;
+    aiParams.isolatedPenalty = l.attack.isolatedPenalty ?? 80;
+    aiParams.advanceBonus    = l.advance.advanceBonus   ?? 80;
+}
+
+function saveLogic() {
+    const logic = getActiveLogic(currentEditSide);
+    logic.author = document.getElementById('logic-author').value;
+    logic.description = document.getElementById('logic-desc').value;
+    const fname = `nomonhan_logic_${currentEditSide}.json`;
+    const a = document.createElement('a');
+    a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(logic, null, 2));
+    a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+}
+
+function loadLogicFile() { document.getElementById('logic-file-input').click(); }
+
+function onLogicFileLoad(event) {
+    const file = event.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (data.side !== currentEditSide) { alert(`このファイルは${data.side}軍用です。`); return; }
+            if (currentEditSide === 'JP') logicJP = data; else logicSOV = data;
+            openLogicEditor(currentEditSide);
+        } catch(err) { alert('ファイルの読み込みに失敗しました。'); }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+}
+
+function resetLogic() {
+    if (currentEditSide === 'JP') logicJP = JSON.parse(JSON.stringify(DEFAULT_LOGIC_JP));
+    else logicSOV = JSON.parse(JSON.stringify(DEFAULT_LOGIC_SOV));
+    openLogicEditor(currentEditSide);
+}
+let gameMode = 'PvE_JP'; let playerSide = 'JP'; 
+let turn = 1; let currentInitiative = 'JP'; let currentPlayer = 'JP'; let currentPhase = 'JP_MOVE'; let initiativeLost = false;
+let jpVP = 0; let sovVP = 0;
+let isHeadless = false;
+let selectedUnit = null; let declaredCombats = []; let currentCombatTargets = []; let currentCombatAttackers = []; let combatQueue = []; 
+let advancePoints = 0; let advanceEligibleUnits = []; let advanceOrigPositions = {}; let pendingDamageTargets = []; let pendingDamage = 0; let pendingUnit = null; let currentCombatWinner = null; let pendingOrigPos = {};
+let pendingAdvanceEligible = []; let pendingAdvancePoints = 0;
+
+window.pendingAITask = null;
+let isAutoPlay = false; 
+
+window.onload = () => { 
+    document.getElementById('status-banner').innerText = "【準備完了】モードを選択してください。"; 
+    const modal = document.getElementById('combat-result-modal'); const modalHeader = document.getElementById('modal-header');
+    modalHeader.onmousedown = function(e) {
+        e.preventDefault();
+        const wrapper = document.getElementById('game-wrapper');
+        const wRect = wrapper.getBoundingClientRect();
+        const mRect = modal.getBoundingClientRect();
+        let shiftX = e.clientX - mRect.left;
+        let shiftY = e.clientY - mRect.top;
+        function onMouseMove(event) {
+            let newLeft = event.clientX - wRect.left - shiftX;
+            let newTop  = event.clientY - wRect.top  - shiftY;
+            newLeft = Math.max(0, Math.min(newLeft, wRect.width  - mRect.width));
+            newTop  = Math.max(0, Math.min(newTop,  wRect.height - mRect.height));
+            modal.style.left = newLeft + 'px';
+            modal.style.top  = newTop  + 'px';
+        }
+        document.addEventListener('mousemove', onMouseMove);
+        document.onmouseup = function() { document.removeEventListener('mousemove', onMouseMove); document.onmouseup = null; };
+    };
+};
+
+function log(msg) { const l = document.getElementById('game-log'); if (l) { l.innerHTML += `<br>>> ${msg}`; l.scrollTop = l.scrollHeight; } }
+
+let retreatArrows = []; // { fromR, fromC, toR, toC, label, timer }
+let combatArrows = []; // { attackers, targets } - 現在の戦闘矢印
+
+function showRetreatArrow(fromR, fromC, toR, toC, label) {
+    retreatArrows.push({ fromR, fromC, toR, toC, label, timer: 120 }); // 120フレーム表示
+    render();
+    if (retreatArrows.length === 1) { // 最初の矢印追加時にタイマー開始
+        function tickArrows() {
+            retreatArrows = retreatArrows.map(a => ({...a, timer: a.timer - 1})).filter(a => a.timer > 0);
+            if (retreatArrows.length > 0) { render(); requestAnimationFrame(tickArrows); }
+            else render();
+        }
+        requestAnimationFrame(tickArrows);
+    }
+}
+
+function drawRetreatArrows() {
+    if (retreatArrows.length === 0) return;
+    const arrowGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    retreatArrows.forEach(a => {
+        const from = getCoord(a.fromR, a.fromC);
+        const to   = getCoord(a.toR, a.toC);
+        const dx = to.x - from.x; const dy = to.y - from.y;
+        const len = Math.sqrt(dx*dx+dy*dy);
+        const ux = dx/len; const uy = dy/len;
+        const arrowSize = 14;
+        const opacity = Math.min(1, a.timer / 30);
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", from.x); line.setAttribute("y1", from.y);
+        line.setAttribute("x2", to.x - ux*arrowSize); line.setAttribute("y2", to.y - uy*arrowSize);
+        line.setAttribute("stroke", "#ff6600"); line.setAttribute("stroke-width", "4");
+        line.setAttribute("stroke-dasharray", "8,4"); line.setAttribute("opacity", opacity);
+        const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        const px = to.x - ux*arrowSize; const py = to.y - uy*arrowSize;
+        const nx = -uy; const ny = ux;
+        const pts = `${to.x},${to.y} ${px+nx*8},${py+ny*8} ${px-nx*8},${py-ny*8}`;
+        head.setAttribute("points", pts); head.setAttribute("fill", "#ff6600"); head.setAttribute("opacity", opacity);
+        const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        lbl.setAttribute("x", (from.x+to.x)/2); lbl.setAttribute("y", (from.y+to.y)/2 - 10);
+        lbl.setAttribute("fill", "#ff6600"); lbl.setAttribute("font-size", "13"); lbl.setAttribute("font-weight", "bold");
+        lbl.setAttribute("text-anchor", "middle"); lbl.setAttribute("opacity", opacity);
+        lbl.textContent = `↩ ${a.label}`;
+        arrowGroup.appendChild(line); arrowGroup.appendChild(head); arrowGroup.appendChild(lbl);
+    });
+    svg.appendChild(arrowGroup);
+}
+
+function drawCombatArrows() {
+    const ns = "http://www.w3.org/2000/svg";
+    const arrowGroup = document.createElementNS(ns, "g");
+
+    function drawArrow(fromR, fromC, toR, toC, color) {
+        const from = getCoord(fromR, fromC);
+        const to   = getCoord(toR, toC);
+        const dx = to.x - from.x; const dy = to.y - from.y;
+        const len = Math.sqrt(dx*dx+dy*dy); if(len < 1) return;
+        const ux = dx/len; const uy = dy/len;
+        const arrowSize = 14;
+        const line = document.createElementNS(ns, "line");
+        line.setAttribute("x1", from.x + ux*28); line.setAttribute("y1", from.y + uy*28);
+        line.setAttribute("x2", to.x - ux*(arrowSize+26)); line.setAttribute("y2", to.y - uy*(arrowSize+26));
+        line.setAttribute("stroke", color); line.setAttribute("stroke-width", "4");
+        line.setAttribute("stroke-dasharray", "9,4"); line.setAttribute("opacity", "0.9");
+        const hx = to.x - ux*26; const hy = to.y - uy*26;
+        const nx = -uy; const ny = ux;
+        const head = document.createElementNS(ns, "polygon");
+        head.setAttribute("points", `${hx},${hy} ${hx-ux*arrowSize+nx*8},${hy-uy*arrowSize+ny*8} ${hx-ux*arrowSize-nx*8},${hy-uy*arrowSize-ny*8}`);
+        head.setAttribute("fill", color); head.setAttribute("opacity", "0.9");
+        arrowGroup.appendChild(line); arrowGroup.appendChild(head);
+    }
+
+    // 確定済み宣言（白）：各攻撃ユニット→各防御ユニット個別に矢印
+    declaredCombats.forEach(({ attackers, targets }) => {
+        attackers.forEach(a => {
+            targets.forEach(t => drawArrow(a.r, a.c, t.r, t.c, "#ffffff"));
+        });
+    });
+
+    // 現在選択中（黄）：currentCombatAttackers → currentCombatTargets
+    if (currentCombatAttackers.length > 0 && currentCombatTargets.length > 0) {
+        currentCombatAttackers.forEach(a => {
+            currentCombatTargets.forEach(t => drawArrow(a.r, a.c, t.r, t.c, "#ffff00"));
+        });
+    } else if (currentCombatAttackers.length === 0 && currentCombatTargets.length > 0) {
+        // 攻撃側未選択でも防御側選択中は黄で示す
+    }
+
+    // 戦闘解決中の矢印（赤）
+    combatArrows.forEach(({ attackers, targets }) => {
+        attackers.forEach(a => {
+            targets.forEach(t => drawArrow(a.r, a.c, t.r, t.c, "#ff2222"));
+        });
+    });
+
+    svg.appendChild(arrowGroup);
+}
+function getCoord(r, c) { let y = OFFSET_Y + (r - 1) * ySpacing; let x = OFFSET_X + (c - 1) * xSpacing; if (r % 2 === 0) x += xSpacing / 2; return { x, y }; }
+function isHill(r, c) { return ["1-1", "1-2", "1-3", "1-4", "1-5", "1-6"].includes(`${r}-${c}`); }
+function isImpassable(r, c) { return ["3-1", "4-1", "5-1", "7-1", "7-2", "7-3", "7-4", "7-5", "7-6", "7-7", "7-8", "7-9"].includes(`${r}-${c}`); }
+function isMilitaryBridge(r1, c1, r2, c2) { if (militaryBridgeDestroyed) return false; const e = `${r1}-${c1}-${r2}-${c2}`; const er = `${r2}-${c2}-${r1}-${c1}`; return e === "2-7-3-8" || er === "2-7-3-8"; }
+function isBridge(r1, c1, r2, c2) { const e = `${r1}-${c1}-${r2}-${c2}`; const er = `${r2}-${c2}-${r1}-${c1}`; return e === "2-1-3-2" || er === "2-1-3-2" || isMilitaryBridge(r1, c1, r2, c2); }
+function isRiverCross(r1, c1, r2, c2) { const e = `${r1}-${c1}-${r2}-${c2}`; const er = `${r2}-${c2}-${r1}-${c1}`; const rivers = ["1-8-2-8", "2-7-2-8", "2-7-3-8", "2-7-3-7", "2-6-3-7", "2-6-3-6", "2-5-3-6", "2-5-3-5", "2-4-3-5", "2-4-3-4", "2-3-3-4", "2-3-3-3", "2-2-3-3", "2-2-3-2", "2-1-3-2", "2-1-3-1"]; return rivers.includes(e) || rivers.includes(er); }
+function getAdjacentCoords(r, c) { const isEvenRow = r % 2 === 0; const dirs = isEvenRow ? [[0, 1], [0, -1], [-1, 0], [-1, 1], [1, 0], [1, 1]] : [[0, 1], [0, -1], [-1, -1], [-1, 0], [1, -1], [1, 0]]; return dirs.map(d => ({ r: r + d[0], c: c + d[1] })).filter(pos => pos.r >= 1 && pos.r <= 7 && pos.c >= 1 && pos.c <= 8); }
+function getUnitAt(r, c) { return units.find(u => u.r === r && u.c === c); }
+function isAdjacent(u1, u2) { return getAdjacentCoords(u1.r, u1.c).some(pos => pos.r === u2.r && pos.c === u2.c); }
+function isEnemyZOC(r, c, mySide) { return units.some(e => { if (e.side === mySide) return false; return getAdjacentCoords(e.r, e.c).some(pos => { if (pos.r === r && pos.c === c) { return !(isRiverCross(e.r, e.c, r, c) && !isBridge(e.r, e.c, r, c)); } return false; }); }); }
+
+// ルール[9.0]: 攻撃可能判定（グローバル統一版）
+// 条件: 隣接 AND 川越えなし（橋除く） AND 攻撃側が丘にいない
+function canFight(attacker, defender) {
+    if (!isAdjacent(attacker, defender)) return false;
+    if (isRiverCross(attacker.r, attacker.c, defender.r, defender.c) &&
+        !isBridge(attacker.r, attacker.c, defender.r, defender.c)) return false;
+    if (isHill(attacker.r, attacker.c)) return false;
+    return true;
+}
+
+function getPathCost(startPos, endPos) {
+    if (startPos.r === endPos.r && startPos.c === endPos.c) return 0;
+    let pq = [{ r: startPos.r, c: startPos.c, cost: 0 }];
+    let visited = new Map(); visited.set(`${startPos.r}-${startPos.c}`, 0);
+    while(pq.length > 0) {
+        pq.sort((a,b) => a.cost - b.cost); let curr = pq.shift();
+        if (curr.r === endPos.r && curr.c === endPos.c) return curr.cost;
+        if (curr.cost > 30) continue; 
+        getAdjacentCoords(curr.r, curr.c).forEach(pos => {
+            if (isImpassable(pos.r, pos.c)) return;
+            let moveCost = 1;
+            if (isRiverCross(curr.r, curr.c, pos.r, pos.c) && !isBridge(curr.r, curr.c, pos.r, pos.c)) moveCost = 50; 
+            let nextCost = curr.cost + moveCost; let key = `${pos.r}-${pos.c}`;
+            if (!visited.has(key) || visited.get(key) > nextCost) { visited.set(key, nextCost); pq.push({ r: pos.r, c: pos.c, cost: nextCost }); }
+        });
+    }
+    return 999;
+}
+
+function getValidRetreatHexes(u, maxSteps = 1, visitedHexes = null) {
+    const banned = new Set();
+    if (visitedHexes) visitedHexes.forEach(k => banned.add(k));
+
+    // BFS：steps数以内で到達できる退却先を列挙
+    // 味方マスは通過のみ可（目的地にはなれない）
+    // 敵ZOC内は通過も目的地も不可
+    const explored = new Set([`${u.r}-${u.c}`]);
+    let frontier = [{r: u.r, c: u.c, steps: 0}];
+    let destinations = [];
+
+    while (frontier.length > 0) {
+        let curr = frontier.shift();
+        if (curr.steps >= maxSteps) continue;
+        getAdjacentCoords(curr.r, curr.c).forEach(pos => {
+            const key = `${pos.r}-${pos.c}`;
+            if (explored.has(key)) return;
+            if (banned.has(key)) return;
+            if (isImpassable(pos.r, pos.c)) return;
+            if (isRiverCross(curr.r, curr.c, pos.r, pos.c) && !isBridge(curr.r, curr.c, pos.r, pos.c)) return;
+            const unitAt = getUnitAt(pos.r, pos.c);
+            // 敵ユニットのいるマスは不可
+            if (unitAt && unitAt.side !== u.side) return;
+            // ZOC内は目的地にも通過にも不可
+            // ただし出発点自体がZOC内の場合、最初の1歩のみ通過可（目的地不可）
+            const inZOC = isEnemyZOC(pos.r, pos.c, u.side);
+            const isFromStart = (curr.r === u.r && curr.c === u.c);
+            if (inZOC && !isFromStart) { explored.add(key); return; }
+            explored.add(key);
+            // 味方ユニットのいるマスは通過のみ
+            if (unitAt && unitAt.side === u.side) {
+                if (!inZOC) frontier.push({r: pos.r, c: pos.c, steps: curr.steps + 1});
+                return;
+            }
+            // 空きマス
+            if (!inZOC) {
+                // ZOC外のみ目的地かつ通過可
+                destinations.push({r: pos.r, c: pos.c, steps: curr.steps + 1});
+                frontier.push({r: pos.r, c: pos.c, steps: curr.steps + 1});
+            }
+            // ZOC内（出発点からの1歩目のみ）：目的地不可、通過も不可（次の探索しない）
+        });
+    }
+    // 重複除去：同じ座標で最小stepsのものだけ残す
+    const seen = new Map();
+    destinations.forEach(d => {
+        const key = `${d.r}-${d.c}`;
+        if (!seen.has(key) || seen.get(key).steps > d.steps) seen.set(key, d);
+    });
+    return Array.from(seen.values());
+}
+
+function getReachableHexes(u, isAdvance = false) {
+    let pq = [{ r: u.r, c: u.c, cost: 0 }];
+    let visited = new Map(); visited.set(`${u.r}-${u.c}`, 0);
+    let reachable = [];
+    while (pq.length > 0) {
+        pq.sort((a,b) => a.cost - b.cost); let curr = pq.shift();
+        if (!isAdvance && curr.cost > 0 && isEnemyZOC(curr.r, curr.c, u.side)) continue; 
+        getAdjacentCoords(curr.r, curr.c).forEach(pos => {
+            if (isImpassable(pos.r, pos.c)) return;
+            let moveCost = isAdvance ? 1 : (isHill(pos.r, pos.c) ? 2 : 1);
+            if (isRiverCross(curr.r, curr.c, pos.r, pos.c)) {
+                if (!isBridge(curr.r, curr.c, pos.r, pos.c)) moveCost = 20; 
+                if (!isAdvance && u.isTank && isMilitaryBridge(curr.r, curr.c, pos.r, pos.c)) return;
+            }
+            let nextCost = curr.cost + moveCost;
+            if (nextCost <= (isAdvance ? advancePoints : u.mov)) {
+                let key = `${pos.r}-${pos.c}`;
+                if (!visited.has(key) || visited.get(key) > nextCost) {
+                    let unitAtPos = getUnitAt(pos.r, pos.c);
+                    if (unitAtPos && unitAtPos.side !== u.side) return; // 敵は通過不可
+                    visited.set(key, nextCost); pq.push({ r: pos.r, c: pos.c, cost: nextCost });
+                    if (!unitAtPos && !reachable.some(h => h.r === pos.r && h.c === pos.c)) reachable.push(pos); // 味方がいるヘクスは止まれない
+                }
+            }
+        });
+    }
+    return reachable;
+}
+
+function scheduleNextAITask(msg, taskFn) {
+    if (gameMode === 'EvE' && !isAutoPlay && !isHeadless) {
+        document.getElementById('step-btn').style.display = "block";
+        document.getElementById('auto-btn').style.display = "block";
+        document.getElementById('status-banner').innerText = `【一時停止】${msg}（右上のボタンを押して進める）`;
+        document.getElementById('status-banner').style.background = "#ff9800";
+        window.pendingAITask = taskFn;
+    } else {
+        setTimeout(taskFn, isHeadless ? 0 : 500);
+    }
+}
+function resumeStep() {
+    document.getElementById('step-btn').style.display = "none";
+    document.getElementById('auto-btn').style.display = "none";
+    if (window.pendingAITask) {
+        let task = window.pendingAITask;
+        window.pendingAITask = null;
+        task();
+    }
+}
+function switchToAuto() {
+    isAutoPlay = true;
+    log("⏩ 全自動モードに切り替えました。");
+    resumeStep();
+}
+
+function showPopup(text, duration, callback) {
+    if (isHeadless) { if (callback) callback(); return; }
+    const popup = document.getElementById('phase-popup');
+    popup.innerHTML = text + '<div style="margin-top:18px; font-size:18px; color:#ffcc00; border:2px solid #ffcc00; padding:6px 24px; border-radius:6px; cursor:pointer; display:inline-block;">▶ クリックして続ける</div>';
+    popup.style.display = 'block';
+    popup.style.cursor = 'pointer';
+    const proceed = () => {
+        popup.style.display = 'none';
+        popup.onclick = null;
+        if (callback) callback();
+    };
+    popup.onclick = proceed;
+}
+
+function startGame(mode) {
+    gameMode = mode; playerSide = mode === 'PvE_JP' ? 'JP' : (mode === 'PvE_SOV' ? 'SOV' : null);
+    isAutoPlay = (mode !== 'EvE'); 
+    document.getElementById('start-screen').style.display = 'none'; document.getElementById('sim-report').style.display = 'none';
+    document.getElementById('bg-map').style.display = 'block'; document.getElementById('game-svg').style.display = 'block';
+    units = JSON.parse(JSON.stringify(gameData.initialUnits)); turn = 1; currentInitiative = 'JP'; currentPlayer = 'JP'; 
+    initiativeLost = false; gameEnded = false; militaryBridgeDestroyed = false; jpVP = 0; sovVP = 0;
+    spawnedReinforcements = { turn2JP: false, turn3SOV: false, turn4SOV: false }; declaredCombats = [];
+    window.pendingAITask = null;
+    document.getElementById('game-log').innerHTML = ">> 【システム】通常対戦を開始します。";
+    document.getElementById('game-log').classList.add('active');
+    // Q学習ステータス表示
+    const qSt = document.getElementById('q-status');
+    if (qSt) { qSt.style.display = (useQTable && qTable) ? 'inline' : 'none'; }
+    qHitCount = 0; qMissCount = 0;
+    showPopup(`第 ${turn} ターン 開始<br><br><span style="font-size:24px;">主導権: 日本軍</span>`, 2000, () => { startPlayerPhase('JP'); });
+}
+
+function checkInstantVictory() {
+    if (gameEnded) return true;
+    let jpTanks = units.filter(u => u.id === 'jp2' || u.id === 'jp3');
+    let sovArt = units.find(u => u.id === 'sv4');
+    if (!sovArt) { endGame("日本軍の即時勝利！<br><span style='font-size:18px;'>(ソ連軍砲兵の除去)</span>"); return true; }
+    if (jpTanks.length === 0) { endGame("ソ連軍の即時勝利！<br><span style='font-size:18px;'>(日本軍戦車2個の壊滅)</span>"); return true; }
+    return false;
+}
+
+function checkReinforcements() {
+    let spawned = false;
+    if (turn >= 2 && !spawnedReinforcements.turn2JP) { let r = gameData.reinforcements.turn2JP; let p = getUnitAt(r.spawns[0].r, r.spawns[0].c)?r.spawns[1]:r.spawns[0]; if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: 日本軍(${u.label})`); spawnedReinforcements.turn2JP = true; spawned = true; } }
+    if (turn >= 3 && !spawnedReinforcements.turn3SOV) { let r = gameData.reinforcements.turn3SOV; let p = getUnitAt(r.spawns[0].r, r.spawns[0].c)?r.spawns[1]:r.spawns[0]; if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: ソ連軍(${u.label})`); spawnedReinforcements.turn3SOV = true; spawned = true;} }
+    if (turn >= 4 && !spawnedReinforcements.turn4SOV) { let r = gameData.reinforcements.turn4SOV; let p = getUnitAt(r.spawns[0].r, r.spawns[0].c)?r.spawns[1]:r.spawns[0]; if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: ソ連軍(${u.label})`); spawnedReinforcements.turn4SOV = true; spawned = true;} }
+    if (spawned) render(); // ★追加: 増援後の確実な再描画
+}
+
+function changeInitiativeAndTurn() {
+    combatQueue = []; 
+    if (turn === 6) { let d = Math.floor(Math.random()*6)+1; log(`🎲 第6T終了判定: [${d}]`); if(d<=2) return endGame(getVpVictoryMessage("第6T終了")); }
+    if (turn === 7) { let d = Math.floor(Math.random()*6)+1; log(`🎲 第7T終了判定: [${d}]`); if(d<=4) return endGame(getVpVictoryMessage("第7T終了")); }
+    if (turn >= 8) return endGame(getVpVictoryMessage("第8ターン終了(最大)"));
+    turn++; currentInitiative = currentInitiative === 'JP' ? 'SOV' : 'JP'; currentPlayer = currentInitiative; initiativeLost = false;
+    let s = currentInitiative === 'JP' ? '日本軍' : 'ソ連軍'; let c = currentInitiative === 'JP' ? '#ffcc00' : '#d32f2f';
+    showPopup(`⚠️ 主導権交替 ⚠️<br><br>第 ${turn} ターン 開始<br><span style="font-size:24px; color:${c};">主導権: ${s}</span>`, 2500, () => { startPlayerPhase(currentPlayer); });
+}
+
+function endGame(msg) {
+    gameEnded = true;
+    // すべてのボタンを非表示
+    ['phase-btn','declare-btn','cancel-btn','step-btn','auto-btn','destroy-bridge-btn'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    // ログ窓を非表示
+    const logEl = document.getElementById('game-log');
+    if (logEl) logEl.classList.remove('active');
+    // 戦闘モーダルを閉じる
+    document.getElementById('combat-result-modal').style.display = 'none';
+    // 退却矢印クリア
+    retreatArrows = [];
+    let res = document.getElementById('result-text'); res.innerHTML = msg; res.style.display = 'block';
+    document.getElementById('start-screen').style.display = 'flex';
+}
+function getVpVictoryMessage(r) { let w = jpVP > sovVP ? "日本軍" : (sovVP > jpVP ? "ソ連軍" : "引き分け"); return `${r}<br><span style='font-size:20px;'>最終スコア [ 日本: ${jpVP} - ソ連: ${sovVP} ]</span><br><br>結果: <b>${w}の勝利！</b>`; }
+function addVP(s, pts) { if(s==='JP') jpVP+=pts; else if(s==='SOV') sovVP+=pts; updateUI(); }
+function destroyBridge() { if(gameEnded || militaryBridgeDestroyed) return; militaryBridgeDestroyed = true; log("💥 軍橋破壊！"); updateUI(); render(); }
+
+function startPlayerPhase(player) {
+    document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable', 'attackable', 'selected-target', 'selected-attacker'));
+    units.forEach(u => { if (u.side === player) u.acted = false; }); checkReinforcements();
+    // フェーズ切替時に矢印・宣言状態をリセット
+    combatArrows = []; declaredCombats = []; currentCombatTargets = []; currentCombatAttackers = [];
+    if (checkInstantVictory()) return;
+    currentPhase = player + '_MOVE'; updateUI(); render();
+    if (player !== playerSide) {
+        scheduleNextAITask(`${player}のAI移動フェイズを開始します`, executeAITurn);
+    }
+}
+function endCurrentPlayerPhase() {
+    if (checkInstantVictory()) return;
+    currentPlayer = (currentPlayer === 'JP' ? 'SOV' : 'JP');
+    let s = currentPlayer === 'JP' ? '日本軍' : 'ソ連軍'; let c = currentPlayer === 'JP' ? '#ffcc00' : '#d32f2f';
+    showPopup(`攻守交替<br><span style="font-size:24px; color:${c};">次は ${s} です</span>`, 1500, () => { startPlayerPhase(currentPlayer); });
+}
+function updateUI() {
+    if(isHeadless || gameEnded) return;
+    const info = document.getElementById('turn-info'); const btn = document.getElementById('phase-btn'); const declareBtn = document.getElementById('declare-btn'); const bridgeBtn = document.getElementById('destroy-bridge-btn'); const sb = document.getElementById('status-banner');
+    document.getElementById('initiative-label').innerText = currentInitiative === 'JP' ? '日本軍' : 'ソ連軍'; document.getElementById('initiative-label').style.background = currentInitiative === 'JP' ? '#ffcc00' : '#d32f2f'; document.getElementById('initiative-label').style.color = currentInitiative === 'JP' ? '#000' : '#fff';
+    document.getElementById('vp-label').innerText = `日本 ${jpVP} - ${sovVP} ソ連`;
+    declareBtn.style.display = "none"; bridgeBtn.style.display = (playerSide === 'JP' && !militaryBridgeDestroyed && units.some(u => u.side === 'JP' && ((u.r===2&&u.c===7)||(u.r===3&&u.c===8)))) ? "block" : "none";
+    let isP = (playerSide && currentPhase.startsWith(playerSide)) || currentPhase === 'WAIT_RETREAT';
+    if(isP) {
+        if(currentPhase.includes('_MOVE')) { info.innerText = `第 ${turn}T : 移動`; btn.innerText="移動終了"; btn.style.display="block"; sb.innerText="【入力待ち】移動する味方を選んでください。"; sb.style.background = playerSide==='JP'?'#ffcc00':'#d32f2f'; }
+        else if(currentPhase.includes('_COMBAT_DECLARE')) { info.innerText = `第 ${turn}T : 宣言`; btn.innerText="戦闘解決へ"; btn.style.display="block"; sb.innerText="【入力待ち】目標と攻撃する部隊をクリックして確定ボタンを押してください。"; if(currentCombatTargets.length>0 && currentCombatAttackers.length>0) declareBtn.style.display="block"; document.getElementById('cancel-btn').style.display=(currentCombatTargets.length>0||currentCombatAttackers.length>0)?'block':'none'; }
+        else if(currentPhase.includes('_ADVANCE')) { 
+            info.innerText = `第 ${turn}T : 前進(${advancePoints})`; btn.innerText="前進終了"; btn.style.display="block"; 
+            sb.innerText=`【入力待ち】戦闘後前進（残 ${advancePoints}マス）`; sb.style.background="#00ffcc";
+            let cancelR = document.getElementById('cancel-btn');
+            if(cancelR){ cancelR.style.display='block'; cancelR.textContent='前進をやり直す'; cancelR.onclick = cancelAdvance; }
+        }
+        else if(currentPhase==='WAIT_RETREAT') { info.innerText = `第 ${turn}T : 退却`; btn.style.display="none"; sb.innerText="【入力待ち】退却先をクリック（黄色のマス）"; sb.style.background="#ff6666";
+            // キャンセルボタンを表示
+            let cancelR = document.getElementById('cancel-btn');
+            if(cancelR){ cancelR.style.display='block'; cancelR.textContent='退却をキャンセル'; cancelR.onclick = cancelRetreat; }
+        }
+    } else { 
+        info.innerText = `第 ${turn}T : AI処理中`; btn.style.display="none"; 
+        if (!window.pendingAITask) { sb.innerText="【処理中】AIが思考中です..."; sb.style.background="#aaa"; }
+    }
+}
+
+function nextPhase() {
+    if(gameEnded || !playerSide || !currentPhase.startsWith(playerSide)) return;
+    selectedUnit = null; document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable', 'selected-target', 'selected-attacker'));
+    if(currentPhase.includes('_MOVE')) { currentPhase = playerSide+'_COMBAT_DECLARE'; units.forEach(u=>{if(u.side===playerSide)u.acted=false;}); declaredCombats=[]; currentCombatTargets=[]; currentCombatAttackers=[]; }
+    else if(currentPhase.includes('_COMBAT_DECLARE')) {
+        // 丘にいる部隊は攻撃義務なし。グローバルcanFight使用。
+        let myUnits2  = units.filter(u => u.side === playerSide);
+        let foeUnits2 = units.filter(u => u.side !== playerSide);
+        let missAttackers = myUnits2.filter(me =>
+            foeUnits2.some(f => canFight(me, f)) &&
+            !declaredCombats.some(c => c.attackers.some(a => a.id === me.id))
+        );
+        if(missAttackers.length > 0){ alert('【未宣言】' + missAttackers.map(u=>u.label).join(', ') + ' がまだ攻撃宣言していません。'); return; }
+        let missTargets = foeUnits2.filter(foe =>
+            myUnits2.some(f => canFight(f, foe)) &&
+            !declaredCombats.some(c => c.targets.some(t => t.id === foe.id))
+        );
+        if(missTargets.length > 0){ alert('【未宣言】敵部隊 ' + missTargets.map(u=>u.label).join(', ') + ' への攻撃が宣言されていません。'); return; }
+        currentPhase = playerSide+'_COMBAT_RESOLVE'; combatQueue = [...declaredCombats]; processNextCombat(); return;
+    }
+    else if(currentPhase.includes('_ADVANCE')) { advancePoints = 0; finishCombatResolution(); return; }
+    updateUI(); render();
+}
+function cancelCombination() {
+    currentCombatTargets = []; currentCombatAttackers = [];
+    declaredCombats = [];
+    document.getElementById('cancel-btn').style.display = 'none';
+    document.getElementById('declare-btn').style.display = 'none';
+    updateUI(); render();
+}
+function confirmCombination() {
+    if (currentCombatTargets.length > 0 && currentCombatAttackers.length > 0) {
+        if (currentCombatAttackers.length > 1 && currentCombatTargets.length > 1) {
+            alert('ルール違反：攻撃側か防御側のどちらかは必ず1ユニットです。');
+            return;
+        }
+        declaredCombats.push({ targets: [...currentCombatTargets], attackers: [...currentCombatAttackers] });
+        currentCombatTargets = []; currentCombatAttackers = [];
+        document.getElementById('cancel-btn').style.display = 'none';
+        updateUI(); render();
+    }
+}
+
+function render() {
+    if(isHeadless) return; svg.innerHTML = '';
+    // SVG描画時の重なりを制御するため、マップのヘックス→ユニットの順で描画を徹底
+    const hexGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const unitGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+    for(let r=1; r<=7; r++) { for(let c=1; c<=8; c++) {
+        const {x, y} = getCoord(r, c); const p = []; for (let i=0; i<6; i++) { const a = (i*60-30)*Math.PI/180; p.push(`${x+HEX_SIZE*Math.cos(a)},${y+HEX_SIZE*Math.sin(a)}`); }
+        const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon"); poly.setAttribute("points", p.join(" "));
+        let cls = "hex-cell"; if (isEnemyZOC(r,c,playerSide||'JP')) cls += " zoc-cell";
+        if (currentPhase.includes('_COMBAT_DECLARE')) { if (currentCombatTargets.some(u=>u.r===r&&u.c===c)) cls += " selected-target"; if (currentCombatAttackers.some(u=>u.r===r&&u.c===c)) cls += " selected-attacker"; }
+        poly.setAttribute("class", cls); poly.setAttribute("id", `hex-${r}-${c}`); poly.onclick = () => handleHexClick(r,c); 
+        hexGroup.appendChild(poly);
+    }}
+    units.forEach(u => {
+        const {x, y} = getCoord(u.r, u.c); const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect"); rect.setAttribute("x", x-27); rect.setAttribute("y", y-27); rect.setAttribute("width", 54); rect.setAttribute("height", 54); rect.setAttribute("fill", u.color);
+        let unitClass = `unit-rect ${u.acted?"acted":""}`;
+        if (currentPhase === 'WAIT_RETREAT' && pendingUnit && pendingUnit.id === u.id) unitClass += ' retreating';
+        else if (currentPhase !== 'WAIT_RETREAT' && document.getElementById('combat-result-modal').style.display === 'block' && pendingDamageTargets && pendingDamageTargets.some(t => t.id === u.id)) unitClass += ' retreating';
+        rect.setAttribute("class", unitClass); rect.onclick = (e) => { e.stopPropagation(); handleUnitClick(u); };
+        const txt = document.createElementNS("http://www.w3.org/2000/svg", "text"); txt.setAttribute("x", x); txt.setAttribute("y", y+6); txt.setAttribute("fill", u.side==='JP'?'black':'white'); txt.setAttribute("text-anchor", "middle"); txt.setAttribute("class", "unit-text"); txt.setAttribute("font-size", "18"); txt.textContent = u.label;
+        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle"); c.setAttribute("cx", x+18); c.setAttribute("cy", y-18); c.setAttribute("r", 9); c.setAttribute("fill", "#fff"); c.setAttribute("stroke", "#000"); c.setAttribute("stroke-width", "1");
+        const st = document.createElementNS("http://www.w3.org/2000/svg", "text"); st.setAttribute("x", x+18); st.setAttribute("y", y-14); st.setAttribute("fill", "black"); st.setAttribute("text-anchor", "middle"); st.setAttribute("font-size", "12"); st.setAttribute("font-weight", "bold"); st.setAttribute("pointer-events", "none"); st.textContent = u.steps;
+        g.appendChild(rect); g.appendChild(txt); g.appendChild(c); g.appendChild(st); 
+        unitGroup.appendChild(g);
+    });
+
+    svg.appendChild(hexGroup);
+
+    // 軍橋の表示（破壊済みなら×マーク）
+    const bridgeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    const b1 = getCoord(2, 7); const b2 = getCoord(3, 8);
+    const bx = (b1.x + b2.x) / 2; const by = (b1.y + b2.y) / 2;
+    if (!militaryBridgeDestroyed) {
+        // 橋マーク（茶色の太線）
+        const bl = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        bl.setAttribute("x1", b1.x); bl.setAttribute("y1", b1.y); bl.setAttribute("x2", b2.x); bl.setAttribute("y2", b2.y);
+        bl.setAttribute("stroke", "#8B4513"); bl.setAttribute("stroke-width", "6"); bl.setAttribute("stroke-dasharray", "8,4");
+        bridgeGroup.appendChild(bl);
+        const bt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        bt.setAttribute("x", bx); bt.setAttribute("y", by - 8); bt.setAttribute("fill", "#ffcc00");
+        bt.setAttribute("text-anchor", "middle"); bt.setAttribute("font-size", "11"); bt.setAttribute("font-weight", "bold");
+        bt.textContent = "軍橋"; bridgeGroup.appendChild(bt);
+    } else {
+        // 破壊済み×マーク
+        const size = 14;
+        const x1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        x1.setAttribute("x1", bx-size); x1.setAttribute("y1", by-size); x1.setAttribute("x2", bx+size); x1.setAttribute("y2", by+size);
+        x1.setAttribute("stroke", "#ff2222"); x1.setAttribute("stroke-width", "5"); x1.setAttribute("stroke-linecap", "round");
+        const x2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        x2.setAttribute("x1", bx+size); x2.setAttribute("y1", by-size); x2.setAttribute("x2", bx-size); x2.setAttribute("y2", by+size);
+        x2.setAttribute("stroke", "#ff2222"); x2.setAttribute("stroke-width", "5"); x2.setAttribute("stroke-linecap", "round");
+        const bt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        bt.setAttribute("x", bx); bt.setAttribute("y", by - 18); bt.setAttribute("fill", "#ff4444");
+        bt.setAttribute("text-anchor", "middle"); bt.setAttribute("font-size", "11"); bt.setAttribute("font-weight", "bold");
+        bt.textContent = "💥破壊"; bridgeGroup.appendChild(bt);
+        bridgeGroup.appendChild(x1); bridgeGroup.appendChild(x2);
+    }
+    svg.appendChild(bridgeGroup);
+
+    svg.appendChild(unitGroup);
+    drawCombatArrows();
+    drawRetreatArrows();
+}
+
+function handleUnitClick(u) {
+    if(gameEnded || !playerSide) return;
+    if(currentPhase===playerSide+'_MOVE' && u.side===playerSide && !u.acted) {
+        if(isEnemyZOC(u.r,u.c,u.side)) { log("⚠️ ZOC移動不可"); return; }
+        selectedUnit = u; document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); getReachableHexes(u,false).forEach(p=>document.getElementById(`hex-${p.r}-${p.c}`).classList.add('movable'));
+    } else if(currentPhase===playerSide+'_COMBAT_DECLARE') {
+        if(u.side!==playerSide) { if(currentCombatTargets.includes(u)) currentCombatTargets=currentCombatTargets.filter(t=>t!==u); else currentCombatTargets.push(u); }
+        else if(u.side===playerSide && currentCombatTargets.length>0 && !declaredCombats.some(c=>c.attackers.includes(u)) && currentCombatTargets.some(t=>isAdjacent(u,t))) {
+            if(currentCombatAttackers.includes(u)) currentCombatAttackers=currentCombatAttackers.filter(a=>a!==u); else currentCombatAttackers.push(u);
+        } updateUI(); render();
+    } else if(currentPhase===playerSide+'_ADVANCE' && u.side===playerSide && advancePoints>0 && advanceEligibleUnits.includes(u)) {
+        selectedUnit=u; document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); getReachableHexes(u,true).forEach(p=>document.getElementById(`hex-${p.r}-${p.c}`).classList.add('movable'));
+    }
+}
+function handleHexClick(r, c) {
+    if(gameEnded || !playerSide) return; const targetHex = document.getElementById(`hex-${r}-${c}`); if(!targetHex||!targetHex.classList.contains('movable')) return;
+    if(currentPhase===playerSide+'_MOVE' && selectedUnit) { selectedUnit.r=r; selectedUnit.c=c; selectedUnit.acted=true; selectedUnit=null; document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); render(); updateUI(); }
+    else if(currentPhase===playerSide+'_ADVANCE' && selectedUnit) {
+        let dist = getPathCost({r:selectedUnit.r,c:selectedUnit.c}, {r,c}); advancePoints -= dist; selectedUnit.r=r; selectedUnit.c=c; selectedUnit=null;
+        document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); render(); updateUI(); if(advancePoints<=0) finishCombatResolution();
+    } else if(currentPhase==='WAIT_RETREAT' && pendingUnit) {
+        if (!pendingUnit._retreatVisited) pendingUnit._retreatVisited = new Set();
+        pendingUnit._retreatVisited.add(`${pendingUnit.r}-${pendingUnit.c}`);
+        // クリックされたマスのstepsを段階的探索で取得
+        let retreatDest = null;
+        for (let trySteps = pendingDamage; trySteps >= 1 && !retreatDest; trySteps--) {
+            retreatDest = getValidRetreatHexes(pendingUnit, trySteps, pendingUnit._retreatVisited).find(p => p.r===r && p.c===c);
+        }
+        let steps = retreatDest ? retreatDest.steps : 1;
+        log(`🏃 退却DEBUG: pendingDamage=${pendingDamage} retreatDest=${JSON.stringify(retreatDest)} steps=${steps}`);
+        pendingUnit.r=r; pendingUnit.c=c; pendingDamage -= steps;
+        log(`🏃‍♂️ 退却: ${pendingUnit.label} → (${r}-${c}) [${steps}マス]`);
+        document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); render(); updateUI();
+        if(pendingDamage>0) showDamageModal(pendingUnit.id, pendingDamage);
+        else { 
+            pendingUnit=null; 
+            document.getElementById('combat-result-modal').style.display='none'; 
+            // 退避していた前進対象を復元
+            advanceEligibleUnits = pendingAdvanceEligible.filter(u => units.includes(u));
+            advancePoints = pendingAdvancePoints;
+            triggerAdvancePhase(); 
+        }
+    }
+}
+
+function processNextCombat() {
+    if (checkInstantVictory()) return;
+    if (combatQueue.length === 0) { if(initiativeLost) changeInitiativeAndTurn(); else endCurrentPlayerPhase(); return; }
+    let combat = combatQueue.shift(); let attackers = combat.attackers.filter(a=>units.includes(a)); let targets = combat.targets.filter(t=>units.includes(t));
+    if (targets.length===0 || attackers.length===0) return processNextCombat();
+    attackers.forEach(a=>a.acted=true);
+    let defStr = targets.reduce((s,t)=>s+t.def,0); if(attackers.some(a=>targets.some(t=>isRiverCross(a.r,a.c,t.r,t.c)&&isBridge(a.r,a.c,t.r,t.c)))) defStr+=1;
+    let atkTargetNum = targets.some(t=>isHill(t.r,t.c))?6:5; let totalAtk = attackers.reduce((s,a)=>s+a.atk,0);
+    let artBonus = 0; let art = units.find(u=>u.label==='1-0'&&u.side==='SOV');
+    if (art && (attackers.some(a=>getPathCost(art,a)<=3) || targets.some(t=>getPathCost(art,t)<=3))) { artBonus=1; log(`🎯 砲兵支援!`); }
+    if (attackers[0].side==='SOV') totalAtk+=artBonus; else if(targets[0].side==='SOV') defStr+=artBonus;
+    
+    let atkHits=0; let atkDice=[]; for(let i=0;i<totalAtk;i++){let d=Math.floor(Math.random()*6)+1;atkDice.push(d);if(d>=atkTargetNum)atkHits++;}
+    let defTargetNum = attackers.some(a=>isHill(a.r,a.c))?6:5; let defHits=0; let defDice=[]; for(let i=0;i<defStr;i++){let d=Math.floor(Math.random()*6)+1;defDice.push(d);if(d>=defTargetNum)defHits++;}
+    let diff = atkHits - defHits; advanceEligibleUnits = []; currentCombatWinner = null; 
+    
+    let atkStr = attackers[0].side==='SOV'?"ソ連":"日本"; let defSideStr = targets[0].side==='SOV'?"ソ連":"日本";
+    let initWarn = "";
+    if((diff>0 && targets[0].side===currentInitiative) || (diff<0 && attackers[0].side===currentInitiative)) { initiativeLost=true; initWarn=`<div style="margin-top:8px; padding:5px; background:rgba(255,0,0,0.3); border:1px solid #ff0000; color:#ffcc00;">⚠️ この損害により主導権交替！</div>`; }
+    
+    log(`⚔️ [戦闘開始] 攻撃: ${attackers.map(a=>a.label).join(",")} vs 防御: ${targets.map(t=>t.label).join(",")}`);
+    log(`🎲 ダイス(目標 攻${atkTargetNum}/防${defTargetNum}) -> 攻[${atkDice.join(",")}] ${atkHits}Hit / 防[${defDice.join(",")}] ${defHits}Hit`);
+    // 戦闘矢印をセット
+    combatArrows = [{ attackers: attackers.map(a=>({r:a.r,c:a.c})), targets: targets.map(t=>({r:t.r,c:t.c})) }];
+    render();
+
+    document.getElementById('combat-details').innerHTML = `
+        <div style="margin-bottom:5px;">⚔️ <b>攻撃 (${atkStr})</b>: ${attackers.map(a=>a.label).join(", ")}<br>ダイス: [ ${atkDice.join(", ")} ]</div>
+        <div>🛡️ <b>防御 (${defSideStr})</b>: ${targets.map(t=>t.label).join(", ")}<br>ダイス: [ ${defDice.join(", ")} ]</div>
+        <hr>🎲 <b>結果</b>: 攻撃 <b>${atkHits}</b> / 防御 <b>${defHits}</b> ${initWarn}
+    `;
+
+    const out = document.getElementById('combat-outcome'); const acts = document.getElementById('combat-actions');
+    let taskToSchedule = null;
+
+    if (diff > 0) {
+        log(`💥 結果: 防御側に ${diff} ダメージ！`);
+        out.innerHTML = `防御側に <span style="color:#f00;font-size:22px;">${diff}</span> 損害！`; advanceEligibleUnits=attackers; currentCombatWinner=attackers[0].side; pendingDamageTargets=targets;
+        if(targets[0].side!==playerSide) { 
+            acts.innerHTML = `<button class="action-btn" onclick="applyAIDamageLoop(${diff})">次へ ▶</button>`;
+            taskToSchedule = null; // クリック待ちにするのでauto-scheduleしない
+        } else {
+            acts.innerHTML=`<button class="action-btn" onclick="startPlayerDamage(${diff})">損害を割振る</button>`;
+        }
+    } else if (diff < 0) {
+        let dmg = -diff; log(`💥 結果: 攻撃側に ${dmg} ダメージ！`);
+        out.innerHTML = `攻撃側に <span style="color:#f00;font-size:22px;">${dmg}</span> 損害！`; advanceEligibleUnits=targets; currentCombatWinner=targets[0].side; pendingDamageTargets=attackers;
+        if(attackers[0].side!==playerSide) { 
+            acts.innerHTML = `<button class="action-btn" onclick="applyAIDamageLoop(${dmg})">次へ ▶</button>`;
+            taskToSchedule = null; // クリック待ちにするのでauto-scheduleしない
+        } else {
+            acts.innerHTML=`<button class="action-btn" onclick="startPlayerDamage(${dmg})">損害を割振る</button>`;
+        }
+    } else {
+        log(`🛡️ 結果: 互角！ダメージなし。`);
+        out.innerHTML="互角！";
+        advanceEligibleUnits = [];
+        acts.innerHTML = `<button class="action-btn" onclick="finishCombatResolution()">次へ ▶</button>`;
+        taskToSchedule = null; // クリック待ちにするのでauto-scheduleしない
+    }
+    document.getElementById('combat-result-modal').style.display = 'block';
+
+    if (taskToSchedule) {
+        if (gameMode === 'EvE' && !isAutoPlay && !isHeadless) scheduleNextAITask("戦闘結果の適用", taskToSchedule);
+        else setTimeout(taskToSchedule, (gameMode === 'EvE' && isHeadless) ? 0 : 500);
+    }
+}
+
+function applyAIDamageLoop(dmg) {
+    let dmgLeft = dmg;
+    let origPos = {};
+    pendingDamageTargets.forEach(t => { origPos[t.id] = {r: t.r, c: t.c}; });
+
+    for (let i = 0; i < pendingDamageTargets.length && dmgLeft > 0; i++) {
+        let u = units.find(x => x.id === pendingDamageTargets[i].id); if (!u) continue;
+        if (u.mov === 0) {
+            let stepsLost = u.steps; u.steps = 0;
+            addVP(currentCombatWinner, u.isTank ? 2 * stepsLost : stepsLost);
+            units = units.filter(x => x.id !== u.id); dmgLeft--;
+            log(`🩸 [損耗] ${u.label} は移動不可のため即壊滅！`); continue;
+        }
+
+        // 退却中に通過したヘクスのみ禁止（元位置はbannedにしない）
+        let visitedHexes = new Set();
+        let retreated = false;
+
+        while (dmgLeft > 0 && u.steps > 0) {
+            // まずdmgLeft分先まで探索、見つからなければ段階的に短い距離で再探索
+            let destinations = [];
+            for (let trySteps = dmgLeft; trySteps >= 1 && destinations.length === 0; trySteps--) {
+                destinations = getValidRetreatHexes(u, trySteps, visitedHexes);
+            }
+            if (destinations.length > 0) {
+                // 退却先をZOCカバレッジで評価して最良のマスを選ぶ
+                destinations.forEach(d => { d.zocScore = evaluateRetreat(u, d.r, d.c, d.steps); });
+                destinations.sort((a, b) => b.zocScore - a.zocScore);
+                let dest = destinations[0];
+                let prevR = u.r; let prevC = u.c;
+                visitedHexes.add(`${u.r}-${u.c}`);
+                u.r = dest.r; u.c = dest.c;
+                log(`🏃‍♂️ [退却] ${u.label} が後方へ後退 → (${u.r}-${u.c}) [${dest.steps}マス]`);
+                showRetreatArrow(prevR, prevC, u.r, u.c, u.label);
+                dmgLeft -= dest.steps;
+                retreated = true;
+                render();
+            } else {
+                // 退却先なし→ステップ損耗
+                u.steps--; dmgLeft--;
+                log(`🩸 [損耗] ${u.label} が 1ステップ損耗 (残り: ${u.steps})`);
+                addVP(currentCombatWinner, u.isTank ? 2 : 1);
+                if (u.steps === 1 && u.maxSteps === 2) { u.label = u.backLabel; u.atk = u.backAtk; u.def = u.backDef; u.mov = u.backMov; }
+                render();
+            }
+        }
+        if (u.steps <= 0) { log(`💀 [壊滅] ${u.label} は全滅しました。`); units = units.filter(x => x.id !== u.id); render(); }
+    }
+    render(); document.getElementById('combat-result-modal').style.display = 'none';
+    let anyRetreatedOrRemoved = pendingDamageTargets.some(t => {
+        let u = units.find(x => x.id === t.id);
+        let orig = origPos[t.id];
+        return !u || (u.r !== orig.r || u.c !== orig.c);
+    });
+    if (anyRetreatedOrRemoved) { advancePoints = dmg; triggerAdvancePhase(); }
+    else { advanceEligibleUnits = []; finishCombatResolution(); }
+}
+
+function startPlayerDamage(dmg) { 
+    // 元の位置を保存
+    pendingOrigPos = {};
+    pendingDamageTargets.forEach(t => { pendingOrigPos[t.id] = {r: t.r, c: t.c}; });
+    // 前進対象を退避（損害処理中に次の戦闘で上書きされるのを防ぐ）
+    pendingAdvanceEligible = [...advanceEligibleUnits];
+    pendingAdvancePoints = dmg;
+    pendingDamage=dmg; showDamageModal(pendingDamageTargets[0].id, dmg); 
+}
+function showDamageModal(uId, dmg) {
+    let html = `損害割振り(残 <span style="color:#f00;font-size:24px;">${dmg}</span>)<br><br>`;
+    pendingDamageTargets.forEach(t=>{ let u=units.find(x=>x.id===t.id); if(u) html+=`<div style="margin-bottom:10px;"><b>${u.label}</b> : <button class="action-btn" onclick="playerChooseStep('${u.id}')">1 損耗</button> <button class="action-btn" onclick="playerChooseRetreat('${u.id}')">退却先を選ぶ</button></div>`; });
+    document.getElementById('combat-outcome').innerHTML=html; document.getElementById('combat-actions').innerHTML=""; document.getElementById('combat-result-modal').style.display='block'; updateUI();
+}
+
+function cancelAdvance() {
+    // 前進したユニットを全て元位置に戻してやり直し
+    advanceEligibleUnits.forEach(u => {
+        const orig = advanceOrigPositions[u.id];
+        if (orig) { u.r = orig.r; u.c = orig.c; }
+    });
+    advancePoints = Object.keys(advanceOrigPositions).length > 0 ? advancePoints : advancePoints; // restore full points
+    // advancePointsを再計算するため、元のdmg値が必要 → combatOutcomeから再取得
+    const span = document.getElementById('combat-outcome')?.innerHTML?.match(/<span[^>]*>(\d+)<\/span>/);
+    if (span) advancePoints = parseInt(span[1]);
+    selectedUnit = null;
+    document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable'));
+    render(); updateUI();
+    log(`↩ 前進をやり直します（残${advancePoints}マス）`);
+}
+
+function cancelRetreat() {
+    // 退却先選択をキャンセルして損害割振りモーダルに戻る
+    if (!pendingUnit) return;
+    // 退却済みの移動を元に戻す
+    const orig = pendingOrigPos[pendingUnit.id];
+    if (orig) { pendingUnit.r = orig.r; pendingUnit.c = orig.c; }
+    pendingUnit._retreatVisited = null;
+    pendingDamage = parseInt(document.getElementById('retreat-cancel-dmg')?.dataset?.dmg || pendingDamage) || pendingDamage;
+    currentPhase = playerSide + '_COMBAT_RESOLVE';
+    pendingUnit = null;
+    document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable'));
+    render(); updateUI();
+    showDamageModal(pendingDamageTargets[0]?.id, pendingDamage);
+}
+function playerChooseStep(uId) {
+    let u=units.find(x=>x.id===uId); if(!u) return; u.steps--; pendingDamage--; addVP(currentCombatWinner, u.isTank ? 2 : 1);
+    log(`🩸 [損耗] プレイヤーが ${u.label} の損耗を選択 (残り: ${u.steps})`);
+    if(u.steps<=0) { log(`💀 [壊滅] ${u.label} は全滅しました。`); units=units.filter(x=>x.id!==uId); pendingDamageTargets=pendingDamageTargets.filter(x=>x.id!==uId); }
+    else if(u.steps===1&&u.maxSteps===2) { u.label=u.backLabel; u.atk=u.backAtk; u.def=u.backDef; u.mov=u.backMov; }
+    render(); if(pendingDamage>0 && pendingDamageTargets.length>0) showDamageModal(pendingDamageTargets[0].id, pendingDamage);
+    else { 
+        pendingDamage=0; document.getElementById('combat-result-modal').style.display='none';
+        let anyRetreatedOrRemoved = pendingDamageTargets.some(t => {
+            let u = units.find(x => x.id === t.id);
+            let orig = pendingOrigPos[t.id];
+            return !u || (orig && (u.r !== orig.r || u.c !== orig.c));
+        });
+        if (anyRetreatedOrRemoved) {
+            // 退避していた前進対象を復元
+            advanceEligibleUnits = pendingAdvanceEligible.filter(u => units.includes(u));
+            advancePoints = pendingAdvancePoints;
+            triggerAdvancePhase();
+        } else {
+            advanceEligibleUnits = [];
+            finishCombatResolution();
+        }
+    }
+}
+function playerChooseRetreat(uId) {
+    let u=units.find(x=>x.id===uId); if(!u) return; if(u.mov===0){ alert("移動力0は即壊滅します"); u.steps=0; return playerChooseStep(uId); }
+    // visitedHexesを初回のみ初期化（元位置はbannedにしない）
+    if (!u._retreatVisited) {
+        u._retreatVisited = new Set();
+    }
+    // pendingDamage分先まで探索（1マスでも退却できれば退却可能）
+    let validHexes = getValidRetreatHexes(u, pendingDamage, u._retreatVisited);
+    if(validHexes.length === 0) { alert("退却不可！損耗扱いになります。"); return playerChooseStep(uId); } 
+    pendingUnit=u; currentPhase='WAIT_RETREAT'; document.getElementById('combat-result-modal').style.display='none'; 
+    validHexes.forEach(p => document.getElementById(`hex-${p.r}-${p.c}`)?.classList.add('movable'));
+    updateUI();
+}
+
+function triggerAdvancePhase() {
+    advanceEligibleUnits = advanceEligibleUnits.filter(u => u.mov > 0);
+    
+    let s = advanceEligibleUnits.length>0 ? advanceEligibleUnits[0].side : null;
+    if(s===playerSide) { 
+        // 前進開始時に全ユニットの元位置を記録
+        advanceOrigPositions = {};
+        advanceEligibleUnits.forEach(u => { advanceOrigPositions[u.id] = {r: u.r, c: u.c}; });
+        currentPhase=playerSide+'_ADVANCE'; log(`🎌 前進先クリック(残${advancePoints}マス)`); updateUI(); 
+    }
+    else if(s) {
+        let advanced = false;
+        advanceEligibleUnits.forEach(u=>{
+            let safetyCounter = 0;
+            while(advancePoints>0 && safetyCounter < 10) {
+                safetyCounter++;
+                let reach = getReachableHexes(u, true);
+                log(`🔍 [前進DEBUG] ${u.label} advancePoints=${advancePoints} 候補マス数=${reach.length}`);
+                if(reach.length===0) { log(`🔍 [前進DEBUG] 候補なしでbreak`); break; }
+                let bestH=null; let bestS=-9999;
+                reach.forEach(hex=>{ let score=evaluateHexForAI(u, hex.r, hex.c, u.side, true); if(score>bestS){bestS=score; bestH=hex;} });
+                log(`🔍 [前進DEBUG] bestH=${bestH?bestH.r+'-'+bestH.c:'null'} bestS=${bestS}`);
+                if(bestH && bestS>-150) { 
+                    let d=getPathCost({r:u.r,c:u.c},{r:bestH.r,c:bestH.c}); 
+                    log(`🔍 [前進DEBUG] 移動距離d=${d}`);
+                    if (d === 0) { log(`🔍 [前進DEBUG] d=0でbreak`); break; }
+                    u.r=bestH.r; u.c=bestH.c; advancePoints-=d; advanced = true;
+                    render();
+                } else {
+                    log(`🔍 [前進DEBUG] bestS=${bestS}が閾値以下でbreak`);
+                    break;
+                }
+            }
+        });
+        if(advanced) log(`🎌 AIが戦闘後前進を実行しました。`);
+        render(); finishCombatResolution();
+    } else finishCombatResolution();
+}
+
+function finishCombatResolution() { 
+    document.getElementById('combat-result-modal').style.display='none';
+    combatArrows = []; // 戦闘矢印クリア
+    // 退却済みマスをリセット（次の戦闘に持ち越さない）
+    units.forEach(u => { delete u._retreatVisited; });
+    if(initiativeLost) changeInitiativeAndTurn(); 
+    else {
+        if (gameMode === 'EvE' && !isAutoPlay && !isHeadless) scheduleNextAITask("次の戦闘／フェイズ移行", processNextCombat);
+        else setTimeout(processNextCombat, (gameMode==='EvE' && isHeadless) ? 0 : 200);
+    }
+}
+
+// ========== AI評価関数（3関数分離版）==========
+
+// 共通ユーティリティ：逃げ場カウント
+function countEscapes(r, c, side, excludeUnitId = null) {
+    return getAdjacentCoords(r, c).filter(pos => {
+        if (isImpassable(pos.r, pos.c)) return false;
+        const u = getUnitAt(pos.r, pos.c);
+        // 味方がいる場合は逃げ場としてカウントしない（ただし自分自身は除外）
+        if (u && u.side === side && u.id !== excludeUnitId) return false;
+        // 敵がいる場合も逃げ場にならない
+        if (u && u.side !== side) return false;
+        return !isEnemyZOC(pos.r, pos.c, side);
+    }).length;
+}
+
+// 共通ユーティリティ：敵の退路カウント（自分が前進先にいると仮定）
+function countEnemyEscapes(enemy, advancerR, advancerC, advancerSide, advancerUnit) {
+    return getAdjacentCoords(enemy.r, enemy.c).filter(pos => {
+        if (isImpassable(pos.r, pos.c)) return false;
+        if (pos.r === advancerR && pos.c === advancerC) return false; // 前進先は自分が占有
+        const u = getUnitAt(pos.r, pos.c);
+        if (u && u.side === enemy.side) return false;
+        // 前進するユニットは元の位置ではなく前進先でZOCを発生させる
+        const friends = units.filter(f => f.side === advancerSide && f.id !== advancerUnit.id);
+        // 前進先の位置でのZOC判定
+        const advancerCoversPos = getAdjacentCoords(advancerR, advancerC).some(ap => ap.r === pos.r && ap.c === pos.c) &&
+            !(isRiverCross(advancerR, advancerC, pos.r, pos.c) && !isBridge(advancerR, advancerC, pos.r, pos.c));
+        const otherFriendCoversPos = friends.some(f => isAdjacent(f, pos) &&
+            !(isRiverCross(f.r, f.c, pos.r, pos.c) && !isBridge(f.r, f.c, pos.r, pos.c)));
+        return !advancerCoversPos && !otherFriendCoversPos;
+    }).length;
+}
+
+// [1] 通常移動評価
+// Q学習による一時的重み調整（executeAITurn/runAITurnSyncから設定）
+let activeQMods = null;
+
+function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
+    const side = unit.side;
+    const enemies = units.filter(e => e.side !== side);
+    const friends = units.filter(f => f.side === side && f.id !== unit.id);
+    let score = 0;
+    const debugThis = (unit.label === '2-1-3' && r === 5 && c === 8);
+
+    // 北側攻撃モード：川北（r<=2）にいるユニットは積極的に敵に接近
+    const isNorthAttack = (unit.r <= 2);
+    if (debugThis) log(`🔬 [詳細DEBUG] 2-1-3 @ 5-8 の内訳開始`);
+
+    // 砲兵防衛線（sv4が存在する場合）
+    const artillery = friends.find(f => f.mov === 0 || f.id === 'sv4');
+    if (artillery) {
+        const minEnemyDistToArt = Math.min(...enemies.map(e => getPathCost(artillery, {r: e.r, c: e.c})));
+        if (minEnemyDistToArt <= 4) {
+            const distToArt = getPathCost({r, c}, {r: artillery.r, c: artillery.c});
+            if (distToArt === 1) {
+                const isBetween = enemies.some(e => getPathCost({r, c}, {r: e.r, c: e.c}) < getPathCost(artillery, {r: e.r, c: e.c}));
+                const bonus = isBetween ? 80 : 40;
+                if (debugThis) log(`🔬 砲兵防衛線ボーナス: +${bonus}`);
+                score += bonus;
+            }
+        }
+    }
+
+    // 最近接敵への距離（川越えは除外）
+    let minDist = 999;
+    enemies.forEach(e => {
+        const d = getPathCost({r, c}, {r: e.r, c: e.c});
+        if (d < minDist && d < 50) minDist = d;
+    });
+    if (minDist === 999) minDist = 0;
+    // 未ペアのユニットは接近を重視、ペア済みは陣形維持
+    const logicMove = getActiveLogic(side).move;
+    let approachWeight = isNorthAttack ? (logicMove.northApproach ?? 40) : (!isPaired ? (logicMove.southApproach ?? 30) : 5);
+    if (activeQMods) approachWeight = Math.max(0, approachWeight + activeQMods.approachMod);
+    const approachScore = -(minDist * approachWeight);
+    if (debugThis) log(`🔬 接近スコア: ${approachScore} (minDist=${minDist}, weight=${approachWeight})`);
+    score += approachScore;
+
+    // 隣接関係
+    const adjEnemies = enemies.filter(e => isAdjacent({r, c}, e) &&
+        !(isRiverCross(r, c, e.r, e.c) && !isBridge(r, c, e.r, e.c)));
+    const adjFriends = friends.filter(f => isAdjacent({r, c}, f));
+    if (debugThis) log(`🔬 隣接敵=${adjEnemies.length} 隣接味方=${adjFriends.length}`);
+
+    // 複数の敵に隣接は危険
+    if (adjEnemies.length >= 2) {
+        if (debugThis) log(`🔬 複数隣接敵ペナルティ: ${-50 * adjEnemies.length}`);
+        score -= 50 * adjEnemies.length;
+    }
+
+    // 隣接する敵の包囲ボーナス（北側攻撃モードは強化）
+    adjEnemies.forEach(e => {
+        const escapes = countEnemyEscapes(e, r, c, side, unit);
+        let encircleBonus = isNorthAttack ? aiParams.encircleBonus * 2 : aiParams.encircleBonus;
+        if (activeQMods) encircleBonus += activeQMods.encircleMod;
+        if (escapes === 0) score += encircleBonus + (e.isTank ? aiParams.tankPriority : 0);
+        else if (escapes === 1) score += Math.round(encircleBonus * 0.5) + (e.isTank ? aiParams.tankPriority : 0);
+        const otherFriendsAdj = friends.filter(f => isAdjacent(f, e)).length;
+        score += otherFriendsAdj === 0 ? 60 : 15;
+    });
+
+    // 自分の逃げ場
+    const myEscapes = countEscapes(r, c, side);
+    if (myEscapes === 0) { if (debugThis) log(`🔬 逃げ場0ペナルティ: -100`); score -= 100; }
+    else if (myEscapes === 1) { if (debugThis) log(`🔬 逃げ場1ペナルティ: -50`); score -= 50; }
+    if (debugThis) log(`🔬 逃げ場数: ${myEscapes}`);
+
+    // 味方との距離優先順位：斜め2ヘクス ＞ 2ヘクス ＞ 隣接(条件次第)
+    // 未ペアのユニットは斜め2ヘクスボーナス無効（攻撃位置を優先）
+    const logic = getActiveLogic(side);
+    const diag2Bonus = !isPaired ? 0 : (attackMode ? (logic.move.diag2BonusAttack ?? 60) : (logic.move.diag2BonusPaired ?? 90));
+    const diag2Offsets = [[-2,-1],[-2,1],[2,-1],[2,1],[0,-2],[0,2]];
+    const diag2Hexes = diag2Offsets.map(d => ({r: r+d[0], c: c+d[1]}));
+    friends.forEach(f => {
+        const isDiag2 = diag2Hexes.some(h => h.r === f.r && h.c === f.c);
+        const dist = getPathCost({r,c}, {r:f.r, c:f.c});
+        if (isDiag2) {
+            if (debugThis) log(`🔬 斜め2ヘクス味方ボーナス: +${diag2Bonus}`);
+            score += diag2Bonus;
+        } else if (dist === 2) {
+            if (debugThis) log(`🔬 2ヘクス味方ボーナス: +30`);
+            score += 30;
+        } else if (dist === 1) {
+            if (adjEnemies.length === 0) {
+                if (debugThis) log(`🔬 密集ペナルティ: -25`);
+                score -= 25;
+            } else {
+                if (debugThis) log(`🔬 戦線維持ボーナス: +8`);
+                score += 8;
+            }
+        }
+    });
+    if (adjEnemies.length > 0 && adjFriends.length === 0) {
+        let isolatedPen = aiParams.isolatedPenalty;
+        if (activeQMods) isolatedPen = Math.max(0, isolatedPen + activeQMods.isolatedMod);
+        if (debugThis) log(`🔬 孤立ペナルティ: ${-isolatedPen}`);
+        score -= isolatedPen;
+    }
+
+
+    if (isHill(r, c)) score += 40;
+    if (debugThis) log(`🔬 合計スコア: ${score}`);
+    return score;
+}
+
+// [2] 戦闘後前進評価
+function evaluateAdvance(unit, r, c) {
+    const side = unit.side;
+    const enemies = units.filter(e => e.side !== side);
+    const friends = units.filter(f => f.side === side && f.id !== unit.id);
+
+    // 移動距離チェック
+    const distFromUnit = getPathCost({r: unit.r, c: unit.c}, {r, c});
+    if (distFromUnit > advancePoints || distFromUnit === 0) return -999;
+
+    // 最低条件：自分が包囲されない（前進先での逃げ場を自分のIDを除外して計算）
+    const myEscapes = countEscapes(r, c, side, unit.id);
+    if (myEscapes === 0) return -999;
+
+    let score = 0;
+    if (myEscapes === 1) score -= 50;
+
+    const adjEnemies = enemies.filter(e => isAdjacent({r, c}, e) &&
+        !(isRiverCross(r, c, e.r, e.c) && !isBridge(r, c, e.r, e.c)));
+
+    // 最優先：敵の退路を0にできる
+    const enemiesTrapped = adjEnemies.filter(e => countEnemyEscapes(e, r, c, side, unit) === 0);
+    if (enemiesTrapped.length > 0) score += 300 * enemiesTrapped.length;
+
+    // 複数の敵に隣接できる
+    if (adjEnemies.length >= 2) score += 150;
+    else if (adjEnemies.length === 1) score += 30;
+
+    // 敵が全滅している場合は無条件で前進ボーナス
+    if (enemies.length === 0) {
+        score += 200;
+        return score;
+    }
+
+    // 敵方向ボーナス：前進先が現在位置より敵に近い
+    if (enemies.length > 0) {
+        const distBefore = Math.min(...enemies.map(e => getPathCost({r: unit.r, c: unit.c}, {r: e.r, c: e.c})));
+        const distAfter  = Math.min(...enemies.map(e => getPathCost({r, c}, {r: e.r, c: e.c})));
+        if (distAfter < distBefore) score += 40;
+        else if (distAfter === distBefore) score -= 30; // 現状維持もペナルティ
+        else score -= 100; // 敵から離れる後退は強くペナルティ
+    }
+
+    // ZOCカバレッジ（敵方向のみ）
+    const closestEnemyDist = enemies.length > 0 ?
+        Math.min(...enemies.map(e => getPathCost({r, c}, {r: e.r, c: e.c}))) : 999;
+    getAdjacentCoords(r, c).forEach(pos => {
+        if (isImpassable(pos.r, pos.c) || getUnitAt(pos.r, pos.c)) return;
+        const posDist = enemies.length > 0 ?
+            Math.min(...enemies.map(e => getPathCost(pos, {r: e.r, c: e.c}))) : 999;
+        if (posDist > closestEnemyDist + 1) return;
+        const alreadyCovered = friends.some(f => isAdjacent(f, pos) &&
+            !(isRiverCross(f.r, f.c, pos.r, pos.c) && !isBridge(f.r, f.c, pos.r, pos.c)));
+        if (!alreadyCovered) score += 40;
+    });
+
+    // 味方との距離：1ヘクス離れが理想
+    const adjFriends = friends.filter(f => isAdjacent({r, c}, f));
+    const nearFriends = friends.filter(f => { const d = getPathCost({r, c}, {r: f.r, c: f.c}); return d === 2; });
+    adjFriends.forEach(f => { score -= (f.steps === 1 || f.atk + f.def <= 2) ? 40 : 25; });
+    score += nearFriends.length * 15;
+
+    if (isHill(r, c)) score += 30;
+    score += aiParams.advanceBonus;
+    return score;
+}
+
+// [3] AI退却先評価（applyAIDamageLoopから呼ばれる）
+function evaluateRetreat(unit, destR, destC, steps) {
+    const side = unit.side;
+    const friends = units.filter(f => f.side === side && f.id !== unit.id);
+    let score = steps * 10; // より多く下がる方を基本優先
+
+    const myUnitCount = units.filter(f => f.side === unit.side).length;
+    const zocWeight = myUnitCount <= 2 ? 80 : myUnitCount <= 3 ? 60 : 40;
+    // 川南岸（r=4〜6）のZOCカバレッジを重視
+    getAdjacentCoords(destR, destC).forEach(pos => {
+        if (isImpassable(pos.r, pos.c) || getUnitAt(pos.r, pos.c)) return;
+        const southBonus = (pos.r >= 4 && pos.r <= 6) ? 2 : 1;
+        const alreadyCovered = friends.some(f => isAdjacent(f, pos) &&
+            !(isRiverCross(f.r, f.c, pos.r, pos.c) && !isBridge(f.r, f.c, pos.r, pos.c)));
+        if (!alreadyCovered) score += zocWeight * southBonus;
+    });
+
+    // 味方から1ヘクス離れを優先
+    const adjFriendCount = friends.filter(f => isAdjacent({r: destR, c: destC}, f)).length;
+    const oneFriendCount = friends.filter(f => getPathCost({r: destR, c: destC}, {r: f.r, c: f.c}) === 2).length;
+    score -= adjFriendCount * 20;
+    score += oneFriendCount * 15;
+
+    return score;
+}
+
+// 後方互換ラッパー（既存コードから呼ばれる箇所用）
+function evaluateHexForAI(unit, r, c, side, isAdvance = false) {
+    if (isAdvance) return evaluateAdvance(unit, r, c);
+    return evaluateMove(unit, r, c, false);
+}
+
+
+function executeAITurn() {
+    if(gameEnded) return; log(`--- ${currentPlayer} (AI) 行動 ---`);
+
+    // === Q学習v2: ユニット単位のQ-action ===
+    // 橋破壊チェック: JP側ユニットのいずれかがdestroy_bridgeを推奨
+    let qBridgeDestroy = false;
+    if (useQTable && qTable && currentPlayer === 'JP' && !militaryBridgeDestroyed) {
+        const jpAlive = units.filter(u => u.side === 'JP' && u.steps > 0);
+        qBridgeDestroy = jpAlive.some(u => getUnitQAction(u) === 'destroy_bridge');
+    }
+    if (qBridgeDestroy) {
+        destroyBridge();
+        log("💥 Q学習v2: JPユニットが軍橋の破壊を推奨！");
+    } else if (currentPlayer === 'JP' && turn >= 4 && !militaryBridgeDestroyed) {
+        let sovSouth = units.filter(u => u.side === 'SOV' && u.r >= 3).length;
+        let jpNorth = units.filter(u => u.side === 'JP' && u.r <= 2).length;
+        if (sovSouth >= 2 && jpNorth >= 2) {
+            destroyBridge();
+            log("💥 AIが状況を判断し、戦略的に軍橋を破壊！");
+        }
+    }
+
+    const mySouthCount = units.filter(u => u.side === currentPlayer && u.r >= 4).length;
+    const foeSouthCount = units.filter(u => u.side !== currentPlayer && u.r >= 4).length;
+    let attackModeMove = mySouthCount > foeSouthCount;
+    log(`🔍 川南側戦力 自軍=${mySouthCount} 敵軍=${foeSouthCount} モード=${attackModeMove?'攻撃':'防御'}`);
+
+    // 強い部隊から先に移動。ただし小林（jp1）は必ず最初に処理
+    activeQMods = null;
+
+    let movingUnits = units.filter(u=>u.side===currentPlayer && u.mov>0);
+    movingUnits.sort((a, b) => {
+        if (a.id === 'jp1') return -1;
+        if (b.id === 'jp1') return 1;
+        if (a.isTank !== b.isTank) return b.isTank ? 1 : -1;
+        return (b.atk + b.def) - (a.atk + a.def);
+    });
+
+    movingUnits.forEach(u=>{
+        if(isEnemyZOC(u.r,u.c,u.side)) { log(`🔍 [移動DEBUG] ${u.label} はZOC内のため移動不可`); activeQMods = null; return; }
+
+        // Q学習v2: ユニットごとにQ-actionを取得し重み設定
+        const unitQAction = getUnitQAction(u);
+        const unitQMods = getQWeightModsV2(unitQAction);
+        activeQMods = unitQMods;
+        if (unitQAction) log(`🧠 Q学習v2: ${u.label} → ${unitQAction}`);
+
+        // 小林（4-2）専用ロジック
+        if (u.id === 'jp1') {
+            // 0308にいて橋が残っている場合、橋破壊チェック（北側から戻ってきた時）
+            if (u.r === 3 && u.c === 8 && !militaryBridgeDestroyed && u._crossedNorth) {
+                destroyBridge();
+                log(`💥 小林が0308に戻り軍橋を破壊！`);
+                u._crossedNorth = false;
+                activeQMods = null;
+                return;
+            }
+            // 1ターン目：50%の確率で川を渡って北側へ
+            if (turn === 1 && !u._northDecided) {
+                u._northDecided = true;
+                if (Math.random() < 0.5) {
+                    // 北側へ渡る：通常評価で北側マスを選ぶ
+                    let reach = getReachableHexes(u, false).filter(h => h.r <= 2);
+                    reach.push({r:u.r, c:u.c});
+                    log(`🔍 [移動DEBUG] ${u.label} 候補マス数=${reach.length} (北側渡河チャレンジ)`);
+                    let bestH = null; let bestS = -9999;
+                    reach.forEach(hex => {
+                        let score = evaluateMove(u, hex.r, hex.c, attackModeMove);
+                        log(`🔍 [移動DEBUG] ${u.label} (${hex.r}-${hex.c}) score=${score}`);
+                        if(score>bestS){bestS=score; bestH=hex;}
+                    });
+                    log(`🔍 [移動DEBUG] ${u.label} → bestH=${bestH?bestH.r+'-'+bestH.c:'null'} bestS=${bestS}`);
+                    if(bestH && bestH.r <= 2) {
+                        u._crossedNorth = true;
+                        log(`🎲 小林が北側への渡河を決断！`);
+                        u.r=bestH.r; u.c=bestH.c; render();
+                    }
+                    activeQMods = null;
+                    return;
+                } else {
+                    log(`🎲 小林は南側に留まり橋を破壊！`);
+                    if (!militaryBridgeDestroyed) destroyBridge();
+                    // 南側評価で通常通り処理（以降の処理に続く）
+                }
+            }
+            // 北側にいる場合は通常評価
+            if (u._crossedNorth) {
+                // 0308に戻れる場合は橋破壊のため戻る
+                let reach = getReachableHexes(u, false); reach.push({r:u.r, c:u.c});
+                const canReturn = reach.some(h => h.r === 3 && h.c === 8);
+                if (canReturn && !militaryBridgeDestroyed) {
+                    u.r = 3; u.c = 8;
+                    destroyBridge();
+                    log(`💥 小林が0308に戻り軍橋を破壊！`);
+                    u._crossedNorth = false;
+                    activeQMods = null;
+                    render(); return;
+                }
+                let bestH = null; let bestS = -9999;
+                reach.forEach(hex => {
+                    let score = evaluateMove(u, hex.r, hex.c, attackModeMove);
+                    if(score>bestS){bestS=score; bestH=hex;}
+                });
+                if(bestH) { u.r=bestH.r; u.c=bestH.c; render(); }
+                activeQMods = null;
+                return;
+            }
+        }
+
+        let reach = getReachableHexes(u, false); reach.push({r:u.r, c:u.c});
+        log(`🔍 [移動DEBUG] ${u.label} 候補マス数=${reach.length}`);
+        let bestH = null; let bestS = -9999;
+        // 各ユニット移動直前に斜めペアを再計算
+        const diag2OffsetsLocal = [[-2,-1],[-2,1],[2,-1],[2,1],[0,-2],[0,2]];
+        const pairedNow = new Set();
+        const currentSideUnits = units.filter(x => x.side === currentPlayer);
+        currentSideUnits.forEach(a => {
+            currentSideUnits.forEach(b => {
+                if (a.id === b.id) return;
+                if (diag2OffsetsLocal.some(d => a.r+d[0]===b.r && a.c+d[1]===b.c)) {
+                    pairedNow.add(a.id); pairedNow.add(b.id);
+                }
+            });
+        });
+        const isPaired = pairedNow.has(u.id);
+        // Q学習v2: retreatモードの場合、現在地ペナルティを逆転（動かないのもOK）
+        const qStayMod = (unitQMods && unitQMods.stayPenalty !== undefined) ? unitQMods.stayPenalty : 80;
+        reach.forEach(hex => {
+            let score = evaluateMove(u, hex.r, hex.c, attackModeMove, isPaired);
+            // 現在地にはペナルティ（動かない選択を抑制）- Q学習で調整
+            if (hex.r === u.r && hex.c === u.c) score -= qStayMod;
+            // Q学習v2: defend_positionなら丘ボーナス追加
+            if (unitQMods && unitQMods.hillBonus && isHill(hex.r, hex.c)) score += unitQMods.hillBonus;
+            // Q学習v2: retreatモードなら敵から離れるほどボーナス
+            if (unitQMods && unitQMods.retreatMode) {
+                const enemies = units.filter(e => e.side !== u.side && e.steps > 0);
+                if (enemies.length > 0) {
+                    const minEDist = Math.min(...enemies.map(e => getPathCost({r:hex.r, c:hex.c}, {r:e.r, c:e.c})));
+                    score += minEDist * 15;
+                }
+            }
+            // Q学習v2: supportFriendなら味方に近いほどボーナス
+            if (unitQMods && unitQMods.supportFriend) {
+                const friends = units.filter(f => f.side === u.side && f.id !== u.id && f.steps > 0);
+                if (friends.length > 0) {
+                    const minFDist = Math.min(...friends.map(f => getPathCost({r:hex.r, c:hex.c}, {r:f.r, c:f.c})));
+                    score += (5 - Math.min(minFDist, 5)) * 20;
+                }
+            }
+            log(`🔍 [移動DEBUG] ${u.label} (${hex.r}-${hex.c}) score=${score}`);
+            if(score>bestS){bestS=score; bestH=hex;}
+        });
+        log(`🔍 [移動DEBUG] ${u.label} → bestH=${bestH?bestH.r+'-'+bestH.c:'null'} bestS=${bestS}`);
+        if(bestH) { u.r=bestH.r; u.c=bestH.c; render(); }
+        activeQMods = null; // ユニットごとにリセット
+    });
+
+    // Q学習重み調整を最終解除（念のため）
+    activeQMods = null;
+
+    scheduleNextAITask("AIの戦闘フェイズを開始します", ()=>{
+        if(gameEnded) return; 
+
+        let cbs = [];
+        let myUnits  = units.filter(u => u.side === currentPlayer);
+        let foeUnits = units.filter(u => u.side !== currentPlayer);
+        const hasInitiative = (currentInitiative === currentPlayer);
+
+        // ===== 攻撃義務ペアリング =====
+        // 攻撃可能マップを構築
+        let attackerTargets = new Map();
+        let defenderAttackers = new Map();
+        myUnits.forEach(me => {
+            let foes = foeUnits.filter(f => canFight(me, f));
+            if (foes.length > 0) attackerTargets.set(me.id, foes);
+        });
+        foeUnits.forEach(foe => {
+            let friends = myUnits.filter(me => canFight(me, foe));
+            if (friends.length > 0) defenderAttackers.set(foe.id, friends);
+        });
+
+        // 攻撃義務は必ず守る（予備除外なし）
+
+        let usedAttackers = new Set();
+        let usedDefenders = new Set();
+
+        // 制約伝播: 選択肢が少ない順に処理
+        // 攻撃可能な敵が1体だけの味方を先に確定
+        let keepGoing = true;
+        while (keepGoing) {
+            keepGoing = false;
+            // 未割当の味方を選択肢の少ない順にソート
+            let pending = [...attackerTargets.keys()]
+                .filter(id => !usedAttackers.has(id))
+                .map(id => ({ id, targets: attackerTargets.get(id).filter(f => !usedDefenders.has(f.id)) }))
+                .filter(x => x.targets.length > 0)
+                .sort((a, b) => a.targets.length - b.targets.length);
+
+            if (pending.length === 0) break;
+            let item = pending[0];
+            let me = myUnits.find(u => u.id === item.id);
+
+            // 主導権なし時は弱い敵を優先、主導権あり時は最初の敵
+            let targets = item.targets;
+            let foe = hasInitiative
+                ? targets[0]
+                : targets.reduce((w, e) => (e.atk + e.def < w.atk + w.def ? e : w), targets[0]);
+
+            // 同じ敵を攻撃する他の味方で「他に攻撃先がない」ものを合流させる
+            let alsoAdj = myUnits.filter(f =>
+                f.id !== me.id &&
+                !usedAttackers.has(f.id) &&
+                canFight(f, foe) &&
+                (attackerTargets.get(f.id) || []).filter(e => !usedDefenders.has(e.id) && e.id !== foe.id).length === 0
+            );
+
+            let attackers = [me, ...alsoAdj];
+            cbs.push({ attackers, targets: [foe] });
+            attackers.forEach(a => usedAttackers.add(a.id));
+            usedDefenders.add(foe.id);
+            keepGoing = true;
+        }
+
+        // 未割当の敵（攻撃義務漏れ補完）
+        foeUnits.filter(f => !usedDefenders.has(f.id) && defenderAttackers.has(f.id)).forEach(foe => {
+            let available = myUnits.filter(me => !usedAttackers.has(me.id) && canFight(me, foe));
+            if (available.length > 0) {
+                cbs.push({ attackers: available, targets: [foe] });
+                available.forEach(a => usedAttackers.add(a.id));
+                usedDefenders.add(foe.id);
+            } else {
+                // 未使用の味方がいない場合：既存戦闘の攻撃者が兼任（合流）
+                // ※ユニットは1回しか攻撃できないのでattackersに追加するだけ（新規戦闘は作らない）
+                for (let cb of cbs) {
+                    let canJoin = cb.attackers.some(a => canFight(a, foe));
+                    if (canJoin) {
+                        cb.targets.push(foe);
+                        usedDefenders.add(foe.id);
+                        break;
+                    }
+                }
+            }
+        });
+
+        // 未割当の味方（まだ攻撃義務がある）を既存戦闘に合流させる
+        // ※新規戦闘は作らない（1ユニット1戦闘の原則）
+        myUnits.filter(me => !usedAttackers.has(me.id) && attackerTargets.has(me.id)).forEach(me => {
+            let targets = (attackerTargets.get(me.id) || []);
+            for (let cb of cbs) {
+                if (targets.some(f => cb.targets.some(t => t.id === f.id))) {
+                    cb.attackers.push(me);
+                    usedAttackers.add(me.id);
+                    return;
+                }
+            }
+            // どこにも合流できない場合のみ新規戦闘（孤立した義務）
+            let foe = targets.find(f => !usedDefenders.has(f.id)) || targets[0];
+            if (foe) {
+                cbs.push({ attackers: [me], targets: [foe] });
+                usedAttackers.add(me.id);
+                usedDefenders.add(foe.id);
+            }
+        });
+
+        combatQueue = cbs; 
+        currentPhase = currentPlayer + '_COMBAT_RESOLVE'; 
+        processNextCombat();
+    });
+}
+
+async function startFastSimulation() {
+    let input = prompt("シミュレーション回数を入力してください", "100"); let count = parseInt(input); if(isNaN(count) || count<=0) return;
+    document.getElementById('start-screen').style.display='none'; document.getElementById('bg-map').style.display='none'; document.getElementById('game-svg').style.display='none';
+    isHeadless=true; simulationData.simulationStats = { totalRuns: count, results: { jpWin:0, sovWin:0, draw:0, totalTurns:0 }, tacticalData: { bridgeDestroyed:{trials:0, jpWin:0, sovWin:0}, bridgeKept:{trials:0, jpWin:0, sovWin:0} } };
+    simulationData.actionLogs = []; log(`⚡ 超高速シミュレーション開始（${count}回）...`);
+    
+    for (let i = 1; i <= count; i++) {
+        units=JSON.parse(JSON.stringify(gameData.initialUnits)); turn=1; jpVP=0; sovVP=0; gameEnded=false; militaryBridgeDestroyed=false; spawnedReinforcements={turn2JP:false,turn3SOV:false,turn4SOV:false};
+        
+        while(!gameEnded && turn<=8) {
+            runAITurnSync('JP', i); if(gameEnded) break;
+            runAITurnSync('SOV', i); if(gameEnded) break;
+            turn++;
+        }
+        
+        let winner = "DRAW";
+        if(jpVP>sovVP || units.findIndex(u=>u.id==='sv4')===-1) { winner="JP"; simulationData.simulationStats.results.jpWin++; }
+        else if(sovVP>jpVP || units.filter(u=>u.isTank&&u.side==='JP').length===0) { winner="SOV"; simulationData.simulationStats.results.sovWin++; }
+        else simulationData.simulationStats.results.draw++;
+        
+        simulationData.simulationStats.results.totalTurns += turn;
+        if(militaryBridgeDestroyed) { simulationData.simulationStats.tacticalData.bridgeDestroyed.trials++; if(winner==='JP') simulationData.simulationStats.tacticalData.bridgeDestroyed.jpWin++; else if(winner==='SOV') simulationData.simulationStats.tacticalData.bridgeDestroyed.sovWin++; }
+        else { simulationData.simulationStats.tacticalData.bridgeKept.trials++; if(winner==='JP') simulationData.simulationStats.tacticalData.bridgeKept.jpWin++; else if(winner==='SOV') simulationData.simulationStats.tacticalData.bridgeKept.sovWin++; }
+
+        if(i%10===0) { document.getElementById('status-banner').innerText=`⚡ 実行中... (${i} / ${count} 完了)`; await new Promise(r=>setTimeout(r, 0)); }
+    }
+    isHeadless=false; showSimulationReport();
+}
+
+function runAITurnSync(side, runNum) {
+    if(turn>=2&&!spawnedReinforcements.turn2JP){units.push(JSON.parse(JSON.stringify(gameData.reinforcements.turn2JP)));spawnedReinforcements.turn2JP=true;}
+    if(turn>=3&&!spawnedReinforcements.turn3SOV){units.push(JSON.parse(JSON.stringify(gameData.reinforcements.turn3SOV)));spawnedReinforcements.turn3SOV=true;}
+    if(turn>=4&&!spawnedReinforcements.turn4SOV){units.push(JSON.parse(JSON.stringify(gameData.reinforcements.turn4SOV)));spawnedReinforcements.turn4SOV=true;}
+    if(units.findIndex(u=>u.id==='sv4')===-1 || units.filter(u=>u.isTank&&u.side==='JP').length===0) { gameEnded=true; return; }
+
+    // Q学習v2: 橋破壊チェック
+    if (useQTable && qTable && side === 'JP' && !militaryBridgeDestroyed) {
+        const jpAlive = units.filter(u => u.side === 'JP' && u.steps > 0);
+        if (jpAlive.some(u => getUnitQAction(u) === 'destroy_bridge')) {
+            militaryBridgeDestroyed = true;
+        }
+    }
+    if (side === 'JP' && turn >= 4 && !militaryBridgeDestroyed) {
+        let sovSouth = units.filter(u => u.side === 'SOV' && u.r >= 3).length;
+        let jpNorth = units.filter(u => u.side === 'JP' && u.r <= 2).length;
+        if (sovSouth >= 2 && jpNorth >= 2) militaryBridgeDestroyed = true;
+    }
+
+    let turnScore = 0; let tactics = [];
+    let movingUnits = units.filter(u=>u.side===side&&u.mov>0);
+    movingUnits.sort((a, b) => {
+        if (a.isTank !== b.isTank) return b.isTank ? 1 : -1;
+        return (b.atk + b.def) - (a.atk + a.def);
+    });
+
+    movingUnits.forEach(u=>{
+        // Q学習v2: ユニット単位の重み設定
+        const unitQAction = getUnitQAction(u);
+        activeQMods = getQWeightModsV2(unitQAction);
+
+        let bestH=null; let bestS=-9999; let res=[];
+        for(let r=1;r<=7;r++){for(let c=1;c<=8;c++){if(!isImpassable(r,c)&&!getUnitAt(r,c)&&getPathCost(u,{r,c})<=u.mov)res.push({r,c});}} res.push({r:u.r,c:u.c});
+        res.forEach(hex=>{ let score=evaluateHexForAI(u, hex.r, hex.c, side); if(score>bestS){bestS=score; bestH=hex;} });
+        if(bestH) { u.r=bestH.r; u.c=bestH.c; turnScore+=bestS; }
+        activeQMods = null;
+    });
+
+    let myU=units.filter(u=>u.side===side); let enU=units.filter(u=>u.side!==side);
+    myU.forEach(my=>{ let adjE=enU.filter(e=>isAdjacent(my,e)); if(adjE.length>0) {
+        let t=adjE[0]; let ah=0; for(let i=0;i<my.atk;i++) if(Math.random()*6+1>=5)ah++; let dh=0; for(let i=0;i<t.def;i++) if(Math.random()*6+1>=5)dh++;
+        if(ah>dh) { 
+            let dmg = ah-dh; t.steps -= dmg; 
+            let pts = t.isTank ? 2*dmg : 1*dmg; 
+            if(side==='JP')jpVP+=pts; else sovVP+=pts; 
+        } else if(dh>ah) { 
+            let dmg = dh-ah; my.steps -= dmg; 
+            let pts = my.isTank ? 2*dmg : 1*dmg; 
+            if(side==='JP')sovVP+=pts; else jpVP+=pts; 
+        }
+    }});
+    units=units.filter(u=>u.steps>0);
+    if (!isHeadless) simulationData.actionLogs.push({ run: runNum, turn: turn, side: side, score: turnScore, vpStatus: {jp: jpVP, sov: sovVP} });
+}
+
+async function startGridSearch() {
+    var RUNS = 10;
+    var gridDef = {
+        approachWeight:  [20, 35, 50],
+        isolatedPenalty: [15, 30, 50],
+        encircleBonus:   [200, 300, 400],
+        tankPriority:    [40, 80, 120],
+        advanceBonus:    [20, 50, 100],
+        cautionLevel:    [40, 80, 130]
+    };
+    var keys = Object.keys(gridDef);
+    var combos = [{}];
+    keys.forEach(function(k) {
+        var next = [];
+        combos.forEach(function(c) {
+            gridDef[k].forEach(function(v) {
+                var obj = JSON.parse(JSON.stringify(c));
+                obj[k] = v;
+                next.push(obj);
+            });
+        });
+        combos = next;
+    });
+
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('bg-map').style.display = 'none';
+    document.getElementById('game-svg').style.display = 'none';
+    isHeadless = true;
+
+    var bestJP  = { score: -1, params: null };
+    var bestSOV = { score: -1, params: null };
+
+    for (var ci = 0; ci < combos.length; ci++) {
+        Object.assign(aiParams, combos[ci]);
+        var jpWin = 0, sovWin = 0;
+
+        for (var i = 0; i < RUNS; i++) {
+            units = JSON.parse(JSON.stringify(gameData.initialUnits));
+            turn = 1; jpVP = 0; sovVP = 0; gameEnded = false;
+            militaryBridgeDestroyed = false;
+            spawnedReinforcements = { turn2JP: false, turn3SOV: false, turn4SOV: false };
+            while (!gameEnded && turn <= 8) {
+                runAITurnSync('JP', i); if (gameEnded) break;
+                runAITurnSync('SOV', i); if (gameEnded) break;
+                turn++;
+            }
+            if (jpVP > sovVP || units.findIndex(function(u){ return u.id === 'sv4'; }) === -1) jpWin++;
+            else if (sovVP > jpVP) sovWin++;
+        }
+
+        var jpRate  = jpWin  / RUNS;
+        var sovRate = sovWin / RUNS;
+        if (jpRate  > bestJP.score)  { bestJP.score  = jpRate;  bestJP.params  = JSON.parse(JSON.stringify(combos[ci])); }
+        if (sovRate > bestSOV.score) { bestSOV.score = sovRate; bestSOV.params = JSON.parse(JSON.stringify(combos[ci])); }
+
+        document.getElementById('status-banner').innerText =
+            '🔬 総当たり探索中... ' + (ci + 1) + '/' + combos.length + ' 完了';
+        await new Promise(function(res){ setTimeout(res, 0); });
+    }
+
+    var finalParams = {};
+    keys.forEach(function(k) {
+        finalParams[k] = Math.round((bestJP.params[k] + bestSOV.params[k]) / 2);
+    });
+    Object.assign(aiParams, finalParams);
+    isHeadless = false;
+
+    var rep = document.getElementById('sim-report');
+    rep.style.display = 'block';
+    var html = '<h2 style="color:#ffcc00;text-align:center;">🔬 総当たり最適化 完了</h2>';
+    html += '<p>探索: ' + combos.length + '通り × ' + RUNS + '回 = ' + (combos.length * RUNS) + '回</p><hr>';
+    html += '<h3>🏅 日本軍最強 (勝率' + (bestJP.score * 100).toFixed(1) + '%)</h3>';
+    html += '<pre style="color:#0f0;">' + JSON.stringify(bestJP.params, null, 2) + '</pre>';
+    html += '<h3>🏅 ソ連軍最強 (勝率' + (bestSOV.score * 100).toFixed(1) + '%)</h3>';
+    html += '<pre style="color:#f88;">' + JSON.stringify(bestSOV.params, null, 2) + '</pre>';
+    html += '<h3 style="color:#ffcc00;">✅ ゲーム適用済み（両軍平均）</h3>';
+    html += '<pre style="color:#ff0;">' + JSON.stringify(finalParams, null, 2) + '</pre>';
+    html += '<button onclick="downloadBestParams()" style="margin-top:10px;padding:10px 20px;font-size:16px;background:#ff8c00;font-weight:bold;border-radius:5px;cursor:pointer;">📥 最強パラメータを保存</button>';
+    html += '<button onclick="location.reload()" style="margin-left:10px;padding:10px 20px;font-size:16px;background:#555;color:#fff;border-radius:5px;cursor:pointer;">このパラメータでゲーム開始</button>';
+    rep.innerHTML = html;
+    document.getElementById('status-banner').innerText = '【完了】最強パラメータ発見！ゲーム開始ボタンを押してください。';
+    document.getElementById('status-banner').style.background = '#4CAF50';
+}
+
+function downloadBestParams() {
+    var data = { version: '2.0', aiParams: aiParams };
+    var a = document.createElement('a');
+    a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2));
+    a.download = 'nomonhan_ai_optimized.json';
+    document.body.appendChild(a); a.click(); a.remove();
+}
+
+function showSimulationReport() {
+    let t = simulationData.simulationStats.totalRuns; let st = simulationData.simulationStats.results; let td = simulationData.simulationStats.tacticalData;
+    document.getElementById('status-banner').innerText = "【完了】シミュレーション結果を出力しました。"; document.getElementById('status-banner').style.background = "#4CAF50"; log(`✅ ${t}回 完了。JSON出力待機。`);
+    let rep = document.getElementById('sim-report'); rep.style.display = 'block';
+    rep.innerHTML = `
+        <h2 style="color:#ffcc00; text-align:center;">📊 機械学習シミュレーション・レポート</h2>
+        <p><b>試行回数:</b> ${t} 回</p><hr>
+        <h3>🏆 勝率データ</h3>
+        <ul><li><b>日本軍 勝利:</b> ${st.jpWin} 回 <span style="color:#ffcc00;">(${((st.jpWin/t)*100).toFixed(1)}%)</span></li><li><b>ソ連軍 勝利:</b> ${st.sovWin} 回 <span style="color:#ffcc00;">(${((st.sovWin/t)*100).toFixed(1)}%)</span></li><li><b>引き分け:</b> ${st.draw} 回</li></ul><hr>
+        <h3>🧠 戦術・学習データ</h3>
+        <ul><li><b>軍橋 破壊時:</b> 試行 ${td.bridgeDestroyed.trials} 回 (日本勝率: ${((td.bridgeDestroyed.jpWin/Math.max(1,td.bridgeDestroyed.trials))*100).toFixed(1)}% / ソ連勝率: ${((td.bridgeDestroyed.sovWin/Math.max(1,td.bridgeDestroyed.trials))*100).toFixed(1)}%)</li>
+        <li><b>軍橋 維持時:</b> 試行 ${td.bridgeKept.trials} 回 (日本勝率: ${((td.bridgeKept.jpWin/Math.max(1,td.bridgeKept.trials))*100).toFixed(1)}% / ソ連勝率: ${((td.bridgeKept.sovWin/Math.max(1,td.bridgeKept.trials))*100).toFixed(1)}%)</li></ul>
+        <button onclick="downloadJSON()" style="margin-top:10px; padding:10px 20px; font-size:16px; background:#ff8c00; font-weight:bold; border-radius:5px; cursor:pointer;">📥 学習用JSONデータをダウンロード</button>
+        <button onclick="location.reload()" style="margin-left:10px; padding:10px 20px; font-size:16px; background:#555; color:#fff; border-radius:5px; cursor:pointer;">タイトルに戻る</button>
+    `;
+}
+
+function downloadJSON() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(simulationData, null, 2));
+    const a = document.createElement('a'); a.setAttribute("href", dataStr); a.setAttribute("download", "nomonhan_learning_data.json");
+    document.body.appendChild(a); a.click(); a.remove();
+}
+</script>
+</body>
+</html>

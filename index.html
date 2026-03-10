@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panzer Waffe - 作戦司令室 -</title>
+    <style>
+        /* ジャーマングレーと黒を基調としたカラーパレットに変更 */
+        :root {
+            --bg-color: #151617;       /* 深い黒寄りの背景 */
+            --panel-bg: #2b2d30;       /* パンツァー・グラウ（ジャーマングレー） */
+            --text-main: #d0d3d4;      /* くすんだ白・シルバー */
+            --text-accent: #ffffff;    /* 強い白 */
+            --btn-bg: #1e2022;         /* 暗いグレー */
+            --btn-hover: #3a3c40;      /* ホバー時の少し明るいグレー */
+            --border-color: #0a0a0b;   /* 漆黒の縁取り */
+            --accent-red: #8b0000;     /* ホバー時の暗い赤のアクセント */
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-image: repeating-linear-gradient(
+                45deg,
+                rgba(0, 0, 0, 0.2) 0px,
+                rgba(0, 0, 0, 0.2) 2px,
+                transparent 2px,
+                transparent 4px
+            );
+        }
+
+        .container {
+            background-color: var(--panel-bg);
+            border: 4px solid var(--border-color);
+            border-radius: 4px; /* 少し角を鋭くして無骨さを強調 */
+            padding: 40px;
+            width: 80%;
+            max-width: 600px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 0, 0, 0.6);
+        }
+
+        h1 {
+            color: var(--text-accent);
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+            letter-spacing: 3px;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #929699;
+            margin-bottom: 40px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        .briefing-text {
+            text-align: left;
+            margin-bottom: 40px;
+            line-height: 1.6;
+            background-color: #18191a;
+            padding: 20px;
+            border-left: 5px solid #5a5d60; /* 無機質なスチールグレー */
+            font-family: monospace;
+            font-size: 1.1em;
+            color: #b0b5b9;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .theater-btn {
+            display: block;
+            text-decoration: none;
+            background-color: var(--btn-bg);
+            color: var(--text-main);
+            padding: 15px 30px;
+            font-size: 1.5em;
+            font-weight: bold;
+            border: 2px solid var(--border-color);
+            border-radius: 2px;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.6);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ホバー時に左側に赤いラインが入る演出を追加 */
+        .theater-btn:hover {
+            background-color: var(--btn-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.8);
+            color: var(--text-accent);
+            border-left: 6px solid var(--accent-red);
+        }
+
+        .theater-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .theater-btn span {
+            display: block;
+            font-size: 0.5em;
+            font-weight: normal;
+            color: #7b8084;
+            margin-top: 5px;
+            letter-spacing: 1px;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            font-size: 0.8em;
+            color: #4a4d50;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>PANZERWAFFE</h1>
+    <div class="subtitle">作戦司令室 (HQ)</div>
+
+    <div class="briefing-text">
+    本サイトは、国際通信社様より発売された『Panzer Waffe』©IED 2026 をプログラム化し、AIとの対戦を可能にすることを目的として立ち上げました。
+    製品をお持ちでない方はご利用いただけない仕様となっておりますので、未所持の方は製品をご購入のうえ、あらためてお越しくださいますようお願い申し上げます。
+    <br><br>
+    本AIは学習機能を備えており、対戦結果を分析しながらデッキ構築や手札運用を数値化し、次回以降の対戦に反映する仕組みを採用する予定ではありましたが
+    予想外に学習ファイルが大きくなることが分かりまして残念ながら、ある程度の育てたところで公開する方向に変更いたしました。
+    <br><br>
+    現時点では、対戦相手として至らない点も多いかと存じます。練習相手として、購入されるかどうかのお試しとして触れていただければ幸いです。
+    <br><br>
+    また、ルール解釈の相違や不具合などによる不自然な挙動がございましたら、ぜひご連絡くださいますようお願い申し上げます。
+    皆様のお力添えをいただきながら、より完成度の高い環境へと改善してまいります。
+    </div>
+
+    <div class="btn-group">
+        <a href="Panzer Waffe_West/index.html" class="theater-btn">
+            西部戦線
+            <span>Western Front (1944-1945)</span>
+        </a>
+        
+        <a href="Panzer Waffe_North Africa/index.html" class="theater-btn">
+            北アフリカ戦線
+            <span>North African Campaign (1941-1943)</span>
+        </a>
+
+        <a href="battleofnomonhan/nomonhan.html" class="theater-btn">
+            ノモンハン
+            <span>Nomonhan Incident (1939)</span>
+        </a>
+
+        <a href="f16ai/scenario.html" class="theater-btn">
+            F-16
+            <span>F-16 Air Combat Simulator</span>
+        </a>
+
+        <a href="ijn/campaign.html" class="theater-btn">
+            連合艦隊
+            <span>Combined Fleet (IJN)</span>
+        </a>
+    </div>
+    
+    <div class="footer">
+        CLASSIFIED INFORMATION - AUTHORIZED PERSONNEL ONLY
+    </div>
+</div>
+
+</body>
+</html>
