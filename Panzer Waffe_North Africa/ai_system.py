@@ -40,7 +40,7 @@ class AI_Brain:
     async def load_data(self):
         # --- 1) 事前学習データをベースとして読み込み ---
         pretrained = _get_pretrained()
-        side_key = "de" if self.faction in ["DE", "de"] else "uk"
+        side_key = "de" if "ge" in self.faction or "de" in self.faction.lower() else "uk"
         if pretrained and side_key in pretrained:
             base = pretrained[side_key]
             self.q_table       = dict(base.get("q_table", {}))
@@ -79,7 +79,7 @@ class AI_Brain:
         key = f"panzer_waffe_ai_{self.faction}"
         # 事前学習ベースを取得
         pretrained = _get_pretrained()
-        side_key = "de" if self.faction in ["DE", "de"] else "uk"
+        side_key = "de" if "ge" in self.faction or "de" in self.faction.lower() else "uk"
         base_q = {}
         base_wr = {}
         base_syn = {}
