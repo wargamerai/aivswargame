@@ -424,11 +424,12 @@ function renderCards() {
   const fEl = document.getElementById('firerList');
   fEl.innerHTML = jpShips.map((s, i) => {
     const sel = selectedFirer === i ? ' firer-sel' : '';
+    const cantFire = getAttack(s) <= 0 ? ' disabled' : '';
     const shared = s.sharedHex ? ' disabled' : '';
     const fired = firedShips.has(i) ? ' disabled' : '';
     const atk = getAttack(s);
-    const label = s.sharedHex ? ' [同一ヘクス]' : (firedShips.has(i) ? ' [射撃済]' : '');
-    return `<div class="card jp${sel}${fired}${shared}" onclick="selectFirer(${i})">
+    const label = s.sharedHex ? ' [同一ヘクス]' : (firedShips.has(i) ? ' [射撃済]' : (cantFire ? ' [砲撃不能]' : ''));
+    return `<div class="card jp${sel}${fired}${shared}${cantFire}" onclick="selectFirer(${i})">
       <span class="c-name">${s.name}${label}</span>
       <span class="c-info">${s.type} 攻:${atk}</span>
     </div>`;
@@ -460,6 +461,7 @@ function renderCards() {
 function selectFirer(i) {
   if (firedShips.has(i)) return;  // 射撃済み — 選択不可
   if (jpShips[i] && jpShips[i].sharedHex) return;  // 同一ヘクス — 射撃不可
+  if (jpShips[i] && getAttack(jpShips[i]) <= 0) return;  // 砲撃不能
   selectedFirer = i;
   renderCards();
   updateShootInfo();
@@ -626,6 +628,7 @@ function doShoot() {
 
   // 射撃済みマーク（同一フェーズ内で再射撃防止）
   firedShips.add(selectedFirer);
+  firer.revealed = true;  // 発砲した艦は敵から視認可能
   // jpFleet内の元インデックスでACTION_DONEを送信（フィルタ後のインデックスではなく）
   var origIdx = (state.jpFleet||[]).indexOf(firer);
   parent.postMessage({type:'ACTION_DONE', shipIndex: origIdx >= 0 ? origIdx : selectedFirer}, '*');
