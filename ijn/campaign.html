@@ -25,7 +25,10 @@
 </head>
 <body>
 
-<h1>決戦連合艦隊 キャンペーン統括システム</h1>
+<div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1>決戦連合艦隊 キャンペーン統括システム</h1>
+    <a href="../index.html" style="background:#2266cc; color:#fff; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold; font-size:0.95em;">トップへ戻る</a>
+</div>
 <div style="background-color: #e0e8f0; padding: 12px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #bbc;">
     <span style="font-size: 1.3em; font-weight: bold; color: #8a6a00;">現在: <span id="currentTurnName">第一次ソロモン海戦</span> (<span id="currentTurn">1</span>/4)</span>
     <span id="scoreArea" style="margin-left: 30px; font-size: 1.15em; display:none;">日本軍スコア: <span id="jpScore" style="color: #cc3311; font-weight:bold;">38</span> | 米軍スコア: <span id="usScore" style="color: #2255cc; font-weight:bold;">14</span></span>
@@ -535,40 +538,40 @@ function renderBattleHistory() {
     let html = '';
     battleHistory.forEach(b => {
         html += `<div class="history-entry">`;
-        html += `<h3 style="color:#ffeb3b;">${b.battleName}</h3>`;
+        html += `<h3 style="color:#1a5a8a;">${b.battleName}</h3>`;
 
         // 日本軍
-        html += `<div style="margin:4px 0;"><strong style="color:#ff8888;">日本軍参加艦:</strong> `;
+        html += `<div style="margin:4px 0;"><strong style="color:#cc3311;">日本軍参加艦:</strong> `;
         html += b.jpShips.map(s => {
-            let style = s.status === 'sunk' ? 'color:#777;text-decoration:line-through'
-                      : s.status === 'heavy' ? 'color:#ff4444'
-                      : s.status === 'medium' ? 'color:#ffaa00'
-                      : s.status === 'light' ? 'color:#ffff88' : 'color:#88ff88';
+            let style = s.status === 'sunk' ? 'color:#999;text-decoration:line-through'
+                      : s.status === 'heavy' ? 'color:#cc2200'
+                      : s.status === 'medium' ? 'color:#cc6600'
+                      : s.status === 'light' ? 'color:#aa8800' : 'color:#222';
             return `<span style="${style}">${s.name}</span>`;
         }).join(', ');
         html += `</div>`;
 
         // 米軍
-        html += `<div style="margin:4px 0;"><strong style="color:#8888ff;">米軍迎撃艦:</strong> `;
+        html += `<div style="margin:4px 0;"><strong style="color:#2255cc;">米軍迎撃艦:</strong> `;
         html += b.usShips.map(s => {
-            let style = s.status === 'sunk' ? 'color:#777;text-decoration:line-through'
-                      : s.status === 'heavy' ? 'color:#ff4444'
-                      : s.status === 'medium' ? 'color:#ffaa00'
-                      : s.status === 'light' ? 'color:#ffff88' : 'color:#88ff88';
+            let style = s.status === 'sunk' ? 'color:#999;text-decoration:line-through'
+                      : s.status === 'heavy' ? 'color:#cc2200'
+                      : s.status === 'medium' ? 'color:#cc6600'
+                      : s.status === 'light' ? 'color:#aa8800' : 'color:#222';
             return `<span style="${style}">${s.name}</span>`;
         }).join(', ');
         html += `</div>`;
 
         // 沈没艦
-        if (b.jpSunk.length) html += `<div style="color:#ff4444; margin:2px 0;">日本軍沈没: ${b.jpSunk.join(', ')}</div>`;
-        if (b.usSunk.length) html += `<div style="color:#66ccff; margin:2px 0;">米軍沈没: ${b.usSunk.join(', ')}</div>`;
+        if (b.jpSunk.length) html += `<div style="color:#cc2200; margin:2px 0;">日本軍沈没: ${b.jpSunk.join(', ')}</div>`;
+        if (b.usSunk.length) html += `<div style="color:#2255cc; margin:2px 0;">米軍沈没: ${b.usSunk.join(', ')}</div>`;
 
         // 損傷艦
-        if (b.jpDamaged.length) html += `<div style="color:#ffaa00; margin:2px 0;">日本軍損傷: ${b.jpDamaged.join(', ')}</div>`;
-        if (b.usDamaged.length) html += `<div style="color:#ffaa00; margin:2px 0;">米軍損傷: ${b.usDamaged.join(', ')}</div>`;
+        if (b.jpDamaged.length) html += `<div style="color:#cc6600; margin:2px 0;">日本軍損傷: ${b.jpDamaged.join(', ')}</div>`;
+        if (b.usDamaged.length) html += `<div style="color:#cc6600; margin:2px 0;">米軍損傷: ${b.usDamaged.join(', ')}</div>`;
 
         // スコア
-        html += `<div style="margin-top:4px; font-size:0.9em; color:#ccc;">スコア獲得 - 日本軍: +${b.jpScoreGain} / 米軍: +${b.usScoreGain}</div>`;
+        html += `<div style="margin-top:4px; font-size:0.9em; color:#666;">スコア獲得 - 日本軍: +${b.jpScoreGain} / 米軍: +${b.usScoreGain}</div>`;
 
         html += `</div>`;
     });
