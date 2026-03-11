@@ -521,6 +521,20 @@ function calcModifiers(firer, target, dist) {
   return { mod, details };
 }
 
+// 2d6の確率分布（合計2〜12）
+const DICE_PROB = [0,0,1,2,3,4,5,6,5,4,3,2,1]; // 合計36
+
+function calcHitChance(mod, dist) {
+  let hitProb = 0, totalProb = 0;
+  for (let d = 2; d <= 12; d++) {
+    var total = d + mod;
+    var hits = getHits(total, dist);
+    if (hits > 0) hitProb += DICE_PROB[d];
+    totalProb += DICE_PROB[d];
+  }
+  return Math.round(hitProb / totalProb * 100);
+}
+
 function updateShootInfo() {
   const el = document.getElementById('shootInfo');
   if (selectedFirer === null || selectedTarget === null) {
@@ -536,8 +550,12 @@ function updateShootInfo() {
   const arcColor = arcInfo.mult < 1 ? '#fa6' : '#6a6';
   const arcLabel = arcInfo.mult < 1 ? `${arcInfo.arc}(火力½)` : `${arcInfo.arc}(全力)`;
 
+  const hitPct = calcHitChance(mod, dist);
+  const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
+
   el.innerHTML = `距離: <b>${dist}</b>hex　修正: <b>${mod >= 0 ? '+' : ''}${mod}</b>`
     + `　射界: <b style="color:${arcColor}">${arcLabel}</b>`
+    + `　命中率: <b style="color:${pctColor};font-size:1.2em">${hitPct}%</b>`
     + (details.length > 0 ? `<div class="mod-detail">(${details.join(' / ')})</div>` : '');
 }
 
@@ -629,6 +647,7 @@ function doShoot() {
   // 射撃済みマーク（同一フェーズ内で再射撃防止）
   firedShips.add(selectedFirer);
   firer.revealed = true;  // 発砲した艦は敵から視認可能
+  if (target && target.side === 'us') target.revealed = true;  // 射撃目標も視認可能
   // jpFleet内の元インデックスでACTION_DONEを送信（フィルタ後のインデックスではなく）
   var origIdx = (state.jpFleet||[]).indexOf(firer);
   parent.postMessage({type:'ACTION_DONE', shipIndex: origIdx >= 0 ? origIdx : selectedFirer}, '*');

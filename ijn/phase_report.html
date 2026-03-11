@@ -210,6 +210,13 @@ function goNextTurn() {
   parent.postMessage({type:'NEXT_TURN'}, '*');
 }
 
+// hub から BATTLE_END を受信 → 自動でキャンペーンに戻る
+window.addEventListener('message', function(e) {
+  if (e.data && e.data.type === 'BATTLE_END') {
+    sendToCampaign();
+  }
+});
+
 init();
 </script>
 </body>

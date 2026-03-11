@@ -46,7 +46,10 @@ function init() {
   const raw = localStorage.getItem('hubState');
   if (!raw) { log('hubStateなし'); return; }
   state = JSON.parse(raw);
+  // 自動修理→自動ターン進行
+  repairAll();
   renderList();
+  setTimeout(() => donePhase(), 1500);
 }
 
 function statusClass(s) {
