@@ -543,10 +543,10 @@ function renderBattleHistory() {
         // 日本軍
         html += `<div style="margin:4px 0;"><strong style="color:#cc3311;">日本軍参加艦:</strong> `;
         html += b.jpShips.map(s => {
-            let style = s.status === 'sunk' ? 'color:#999;text-decoration:line-through'
+            let style = s.status === 'sunk' ? 'color:#aaa;text-decoration:line-through'
                       : s.status === 'heavy' ? 'color:#cc2200'
                       : s.status === 'medium' ? 'color:#cc6600'
-                      : s.status === 'light' ? 'color:#aa8800' : 'color:#222';
+                      : s.status === 'light' ? 'color:#aa8800' : 'color:#2a8a2a';
             return `<span style="${style}">${s.name}</span>`;
         }).join(', ');
         html += `</div>`;
@@ -554,10 +554,10 @@ function renderBattleHistory() {
         // 米軍
         html += `<div style="margin:4px 0;"><strong style="color:#2255cc;">米軍迎撃艦:</strong> `;
         html += b.usShips.map(s => {
-            let style = s.status === 'sunk' ? 'color:#999;text-decoration:line-through'
+            let style = s.status === 'sunk' ? 'color:#aaa;text-decoration:line-through'
                       : s.status === 'heavy' ? 'color:#cc2200'
                       : s.status === 'medium' ? 'color:#cc6600'
-                      : s.status === 'light' ? 'color:#aa8800' : 'color:#222';
+                      : s.status === 'light' ? 'color:#aa8800' : 'color:#2a8a2a';
             return `<span style="${style}">${s.name}</span>`;
         }).join(', ');
         html += `</div>`;
