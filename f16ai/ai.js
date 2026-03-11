@@ -241,6 +241,12 @@ const AI = {
                     // 高度上限ペナルティ
                     if (sim.altitude > 35) hScore -= (sim.altitude - 35) * PT.ALT_CEILING;
 
+                    // マップ端ペナルティ（端2ヘクス以内で減点）
+                    let edgeMaxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
+                    let edgeMaxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
+                    let edgeDist = Math.min(sim.x, sim.y, edgeMaxC - sim.x, edgeMaxR - sim.y);
+                    if (edgeDist <= 2) hScore -= (3 - edgeDist) * 15;
+
                     // ε-greedy: 15%でランダム探索
                     let finalScore = qVal * 2 + hScore + (Math.random() < 0.15 ? Math.random() * 40 : 0);
 
@@ -453,7 +459,9 @@ const AI = {
             else if (char === '3') { currentDirIdx = (currentDirIdx + 1) % 6; cx += moveDist * Math.cos(Math.PI / 180 * this.DIR_ANGLES[this.DIR_ORDER[currentDirIdx]]); cy += moveDist * Math.sin(Math.PI / 180 * this.DIR_ANGLES[this.DIR_ORDER[currentDirIdx]]); stepsSinceLastTurn++; }
             else if (char === '7' || char === '9') { currentDirIdx = (currentDirIdx + 3) % 6; }
             else if (char === '5') { cx += moveDist * Math.cos(Math.PI / 180 * this.DIR_ANGLES[this.DIR_ORDER[currentDirIdx]]); cy += moveDist * Math.sin(Math.PI / 180 * this.DIR_ANGLES[this.DIR_ORDER[currentDirIdx]]); stepsSinceLastTurn++; }
-            if (cx < -10 || cx > 53 * hStep + 10 || cy < -10 || cy > 27 * vStep + 10) isOffMap = true;
+            let bMaxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
+            let bMaxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
+            if (cx < -10 || cx > bMaxC * hStep + 10 || cy < -10 || cy > bMaxR * vStep + 10) isOffMap = true;
         }
 
         let maxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
