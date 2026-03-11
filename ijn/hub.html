@@ -844,7 +844,7 @@ function drawShip(ship) {
 
   // クリティカル状態ドット（艦の左上に色付き丸を並べる）
   var critDots = [];
-  if (ship.speed === 0 && ship.status !== 'sunk') critDots.push('#111111'); // 航行不能=黒
+  if ((ship.speed === 0 || (ship.dmgM >= ship.capM)) && ship.status !== 'sunk') critDots.push('#111111'); // 航行不能=黒
   if (ship.cannotTurn)   critDots.push('#ffcc00');  // 回頭不能=黄
   if (ship.cannotFire)   critDots.push('#ff4444');  // 砲撃不能=赤
   if (ship.cannotTorpedo) critDots.push('#ff6688'); // 雷撃不能=ピンク
