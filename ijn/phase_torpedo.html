@@ -289,7 +289,6 @@ function renderCards() {
 
   // 目標カード
   let tHtml = '';
-  const ini = state.initiative || 'jp';
   const firerSide = ini === 'jp' ? 'jp' : 'us';
   tf.forEach((s, i) => {
     let canTarget = s.status !== 'sunk' && s.col >= 0;
