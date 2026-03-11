@@ -785,6 +785,14 @@ function autoUSShoot(title) {
     log('日本軍: 砲撃を受けた → 敵発見、自由移動可能');
   }
 
+  // 発砲した米軍艦のrevealed状態をアニメ開始前にマップへ即時反映
+  localStorage.setItem('hubState', JSON.stringify(state));
+  parent.postMessage({type:'STATE_UPDATE',
+    usFleet:state.usFleet, jpFleet:state.jpFleet,
+    jpDetected:state.jpDetected, jpFreeMove:state.jpFreeMove,
+    contactMade:state.contactMade
+  }, '*');
+
   // 1隻ずつアニメーション + オーバーレイ表示
   let idx = 0;
   const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
