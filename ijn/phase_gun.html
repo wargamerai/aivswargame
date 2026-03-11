@@ -626,7 +626,9 @@ function doShoot() {
 
   // 射撃済みマーク（同一フェーズ内で再射撃防止）
   firedShips.add(selectedFirer);
-  parent.postMessage({type:'ACTION_DONE', shipIndex:selectedFirer}, '*');
+  // jpFleet内の元インデックスでACTION_DONEを送信（フィルタ後のインデックスではなく）
+  var origIdx = (state.jpFleet||[]).indexOf(firer);
+  parent.postMessage({type:'ACTION_DONE', shipIndex: origIdx >= 0 ? origIdx : selectedFirer}, '*');
 
   // 第一砲撃で射撃した艦をマーク → 雷撃不可
   if (subPhase === 'gun1a' || subPhase === 'gun1b') {
@@ -932,20 +934,19 @@ function resolveDamage(title) {
       if (d.critSunk) shipSummary[ship.name].critSunk = true;
     }
 
-    // サマリー出力（艦ごとに1行 = 最終ステータス）
-    var statusLabels = {sunk:'沈没', heavy:'大破', medium:'中破', light:'小破', ok:'無傷'};
+    // サマリー出力（艦ごと: G/M損害 + クリティカル詳細）
     for (var name in shipSummary) {
       var ss = shipSummary[name];
       var ship = ss.ship;
       if (ss.critSunk) {
         summaryLines.push(`${name} 轟沈！`);
       } else if (ship.status === 'sunk') {
-        summaryLines.push(`${name}: G${ss.totalG} M${ss.totalM} → 沈没`);
+        summaryLines.push(`${name}: G${ss.totalG} M${ss.totalM} (${ship.dmgG||0}/${ship.capG} ${ship.dmgM||0}/${ship.capM})`);
       } else {
-        summaryLines.push(`${name}: G${ss.totalG} M${ss.totalM} → ${statusLabels[ship.status]||ship.status}`);
+        summaryLines.push(`${name}: G${ss.totalG} M${ss.totalM} (${ship.dmgG||0}/${ship.capG} ${ship.dmgM||0}/${ship.capM})`);
       }
       for (var ci = 0; ci < ss.crits.length; ci++) {
-        summaryLines.push(`  クリティカル: ${ss.crits[ci]}`);
+        summaryLines.push(`  ⚡ ${ss.crits[ci]}`);
       }
     }
   }
