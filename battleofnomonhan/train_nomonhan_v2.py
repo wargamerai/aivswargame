@@ -499,7 +499,23 @@ class NomonhanV2:
                       f"Draw:{self.stats['draws']:,} "
                       f"ε={epsilon:.3f} Q状態数={len(self.q_table)}")
 
+            # 5万回ごとに途中保存（中断しても失われない）
+            if ep % 50000 == 0:
+                self.save_qtable()
+                print(f"  💾 途中保存完了 ({ep:,}回時点)")
+
         self.print_report()
+
+    def save_qtable(self):
+        """Q-tableをJSON + JS形式で保存"""
+        out = "nomonhan_q_v2.json"
+        with open(out, 'w', encoding='utf-8') as f:
+            json.dump(self.q_table, f, ensure_ascii=False, indent=2)
+        out_js = "nomonhan_q_v2_data.js"
+        with open(out_js, 'w', encoding='utf-8') as f:
+            f.write("var Q_TABLE_V2 = ")
+            json.dump(self.q_table, f, ensure_ascii=False)
+            f.write(";\n")
 
     def print_report(self):
         print("\n==========================================")
@@ -513,19 +529,9 @@ class NomonhanV2:
         print(f"🧠 Q-table状態数: {len(self.q_table)}")
         print("==========================================\n")
 
-        # Q-table保存
-        out = "nomonhan_q_v2.json"
-        with open(out, 'w', encoding='utf-8') as f:
-            json.dump(self.q_table, f, ensure_ascii=False, indent=2)
-        print(f"💾 Q-table保存: {out} ({len(self.q_table)} 状態)")
-
-        # JS版も同時出力（CORS回避用）
-        out_js = "nomonhan_q_v2_data.js"
-        with open(out_js, 'w', encoding='utf-8') as f:
-            f.write("var Q_TABLE_V2 = ")
-            json.dump(self.q_table, f, ensure_ascii=False)
-            f.write(";\n")
-        print(f"💾 JS版保存: {out_js}")
+        self.save_qtable()
+        print(f"💾 Q-table保存: nomonhan_q_v2.json ({len(self.q_table)} 状態)")
+        print(f"💾 JS版保存: nomonhan_q_v2_data.js")
 
         # サンプル表示
         print("\n--- Q-table サンプル ---")

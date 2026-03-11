@@ -695,6 +695,7 @@ class Game:
             choice = choice.strip()
 
             success = False
+            valid_choice = True
             if choice == '99':
                 self.print_q(f"\n【投了】あなたは投了（引き分け）を選択しました。ゲーム終了です。")
                 self.game_over = True
@@ -706,11 +707,16 @@ class Game:
             elif choice == '4': success = await self.action_play_tactical_card(self.current_player, self.enemy_player)
             elif choice == '5': success = await self.action_add_tank(self.current_player, self.enemy_player)
             elif choice == '6': success = await self.action_swap_card(self.current_player)
+            else:
+                valid_choice = False
+                self.print_q("正しい番号が入力されませんでした。")
+                continue
+
             if success and self.enemy_player.brain:
                 action_map = {'1':'attack','2':'move','3':'attack_hq','4':'play_tactical','5':'add_tank','6':'swap'}
                 self.enemy_player.brain.record_player_action(action_map.get(choice, choice))
-            else:
-                self.print_q("正しい番号が入力されませんでした。")
+
+            if not success:
                 continue
             
             if success:
@@ -1775,7 +1781,10 @@ class Game:
                             self.print_q(f"  {len(player.platoons[p]) + 1}番目 (最後尾に追加)")
                             
                             while True:
-                                pos_val = await self.safe_input_method(f"配置する位置を数字で入力してください (1〜{len(player.platoons[p]) + 1}): ")
+                                pos_val = await self.safe_input_method(f"配置する位置を数字で入力してください (1〜{len(player.platoons[p]) + 1} / 99: この戦車の配置をやめる): ")
+                                if pos_val == '99':
+                                    card = None
+                                    break
                                 if pos_val.isdigit() and 1 <= int(pos_val) <= len(player.platoons[p]) + 1:
                                     insert_idx = int(pos_val) - 1
                                     player.platoons[p].insert(insert_idx, card)
@@ -1783,6 +1792,9 @@ class Game:
                                 self.print_q("正しい番号を入力してください。")
                         else:
                             player.platoons[p].append(card)
+                        if card is None:
+                            self.print_q("配置をキャンセルしました。")
+                            continue
                         self.print_q(f"列{p}に {card.name} を裏向きで追加配置しました！")
                         
                     player.hand.remove(card)

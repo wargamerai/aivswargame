@@ -712,13 +712,14 @@ class Game:
                 elif choice == '4': success = await self.action_play_tactical_card(self.current_player, self.enemy_player)
                 elif choice == '5': success = await self.action_add_tank(self.current_player, self.enemy_player)
                 elif choice == '6': success = await self.action_swap_card(self.current_player)
+                elif choice == '8': await self.show_discard_pile(self.current_player); continue
+                elif choice == '9': await self.show_discard_pile(self.enemy_player); continue
+                else: print("正しい番号が入力されませんでした。"); continue
                 # プレイヤーの行動を相手AIの学習データに記録
                 if success and self.enemy_player.brain:
                     action_map = {'1':'attack','2':'move','3':'attack_hq','4':'play_tactical','5':'add_tank','6':'swap'}
                     self.enemy_player.brain.record_player_action(action_map.get(choice, choice))
-                elif choice == '8': await self.show_discard_pile(self.current_player); continue
-                elif choice == '9': await self.show_discard_pile(self.enemy_player); continue
-                else: print("正しい番号が入力されませんでした。"); continue
+                if not success: continue
                 
                 if success:
                     patton_active = any(e.name == 'パットン第3軍' for e in self.current_player.active_events)
@@ -1350,7 +1351,10 @@ class Game:
                             print(f"  {len(player.platoons[p]) + 1}番目 (最後尾に追加)")
                             
                             while True:
-                                pos_val = (await safe_input(f"配置する位置を数字で入力してください (1〜{len(player.platoons[p]) + 1}): ")).strip()
+                                pos_val = (await safe_input(f"配置する位置を数字で入力してください (1〜{len(player.platoons[p]) + 1} / 99: この戦車の配置をやめる): ")).strip()
+                                if pos_val == '99':
+                                    card = None
+                                    break
                                 if pos_val.isdigit() and 1 <= int(pos_val) <= len(player.platoons[p]) + 1:
                                     insert_idx = int(pos_val) - 1
                                     player.platoons[p].insert(insert_idx, card)
@@ -1358,8 +1362,11 @@ class Game:
                                 print("正しい番号を入力してください。")
                         else:
                             player.platoons[p].append(card)
+                        if card is None:
+                            print("配置をキャンセルしました。")
+                            continue
                         print(f"小隊{p}に {card.name} を裏向きで追加配置しました！")
-                        
+
                     player.hand.remove(card)
                     added_count += 1
                     
