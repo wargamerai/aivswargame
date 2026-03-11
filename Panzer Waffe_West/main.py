@@ -675,27 +675,25 @@ class Game:
                 
             print("99: 終了する（引き分けにしてゲームを終える）")
             
-            choice = (await safe_input("番号を入力: ")).strip()
-
-            # ----------------------------------------------------
-            # ★ クライフ作戦の能力2（手札破壊）の処理を追加
-            # ----------------------------------------------------
-            if choice == '7' and any(e.name == 'クライフ作戦' for e in self.current_player.active_events):
-                greif = next(e for e in self.current_player.active_events if e.name == 'クライフ作戦')
-                self.current_player.active_events.remove(greif)
-                self.current_player.discard_pile.append(greif)
-                self.print_q("\n【クライフ作戦 発動！】ドイツ軍はカードを破棄し、敵の手札を破壊します！")
-                for _ in range(2):
-                    if self.enemy_player.hand:
-                        discarded = random.choice(self.enemy_player.hand)
-                        self.enemy_player.hand.remove(discarded)
-                        self.enemy_player.discard_pile.append(discarded)
-                        self.print_q(f"敵の手札から『{discarded.name}』が捨て札にされました！")
-                return True
-            
             success = False
             try:
                 choice = (await safe_input(f"[{self.current_player.faction}] 番号を入力してください: ")).strip()
+
+                # ----------------------------------------------------
+                # ★ クライフ作戦の能力2（手札破壊）の処理
+                # ----------------------------------------------------
+                if choice == '7' and any(e.name == 'クライフ作戦' for e in self.current_player.active_events):
+                    greif = next(e for e in self.current_player.active_events if e.name == 'クライフ作戦')
+                    self.current_player.active_events.remove(greif)
+                    self.current_player.discard_pile.append(greif)
+                    self.print_q("\n【クライフ作戦 発動！】ドイツ軍はカードを破棄し、敵の手札を破壊します！")
+                    for _ in range(2):
+                        if self.enemy_player.hand:
+                            discarded = random.choice(self.enemy_player.hand)
+                            self.enemy_player.hand.remove(discarded)
+                            self.enemy_player.discard_pile.append(discarded)
+                            self.print_q(f"敵の手札から『{discarded.name}』が捨て札にされました！")
+                    return True
                 if choice == '99':
                     print(f"\n【投了】あなたは投了（引き分け）を選択しました。ゲーム終了です。")
                     self.game_over = True; self.winner = "Draw"; return True
