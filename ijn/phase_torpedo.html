@@ -197,8 +197,9 @@ function getTorpPower(s) {
   return s.torpedo.includes('TT') ? 10 : 6;
 }
 
-// 雷撃射程: revealed/onFireは13hex、それ以外はspotRange
-function getTorpMaxRange(target) {
+// 雷撃射程: 米軍=常に13hex、日本軍=spotRange（revealed/onFireなら13hex）
+function getTorpMaxRange(target, firer) {
+  if (firer && firer.side === 'us') return 13;  // 米軍: レーダーで制限なし
   return (target.revealed || target.onFire) ? 13 : (state.spotRange || 5);
 }
 function getTorpRolls(s) { return s.torpedo === 'TT3' ? 3 : 1; }
@@ -304,7 +305,7 @@ function renderCards() {
     if (canTarget && selectedFirer !== null) {
       const f = ff[selectedFirer];
       const d = hexDist(f.col, f.row, s.col, s.row);
-      if (d > getTorpMaxRange(s) || !checkBroadside(f, s)) canTarget = false;
+      if (d > getTorpMaxRange(s, f) || !checkBroadside(f, s)) canTarget = false;
     }
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
@@ -356,7 +357,7 @@ function updateShootInfo() {
   const target = getTargetFleet()[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
 
-  const torpMaxR = getTorpMaxRange(target);
+  const torpMaxR = getTorpMaxRange(target, firer);
   if (dist > torpMaxR) {
     el.innerHTML = `距離 ${dist}hex — <span style="color:#f66">射程外（${torpMaxR}hex超）</span>`;
     btn.disabled = true;
@@ -433,7 +434,7 @@ function doTorpedo() {
   const firer = getFirerFleet()[selectedFirer];
   const target = getTargetFleet()[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
-  const torpMaxR2 = getTorpMaxRange(target);
+  const torpMaxR2 = getTorpMaxRange(target, firer);
   if (dist > torpMaxR2) { log(`射程外（${torpMaxR2}hex超）`); return; }
 
   const tp = getTorpPower(firer);
@@ -627,7 +628,7 @@ function autoUSTorpedo() {
     let bestTarget = null, bestDist = 999;
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > getTorpMaxRange(t)) continue;
+      if (d > getTorpMaxRange(t, firer)) continue;
       if (!checkBroadside(firer, t)) continue;  // 舷側のみ
       if (d < bestDist) { bestDist = d; bestTarget = t; }
     }

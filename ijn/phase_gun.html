@@ -339,9 +339,10 @@ function isVisibleToUS(jpShip) {
   });
 }
 
-// 射程上限: revealed/onFireは13hex、それ以外はspotRange
-function getMaxRange(target) {
-  return (target.revealed || target.onFire) ? 13 : (state.spotRange || 5);
+// 射程上限: 米軍=常に16hex、日本軍=spotRange（revealed/onFireなら16hex）
+function getMaxRange(target, firer) {
+  if (firer && firer.side === 'us') return 16;  // 米軍: レーダーで制限なし
+  return (target.revealed || target.onFire) ? 16 : (state.spotRange || 5);
 }
 
 // ===== 初期化 =====
@@ -438,7 +439,7 @@ function renderCards() {
     if (selectedFirer !== null) {
       const firer = jpShips[selectedFirer];
       const d = hexDist(firer.col, firer.row, s.col, s.row);
-      if (d > getMaxRange(s)) oor = ' disabled';
+      if (d > getMaxRange(s, firer)) oor = ' disabled';
       else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
     }
     return `<div class="card us${sel}${oor}" onclick="selectTarget(${i})">
@@ -538,7 +539,7 @@ function doShoot() {
   const firer = jpShips[selectedFirer];
   const target = usShips[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
-  const maxR = getMaxRange(target);
+  const maxR = getMaxRange(target, firer);
   if (dist > maxR) { log(`射程外（${maxR}hex超）`); return; }
 
   // 射界チェック（利根型の後方射撃不能）
@@ -691,7 +692,7 @@ function autoUSShoot(title) {
   // 一斉射撃判定: BB/CA全艦が射程内に入るまで待機
   const capitalShips = us.filter(s => ['BB','OBB','CA'].includes(s.type));
   const inRange = capitalShips.filter(firer =>
-    jp.some(t => hexDist(firer.col, firer.row, t.col, t.row) <= getMaxRange(t))
+    jp.some(t => hexDist(firer.col, firer.row, t.col, t.row) <= getMaxRange(t, firer))
   );
   state.usWaitTurns = (state.usWaitTurns || 0);
   if (capitalShips.length > 0 && inRange.length < capitalShips.length * 0.7 && state.usWaitTurns < 3) {
@@ -699,7 +700,7 @@ function autoUSShoot(title) {
     log('米軍、態勢構築中… 射撃待機');
     // DD/CLのみ射撃可能にする
     const lightShips = us.filter(s => !['BB','OBB','CA'].includes(s.type));
-    if (lightShips.length === 0 || !jp.some(t => lightShips.some(f => hexDist(f.col,f.row,t.col,t.row) <= getMaxRange(t)))) {
+    if (lightShips.length === 0 || !jp.some(t => lightShips.some(f => hexDist(f.col,f.row,t.col,t.row) <= getMaxRange(t, f)))) {
       setTimeout(() => doneSubPhase(), 400);
       return;
     }
@@ -720,7 +721,7 @@ function autoUSShoot(title) {
     let bestTarget = null, bestScore = 999;
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > getMaxRange(t)) continue;
+      if (d > getMaxRange(t, firer)) continue;
       const score = d + (assignCount[t.name] || 0) * 4;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
