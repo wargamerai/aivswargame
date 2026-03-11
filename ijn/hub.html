@@ -81,23 +81,19 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 #left h3 { color: #cc3311; font-size: 1.05em; padding: 5px 8px; margin: 0; border-bottom: 1px solid #ccc; cursor:pointer; user-select:none; }
 #left h3.us { color: #2255cc; }
 #left h3:hover { background: #e0e0ee; }
-#fleetList .ship-row {
-  padding: 2px 6px; border-bottom: 1px solid #ddd;
-  display: flex; justify-content: space-between; align-items: center; gap:4px;
-}
-#fleetList .ship-row.sunk { color: #aaa; text-decoration: line-through; }
-#fleetList .ship-row .name { flex: 1; white-space: nowrap; }
-#fleetList .ship-row .lead { color: #8a6a00; font-size: 0.95em; }
-#fleetList .dmg { font-size: 0.9em; padding: 1px 3px; border-radius: 2px; font-family:monospace; white-space:nowrap; }
-#fleetList .dmg.ok { color: #2a8a2a; }
-#fleetList .dmg.light { color: #aa8800; background:#fff8e0; }
-#fleetList .dmg.medium { color: #cc6600; background:#ffeedd; }
-#fleetList .dmg.heavy { color: #cc2200; background:#ffdddd; font-weight:bold; }
-#fleetList .dmg.sunk { color: #aaa; }
-#fleetList .crit-line { font-size:0.85em; color:#aa00aa; padding:0 6px 2px 16px; }
+#fleetList table { width:100%; border-collapse:collapse; font-size:0.82em; font-family:monospace; }
+#fleetList th { background:#e0e8f0; color:#444; padding:2px 4px; border:1px solid #ccc; text-align:center; font-size:0.85em; }
+#fleetList td { padding:2px 4px; border:1px solid #ddd; text-align:center; white-space:nowrap; }
+#fleetList td.name-cell { text-align:left; font-weight:bold; }
+#fleetList tr.sunk { color: #aaa; text-decoration: line-through; }
+#fleetList tr.ok td.status-cell { color:#2a8a2a; }
+#fleetList tr.light td.status-cell { background:#fff8e0; }
+#fleetList tr.medium td.status-cell { background:#ffeedd; }
+#fleetList tr.heavy td.status-cell { background:#ffdddd; }
+#fleetList tr.sunk td.status-cell { color:#cc0000; font-weight:bold; }
+#fleetList .crit-cell { color:#aa00aa; font-size:0.85em; text-align:left; }
 #fleetList .fleet-section { }
-#fleetList .fleet-section.collapsed .ship-row,
-#fleetList .fleet-section.collapsed .crit-line { display:none; }
+#fleetList .fleet-section.collapsed table { display:none; }
 
 #phaseFlash {
   position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%);
@@ -578,58 +574,61 @@ function toggleFleetSection(side) {
 function renderFleetList() {
   const el = document.getElementById('fleetList');
   if (!el || !state.jpFleet) return;
-  function dmgLabel(s) {
-    var g = s.dmgG || 0, m = s.dmgM || 0;
-    if (g === 0 && m === 0) return '';
-    return `G${g} M${m}`;
-  }
-  function critLine(s) {
+  function critText(s) {
     var parts = [];
     if (s.cannotFire) parts.push('砲×');
     if (s.cannotTurn) parts.push('舵×');
     if (s.cannotTorpedo) parts.push('雷×');
-    if (s.speed === 0 && s.status !== 'sunk') parts.push('停止');
-    if (s.onFire) parts.push('火災');
-    if (s.crits && s.crits.length > 0) {
-      s.crits.forEach(function(c) { if (parts.indexOf(c) < 0) parts.push(c); });
-    }
-    if (parts.length === 0) return '';
-    return '<div class="crit-line">⚠ ' + parts.join(' / ') + '</div>';
+    if ((s.speed === 0 || s.dmgM >= s.capM) && s.status !== 'sunk') parts.push('停止');
+    if (s.onFire) parts.push('🔥');
+    return parts.join(' ');
   }
   var ad = state.actionDone || [];
+  // 日本軍
   var jpCol = fleetListCollapsed.jp ? ' collapsed' : '';
   var html = '<div class="fleet-section' + jpCol + '">';
   html += '<h3 onclick="toggleFleetSection(\'jp\')">' + (fleetListCollapsed.jp ? '▶' : '▼') + ' 日本軍</h3>';
+  html += '<table><tr><th>艦名</th><th>G</th><th>M</th><th>状態</th></tr>';
   for (var si = 0; si < state.jpFleet.length; si++) {
     var s = state.jpFleet[si];
     var cls = s.status || 'ok';
-    var lead = s.isLead ? '<span class="lead">★</span>' : '';
-    var done = ad.indexOf(si) >= 0 ? '<span style="color:#44ff44;margin-left:4px;">✓</span>' : '';
-    var dl = dmgLabel(s);
-    html += '<div class="ship-row ' + (cls === 'sunk' ? 'sunk' : '') + '">';
-    html += '<span class="name">' + lead + s.name + done + '</span>';
-    html += '<span class="dmg ' + cls + '">' + (dl || '—') + '</span>';
-    html += '</div>' + critLine(s);
+    var done = ad.indexOf(si) >= 0 ? '✓' : '';
+    var lead = s.isLead ? '★' : '';
+    var g = s.dmgG || 0, m = s.dmgM || 0;
+    var gStr = g > 0 ? g + '/' + s.capG : '-';
+    var mStr = m > 0 ? m + '/' + s.capM : '-';
+    var ct = critText(s);
+    html += '<tr class="' + cls + '">';
+    html += '<td class="name-cell" style="color:#cc3311">' + lead + s.name + done + '</td>';
+    html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
+    html += '<td class="status-cell">' + (ct || '-') + '</td>';
+    html += '</tr>';
   }
-  html += '</div>';
+  html += '</table></div>';
+  // 米軍
   var usCol = fleetListCollapsed.us ? ' collapsed' : '';
   html += '<div class="fleet-section' + usCol + '">';
   html += '<h3 class="us" onclick="toggleFleetSection(\'us\')">' + (fleetListCollapsed.us ? '▶' : '▼') + ' 米軍</h3>';
+  html += '<table><tr><th>艦名</th><th>G</th><th>M</th><th>状態</th></tr>';
   for (var ui = 0; ui < state.usFleet.length; ui++) {
     var s = state.usFleet[ui];
     var cls = s.status || 'ok';
     var visible = isSpotted(s);
     if (!visible) {
-      html += '<div class="ship-row"><span class="name" style="color:#999">???</span></div>';
+      html += '<tr><td class="name-cell" style="color:#999">???</td><td>-</td><td>-</td><td>-</td></tr>';
     } else {
-      var dl = dmgLabel(s);
-      html += '<div class="ship-row ' + (cls === 'sunk' ? 'sunk' : '') + '">';
-      html += '<span class="name">' + s.name + '</span>';
-      html += '<span class="dmg ' + cls + '">' + (dl || '—') + '</span>';
-      html += '</div>' + critLine(s);
+      var g = s.dmgG || 0, m = s.dmgM || 0;
+      var gStr = g > 0 ? g + '/' + s.capG : '-';
+      var mStr = m > 0 ? m + '/' + s.capM : '-';
+      var ct = critText(s);
+      html += '<tr class="' + cls + '">';
+      html += '<td class="name-cell" style="color:#2255cc">' + s.name + '</td>';
+      html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
+      html += '<td class="status-cell">' + (ct || '-') + '</td>';
+      html += '</tr>';
     }
   }
-  html += '</div>';
+  html += '</table></div>';
   el.innerHTML = html;
 }
 
