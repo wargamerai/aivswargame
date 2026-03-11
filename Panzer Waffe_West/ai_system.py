@@ -4,6 +4,28 @@ import random
 # localStorageのキー名
 LS_KEY_PREFIX = "panzer_waffe_ai_"
 
+try:
+    import js
+    def _ls_get(key):
+        v = js.localStorage.getItem(key)
+        return v if v is not None else None
+    def _ls_set(key, val):
+        js.localStorage.setItem(key, val)
+    def _get_pretrained():
+        """JSグローバル変数 AI_PRETRAINED_WEST から事前学習データを取得"""
+        try:
+            raw = js.AI_PRETRAINED_WEST
+            if raw:
+                from pyodide.ffi import JsProxy
+                return json.loads(js.JSON.stringify(raw))
+        except Exception:
+            pass
+        return None
+except ImportError:
+    def _ls_get(key): return None
+    def _ls_set(key, val): pass
+    def _get_pretrained(): return None
+
 class AI_Brain:
     def __init__(self, faction):
         self.faction = faction
@@ -18,41 +40,92 @@ class AI_Brain:
         self.gamma = 0.9
 
     # =====================================================
-    # localStorage: データ読み込み
+    # データ読み込み（事前学習ベース + localStorage差分マージ）
     # =====================================================
     async def load_data(self):
-        try:
-            import js
-            key = LS_KEY_PREFIX + self.faction
-            raw = js.localStorage.getItem(key)
-            if raw:
-                data = json.loads(raw)
-                self.q_table        = data.get("q_table", {})
-                self.card_winrates  = data.get("card_winrates", {})
-                self.synergy_table  = data.get("synergy_table", {})
-                self.player_patterns= data.get("player_patterns", {})
-                return
-        except Exception:
-            pass
-        self.q_table = {}
-        self.card_winrates = {}
-        self.synergy_table = {}
+        # --- 1) 事前学習データをベースとして読み込み ---
+        pretrained = _get_pretrained()
+        side_key = "de" if "ge" in self.faction or "de" in self.faction.lower() else "uk"
+        if pretrained and side_key in pretrained:
+            base = pretrained[side_key]
+            self.q_table       = dict(base.get("q_table", {}))
+            self.card_winrates = dict(base.get("card_winrates", {}))
+            self.synergy_table = dict(base.get("synergy_table", {}))
+        else:
+            self.q_table = {}
+            self.card_winrates = {}
+            self.synergy_table = {}
         self.player_patterns = {}
 
+        # --- 2) localStorageの追加学習データをマージ（上書き優先） ---
+        key = LS_KEY_PREFIX + self.faction
+        try:
+            raw = _ls_get(key)
+            if raw:
+                local = json.loads(raw)
+                # Q-table: localStorageのデータで上書き・追加
+                for state, actions in local.get("q_table", {}).items():
+                    if state not in self.q_table:
+                        self.q_table[state] = {}
+                    self.q_table[state].update(actions)
+                # card_winrates: localStorageで上書き
+                for card, wr in local.get("card_winrates", {}).items():
+                    self.card_winrates[card] = wr
+                # synergy: localStorageで上書き
+                for pair, syn in local.get("synergy_table", {}).items():
+                    self.synergy_table[pair] = syn
+                # player_patterns: localStorage固有
+                self.player_patterns = local.get("player_patterns", {})
+        except Exception:
+            pass
+
     # =====================================================
-    # localStorage: 保存
+    # 保存（事前学習との差分のみlocalStorageに保存）
     # =====================================================
     async def save_data(self):
+        key = LS_KEY_PREFIX + self.faction
+        # 事前学習ベースを取得
+        pretrained = _get_pretrained()
+        side_key = "de" if "ge" in self.faction or "de" in self.faction.lower() else "uk"
+        base_q = {}
+        base_wr = {}
+        base_syn = {}
+        if pretrained and side_key in pretrained:
+            base_q  = pretrained[side_key].get("q_table", {})
+            base_wr = pretrained[side_key].get("card_winrates", {})
+            base_syn = pretrained[side_key].get("synergy_table", {})
+
+        # Q-table差分
+        delta_q = {}
+        for state, actions in self.q_table.items():
+            base_actions = base_q.get(state, {})
+            diff = {}
+            for act, qval in actions.items():
+                if act not in base_actions or abs(qval - base_actions[act]) > 1e-9:
+                    diff[act] = qval
+            if diff:
+                delta_q[state] = diff
+
+        # card_winrates差分
+        delta_wr = {}
+        for card, wr in self.card_winrates.items():
+            if card not in base_wr or wr != base_wr[card]:
+                delta_wr[card] = wr
+
+        # synergy差分
+        delta_syn = {}
+        for pair, syn in self.synergy_table.items():
+            if pair not in base_syn or syn != base_syn[pair]:
+                delta_syn[pair] = syn
+
+        payload = {
+            "q_table":         delta_q,
+            "card_winrates":   delta_wr,
+            "synergy_table":   delta_syn,
+            "player_patterns": self.player_patterns,
+        }
         try:
-            import js
-            key = LS_KEY_PREFIX + self.faction
-            payload = {
-                "q_table":         self.q_table,
-                "card_winrates":   self.card_winrates,
-                "synergy_table":   self.synergy_table,
-                "player_patterns": self.player_patterns,
-            }
-            js.localStorage.setItem(key, json.dumps(payload, ensure_ascii=False))
+            _ls_set(key, json.dumps(payload, ensure_ascii=False))
         except Exception:
             pass
 
