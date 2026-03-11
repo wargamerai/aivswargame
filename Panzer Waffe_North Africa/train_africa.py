@@ -877,12 +877,44 @@ class Game:
 # =====================================================
 # メイン
 # =====================================================
+def save_all(brain_de, brain_uk, total_games, saved_pmatrix, data_file):
+    """JSON保存 + JS出力"""
+    out_data={
+        "de": brain_de.to_dict(),
+        "uk": brain_uk.to_dict(),
+        "total_games": total_games,
+        "personality_matrix": saved_pmatrix,
+    }
+    with open(data_file,'w',encoding='utf-8') as f:
+        json.dump(out_data, f, ensure_ascii=False)
+    size_mb = os.path.getsize(data_file) / 1024 / 1024
+    print(f"  JSON保存: {data_file} ({size_mb:.1f} MB)")
+
+    # JS形式も同時出力（Q値0.01未満カット）
+    js_path = os.path.join(os.path.dirname(os.path.abspath(data_file)), 'ai_pretrained_africa.js')
+    pruned = {}
+    for side_key in ['de', 'uk']:
+        side_data = {}
+        qt = {}
+        for state, actions in out_data[side_key].get('q_table', {}).items():
+            kept = {a: round(q, 6) for a, q in actions.items() if abs(q) >= 0.01}
+            if kept:
+                qt[state] = kept
+        side_data['q_table'] = qt
+        side_data['card_winrates'] = out_data[side_key].get('card_winrates', {})
+        side_data['synergy_table'] = out_data[side_key].get('synergy_table', {})
+        pruned[side_key] = side_data
+    with open(js_path, 'w', encoding='utf-8') as f:
+        f.write('var AI_PRETRAINED_AFRICA = ' + json.dumps(pruned, ensure_ascii=False, separators=(',', ':')) + ';\n')
+    js_size = os.path.getsize(js_path) / 1024 / 1024
+    print(f"  JS出力: {js_path} ({js_size:.1f} MB)")
+
 def main():
     print("="*55)
     print("  Panzer Waffe 北アフリカ1942 AI学習スクリプト")
     print("="*55)
 
-    csv_file="cards_africa.csv"
+    csv_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "cards_africa.csv")
     if not os.path.exists(csv_file):
         print(f"エラー: {csv_file} が見つかりません。")
         sys.exit(1)
@@ -890,7 +922,7 @@ def main():
     except: df=pd.read_csv(csv_file, encoding='cp932')
     print(f"カードデータ: {len(df)}枚\n")
 
-    data_file="ai_data_africa.json"
+    data_file=os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai_data_africa.json")
     brain_de=AI_Brain("Panzerwaffe_africa_ge")
     brain_uk=AI_Brain("Panzerwaffe_africa_uk")
     saved_data = {}
@@ -906,47 +938,72 @@ def main():
     else:
         print("新規学習を開始します。")
 
-    while True:
-        try:
-            num=int(input("\n対戦回数を入力 (例: 1000, 10000): ").strip())
-            if num>0: break
-        except: pass
-        print("1以上の数を入力してください。")
+    # CLI引数またはインタラクティブ入力
+    if len(sys.argv) > 1:
+        num = int(sys.argv[1])
+    else:
+        while True:
+            try:
+                num=int(input("\n対戦回数を入力 (例: 1000, 10000): ").strip())
+                if num>0: break
+            except: pass
+            print("1以上の数を入力してください。")
 
-    print(f"\n{num}回の自動対戦を開始します...\n")
+    save_interval = 10000  # 1万回ごとに中間保存
+    print(f"\n{num}回の自動対戦を開始します...（{save_interval}回ごとに中間保存）\n")
 
     p1_wins=p2_wins=draws=0
     pmatrix = defaultdict(lambda: defaultdict(lambda: {'wins':0,'games':0}))
+    saved_pmatrix = saved_data.get('personality_matrix', {})
     start_time=time.time()
 
     for i in range(num):
-        g=Game(df)
-        g.setup(brain_de, brain_uk)
-        de_p=brain_de.personality_name; uk_p=brain_uk.personality_name
-        winner=g.play()
+        try:
+            g=Game(df)
+            g.setup(brain_de, brain_uk)
+            de_p=brain_de.personality_name; uk_p=brain_uk.personality_name
+            winner=g.play()
 
-        if winner=="Draw":
-            draws+=1; pmatrix[de_p][uk_p]['games']+=1
-        elif winner==g.player1:
-            p1_wins+=1; pmatrix[de_p][uk_p]['games']+=1; pmatrix[de_p][uk_p]['wins']+=1
-        else:
-            p2_wins+=1; pmatrix[de_p][uk_p]['games']+=1
+            if winner=="Draw":
+                draws+=1; pmatrix[de_p][uk_p]['games']+=1
+            elif winner==g.player1:
+                p1_wins+=1; pmatrix[de_p][uk_p]['games']+=1; pmatrix[de_p][uk_p]['wins']+=1
+            else:
+                p2_wins+=1; pmatrix[de_p][uk_p]['games']+=1
+        except Exception:
+            draws += 1
 
-        if (i+1)%10==0 or i==num-1:
+        if (i+1)%1000==0 or i==num-1:
             done=i+1; pct=done/num*100
             elapsed=time.time()-start_time
-            eta=(elapsed/done*(num-done)) if done>0 else 0
+            rate = done / elapsed if elapsed > 0 else 0
+            eta=(num-done) / rate if rate > 0 else 0
             de_r=f"{p1_wins/done*100:.1f}%"
             uk_r=f"{p2_wins/done*100:.1f}%"
-            bar="█"*(int(pct)//5)+"░"*(20-int(pct)//5)
-            print(f"  [{bar}] {done:>6}/{num}  "
-                  f"ドイツ:{p1_wins}({de_r})[{brain_de.personality_name}]  "
-                  f"連合:{p2_wins}({uk_r})[{brain_uk.personality_name}]  "
-                  f"引分:{draws}  残{int(eta)}秒   ", end='\r')
+            de_states = len(brain_de.q_table)
+            uk_states = len(brain_uk.q_table)
+            print(f"[{done:>7}/{num}] DE勝率:{de_r} UK勝率:{uk_r} 引分:{draws} | "
+                  f"状態数 DE:{de_states} UK:{uk_states} | "
+                  f"{rate:.0f}局/秒 残り{eta/60:.0f}分")
+
+        # 中間保存
+        if (i+1) % save_interval == 0:
+            # 人格マトリクスをマージ
+            tmp_pmatrix = dict(saved_pmatrix)
+            for de_p in pmatrix:
+                if de_p not in tmp_pmatrix: tmp_pmatrix[de_p] = {}
+                for us_p in pmatrix[de_p]:
+                    if us_p not in tmp_pmatrix[de_p]:
+                        tmp_pmatrix[de_p][us_p] = {'wins':0,'games':0}
+                    tmp_pmatrix[de_p][us_p]['wins']  += pmatrix[de_p][us_p]['wins']
+                    tmp_pmatrix[de_p][us_p]['games'] += pmatrix[de_p][us_p]['games']
+            print(f"\n--- 中間保存 ({done}回完了) ---")
+            save_all(brain_de, brain_uk, total_games + done, tmp_pmatrix, data_file)
 
     elapsed=time.time()-start_time
     total_games += num
-    print(f"\n\n完了！ {elapsed:.1f}秒  累計{total_games}戦")
+    print(f"\n{'='*60}")
+    print(f"完了！ {elapsed:.1f}秒  累計{total_games}戦")
     print(f"ドイツ {p1_wins}勝 / 連合 {p2_wins}勝 / 引分 {draws}")
 
     de_states = len(brain_de.q_table)
@@ -972,8 +1029,7 @@ def main():
         print()
     print(f"{'='*65}")
 
-    # 人格マトリクスをマージ保存
-    saved_pmatrix = saved_data.get('personality_matrix', {})
+    # 最終保存（人格マトリクスをマージ）
     for de_p in pmatrix:
         if de_p not in saved_pmatrix: saved_pmatrix[de_p] = {}
         for us_p in pmatrix[de_p]:
@@ -982,37 +1038,9 @@ def main():
             saved_pmatrix[de_p][us_p]['wins']  += pmatrix[de_p][us_p]['wins']
             saved_pmatrix[de_p][us_p]['games'] += pmatrix[de_p][us_p]['games']
 
-    out_data={
-        "de": brain_de.to_dict(),
-        "uk": brain_uk.to_dict(),
-        "total_games": total_games,
-        "personality_matrix": saved_pmatrix,
-    }
-    with open(data_file,'w',encoding='utf-8') as f:
-        json.dump(out_data, f, ensure_ascii=False)
-    print(f"\n学習データ保存: {data_file}")
-
-    # HTMLへの焼き込み
-    html_file="index.html"
-    if os.path.exists(html_file):
-        ans=input(f"\nindex.htmlに焼き込みますか？ (y/n): ").strip().lower()
-        if ans=='y':
-            with open(html_file,'r',encoding='utf-8') as f:
-                html=f.read()
-            de_json=json.dumps(brain_de.to_dict(), ensure_ascii=False)
-            uk_json=json.dumps(brain_uk.to_dict(), ensure_ascii=False)
-            inject=f"""<script id="ai-preload-data">
-(function(){{
-  try{{localStorage.setItem("panzer_waffe_ai_Panzerwaffe_africa_ge",'{de_json}');}}catch(e){{}}
-  try{{localStorage.setItem("panzer_waffe_ai_Panzerwaffe_africa_uk",'{uk_json}');}}catch(e){{}}
-}})();
-</script>"""
-            html=re.sub(r'<script id="ai-preload-data">.*?</script>','',html,flags=re.DOTALL)
-            html=html.replace('</head>', inject+'\n</head>', 1)
-            out="index_trained.html"
-            with open(out,'w',encoding='utf-8') as f:
-                f.write(html)
-            print(f"焼き込み完了 → {out}")
+    print(f"\n--- 最終保存 ---")
+    save_all(brain_de, brain_uk, total_games, saved_pmatrix, data_file)
+    print("\n完了！")
 
 if __name__=="__main__":
     main()
