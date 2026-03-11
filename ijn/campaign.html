@@ -395,6 +395,9 @@ function phaseSortie() {
         actualThreat   += (s.type==='BB'||s.type==='OBB') ? 4 : s.type==='CA' ? 2 : 1;
     });
 
+    // 米軍: usedフラグをリセット（沈没艦を除く）
+    usAllShips.forEach(s => { if (s.status !== 'sunk') s.used = false; });
+
     // 米軍編成: 日本軍の視認隻数+1~2隻、余りポイントでクラスアップ
     currentUsFleet = [];
     const jpVisibleCount = currentJpFleet.filter((s,i) => {

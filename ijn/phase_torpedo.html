@@ -253,6 +253,19 @@ function init() {
   if (!raw) { log('hubStateなし'); return; }
   state = JSON.parse(raw);
 
+  // 両軍に雷撃可能な艦がいるか確認
+  const jpCanFire = (state.jpFleet||[]).some(s =>
+    s.status !== 'sunk' && s.col >= 0 && getTorpPower(s) > 0 && !s.sharedHex
+  );
+  const usCanFire = (state.usFleet||[]).some(s =>
+    s.status !== 'sunk' && s.col >= 0 && getTorpPower(s) > 0 && !s.sharedHex
+  );
+  if (!jpCanFire && !usCanFire) {
+    log('雷撃可能な艦なし — 自動スキップ');
+    setTimeout(() => donePhase(), 500);
+    return;
+  }
+
   const ini = state.initiative || 'jp';
   if (ini === 'us') {
     // 米軍先攻 → 自動雷撃
