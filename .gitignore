@@ -1,0 +1,10 @@
+# Training data (too large for GitHub, local only)
+ai_data_africa.json
+ai_data_africa_backup.json
+ai_data_west_recovered.json
+ai_data_west.json
+*.DS_Store
+
+# Backup/recovered HTML files
+panzer_waffe_trained.html
+index_trained.html
