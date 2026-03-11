@@ -192,8 +192,14 @@ function getTorpPower(s) {
   if (!s.torpedo || s.torpedo==='-') return 0;
   if (s.cannotTorpedo) return 0;
   if (s.torpedoFired) return 0;  // 1回限り
+  if (s.firedGun1) return 0;    // 第一砲撃で射撃済み → 雷撃不可
   if (s.torpedo === 'TT3') return 10; // 北上・大井（命中判定3回）
   return s.torpedo.includes('TT') ? 10 : 6;
+}
+
+// 雷撃射程: revealed/onFireは13hex、それ以外はspotRange
+function getTorpMaxRange(target) {
+  return (target.revealed || target.onFire) ? 13 : (state.spotRange || 5);
 }
 function getTorpRolls(s) { return s.torpedo === 'TT3' ? 3 : 1; }
 function getDefense(s) { return Math.round(s.capG * 0.7); }
@@ -298,7 +304,7 @@ function renderCards() {
     if (canTarget && selectedFirer !== null) {
       const f = ff[selectedFirer];
       const d = hexDist(f.col, f.row, s.col, s.row);
-      if (d > 13 || !checkBroadside(f, s)) canTarget = false;
+      if (d > getTorpMaxRange(s) || !checkBroadside(f, s)) canTarget = false;
     }
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
@@ -350,8 +356,9 @@ function updateShootInfo() {
   const target = getTargetFleet()[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
 
-  if (dist > 13) {
-    el.innerHTML = `距離 ${dist}hex — <span style="color:#f66">射程外（13hex超）</span>`;
+  const torpMaxR = getTorpMaxRange(target);
+  if (dist > torpMaxR) {
+    el.innerHTML = `距離 ${dist}hex — <span style="color:#f66">射程外（${torpMaxR}hex超）</span>`;
     btn.disabled = true;
     return;
   }
@@ -426,7 +433,8 @@ function doTorpedo() {
   const firer = getFirerFleet()[selectedFirer];
   const target = getTargetFleet()[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
-  if (dist > 13) { log('射程外（13hex超）'); return; }
+  const torpMaxR2 = getTorpMaxRange(target);
+  if (dist > torpMaxR2) { log(`射程外（${torpMaxR2}hex超）`); return; }
 
   const tp = getTorpPower(firer);
   if (tp === 0) { log('魚雷なし'); return; }
@@ -619,7 +627,7 @@ function autoUSTorpedo() {
     let bestTarget = null, bestDist = 999;
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > 13) continue;
+      if (d > getTorpMaxRange(t)) continue;
       if (!checkBroadside(firer, t)) continue;  // 舷側のみ
       if (d < bestDist) { bestDist = d; bestTarget = t; }
     }
