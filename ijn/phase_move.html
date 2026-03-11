@@ -295,6 +295,8 @@ function withdrawMove(ship) {
     }
     ship.col = next.col;
     ship.row = next.row;
+    var sunkAt = getSunkShip(next.col, next.row, ship);
+    if (sunkAt) collisionCheck(ship, sunkAt);
     remain--;
   }
   if (ship.col < 0) {
@@ -330,6 +332,8 @@ function autoAdvanceIndividual(fleet) {
       }
       ship.col = next.col;
       ship.row = next.row;
+      var sunkAt = getSunkShip(next.col, next.row, ship);
+      if (sunkAt) collisionCheck(ship, sunkAt);
     }
   }
 }
@@ -374,6 +378,8 @@ function autoAdvanceColumn(fleet) {
       lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
       lead.col = next.col;
       lead.row = next.row;
+      var sunkAt = getSunkShip(next.col, next.row, lead);
+      if (sunkAt) collisionCheck(lead, sunkAt);
 
       moveFollowers(lead, fleet);
     }
@@ -578,6 +584,8 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
     lead.col = next.col;
     lead.row = next.row;
+    var sunkAt = getSunkShip(next.col, next.row, lead);
+    if (sunkAt) collisionCheck(lead, sunkAt);
     turned = false;
     remain--;
     moveFollowers(lead, usFleet);
@@ -715,6 +723,8 @@ function allStraight() {
       }
       ship.col = next.col;
       ship.row = next.row;
+      var sunkAt = getSunkShip(next.col, next.row, ship);
+      if (sunkAt) collisionCheck(ship, sunkAt);
     }
     movedShips.add(idx);
     parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
@@ -848,10 +858,16 @@ function occupied(col, row, skipShip) {
   );
 }
 
-// 占有ヘクスにいる艦を返す
+// 占有ヘクスにいる艦を返す（生存艦）
 function getOccupant(col, row, skipShip) {
   return [...(state.jpFleet||[]), ...(state.usFleet||[])].find(s =>
     s !== skipShip && s.col===col && s.row===row && s.status!=='sunk' && s.col >= 0
+  );
+}
+// 沈没船を返す（沈没中の船体との衝突チェック用）
+function getSunkShip(col, row, skipShip) {
+  return [...(state.jpFleet||[]), ...(state.usFleet||[])].find(s =>
+    s !== skipShip && s.col===col && s.row===row && s.status==='sunk' && s.col >= 0
   );
 }
 
@@ -992,9 +1008,10 @@ function canForceEntry(ship) {
 
 // 衝突チェック実行
 function collisionCheck(invader, occupant) {
+  var isSunk = (occupant.status === 'sunk');
   var d1 = roll(), d2 = roll();
   var logLines = [];
-  logLines.push('⚓ 衝突チェック: ' + invader.name + ' → ' + occupant.name + ' [' + d1 + '+' + d2 + '=' + (d1+d2) + ']');
+  logLines.push('⚓ 衝突チェック: ' + invader.name + ' → ' + occupant.name + (isSunk ? '(沈没船)' : '') + ' [' + d1 + '+' + d2 + '=' + (d1+d2) + ']');
 
   if (d1 + d2 !== 7) {
     logLines.push('  → 衝突回避');
@@ -1013,6 +1030,13 @@ function collisionCheck(invader, occupant) {
   logLines.push('  ' + invader.name + '(侵入側 1:2): [' + dInv1 + '+' + dInv2 + '] → ' + invDmgStr);
   if (invResult.critText) logLines.push('    クリティカル! ' + invResult.critText);
   if (invResult.sunk) logLines.push('    → 沈没!');
+
+  // 沈没船との衝突: 被衝突側（沈没船）にはダメージなし
+  if (isSunk) {
+    logLines.push('  ' + occupant.name + '(沈没船): 追加損害なし');
+    setInfo(logLines.join('\n'));
+    return logLines;
+  }
 
   // 被衝突側: レーティング比率
   var invRating = getCollisionRating(invader);
@@ -1150,6 +1174,12 @@ function moveForward() {
   moving.row = next.row;
   turnedThisHex = false;
   remainMove--;
+
+  // 沈没船との衝突チェック（沈没中の船体に接触）
+  var sunkOcc = getSunkShip(next.col, next.row, moving);
+  if (sunkOcc) {
+    collisionCheck(moving, sunkOcc);
+  }
 
   let restriction = moving.cannotTurn ? '\n⚠ 回頭不能 — 直進(5)のみ' : '';
   setInfo(`${moving.name} 前進 → (${next.col},${next.row})${restriction}\n147963=方向転換 5=直進`);
