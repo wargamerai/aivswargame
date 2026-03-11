@@ -395,35 +395,58 @@ function phaseSortie() {
         actualThreat   += (s.type==='BB'||s.type==='OBB') ? 4 : s.type==='CA' ? 2 : 1;
     });
 
-    // 米軍編成（内部処理のみ・表示しない）
+    // 米軍編成: 日本軍の視認隻数+1~2隻、余りポイントでクラスアップ
     currentUsFleet = [];
+    const jpVisibleCount = currentJpFleet.filter((s,i) => {
+        // scoutShipは既に呼ばれているが結果を保持していないので、実隻数を使う
+        return s.status !== 'sunk' && s.col >= 0;
+    }).length;
+    const usTargetCount = jpVisibleCount + 1 + (Math.random() < 0.5 ? 1 : 0); // +1 or +2
+
     let usAvailable = usAllShips.filter(s => !s.used);
     usAvailable.sort(() => Math.random() - 0.5);
-    const usThreshold = 0.8 + Math.random() * 0.8;
-    let currentUsThreat = 0;
-    for (let ship of usAvailable) {
-        if (currentUsFleet.length >= 4 && currentUsThreat >= apparentThreat * usThreshold) break;
-        currentUsFleet.push(ship);
-        currentUsThreat += (ship.type === 'BB' ? 4 : (ship.type === 'CA' ? 2 : 1));
-        ship.used = true;
-    }
 
-    // バランス調整: 主力艦（BB/CA）が0隻なら未使用から1隻追加
-    const hasCapital = currentUsFleet.some(s => s.type === 'BB' || s.type === 'CA');
-    if (!hasCapital) {
-        const capShip = usAllShips.find(s => !s.used && (s.type === 'BB' || s.type === 'CA'));
-        if (capShip) {
-            currentUsFleet.push(capShip);
-            capShip.used = true;
+    // まず目標隻数まで追加（小型艦優先で枠を確保）
+    const smallShips = usAvailable.filter(s => s.type === 'DD' || s.type === 'CL' || s.type === 'CLAA');
+    const bigShips = usAvailable.filter(s => s.type === 'BB' || s.type === 'CA' || s.type === 'OBB');
+    // 大型艦を1~2隻確保、残りを小型艦で埋める
+    const bigCount = Math.min(bigShips.length, 1 + (Math.random() < 0.4 ? 1 : 0));
+    for (let i = 0; i < bigCount && currentUsFleet.length < usTargetCount; i++) {
+        currentUsFleet.push(bigShips[i]);
+        bigShips[i].used = true;
+    }
+    const remainSmall = smallShips.filter(s => !s.used);
+    for (let i = 0; i < remainSmall.length && currentUsFleet.length < usTargetCount; i++) {
+        currentUsFleet.push(remainSmall[i]);
+        remainSmall[i].used = true;
+    }
+    // まだ足りなければ残りの大型艦で埋める
+    for (let i = bigCount; i < bigShips.length && currentUsFleet.length < usTargetCount; i++) {
+        if (!bigShips[i].used) {
+            currentUsFleet.push(bigShips[i]);
+            bigShips[i].used = true;
         }
     }
 
-    // バランス調整: 閾値到達後に50%の確率で1隻追加（上ぶれ抑制のため最大+1）
-    const extraAvailable = usAllShips.filter(s => !s.used);
-    if (extraAvailable.length > 0 && Math.random() < 0.5) {
-        const extra = extraAvailable[Math.floor(Math.random() * extraAvailable.length)];
-        currentUsFleet.push(extra);
-        extra.used = true;
+    // ポイント余りでクラスアップ: 脅威値が低ければDD→CL/CA等に差し替え
+    let currentUsThreat = currentUsFleet.reduce((sum, s) =>
+        sum + (s.type === 'BB' ? 4 : s.type === 'CA' ? 2 : s.type === 'OBB' ? 4 : 1), 0);
+    if (currentUsThreat < apparentThreat) {
+        // 小型艦を大型艦に差し替え（隻数は変えない）
+        const upgradePool = usAllShips.filter(s => !s.used && (s.type === 'BB' || s.type === 'CA'));
+        for (const upgrade of upgradePool) {
+            const weakIdx = currentUsFleet.findIndex(s => s.type === 'DD' || s.type === 'CL');
+            if (weakIdx < 0) break;
+            const weak = currentUsFleet[weakIdx];
+            const oldThreat = weak.type === 'DD' || weak.type === 'CL' ? 1 : 2;
+            const newThreat = upgrade.type === 'BB' ? 4 : 2;
+            if (currentUsThreat - oldThreat + newThreat <= apparentThreat + 2) {
+                weak.used = false;
+                currentUsFleet[weakIdx] = upgrade;
+                upgrade.used = true;
+                currentUsThreat = currentUsThreat - oldThreat + newThreat;
+            }
+        }
     }
     currentUsFleet = sortShips(currentUsFleet, false);
 

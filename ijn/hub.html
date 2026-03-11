@@ -73,26 +73,31 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 #btnDebugToggle:hover { opacity: 1; }
 
 #left {
-  width: 210px; min-width: 210px;
+  width: 240px; min-width: 240px;
   background: #f0f0f5; border-right: 2px solid #bbc;
   display: flex; flex-direction: column; overflow-y: auto;
-  font-size: 0.88em;
+  font-size: 0.82em;
 }
-#left h3 { color: #cc3311; font-size: 1.05em; padding: 5px 8px; margin: 0; border-bottom: 1px solid #ccc; }
+#left h3 { color: #cc3311; font-size: 1.05em; padding: 5px 8px; margin: 0; border-bottom: 1px solid #ccc; cursor:pointer; user-select:none; }
 #left h3.us { color: #2255cc; }
+#left h3:hover { background: #e0e0ee; }
 #fleetList .ship-row {
-  padding: 3px 8px; border-bottom: 1px solid #ddd;
-  display: flex; justify-content: space-between; align-items: center;
+  padding: 2px 6px; border-bottom: 1px solid #ddd;
+  display: flex; justify-content: space-between; align-items: center; gap:4px;
 }
 #fleetList .ship-row.sunk { color: #aaa; text-decoration: line-through; }
-#fleetList .ship-row .name { flex: 1; }
+#fleetList .ship-row .name { flex: 1; white-space: nowrap; }
 #fleetList .ship-row .lead { color: #8a6a00; font-size: 0.95em; }
-#fleetList .dmg { font-size: 0.95em; padding: 2px 5px; border-radius: 2px; }
+#fleetList .dmg { font-size: 0.9em; padding: 1px 3px; border-radius: 2px; font-family:monospace; white-space:nowrap; }
 #fleetList .dmg.ok { color: #2a8a2a; }
-#fleetList .dmg.light { color: #aa8800; }
-#fleetList .dmg.medium { color: #cc6600; }
-#fleetList .dmg.heavy { color: #cc2200; }
+#fleetList .dmg.light { color: #aa8800; background:#fff8e0; }
+#fleetList .dmg.medium { color: #cc6600; background:#ffeedd; }
+#fleetList .dmg.heavy { color: #cc2200; background:#ffdddd; font-weight:bold; }
 #fleetList .dmg.sunk { color: #aaa; }
+#fleetList .crit-line { font-size:0.85em; color:#aa00aa; padding:0 6px 2px 16px; }
+#fleetList .fleet-section { }
+#fleetList .fleet-section.collapsed .ship-row,
+#fleetList .fleet-section.collapsed .crit-line { display:none; }
 
 #phaseFlash {
   position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%);
@@ -565,39 +570,66 @@ function playShootAnimation(from, to) {
   requestAnimationFrame(animate);
 }
 
+var fleetListCollapsed = { jp: false, us: false };
+function toggleFleetSection(side) {
+  fleetListCollapsed[side] = !fleetListCollapsed[side];
+  renderFleetList();
+}
 function renderFleetList() {
   const el = document.getElementById('fleetList');
   if (!el || !state.jpFleet) return;
-  const statusMap = {ok:'無傷', light:'小破', medium:'中破', heavy:'大破', sunk:'沈没'};
-  function critBadges(s) {
-    if (!s.crits || s.crits.length === 0) return '';
-    return '<div style="font-size:0.8em;color:#aa00aa;margin-left:16px;">' + s.crits.join(', ') + '</div>';
+  function dmgLabel(s) {
+    var g = s.dmgG || 0, m = s.dmgM || 0;
+    if (g === 0 && m === 0) return '';
+    return `G${g} M${m}`;
   }
-  let html = '<h3>日本軍</h3>';
+  function critLine(s) {
+    var parts = [];
+    if (s.cannotFire) parts.push('砲×');
+    if (s.cannotTurn) parts.push('舵×');
+    if (s.cannotTorpedo) parts.push('雷×');
+    if (s.speed === 0 && s.status !== 'sunk') parts.push('停止');
+    if (s.onFire) parts.push('火災');
+    if (s.crits && s.crits.length > 0) {
+      s.crits.forEach(function(c) { if (parts.indexOf(c) < 0) parts.push(c); });
+    }
+    if (parts.length === 0) return '';
+    return '<div class="crit-line">⚠ ' + parts.join(' / ') + '</div>';
+  }
   var ad = state.actionDone || [];
+  var jpCol = fleetListCollapsed.jp ? ' collapsed' : '';
+  var html = '<div class="fleet-section' + jpCol + '">';
+  html += '<h3 onclick="toggleFleetSection(\'jp\')">' + (fleetListCollapsed.jp ? '▶' : '▼') + ' 日本軍</h3>';
   for (var si = 0; si < state.jpFleet.length; si++) {
     var s = state.jpFleet[si];
-    const cls = s.status || 'ok';
-    const lead = s.isLead ? '<span class="lead">★</span>' : '';
-    const done = ad.indexOf(si) >= 0 ? '<span style="color:#44ff44;margin-left:4px;">✓</span>' : '';
-    html += `<div class="ship-row ${cls === 'sunk' ? 'sunk' : ''}">
-      <span class="name">${lead}${s.name}${done}</span>
-      <span class="dmg ${cls}">${statusMap[cls]||cls}</span>
-    </div>${critBadges(s)}`;
+    var cls = s.status || 'ok';
+    var lead = s.isLead ? '<span class="lead">★</span>' : '';
+    var done = ad.indexOf(si) >= 0 ? '<span style="color:#44ff44;margin-left:4px;">✓</span>' : '';
+    var dl = dmgLabel(s);
+    html += '<div class="ship-row ' + (cls === 'sunk' ? 'sunk' : '') + '">';
+    html += '<span class="name">' + lead + s.name + done + '</span>';
+    html += '<span class="dmg ' + cls + '">' + (dl || '—') + '</span>';
+    html += '</div>' + critLine(s);
   }
-  html += '<h3 class="us">米軍</h3>';
-  for (const s of state.usFleet) {
-    const cls = s.status || 'ok';
-    const visible = isSpotted(s);
+  html += '</div>';
+  var usCol = fleetListCollapsed.us ? ' collapsed' : '';
+  html += '<div class="fleet-section' + usCol + '">';
+  html += '<h3 class="us" onclick="toggleFleetSection(\'us\')">' + (fleetListCollapsed.us ? '▶' : '▼') + ' 米軍</h3>';
+  for (var ui = 0; ui < state.usFleet.length; ui++) {
+    var s = state.usFleet[ui];
+    var cls = s.status || 'ok';
+    var visible = isSpotted(s);
     if (!visible) {
-      html += `<div class="ship-row"><span class="name" style="color:#999">???</span></div>`;
+      html += '<div class="ship-row"><span class="name" style="color:#999">???</span></div>';
     } else {
-      html += `<div class="ship-row ${cls === 'sunk' ? 'sunk' : ''}">
-        <span class="name">${s.name}</span>
-        <span class="dmg ${cls}">${statusMap[cls]||cls}</span>
-      </div>${critBadges(s)}`;
+      var dl = dmgLabel(s);
+      html += '<div class="ship-row ' + (cls === 'sunk' ? 'sunk' : '') + '">';
+      html += '<span class="name">' + s.name + '</span>';
+      html += '<span class="dmg ' + cls + '">' + (dl || '—') + '</span>';
+      html += '</div>' + critLine(s);
     }
   }
+  html += '</div>';
   el.innerHTML = html;
 }
 
@@ -810,24 +842,26 @@ function drawShip(ship) {
   ctx.restore();
   ctx.globalAlpha = 1.0;
 
-  // クリティカル状態アイコン（艦の左上に小アイコン列）
-  var critIcons = [];
-  if (ship.cannotFire)   critIcons.push({text:'砲', color:'#ff4444'});  // 砲撃不能
-  if (ship.cannotTurn)   critIcons.push({text:'舵', color:'#ffaa00'});  // 回頭不能
-  if (ship.cannotTorpedo) critIcons.push({text:'雷', color:'#ff6688'});  // 雷撃不能
-  if (ship.speed === 0 && ship.status !== 'sunk') critIcons.push({text:'停', color:'#ff0000'}); // 航行不能
-  if (ship.withdrawing)  critIcons.push({text:'退', color:'#8888ff'});  // 離脱中
-  if (ship.sharedHex)    critIcons.push({text:'衝', color:'#ffff00'});  // 同一ヘクス
-  if (critIcons.length > 0) {
-    ctx.font = 'bold 7px sans-serif';
-    ctx.textAlign = 'center';
-    for (var ci = 0; ci < critIcons.length; ci++) {
-      var ix = x - drawSz - 2 + ci * 10;
-      var iy = y - drawSz - 2;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(ix - 5, iy - 6, 10, 8);
-      ctx.fillStyle = critIcons[ci].color;
-      ctx.fillText(critIcons[ci].text, ix, iy);
+  // クリティカル状態ドット（艦の左上に色付き丸を並べる）
+  var critDots = [];
+  if (ship.speed === 0 && ship.status !== 'sunk') critDots.push('#111111'); // 航行不能=黒
+  if (ship.cannotTurn)   critDots.push('#ffcc00');  // 回頭不能=黄
+  if (ship.cannotFire)   critDots.push('#ff4444');  // 砲撃不能=赤
+  if (ship.cannotTorpedo) critDots.push('#ff6688'); // 雷撃不能=ピンク
+  if (ship.withdrawing)  critDots.push('#8888ff');  // 離脱中=青
+  if (ship.sharedHex)    critDots.push('#ffff00');  // 同一ヘクス=明黄
+  if (critDots.length > 0) {
+    var dotR = 3;
+    for (var ci = 0; ci < critDots.length; ci++) {
+      var dx = x - drawSz - 4 + ci * (dotR * 2 + 2);
+      var dy = y - drawSz - 4;
+      ctx.fillStyle = critDots[ci];
+      ctx.beginPath();
+      ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
     }
   }
 
@@ -1031,9 +1065,11 @@ function showDmgSummary(title, lines) {
   const body = document.getElementById('dmgSummaryBody');
   body.innerHTML = lines.map(l => {
     if (l.includes('轟沈') || l.includes('沈没')) return `<div style="color:#cc2200;font-weight:bold">${l}</div>`;
-    if (l.includes('大破')) return `<div style="color:#cc6600;font-weight:bold">${l}</div>`;
-    if (l.includes('クリティカル')) return `<div style="color:#aa00aa;font-weight:bold">${l}</div>`;
+    if (l.includes('⚡')) return `<div style="color:#aa00aa;font-weight:bold">${l}</div>`;
     if (l.includes('旗艦に昇格')) return `<div style="color:#8a6a00;font-weight:bold">${l}</div>`;
+    // M損害が多い艦を色分け
+    var mMatch = l.match(/M(\d+)/);
+    if (mMatch && parseInt(mMatch[1]) > 0) return `<div style="color:#cc6600">${l}</div>`;
     return `<div>${l}</div>`;
   }).join('');
   const ov = document.getElementById('dmgSummaryOverlay');
@@ -1175,10 +1211,11 @@ function onPhaseDone(next) {
   const curIdx = PHASE_SEQ.indexOf(state.phase);
   dbg(`onPhaseDone: current=${state.phase}(idx=${curIdx}), next=${next||'auto'}`);
 
-  // 修理完了 → レポート画面表示
+  // 修理完了 → 次ターンへ自動進行（ダメージは左パネルで確認可能）
   if (next === 'turn_end' || curIdx >= PHASE_SEQ.length - 1) {
-    dbg('→ showTurnEndReport()');
-    showTurnEndReport();
+    dbg('→ nextTurn() (auto)');
+    showPhaseFlash(`第${state.combatTurn}ターン終了`);
+    setTimeout(() => { nextTurn(); draw(); }, 1500);
     return;
   }
 
@@ -1504,8 +1541,8 @@ canvas.addEventListener('click', (e) => {
     if (!state.deployMode) return;
   }
 
-  // 砲撃フェーズ中: マップクリックで射撃艦/目標艦を選択
-  if (state.phase && state.phase.match(/^gun/)) {
+  // 砲撃/雷撃フェーズ中: マップクリックで射撃艦/目標艦を選択
+  if (state.phase && (state.phase.match(/^gun/) || state.phase === 'torpedo')) {
     const hex = pixelToHex(cx, cy);
     if (hex) {
       // JP艦クリック → firer選択

@@ -797,6 +797,25 @@ function log(msg) {
 }
 
 init();
+
+// マップクリックからの艦選択受信
+window.addEventListener('message', function(e) {
+  var msg = e.data;
+  if (!msg || !msg.type) return;
+  if (msg.type === 'MAP_SELECT_FIRER') {
+    var ff = getFirerFleet();
+    var shipName = state.jpFleet[msg.index] && state.jpFleet[msg.index].name;
+    if (!shipName) return;
+    var idx = ff.findIndex(function(s) { return s.name === shipName; });
+    if (idx >= 0) clickFirer(idx);
+  } else if (msg.type === 'MAP_SELECT_TARGET') {
+    var tf = getTargetFleet();
+    var shipName = state.usFleet[msg.index] && state.usFleet[msg.index].name;
+    if (!shipName) return;
+    var idx = tf.findIndex(function(s) { return s.name === shipName; });
+    if (idx >= 0) clickTarget(idx);
+  }
+});
 </script>
 </body>
 </html>
