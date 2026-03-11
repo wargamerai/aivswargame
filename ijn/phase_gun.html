@@ -339,6 +339,11 @@ function isVisibleToUS(jpShip) {
   });
 }
 
+// 射程上限: revealed/onFireは13hex、それ以外はspotRange
+function getMaxRange(target) {
+  return (target.revealed || target.onFire) ? 13 : (state.spotRange || 5);
+}
+
 // ===== 初期化 =====
 function init() {
   const raw = localStorage.getItem('hubState');
@@ -433,7 +438,7 @@ function renderCards() {
     if (selectedFirer !== null) {
       const firer = jpShips[selectedFirer];
       const d = hexDist(firer.col, firer.row, s.col, s.row);
-      if (d > 16) oor = ' disabled';
+      if (d > getMaxRange(s)) oor = ' disabled';
       else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
     }
     return `<div class="card us${sel}${oor}" onclick="selectTarget(${i})">
@@ -533,7 +538,8 @@ function doShoot() {
   const firer = jpShips[selectedFirer];
   const target = usShips[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
-  if (dist > 16) { log('射程外（16hex超）'); return; }
+  const maxR = getMaxRange(target);
+  if (dist > maxR) { log(`射程外（${maxR}hex超）`); return; }
 
   // 射界チェック（利根型の後方射撃不能）
   const arcCheck = getArcInfo(firer, target);
@@ -610,6 +616,11 @@ function doShoot() {
     log('  → 外れ');
   }
 
+  // 第一砲撃で射撃した艦をマーク → 雷撃不可
+  if (subPhase === 'gun1a' || subPhase === 'gun1b') {
+    firer.firedGun1 = true;
+  }
+
   // クリティカル効果をstateに保存（火災・砲撃不能等が次フェーズに引き継がれる）
   localStorage.setItem('hubState', JSON.stringify(state));
 
@@ -680,7 +691,7 @@ function autoUSShoot(title) {
   // 一斉射撃判定: BB/CA全艦が射程内に入るまで待機
   const capitalShips = us.filter(s => ['BB','OBB','CA'].includes(s.type));
   const inRange = capitalShips.filter(firer =>
-    jp.some(t => hexDist(firer.col, firer.row, t.col, t.row) <= 16)
+    jp.some(t => hexDist(firer.col, firer.row, t.col, t.row) <= getMaxRange(t))
   );
   state.usWaitTurns = (state.usWaitTurns || 0);
   if (capitalShips.length > 0 && inRange.length < capitalShips.length * 0.7 && state.usWaitTurns < 3) {
@@ -688,7 +699,7 @@ function autoUSShoot(title) {
     log('米軍、態勢構築中… 射撃待機');
     // DD/CLのみ射撃可能にする
     const lightShips = us.filter(s => !['BB','OBB','CA'].includes(s.type));
-    if (lightShips.length === 0 || !jp.some(t => lightShips.some(f => hexDist(f.col,f.row,t.col,t.row) <= 16))) {
+    if (lightShips.length === 0 || !jp.some(t => lightShips.some(f => hexDist(f.col,f.row,t.col,t.row) <= getMaxRange(t)))) {
       setTimeout(() => doneSubPhase(), 400);
       return;
     }
@@ -709,7 +720,7 @@ function autoUSShoot(title) {
     let bestTarget = null, bestScore = 999;
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > 16) continue;
+      if (d > getMaxRange(t)) continue;
       const score = d + (assignCount[t.name] || 0) * 4;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
@@ -717,6 +728,10 @@ function autoUSShoot(title) {
     assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
 
     firer.revealed = true;
+    // 第一砲撃で射撃した艦をマーク → 雷撃不可
+    if (subPhase === 'gun1a' || subPhase === 'gun1b') {
+      firer.firedGun1 = true;
+    }
     const bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
     // 射界チェック
