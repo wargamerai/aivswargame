@@ -169,6 +169,7 @@ function exportToCampaign() {
     dmgG: s.dmgG||0,
     dmgM: s.dmgM||0,
     status: s.status,
+    speed: s.speed !== undefined && s.speed !== null ? s.speed : -1,
   }));
   localStorage.setItem('battleResult', JSON.stringify(result));
   log('戦闘結果をlocalStorageに保存 (battleResult)');

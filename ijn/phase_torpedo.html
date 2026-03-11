@@ -283,12 +283,20 @@ function renderCards() {
   ff.forEach((s, i) => {
     const tp = getTorpPower(s);
     const canFire = (s.status==='ok'||s.status==='light'||s.status==='medium') &&
-                    tp > 0 && !firedShips.has(s.name) && s.col >= 0;
+                    tp > 0 && !firedShips.has(s.name) && s.col >= 0 && !s.sharedHex;
     const sel = selectedFirer === i ? ' firer-sel' : '';
     const dis = !canFire ? ' disabled' : '';
     const side = ini === 'jp' ? 'jp' : 'us';
+    // 雷撃不可理由の表示
+    let reason = '';
+    if (s.sharedHex) reason = ' [同一ヘクス]';
+    else if (s.firedGun1) reason = ' [砲撃済→雷撃不可]';
+    else if (s.torpedoFired) reason = ' [雷撃済]';
+    else if (s.cannotTorpedo) reason = ' [雷撃不能]';
+    else if (firedShips.has(s.name)) reason = ' [発射済]';
+    else if (!s.torpedo || s.torpedo === '-') reason = ' [魚雷なし]';
     fHtml += `<div class="card ${side}${sel}${dis}" onclick="clickFirer(${i})">
-      <span class="c-name">${s.name}</span>
+      <span class="c-name">${s.name}${reason}</span>
       <span class="c-info">${s.type} 魚雷:${s.torpedo||'-'}</span>
     </div>`;
   });
@@ -325,6 +333,7 @@ function clickFirer(i) {
   const s = ff[i];
   if (!s || firedShips.has(s.name) || getTorpPower(s) === 0) return;
   if (s.status === 'sunk' || s.status === 'heavy') return;
+  if (s.sharedHex) return;  // 同一ヘクス — 雷撃不可
   selectedFirer = (selectedFirer === i) ? null : i;
   renderCards();
   // ハイライト通知
@@ -459,7 +468,7 @@ function doTorpedo() {
     const dt = d1 + d2 + mod;
     if (d1 === d2) isDouble1 = true;
     const row = Math.max(0, Math.min(12, dt));
-    const h = HIT_CHART[row]?.[col] || 0;
+    const h = (HIT_CHART[row] && HIT_CHART[row][col]) || 0;
     totalHits += h;
     hitRolls.push({d1, d2, dt, h});
   }
@@ -493,7 +502,7 @@ function doTorpedo() {
 
     const d3 = roll(), d4 = roll();
     const isDouble2 = (d3 === d4);
-    const dmgStr = DMG_CHART[d3+d4-2]?.[rc] || '-';
+    const dmgStr = (DMG_CHART[d3+d4-2] && DMG_CHART[d3+d4-2][rc]) || '-';
     const dmg = parseDmg(dmgStr);
     dmgG = dmg.g; dmgM = dmg.m; sunk = dmg.sunk;
     dmgText = dmgStr;
@@ -528,6 +537,15 @@ function doTorpedo() {
 
   firedShips.add(firer.name);
   firer.torpedoFired = true;  // 永続フラグ（1戦闘1回限り）
+  // hub側に行動済み通知
+  var firerFleet = firer.side === 'jp' ? (state.jpFleet||[]) : (state.usFleet||[]);
+  var firerIdx = -1;
+  for (var fi = 0; fi < firerFleet.length; fi++) {
+    if (firerFleet[fi].name === firer.name) { firerIdx = fi; break; }
+  }
+  if (firerIdx >= 0 && firer.side === 'jp') {
+    parent.postMessage({type:'ACTION_DONE', shipIndex:firerIdx}, '*');
+  }
 
   // 日本艦が雷撃で被弾 → 接触フラグ設定
   // （魚雷は発砲炎がないので、命中して初めて敵の存在に気づく）
@@ -642,7 +660,7 @@ function autoUSTorpedo() {
 
     const row = Math.max(0, Math.min(12, diceTotal));
     const col = distCol(bestDist);
-    const hits = HIT_CHART[row]?.[col] || 0;
+    const hits = (HIT_CHART[row] && HIT_CHART[row][col]) || 0;
 
     let dmgText = '外れ', dmgG = 0, dmgM = 0, critText = '', sunk = false;
     let ratioLabel = '', dmgDice = '';
@@ -657,7 +675,7 @@ function autoUSTorpedo() {
 
       const d3 = roll(), d4 = roll();
       const isDouble2 = (d3 === d4);
-      const dmgStr = DMG_CHART[d3+d4-2]?.[rc] || '-';
+      const dmgStr = (DMG_CHART[d3+d4-2] && DMG_CHART[d3+d4-2][rc]) || '-';
       const dmg = parseDmg(dmgStr);
       dmgG = dmg.g; dmgM = dmg.m; sunk = dmg.sunk;
       dmgText = dmgStr;

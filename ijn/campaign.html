@@ -407,6 +407,24 @@ function phaseSortie() {
         currentUsThreat += (ship.type === 'BB' ? 4 : (ship.type === 'CA' ? 2 : 1));
         ship.used = true;
     }
+
+    // バランス調整: 主力艦（BB/CA）が0隻なら未使用から1隻追加
+    const hasCapital = currentUsFleet.some(s => s.type === 'BB' || s.type === 'CA');
+    if (!hasCapital) {
+        const capShip = usAllShips.find(s => !s.used && (s.type === 'BB' || s.type === 'CA'));
+        if (capShip) {
+            currentUsFleet.push(capShip);
+            capShip.used = true;
+        }
+    }
+
+    // バランス調整: 閾値到達後に50%の確率で1隻追加（上ぶれ抑制のため最大+1）
+    const extraAvailable = usAllShips.filter(s => !s.used);
+    if (extraAvailable.length > 0 && Math.random() < 0.5) {
+        const extra = extraAvailable[Math.floor(Math.random() * extraAvailable.length)];
+        currentUsFleet.push(extra);
+        extra.used = true;
+    }
     currentUsFleet = sortShips(currentUsFleet, false);
 
     // ハンディキャップ計算
@@ -493,6 +511,17 @@ function applyBattleResultData(importData) {
             let addM = data.dmgM || 0;
             let isUs = currentUsFleet.includes(ship);
             applyDamageToShip(ship, addG, addM, isUs);
+        }
+    });
+
+    // 航行不能の艦 → 自沈扱い（戦闘後に帰還できないため）
+    importData.forEach(data => {
+        if (data.speed !== 0) return;  // speed=0のみ対象
+        let ship = currentJpFleet.find(s => s.name === data.name) || currentUsFleet.find(s => s.name === data.name);
+        if (ship && ship.status !== 'sunk') {
+            let isUs = currentUsFleet.includes(ship);
+            logMsg(`${ship.name} 航行不能 → 自沈処理`);
+            applyDamageToShip(ship, 999, 0, isUs);  // 999 = instant sink
         }
     });
 

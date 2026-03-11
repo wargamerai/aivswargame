@@ -179,7 +179,7 @@ function ratioCol(fp, def) {
 }
 function getDmgResult(dice, rc) {
   const row = Math.max(0, Math.min(11, dice - 2));
-  return DMG_CHART[row]?.[rc] || '-';
+  return (DMG_CHART[row] && DMG_CHART[row][rc]) || '-';
 }
 function toAxial(c,r){return{q:c-(r-(r&1))/2, r:r};}
 function hexDist(c1,r1,c2,r2){
@@ -237,6 +237,7 @@ let usShips = [];  // 射撃可能な米艦
 let selectedFirer = null;
 let selectedTarget = null;
 let targetShotCount = {};  // 同一目標への射撃回数（合同射撃修正用）
+let firedShips = new Set(); // 射撃済み艦のインデックス（同一フェーズ内で再射撃防止）
 
 function getAttack(s) {
   if (s.cannotFire) return 0;           // 電路切断 → 砲撃不能
@@ -412,6 +413,7 @@ function setupJPShoot(title) {
   selectedFirer = null;
   selectedTarget = null;
   targetShotCount = {};
+  firedShips = new Set();
   renderCards();
   updateShootInfo();
   log('射撃艦と目標をクリックして選択してください');
@@ -422,9 +424,12 @@ function renderCards() {
   const fEl = document.getElementById('firerList');
   fEl.innerHTML = jpShips.map((s, i) => {
     const sel = selectedFirer === i ? ' firer-sel' : '';
+    const shared = s.sharedHex ? ' disabled' : '';
+    const fired = firedShips.has(i) ? ' disabled' : '';
     const atk = getAttack(s);
-    return `<div class="card jp${sel}" onclick="selectFirer(${i})">
-      <span class="c-name">${s.name}</span>
+    const label = s.sharedHex ? ' [同一ヘクス]' : (firedShips.has(i) ? ' [射撃済]' : '');
+    return `<div class="card jp${sel}${fired}${shared}" onclick="selectFirer(${i})">
+      <span class="c-name">${s.name}${label}</span>
       <span class="c-info">${s.type} 攻:${atk}</span>
     </div>`;
   }).join('');
@@ -453,6 +458,8 @@ function renderCards() {
 }
 
 function selectFirer(i) {
+  if (firedShips.has(i)) return;  // 射撃済み — 選択不可
+  if (jpShips[i] && jpShips[i].sharedHex) return;  // 同一ヘクス — 射撃不可
   selectedFirer = i;
   renderCards();
   updateShootInfo();
@@ -617,6 +624,10 @@ function doShoot() {
     log('  → 外れ');
   }
 
+  // 射撃済みマーク（同一フェーズ内で再射撃防止）
+  firedShips.add(selectedFirer);
+  parent.postMessage({type:'ACTION_DONE', shipIndex:selectedFirer}, '*');
+
   // 第一砲撃で射撃した艦をマーク → 雷撃不可
   if (subPhase === 'gun1a' || subPhase === 'gun1b') {
     firer.firedGun1 = true;
@@ -679,7 +690,7 @@ function autoUSShoot(title) {
   document.getElementById('shootUI').style.display = 'none';
   log(`=== ${title} ===`);
 
-  const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0);
+  const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
   // 米軍から見える日本艦のみ目標にできる
   const jp = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToUS(s));
 
@@ -874,51 +885,67 @@ function resolveDamage(title) {
     log('蓄積損害なし');
     summaryLines.push('蓄積損害なし');
   } else {
+    // 同一艦への複数ヒットを集約（最終ステータスのみサマリーに表示）
+    var shipSummary = {}; // name → {totalG, totalM, finalStatus, crits[], sunk}
+
     for (const d of pending) {
       const arr = d.side==='us' ? state.usFleet : state.jpFleet;
-      const ship = arr?.find(s => s.name === d.name);
+      const ship = arr && arr.find(s => s.name === d.name);
       if (!ship) continue;
 
-      // 日本艦が被弾 → 接触フラグ設定用
       if (d.side === 'jp' && (d.g > 0 || d.m > 0 || d.critSunk)) jpWasHit = true;
 
-      // 既に沈没済み（前の射撃で轟沈等）→ スキップ
       if (ship.status === 'sunk') {
         log(`${ship.name}: 既に沈没`);
         continue;
       }
 
-      // クリティカル轟沈
+      // ダメージ適用
       if (d.critSunk) {
         ship.status = 'sunk';
         ship.dmgG = (ship.dmgG||0) + d.g;
         ship.dmgM = (ship.dmgM||0) + d.m;
         log(`<span class="dmg">${ship.name} 轟沈！</span>`);
-        summaryLines.push(`${ship.name} 轟沈！`);
-        if (d.critText) {
-          log(`  <span class="crit">⚡ ${d.critText}</span>`);
-          summaryLines.push(`  ${d.critText}`);
-        }
-        continue;
+        if (d.critText) log(`  <span class="crit">⚡ ${d.critText}</span>`);
+      } else {
+        ship.dmgG = (ship.dmgG||0) + d.g;
+        ship.dmgM = (ship.dmgM||0) + d.m;
+        if (ship.dmgG > ship.capG) { ship.dmgM += ship.dmgG-ship.capG; ship.dmgG=ship.capG; }
+        const total = ship.dmgG + ship.dmgM;
+        const cap = ship.capG + ship.capM;
+        if (ship.dmgM >= ship.capM) {
+          ship.status = 'sunk';
+          log(`<span class="dmg">${ship.name} 沈没！(G${d.g} M${d.m})</span>`);
+        } else if (total >= cap*0.5) { ship.status = 'heavy'; log(`${ship.name}: G${d.g} M${d.m} → 大破`); }
+        else if (total >= cap*0.25) { ship.status = 'medium'; log(`${ship.name}: G${d.g} M${d.m} → 中破`); }
+        else { ship.status = total > 0 ? 'light' : 'ok'; log(`${ship.name}: G${d.g} M${d.m} → ${total > 0 ? '小破' : '無傷'}`); }
+        if (d.critText) log(`  <span class="crit">⚡ クリティカル: ${d.critText}</span>`);
       }
 
-      ship.dmgG = (ship.dmgG||0) + d.g;
-      ship.dmgM = (ship.dmgM||0) + d.m;
-      if (ship.dmgG > ship.capG) { ship.dmgM += ship.dmgG-ship.capG; ship.dmgG=ship.capG; }
-      const total = ship.dmgG + ship.dmgM;
-      const cap = ship.capG + ship.capM;
-      let statusText = '';
-      if (ship.dmgM >= ship.capM) {
-        ship.status = 'sunk';
-        statusText = '沈没';
-        log(`<span class="dmg">${ship.name} 沈没！(G${d.g} M${d.m})</span>`);
-      } else if (total >= cap*0.5) { ship.status = 'heavy'; statusText = '大破'; log(`${ship.name}: G${d.g} M${d.m} → 大破`); }
-      else if (total >= cap*0.25) { ship.status = 'medium'; statusText = '中破'; log(`${ship.name}: G${d.g} M${d.m} → 中破`); }
-      else { ship.status = total > 0 ? 'light' : 'ok'; statusText = total > 0 ? '小破' : '無傷'; log(`${ship.name}: G${d.g} M${d.m} → ${statusText}`); }
-      summaryLines.push(`${ship.name}: G${d.g} M${d.m} → ${statusText}`);
-      if (d.critText) {
-        log(`  <span class="crit">⚡ クリティカル: ${d.critText}</span>`);
-        summaryLines.push(`  クリティカル: ${d.critText}`);
+      // サマリー集約
+      if (!shipSummary[ship.name]) {
+        shipSummary[ship.name] = {totalG:0, totalM:0, crits:[], ship:ship};
+      }
+      shipSummary[ship.name].totalG += d.g;
+      shipSummary[ship.name].totalM += d.m;
+      if (d.critText) shipSummary[ship.name].crits.push(d.critText);
+      if (d.critSunk) shipSummary[ship.name].critSunk = true;
+    }
+
+    // サマリー出力（艦ごとに1行 = 最終ステータス）
+    var statusLabels = {sunk:'沈没', heavy:'大破', medium:'中破', light:'小破', ok:'無傷'};
+    for (var name in shipSummary) {
+      var ss = shipSummary[name];
+      var ship = ss.ship;
+      if (ss.critSunk) {
+        summaryLines.push(`${name} 轟沈！`);
+      } else if (ship.status === 'sunk') {
+        summaryLines.push(`${name}: G${ss.totalG} M${ss.totalM} → 沈没`);
+      } else {
+        summaryLines.push(`${name}: G${ss.totalG} M${ss.totalM} → ${statusLabels[ship.status]||ship.status}`);
+      }
+      for (var ci = 0; ci < ss.crits.length; ci++) {
+        summaryLines.push(`  クリティカル: ${ss.crits[ci]}`);
       }
     }
   }
@@ -996,6 +1023,24 @@ function log(msg) {
 }
 
 init();
+
+// hub.htmlからのマップクリック選択を受信
+window.addEventListener('message', function(e) {
+  var msg = e.data;
+  if (!msg || !msg.type) return;
+  if (msg.type === 'MAP_SELECT_FIRER' && jpShips) {
+    // hubのjpFleetインデックス → jpShips内の名前で検索
+    var shipName = state.jpFleet[msg.index] && state.jpFleet[msg.index].name;
+    if (!shipName) return;
+    var idx = jpShips.findIndex(function(s) { return s.name === shipName; });
+    if (idx >= 0) selectFirer(idx);
+  } else if (msg.type === 'MAP_SELECT_TARGET' && usShips) {
+    var shipName = state.usFleet[msg.index] && state.usFleet[msg.index].name;
+    if (!shipName) return;
+    var idx = usShips.findIndex(function(s) { return s.name === shipName; });
+    if (idx >= 0) selectTarget(idx);
+  }
+});
 </script>
 </body>
 </html>
