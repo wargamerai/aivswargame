@@ -232,7 +232,7 @@ function withdrawMove(ship) {
   let remain = spd;
 
   while (remain > 0) {
-    if (ship.dir !== target) {
+    if (ship.dir !== target && !ship.cannotTurn) {
       ship.dir = turnStep(ship.dir, target);
       remain--;
       if (remain <= 0) break;
@@ -793,7 +793,7 @@ function moveFollowers(lead, fleet) {
     chain[i].path.push({col: chain[i].col, row: chain[i].row, dir: chain[i].dir});
     chain[i].col = target.col;
     chain[i].row = target.row;
-    chain[i].dir = target.dir;
+    if (!chain[i].cannotTurn) chain[i].dir = target.dir;  // 回頭不能なら方向維持
     ahead.path.shift();
   }
   if (chain.length > 1) {
