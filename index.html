@@ -219,6 +219,12 @@
         .deck-tab:hover {
             background: var(--btn-hover);
         }
+        .deck-tabs-hint {
+            color: #7b8084;
+            font-size: 0.9em;
+            margin-left: 8px;
+            align-self: center;
+        }
         .deck-list {
             display: flex;
             flex-direction: column;
@@ -353,6 +359,7 @@
                     <div class="deck-tabs">
                         <button class="deck-tab active" onclick="switchFaction(this,'west','ドイツ軍')">ドイツ軍</button>
                         <button class="deck-tab" onclick="switchFaction(this,'west','連合軍')">連合軍</button>
+                        <span class="deck-tabs-hint">※ AI対戦のメニュー「2」からデッキを作成・登録できます</span>
                     </div>
                     <div class="deck-list" id="deck-list-west"><div class="no-decks">読み込み中...</div></div>
                     <div class="pager" id="pager-west" style="display:none;">
@@ -379,6 +386,7 @@
                     <div class="deck-tabs">
                         <button class="deck-tab active" onclick="switchFaction(this,'africa','ドイツ軍')">ドイツ軍</button>
                         <button class="deck-tab" onclick="switchFaction(this,'africa','連合軍')">連合軍</button>
+                        <span class="deck-tabs-hint">※ AI対戦のメニュー「2」からデッキを作成・登録できます</span>
                     </div>
                     <div class="deck-list" id="deck-list-africa"><div class="no-decks">読み込み中...</div></div>
                     <div class="pager" id="pager-africa" style="display:none;">
@@ -504,7 +512,7 @@
                 <div class="deck-row">
                     <div class="deck-rank">${rank}</div>
                     <div class="deck-name">${escapeHtml(d.deck_name)}</div>
-                    <div class="deck-stats">${d.win_rate.toFixed(1)}%</div>
+                    <div class="deck-stats">AI勝率 ${d.win_rate.toFixed(1)}%</div>
                     <div class="deck-human-stats">${humanText}</div>
                     <div class="deck-meta">by ${escapeHtml(d.player_name)}</div>
                     <a href="${gamePath}?challenge=${d.id}" class="challenge-btn">挑戦する</a>
