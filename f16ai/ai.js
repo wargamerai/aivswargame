@@ -146,11 +146,13 @@ const AI = {
             prevAspect === '後方');
 
         // ── スコアリング定数（ここを変えるとAIの傾向が変わる） ──
+        // 固定マップ（朝鮮シナリオ等）ではターン数が短いので攻撃的に
+        let isSmallMap = (window.AI && window.AI.mapMaxC !== undefined && window.AI.mapMaxC <= 30);
         const PT = {
-            REAR:          200,   // 後方射界に入る（後攻取得、最重要）
-            REAR_SIDE:      70,   // 後方側面に入る
-            FRONT_ARC:      30,   // 前方射界（まず向く）
-            DIST_CLOSE:     20,   // 1ヘクス接近ごと
+            REAR:          isSmallMap ? 400 : 200,   // 後方射界に入る（後攻取得、最重要）
+            REAR_SIDE:     isSmallMap ? 150 :  70,   // 後方側面に入る
+            FRONT_ARC:     isSmallMap ?  80 :  30,   // 前方射界（まず向く）
+            DIST_CLOSE:    isSmallMap ?  60 :  20,   // 1ヘクス接近ごと
             ALT_PENALTY:     8,   // 高度差1につきマイナス
             ALT_CEILING:    25,   // 高度35以上ペナルティ係数
             ROLE_SPREAD:    50,   // 役割に沿った位置取り
