@@ -220,46 +220,53 @@
             background: var(--btn-hover);
         }
         .deck-list {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            flex-direction: column;
             gap: 6px;
-            max-height: 350px;
+            max-height: 400px;
             overflow-y: auto;
         }
         .deck-row {
             background: #222426;
             border: 1px solid var(--border-color);
-            padding: 6px 10px;
+            padding: 8px 14px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            gap: 16px;
             border-radius: 2px;
         }
-        .deck-info { flex: 1; min-width: 0; }
+        .deck-rank {
+            color: var(--text-accent);
+            font-weight: bold;
+            font-size: 1.2em;
+            min-width: 30px;
+            text-align: right;
+        }
         .deck-name {
             color: var(--text-accent);
             font-weight: bold;
-            font-size: 1.3em;
+            font-size: 1.2em;
+            min-width: 100px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .deck-meta {
-            color: #7b8084;
-            font-size: 1.1em;
-            margin-top: 1px;
-        }
         .deck-stats {
             color: #00ff00;
             font-family: monospace;
-            font-size: 1.2em;
-            margin-top: 1px;
+            font-size: 1.1em;
+            white-space: nowrap;
         }
         .deck-human-stats {
             color: #ffcc00;
             font-family: monospace;
-            font-size: 1.1em;
-            margin-top: 1px;
+            font-size: 1em;
+            white-space: nowrap;
+        }
+        .deck-meta {
+            color: #7b8084;
+            font-size: 1em;
+            white-space: nowrap;
         }
         .challenge-btn {
             background: var(--accent-red);
@@ -495,12 +502,11 @@
 
             html += `
                 <div class="deck-row">
-                    <div class="deck-info">
-                        <div class="deck-name">${rank}. ${escapeHtml(d.deck_name)}</div>
-                        <div class="deck-stats">AI勝率: ${d.win_rate.toFixed(1)}% (${d.games_played}戦)</div>
-                        <div class="deck-human-stats">${humanText}</div>
-                        <div class="deck-meta">by ${escapeHtml(d.player_name)}</div>
-                    </div>
+                    <div class="deck-rank">${rank}</div>
+                    <div class="deck-name">${escapeHtml(d.deck_name)}</div>
+                    <div class="deck-stats">${d.win_rate.toFixed(1)}%</div>
+                    <div class="deck-human-stats">${humanText}</div>
+                    <div class="deck-meta">by ${escapeHtml(d.player_name)}</div>
                     <a href="${gamePath}?challenge=${d.id}" class="challenge-btn">挑戦する</a>
                 </div>
             `;
