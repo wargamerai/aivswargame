@@ -127,23 +127,64 @@ def get_hex_distance(x1, y1, x2, y2):
 # アーク・アスペクト判定
 # =====================================================
 def get_arc_aspect(ax, ay, a_dir, tx, ty, t_dir):
-    dx, dy = tx - ax, ty - ay
-    if dx == 0 and dy == 0:
-        return '前方', '後方'
+    """ゲーム本体 index.html の getArcToPoint / getTargetAspect と完全同一のロジック"""
+    # ヘックス座標→ピクセル座標（ゲーム本体と同じ: hStep=37.5, vStep=43.301）
+    H_STEP = 37.5
+    V_STEP = 43.301
+    pax = ax * H_STEP
+    pay = ay * V_STEP + (ax % 2) * (V_STEP / 2)
+    ptx = tx * H_STEP
+    pty = ty * V_STEP + (tx % 2) * (V_STEP / 2)
 
-    ang = math.degrees(math.atan2(dy, dx))
+    if abs(ptx - pax) < 1 and abs(pty - pay) < 1:
+        # 同一ヘックス: ゲーム本体と同じ処理
+        a_ang = DIR_ANGLES.get(a_dir, 0)
+        t_ang = DIR_ANGLES.get(t_dir, 0)
+        diff = abs((a_ang - t_ang + 360) % 360)
+        if diff > 180:
+            diff = 360 - diff
+        r_diff = round(diff)
+        if r_diff == 120:
+            arc = '範囲外'
+        else:
+            arc = '前方'
+        if r_diff == 0:
+            aspect = '後方'
+        elif r_diff == 60:
+            aspect = '後方側面'
+        elif r_diff == 180:
+            aspect = '前方'
+        else:
+            aspect = '側面'
+        return arc, aspect
 
+    # arc判定: ゲーム本体 getArcToPoint と同一（±30°が前方）
+    angle_to_target = math.degrees(math.atan2(pty - pay, ptx - pax))
     a_ang = DIR_ANGLES.get(a_dir, 0)
-    rel = (ang - a_ang + 360) % 360
-    if rel > 180: rel -= 360
-    arc = '前方' if abs(rel) <= 60 else '後方'
+    rel = (angle_to_target - a_ang + 360) % 360
+    if rel >= 330 or rel <= 30:
+        arc = '前方'
+    elif rel >= 150 and rel <= 210:
+        arc = '後方'
+    elif rel > 30 and rel < 150:
+        arc = '後方側面' if rel >= 90 else '前方側面'
+    elif rel > 210 and rel < 330:
+        arc = '後方側面' if rel <= 270 else '前方側面'
+    else:
+        arc = '範囲外'
 
+    # aspect判定: ゲーム本体 getTargetAspect と同一
+    angle_to_attacker = math.degrees(math.atan2(pay - pty, pax - ptx))
     t_ang = DIR_ANGLES.get(t_dir, 0)
-    t_to_a = (math.degrees(math.atan2(ay - ty, ax - tx)) - t_ang + 360) % 360
-    if t_to_a > 180: t_to_a -= 360
-    if abs(t_to_a) <= 60: aspect = '後方'
-    elif abs(t_to_a) <= 120: aspect = '後方側面'
-    else: aspect = '前方'
+    diff_aspect = abs((angle_to_attacker - t_ang + 540) % 360 - 180)
+    if diff_aspect < 30:
+        aspect = '前方'
+    elif diff_aspect > 150:
+        aspect = '後方'
+    elif diff_aspect >= 90:
+        aspect = '後方側面'
+    else:
+        aspect = '側面'
 
     return arc, aspect
 
