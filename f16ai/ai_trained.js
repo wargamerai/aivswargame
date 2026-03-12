@@ -255,6 +255,23 @@ const AI = {
                     // ── ヒューリスティックスコア ──
                     let hScore = 0;
 
+                    // ★★ 射撃可能判定: この位置から実際に撃てるなら最大ボーナス ★★
+                    if (arc === '前方') {
+                        // GUN: dist≤2, altDiff≤1, aspect=後方/後方側面/前方
+                        if (unit.gun > 0 && newDist <= 2 && altDiff <= 1 &&
+                            (aspect === '後方' || aspect === '後方側面' || aspect === '前方')) {
+                            hScore += 2000;
+                        }
+                        // HS: aspect=後方, altDiff≤2
+                        if (unit.missiles && unit.missiles.hs > 0 && aspect === '後方' && altDiff <= 2 && newDist >= 1) {
+                            hScore += 1500;
+                        }
+                        // RH: dist≥4, altDiff≤3 (非ソ連のみ)
+                        if (unit.team !== 'Red' && unit.missiles && unit.missiles.rh > 0 && newDist >= 4 && altDiff <= 3) {
+                            hScore += 1200;
+                        }
+                    }
+
                     // 後攻取得が最重要評価軸（射界はルール通り±30°で判定済み）
                     if      (arc === '前方' && aspect === '後方')      hScore += PT.REAR;
                     else if (arc === '前方' && aspect === '後方側面')  hScore += PT.REAR_SIDE;
@@ -288,29 +305,47 @@ const AI = {
                     // 高度差ペナルティ
                     hScore -= altDiff * PT.ALT_PENALTY;
 
-                    // 挟撃役割別ボーナス（Python PINCER戦術と同一）
+                    // ── 挟撃役割別スコアリング ──
                     if (role === 'pincer_front') {
-                        // 正面担当: 敵に向かって距離を詰める → 敵を旋回させる
-                        hScore += (curDist - newDist) * 40;
-                        if (arc === '前方') hScore += 40;
+                        // 正面担当: まっすぐ敵に突っ込んで旋回を強制する
+                        hScore += (curDist - newDist) * 80;  // 距離詰めを強化
+                        if (arc === '前方') hScore += 100;
+                        // 高度は敵と同じか少し下（正面から圧力をかける）
+                        if (altDiff <= 2) hScore += 50;
                     } else if (role === 'pincer_rear') {
-                        // 後方担当: 敵の後ろに回り込む → 尻を取る
-                        // 正面担当との角度差が大きいほどボーナス（時間差攻撃）
-                        if (arc === '前方' && aspect === '後方') hScore += 120;
-                        else if (arc === '前方' && aspect === '後方側面') hScore += 80;
-                        // 正面担当と敵を挟む角度を計算
+                        // 後方担当: frontとは違う方向から回り込んで尻を取る
+                        // ★距離ペナルティを打ち消す（迂回を許容）
+                        if (newDist > curDist) {
+                            hScore += (newDist - curDist) * PT.DIST_CLOSE; // 距離増ペナルティ相殺
+                        }
+                        // ★高度優位: 敵より高い位置を取る（急降下攻撃の準備）
+                        let altAdv = sim.altitude - target.altitude;
+                        if (altAdv >= 3 && altAdv <= 8) hScore += 300;  // 高度優位
+                        else if (altAdv >= 1) hScore += 150;
+                        // ★射撃位置に入れたら最大ボーナス
+                        if (arc === '前方' && aspect === '後方') hScore += 800;
+                        else if (arc === '前方' && aspect === '後方側面') hScore += 500;
+                        else if (arc === '前方') hScore += 200;
+                        // ★frontとの角度差（挟撃の核心）
                         let frontUnit = myUnits.find(u => u.id !== unit.id &&
                             this.getSovietRole(u, myUnits) === 'pincer_front');
                         if (frontUnit) {
-                            let myAng = Math.atan2(sim.y - target.y, sim.x - target.x);
-                            let hisAng = Math.atan2(frontUnit.y - target.y, frontUnit.x - target.x);
-                            let angleDiff = Math.abs(myAng - hisAng) * 180 / Math.PI % 360;
+                            let sx = sim.x * 37.5, sy = sim.y * 43.301 + (sim.x % 2) * 21.650;
+                            let fx = frontUnit.x * 37.5, fy = frontUnit.y * 43.301 + (frontUnit.x % 2) * 21.650;
+                            let etx = target.x * 37.5, ety = target.y * 43.301 + (target.x % 2) * 21.650;
+                            let myAng = Math.atan2(sy - ety, sx - etx) * 180 / Math.PI;
+                            let hisAng = Math.atan2(fy - ety, fx - etx) * 180 / Math.PI;
+                            let angleDiff = Math.abs(myAng - hisAng);
                             if (angleDiff > 180) angleDiff = 360 - angleDiff;
-                            if (angleDiff >= 120) hScore += 60;  // 120°以上離れて挟めている
-                            else if (angleDiff >= 60) hScore += 30;
+                            // 90°以上離れていれば挟めている
+                            if (angleDiff >= 120) hScore += 400;
+                            else if (angleDiff >= 90) hScore += 250;
+                            else if (angleDiff >= 60) hScore += 100;
+                            // frontと同じ方向にいるなら罰則（同じ方向に突っ込むな）
+                            if (angleDiff < 30) hScore -= 300;
                         }
                     } else {
-                        // solo: 通常の距離詰め
+                        // solo: 高度差も考慮
                         hScore -= altDiff * 3;
                     }
 
@@ -368,7 +403,7 @@ const AI = {
 
         // デバッグ: 移動決定の詳細ログ
         let { arc: dbgArc } = this.getArcAndAspect(unit.x, unit.y, unit.direction, target.x, target.y, target.direction, curDist);
-        console.log(`[AI_MOVE] ${unit.id} pos:(${unit.x},${unit.y}) dir:${unit.direction} → target:(${target.x},${target.y}) dist:${curDist} arc:${dbgArc} forceEdgeTurn:${forceEdgeTurn} best:r${best.r}c${best.c} score:${best.finalScore.toFixed(0)} candidates:${candidates.length} top3:[${candidates.slice(0,3).map(c=>`r${c.r}c${c.c}=${c.finalScore.toFixed(0)}`).join(', ')}]`);
+        console.log(`[AI_MOVE] ${unit.id} pos:(${unit.x},${unit.y}) dir:${unit.direction} alt:${unit.altitude} role:${role} → target:(${target.x},${target.y}) dist:${curDist} arc:${dbgArc} forceEdgeTurn:${forceEdgeTurn} best:r${best.r}c${best.c} score:${best.finalScore.toFixed(0)} candidates:${candidates.length} top3:[${candidates.slice(0,3).map(c=>`r${c.r}c${c.c}=${c.finalScore.toFixed(0)}`).join(', ')}]`);
 
         // 次ターンの報酬計算用に記録
         AirCombatRL.recordStep(unit.id, state, best.actionKey, curDist);
