@@ -451,11 +451,11 @@ function applyCritical(target, cd) {
   switch(cd) {
     case 2: result.sunk = true; target.crits.push('轟沈(弾薬庫)'); break;
     case 3:
-      if (tp==='BB') { result.extraG=3; result.extraM=3; target.crits.push('大損害(3G3M)'); }
+      if (tp==='BB'||tp==='OBB') { result.extraG=3; result.extraM=3; target.crits.push('大損害(3G3M)'); }
       else { result.sunk = true; target.crits.push('轟沈'); }
       break;
     case 4:
-      if (tp==='BB'||tp==='CA') { result.extraG=3; result.extraM=3; target.crits.push('大損害(3G3M)'); }
+      if (tp==='BB'||tp==='OBB'||tp==='CA') { result.extraG=3; result.extraM=3; target.crits.push('大損害(3G3M)'); }
       else { result.sunk = true; target.crits.push('轟沈'); }
       break;
     case 5: // 隔壁破壊(M損害+D1)
@@ -476,7 +476,7 @@ function applyCritical(target, cd) {
     case 10: target.cannotFire = true; target.crits.push('砲撃不能'); break;
     case 11: target.cannotTurn = true; target.crits.push('回頭不能'); break;
     case 12:
-      if (tp==='BB') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
+      if (tp==='BB'||tp==='OBB') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
       else { target.speed = 0; target.crits.push('航行不能'); }
       break;
   }

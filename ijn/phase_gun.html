@@ -261,12 +261,12 @@ function applyCritical(target, cd) {
       result.sunk = true;
       target.crits.push('轟沈(弾薬庫)');
       break;
-    case 3: // BB:3G3M / 他:轟沈
-      if (tp === 'BB') { result.extraG = 3; result.extraM = 3; target.crits.push('大損害(3G3M)'); }
+    case 3: // BB/OBB:3G3M / 他:轟沈
+      if (tp === 'BB' || tp === 'OBB') { result.extraG = 3; result.extraM = 3; target.crits.push('大損害(3G3M)'); }
       else { result.sunk = true; target.crits.push('轟沈'); }
       break;
-    case 4: // BB+CA:3G3M / 他:轟沈
-      if (tp === 'BB' || tp === 'CA') { result.extraG = 3; result.extraM = 3; target.crits.push('大損害(3G3M)'); }
+    case 4: // BB/OBB+CA:3G3M / 他:轟沈
+      if (tp === 'BB' || tp === 'OBB' || tp === 'CA') { result.extraG = 3; result.extraM = 3; target.crits.push('大損害(3G3M)'); }
       else { result.sunk = true; target.crits.push('轟沈'); }
       break;
     case 5: // 射撃指揮所被弾（命中修正+D1）
@@ -290,12 +290,12 @@ function applyCritical(target, cd) {
       target.cannotFire = true;
       target.crits.push('砲撃不能');
       break;
-    case 10: // 機関室被弾 BB+CA:速力半減 / 他:航行不能
-      if (tp === 'BB' || tp === 'CA') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
+    case 10: // 機関室被弾 BB/OBB+CA:速力半減 / 他:航行不能
+      if (tp === 'BB' || tp === 'OBB' || tp === 'CA') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
       else { target.speed = 0; target.crits.push('航行不能'); }
       break;
-    case 11: // 機関室被弾 BB:速力半減 / 他:航行不能
-      if (tp === 'BB') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
+    case 11: // 機関室被弾 BB/OBB:速力半減 / 他:航行不能
+      if (tp === 'BB' || tp === 'OBB') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
       else { target.speed = 0; target.crits.push('航行不能'); }
       break;
     case 12: // 機関室被弾 全艦航行不能
