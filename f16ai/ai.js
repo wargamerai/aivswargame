@@ -241,15 +241,15 @@ const AI = {
                     // 高度上限ペナルティ
                     if (sim.altitude > 35) hScore -= (sim.altitude - 35) * PT.ALT_CEILING;
 
-                    // マップ端ペナルティ（端8ヘクス以内で極端な減点）
+                    // マップ端ペナルティ（端5ヘクス以内で極端な減点）
                     let edgeMaxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
                     let edgeMaxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
                     let edgeDist = Math.min(sim.x, sim.y, edgeMaxC - sim.x, edgeMaxR - sim.y);
                     if (edgeDist <= 0) hScore -= 9999;
-                    else if (edgeDist <= 2) hScore -= 2000;
-                    else if (edgeDist <= 4) hScore -= 500;
-                    else if (edgeDist <= 6) hScore -= 200;
-                    else if (edgeDist <= 8) hScore -= 80;
+                    else if (edgeDist <= 1) hScore -= 2000;
+                    else if (edgeDist <= 2) hScore -= 1000;
+                    else if (edgeDist <= 3) hScore -= 500;
+                    else if (edgeDist <= 5) hScore -= 200;
 
                     // ε-greedy: 15%でランダム探索
                     let finalScore = qVal * 2 + hScore + (Math.random() < 0.15 ? Math.random() * 40 : 0);
