@@ -78,14 +78,22 @@ const AirCombatRL = {
         const act  = this._lastAction[unitId];
         const oldD = this._lastDist[unitId];
         if (!prev || !act) return;
+        // Python train_air.py の reward_step() と同一の報酬構造
         let r = 0;
-        if (gotRear)         r += 8;   // 後方ポジション取得（最重要）
-        if (newDist < oldD)  r += 1;   // 接近（補助）
-        else if (newDist > oldD) r -= 1;
-        if (newDist <= 4)    r += 2;   // 射程内
-        if (fired)           r += 5;   // 攻撃できた
-        if (hit)             r += 15;  // 命中
-        this.update(prev, act, r, 0);
+        if (newDist < oldD)  r += 3;   // 接近
+        else if (newDist > oldD) r -= 2; // 離脱ペナルティ
+        if (newDist <= 1)    r += 8;   // 超近距離
+        else if (newDist <= 4) r += 4; // 射程内
+        else if (newDist <= 10) r += 1; // 中距離
+        if (fired)           r += 6;   // 攻撃実行
+        if (hit)             r += 18;  // 命中
+        // nextMaxQ を正しく計算（Python版と同じ）
+        let nextMax = 0;
+        const table = this.getTable();
+        const actions = table[prev] || {};
+        const vals = Object.values(actions);
+        if (vals.length > 0) nextMax = Math.max(...vals);
+        this.update(prev, act, r, nextMax);
     }
 };
 
@@ -97,17 +105,32 @@ const AI = {
     // 状態を文字列に変換（Q学習用）
     // ==========================================
     getState: function(unit, enemy) {
+        // Python train_air.py の get_state() と完全同一のキー生成
         const dist = Math.min(20, Math.round(this.getHexDistance(unit.x, unit.y, enemy.x, enemy.y)));
-        const altDiff = Math.max(-5, Math.min(5, Math.round((unit.altitude - enemy.altitude) / 2)));
+        const distBand = dist <= 1 ? 'C' : dist <= 4 ? 'N' : dist <= 10 ? 'M' : 'F';
+        const altRaw = unit.altitude - enemy.altitude;
+        const altC = altRaw >= 3 ? 'U' : altRaw <= -3 ? 'D' : 'E';
+        const myAlt = unit.altitude >= 25 ? 'H' : unit.altitude >= 12 ? 'M' : 'L';
         const { arc, aspect } = this.getArcAndAspect(
             unit.x, unit.y, unit.direction,
             enemy.x, enemy.y, enemy.direction, dist
         );
-        const arcCode = arc === '前方' ? 'F' : 'O';
-        const aspCode = aspect === '後方' ? 'R' : aspect === '後方側面' ? 'S' : 'X';
-        const hasHS = (unit.missiles && unit.missiles.hs > 0) ? 'H' : 'N';
-        const hasRH = (unit.missiles && unit.missiles.rh > 0) ? 'R' : 'N';
-        return `d${dist}_a${altDiff}_${arcCode}${aspCode}_${hasHS}${hasRH}`;
+        const arcC = arc === '前方' ? 'F' : 'O';
+        const aspC = aspect === '後方' ? 'R' : aspect === '後方側面' ? 'S' : 'X';
+        const hs = unit.missiles ? unit.missiles.hs : 0;
+        const rh = unit.missiles ? unit.missiles.rh : 0;
+        const hsC = hs >= 2 ? 'H' : hs === 1 ? 'h' : 'N';
+        const rhC = rh >= 2 ? 'R' : rh === 1 ? 'r' : 'N';
+        const dmgC = (enemy.damage === '損害あり') ? 'D' : 'O';
+        let numC = 'E';
+        if (typeof units !== 'undefined') {
+            const myAlive = units.filter(u => u.team === unit.team && u.status !== 'destroyed').length;
+            const enAlive = units.filter(u => u.team !== unit.team && u.status !== 'destroyed').length;
+            numC = myAlive > enAlive ? 'A' : myAlive < enAlive ? 'B' : 'E';
+        }
+        const prevDist = (this._lastDist && this._lastDist[unit.id]) || dist;
+        const trendC = dist < prevDist ? 'I' : dist > prevDist ? 'O' : 'S';
+        return `${distBand}${altC}${myAlt}_${arcC}${aspC}_${hsC}${rhC}_${dmgC}${numC}${trendC}`;
     },
 
     // ==========================================
@@ -307,8 +330,8 @@ const AI = {
                       if (facingEdge) hScore -= 10000;
                     }
 
-                    // 固定マップではQ値の影響を下げる（別マップで訓練済みのため）
-                    let qWeight = (edgeMaxC <= 30 || edgeMaxR <= 30) ? 0.1 : 2;
+                    // Q値の重み（全マップ共通）
+                    let qWeight = 2;
                     // ε-greedy: 15%でランダム探索
                     let finalScore = qVal * qWeight + hScore + (Math.random() < 0.15 ? Math.random() * 40 : 0);
 
