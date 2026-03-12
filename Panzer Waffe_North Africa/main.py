@@ -160,12 +160,14 @@ class Player:
         self.active_events = []
 
 class Game:
-    def __init__(self, df, p1_f, p2_f, campaign_prefix, p1_ai=False, p2_ai=False, quiet=False, training=False):
+    def __init__(self, df, p1_f, p2_f, campaign_prefix, p1_ai=False, p2_ai=False, quiet=False, training=False, p1_preset_deck=None, p2_preset_deck=None):
         self.df = df
         self.quiet = quiet
         self.training_mode = training
         self.game_over = False
         self.winner = None
+        self.p1_preset_deck = p1_preset_deck
+        self.p2_preset_deck = p2_preset_deck
         # Playerに渡す引数を2つ（陣営名, AIフラグ）に整理
         self.player1 = Player(p1_f, is_ai=p1_ai or training)
         self.player2 = Player(p2_f, is_ai=p2_ai or training)
@@ -179,6 +181,21 @@ class Game:
 
     async def safe_input_method(self, prompt_text=""):
         return await safe_input(prompt_text)
+
+    def build_deck_from_ids(self, player, card_ids):
+        """カードIDリストから固定デッキを復元する"""
+        pool = [Card(row) for _, row in self.df.iterrows() if row['Faction'] == player.faction or row['Faction'] == player.faction.replace("軍", "")]
+        events = [c for c in pool if c.type in ['イベント', 'アクシデント']]
+        non_events = [c for c in pool if c.type not in ['イベント', 'アクシデント']]
+        deck = list(events)
+        used = []
+        for cid in card_ids:
+            for c in non_events:
+                if c.id == str(cid) and c not in used:
+                    deck.append(c)
+                    used.append(c)
+                    break
+        player.headquarters = deck
 
     # ==========================================
     # 1. デッキ構築フェーズ
@@ -2276,10 +2293,18 @@ class Game:
     # ==========================================
     async def start_game(self):
         self.print_q("\n作戦準備を開始します……")
-        await self.build_deck(self.player1)
-        
+        if self.p1_preset_deck:
+            self.build_deck_from_ids(self.player1, self.p1_preset_deck)
+            self.print_q(f"【固定デッキ】{self.player1.faction} の登録デッキを配備しました。")
+        else:
+            await self.build_deck(self.player1)
+
         self.print_q("\n続いて敵軍(AI)の配備を行います……")
-        await self.build_deck(self.player2)
+        if self.p2_preset_deck:
+            self.build_deck_from_ids(self.player2, self.p2_preset_deck)
+            self.print_q(f"【チャレンジデッキ】{self.player2.faction} の登録デッキを配備しました。")
+        else:
+            await self.build_deck(self.player2)
         
         self.print_q("\n両軍のデッキ配備が完了しました。")
         
@@ -2297,39 +2322,232 @@ class Game:
         self.print_q("\n★★★ 戦闘開始！ ★★★")
         await self.play()
 
-# ==========================================
-# ゲーム起動用のメイン関数
-# ==========================================////////////////////////////////////////////////
+# ---------------------------------------------
+# 【Firebase連携ヘルパー】
+# ---------------------------------------------
+async def save_challenge_to_firebase(deck_name, player_name, faction, card_ids, win_rate, wins, losses, draws, game_version):
+    """チャレンジデッキをFirestoreに保存"""
+    import js
+    from pyodide.ffi import to_js
+    data = {
+        "deck_name": deck_name,
+        "player_name": player_name,
+        "faction": faction,
+        "card_ids": card_ids,
+        "win_rate": win_rate,
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "games_played": wins + losses + draws,
+        "game_version": game_version,
+        "created_at": str(js.Date.new().toISOString()),
+        "human_challenges": 0,
+        "human_wins": 0
+    }
+    js_data = to_js(data, dict_converter=js.Object.fromEntries)
+    await js.window.db.collection("challenge_decks").add(js_data)
+
 # ==========================================
 # ゲーム起動用のメイン関数（終了・完了時に自動でリロードしてトップに戻る）
 # ==========================================
 async def async_main():
     import js
+    from pyodide.ffi import to_js
+
+    # URLパラメータチェック（チャレンジモード）
+    params = js.URLSearchParams.new(js.window.location.search)
+    challenge_id = None
+    raw = params.get("challenge")
+    if raw is not None and str(raw) != "null" and str(raw).strip() != "":
+        challenge_id = str(raw).strip()
+
+    csv_file = "cards_africa.csv"
+    campaign_prefix = "africa"
+    df = pd.read_csv(csv_file, encoding='utf-8-sig')
+
+    # === チャレンジモード（URLパラメータで飛んできた場合）===
+    if challenge_id:
+        try:
+            print("\n" + "="*50)
+            print("【チャレンジモード（アフリカ戦線）】")
+            print("="*50)
+            print("\nデッキデータを読み込んでいます...")
+
+            doc = await js.window.db.collection("challenge_decks").doc(challenge_id).get()
+            if not doc.exists:
+                print("\n[エラー] 指定されたデッキが見つかりません。")
+                await safe_input("Enterで戻ります...")
+                js.window.location.href = "../index.html"
+                return
+
+            deck_data = doc.data()
+            enemy_faction = str(deck_data.faction)
+            enemy_deck_name = str(deck_data.deck_name)
+            enemy_player_name = str(deck_data.player_name)
+            enemy_win_rate = float(deck_data.win_rate)
+            enemy_card_ids = [str(deck_data.card_ids[i]) for i in range(deck_data.card_ids.length)]
+
+            print(f"\n★ 『{enemy_deck_name}』(by {enemy_player_name}) に挑戦！")
+            print(f"  陣営: {enemy_faction} / AI勝率: {enemy_win_rate:.1f}%")
+
+            if enemy_faction == "ドイツ軍":
+                player_faction = "連合軍"
+            else:
+                player_faction = "ドイツ軍"
+            print(f"\nあなたは【{player_faction}】で戦います。")
+
+            game = Game(df=df, p1_f=player_faction, p2_f=enemy_faction, campaign_prefix=campaign_prefix,
+                        p1_ai=False, p2_ai=True, p2_preset_deck=enemy_card_ids)
+            await game.start_game()
+
+            # 結果をFirebaseに記録
+            human_won = (game.winner == game.player1)
+            try:
+                increment = js.window.firebase.firestore.FieldValue.increment(1)
+                update_data = {"human_challenges": increment}
+                if human_won:
+                    update_data["human_wins"] = increment
+                js_update = to_js(update_data, dict_converter=js.Object.fromEntries)
+                await js.window.db.collection("challenge_decks").doc(challenge_id).update(js_update)
+                if human_won:
+                    print("\n★★★ 勝利！チャレンジデッキを撃破しました！ ★★★")
+                else:
+                    print("\n--- 敗北... チャレンジデッキに負けました ---")
+            except Exception as fe:
+                print(f"\n(戦績の記録に失敗しました: {fe})")
+
+            await safe_input("Enterで戻ります...")
+            js.window.location.href = "../index.html"
+            return
+
+        except Exception as e:
+            print(f"\n【エラー】チャレンジモードでエラーが発生しました: {e}")
+            await safe_input("Enterで戻ります...")
+            js.window.location.href = "../index.html"
+            return
+
+    # === 通常メニュー ===
     while True:
         try:
             print("\n" + "="*50)
             print("【作戦システム起動（アフリカ戦線専用）】")
             print("="*50)
-            
+
             print("\n【メニュー】")
             print("1: プレイヤー vs AI (コンピュータ)")
+            print("2: チャレンジデッキを作る")
             print("0: 終了して『西部/アフリカ』選択に戻る")
-            
+
             mode_choice = (await safe_input("形式を選んでください: ")).strip()
-            
+
             # 0 を選んだらブラウザをリロードして大元のトップ（戦線選択）に戻る
             if mode_choice == '0':
                 print("\n戦線選択画面に戻ります。リロード中...")
                 js.window.location.href = "../index.html"
-                return 
+                return
 
             is_auto_training = (mode_choice == "trainai")
             is_test_ai = (mode_choice == "testai")
-            csv_file = "cards_africa.csv"
-            campaign_prefix = "africa"
-            df = pd.read_csv(csv_file, encoding='utf-8-sig')
-            
-            if is_auto_training:
+
+            # === チャレンジデッキ作成 ===
+            if mode_choice == '2':
+                print("\n" + "="*50)
+                print("【チャレンジデッキ作成（アフリカ戦線）】")
+                print("="*50)
+
+                faction_choice = await safe_input("陣営選択 (1: ドイツ / 2: 連合): ")
+                if faction_choice == '1':
+                    challenge_faction = "ドイツ軍"
+                    opponent_faction = "連合軍"
+                else:
+                    challenge_faction = "連合軍"
+                    opponent_faction = "ドイツ軍"
+
+                # デッキ編集（既存UIを流用）
+                print(f"\n【{challenge_faction}】のデッキを編成してください。")
+                temp_game = Game(df=df, p1_f=challenge_faction, p2_f=opponent_faction, campaign_prefix=campaign_prefix)
+                temp_player = Player(challenge_faction, is_ai=False)
+                # build_deckはplayer.headquartersに直接セットする
+                temp_game.player1 = temp_player
+                await temp_game.build_deck(temp_player)
+                built_deck = temp_player.headquarters
+
+                # イベント/アクシデント以外のカードIDを抽出
+                card_ids = [c.id for c in built_deck if c.type not in ['イベント', 'アクシデント']]
+
+                player_name = (await safe_input("あなたの名前（ハンドルネーム）: ")).strip()
+                if not player_name: player_name = "名無し"
+                deck_name = (await safe_input("デッキ名: ")).strip()
+                if not deck_name: deck_name = "無名デッキ"
+
+                # AI 100回自動対戦
+                print(f"\n『{deck_name}』の強さを測定します...")
+                print("AI 100回自動対戦を開始します。しばらくお待ちください...\n")
+                num_battles = 100
+                p1_wins, p2_wins, draws = 0, 0, 0
+
+                def show_challenge_progress(i):
+                    done = i + 1
+                    total = num_battles
+                    pct = int(done / total * 100)
+                    bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+                    rate = f"{p1_wins/done*100:.1f}%" if done > 0 else "-"
+                    msg = (
+                        f"【チャレンジデッキ測定中】\n\n"
+                        f"  デッキ名: {deck_name}\n"
+                        f"  陣営: {challenge_faction}\n\n"
+                        f"  {done} / {total} 回  ({pct}%)\n"
+                        f"  [{bar}]\n\n"
+                        f"  デッキ勝利: {p1_wins}  ({rate})\n"
+                        f"  AI勝利   : {p2_wins}\n"
+                        f"  引き分け : {draws}\n"
+                    )
+                    try:
+                        d = js.document.getElementById("fixed-dashboard")
+                        if d: d.innerText = msg
+                    except: pass
+
+                for i in range(num_battles):
+                    game = Game(df=df, p1_f=challenge_faction, p2_f=opponent_faction,
+                                campaign_prefix=campaign_prefix,
+                                p1_ai=True, p2_ai=True, quiet=True,
+                                p1_preset_deck=card_ids)
+                    await game.start_game()
+
+                    if game.winner == "Draw": draws += 1
+                    elif game.winner == game.player1: p1_wins += 1
+                    else: p2_wins += 1
+
+                    if (i + 1) % 5 == 0 or i == num_battles - 1:
+                        show_challenge_progress(i)
+                        await asyncio.sleep(0)
+
+                win_rate = round(p1_wins / num_battles * 100, 1)
+                print(f"\n{'='*50}")
+                print(f"【測定完了】")
+                print(f"  デッキ名: {deck_name}")
+                print(f"  作成者: {player_name}")
+                print(f"  陣営: {challenge_faction}")
+                print(f"  勝率: {win_rate}% ({p1_wins}勝 {p2_wins}敗 {draws}分)")
+                print(f"{'='*50}")
+
+                # Firebaseに保存
+                print("\nチャレンジデッキを登録しています...")
+                try:
+                    await save_challenge_to_firebase(
+                        deck_name, player_name, challenge_faction, card_ids,
+                        win_rate, p1_wins, p2_wins, draws, "africa"
+                    )
+                    print("\n★ 登録完了！ポータルのチャレンジ一覧に追加されました！")
+                except Exception as fe:
+                    print(f"\n[エラー] Firebase登録に失敗しました: {fe}")
+                    print("Firebase設定を確認してください。")
+
+                await safe_input("Enterで戻ります...")
+                js.window.location.href = "../index.html"
+                return
+
+            elif is_auto_training:
                 num_val = await safe_input("対戦回数を入力 (例: 10, 100): ")
                 if not num_val.isdigit():
                     continue
