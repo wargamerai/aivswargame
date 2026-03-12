@@ -19,12 +19,37 @@ const AirCombatRL = {
     _dirty: false,
     _saveTimer: null,
 
+    _fileLoaded: false,
+
+    loadFromFile: function() {
+        // aircombat_q.json から訓練済みQ-tableを読み込み
+        if (this._fileLoaded) return;
+        this._fileLoaded = true;
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', 'aircombat_q.json', false); // 同期読み込み
+        try {
+            xhr.send();
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                this._table = data.q_table || data || {};
+                console.log('[Q] aircombat_q.json loaded:', Object.keys(this._table).length, 'states');
+            }
+        } catch(e) {
+            console.warn('[Q] aircombat_q.json load failed:', e);
+        }
+    },
+
     getTable: function() {
         if (!this._table) {
-            try {
-                const raw = localStorage.getItem('aircombat_q');
-                this._table = raw ? JSON.parse(raw) : {};
-            } catch(e) { this._table = {}; }
+            // まず外部JSONファイルから読み込み
+            this.loadFromFile();
+            if (!this._table) {
+                // フォールバック: localStorageから読み込み
+                try {
+                    const raw = localStorage.getItem('aircombat_q');
+                    this._table = raw ? JSON.parse(raw) : {};
+                } catch(e) { this._table = {}; }
+            }
         }
         return this._table;
     },
