@@ -129,7 +129,132 @@
             color: #4a4d50;
             letter-spacing: 1px;
         }
+
+        /* チャレンジデッキ一覧 */
+        .challenge-section {
+            margin-top: 40px;
+            border-top: 3px solid var(--border-color);
+            padding-top: 30px;
+        }
+        .challenge-section h2 {
+            color: var(--text-accent);
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+        .challenge-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .challenge-tab {
+            background: var(--btn-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 8px 14px;
+            font-size: 0.85em;
+            cursor: pointer;
+            border-radius: 2px;
+            font-family: inherit;
+        }
+        .challenge-tab.active {
+            background: var(--accent-red);
+            color: var(--text-accent);
+            border-color: var(--accent-red);
+        }
+        .challenge-tab:hover {
+            background: var(--btn-hover);
+        }
+        .deck-list {
+            text-align: left;
+        }
+        .deck-row {
+            background: #18191a;
+            border: 1px solid var(--border-color);
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 2px;
+        }
+        .deck-info {
+            flex: 1;
+        }
+        .deck-name {
+            color: var(--text-accent);
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .deck-meta {
+            color: #7b8084;
+            font-size: 0.85em;
+            margin-top: 4px;
+        }
+        .deck-stats {
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 0.9em;
+            margin-top: 4px;
+        }
+        .deck-human-stats {
+            color: #ffcc00;
+            font-family: monospace;
+            font-size: 0.8em;
+            margin-top: 2px;
+        }
+        .challenge-btn {
+            background: var(--accent-red);
+            color: var(--text-accent);
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.9em;
+            cursor: pointer;
+            border-radius: 2px;
+            text-decoration: none;
+            font-family: inherit;
+            font-weight: bold;
+            white-space: nowrap;
+            margin-left: 12px;
+        }
+        .challenge-btn:hover {
+            background: #a00000;
+        }
+        .pager {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .pager button {
+            background: var(--btn-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .pager button:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+        .pager span {
+            color: #7b8084;
+            font-size: 0.9em;
+        }
+        .no-decks {
+            color: #5a5d60;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
     </style>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="firebase_config.js"></script>
 </head>
 <body>
 
@@ -176,10 +301,142 @@
         </a>
     </div>
     
+    <!-- チャレンジデッキ一覧 -->
+    <div class="challenge-section">
+        <h2>チャレンジデッキ</h2>
+        <div class="challenge-tabs">
+            <button class="challenge-tab active" onclick="switchTab('west','ドイツ軍')">西部 ドイツ軍</button>
+            <button class="challenge-tab" onclick="switchTab('west','連合軍')">西部 連合軍</button>
+            <button class="challenge-tab" onclick="switchTab('africa','ドイツ軍')">北アフリカ ドイツ軍</button>
+            <button class="challenge-tab" onclick="switchTab('africa','連合軍')">北アフリカ 連合軍</button>
+        </div>
+        <div id="deck-list-container" class="deck-list">
+            <div class="no-decks">読み込み中...</div>
+        </div>
+        <div class="pager" id="pager" style="display:none;">
+            <button id="prev-btn" onclick="changePage(-1)">&#9664; 前へ</button>
+            <span id="page-info">1 / 1</span>
+            <button id="next-btn" onclick="changePage(1)">次へ &#9654;</button>
+        </div>
+    </div>
+
     <div class="footer">
         CLASSIFIED INFORMATION - AUTHORIZED PERSONNEL ONLY
     </div>
 </div>
+
+<script>
+    // チャレンジデッキ一覧管理
+    let currentVersion = 'west';
+    let currentFaction = 'ドイツ軍';
+    let currentPage = 0;
+    const PAGE_SIZE = 20;
+    let allDecks = [];
+
+    function switchTab(version, faction) {
+        currentVersion = version;
+        currentFaction = faction;
+        currentPage = 0;
+        // タブのアクティブ状態を更新
+        document.querySelectorAll('.challenge-tab').forEach(t => t.classList.remove('active'));
+        event.target.classList.add('active');
+        loadDecks();
+    }
+
+    function changePage(delta) {
+        const maxPage = Math.ceil(allDecks.length / PAGE_SIZE) - 1;
+        currentPage = Math.max(0, Math.min(maxPage, currentPage + delta));
+        renderDecks();
+    }
+
+    async function loadDecks() {
+        const container = document.getElementById('deck-list-container');
+        container.innerHTML = '<div class="no-decks">読み込み中...</div>';
+
+        try {
+            const snapshot = await window.db.collection('challenge_decks')
+                .where('game_version', '==', currentVersion)
+                .where('faction', '==', currentFaction)
+                .orderBy('win_rate', 'desc')
+                .get();
+
+            allDecks = [];
+            snapshot.forEach(doc => {
+                allDecks.push({ id: doc.id, ...doc.data() });
+            });
+            renderDecks();
+        } catch (e) {
+            container.innerHTML = '<div class="no-decks">データの読み込みに失敗しました。Firebase設定を確認してください。</div>';
+            console.error('Firestore error:', e);
+        }
+    }
+
+    function renderDecks() {
+        const container = document.getElementById('deck-list-container');
+        const pager = document.getElementById('pager');
+
+        if (allDecks.length === 0) {
+            container.innerHTML = '<div class="no-decks">登録されたデッキはまだありません。</div>';
+            pager.style.display = 'none';
+            return;
+        }
+
+        const totalPages = Math.ceil(allDecks.length / PAGE_SIZE);
+        const start = currentPage * PAGE_SIZE;
+        const pageDecks = allDecks.slice(start, start + PAGE_SIZE);
+
+        // ゲームページのパス
+        const gamePath = currentVersion === 'west'
+            ? 'Panzer Waffe_West/index.html'
+            : 'Panzer Waffe_North Africa/index.html';
+
+        let html = '';
+        pageDecks.forEach((d, i) => {
+            const rank = start + i + 1;
+            const humanRate = d.human_challenges > 0
+                ? Math.round(d.human_wins / d.human_challenges * 100)
+                : null;
+            const humanText = d.human_challenges > 0
+                ? `${d.human_challenges}人挑戦 / ${d.human_wins}人撃破 (人間勝率${humanRate}%)`
+                : 'まだ挑戦者なし';
+
+            html += `
+                <div class="deck-row">
+                    <div class="deck-info">
+                        <div class="deck-name">${rank}. ${escapeHtml(d.deck_name)}</div>
+                        <div class="deck-stats">AI勝率: ${d.win_rate.toFixed(1)}% (${d.games_played}戦)</div>
+                        <div class="deck-human-stats">${humanText}</div>
+                        <div class="deck-meta">by ${escapeHtml(d.player_name)}</div>
+                    </div>
+                    <a href="${gamePath}?challenge=${d.id}" class="challenge-btn">挑戦する</a>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+
+        // ページング
+        if (totalPages > 1) {
+            pager.style.display = 'flex';
+            document.getElementById('page-info').textContent = `${currentPage + 1} / ${totalPages}`;
+            document.getElementById('prev-btn').disabled = (currentPage === 0);
+            document.getElementById('next-btn').disabled = (currentPage >= totalPages - 1);
+        } else {
+            pager.style.display = 'none';
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // 初期読み込み
+    document.addEventListener('DOMContentLoaded', () => {
+        // Firebase初期化を少し待ってからロード
+        setTimeout(() => { loadDecks(); }, 500);
+    });
+</script>
 
 </body>
 </html>
