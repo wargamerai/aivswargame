@@ -20,6 +20,19 @@ td { padding:4px 6px; border:1px solid #ddd; }
 #scoreBox { background:#f0f0f0; border:1px solid #bbb; padding:10px; border-radius:4px; margin:10px 0; font-size:1em; }
 .score-line { margin:4px 0; }
 .winner { color:#8a6a00; font-size:1.15em; font-weight:bold; }
+.vp-detail { margin:4px 0 2px 16px; font-size:0.85em; color:#555; }
+.vp-detail .ship-vp { display:flex; justify-content:space-between; padding:1px 0; border-bottom:1px dotted #ccc; }
+.vp-detail .ship-vp:last-child { border-bottom:none; }
+.vp-detail .vp-val { font-weight:bold; color:#1a5a8a; min-width:60px; text-align:right; }
+.vp-detail .vp-sunk { color:#cc0000; }
+.vp-subtotal { margin:4px 0 2px 16px; font-size:0.9em; font-weight:bold; border-top:1px solid #999; padding-top:3px; display:flex; justify-content:space-between; }
+.bonus-section { margin:6px 0 2px 16px; padding:6px 8px; background:#fffff0; border:1px solid #cc8; border-radius:3px; }
+.bonus-title { font-weight:bold; color:#8a6a00; margin-bottom:3px; }
+.winner-box { text-align:center; padding:10px; margin-top:8px; border:2px solid #8a6a00; border-radius:6px; background:#fffff0; }
+.winner-box .result-label { font-size:1.3em; font-weight:bold; }
+.winner-box .jp-win { color:#cc3311; }
+.winner-box .us-win { color:#2255cc; }
+.winner-box .draw { color:#888; }
 button {
   background:#dde4f0; color:#334; border:1px solid #99a;
   padding:6px 12px; font-size:0.95em; cursor:pointer; border-radius:3px; margin:5px 3px 0 0; font-weight:bold;
@@ -58,16 +71,29 @@ function statusClass(s) {
   return {ok:'ok',light:'light',medium:'medium',heavy:'heavy',sunk:'sunk',exited:'sunk'}[s]||'ok';
 }
 
-function calcVP(fleet, enemySide) {
-  let vp = 0;
+// 艦ごとの内訳付きVP計算
+function calcVPDetail(fleet) {
+  const items = [];
+  let total = 0;
   for (const s of fleet) {
-    if (s.status==='sunk') {
-      vp += (s.capG + s.capM) * s.vp;
+    let vp = 0;
+    let reason = '';
+    if (s.status === 'sunk') {
+      vp = (s.capG + s.capM) * s.vp;
+      reason = '撃沈';
     } else {
-      vp += ((s.dmgG||0) + (s.dmgM||0)) * s.vp;
+      const dmg = (s.dmgG||0) + (s.dmgM||0);
+      if (dmg > 0) {
+        vp = dmg * s.vp;
+        reason = statusLabel(s.status);
+      }
+    }
+    if (vp > 0) {
+      items.push({ name: s.name, type: s.type, vp, reason, sunk: s.status === 'sunk' });
+      total += vp;
     }
   }
-  return vp;
+  return { items, total };
 }
 
 function init() {
@@ -98,9 +124,11 @@ function renderReport() {
   const usLight   = us.filter(s=>s.status==='light');
   const usOk      = us.filter(s=>s.status==='ok');
 
-  // VP: each side earns points for damage dealt to enemy
-  const jpCombat = calcVP(us, 'jp'); // damage on US = JP earns
-  const usEarned = calcVP(jp, 'us'); // damage on JP = US earns
+  // VP内訳計算: 敵艦への損害 = 自軍の得点
+  const jpVPDetail = calcVPDetail(us); // 米艦への損害 = 日本軍得点
+  const usVPDetail = calcVPDetail(jp); // 日本艦への損害 = 米軍得点
+  const jpCombat = jpVPDetail.total;
+  const usEarned = usVPDetail.total;
 
   const combatTurn = state.combatTurn || 0;
 
@@ -118,7 +146,7 @@ function renderReport() {
   const TRANSPORT_BONUS = [2, 1]; // DD: [無傷, 小破]
 
   let jpBonus = 0;
-  let jpBonusDetail = [];
+  let jpBonusItems = [];
   const usAllGone = us.every(s => s.status === 'sunk' || s.col < 0);
   const mission = jp.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
   const missionLabel = mission === 'bombard' ? '艦砲射撃' : '輸送';
@@ -135,7 +163,8 @@ function renderReport() {
       }
       if (bonus > 0) {
         jpBonus += bonus;
-        jpBonusDetail.push(`${s.name}(+${bonus})`);
+        const cond = s.status === 'ok' ? '無傷' : '小破';
+        jpBonusItems.push({ name: s.name, bonus, cond });
       }
     }
   }
@@ -154,20 +183,84 @@ function renderReport() {
   }
   html += `</div>`;
 
-  // Score
+  // ── 得点内訳 ──
   html += `<div id="scoreBox">`;
-  html += `<div class="score-line jp">🎌 日本軍獲得得点: <strong>${jpEarned}</strong> pt</div>`;
-  if (jpBonus > 0) {
-    html += `<div style="color:#8a6a00;font-size:0.85em;margin-left:12px">戦闘: ${jpCombat}pt + ${missionLabel}ボーナス: ${jpBonus}pt</div>`;
-    html += `<div style="color:#889;font-size:0.75em;margin-left:12px">${jpBonusDetail.join(', ')}</div>`;
-  }
-  if (state.contactMade) {
-    html += `<div class="score-line us">🦅 米軍獲得得点: <strong>${usEarned}</strong> pt</div>`;
-    const winner = jpEarned > usEarned ? '日本軍勝利' : jpEarned < usEarned ? '米軍勝利' : '引き分け';
-    const wc = jpEarned > usEarned ? 'jp' : jpEarned < usEarned ? 'us' : 'ok';
-    html += `<div class="winner ${wc}">→ ${winner}</div>`;
+  html += `<h4 class="jp" style="margin-top:0">🎌 日本軍 戦果報告</h4>`;
+
+  // 日本軍の戦闘得点内訳（米艦への損害）
+  if (jpVPDetail.items.length > 0) {
+    html += `<div style="font-size:0.85em;color:#666;margin-bottom:2px">【戦闘損害による得点】</div>`;
+    html += `<div class="vp-detail">`;
+    for (const it of jpVPDetail.items) {
+      const sunkCls = it.sunk ? ' vp-sunk' : '';
+      const mark = it.sunk ? '💥 ' : '💢 ';
+      html += `<div class="ship-vp">
+        <span>${mark}${it.name} <span style="color:#888">(${it.type})</span> ─ ${it.reason}</span>
+        <span class="vp-val${sunkCls}">+${it.vp} pt</span>
+      </div>`;
+    }
+    html += `</div>`;
+    html += `<div class="vp-subtotal"><span>戦闘得点 小計</span><span>${jpCombat} pt</span></div>`;
   } else {
-    html += `<div class="score-line us" style="color:#889">🦅 米軍獲得得点: ???</div>`;
+    html += `<div style="color:#889;margin:4px 0 4px 16px;font-size:0.85em">戦闘損害なし</div>`;
+  }
+
+  // ボーナス内訳
+  if (jpBonus > 0) {
+    html += `<div class="bonus-section">`;
+    html += `<div class="bonus-title">🏆 ${missionLabel}ボーナス（敵艦隊全滅・${combatTurn}ターンで達成）</div>`;
+    html += `<div class="vp-detail">`;
+    for (const b of jpBonusItems) {
+      html += `<div class="ship-vp">
+        <span>⭐ ${b.name} <span style="color:#888">(${b.cond})</span></span>
+        <span class="vp-val" style="color:#8a6a00">+${b.bonus} pt</span>
+      </div>`;
+    }
+    html += `</div>`;
+    html += `<div class="vp-subtotal"><span>${missionLabel}ボーナス 小計</span><span>${jpBonus} pt</span></div>`;
+    html += `</div>`;
+  } else if (usAllGone && combatTurn >= 10) {
+    html += `<div style="color:#889;margin:4px 0 4px 16px;font-size:0.85em">※ 敵全滅も10ターン経過のためボーナスなし</div>`;
+  }
+
+  // 日本軍合計
+  html += `<div style="font-size:1.1em;font-weight:bold;margin:8px 0 4px 0;padding:4px 8px;background:#ffe8e0;border-radius:3px;display:flex;justify-content:space-between">
+    <span>🎌 日本軍 合計得点</span><span>${jpEarned} pt</span></div>`;
+
+  // 米軍得点
+  html += `<h4 class="us" style="margin-top:12px">🦅 米軍 戦果</h4>`;
+  if (state.contactMade) {
+    if (usVPDetail.items.length > 0) {
+      html += `<div style="font-size:0.85em;color:#666;margin-bottom:2px">【戦闘損害による得点】</div>`;
+      html += `<div class="vp-detail">`;
+      for (const it of usVPDetail.items) {
+        const sunkCls = it.sunk ? ' vp-sunk' : '';
+        const mark = it.sunk ? '💥 ' : '💢 ';
+        html += `<div class="ship-vp">
+          <span>${mark}${it.name} <span style="color:#888">(${it.type})</span> ─ ${it.reason}</span>
+          <span class="vp-val${sunkCls}">+${it.vp} pt</span>
+        </div>`;
+      }
+      html += `</div>`;
+    } else {
+      html += `<div style="color:#889;margin:4px 0 4px 16px;font-size:0.85em">戦闘損害なし</div>`;
+    }
+    html += `<div style="font-size:1.1em;font-weight:bold;margin:8px 0 4px 0;padding:4px 8px;background:#e0e8ff;border-radius:3px;display:flex;justify-content:space-between">
+      <span>🦅 米軍 合計得点</span><span>${usEarned} pt</span></div>`;
+
+    // 勝敗判定
+    let winLabel, winClass;
+    if (jpEarned > usEarned) { winLabel = '日本軍の勝利！'; winClass = 'jp-win'; }
+    else if (jpEarned < usEarned) { winLabel = '米軍の勝利…'; winClass = 'us-win'; }
+    else { winLabel = '引き分け'; winClass = 'draw'; }
+    const diff = Math.abs(jpEarned - usEarned);
+    const ratio = usEarned > 0 ? (jpEarned / usEarned).toFixed(1) : '∞';
+    html += `<div class="winner-box">
+      <div class="result-label ${winClass}">${winLabel}</div>
+      <div style="font-size:0.85em;color:#666;margin-top:4px">${jpEarned} 対 ${usEarned}（差: ${diff}pt / 比率: ${ratio}）</div>
+    </div>`;
+  } else {
+    html += `<div style="color:#889;padding:8px">未接触 — 米軍得点: 不明</div>`;
   }
   html += `</div>`;
 
