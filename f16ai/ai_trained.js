@@ -157,9 +157,25 @@ const AI = {
             ALT_CEILING:    25,   // 高度35以上ペナルティ係数
             ROLE_SPREAD:    50,   // 役割に沿った位置取り
             BREAK_AWAY:     80,   // ぐるぐる回り脱出
+            RE_ENGAGE:     isSmallMap ? 300 : 150,   // パス後の再突入
         };
 
         let candidates = [];
+
+        // ── 端5ヘクス以内+端向き → 直進(c=2)禁止フラグ ──
+        let uEdgeMaxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
+        let uEdgeMaxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
+        let uDLeft = unit.x, uDRight = uEdgeMaxC - unit.x;
+        let uDTop = unit.y, uDBot = uEdgeMaxR - unit.y;
+        let uEdgeDist = Math.min(uDLeft, uDRight, uDTop, uDBot);
+        let uDirDeg = this.DIR_ANGLES[unit.direction] || 0;
+        let forceEdgeTurn = false;
+        if (uEdgeDist <= 5) {
+            if (uDRight <= 5 && uDirDeg > -90 && uDirDeg < 90) forceEdgeTurn = true;
+            if (uDLeft  <= 5 && (uDirDeg > 90 || uDirDeg < -90)) forceEdgeTurn = true;
+            if (uDBot   <= 5 && uDirDeg > 0 && uDirDeg < 180) forceEdgeTurn = true;
+            if (uDTop   <= 5 && uDirDeg < 0 && uDirDeg > -180) forceEdgeTurn = true;
+        }
 
         for (let dr = -2; dr <= 2; dr++) {
             for (let dc = -2; dc <= 2; dc++) {
@@ -167,6 +183,8 @@ const AI = {
                 let r = unit.startRow + dr;
                 let c = unit.startCol + dc;
                 if (r < 0 || r > 4 || c < 0 || c > 4) continue;
+                // 端向き時は直進(c=2)を完全禁止 → 旋回のみ許可
+                if (forceEdgeTurn && c === 2) continue;
                 if ((unit.damage === '損害あり' || unit.bomb_equipped) && (r < 1 || r > 3 || c < 1 || c > 3)) continue;
                 if (unit.altitude >= 40 && r === 0) continue;
 
@@ -209,6 +227,23 @@ const AI = {
                     else if (arc === '前方')                           hScore += PT.FRONT_ARC;
                     // 前方側面にいても敵の方を向いている→射撃位置に向かうインセンティブ
                     else if (arc === '前方側面')                        hScore += PT.FRONT_ARC / 2;
+
+                    // ── パス後の再突入: 敵が後方にいる場合、敵方向への旋回にボーナス ──
+                    if (arc === '後方' || arc === '後方側面') {
+                        let simDirDeg = this.DIR_ANGLES[sim.dir] || 0;
+                        let sx = sim.x * 37.5, sy = sim.y * 43.301 + (sim.x % 2) * 21.650;
+                        let tx = target.x * 37.5, ty = target.y * 43.301 + (target.x % 2) * 21.650;
+                        let angleToEnemy = Math.atan2(ty - sy, tx - sx) * 180 / Math.PI;
+                        let headingDiff = Math.abs(((angleToEnemy - simDirDeg + 540) % 360) - 180);
+                        // headingDiff: 0°=敵の方向, 180°=背中向き → 90°未満ならボーナス
+                        if (headingDiff < 90) {
+                            hScore += PT.RE_ENGAGE * (1 - headingDiff / 90);
+                        }
+                        // 旋回中は距離増加ペナルティを70%緩和
+                        if (curDist - newDist < 0) {
+                            hScore += Math.abs(curDist - newDist) * PT.DIST_CLOSE * 0.7;
+                        }
+                    }
 
                     // 距離調整（補助）
                     hScore += (curDist - newDist) * PT.DIST_CLOSE;
