@@ -147,7 +147,7 @@ const AI = {
 
         // ── スコアリング定数（ここを変えるとAIの傾向が変わる） ──
         // 固定マップ（朝鮮シナリオ等）ではターン数が短いので攻撃的に
-        let isSmallMap = (window.AI && window.AI.mapMaxC !== undefined && window.AI.mapMaxC <= 30);
+        let isSmallMap = (window.AI && window.AI.mapMaxC !== undefined && window.AI.mapMaxC <= 30 && window.AI.mapMaxR !== undefined && window.AI.mapMaxR <= 30);
         const PT = {
             REAR:          isSmallMap ? 400 : 200,   // 後方射界に入る（後攻取得、最重要）
             REAR_SIDE:     isSmallMap ? 150 :  70,   // 後方側面に入る
@@ -203,10 +203,12 @@ const AI = {
                     // ── ヒューリスティックスコア ──
                     let hScore = 0;
 
-                    // 後攻取得が最重要評価軸
+                    // 後攻取得が最重要評価軸（射界はルール通り±30°で判定済み）
                     if      (arc === '前方' && aspect === '後方')      hScore += PT.REAR;
                     else if (arc === '前方' && aspect === '後方側面')  hScore += PT.REAR_SIDE;
                     else if (arc === '前方')                           hScore += PT.FRONT_ARC;
+                    // 前方側面にいても敵の方を向いている→射撃位置に向かうインセンティブ
+                    else if (arc === '前方側面')                        hScore += PT.FRONT_ARC / 2;
 
                     // 距離調整（補助）
                     hScore += (curDist - newDist) * PT.DIST_CLOSE;
@@ -258,16 +260,17 @@ const AI = {
                     if (dBot   <= 5 && dirDeg > 0 && dirDeg < 180)    facingEdge = true;  // 下端で下向き
                     if (dTop   <= 5 && dirDeg < 0 && dirDeg > -180)   facingEdge = true;  // 上端で上向き
 
-                    if (edgeDist <= 0) hScore -= 9999;
+                    if (edgeDist <= 0) hScore -= 99999;
                     else if (edgeDist <= 5) {
-                      // 位置ペナルティ
-                      hScore -= (6 - edgeDist) * 100;
-                      // 外側を向いていれば追加で巨大ペナルティ
-                      if (facingEdge) hScore -= 3000;
+                      // 端に入ること自体を事実上禁止（距離が近いほど致命的）
+                      // dist1=-5000, dist2=-4000, dist3=-3000, dist4=-2000, dist5=-1000
+                      hScore -= (6 - edgeDist) * 1000;
+                      // 外側を向いていれば更に致命的
+                      if (facingEdge) hScore -= 10000;
                     }
 
                     // 固定マップではQ値の影響を下げる（別マップで訓練済みのため）
-                    let qWeight = (edgeMaxC <= 30 || edgeMaxR <= 30) ? 0.5 : 2;
+                    let qWeight = (edgeMaxC <= 30 || edgeMaxR <= 30) ? 0.1 : 2;
                     // ε-greedy: 15%でランダム探索
                     let finalScore = qVal * qWeight + hScore + (Math.random() < 0.15 ? Math.random() * 40 : 0);
 
@@ -708,8 +711,12 @@ const AI = {
             let tx = tx_hex * 37.5, ty = ty_hex * 43.301 + (tx_hex % 2) * 21.650;
             let angleToTarget = Math.atan2(ty - ay, tx - ax) * 180 / Math.PI;
             let relArc = (angleToTarget - aF + 360) % 360;
-            // 前方弧：±30度（真正面のみ、60度幅）
+            // ゲーム本体と同じ射界区分（ルール準拠、スコアリング用に細分化）
             if (relArc <= 30 || relArc >= 330) arc = "前方";
+            else if (relArc > 30 && relArc < 90) arc = "前方側面";
+            else if (relArc > 270 && relArc < 330) arc = "前方側面";
+            else if (relArc >= 150 && relArc <= 210) arc = "後方";
+            else arc = "後方側面";
             let angle = Math.atan2(ay - ty, ax - tx) * 180 / Math.PI;
             let diffAspect = Math.abs((angle - tF + 540) % 360 - 180);
             if (diffAspect < 30) aspect = "前方";
