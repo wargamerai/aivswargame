@@ -1287,6 +1287,12 @@ function nextTurn() {
     return;
   }
   document.getElementById('combatTurn').textContent = state.combatTurn;
+
+  // ターン開始時: per-turnフラグをリセット（firedGun1 = 第一砲撃で射撃→雷撃不可）
+  // torpedoFiredはリセットしない（ルール上、魚雷は1戦闘につき1回のみ）
+  (state.jpFleet||[]).forEach(s => { s.firedGun1 = false; });
+  (state.usFleet||[]).forEach(s => { s.firedGun1 = false; });
+
   autoInitiative();
   saveState();
 }
