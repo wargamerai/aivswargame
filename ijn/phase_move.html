@@ -543,6 +543,22 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
     if (next.col < 0 || next.col >= COLS || next.row < 0) break;
 
     if (occupied(next.col, next.row, lead)) {
+      if (lead.cannotTurn) {
+        // 回頭不能 → 回避不可、直進して衝突チェック
+        var occ = getOccupant(next.col, next.row, lead);
+        if (occ) {
+          lead.path = lead.path || [];
+          lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+          lead.col = next.col;
+          lead.row = next.row;
+          collisionCheck(lead, occ);
+          moveFollowers(lead, usFleet);
+          remain--;
+          continue;
+        }
+        break;
+      }
+      // 回頭可能 → 隣接ヘックスで回避を試みる
       const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
       let avoided = false;
       for (const offset of [1, 5]) {
@@ -560,22 +576,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
           break;
         }
       }
-      if (!avoided) {
-        if (lead.cannotTurn) {
-          var occ = getOccupant(next.col, next.row, lead);
-          if (occ) {
-            lead.path = lead.path || [];
-            lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-            lead.col = next.col;
-            lead.row = next.row;
-            collisionCheck(lead, occ);
-            moveFollowers(lead, usFleet);
-            remain--;
-            continue;
-          }
-        }
-        break;
-      }
+      if (!avoided) break;
       turned = false;
       continue;
     }
