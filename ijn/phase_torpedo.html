@@ -236,7 +236,7 @@ function getTorpMaxRange(target, firer) {
   return (target.revealed || target.onFire) ? 13 : (state.spotRange || 5);
 }
 function getTorpRolls(s) { return s.torpedo === 'TT3' ? 3 : 1; }
-function getDefense(s) { return Math.round(s.capG * 0.7); }
+function getDefense(s) { return s.def || 0; }
 
 // 魚雷は舷側からのみ発射可能
 function isBroadside(dir, dq, dr, ds) {
