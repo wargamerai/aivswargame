@@ -241,14 +241,15 @@ const AI = {
                     // 高度上限ペナルティ
                     if (sim.altitude > 35) hScore -= (sim.altitude - 35) * PT.ALT_CEILING;
 
-                    // マップ端ペナルティ（端4ヘクス以内で強い減点）
+                    // マップ端ペナルティ（端8ヘクス以内で極端な減点）
                     let edgeMaxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
                     let edgeMaxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
                     let edgeDist = Math.min(sim.x, sim.y, edgeMaxC - sim.x, edgeMaxR - sim.y);
-                    if (edgeDist <= 0) hScore -= 200;
-                    else if (edgeDist <= 1) hScore -= 100;
-                    else if (edgeDist <= 2) hScore -= 50;
-                    else if (edgeDist <= 4) hScore -= (5 - edgeDist) * 10;
+                    if (edgeDist <= 0) hScore -= 9999;
+                    else if (edgeDist <= 2) hScore -= 2000;
+                    else if (edgeDist <= 4) hScore -= 500;
+                    else if (edgeDist <= 6) hScore -= 200;
+                    else if (edgeDist <= 8) hScore -= 80;
 
                     // ε-greedy: 15%でランダム探索
                     let finalScore = qVal * 2 + hScore + (Math.random() < 0.15 ? Math.random() * 40 : 0);
@@ -259,7 +260,8 @@ const AI = {
         }
 
         if (candidates.length === 0) {
-            return { r: unit.cursorRow, c: 2, cmd: '5' };
+            // 全候補がマップ外 → 反転して直進を試みる
+            return { r: unit.cursorRow, c: 2, cmd: '75' };
         }
 
         candidates.sort((a, b) => b.finalScore - a.finalScore);
