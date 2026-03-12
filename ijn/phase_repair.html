@@ -130,6 +130,17 @@ function repairShip(name) {
     }
   }
   ship.crits = remaining;
+
+  // ★ フラグ再計算: crits配列の実際の内容に基づいてフラグを正しく設定
+  // （火災が2個あって1個だけ修理成功した場合、onFireはtrueのままにする等）
+  ship.onFire = remaining.includes('火災');
+  ship.cannotFire = remaining.includes('砲撃不能');
+  ship.gunHalved = remaining.includes('攻撃力半減');
+  ship.cannotTurn = remaining.includes('回頭不能');
+  ship.cannotTorpedo = remaining.includes('雷撃不能');
+  if (!remaining.includes('射撃指揮所')) ship.critHitMod = 0;
+  if (!remaining.includes('速力半減') && !remaining.includes('航行不能')) delete ship.speed;
+
   saveAndNotify();
   renderList();
 }

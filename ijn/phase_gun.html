@@ -515,8 +515,8 @@ function calcModifiers(firer, target, dist) {
   const prevShots = targetShotCount[target.name] || 0;
   if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
 
-  // 射撃指揮所被弾（クリティカル5）: 被弾艦への命中修正+
-  if (target.critHitMod) { mod += target.critHitMod; details.push(`指揮所+${target.critHitMod}`); }
+  // 射撃指揮所被弾（クリティカル5）: 被弾した射撃艦自身の命中修正+（射撃が不正確になる）
+  if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
 
   return { mod, details };
 }
@@ -782,7 +782,7 @@ function autoUSShoot(title) {
     const tc = firer.turnCount || 0;
     if (tc > 0) { mod += tc; details.push(`転舵+${tc}`); }
     if (bestTarget.type === 'DD') { mod += 1; details.push('DD+1'); }
-    if (bestTarget.critHitMod) { mod += bestTarget.critHitMod; details.push(`指揮所+${bestTarget.critHitMod}`); }
+    if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
     const prevShots = usShotCount[bestTarget.name] || 0;
     if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
 
