@@ -826,7 +826,7 @@ function startMove(ship) {
 function getSpeed(s) {
   // クリティカルで速力変更済みならそちらを使用
   if (s.speed !== undefined && s.speed !== null) return s.speed;
-  return {BB:4,OBB:3,CA:5,CL:6,CLAA:5,DD:6}[s.type] || 4;
+  return s.spd || 4;
 }
 
 // Axial hex math (pointy-top offset)

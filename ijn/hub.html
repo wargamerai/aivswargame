@@ -1379,7 +1379,7 @@ function buildFleets(data) {
   state.jpFleet = (data.jpFleet || []).map((s,i) => ({
     name: s.name, type: s.type, side: 'jp',
     col: -1, row: -1,
-    dir: 6, speed: SPEEDS[s.type]||4,
+    dir: 6, speed: s.spd||4,
     capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
     vp: s.vp, torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : (TORPEDOES[s.type]||'-'),
     isLead: false, colIndex:-1, followOrder:0,
@@ -1397,7 +1397,7 @@ function buildFleets(data) {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
       col: 33, row: Math.min(ROWS-1, 6 + i),
-      dir: 4, speed: SPEEDS[s.type]||4,
+      dir: 4, speed: s.spd||4,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
       vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
       isLead: i===0, colIndex:0, followOrder:i,
@@ -1411,7 +1411,7 @@ function buildFleets(data) {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
       col: Math.min(COLS-1, 34), row: Math.min(ROWS-1, 6 + i),
-      dir: 4, speed: SPEEDS[s.type]||4,
+      dir: 4, speed: s.spd||4,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
       vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
       isLead: i===0, colIndex:1, followOrder:i,
@@ -1486,7 +1486,7 @@ function startDeploy() {
 }
 
 function shipStats(ship) {
-  return `火力:${ship.capG} 装甲:${ship.capM} 速力:${SPEEDS[ship.type]||4} 魚雷:${TORPEDOES[ship.type]||'-'}`;
+  return `火力:${ship.capG} 装甲:${ship.capM} 速力:${ship.spd||4} 魚雷:${TORPEDOES[ship.type]||'-'}`;
 }
 
 function showDeployPrompt() {
@@ -1534,7 +1534,7 @@ function updateDeployPanel() {
       mark = ' ✓';
     } else if (i === idx) { cls = 'current'; mark = ' ◀'; }
     rows += `<div class="ship ${cls}">${i+1}. ${s.name}（${s.type}）${colTag}${mark}`
-      + `<div class="st">火${s.capG} 甲${s.capM} 速${SPEEDS[s.type]||4} 雷${TORPEDOES[s.type]||'-'}</div></div>`;
+      + `<div class="st">火${s.capG} 甲${s.capM} 速${s.spd||4} 雷${TORPEDOES[s.type]||'-'}</div></div>`;
   });
   const html = `<!DOCTYPE html><html><head><style>
 body{background:#080818;color:#e0e0e0;font-family:monospace;padding:8px;font-size:0.95em;margin:0}
