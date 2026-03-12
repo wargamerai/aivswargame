@@ -93,13 +93,7 @@
             </div>
             <div class="mode-group" style="border-color:#4CAF50;">
                 <h3 style="margin-top:0; color:#4CAF50;">🧠 Q学習AI（200万回学習）</h3>
-                <button id="q-toggle-btn" class="mode-btn" onclick="toggleQTable()" style="background:#555; border-color:#4CAF50;">🧠 Q学習AI: OFF</button>
-                <span style="font-size:12px; color:#aaa;">ONにすると46MBのデータを読み込みます。対戦・シミュレーション両方に適用されます。</span>
-            </div>
-            <div class="mode-group" style="border-color:#4a9eff;">
-                <h3 style="margin-top:0; color:#4a9eff;">⚙️ AIロジック編集</h3>
-                <button class="mode-btn" onclick="openLogicEditor('JP')" style="background:#1a3a5c; border-color:#4a9eff;">🇯🇵 日本軍AIロジックを編集</button>
-                <button class="mode-btn" onclick="openLogicEditor('SOV')" style="background:#5c1a1a; border-color:#ff4444;">🚩 ソ連軍AIロジックを編集</button>
+                <span style="font-size:12px; color:#4CAF50;">Q学習AI: 常時ON</span>
             </div>
         </div>
 
@@ -195,7 +189,7 @@ let simulationData = { simulationStats: { totalRuns: 0, results: {}, tacticalDat
 
 // ===== Q学習テーブル v2（特徴ベース・ユニット単位） =====
 let qTable = null;
-let useQTable = false;
+let useQTable = true;
 let qTableLoading = false;
 let qHitCount = 0;
 let qMissCount = 0;
@@ -528,8 +522,10 @@ let pendingAdvanceEligible = []; let pendingAdvancePoints = 0;
 window.pendingAITask = null;
 let isAutoPlay = false; 
 
-window.onload = () => { 
-    document.getElementById('status-banner').innerText = "【準備完了】モードを選択してください。"; 
+window.onload = () => {
+    document.getElementById('status-banner').innerText = "【準備完了】モードを選択してください。";
+    // Q学習データを自動読み込み（常時ON）
+    loadQTable(); 
     const modal = document.getElementById('combat-result-modal'); const modalHeader = document.getElementById('modal-header');
     modalHeader.onmousedown = function(e) {
         e.preventDefault();
