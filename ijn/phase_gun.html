@@ -186,39 +186,6 @@ function hexDist(c1,r1,c2,r2){
   const a=toAxial(c1,r1),b=toAxial(c2,r2);
   return Math.max(Math.abs(a.q-b.q),Math.abs(a.r-b.r),Math.abs((a.q+a.r)-(b.q+b.r)));
 }
-// cube座標変換
-function axialToCube(q,r){return{x:q,y:-q-r,z:r};}
-function cubeToOffset(x,y,z){var r=z; return{col:x+Math.floor((r-(r&1))/2), row:r};}
-function cubeRound(x,y,z){
-  var rx=Math.round(x),ry=Math.round(y),rz=Math.round(z);
-  var dx=Math.abs(rx-x),dy=Math.abs(ry-y),dz=Math.abs(rz-z);
-  if(dx>dy&&dx>dz) rx=-ry-rz; else if(dy>dz) ry=-rx-rz; else rz=-rx-ry;
-  return{x:rx,y:ry,z:rz};
-}
-// 射線チェック: firer→target間のヘクスに他の船がいたらtrue（射線遮蔽）
-function isLineBlocked(firer, target, allShips) {
-  var dist = hexDist(firer.col, firer.row, target.col, target.row);
-  if (dist <= 1) return false; // 隣接なら遮蔽なし
-  var fa = toAxial(firer.col, firer.row);
-  var ta = toAxial(target.col, target.row);
-  var fc = axialToCube(fa.q, fa.r);
-  var tc = axialToCube(ta.q, ta.r);
-  for (var i = 1; i < dist; i++) {
-    var t = i / dist;
-    var cx = fc.x + (tc.x - fc.x) * t;
-    var cy = fc.y + (tc.y - fc.y) * t;
-    var cz = fc.z + (tc.z - fc.z) * t;
-    var rounded = cubeRound(cx, cy, cz);
-    var off = cubeToOffset(rounded.x, rounded.y, rounded.z);
-    for (var j = 0; j < allShips.length; j++) {
-      var s = allShips[j];
-      if (s === firer || s === target) continue;
-      if (s.status === 'sunk' || s.col < 0) continue;
-      if (s.col === off.col && s.row === off.row) return true;
-    }
-  }
-  return false;
-}
 function roll() { return Math.ceil(Math.random()*6); }
 
 // ===== 射界（cube座標積方式）=====
@@ -480,7 +447,6 @@ function renderCards() {
       const d = hexDist(firer.col, firer.row, s.col, s.row);
       if (d > getMaxRange(s, firer)) oor = ' disabled';
       else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
-      else if (isLineBlocked(firer, s, [...jpShips, ...usShips])) oor = ' disabled';
     }
     return `<div class="card us${sel}${oor}" onclick="selectTarget(${i})">
       <span class="c-name">${s.name}</span>
@@ -511,7 +477,6 @@ function selectTarget(i) {
     const firer = jpShips[selectedFirer];
     const d = hexDist(firer.col, firer.row, usShips[i].col, usShips[i].row);
     if (d > 16) return;
-    if (isLineBlocked(firer, usShips[i], [...jpShips, ...usShips])) return;
   }
   selectedTarget = i;
   renderCards();
@@ -607,9 +572,6 @@ function doShoot() {
   // 射界チェック（利根型の後方射撃不能）
   const arcCheck = getArcInfo(firer, target);
   if (arcCheck.mult === 0) { log(`${arcCheck.arc} — この方向には射撃できません`); return; }
-
-  // 射線遮蔽チェック
-  if (isLineBlocked(firer, target, [...jpShips, ...usShips])) { log('射線上に他の艦が存在 — 射撃不可'); return; }
 
   const {mod, details} = calcModifiers(firer, target, dist);
 
@@ -792,11 +754,9 @@ function autoUSShoot(title) {
   for (const firer of us) {
     // 目標選択: 距離 + 割り当てペナルティでスコアリング
     let bestTarget = null, bestScore = 999;
-    const allShipsForLOS = [...us, ...jp];
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getMaxRange(t, firer)) continue;
-      if (isLineBlocked(firer, t, allShipsForLOS)) continue;
       const score = d + (assignCount[t.name] || 0) * 4;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
