@@ -613,24 +613,37 @@ function applyBattleResultData(importData, endTurn) {
         jpBonusMission = mission;
         logMsg(`任務: ${mission === 'bombard' ? '艦砲射撃' : '輸送'}`);
 
+        // ボーナスVP固定値テーブル
+        const BOMBARD_BONUS = {
+            '大和':[60,30],'長門':[28,14],'陸奥':[28,14],
+            '金剛':[20,10],'榛名':[20,10],'比叡':[20,10],'霧島':[20,10],
+            '伊勢':[24,12],'日向':[24,12],
+            '扶桑':[24,12],'山城':[24,12],
+            '高雄':[8,4],'愛宕':[8,4],'摩耶':[8,4],'鳥海':[8,4],
+            '妙高':[8,4],'羽黒':[8,4],'熊野':[8,4],'鈴谷':[8,4],
+            '利根':[7,4],'筑摩':[7,4],
+            '古鷹':[6,3],'青葉':[6,3],'衣笠':[6,3]
+        };
+        const TRANSPORT_BONUS = [2, 1]; // DD: [無傷, 小破]
+
         currentJpFleet.forEach(ship => {
             if (ship.status === 'sunk') return;
             const jpData = importData.find(d => d.name === ship.name);
             if (jpData && jpData.col < 0) return;
-            if (mission === 'bombard' && ship.type !== 'BB' && ship.type !== 'OBB' && ship.type !== 'CA') return;
-            if (mission === 'transport' && ship.type !== 'CL' && ship.type !== 'CLAA' && ship.type !== 'DD') return;
             if (ship.status !== 'ok' && ship.status !== 'light') {
                 logMsg(`  ${ship.name}: ${statusLabel(ship.status)} → ボーナス対象外`);
                 return;
             }
-            const battleData = importData.find(d => d.name === ship.name);
-            if (battleData && (battleData.cannotTurn || battleData.cannotFire || battleData.cannotTorpedo)) {
-                logMsg(`  ${ship.name}: 特殊損害あり → ボーナス対象外`);
-                return;
+            let bonus = 0;
+            if (mission === 'bombard' && BOMBARD_BONUS[ship.name]) {
+                bonus = ship.status === 'ok' ? BOMBARD_BONUS[ship.name][0] : BOMBARD_BONUS[ship.name][1];
+            } else if (mission === 'transport' && ship.type === 'DD') {
+                bonus = ship.status === 'ok' ? TRANSPORT_BONUS[0] : TRANSPORT_BONUS[1];
             }
-            const bonus = (ship.capG + ship.capM) * ship.vp;
-            jpBonus += bonus;
-            logMsg(`  ${ship.name}: +${bonus}点`);
+            if (bonus > 0) {
+                jpBonus += bonus;
+                logMsg(`  ${ship.name}: +${bonus}点`);
+            }
         });
 
         if (jpBonus > 0) {

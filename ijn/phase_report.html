@@ -99,10 +99,47 @@ function renderReport() {
   const usOk      = us.filter(s=>s.status==='ok');
 
   // VP: each side earns points for damage dealt to enemy
-  const jpEarned = calcVP(us, 'jp'); // damage on US = JP earns
+  const jpCombat = calcVP(us, 'jp'); // damage on US = JP earns
   const usEarned = calcVP(jp, 'us'); // damage on JP = US earns
 
   const combatTurn = state.combatTurn || 0;
+
+  // ボーナスVP固定値テーブル
+  const BOMBARD_BONUS = {
+    '大和':[60,30],'長門':[28,14],'陸奥':[28,14],
+    '金剛':[20,10],'榛名':[20,10],'比叡':[20,10],'霧島':[20,10],
+    '伊勢':[24,12],'日向':[24,12],
+    '扶桑':[24,12],'山城':[24,12],
+    '高雄':[8,4],'愛宕':[8,4],'摩耶':[8,4],'鳥海':[8,4],
+    '妙高':[8,4],'羽黒':[8,4],'熊野':[8,4],'鈴谷':[8,4],
+    '利根':[7,4],'筑摩':[7,4],
+    '古鷹':[6,3],'青葉':[6,3],'衣笠':[6,3]
+  };
+  const TRANSPORT_BONUS = [2, 1]; // DD: [無傷, 小破]
+
+  let jpBonus = 0;
+  let jpBonusDetail = [];
+  const usAllGone = us.every(s => s.status === 'sunk' || s.col < 0);
+  const mission = jp.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
+  const missionLabel = mission === 'bombard' ? '艦砲射撃' : '輸送';
+  if (usAllGone && combatTurn < 10) {
+    for (const s of jp) {
+      if (s.status === 'sunk') continue;
+      if (s.col < 0) continue;
+      if (s.status !== 'ok' && s.status !== 'light') continue;
+      let bonus = 0;
+      if (mission === 'bombard' && BOMBARD_BONUS[s.name]) {
+        bonus = s.status === 'ok' ? BOMBARD_BONUS[s.name][0] : BOMBARD_BONUS[s.name][1];
+      } else if (mission === 'transport' && s.type === 'DD') {
+        bonus = s.status === 'ok' ? TRANSPORT_BONUS[0] : TRANSPORT_BONUS[1];
+      }
+      if (bonus > 0) {
+        jpBonus += bonus;
+        jpBonusDetail.push(`${s.name}(+${bonus})`);
+      }
+    }
+  }
+  const jpEarned = jpCombat + jpBonus;
 
   let html = '';
 
@@ -112,11 +149,18 @@ function renderReport() {
   html += `<div>戦闘ターン数: <strong>${combatTurn}</strong></div>`;
   html += `<div>視認距離: ${state.spotRange||'-'} hex</div>`;
   html += `<div>先攻: ${state.initiative==='jp'?'<span class="jp">日本軍</span>':'<span class="us">米軍</span>'}</div>`;
+  if (usAllGone && combatTurn < 10) {
+    html += `<div>任務: <strong>${missionLabel}</strong></div>`;
+  }
   html += `</div>`;
 
   // Score
   html += `<div id="scoreBox">`;
   html += `<div class="score-line jp">🎌 日本軍獲得得点: <strong>${jpEarned}</strong> pt</div>`;
+  if (jpBonus > 0) {
+    html += `<div style="color:#8a6a00;font-size:0.85em;margin-left:12px">戦闘: ${jpCombat}pt + ${missionLabel}ボーナス: ${jpBonus}pt</div>`;
+    html += `<div style="color:#889;font-size:0.75em;margin-left:12px">${jpBonusDetail.join(', ')}</div>`;
+  }
   if (state.contactMade) {
     html += `<div class="score-line us">🦅 米軍獲得得点: <strong>${usEarned}</strong> pt</div>`;
     const winner = jpEarned > usEarned ? '日本軍勝利' : jpEarned < usEarned ? '米軍勝利' : '引き分け';
@@ -199,7 +243,8 @@ function sendToCampaign() {
   const raw = localStorage.getItem('battleResult');
   if (!raw) { alert('データなし'); return; }
   const data = JSON.parse(raw);
-  const forCampaign = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status, speed:s.speed}));
+  const ships = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status, speed:s.speed}));
+  const forCampaign = { endTurn: state.combatTurn || 0, ships: ships };
   localStorage.setItem('battleResultForCampaign', JSON.stringify(forCampaign));
   // キャンペーン画面を開く（同じタブで遷移）
   window.top.location.href = 'campaign.html';
