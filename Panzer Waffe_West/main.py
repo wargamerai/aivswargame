@@ -1717,6 +1717,7 @@ async def update_challenge_result(challenge_id, human_won):
     await doc_ref.update(js_update)
 
 async def async_main():
+    import asyncio
     import js
     from pyodide.ffi import to_js
 

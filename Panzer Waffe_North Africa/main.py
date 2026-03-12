@@ -2351,6 +2351,7 @@ async def save_challenge_to_firebase(deck_name, player_name, faction, card_ids, 
 # ゲーム起動用のメイン関数（終了・完了時に自動でリロードしてトップに戻る）
 # ==========================================
 async def async_main():
+    import asyncio
     import js
     from pyodide.ffi import to_js
 
