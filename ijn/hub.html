@@ -1253,8 +1253,8 @@ function onPhaseDone(next) {
     if (fresh.jpFleet) state.jpFleet = fresh.jpFleet;
     if (fresh.usFleet) state.usFleet = fresh.usFleet;
   }
-  const jpAlive = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0).length;
-  const usAlive = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0).length;
+  const jpAlive = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.status !== 'exited' && s.col >= 0).length;
+  const usAlive = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.status !== 'exited' && s.col >= 0).length;
   if (jpAlive === 0 || usAlive === 0) {
     const winner = usAlive === 0 ? '日本軍' : '米軍';
     dbg(`→ 全滅検出: JP=${jpAlive} US=${usAlive} → 戦闘終了`);
