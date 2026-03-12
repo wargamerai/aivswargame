@@ -534,8 +534,8 @@ function exportJson() {
     const exportData = {
         turn: currentTurn,
         battleName: BATTLE_NAMES[currentTurn],
-        jpFleet: currentJpFleet.map(s => ({ name: s.name, type: s.type, capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM, vp: s.vp })),
-        usFleet: currentUsFleet.map(s => ({ name: s.name, type: s.type, capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM, vp: s.vp }))
+        jpFleet: currentJpFleet.map(s => ({ name: s.name, type: s.type, atk: s.atk, def: s.def, spd: s.spd, capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM, vp: s.vp })),
+        usFleet: currentUsFleet.map(s => ({ name: s.name, type: s.type, atk: s.atk, def: s.def, spd: s.spd, capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM, vp: s.vp }))
     };
     localStorage.setItem('campaignFleet', JSON.stringify(exportData));
 }
