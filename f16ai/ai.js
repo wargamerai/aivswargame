@@ -794,7 +794,7 @@ const AI = {
             // 機関砲：dist0〜2、後方・後方側面・前方
             if (unit.gun > 0 && altDiff <= 1 && dist <= 2 && (aspect === "後方" || aspect === "後方側面" || aspect === "前方")) {
                 let val = window.COMBAT_CHARTS.GUN[unit.gunType || "A"]?.[aspect]?.[dist] || 0;
-                if (val > best.score) best = { type: 'GUN', targetId: target.id, dist, aspect, score: val };
+                if (val > 0 && val > best.score) best = { type: 'GUN', targetId: target.id, dist, aspect, score: val };
             }
 
             // HSミサイル：後方のみ（dist>=1、dist=0後方側面は不可）
