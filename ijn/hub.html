@@ -1609,6 +1609,21 @@ canvas.addEventListener('click', (e) => {
     if (!state.deployMode) return;
   }
 
+  // 移動フェーズ中: マップクリックで移動艦を選択
+  if (state.phase && state.phase.match(/^move/)) {
+    const hex = pixelToHex(cx, cy);
+    if (hex) {
+      var jpIdx = state.jpFleet.findIndex(s => s.col === hex.col && s.row === hex.row && s.status !== 'sunk');
+      if (jpIdx >= 0) {
+        var iframe = document.getElementById('subframe');
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({type:'MAP_SELECT_SHIP', index:jpIdx}, '*');
+        }
+        return;
+      }
+    }
+  }
+
   // 砲撃/雷撃フェーズ中: マップクリックで射撃艦/目標艦を選択
   if (state.phase && (state.phase.match(/^gun/) || state.phase === 'torpedo')) {
     const hex = pixelToHex(cx, cy);

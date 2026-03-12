@@ -1268,6 +1268,17 @@ function pushState() {
   }, '*');
 }
 
+// hub.htmlからのマップクリック選択を受信
+window.addEventListener('message', function(e) {
+  var msg = e.data;
+  if (!msg) return;
+  if (msg.type === 'MAP_SELECT_SHIP' && state && state.jpFreeMove) {
+    var shipName = state.jpFleet[msg.index] && state.jpFleet[msg.index].name;
+    var idx = jpFleet.findIndex(function(s) { return s.name === shipName; });
+    if (idx >= 0) clickShip(idx);
+  }
+});
+
 function donePhase() {
   // 未移動艦チェック（日本軍手動移動モード時のみ）
   if (state.jpFreeMove && isJPMoving()) {
@@ -1279,9 +1290,11 @@ function donePhase() {
     const unmoved = jpFleet.filter((s, i) => canShipMove(s) && !movedShips.has(i));
     if (unmoved.length > 0) {
       const names = unmoved.map(s => s.name).join(', ');
-      if (!confirm(`${unmoved.length}隻が未移動です（${names}）。\n次フェーズに進みますか？`)) {
+      if (!confirm(`${unmoved.length}隻が未移動です（${names}）。\n未移動艦は直進します。よろしいですか？`)) {
         return;
       }
+      // 未移動艦を直進させる
+      allStraight();
     }
   }
   if (moving) {
