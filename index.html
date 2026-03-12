@@ -5,16 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panzer Waffe - 作戦司令室 -</title>
     <style>
-        /* ジャーマングレーと黒を基調としたカラーパレットに変更 */
         :root {
-            --bg-color: #151617;       /* 深い黒寄りの背景 */
-            --panel-bg: #2b2d30;       /* パンツァー・グラウ（ジャーマングレー） */
-            --text-main: #d0d3d4;      /* くすんだ白・シルバー */
-            --text-accent: #ffffff;    /* 強い白 */
-            --btn-bg: #1e2022;         /* 暗いグレー */
-            --btn-hover: #3a3c40;      /* ホバー時の少し明るいグレー */
-            --border-color: #0a0a0b;   /* 漆黒の縁取り */
-            --accent-red: #8b0000;     /* ホバー時の暗い赤のアクセント */
+            --bg-color: #151617;
+            --panel-bg: #2b2d30;
+            --text-main: #d0d3d4;
+            --text-accent: #ffffff;
+            --btn-bg: #1e2022;
+            --btn-hover: #3a3c40;
+            --border-color: #0a0a0b;
+            --accent-red: #8b0000;
         }
 
         body {
@@ -39,7 +38,7 @@
         .container {
             background-color: var(--panel-bg);
             border: 4px solid var(--border-color);
-            border-radius: 4px; /* 少し角を鋭くして無骨さを強調 */
+            border-radius: 4px;
             padding: 40px;
             width: 80%;
             max-width: 600px;
@@ -70,7 +69,7 @@
             line-height: 1.6;
             background-color: #18191a;
             padding: 20px;
-            border-left: 5px solid #5a5d60; /* 無機質なスチールグレー */
+            border-left: 5px solid #5a5d60;
             font-family: monospace;
             font-size: 1.1em;
             color: #b0b5b9;
@@ -98,9 +97,11 @@
             letter-spacing: 2px;
             position: relative;
             overflow: hidden;
+            cursor: pointer;
+            font-family: inherit;
+            text-align: center;
         }
 
-        /* ホバー時に左側に赤いラインが入る演出を追加 */
         .theater-btn:hover {
             background-color: var(--btn-hover);
             transform: translateY(-2px);
@@ -122,7 +123,7 @@
             margin-top: 5px;
             letter-spacing: 1px;
         }
-        
+
         .footer {
             margin-top: 30px;
             font-size: 0.8em;
@@ -130,94 +131,147 @@
             letter-spacing: 1px;
         }
 
-        /* チャレンジデッキ一覧 */
-        .challenge-section {
-            margin-top: 40px;
-            border-top: 3px solid var(--border-color);
-            padding-top: 30px;
+        /* サブメニュー（展開式） */
+        .sub-menu {
+            display: none;
+            margin-top: 12px;
+            padding: 16px;
+            background: #18191a;
+            border: 1px solid var(--border-color);
+            border-radius: 2px;
+            animation: slideDown 0.2s ease-out;
         }
-        .challenge-section h2 {
-            color: var(--text-accent);
-            font-size: 1.5em;
-            margin-bottom: 20px;
-            letter-spacing: 2px;
+        .sub-menu.open {
+            display: block;
         }
-        .challenge-tabs {
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .sub-menu-btns {
             display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            justify-content: center;
-            margin-bottom: 20px;
+            gap: 12px;
+            margin-bottom: 0;
         }
-        .challenge-tab {
+        .sub-btn {
+            flex: 1;
+            padding: 12px 16px;
+            font-size: 1em;
+            font-weight: bold;
+            font-family: inherit;
+            border: 2px solid var(--border-color);
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+        }
+        .sub-btn-ai {
             background: var(--btn-bg);
             color: var(--text-main);
-            border: 1px solid var(--border-color);
-            padding: 8px 14px;
-            font-size: 0.85em;
-            cursor: pointer;
-            border-radius: 2px;
-            font-family: inherit;
         }
-        .challenge-tab.active {
+        .sub-btn-ai:hover {
+            background: var(--btn-hover);
+            color: var(--text-accent);
+            border-color: #5a5d60;
+        }
+        .sub-btn-challenge {
             background: var(--accent-red);
             color: var(--text-accent);
             border-color: var(--accent-red);
         }
-        .challenge-tab:hover {
+        .sub-btn-challenge:hover {
+            background: #a00000;
+        }
+
+        /* チャレンジデッキ一覧 */
+        .deck-panel {
+            display: none;
+            margin-top: 16px;
+            animation: slideDown 0.2s ease-out;
+        }
+        .deck-panel.open {
+            display: block;
+        }
+        .deck-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .deck-tab {
+            background: var(--btn-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            font-size: 0.8em;
+            cursor: pointer;
+            border-radius: 2px;
+            font-family: inherit;
+        }
+        .deck-tab.active {
+            background: var(--accent-red);
+            color: var(--text-accent);
+            border-color: var(--accent-red);
+        }
+        .deck-tab:hover {
             background: var(--btn-hover);
         }
         .deck-list {
-            text-align: left;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            max-height: 350px;
+            overflow-y: auto;
         }
         .deck-row {
-            background: #18191a;
+            background: #222426;
             border: 1px solid var(--border-color);
-            padding: 12px 16px;
-            margin-bottom: 8px;
+            padding: 6px 10px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-radius: 2px;
         }
-        .deck-info {
-            flex: 1;
-        }
+        .deck-info { flex: 1; min-width: 0; }
         .deck-name {
             color: var(--text-accent);
             font-weight: bold;
-            font-size: 1.1em;
+            font-size: 0.85em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .deck-meta {
             color: #7b8084;
-            font-size: 0.85em;
-            margin-top: 4px;
+            font-size: 0.7em;
+            margin-top: 1px;
         }
         .deck-stats {
             color: #00ff00;
             font-family: monospace;
-            font-size: 0.9em;
-            margin-top: 4px;
+            font-size: 0.75em;
+            margin-top: 1px;
         }
         .deck-human-stats {
             color: #ffcc00;
             font-family: monospace;
-            font-size: 0.8em;
-            margin-top: 2px;
+            font-size: 0.7em;
+            margin-top: 1px;
         }
         .challenge-btn {
             background: var(--accent-red);
             color: var(--text-accent);
             border: none;
-            padding: 8px 16px;
-            font-size: 0.9em;
+            padding: 4px 10px;
+            font-size: 0.75em;
             cursor: pointer;
             border-radius: 2px;
             text-decoration: none;
             font-family: inherit;
             font-weight: bold;
             white-space: nowrap;
-            margin-left: 12px;
+            margin-left: 10px;
         }
         .challenge-btn:hover {
             background: #a00000;
@@ -227,7 +281,7 @@
             justify-content: center;
             align-items: center;
             gap: 16px;
-            margin-top: 16px;
+            margin-top: 12px;
         }
         .pager button {
             background: var(--btn-bg);
@@ -248,7 +302,7 @@
         .no-decks {
             color: #5a5d60;
             font-style: italic;
-            padding: 20px;
+            padding: 16px;
             text-align: center;
         }
     </style>
@@ -275,15 +329,57 @@
     </div>
 
     <div class="btn-group">
-        <a href="Panzer Waffe_West/index.html" class="theater-btn">
-            西部戦線
-            <span>Western Front (1944-1945)</span>
-        </a>
-        
-        <a href="Panzer Waffe_North Africa/index.html" class="theater-btn">
-            北アフリカ戦線
-            <span>North African Campaign (1941-1943)</span>
-        </a>
+        <!-- 西部戦線 -->
+        <div>
+            <button class="theater-btn" onclick="toggleSubMenu('west')">
+                西部戦線
+                <span>Western Front (1944-1945)</span>
+            </button>
+            <div class="sub-menu" id="sub-west">
+                <div class="sub-menu-btns">
+                    <a href="Panzer Waffe_West/index.html" class="sub-btn sub-btn-ai">AI対戦</a>
+                    <button class="sub-btn sub-btn-challenge" onclick="openChallenge('west')">チャレンジデッキ</button>
+                </div>
+                <div class="deck-panel" id="deck-panel-west">
+                    <div class="deck-tabs">
+                        <button class="deck-tab active" onclick="switchFaction(this,'west','ドイツ軍')">ドイツ軍</button>
+                        <button class="deck-tab" onclick="switchFaction(this,'west','連合軍')">連合軍</button>
+                    </div>
+                    <div class="deck-list" id="deck-list-west"><div class="no-decks">読み込み中...</div></div>
+                    <div class="pager" id="pager-west" style="display:none;">
+                        <button onclick="changePage('west',-1)">&#9664; 前へ</button>
+                        <span id="page-info-west">1 / 1</span>
+                        <button onclick="changePage('west',1)">次へ &#9654;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 北アフリカ戦線 -->
+        <div>
+            <button class="theater-btn" onclick="toggleSubMenu('africa')">
+                北アフリカ戦線
+                <span>North African Campaign (1941-1943)</span>
+            </button>
+            <div class="sub-menu" id="sub-africa">
+                <div class="sub-menu-btns">
+                    <a href="Panzer Waffe_North Africa/index.html" class="sub-btn sub-btn-ai">AI対戦</a>
+                    <button class="sub-btn sub-btn-challenge" onclick="openChallenge('africa')">チャレンジデッキ</button>
+                </div>
+                <div class="deck-panel" id="deck-panel-africa">
+                    <div class="deck-tabs">
+                        <button class="deck-tab active" onclick="switchFaction(this,'africa','ドイツ軍')">ドイツ軍</button>
+                        <button class="deck-tab" onclick="switchFaction(this,'africa','連合軍')">連合軍</button>
+                    </div>
+                    <div class="deck-list" id="deck-list-africa"><div class="no-decks">読み込み中...</div></div>
+                    <div class="pager" id="pager-africa" style="display:none;">
+                        <button onclick="changePage('africa',-1)">&#9664; 前へ</button>
+                        <span id="page-info-africa">1 / 1</span>
+                        <button onclick="changePage('africa',1)">次へ &#9654;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <a href="battleofnomonhan/nomonhan.html" class="theater-btn">
             ノモンハン
@@ -300,25 +396,6 @@
             <span>Combined Fleet (IJN)</span>
         </a>
     </div>
-    
-    <!-- チャレンジデッキ一覧 -->
-    <div class="challenge-section">
-        <h2>チャレンジデッキ</h2>
-        <div class="challenge-tabs">
-            <button class="challenge-tab active" onclick="switchTab('west','ドイツ軍')">西部 ドイツ軍</button>
-            <button class="challenge-tab" onclick="switchTab('west','連合軍')">西部 連合軍</button>
-            <button class="challenge-tab" onclick="switchTab('africa','ドイツ軍')">北アフリカ ドイツ軍</button>
-            <button class="challenge-tab" onclick="switchTab('africa','連合軍')">北アフリカ 連合軍</button>
-        </div>
-        <div id="deck-list-container" class="deck-list">
-            <div class="no-decks">読み込み中...</div>
-        </div>
-        <div class="pager" id="pager" style="display:none;">
-            <button id="prev-btn" onclick="changePage(-1)">&#9664; 前へ</button>
-            <span id="page-info">1 / 1</span>
-            <button id="next-btn" onclick="changePage(1)">次へ &#9654;</button>
-        </div>
-    </div>
 
     <div class="footer">
         CLASSIFIED INFORMATION - AUTHORIZED PERSONNEL ONLY
@@ -326,76 +403,90 @@
 </div>
 
 <script>
-    // チャレンジデッキ一覧管理
-    let currentVersion = 'west';
-    let currentFaction = 'ドイツ軍';
-    let currentPage = 0;
+    // 状態管理
+    const state = {
+        west:   { faction: 'ドイツ軍', page: 0, decks: [], loaded: false },
+        africa: { faction: 'ドイツ軍', page: 0, decks: [], loaded: false }
+    };
     const PAGE_SIZE = 20;
-    let allDecks = [];
 
-    function switchTab(version, faction) {
-        currentVersion = version;
-        currentFaction = faction;
-        currentPage = 0;
-        // タブのアクティブ状態を更新
-        document.querySelectorAll('.challenge-tab').forEach(t => t.classList.remove('active'));
-        event.target.classList.add('active');
-        loadDecks();
+    function toggleSubMenu(version) {
+        const el = document.getElementById('sub-' + version);
+        const isOpen = el.classList.contains('open');
+        // 他のサブメニューを閉じる
+        document.querySelectorAll('.sub-menu').forEach(m => m.classList.remove('open'));
+        document.querySelectorAll('.deck-panel').forEach(p => p.classList.remove('open'));
+        if (!isOpen) el.classList.add('open');
     }
 
-    function changePage(delta) {
-        const maxPage = Math.ceil(allDecks.length / PAGE_SIZE) - 1;
-        currentPage = Math.max(0, Math.min(maxPage, currentPage + delta));
-        renderDecks();
+    function openChallenge(version) {
+        const panel = document.getElementById('deck-panel-' + version);
+        const isOpen = panel.classList.contains('open');
+        if (isOpen) {
+            panel.classList.remove('open');
+            return;
+        }
+        panel.classList.add('open');
+        if (!state[version].loaded) {
+            loadDecks(version);
+        }
     }
 
-    async function loadDecks() {
-        const container = document.getElementById('deck-list-container');
+    function switchFaction(btn, version, faction) {
+        state[version].faction = faction;
+        state[version].page = 0;
+        // タブ更新
+        btn.parentElement.querySelectorAll('.deck-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+        loadDecks(version);
+    }
+
+    async function loadDecks(version) {
+        const container = document.getElementById('deck-list-' + version);
         container.innerHTML = '<div class="no-decks">読み込み中...</div>';
 
         try {
             const snapshot = await window.db.collection('challenge_decks')
-                .where('game_version', '==', currentVersion)
-                .where('faction', '==', currentFaction)
+                .where('game_version', '==', version)
+                .where('faction', '==', state[version].faction)
                 .orderBy('win_rate', 'desc')
                 .get();
 
-            allDecks = [];
+            state[version].decks = [];
             snapshot.forEach(doc => {
-                allDecks.push({ id: doc.id, ...doc.data() });
+                state[version].decks.push({ id: doc.id, ...doc.data() });
             });
-            renderDecks();
+            state[version].loaded = true;
+            renderDecks(version);
         } catch (e) {
-            container.innerHTML = '<div class="no-decks">データの読み込みに失敗しました。Firebase設定を確認してください。</div>';
+            container.innerHTML = '<div class="no-decks">データの読み込みに失敗しました。</div>';
             console.error('Firestore error:', e);
         }
     }
 
-    function renderDecks() {
-        const container = document.getElementById('deck-list-container');
-        const pager = document.getElementById('pager');
+    function renderDecks(version) {
+        const s = state[version];
+        const container = document.getElementById('deck-list-' + version);
+        const pager = document.getElementById('pager-' + version);
+        const gamePath = version === 'west'
+            ? 'Panzer Waffe_West/index.html'
+            : 'Panzer Waffe_North Africa/index.html';
 
-        if (allDecks.length === 0) {
+        if (s.decks.length === 0) {
             container.innerHTML = '<div class="no-decks">登録されたデッキはまだありません。</div>';
             pager.style.display = 'none';
             return;
         }
 
-        const totalPages = Math.ceil(allDecks.length / PAGE_SIZE);
-        const start = currentPage * PAGE_SIZE;
-        const pageDecks = allDecks.slice(start, start + PAGE_SIZE);
-
-        // ゲームページのパス
-        const gamePath = currentVersion === 'west'
-            ? 'Panzer Waffe_West/index.html'
-            : 'Panzer Waffe_North Africa/index.html';
+        const totalPages = Math.ceil(s.decks.length / PAGE_SIZE);
+        const start = s.page * PAGE_SIZE;
+        const pageDecks = s.decks.slice(start, start + PAGE_SIZE);
 
         let html = '';
         pageDecks.forEach((d, i) => {
             const rank = start + i + 1;
             const humanRate = d.human_challenges > 0
-                ? Math.round(d.human_wins / d.human_challenges * 100)
-                : null;
+                ? Math.round(d.human_wins / d.human_challenges * 100) : null;
             const humanText = d.human_challenges > 0
                 ? `${d.human_challenges}人挑戦 / ${d.human_wins}人撃破 (人間勝率${humanRate}%)`
                 : 'まだ挑戦者なし';
@@ -414,15 +505,22 @@
         });
         container.innerHTML = html;
 
-        // ページング
         if (totalPages > 1) {
             pager.style.display = 'flex';
-            document.getElementById('page-info').textContent = `${currentPage + 1} / ${totalPages}`;
-            document.getElementById('prev-btn').disabled = (currentPage === 0);
-            document.getElementById('next-btn').disabled = (currentPage >= totalPages - 1);
+            document.getElementById('page-info-' + version).textContent = `${s.page + 1} / ${totalPages}`;
+            const btns = pager.querySelectorAll('button');
+            btns[0].disabled = (s.page === 0);
+            btns[1].disabled = (s.page >= totalPages - 1);
         } else {
             pager.style.display = 'none';
         }
+    }
+
+    function changePage(version, delta) {
+        const s = state[version];
+        const maxPage = Math.ceil(s.decks.length / PAGE_SIZE) - 1;
+        s.page = Math.max(0, Math.min(maxPage, s.page + delta));
+        renderDecks(version);
     }
 
     function escapeHtml(text) {
@@ -430,12 +528,6 @@
         div.textContent = text;
         return div.innerHTML;
     }
-
-    // 初期読み込み
-    document.addEventListener('DOMContentLoaded', () => {
-        // Firebase初期化を少し待ってからロード
-        setTimeout(() => { loadDecks(); }, 500);
-    });
 </script>
 
 </body>
