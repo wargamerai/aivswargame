@@ -141,7 +141,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
   <button id="btnFog" onclick="toggleFog()">霧: OFF</button>
   <button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
   <button id="btnCampaign" onclick="loadCampaign()">読込</button>
-  <button id="btnReturn" onclick="if(confirm('戦闘を終了してキャンペーンに戻りますか？'))returnToCampaign()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
+  <button id="btnReturn" onclick="if(confirm('戦闘を終了して結果を表示しますか？'))showTurnEndReport()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
 </div>
 
 <div id="main">
@@ -1283,8 +1283,8 @@ function nextTurn() {
   if (state.combatTurn > 10) {
     setInfo('戦闘終了！（10ターン経過）');
     showPhaseFlash('戦闘終了！');
-    // 戦闘結果をキャンペーン用に保存してから遷移
-    returnToCampaign();
+    // 戦闘結果画面を表示（そこからキャンペーンへ遷移）
+    showTurnEndReport();
     return;
   }
   document.getElementById('combatTurn').textContent = state.combatTurn;
