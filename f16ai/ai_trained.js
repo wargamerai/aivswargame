@@ -322,6 +322,10 @@ const AI = {
         candidates.sort((a, b) => b.finalScore - a.finalScore);
         let best = candidates[0];
 
+        // デバッグ: 移動決定の詳細ログ
+        let { arc: dbgArc } = this.getArcAndAspect(unit.x, unit.y, unit.direction, target.x, target.y, target.direction, curDist);
+        console.log(`[AI_MOVE] ${unit.id} pos:(${unit.x},${unit.y}) dir:${unit.direction} → target:(${target.x},${target.y}) dist:${curDist} arc:${dbgArc} forceEdgeTurn:${forceEdgeTurn} best:r${best.r}c${best.c} score:${best.finalScore.toFixed(0)} candidates:${candidates.length} top3:[${candidates.slice(0,3).map(c=>`r${c.r}c${c.c}=${c.finalScore.toFixed(0)}`).join(', ')}]`);
+
         // 次ターンの報酬計算用に記録
         AirCombatRL.recordStep(unit.id, state, best.actionKey, curDist);
         // 後方アスペクトを記録（次ターンの報酬判定用）
