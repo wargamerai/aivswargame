@@ -98,7 +98,7 @@ const AirCombatRL = {
         this._lastDist[unitId] = dist;
     },
 
-    applyReward: function(unitId, newDist, fired, hit, gotRear) {
+    applyReward: function(unitId, newDist, fired, hit, gotRear, arc, aspect) {
         const prev = this._lastState[unitId];
         const act  = this._lastAction[unitId];
         const oldD = this._lastDist[unitId];
@@ -112,6 +112,11 @@ const AirCombatRL = {
         else if (newDist <= 10) r += 1; // 中距離
         if (fired)           r += 6;   // 攻撃実行
         if (hit)             r += 18;  // 命中
+        // ポジショニング報酬（Python reward_step と同一）
+        if (arc === '前方' && aspect === '後方') r += 12;
+        else if (arc === '前方' && aspect === '後方側面') r += 8;
+        else if (arc === '前方') r += 3;
+        else if (aspect === '後方') r += 4;
         // nextMaxQ を正しく計算（Python版と同じ）
         let nextMax = 0;
         const table = this.getTable();
@@ -188,10 +193,13 @@ const AI = {
         const isCircling = unit._posHistory.length >= 4 &&
             (Math.max(...unit._posHistory) - Math.min(...unit._posHistory)) < 2;
 
-        // ── 前ターンのQ報酬適用（後方ポジション取得を加点） ──
-        const { aspect: prevAspect } = unit._prevAspect || { aspect: '' };
+        // ── 前ターンのQ報酬適用（ポジショニング報酬付き） ──
+        const { arc: prevArc, aspect: prevAspect } = this.getArcAndAspect(
+            unit.x, unit.y, unit.direction,
+            target.x, target.y, target.direction, curDist
+        );
         AirCombatRL.applyReward(unit.id, curDist, false, false,
-            prevAspect === '後方');
+            prevAspect === '後方', prevArc, prevAspect);
 
         // ── スコアリング定数（ここを変えるとAIの傾向が変わる） ──
         // 固定マップ（朝鮮シナリオ等）ではターン数が短いので攻撃的に
@@ -302,22 +310,29 @@ const AI = {
                     // 高度差ペナルティ
                     hScore -= altDiff * PT.ALT_PENALTY;
 
-                    // 役割別ボーナス
-                    // role 1(左翼)：目標より+3高度・左側から接近
-                    // role 2(右翼)：目標より-3高度・右側から接近
-                    // role 0(囮)  ：目標正面に飛び込み（高度は目標に合わせる）
-                    if (role === 1) {
-                        hScore -= Math.abs(sim.altitude - (target.altitude + 3)) * 3;
-                        let tRad = this.DIR_ANGLES[target.direction] * Math.PI / 180;
-                        let cross = Math.cos(tRad) * (sim.y - target.y) - Math.sin(tRad) * (sim.x - target.x);
-                        if (cross > 0) hScore += PT.ROLE_SPREAD;
-                    } else if (role === 2) {
-                        hScore -= Math.abs(sim.altitude - (target.altitude - 3)) * 3;
-                        let tRad = this.DIR_ANGLES[target.direction] * Math.PI / 180;
-                        let cross = Math.cos(tRad) * (sim.y - target.y) - Math.sin(tRad) * (sim.x - target.x);
-                        if (cross < 0) hScore += PT.ROLE_SPREAD;
+                    // 挟撃役割別ボーナス（Python PINCER戦術と同一）
+                    if (role === 'pincer_front') {
+                        // 正面担当: 敵に向かって距離を詰める → 敵を旋回させる
+                        hScore += (curDist - newDist) * 40;
+                        if (arc === '前方') hScore += 40;
+                    } else if (role === 'pincer_rear') {
+                        // 後方担当: 敵の後ろに回り込む → 尻を取る
+                        // 正面担当との角度差が大きいほどボーナス（時間差攻撃）
+                        if (arc === '前方' && aspect === '後方') hScore += 120;
+                        else if (arc === '前方' && aspect === '後方側面') hScore += 80;
+                        // 正面担当と敵を挟む角度を計算
+                        let frontUnit = myUnits.find(u => u.id !== unit.id &&
+                            this.getSovietRole(u, myUnits) === 'pincer_front');
+                        if (frontUnit) {
+                            let myAng = Math.atan2(sim.y - target.y, sim.x - target.x);
+                            let hisAng = Math.atan2(frontUnit.y - target.y, frontUnit.x - target.x);
+                            let angleDiff = Math.abs(myAng - hisAng) * 180 / Math.PI % 360;
+                            if (angleDiff > 180) angleDiff = 360 - angleDiff;
+                            if (angleDiff >= 120) hScore += 60;  // 120°以上離れて挟めている
+                            else if (angleDiff >= 60) hScore += 30;
+                        }
                     } else {
-                        // role 0 は高度を合わせて正面から引きつける
+                        // solo: 通常の距離詰め
                         hScore -= altDiff * 3;
                     }
 
@@ -430,14 +445,33 @@ const AI = {
         return sorted[targetIdx];
     },
 
-    // ===== 役割割り当て =====
-    // role 0: 囮・正面（直進で引きつける）
-    // role 1: 左翼（左から回り込み、高度+3を目指す）
-    // role 2: 右翼（右から回り込み、高度-3を目指す）
+    // ===== 挟撃役割割り当て（Python train_air.py PINCER戦術と同一） =====
+    // 同じ敵を担当する味方が2機以上いる場合:
+    //   最も近い1機 → pincer_front（正面から追って旋回を強制）
+    //   残り       → pincer_rear（後方から回り込んで尻を取る）
+    // 1機だけなら solo
     getSovietRole: function(unit, myUnits) {
-        let sorted = [...myUnits].sort((a, b) => a.id.localeCompare(b.id));
-        let idx = sorted.findIndex(u => u.id === unit.id);
-        return idx % 3; // 0:囮 1:左翼 2:右翼
+        // この機体と同じターゲットを担当する味方を探す
+        let validEnemies = (typeof units !== 'undefined')
+            ? units.filter(u => u.team !== unit.team && u.status !== 'destroyed') : [];
+        if (validEnemies.length === 0) return 'solo';
+        let myTarget = this.assignGroupTarget(unit, myUnits, validEnemies);
+        if (!myTarget) return 'solo';
+
+        // 同じターゲット担当の味方リスト
+        let sameTarget = myUnits.filter(u => {
+            let t = this.assignGroupTarget(u, myUnits, validEnemies);
+            return t && t.id === myTarget.id;
+        });
+        if (sameTarget.length <= 1) return 'solo';
+
+        // 最も敵に近い機体が正面担当、残りが後方担当
+        sameTarget.sort((a, b) => {
+            let da = this.getHexDistance(a.x, a.y, myTarget.x, myTarget.y);
+            let db = this.getHexDistance(b.x, b.y, myTarget.x, myTarget.y);
+            return da - db;
+        });
+        return (sameTarget[0].id === unit.id) ? 'pincer_front' : 'pincer_rear';
     },
 
     // ===== ソ連AI専用：回避行動 =====

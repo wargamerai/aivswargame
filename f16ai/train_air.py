@@ -430,7 +430,8 @@ class AirCombatAI:
 
         return score
 
-    def reward_step(self, unit_id, new_dist, fired, hit, killed, got_shot_at=False):
+    def reward_step(self, unit_id, new_dist, fired, hit, killed, got_shot_at=False,
+                     arc=None, aspect=None):
         if unit_id not in self._last: return
         state, action, old_dist = self._last[unit_id]
         r = 0
@@ -443,6 +444,15 @@ class AirCombatAI:
         if hit:    r += 18
         if killed: r += 35
         if got_shot_at: r -= 8
+        # ポジショニング報酬: 敵の後ろを取る動きを評価
+        if arc == '前方' and aspect == '後方':
+            r += 12  # 理想の尻取り位置
+        elif arc == '前方' and aspect == '後方側面':
+            r += 8   # 良いポジション
+        elif arc == '前方':
+            r += 3   # 敵が正面にいる
+        elif aspect == '後方':
+            r += 4   # 敵の後ろにいる（まだ正面に捉えてない）
         next_max = self.get_best_q(state)
         self.update_q(state, action, r, next_max)
 
@@ -543,7 +553,7 @@ def resolve_attack(attacker, target, gun_chart, hs_chart, rh_chart):
 
     def roll(): return random.randint(1,6) + random.randint(1,6)
 
-    if attacker.gun > 0 and arc == '前方' and dist <= 1 and alt_diff <= 1 and aspect in ('後方','後方側面'):
+    if attacker.gun > 0 and arc == '前方' and dist <= 2 and alt_diff <= 1 and aspect in ('後方','後方側面','前方'):
         val = gun_chart.get(attacker.gun_type, {}).get(aspect, [0,0,0])
         needed = val[dist] if dist < len(val) else 0
         if needed > 0:
@@ -635,7 +645,7 @@ def is_in_attack_range(attacker, target, gun_chart, hs_chart, rh_chart):
     arc, aspect = get_arc_aspect(attacker.x, attacker.y, attacker.direction,
                                   target.x, target.y, target.direction)
     if arc != '前方': return False
-    if attacker.gun > 0 and dist <= 1 and alt_diff <= 1 and aspect in ('後方', '後方側面'):
+    if attacker.gun > 0 and dist <= 2 and alt_diff <= 1 and aspect in ('後方', '後方側面', '前方'):
         return True
     mtype = attacker.missile_type
     if attacker.missiles_hs > 0 and alt_diff <= 2:
@@ -814,8 +824,12 @@ def run_game(sc, ai, plane_data, gun_chart, hs_chart, rh_chart):
                 kill_by_this[weapon] = kill_by_this.get(weapon, 0) + 1
             if hit:    tactic_log[tkey]['hits']  += 1
             if killed: tactic_log[tkey]['kills'] += 1
+            # 移動後のarc/aspectを計算してポジショニング報酬に使う
+            post_arc, post_aspect = get_arc_aspect(u.x, u.y, u.direction,
+                                                    target.x, target.y, target.direction)
             ai.reward_step(u.id, dist, result != 'skip', hit, killed,
-                           got_shot_at=(u.id in shot_at))
+                           got_shot_at=(u.id in shot_at),
+                           arc=post_arc, aspect=post_aspect)
             ai.record_maneuver(r, c, hit, killed)
 
             # 【NEW】Red機が攻撃した場合のみ同時攻撃数・包囲形態を記録
