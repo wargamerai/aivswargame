@@ -190,11 +190,12 @@ class Game:
             self.current_player = self.player1; self.enemy_player = self.player2
         else:
             self.current_player = self.player2; self.enemy_player = self.player1
-        try:
-            import js
-            dashboard = js.document.getElementById("fixed-dashboard")
-            if dashboard: dashboard.innerText = "実戦フェイズ：初期配置完了"
-        except: pass
+        if not self.quiet:
+            try:
+                import js
+                dashboard = js.document.getElementById("fixed-dashboard")
+                if dashboard: dashboard.innerText = "実戦フェイズ：初期配置完了"
+            except: pass
 
     async def build_player_deck(self, player, all_cards):
         pool = [Card(row) for _, row in all_cards.iterrows() if row['Faction'] == player.faction or row['Faction'] == player.faction.replace("軍", "")]
@@ -620,6 +621,43 @@ class Game:
                 if choice == '1': return valid_cards[0]
                 elif choice == '99': return None
 
+    async def action_swap_card(self, player):
+        """手札を1枚デッキの下に戻し、1枚引く"""
+        if not player.hand:
+            print("\n手札がありません。")
+            return False
+        if not player.headquarters:
+            print("\nデッキにカードがありません。")
+            return False
+        print("\n--- 手札交換 ---")
+        print("デッキの下に戻すカードを選んでください:")
+        for i, c in enumerate(player.hand):
+            if c.type == '戦車':
+                print(f"  {i+1}: [{c.type}] {c.name} (攻{c.attack}/防{c.defense})")
+            else:
+                print(f"  {i+1}: [{c.type}] {c.name}")
+        choice = await safe_input("\n> 番号を入力 (99: 戻る): ")
+        if choice == '99': return False
+        try:
+            idx = int(choice) - 1
+            if idx < 0 or idx >= len(player.hand): print("無効な番号です。"); return False
+        except ValueError: print("無効な入力です。"); return False
+        returned_card = player.hand.pop(idx)
+        player.headquarters.append(returned_card)
+        drawn_card = player.headquarters.pop(0)
+        if drawn_card.type == 'アクシデント':
+            self.print_q(f"\n【アクシデント発生！】『{drawn_card.name}』が発生！")
+            for p_target in [player, self.enemy_player if player == self.current_player else self.current_player]:
+                while p_target.active_events:
+                    old_ev = p_target.active_events.pop(0)
+                    self.print_q(f"  -> 古いイベント/アクシデント『{old_ev.name}』は押し出され、除外されました。")
+            player.active_events.append(drawn_card)
+            print(f"\n『{returned_card.name}』をデッキに戻しましたが、アクシデント『{drawn_card.name}』を引きました！")
+        else:
+            player.hand.append(drawn_card)
+            print(f"\n『{returned_card.name}』をデッキに戻し、新しいカードを引きました。")
+        return True
+
     async def show_discard_pile(self, player):
         print(f"\n=== 【{player.faction}】の捨て札 ===")
         if not player.discard_pile: print("  なし")
@@ -673,12 +711,13 @@ class Game:
             r1, r2 = 1.0, -1.0
         else:
             r1, r2 = -1.0, 1.0
-        if self.player1.brain: await self.player1.brain.learn(r1)
-        if self.player2.brain: await self.player2.brain.learn(r2)
-        if self.player1.brain: await self.player1.brain.learn_deck(self.winner == self.player1)
-        if self.player2.brain: await self.player2.brain.learn_deck(self.winner == self.player2)
-        if self.player1.brain: await self.player1.brain.save_player_patterns()
-        if self.player2.brain: await self.player2.brain.save_player_patterns()
+        if not self.quiet:
+            if self.player1.brain: await self.player1.brain.learn(r1)
+            if self.player2.brain: await self.player2.brain.learn(r2)
+            if self.player1.brain: await self.player1.brain.learn_deck(self.winner == self.player1)
+            if self.player2.brain: await self.player2.brain.learn_deck(self.winner == self.player2)
+            if self.player1.brain: await self.player1.brain.save_player_patterns()
+            if self.player2.brain: await self.player2.brain.save_player_patterns()
         return self.winner
 
     async def take_turn(self):
@@ -1440,7 +1479,7 @@ class Game:
     async def ai_take_turn(self):
         self.show_battlefield()
         self.print_q("\nAIが盤面を分析・計算中...（Q学習モード）")
-        await asyncio.sleep(0.1)
+        if not self.quiet: await asyncio.sleep(0.1)
         state_str = "Default"
         try: state_str = self.current_player.brain.get_abstract_state(self.current_player, self.enemy_player, self.terrains)
         except: pass
@@ -1844,33 +1883,27 @@ async def async_main():
                 # イベント/アクシデント以外のカードIDを抽出
                 card_ids = [c.id for c in built_deck if c.type not in ['イベント', 'アクシデント']]
 
-                player_name = (await safe_input("あなたの名前（ハンドルネーム）: ")).strip()
+                player_name = (await safe_input("あなたの名前（ハンドルネーム、8文字以内）: ")).strip()
                 if not player_name: player_name = "名無し"
-                deck_name = (await safe_input("デッキ名: ")).strip()
-                if not deck_name: deck_name = "無名デッキ"
+                player_name = player_name[:8]
 
-                # AI 100回自動対戦
+                while True:
+                    deck_name = (await safe_input("デッキ名（8文字以内）: ")).strip()
+                    if not deck_name: deck_name = "無名デッキ"
+                    if len(deck_name) <= 8: break
+                    print(f"デッキ名が長すぎます（{len(deck_name)}文字）。8文字以内にしてください。")
+
+                # AI 30回自動対戦
                 print(f"\n『{deck_name}』の強さを測定します...")
-                print("AI 100回自動対戦を開始します。しばらくお待ちください...\n")
-                num_battles = 100
+                print("AI 30回自動対戦を開始します。しばらくお待ちください...\n")
+                num_battles = 30
                 p1_wins, p2_wins, draws = 0, 0, 0
 
                 def show_challenge_progress(i):
                     done = i + 1
-                    total = num_battles
-                    pct = int(done / total * 100)
-                    bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
-                    rate = f"{p1_wins/done*100:.1f}%" if done > 0 else "-"
-                    msg = (
-                        f"【チャレンジデッキ測定中】\n\n"
-                        f"  デッキ名: {deck_name}\n"
-                        f"  陣営: {challenge_faction}\n\n"
-                        f"  {done} / {total} 回  ({pct}%)\n"
-                        f"  [{bar}]\n\n"
-                        f"  デッキ勝利: {p1_wins}  ({rate})\n"
-                        f"  AI勝利   : {p2_wins}\n"
-                        f"  引き分け : {draws}\n"
-                    )
+                    pct = int(done / num_battles * 100)
+                    rate = f"{p1_wins/done*100:.0f}%" if done > 0 else "-"
+                    msg = f"測定中... {pct}%  (勝率{rate})"
                     try:
                         d = js.document.getElementById("fixed-dashboard")
                         if d: d.innerText = msg
@@ -1887,9 +1920,8 @@ async def async_main():
                     elif game.winner == game.player1: p1_wins += 1
                     else: p2_wins += 1
 
-                    if (i + 1) % 5 == 0 or i == num_battles - 1:
-                        show_challenge_progress(i)
-                        await asyncio.sleep(0)
+                    show_challenge_progress(i)
+                    await asyncio.sleep(0)
 
                 win_rate = round(p1_wins / num_battles * 100, 1)
                 print(f"\n{'='*50}")

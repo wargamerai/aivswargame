@@ -663,12 +663,13 @@ class Game:
             r1, r2 = 1.0, -1.0
         else:
             r1, r2 = -1.0, 1.0
-        if self.player1.brain: await self.player1.brain.learn(r1)
-        if self.player2.brain: await self.player2.brain.learn(r2)
-        if self.player1.brain: await self.player1.brain.learn_deck(self.winner == self.player1)
-        if self.player2.brain: await self.player2.brain.learn_deck(self.winner == self.player2)
-        if self.player1.brain: await self.player1.brain.save_player_patterns()
-        if self.player2.brain: await self.player2.brain.save_player_patterns()
+        if not self.quiet:
+            if self.player1.brain: await self.player1.brain.learn(r1)
+            if self.player2.brain: await self.player2.brain.learn(r2)
+            if self.player1.brain: await self.player1.brain.learn_deck(self.winner == self.player1)
+            if self.player2.brain: await self.player2.brain.learn_deck(self.winner == self.player2)
+            if self.player1.brain: await self.player1.brain.save_player_patterns()
+            if self.player2.brain: await self.player2.brain.save_player_patterns()
 
     async def take_turn(self):
         GameEffects.check_auto_play_debuffs(self.current_player, self)
@@ -2309,11 +2310,12 @@ class Game:
         
         self.print_q("\n両軍のデッキ配備が完了しました。")
         
-        try:
-            import js
-            dashboard = js.document.getElementById("fixed-dashboard")
-            if dashboard: dashboard.innerText = "実戦フェイズ：初期配置"
-        except: pass
+        if not self.quiet:
+            try:
+                import js
+                dashboard = js.document.getElementById("fixed-dashboard")
+                if dashboard: dashboard.innerText = "実戦フェイズ：初期配置"
+            except: pass
 
         await self.setup_initial_board(self.player1)
         await self.setup_initial_board(self.player2)
@@ -2477,33 +2479,27 @@ async def async_main():
                 # イベント/アクシデント以外のカードIDを抽出
                 card_ids = [c.id for c in built_deck if c.type not in ['イベント', 'アクシデント']]
 
-                player_name = (await safe_input("あなたの名前（ハンドルネーム）: ")).strip()
+                player_name = (await safe_input("あなたの名前（ハンドルネーム、8文字以内）: ")).strip()
                 if not player_name: player_name = "名無し"
-                deck_name = (await safe_input("デッキ名: ")).strip()
-                if not deck_name: deck_name = "無名デッキ"
+                player_name = player_name[:8]
 
-                # AI 100回自動対戦
+                while True:
+                    deck_name = (await safe_input("デッキ名（8文字以内）: ")).strip()
+                    if not deck_name: deck_name = "無名デッキ"
+                    if len(deck_name) <= 8: break
+                    print(f"デッキ名が長すぎます（{len(deck_name)}文字）。8文字以内にしてください。")
+
+                # AI 30回自動対戦
                 print(f"\n『{deck_name}』の強さを測定します...")
-                print("AI 100回自動対戦を開始します。しばらくお待ちください...\n")
-                num_battles = 100
+                print("AI 30回自動対戦を開始します。しばらくお待ちください...\n")
+                num_battles = 30
                 p1_wins, p2_wins, draws = 0, 0, 0
 
                 def show_challenge_progress(i):
                     done = i + 1
-                    total = num_battles
-                    pct = int(done / total * 100)
-                    bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
-                    rate = f"{p1_wins/done*100:.1f}%" if done > 0 else "-"
-                    msg = (
-                        f"【チャレンジデッキ測定中】\n\n"
-                        f"  デッキ名: {deck_name}\n"
-                        f"  陣営: {challenge_faction}\n\n"
-                        f"  {done} / {total} 回  ({pct}%)\n"
-                        f"  [{bar}]\n\n"
-                        f"  デッキ勝利: {p1_wins}  ({rate})\n"
-                        f"  AI勝利   : {p2_wins}\n"
-                        f"  引き分け : {draws}\n"
-                    )
+                    pct = int(done / num_battles * 100)
+                    rate = f"{p1_wins/done*100:.0f}%" if done > 0 else "-"
+                    msg = f"測定中... {pct}%  (勝率{rate})"
                     try:
                         d = js.document.getElementById("fixed-dashboard")
                         if d: d.innerText = msg
@@ -2520,9 +2516,8 @@ async def async_main():
                     elif game.winner == game.player1: p1_wins += 1
                     else: p2_wins += 1
 
-                    if (i + 1) % 5 == 0 or i == num_battles - 1:
-                        show_challenge_progress(i)
-                        await asyncio.sleep(0)
+                    show_challenge_progress(i)
+                    await asyncio.sleep(0)
 
                 win_rate = round(p1_wins / num_battles * 100, 1)
                 print(f"\n{'='*50}")
