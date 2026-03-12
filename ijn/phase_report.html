@@ -147,7 +147,7 @@ function renderReport() {
 
   let jpBonus = 0;
   let jpBonusItems = [];
-  const usAllGone = us.every(s => s.status === 'sunk' || s.col < 0);
+  const usAllGone = us.every(s => s.status === 'sunk' || s.status === 'exited' || s.col < 0);
   const mission = jp.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
   const missionLabel = mission === 'bombard' ? '艦砲射撃' : '輸送';
   if (usAllGone && combatTurn < 10) {
