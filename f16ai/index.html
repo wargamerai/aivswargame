@@ -2859,12 +2859,14 @@ window.COMBAT_CHARTS.RH = {
                             if (window.COMBAT_CHARTS?.GUN?.[u.gunType]?.[ak]) {
                                 val = window.COMBAT_CHARTS.GUN[u.gunType][ak][attackInfo.dist] || 0;
                             }
+                            if (val <= 0) { continue; } // 命中不可能な射撃はスキップ（弾節約）
                             u.gun--;
                             if (sum < val) { t.status = 'destroyed'; simLog(`💥 ${u.id} が ${t.id} を機関砲で撃墜！(2D6=${sum} < ${val})`); }
                             else if (sum === val) { t.damage = '損害あり'; simLog(`⚠️ ${u.id} が ${t.id} に損害！(2D6=${sum} = ${val})`); }
                             else { simLog(`☁️ ${u.id} の機関砲が外れ(2D6=${sum})`); }
                         } else {
                             val = getMissileTargetValue('HS', u.missileType, attackInfo.dist);
+                            if (val <= 0) { continue; } // 命中不可能なミサイルはスキップ
                             u.missiles.hs--;
                             if (sum <= val) { t.status = 'destroyed'; simLog(`🚀 ${u.id} が ${t.id} をHSで撃墜！(2D6=${sum} ≤ ${val})`); }
                             else { simLog(`☁️ ${u.id} のHSが外れ(2D6=${sum})`); }
