@@ -787,6 +787,8 @@ const AI = {
             let dist = this.getHexDistance(unit.x, unit.y, target.x, target.y);
             let altDiff = Math.abs(unit.altitude - target.altitude);
             let { arc, aspect } = this.getArcAndAspect(unit.x, unit.y, unit.direction, target.x, target.y, target.direction, dist);
+            // ★ 射撃判定デバッグ: 全ターゲットの状態を表示
+            console.log(`[FIRE_DBG] ${unit.id}(${unit.x},${unit.y})dir${unit.direction}alt${unit.altitude} → ${target.id}(${target.x},${target.y})dir${target.direction}alt${target.altitude} dist:${dist} arc:${arc} asp:${aspect} altD:${altDiff} gun:${unit.gun} hs:${unit.missiles?.hs} rh:${unit.missiles?.rh}`);
             if (arc !== "前方") continue;
 
             // 機関砲：dist0〜2、後方・後方側面・前方

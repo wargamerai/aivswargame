@@ -615,7 +615,8 @@ function renderFleetList() {
     if (s.cannotTurn) parts.push('舵×');
     if (s.cannotTorpedo) parts.push('雷×');
     if ((s.speed === 0 || s.dmgM >= s.capM) && s.status !== 'sunk') parts.push('停止');
-    if (s.onFire) parts.push('🔥');
+    var fc = (s.crits||[]).filter(function(c){return c==='火災';}).length;
+    if (fc > 0) parts.push('🔥' + (fc > 1 ? '×'+fc : ''));
     return parts.join(' ');
   }
   var ad = state.actionDone || [];
