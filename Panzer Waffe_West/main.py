@@ -38,6 +38,7 @@ def print(*args, **kwargs):
 # 【入力の配線】
 # ---------------------------------------------
 async def safe_input(prompt_text=""):
+    import asyncio
     import js
     from pyodide.ffi import create_proxy
     print(f"\n> {prompt_text}")
