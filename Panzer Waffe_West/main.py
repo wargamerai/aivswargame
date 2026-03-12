@@ -1943,7 +1943,6 @@ async def async_main():
                         if d: d.innerText = msg
                     except: pass
 
-                import asyncio
                 for i in range(num_battles):
                     game = Game(df=df, p1_faction="ドイツ軍", p2_faction="連合軍", p1_ai=True, p2_ai=True, quiet_mode=True, training_mode=True)
                     await game.setup_game()
@@ -2042,7 +2041,6 @@ async def async_main():
             return
 
 def main():
-    import asyncio
     import js
     js.window._game_task = asyncio.create_task(async_main())
 

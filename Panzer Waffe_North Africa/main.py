@@ -2594,7 +2594,6 @@ async def async_main():
             return
 
 def main():
-    import asyncio
     import js
     js.window._game_task = asyncio.create_task(async_main())
 
