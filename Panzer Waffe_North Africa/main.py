@@ -647,7 +647,7 @@ class Game:
             self.print_q("--------------------------------------------")
             self.print_q(f"【{self.current_player.faction}】のターン終了。プレイヤー交代。")
             
-            if not self.training_mode:
+            if not self.training_mode and not self.quiet:
                 await safe_input("\n【ターンの結果を確認したら Enter キーを押して次へ...】")
             
             temp = self.current_player
@@ -694,7 +694,7 @@ class Game:
                     continue
                     
                 if success:
-                    if not self.training_mode:
+                    if not self.training_mode and not self.quiet:
                         await self.safe_input_method("\n【攻撃の結果を確認したら Enter を押してください...】")
                     return True
                 continue
@@ -737,7 +737,7 @@ class Game:
                 continue
             
             if success:
-                if choice in ['1', '3'] and not self.training_mode:
+                if choice in ['1', '3'] and not self.training_mode and not self.quiet:
                     await self.safe_input_method("\n【攻撃の結果を確認したら Enter を押してください...】")
 
                 if choice in ['1', '3'] and is_fox_active and attack_count == 0:
@@ -1853,7 +1853,7 @@ class Game:
         while True:
             if self.game_over: return
             self.show_battlefield()
-            if not self.training_mode:
+            if not self.training_mode and not self.quiet:
                 self.print_q("\nAIが行動を計算中...")
                 await asyncio.sleep(0.5)
             
@@ -2278,7 +2278,7 @@ class Game:
                 if self.current_player.headquarters:
                     self.current_player.hand.append(self.current_player.headquarters.pop(0))
             
-            if action_type_raw in ['attack', 'attack_hq'] and not self.training_mode:
+            if action_type_raw in ['attack', 'attack_hq'] and not self.training_mode and not self.quiet:
                 await self.safe_input_method("\n【AIの攻撃結果を確認したら Enter を押してください...】")
 
             if action_type_raw in ['attack', 'attack_hq']:

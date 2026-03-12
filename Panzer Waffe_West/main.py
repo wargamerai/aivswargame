@@ -138,7 +138,7 @@ class Game:
         if not self.quiet: print(text)
 
     def wait(self, sec):
-        if not self.training_mode: time.sleep(sec)
+        if not self.training_mode and not self.quiet: time.sleep(sec)
 
     def build_deck_from_ids(self, player, card_ids):
         """カードIDリストから固定デッキを復元する"""
@@ -159,7 +159,7 @@ class Game:
     async def setup_game(self):
         if self.player1.is_ai: await self.player1.brain.load_data()
         if self.player2.is_ai: await self.player2.brain.load_data()
-        if self.training_mode:
+        if self.training_mode or self.quiet:
             deck1 = self.build_deck_from_ids(self.player1, self.p1_preset_deck) if self.p1_preset_deck else self.build_deck_auto(self.player1, self.df)
             deck2 = self.build_deck_from_ids(self.player2, self.p2_preset_deck) if self.p2_preset_deck else self.build_deck_auto(self.player2, self.df)
         else:
@@ -662,7 +662,7 @@ class Game:
             if self.game_over: break
             self.print_q("--------------------------------------------")
             self.print_q(f"【{self.current_player.faction}】のターン終了。プレイヤー交代。")
-            if not self.training_mode: await safe_input("\n【ターンの結果を確認したら Enter キーを押して次へ...】")
+            if not self.training_mode and not self.quiet: await safe_input("\n【ターンの結果を確認したら Enter キーを押して次へ...】")
             self.current_player, self.enemy_player = self.enemy_player, self.current_player
 
         if turn_count >= 150: self.winner = "Draw"
