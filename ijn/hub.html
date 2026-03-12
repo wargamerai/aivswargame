@@ -141,6 +141,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
   <button id="btnFog" onclick="toggleFog()">霧: OFF</button>
   <button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
   <button id="btnCampaign" onclick="loadCampaign()">読込</button>
+  <button id="btnReturn" onclick="if(confirm('戦闘を終了してキャンペーンに戻りますか？'))returnToCampaign()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">撤退</button>
 </div>
 
 <div id="main">
@@ -1281,11 +1282,8 @@ function nextTurn() {
   if (state.combatTurn > 10) {
     setInfo('戦闘終了！（10ターン経過）');
     showPhaseFlash('戦闘終了！');
-    // 10ターン経過 → 自動でキャンペーンへ戻す
-    var iframe = document.getElementById('subframe');
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage({type:'BATTLE_END'}, '*');
-    }
+    // 戦闘結果をキャンペーン用に保存してから遷移
+    returnToCampaign();
     return;
   }
   document.getElementById('combatTurn').textContent = state.combatTurn;
@@ -1294,6 +1292,16 @@ function nextTurn() {
 }
 
 // ========== CAMPAIGN LOAD ==========
+// 戦闘結果をキャンペーン用に保存してキャンペーン画面に遷移
+function returnToCampaign() {
+  var allFleet = [...(state.jpFleet||[]), ...(state.usFleet||[])];
+  var result = allFleet.map(function(s) {
+    return { name: s.name, dmgG: s.dmgG||0, dmgM: s.dmgM||0, status: s.status, speed: s.speed !== undefined && s.speed !== null ? s.speed : -1 };
+  });
+  localStorage.setItem('battleResultForCampaign', JSON.stringify(result));
+  setTimeout(function() { window.location.href = 'campaign.html'; }, 2000);
+}
+
 function loadCampaign() {
   const raw = localStorage.getItem('campaignFleet');
   if (!raw) {
