@@ -31,7 +31,7 @@
 </div>
 <div style="background-color: #e0e8f0; padding: 12px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #bbc;">
     <span style="font-size: 1.3em; font-weight: bold; color: #8a6a00;">現在: <span id="currentTurnName">第一次ソロモン海戦</span> (<span id="currentTurn">1</span>/4)</span>
-    <span id="scoreArea" style="margin-left: 30px; font-size: 1.15em; display:none;">日本軍スコア: <span id="jpScore" style="color: #cc3311; font-weight:bold;">38</span> | 米軍スコア: <span id="usScore" style="color: #2255cc; font-weight:bold;">14</span></span>
+    <span id="scoreArea" style="margin-left: 30px; font-size: 1.15em; display:none;">日本軍スコア: <span id="jpScore" style="color: #cc3311; font-weight:bold;">0</span> | 米軍スコア: <span id="usScore" style="color: #2255cc; font-weight:bold;">0</span></span>
 </div>
 
 <div>
@@ -56,6 +56,37 @@
 </div>
 
 <div id="log"></div>
+
+<!-- キャンペーン終了サマリーオーバーレイ -->
+<div id="summaryOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; overflow-y:auto;">
+  <div style="max-width:800px; margin:30px auto; background:#1a2a3a; border-radius:12px; padding:30px; color:#e0e8f0; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+    <h1 id="summaryTitle" style="text-align:center; font-size:2.2em; margin-bottom:5px; color:#ffd700;"></h1>
+    <h2 id="summaryWinner" style="text-align:center; font-size:1.6em; margin-top:0; margin-bottom:20px;"></h2>
+
+    <!-- 最終スコア -->
+    <div style="display:flex; justify-content:center; gap:60px; margin-bottom:25px;">
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; color:#ff8888;">日本軍</div>
+        <div id="summaryJpScore" style="font-size:3em; font-weight:bold; color:#ff4444;"></div>
+      </div>
+      <div style="text-align:center; font-size:2em; color:#888; padding-top:25px;">VS</div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; color:#88aaff;">米軍</div>
+        <div id="summaryUsScore" style="font-size:3em; font-weight:bold; color:#4488ff;"></div>
+      </div>
+    </div>
+
+    <!-- 各海戦の詳細 -->
+    <div id="summaryBattles"></div>
+
+    <!-- 沈没艦一覧 -->
+    <div id="summarySunkList" style="margin-top:20px;"></div>
+
+    <div style="text-align:center; margin-top:25px;">
+      <button id="summaryConfirmBtn" onclick="closeSummaryAndProceed()" style="font-size:1.3em; padding:14px 40px; background:#ffd700; color:#1a2a3a; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">確認</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // --- 定数 ---
@@ -188,14 +219,17 @@ const usAllShips = [
 ];
 
 let currentTurn = 1;
-let jpScore = 38;
-let usScore = 14;
+let jpScore = 0;
+let usScore = 0;
 let currentJpFleet = [];
 let currentUsFleet = [];
 let usedRolls = [];
 let maxUsHandicap = 0;
 let battleHistory = [];
 let currentPhase = 'sortie'; // 'sortie', 'combat', 'next'
+let jpMission = ''; // 'bombard' or 'transport' — 出撃時に決定
+let lastJpHandicap = 0;
+let lastUsHandicap = 0;
 
 // --- ユーティリティ ---
 function logMsg(msg) {
@@ -232,7 +266,7 @@ function updateScoreUI() {
 // --- キャンペーン状態永続化 ---
 function saveCampaignState() {
     const state = {
-        currentTurn, jpScore, usScore, usedRolls, maxUsHandicap, currentPhase,
+        currentTurn, jpScore, usScore, usedRolls, maxUsHandicap, currentPhase, jpMission,
         jpAllShipsState: jpAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, rest: s.rest })),
         usAllShipsState: usAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, used: s.used })),
         currentJpFleetNames: currentJpFleet.map(s => s.name),
@@ -248,11 +282,12 @@ function loadCampaignState() {
     try {
         const state = JSON.parse(raw);
         currentTurn = state.currentTurn || 1;
-        jpScore = state.jpScore || 38;
-        usScore = state.usScore || 14;
+        jpScore = state.jpScore !== undefined ? state.jpScore : 0;
+        usScore = state.usScore !== undefined ? state.usScore : 0;
         usedRolls = state.usedRolls || [];
         maxUsHandicap = state.maxUsHandicap || 0;
         currentPhase = state.currentPhase || 'sortie';
+        jpMission = state.jpMission || '';
         battleHistory = state.battleHistory || [];
 
         if (state.jpAllShipsState) {
@@ -465,6 +500,11 @@ function phaseSortie() {
 
     jpScore += jpHandicapAdd;
     usScore += usHandicapAdd;
+    lastJpHandicap = jpHandicapAdd;
+    lastUsHandicap = usHandicapAdd;
+
+    // 日本軍ミッション判定（ボーナス用）: 最初の編成にBB/OBB/CAがいれば艦砲射撃
+    jpMission = currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
 
     document.getElementById('jpHandicapInfo').innerText = `出撃: ${currentJpFleet.length}隻`;
 
@@ -513,16 +553,26 @@ function loadBattleResult() {
     const raw = localStorage.getItem('battleResultForCampaign');
     if (!raw) { logMsg('戦闘結果データがありません。'); return; }
     try {
-        const importData = JSON.parse(raw);
-        applyBattleResultData(importData);
+        const parsed = JSON.parse(raw);
+        // 新形式: { endTurn, ships } / 旧形式: 配列
+        let importData, endTurn;
+        if (Array.isArray(parsed)) {
+            importData = parsed;
+            endTurn = 10;
+        } else {
+            importData = parsed.ships || [];
+            endTurn = parsed.endTurn || 10;
+        }
+        applyBattleResultData(importData, endTurn);
         localStorage.removeItem('battleResultForCampaign');
     } catch(e) {
         logMsg('戦闘結果の読み込みエラー: ' + e.message);
     }
 }
 
-function applyBattleResultData(importData) {
+function applyBattleResultData(importData, endTurn) {
     if (!Array.isArray(importData)) { logMsg('データ形式エラー'); return; }
+    endTurn = endTurn || 10;
 
     logMsg(`\n--- ${BATTLE_NAMES[currentTurn]} 戦闘結果 ---`);
 
@@ -551,18 +601,62 @@ function applyBattleResultData(importData) {
         }
     });
 
+    // --- 日本軍ボーナス得点 ---
+    let jpBonus = 0;
+    let jpBonusMission = '';
+    const usAllGone = currentUsFleet.every(s => s.status === 'sunk' || (importData.find(d => d.name === s.name && d.col < 0)));
+    if (usAllGone && endTurn < 10) {
+        logMsg('\n--- 日本軍ボーナス得点 ---');
+        logMsg(`米軍全艦が第${endTurn}ターンまでに離脱/撃沈`);
+
+        const mission = jpMission || (currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport');
+        jpBonusMission = mission;
+        logMsg(`任務: ${mission === 'bombard' ? '艦砲射撃' : '輸送'}`);
+
+        currentJpFleet.forEach(ship => {
+            if (ship.status === 'sunk') return;
+            const jpData = importData.find(d => d.name === ship.name);
+            if (jpData && jpData.col < 0) return;
+            if (mission === 'bombard' && ship.type !== 'BB' && ship.type !== 'OBB' && ship.type !== 'CA') return;
+            if (mission === 'transport' && ship.type !== 'CL' && ship.type !== 'CLAA' && ship.type !== 'DD') return;
+            if (ship.status !== 'ok' && ship.status !== 'light') {
+                logMsg(`  ${ship.name}: ${statusLabel(ship.status)} → ボーナス対象外`);
+                return;
+            }
+            const battleData = importData.find(d => d.name === ship.name);
+            if (battleData && (battleData.cannotTurn || battleData.cannotFire || battleData.cannotTorpedo)) {
+                logMsg(`  ${ship.name}: 特殊損害あり → ボーナス対象外`);
+                return;
+            }
+            const bonus = (ship.capG + ship.capM) * ship.vp;
+            jpBonus += bonus;
+            logMsg(`  ${ship.name}: +${bonus}点`);
+        });
+
+        if (jpBonus > 0) {
+            jpScore += jpBonus;
+            logMsg(`日本軍ボーナス合計: +${jpBonus}点`);
+        } else {
+            logMsg('ボーナス対象艦なし');
+        }
+    }
+
     // 戦闘記録を保存
     battleHistory.push({
         turn: currentTurn,
         battleName: BATTLE_NAMES[currentTurn],
-        jpShips: currentJpFleet.map(s => ({name:s.name, type:s.type, status:s.status, dmgG:s.dmgG, dmgM:s.dmgM, capG:s.capG, capM:s.capM})),
-        usShips: currentUsFleet.map(s => ({name:s.name, type:s.type, status:s.status, dmgG:s.dmgG, dmgM:s.dmgM, capG:s.capG, capM:s.capM})),
+        jpShips: currentJpFleet.map(s => ({name:s.name, type:s.type, status:s.status, dmgG:s.dmgG, dmgM:s.dmgM, capG:s.capG, capM:s.capM, vp:s.vp})),
+        usShips: currentUsFleet.map(s => ({name:s.name, type:s.type, status:s.status, dmgG:s.dmgG, dmgM:s.dmgM, capG:s.capG, capM:s.capM, vp:s.vp})),
         jpSunk: currentJpFleet.filter(s => s.status === 'sunk').map(s => s.name),
         usSunk: currentUsFleet.filter(s => s.status === 'sunk').map(s => s.name),
         jpDamaged: currentJpFleet.filter(s => s.status !== 'ok' && s.status !== 'sunk').map(s => `${s.name}(${statusLabel(s.status)})`),
         usDamaged: currentUsFleet.filter(s => s.status !== 'ok' && s.status !== 'sunk').map(s => `${s.name}(${statusLabel(s.status)})`),
         jpScoreGain: jpScore - jpScoreBefore,
         usScoreGain: usScore - usScoreBefore,
+        jpHandicap: lastJpHandicap,
+        usHandicap: lastUsHandicap,
+        jpBonus: jpBonus,
+        jpBonusMission: jpBonusMission,
     });
 
     updateScoreUI();
@@ -571,9 +665,11 @@ function applyBattleResultData(importData) {
 
     currentPhase = 'next';
     document.getElementById('btnCombat').disabled = true;
-    document.getElementById('btnNext').disabled = false;
+    document.getElementById('btnNext').disabled = true; // サマリー確認後に有効化
     saveCampaignState();
-    logMsg(`戦闘結果反映完了。次の海戦へ進んでください。`);
+
+    // 海戦結果サマリーをオーバーレイ表示
+    showBattleSummary(battleHistory[battleHistory.length - 1]);
 }
 
 function statusLabel(s) {
@@ -673,6 +769,170 @@ function applyDamageToShip(ship, addG, addM, isUs) {
     }
 }
 
+// --- 各海戦結果サマリー表示 ---
+function showBattleSummary(b) {
+    // 今回の海戦の得点差で勝敗判定
+    const jpGain = b.jpScoreGain || 0;
+    const usGain = b.usScoreGain || 0;
+    const diff = jpGain - usGain;
+
+    let verdict, verdictColor;
+    if (diff >= 80) { verdict = '日本軍 大勝利！'; verdictColor = '#ff2200'; }
+    else if (diff >= 40) { verdict = '日本軍 勝利！'; verdictColor = '#ff4444'; }
+    else if (diff >= 10) { verdict = '日本軍 辛勝'; verdictColor = '#ff8866'; }
+    else if (diff > -10) { verdict = '引き分け'; verdictColor = '#ffd700'; }
+    else if (diff > -40) { verdict = '米軍 辛勝'; verdictColor = '#88aaff'; }
+    else if (diff > -80) { verdict = '米軍 勝利！'; verdictColor = '#4488ff'; }
+    else { verdict = '米軍 大勝利！'; verdictColor = '#2266ff'; }
+
+    document.getElementById('summaryTitle').textContent = b.battleName;
+    document.getElementById('summaryWinner').textContent = verdict;
+    document.getElementById('summaryWinner').style.color = verdictColor;
+    document.getElementById('summaryJpScore').textContent = jpGain;
+    document.getElementById('summaryUsScore').textContent = usGain;
+
+    // 得点内訳
+    const dmgJp = jpGain - (b.jpHandicap||0) - (b.jpBonus||0);
+    const dmgUs = usGain - (b.usHandicap||0);
+
+    let html = '<div style="background:#2a3a4a; border-radius:8px; padding:14px; margin-bottom:12px;">';
+    html += '<h3 style="color:#ccc; margin:0 0 10px 0;">得点内訳</h3>';
+    html += '<table style="width:100%; border-collapse:collapse; font-size:1em;">';
+    html += `<tr><td style="color:#aaa; padding:5px 8px;">損害得点</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">日本軍 +${dmgJp}</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">米軍 +${dmgUs}</td></tr>`;
+
+    if ((b.jpHandicap||0) > 0 || (b.usHandicap||0) > 0) {
+        html += `<tr><td style="color:#aaa; padding:5px 8px;">ハンディキャップ</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">${(b.jpHandicap||0) > 0 ? '+'+b.jpHandicap : '-'}</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">${(b.usHandicap||0) > 0 ? '+'+b.usHandicap : '-'}</td></tr>`;
+    }
+
+    if ((b.jpBonus||0) > 0) {
+        const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
+        html += `<tr><td style="color:#aaa; padding:5px 8px;">日本軍ボーナス(${mLabel}成功)</td><td style="color:#ffcc00; padding:5px 8px; text-align:right;">+${b.jpBonus}</td><td style="padding:5px 8px; text-align:right; color:#666;">-</td></tr>`;
+    }
+
+    html += `<tr style="border-top:2px solid #555;"><td style="color:#ddd; padding:6px 8px; font-weight:bold; font-size:1.1em;">合計</td><td style="color:#ff4444; padding:6px 8px; text-align:right; font-weight:bold; font-size:1.1em;">+${jpGain}</td><td style="color:#4488ff; padding:6px 8px; text-align:right; font-weight:bold; font-size:1.1em;">+${usGain}</td></tr>`;
+    html += '</table>';
+
+    // 沈没艦
+    if (b.jpSunk.length > 0 || b.usSunk.length > 0) {
+        html += '<div style="margin-top:10px; border-top:1px solid #444; padding-top:8px;">';
+        if (b.jpSunk.length > 0) html += `<div style="color:#ff6666; margin-bottom:3px;">日本軍沈没: ${b.jpSunk.join(', ')}</div>`;
+        if (b.usSunk.length > 0) html += `<div style="color:#6688ff;">米軍沈没: ${b.usSunk.join(', ')}</div>`;
+        html += '</div>';
+    }
+
+    // 損傷艦
+    if (b.jpDamaged.length > 0 || b.usDamaged.length > 0) {
+        html += '<div style="margin-top:6px; font-size:0.9em;">';
+        if (b.jpDamaged.length > 0) html += `<div style="color:#ff9966;">日本軍損傷: ${b.jpDamaged.join(', ')}</div>`;
+        if (b.usDamaged.length > 0) html += `<div style="color:#88aacc;">米軍損傷: ${b.usDamaged.join(', ')}</div>`;
+        html += '</div>';
+    }
+
+    html += '</div>';
+
+    // 累計スコア
+    html += '<div style="background:#2a3a4a; border-radius:8px; padding:14px;">';
+    html += `<h3 style="color:#ccc; margin:0 0 5px 0;">累計スコア (${currentTurn}/4海戦)</h3>`;
+    html += `<div style="display:flex; justify-content:center; gap:40px;">`;
+    html += `<span style="color:#ff4444; font-size:1.3em; font-weight:bold;">日本軍 ${jpScore}</span>`;
+    html += `<span style="color:#888; font-size:1.3em;">vs</span>`;
+    html += `<span style="color:#4488ff; font-size:1.3em; font-weight:bold;">米軍 ${usScore}</span>`;
+    html += `</div></div>`;
+
+    document.getElementById('summaryBattles').innerHTML = html;
+    document.getElementById('summarySunkList').innerHTML = '';
+
+    // ボタンテキストを状況に応じて変更
+    const btnText = currentTurn >= 4 ? '最終結果へ' : '次の海戦へ';
+    document.getElementById('summaryConfirmBtn').textContent = btnText;
+    document.getElementById('summaryOverlay').style.display = 'block';
+}
+
+let summaryIsFinal = false;
+
+function closeSummaryAndProceed() {
+    document.getElementById('summaryOverlay').style.display = 'none';
+    if (summaryIsFinal) {
+        // キャンペーン終了サマリー確認済み → 何もしない
+        summaryIsFinal = false;
+        return;
+    }
+    if (currentTurn >= 4) {
+        // 最終戦の海戦サマリー確認 → キャンペーン終了処理 → 最終サマリー表示
+        logMsg(`\n=== キャンペーン終了！ ===`);
+        logMsg(`最終スコア - 日本軍: ${jpScore} / 米軍: ${usScore}`);
+        let winner = jpScore > usScore ? "日本軍" : (usScore > jpScore ? "アメリカ軍" : "引き分け");
+        logMsg(`勝者: ${winner}`);
+        document.getElementById('btnNext').disabled = true;
+        document.getElementById('btnSortie').disabled = true;
+        saveCampaignState();
+        showCampaignSummary();
+    } else {
+        // 次の海戦へ進めるようにする
+        document.getElementById('btnNext').disabled = false;
+        logMsg(`戦闘結果反映完了。次の海戦へ進んでください。`);
+    }
+}
+
+// --- キャンペーン終了サマリー表示 ---
+function showCampaignSummary() {
+    summaryIsFinal = true;
+    document.getElementById('summaryTitle').textContent = '＝ キャンペーン終了 ＝';
+    let winner = jpScore > usScore ? '日本軍の勝利！' : (usScore > jpScore ? 'アメリカ軍の勝利！' : '引き分け！');
+    let winColor = jpScore > usScore ? '#ff4444' : (usScore > jpScore ? '#4488ff' : '#ffd700');
+    document.getElementById('summaryWinner').textContent = winner;
+    document.getElementById('summaryWinner').style.color = winColor;
+    document.getElementById('summaryJpScore').textContent = jpScore;
+    document.getElementById('summaryUsScore').textContent = usScore;
+
+    // 各海戦の詳細
+    let battlesHtml = '';
+    battleHistory.forEach(b => {
+        battlesHtml += `<div style="background:#2a3a4a; border-radius:8px; padding:14px; margin-bottom:12px; border-left:4px solid #ffd700;">`;
+        battlesHtml += `<h3 style="color:#ffd700; margin:0 0 8px 0;">${b.battleName}</h3>`;
+        battlesHtml += `<table style="width:100%; border-collapse:collapse; font-size:0.9em;">`;
+
+        // 損害得点
+        const dmgJp = b.jpScoreGain - (b.jpHandicap||0) - (b.jpBonus||0);
+        const dmgUs = b.usScoreGain - (b.usHandicap||0);
+        battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">損害得点</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">日本軍 +${dmgJp}</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">米軍 +${dmgUs}</td></tr>`;
+
+        // ハンディキャップ
+        if ((b.jpHandicap||0) > 0 || (b.usHandicap||0) > 0) {
+            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">ハンディキャップ</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">${(b.jpHandicap||0) > 0 ? '+'+b.jpHandicap : '-'}</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">${(b.usHandicap||0) > 0 ? '+'+b.usHandicap : '-'}</td></tr>`;
+        }
+
+        // 日本軍ボーナス
+        if ((b.jpBonus||0) > 0) {
+            const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
+            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">日本軍ボーナス(${mLabel})</td><td style="color:#ffcc00; padding:3px 8px; text-align:right;">+${b.jpBonus}</td><td style="padding:3px 8px; text-align:right; color:#666;">-</td></tr>`;
+        }
+
+        // 合計
+        battlesHtml += `<tr style="border-top:1px solid #555;"><td style="color:#ddd; padding:3px 8px; font-weight:bold;">小計</td><td style="color:#ff4444; padding:3px 8px; text-align:right; font-weight:bold;">+${b.jpScoreGain}</td><td style="color:#4488ff; padding:3px 8px; text-align:right; font-weight:bold;">+${b.usScoreGain}</td></tr>`;
+
+        // 沈没艦
+        if (b.jpSunk.length > 0) battlesHtml += `<tr><td colspan="3" style="color:#ff6666; padding:3px 8px; font-size:0.85em;">日本軍沈没: ${b.jpSunk.join(', ')}</td></tr>`;
+        if (b.usSunk.length > 0) battlesHtml += `<tr><td colspan="3" style="color:#6688ff; padding:3px 8px; font-size:0.85em;">米軍沈没: ${b.usSunk.join(', ')}</td></tr>`;
+
+        battlesHtml += `</table></div>`;
+    });
+    document.getElementById('summaryBattles').innerHTML = battlesHtml;
+
+    // 全体の沈没艦一覧
+    const allJpSunk = jpAllShips.filter(s => s.status === 'sunk').map(s => s.name);
+    const allUsSunk = usAllShips.filter(s => s.status === 'sunk').map(s => s.name);
+    let sunkHtml = '<div style="background:#2a3a4a; border-radius:8px; padding:14px;">';
+    sunkHtml += '<h3 style="color:#ccc; margin:0 0 8px 0;">全沈没艦</h3>';
+    sunkHtml += `<div style="color:#ff6666; margin-bottom:4px;">日本軍: ${allJpSunk.length > 0 ? allJpSunk.join(', ') : 'なし'}</div>`;
+    sunkHtml += `<div style="color:#6688ff;">米軍: ${allUsSunk.length > 0 ? allUsSunk.join(', ') : 'なし'}</div>`;
+    sunkHtml += '</div>';
+    document.getElementById('summarySunkList').innerHTML = sunkHtml;
+
+    document.getElementById('summaryConfirmBtn').textContent = '確認';
+    document.getElementById('summaryOverlay').style.display = 'block';
+}
+
 // --- 次のターンへ ---
 function phaseNextTurn() {
     if (currentTurn >= 4) {
@@ -684,6 +944,7 @@ function phaseNextTurn() {
         document.getElementById('btnSortie').disabled = true;
         renderBattleHistory();
         saveCampaignState();
+        // サマリーはapplyBattleResultData → showBattleSummary → closeSummaryAndProceed → showCampaignSummaryの流れで表示
         return;
     }
 

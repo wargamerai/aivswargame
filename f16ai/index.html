@@ -2811,6 +2811,8 @@ window.COMBAT_CHARTS.RH = {
                 // 移動フェーズ
                 for (let u of order) {
                     if (u.status !== 'alive') continue;
+                    // validateAndSimulateがunits[activeUnitIndex]を参照するので合わせる
+                    activeUnitIndex = units.indexOf(u);
                     let enemies = units.filter(t => t.team !== u.team && t.status !== 'destroyed');
                     let moveInfo = AI.decideMove(u, enemies);
                     u.cursorRow = moveInfo.r;

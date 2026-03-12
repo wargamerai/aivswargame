@@ -141,7 +141,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
   <button id="btnFog" onclick="toggleFog()">霧: OFF</button>
   <button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
   <button id="btnCampaign" onclick="loadCampaign()">読込</button>
-  <button id="btnReturn" onclick="if(confirm('戦闘を終了してキャンペーンに戻りますか？'))returnToCampaign()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">撤退</button>
+  <button id="btnReturn" onclick="if(confirm('戦闘を終了してキャンペーンに戻りますか？'))returnToCampaign()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
 </div>
 
 <div id="main">
@@ -1296,9 +1296,25 @@ function nextTurn() {
 function returnToCampaign() {
   var allFleet = [...(state.jpFleet||[]), ...(state.usFleet||[])];
   var result = allFleet.map(function(s) {
-    return { name: s.name, dmgG: s.dmgG||0, dmgM: s.dmgM||0, status: s.status, speed: s.speed !== undefined && s.speed !== null ? s.speed : -1 };
+    return {
+      name: s.name,
+      dmgG: s.dmgG||0,
+      dmgM: s.dmgM||0,
+      status: s.status,
+      speed: s.speed !== undefined && s.speed !== null ? s.speed : -1,
+      col: s.col !== undefined ? s.col : -1,
+      side: s.side || '',
+      cannotTurn: !!s.cannotTurn,
+      cannotFire: !!s.cannotFire,
+      cannotTorpedo: !!s.cannotTorpedo
+    };
   });
-  localStorage.setItem('battleResultForCampaign', JSON.stringify(result));
+  // 戦闘終了ターンも渡す
+  var meta = {
+    endTurn: state.combatTurn || 10,
+    ships: result
+  };
+  localStorage.setItem('battleResultForCampaign', JSON.stringify(meta));
   setTimeout(function() { window.location.href = 'campaign.html'; }, 2000);
 }
 
