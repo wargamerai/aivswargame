@@ -241,18 +241,33 @@ const AI = {
                     // 高度上限ペナルティ
                     if (sim.altitude > 35) hScore -= (sim.altitude - 35) * PT.ALT_CEILING;
 
-                    // マップ端ペナルティ（端5ヘクス以内で極端な減点）
+                    // マップ端ペナルティ（端5ヘクス以内: 位置+方向で判定）
                     let edgeMaxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
                     let edgeMaxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
-                    let edgeDist = Math.min(sim.x, sim.y, edgeMaxC - sim.x, edgeMaxR - sim.y);
-                    if (edgeDist <= 0) hScore -= 9999;
-                    else if (edgeDist <= 1) hScore -= 2000;
-                    else if (edgeDist <= 2) hScore -= 1000;
-                    else if (edgeDist <= 3) hScore -= 500;
-                    else if (edgeDist <= 5) hScore -= 200;
+                    let dLeft = sim.x, dRight = edgeMaxC - sim.x;
+                    let dTop = sim.y, dBot = edgeMaxR - sim.y;
+                    let edgeDist = Math.min(dLeft, dRight, dTop, dBot);
+                    // 方向角度（度）: 右=0~60, 下=60~150, 左=150~210, 上=210~330
+                    let dirDeg = this.DIR_ANGLES[sim.dir] || 0;
+                    // 各辺に向かっているか判定
+                    let facingEdge = false;
+                    if (dRight <= 5 && dirDeg > -90 && dirDeg < 90)   facingEdge = true;  // 右端で右向き
+                    if (dLeft  <= 5 && (dirDeg > 90 || dirDeg < -90)) facingEdge = true;  // 左端で左向き
+                    if (dBot   <= 5 && dirDeg > 0 && dirDeg < 180)    facingEdge = true;  // 下端で下向き
+                    if (dTop   <= 5 && dirDeg < 0 && dirDeg > -180)   facingEdge = true;  // 上端で上向き
 
+                    if (edgeDist <= 0) hScore -= 9999;
+                    else if (edgeDist <= 5) {
+                      // 位置ペナルティ
+                      hScore -= (6 - edgeDist) * 100;
+                      // 外側を向いていれば追加で巨大ペナルティ
+                      if (facingEdge) hScore -= 3000;
+                    }
+
+                    // 固定マップではQ値の影響を下げる（別マップで訓練済みのため）
+                    let qWeight = (edgeMaxC <= 30 || edgeMaxR <= 30) ? 0.5 : 2;
                     // ε-greedy: 15%でランダム探索
-                    let finalScore = qVal * 2 + hScore + (Math.random() < 0.15 ? Math.random() * 40 : 0);
+                    let finalScore = qVal * qWeight + hScore + (Math.random() < 0.15 ? Math.random() * 40 : 0);
 
                     candidates.push({ r, c, cmd: vt.cmd, actionKey, finalScore, newDist });
                 }
