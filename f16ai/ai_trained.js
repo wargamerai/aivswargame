@@ -157,7 +157,7 @@ const AI = {
             ALT_CEILING:    25,   // 高度35以上ペナルティ係数
             ROLE_SPREAD:    50,   // 役割に沿った位置取り
             BREAK_AWAY:     80,   // ぐるぐる回り脱出
-            RE_ENGAGE:     isSmallMap ? 300 : 150,   // パス後の再突入
+            RE_ENGAGE:     isSmallMap ? 500 : 300,   // 敵方向への旋回（近距離×3倍）
         };
 
         let candidates = [];
@@ -228,20 +228,23 @@ const AI = {
                     // 前方側面にいても敵の方を向いている→射撃位置に向かうインセンティブ
                     else if (arc === '前方側面')                        hScore += PT.FRONT_ARC / 2;
 
-                    // ── パス後の再突入: 敵が後方にいる場合、敵方向への旋回にボーナス ──
-                    if (arc === '後方' || arc === '後方側面') {
+                    // ── 敵が前方にいない場合、敵方向への旋回にボーナス ──
+                    if (arc !== '前方') {
                         let simDirDeg = this.DIR_ANGLES[sim.dir] || 0;
                         let sx = sim.x * 37.5, sy = sim.y * 43.301 + (sim.x % 2) * 21.650;
                         let tx = target.x * 37.5, ty = target.y * 43.301 + (target.x % 2) * 21.650;
                         let angleToEnemy = Math.atan2(ty - sy, tx - sx) * 180 / Math.PI;
                         let headingDiff = Math.abs(((angleToEnemy - simDirDeg + 540) % 360) - 180);
-                        // headingDiff: 0°=敵の方向, 180°=背中向き → 90°未満ならボーナス
-                        if (headingDiff < 90) {
-                            hScore += PT.RE_ENGAGE * (1 - headingDiff / 90);
+                        // headingDiff: 0°=敵の方向, 180°=背中向き
+                        // 近距離(≤6)では旋回ボーナスを大幅強化（ドッグファイト優先）
+                        let engageBonus = PT.RE_ENGAGE;
+                        if (newDist <= 6) engageBonus = PT.RE_ENGAGE * 3;
+                        if (headingDiff < 120) {
+                            hScore += engageBonus * (1 - headingDiff / 120);
                         }
-                        // 旋回中は距離増加ペナルティを70%緩和
+                        // 旋回中は距離増加ペナルティを完全キャンセル
                         if (curDist - newDist < 0) {
-                            hScore += Math.abs(curDist - newDist) * PT.DIST_CLOSE * 0.7;
+                            hScore += Math.abs(curDist - newDist) * PT.DIST_CLOSE;
                         }
                     }
 
