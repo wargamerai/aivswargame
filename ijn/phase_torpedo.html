@@ -911,24 +911,8 @@ function saveAndNotify() {
 }
 
 function promoteLeads() {
-  for (let ci = 0; ci < 3; ci++) {
-    const inCol = (state.jpFleet||[]).filter(s => s.colIndex === ci && s.col >= 0 && s.status !== 'sunk' && s.status !== 'heavy');
-    const lead = inCol.find(s => s.isLead);
-    if (!lead && inCol.length > 0) {
-      inCol.sort((a,b) => a.followOrder - b.followOrder);
-      inCol[0].isLead = true;
-      inCol[0].followOrder = 0;
-      inCol.forEach((s,i) => { s.followOrder = i; });
-      log(`${inCol[0].name} が旗艦に昇格`);
-    }
-    (state.jpFleet||[]).filter(s => s.colIndex === ci && s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
-  }
-  const usAlive = (state.usFleet||[]).filter(s => s.col >= 0 && s.status !== 'sunk' && s.status !== 'heavy');
-  const usLead = usAlive.find(s => s.isLead);
-  if (!usLead && usAlive.length > 0) {
-    usAlive.sort((a,b) => a.followOrder - b.followOrder);
-    usAlive[0].isLead = true;
-  }
+  // 大破/沈没した旗艦のフラグ解除（昇格はしない）
+  (state.jpFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
   (state.usFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
 }
 

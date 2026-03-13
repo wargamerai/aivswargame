@@ -200,26 +200,9 @@ function autoWithdrawHeavy() {
     // 離脱開始
     ship.withdrawing = true;
     ship.retreatDir = ship.side === 'jp' ? 4 : 6;  // JP=西, US=東
-    const wasLead = ship.isLead;
-    const ci = ship.colIndex;
-    ship.isLead = false;
     const reason = ship.status === 'heavy' ? '大破' : '射撃不能';
     setInfo(`${ship.name} ${reason}！ 離脱開始`);
     if (getSpeed(ship) > 0) withdrawMove(ship);
-
-    // US旗艦だった場合 → 次の艦に昇格（US列構造維持のため）
-    if (ship.side === 'us' && wasLead) {
-      const remaining = usFleet.filter(s =>
-        s.colIndex === ci && s.col >= 0 && s.status !== 'sunk' &&
-        s.status !== 'heavy' && !s.withdrawing && !s.cannotShoot
-      );
-      if (remaining.length > 0) {
-        remaining.sort((a,b) => a.followOrder - b.followOrder);
-        remaining[0].isLead = true;
-        setInfo(`${remaining[0].name} が旗艦に昇格`);
-        remaining.forEach((s,i) => { s.followOrder = i; });
-      }
-    }
   }
   pushState();
 }

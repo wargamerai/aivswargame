@@ -1030,29 +1030,8 @@ function resolveDamage(title) {
 
   localStorage.removeItem(PENDING_KEY);
 
-  // 旗艦沈没/大破時 → 次の艦を自動昇格
-  for (let ci = 0; ci < 3; ci++) {
-    const inCol = (state.jpFleet||[]).filter(s => s.colIndex === ci && s.col >= 0 && s.status !== 'sunk' && s.status !== 'heavy');
-    const lead = inCol.find(s => s.isLead);
-    if (!lead && inCol.length > 0) {
-      inCol.sort((a,b) => a.followOrder - b.followOrder);
-      inCol[0].isLead = true;
-      inCol[0].followOrder = 0;
-      inCol.forEach((s,i) => { s.followOrder = i; });
-      log(`<span class="hit">${inCol[0].name} が第${ci+1}艦隊旗艦に昇格</span>`);
-      summaryLines.push(`${inCol[0].name} が第${ci+1}艦隊旗艦に昇格`);
-    }
-    // 大破した旧旗艦の旗艦フラグを解除
-    const heavyLeads = (state.jpFleet||[]).filter(s => s.colIndex === ci && s.isLead && (s.status === 'heavy' || s.status === 'sunk'));
-    for (const hl of heavyLeads) { hl.isLead = false; }
-  }
-  const usAlive = (state.usFleet||[]).filter(s => s.col >= 0 && s.status !== 'sunk' && s.status !== 'heavy');
-  const usLead = usAlive.find(s => s.isLead);
-  if (!usLead && usAlive.length > 0) {
-    usAlive.sort((a,b) => a.followOrder - b.followOrder);
-    usAlive[0].isLead = true;
-  }
-  // 大破した米旗艦の旗艦フラグ解除
+  // 大破/沈没した旗艦のフラグ解除（昇格はしない）
+  (state.jpFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
   (state.usFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
 
   // 二重安全網: autoUSShootで設定済みのはずだが、念のため
