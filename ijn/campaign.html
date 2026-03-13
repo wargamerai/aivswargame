@@ -21,6 +21,32 @@
         #log { background-color: #f0f0f0; padding: 10px; height: 160px; overflow-y: scroll; font-family: monospace; border: 1px solid #ccc; margin-top: 20px; font-size: 1em; color: #333;}
         .history-entry { background:#fff; padding:12px; border-radius:8px; margin-bottom:10px; border-left: 3px solid #2266cc; border: 1px solid #ddd; }
         .history-entry h3 { margin-top:0; }
+
+        /* 戦闘レポートカラム */
+        .battle-reports-grid {
+            display:flex; gap:12px; overflow-x:auto; padding-bottom:8px;
+        }
+        .report-col {
+            background:#f5f5fa; border:1px solid #bbb; border-radius:6px;
+            padding:10px; min-width:280px; flex:1; font-family:monospace; font-size:0.88em;
+        }
+        .report-col h3 { margin:0 0 8px; font-size:1.05em; border-bottom:2px solid #1a5a8a; padding-bottom:4px; }
+        .rp-section { background:#f0f0f0; border:1px solid #ccc; border-radius:4px; padding:8px; margin:6px 0; }
+        .rp-section h4 { color:#1a5a8a; margin:0 0 4px; font-size:0.9em; border-bottom:1px solid #ccc; padding-bottom:2px; }
+        .rp-jp { color:#cc3311; } .rp-us { color:#2255cc; }
+        .rp-ok { color:#2a8a2a; } .rp-light { color:#aa8800; } .rp-medium { color:#cc6600; } .rp-heavy { color:#cc2200; } .rp-sunk { color:#cc0000; font-weight:bold; }
+        .rp-vp-row { display:flex; justify-content:space-between; padding:1px 0; border-bottom:1px dotted #ccc; font-size:0.9em; }
+        .rp-vp-row:last-child { border-bottom:none; }
+        .rp-vp-val { font-weight:bold; color:#1a5a8a; }
+        .rp-vp-sunk { color:#cc0000; }
+        .rp-total { font-weight:bold; padding:4px 6px; border-radius:3px; display:flex; justify-content:space-between; margin:4px 0; }
+        .rp-total-jp { background:#ffe8e0; }
+        .rp-total-us { background:#e0e8ff; }
+        .rp-winner { text-align:center; padding:6px; margin:6px 0; border:2px solid #8a6a00; border-radius:5px; background:#fffff0; font-weight:bold; }
+        .rp-winner .jp-win { color:#cc3311; } .rp-winner .us-win { color:#2255cc; } .rp-winner .draw { color:#888; }
+        .rp-ship-tbl { width:100%; border-collapse:collapse; font-size:0.85em; margin-top:4px; }
+        .rp-ship-tbl th { background:#e0e8f0; color:#444; padding:3px 4px; border:1px solid #ccc; text-align:left; font-size:0.85em; }
+        .rp-ship-tbl td { padding:3px 4px; border:1px solid #ddd; font-size:0.85em; }
     </style>
 </head>
 <body>
@@ -701,53 +727,118 @@ function statusLabel(s) {
     return '無傷';
 }
 
-// --- 戦闘記録表示 ---
+// --- VP計算（戦闘レポート用） ---
+function calcVPDetail(fleet) {
+    const items = [];
+    let total = 0;
+    for (const s of fleet) {
+        let vp = 0, reason = '';
+        if (s.status === 'sunk') {
+            vp = (s.capG + s.capM) * s.vp;
+            reason = '撃沈';
+        } else {
+            const dmg = (s.dmgG||0) + (s.dmgM||0);
+            if (dmg > 0) { vp = dmg * s.vp; reason = statusLabel(s.status); }
+        }
+        if (vp > 0) { items.push({name:s.name, type:s.type, vp, reason, sunk:s.status==='sunk'}); total += vp; }
+    }
+    return {items, total};
+}
+function statusClassRp(s) {
+    return {ok:'rp-ok',light:'rp-light',medium:'rp-medium',heavy:'rp-heavy',sunk:'rp-sunk'}[s]||'rp-ok';
+}
+
+// --- 戦闘記録表示（戦闘レポート形式） ---
 function renderBattleHistory() {
     const panel = document.getElementById('battleHistoryPanel');
     if (battleHistory.length === 0) { panel.style.display = 'none'; return; }
     panel.style.display = 'block';
 
-    let html = '';
+    let html = '<div class="battle-reports-grid">';
+
     battleHistory.forEach(b => {
-        html += `<div class="history-entry">`;
-        html += `<h3 style="color:#1a5a8a;">${b.battleName}</h3>`;
+        const jp = b.jpShips || [];
+        const us = b.usShips || [];
+        const jpVP = calcVPDetail(us); // 米艦への損害 = 日本軍得点
+        const usVP = calcVPDetail(jp); // 日本艦への損害 = 米軍得点
+        const jpBonus = b.jpBonus || 0;
+        const jpEarned = jpVP.total + jpBonus;
+        const usEarned = usVP.total;
 
-        // 日本軍
-        html += `<div style="margin:4px 0;"><strong style="color:#cc3311;">日本軍参加艦:</strong> `;
-        html += b.jpShips.map(s => {
-            let style = s.status === 'sunk' ? 'color:#aaa;text-decoration:line-through'
-                      : s.status === 'heavy' ? 'color:#cc2200'
-                      : s.status === 'medium' ? 'color:#cc6600'
-                      : s.status === 'light' ? 'color:#aa8800' : 'color:#2a8a2a';
-            return `<span style="${style}">${s.name}</span>`;
-        }).join(', ');
+        html += `<div class="report-col">`;
+        html += `<h3>${b.battleName}</h3>`;
+
+        // ── 得点セクション ──
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-jp">🎌 日本軍 戦果</h4>`;
+        if (jpVP.items.length > 0) {
+            for (const it of jpVP.items) {
+                const sunkCls = it.sunk ? ' rp-vp-sunk' : '';
+                const mark = it.sunk ? '💥' : '💢';
+                html += `<div class="rp-vp-row"><span>${mark} ${it.name} (${it.type}) ${it.reason}</span><span class="rp-vp-val${sunkCls}">+${it.vp}</span></div>`;
+            }
+        } else {
+            html += `<div style="color:#889;font-size:0.85em">戦闘損害なし</div>`;
+        }
+        if (jpBonus > 0) {
+            const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
+            html += `<div style="margin-top:3px;padding:3px;background:#fffff0;border:1px solid #cc8;border-radius:2px;font-size:0.85em">🏆 ${mLabel}ボーナス <strong>+${jpBonus}</strong></div>`;
+        }
+        html += `<div class="rp-total rp-total-jp"><span>🎌 合計</span><span>${jpEarned} pt</span></div>`;
         html += `</div>`;
 
-        // 米軍
-        html += `<div style="margin:4px 0;"><strong style="color:#2255cc;">米軍迎撃艦:</strong> `;
-        html += b.usShips.map(s => {
-            let style = s.status === 'sunk' ? 'color:#aaa;text-decoration:line-through'
-                      : s.status === 'heavy' ? 'color:#cc2200'
-                      : s.status === 'medium' ? 'color:#cc6600'
-                      : s.status === 'light' ? 'color:#aa8800' : 'color:#2a8a2a';
-            return `<span style="${style}">${s.name}</span>`;
-        }).join(', ');
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-us">🦅 米軍 戦果</h4>`;
+        if (usVP.items.length > 0) {
+            for (const it of usVP.items) {
+                const sunkCls = it.sunk ? ' rp-vp-sunk' : '';
+                const mark = it.sunk ? '💥' : '💢';
+                html += `<div class="rp-vp-row"><span>${mark} ${it.name} (${it.type}) ${it.reason}</span><span class="rp-vp-val${sunkCls}">+${it.vp}</span></div>`;
+            }
+        } else {
+            html += `<div style="color:#889;font-size:0.85em">戦闘損害なし</div>`;
+        }
+        html += `<div class="rp-total rp-total-us"><span>🦅 合計</span><span>${usEarned} pt</span></div>`;
         html += `</div>`;
 
-        // 沈没艦
-        if (b.jpSunk.length) html += `<div style="color:#cc2200; margin:2px 0;">日本軍沈没: ${b.jpSunk.join(', ')}</div>`;
-        if (b.usSunk.length) html += `<div style="color:#2255cc; margin:2px 0;">米軍沈没: ${b.usSunk.join(', ')}</div>`;
+        // ── 勝敗判定 ──
+        let winLabel, winClass;
+        if (jpEarned > usEarned) { winLabel = '日本軍の勝利！'; winClass = 'jp-win'; }
+        else if (jpEarned < usEarned) { winLabel = '米軍の勝利…'; winClass = 'us-win'; }
+        else { winLabel = '引き分け'; winClass = 'draw'; }
+        const diff = Math.abs(jpEarned - usEarned);
+        html += `<div class="rp-winner"><span class="${winClass}">${winLabel}</span><div style="font-size:0.8em;color:#666;font-weight:normal">${jpEarned} 対 ${usEarned}（差: ${diff}pt）</div></div>`;
 
-        // 損傷艦
-        if (b.jpDamaged.length) html += `<div style="color:#cc6600; margin:2px 0;">日本軍損傷: ${b.jpDamaged.join(', ')}</div>`;
-        if (b.usDamaged.length) html += `<div style="color:#cc6600; margin:2px 0;">米軍損傷: ${b.usDamaged.join(', ')}</div>`;
-
-        // スコア
-        html += `<div style="margin-top:4px; font-size:0.9em; color:#666;">スコア獲得 - 日本軍: +${b.jpScoreGain} / 米軍: +${b.usScoreGain}</div>`;
-
+        // ── 日本軍艦隊テーブル ──
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-jp">🎌 日本軍艦隊</h4>`;
+        html += `<table class="rp-ship-tbl"><tr><th>艦名</th><th>種</th><th>G</th><th>M</th><th>状態</th></tr>`;
+        for (const s of jp) {
+            const sc = statusClassRp(s.status);
+            html += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.dmgG||0}/${s.capG}</td><td>${s.dmgM||0}/${s.capM}</td><td class="${sc}">${statusLabel(s.status)}</td></tr>`;
+        }
+        html += `</table>`;
+        const jpSunk = jp.filter(s=>s.status==='sunk');
+        if (jpSunk.length) html += `<div style="color:#cc2200;font-size:0.8em;margin-top:3px">沈没: ${jpSunk.map(s=>s.name).join(', ')}</div>`;
         html += `</div>`;
+
+        // ── 米軍艦隊テーブル ──
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-us">🦅 米軍艦隊</h4>`;
+        html += `<table class="rp-ship-tbl"><tr><th>艦名</th><th>種</th><th>G</th><th>M</th><th>状態</th></tr>`;
+        for (const s of us) {
+            const sc = statusClassRp(s.status);
+            html += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.dmgG||0}/${s.capG}</td><td>${s.dmgM||0}/${s.capM}</td><td class="${sc}">${statusLabel(s.status)}</td></tr>`;
+        }
+        html += `</table>`;
+        const usSunk = us.filter(s=>s.status==='sunk');
+        if (usSunk.length) html += `<div style="color:#2255cc;font-size:0.8em;margin-top:3px">沈没: ${usSunk.map(s=>s.name).join(', ')}</div>`;
+        html += `</div>`;
+
+        html += `</div>`; // report-col
     });
 
+    html += '</div>'; // battle-reports-grid
     document.getElementById('battleHistoryContent').innerHTML = html;
 }
 
