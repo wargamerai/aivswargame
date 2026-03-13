@@ -658,8 +658,8 @@ function doShoot() {
     dmgDice = `${d3}+${d4}=${d3+d4}${isDouble2?' [ゾロ目!]':''}`;
     log(`  損害ダイス: ${dmgDice} → <span class="dmg">${dmgStr}</span>`);
 
-    // クリティカル
-    if (isDouble1 || isDouble2) {
+    // クリティカル（ダメージ0なら発生しない）
+    if ((isDouble1 || isDouble2) && (dmgG > 0 || dmgM > 0)) {
       const cd = roll()+roll();
       const crit = applyCritical(target, cd);
       critText = crit.text;
@@ -848,7 +848,7 @@ function autoUSShoot(title) {
       dmgText = dmgStr;
       dmgDice = `${d3}+${d4}=${d3+d4}${d3===d4?' [ゾロ目!]':''}`;
 
-      if (d1===d2 || d3===d4) {
+      if ((d1===d2 || d3===d4) && (dmgG > 0 || dmgM > 0)) {
         const cd = roll()+roll();
         const crit = applyCritical(bestTarget, cd);
         critText = crit.text;

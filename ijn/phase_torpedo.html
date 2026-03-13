@@ -632,8 +632,8 @@ function doTorpedo() {
       log(`  <span class="dmg">${target.name} 撃沈！</span>`);
     }
 
-    // クリティカル
-    if (isDouble1 || isDouble2) {
+    // クリティカル（ダメージ0なら発生しない）
+    if ((isDouble1 || isDouble2) && (dmgG > 0 || dmgM > 0 || sunk)) {
       const cd = roll()+roll();
       const crit = applyCritical(target, cd);
       critText = crit.text;
@@ -805,7 +805,7 @@ function autoUSTorpedo() {
 
       if (sunk) { bestTarget.status = 'sunk'; }
 
-      if (isDouble1 || isDouble2) {
+      if ((isDouble1 || isDouble2) && (dmgG > 0 || dmgM > 0 || sunk)) {
         const cd = roll()+roll();
         const crit = applyCritical(bestTarget, cd);
         critText = crit.text;
