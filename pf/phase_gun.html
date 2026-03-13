@@ -232,8 +232,8 @@ let state = null;
 let subPhase = '';
 const PENDING_KEY = 'gunPendingDmg';
 
-let jpShips = [];  // 射撃可能な日本艦
-let usShips = [];  // 射撃可能な米艦
+let firerShips = [];  // 射撃可能な射撃艦（プレイヤー=米軍）
+let targetShips = [];  // 射撃可能な目標艦（AI=日本軍）
 let selectedFirer = null;
 let selectedTarget = null;
 let targetShotCount = {};  // 同一目標への射撃回数（合同射撃修正用）
@@ -397,49 +397,49 @@ function init() {
     // revealed はリセットしない（前ターンの発砲位置は次ターンも視認可能）
     localStorage.setItem('hubState', JSON.stringify(state));
     if (isJPFirst) {
-      setupJPShoot('第一砲撃 — 日本軍射撃');
+      autoJPShoot('第一砲撃 — 日本軍射撃（自動）');
     } else {
-      autoUSShoot('第一砲撃 — 米軍射撃（自動）');
+      setupUSShoot('第一砲撃 — 米軍射撃');
     }
   } else if (subPhase === 'gun1b') {
     if (isJPFirst) {
-      autoUSShoot('第一砲撃 — 米軍射撃（自動）');
+      setupUSShoot('第一砲撃 — 米軍射撃');
     } else {
-      setupJPShoot('第一砲撃 — 日本軍射撃');
+      autoJPShoot('第一砲撃 — 日本軍射撃（自動）');
     }
   } else if (subPhase === 'gun1r') {
     resolveDamage('第一砲撃 — 損害確定');
   } else if (subPhase === 'gun2a') {
     localStorage.removeItem(PENDING_KEY);
     if (isJPFirst) {
-      autoUSShoot('第二砲撃 — 米軍射撃（自動）');
+      setupUSShoot('第二砲撃 — 米軍射撃');
     } else {
-      setupJPShoot('第二砲撃 — 日本軍射撃');
+      autoJPShoot('第二砲撃 — 日本軍射撃（自動）');
     }
   } else if (subPhase === 'gun2b') {
     if (isJPFirst) {
-      setupJPShoot('第二砲撃 — 日本軍射撃');
+      autoJPShoot('第二砲撃 — 日本軍射撃（自動）');
     } else {
-      autoUSShoot('第二砲撃 — 米軍射撃（自動）');
+      setupUSShoot('第二砲撃 — 米軍射撃');
     }
   } else if (subPhase === 'gun2r') {
     resolveDamage('第二砲撃 — 損害確定');
   } else {
-    setupJPShoot('砲撃フェーズ');
+    setupUSShoot('砲撃フェーズ');
   }
 }
 
-// ===== 日本軍射撃（手動・カード式）=====
-function setupJPShoot(title) {
+// ===== 米軍射撃（手動・カード式）=====
+function setupUSShoot(title) {
   document.getElementById('phTitle').textContent = title;
 
-  jpShips = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0);
-  // 日本軍から見える米艦のみ目標にできる
-  usShips = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToJP(s));
+  firerShips = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
+  // 米軍から見える日本艦のみ目標にできる
+  targetShips = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToUS(s));
 
   log(`=== ${title} ===`);
 
-  if (jpShips.length === 0 || usShips.length === 0) {
+  if (firerShips.length === 0 || targetShips.length === 0) {
     log('視認可能な目標なし — スキップ');
     document.getElementById('shootUI').style.display = 'none';
     setTimeout(() => doneSubPhase(), 400);
@@ -459,14 +459,14 @@ function setupJPShoot(title) {
 function renderCards() {
   // 射撃艦カード
   const fEl = document.getElementById('firerList');
-  fEl.innerHTML = jpShips.map((s, i) => {
+  fEl.innerHTML = firerShips.map((s, i) => {
     const sel = selectedFirer === i ? ' firer-sel' : '';
     const cantFire = getAttack(s) <= 0 ? ' disabled' : '';
     const shared = s.sharedHex ? ' disabled' : '';
     const fired = firedShips.has(i) ? ' disabled' : '';
     const atk = getAttack(s);
     const label = s.sharedHex ? ' [同一ヘクス]' : (firedShips.has(i) ? ' [射撃済]' : (cantFire ? ' [砲撃不能]' : ''));
-    return `<div class="card jp${sel}${fired}${shared}${cantFire}" onclick="selectFirer(${i})">
+    return `<div class="card us${sel}${fired}${shared}${cantFire}" onclick="selectFirer(${i})">
       <span class="c-name">${s.name}${label}</span>
       <span class="c-info">${s.type} 攻:${atk}</span>
     </div>`;
@@ -474,18 +474,18 @@ function renderCards() {
 
   // 目標カード
   const tEl = document.getElementById('targetList');
-  tEl.innerHTML = usShips.map((s, i) => {
+  tEl.innerHTML = targetShips.map((s, i) => {
     const sel = selectedTarget === i ? ' target-sel' : '';
     const def = getDefense(s);
     // 射程外・射界外判定
     let oor = '';
     if (selectedFirer !== null) {
-      const firer = jpShips[selectedFirer];
+      const firer = firerShips[selectedFirer];
       const d = hexDist(firer.col, firer.row, s.col, s.row);
       if (d > getMaxRange(s, firer)) oor = ' disabled';
       else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
     }
-    return `<div class="card us${sel}${oor}" onclick="selectTarget(${i})">
+    return `<div class="card jp${sel}${oor}" onclick="selectTarget(${i})">
       <span class="c-name">${s.name}</span>
       <span class="c-info">${s.type} 防:${def}</span>
     </div>`;
@@ -497,29 +497,29 @@ function renderCards() {
 
 function selectFirer(i) {
   if (firedShips.has(i)) return;  // 射撃済み — 選択不可
-  if (jpShips[i] && jpShips[i].sharedHex) return;  // 同一ヘクス — 射撃不可
-  if (jpShips[i] && getAttack(jpShips[i]) <= 0) return;  // 砲撃不能
+  if (firerShips[i] && firerShips[i].sharedHex) return;  // 同一ヘクス — 射撃不可
+  if (firerShips[i] && getAttack(firerShips[i]) <= 0) return;  // 砲撃不能
   selectedFirer = i;
   renderCards();
   updateShootInfo();
   // hub.htmlにハイライト通知
-  const fName = jpShips[i].name;
-  const tName = selectedTarget !== null ? usShips[selectedTarget].name : null;
+  const fName = firerShips[i].name;
+  const tName = selectedTarget !== null ? targetShips[selectedTarget].name : null;
   parent.postMessage({type:'HIGHLIGHT', firer:fName, target:tName}, '*');
 }
 
 function selectTarget(i) {
   // 射程外チェック
   if (selectedFirer !== null) {
-    const firer = jpShips[selectedFirer];
-    const d = hexDist(firer.col, firer.row, usShips[i].col, usShips[i].row);
+    const firer = firerShips[selectedFirer];
+    const d = hexDist(firer.col, firer.row, targetShips[i].col, targetShips[i].row);
     if (d > 16) return;
   }
   selectedTarget = i;
   renderCards();
   updateShootInfo();
-  const fName = selectedFirer !== null ? jpShips[selectedFirer].name : null;
-  const tName = usShips[i].name;
+  const fName = selectedFirer !== null ? firerShips[selectedFirer].name : null;
+  const tName = targetShips[i].name;
   parent.postMessage({type:'HIGHLIGHT', firer:fName, target:tName}, '*');
 }
 
@@ -578,8 +578,8 @@ function updateShootInfo() {
     el.innerHTML = '射撃艦と目標を選んでください';
     return;
   }
-  const firer = jpShips[selectedFirer];
-  const target = usShips[selectedTarget];
+  const firer = firerShips[selectedFirer];
+  const target = targetShips[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
   const {mod, details} = calcModifiers(firer, target, dist);
 
@@ -600,8 +600,8 @@ function updateShootInfo() {
 function doShoot() {
   if (selectedFirer === null || selectedTarget === null) return;
 
-  const firer = jpShips[selectedFirer];
-  const target = usShips[selectedTarget];
+  const firer = firerShips[selectedFirer];
+  const target = targetShips[selectedTarget];
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
   const maxR = getMaxRange(target, firer);
   if (dist > maxR) { log(`射程外（${maxR}hex超）`); return; }
@@ -679,7 +679,7 @@ function doShoot() {
     const totalG = dmgG, totalM = dmgM;
     if (totalG > 0 || totalM > 0 || target.status === 'sunk') {
       const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
-      pending.push({name: target.name, side:'us', g:totalG, m:totalM, critText: critText, critSunk: target.status === 'sunk'});
+      pending.push({name: target.name, side:'jp', g:totalG, m:totalM, critText: critText, critSunk: target.status === 'sunk'});
       localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
       log(`  → 損害蓄積: G${totalG} M${totalM}`);
     }
@@ -690,9 +690,9 @@ function doShoot() {
   // 射撃済みマーク（同一フェーズ内で再射撃防止）
   firedShips.add(selectedFirer);
   firer.revealed = true;  // 発砲した艦は敵から視認可能
-  if (target && target.side === 'us') target.revealed = true;  // 射撃目標も視認可能
-  // jpFleet内の元インデックスでACTION_DONEを送信（フィルタ後のインデックスではなく）
-  var origIdx = (state.jpFleet||[]).indexOf(firer);
+  if (target) target.revealed = true;  // 射撃目標も視認可能
+  // usFleet内の元インデックスでACTION_DONEを送信（フィルタ後のインデックスではなく）
+  var origIdx = (state.usFleet||[]).indexOf(firer);
   parent.postMessage({type:'ACTION_DONE', shipIndex: origIdx >= 0 ? origIdx : selectedFirer}, '*');
 
   // 第一砲撃で射撃した艦をマーク → 雷撃不可
@@ -754,63 +754,35 @@ function closeResult() {
   parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
 }
 
-// ===== 米軍射撃（自動）=====
-function autoUSShoot(title) {
+// ===== 日本軍射撃（自動）=====
+function autoJPShoot(title) {
   document.getElementById('phTitle').textContent = title;
   document.getElementById('shootUI').style.display = 'none';
   log(`=== ${title} ===`);
 
-  const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
-  // 米軍から見える日本艦のみ目標にできる
-  const jp = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToUS(s));
+  const jp = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
+  // 日本軍から見える米艦のみ目標にできる
+  const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToJP(s));
 
-  if (us.length === 0 || jp.length === 0) {
+  if (jp.length === 0 || us.length === 0) {
     log('射撃可能な艦なし');
     setTimeout(() => doneSubPhase(), 400);
     return;
   }
 
-  // 一斉射撃判定: BB/CA全艦が射程内に入るまで待機
-  const capitalShips = us.filter(s => ['BB','OBB','CA'].includes(s.type));
-  const inRange = capitalShips.filter(firer =>
-    jp.some(t => hexDist(firer.col, firer.row, t.col, t.row) <= getMaxRange(t, firer))
-  );
-  state.usWaitTurns = (state.usWaitTurns || 0);
-  if (capitalShips.length > 0 && inRange.length < capitalShips.length * 0.7 && state.usWaitTurns < 3) {
-    state.usWaitTurns++;
-    log('米軍、態勢構築中… 射撃待機');
-    // DD/CLのみ射撃可能にする
-    const lightShips = us.filter(s => !['BB','OBB','CA'].includes(s.type));
-    if (lightShips.length === 0 || !jp.some(t => lightShips.some(f => hexDist(f.col,f.row,t.col,t.row) <= getMaxRange(t, f)))) {
-      setTimeout(() => doneSubPhase(), 400);
-      return;
-    }
-    // DD/CLだけで射撃続行
-    us.length = 0;
-    us.push(...lightShips);
-  } else {
-    state.usWaitTurns = 0;  // 射撃開始 → カウントリセット
-  }
-
   // 全射撃結果を事前計算してキューに入れる
   const results = [];
-  const usShotCount = {};
+  const jpShotCount = {};
   const assignCount = {};  // 目標分散用
 
-  for (const firer of us) {
-    // 目標選択: 広く浅く — 損傷大ほど後回し
-    // 米BBだけは大和/長門/陸奥をしつこく狙う（ダメージ蓄積で次回出撃を潰す）
-    // DD/CL/CAで大型艦を撃っても装甲で弾かれるので小型艦を狙う
-    const HIGH_VALUE = ['大和', '長門', '陸奥'];
-    const isBBFirer = (firer.type === 'BB');
+  for (const firer of jp) {
+    // 目標選択: 最も近い敵、損傷大ほど後回し
     let bestTarget = null, bestScore = 999;
-    for (const t of jp) {
+    for (const t of us) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getMaxRange(t, firer)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      // BBが撃つ場合のみ高価値艦の損傷ペナルティ免除
-      const isHV = isBBFirer && HIGH_VALUE.includes(t.name);
-      const dmgPenalty = isHV ? 0 : dmgRate * 30;
+      const dmgPenalty = dmgRate * 30;
       const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
@@ -831,19 +803,19 @@ function autoUSShoot(title) {
 
     let mod = 0;
     const details = [];
-    if (firer.radar && bestDist > (state.spotRange || 5)) { mod += 1; details.push('レーダー+1'); }
+    // 日本軍はレーダーなし
     if (bestTarget.onFire) { mod -= 2; details.push('火災-2'); }
     const tc = firer.turnCount || 0;
     if (tc > 0) { mod += tc; details.push(`転舵+${tc}`); }
     if (bestTarget.type === 'DD') { mod += 1; details.push('DD+1'); }
     if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
-    const prevShots = usShotCount[bestTarget.name] || 0;
+    const prevShots = jpShotCount[bestTarget.name] || 0;
     if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
 
     const d1 = roll(), d2 = roll();
     const diceTotal = d1 + d2 + mod;
     const hits = getHits(diceTotal, bestDist);
-    usShotCount[bestTarget.name] = prevShots + 1;
+    jpShotCount[bestTarget.name] = prevShots + 1;
 
     let dmgText = '外れ', dmgG = 0, dmgM = 0, critText = '', ratioLabel = '', dmgDice = '';
 
@@ -861,10 +833,10 @@ function autoUSShoot(title) {
       dmgText = dmgStr;
       dmgDice = `${d3}+${d4}=${d3+d4}${d3===d4?' [ゾロ目!]':''}`;
 
-      const usCritCount = (d1===d2 && d3===d4) ? 2 : (d1===d2 || d3===d4) ? 1 : 0;
-      if (usCritCount > 0 && (dmgG > 0 || dmgM > 0)) {
+      const jpCritCount = (d1===d2 && d3===d4) ? 2 : (d1===d2 || d3===d4) ? 1 : 0;
+      if (jpCritCount > 0 && (dmgG > 0 || dmgM > 0)) {
         const critTexts = [];
-        for (let ci = 0; ci < usCritCount; ci++) {
+        for (let ci = 0; ci < jpCritCount; ci++) {
           const cd = roll()+roll();
           const crit = applyCritical(bestTarget, cd);
           critTexts.push(crit.text);
@@ -887,19 +859,18 @@ function autoUSShoot(title) {
     return;
   }
 
-  // 日本艦が攻撃を受けた（命中の有無に関係なく） → 自由移動
-  if (!state.jpDetected) {
-    state.jpDetected = true;
-    state.jpFreeMove = true;
+  // 米艦が攻撃を受けた → 接触確認
+  if (!state.usDetected) {
+    state.usDetected = true;
     state.contactMade = true;
-    log('日本軍: 砲撃を受けた → 敵発見、自由移動可能');
+    log('米軍: 砲撃を受けた → 敵発見');
   }
 
-  // 発砲した米軍艦のrevealed状態をアニメ開始前にマップへ即時反映
+  // 発砲した日本軍艦のrevealed状態をアニメ開始前にマップへ即時反映
   localStorage.setItem('hubState', JSON.stringify(state));
   parent.postMessage({type:'STATE_UPDATE',
     usFleet:state.usFleet, jpFleet:state.jpFleet,
-    jpDetected:state.jpDetected, jpFreeMove:state.jpFreeMove,
+    usDetected:state.usDetected,
     contactMade:state.contactMade
   }, '*');
 
@@ -911,8 +882,8 @@ function autoUSShoot(title) {
     if (idx >= results.length) {
       localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
       localStorage.setItem('hubState', JSON.stringify(state));
-      parent.postMessage({type:'STATE_UPDATE', usFleet:state.usFleet}, '*');
-      log('--- 米軍射撃完了 ---');
+      parent.postMessage({type:'STATE_UPDATE', jpFleet:state.jpFleet}, '*');
+      log('--- 日本軍射撃完了 ---');
       setTimeout(() => doneSubPhase(), 400);
       return;
     }
@@ -927,20 +898,20 @@ function autoUSShoot(title) {
     }, '*');
 
     // ログ
-    const usHitPct = calcHitChance(r.mod, r.dist);
-    log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${usHitPct}%)`);
+    const jpHitPct = calcHitChance(r.mod, r.dist);
+    log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${jpHitPct}%)`);
     if (r.hits > 0) {
       log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
       log(`  損害: <span class="dmg">${r.dmgText}</span>`);
       if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
       if (r.dmgG > 0 || r.dmgM > 0 || r.target.status === 'sunk') {
-        pending.push({name: r.target.name, side:'jp', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.target.status === 'sunk'});
+        pending.push({name: r.target.name, side:'us', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.target.status === 'sunk'});
       }
     } else {
       log('  外れ');
     }
 
-    // 結果オーバーレイ（日本軍と同じ形式）
+    // 結果オーバーレイ
     showResult(r);
 
     // 確認ボタンで次へ進む
@@ -1103,16 +1074,16 @@ init();
 window.addEventListener('message', function(e) {
   var msg = e.data;
   if (!msg || !msg.type) return;
-  if (msg.type === 'MAP_SELECT_FIRER' && jpShips) {
-    // hubのjpFleetインデックス → jpShips内の名前で検索
-    var shipName = state.jpFleet[msg.index] && state.jpFleet[msg.index].name;
-    if (!shipName) return;
-    var idx = jpShips.findIndex(function(s) { return s.name === shipName; });
-    if (idx >= 0) selectFirer(idx);
-  } else if (msg.type === 'MAP_SELECT_TARGET' && usShips) {
+  if (msg.type === 'MAP_SELECT_FIRER' && firerShips) {
+    // hubのusFleetインデックス → firerShips内の名前で検索（PF: 米軍=プレイヤー）
     var shipName = state.usFleet[msg.index] && state.usFleet[msg.index].name;
     if (!shipName) return;
-    var idx = usShips.findIndex(function(s) { return s.name === shipName; });
+    var idx = firerShips.findIndex(function(s) { return s.name === shipName; });
+    if (idx >= 0) selectFirer(idx);
+  } else if (msg.type === 'MAP_SELECT_TARGET' && targetShips) {
+    var shipName = state.jpFleet[msg.index] && state.jpFleet[msg.index].name;
+    if (!shipName) return;
+    var idx = targetShips.findIndex(function(s) { return s.name === shipName; });
     if (idx >= 0) selectTarget(idx);
   }
 });
