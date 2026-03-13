@@ -576,15 +576,16 @@ function showScoutResults() {
     let detectedCount = 0;
     scoutResults.forEach((r, i) => {
         totalThreat += r.threat;
-        if (r.threat > 0) detectedCount++;
-        html += `<tr><td>${i+1}</td><td class="${r.seenClass}">${r.seen}</td><td>${r.threat > 0 ? r.threat : '-'}</td></tr>`;
+        if (r.threat > 0) {
+            detectedCount++;
+            html += `<tr><td>${detectedCount}</td><td class="${r.seenClass}">${r.seen}</td><td>${r.threat}</td></tr>`;
+        }
     });
     html += '</table>';
 
     document.getElementById('scoutResult').innerHTML = html;
 
-    const undetected = scoutResults.filter(r => r.threat === 0).length;
-    let summary = `探知: ${detectedCount}隻 / 未探知: ${undetected}隻 / 見かけ上の脅威値: ${totalThreat}`;
+    let summary = `探知: ${detectedCount}隻 / 見かけ上の脅威値: ${totalThreat}`;
     document.getElementById('scoutSummary').textContent = summary;
 }
 
