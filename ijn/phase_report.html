@@ -40,42 +40,6 @@ button {
 button:hover { background:#c8d4ee; }
 button.send { background:#d0f0d0; border-color:#2a8a2a; color:#1a5a1a; }
 button.send:hover { background:#b8e8b8; }
-
-/* キャンペーン情報セクション */
-.campaign-section { margin-top:16px; border-top:3px solid #1a5a8a; padding-top:12px; }
-.campaign-section h3 { font-size:1.1em; margin-bottom:10px; }
-.campaign-grid {
-  display:grid; grid-template-columns:1fr 1fr; gap:8px;
-  margin-bottom:10px;
-}
-@media (min-width:900px) {
-  .campaign-grid { grid-template-columns:repeat(4, 1fr); }
-}
-.camp-col {
-  background:#fff; border:1px solid #ccd; border-radius:5px;
-  padding:8px; font-size:0.85em; min-height:100px;
-}
-.camp-col h4 { margin:0 0 6px; font-size:0.95em; border-bottom:1px solid #dde; padding-bottom:4px; }
-.camp-score-big {
-  text-align:center; font-size:1.6em; font-weight:bold; margin:6px 0;
-}
-.camp-score-jp { color:#cc3311; }
-.camp-score-us { color:#2255cc; }
-.camp-history-item {
-  background:#f0f4fa; border-left:3px solid #2266cc; padding:4px 6px;
-  margin-bottom:4px; border-radius:2px; font-size:0.88em;
-}
-.camp-history-item .h-name { font-weight:bold; color:#1a5a8a; }
-.camp-history-item .h-score { color:#666; font-size:0.9em; }
-.camp-ship-row {
-  display:flex; justify-content:space-between; padding:1px 2px;
-  border-bottom:1px dotted #ddd; font-size:0.88em;
-}
-.camp-ship-row:last-child { border-bottom:none; }
-.camp-ship-row .s-name { font-weight:bold; }
-.camp-ship-row .s-type { color:#888; margin-left:3px; }
-.camp-ship-row .s-rest { color:#aa8800; font-size:0.85em; }
-.camp-no-data { color:#aab; font-size:0.85em; padding:8px; text-align:center; }
 </style>
 </head>
 <body>
@@ -87,8 +51,6 @@ button.send:hover { background:#b8e8b8; }
   <button onclick="goNextTurn()" id="btnNextTurn">次のターンへ</button>
   <button class="send" onclick="sendToCampaign()">キャンペーンに戻る（戦闘終了）</button>
 </div>
-
-<div id="campaignSection"></div>
 
 <script>
 let state = null;
@@ -139,134 +101,11 @@ function init() {
   if (!raw) { document.getElementById('reportContent').textContent='データなし'; return; }
   state = JSON.parse(raw);
   renderReport();
-  renderCampaignData();
   // 10ターン経過 → 次ターンボタン無効化
   if (state.combatTurn >= 10) {
     const btn = document.getElementById('btnNextTurn');
     if (btn) { btn.disabled = true; btn.textContent = '戦闘終了（10ターン経過）'; }
   }
-}
-
-const BATTLE_NAMES = {1:'第一次ソロモン海戦',2:'第二次ソロモン海戦',3:'第三次ソロモン海戦',4:'第四次ソロモン海戦'};
-
-function renderCampaignData() {
-  const raw = localStorage.getItem('campaignState');
-  if (!raw) { return; }
-  let camp;
-  try { camp = JSON.parse(raw); } catch(e) { return; }
-
-  const currentTurn = camp.currentTurn || 1;
-  const jpScore = camp.jpScore || 0;
-  const usScore = camp.usScore || 0;
-  const history = camp.battleHistory || [];
-  const jpShips = camp.jpAllShipsState || [];
-  const usShips = camp.usAllShipsState || [];
-
-  let html = `<div class="campaign-section">`;
-  html += `<h3>📋 キャンペーン状況 — ${BATTLE_NAMES[currentTurn]||'第'+currentTurn+'回戦'} (${currentTurn}/4)</h3>`;
-  html += `<div class="campaign-grid">`;
-
-  // ── Column 1: スコア概況 ──
-  html += `<div class="camp-col">`;
-  html += `<h4>累計スコア</h4>`;
-  html += `<div class="camp-score-big camp-score-jp">🎌 ${jpScore}</div>`;
-  html += `<div style="text-align:center;color:#888;font-size:0.85em">VS</div>`;
-  html += `<div class="camp-score-big camp-score-us">🦅 ${usScore}</div>`;
-  const diff = jpScore - usScore;
-  let verdictText;
-  if (diff >= 80) verdictText = '日本軍 大勝利';
-  else if (diff >= 40) verdictText = '日本軍 勝利';
-  else if (diff >= 10) verdictText = '日本軍 優勢';
-  else if (diff > -10) verdictText = '互角';
-  else if (diff > -40) verdictText = '米軍 優勢';
-  else if (diff > -80) verdictText = '米軍 勝利';
-  else verdictText = '米軍 大勝利';
-  const verdictColor = diff > 0 ? '#cc3311' : diff < 0 ? '#2255cc' : '#888';
-  html += `<div style="text-align:center;font-weight:bold;color:${verdictColor};margin-top:4px;font-size:0.95em">${verdictText}</div>`;
-  html += `<div style="text-align:center;color:#666;font-size:0.8em;margin-top:2px">差: ${Math.abs(diff)} pt</div>`;
-  html += `</div>`;
-
-  // ── Column 2: 海戦記録 ──
-  html += `<div class="camp-col">`;
-  html += `<h4>海戦記録</h4>`;
-  if (history.length === 0) {
-    html += `<div class="camp-no-data">まだ海戦記録なし</div>`;
-  } else {
-    for (const b of history) {
-      const bDiff = (b.jpScoreGain||0) - (b.usScoreGain||0);
-      let bResult;
-      if (bDiff >= 40) bResult = '🔴 日本軍勝利';
-      else if (bDiff >= 10) bResult = '🟠 日本軍辛勝';
-      else if (bDiff > -10) bResult = '🟡 引き分け';
-      else if (bDiff > -40) bResult = '🔵 米軍辛勝';
-      else bResult = '🔵 米軍勝利';
-      html += `<div class="camp-history-item">`;
-      html += `<div class="h-name">${b.battleName}</div>`;
-      html += `<div class="h-score">JP +${b.jpScoreGain||0} / US +${b.usScoreGain||0} → ${bResult}</div>`;
-      if (b.jpSunk && b.jpSunk.length > 0) html += `<div style="color:#cc2200;font-size:0.85em">日沈没: ${b.jpSunk.join(', ')}</div>`;
-      if (b.usSunk && b.usSunk.length > 0) html += `<div style="color:#2255cc;font-size:0.85em">米沈没: ${b.usSunk.join(', ')}</div>`;
-      html += `</div>`;
-    }
-  }
-  html += `</div>`;
-
-  // ── Column 3: 日本軍全艦状態 ──
-  html += `<div class="camp-col">`;
-  html += `<h4 class="jp">日本軍 全艦状態</h4>`;
-  if (jpShips.length === 0) {
-    html += `<div class="camp-no-data">データなし</div>`;
-  } else {
-    const jpSunk = jpShips.filter(s => s.status === 'sunk');
-    const jpDmg = jpShips.filter(s => s.status !== 'ok' && s.status !== 'sunk');
-    const jpOk = jpShips.filter(s => s.status === 'ok');
-    // 損傷・沈没艦を先に表示
-    for (const s of [...jpSunk, ...jpDmg]) {
-      const sc = statusClass(s.status);
-      const restLabel = s.rest > 0 && s.status !== 'sunk' ? ` (残${s.rest}休)` : '';
-      html += `<div class="camp-ship-row">
-        <span><span class="s-name">${s.name}</span></span>
-        <span class="${sc}">${statusLabel(s.status)}${restLabel}</span>
-      </div>`;
-    }
-    if (jpOk.length > 0) {
-      html += `<div style="color:#2a8a2a;margin-top:4px;font-size:0.85em">無傷: ${jpOk.length}隻</div>`;
-      // 無傷艦名は折りたたみ
-      html += `<details style="font-size:0.82em;color:#666;margin-top:2px"><summary>一覧</summary>`;
-      html += jpOk.map(s => s.name).join(', ');
-      html += `</details>`;
-    }
-  }
-  html += `</div>`;
-
-  // ── Column 4: 米軍全艦状態 ──
-  html += `<div class="camp-col">`;
-  html += `<h4 class="us">米軍 全艦状態</h4>`;
-  if (usShips.length === 0) {
-    html += `<div class="camp-no-data">データなし</div>`;
-  } else {
-    const usSunk = usShips.filter(s => s.status === 'sunk');
-    const usDmg = usShips.filter(s => s.status !== 'ok' && s.status !== 'sunk');
-    const usOk = usShips.filter(s => s.status === 'ok');
-    for (const s of [...usSunk, ...usDmg]) {
-      const sc = statusClass(s.status);
-      html += `<div class="camp-ship-row">
-        <span><span class="s-name">${s.name}</span></span>
-        <span class="${sc}">${statusLabel(s.status)}</span>
-      </div>`;
-    }
-    if (usOk.length > 0) {
-      html += `<div style="color:#2a8a2a;margin-top:4px;font-size:0.85em">無傷: ${usOk.length}隻</div>`;
-      html += `<details style="font-size:0.82em;color:#666;margin-top:2px"><summary>一覧</summary>`;
-      html += usOk.map(s => s.name).join(', ');
-      html += `</details>`;
-    }
-  }
-  html += `</div>`;
-
-  html += `</div>`; // campaign-grid
-  html += `</div>`; // campaign-section
-
-  document.getElementById('campaignSection').innerHTML = html;
 }
 
 function renderReport() {
