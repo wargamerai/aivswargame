@@ -137,6 +137,21 @@ function distCol(d) {
   if(d<=9)return 8;if(d<=10)return 9;return 10;
 }
 
+// 命中率計算（2d6確率分布ベース）
+const DICE_PROB = [0,0,1,2,3,4,5,6,5,4,3,2,1]; // 合計36
+function calcTorpHitChance(mod, dist) {
+  const col = distCol(dist);
+  let hitProb = 0, totalProb = 0;
+  for (let d = 2; d <= 12; d++) {
+    const total = d + mod;
+    const row = Math.max(0, Math.min(12, total));
+    const hits = (HIT_CHART[row] && HIT_CHART[row][col]) || 0;
+    if (hits > 0) hitProb += DICE_PROB[d];
+    totalProb += DICE_PROB[d];
+  }
+  return Math.round(hitProb / totalProb * 100);
+}
+
 // ===== TORPEDO DAMAGE CHART =====
 const DMG_CHART = [
   ['4M','5MG','5MG','6MG','6MG','6M2G','6M2G','SINK','SINK','SINK','SINK'],
@@ -532,7 +547,8 @@ function doTorpedo() {
     to: {col: target.col, row: target.row}
   }, '*');
 
-  log(`🐟 ${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}${nRolls>1?' ×'+nRolls+'回':''})`);
+  const hitChance = calcTorpHitChance(mod, dist);
+  log(`🐟 ${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, 命中率${hitChance}%${nRolls>1?' ×'+nRolls+'回':''})`);
   for (const hr of hitRolls) {
     log(`  ダイス: ${hr.d1}+${hr.d2}=${hr.d1+hr.d2}${mod!==0?` →${hr.dt}`:''}${hr.d1===hr.d2?' [ゾロ目!]':''} → 命中${hr.h}発`);
   }
@@ -638,7 +654,8 @@ function showResult(r) {
     <div class="r-row"><span class="r-label">雷撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
-    <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>`;
+    <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>
+    <div class="r-row"><span class="r-label">命中率</span> <span class="r-value">${calcTorpHitChance(r.mod, r.dist)}%</span></div>`;
   if (r.details.length > 0) {
     html += `<div style="color:#aa8;font-size:0.8em;text-align:right">${r.details.join(' / ')}</div>`;
   }
@@ -788,7 +805,8 @@ function autoUSTorpedo() {
       to: {col: r.target.col, row: r.target.row}
     }, '*');
 
-    log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist})`);
+    const usHitChance = calcTorpHitChance(r.mod, r.dist);
+    log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist}, 命中率${usHitChance}%)`);
     if (r.hits > 0) {
       log(`  <span class="hit">命中${r.hits}発</span> ${r.dmgText}`);
       if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
