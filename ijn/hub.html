@@ -1173,9 +1173,15 @@ window.addEventListener('message', (e) => {
     }
 
     case 'NEXT_TURN':
+      if (state._nextTurnProcessing) {
+        dbg('msg: NEXT_TURN IGNORED (duplicate)');
+        break;
+      }
+      state._nextTurnProcessing = true;
       dbg('msg: NEXT_TURN — レポートから次ターンへ');
       nextTurn();
       draw();
+      setTimeout(() => { state._nextTurnProcessing = false; }, 2000);
       break;
 
     case 'HIGHLIGHT':
