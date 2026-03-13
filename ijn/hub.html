@@ -1159,10 +1159,18 @@ window.addEventListener('message', (e) => {
       draw();
       break;
 
-    case 'PHASE_DONE':
+    case 'PHASE_DONE': {
+      // 同じフェーズからの2重発火を防止
+      const phaseKey = state.phase + '_' + state.combatTurn;
+      if (state._lastPhaseDone === phaseKey) {
+        dbg(`msg: PHASE_DONE IGNORED (duplicate: ${phaseKey})`);
+        break;
+      }
+      state._lastPhaseDone = phaseKey;
       dbg(`msg: PHASE_DONE (nextPhase=${msg.nextPhase||'none'}, curPhase=${state.phase})`);
       onPhaseDone(msg.nextPhase);
       break;
+    }
 
     case 'NEXT_TURN':
       dbg('msg: NEXT_TURN — レポートから次ターンへ');
