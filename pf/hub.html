@@ -449,7 +449,8 @@ function draw() {
   var highlightShip = null;
   var weaponRange = 0;
   if ((isGunPhase || isTorpPhase) && state.highlightFirer) {
-    highlightShip = [...(state.jpFleet||[]), ...(state.usFleet||[])].find(s => s.name === state.highlightFirer && s.status !== 'sunk');
+    // PF: 米軍(プレイヤー)の射撃艦のみハイライト
+    highlightShip = (state.usFleet||[]).find(s => s.name === state.highlightFirer && s.status !== 'sunk');
     weaponRange = isTorpPhase ? 13 : 16;
   }
 
@@ -750,6 +751,8 @@ function drawArcOverlay(ship, x, y) {
   if (!showArcs) return;
   if (arcShipName !== ship.name) return;
   if (ship.status === 'sunk' || ship.col < 0) return;
+  // PF: 日本軍(AI)の射界は表示しない
+  if (ship.side === 'jp') return;
 
   const fa = toAxial(ship.col, ship.row);
   const range = 5;
@@ -1691,7 +1694,7 @@ canvas.addEventListener('click', (e) => {
     if (hex) {
       const allShips = [...(state.jpFleet||[]), ...(state.usFleet||[])];
       const clicked = allShips.find(s => s.col === hex.col && s.row === hex.row && s.status !== 'sunk' && s.col >= 0);
-      if (clicked) {
+      if (clicked && clicked.side === 'us') {  // PF: 米軍のみ射界表示
         arcShipName = (arcShipName === clicked.name) ? null : clicked.name;  // 同じ艦再クリックで解除
       } else {
         arcShipName = null;  // 空ヘクスクリックで解除
