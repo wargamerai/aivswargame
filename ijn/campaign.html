@@ -273,7 +273,7 @@ function rollDice(sides = 6) { return Math.floor(Math.random() * sides) + 1; }
 function getShipByName(name, array) { return array.find(s => s.name === name); }
 
 // --- 参加料(fee)計算: VP = (capG + capM) × 5, fee = VP / 2 ---
-function shipFee(s) { return (s.capG + s.capM) * 5 / 2; }
+function shipFee(s) { return (s.capG + s.capM) * s.vp / 2; }
 function fleetFee(fleet) { return fleet.reduce((sum, s) => sum + shipFee(s), 0); }
 
 function sortShips(fleet, isJp) {
