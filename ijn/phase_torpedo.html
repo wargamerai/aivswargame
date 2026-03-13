@@ -799,8 +799,7 @@ function autoUSTorpedo() {
   // 全結果を事前計算
   const results = [];
   for (const firer of us) {
-    // 最寄りの舷側にいるJP艦を選択（広く浅く、ただし大和/長門/陸奥は追い回す）
-    const HIGH_VALUE = ['大和', '長門', '陸奥'];
+    // 最寄りの舷側にいるJP艦を選択（広く浅く、損傷大ほど後回し）
     let bestTarget = null, bestScore = 999;
     const allShips = [...us, ...jp];
     for (const t of jp) {
@@ -809,7 +808,7 @@ function autoUSTorpedo() {
       if (!checkBroadside(firer, t)) continue;
       if (isLineBlocked(firer, t, allShips)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      const dmgPenalty = HIGH_VALUE.includes(t.name) ? 0 : dmgRate * 30;
+      const dmgPenalty = dmgRate * 30;
       const score = d + dmgPenalty;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
