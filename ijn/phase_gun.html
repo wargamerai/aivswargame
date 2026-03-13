@@ -798,14 +798,15 @@ function autoUSShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of us) {
-    // 目標選択: 広く浅く — 無傷優先、損傷が大きいほど後回し
+    // 目標選択: 広く浅く — 損傷大ほど後回し（ただし大和/長門/陸奥は追い回す）
+    const HIGH_VALUE = ['大和', '長門', '陸奥']; // 複数回出撃する艦→ダメージ蓄積狙い
     let bestTarget = null, bestScore = 999;
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getMaxRange(t, firer)) continue;
-      // 損傷率（G/Mの高い方）に応じてペナルティ
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      const dmgPenalty = dmgRate * 30;  // 無傷0、中破15、大破22+
+      // 高価値艦は損傷ペナルティなし（しつこく狙う）
+      const dmgPenalty = HIGH_VALUE.includes(t.name) ? 0 : dmgRate * 30;
       const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
