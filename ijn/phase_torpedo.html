@@ -212,6 +212,7 @@ function cubeRound(x,y,z){
   return{x:rx,y:ry,z:rz};
 }
 // 雷撃射線チェック: 発射艦→目標艦の間に他の船がいたらtrue（射線遮蔽）
+// ただしヘクスサイド上（境界線上）を通過する場合はブロックしない
 function isLineBlocked(firer, target, allShips) {
   var dist = hexDist(firer.col, firer.row, target.col, target.row);
   if (dist <= 1) return false;
@@ -224,6 +225,12 @@ function isLineBlocked(firer, target, allShips) {
     var cx = fc.x + (tc.x - fc.x) * t;
     var cy = fc.y + (tc.y - fc.y) * t;
     var cz = fc.z + (tc.z - fc.z) * t;
+    // ヘクスサイド判定: cube座標の丸め誤差が2つ同値ならヘクス境界上
+    var rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz);
+    var dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
+    var diffs = [dx, dy, dz].sort(function(a,b){return b-a;});
+    // 上位2つの差が近い＝ヘクスサイド上 → 通過扱い（ブロックしない）
+    if (diffs[0] > 0.01 && (diffs[0] - diffs[1]) < 0.01) continue;
     var rounded = cubeRound(cx, cy, cz);
     var off = cubeToOffset(rounded.x, rounded.y, rounded.z);
     for (var j = 0; j < allShips.length; j++) {
