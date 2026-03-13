@@ -694,6 +694,7 @@ function isSpotted(ship) {
   const friends = state.usFleet;
   return friends.some(f => {
     if (f.status === 'sunk') return false;
+    if (f.col < 0 || f.row < 0) return false;  // 未配置艦は索敵不可
     const d = hexDist(ship.col, ship.row, f.col, f.row);
     if (d <= state.spotRange) return true;
     if (f.radar && d <= 20) return true;
