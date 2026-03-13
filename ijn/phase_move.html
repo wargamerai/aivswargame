@@ -1247,6 +1247,15 @@ function turnTo(dir) {
     return;
   }
 
+  // 60度制限: 隣接方向のみ許可
+  const ci = DIR_CW.indexOf(moving.dir);
+  const adj1 = DIR_CW[(ci + 1) % 6];
+  const adj2 = DIR_CW[(ci + 5) % 6];
+  if (dir !== adj1 && dir !== adj2) {
+    setInfo(`60度ずつしか回頭できません！（${DIR_NAMES[adj1]} or ${DIR_NAMES[adj2]}）`);
+    return;
+  }
+
   saveUndo();
   moving.dir = dir;
   moving.turnCount = (moving.turnCount || 0) + 1;  // 回頭数記録（砲撃修正用）
