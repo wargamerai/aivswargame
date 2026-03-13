@@ -492,35 +492,30 @@ function phaseSortie() {
         logMsg('【練習モード】米軍: 重巡1隻のみ');
 
     } else if (difficulty === 'moderate') {
-        // 控えめモード: 索敵の見かけ脅威値に合わせて編成
-        // 大型艦→小型艦の順に追加し、脅威値合計がapparentThreatに近づくまで
+        // 控えめモード: 日本軍の艦種構成をミラーして同数を揃える
+        // OBBはBB扱いで対応、CLAAはCL扱い
+        const jpTypeCount = { BB: 0, CA: 0, CL: 0, DD: 0 };
+        currentJpFleet.forEach(s => {
+            if (s.type === 'BB' || s.type === 'OBB') jpTypeCount.BB++;
+            else if (s.type === 'CA') jpTypeCount.CA++;
+            else if (s.type === 'CL') jpTypeCount.CL++;
+            else if (s.type === 'DD') jpTypeCount.DD++;
+        });
         let usAvailable = usAllShips.filter(s => !s.used && s.status !== 'sunk');
         usAvailable.sort(() => Math.random() - 0.5);
-        // 艦種別にシャッフル済みプール
-        const pool = usAvailable.sort((a, b) => usThreatOf(b) - usThreatOf(a));
-        let usThreatSum = 0;
-        for (const s of pool) {
-            const st = usThreatOf(s);
-            if (usThreatSum + st > apparentThreat + 1) continue; // 超過しすぎなら飛ばす
-            currentUsFleet.push(s);
-            s.used = true;
-            usThreatSum += st;
-            if (usThreatSum >= apparentThreat) break;
-        }
-        // まだ足りなければ小型艦で埋める
-        if (usThreatSum < apparentThreat) {
-            const remain = usAllShips.filter(s => !s.used && s.status !== 'sunk');
-            remain.sort(() => Math.random() - 0.5);
-            for (const s of remain) {
-                const st = usThreatOf(s);
-                if (usThreatSum + st > apparentThreat + 2) continue;
-                currentUsFleet.push(s);
-                s.used = true;
-                usThreatSum += st;
-                if (usThreatSum >= apparentThreat) break;
+        // 艦種ごとに同数を割り当て
+        const usTypeMap = { BB: 'BB', CA: 'CA', CL: ['CL','CLAA'], DD: 'DD' };
+        for (const [jpType, need] of Object.entries(jpTypeCount)) {
+            if (need === 0) continue;
+            const matchTypes = Array.isArray(usTypeMap[jpType]) ? usTypeMap[jpType] : [usTypeMap[jpType]];
+            const candidates = usAvailable.filter(s => matchTypes.includes(s.type) && !s.used);
+            for (let i = 0; i < need && i < candidates.length; i++) {
+                currentUsFleet.push(candidates[i]);
+                candidates[i].used = true;
             }
         }
-        logMsg(`【控えめモード】米軍脅威値: ${usThreatSum} (日本軍見かけ: ${apparentThreat})`);
+        const usThreatSum = currentUsFleet.reduce((sum, s) => sum + usThreatOf(s), 0);
+        logMsg(`【控えめモード】米軍: BB${jpTypeCount.BB} CA${jpTypeCount.CA} CL${jpTypeCount.CL} DD${jpTypeCount.DD} に合わせて${currentUsFleet.length}隻編成 (脅威値${usThreatSum})`);
 
     } else {
         // 強敵モード: 見かけ脅威値を上回る、なるべく多くの艦を出す
