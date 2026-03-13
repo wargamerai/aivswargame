@@ -61,11 +61,11 @@
 </div>
 
 <div>
-    <label style="font-weight:bold; margin-right:6px;">難易度:</label>
+    <label style="font-weight:bold; margin-right:6px;">敵の性格:</label>
     <select id="difficultySelect" style="font-size:1em; padding:4px 8px; margin-right:12px;">
         <option value="practice">練習（CA1隻のみ）</option>
-        <option value="moderate" selected>控えめ（索敵脅威値に合わせる）</option>
-        <option value="hard">強敵（脅威値を上回る大艦隊）</option>
+        <option value="moderate" selected>油断</option>
+        <option value="hard">慎重</option>
     </select>
     <button id="btnSortie" onclick="phaseSortie()">1. 出撃編成＆索敵</button>
     <button id="btnCombat" onclick="openBattle()" disabled style="background-color: #cc6600; color:#fff;">2. 戦闘開始</button>
@@ -519,10 +519,10 @@ function phaseSortie() {
             }
         }
         const usThreatSum = currentUsFleet.reduce((sum, s) => sum + usThreatOf(s), 0);
-        logMsg(`【控えめモード】米軍: BB${jpTypeCount.BB} CA${jpTypeCount.CA} CL${jpTypeCount.CL} DD${jpTypeCount.DD} に合わせて${currentUsFleet.length}隻編成 (脅威値${usThreatSum})`);
+        logMsg(`【油断】米軍: BB${jpTypeCount.BB} CA${jpTypeCount.CA} CL${jpTypeCount.CL} DD${jpTypeCount.DD} に合わせて${currentUsFleet.length}隻編成 (脅威値${usThreatSum})`);
 
     } else {
-        // 強敵モード: 日本軍の編成を見て逆張りする
+        // 慎重モード: 日本軍の編成を見て逆張りする
         // 日本にBBがいる → 手抜き（小型艦で凌ぎ、大型艦を温存）
         // 日本にBBがいない → 主力投入（BBをぶつけて圧倒）
         // 第4戦 → 残り全部投入
@@ -626,7 +626,7 @@ function phaseSortie() {
         const usBB = currentUsFleet.filter(s => s.type === 'BB').length;
         const usCA = currentUsFleet.filter(s => s.type === 'CA' || s.type === 'OBB').length;
         const usDD = currentUsFleet.filter(s => s.type === 'DD' || s.type === 'CL' || s.type === 'CLAA').length;
-        logMsg(`【強敵モード/${turnStyle}】米軍${currentUsFleet.length}隻 (BB${usBB} CA${usCA} DD他${usDD}) 脅威値${usThreatSum} [残存${remainAfter}隻/残${remainBattles-1}戦]`);
+        logMsg(`【慎重/${turnStyle}】米軍${currentUsFleet.length}隻 (BB${usBB} CA${usCA} DD他${usDD}) 脅威値${usThreatSum} [残存${remainAfter}隻/残${remainBattles-1}戦]`);
     }
 
     currentUsFleet = sortShips(currentUsFleet, false);
