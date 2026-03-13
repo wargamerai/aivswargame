@@ -322,6 +322,7 @@ let currentPhase = 'sortie'; // 'sortie', 'selecting', 'combat', 'next'
 let jpMission = '';
 let lastJpHandicap = 0;
 let lastUsHandicap = 0;
+let maxUsHandicap = 0;
 let scoutResults = []; // 索敵結果を保存
 
 // --- ユーティリティ ---
@@ -366,7 +367,7 @@ function usThreatOf(s) {
 // --- キャンペーン状態永続化 ---
 function saveCampaignState() {
     const state = {
-        currentTurn, jpScore, usScore, usedRolls, currentPhase, jpMission,
+        currentTurn, jpScore, usScore, usedRolls, maxUsHandicap, currentPhase, jpMission,
         jpAllShipsState: jpAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, rest: s.rest })),
         usAllShipsState: usAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, used: s.used })),
         currentJpFleetNames: currentJpFleet.map(s => s.name),
@@ -391,6 +392,7 @@ function loadCampaignState() {
         jpMission = state.jpMission || '';
         battleHistory = state.battleHistory || [];
         scoutResults = state.scoutResults || [];
+        maxUsHandicap = state.maxUsHandicap || 0;
 
         if (state.jpAllShipsState) {
             state.jpAllShipsState.forEach(saved => {
@@ -472,17 +474,17 @@ function phaseSortie() {
     let jpNames = [];
     let ddCount = 0;
 
-    if (roll === 2) { jpNames = ['高雄', '愛宕', '大和', '由良', '長門', '陸奥', '摩耶', '鳥海']; ddCount = rollDice() + 4; }
-    else if (roll === 3) { jpNames = ['妙高', '羽黒', '大和', '五十鈴']; ddCount = rollDice(); }
-    else if (roll === 4) { jpNames = ['比叡', '霧島', '長良']; ddCount = rollDice() + 4; }
-    else if (roll === 5) { jpNames = ['古鷹', '青葉', '衣笠']; ddCount = rollDice(); }
-    else if (roll === 6) { jpNames = ['高雄', '愛宕', '摩耶', '鳥海', '川内']; ddCount = rollDice() + 2; }
-    else if (roll === 7) { jpNames = []; ddCount = rollDice() + 4; }
-    else if (roll === 8) { jpNames = ['北上', '大井']; ddCount = rollDice() + 4; }
-    else if (roll === 9) { jpNames = ['熊野', '鈴谷']; ddCount = rollDice(); }
-    else if (roll === 10) { jpNames = ['神通', '金剛', '榛名', '妙高', '羽黒']; ddCount = rollDice() + 2; }
-    else if (roll === 11) { jpNames = ['夕張', '長門', '陸奥', '利根', '筑摩']; ddCount = rollDice() + 2; }
-    else if (roll === 12) { jpNames = ['天龍', '龍田', '伊勢', '日向', '山城', '扶桑']; ddCount = rollDice() + 2; }
+    if (roll === 2) { jpNames = ['高雄', '愛宕', '大和', '由良', '長門', '陸奥', '摩耶', '鳥海']; ddCount = rollDice() + 4; maxUsHandicap = 100; }
+    else if (roll === 3) { jpNames = ['妙高', '羽黒', '大和', '五十鈴']; ddCount = rollDice(); maxUsHandicap = 50; }
+    else if (roll === 4) { jpNames = ['比叡', '霧島', '長良']; ddCount = rollDice() + 4; maxUsHandicap = 30; }
+    else if (roll === 5) { jpNames = ['古鷹', '青葉', '衣笠']; ddCount = rollDice(); maxUsHandicap = 10; }
+    else if (roll === 6) { jpNames = ['高雄', '愛宕', '摩耶', '鳥海', '川内']; ddCount = rollDice() + 2; maxUsHandicap = 20; }
+    else if (roll === 7) { jpNames = []; ddCount = rollDice() + 4; maxUsHandicap = 0; }
+    else if (roll === 8) { jpNames = ['北上', '大井']; ddCount = rollDice() + 4; maxUsHandicap = 0; }
+    else if (roll === 9) { jpNames = ['熊野', '鈴谷']; ddCount = rollDice(); maxUsHandicap = 10; }
+    else if (roll === 10) { jpNames = ['神通', '金剛', '榛名', '妙高', '羽黒']; ddCount = rollDice() + 2; maxUsHandicap = 40; }
+    else if (roll === 11) { jpNames = ['夕張', '長門', '陸奥', '利根', '筑摩']; ddCount = rollDice() + 2; maxUsHandicap = 45; }
+    else if (roll === 12) { jpNames = ['天龍', '龍田', '伊勢', '日向', '山城', '扶桑']; ddCount = rollDice() + 2; maxUsHandicap = 50; }
 
     currentJpFleet = [];
 
@@ -651,13 +653,17 @@ function toggleShip(name) {
     saveCampaignState();
 }
 
+// --- 参加料(fee)計算: VP = (capG + capM) × 5, fee = VP / 2 ---
+function shipFee(s) { return (s.capG + s.capM) * 5 / 2; }
+function fleetFee(fleet) { return fleet.reduce((sum, s) => sum + shipFee(s), 0); }
+
 // --- ハンディキャップ表示更新 ---
 // 選択中は米軍側の情報だけ表示（日本軍feeを見せるとサクテキの意味がなくなる）
 function updateHandicapDisplay() {
     const selected = [...selectedUsShips].map(n => usAllShips.find(s => s.name === n)).filter(Boolean);
     const selCount = selected.length;
 
-    let usFee = selected.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
+    let usFee = fleetFee(selected);
 
     // 脅威値（米軍の実値と、索敵で得た見かけの脅威値のみ表示）
     const usThreat = selected.reduce((sum, s) => sum + usThreatOf(s), 0);
@@ -704,11 +710,13 @@ function confirmFleet() {
     currentUsFleet.forEach(s => { s.used = true; });
     currentUsFleet = sortShips(currentUsFleet, false);
 
-    // ハンディキャップ計算
-    let jpFee = currentJpFleet.reduce((sum, s) => sum + (Math.ceil(s.vp / 2)), 0);
-    let usFee = currentUsFleet.reduce((sum, s) => sum + (Math.ceil(s.vp / 2)), 0);
-    let jpHandicapAdd = Math.max(0, usFee - jpFee) * 10;
-    let usHandicapAdd = Math.max(0, jpFee - usFee) * 10;
+    // ハンディキャップ計算: fee = (capG + capM) × 5 / 2
+    let jpFee = fleetFee(currentJpFleet);
+    let usFee = fleetFee(currentUsFleet);
+    let jpHandicapAdd = Math.max(0, usFee - jpFee);
+    let usHandicapAdd = Math.max(0, jpFee - usFee);
+    // ロール別キャップ適用
+    if (usHandicapAdd > maxUsHandicap) usHandicapAdd = maxUsHandicap;
 
     jpScore += jpHandicapAdd;
     usScore += usHandicapAdd;
