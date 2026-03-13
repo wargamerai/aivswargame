@@ -548,24 +548,15 @@ function phaseSortie() {
                 usThreatSum += usThreatOf(s);
             }
         } else if (jpHasBB) {
-            // 日本にBBあり → 手抜き: 小型艦中心、fee合わせてハンディ損回避
+            // 日本にBBあり → 温存: 小型艦控えめに出す（feeは日本の7割程度で抑えて艦を節約）
             turnStyle = '温存';
+            const feeTarget = Math.ceil(jpFeeCalc * 0.7);
             let usFeeSum = 0;
             for (const s of smallPool) {
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
                 usFeeSum += Math.ceil(s.vp / 2);
-                if (usFeeSum >= jpFeeCalc) break;
-            }
-            // feeが足りなければCA1隻だけ（BBは温存）
-            if (usFeeSum < jpFeeCalc - 1) {
-                const caOnly = bigPool.filter(s => s.type === 'CA');
-                for (const s of caOnly) {
-                    currentUsFleet.push(s); s.used = true;
-                    usThreatSum += usThreatOf(s);
-                    usFeeSum += Math.ceil(s.vp / 2);
-                    break;
-                }
+                if (usFeeSum >= feeTarget) break;
             }
             const handicapDiff = Math.abs(jpFeeCalc - usFeeSum) * 10;
             logMsg(`  (温存: JP fee=${jpFeeCalc}, US fee=${usFeeSum}, ハンディ差=${handicapDiff}点)`);
@@ -586,7 +577,7 @@ function phaseSortie() {
                 usThreatSum += usThreatOf(s);
             }
             for (const s of smallPool) {
-                if (usThreatSum >= targetThreat * 1.2) break;
+                if (usThreatSum >= targetThreat) break;
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
             }
