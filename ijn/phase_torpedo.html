@@ -469,7 +469,7 @@ function calcModifiers(firer, target) {
   const details = [];
   // 目標の方位（前方/後方から撃つと的が細い → +1）
   const aspect = getTargetAspect(firer, target);
-  if (aspect !== '舷側') { mod += 1; details.push(`${aspect}+1`); }
+  if (aspect !== '舷側') { mod += 2; details.push(`${aspect}+2`); }
   if (target.onFire) { mod -= 1; details.push('火災-1'); }
   if (target.speed === 0 || (target.dmgM >= target.capM && target.status !== 'sunk')) {
     mod -= 2; details.push('停止-2');
