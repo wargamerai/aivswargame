@@ -979,6 +979,25 @@ function drawShip(ship) {
   } else {
     ctx.fillStyle = '#99aaff';
     ctx.fillText(usShipLabel(ship), x, y + drawSz + 10);
+    // 魚雷マーク（保有かつ未発射かつ雷撃可能）— ユニット右上に丸囲みT
+    if (ship.torpedo && ship.torpedo !== '-' && !ship.torpedoFired && !ship.cannotTorpedo) {
+      const tr = 7;
+      const tx = x + drawSz + 4;
+      const ty = y - drawSz - 4;
+      ctx.beginPath();
+      ctx.arc(tx, ty, tr, 0, Math.PI * 2);
+      ctx.fillStyle = '#00ffaa';
+      ctx.fill();
+      ctx.strokeStyle = '#003322';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillStyle = '#003322';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('T', tx, ty);
+      ctx.textBaseline = 'alphabetic';
+    }
   }
 }
 
