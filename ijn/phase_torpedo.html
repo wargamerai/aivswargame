@@ -453,7 +453,7 @@ function calcModifiers(firer, target) {
     mod -= 1; details.push('半速-1');
   }
   if (target.type === 'DD') { mod += 1; details.push('DD+1'); }
-  if (target.side === 'us') { mod += 1; details.push('米軍+1'); }
+  if (firer.side === 'us') { mod += 1; details.push('米魚雷+1'); }
   return {mod, details};
 }
 
