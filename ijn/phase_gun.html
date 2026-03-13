@@ -394,7 +394,7 @@ function init() {
 
   if (subPhase === 'gun1a') {
     localStorage.removeItem(PENDING_KEY);
-    (state.usFleet||[]).forEach(s => { s.revealed = false; });
+    // revealed はリセットしない（前ターンの発砲位置は次ターンも視認可能）
     localStorage.setItem('hubState', JSON.stringify(state));
     if (isJPFirst) {
       setupJPShoot('第一砲撃 — 日本軍射撃');
