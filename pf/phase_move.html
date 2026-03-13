@@ -916,21 +916,69 @@ function allStraight() {
   };
 
   var count = 0;
-  // 前方の艦から先に動かす
-  var targets = [];
+  var movedNames = new Set();  // 縦列随伴で既に動いた艦
+
+  // 未移動のリード艦を先に動かす（縦列維持）
+  var unmovedLeads = [];
   usFleet.forEach(function(s, i) {
-    if (canShipMove(s) && !movedShips.has(i)) targets.push({ship:s, idx:i});
+    if (s.isLead && canShipMove(s) && !movedShips.has(i)) unmovedLeads.push({ship:s, idx:i});
   });
-  targets.sort(function(a, b) {
+  unmovedLeads.sort(function(a, b) {
     var aE = [6,3,9].indexOf(a.ship.dir) >= 0;
     var bE = [6,3,9].indexOf(b.ship.dir) >= 0;
     if (aE && bE) return b.ship.col - a.ship.col;
     if (!aE && !bE) return a.ship.col - b.ship.col;
     return 0;
   });
-  for (var t = 0; t < targets.length; t++) {
-    var ship = targets[t].ship;
-    var idx = targets[t].idx;
+  for (var t = 0; t < unmovedLeads.length; t++) {
+    var lead = unmovedLeads[t].ship;
+    var spd = getSpeed(lead);
+    var moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    for (var step = 0; step < moveCount; step++) {
+      var next = hexNeighbor(lead.col, lead.row, lead.dir);
+      if (!next) break;
+      if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+      lead.path = lead.path || [];
+      lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+      lead.col = next.col;
+      lead.row = next.row;
+      var occupant = getOccupant(next.col, next.row, lead);
+      if (occupant) collisionCheck(lead, occupant);
+      var sunkAt = getSunkShip(next.col, next.row, lead);
+      if (sunkAt) collisionCheck(lead, sunkAt);
+      moveFollowers(lead, usFleet);
+    }
+    movedShips.add(unmovedLeads[t].idx);
+    movedNames.add(lead.name);
+    parent.postMessage({type:'ACTION_DONE', shipIndex:unmovedLeads[t].idx}, '*');
+    count++;
+    // 随伴艦もmovedにマーク
+    var ci = lead.colIndex;
+    usFleet.forEach(function(s, i) {
+      if (!s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing) {
+        movedShips.add(i);
+        movedNames.add(s.name);
+        parent.postMessage({type:'ACTION_DONE', shipIndex:i}, '*');
+        count++;
+      }
+    });
+  }
+
+  // 残りの未移動艦（リードでも随伴でもない独立艦）を個別に直進
+  var remaining = [];
+  usFleet.forEach(function(s, i) {
+    if (canShipMove(s) && !movedShips.has(i) && !movedNames.has(s.name)) remaining.push({ship:s, idx:i});
+  });
+  remaining.sort(function(a, b) {
+    var aE = [6,3,9].indexOf(a.ship.dir) >= 0;
+    var bE = [6,3,9].indexOf(b.ship.dir) >= 0;
+    if (aE && bE) return b.ship.col - a.ship.col;
+    if (!aE && !bE) return a.ship.col - b.ship.col;
+    return 0;
+  });
+  for (var t = 0; t < remaining.length; t++) {
+    var ship = remaining[t].ship;
+    var idx = remaining[t].idx;
     var spd = getSpeed(ship);
     var moveCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
     for (var step = 0; step < moveCount; step++) {
@@ -939,7 +987,6 @@ function allStraight() {
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
       ship.col = next.col;
       ship.row = next.row;
-      // 同一ヘクスに他の艦がいたら衝突チェック（進入は止めない）
       var occupant = getOccupant(next.col, next.row, ship);
       if (occupant) collisionCheck(ship, occupant);
       var sunkAt = getSunkShip(next.col, next.row, ship);
