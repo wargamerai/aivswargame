@@ -1131,9 +1131,14 @@ function collisionCheck(invader, occupant) {
   var logLines = [];
   logLines.push('⚓ 衝突チェック: ' + invader.name + ' → ' + occupant.name + (isSunk ? '(沈没船)' : '') + ' [' + d1 + '+' + d2 + '=' + (d1+d2) + ']');
 
+  // 衝突関係の艦をハイライト表示
+  parent.postMessage({type:'HIGHLIGHT', firer:invader.name, target:occupant.name}, '*');
+
   if (d1 + d2 !== 7) {
     logLines.push('  → 衝突回避');
     setInfo(logLines.join('\n'));
+    // 回避でも少し表示してからクリア
+    setTimeout(function(){ parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*'); }, 1500);
     return logLines;
   }
 
@@ -1153,6 +1158,7 @@ function collisionCheck(invader, occupant) {
   if (isSunk) {
     logLines.push('  ' + occupant.name + '(沈没船): 追加損害なし');
     setInfo(logLines.join('\n'));
+    setTimeout(function(){ parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*'); }, 3000);
     return logLines;
   }
 
@@ -1173,6 +1179,7 @@ function collisionCheck(invader, occupant) {
   if (occResult.sunk) logLines.push('    → 沈没!');
 
   setInfo(logLines.join('\n'));
+  setTimeout(function(){ parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*'); }, 3000);
   return logLines;
 }
 
