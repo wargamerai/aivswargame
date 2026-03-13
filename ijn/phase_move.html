@@ -325,8 +325,12 @@ function autoAdvanceIndividual(fleet) {
     return 0;
   });
 
+  // 直進モード統一速力: OBBがいたら3、なければ4
+  const hasOBB = ships.some(s => s.type === 'OBB');
+  const fleetSpeed = hasOBB ? 3 : 4;
+
   for (const ship of ships) {
-    const spd = getSpeed(ship);
+    const spd = Math.min(getSpeed(ship), fleetSpeed);  // 統一速力で上限
     const moveCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
     for (let step = 0; step < moveCount; step++) {
       const next = hexNeighbor(ship.col, ship.row, ship.dir);
@@ -360,8 +364,13 @@ function autoAdvanceColumn(fleet) {
     return 0;
   });
 
+  // 直進モード統一速力: OBBがいたら3、なければ4
+  const activeShips = fleet.filter(s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
+  const hasOBB = activeShips.some(s => s.type === 'OBB');
+  const fleetSpeed = hasOBB ? 3 : 4;
+
   for (const lead of leads) {
-    const spd = getSpeed(lead);
+    const spd = Math.min(getSpeed(lead), fleetSpeed);  // 統一速力で上限
     const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
 
     for (let step = 0; step < moveCount; step++) {
