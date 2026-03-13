@@ -272,6 +272,10 @@ function logMsg(msg) {
 function rollDice(sides = 6) { return Math.floor(Math.random() * sides) + 1; }
 function getShipByName(name, array) { return array.find(s => s.name === name); }
 
+// --- 参加料(fee)計算: VP = (capG + capM) × 5, fee = VP / 2 ---
+function shipFee(s) { return (s.capG + s.capM) * 5 / 2; }
+function fleetFee(fleet) { return fleet.reduce((sum, s) => sum + shipFee(s), 0); }
+
 function sortShips(fleet, isJp) {
     // 艦種の優先順位（大きい順）
     const TYPE_ORDER = { BB: 0, OBB: 1, CA: 2, CL: 3, DD: 4 };
@@ -537,7 +541,7 @@ function phaseSortie() {
         const caPerBattle = Math.ceil(caAvail / remainBattles);  // CA按分
         const ddPerBattle = Math.ceil(ddAvail / remainBattles);  // DD按分
 
-        const jpFeeCalc = currentJpFleet.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
+        const jpFeeCalc = fleetFee(currentJpFleet);
         const jpBBCount = currentJpFleet.filter(s => s.type === 'BB' || s.type === 'OBB').length;
         const isLastBattle = (currentTurn >= 4);
         let usThreatSum = 0;
@@ -586,10 +590,10 @@ function phaseSortie() {
             for (const s of smallPool) {
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
-                usFeeSum += Math.ceil(s.vp / 2);
+                usFeeSum += shipFee(s);
                 if (usFeeSum >= feeTarget) break;
             }
-            const handicapDiff = Math.abs(jpFeeCalc - usFeeSum) * 10;
+            const handicapDiff = Math.abs(jpFeeCalc - usFeeSum);
             logMsg(`  (温存: JP fee=${jpFeeCalc}, US fee=${usFeeSum}, ハンディ差=${handicapDiff}点)`);
         } else {
             // 日本にBBなし → 主力投入: BB1隻+CAで圧倒（残りBBは後半用に温存）
@@ -628,10 +632,10 @@ function phaseSortie() {
     currentUsFleet = sortShips(currentUsFleet, false);
 
     // ハンディキャップ計算
-    let jpFee = currentJpFleet.reduce((sum, s) => sum + (Math.ceil(s.vp / 2)), 0);
-    let usFee = currentUsFleet.reduce((sum, s) => sum + (Math.ceil(s.vp / 2)), 0);
-    let jpHandicapAdd = Math.max(0, usFee - jpFee) * 10;
-    let usHandicapAdd = Math.max(0, jpFee - usFee) * 10;
+    let jpFee = fleetFee(currentJpFleet);
+    let usFee = fleetFee(currentUsFleet);
+    let jpHandicapAdd = Math.max(0, usFee - jpFee);
+    let usHandicapAdd = Math.max(0, jpFee - usFee);
 
     if (usHandicapAdd > maxUsHandicap) {
         usHandicapAdd = maxUsHandicap;
