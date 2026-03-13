@@ -652,34 +652,24 @@ function toggleShip(name) {
 }
 
 // --- ハンディキャップ表示更新 ---
+// 選択中は米軍側の情報だけ表示（日本軍feeを見せるとサクテキの意味がなくなる）
 function updateHandicapDisplay() {
     const selected = [...selectedUsShips].map(n => usAllShips.find(s => s.name === n)).filter(Boolean);
     const selCount = selected.length;
 
-    let jpFee = currentJpFleet.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
     let usFee = selected.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
-    let jpHandicapAdd = Math.max(0, usFee - jpFee) * 10;
-    let usHandicapAdd = Math.max(0, jpFee - usFee) * 10;
 
-    // 脅威値
+    // 脅威値（米軍の実値と、索敵で得た見かけの脅威値のみ表示）
     const usThreat = selected.reduce((sum, s) => sum + usThreatOf(s), 0);
-    const jpThreat = currentJpFleet.reduce((sum, s) => sum + usThreatOf(s), 0);
     const apparentThreat = scoutResults.reduce((sum, r) => sum + r.threat, 0);
 
     let html = '';
     html += `<span class="handi-label">選択中: ${selCount}隻</span>`;
     html += ` | <span class="handi-us">米軍脅威値: ${usThreat}</span>`;
-    html += ` | <span class="handi-jp">日本軍見かけ脅威値: ${apparentThreat}</span> (実際: ${jpThreat})`;
+    html += ` | <span class="handi-jp">日本軍見かけ脅威値: ${apparentThreat}</span>`;
     html += `<br>`;
-    html += `<span class="handi-label">出撃費用:</span> 米軍 ${usFee} / 日本軍 ${jpFee}`;
-    html += ` → `;
-    if (jpHandicapAdd > 0) {
-        html += `<span class="handi-jp">日本軍にハンディ +${jpHandicapAdd}点</span>`;
-    } else if (usHandicapAdd > 0) {
-        html += `<span class="handi-us">米軍にハンディ +${usHandicapAdd}点</span>`;
-    } else {
-        html += `<span style="color:#888;">ハンディなし</span>`;
-    }
+    html += `<span class="handi-label">米軍出撃費用:</span> ${usFee}`;
+    html += ` <span style="color:#888; font-size:0.85em;">（ハンディキャップは確定後に算出）</span>`;
 
     // 艦種内訳
     const bb = selected.filter(s => s.type === 'BB').length;
