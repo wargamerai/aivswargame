@@ -518,11 +518,10 @@ function phaseSortie() {
         logMsg(`【控えめモード】米軍: BB${jpTypeCount.BB} CA${jpTypeCount.CA} CL${jpTypeCount.CL} DD${jpTypeCount.DD} に合わせて${currentUsFleet.length}隻編成 (脅威値${usThreatSum})`);
 
     } else {
-        // 強敵モード: 戦ごとに強弱をつける
-        // 第1戦:主力、第2戦:やや控え、第3戦:手抜き(小型艦中心)、第4戦:残り全力
-        const TURN_STYLE = { 1: 'strong', 2: 'moderate', 3: 'weak', 4: 'strong' };
-        const turnStyle = TURN_STYLE[currentTurn] || 'strong';
-        const turnLabel = { strong: '主力', moderate: '通常', weak: '手抜き' };
+        // 強敵モード: 日本軍の編成を見て逆張りする
+        // 日本にBBがいる → 手抜き（小型艦で凌ぎ、大型艦を温存）
+        // 日本にBBがいない → 主力投入（BBをぶつけて圧倒）
+        // 第4戦 → 残り全部投入
         let usAvailable = usAllShips.filter(s => !s.used && s.status !== 'sunk');
         usAvailable.sort(() => Math.random() - 0.5);
 
@@ -531,66 +530,70 @@ function phaseSortie() {
         bigPool.sort(() => Math.random() - 0.5);
         smallPool.sort(() => Math.random() - 0.5);
 
-        // 日本軍のfee（ハンディ計算用VP）
         const jpFeeCalc = currentJpFleet.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
+        const jpHasBB = currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB');
+        const isLastBattle = (currentTurn >= 4);
         let usThreatSum = 0;
+        let turnStyle;
 
-        if (turnStyle === 'strong') {
-            // 主力戦: 大型艦多め、脅威値を大きく上回る
-            const targetThreat = apparentThreat + 4 + rollDice();
+        if (isLastBattle) {
+            // 最終戦: 残り全部投入
+            turnStyle = '総力';
             for (const s of bigPool) {
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
+            }
+            for (const s of smallPool) {
+                currentUsFleet.push(s); s.used = true;
+                usThreatSum += usThreatOf(s);
+            }
+        } else if (jpHasBB) {
+            // 日本にBBあり → 手抜き: 小型艦中心、fee合わせてハンディ損回避
+            turnStyle = '温存';
+            let usFeeSum = 0;
+            for (const s of smallPool) {
+                currentUsFleet.push(s); s.used = true;
+                usThreatSum += usThreatOf(s);
+                usFeeSum += Math.ceil(s.vp / 2);
+                if (usFeeSum >= jpFeeCalc) break;
+            }
+            // feeが足りなければCA1隻だけ（BBは温存）
+            if (usFeeSum < jpFeeCalc - 1) {
+                const caOnly = bigPool.filter(s => s.type === 'CA');
+                for (const s of caOnly) {
+                    currentUsFleet.push(s); s.used = true;
+                    usThreatSum += usThreatOf(s);
+                    usFeeSum += Math.ceil(s.vp / 2);
+                    break;
+                }
+            }
+            const handicapDiff = Math.abs(jpFeeCalc - usFeeSum) * 10;
+            logMsg(`  (温存: JP fee=${jpFeeCalc}, US fee=${usFeeSum}, ハンディ差=${handicapDiff}点)`);
+        } else {
+            // 日本にBBなし → 主力投入: BBをぶつけて圧倒
+            turnStyle = '主力';
+            const targetThreat = apparentThreat + 4 + rollDice();
+            // BB優先で投入
+            const bbPool = bigPool.filter(s => s.type === 'BB');
+            const caPool = bigPool.filter(s => s.type === 'CA' || s.type === 'OBB');
+            for (const s of bbPool) {
+                currentUsFleet.push(s); s.used = true;
+                usThreatSum += usThreatOf(s);
+            }
+            for (const s of caPool) {
                 if (usThreatSum >= targetThreat) break;
+                currentUsFleet.push(s); s.used = true;
+                usThreatSum += usThreatOf(s);
             }
             for (const s of smallPool) {
                 if (usThreatSum >= targetThreat * 1.2) break;
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
             }
-        } else if (turnStyle === 'moderate') {
-            // 通常: 大型艦控えめ、脅威値はやや上回る
-            const targetThreat = apparentThreat + 2;
-            const bigLimit = Math.ceil(bigPool.length * 0.4);
-            let bigUsed = 0;
-            for (const s of bigPool) {
-                if (bigUsed >= bigLimit) break;
-                currentUsFleet.push(s); s.used = true;
-                usThreatSum += usThreatOf(s);
-                bigUsed++;
-                if (usThreatSum >= targetThreat) break;
-            }
-            for (const s of smallPool) {
-                if (usThreatSum >= targetThreat * 1.1) break;
-                currentUsFleet.push(s); s.used = true;
-                usThreatSum += usThreatOf(s);
-            }
-        } else {
-            // 手抜き: 小型艦中心だが、ハンディで大損しないようfee合計を日本軍に近づける
-            // まず小型艦を投入（大型艦は1隻まで）
-            let usFeeSum = 0;
-            for (const s of smallPool) {
-                currentUsFleet.push(s); s.used = true;
-                usThreatSum += usThreatOf(s);
-                usFeeSum += Math.ceil(s.vp / 2);
-                // feeが日本軍と同程度になったら止める
-                if (usFeeSum >= jpFeeCalc) break;
-            }
-            // feeがまだ足りなければ大型艦を1隻だけ追加
-            if (usFeeSum < jpFeeCalc - 1) {
-                for (const s of bigPool) {
-                    currentUsFleet.push(s); s.used = true;
-                    usThreatSum += usThreatOf(s);
-                    usFeeSum += Math.ceil(s.vp / 2);
-                    break; // 1隻のみ
-                }
-            }
-            const handicapDiff = Math.abs(jpFeeCalc - usFeeSum) * 10;
-            logMsg(`  (手抜き調整: JP fee=${jpFeeCalc}, US fee=${usFeeSum}, ハンディ差=${handicapDiff}点)`);
         }
 
         const remainAfter = usAvailable.length - currentUsFleet.length;
-        logMsg(`【強敵モード/${turnLabel[turnStyle]}】米軍${currentUsFleet.length}隻 脅威値${usThreatSum} (日本軍見かけ${apparentThreat}) [残存${remainAfter}隻]`);
+        logMsg(`【強敵モード/${turnStyle}】米軍${currentUsFleet.length}隻 脅威値${usThreatSum} (日本軍見かけ${apparentThreat}) [残存${remainAfter}隻]`);
     }
 
     currentUsFleet = sortShips(currentUsFleet, false);
