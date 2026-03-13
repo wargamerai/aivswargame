@@ -444,7 +444,7 @@ function updateShootInfo() {
 
   const {mod, details} = calcModifiers(firer, target);
   const hitPct = calcTorpHitChance(mod, dist);
-  el.innerHTML = `${firer.name} → ${target.name} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#0ff;font-weight:bold">命中率 ${hitPct}%</span>`;
+  el.innerHTML = `${firer.name} → ${target.name} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
   if (details.length > 0) {
     el.innerHTML += `<div class="mod-detail">${details.join(' / ')}</div>`;
   }
