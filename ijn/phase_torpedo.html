@@ -799,15 +799,18 @@ function autoUSTorpedo() {
   // 全結果を事前計算
   const results = [];
   for (const firer of us) {
-    // 最寄りの舷側にいるJP艦を選択
-    let bestTarget = null, bestDist = 999;
+    // 最寄りの舷側にいるJP艦を選択（大破艦は避ける）
+    let bestTarget = null, bestScore = 999;
     const allShips = [...us, ...jp];
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
       if (!checkBroadside(firer, t)) continue;  // 舷側のみ
       if (isLineBlocked(firer, t, allShips)) continue;  // 射線遮蔽
-      if (d < bestDist) { bestDist = d; bestTarget = t; }
+      // 大破艦は優先度大幅ダウン（75%以上損傷）
+      const heavyDmg = (t.dmgG >= t.capG * 0.75 || t.dmgM >= t.capM * 0.75);
+      const score = d + (heavyDmg ? 50 : 0);
+      if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
     if (!bestTarget) continue;
 

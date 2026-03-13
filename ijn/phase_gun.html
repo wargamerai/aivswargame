@@ -798,12 +798,14 @@ function autoUSShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of us) {
-    // 目標選択: 距離 + 割り当てペナルティでスコアリング
+    // 目標選択: 大破艦を避け、まだ無傷〜中破の艦を狙う
     let bestTarget = null, bestScore = 999;
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getMaxRange(t, firer)) continue;
-      const score = d + (assignCount[t.name] || 0) * 4;
+      // 大破（G/Mどちらかが容量の75%以上損傷）は優先度大幅ダウン
+      const heavyDmg = (t.dmgG >= t.capG * 0.75 || t.dmgM >= t.capM * 0.75);
+      const score = d + (assignCount[t.name] || 0) * 4 + (heavyDmg ? 50 : 0);
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
     if (!bestTarget) continue;
