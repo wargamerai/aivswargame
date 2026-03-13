@@ -587,6 +587,14 @@ function applyBattleResultData(importData, endTurn) {
             let addM = data.dmgM || 0;
             let isUs = currentUsFleet.includes(ship);
             applyDamageToShip(ship, addG, addM, isUs);
+            // クリティカル轟沈: ダメージ不足でもstatusがsunkなら撃沈扱い
+            if (data.status === 'sunk' && ship.status !== 'sunk') {
+                ship.status = 'sunk';
+                ship.rest = 99;
+                if (isUs) jpScore += (ship.capG + ship.capM) * ship.vp;
+                else usScore += (ship.capG + ship.capM) * ship.vp;
+                logMsg(`${ship.name} クリティカル轟沈！`);
+            }
         }
     });
 
