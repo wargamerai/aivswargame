@@ -656,16 +656,21 @@ function doTorpedo() {
       log(`  <span class="dmg">${target.name} 撃沈！</span>`);
     }
 
-    // クリティカル（ダメージ0なら発生しない）
-    if ((isDouble1 || isDouble2) && (dmgG > 0 || dmgM > 0 || sunk)) {
-      const cd = roll()+roll();
-      const crit = applyCritical(target, cd);
-      critText = crit.text;
-      dmgG += crit.extraG;
-      dmgM += crit.extraM;
-      if (crit.sunk) sunk = true;
-      log(`  <span class="crit">クリティカル! ${critText}</span>`);
-      if (crit.sunk && !dmg.sunk) log(`  <span class="dmg">${target.name} 轟沈！</span>`);
+    // クリティカル（ダメージ0なら発生しない、両方ゾロ目なら2回判定）
+    const critCount = (isDouble1 && isDouble2) ? 2 : (isDouble1 || isDouble2) ? 1 : 0;
+    if (critCount > 0 && (dmgG > 0 || dmgM > 0 || sunk)) {
+      const critTexts = [];
+      for (let ci = 0; ci < critCount; ci++) {
+        const cd = roll()+roll();
+        const crit = applyCritical(target, cd);
+        critTexts.push(crit.text);
+        dmgG += crit.extraG;
+        dmgM += crit.extraM;
+        if (crit.sunk) sunk = true;
+        log(`  <span class="crit">クリティカル${critCount>1?'('+(ci+1)+')':''}! ${crit.text}</span>`);
+        if (crit.sunk && !dmg.sunk) log(`  <span class="dmg">${target.name} 轟沈！</span>`);
+      }
+      critText = critTexts.join(' / ');
     }
 
     // 損害即時適用（轟沈時もダメージを記録 — VP計算用）
@@ -829,13 +834,18 @@ function autoUSTorpedo() {
 
       if (sunk) { bestTarget.status = 'sunk'; }
 
-      if ((isDouble1 || isDouble2) && (dmgG > 0 || dmgM > 0 || sunk)) {
-        const cd = roll()+roll();
-        const crit = applyCritical(bestTarget, cd);
-        critText = crit.text;
-        dmgG += crit.extraG;
-        dmgM += crit.extraM;
-        if (crit.sunk) sunk = true;
+      const usCritCount = (isDouble1 && isDouble2) ? 2 : (isDouble1 || isDouble2) ? 1 : 0;
+      if (usCritCount > 0 && (dmgG > 0 || dmgM > 0 || sunk)) {
+        const critTexts = [];
+        for (let ci = 0; ci < usCritCount; ci++) {
+          const cd = roll()+roll();
+          const crit = applyCritical(bestTarget, cd);
+          critTexts.push(crit.text);
+          dmgG += crit.extraG;
+          dmgM += crit.extraM;
+          if (crit.sunk) sunk = true;
+        }
+        critText = critTexts.join(' / ');
       }
 
       // 轟沈時もダメージを記録（VP計算用）
