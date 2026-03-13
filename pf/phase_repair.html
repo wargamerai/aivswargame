@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+body { background:#f5f5fa; color:#222; font-family:monospace; padding:12px; font-size:0.95em; }
+h3 { color:#1a5a8a; margin-bottom:8px; }
+.section { background:#f0f0f0; border:1px solid #bbb; padding:8px; margin:6px 0; border-radius:3px; }
+#shipTable { width:100%; border-collapse:collapse; font-size:0.9em; margin-top:5px; }
+#shipTable th { background:#e0e8f0; color:#444; padding:4px 5px; border:1px solid #ccc; }
+#shipTable td { padding:4px 5px; border:1px solid #ddd; }
+.ok { color:#2a8a2a; } .light { color:#aa8800; } .medium { color:#cc6600; }
+.heavy { color:#cc2200; } .sunk { color:#999; text-decoration:line-through; }
+button {
+  background:#dde4f0; color:#334; border:1px solid #99a;
+  padding:5px 10px; font-size:0.92em; cursor:pointer; border-radius:3px; margin:4px 3px 0 0; font-weight:bold;
+}
+button:hover { background:#c8d4ee; }
+button.repair-btn { background:#d0f0d0; border-color:#2a8a2a; font-size:0.88em; padding:3px 8px; color:#1a5a1a; }
+button.repair-btn:hover { background:#b8e8b8; }
+#log { background:#f0f0f0; border:1px solid #ccc; padding:8px; height:110px; overflow-y:auto; font-size:0.9em; line-height:1.6; margin:8px 0; color:#333; }
+.crit-badge { background:#f0e0f8; color:#7700aa; border:1px solid #bb88dd; padding:2px 5px; border-radius:2px; font-size:0.85em; margin:1px; display:inline-block; cursor:pointer; }
+.crit-badge:hover { background:#e8d0f0; }
+</style>
+</head>
+<body>
+<h3>⑦ 修理フェーズ</h3>
+<p style="color:#667;font-size:0.75em;margin-bottom:6px">クリティカル損傷のみ修理可能（G/M損害は回復不可）<br>ゾロ目で修理成功</p>
+
+<div class="section">
+  <div id="shipList"></div>
+</div>
+
+<button onclick="repairAll()">全艦修理チェック（一括）</button>
+<button onclick="donePhase()" id="btnDone">ターン終了</button>
+
+<div id="log"></div>
+
+<script>
+let state = null;
+
+// Critical damage types that can be repaired
+const CRIT_TYPES = ['火災','射撃指揮所','回頭不能','砲撃不能','速力半減','航行不能','雷撃不能','攻撃力半減'];
+
+function init() {
+  const raw = localStorage.getItem('hubState');
+  if (!raw) { log('hubStateなし'); return; }
+  state = JSON.parse(raw);
+  // 自動修理→自動ターン進行
+  repairAll();
+  renderList();
+  setTimeout(() => donePhase(), 1500);
+}
+
+function statusClass(s) {
+  if (s==='sunk') return 'sunk';
+  if (s==='heavy') return 'heavy';
+  if (s==='medium') return 'medium';
+  if (s==='light') return 'light';
+  return 'ok';
+}
+function statusLabel(s) {
+  return {ok:'無傷',light:'小破',medium:'中破',heavy:'大破',sunk:'沈没',exited:'離脱'}[s]||s;
+}
+
+function renderList() {
+  const el = document.getElementById('shipList');
+  const all = [...(state.jpFleet||[]), ...(state.usFleet||[])];
+  const active = all.filter(s => s.status!=='sunk' && s.status!=='exited');
+
+  if (active.length===0) { el.innerHTML='<div style="color:#556">艦なし</div>'; return; }
+
+  let html = `<table id="shipTable">
+    <tr><th>艦名</th><th>軍</th><th>状態</th><th>G/M</th><th>クリティカル</th><th>修理</th></tr>`;
+
+  for (const s of active) {
+    const sc = statusClass(s.status);
+    const crits = s.crits || [];
+    const critHtml = crits.length===0 ? '<span style="color:#445">なし</span>'
+      : crits.map((c,i)=>`<span class="crit-badge">${c}</span>`).join('');
+    const repBtn = crits.length>0
+      ? `<button class="repair-btn" onclick="repairShip('${s.name}')">修理</button>`
+      : '';
+    const side = s.side==='jp' ? '🎌' : '🦅';
+    html += `<tr>
+      <td>${s.name}</td>
+      <td>${side}</td>
+      <td class="${sc}">${statusLabel(s.status)}</td>
+      <td>${s.dmgG||0}/${s.dmgM||0}</td>
+      <td>${critHtml}</td>
+      <td>${repBtn}</td>
+    </tr>`;
+  }
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+// クリティカル文字列→対応するフラグ解除
+function clearCritFlag(ship, crit) {
+  if (crit === '火災') ship.onFire = false;
+  else if (crit === '砲撃不能') ship.cannotFire = false;
+  else if (crit === '攻撃力半減') ship.gunHalved = false;
+  else if (crit === '回頭不能') ship.cannotTurn = false;
+  else if (crit === '雷撃不能') ship.cannotTorpedo = false;
+  else if (crit === '射撃指揮所') { ship.critHitMod = 0; }
+  else if (crit === '速力半減' || crit === '航行不能') { delete ship.speed; /* 元の速力に戻す */ }
+}
+
+function repairShip(name) {
+  const all = [...(state.jpFleet||[]), ...(state.usFleet||[])];
+  const ship = all.find(s=>s.name===name);
+  if (!ship || !ship.crits || ship.crits.length===0) return;
+
+  log(`${name} 修理チェック:`);
+  const remaining = [];
+  for (const crit of ship.crits) {
+    // 轟沈・大損害は修理不可
+    if (crit.startsWith('轟沈') || crit.startsWith('大損害') || crit === '隔壁破壊') {
+      remaining.push(crit);
+      log(`  - ${crit}: 修理不可`);
+      continue;
+    }
+    const d1=Math.ceil(Math.random()*6), d2=Math.ceil(Math.random()*6);
+    if (d1===d2) {
+      log(`  OK ${crit}: ${d1}+${d2} ゾロ目 → 修理成功！`);
+      clearCritFlag(ship, crit);
+    } else {
+      log(`  NG ${crit}: ${d1}+${d2} 失敗`);
+      remaining.push(crit);
+    }
+  }
+  ship.crits = remaining;
+
+  // ★ フラグ再計算: crits配列の実際の内容に基づいてフラグを正しく設定
+  // （火災が2個あって1個だけ修理成功した場合、onFireはtrueのままにする等）
+  ship.onFire = remaining.includes('火災');
+  ship.cannotFire = remaining.includes('砲撃不能');
+  ship.gunHalved = remaining.includes('攻撃力半減');
+  ship.cannotTurn = remaining.includes('回頭不能');
+  ship.cannotTorpedo = remaining.includes('雷撃不能');
+  if (!remaining.includes('射撃指揮所')) ship.critHitMod = 0;
+  if (!remaining.includes('速力半減') && !remaining.includes('航行不能')) delete ship.speed;
+
+  saveAndNotify();
+  renderList();
+}
+
+function repairAll() {
+  const all = [...(state.jpFleet||[]), ...(state.usFleet||[])];
+  let anyRepair = false;
+  for (const ship of all) {
+    if (!ship.crits || ship.crits.length===0) continue;
+    anyRepair = true;
+    repairShip(ship.name);
+  }
+  if (!anyRepair) log('修理対象なし');
+}
+
+function saveAndNotify() {
+  localStorage.setItem('hubState', JSON.stringify(state));
+  parent.postMessage({
+    type:'STATE_UPDATE',
+    jpFleet:state.jpFleet,
+    usFleet:state.usFleet
+  }, '*');
+}
+
+function donePhase() {
+  saveAndNotify();
+
+  // Export results back to campaign
+  exportToCampaign();
+
+  log('=== ターン終了 ===');
+  parent.postMessage({type:'PHASE_DONE', nextPhase:'turn_end'}, '*');
+}
+
+function exportToCampaign() {
+  // Build damage result for campaign.html import
+  const all = [...(state.jpFleet||[]), ...(state.usFleet||[])];
+  const result = all.map(s=>({
+    name: s.name,
+    dmgG: s.dmgG||0,
+    dmgM: s.dmgM||0,
+    status: s.status,
+    speed: s.speed !== undefined && s.speed !== null ? s.speed : -1,
+  }));
+  localStorage.setItem('battleResult', JSON.stringify(result));
+  log('戦闘結果をlocalStorageに保存 (battleResult)');
+}
+
+function log(msg) {
+  const el=document.getElementById('log');
+  el.innerHTML+=`<div>${msg}</div>`;
+  el.scrollTop=el.scrollHeight;
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<style>
+body { background:#f5f5fa; color:#222; font-family:monospace; padding:14px; font-size:1em; }
+h3 { color:#1a5a8a; margin-bottom:12px; font-size:1.1em; }
+.result { background:#e8f0e8; border:1px solid #8a8; padding:10px; margin:10px 0; border-radius:4px; line-height:1.8; }
+.winner { color:#8a6a00; font-weight:bold; font-size:1.15em; }
+.jp { color:#cc3311; }
+.us { color:#2255cc; }
+button {
+  background:#dde4f0; color:#334; border:1px solid #99a;
+  padding:7px 14px; font-size:1em; cursor:pointer; border-radius:3px; margin-top:10px; font-weight:bold;
+}
+button:hover { background:#c8d4ee; }
+button:disabled { background:#e8e8e8; color:#999; cursor:default; }
+</style>
+</head>
+<body>
+<h3>① イニシアチブ決定</h3>
+
+<button id="btnRoll" onclick="rollAll()">ダイスを振る</button>
+
+<div id="result" class="result" style="display:none"></div>
+
+<button id="btnNext" onclick="goNext()" disabled>移動フェーズへ</button>
+
+<script>
+let initiative = null;
+
+function rollAll() {
+  const jp = Math.ceil(Math.random()*6);
+  const us = Math.ceil(Math.random()*6);
+  const spot = Math.ceil(Math.random()*6) + 4;
+
+  if (jp >= us) {
+    initiative = 'jp';
+  } else {
+    initiative = 'us';
+  }
+
+  const winner = initiative === 'jp'
+    ? '<span class="jp">日本軍先攻</span>'
+    : '<span class="us">米軍先攻</span>';
+
+  document.getElementById('result').innerHTML =
+    `日本軍: <span class="jp">${jp}</span> ／ 米軍: <span class="us">${us}</span><br>` +
+    `→ <span class="winner">${winner}</span><br>` +
+    `視認距離: <strong>${spot}</strong> ヘックス`;
+  document.getElementById('result').style.display = 'block';
+
+  // ハブへ通知
+  parent.postMessage({
+    type: 'STATE_UPDATE',
+    initiative,
+    spotRange: spot,
+  }, '*');
+
+  parent.postMessage({ type:'SET_INFO', text:`イニシアチブ: ${initiative==='jp'?'日本軍':'米軍'}先攻\n視認距離: ${spot}hex` }, '*');
+
+  document.getElementById('btnRoll').disabled = true;
+  document.getElementById('btnNext').disabled = false;
+}
+
+function goNext() {
+  parent.postMessage({ type:'PHASE_DONE', nextPhase:'move' }, '*');
+}
+</script>
+</body>
+</html>
