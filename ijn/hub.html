@@ -1022,12 +1022,12 @@ function loadPhase(phase) {
     const fresh = JSON.parse(freshRaw);
     if (fresh.jpFleet) state.jpFleet = fresh.jpFleet;
     if (fresh.usFleet) state.usFleet = fresh.usFleet;
-    // 接触・自由移動フラグも同期
-    if (fresh.jpDetected !== undefined) state.jpDetected = fresh.jpDetected;
-    if (fresh.usDetected !== undefined) state.usDetected = fresh.usDetected;
-    if (fresh.jpFreeMove !== undefined) state.jpFreeMove = fresh.jpFreeMove;
-    if (fresh.usFreeMove !== undefined) state.usFreeMove = fresh.usFreeMove;
-    if (fresh.contactMade !== undefined) state.contactMade = fresh.contactMade;
+    // 接触・自由移動フラグも同期（true方向のみ — 一度発見したら戻さない）
+    if (fresh.jpDetected)  state.jpDetected  = true;
+    if (fresh.usDetected)  state.usDetected  = true;
+    if (fresh.jpFreeMove)  state.jpFreeMove  = true;
+    if (fresh.usFreeMove)  state.usFreeMove  = true;
+    if (fresh.contactMade) state.contactMade = true;
   }
   state.phase = phase;
   state.actionDone = [];  // フェーズ遷移で行動済みリストクリア
