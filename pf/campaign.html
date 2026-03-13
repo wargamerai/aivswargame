@@ -511,6 +511,8 @@ function phaseSortie() {
         const r = scoutShip(s);
         scoutResults.push({ name: s.name, type: s.type, seen: r.seen, threat: r.threat, seenClass: r.seenClass });
     });
+    // 脅威値の大きい順にソート（艦の並びから正体を推測されないように）
+    scoutResults.sort((a, b) => b.threat - a.threat);
 
     // 日本軍ミッション判定
     jpMission = currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
