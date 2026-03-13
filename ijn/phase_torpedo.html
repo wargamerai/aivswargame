@@ -443,9 +443,33 @@ function updateShootInfo() {
   btn.disabled = false;
 }
 
+// 目標から見た射撃艦の方位（前方/後方なら的が細く当たりにくい）
+function getTargetAspect(firer, target) {
+  const fa = toAxial(firer.col, firer.row);
+  const ta = toAxial(target.col, target.row);
+  const dq = fa.q - ta.q;  // 目標→射撃艦の方向
+  const dr = fa.r - ta.r;
+  const ds = -dq - dr;
+  if (dq === 0 && dr === 0) return '舷側';
+  if (isBroadside(target.dir, dq, dr, ds)) return '舷側';
+  // 前方/後方判定
+  const dir = target.dir;
+  let front = true;
+  if (dir === 6) front = dq > 0;
+  else if (dir === 4) front = dq < 0;
+  else if (dir === 3) front = dr > 0;
+  else if (dir === 7) front = dr < 0;
+  else if (dir === 9) front = ds < 0;
+  else if (dir === 1) front = ds > 0;
+  return front ? '前方' : '後方';
+}
+
 function calcModifiers(firer, target) {
   let mod = 0;
   const details = [];
+  // 目標の方位（前方/後方から撃つと的が細い → +1）
+  const aspect = getTargetAspect(firer, target);
+  if (aspect !== '舷側') { mod += 1; details.push(`${aspect}+1`); }
   if (target.onFire) { mod -= 1; details.push('火災-1'); }
   if (target.speed === 0 || (target.dmgM >= target.capM && target.status !== 'sunk')) {
     mod -= 2; details.push('停止-2');
