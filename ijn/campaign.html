@@ -61,6 +61,12 @@
 </div>
 
 <div>
+    <label style="font-weight:bold; margin-right:6px;">難易度:</label>
+    <select id="difficultySelect" style="font-size:1em; padding:4px 8px; margin-right:12px;">
+        <option value="practice">練習（CA1隻のみ）</option>
+        <option value="moderate" selected>控えめ（索敵脅威値に合わせる）</option>
+        <option value="hard">強敵（脅威値を上回る大艦隊）</option>
+    </select>
     <button id="btnSortie" onclick="phaseSortie()">1. 出撃編成＆索敵</button>
     <button id="btnCombat" onclick="openBattle()" disabled style="background-color: #cc6600; color:#fff;">2. 戦闘開始</button>
     <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
@@ -298,6 +304,7 @@ function updateScoreUI() {
 function saveCampaignState() {
     const state = {
         currentTurn, jpScore, usScore, usedRolls, maxUsHandicap, currentPhase, jpMission,
+        difficulty: document.getElementById('difficultySelect').value,
         jpAllShipsState: jpAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, rest: s.rest })),
         usAllShipsState: usAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, used: s.used })),
         currentJpFleetNames: currentJpFleet.map(s => s.name),
@@ -315,6 +322,7 @@ function loadCampaignState() {
         currentTurn = state.currentTurn || 1;
         jpScore = state.jpScore !== undefined ? state.jpScore : 0;
         usScore = state.usScore !== undefined ? state.usScore : 0;
+        if (state.difficulty) document.getElementById('difficultySelect').value = state.difficulty;
         usedRolls = state.usedRolls || [];
         maxUsHandicap = state.maxUsHandicap || 0;
         currentPhase = state.currentPhase || 'sortie';
@@ -464,59 +472,85 @@ function phaseSortie() {
     // 米軍: usedフラグをリセット（沈没艦を除く）
     usAllShips.forEach(s => { if (s.status !== 'sunk') s.used = false; });
 
-    // 米軍編成: 日本軍の視認隻数+1~2隻、余りポイントでクラスアップ
+    // 難易度取得
+    const difficulty = document.getElementById('difficultySelect').value;
     currentUsFleet = [];
-    const jpVisibleCount = currentJpFleet.filter((s,i) => {
-        // scoutShipは既に呼ばれているが結果を保持していないので、実隻数を使う
-        return s.status !== 'sunk' && s.col >= 0;
-    }).length;
-    const usTargetCount = jpVisibleCount + 1 + (Math.random() < 0.5 ? 1 : 0); // +1 or +2
 
-    let usAvailable = usAllShips.filter(s => !s.used);
-    usAvailable.sort(() => Math.random() - 0.5);
+    function usThreatOf(s) {
+        return (s.type === 'BB' || s.type === 'OBB') ? 4 : s.type === 'CA' ? 2 : 1;
+    }
 
-    // まず目標隻数まで追加（小型艦優先で枠を確保）
-    const smallShips = usAvailable.filter(s => s.type === 'DD' || s.type === 'CL' || s.type === 'CLAA');
-    const bigShips = usAvailable.filter(s => s.type === 'BB' || s.type === 'CA' || s.type === 'OBB');
-    // 大型艦を1~2隻確保、残りを小型艦で埋める
-    const bigCount = Math.min(bigShips.length, 1 + (Math.random() < 0.4 ? 1 : 0));
-    for (let i = 0; i < bigCount && currentUsFleet.length < usTargetCount; i++) {
-        currentUsFleet.push(bigShips[i]);
-        bigShips[i].used = true;
-    }
-    const remainSmall = smallShips.filter(s => !s.used);
-    for (let i = 0; i < remainSmall.length && currentUsFleet.length < usTargetCount; i++) {
-        currentUsFleet.push(remainSmall[i]);
-        remainSmall[i].used = true;
-    }
-    // まだ足りなければ残りの大型艦で埋める
-    for (let i = bigCount; i < bigShips.length && currentUsFleet.length < usTargetCount; i++) {
-        if (!bigShips[i].used) {
-            currentUsFleet.push(bigShips[i]);
-            bigShips[i].used = true;
+    if (difficulty === 'practice') {
+        // 練習モード: ニューオリンズ1隻のみ
+        const no = usAllShips.find(s => s.name === 'NEW ORLEANS' && s.status !== 'sunk');
+        if (no) { currentUsFleet.push(no); no.used = true; }
+        else {
+            // ニューオリンズが沈没済みなら残りのCAから1隻
+            const altCA = usAllShips.find(s => s.type === 'CA' && s.status !== 'sunk');
+            if (altCA) { currentUsFleet.push(altCA); altCA.used = true; }
         }
-    }
+        logMsg('【練習モード】米軍: 重巡1隻のみ');
 
-    // ポイント余りでクラスアップ: 脅威値が低ければDD→CL/CA等に差し替え
-    let currentUsThreat = currentUsFleet.reduce((sum, s) =>
-        sum + (s.type === 'BB' ? 4 : s.type === 'CA' ? 2 : s.type === 'OBB' ? 4 : 1), 0);
-    if (currentUsThreat < apparentThreat) {
-        // 小型艦を大型艦に差し替え（隻数は変えない）
-        const upgradePool = usAllShips.filter(s => !s.used && (s.type === 'BB' || s.type === 'CA'));
-        for (const upgrade of upgradePool) {
-            const weakIdx = currentUsFleet.findIndex(s => s.type === 'DD' || s.type === 'CL');
-            if (weakIdx < 0) break;
-            const weak = currentUsFleet[weakIdx];
-            const oldThreat = weak.type === 'DD' || weak.type === 'CL' ? 1 : 2;
-            const newThreat = upgrade.type === 'BB' ? 4 : 2;
-            if (currentUsThreat - oldThreat + newThreat <= apparentThreat + 2) {
-                weak.used = false;
-                currentUsFleet[weakIdx] = upgrade;
-                upgrade.used = true;
-                currentUsThreat = currentUsThreat - oldThreat + newThreat;
+    } else if (difficulty === 'moderate') {
+        // 控えめモード: 索敵の見かけ脅威値に合わせて編成
+        // 大型艦→小型艦の順に追加し、脅威値合計がapparentThreatに近づくまで
+        let usAvailable = usAllShips.filter(s => !s.used && s.status !== 'sunk');
+        usAvailable.sort(() => Math.random() - 0.5);
+        // 艦種別にシャッフル済みプール
+        const pool = usAvailable.sort((a, b) => usThreatOf(b) - usThreatOf(a));
+        let usThreatSum = 0;
+        for (const s of pool) {
+            const st = usThreatOf(s);
+            if (usThreatSum + st > apparentThreat + 1) continue; // 超過しすぎなら飛ばす
+            currentUsFleet.push(s);
+            s.used = true;
+            usThreatSum += st;
+            if (usThreatSum >= apparentThreat) break;
+        }
+        // まだ足りなければ小型艦で埋める
+        if (usThreatSum < apparentThreat) {
+            const remain = usAllShips.filter(s => !s.used && s.status !== 'sunk');
+            remain.sort(() => Math.random() - 0.5);
+            for (const s of remain) {
+                const st = usThreatOf(s);
+                if (usThreatSum + st > apparentThreat + 2) continue;
+                currentUsFleet.push(s);
+                s.used = true;
+                usThreatSum += st;
+                if (usThreatSum >= apparentThreat) break;
             }
         }
+        logMsg(`【控えめモード】米軍脅威値: ${usThreatSum} (日本軍見かけ: ${apparentThreat})`);
+
+    } else {
+        // 強敵モード: 見かけ脅威値を上回る、なるべく多くの艦を出す
+        let usAvailable = usAllShips.filter(s => !s.used && s.status !== 'sunk');
+        usAvailable.sort(() => Math.random() - 0.5);
+        const targetThreat = apparentThreat + 4 + rollDice(); // 脅威値を大きく上回る
+        // まず大型艦を優先的に投入
+        const bigPool = usAvailable.filter(s => s.type === 'BB' || s.type === 'CA' || s.type === 'OBB');
+        const smallPool = usAvailable.filter(s => s.type === 'DD' || s.type === 'CL' || s.type === 'CLAA');
+        bigPool.sort(() => Math.random() - 0.5);
+        smallPool.sort(() => Math.random() - 0.5);
+        let usThreatSum = 0;
+        // 大型艦を投入
+        for (const s of bigPool) {
+            currentUsFleet.push(s);
+            s.used = true;
+            usThreatSum += usThreatOf(s);
+            if (usThreatSum >= targetThreat) break;
+        }
+        // 小型艦でさらに数を増やす（脅威値上限の1.5倍まで）
+        const maxThreat = targetThreat * 1.5;
+        for (const s of smallPool) {
+            if (usThreatSum >= maxThreat) break;
+            currentUsFleet.push(s);
+            s.used = true;
+            usThreatSum += usThreatOf(s);
+        }
+        logMsg(`【強敵モード】米軍脅威値: ${usThreatSum} (日本軍見かけ: ${apparentThreat})`);
     }
+
     currentUsFleet = sortShips(currentUsFleet, false);
 
     // ハンディキャップ計算
