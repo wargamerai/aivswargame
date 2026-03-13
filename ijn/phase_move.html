@@ -786,18 +786,22 @@ function renderList() {
 
   jpFleet.forEach((s, i) => {
     const statusText = getShipStatusText(s);
-    const isDone = movedShips.has(i) && moving !== s;
+    const hasSaved = !!shipStates[s.name];
+    const isFinished = movedShips.has(i) && moving !== s && !hasSaved;  // 確定済み
+    const isPaused = hasSaved && moving !== s;  // 中断中（切替可能）
     const isActive = (moving === s);
     const isMoveable = canShipMove(s);
 
     let cls = 'card jp';
     if (isActive) cls += ' selected';
-    else if (isDone) cls += ' done';
+    else if (isFinished) cls += ' done';
     else if (!isMoveable) cls += ' disabled';
 
     const spd = getSpeed(s);
     const spdInfo = isMoveable ? ` 速:${spd}` : '';
-    const label = isDone ? ' [済]' : (!isMoveable ? statusText : '');
+    let label = '';
+    if (isFinished) label = ' [済]';
+    else if (!isMoveable) label = statusText;
 
     html += `<div class="${cls}" onclick="clickShip(${i})">
       <span class="c-name">${s.name}${label}</span>
@@ -824,16 +828,24 @@ function clickShip(i) {
   if (!canShipMove(s)) return;
   if (moving === s) return;  // 既に選択中
 
+  // 完了済みで保存状態もない → 再選択不可（確定済み）
+  if (movedShips.has(i) && !shipStates[s.name]) return;
+
   // 現在の艦を一時保存（確定せず）
   if (moving) {
+    const curIdx = jpFleet.indexOf(moving);
+    const isDone = remainMove <= 0;
     shipStates[moving.name] = {
       col: moving.col, row: moving.row, dir: moving.dir,
-      remainMove, undoStack: undoStack.slice(), turnedThisHex
+      remainMove, undoStack: undoStack.slice(), turnedThisHex,
+      done: isDone
     };
-    // softFinishMoveで追加されていた分を戻す（切り替え中は未確定扱い）
-    const curIdx = jpFleet.indexOf(moving);
-    movedShips.delete(curIdx);
-    parent.postMessage({type:'ACTION_UNDO', shipIndex:curIdx}, '*');
+    // 未完了の船のみmovedShipsから除外
+    if (!isDone && movedShips.has(curIdx)) {
+      movedShips.delete(curIdx);
+      parent.postMessage({type:'ACTION_UNDO', shipIndex:curIdx}, '*');
+    }
+    // 完了済みの船はmovedShipsに残す
     moving = null;
   }
 
@@ -852,7 +864,7 @@ function clickShip(i) {
     document.getElementById('btnUndo').disabled = (undoStack.length === 0);
     let restriction = s.cannotTurn ? '\n⚠ 回頭不能 — 直進(5)のみ' : '';
     setInfo(`移動中: ${s.name} 向き:${DIR_NAMES[s.dir]||'?'}${restriction}\n147963=方向転換 5=直進`);
-    setMoveBar(`残り移動力: ${remainMove}`);
+    setMoveBar(remainMove > 0 ? `残り移動力: ${remainMove}` : '移動力なし');
     renderList();
     pushState();
   } else {
@@ -1334,9 +1346,18 @@ function donePhase() {
       movedShips.add(idx);
       moving = null;
     }
-    // 一時保存中の艦も確定（shipStatesに残っている分）
+    // 一時保存中の艦も確定（shipStatesに残っている分→位置を復元して確定）
     for (const name in shipStates) {
-      delete shipStates[name]; // 保存状態の位置は既に艦に適用済み
+      const saved = shipStates[name];
+      const ship = jpFleet.find(s => s.name === name);
+      if (ship && saved) {
+        ship.col = saved.col;
+        ship.row = saved.row;
+        ship.dir = saved.dir;
+        const idx = jpFleet.indexOf(ship);
+        movedShips.add(idx);
+      }
+      delete shipStates[name];
     }
     const unmoved = jpFleet.filter((s, i) => canShipMove(s) && !movedShips.has(i));
     if (unmoved.length > 0) {
@@ -1391,7 +1412,8 @@ document.addEventListener('keydown', e => {
     // 次の未移動艦を探す
     const moveable = jpFleet
       .map((s, i) => ({ship: s, idx: i}))
-      .filter(x => canShipMove(x.ship) && x.ship !== moving && !movedShips.has(x.idx));
+      .filter(x => canShipMove(x.ship) && x.ship !== moving &&
+        (!movedShips.has(x.idx) || shipStates[x.ship.name]));
     if (moveable.length === 0) return;
     let next = moveable.find(x => x.idx > curIdx);
     if (!next) next = moveable[0];
