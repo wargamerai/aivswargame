@@ -251,56 +251,93 @@ function getAttack(s) {
 // クリティカルヒット効果適用（target=被弾艦, cd=クリティカルダイス合計）
 // 返値: {text, extraG, extraM, sunk}
 function applyCritical(target, cd) {
-  const ct = CRIT_CHART[cd] || '不明';
-  const result = {text: `${cd}: ${ct}`, extraG: 0, extraM: 0, sunk: false};
+  const result = {text: '', extraG: 0, extraM: 0, sunk: false};
   const tp = target.type;
   if (!target.crits) target.crits = [];
 
   switch(cd) {
-    case 2: // 弾薬庫被弾→轟沈
+    case 2:
       result.sunk = true;
+      result.text = `${cd}: 弾薬庫被弾 → 轟沈`;
       target.crits.push('轟沈(弾薬庫)');
       break;
-    case 3: // BB/OBB:3G3M / 他:轟沈
-      if (tp === 'BB' || tp === 'OBB') { result.extraG = 3; result.extraM = 3; target.crits.push('大損害(3G3M)'); }
-      else { result.sunk = true; target.crits.push('轟沈'); }
+    case 3:
+      if (tp === 'BB' || tp === 'OBB') {
+        result.extraG = 3; result.extraM = 3;
+        result.text = `${cd}: 弾薬庫被弾 → 大損害(3G3M)`;
+        target.crits.push('大損害(3G3M)');
+      } else {
+        result.sunk = true;
+        result.text = `${cd}: 弾薬庫被弾 → 轟沈`;
+        target.crits.push('轟沈');
+      }
       break;
-    case 4: // BB/OBB+CA:3G3M / 他:轟沈
-      if (tp === 'BB' || tp === 'OBB' || tp === 'CA') { result.extraG = 3; result.extraM = 3; target.crits.push('大損害(3G3M)'); }
-      else { result.sunk = true; target.crits.push('轟沈'); }
+    case 4:
+      if (tp === 'BB' || tp === 'OBB' || tp === 'CA') {
+        result.extraG = 3; result.extraM = 3;
+        result.text = `${cd}: 弾薬庫被弾 → 大損害(3G3M)`;
+        target.crits.push('大損害(3G3M)');
+      } else {
+        result.sunk = true;
+        result.text = `${cd}: 弾薬庫被弾 → 轟沈`;
+        target.crits.push('轟沈');
+      }
       break;
-    case 5: // 射撃指揮所被弾（命中修正+D1）
+    case 5: {
       target.critHitMod = (target.critHitMod || 0) + roll();
-      result.text += ` → +${target.critHitMod}`;
+      result.text = `${cd}: 射撃指揮所被弾 → 命中修正+${target.critHitMod}`;
       target.crits.push('射撃指揮所');
       break;
-    case 6: // 火災発生
+    }
+    case 6:
       target.onFire = true;
+      result.text = `${cd}: 火災発生`;
       target.crits.push('火災');
       break;
-    case 7: // 弾薬庫浸水（砲撃力半減）
+    case 7:
       target.gunHalved = true;
+      result.text = `${cd}: 弾薬庫浸水 → 砲撃力半減`;
       target.crits.push('攻撃力半減');
       break;
-    case 8: // 操舵室被弾（回頭不能）
+    case 8:
       target.cannotTurn = true;
+      result.text = `${cd}: 操舵室被弾 → 回頭不能`;
       target.crits.push('回頭不能');
       break;
-    case 9: // 電路切断（砲撃不能）
+    case 9:
       target.cannotFire = true;
+      result.text = `${cd}: 電路切断 → 砲撃不能`;
       target.crits.push('砲撃不能');
       break;
-    case 10: // 機関室被弾 BB/OBB+CA:速力半減 / 他:航行不能
-      if (tp === 'BB' || tp === 'OBB' || tp === 'CA') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
-      else { target.speed = 0; target.crits.push('航行不能'); }
+    case 10:
+      if (tp === 'BB' || tp === 'OBB' || tp === 'CA') {
+        target.speed = Math.ceil((target.speed||4)/2);
+        result.text = `${cd}: 機関室被弾 → 速力半減`;
+        target.crits.push('速力半減');
+      } else {
+        target.speed = 0;
+        result.text = `${cd}: 機関室被弾 → 航行不能`;
+        target.crits.push('航行不能');
+      }
       break;
-    case 11: // 機関室被弾 BB/OBB:速力半減 / 他:航行不能
-      if (tp === 'BB' || tp === 'OBB') { target.speed = Math.ceil((target.speed||4)/2); target.crits.push('速力半減'); }
-      else { target.speed = 0; target.crits.push('航行不能'); }
+    case 11:
+      if (tp === 'BB' || tp === 'OBB') {
+        target.speed = Math.ceil((target.speed||4)/2);
+        result.text = `${cd}: 機関室被弾 → 速力半減`;
+        target.crits.push('速力半減');
+      } else {
+        target.speed = 0;
+        result.text = `${cd}: 機関室被弾 → 航行不能`;
+        target.crits.push('航行不能');
+      }
       break;
-    case 12: // 機関室被弾 全艦航行不能
+    case 12:
       target.speed = 0;
+      result.text = `${cd}: 機関室被弾 → 航行不能`;
       target.crits.push('航行不能');
+      break;
+    default:
+      result.text = `${cd}: 不明`;
       break;
   }
 
