@@ -570,15 +570,15 @@ function phaseSortie() {
             const handicapDiff = Math.abs(jpFeeCalc - usFeeSum) * 10;
             logMsg(`  (温存: JP fee=${jpFeeCalc}, US fee=${usFeeSum}, ハンディ差=${handicapDiff}点)`);
         } else {
-            // 日本にBBなし → 主力投入: BBをぶつけて圧倒
+            // 日本にBBなし → 主力投入: BB1隻+CAで圧倒（残りBBは後半用に温存）
             turnStyle = '主力';
             const targetThreat = apparentThreat + 4 + rollDice();
-            // BB優先で投入
             const bbPool = bigPool.filter(s => s.type === 'BB');
             const caPool = bigPool.filter(s => s.type === 'CA' || s.type === 'OBB');
-            for (const s of bbPool) {
-                currentUsFleet.push(s); s.used = true;
-                usThreatSum += usThreatOf(s);
+            // BB1隻だけ投入
+            if (bbPool.length > 0) {
+                currentUsFleet.push(bbPool[0]); bbPool[0].used = true;
+                usThreatSum += usThreatOf(bbPool[0]);
             }
             for (const s of caPool) {
                 if (usThreatSum >= targetThreat) break;
