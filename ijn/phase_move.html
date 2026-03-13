@@ -272,7 +272,8 @@ function getRetreatDir(ship) {
 }
 
 function withdrawMove(ship) {
-  const spd = Math.max(1, Math.ceil(getSpeed(ship) / 2));  // 大破=半速
+  let spd = getSpeed(ship);
+  if (ship.dmgM >= ship.capM / 2) spd = Math.max(1, Math.ceil(spd / 2));  // M損害半分以上なら半速
   let remain = spd;
 
   while (remain > 0) {
