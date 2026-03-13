@@ -355,7 +355,8 @@ function extendMapUp() {
 // ========== 接触判定 ==========
 const JP_LINE_COL = 9;       // 日本配置線（青）
 const US_LINE_COL = COLS - 10; // 米軍配置線（赤）= col 26
-const DEPLOY_MAX_COL = JP_LINE_COL - 1; // 青線の左側
+const DEPLOY_MAX_COL = JP_LINE_COL - 1; // 青線の左側（IJN用）
+const DEPLOY_MIN_COL = US_LINE_COL + 1; // PF: 赤線の右側（米軍配置域）
 const DIR_NAMES = {6:'→東', 3:'↘南東', 1:'↙南西', 4:'←西', 7:'↗北西', 9:'↖北東'};
 let deployCol = 0; // 現在選択中の艦隊列（0,1,2）
 const MAX_COLUMNS = 3;
@@ -479,7 +480,7 @@ function draw() {
       ctx.moveTo(corners[0].x, corners[0].y);
       corners.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
       ctx.closePath();
-      const deployable = state.deployMode && c <= DEPLOY_MAX_COL;
+      const deployable = state.deployMode && c >= DEPLOY_MIN_COL;
       var hexColor = '#020508';
       if (deployable) hexColor = '#0a2a1a';
       else if (inRange) hexColor = '#0c2a40';
@@ -512,7 +513,7 @@ function draw() {
           if (inRadar2) inWeapon2 = true;
         }
       }
-      const deployable = state.deployMode && c <= DEPLOY_MAX_COL;
+      const deployable = state.deployMode && c >= DEPLOY_MIN_COL;
       var lineColor = '#3a5565';
       if (deployable) lineColor = '#3a8a4a';
       else if (inRange) lineColor = '#6aaadd';
@@ -1260,7 +1261,7 @@ window.addEventListener('message', (e) => {
     case 'DEPLOY_UNDO':
       if (state.deployMode && state.deployIdx > 0) {
         state.deployIdx--;
-        const undoShip = state.jpFleet[state.deployIdx];
+        const undoShip = state.usFleet[state.deployIdx];  // PF: 米軍
         // 元の列から旗艦を外す場合、その列の次の艦を旗艦に昇格…ではなく単純にリセット
         const undoCol = undoShip.colIndex;
         undoShip.col = -1;
@@ -1446,55 +1447,54 @@ const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
 const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
 
 function buildFleets(data) {
-  state.jpFleet = (data.jpFleet || []).map((s,i) => ({
-    name: s.name, type: s.type, side: 'jp',
+  // PF: 日本軍(AI)は自動配置（左側）
+  var jpData = data.jpFleet || [];
+  var jpMain = jpData.filter(s => s.type !== 'DD');
+  var jpDD   = jpData.filter(s => s.type === 'DD');
+  var jpBuilt = [];
+  // 主力列（col=2）
+  jpMain.forEach((s, i) => {
+    jpBuilt.push({
+      name: s.name, type: s.type, side: 'jp',
+      col: 2, row: Math.min(ROWS-1, 6 + i),
+      dir: 6, speed: s.spd||4,
+      atk: s.atk||0, def: s.def||0,
+      capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
+      vp: s.vp, torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : (TORPEDOES[s.type]||'-'),
+      isLead: i===0, colIndex:0, followOrder:i,
+      status:'ok', faceUp:false, radar:false,
+      path:[],
+    });
+  });
+  // 駆逐列（col=3）
+  jpDD.forEach((s, i) => {
+    jpBuilt.push({
+      name: s.name, type: s.type, side: 'jp',
+      col: 3, row: Math.min(ROWS-1, 6 + i),
+      dir: 6, speed: s.spd||4,
+      atk: s.atk||0, def: s.def||0,
+      capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
+      vp: s.vp, torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : (TORPEDOES[s.type]||'-'),
+      isLead: i===0, colIndex:1, followOrder:i,
+      status:'ok', faceUp:false, radar:false,
+      path:[],
+    });
+  });
+  state.jpFleet = jpBuilt;
+
+  // PF: 米軍(プレイヤー)は手動配置
+  state.usFleet = (data.usFleet || []).map((s,i) => ({
+    name: s.name, type: s.type, side: 'us',
     col: -1, row: -1,
-    dir: 6, speed: s.spd||4,
+    dir: 4, speed: s.spd||4,
     atk: s.atk||0, def: s.def||0,
     capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-    vp: s.vp, torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : (TORPEDOES[s.type]||'-'),
+    vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
     isLead: false, colIndex:-1, followOrder:0,
-    status:'ok', faceUp:false, radar:false,  // PF: 日本軍は非表示開始
+    status:'ok', faceUp:true,
+    radar: ['BB','CA','CL','CLAA'].includes(s.type),
     path:[],
   }));
-
-  // 米軍2列配置: 大型艦(BB/CA/CL/CLAA)=主力列, DD=駆逐列
-  var usData = data.usFleet || [];
-  var usMain = usData.filter(s => s.type !== 'DD');
-  var usDD   = usData.filter(s => s.type === 'DD');
-  var usBuilt = [];
-  // 主力列（col=33）
-  usMain.forEach((s, i) => {
-    usBuilt.push({
-      name: s.name, type: s.type, side: 'us',
-      col: 33, row: Math.min(ROWS-1, 6 + i),
-      dir: 4, speed: s.spd||4,
-      atk: s.atk||0, def: s.def||0,
-      capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
-      isLead: i===0, colIndex:0, followOrder:i,
-      status:'ok', faceUp:true,   // PF: 米軍(プレイヤー)は常時表示
-      radar: ['BB','CA','CL','CLAA'].includes(s.type),
-      path:[],
-    });
-  });
-  // 駆逐列（col=34、主力列の1ヘクス東）
-  usDD.forEach((s, i) => {
-    usBuilt.push({
-      name: s.name, type: s.type, side: 'us',
-      col: Math.min(COLS-1, 34), row: Math.min(ROWS-1, 6 + i),
-      dir: 4, speed: s.spd||4,
-      atk: s.atk||0, def: s.def||0,
-      capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
-      isLead: i===0, colIndex:1, followOrder:i,
-      status:'ok', faceUp:true,   // PF: 米軍(プレイヤー)は常時表示
-      radar: false,
-      path:[],
-    });
-  });
-  // DDがいない場合は主力列のみ
-  state.usFleet = usBuilt;
 
   state.spotRange = 0;
 }
@@ -1565,26 +1565,25 @@ function shipStats(ship) {
 function showDeployPrompt() {
   if (!state.deployMode) return;
   const idx = state.deployIdx;
-  const fleet = state.jpFleet;
+  const fleet = state.usFleet;  // PF: 米軍を手動配置
   if (idx >= fleet.length) {
     finishDeploy();
     return;
   }
   const ship = fleet[idx];
   const colLabel = `第${deployCol+1}艦隊`;
-  // この列に既に旗艦がいるか？
   const hasLead = fleet.some(s => s.colIndex === deployCol && s.isLead);
   const role = hasLead ? '随伴艦' : '旗艦（先頭艦）';
   setInfo(
     `【配置 ${idx+1}/${fleet.length}】${ship.name}（${ship.type}）\n` +
     `${colLabel} — ${role}\n` +
-    `青線の左側クリック＝配置＋方向`
+    `赤線の右側クリック＝配置＋方向`
   );
   updateDeployPanel();
 }
 
 function updateDeployPanel() {
-  const fleet = state.jpFleet;
+  const fleet = state.usFleet;  // PF: 米軍を手動配置
   const idx = state.deployIdx;
 
   // 艦隊列ごとのボタン
@@ -1627,7 +1626,7 @@ button.undo{background:#4a2a1a;color:#fa8;border:1px solid #643;padding:5px 10px
 button.undo:hover{background:#6a3a2a}
 button.undo:disabled{background:#222;color:#555;cursor:default}
 </style></head><body>
-<h3>日本軍 艦隊配置</h3>
+<h3>米軍 艦隊配置</h3>
 <div class="col-bar">${colBtns}</div>
 ${rows}
 <button class="undo" onclick="parent.postMessage({type:'DEPLOY_UNDO'},'*')" ${idx <= 0 ? 'disabled' : ''}>◀ 1つ戻す</button>
@@ -1638,7 +1637,7 @@ ${rows}
 
 // 指定列の旗艦を再計算（配置済み艦のうち最初に配置された艦が旗艦）
 function recalcLeads(ci) {
-  const inCol = state.jpFleet.filter(s => s.colIndex === ci && s.col >= 0);
+  const inCol = state.usFleet.filter(s => s.colIndex === ci && s.col >= 0);  // PF: 米軍
   inCol.forEach(s => s.isLead = false);
   if (inCol.length > 0) {
     inCol[0].isLead = true;
@@ -1682,40 +1681,40 @@ canvas.addEventListener('click', (e) => {
     if (!state.deployMode) return;
   }
 
-  // 移動フェーズ中: マップクリックで移動艦を選択
+  // PF: 移動フェーズ中: マップクリックで米軍(プレイヤー)艦を選択
   if (state.phase && state.phase.match(/^move/)) {
     const hex = pixelToHex(cx, cy);
     if (hex) {
-      var jpIdx = state.jpFleet.findIndex(s => s.col === hex.col && s.row === hex.row && s.status !== 'sunk');
-      if (jpIdx >= 0) {
+      var usIdx = state.usFleet.findIndex(s => s.col === hex.col && s.row === hex.row && s.status !== 'sunk');
+      if (usIdx >= 0) {
         var iframe = document.getElementById('subframe');
         if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage({type:'MAP_SELECT_SHIP', index:jpIdx}, '*');
+          iframe.contentWindow.postMessage({type:'MAP_SELECT_SHIP', index:usIdx}, '*');
         }
         return;
       }
     }
   }
 
-  // 砲撃/雷撃フェーズ中: マップクリックで射撃艦/目標艦を選択
+  // PF: 砲撃/雷撃フェーズ中: US艦クリック→firer、JP艦クリック→target
   if (state.phase && (state.phase.match(/^gun/) || state.phase === 'torpedo')) {
     const hex = pixelToHex(cx, cy);
     if (hex) {
-      // JP艦クリック → firer選択
-      var jpIdx = state.jpFleet.findIndex(s => s.col === hex.col && s.row === hex.row && s.status !== 'sunk');
-      if (jpIdx >= 0) {
-        var iframe = document.getElementById('subframe');
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage({type:'MAP_SELECT_FIRER', index:jpIdx}, '*');
-        }
-        return;
-      }
-      // US艦クリック → target選択
+      // US艦クリック → firer選択（プレイヤー側）
       var usIdx = state.usFleet.findIndex(s => s.col === hex.col && s.row === hex.row && s.status !== 'sunk');
       if (usIdx >= 0) {
         var iframe = document.getElementById('subframe');
         if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage({type:'MAP_SELECT_TARGET', index:usIdx}, '*');
+          iframe.contentWindow.postMessage({type:'MAP_SELECT_FIRER', index:usIdx}, '*');
+        }
+        return;
+      }
+      // JP艦クリック → target選択（AI側）
+      var jpIdx = state.jpFleet.findIndex(s => s.col === hex.col && s.row === hex.row && s.status !== 'sunk');
+      if (jpIdx >= 0) {
+        var iframe = document.getElementById('subframe');
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({type:'MAP_SELECT_TARGET', index:jpIdx}, '*');
         }
         return;
       }
@@ -1727,8 +1726,8 @@ canvas.addEventListener('click', (e) => {
   const hex = pixelToHex(cx, cy);
   if (!hex) return;
 
-  // 配置可能域チェック（青い線の左側）
-  if (hex.col > DEPLOY_MAX_COL) return;
+  // PF: 配置可能域チェック（赤い線の右側）
+  if (hex.col < DEPLOY_MIN_COL) return;
 
   // 他の艦と重複チェック
   const occupied = [...state.jpFleet, ...state.usFleet].some(s =>
@@ -1741,15 +1740,15 @@ canvas.addEventListener('click', (e) => {
   const angleDeg = Math.atan2(cy - center.y, cx - center.x) * 180 / Math.PI;
   const dir = angleToDir(angleDeg);
 
-  // 配置実行
-  const ship = state.jpFleet[state.deployIdx];
+  // PF: 米軍を手動配置
+  const ship = state.usFleet[state.deployIdx];
   ship.col = hex.col;
   ship.row = hex.row;
   ship.dir = dir;
   ship.colIndex = deployCol;
 
   // この列の既存艦数で旗艦/追従を決定
-  const alreadyInCol = state.jpFleet.filter(s => s !== ship && s.colIndex === deployCol && s.col >= 0);
+  const alreadyInCol = state.usFleet.filter(s => s !== ship && s.colIndex === deployCol && s.col >= 0);
   if (alreadyInCol.length === 0) {
     ship.isLead = true;
     ship.followOrder = 0;
