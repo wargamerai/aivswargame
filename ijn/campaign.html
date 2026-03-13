@@ -518,32 +518,35 @@ function phaseSortie() {
         logMsg(`【控えめモード】米軍: BB${jpTypeCount.BB} CA${jpTypeCount.CA} CL${jpTypeCount.CL} DD${jpTypeCount.DD} に合わせて${currentUsFleet.length}隻編成 (脅威値${usThreatSum})`);
 
     } else {
-        // 強敵モード: 見かけ脅威値を上回る、なるべく多くの艦を出す
+        // 強敵モード: 見かけ脅威値を上回るが、残りの戦いに備えて配分
         let usAvailable = usAllShips.filter(s => !s.used && s.status !== 'sunk');
+        const remainingBattles = Math.max(1, 5 - currentTurn); // 残り戦数（今回含む）
+        const maxShips = Math.ceil(usAvailable.length / remainingBattles) + 2; // 1戦あたり上限+2
         usAvailable.sort(() => Math.random() - 0.5);
-        const targetThreat = apparentThreat + 4 + rollDice(); // 脅威値を大きく上回る
+        const targetThreat = apparentThreat + 2 + rollDice(); // 脅威値を上回る
         // まず大型艦を優先的に投入
         const bigPool = usAvailable.filter(s => s.type === 'BB' || s.type === 'CA' || s.type === 'OBB');
         const smallPool = usAvailable.filter(s => s.type === 'DD' || s.type === 'CL' || s.type === 'CLAA');
         bigPool.sort(() => Math.random() - 0.5);
         smallPool.sort(() => Math.random() - 0.5);
         let usThreatSum = 0;
-        // 大型艦を投入
+        // 大型艦を投入（隻数上限あり）
         for (const s of bigPool) {
+            if (currentUsFleet.length >= maxShips) break;
             currentUsFleet.push(s);
             s.used = true;
             usThreatSum += usThreatOf(s);
             if (usThreatSum >= targetThreat) break;
         }
-        // 小型艦でさらに数を増やす（脅威値上限の1.5倍まで）
-        const maxThreat = targetThreat * 1.5;
+        // 小型艦で数を増やす（隻数上限まで）
         for (const s of smallPool) {
-            if (usThreatSum >= maxThreat) break;
+            if (currentUsFleet.length >= maxShips) break;
+            if (usThreatSum >= targetThreat * 1.3) break;
             currentUsFleet.push(s);
             s.used = true;
             usThreatSum += usThreatOf(s);
         }
-        logMsg(`【強敵モード】米軍脅威値: ${usThreatSum} (日本軍見かけ: ${apparentThreat})`);
+        logMsg(`【強敵モード】米軍${currentUsFleet.length}隻 脅威値${usThreatSum} (日本軍見かけ${apparentThreat}) [残存${usAvailable.length - currentUsFleet.length}隻/残${remainingBattles - 1}戦]`);
     }
 
     currentUsFleet = sortShips(currentUsFleet, false);
