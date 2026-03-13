@@ -150,6 +150,9 @@ function renderReport() {
   const usAllGone = us.every(s => s.status === 'sunk' || s.status === 'exited' || s.col < 0);
   const mission = jp.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
   const missionLabel = mission === 'bombard' ? '艦砲射撃' : '輸送';
+  console.log('[BONUS DEBUG] usAllGone=', usAllGone, 'combatTurn=', combatTurn, 'mission=', mission);
+  console.log('[BONUS DEBUG] US fleet:', us.map(s => `${s.name}:status=${s.status},col=${s.col}`).join(' | '));
+  console.log('[BONUS DEBUG] JP fleet:', jp.map(s => `${s.name}:status=${s.status},col=${s.col}`).join(' | '));
   if (usAllGone && combatTurn < 10) {
     for (const s of jp) {
       if (s.status === 'sunk') continue;
