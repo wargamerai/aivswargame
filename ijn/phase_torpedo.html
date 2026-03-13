@@ -579,11 +579,12 @@ function doTorpedo() {
       if (crit.sunk && !dmg.sunk) log(`  <span class="dmg">${target.name} 轟沈！</span>`);
     }
 
-    // 損害即時適用
-    if (!sunk && (dmgG > 0 || dmgM > 0)) {
+    // 損害即時適用（轟沈時もダメージを記録 — VP計算用）
+    if (dmgG > 0 || dmgM > 0) {
       applyDamage(target, dmgG, dmgM);
       log(`  → 損害適用: G${dmgG} M${dmgM}`);
     }
+    if (sunk) { target.status = 'sunk'; }
   } else {
     log('  → 外れ');
   }
@@ -747,9 +748,11 @@ function autoUSTorpedo() {
         if (crit.sunk) sunk = true;
       }
 
-      if (!sunk && (dmgG > 0 || dmgM > 0)) {
+      // 轟沈時もダメージを記録（VP計算用）
+      if (dmgG > 0 || dmgM > 0) {
         applyDamage(bestTarget, dmgG, dmgM);
       }
+      if (sunk) { bestTarget.status = 'sunk'; }
     }
 
     // 魚雷発射済みフラグ（移動AIの離脱判定用）

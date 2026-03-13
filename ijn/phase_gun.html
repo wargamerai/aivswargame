@@ -925,7 +925,20 @@ function resolveDamage(title) {
       if (d.side === 'jp' && (d.g > 0 || d.m > 0 || d.critSunk)) jpWasHit = true;
 
       if (ship.status === 'sunk') {
-        log(`${ship.name}: 既に沈没`);
+        // 既に沈没（クリティカル轟沈等）— ダメージだけ加算（VP計算用）
+        ship.dmgG = (ship.dmgG||0) + d.g;
+        ship.dmgM = (ship.dmgM||0) + d.m;
+        if (ship.dmgG > ship.capG) { ship.dmgM += ship.dmgG - ship.capG; ship.dmgG = ship.capG; }
+        if (ship.dmgM > ship.capM) ship.dmgM = ship.capM;
+        log(`${ship.name}: 既に沈没 (G+${d.g} M+${d.m})`);
+        // サマリー集約
+        if (!shipSummary[ship.name]) {
+          shipSummary[ship.name] = {totalG:0, totalM:0, crits:[], ship:ship};
+        }
+        shipSummary[ship.name].totalG += d.g;
+        shipSummary[ship.name].totalM += d.m;
+        if (d.critText) shipSummary[ship.name].crits.push(d.critText);
+        shipSummary[ship.name].critSunk = true;
         continue;
       }
 
