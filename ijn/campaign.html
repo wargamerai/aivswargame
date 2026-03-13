@@ -531,7 +531,7 @@ function phaseSortie() {
         smallPool.sort(() => Math.random() - 0.5);
 
         const jpFeeCalc = currentJpFleet.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
-        const jpHasBB = currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB');
+        const jpBBCount = currentJpFleet.filter(s => s.type === 'BB' || s.type === 'OBB').length;
         const isLastBattle = (currentTurn >= 4);
         let usThreatSum = 0;
         let turnStyle;
@@ -547,8 +547,28 @@ function phaseSortie() {
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
             }
-        } else if (jpHasBB) {
-            // 日本にBBあり → 温存: 小型艦控えめに出す（feeは日本の7割程度で抑えて艦を節約）
+        } else if (jpBBCount >= 3) {
+            // 日本にBB3隻以上 → 迎撃: BB全投入で殴る（砲撃得点が大きすぎて温存不可）
+            turnStyle = '迎撃';
+            const targetThreat = apparentThreat + 4 + rollDice();
+            const bbPool2 = bigPool.filter(s => s.type === 'BB');
+            const caPool2 = bigPool.filter(s => s.type === 'CA' || s.type === 'OBB');
+            for (const s of bbPool2) {
+                currentUsFleet.push(s); s.used = true;
+                usThreatSum += usThreatOf(s);
+            }
+            for (const s of caPool2) {
+                if (usThreatSum >= targetThreat) break;
+                currentUsFleet.push(s); s.used = true;
+                usThreatSum += usThreatOf(s);
+            }
+            for (const s of smallPool) {
+                if (usThreatSum >= targetThreat) break;
+                currentUsFleet.push(s); s.used = true;
+                usThreatSum += usThreatOf(s);
+            }
+        } else if (jpBBCount >= 1) {
+            // 日本にBB1〜2隻 → 温存: 小型艦控えめに出す
             turnStyle = '温存';
             const feeTarget = Math.ceil(jpFeeCalc * 0.7);
             let usFeeSum = 0;
