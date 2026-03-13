@@ -42,6 +42,7 @@ button.undo-btn:hover { background:#ffd8c0; }
 <div id="manualControls" style="display:none">
   <button onclick="doUndo()" class="undo-btn" id="btnUndo" disabled>◀ やり直し</button>
   <button onclick="allStraight()" id="btnAllStraight">全艦直進 ▶</button>
+  <button onclick="undoAllStraight()" id="btnUndoAll" style="display:none">◀ 全艦直進やり直し</button>
 </div>
 
 <div id="shipList"></div>
@@ -320,15 +321,11 @@ function autoAdvanceIndividual(fleet) {
       const next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
-      if (occupied(next.col, next.row, ship)) {
-        if (canForceEntry(ship)) {
-          var occ = getOccupant(next.col, next.row, ship);
-          if (occ) { ship.col = next.col; ship.row = next.row; collisionCheck(ship, occ); continue; }
-        }
-        break;
-      }
       ship.col = next.col;
       ship.row = next.row;
+      // 同一ヘクス進入 → 衝突チェック（止めない）
+      var occ = getOccupant(next.col, next.row, ship);
+      if (occ) collisionCheck(ship, occ);
       var sunkAt = getSunkShip(next.col, next.row, ship);
       if (sunkAt) collisionCheck(ship, sunkAt);
     }
@@ -361,25 +358,14 @@ function autoAdvanceColumn(fleet) {
       const next = hexNeighbor(lead.col, lead.row, lead.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
-      if (occupied(next.col, next.row, lead)) {
-        if (canForceEntry(lead)) {
-          var occ = getOccupant(next.col, next.row, lead);
-          if (occ) {
-            lead.path = lead.path || [];
-            lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-            lead.col = next.col; lead.row = next.row;
-            collisionCheck(lead, occ);
-            moveFollowers(lead, fleet);
-            continue;
-          }
-        }
-        break;
-      }
 
       lead.path = lead.path || [];
       lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
       lead.col = next.col;
       lead.row = next.row;
+      // 同一ヘクス進入 → 衝突チェック（止めない）
+      var occ = getOccupant(next.col, next.row, lead);
+      if (occ) collisionCheck(lead, occ);
       var sunkAt = getSunkShip(next.col, next.row, lead);
       if (sunkAt) collisionCheck(lead, sunkAt);
 
@@ -561,22 +547,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
       break;
     }
 
-    if (occupied(next.col, next.row, lead)) {
-      if (lead.cannotTurn) {
-        // 回頭不能 → 回避不可、直進して衝突チェック
-        var occ = getOccupant(next.col, next.row, lead);
-        if (occ) {
-          lead.path = lead.path || [];
-          lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-          lead.col = next.col;
-          lead.row = next.row;
-          collisionCheck(lead, occ);
-          moveFollowers(lead, usFleet);
-          remain--;
-          continue;
-        }
-        break;
-      }
+    if (occupied(next.col, next.row, lead) && !lead.cannotTurn) {
       // 回頭可能 → 隣接ヘックスで回避を試みる
       const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
       let avoided = false;
@@ -595,15 +566,17 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
           break;
         }
       }
-      if (!avoided) break;
-      turned = false;
-      continue;
+      if (avoided) { turned = false; continue; }
+      // 回避失敗 → そのまま突入
     }
 
     lead.path = lead.path || [];
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
     lead.col = next.col;
     lead.row = next.row;
+    // 同一ヘクス進入 → 衝突チェック（止めない）
+    var occAt = getOccupant(next.col, next.row, lead);
+    if (occAt) collisionCheck(lead, occAt);
     var sunkAt = getSunkShip(next.col, next.row, lead);
     if (sunkAt) collisionCheck(lead, sunkAt);
     turned = false;
@@ -708,12 +681,20 @@ function startFreeMode() {
   checkAllMoved();
 }
 
-// 全艦直進コマンド
+// 全艦直進コマンド（やり直し可能）
+let allStraightBackup = null;  // 全艦直進前の状態を保存
 function allStraight() {
   // 現在操作中の艦を確定
   if (moving) finishMove();
+
+  // やり直し用に全状態を保存
+  allStraightBackup = {
+    fleet: jpFleet.map(s => ({...s, crits: [...(s.crits||[])]})),
+    movedShips: new Set(movedShips)
+  };
+
   var count = 0;
-  // 前方の艦から先に動かす（ブロック回避）
+  // 前方の艦から先に動かす
   var targets = [];
   jpFleet.forEach(function(s, i) {
     if (canShipMove(s) && !movedShips.has(i)) targets.push({ship:s, idx:i});
@@ -734,15 +715,11 @@ function allStraight() {
       var next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
-      if (occupied(next.col, next.row, ship)) {
-        if (canForceEntry(ship)) {
-          var occ = getOccupant(next.col, next.row, ship);
-          if (occ) { ship.col = next.col; ship.row = next.row; collisionCheck(ship, occ); continue; }
-        }
-        break;
-      }
       ship.col = next.col;
       ship.row = next.row;
+      // 同一ヘクスに他の艦がいたら衝突チェック（進入は止めない）
+      var occupant = getOccupant(next.col, next.row, ship);
+      if (occupant) collisionCheck(ship, occupant);
       var sunkAt = getSunkShip(next.col, next.row, ship);
       if (sunkAt) collisionCheck(ship, sunkAt);
     }
@@ -750,10 +727,33 @@ function allStraight() {
     parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
     count++;
   }
-  setInfo(count + '隻が直進しました');
+  setInfo(count + '隻が直進しました（やり直し可能）');
+  document.getElementById('btnUndoAll').style.display = '';
+  document.getElementById('btnAllStraight').style.display = 'none';
   pushState();
   renderList();
   checkAllMoved();
+}
+
+function undoAllStraight() {
+  if (!allStraightBackup) return;
+  // 艦の状態を復元
+  for (let i = 0; i < jpFleet.length; i++) {
+    Object.assign(jpFleet[i], allStraightBackup.fleet[i]);
+  }
+  movedShips = allStraightBackup.movedShips;
+  // ACTION_DONE を取り消す
+  jpFleet.forEach((s, i) => {
+    if (!movedShips.has(i)) {
+      parent.postMessage({type:'ACTION_UNDO', shipIndex:i}, '*');
+    }
+  });
+  allStraightBackup = null;
+  setInfo('全艦直進を取り消しました');
+  document.getElementById('btnUndoAll').style.display = 'none';
+  document.getElementById('btnAllStraight').style.display = '';
+  pushState();
+  renderList();
 }
 
 function setInfo(t) { document.getElementById('info').textContent = t; }
