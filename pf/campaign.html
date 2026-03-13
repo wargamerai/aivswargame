@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>太平洋艦隊 キャンペーン統括システム</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5fa; color: #222; margin: 20px; }
+        h1, h2, h3 { color: #1a5a8a; font-size: 1.3em; }
+        .panel { background-color: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border: 1px solid #ddd; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 1em; }
+        th, td { border: 1px solid #ccc; padding: 7px; text-align: center; }
+        th { background-color: #e0e8f0; color: #333; }
+        .status-ok { color: #2a8a2a; }
+        .status-light { color: #aa8800; }
+        .status-medium { color: #cc6600; }
+        .status-heavy { color: #cc2200; }
+        .status-sunk { color: #999; text-decoration: line-through; }
+        button { background-color: #2266cc; color: white; border: none; padding: 11px 16px; cursor: pointer; border-radius: 4px; font-size: 1.05em; margin-right: 10px; margin-bottom: 10px; font-weight: bold;}
+        button:hover { background-color: #1a55aa; }
+        button:disabled { background-color: #ddd; color: #999; cursor: not-allowed; }
+        #log { background-color: #f0f0f0; padding: 10px; height: 160px; overflow-y: scroll; font-family: monospace; border: 1px solid #ccc; margin-top: 20px; font-size: 1em; color: #333;}
+        .history-entry { background:#fff; padding:12px; border-radius:8px; margin-bottom:10px; border-left: 3px solid #2266cc; border: 1px solid #ddd; }
+        .history-entry h3 { margin-top:0; }
+
+        /* 戦闘レポートカラム */
+        .battle-reports-grid {
+            display:flex; gap:12px; overflow-x:auto; padding-bottom:8px;
+        }
+        .report-col {
+            background:#f5f5fa; border:1px solid #bbb; border-radius:6px;
+            padding:10px; min-width:280px; flex:1; font-family:monospace; font-size:0.88em;
+        }
+        .report-col h3 { margin:0 0 8px; font-size:1.05em; border-bottom:2px solid #1a5a8a; padding-bottom:4px; }
+        .rp-section { background:#f0f0f0; border:1px solid #ccc; border-radius:4px; padding:8px; margin:6px 0; }
+        .rp-section h4 { color:#1a5a8a; margin:0 0 4px; font-size:0.9em; border-bottom:1px solid #ccc; padding-bottom:2px; }
+        .rp-jp { color:#cc3311; } .rp-us { color:#2255cc; }
+        .rp-ok { color:#2a8a2a; } .rp-light { color:#aa8800; } .rp-medium { color:#cc6600; } .rp-heavy { color:#cc2200; } .rp-sunk { color:#cc0000; font-weight:bold; }
+        .rp-vp-row { display:flex; justify-content:space-between; padding:1px 0; border-bottom:1px dotted #ccc; font-size:0.9em; }
+        .rp-vp-row:last-child { border-bottom:none; }
+        .rp-vp-val { font-weight:bold; color:#1a5a8a; }
+        .rp-vp-sunk { color:#cc0000; }
+        .rp-total { font-weight:bold; padding:4px 6px; border-radius:3px; display:flex; justify-content:space-between; margin:4px 0; }
+        .rp-total-jp { background:#ffe8e0; }
+        .rp-total-us { background:#e0e8ff; }
+        .rp-winner { text-align:center; padding:6px; margin:6px 0; border:2px solid #8a6a00; border-radius:5px; background:#fffff0; font-weight:bold; }
+        .rp-winner .jp-win { color:#cc3311; } .rp-winner .us-win { color:#2255cc; } .rp-winner .draw { color:#888; }
+        .rp-ship-tbl { width:100%; border-collapse:collapse; font-size:0.85em; margin-top:4px; }
+        .rp-ship-tbl th { background:#e0e8f0; color:#444; padding:3px 4px; border:1px solid #ccc; text-align:left; font-size:0.85em; }
+        .rp-ship-tbl td { padding:3px 4px; border:1px solid #ddd; font-size:0.85em; }
+
+        /* 索敵結果テーブル */
+        .scout-table { width:100%; border-collapse:collapse; margin:8px 0; font-size:0.95em; }
+        .scout-table th { background:#ffe8e0; color:#993322; padding:5px 8px; border:1px solid #ccc; text-align:left; }
+        .scout-table td { padding:5px 8px; border:1px solid #ddd; }
+        .scout-ll { color:#cc0000; font-weight:bold; }
+        .scout-l { color:#cc6600; font-weight:bold; }
+        .scout-m { color:#886600; }
+        .scout-s { color:#448844; }
+        .scout-none { color:#999; }
+
+        /* 艦隊選択カード */
+        .ship-cards { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+        .ship-card {
+            background:#e8eef8; border:2px solid #99b; padding:6px 10px;
+            border-radius:5px; cursor:pointer; font-size:0.92em; transition: all 0.15s;
+            min-width:120px; text-align:center;
+        }
+        .ship-card:hover { background:#c8d8f0; border-color:#77a; }
+        .ship-card.selected { border-color:#2266cc; background:#d0e0ff; box-shadow: 0 0 6px rgba(34,102,204,0.4); }
+        .ship-card.unavailable { opacity:0.3; cursor:default; pointer-events:none; }
+        .ship-card .c-name { font-weight:bold; display:block; }
+        .ship-card .c-info { color:#666; font-size:0.85em; }
+        .ship-card .c-type { color:#2255cc; font-weight:bold; font-size:0.8em; }
+
+        /* ハンディキャップ表示 */
+        .handicap-bar {
+            background:#fff8e0; border:2px solid #cc9900; border-radius:6px;
+            padding:10px 16px; margin:10px 0; font-size:1.05em;
+        }
+        .handicap-bar .handi-label { color:#886600; font-weight:bold; }
+        .handicap-bar .handi-jp { color:#cc3311; font-weight:bold; }
+        .handicap-bar .handi-us { color:#2255cc; font-weight:bold; }
+
+        /* 艦種グループヘッダ */
+        .type-header { width:100%; font-weight:bold; color:#1a5a8a; font-size:1em; margin:8px 0 4px; padding:4px 8px; background:#e0e8f0; border-radius:3px; }
+    </style>
+</head>
+<body>
+
+<div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1>太平洋艦隊 キャンペーン統括システム</h1>
+    <a href="../index.html" style="background:#2266cc; color:#fff; padding:8px 16px; border-radius:4px; text-decoration:none; font-weight:bold; font-size:0.95em;">トップへ戻る</a>
+</div>
+<div style="background-color: #e0e8f0; padding: 12px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #bbc;">
+    <span style="font-size: 1.3em; font-weight: bold; color: #8a6a00;">現在: <span id="currentTurnName">第一次ソロモン海戦</span> (<span id="currentTurn">1</span>/4)</span>
+    <span id="scoreArea" style="margin-left: 30px; font-size: 1.15em; display:none;">米軍スコア: <span id="usScore" style="color: #2255cc; font-weight:bold;">0</span> | 日本軍スコア: <span id="jpScore" style="color: #cc3311; font-weight:bold;">0</span></span>
+</div>
+
+<div>
+    <button id="btnSortie" onclick="phaseSortie()">1. 索敵＆艦隊編成</button>
+    <button id="btnCombat" onclick="openBattle()" disabled style="background-color: #cc6600; color:#fff;">2. 戦闘開始</button>
+    <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
+    <button onclick="resetCampaign()" style="background-color: #cc2200; color:#fff; float:right; font-size:0.9em;">キャンペーンリセット</button>
+</div>
+
+<!-- 索敵結果パネル -->
+<div id="scoutPanel" class="panel" style="margin-top:10px; display:none;">
+    <h2>索敵報告</h2>
+    <div id="scoutResult"></div>
+    <div id="scoutSummary" style="margin-top:8px; font-weight:bold; color:#993322;"></div>
+</div>
+
+<!-- 艦隊選択パネル -->
+<div id="fleetSelectPanel" class="panel" style="margin-top:10px; display:none;">
+    <h2>米軍 出撃艦隊を選択</h2>
+    <div id="handicapDisplay" class="handicap-bar"></div>
+    <div id="usFleetCards"></div>
+    <div style="margin-top:12px;">
+        <button id="btnConfirmFleet" onclick="confirmFleet()" disabled style="background-color:#2266cc; font-size:1.1em; padding:12px 24px;">出撃確定（0隻選択中）</button>
+        <button onclick="clearSelection()" style="background-color:#888; font-size:0.9em;">選択クリア</button>
+    </div>
+</div>
+
+<!-- 編成結果パネル -->
+<div id="fleetPanel" class="panel" style="margin-top:10px; display:none;">
+    <h2>出撃艦隊</h2>
+    <div style="display:flex; gap:20px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:300px;">
+            <h3 style="color:#cc3311;">日本軍</h3>
+            <table id="jpTable">
+                <thead><tr><th>艦名</th><th>艦種</th><th>速力</th><th>火力</th><th>装甲</th><th>魚雷</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div style="flex:1; min-width:300px;">
+            <h3 style="color:#2255cc;">米軍（あなた）</h3>
+            <table id="usTable">
+                <thead><tr><th>艦名</th><th>艦種</th><th>速力</th><th>火力</th><th>装甲</th><th>魚雷</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="battleHistoryPanel" style="display:none; margin-top:20px;">
+    <h2>戦闘記録</h2>
+    <div id="battleHistoryContent"></div>
+</div>
+
+<div id="log"></div>
+
+<!-- キャンペーン終了サマリーオーバーレイ -->
+<div id="summaryOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; overflow-y:auto;">
+  <div style="max-width:800px; margin:30px auto; background:#1a2a3a; border-radius:12px; padding:30px; color:#e0e8f0; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+    <h1 id="summaryTitle" style="text-align:center; font-size:2.2em; margin-bottom:5px; color:#ffd700;"></h1>
+    <h2 id="summaryWinner" style="text-align:center; font-size:1.6em; margin-top:0; margin-bottom:20px;"></h2>
+
+    <!-- 最終スコア -->
+    <div style="display:flex; justify-content:center; gap:60px; margin-bottom:25px;">
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; color:#88aaff;">米軍（あなた）</div>
+        <div id="summaryUsScore" style="font-size:3em; font-weight:bold; color:#4488ff;"></div>
+      </div>
+      <div style="text-align:center; font-size:2em; color:#888; padding-top:25px;">VS</div>
+      <div style="text-align:center;">
+        <div style="font-size:0.9em; color:#ff8888;">日本軍</div>
+        <div id="summaryJpScore" style="font-size:3em; font-weight:bold; color:#ff4444;"></div>
+      </div>
+    </div>
+
+    <!-- 各海戦の詳細 -->
+    <div id="summaryBattles"></div>
+
+    <!-- 沈没艦一覧 -->
+    <div id="summarySunkList" style="margin-top:20px;"></div>
+
+    <div style="text-align:center; margin-top:25px;">
+      <button id="summaryConfirmBtn" onclick="closeSummaryAndProceed()" style="font-size:1.3em; padding:14px 40px; background:#ffd700; color:#1a2a3a; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">確認</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- 定数 ---
+const BATTLE_NAMES = {
+    1: '第一次ソロモン海戦',
+    2: '第二次ソロモン海戦',
+    3: '第三次ソロモン海戦',
+    4: '第四次ソロモン海戦'
+};
+const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
+const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
+
+// --- データ定義 ---
+const jpAllShips = [
+    { name: '大和', yomi: 'やまと', type: 'BB', atk: 20, def: 15, spd: 4, capG: 20, capM: 20, vp: 5, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '長門', yomi: 'ながと', type: 'BB', atk: 14, def: 10, spd: 4, capG: 16, capM: 16, vp: 4, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '陸奥', yomi: 'むつ', type: 'BB', atk: 14, def: 10, spd: 4, capG: 16, capM: 16, vp: 4, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '金剛', yomi: 'こんごう', type: 'BB', atk: 10, def: 7, spd: 5, capG: 12, capM: 12, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '榛名', yomi: 'はるな', type: 'BB', atk: 10, def: 7, spd: 5, capG: 12, capM: 12, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '比叡', yomi: 'ひえい', type: 'BB', atk: 10, def: 7, spd: 5, capG: 12, capM: 12, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '霧島', yomi: 'きりしま', type: 'BB', atk: 10, def: 7, spd: 5, capG: 12, capM: 12, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '伊勢', yomi: 'いせ', type: 'OBB', atk: 12, def: 9, spd: 3, capG: 14, capM: 14, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '日向', yomi: 'ひゅうが', type: 'OBB', atk: 12, def: 9, spd: 3, capG: 14, capM: 14, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '扶桑', yomi: 'ふそう', type: 'OBB', atk: 12, def: 8, spd: 3, capG: 13, capM: 13, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '山城', yomi: 'やましろ', type: 'OBB', atk: 12, def: 8, spd: 3, capG: 13, capM: 13, vp: 3, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '高雄', yomi: 'たかお', type: 'CA', atk: 8, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '愛宕', yomi: 'あたご', type: 'CA', atk: 8, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '摩耶', yomi: 'まや', type: 'CA', atk: 8, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '鳥海', yomi: 'ちょうかい', type: 'CA', atk: 8, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '妙高', yomi: 'みょうこう', type: 'CA', atk: 8, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '羽黒', yomi: 'はぐろ', type: 'CA', atk: 8, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '古鷹', yomi: 'ふるたか', type: 'CA', atk: 6, def: 4, spd: 5, capG: 7, capM: 7, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '青葉', yomi: 'あおば', type: 'CA', atk: 6, def: 4, spd: 5, capG: 7, capM: 7, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '衣笠', yomi: 'きぬがさ', type: 'CA', atk: 6, def: 4, spd: 5, capG: 7, capM: 7, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '熊野', yomi: 'くまの', type: 'CA', atk: 8, def: 5, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '鈴谷', yomi: 'すずや', type: 'CA', atk: 8, def: 5, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '利根', yomi: 'とね', type: 'CA', atk: 7, def: 5, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '筑摩', yomi: 'ちくま', type: 'CA', atk: 7, def: 5, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '川内', yomi: 'せんだい', type: 'CL', atk: 3, def: 3, spd: 6, capG: 6, capM: 6, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '神通', yomi: 'じんつう', type: 'CL', atk: 3, def: 3, spd: 6, capG: 6, capM: 6, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '長良', yomi: 'ながら', type: 'CL', atk: 3, def: 3, spd: 6, capG: 6, capM: 6, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '五十鈴', yomi: 'いすず', type: 'CL', atk: 3, def: 3, spd: 6, capG: 6, capM: 6, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '由良', yomi: 'ゆら', type: 'CL', atk: 3, def: 3, spd: 6, capG: 6, capM: 6, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '北上', yomi: 'きたかみ', type: 'CL', atk: 2, def: 3, spd: 6, capG: 6, capM: 6, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '大井', yomi: 'おおい', type: 'CL', atk: 2, def: 3, spd: 6, capG: 6, capM: 6, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '夕張', yomi: 'ゆうばり', type: 'CL', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '天龍', yomi: 'てんりゅう', type: 'CL', atk: 2, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '龍田', yomi: 'たつた', type: 'CL', atk: 2, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '吹雪', yomi: 'ふぶき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '白雪', yomi: 'しらゆき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '初雪', yomi: 'はつゆき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '綾波', yomi: 'あやなみ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '天霧', yomi: 'あまぎり', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '暁', yomi: 'あかつき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '雷', yomi: 'いかづち', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '電', yomi: 'いなづま', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '朝潮', yomi: 'あさしお', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '朝雲', yomi: 'あさぐも', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '陽炎', yomi: 'かげろう', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '黒潮', yomi: 'くろしお', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '親潮', yomi: 'おやしお', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '雪風', yomi: 'ゆきかぜ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '天津風', yomi: 'あまつかぜ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '舞風', yomi: 'まいかぜ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '白露', yomi: 'しらつゆ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '時雨', yomi: 'しぐれ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '村雨', yomi: 'むらさめ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '夕立', yomi: 'ゆうだち', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '春雨', yomi: 'はるさめ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '五月雨', yomi: 'さみだれ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '海風', yomi: 'うみかぜ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '江風', yomi: 'かわかぜ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '涼風', yomi: 'すずかぜ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '夕雲', yomi: 'ゆうぐも', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '長波', yomi: 'ながなみ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '巻波', yomi: 'まきなみ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '高波', yomi: 'たかなみ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '秋月', yomi: 'あきづき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 5, capM: 5, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '照月', yomi: 'てるづき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 5, capM: 5, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 }
+];
+
+const usAllShips = [
+    { name: 'WASHINGTON', type: 'BB', atk: 15, def: 11, spd: 4, capG: 16, capM: 16, vp: 4, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'SOUTH DAKOTA', type: 'BB', atk: 15, def: 12, spd: 4, capG: 15, capM: 15, vp: 4, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'NORTH CAROLINA', type: 'BB', atk: 15, def: 11, spd: 4, capG: 16, capM: 16, vp: 4, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'SAN FRANCISCO', type: 'CA', atk: 7, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'PORTLAND', type: 'CA', atk: 7, def: 4, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'NEW ORLEANS', type: 'CA', atk: 7, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'PENSACOLA', type: 'CA', atk: 7, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'NORTHAMPTON', type: 'CA', atk: 7, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'CHICAGO', type: 'CA', atk: 7, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'MINNEAPOLIS', type: 'CA', atk: 7, def: 5, spd: 5, capG: 9, capM: 9, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'CHESTER', type: 'CA', atk: 7, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'SALT LAKE CITY', type: 'CA', atk: 7, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'HELENA', type: 'CL', atk: 6, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'HONOLULU', type: 'CL', atk: 6, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'BOISE', type: 'CL', atk: 6, def: 4, spd: 5, capG: 8, capM: 8, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'ATLANTA', type: 'CLAA', atk: 5, def: 4, spd: 5, capG: 6, capM: 6, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'JUNEAU', type: 'CLAA', atk: 5, def: 4, spd: 5, capG: 6, capM: 6, vp: 2, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'FLETCHER',   type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: "O'BANNON",   type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'AARON WARD', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'BARTON',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'BUCHANAN',   type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'DUNCAN',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'FARENHOLT',  type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'LAFFEY',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'LARDNER',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'MCCALLA',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'GREYSON',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'GWIN',       type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'MONSEEN',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'PATTERSON',  type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'WALKE',      type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'BAGLEY',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'HELM',       type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'BENHAM',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'MAURY',      type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'STERRETT',   type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'WILSON',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'CUSHING',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'DRAYTON',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'LAMSON',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'PERKINS',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'PRESTON',    type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'DALE',       type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'FARRAGUT',   type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'MACDONOUGH', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+    { name: 'WORDEN',     type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', used: false },
+];
+
+let currentTurn = 1;
+let jpScore = 0;
+let usScore = 0;
+let currentJpFleet = [];
+let currentUsFleet = [];
+let selectedUsShips = new Set(); // プレイヤーが選択中の米軍艦名
+let usedRolls = [];
+let battleHistory = [];
+let currentPhase = 'sortie'; // 'sortie', 'selecting', 'combat', 'next'
+let jpMission = '';
+let lastJpHandicap = 0;
+let lastUsHandicap = 0;
+let scoutResults = []; // 索敵結果を保存
+
+// --- ユーティリティ ---
+function logMsg(msg) {
+    const logDiv = document.getElementById('log');
+    logDiv.innerHTML += `<div>${msg}</div>`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+}
+function rollDice(sides = 6) { return Math.floor(Math.random() * sides) + 1; }
+function getShipByName(name, array) { return array.find(s => s.name === name); }
+
+function sortShips(fleet, isJp) {
+    const TYPE_ORDER = { BB: 0, OBB: 1, CA: 2, CL: 3, CLAA: 3, DD: 4 };
+    return fleet.sort((a, b) => {
+        const ta = TYPE_ORDER[a.type] ?? 9;
+        const tb = TYPE_ORDER[b.type] ?? 9;
+        if (ta !== tb) return ta - tb;
+        if (a.capG !== b.capG) return b.capG - a.capG;
+        if (a.capM !== b.capM) return b.capM - a.capM;
+        if (isJp) {
+            return (a.yomi || '').localeCompare(b.yomi || '', 'ja');
+        } else {
+            return a.name.localeCompare(b.name, 'en');
+        }
+    });
+}
+
+function updateTurnDisplay() {
+    document.getElementById('currentTurn').innerText = currentTurn;
+    document.getElementById('currentTurnName').innerText = BATTLE_NAMES[currentTurn] || `第${currentTurn}回戦`;
+}
+
+function updateScoreUI() {
+    document.getElementById('jpScore').innerText = jpScore;
+    document.getElementById('usScore').innerText = usScore;
+}
+
+function usThreatOf(s) {
+    return (s.type === 'BB' || s.type === 'OBB') ? 4 : s.type === 'CA' ? 2 : 1;
+}
+
+// --- キャンペーン状態永続化 ---
+function saveCampaignState() {
+    const state = {
+        currentTurn, jpScore, usScore, usedRolls, currentPhase, jpMission,
+        jpAllShipsState: jpAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, rest: s.rest })),
+        usAllShipsState: usAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, used: s.used })),
+        currentJpFleetNames: currentJpFleet.map(s => s.name),
+        currentUsFleetNames: currentUsFleet.map(s => s.name),
+        selectedUsShipNames: [...selectedUsShips],
+        battleHistory: battleHistory,
+        scoutResults: scoutResults,
+    };
+    localStorage.setItem('pfCampaignState', JSON.stringify(state));
+}
+
+function loadCampaignState() {
+    const raw = localStorage.getItem('pfCampaignState');
+    if (!raw) return false;
+    try {
+        const state = JSON.parse(raw);
+        currentTurn = state.currentTurn || 1;
+        jpScore = state.jpScore !== undefined ? state.jpScore : 0;
+        usScore = state.usScore !== undefined ? state.usScore : 0;
+        usedRolls = state.usedRolls || [];
+        currentPhase = state.currentPhase || 'sortie';
+        jpMission = state.jpMission || '';
+        battleHistory = state.battleHistory || [];
+        scoutResults = state.scoutResults || [];
+
+        if (state.jpAllShipsState) {
+            state.jpAllShipsState.forEach(saved => {
+                const ship = jpAllShips.find(s => s.name === saved.name);
+                if (ship) { ship.dmgG = saved.dmgG; ship.dmgM = saved.dmgM; ship.status = saved.status; ship.rest = saved.rest; }
+            });
+        }
+        if (state.usAllShipsState) {
+            state.usAllShipsState.forEach(saved => {
+                const ship = usAllShips.find(s => s.name === saved.name);
+                if (ship) { ship.dmgG = saved.dmgG; ship.dmgM = saved.dmgM; ship.status = saved.status; ship.used = saved.used; }
+            });
+        }
+
+        currentJpFleet = (state.currentJpFleetNames || []).map(n => jpAllShips.find(s => s.name === n)).filter(Boolean);
+        currentUsFleet = (state.currentUsFleetNames || []).map(n => usAllShips.find(s => s.name === n)).filter(Boolean);
+        selectedUsShips = new Set(state.selectedUsShipNames || []);
+
+        updateTurnDisplay();
+        updateScoreUI();
+        renderBattleHistory();
+
+        if (battleHistory.length > 0) {
+            document.getElementById('scoreArea').style.display = '';
+        }
+
+        // ボタン状態復元
+        if (currentPhase === 'selecting') {
+            document.getElementById('btnSortie').disabled = true;
+            document.getElementById('btnCombat').disabled = true;
+            document.getElementById('btnNext').disabled = true;
+            showScoutResults();
+            showFleetSelection();
+        } else if (currentPhase === 'combat') {
+            document.getElementById('btnSortie').disabled = true;
+            document.getElementById('btnCombat').disabled = false;
+            document.getElementById('btnNext').disabled = true;
+            document.getElementById('fleetPanel').style.display = 'block';
+            renderFleetTables();
+        } else if (currentPhase === 'next') {
+            document.getElementById('btnSortie').disabled = true;
+            document.getElementById('btnCombat').disabled = true;
+            document.getElementById('btnNext').disabled = false;
+            document.getElementById('fleetPanel').style.display = 'block';
+            renderFleetTables();
+        } else {
+            document.getElementById('btnSortie').disabled = false;
+            document.getElementById('btnCombat').disabled = true;
+            document.getElementById('btnNext').disabled = true;
+        }
+
+        return true;
+    } catch(e) {
+        console.error('Campaign state load error:', e);
+        return false;
+    }
+}
+
+function resetCampaign() {
+    if (!confirm('キャンペーンデータをリセットしますか？')) return;
+    localStorage.removeItem('pfCampaignState');
+    localStorage.removeItem('campaignFleet');
+    localStorage.removeItem('battleResultForCampaign');
+    location.reload();
+}
+
+// --- フェイズ1: 索敵 → 日本軍艦隊決定 ---
+function phaseSortie() {
+    document.getElementById('scoreArea').style.display = 'none';
+    logMsg(`\n--- ${BATTLE_NAMES[currentTurn]} 索敵フェイズ ---`);
+
+    let roll = 0;
+    while (roll === 0 || usedRolls.includes(roll)) {
+        roll = rollDice() + rollDice();
+    }
+    usedRolls.push(roll);
+    logMsg(`日本軍出撃ダイス: ${roll}`);
+
+    let jpNames = [];
+    let ddCount = 0;
+
+    if (roll === 2) { jpNames = ['高雄', '愛宕', '大和', '由良', '長門', '陸奥', '摩耶', '鳥海']; ddCount = rollDice() + 4; }
+    else if (roll === 3) { jpNames = ['妙高', '羽黒', '大和', '五十鈴']; ddCount = rollDice(); }
+    else if (roll === 4) { jpNames = ['比叡', '霧島', '長良']; ddCount = rollDice() + 4; }
+    else if (roll === 5) { jpNames = ['古鷹', '青葉', '衣笠']; ddCount = rollDice(); }
+    else if (roll === 6) { jpNames = ['高雄', '愛宕', '摩耶', '鳥海', '川内']; ddCount = rollDice() + 2; }
+    else if (roll === 7) { jpNames = []; ddCount = rollDice() + 4; }
+    else if (roll === 8) { jpNames = ['北上', '大井']; ddCount = rollDice() + 4; }
+    else if (roll === 9) { jpNames = ['熊野', '鈴谷']; ddCount = rollDice(); }
+    else if (roll === 10) { jpNames = ['神通', '金剛', '榛名', '妙高', '羽黒']; ddCount = rollDice() + 2; }
+    else if (roll === 11) { jpNames = ['夕張', '長門', '陸奥', '利根', '筑摩']; ddCount = rollDice() + 2; }
+    else if (roll === 12) { jpNames = ['天龍', '龍田', '伊勢', '日向', '山城', '扶桑']; ddCount = rollDice() + 2; }
+
+    currentJpFleet = [];
+
+    jpNames.forEach(n => {
+        let ship = getShipByName(n, jpAllShips);
+        if (ship && ship.status !== 'sunk' && ship.rest === 0 && ship.dmgG === 0 && ship.dmgM === 0) {
+            currentJpFleet.push(ship);
+        } else if(ship) {
+            let reason = ship.status === 'sunk' ? '沈没' : (ship.rest > 0 ? `ドック入り(残り${ship.rest}休)` : '損傷あり');
+            logMsg(`※ ${ship.name} は出撃不可（${reason}）→ 代替なし`);
+        }
+    });
+
+    let ddPool = jpAllShips.filter(s => s.type === 'DD' && s.status !== 'sunk' && s.rest === 0 && s.dmgG === 0 && s.dmgM === 0);
+    sortShips(ddPool, true);
+    for(let i=0; i<Math.min(ddCount, ddPool.length); i++) {
+        currentJpFleet.push(ddPool[i]);
+    }
+    currentJpFleet = sortShips(currentJpFleet, true);
+
+    logMsg(`日本軍艦隊: ${currentJpFleet.length}隻出撃`);
+
+    // 索敵
+    scoutResults = [];
+    currentJpFleet.forEach(s => {
+        const r = scoutShip(s);
+        scoutResults.push({ name: s.name, type: s.type, seen: r.seen, threat: r.threat, seenClass: r.seenClass });
+    });
+
+    // 日本軍ミッション判定
+    jpMission = currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
+
+    // 米軍usedフラグリセット（沈没艦除く）
+    usAllShips.forEach(s => { if (s.status !== 'sunk') s.used = false; });
+
+    // 索敵結果表示
+    showScoutResults();
+
+    // 米軍艦隊選択UI表示
+    selectedUsShips.clear();
+    showFleetSelection();
+
+    currentPhase = 'selecting';
+    document.getElementById('btnSortie').disabled = true;
+    document.getElementById('btnCombat').disabled = true;
+    saveCampaignState();
+}
+
+// --- 索敵関数 ---
+function scoutShip(s) {
+    const d = rollDice() + rollDice();
+    if (d === 12) return { seen: '＊（索敵なし）', threat: 0, seenClass: 'scout-none' };
+    if (d === 2) {
+        if (s.type === 'BB')                      return { seen: 'LL（超大型艦）',  threat: 6, seenClass: 'scout-ll' };
+        if (s.type === 'OBB')                     return { seen: 'L（大型艦）',     threat: 4, seenClass: 'scout-l' };
+        if (s.type === 'CA')                      return { seen: 'M（中型艦）',     threat: 2, seenClass: 'scout-m' };
+        if (s.type === 'CL' || s.type === 'CLAA') return { seen: 'M（中型艦）',     threat: 2, seenClass: 'scout-m' };
+        return { seen: '－（不可視）', threat: 0, seenClass: 'scout-none' };
+    }
+    if (s.type === 'BB') {
+        return Math.random() < 0.5 ? { seen: 'LL（超大型艦）', threat: 6, seenClass: 'scout-ll' } : { seen: 'L（大型艦）', threat: 4, seenClass: 'scout-l' };
+    }
+    if (s.type === 'OBB') {
+        return Math.random() < 0.5 ? { seen: 'L（大型艦）', threat: 4, seenClass: 'scout-l' } : { seen: 'M（中型艦）', threat: 2, seenClass: 'scout-m' };
+    }
+    if (s.type === 'CA') {
+        const r = Math.random();
+        if (r < 0.33) return { seen: 'L（大型艦）', threat: 4, seenClass: 'scout-l' };
+        if (r < 0.67) return { seen: 'M（中型艦）', threat: 2, seenClass: 'scout-m' };
+        return { seen: 'S（小型艦）', threat: 1, seenClass: 'scout-s' };
+    }
+    if (s.type === 'CL' || s.type === 'CLAA') {
+        return Math.random() < 0.5 ? { seen: 'M（中型艦）', threat: 2, seenClass: 'scout-m' } : { seen: 'S（小型艦）', threat: 1, seenClass: 'scout-s' };
+    }
+    return Math.random() < 0.5 ? { seen: 'M（中型艦）', threat: 2, seenClass: 'scout-m' } : { seen: 'S（小型艦）', threat: 1, seenClass: 'scout-s' };
+}
+
+// --- 索敵結果表示 ---
+function showScoutResults() {
+    const panel = document.getElementById('scoutPanel');
+    panel.style.display = 'block';
+
+    let html = '<table class="scout-table">';
+    html += '<tr><th>#</th><th>索敵結果</th><th>脅威値</th></tr>';
+
+    let totalThreat = 0;
+    let detectedCount = 0;
+    scoutResults.forEach((r, i) => {
+        totalThreat += r.threat;
+        if (r.threat > 0) detectedCount++;
+        html += `<tr><td>${i+1}</td><td class="${r.seenClass}">${r.seen}</td><td>${r.threat > 0 ? r.threat : '-'}</td></tr>`;
+    });
+    html += '</table>';
+
+    document.getElementById('scoutResult').innerHTML = html;
+
+    const undetected = scoutResults.filter(r => r.threat === 0).length;
+    let summary = `探知: ${detectedCount}隻 / 未探知: ${undetected}隻 / 見かけ上の脅威値: ${totalThreat}`;
+    document.getElementById('scoutSummary').textContent = summary;
+}
+
+// --- 米軍艦隊選択UI ---
+function showFleetSelection() {
+    const panel = document.getElementById('fleetSelectPanel');
+    panel.style.display = 'block';
+
+    const available = usAllShips.filter(s => s.status !== 'sunk');
+    const sorted = sortShips([...available], false);
+
+    // 艦種ごとにグループ化
+    const TYPE_LABELS = { BB: '戦艦 (BB)', CA: '重巡洋艦 (CA)', CL: '軽巡洋艦 (CL)', CLAA: '防空巡洋艦 (CLAA)', DD: '駆逐艦 (DD)' };
+    const TYPE_ORDER_ARR = ['BB', 'CA', 'CL', 'CLAA', 'DD'];
+
+    let html = '';
+    for (const type of TYPE_ORDER_ARR) {
+        const ships = sorted.filter(s => s.type === type);
+        if (ships.length === 0) continue;
+
+        html += `<div class="type-header">${TYPE_LABELS[type]} (${ships.filter(s => !s.used).length}隻利用可)</div>`;
+        html += '<div class="ship-cards">';
+        for (const s of ships) {
+            const isUnavailable = s.used;
+            const isSelected = selectedUsShips.has(s.name);
+            let cls = 'ship-card';
+            if (isUnavailable) cls += ' unavailable';
+            else if (isSelected) cls += ' selected';
+
+            const torpedo = TORPEDOES[s.type] || '-';
+            const dmgInfo = (s.dmgG > 0 || s.dmgM > 0) ? ` <span style="color:#cc6600;">[損傷G${s.dmgG}/M${s.dmgM}]</span>` : '';
+
+            html += `<div class="${cls}" onclick="toggleShip('${s.name}')" data-ship="${s.name}">`;
+            html += `<span class="c-type">${s.type}</span>`;
+            html += `<span class="c-name">${s.name}</span>`;
+            html += `<span class="c-info">火${s.atk} 装${s.def} 速${s.spd} 魚${torpedo}${dmgInfo}</span>`;
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+
+    document.getElementById('usFleetCards').innerHTML = html;
+    updateHandicapDisplay();
+}
+
+// --- 艦の選択トグル ---
+function toggleShip(name) {
+    const ship = usAllShips.find(s => s.name === name);
+    if (!ship || ship.status === 'sunk' || ship.used) return;
+
+    if (selectedUsShips.has(name)) {
+        selectedUsShips.delete(name);
+    } else {
+        selectedUsShips.add(name);
+    }
+
+    // カードの見た目を更新
+    document.querySelectorAll('.ship-card').forEach(card => {
+        const cardName = card.dataset.ship;
+        if (cardName === name) {
+            card.classList.toggle('selected', selectedUsShips.has(name));
+        }
+    });
+
+    updateHandicapDisplay();
+    saveCampaignState();
+}
+
+// --- ハンディキャップ表示更新 ---
+function updateHandicapDisplay() {
+    const selected = [...selectedUsShips].map(n => usAllShips.find(s => s.name === n)).filter(Boolean);
+    const selCount = selected.length;
+
+    let jpFee = currentJpFleet.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
+    let usFee = selected.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
+    let jpHandicapAdd = Math.max(0, usFee - jpFee) * 10;
+    let usHandicapAdd = Math.max(0, jpFee - usFee) * 10;
+
+    // 脅威値
+    const usThreat = selected.reduce((sum, s) => sum + usThreatOf(s), 0);
+    const jpThreat = currentJpFleet.reduce((sum, s) => sum + usThreatOf(s), 0);
+    const apparentThreat = scoutResults.reduce((sum, r) => sum + r.threat, 0);
+
+    let html = '';
+    html += `<span class="handi-label">選択中: ${selCount}隻</span>`;
+    html += ` | <span class="handi-us">米軍脅威値: ${usThreat}</span>`;
+    html += ` | <span class="handi-jp">日本軍見かけ脅威値: ${apparentThreat}</span> (実際: ${jpThreat})`;
+    html += `<br>`;
+    html += `<span class="handi-label">出撃費用:</span> 米軍 ${usFee} / 日本軍 ${jpFee}`;
+    html += ` → `;
+    if (jpHandicapAdd > 0) {
+        html += `<span class="handi-jp">日本軍にハンディ +${jpHandicapAdd}点</span>`;
+    } else if (usHandicapAdd > 0) {
+        html += `<span class="handi-us">米軍にハンディ +${usHandicapAdd}点</span>`;
+    } else {
+        html += `<span style="color:#888;">ハンディなし</span>`;
+    }
+
+    // 艦種内訳
+    const bb = selected.filter(s => s.type === 'BB').length;
+    const ca = selected.filter(s => s.type === 'CA').length;
+    const cl = selected.filter(s => s.type === 'CL' || s.type === 'CLAA').length;
+    const dd = selected.filter(s => s.type === 'DD').length;
+    html += `<br><span style="color:#555; font-size:0.9em;">内訳: BB${bb} CA${ca} CL${cl} DD${dd}</span>`;
+
+    document.getElementById('handicapDisplay').innerHTML = html;
+
+    // 出撃ボタン更新
+    const btn = document.getElementById('btnConfirmFleet');
+    btn.disabled = (selCount === 0);
+    btn.textContent = `出撃確定（${selCount}隻選択中）`;
+}
+
+// --- 選択クリア ---
+function clearSelection() {
+    selectedUsShips.clear();
+    document.querySelectorAll('.ship-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    updateHandicapDisplay();
+    saveCampaignState();
+}
+
+// --- 艦隊確定 ---
+function confirmFleet() {
+    if (selectedUsShips.size === 0) return;
+
+    currentUsFleet = [...selectedUsShips].map(n => usAllShips.find(s => s.name === n)).filter(Boolean);
+    currentUsFleet.forEach(s => { s.used = true; });
+    currentUsFleet = sortShips(currentUsFleet, false);
+
+    // ハンディキャップ計算
+    let jpFee = currentJpFleet.reduce((sum, s) => sum + (Math.ceil(s.vp / 2)), 0);
+    let usFee = currentUsFleet.reduce((sum, s) => sum + (Math.ceil(s.vp / 2)), 0);
+    let jpHandicapAdd = Math.max(0, usFee - jpFee) * 10;
+    let usHandicapAdd = Math.max(0, jpFee - usFee) * 10;
+
+    jpScore += jpHandicapAdd;
+    usScore += usHandicapAdd;
+    lastJpHandicap = jpHandicapAdd;
+    lastUsHandicap = usHandicapAdd;
+
+    logMsg(`米軍艦隊確定: ${currentUsFleet.length}隻出撃`);
+    if (jpHandicapAdd > 0) logMsg(`日本軍ハンディキャップ: +${jpHandicapAdd}点`);
+    if (usHandicapAdd > 0) logMsg(`米軍ハンディキャップ: +${usHandicapAdd}点`);
+
+    // 選択パネルを隠して艦隊表示
+    document.getElementById('scoutPanel').style.display = 'none';
+    document.getElementById('fleetSelectPanel').style.display = 'none';
+    document.getElementById('fleetPanel').style.display = 'block';
+    renderFleetTables();
+
+    currentPhase = 'combat';
+    document.getElementById('btnCombat').disabled = false;
+    exportJson();
+    saveCampaignState();
+}
+
+// --- テーブル描画 ---
+function renderFleetTables() {
+    const tbodyJp = document.querySelector('#jpTable tbody');
+    tbodyJp.innerHTML = '';
+    currentJpFleet.forEach(s => {
+        let typeStr = s.type === 'OBB' ? 'BB(旧式)' : s.type;
+        const speed = s.spd || 4;
+        const torpedo = TORPEDOES[s.type] || '-';
+        tbodyJp.innerHTML += `<tr><td>${s.name}</td><td>${typeStr}</td><td>${speed}</td><td>${s.capG}</td><td>${s.capM}</td><td>${torpedo}</td></tr>`;
+    });
+
+    const tbodyUs = document.querySelector('#usTable tbody');
+    tbodyUs.innerHTML = '';
+    currentUsFleet.forEach(s => {
+        const speed = s.spd || 4;
+        const torpedo = TORPEDOES[s.type] || '-';
+        tbodyUs.innerHTML += `<tr><td>${s.name}</td><td>${s.type}</td><td>${speed}</td><td>${s.capG}</td><td>${s.capM}</td><td>${torpedo}</td></tr>`;
+    });
+}
+
+// --- JSON出力（localStorage自動連携） ---
+function exportJson() {
+    const exportData = {
+        turn: currentTurn,
+        battleName: BATTLE_NAMES[currentTurn],
+        jpFleet: currentJpFleet.map(s => ({ name: s.name, type: s.type, atk: s.atk, def: s.def, spd: s.spd, capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM, vp: s.vp })),
+        usFleet: currentUsFleet.map(s => ({ name: s.name, type: s.type, atk: s.atk, def: s.def, spd: s.spd, capG: s.capG, capM: s.capM, dmgG: s.dmgG, dmgM: s.dmgM, vp: s.vp }))
+    };
+    localStorage.setItem('campaignFleet', JSON.stringify(exportData));
+}
+
+// --- 戦闘開始 → hub.htmlへ遷移 ---
+function openBattle() {
+    exportJson();
+    saveCampaignState();
+    localStorage.setItem('campaignReady', 'true');
+    window.location.href = 'hub.html';
+}
+
+// --- 戦闘結果読み込み ---
+function loadBattleResult() {
+    const raw = localStorage.getItem('battleResultForCampaign');
+    if (!raw) { logMsg('戦闘結果データがありません。'); return; }
+    try {
+        const parsed = JSON.parse(raw);
+        let importData, endTurn;
+        if (Array.isArray(parsed)) {
+            importData = parsed;
+            endTurn = 10;
+        } else {
+            importData = parsed.ships || [];
+            endTurn = parsed.endTurn || 10;
+        }
+        applyBattleResultData(importData, endTurn);
+        localStorage.removeItem('battleResultForCampaign');
+    } catch(e) {
+        logMsg('戦闘結果の読み込みエラー: ' + e.message);
+    }
+}
+
+function applyBattleResultData(importData, endTurn) {
+    if (!Array.isArray(importData)) { logMsg('データ形式エラー'); return; }
+    endTurn = endTurn || 10;
+
+    logMsg(`\n--- ${BATTLE_NAMES[currentTurn]} 戦闘結果 ---`);
+
+    const jpScoreBefore = jpScore;
+    const usScoreBefore = usScore;
+
+    importData.forEach(data => {
+        let ship = currentJpFleet.find(s => s.name === data.name) || currentUsFleet.find(s => s.name === data.name);
+        if (ship) {
+            let addG = data.dmgG || 0;
+            let addM = data.dmgM || 0;
+            let isUs = currentUsFleet.includes(ship);
+            applyDamageToShip(ship, addG, addM, isUs);
+            if (data.status === 'sunk' && ship.status !== 'sunk') {
+                ship.status = 'sunk';
+                ship.rest = 99;
+                if (isUs) jpScore += (ship.capG + ship.capM) * ship.vp;
+                else usScore += (ship.capG + ship.capM) * ship.vp;
+                logMsg(`${ship.name} クリティカル轟沈！`);
+            }
+        }
+    });
+
+    // 航行不能の艦 → 自沈
+    importData.forEach(data => {
+        if (data.speed !== 0) return;
+        let ship = currentJpFleet.find(s => s.name === data.name) || currentUsFleet.find(s => s.name === data.name);
+        if (ship && ship.status !== 'sunk') {
+            let isUs = currentUsFleet.includes(ship);
+            logMsg(`${ship.name} 航行不能 → 自沈処理`);
+            applyDamageToShip(ship, 999, 0, isUs);
+        }
+    });
+
+    // --- 日本軍ボーナス得点 ---
+    let jpBonus = 0;
+    let jpBonusMission = '';
+    const usAllGone = currentUsFleet.every(s => s.status === 'sunk' || (importData.find(d => d.name === s.name && d.col < 0)));
+    if (usAllGone && endTurn < 10) {
+        logMsg('\n--- 日本軍ボーナス得点 ---');
+        logMsg(`米軍全艦が第${endTurn}ターンまでに離脱/撃沈`);
+
+        const mission = jpMission || (currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport');
+        jpBonusMission = mission;
+        logMsg(`任務: ${mission === 'bombard' ? '艦砲射撃' : '輸送'}`);
+
+        const BOMBARD_BONUS = {
+            '大和':[60,30],'長門':[28,14],'陸奥':[28,14],
+            '金剛':[20,10],'榛名':[20,10],'比叡':[20,10],'霧島':[20,10],
+            '伊勢':[24,12],'日向':[24,12],
+            '扶桑':[24,12],'山城':[24,12],
+            '高雄':[8,4],'愛宕':[8,4],'摩耶':[8,4],'鳥海':[8,4],
+            '妙高':[8,4],'羽黒':[8,4],'熊野':[8,4],'鈴谷':[8,4],
+            '利根':[7,4],'筑摩':[7,4],
+            '古鷹':[6,3],'青葉':[6,3],'衣笠':[6,3]
+        };
+        const TRANSPORT_BONUS = [2, 1];
+
+        currentJpFleet.forEach(ship => {
+            if (ship.status === 'sunk') return;
+            const jpData = importData.find(d => d.name === ship.name);
+            if (jpData && jpData.col < 0) return;
+            if (ship.status !== 'ok' && ship.status !== 'light') {
+                logMsg(`  ${ship.name}: ${statusLabel(ship.status)} → ボーナス対象外`);
+                return;
+            }
+            let bonus = 0;
+            if (mission === 'bombard' && BOMBARD_BONUS[ship.name]) {
+                bonus = ship.status === 'ok' ? BOMBARD_BONUS[ship.name][0] : BOMBARD_BONUS[ship.name][1];
+            } else if (mission === 'transport' && ship.type === 'DD') {
+                bonus = ship.status === 'ok' ? TRANSPORT_BONUS[0] : TRANSPORT_BONUS[1];
+            }
+            if (bonus > 0) {
+                jpBonus += bonus;
+                logMsg(`  ${ship.name}: +${bonus}点`);
+            }
+        });
+
+        if (jpBonus > 0) {
+            jpScore += jpBonus;
+            logMsg(`日本軍ボーナス合計: +${jpBonus}点`);
+        } else {
+            logMsg('ボーナス対象艦なし');
+        }
+    }
+
+    // 戦闘記録を保存
+    battleHistory.push({
+        turn: currentTurn,
+        battleName: BATTLE_NAMES[currentTurn],
+        jpShips: currentJpFleet.map(s => ({name:s.name, type:s.type, status:s.status, dmgG:s.dmgG, dmgM:s.dmgM, capG:s.capG, capM:s.capM, vp:s.vp})),
+        usShips: currentUsFleet.map(s => ({name:s.name, type:s.type, status:s.status, dmgG:s.dmgG, dmgM:s.dmgM, capG:s.capG, capM:s.capM, vp:s.vp})),
+        jpSunk: currentJpFleet.filter(s => s.status === 'sunk').map(s => s.name),
+        usSunk: currentUsFleet.filter(s => s.status === 'sunk').map(s => s.name),
+        jpDamaged: currentJpFleet.filter(s => s.status !== 'ok' && s.status !== 'sunk').map(s => `${s.name}(${statusLabel(s.status)})`),
+        usDamaged: currentUsFleet.filter(s => s.status !== 'ok' && s.status !== 'sunk').map(s => `${s.name}(${statusLabel(s.status)})`),
+        jpScoreGain: jpScore - jpScoreBefore,
+        usScoreGain: usScore - usScoreBefore,
+        jpHandicap: lastJpHandicap,
+        usHandicap: lastUsHandicap,
+        jpBonus: jpBonus,
+        jpBonusMission: jpBonusMission,
+    });
+
+    updateScoreUI();
+    document.getElementById('scoreArea').style.display = '';
+    renderBattleHistory();
+
+    currentPhase = 'next';
+    document.getElementById('btnCombat').disabled = true;
+    document.getElementById('btnNext').disabled = true;
+    saveCampaignState();
+
+    showBattleSummary(battleHistory[battleHistory.length - 1]);
+}
+
+function statusLabel(s) {
+    if (s === 'light') return '小破';
+    if (s === 'medium') return '中破';
+    if (s === 'heavy') return '大破';
+    if (s === 'sunk') return '沈没';
+    return '無傷';
+}
+
+// --- VP計算 ---
+function calcVPDetail(fleet) {
+    const items = [];
+    let total = 0;
+    for (const s of fleet) {
+        let vp = 0, reason = '';
+        if (s.status === 'sunk') {
+            vp = (s.capG + s.capM) * s.vp;
+            reason = '撃沈';
+        } else {
+            const dmg = (s.dmgG||0) + (s.dmgM||0);
+            if (dmg > 0) { vp = dmg * s.vp; reason = statusLabel(s.status); }
+        }
+        if (vp > 0) { items.push({name:s.name, type:s.type, vp, reason, sunk:s.status==='sunk'}); total += vp; }
+    }
+    return {items, total};
+}
+function statusClassRp(s) {
+    return {ok:'rp-ok',light:'rp-light',medium:'rp-medium',heavy:'rp-heavy',sunk:'rp-sunk'}[s]||'rp-ok';
+}
+
+// --- 戦闘記録表示 ---
+function renderBattleHistory() {
+    const panel = document.getElementById('battleHistoryPanel');
+    if (battleHistory.length === 0) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+
+    let html = '<div class="battle-reports-grid">';
+
+    battleHistory.forEach(b => {
+        const jp = b.jpShips || [];
+        const us = b.usShips || [];
+        const usVP = calcVPDetail(jp); // 日本艦への損害 = 米軍得点
+        const jpVP = calcVPDetail(us); // 米艦への損害 = 日本軍得点
+        const jpBonus = b.jpBonus || 0;
+        const jpEarned = jpVP.total + jpBonus;
+        const usEarned = usVP.total;
+
+        html += `<div class="report-col">`;
+        html += `<h3>${b.battleName}</h3>`;
+
+        // 米軍戦果（プレイヤー側を先に表示）
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-us">米軍（あなた）戦果</h4>`;
+        if (usVP.items.length > 0) {
+            for (const it of usVP.items) {
+                const sunkCls = it.sunk ? ' rp-vp-sunk' : '';
+                const mark = it.sunk ? '💥' : '💢';
+                html += `<div class="rp-vp-row"><span>${mark} ${it.name} (${it.type}) ${it.reason}</span><span class="rp-vp-val${sunkCls}">+${it.vp}</span></div>`;
+            }
+        } else {
+            html += `<div style="color:#889;font-size:0.85em">戦闘損害なし</div>`;
+        }
+        html += `<div class="rp-total rp-total-us"><span>米軍 合計</span><span>${usEarned} pt</span></div>`;
+        html += `</div>`;
+
+        // 日本軍戦果
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-jp">日本軍 戦果</h4>`;
+        if (jpVP.items.length > 0) {
+            for (const it of jpVP.items) {
+                const sunkCls = it.sunk ? ' rp-vp-sunk' : '';
+                const mark = it.sunk ? '💥' : '💢';
+                html += `<div class="rp-vp-row"><span>${mark} ${it.name} (${it.type}) ${it.reason}</span><span class="rp-vp-val${sunkCls}">+${it.vp}</span></div>`;
+            }
+        } else {
+            html += `<div style="color:#889;font-size:0.85em">戦闘損害なし</div>`;
+        }
+        if (jpBonus > 0) {
+            const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
+            html += `<div style="margin-top:3px;padding:3px;background:#fffff0;border:1px solid #cc8;border-radius:2px;font-size:0.85em">🏆 ${mLabel}ボーナス <strong>+${jpBonus}</strong></div>`;
+        }
+        html += `<div class="rp-total rp-total-jp"><span>日本軍 合計</span><span>${jpEarned} pt</span></div>`;
+        html += `</div>`;
+
+        // 勝敗判定
+        let winLabel, winClass;
+        if (usEarned > jpEarned) { winLabel = '米軍の勝利！'; winClass = 'us-win'; }
+        else if (usEarned < jpEarned) { winLabel = '日本軍の勝利…'; winClass = 'jp-win'; }
+        else { winLabel = '引き分け'; winClass = 'draw'; }
+        const diff = Math.abs(jpEarned - usEarned);
+        html += `<div class="rp-winner"><span class="${winClass}">${winLabel}</span><div style="font-size:0.8em;color:#666;font-weight:normal">${usEarned} 対 ${jpEarned}（差: ${diff}pt）</div></div>`;
+
+        // 米軍艦隊テーブル（プレイヤー側を先に）
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-us">米軍艦隊</h4>`;
+        html += `<table class="rp-ship-tbl"><tr><th>艦名</th><th>種</th><th>G</th><th>M</th><th>状態</th></tr>`;
+        for (const s of us) {
+            const sc = statusClassRp(s.status);
+            html += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.dmgG||0}/${s.capG}</td><td>${s.dmgM||0}/${s.capM}</td><td class="${sc}">${statusLabel(s.status)}</td></tr>`;
+        }
+        html += `</table>`;
+        const usSunk = us.filter(s=>s.status==='sunk');
+        if (usSunk.length) html += `<div style="color:#2255cc;font-size:0.8em;margin-top:3px">沈没: ${usSunk.map(s=>s.name).join(', ')}</div>`;
+        html += `</div>`;
+
+        // 日本軍艦隊テーブル
+        html += `<div class="rp-section">`;
+        html += `<h4 class="rp-jp">日本軍艦隊</h4>`;
+        html += `<table class="rp-ship-tbl"><tr><th>艦名</th><th>種</th><th>G</th><th>M</th><th>状態</th></tr>`;
+        for (const s of jp) {
+            const sc = statusClassRp(s.status);
+            html += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.dmgG||0}/${s.capG}</td><td>${s.dmgM||0}/${s.capM}</td><td class="${sc}">${statusLabel(s.status)}</td></tr>`;
+        }
+        html += `</table>`;
+        const jpSunk = jp.filter(s=>s.status==='sunk');
+        if (jpSunk.length) html += `<div style="color:#cc2200;font-size:0.8em;margin-top:3px">沈没: ${jpSunk.map(s=>s.name).join(', ')}</div>`;
+        html += `</div>`;
+
+        html += `</div>`; // report-col
+    });
+
+    html += '</div>';
+    document.getElementById('battleHistoryContent').innerHTML = html;
+}
+
+// --- ダメージ・スコア処理 ---
+function applyDamageToShip(ship, addG, addM, isUs) {
+    if (ship.status === 'sunk') return;
+
+    ship.dmgG += addG;
+    ship.dmgM += addM;
+
+    if (ship.dmgG > ship.capG) {
+        ship.dmgM += (ship.dmgG - ship.capG);
+        ship.dmgG = ship.capG;
+    }
+
+    let totalCap = ship.capG + ship.capM;
+    let totalDmg = ship.dmgG + ship.dmgM;
+    let ratio = totalDmg / totalCap;
+
+    if (ship.dmgM >= ship.capM || (addG === 999)) {
+        ship.status = 'sunk';
+        ship.rest = 99;
+        if(isUs) jpScore += ship.capG * ship.vp + ship.capM * ship.vp;
+        else usScore += ship.capG * ship.vp + ship.capM * ship.vp;
+        logMsg(`${ship.name} 轟沈！`);
+    } else if (ratio >= 0.5) {
+        ship.status = 'heavy';
+        ship.rest = 99;
+    } else if (ratio >= 0.25) {
+        ship.status = 'medium';
+        ship.rest = 2;
+    } else if (totalDmg > 0) {
+        ship.status = 'light';
+        ship.rest = 1;
+    }
+
+    if (ship.status !== 'sunk' && (addG > 0 || addM > 0)) {
+         if(isUs) jpScore += (addG + addM) * ship.vp;
+         else usScore += (addG + addM) * ship.vp;
+    }
+}
+
+// --- 海戦結果サマリー表示 ---
+function showBattleSummary(b) {
+    const jpGain = b.jpScoreGain || 0;
+    const usGain = b.usScoreGain || 0;
+    const diff = usGain - jpGain; // PF版: 米軍視点
+
+    let verdict, verdictColor;
+    if (diff >= 80) { verdict = '米軍 大勝利！'; verdictColor = '#4488ff'; }
+    else if (diff >= 40) { verdict = '米軍 勝利！'; verdictColor = '#4488ff'; }
+    else if (diff >= 10) { verdict = '米軍 辛勝'; verdictColor = '#88aaff'; }
+    else if (diff > -10) { verdict = '引き分け'; verdictColor = '#ffd700'; }
+    else if (diff > -40) { verdict = '日本軍 辛勝'; verdictColor = '#ff8866'; }
+    else if (diff > -80) { verdict = '日本軍 勝利！'; verdictColor = '#ff4444'; }
+    else { verdict = '日本軍 大勝利！'; verdictColor = '#ff2200'; }
+
+    document.getElementById('summaryTitle').textContent = b.battleName;
+    document.getElementById('summaryWinner').textContent = verdict;
+    document.getElementById('summaryWinner').style.color = verdictColor;
+    document.getElementById('summaryUsScore').textContent = usGain;
+    document.getElementById('summaryJpScore').textContent = jpGain;
+
+    const dmgUs = usGain - (b.usHandicap||0);
+    const dmgJp = jpGain - (b.jpHandicap||0) - (b.jpBonus||0);
+
+    let html = '<div style="background:#2a3a4a; border-radius:8px; padding:14px; margin-bottom:12px;">';
+    html += '<h3 style="color:#ccc; margin:0 0 10px 0;">得点内訳</h3>';
+    html += '<table style="width:100%; border-collapse:collapse; font-size:1em;">';
+    html += `<tr><td style="color:#aaa; padding:5px 8px;">損害得点</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">米軍 +${dmgUs}</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">日本軍 +${dmgJp}</td></tr>`;
+
+    if ((b.jpHandicap||0) > 0 || (b.usHandicap||0) > 0) {
+        html += `<tr><td style="color:#aaa; padding:5px 8px;">ハンディキャップ</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">${(b.usHandicap||0) > 0 ? '+'+b.usHandicap : '-'}</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">${(b.jpHandicap||0) > 0 ? '+'+b.jpHandicap : '-'}</td></tr>`;
+    }
+
+    if ((b.jpBonus||0) > 0) {
+        const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
+        html += `<tr><td style="color:#aaa; padding:5px 8px;">日本軍ボーナス(${mLabel}成功)</td><td style="padding:5px 8px; text-align:right; color:#666;">-</td><td style="color:#ffcc00; padding:5px 8px; text-align:right;">+${b.jpBonus}</td></tr>`;
+    }
+
+    html += `<tr style="border-top:2px solid #555;"><td style="color:#ddd; padding:6px 8px; font-weight:bold; font-size:1.1em;">合計</td><td style="color:#4488ff; padding:6px 8px; text-align:right; font-weight:bold; font-size:1.1em;">+${usGain}</td><td style="color:#ff4444; padding:6px 8px; text-align:right; font-weight:bold; font-size:1.1em;">+${jpGain}</td></tr>`;
+    html += '</table>';
+
+    if (b.usSunk.length > 0 || b.jpSunk.length > 0) {
+        html += '<div style="margin-top:10px; border-top:1px solid #444; padding-top:8px;">';
+        if (b.usSunk.length > 0) html += `<div style="color:#6688ff; margin-bottom:3px;">米軍沈没: ${b.usSunk.join(', ')}</div>`;
+        if (b.jpSunk.length > 0) html += `<div style="color:#ff6666;">日本軍沈没: ${b.jpSunk.join(', ')}</div>`;
+        html += '</div>';
+    }
+
+    if (b.usDamaged.length > 0 || b.jpDamaged.length > 0) {
+        html += '<div style="margin-top:6px; font-size:0.9em;">';
+        if (b.usDamaged.length > 0) html += `<div style="color:#88aacc;">米軍損傷: ${b.usDamaged.join(', ')}</div>`;
+        if (b.jpDamaged.length > 0) html += `<div style="color:#ff9966;">日本軍損傷: ${b.jpDamaged.join(', ')}</div>`;
+        html += '</div>';
+    }
+
+    html += '</div>';
+
+    // 累計スコア
+    html += '<div style="background:#2a3a4a; border-radius:8px; padding:14px;">';
+    html += `<h3 style="color:#ccc; margin:0 0 5px 0;">累計スコア (${currentTurn}/4海戦)</h3>`;
+    html += `<div style="display:flex; justify-content:center; gap:40px;">`;
+    html += `<span style="color:#4488ff; font-size:1.3em; font-weight:bold;">米軍 ${usScore}</span>`;
+    html += `<span style="color:#888; font-size:1.3em;">vs</span>`;
+    html += `<span style="color:#ff4444; font-size:1.3em; font-weight:bold;">日本軍 ${jpScore}</span>`;
+    html += `</div></div>`;
+
+    document.getElementById('summaryBattles').innerHTML = html;
+    document.getElementById('summarySunkList').innerHTML = '';
+
+    const btnText = currentTurn >= 4 ? '最終結果へ' : '次の海戦へ';
+    document.getElementById('summaryConfirmBtn').textContent = btnText;
+    document.getElementById('summaryOverlay').style.display = 'block';
+}
+
+let summaryIsFinal = false;
+
+function closeSummaryAndProceed() {
+    document.getElementById('summaryOverlay').style.display = 'none';
+    if (summaryIsFinal) {
+        summaryIsFinal = false;
+        return;
+    }
+    if (currentTurn >= 4) {
+        logMsg(`\n=== キャンペーン終了！ ===`);
+        logMsg(`最終スコア - 米軍: ${usScore} / 日本軍: ${jpScore}`);
+        let winner = usScore > jpScore ? "アメリカ軍" : (jpScore > usScore ? "日本軍" : "引き分け");
+        logMsg(`勝者: ${winner}`);
+        document.getElementById('btnNext').disabled = true;
+        document.getElementById('btnSortie').disabled = true;
+        saveCampaignState();
+        showCampaignSummary();
+    } else {
+        document.getElementById('btnNext').disabled = false;
+        logMsg(`戦闘結果反映完了。次の海戦へ進んでください。`);
+    }
+}
+
+// --- キャンペーン終了サマリー ---
+function showCampaignSummary() {
+    summaryIsFinal = true;
+    document.getElementById('summaryTitle').textContent = '＝ キャンペーン終了 ＝';
+    let winner = usScore > jpScore ? 'アメリカ軍の勝利！' : (jpScore > usScore ? '日本軍の勝利！' : '引き分け！');
+    let winColor = usScore > jpScore ? '#4488ff' : (jpScore > usScore ? '#ff4444' : '#ffd700');
+    document.getElementById('summaryWinner').textContent = winner;
+    document.getElementById('summaryWinner').style.color = winColor;
+    document.getElementById('summaryUsScore').textContent = usScore;
+    document.getElementById('summaryJpScore').textContent = jpScore;
+
+    let battlesHtml = '';
+    battleHistory.forEach(b => {
+        battlesHtml += `<div style="background:#2a3a4a; border-radius:8px; padding:14px; margin-bottom:12px; border-left:4px solid #ffd700;">`;
+        battlesHtml += `<h3 style="color:#ffd700; margin:0 0 8px 0;">${b.battleName}</h3>`;
+        battlesHtml += `<table style="width:100%; border-collapse:collapse; font-size:0.9em;">`;
+
+        const dmgUs = b.usScoreGain - (b.usHandicap||0);
+        const dmgJp = b.jpScoreGain - (b.jpHandicap||0) - (b.jpBonus||0);
+        battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">損害得点</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">米軍 +${dmgUs}</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">日本軍 +${dmgJp}</td></tr>`;
+
+        if ((b.jpHandicap||0) > 0 || (b.usHandicap||0) > 0) {
+            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">ハンディキャップ</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">${(b.usHandicap||0) > 0 ? '+'+b.usHandicap : '-'}</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">${(b.jpHandicap||0) > 0 ? '+'+b.jpHandicap : '-'}</td></tr>`;
+        }
+
+        if ((b.jpBonus||0) > 0) {
+            const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
+            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">日本軍ボーナス(${mLabel})</td><td style="padding:3px 8px; text-align:right; color:#666;">-</td><td style="color:#ffcc00; padding:3px 8px; text-align:right;">+${b.jpBonus}</td></tr>`;
+        }
+
+        battlesHtml += `<tr style="border-top:1px solid #555;"><td style="color:#ddd; padding:3px 8px; font-weight:bold;">小計</td><td style="color:#4488ff; padding:3px 8px; text-align:right; font-weight:bold;">+${b.usScoreGain}</td><td style="color:#ff4444; padding:3px 8px; text-align:right; font-weight:bold;">+${b.jpScoreGain}</td></tr>`;
+
+        if (b.usSunk.length > 0) battlesHtml += `<tr><td colspan="3" style="color:#6688ff; padding:3px 8px; font-size:0.85em;">米軍沈没: ${b.usSunk.join(', ')}</td></tr>`;
+        if (b.jpSunk.length > 0) battlesHtml += `<tr><td colspan="3" style="color:#ff6666; padding:3px 8px; font-size:0.85em;">日本軍沈没: ${b.jpSunk.join(', ')}</td></tr>`;
+
+        battlesHtml += `</table></div>`;
+    });
+    document.getElementById('summaryBattles').innerHTML = battlesHtml;
+
+    const allUsSunk = usAllShips.filter(s => s.status === 'sunk').map(s => s.name);
+    const allJpSunk = jpAllShips.filter(s => s.status === 'sunk').map(s => s.name);
+    let sunkHtml = '<div style="background:#2a3a4a; border-radius:8px; padding:14px;">';
+    sunkHtml += '<h3 style="color:#ccc; margin:0 0 8px 0;">全沈没艦</h3>';
+    sunkHtml += `<div style="color:#6688ff; margin-bottom:4px;">米軍: ${allUsSunk.length > 0 ? allUsSunk.join(', ') : 'なし'}</div>`;
+    sunkHtml += `<div style="color:#ff6666;">日本軍: ${allJpSunk.length > 0 ? allJpSunk.join(', ') : 'なし'}</div>`;
+    sunkHtml += '</div>';
+    document.getElementById('summarySunkList').innerHTML = sunkHtml;
+
+    document.getElementById('summaryConfirmBtn').textContent = '確認';
+    document.getElementById('summaryOverlay').style.display = 'block';
+}
+
+// --- 次のターンへ ---
+function phaseNextTurn() {
+    if (currentTurn >= 4) {
+        logMsg(`\n=== キャンペーン終了！ ===`);
+        logMsg(`最終スコア - 米軍: ${usScore} / 日本軍: ${jpScore}`);
+        let winner = usScore > jpScore ? "アメリカ軍" : (jpScore > usScore ? "日本軍" : "引き分け");
+        logMsg(`勝者: ${winner}`);
+        document.getElementById('btnNext').disabled = true;
+        document.getElementById('btnSortie').disabled = true;
+        renderBattleHistory();
+        saveCampaignState();
+        return;
+    }
+
+    // ドックでの修理（米軍艦の修理）
+    usAllShips.forEach(s => {
+        if (s.status !== 'sunk' && s.status !== 'heavy' && (s.dmgG > 0 || s.dmgM > 0)) {
+            // 小破・中破の修理
+            const totalCap = s.capG + s.capM;
+            const totalDmg = s.dmgG + s.dmgM;
+            const ratio = totalDmg / totalCap;
+            if (ratio < 0.25) {
+                // 小破: 1ターンで修理完了
+                s.dmgG = 0; s.dmgM = 0; s.status = 'ok'; s.used = false;
+                logMsg(`${s.name} の修理完了、戦線復帰。`);
+            } else if (ratio < 0.5) {
+                // 中破: ダメージ半減
+                s.dmgG = Math.floor(s.dmgG / 2);
+                s.dmgM = Math.floor(s.dmgM / 2);
+                if (s.dmgG + s.dmgM === 0) { s.status = 'ok'; }
+                else { s.status = 'light'; }
+                s.used = false;
+                logMsg(`${s.name} の修理進行中（中破→${statusLabel(s.status)}）`);
+            }
+        } else if (s.status !== 'sunk' && s.status === 'ok') {
+            s.used = false;
+        }
+    });
+
+    // 日本軍ドック修理
+    jpAllShips.forEach(s => {
+        if (s.rest > 0 && s.status !== 'sunk' && s.status !== 'heavy') {
+            s.rest--;
+            if (s.rest === 0) {
+                s.dmgG = 0;
+                s.dmgM = 0;
+                s.status = 'ok';
+                logMsg(`${s.name} の修理完了、戦線復帰。`);
+            }
+        }
+    });
+
+    currentTurn++;
+    updateTurnDisplay();
+
+    currentJpFleet = [];
+    currentUsFleet = [];
+    selectedUsShips.clear();
+    scoutResults = [];
+
+    // パネルを隠す
+    document.getElementById('scoutPanel').style.display = 'none';
+    document.getElementById('fleetSelectPanel').style.display = 'none';
+    document.getElementById('fleetPanel').style.display = 'none';
+
+    currentPhase = 'sortie';
+    document.getElementById('btnSortie').disabled = false;
+    document.getElementById('btnNext').disabled = true;
+    saveCampaignState();
+
+    logMsg(`\n--- ${BATTLE_NAMES[currentTurn]} へ移行 ---`);
+}
+
+// --- ページ読み込み ---
+window.addEventListener('load', () => {
+    loadCampaignState();
+    updateTurnDisplay();
+
+    const raw = localStorage.getItem('battleResultForCampaign');
+    if (raw) {
+        logMsg('--- 海戦結果を自動読み込み ---');
+        document.getElementById('fleetPanel').style.display = 'block';
+        renderFleetTables();
+        loadBattleResult();
+    }
+});
+
+</script>
+</body>
+</html>
