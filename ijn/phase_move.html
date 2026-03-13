@@ -7,12 +7,20 @@ body { background:#f5f5fa; color:#222; font-family:monospace; padding:12px; font
 h3 { color:#1a5a8a; margin-bottom:10px; font-size:1.15em; }
 #info { background:#e8f0e8; border:1px solid #8a8; padding:8px; margin:8px 0; min-height:52px; line-height:1.6; border-radius:3px; }
 #moveBar { color:#8a6a00; font-size:1.05em; font-weight:bold; margin:5px 0; min-height:20px; }
-#shipList { margin:8px 0; max-height:200px; overflow-y:auto; }
-.ship { padding:3px 6px; cursor:pointer; border-radius:2px; font-size:1em; }
-.ship.active { background:#d0f0d0; color:#1a6a1a; font-weight:bold; }
-.ship.done { color:#999; }
-.ship.jp { color:#cc3311; }
-.ship.us { color:#2255cc; }
+#shipList { margin:8px 0; }
+.ship-cards { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:8px; }
+.card {
+  background:#e0e8f4; border:2px solid #99b; padding:5px 10px;
+  border-radius:4px; cursor:pointer; font-size:0.95em; transition: all 0.15s;
+}
+.card:hover { background:#c8d8f0; border-color:#77a; }
+.card.selected { border-color:#2a8a2a; background:#d0f0d0; font-weight:bold; }
+.card.done { opacity:0.4; cursor:default; }
+.card.disabled { opacity:0.3; cursor:default; pointer-events:none; }
+.card .c-name { font-weight:bold; }
+.card .c-info { color:#666; font-size:0.88em; }
+.card.jp .c-name { color:#cc3311; }
+.card.us .c-name { color:#2255cc; }
 button {
   background:#dde4f0; color:#334; border:1px solid #99a;
   padding:6px 10px; font-size:0.92em; cursor:pointer; border-radius:3px; margin:4px 3px 4px 0; font-weight:bold;
@@ -55,8 +63,9 @@ let usFleet = [];
 let moving = null;    // 現在操作中の艦
 let remainMove = 0;
 let turnedThisHex = false;
-let movedShips = new Set();  // 移動済み艦のインデックス
+let movedShips = new Set();  // 移動済み艦のインデックス（移動力消費完了）
 let undoStack = [];
+let shipStates = {};  // 艦名→{col, row, dir, remainMove, undoStack, turnedThisHex} 一時保存
 
 const COLS = 36;
 const JP_LINE_COL = 9;
@@ -540,7 +549,24 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
     }
     const next = hexNeighbor(lead.col, lead.row, lead.dir);
     if (!next) break;
-    if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+    if (next.row < 0) break;
+    // マップ端到達 → 退場
+    if (next.col < 0 || next.col >= COLS) {
+      lead.col = -1;
+      lead.status = 'exited';
+      lead.withdrawing = true;
+      console.log(`${lead.name} マップ端到達 → 退場`);
+      // 随伴艦も退場
+      const ci = lead.colIndex;
+      const followers = usFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0);
+      for (const f of followers) {
+        f.col = -1;
+        f.status = 'exited';
+        f.withdrawing = true;
+        console.log(`${f.name} (随伴) → 退場`);
+      }
+      break;
+    }
 
     if (occupied(next.col, next.row, lead)) {
       if (lead.cannotTurn) {
@@ -756,29 +782,38 @@ function getShipStatusText(s) {
 
 function renderList() {
   const el = document.getElementById('shipList');
-  let html = '<div class="phase-label">— 日本軍 —</div>';
+  let html = '<div class="phase-label">▼ 日本軍</div><div class="ship-cards">';
 
   jpFleet.forEach((s, i) => {
     const statusText = getShipStatusText(s);
-    const isDone = movedShips.has(i);
+    const isDone = movedShips.has(i) && moving !== s;
     const isActive = (moving === s);
-    const isMoveable = canShipMove(s) && !isDone;
+    const isMoveable = canShipMove(s);
 
-    let cls = 'ship jp';
-    if (isActive) cls += ' active';
-    else if (isDone || !isMoveable) cls += ' done';
+    let cls = 'card jp';
+    if (isActive) cls += ' selected';
+    else if (isDone) cls += ' done';
+    else if (!isMoveable) cls += ' disabled';
 
-    const onclick = (isMoveable || isActive) ? ` onclick="clickShip(${i})"` : '';
-    const style = (!isMoveable && !isActive) ? ' style="cursor:default"' : '';
+    const spd = getSpeed(s);
+    const spdInfo = isMoveable ? ` 速:${spd}` : '';
+    const label = isDone ? ' [済]' : (!isMoveable ? statusText : '');
 
-    html += `<div class="${cls}"${onclick}${style}>${s.name}(${s.type})${statusText}</div>`;
+    html += `<div class="${cls}" onclick="clickShip(${i})">
+      <span class="c-name">${s.name}${label}</span>
+      <span class="c-info">${s.type}${spdInfo}${statusText && isMoveable ? statusText : ''}</span>
+    </div>`;
   });
 
-  html += '<div class="phase-label" style="margin-top:6px">— 米軍 —</div>';
+  html += '</div><div class="phase-label" style="margin-top:4px">▼ 米軍</div><div class="ship-cards">';
   html += usFleet.map(s => {
     const statusText = getShipStatusText(s);
-    return `<div class="ship us">${s.name}(${s.type})${statusText}</div>`;
+    return `<div class="card us disabled">
+      <span class="c-name">${s.name}</span>
+      <span class="c-info">${s.type}${statusText}</span>
+    </div>`;
   }).join('');
+  html += '</div>';
 
   el.innerHTML = html;
 }
@@ -787,13 +822,42 @@ function clickShip(i) {
   if (!state.jpFreeMove) return;
   const s = jpFleet[i];
   if (!canShipMove(s)) return;
-  if (movedShips.has(i) && moving !== s) return;
   if (moving === s) return;  // 既に選択中
+
+  // 現在の艦を一時保存（確定せず）
   if (moving) {
-    // 現在の艦を確定してから次へ（softFinishMove済みならfinishMoveで確定）
-    finishMove();
+    shipStates[moving.name] = {
+      col: moving.col, row: moving.row, dir: moving.dir,
+      remainMove, undoStack: undoStack.slice(), turnedThisHex
+    };
+    // softFinishMoveで追加されていた分を戻す（切り替え中は未確定扱い）
+    const curIdx = jpFleet.indexOf(moving);
+    movedShips.delete(curIdx);
+    parent.postMessage({type:'ACTION_UNDO', shipIndex:curIdx}, '*');
+    moving = null;
   }
-  startMove(s);
+
+  // 保存状態があれば復元
+  if (shipStates[s.name]) {
+    const saved = shipStates[s.name];
+    s.col = saved.col;
+    s.row = saved.row;
+    s.dir = saved.dir;
+    remainMove = saved.remainMove;
+    undoStack = saved.undoStack;
+    turnedThisHex = saved.turnedThisHex;
+    delete shipStates[s.name];
+
+    moving = s;
+    document.getElementById('btnUndo').disabled = (undoStack.length === 0);
+    let restriction = s.cannotTurn ? '\n⚠ 回頭不能 — 直進(5)のみ' : '';
+    setInfo(`移動中: ${s.name} 向き:${DIR_NAMES[s.dir]||'?'}${restriction}\n147963=方向転換 5=直進`);
+    setMoveBar(`残り移動力: ${remainMove}`);
+    renderList();
+    pushState();
+  } else {
+    startMove(s);
+  }
 }
 
 function startMove(ship) {
@@ -1145,36 +1209,18 @@ function moveForward() {
   if (next.col < 0 || next.col >= COLS || next.row < 0) {
     setInfo('マップ外'); return;
   }
-  if (occupied(next.col, next.row, moving)) {
-    // 衝突ルール: 強制進入可能か判定
-    if (!canForceEntry(moving)) {
-      setInfo(`(${next.col},${next.row}) は塞がっています`); return;
-    }
-    // 強制進入 → 衝突チェック
-    var occupant = getOccupant(next.col, next.row, moving);
-    if (!occupant) { setInfo(`(${next.col},${next.row}) は塞がっています`); return; }
-
-    saveUndo();
-    moving.col = next.col;
-    moving.row = next.row;
-    turnedThisHex = false;
-    remainMove--;
-
-    var logLines = collisionCheck(moving, occupant);
-    pushState();
-
-    if (remainMove <= 0) {
-      softFinishMove();
-    }
-    return;
-  }
-
   saveUndo();
 
   moving.col = next.col;
   moving.row = next.row;
   turnedThisHex = false;
   remainMove--;
+
+  // 同一ヘクスに他の艦がいる場合 → 衝突チェック
+  var occupant = getOccupant(next.col, next.row, moving);
+  if (occupant) {
+    collisionCheck(moving, occupant);
+  }
 
   // 沈没船との衝突チェック（沈没中の船体に接触）
   var sunkOcc = getSunkShip(next.col, next.row, moving);
@@ -1244,15 +1290,14 @@ function finishMove() {
   checkAllMoved();
 }
 
-// 全艦の移動完了チェック
+// 全艦の移動完了チェック（自動donePhaseはしない — ユーザーがボタンで確定）
 function checkAllMoved() {
   const allDone = jpFleet.every((s, i) => {
     if (!canShipMove(s)) return true;  // 移動不可は自動完了扱い
     return movedShips.has(i);
   });
   if (allDone) {
-    setInfo('全艦の移動完了！');
-    setTimeout(() => donePhase(), 800);
+    setInfo('全艦の移動完了！ 「次フェーズへ」で確定');
   }
 }
 
@@ -1283,10 +1328,15 @@ window.addEventListener('message', function(e) {
 function donePhase() {
   // 未移動艦チェック（日本軍手動移動モード時のみ）
   if (state.jpFreeMove && isJPMoving()) {
+    // 現在操作中の艦を確定
     if (moving) {
       const idx = jpFleet.indexOf(moving);
       movedShips.add(idx);
       moving = null;
+    }
+    // 一時保存中の艦も確定（shipStatesに残っている分）
+    for (const name in shipStates) {
+      delete shipStates[name]; // 保存状態の位置は既に艦に適用済み
     }
     const unmoved = jpFleet.filter((s, i) => canShipMove(s) && !movedShips.has(i));
     if (unmoved.length > 0) {
@@ -1338,15 +1388,14 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Tab') {
     e.preventDefault();
     const curIdx = moving ? jpFleet.indexOf(moving) : -1;
-    if (moving) finishMove();  // 現在の艦を確定してから次へ
-    // 未移動の艦を順に選択（finishMove後に再計算）
+    // 次の未移動艦を探す
     const moveable = jpFleet
       .map((s, i) => ({ship: s, idx: i}))
-      .filter(x => canShipMove(x.ship) && !movedShips.has(x.idx));
+      .filter(x => canShipMove(x.ship) && x.ship !== moving && !movedShips.has(x.idx));
     if (moveable.length === 0) return;
     let next = moveable.find(x => x.idx > curIdx);
-    if (!next) next = moveable[0];  // 先頭に戻る
-    startMove(next.ship);
+    if (!next) next = moveable[0];
+    clickShip(next.idx);  // clickShipで自動的に現在の艦を保存→次へ
   }
 });
 
