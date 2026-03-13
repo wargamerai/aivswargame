@@ -798,15 +798,19 @@ function autoUSShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of us) {
-    // 目標選択: 広く浅く — 損傷大ほど後回し（ただし大和/長門/陸奥は追い回す）
-    const HIGH_VALUE = ['大和', '長門', '陸奥']; // 複数回出撃する艦→ダメージ蓄積狙い
+    // 目標選択: 広く浅く — 損傷大ほど後回し
+    // 米BBだけは大和/長門/陸奥をしつこく狙う（ダメージ蓄積で次回出撃を潰す）
+    // DD/CL/CAで大型艦を撃っても装甲で弾かれるので小型艦を狙う
+    const HIGH_VALUE = ['大和', '長門', '陸奥'];
+    const isBBFirer = (firer.type === 'BB');
     let bestTarget = null, bestScore = 999;
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getMaxRange(t, firer)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      // 高価値艦は損傷ペナルティなし（しつこく狙う）
-      const dmgPenalty = HIGH_VALUE.includes(t.name) ? 0 : dmgRate * 30;
+      // BBが撃つ場合のみ高価値艦の損傷ペナルティ免除
+      const isHV = isBBFirer && HIGH_VALUE.includes(t.name);
+      const dmgPenalty = isHV ? 0 : dmgRate * 30;
       const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
