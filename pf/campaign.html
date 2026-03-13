@@ -744,11 +744,14 @@ function confirmFleet() {
 function renderFleetTables() {
     const tbodyJp = document.querySelector('#jpTable tbody');
     tbodyJp.innerHTML = '';
-    currentJpFleet.forEach(s => {
-        let typeStr = s.type === 'OBB' ? 'BB(旧式)' : s.type;
-        const speed = s.spd || 4;
-        const torpedo = TORPEDOES[s.type] || '-';
-        tbodyJp.innerHTML += `<tr><td>${s.name}</td><td>${typeStr}</td><td>${speed}</td><td>${s.capG}</td><td>${s.capM}</td><td>${torpedo}</td></tr>`;
+    // PF: 日本軍の詳細は隠す（索敵結果に対応した情報のみ）
+    currentJpFleet.forEach((s, i) => {
+        const sr = scoutResults.find(r => r.name === s.name);
+        if (sr && sr.threat > 0) {
+            tbodyJp.innerHTML += `<tr><td style="color:#999">${sr.seen}</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`;
+        } else {
+            tbodyJp.innerHTML += `<tr><td style="color:#666">???</td><td>-</td><td>-</td><td>-</td><td>-</td><td>-</td></tr>`;
+        }
     });
 
     const tbodyUs = document.querySelector('#usTable tbody');
