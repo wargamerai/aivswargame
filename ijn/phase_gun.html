@@ -658,16 +658,21 @@ function doShoot() {
     dmgDice = `${d3}+${d4}=${d3+d4}${isDouble2?' [ゾロ目!]':''}`;
     log(`  損害ダイス: ${dmgDice} → <span class="dmg">${dmgStr}</span>`);
 
-    // クリティカル（ダメージ0なら発生しない）
-    if ((isDouble1 || isDouble2) && (dmgG > 0 || dmgM > 0)) {
-      const cd = roll()+roll();
-      const crit = applyCritical(target, cd);
-      critText = crit.text;
-      dmgG += crit.extraG;
-      dmgM += crit.extraM;
-      log(`  <span class="crit">クリティカル! ${critText}</span>`);
-      if (crit.sunk) log(`  <span class="dmg">${target.name} 轟沈！</span>`);
-      if (crit.extraG > 0 || crit.extraM > 0) log(`  クリティカル追加損害: G${crit.extraG} M${crit.extraM}`);
+    // クリティカル（ダメージ0なら発生しない、両方ゾロ目なら2回判定）
+    const critCount = (isDouble1 && isDouble2) ? 2 : (isDouble1 || isDouble2) ? 1 : 0;
+    if (critCount > 0 && (dmgG > 0 || dmgM > 0)) {
+      const critTexts = [];
+      for (let ci = 0; ci < critCount; ci++) {
+        const cd = roll()+roll();
+        const crit = applyCritical(target, cd);
+        critTexts.push(crit.text);
+        dmgG += crit.extraG;
+        dmgM += crit.extraM;
+        log(`  <span class="crit">クリティカル${critCount>1?'('+(ci+1)+')':''}! ${crit.text}</span>`);
+        if (crit.sunk) log(`  <span class="dmg">${target.name} 轟沈！</span>`);
+        if (crit.extraG > 0 || crit.extraM > 0) log(`  クリティカル追加損害: G${crit.extraG} M${crit.extraM}`);
+      }
+      critText = critTexts.join(' / ');
     }
 
     // 蓄積損害
@@ -848,12 +853,17 @@ function autoUSShoot(title) {
       dmgText = dmgStr;
       dmgDice = `${d3}+${d4}=${d3+d4}${d3===d4?' [ゾロ目!]':''}`;
 
-      if ((d1===d2 || d3===d4) && (dmgG > 0 || dmgM > 0)) {
-        const cd = roll()+roll();
-        const crit = applyCritical(bestTarget, cd);
-        critText = crit.text;
-        dmgG += crit.extraG;
-        dmgM += crit.extraM;
+      const usCritCount = (d1===d2 && d3===d4) ? 2 : (d1===d2 || d3===d4) ? 1 : 0;
+      if (usCritCount > 0 && (dmgG > 0 || dmgM > 0)) {
+        const critTexts = [];
+        for (let ci = 0; ci < usCritCount; ci++) {
+          const cd = roll()+roll();
+          const crit = applyCritical(bestTarget, cd);
+          critTexts.push(crit.text);
+          dmgG += crit.extraG;
+          dmgM += crit.extraM;
+        }
+        critText = critTexts.join(' / ');
       }
     }
 
