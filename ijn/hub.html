@@ -937,6 +937,12 @@ function drawShip(ship) {
     ctx.fillStyle = '#ffcc99';
     const dmgLabel = state.fogMode ? fogOwnStatus(ship) : '';
     ctx.fillText(ship.name.substring(0,3) + dmgLabel, x, y + drawSz + 10);
+    // 魚雷マーク（保有かつ未発射かつ雷撃可能）
+    if (ship.torpedo && ship.torpedo !== '-' && !ship.torpedoFired && !ship.cannotTorpedo) {
+      ctx.font = 'bold 8px sans-serif';
+      ctx.fillStyle = '#66ffcc';
+      ctx.fillText('雷', x + drawSz + 6, y + drawSz + 10);
+    }
   } else {
     ctx.fillStyle = '#99aaff';
     ctx.fillText(usShipLabel(ship), x, y + drawSz + 10);
