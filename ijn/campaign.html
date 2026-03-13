@@ -267,8 +267,13 @@ function rollDice(sides = 6) { return Math.floor(Math.random() * sides) + 1; }
 function getShipByName(name, array) { return array.find(s => s.name === name); }
 
 function sortShips(fleet, isJp) {
+    // 艦種の優先順位（大きい順）
+    const TYPE_ORDER = { BB: 0, OBB: 1, CA: 2, CL: 3, DD: 4 };
     return fleet.sort((a, b) => {
-        // 火力(capG)降順 → 同火力なら装甲(capM)降順
+        // 艦種別（大きい順）→ 同艦種なら火力降順 → 装甲降順 → 名前順
+        const ta = TYPE_ORDER[a.type] ?? 9;
+        const tb = TYPE_ORDER[b.type] ?? 9;
+        if (ta !== tb) return ta - tb;
         if (a.capG !== b.capG) return b.capG - a.capG;
         if (a.capM !== b.capM) return b.capM - a.capM;
         if (isJp) {
