@@ -591,7 +591,8 @@ function doShoot() {
   const arcInfo = getArcInfo(firer, target);
 
   // ログ
-  log(`${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, ${arcInfo.arc})`);
+  const jpHitPct = calcHitChance(mod, dist);
+  log(`${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, ${arcInfo.arc}, 命中率${jpHitPct}%)`);
   log(`  ダイス: ${d1}+${d2}=${d1+d2}${mod!==0?` →${diceTotal}`:''}${isDouble1?' [ゾロ目!]':''}`);
   log(`  <span class="hit">命中数: ${hits}発</span>`);
 
@@ -682,6 +683,9 @@ function showResult(r) {
   if (r.details.length > 0) {
     html += `<div style="color:#aa8;font-size:0.8em;text-align:right">${r.details.join(' / ')}</div>`;
   }
+  const hitPct = calcHitChance(r.mod, r.dist);
+  const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
+  html += `<div class="r-row"><span class="r-label">命中率</span> <span class="r-value" style="color:${pctColor};font-size:1.1em;font-weight:bold">${hitPct}%</span></div>`;
   html += `<div class="r-dice">🎲 ${r.d1} + ${r.d2} = ${r.d1+r.d2} → ${r.d1+r.d2+r.mod}</div>`;
   html += `<div class="r-hits ${r.hits>0?'hit':'miss'}">${r.hits > 0 ? `命中 ${r.hits}発！` : '外れ！'}</div>`;
   if (r.hits > 0) {
@@ -868,7 +872,8 @@ function autoUSShoot(title) {
     }, '*');
 
     // ログ
-    log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc})`);
+    const usHitPct = calcHitChance(r.mod, r.dist);
+    log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${usHitPct}%)`);
     if (r.hits > 0) {
       log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
       log(`  損害: <span class="dmg">${r.dmgText}</span>`);
