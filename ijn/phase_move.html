@@ -501,7 +501,11 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
       }
     }
   } else {
+    // 米軍主力艦: 距離6〜7を維持してアウトレンジ砲撃
+    // 近すぎると日本の魚雷圏内、遠すぎると砲撃できない
+    const IDEAL_RANGE = 7;  // 理想交戦距離
     if (distToJP > sr + 3) {
+      // 索敵圏外 → 接近して射程に入る
       let goalCol = jpc.col, goalRow = jpc.row;
       for (let i = 0; i < sr + 2; i++) {
         const n = hexNeighbor(goalCol, goalRow, jpDir);
@@ -509,10 +513,15 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
         goalCol = n.col; goalRow = n.row;
       }
       targetDir = bestDirToward(lead.col, lead.row, goalCol, goalRow);
-    } else if (distToJP < 8) {
+    } else if (distToJP < IDEAL_RANGE - 1) {
+      // 近すぎ（魚雷圏内）→ 距離を取る
       targetDir = bestDirAway(lead.col, lead.row, jpc.col, jpc.row);
-    } else {
+    } else if (distToJP >= IDEAL_RANGE - 1 && distToJP <= IDEAL_RANGE + 2) {
+      // 理想距離帯 → 横方向に平行移動して維持
       targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row);
+    } else {
+      // やや遠い → じわじわ接近
+      targetDir = bestDirToward(lead.col, lead.row, jpc.col, jpc.row);
     }
   }
 
