@@ -341,7 +341,7 @@ function applyCritical(target, cd) {
       break;
   }
 
-  if (result.sunk) { target.status = 'sunk'; }
+  // 轟沈は損害確定フェーズで処理（射撃時は即時撃沈しない）
   return result;
 }
 function getDefense(s) { return s.def || 0; }
@@ -659,6 +659,7 @@ function doShoot() {
     log(`  損害ダイス: ${dmgDice} → <span class="dmg">${dmgStr}</span>`);
 
     // クリティカル（ダメージ0なら発生しない、両方ゾロ目なら2回判定）
+    let critSunk = false;
     const critCount = (isDouble1 && isDouble2) ? 2 : (isDouble1 || isDouble2) ? 1 : 0;
     if (critCount > 0 && (dmgG > 0 || dmgM > 0)) {
       const critTexts = [];
@@ -668,8 +669,8 @@ function doShoot() {
         critTexts.push(crit.text);
         dmgG += crit.extraG;
         dmgM += crit.extraM;
+        if (crit.sunk) critSunk = true;
         log(`  <span class="crit">クリティカル${critCount>1?'('+(ci+1)+')':''}! ${crit.text}</span>`);
-        if (crit.sunk) log(`  <span class="dmg">${target.name} 轟沈！</span>`);
         if (crit.extraG > 0 || crit.extraM > 0) log(`  クリティカル追加損害: G${crit.extraG} M${crit.extraM}`);
       }
       critText = critTexts.join(' / ');
@@ -677,11 +678,11 @@ function doShoot() {
 
     // 蓄積損害
     const totalG = dmgG, totalM = dmgM;
-    if (totalG > 0 || totalM > 0 || target.status === 'sunk') {
+    if (totalG > 0 || totalM > 0 || critSunk) {
       const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
-      pending.push({name: target.name, side:'jp', g:totalG, m:totalM, critText: critText, critSunk: target.status === 'sunk'});
+      pending.push({name: target.name, side:'jp', g:totalG, m:totalM, critText: critText, critSunk: critSunk});
       localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
-      log(`  → 損害蓄積: G${totalG} M${totalM}`);
+      log(`  → 損害蓄積: G${totalG} M${totalM}${critSunk ? ' [轟沈判定]' : ''}`);
     }
   } else {
     log('  → 外れ');
@@ -710,7 +711,7 @@ function doShoot() {
   showResult({
     firer, target, dist, mod, details,
     d1, d2, hits, dmgText, critText,
-    ratioLabel, dmgDice, arcInfo
+    ratioLabel, dmgDice, arcInfo, critSunk
   });
 }
 
@@ -737,8 +738,8 @@ function showResult(r) {
   }
   if (r.critText) {
     html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
-    if (r.target.status === 'sunk') {
-      html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 轟沈！</div>`;
+    if (r.critSunk) {
+      html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 轟沈判定！（損害確定で処理）</div>`;
     }
   }
   body.innerHTML = html;
@@ -833,6 +834,7 @@ function autoJPShoot(title) {
       dmgText = dmgStr;
       dmgDice = `${d3}+${d4}=${d3+d4}${d3===d4?' [ゾロ目!]':''}`;
 
+      var jpCritSunk = false;
       const jpCritCount = (d1===d2 && d3===d4) ? 2 : (d1===d2 || d3===d4) ? 1 : 0;
       if (jpCritCount > 0 && (dmgG > 0 || dmgM > 0)) {
         const critTexts = [];
@@ -842,6 +844,7 @@ function autoJPShoot(title) {
           critTexts.push(crit.text);
           dmgG += crit.extraG;
           dmgM += crit.extraM;
+          if (crit.sunk) jpCritSunk = true;
         }
         critText = critTexts.join(' / ');
       }
@@ -849,7 +852,7 @@ function autoJPShoot(title) {
 
     results.push({
       firer, target: bestTarget, dist: bestDist, mod, details,
-      d1, d2, hits, dmgText, dmgG, dmgM, critText, ratioLabel, dmgDice, arcInfo
+      d1, d2, hits, dmgText, dmgG, dmgM, critText, critSunk: jpCritSunk, ratioLabel, dmgDice, arcInfo
     });
   }
 
@@ -904,8 +907,8 @@ function autoJPShoot(title) {
       log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
       log(`  損害: <span class="dmg">${r.dmgText}</span>`);
       if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
-      if (r.dmgG > 0 || r.dmgM > 0 || r.target.status === 'sunk') {
-        pending.push({name: r.target.name, side:'us', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.target.status === 'sunk'});
+      if (r.dmgG > 0 || r.dmgM > 0 || r.critSunk) {
+        pending.push({name: r.target.name, side:'us', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.critSunk});
       }
     } else {
       log('  外れ');
