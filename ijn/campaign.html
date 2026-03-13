@@ -530,6 +530,13 @@ function phaseSortie() {
         bigPool.sort(() => Math.random() - 0.5);
         smallPool.sort(() => Math.random() - 0.5);
 
+        // 残り戦数で按分（今回含む）
+        const remainBattles = Math.max(1, 5 - currentTurn);
+        const caAvail = usAvailable.filter(s => s.type === 'CA').length;
+        const ddAvail = smallPool.length;
+        const caPerBattle = Math.ceil(caAvail / remainBattles);  // CA按分
+        const ddPerBattle = Math.ceil(ddAvail / remainBattles);  // DD按分
+
         const jpFeeCalc = currentJpFleet.reduce((sum, s) => sum + Math.ceil(s.vp / 2), 0);
         const jpBBCount = currentJpFleet.filter(s => s.type === 'BB' || s.type === 'OBB').length;
         const isLastBattle = (currentTurn >= 4);
@@ -557,15 +564,19 @@ function phaseSortie() {
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
             }
+            let caUsed2 = 0;
             for (const s of caPool2) {
-                if (usThreatSum >= targetThreat) break;
+                if (usThreatSum >= targetThreat || caUsed2 >= caPerBattle + 1) break;
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
+                caUsed2++;
             }
+            let ddUsed2 = 0;
             for (const s of smallPool) {
-                if (usThreatSum >= targetThreat) break;
+                if (usThreatSum >= targetThreat || ddUsed2 >= ddPerBattle) break;
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
+                ddUsed2++;
             }
         } else if (jpBBCount >= 1) {
             // 日本にBB1〜2隻 → 温存: 小型艦控えめに出す
@@ -591,20 +602,27 @@ function phaseSortie() {
                 currentUsFleet.push(bbPool[0]); bbPool[0].used = true;
                 usThreatSum += usThreatOf(bbPool[0]);
             }
+            let caUsed = 0;
             for (const s of caPool) {
-                if (usThreatSum >= targetThreat) break;
+                if (usThreatSum >= targetThreat || caUsed >= caPerBattle) break;
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
+                caUsed++;
             }
+            let ddUsed = 0;
             for (const s of smallPool) {
-                if (usThreatSum >= targetThreat) break;
+                if (usThreatSum >= targetThreat || ddUsed >= ddPerBattle) break;
                 currentUsFleet.push(s); s.used = true;
                 usThreatSum += usThreatOf(s);
+                ddUsed++;
             }
         }
 
         const remainAfter = usAvailable.length - currentUsFleet.length;
-        logMsg(`【強敵モード/${turnStyle}】米軍${currentUsFleet.length}隻 脅威値${usThreatSum} (日本軍見かけ${apparentThreat}) [残存${remainAfter}隻]`);
+        const usBB = currentUsFleet.filter(s => s.type === 'BB').length;
+        const usCA = currentUsFleet.filter(s => s.type === 'CA' || s.type === 'OBB').length;
+        const usDD = currentUsFleet.filter(s => s.type === 'DD' || s.type === 'CL' || s.type === 'CLAA').length;
+        logMsg(`【強敵モード/${turnStyle}】米軍${currentUsFleet.length}隻 (BB${usBB} CA${usCA} DD他${usDD}) 脅威値${usThreatSum} [残存${remainAfter}隻/残${remainBattles-1}戦]`);
     }
 
     currentUsFleet = sortShips(currentUsFleet, false);
