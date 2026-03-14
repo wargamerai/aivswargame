@@ -1355,10 +1355,11 @@ function onPhaseDone(next) {
     return;
   }
 
-  // 修理完了 → レポート画面を表示（プレイヤーが手動で次ターンへ進める）
+  // 修理完了 → 「次のターンへ」ボタンを表示（プレイヤーが手動で進める）
   if (next === 'turn_end' || curIdx >= PHASE_SEQ.length - 1) {
-    dbg('→ showTurnEndReport()');
-    setTimeout(() => showTurnEndReport(), 500);
+    dbg('→ showNextTurnPrompt()');
+    showPhaseFlash(`第${state.combatTurn}ターン終了`);
+    showNextTurnPrompt();
     return;
   }
 
@@ -1375,7 +1376,25 @@ function onPhaseDone(next) {
   draw();
 }
 
-// ターン末: レポート画面をiframeに表示
+// ターン末: 「次のターンへ」ボタンをiframe内に表示
+function showNextTurnPrompt() {
+  state.phase = 'turn_end';
+  saveState();
+  document.getElementById('frameTitle').textContent = `第${state.combatTurn}ターン終了`;
+  const iframe = document.getElementById('subframe');
+  iframe.srcdoc = `<!DOCTYPE html><html><head><style>
+    body{background:#f5f5fa;display:flex;align-items:center;justify-content:center;height:90vh;margin:0;font-family:monospace;}
+    .box{text-align:center;padding:30px;}
+    h2{color:#1a5a8a;margin-bottom:20px;}
+    button{background:#dde4f0;color:#334;border:1px solid #99a;padding:12px 32px;font-size:1.2em;cursor:pointer;border-radius:4px;font-weight:bold;}
+    button:hover{background:#c8d4ee;}
+    </style></head><body><div class="box">
+    <h2>第${state.combatTurn}ターン終了</h2>
+    <button onclick="parent.postMessage({type:'NEXT_TURN'},'*')">次のターンへ</button>
+    </div></body></html>`;
+}
+
+// 戦闘終了時: レポート画面をiframeに表示
 function showTurnEndReport() {
   state.phase = 'report';
   saveState();
