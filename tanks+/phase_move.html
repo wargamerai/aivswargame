@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<script src="scenarios.js"></script>
+<style>
+body { background:#f5f5fa; color:#222; font-family:monospace; padding:8px; font-size:1em; }
+h3 { color:#1a5a8a; margin-bottom:6px; font-size:1.1em; }
+
+.section-label { color:#555; font-size:0.9em; margin:8px 0 4px; font-weight:bold; }
+.unit-cards { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+.card {
+  background:#e0e8f4; border:2px solid #99b; padding:4px 8px;
+  border-radius:4px; cursor:pointer; font-size:0.9em; transition:all 0.15s;
+}
+.card:hover { background:#c8d8f0; }
+.card.selected { border-color:#cc3311; background:#ffe8e0; }
+.card.moved { opacity:0.4; cursor:default; }
+.card.disabled { opacity:0.3; pointer-events:none; }
+.card .c-name { font-weight:bold; }
+.card .c-info { color:#666; font-size:0.85em; }
+
+#moveInfo {
+  background:#e8f0e8; border:1px solid #8a8; padding:6px;
+  margin:6px 0; border-radius:3px; font-size:0.95em; line-height:1.5;
+  min-height:24px;
+}
+
+.controls { margin:8px 0; display:flex; flex-wrap:wrap; gap:4px; }
+button {
+  background:#dde4f0; color:#334; border:1px solid #99a;
+  padding:6px 12px; font-size:0.9em; cursor:pointer; border-radius:3px; font-weight:bold;
+}
+button:hover { background:#c8d4ee; }
+button:disabled { background:#e8e8e8; color:#999; cursor:default; }
+button.action { background:#2a7a2a; color:#fff; border-color:#1a5a1a; }
+button.action:hover { background:#3a9a3a; }
+button.danger { background:#cc3311; color:#fff; border-color:#aa2200; }
+
+#log {
+  background:#f0f0f0; border:1px solid #ccc; padding:6px;
+  height:120px; overflow-y:auto; font-size:0.85em; line-height:1.5; margin-top:8px; color:#333;
+}
+</style>
+</head>
+<body>
+<h3 id="phTitle">移動フェーズ</h3>
+
+<div class="section-label">▼ ユニットを選択</div>
+<div id="unitCards" class="unit-cards"></div>
+
+<div id="moveInfo">ユニットを選択してください</div>
+
+<div class="controls">
+  <button onclick="rotateLeft()" id="btnRotL">↺ 左回転</button>
+  <button onclick="moveForward()" id="btnFwd">▲ 前進</button>
+  <button onclick="moveBackward()" id="btnBack">▼ 後退</button>
+  <button onclick="rotateRight()" id="btnRotR">↻ 右回転</button>
+  <button onclick="undoMove()" id="btnUndo">戻す</button>
+  <button onclick="confirmUnit()" id="btnConfirm" class="action">確定</button>
+  <button onclick="donePhase()" class="danger">フェーズ終了</button>
+</div>
+
+<div id="log"></div>
+
+<script>
+let state = null;
+let phase = '';
+let activeSide = '';
+let selectedIdx = -1;
+let moveHistory = []; // { col, row, dir, mp } の配列（undo用）
+
+function log(text) {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div>${text}</div>`;
+  el.scrollTop = el.scrollHeight;
+  parent.postMessage({ type:'GAME_LOG', text:text }, '*');
+}
+
+function init() {
+  const params = new URLSearchParams(window.location.search);
+  phase = params.get('phase') || 'mv1';
+
+  const raw = localStorage.getItem('tanksState');
+  if (!raw) { log('状態なし'); return; }
+  state = JSON.parse(raw);
+
+  // 移動する側を決定
+  if (phase.endsWith('1')) {
+    activeSide = state.firstPlayer;
+  } else {
+    activeSide = state.firstPlayer === state.side1 ? state.side2 : state.side1;
+  }
+
+  const nc = NATION_COLORS[activeSide];
+  document.getElementById('phTitle').textContent =
+    `移動フェーズ — ${nc ? nc.label : activeSide}`;
+
+  // 移動力を初期化
+  for (const u of state.units) {
+    if (u.side !== activeSide) continue;
+    if (u.status === 'destroyed') continue;
+    const db = UNIT_DB[u.name];
+    if (!db) continue;
+    // 準備射撃した艦は移動不可
+    if (u.fired) { u.remainMove = 0; continue; }
+    // 移動不能
+    if (u.status === 'immobilized') { u.remainMove = 0; continue; }
+    // 対戦車砲は移動0（回転のみ）
+    u.remainMove = db.move;
+    u.moved = false;
+  }
+
+  log(`=== ${document.getElementById('phTitle').textContent} ===`);
+  renderCards();
+  updateMoveInfo();
+  updateButtons();
+}
+
+// ===== カード表示 =====
+function renderCards() {
+  const el = document.getElementById('unitCards');
+  el.innerHTML = '';
+  state.units.forEach((u, i) => {
+    if (u.side !== activeSide) return;
+    if (u.status === 'destroyed') return;
+    const db = UNIT_DB[u.name];
+    if (!db) return;
+
+    const card = document.createElement('div');
+    card.className = 'card' +
+      (i === selectedIdx ? ' selected' : '') +
+      (u.moved ? ' moved' : '') +
+      (u.fired || u.status === 'immobilized' ? ' disabled' : '');
+
+    const mp = u.remainMove !== undefined ? u.remainMove : db.move;
+    card.innerHTML = `<span class="c-name">${u.name}</span>
+      <span class="c-info"> MP:${mp} ${db.type==='atgun'?'(砲)':''}</span>`;
+
+    card.onclick = () => selectUnit(i);
+    el.appendChild(card);
+  });
+}
+
+function selectUnit(idx) {
+  if (selectedIdx >= 0 && selectedIdx !== idx) {
+    // 前のユニットの移動を自動確定
+    if (moveHistory.length > 0) confirmUnit();
+  }
+
+  const u = state.units[idx];
+  if (!u || u.side !== activeSide || u.status === 'destroyed') return;
+  if (u.fired || u.status === 'immobilized' || u.moved) return;
+
+  selectedIdx = idx;
+  moveHistory = [];
+  renderCards();
+  updateMoveInfo();
+  updateButtons();
+
+  // 親にハイライト通知
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:idx }, '*');
+}
+
+function updateMoveInfo() {
+  const el = document.getElementById('moveInfo');
+  if (selectedIdx < 0) {
+    el.textContent = 'ユニットを選択してください';
+    return;
+  }
+  const u = state.units[selectedIdx];
+  const db = UNIT_DB[u.name];
+  const dirLabel = ['東','北東','北西','西','南西','南東'];
+  const dir = u.dir !== undefined ? dirLabel[u.dir] : '-';
+  el.innerHTML = `<b>${u.name}</b> (${db.type}) | 残りMP: ${u.remainMove} | 向き: ${dir} | 位置: (${u.col},${u.row})`;
+}
+
+function updateButtons() {
+  const hasUnit = selectedIdx >= 0;
+  const u = hasUnit ? state.units[selectedIdx] : null;
+  const db = hasUnit ? UNIT_DB[u.name] : null;
+  const mp = hasUnit ? u.remainMove : 0;
+  const isATGun = db && db.type === 'atgun';
+  const isInf = db && db.type === 'infantry';
+
+  document.getElementById('btnFwd').disabled = !hasUnit || mp < 1 || isATGun;
+  document.getElementById('btnBack').disabled = !hasUnit || mp < 2 || isATGun || isInf;
+  document.getElementById('btnRotL').disabled = !hasUnit || (mp < 1 && !isATGun) || isInf;
+  document.getElementById('btnRotR').disabled = !hasUnit || (mp < 1 && !isATGun) || isInf;
+  document.getElementById('btnUndo').disabled = moveHistory.length === 0;
+  document.getElementById('btnConfirm').disabled = selectedIdx < 0;
+}
+
+// ===== 移動操作 =====
+function getTerrainCost(col, row) {
+  const key = `${col},${row}`;
+  const t = state.terrain[key];
+  return TERRAIN_COST[t] || 1;
+}
+
+function moveForward() {
+  if (selectedIdx < 0) return;
+  const u = state.units[selectedIdx];
+  const db = UNIT_DB[u.name];
+  if (db.type === 'atgun') return;
+
+  let targetHex;
+  if (db.type === 'infantry') {
+    // 歩兵: とりあえず前方向に進む（実際にはクリックで移動先選択）
+    targetHex = hexNeighbor(u.col, u.row, u.dir || 0);
+  } else {
+    targetHex = hexNeighbor(u.col, u.row, u.dir);
+  }
+  if (!targetHex) { log('移動不可（マップ外）'); return; }
+
+  const cost = db.type === 'infantry' ? 1 : getTerrainCost(targetHex.col, targetHex.row);
+  if (u.remainMove < cost) { log(`MP不足（必要:${cost}, 残り:${u.remainMove}）`); return; }
+
+  // スタックチェック
+  if (!checkStacking(targetHex.col, targetHex.row, u)) {
+    log('スタック制限超過'); return;
+  }
+
+  // 移動実行
+  moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
+  u.col = targetHex.col;
+  u.row = targetHex.row;
+  u.remainMove -= cost;
+
+  log(`${u.name}: (${u.col},${u.row})へ前進 MP-${cost}`);
+  pushState();
+  updateMoveInfo();
+  updateButtons();
+  renderCards();
+}
+
+function moveBackward() {
+  if (selectedIdx < 0) return;
+  const u = state.units[selectedIdx];
+  const db = UNIT_DB[u.name];
+  if (db.type === 'atgun' || db.type === 'infantry') return;
+
+  const backDir = (u.dir + 3) % 6;
+  const targetHex = hexNeighbor(u.col, u.row, backDir);
+  if (!targetHex) { log('後退不可（マップ外）'); return; }
+
+  const cost = getTerrainCost(targetHex.col, targetHex.row) + 1; // 後退は+1
+  if (u.remainMove < cost) { log(`MP不足（後退必要:${cost}, 残り:${u.remainMove}）`); return; }
+
+  if (!checkStacking(targetHex.col, targetHex.row, u)) {
+    log('スタック制限超過'); return;
+  }
+
+  moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
+  u.col = targetHex.col;
+  u.row = targetHex.row;
+  u.remainMove -= cost;
+
+  log(`${u.name}: (${u.col},${u.row})へ後退 MP-${cost}`);
+  pushState();
+  updateMoveInfo();
+  updateButtons();
+  renderCards();
+}
+
+function rotateLeft() {
+  if (selectedIdx < 0) return;
+  const u = state.units[selectedIdx];
+  const db = UNIT_DB[u.name];
+  if (db.type === 'infantry') return;
+
+  // 対戦車砲: 射撃マーカーなしなら自由に回転（MPコストなし）
+  if (db.type === 'atgun') {
+    moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
+    u.dir = (u.dir + 1) % 6;
+    log(`${u.name}: 左回転 → ${['東','北東','北西','西','南西','南東'][u.dir]}`);
+    pushState();
+    updateMoveInfo();
+    return;
+  }
+
+  if (u.remainMove < 1) { log('MP不足'); return; }
+  moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
+  u.dir = (u.dir + 1) % 6;
+  u.remainMove -= 1;
+  log(`${u.name}: 左回転 → ${['東','北東','北西','西','南西','南東'][u.dir]} MP-1`);
+  pushState();
+  updateMoveInfo();
+  updateButtons();
+  renderCards();
+}
+
+function rotateRight() {
+  if (selectedIdx < 0) return;
+  const u = state.units[selectedIdx];
+  const db = UNIT_DB[u.name];
+  if (db.type === 'infantry') return;
+
+  if (db.type === 'atgun') {
+    moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
+    u.dir = (u.dir + 5) % 6;
+    log(`${u.name}: 右回転 → ${['東','北東','北西','西','南西','南東'][u.dir]}`);
+    pushState();
+    updateMoveInfo();
+    return;
+  }
+
+  if (u.remainMove < 1) { log('MP不足'); return; }
+  moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
+  u.dir = (u.dir + 5) % 6;
+  u.remainMove -= 1;
+  log(`${u.name}: 右回転 → ${['東','北東','北西','西','南西','南東'][u.dir]} MP-1`);
+  pushState();
+  updateMoveInfo();
+  updateButtons();
+  renderCards();
+}
+
+function undoMove() {
+  if (moveHistory.length === 0 || selectedIdx < 0) return;
+  const prev = moveHistory.pop();
+  const u = state.units[selectedIdx];
+  u.col = prev.col;
+  u.row = prev.row;
+  u.dir = prev.dir;
+  u.remainMove = prev.mp;
+  log(`${u.name}: 移動を取り消し`);
+  pushState();
+  updateMoveInfo();
+  updateButtons();
+  renderCards();
+}
+
+function confirmUnit() {
+  if (selectedIdx < 0) return;
+  const u = state.units[selectedIdx];
+  u.moved = true;
+  moveHistory = [];
+  log(`${u.name}: 移動確定`);
+  selectedIdx = -1;
+  pushState();
+  renderCards();
+  updateMoveInfo();
+  updateButtons();
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
+}
+
+// ===== スタックチェック =====
+function checkStacking(col, row, movingUnit) {
+  const db = UNIT_DB[movingUnit.name];
+  const friendly = state.units.filter(u =>
+    u.side === movingUnit.side && u.col === col && u.row === row &&
+    u.status !== 'destroyed' && u.id !== movingUnit.id
+  );
+
+  if (db.type === 'tank' || db.type === 'apc') {
+    const tanks = friendly.filter(u => {
+      const d = UNIT_DB[u.name];
+      return d && (d.type === 'tank' || d.type === 'apc');
+    });
+    if (tanks.length >= 2) return false;
+  }
+  if (db.type === 'infantry') {
+    const infs = friendly.filter(u => {
+      const d = UNIT_DB[u.name];
+      return d && d.type === 'infantry';
+    });
+    if (infs.length >= 4) return false;
+  }
+  return true;
+}
+
+// ===== ヘクス関数（hub.htmlと同じ） =====
+const HEX_SIZE = 82;
+const HEX_H = HEX_SIZE * Math.sqrt(3);
+const OX = 75, OY = 85;
+
+function hexNeighbor(col, row, dir) {
+  const even = (col % 2 === 0);
+  const neighbors = even ?
+    [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[0,1]] :
+    [[1,1],[1,0],[0,-1],[-1,0],[-1,1],[0,1]];
+  const d = neighbors[dir];
+  if (!d) return null;
+  const nc = col + d[0];
+  const nr = row + d[1];
+  if (nc < 1 || nr < 1 || nc > 48 || nr > 30) return null;
+  return { col: nc, row: nr };
+}
+
+// ===== state送信 =====
+function pushState() {
+  localStorage.setItem('tanksState', JSON.stringify(state));
+  parent.postMessage({ type:'STATE_UPDATE', units:state.units }, '*');
+}
+
+function donePhase() {
+  if (selectedIdx >= 0 && moveHistory.length > 0) confirmUnit();
+  log('--- 移動フェーズ終了 ---');
+  pushState();
+  parent.postMessage({ type:'PHASE_DONE' }, '*');
+}
+
+// ===== 親からのメッセージ =====
+window.addEventListener('message', (e) => {
+  if (!e.data || !e.data.type) return;
+  if (e.data.type === 'MAP_SELECT' && e.data.unitIdx >= 0) {
+    const u = state.units[e.data.unitIdx];
+    if (u && u.side === activeSide) selectUnit(e.data.unitIdx);
+  }
+  if (e.data.type === 'SELECT_UNIT') {
+    selectUnit(e.data.unitIdx);
+  }
+});
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>

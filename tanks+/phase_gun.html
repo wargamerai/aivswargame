@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<script src="scenarios.js"></script>
+<style>
+body { background:#f5f5fa; color:#222; font-family:monospace; padding:8px; font-size:1em; }
+h3 { color:#1a5a8a; margin-bottom:6px; font-size:1.1em; }
+
+.section-label { color:#555; font-size:0.9em; margin:8px 0 4px; font-weight:bold; }
+.unit-cards { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; }
+.card {
+  background:#e0e8f4; border:2px solid #99b; padding:4px 8px;
+  border-radius:4px; cursor:pointer; font-size:0.9em; transition:all 0.15s;
+}
+.card:hover { background:#c8d8f0; }
+.card.firer-sel { border-color:#cc3311; background:#ffe8e0; }
+.card.target-sel { border-color:#2255cc; background:#e0e8ff; }
+.card.disabled { opacity:0.3; pointer-events:none; }
+.card .c-name { font-weight:bold; }
+.card .c-info { color:#666; font-size:0.85em; }
+
+#shootInfo {
+  background:#e8f0e8; border:1px solid #8a8; padding:6px;
+  margin:6px 0; border-radius:3px; font-size:0.95em; line-height:1.6; min-height:24px;
+}
+
+button {
+  background:#dde4f0; color:#334; border:1px solid #99a;
+  padding:6px 12px; font-size:0.9em; cursor:pointer; border-radius:3px; font-weight:bold;
+  margin:2px;
+}
+button:hover { background:#c8d4ee; }
+button:disabled { background:#e8e8e8; color:#999; cursor:default; }
+#btnShoot { background:#cc3311; color:#fff; border-color:#aa2200; font-size:1.05em; padding:8px 20px; }
+#btnShoot:hover { background:#ee4422; }
+#btnShoot:disabled { background:#ddd; color:#999; }
+button.done-btn { background:#cc3311; color:#fff; border-color:#aa2200; }
+
+/* 結果オーバーレイ */
+#resultOverlay {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:center; z-index:100;
+}
+#resultBox {
+  background:#fff; border:2px solid #aa8833; border-radius:8px; padding:16px 20px;
+  max-width:320px; width:90%; font-size:1.1em; line-height:1.7; color:#222;
+}
+#resultTitle { color:#8a6a00; font-size:1.2em; font-weight:bold; text-align:center; margin-bottom:8px; border-bottom:2px solid #ddd; padding-bottom:6px; }
+.r-row { display:flex; justify-content:space-between; }
+.r-label { color:#666; } .r-value { font-weight:bold; }
+.r-dice { color:#222; font-size:1.1em; text-align:center; margin:6px 0; }
+.r-hit { text-align:center; font-size:1.3em; font-weight:bold; margin:4px 0; }
+.r-hit.hit { color:#8a6a00; } .r-hit.miss { color:#999; }
+.r-dmg { text-align:center; color:#cc2200; font-size:1.1em; font-weight:bold; margin:4px 0; }
+#resultBox button { display:block; margin:10px auto 0; padding:8px 24px; background:#2a8a2a; border-color:#1a6a1a; color:#fff; }
+
+#log {
+  background:#f0f0f0; border:1px solid #ccc; padding:6px;
+  height:120px; overflow-y:auto; font-size:0.85em; line-height:1.5; margin-top:8px; color:#333;
+}
+.hit-text { color:#8a6a00; } .dmg-text { color:#cc2200; }
+</style>
+</head>
+<body>
+<h3 id="phTitle">射撃フェーズ</h3>
+
+<div class="section-label">▼ 射撃ユニットを選択</div>
+<div id="firerList" class="unit-cards"></div>
+
+<div class="section-label">▼ 目標を選択</div>
+<div id="targetList" class="unit-cards"></div>
+
+<div id="shootInfo">射撃ユニットと目標を選択してください</div>
+
+<div>
+  <button id="btnShoot" onclick="doShoot()" disabled>射撃</button>
+  <button onclick="donePhase()" class="done-btn">フェーズ終了</button>
+</div>
+
+<!-- 結果オーバーレイ -->
+<div id="resultOverlay">
+  <div id="resultBox">
+    <div id="resultTitle">射撃結果</div>
+    <div id="resultBody"></div>
+    <button onclick="closeResult()">確認</button>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+let state = null;
+let phase = '';
+let activeSide = '', enemySide = '';
+let isAdvanceFire = false;
+let selectedFirer = -1, selectedTarget = -1;
+let firers = [], targets = [];
+
+function roll() { return Math.floor(Math.random() * 6) + 1; }
+
+function log(text) {
+  const el = document.getElementById('log');
+  el.innerHTML += `<div>${text}</div>`;
+  el.scrollTop = el.scrollHeight;
+  parent.postMessage({ type:'GAME_LOG', text:text }, '*');
+}
+
+function init() {
+  const params = new URLSearchParams(window.location.search);
+  phase = params.get('phase') || 'pf1';
+
+  const raw = localStorage.getItem('tanksState');
+  if (!raw) { log('状態なし'); return; }
+  state = JSON.parse(raw);
+
+  // 射撃する側を決定
+  if (phase.endsWith('1')) {
+    activeSide = state.firstPlayer;
+    enemySide = state.firstPlayer === state.side1 ? state.side2 : state.side1;
+  } else {
+    activeSide = state.firstPlayer === state.side1 ? state.side2 : state.side1;
+    enemySide = state.firstPlayer;
+  }
+
+  isAdvanceFire = phase.startsWith('af');
+  const phaseLabel = isAdvanceFire ? '前進射撃' : '準備射撃';
+  const nc = NATION_COLORS[activeSide];
+  document.getElementById('phTitle').textContent =
+    `${phaseLabel} — ${nc ? nc.label : activeSide}`;
+
+  log(`=== ${document.getElementById('phTitle').textContent} ===`);
+
+  // 射撃可能ユニットをフィルタ
+  firers = [];
+  state.units.forEach((u, i) => {
+    if (u.side !== activeSide) return;
+    if (u.status === 'destroyed') return;
+    if (u.col < 1) return;
+    if (u.ammoOut || u.gunDisabled) return;
+
+    const db = UNIT_DB[u.name];
+    if (!db) return;
+
+    // 準備射撃: 全ユニット可（ただし前ターンの射撃マーカーは既にクリア済み）
+    // 前進射撃: 自走砲は不可
+    if (isAdvanceFire && db.turret === 'fixed' && db.type === 'tank') return;
+
+    // 歩兵・対戦車砲も射撃可能
+    firers.push(i);
+  });
+
+  // 目標候補
+  targets = [];
+  state.units.forEach((u, i) => {
+    if (u.side !== enemySide) return;
+    if (u.status === 'destroyed') return;
+    if (u.col < 1) return;
+    // 秘匿ユニットは視認できない（発見されたもののみ）
+    // 簡易: hiddenでないユニットのみ
+    if (u.hidden) return;
+    targets.push(i);
+  });
+
+  if (firers.length === 0) {
+    log('射撃可能なユニットなし');
+    setTimeout(() => donePhase(), 400);
+    return;
+  }
+  if (targets.length === 0) {
+    log('視認可能な目標なし');
+    setTimeout(() => donePhase(), 400);
+    return;
+  }
+
+  renderCards();
+  updateShootInfo();
+}
+
+// ===== カード表示 =====
+function renderCards() {
+  const fEl = document.getElementById('firerList');
+  fEl.innerHTML = '';
+  for (const i of firers) {
+    const u = state.units[i];
+    const db = UNIT_DB[u.name];
+    const card = document.createElement('div');
+    card.className = 'card' +
+      (i === selectedFirer ? ' firer-sel' : '') +
+      (u.fired ? ' disabled' : '');
+    card.innerHTML = `<span class="c-name">${u.name}</span>`;
+    card.onclick = () => { if (!u.fired) { selectedFirer = i; renderCards(); updateShootInfo(); } };
+    fEl.appendChild(card);
+  }
+
+  const tEl = document.getElementById('targetList');
+  tEl.innerHTML = '';
+  for (const i of targets) {
+    const u = state.units[i];
+    if (u.status === 'destroyed') continue;
+    const card = document.createElement('div');
+    card.className = 'card' + (i === selectedTarget ? ' target-sel' : '');
+    card.innerHTML = `<span class="c-name">${u.name}</span>
+      <span class="c-info">${u.status === 'immobilized' ? ' 移動不能' : ''}</span>`;
+    card.onclick = () => { selectedTarget = i; renderCards(); updateShootInfo(); };
+    tEl.appendChild(card);
+  }
+}
+
+// ===== 射撃情報表示 =====
+function updateShootInfo() {
+  const el = document.getElementById('shootInfo');
+  const btn = document.getElementById('btnShoot');
+
+  if (selectedFirer < 0 || selectedTarget < 0) {
+    el.textContent = '射撃ユニットと目標を選択してください';
+    btn.disabled = true;
+    return;
+  }
+
+  const firer = state.units[selectedFirer];
+  const target = state.units[selectedTarget];
+  const fDb = UNIT_DB[firer.name];
+  const tDb = UNIT_DB[target.name];
+
+  const dist = hexDist(firer.col, firer.row, target.col, target.row);
+  const di = distKey(dist);
+
+  if (di < 0 || !FIRE_TABLE[firer.name]) {
+    el.textContent = `射程外（距離${dist}）`;
+    btn.disabled = true;
+    return;
+  }
+
+  // 歩兵の射撃処理
+  if (fDb.type === 'infantry') {
+    el.innerHTML = getInfantryShootInfo(firer, target, dist);
+    btn.disabled = false;
+    return;
+  }
+
+  const ft = FIRE_TABLE[firer.name][di];
+  if (!ft) { el.textContent = '射撃データなし'; btn.disabled = true; return; }
+
+  const pen = ft[0];
+  let hitNum = ft[1];
+
+  // 修正計算
+  let mod = 0;
+  const details = [];
+
+  // 目標の地形
+  const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
+  if (tTerrain === 'forest') { mod += HIT_MODIFIERS.forest; details.push(`森+${HIT_MODIFIERS.forest}`); }
+  if (tTerrain === 'building') { mod += HIT_MODIFIERS.building; details.push(`建物+${HIT_MODIFIERS.building}`); }
+
+  // 小型目標
+  if (tDb.small) { mod += HIT_MODIFIERS.smallTarget; details.push('小型+1'); }
+
+  // 移動不能
+  if (target.status === 'immobilized') { mod += HIT_MODIFIERS.immobilized; details.push('移動不能-1'); }
+
+  // 前進射撃
+  if (isAdvanceFire) {
+    const afMod = HIT_MODIFIERS.advanceFire[fDb.nation] || 2;
+    mod += afMod; details.push(`前進射撃+${afMod}`);
+  }
+
+  // 距離0は必中
+  const autoHit = (dist === 0);
+
+  // 命中確率計算
+  const effectiveHit = hitNum - mod;
+  let hitChance = 0;
+  if (autoHit) {
+    hitChance = 100;
+  } else {
+    for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) {
+      if (a + b <= effectiveHit) hitChance++;
+    }
+    hitChance = Math.round(hitChance / 36 * 100);
+  }
+
+  // 射界判定
+  const inArc = isInFireArc(firer, target);
+  const armor = tDb.armor - (inArc ? 0 : 2);
+  const penDiff = pen - Math.max(0, armor);
+
+  // 対歩兵の場合
+  const vsInfantry = (tDb.type === 'infantry' || tDb.type === 'atgun');
+
+  let html = `<b>${firer.name}</b> → <b>${target.name}</b><br>`;
+  html += `距離: ${dist}hex | 貫通力: ${pen} | 命中数: ${hitNum}`;
+  if (mod !== 0) html += ` (修正${mod >= 0 ? '+' : ''}${mod} → 有効${effectiveHit})`;
+  html += `<br>命中率: <b style="color:${hitChance>=50?'#2a7a2a':'#cc3311'}">${hitChance}%</b>`;
+  if (!vsInfantry) {
+    html += ` | 装甲: ${tDb.armor}${inArc?'':'(射界外-2→'+armor+')'} | 貫通差: ${penDiff >= 0 ? '+' : ''}${penDiff}`;
+  }
+  if (details.length > 0) html += `<br><span style="color:#888;font-size:0.85em">${details.join(' / ')}</span>`;
+  if (autoHit) html += `<br><b style="color:#2a7a2a">距離0: 必中</b>`;
+
+  el.innerHTML = html;
+  btn.disabled = false;
+}
+
+function getInfantryShootInfo(firer, target, dist) {
+  const tDb = UNIT_DB[target.name];
+  const fDb = UNIT_DB[firer.name];
+
+  if (tDb.type === 'tank' || tDb.type === 'apc') {
+    // 対戦車攻撃
+    const table = INF_VS_TANK[fDb.nation];
+    if (!table || table[dist] === undefined) return `射程外（対戦車攻撃は距離${Object.keys(table).pop()}まで）`;
+    return `<b>${firer.name}</b> → <b>${target.name}</b> (対戦車攻撃)<br>距離:${dist} | ${table[dist]}以下で撃破`;
+  } else {
+    // 対歩兵攻撃
+    const key = fDb.nation + '_inf';
+    const table = ANTI_INF_TABLE[key];
+    if (!table || table[dist] === undefined) return `射程外`;
+    return `<b>${firer.name}</b> → <b>${target.name}</b> (対歩兵攻撃)<br>距離:${dist} | ${table[dist]}以下で撃破`;
+  }
+}
+
+// ===== 射界判定 =====
+function isInFireArc(firer, target) {
+  // 簡易射界判定: firerの向き(dir)を基準に±1方向（60度）が射界内
+  const dx = target.col - firer.col;
+  const dy = target.row - firer.row;
+  const angle = Math.atan2(-dy, dx); // 画面座標系
+  const dirAngleRad = firer.dir * 60 * Math.PI / 180;
+  let diff = angle - dirAngleRad;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return Math.abs(diff) <= Math.PI / 3; // ±60度
+}
+
+// ===== 射撃実行 =====
+function doShoot() {
+  if (selectedFirer < 0 || selectedTarget < 0) return;
+
+  const firer = state.units[selectedFirer];
+  const target = state.units[selectedTarget];
+  const fDb = UNIT_DB[firer.name];
+  const tDb = UNIT_DB[target.name];
+  const dist = hexDist(firer.col, firer.row, target.col, target.row);
+
+  // 歩兵の射撃
+  if (fDb.type === 'infantry') {
+    doInfantryShoot(firer, target, dist);
+    return;
+  }
+
+  const di = distKey(dist);
+  const ft = FIRE_TABLE[firer.name][di];
+  if (!ft) return;
+
+  const pen = ft[0];
+  let hitNum = ft[1];
+
+  // 修正計算
+  let mod = 0;
+  const details = [];
+  const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
+  if (tTerrain === 'forest') { mod += 2; details.push('森+2'); }
+  if (tTerrain === 'building') { mod += 2; details.push('建物+2'); }
+  if (tDb.small) { mod += 1; details.push('小型+1'); }
+  if (target.status === 'immobilized') { mod -= 1; details.push('移動不能-1'); }
+  if (isAdvanceFire) { const am = HIT_MODIFIERS.advanceFire[fDb.nation]||2; mod += am; details.push(`前進+${am}`); }
+
+  // ダイス
+  const d1 = roll(), d2 = roll();
+  const rawTotal = d1 + d2;
+  const modTotal = rawTotal + mod;
+  const autoHit = (dist === 0);
+  const isHit = autoHit || (modTotal <= hitNum);
+
+  // 弾丸アニメーション
+  parent.postMessage({
+    type:'SHOOT_ANIM',
+    from: { col:firer.col, row:firer.row },
+    to: { col:target.col, row:target.row }
+  }, '*');
+
+  // 特殊判定
+  let continuousFire = (rawTotal === 2); // ゾロ目2=連続射撃
+  let ammoOut = (rawTotal === 12);        // ゾロ目12=弾薬切れ
+
+  let resultHtml = '';
+  resultHtml += `<div class="r-row"><span class="r-label">射撃</span><span class="r-value">${firer.name}</span></div>`;
+  resultHtml += `<div class="r-row"><span class="r-label">目標</span><span class="r-value">${target.name}</span></div>`;
+  resultHtml += `<div class="r-row"><span class="r-label">距離</span><span class="r-value">${dist}hex</span></div>`;
+  resultHtml += `<div class="r-dice">🎲 ${d1}+${d2}=${rawTotal} 修正${mod>=0?'+':''}${mod} → ${modTotal} (命中数${hitNum})</div>`;
+
+  if (isHit) {
+    resultHtml += `<div class="r-hit hit">命中！</div>`;
+    log(`${firer.name} → ${target.name}: <span class="hit-text">命中</span> (${d1}+${d2}=${rawTotal}, 修正${mod>=0?'+':''}${mod}→${modTotal})`);
+
+    // 撃破判定
+    const vsInfantry = (tDb.type === 'infantry' || tDb.type === 'atgun');
+    if (vsInfantry) {
+      // 榴弾射撃（対歩兵）
+      const antiInf = fDb.antiInf;
+      const dd1 = roll(), dd2 = roll();
+      let dmgRoll = dd1 + dd2;
+      if (tTerrain === 'forest' || tTerrain === 'building') dmgRoll += 1;
+      const destroyed = (dmgRoll <= antiInf);
+      resultHtml += `<div class="r-row"><span class="r-label">対歩兵力</span><span class="r-value">${antiInf}</span></div>`;
+      resultHtml += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dd1+dd2}${tTerrain!=='plain'?'+1':''} → ${dmgRoll}</div>`;
+      if (destroyed) {
+        target.status = 'destroyed';
+        resultHtml += `<div class="r-dmg">撃破！</div>`;
+        log(`  → <span class="dmg-text">${target.name} 撃破</span>`);
+      } else {
+        resultHtml += `<div style="text-align:center;color:#888">無効果</div>`;
+        log(`  → 無効果`);
+      }
+    } else {
+      // 対戦車: 撃破判定
+      const inArc = isInFireArc(firer, target);
+      const armor = tDb.armor - (inArc ? 0 : 2);
+      const penDiff = pen - Math.max(0, armor);
+      const dd1 = roll(), dd2 = roll();
+      const dmgTotal = dd1 + dd2;
+      // 距離0は+3扱い
+      const effMod = autoHit ? 3 : penDiff;
+      const result = getDestructionResult(effMod, dmgTotal);
+
+      resultHtml += `<div class="r-row"><span class="r-label">装甲</span><span class="r-value">${tDb.armor}${inArc?'':' (射界外-2→'+armor+')'}</span></div>`;
+      resultHtml += `<div class="r-row"><span class="r-label">貫通差</span><span class="r-value">${effMod >= 0 ? '+' : ''}${effMod}</span></div>`;
+      resultHtml += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</div>`;
+
+      if (result === 'destroyed') {
+        target.status = 'destroyed';
+        resultHtml += `<div class="r-dmg">破壊！</div>`;
+        log(`  → <span class="dmg-text">${target.name} 破壊</span>`);
+      } else if (result === 'immobilized') {
+        target.status = 'immobilized';
+        resultHtml += `<div style="text-align:center;color:#cc0;font-weight:bold">移動不能</div>`;
+        log(`  → ${target.name} 移動不能`);
+      } else {
+        resultHtml += `<div style="text-align:center;color:#888">無効果</div>`;
+        log(`  → 無効果`);
+      }
+    }
+  } else {
+    resultHtml += `<div class="r-hit miss">外れ</div>`;
+    log(`${firer.name} → ${target.name}: 外れ (${d1}+${d2}=${rawTotal}, 修正${mod>=0?'+':''}${mod}→${modTotal}, 命中数${hitNum})`);
+  }
+
+  // 特殊
+  if (continuousFire) {
+    resultHtml += `<div style="text-align:center;color:#2a7a2a;font-weight:bold">🎯 連続射撃！（もう一度射撃可能）</div>`;
+    log(`  ★ 連続射撃（ゾロ目2）`);
+  } else {
+    firer.fired = true;
+  }
+
+  if (ammoOut) {
+    firer.ammoOut = true;
+    firer.fired = true;
+    resultHtml += `<div style="text-align:center;color:#f00;font-weight:bold">⚠ 弾薬切れ！</div>`;
+    log(`  ★ ${firer.name} 弾薬切れ（ゾロ目12）`);
+  }
+
+  if (details.length > 0) {
+    resultHtml += `<div style="color:#888;font-size:0.8em;text-align:center">${details.join(' / ')}</div>`;
+  }
+
+  // 結果表示
+  document.getElementById('resultBody').innerHTML = resultHtml;
+  document.getElementById('resultOverlay').style.display = 'flex';
+
+  pushState();
+}
+
+function doInfantryShoot(firer, target, dist) {
+  const fDb = UNIT_DB[firer.name];
+  const tDb = UNIT_DB[target.name];
+  const d1 = roll(), d2 = roll();
+  let total = d1 + d2;
+
+  let mod = 0;
+  if (isAdvanceFire) mod += 1;
+  const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
+  if (tTerrain === 'forest' || tTerrain === 'building') mod += 1;
+  total += mod;
+
+  let resultHtml = '';
+  resultHtml += `<div class="r-row"><span class="r-label">射撃</span><span class="r-value">${firer.name}</span></div>`;
+  resultHtml += `<div class="r-row"><span class="r-label">目標</span><span class="r-value">${target.name}</span></div>`;
+
+  if (tDb.type === 'tank' || tDb.type === 'apc') {
+    // 対戦車攻撃
+    const table = INF_VS_TANK[fDb.nation];
+    const hitNum = table ? table[dist] : 0;
+    resultHtml += `<div class="r-dice">🎲 ${d1}+${d2}=${d1+d2} ${mod?`修正+${mod}→${total}`:''} (${hitNum}以下で撃破)</div>`;
+    if (total <= hitNum) {
+      target.status = 'destroyed';
+      resultHtml += `<div class="r-dmg">撃破！</div>`;
+      log(`${firer.name} → ${target.name}: <span class="dmg-text">対戦車攻撃 撃破</span>`);
+    } else {
+      resultHtml += `<div style="text-align:center;color:#888">無効</div>`;
+      log(`${firer.name} → ${target.name}: 対戦車攻撃 無効`);
+    }
+  } else {
+    // 対歩兵攻撃
+    const key = fDb.nation + '_inf';
+    const table = ANTI_INF_TABLE[key];
+    const hitNum = table ? table[dist] : 0;
+    resultHtml += `<div class="r-dice">🎲 ${d1}+${d2}=${d1+d2} ${mod?`修正+${mod}→${total}`:''} (${hitNum}以下で撃破)</div>`;
+    if (total <= hitNum) {
+      target.status = 'destroyed';
+      resultHtml += `<div class="r-dmg">撃破！</div>`;
+      log(`${firer.name} → ${target.name}: <span class="dmg-text">撃破</span>`);
+    } else {
+      resultHtml += `<div style="text-align:center;color:#888">無効</div>`;
+      log(`${firer.name} → ${target.name}: 無効`);
+    }
+  }
+
+  firer.fired = true;
+  document.getElementById('resultBody').innerHTML = resultHtml;
+  document.getElementById('resultOverlay').style.display = 'flex';
+  pushState();
+}
+
+function closeResult() {
+  document.getElementById('resultOverlay').style.display = 'none';
+  selectedFirer = -1;
+  selectedTarget = -1;
+  // 目標リストを更新（撃破されたユニットを除外）
+  targets = targets.filter(i => state.units[i].status !== 'destroyed');
+  renderCards();
+  updateShootInfo();
+}
+
+// ===== ヘクス関数 =====
+function hexDist(c1, r1, c2, r2) {
+  function toAxial(col, row) {
+    const q = col - 1;
+    const r = row - 1 - Math.floor((col - 1) / 2);
+    return { q, r };
+  }
+  const a = toAxial(c1, r1);
+  const b = toAxial(c2, r2);
+  return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs((a.q + a.r) - (b.q + b.r)));
+}
+
+// ===== state送信 =====
+function pushState() {
+  localStorage.setItem('tanksState', JSON.stringify(state));
+  parent.postMessage({ type:'STATE_UPDATE', units:state.units }, '*');
+}
+
+function donePhase() {
+  log('--- 射撃フェーズ終了 ---');
+  pushState();
+  parent.postMessage({ type:'PHASE_DONE' }, '*');
+}
+
+// ===== 親からのメッセージ =====
+window.addEventListener('message', (e) => {
+  if (!e.data || !e.data.type) return;
+  if (e.data.type === 'MAP_SELECT' && e.data.unitIdx >= 0) {
+    const u = state.units[e.data.unitIdx];
+    if (u.side === activeSide && firers.includes(e.data.unitIdx)) {
+      selectedFirer = e.data.unitIdx;
+    } else if (u.side === enemySide && targets.includes(e.data.unitIdx)) {
+      selectedTarget = e.data.unitIdx;
+    }
+    renderCards();
+    updateShootInfo();
+  }
+});
+
+window.addEventListener('load', init);
+</script>
+</body>
+</html>

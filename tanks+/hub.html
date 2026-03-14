@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>TANKS+ タンクス・プラス</title>
+<script src="scenarios.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#2a2a2a; color:#ddd; font-family:'Segoe UI',sans-serif; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
+
+/* --- トップバー --- */
+#topbar {
+  background:#1a1a24; padding:6px 12px; display:flex; align-items:center; gap:12px;
+  border-bottom:1px solid #555; flex:0 0 auto; font-size:0.9em;
+}
+#topbar .title { font-weight:bold; font-size:1.1em; color:#e8c840; }
+#topbar .info { color:#aaa; }
+#phaseBar { display:flex; gap:2px; }
+#phaseBar .ph {
+  padding:3px 8px; background:#333; border-radius:3px; font-size:0.85em; color:#888;
+}
+#phaseBar .ph.active { background:#c8a020; color:#000; font-weight:bold; }
+#phaseBar .ph.done { background:#555; color:#aaa; }
+button.top-btn {
+  background:#445; color:#ccc; border:1px solid #667; padding:4px 12px;
+  border-radius:3px; cursor:pointer; font-size:0.85em;
+}
+button.top-btn:hover { background:#556; }
+
+/* --- メインエリア --- */
+#main { display:flex; flex:1; overflow:hidden; }
+
+/* --- 左パネル（ユニット一覧） --- */
+#leftPanel {
+  width:200px; background:#1e1e28; border-right:1px solid #444;
+  overflow-y:auto; padding:6px; font-size:0.82em; flex:0 0 200px;
+}
+#leftPanel h4 { color:#c8a020; margin:6px 0 4px; font-size:0.95em; }
+.unit-item {
+  padding:3px 5px; margin:1px 0; border-radius:3px; cursor:pointer;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.unit-item:hover { background:#333; }
+.unit-item.selected { background:#445; border:1px solid #88a; }
+.unit-item .u-name { font-weight:bold; }
+.unit-item .u-status { font-size:0.8em; color:#888; }
+.unit-item.destroyed { opacity:0.3; text-decoration:line-through; }
+.unit-item.immobilized { border-left:3px solid #cc0; }
+
+/* --- マップエリア --- */
+#mapArea { flex:1; position:relative; overflow:hidden; background:#3a3a2a; }
+#mapCanvas { position:absolute; top:0; left:0; cursor:grab; }
+
+/* --- 右パネル（iframe） --- */
+#rightPanel {
+  width:380px; background:#1a1a24; border-left:1px solid #444;
+  display:flex; flex-direction:column; flex:0 0 380px;
+}
+#rightPanel iframe {
+  width:100%; flex:1; border:none; background:#f5f5fa;
+}
+#rightPanel .phase-title {
+  padding:6px 10px; background:#222; color:#c8a020; font-weight:bold;
+  font-size:0.9em; border-bottom:1px solid #444;
+}
+
+/* --- シナリオ選択画面 --- */
+#scenarioScreen {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.85); display:flex; justify-content:center; align-items:center;
+  z-index:200;
+}
+#scenarioBox {
+  background:#2a2a34; border:2px solid #c8a020; border-radius:8px;
+  padding:24px; max-width:500px; width:90%;
+}
+#scenarioBox h2 { color:#c8a020; margin-bottom:16px; text-align:center; }
+#scenarioBox select, #scenarioBox button {
+  display:block; width:100%; margin:8px 0; padding:10px;
+  font-size:1em; border-radius:4px; border:1px solid #666;
+}
+#scenarioBox select { background:#333; color:#ddd; }
+#scenarioBox button { background:#c8a020; color:#000; font-weight:bold; cursor:pointer; border:none; }
+#scenarioBox button:hover { background:#dab030; }
+#scenarioBox label { display:block; margin:8px 0 4px; color:#aaa; font-size:0.9em; }
+
+/* --- ログパネル --- */
+#gameLog {
+  flex:0 0 auto; max-height:160px; overflow-y:auto;
+  background:#1a1a24; color:#ccc; font-size:0.82em; font-family:monospace;
+  padding:4px 8px; border-top:1px solid #555; line-height:1.5; display:none;
+}
+</style>
+</head>
+<body>
+
+<!-- トップバー -->
+<div id="topbar">
+  <span class="title">TANKS+</span>
+  <span class="info" id="turnInfo">ターン 1</span>
+  <div id="phaseBar"></div>
+  <span class="info" id="playerInfo"></span>
+  <button class="top-btn" onclick="endPhase()">フェーズ終了</button>
+</div>
+
+<!-- メインエリア -->
+<div id="main">
+  <div id="leftPanel">
+    <h4 id="side1Label">―</h4>
+    <div id="side1List"></div>
+    <h4 id="side2Label">―</h4>
+    <div id="side2List"></div>
+  </div>
+  <div id="mapArea">
+    <canvas id="mapCanvas"></canvas>
+  </div>
+  <div id="rightPanel">
+    <div class="phase-title" id="phaseTitleBar">―</div>
+    <iframe id="phaseFrame" src="about:blank"></iframe>
+  </div>
+  <div id="gameLog"></div>
+</div>
+
+<!-- シナリオ選択 -->
+<div id="scenarioScreen">
+  <div id="scenarioBox">
+    <h2>TANKS+ タンクス・プラス</h2>
+    <label>シナリオ</label>
+    <select id="selScenario"></select>
+    <label>操作する軍</label>
+    <select id="selSide">
+      <option value="side1">先攻側</option>
+      <option value="side2">後攻側</option>
+      <option value="hotseat">ホットシート（両方手動）</option>
+    </select>
+    <button onclick="startGame()">ゲーム開始</button>
+  </div>
+</div>
+
+<script>
+// ===== グローバル状態 =====
+let state = null;
+let mapImg1 = null, mapImg2 = null;
+let mapLoaded = 0;
+
+// Canvas
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+let camX = 0, camY = 0, zoom = 0.4;
+let dragging = false, dragStartX = 0, dragStartY = 0;
+
+// ===== ヘクス定数（JPG画像に合わせてキャリブレーション） =====
+// MapA-Vertical: 3972x2860, 約24列×25行
+// flat-topヘクス: 幅=size*2, 高さ=size*sqrt(3)
+const HEX_SIZE = 82;  // ヘクス半径（ピクセル）
+const HEX_W = HEX_SIZE * 2;
+const HEX_H = HEX_SIZE * Math.sqrt(3);
+const OX = 75;   // 左上ヘクス(01,01)の中心X
+const OY = 85;   // 左上ヘクス(01,01)の中心Y
+
+// ===== ヘクス関数 =====
+// flat-topヘクス: 奇数列は半ヘクス下にずれる
+function hexCenter(col, row) {
+  const x = OX + (col - 1) * HEX_SIZE * 1.5;
+  const y = OY + (row - 1) * HEX_H + ((col % 2 === 0) ? HEX_H / 2 : 0);
+  return { x, y };
+}
+
+function hexCorners(cx, cy) {
+  const corners = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.PI / 180 * (60 * i);
+    corners.push({
+      x: cx + HEX_SIZE * Math.cos(angle),
+      y: cy + HEX_SIZE * Math.sin(angle)
+    });
+  }
+  return corners;
+}
+
+function pixelToHex(px, py) {
+  // 逆変換: ピクセル座標からヘクス座標を求める
+  let bestCol = 1, bestRow = 1, bestDist = Infinity;
+  for (let c = 1; c <= 48; c++) {
+    for (let r = 1; r <= 30; r++) {
+      const h = hexCenter(c, r);
+      const d = (px - h.x) ** 2 + (py - h.y) ** 2;
+      if (d < bestDist) { bestDist = d; bestCol = c; bestRow = r; }
+    }
+  }
+  return { col: bestCol, row: bestRow };
+}
+
+function hexDist(c1, r1, c2, r2) {
+  // axial座標に変換して距離計算
+  function toAxial(col, row) {
+    const q = col - 1;
+    const r = row - 1 - Math.floor((col - 1) / 2);
+    return { q, r };
+  }
+  const a = toAxial(c1, r1);
+  const b = toAxial(c2, r2);
+  return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs((a.q + a.r) - (b.q + b.r)));
+}
+
+// 6方向（flat-top hex）: 1=NE, 2=N(未使用), 3=NW, 4=SW, 5=S(未使用), 6=SE
+// flat-topで使う6方向: 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE
+const DIR_LABELS = ['東','北東','北西','西','南西','南東'];
+function hexNeighbor(col, row, dir) {
+  const odd = (col % 2 === 1);
+  const deltas = odd ?
+    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]] :  // 奇数列
+    [[1,1],[1,0],[0,-1],[-1,0],[-1,-1],[0,1]];    // 偶数列（未確定）
+  // flat-top: dir 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE
+  const even = !odd;
+  const neighbors = even ?
+    [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[0,1]] :
+    [[1,1],[1,0],[0,-1],[-1,0],[-1,1],[0,1]];
+  const d = neighbors[dir];
+  if (!d) return null;
+  return { col: col + d[0], row: row + d[1] };
+}
+
+// 向き矢印の角度（flat-top）: dir 0=E(0°), 1=NE(60°), 2=NW(120°), 3=W(180°), 4=SW(240°), 5=SE(300°)
+function dirAngle(dir) {
+  return dir * 60 * Math.PI / 180;
+}
+
+// ===== 描画 =====
+function draw() {
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(camX, camY);
+  ctx.scale(zoom, zoom);
+
+  // 地図画像
+  if (mapImg1 && mapImg1.complete) ctx.drawImage(mapImg1, 0, 0);
+  if (mapImg2 && mapImg2.complete) {
+    // 2枚目は右に並べる（Verticalなら横に、Horizontalなら縦に）
+    if (state && state.map1orient === 'Vertical') {
+      ctx.drawImage(mapImg2, mapImg1.width, 0);
+    } else {
+      ctx.drawImage(mapImg2, 0, mapImg1.height);
+    }
+  }
+
+  // ヘクスグリッド（薄い線）
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1;
+  const maxCol = 48, maxRow = 30;
+  for (let c = 1; c <= maxCol; c++) {
+    for (let r = 1; r <= maxRow; r++) {
+      const h = hexCenter(c, r);
+      const corners = hexCorners(h.x, h.y);
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+
+  // ユニット描画
+  if (state && state.units) {
+    for (const u of state.units) {
+      if (u.status === 'destroyed' && !u.showWreck) continue;
+      if (u.col < 1 || u.row < 1) continue;
+      drawUnit(u);
+    }
+  }
+
+  // 選択ユニットのハイライト
+  if (state && state.selectedUnit !== null && state.selectedUnit !== undefined) {
+    const su = state.units[state.selectedUnit];
+    if (su && su.col >= 1) {
+      const h = hexCenter(su.col, su.row);
+      ctx.strokeStyle = '#ff0';
+      ctx.lineWidth = 3;
+      const corners = hexCorners(h.x, h.y);
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawUnit(u) {
+  const db = UNIT_DB[u.name];
+  if (!db) return;
+  const nc = NATION_COLORS[db.nation] || { fill:'#888', stroke:'#444' };
+  const h = hexCenter(u.col, u.row);
+  const sz = HEX_SIZE * 0.55;
+
+  ctx.save();
+  ctx.translate(h.x, h.y);
+
+  // 背景形状
+  if (u.hidden) {
+    // 秘匿: グレー四角
+    ctx.fillStyle = '#666';
+    ctx.fillRect(-sz, -sz, sz*2, sz*2);
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-sz, -sz, sz*2, sz*2);
+    ctx.fillStyle = '#aaa';
+    ctx.font = `${sz*0.6}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('?', 0, sz*0.2);
+  } else if (db.type === 'tank' || db.type === 'apc') {
+    // 戦車/APC: 四角+向き矢印
+    ctx.fillStyle = nc.fill;
+    ctx.fillRect(-sz, -sz*0.7, sz*2, sz*1.4);
+    ctx.strokeStyle = nc.stroke;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-sz, -sz*0.7, sz*2, sz*1.4);
+    // 向き矢印
+    if (u.dir !== undefined) {
+      const angle = dirAngle(u.dir);
+      const ax = Math.cos(angle) * sz * 1.2;
+      const ay = -Math.sin(angle) * sz * 1.2;
+      ctx.strokeStyle = '#ff0';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(ax, ay);
+      ctx.stroke();
+      // 矢じり
+      const headLen = sz * 0.4;
+      const a1 = angle + 2.5;
+      const a2 = angle - 2.5;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax + Math.cos(a1)*headLen, ay - Math.sin(a1)*headLen);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax + Math.cos(a2)*headLen, ay - Math.sin(a2)*headLen);
+      ctx.stroke();
+    }
+    // 名前
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${sz*0.45}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(u.name.substring(0, 8), 0, sz*0.15);
+  } else if (db.type === 'infantry') {
+    // 歩兵: 円
+    ctx.fillStyle = nc.fill;
+    ctx.beginPath();
+    ctx.arc(0, 0, sz*0.8, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = nc.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${sz*0.4}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('歩', 0, sz*0.15);
+  } else if (db.type === 'atgun') {
+    // 対戦車砲: 三角
+    ctx.fillStyle = nc.fill;
+    ctx.beginPath();
+    ctx.moveTo(0, -sz*0.9);
+    ctx.lineTo(sz*0.8, sz*0.6);
+    ctx.lineTo(-sz*0.8, sz*0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = nc.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // 向き矢印
+    if (u.dir !== undefined) {
+      const angle = dirAngle(u.dir);
+      const ax = Math.cos(angle) * sz;
+      const ay = -Math.sin(angle) * sz;
+      ctx.strokeStyle = '#ff0';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(ax, ay);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold ${sz*0.35}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(u.name.substring(0, 6), 0, sz*0.15);
+  }
+
+  // 状態マーカー
+  if (u.status === 'destroyed') {
+    ctx.strokeStyle = '#f00';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-sz, -sz); ctx.lineTo(sz, sz);
+    ctx.moveTo(sz, -sz); ctx.lineTo(-sz, sz);
+    ctx.stroke();
+  }
+  if (u.status === 'immobilized') {
+    ctx.strokeStyle = '#cc0';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([4,4]);
+    ctx.strokeRect(-sz*1.1, -sz*0.9, sz*2.2, sz*1.8);
+    ctx.setLineDash([]);
+  }
+  if (u.fired) {
+    ctx.fillStyle = 'rgba(255,100,0,0.5)';
+    ctx.beginPath();
+    ctx.arc(sz*0.7, -sz*0.5, sz*0.25, 0, Math.PI*2);
+    ctx.fill();
+  }
+  if (u.ammoOut) {
+    ctx.fillStyle = '#f00';
+    ctx.font = `bold ${sz*0.5}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('弾切', 0, sz*0.8);
+  }
+
+  ctx.restore();
+}
+
+// ===== キャンバスイベント =====
+function resizeCanvas() {
+  const area = document.getElementById('mapArea');
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight;
+  draw();
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0) {
+    dragging = true;
+    dragStartX = e.clientX - camX;
+    dragStartY = e.clientY - camY;
+    canvas.style.cursor = 'grabbing';
+  }
+});
+canvas.addEventListener('mousemove', (e) => {
+  if (dragging) {
+    camX = e.clientX - dragStartX;
+    camY = e.clientY - dragStartY;
+    draw();
+  }
+});
+canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'grab'; });
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const oldZoom = zoom;
+  zoom *= e.deltaY < 0 ? 1.1 : 0.9;
+  zoom = Math.max(0.15, Math.min(2, zoom));
+  // ズーム中心をマウス位置に
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  camX = mx - (mx - camX) * (zoom / oldZoom);
+  camY = my - (my - camY) * (zoom / oldZoom);
+  draw();
+});
+
+// ヘクスクリック
+canvas.addEventListener('click', (e) => {
+  if (!state) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left - camX) / zoom;
+  const my = (e.clientY - rect.top - camY) / zoom;
+  const hex = pixelToHex(mx, my);
+
+  // そのヘクスにいるユニットを探す
+  const idx = state.units.findIndex(u =>
+    u.col === hex.col && u.row === hex.row && u.status !== 'destroyed'
+  );
+  if (idx >= 0) {
+    state.selectedUnit = idx;
+  } else {
+    state.selectedUnit = null;
+  }
+  renderUnitList();
+  draw();
+  // iframeに選択を通知
+  const frame = document.getElementById('phaseFrame');
+  if (frame.contentWindow) {
+    frame.contentWindow.postMessage({
+      type: 'MAP_SELECT',
+      col: hex.col, row: hex.row,
+      unitIdx: idx
+    }, '*');
+  }
+});
+
+// ===== シナリオ選択 =====
+function initScenarioScreen() {
+  const sel = document.getElementById('selScenario');
+  sel.innerHTML = '';
+  for (const sc of SCENARIOS) {
+    const opt = document.createElement('option');
+    opt.value = sc.id;
+    opt.textContent = sc.name;
+    sel.appendChild(opt);
+  }
+}
+
+function startGame() {
+  const scId = document.getElementById('selScenario').value;
+  const sideChoice = document.getElementById('selSide').value;
+  const sc = SCENARIOS.find(s => s.id === scId);
+  if (!sc) return;
+
+  // 国を決定
+  const sides = Object.keys(sc.sides);
+  const side1 = sides[0]; // 先攻側
+  const side2 = sides[1]; // 後攻側
+
+  let playerSide = null;
+  if (sideChoice === 'side1') playerSide = side1;
+  else if (sideChoice === 'side2') playerSide = side2;
+  else playerSide = 'hotseat';
+
+  // ユニット生成
+  const units = [];
+  let uid = 0;
+  for (const side of sides) {
+    const sd = sc.sides[side];
+    for (const u of sd.units) {
+      units.push({
+        id: uid++,
+        name: u.name,
+        side: side,
+        col: u.col || -1,
+        row: u.row || -1,
+        dir: u.dir !== undefined ? u.dir : 0,
+        status: 'ok',      // ok, immobilized, destroyed
+        fired: false,
+        moved: false,
+        ammoOut: false,
+        gunDisabled: false,
+        hidden: (sd.setup === 'deploy'),
+        isDummy: false,
+        carrying: null,     // 輸送中の歩兵ID
+        showWreck: false,
+      });
+    }
+  }
+
+  state = {
+    scenarioId: sc.id,
+    turn: 1,
+    maxTurns: sc.maxTurns || 99,
+    phase: 'pf1',
+    phaseIdx: 0,
+    firstPlayer: sc.firstPlayer || side1,
+    playerSide: playerSide,
+    side1: side1,
+    side2: side2,
+    units: units,
+    map1: sc.map1,
+    map1orient: sc.map1orient,
+    map2: sc.map2,
+    map2orient: sc.map2orient,
+    selectedUnit: null,
+    terrain: sc.terrain || {},
+  };
+
+  // 地図画像ロード
+  loadMaps();
+
+  // UI更新
+  document.getElementById('scenarioScreen').style.display = 'none';
+  saveState();
+  updateTopbar();
+  renderUnitList();
+  loadPhase();
+}
+
+function loadMaps() {
+  mapImg1 = new Image();
+  mapImg2 = new Image();
+  mapLoaded = 0;
+  mapImg1.onload = () => { mapLoaded++; if (mapLoaded >= 2) draw(); };
+  mapImg2.onload = () => { mapLoaded++; if (mapLoaded >= 2) draw(); };
+  mapImg1.src = `Map${state.map1}-${state.map1orient}.jpg`;
+  mapImg2.src = `Map${state.map2}-${state.map2orient}.jpg`;
+}
+
+// ===== フェーズ管理 =====
+const PHASE_SEQ = ['pf1','mv1','af1','pf2','mv2','af2'];
+const PHASE_LABELS = {
+  pf1:'先攻準備射撃', mv1:'先攻移動', af1:'先攻前進射撃',
+  pf2:'後攻準備射撃', mv2:'後攻移動', af2:'後攻前進射撃'
+};
+
+function getActiveSide(phase) {
+  if (phase.endsWith('1')) return state.firstPlayer;
+  return state.firstPlayer === state.side1 ? state.side2 : state.side1;
+}
+
+function updateTopbar() {
+  document.getElementById('turnInfo').textContent = `ターン ${state.turn}/${state.maxTurns}`;
+
+  const bar = document.getElementById('phaseBar');
+  bar.innerHTML = '';
+  for (let i = 0; i < PHASE_SEQ.length; i++) {
+    const div = document.createElement('div');
+    div.className = 'ph' + (i === state.phaseIdx ? ' active' : i < state.phaseIdx ? ' done' : '');
+    div.textContent = PHASE_LABELS[PHASE_SEQ[i]];
+    bar.appendChild(div);
+  }
+
+  const activeSide = getActiveSide(state.phase);
+  const nc = NATION_COLORS[activeSide];
+  document.getElementById('playerInfo').textContent =
+    `${nc ? nc.label : activeSide}${isPlayerPhase() ? '（手動）' : '（AI）'}`;
+}
+
+function isPlayerPhase() {
+  if (state.playerSide === 'hotseat') return true;
+  return getActiveSide(state.phase) === state.playerSide;
+}
+
+function loadPhase() {
+  const phase = state.phase;
+  const file = phase.startsWith('mv') ? 'phase_move.html' : 'phase_gun.html';
+  document.getElementById('phaseTitleBar').textContent = PHASE_LABELS[phase];
+  saveState();
+
+  const frame = document.getElementById('phaseFrame');
+  frame.src = `${file}?phase=${phase}`;
+}
+
+function endPhase() {
+  // フェーズ終了 → 次フェーズ
+  // 射撃マーカーをクリア（前進射撃フェーズ終了時）
+  if (state.phase === 'af1') {
+    state.units.filter(u => u.side === getActiveSide('pf1')).forEach(u => u.fired = false);
+  }
+  if (state.phase === 'af2') {
+    state.units.filter(u => u.side === getActiveSide('pf2')).forEach(u => u.fired = false);
+  }
+
+  // 移動フラグリセット（各移動フェーズ終了後）
+  if (state.phase === 'mv1' || state.phase === 'mv2') {
+    state.units.forEach(u => u.moved = false);
+  }
+
+  state.phaseIdx++;
+  if (state.phaseIdx >= PHASE_SEQ.length) {
+    // ターン終了
+    state.phaseIdx = 0;
+    state.turn++;
+    if (state.turn > state.maxTurns) {
+      alert('ゲーム終了');
+      return;
+    }
+    gameLog(`<b style="color:#c8a020">══ 第${state.turn}ターン ══</b>`);
+  }
+  state.phase = PHASE_SEQ[state.phaseIdx];
+  saveState();
+  updateTopbar();
+  renderUnitList();
+  loadPhase();
+  draw();
+}
+
+// ===== ユニット一覧 =====
+function renderUnitList() {
+  if (!state) return;
+
+  const s1 = state.side1;
+  const s2 = state.side2;
+  const nc1 = NATION_COLORS[s1];
+  const nc2 = NATION_COLORS[s2];
+
+  document.getElementById('side1Label').textContent = nc1 ? nc1.label : s1;
+  document.getElementById('side1Label').style.color = nc1 ? nc1.fill : '#ccc';
+  document.getElementById('side2Label').textContent = nc2 ? nc2.label : s2;
+  document.getElementById('side2Label').style.color = nc2 ? nc2.fill : '#ccc';
+
+  renderSideList('side1List', s1);
+  renderSideList('side2List', s2);
+}
+
+function renderSideList(containerId, side) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  state.units.forEach((u, i) => {
+    if (u.side !== side) return;
+    const div = document.createElement('div');
+    div.className = 'unit-item' +
+      (u.status === 'destroyed' ? ' destroyed' : '') +
+      (u.status === 'immobilized' ? ' immobilized' : '') +
+      (state.selectedUnit === i ? ' selected' : '');
+    const statusText = u.status === 'destroyed' ? '撃破' :
+                       u.status === 'immobilized' ? '移動不能' :
+                       u.ammoOut ? '弾切' : '';
+    div.innerHTML = `<span class="u-name">${u.name}</span><span class="u-status">${statusText}</span>`;
+    div.onclick = () => {
+      state.selectedUnit = i;
+      renderUnitList();
+      draw();
+      // iframeに通知
+      const frame = document.getElementById('phaseFrame');
+      if (frame.contentWindow) {
+        frame.contentWindow.postMessage({ type:'SELECT_UNIT', unitIdx:i }, '*');
+      }
+    };
+    el.appendChild(div);
+  });
+}
+
+// ===== State管理 =====
+function saveState() {
+  localStorage.setItem('tanksState', JSON.stringify(state));
+}
+
+function gameLog(text) {
+  const gl = document.getElementById('gameLog');
+  if (gl) {
+    gl.style.display = '';
+    gl.innerHTML += `<div>${text}</div>`;
+    gl.scrollTop = gl.scrollHeight;
+  }
+}
+
+// ===== iframe通信 =====
+window.addEventListener('message', (e) => {
+  if (!e.data || !e.data.type) return;
+
+  switch (e.data.type) {
+    case 'PHASE_DONE':
+      endPhase();
+      break;
+    case 'STATE_UPDATE':
+      if (e.data.units) state.units = e.data.units;
+      saveState();
+      renderUnitList();
+      draw();
+      break;
+    case 'HIGHLIGHT':
+      state.selectedUnit = e.data.unitIdx || null;
+      draw();
+      break;
+    case 'SHOOT_ANIM':
+      // 弾丸アニメーション（将来実装）
+      break;
+    case 'GAME_LOG':
+      gameLog(e.data.text);
+      break;
+  }
+});
+
+// ===== 初期化 =====
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('load', () => {
+  resizeCanvas();
+  initScenarioScreen();
+});
+</script>
+</body>
+</html>
