@@ -178,12 +178,14 @@ function startStraightMode() {
     state.contactMade = true;
     pushState();
     setInfo('敵艦発見！ 両軍自由移動可能');
-  } else if (radar && !state.usDetected) {
-    state.usDetected = true;
-    state.usFreeMove = true;
-    state.contactMade = true;
-    pushState();
-    setInfo(`${side}直進完了 — 敵未発見`);
+  } else if (radar) {
+    if (!state.usDetected) {
+      state.usDetected = true;
+      state.usFreeMove = true;
+      state.contactMade = true;
+      pushState();
+    }
+    setInfo('レーダー探知！ 米軍自由移動可能');
   } else if (!visual && !radar) {
     checkLineReach();
     setInfo(`${side}直進完了 — 敵未発見`);
