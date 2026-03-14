@@ -916,7 +916,7 @@ function autoJPShoot(title) {
     contactMade:state.contactMade
   }, '*');
 
-  // 1隻ずつ自動処理（オーバーレイなし、ログ+アニメーションのみ）
+  // 1隻ずつオーバーレイ表示、「確認」で次へ
   let idx = 0;
   const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
 
@@ -953,8 +953,14 @@ function autoJPShoot(title) {
       log('  外れ');
     }
 
-    // 次の射撃へ（少し間を空ける）
-    setTimeout(() => processNext(), 800);
+    // オーバーレイで結果表示
+    showResult(r);
+    const okBtn = document.getElementById('resultOK');
+    okBtn.textContent = '確認';
+    okBtn.onclick = function() {
+      closeResult();
+      setTimeout(() => processNext(), 300);
+    };
   }
 
   processNext();
