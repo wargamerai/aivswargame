@@ -729,6 +729,9 @@ function doShoot() {
         d1, d2, hits, dmgText, critText,
         ratioLabel, dmgDice, arcInfo, critSunk
       });
+      const okBtn2 = document.getElementById('resultOK');
+      okBtn2.textContent = '確認';
+      okBtn2.onclick = function() { closeResult(); };
     }, 600);
   };
 }
