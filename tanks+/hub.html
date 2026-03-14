@@ -321,7 +321,7 @@ function isInFixedArc(unit, tc, tr) {
   let diff = angle - centerAngle;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
-  return Math.abs(diff) <= Math.PI / 3;
+  return Math.abs(diff) <= Math.PI / 3 + 0.05; // 境界ヘクスを含める余裕
 }
 
 // 射界描画: 選択ユニットの射界ヘクスを距離5hex刻みで色分け
