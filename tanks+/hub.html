@@ -103,6 +103,16 @@ button.top-btn:hover { background:#556; }
   <span class="info" id="playerInfo"></span>
   <button class="top-btn" onclick="endPhase()">フェーズ終了</button>
   <button class="top-btn" id="arcBtn" onclick="toggleArc()">射界表示</button>
+  <span style="margin-left:20px;color:#888">|</span>
+  <button class="top-btn" id="teBtn" onclick="toggleTerrainEdit()">地形編集</button>
+  <span id="teBrush" style="display:none; gap:4px; align-items:center;">
+    <button class="top-btn te-b" data-t="forest" onclick="setTeBrush('forest')">森</button>
+    <button class="top-btn te-b" data-t="building" onclick="setTeBrush('building')">建物</button>
+    <button class="top-btn te-b" data-t="slope" onclick="setTeBrush('slope')">丘</button>
+    <button class="top-btn te-b" data-t="bocage" onclick="setTeBrush('bocage')">ボカージュ</button>
+    <button class="top-btn te-b" data-t="eraser" onclick="setTeBrush('eraser')">消去</button>
+    <button class="top-btn" onclick="exportTerrain()" style="background:#364;color:#8f8">出力</button>
+  </span>
 </div>
 
 <!-- メインエリア -->
@@ -224,6 +234,33 @@ function hexNeighbor(col, row, dir) {
   return { col: col + d[0], row: row + d[1] };
 }
 
+// ヘクスサイド: クリック位置から最も近い辺を特定
+// 戻り値: 正規化キー "col1,row1-col2,row2"（小さい方が先）と辺の両端頂点
+function nearestHexSide(px, py) {
+  const hex = pixelToHex(px, py);
+  const hc = hexCenter(hex.col, hex.row);
+  const corners = hexCorners(hc.x, hc.y);
+  // 6辺それぞれの中点との距離
+  let bestDir = 0, bestDist = Infinity;
+  for (let i = 0; i < 6; i++) {
+    const j = (i + 1) % 6;
+    const mx = (corners[i].x + corners[j].x) / 2;
+    const my = (corners[i].y + corners[j].y) / 2;
+    const d = (px - mx) ** 2 + (py - my) ** 2;
+    if (d < bestDist) { bestDist = d; bestDir = i; }
+  }
+  // その辺に隣接するヘクス
+  const nb = hexNeighbor(hex.col, hex.row, bestDir);
+  if (!nb) return null;
+  // 正規化: 小さい座標が先
+  const a = `${hex.col},${hex.row}`;
+  const b = `${nb.col},${nb.row}`;
+  const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+  // 辺の頂点座標
+  const j = (bestDir + 1) % 6;
+  return { key, v1: corners[bestDir], v2: corners[j] };
+}
+
 // 向き矢印の角度（flat-top）: dir 0=E(0°), 1=NE(60°), 2=NW(120°), 3=W(180°), 4=SW(240°), 5=SE(300°)
 function dirAngle(dir) {
   return dir * 60 * Math.PI / 180;
@@ -291,6 +328,45 @@ function draw() {
     }
   }
 
+  // ヘクスサイド地形描画（ボカージュ等）
+  if (state && state.hexsideTerrain) {
+    for (const key in state.hexsideTerrain) {
+      const [partA, partB] = key.split('-');
+      const [c1, r1] = partA.split(',').map(Number);
+      const [c2, r2] = partB.split(',').map(Number);
+      const h1 = hexCenter(c1, r1);
+      const h2 = hexCenter(c2, r2);
+      // 2つのヘクス中心の中点と、辺の頂点を計算
+      const corners1 = hexCorners(h1.x, h1.y);
+      const corners2 = hexCorners(h2.x, h2.y);
+      // 共有する2頂点を見つける（距離が近い頂点ペア）
+      const shared = [];
+      for (const p1 of corners1) {
+        for (const p2 of corners2) {
+          if (Math.abs(p1.x - p2.x) < 2 && Math.abs(p1.y - p2.y) < 2) {
+            shared.push({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 });
+          }
+        }
+      }
+      if (shared.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(shared[0].x, shared[0].y);
+        ctx.lineTo(shared[1].x, shared[1].y);
+        ctx.strokeStyle = '#8B4513';
+        ctx.lineWidth = 6;
+        ctx.stroke();
+        // ラベル
+        const mx = (shared[0].x + shared[1].x) / 2;
+        const my = (shared[0].y + shared[1].y) / 2;
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${HEX_SIZE * 0.18}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('ボ', mx, my);
+      }
+    }
+  }
+
   // 射界オーバーレイ
   if (showArc && state && state.selectedUnit !== null && state.selectedUnit !== undefined) {
     drawFireArc(state.units[state.selectedUnit], maxCol, maxRow);
@@ -329,6 +405,56 @@ function toggleArc() {
   document.getElementById('arcBtn').style.background = showArc ? '#c8a020' : '';
   document.getElementById('arcBtn').style.color = showArc ? '#000' : '';
   draw();
+}
+
+// ===== 地形エディタ =====
+let terrainEditMode = false;
+let teBrush = 'forest'; // forest|building|slope|eraser
+
+function toggleTerrainEdit() {
+  terrainEditMode = !terrainEditMode;
+  document.getElementById('teBtn').style.background = terrainEditMode ? '#c8a020' : '';
+  document.getElementById('teBtn').style.color = terrainEditMode ? '#000' : '';
+  document.getElementById('teBrush').style.display = terrainEditMode ? 'flex' : 'none';
+  if (terrainEditMode) setTeBrush('forest');
+}
+
+function setTeBrush(t) {
+  teBrush = t;
+  document.querySelectorAll('.te-b').forEach(b => {
+    const active = b.dataset.t === t;
+    b.style.background = active ? '#c8a020' : '';
+    b.style.color = active ? '#000' : '';
+  });
+}
+
+function exportTerrain() {
+  if (!state) return;
+  let lines = [];
+  const sorted = Object.entries(state.terrain).sort((a, b) => {
+    const [ac, ar] = a[0].split(',').map(Number);
+    const [bc, br] = b[0].split(',').map(Number);
+    return ac - bc || ar - br;
+  });
+  for (const [key, val] of sorted) {
+    lines.push(`'${key}': '${val}'`);
+  }
+  let text = 'terrain: {\n  ' + lines.join(',\n  ') + '\n}';
+  // ヘクスサイド地形
+  if (state.hexsideTerrain && Object.keys(state.hexsideTerrain).length > 0) {
+    const hsLines = [];
+    const hsSorted = Object.entries(state.hexsideTerrain).sort();
+    for (const [key, val] of hsSorted) {
+      hsLines.push(`'${key}': '${val}'`);
+    }
+    text += ',\nhexsideTerrain: {\n  ' + hsLines.join(',\n  ') + '\n}';
+  }
+  navigator.clipboard.writeText(text).then(() => {
+    alert('地形データをクリップボードにコピーしました');
+  }).catch(() => {
+    console.log(text);
+    alert('コンソールに出力しました');
+  });
 }
 
 // 射界判定: 頂点は正面の隣接ヘクス、そこから120°に広がる
@@ -602,6 +728,31 @@ canvas.addEventListener('click', (e) => {
   const my = (e.clientY - rect.top - camY) / zoom;
   const hex = pixelToHex(mx, my);
 
+  // 地形エディタモード
+  if (terrainEditMode) {
+    if (teBrush === 'bocage') {
+      // ヘクスサイドに配置
+      const side = nearestHexSide(mx, my);
+      if (side) {
+        if (!state.hexsideTerrain) state.hexsideTerrain = {};
+        state.hexsideTerrain[side.key] = 'bocage';
+      }
+    } else if (teBrush === 'eraser') {
+      // ヘクス地形とヘクスサイド地形の両方を消す
+      const key = `${hex.col},${hex.row}`;
+      delete state.terrain[key];
+      // 近くのヘクスサイドも消す
+      const side = nearestHexSide(mx, my);
+      if (side && state.hexsideTerrain) {
+        delete state.hexsideTerrain[side.key];
+      }
+    } else {
+      state.terrain[`${hex.col},${hex.row}`] = teBrush;
+    }
+    draw();
+    return;
+  }
+
   // そのヘクスにいるユニットを探す
   const idx = state.units.findIndex(u =>
     u.col === hex.col && u.row === hex.row && u.status !== 'destroyed'
@@ -613,12 +764,20 @@ canvas.addEventListener('click', (e) => {
   }
   renderUnitList();
   draw();
+  // クリック位置からヘクスサイド（0-5）を計算
+  const hc = hexCenter(hex.col, hex.row);
+  const clickAngle = Math.atan2(-(my - hc.y), mx - hc.x); // Y上向き
+  let sideDir = Math.round(clickAngle / (Math.PI / 3));
+  if (sideDir < 0) sideDir += 6;
+  sideDir = sideDir % 6;
+
   // iframeに選択を通知
   const frame = document.getElementById('phaseFrame');
   if (frame.contentWindow) {
     frame.contentWindow.postMessage({
       type: 'MAP_SELECT',
       col: hex.col, row: hex.row,
+      side: sideDir,
       unitIdx: idx
     }, '*');
   }
@@ -695,6 +854,7 @@ function startGame() {
     map2orient: sc.map2orient,
     selectedUnit: null,
     terrain: sc.terrain || {},
+    hexsideTerrain: sc.hexsideTerrain || {},
   };
 
   // 地図画像ロード
@@ -710,12 +870,17 @@ function startGame() {
 
 function loadMaps() {
   mapImg1 = new Image();
-  mapImg2 = new Image();
+  mapImg2 = null;
+  const needTwo = state.map2 && state.map2orient;
+  const total = needTwo ? 2 : 1;
   mapLoaded = 0;
-  mapImg1.onload = () => { mapLoaded++; if (mapLoaded >= 2) draw(); };
-  mapImg2.onload = () => { mapLoaded++; if (mapLoaded >= 2) draw(); };
+  mapImg1.onload = () => { mapLoaded++; if (mapLoaded >= total) draw(); };
   mapImg1.src = `Map${state.map1}-${state.map1orient}.jpg`;
-  mapImg2.src = `Map${state.map2}-${state.map2orient}.jpg`;
+  if (needTwo) {
+    mapImg2 = new Image();
+    mapImg2.onload = () => { mapLoaded++; if (mapLoaded >= total) draw(); };
+    mapImg2.src = `Map${state.map2}-${state.map2orient}.jpg`;
+  }
 }
 
 // ===== フェーズ管理 =====

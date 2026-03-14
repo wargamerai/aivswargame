@@ -96,6 +96,7 @@ let activeSide = '', enemySide = '';
 let isAdvanceFire = false;
 let selectedFirer = -1, selectedTarget = -1;
 let firers = [], targets = [];
+let contFireUnit = -1, contFireTarget = -1; // 連続射撃の強制目標
 
 function roll() { return Math.floor(Math.random() * 6) + 1; }
 
@@ -189,7 +190,13 @@ function renderCards() {
       (i === selectedFirer ? ' firer-sel' : '') +
       (u.fired ? ' disabled' : '');
     card.innerHTML = `<span class="c-name">${u.name}</span>`;
-    card.onclick = () => { if (!u.fired) { selectedFirer = i; renderCards(); updateShootInfo(); } };
+    // 連続射撃中は射撃ユニット固定
+    const firerLocked = (contFireUnit >= 0 && contFireUnit !== i);
+    const isDisabled = u.fired || firerLocked;
+    card.className = 'card' +
+      (i === selectedFirer ? ' firer-sel' : '') +
+      (isDisabled ? ' disabled' : '');
+    card.onclick = () => { if (!isDisabled) { selectedFirer = i; renderCards(); updateShootInfo(); } };
     fEl.appendChild(card);
   }
 
@@ -198,11 +205,13 @@ function renderCards() {
   for (const i of targets) {
     const u = state.units[i];
     if (u.status === 'destroyed') continue;
+    // 連続射撃で目標固定の場合
+    const targetLocked = (contFireUnit >= 0 && contFireTarget >= 0 && contFireTarget !== i);
     const card = document.createElement('div');
-    card.className = 'card' + (i === selectedTarget ? ' target-sel' : '');
+    card.className = 'card' + (i === selectedTarget ? ' target-sel' : '') + (targetLocked ? ' disabled' : '');
     card.innerHTML = `<span class="c-name">${u.name}</span>
       <span class="c-info">${u.status === 'immobilized' ? ' 移動不能' : ''}</span>`;
-    card.onclick = () => { selectedTarget = i; renderCards(); updateShootInfo(); };
+    card.onclick = () => { if (!targetLocked) { selectedTarget = i; renderCards(); updateShootInfo(); } };
     tEl.appendChild(card);
   }
 }
@@ -374,6 +383,9 @@ function isHittingFrontArmor(firer, target) {
 function doShoot() {
   if (selectedFirer < 0 || selectedTarget < 0) return;
 
+  // 連続射撃の2発目ならリセット予約
+  const isContFire = (contFireUnit >= 0);
+
   const firer = state.units[selectedFirer];
   const target = state.units[selectedTarget];
   const fDb = UNIT_DB[firer.name];
@@ -485,10 +497,27 @@ function doShoot() {
 
   // 特殊
   if (continuousFire) {
-    resultHtml += `<div style="text-align:center;color:#2a7a2a;font-weight:bold">🎯 連続射撃！（もう一度射撃可能）</div>`;
-    log(`  ★ 連続射撃（ゾロ目2）`);
+    const targetAlive = (target.status !== 'destroyed' && target.status !== 'immobilized');
+    if (targetAlive) {
+      // 目標に効果なし → 同じ目標に再射撃
+      contFireUnit = selectedFirer;
+      contFireTarget = selectedTarget;
+      resultHtml += `<div style="text-align:center;color:#2a7a2a;font-weight:bold">🎯 連続射撃！（同じ目標にもう一度）</div>`;
+      log(`  ★ 連続射撃（ゾロ目2）→ 同一目標`);
+    } else {
+      // 目標を破壊/移動不能にした → 別の目標を選択可能
+      contFireUnit = selectedFirer;
+      contFireTarget = -1;
+      resultHtml += `<div style="text-align:center;color:#2a7a2a;font-weight:bold">🎯 連続射撃！（別の目標を選択可能）</div>`;
+      log(`  ★ 連続射撃（ゾロ目2）→ 目標選択可`);
+    }
   } else {
     firer.fired = true;
+    // 連続射撃の2発目だった場合、完了
+    if (isContFire) {
+      contFireUnit = -1;
+      contFireTarget = -1;
+    }
   }
 
   if (ammoOut) {
@@ -563,10 +592,17 @@ function doInfantryShoot(firer, target, dist) {
 
 function closeResult() {
   document.getElementById('resultOverlay').style.display = 'none';
-  selectedFirer = -1;
-  selectedTarget = -1;
   // 目標リストを更新（撃破されたユニットを除外）
   targets = targets.filter(i => state.units[i].status !== 'destroyed');
+
+  // 連続射撃中: 射撃ユニットと目標を自動選択
+  if (contFireUnit >= 0) {
+    selectedFirer = contFireUnit;
+    selectedTarget = contFireTarget >= 0 ? contFireTarget : -1;
+  } else {
+    selectedFirer = -1;
+    selectedTarget = -1;
+  }
   renderCards();
   updateShootInfo();
 }
