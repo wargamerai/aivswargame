@@ -217,6 +217,11 @@ const SCENARIOS = [
           { name:'T34/85', col:20, row:10, dir:3 },
         ]
       }
+    },
+    terrain: {
+      '13,9': 'forest', '13,10': 'forest', '13,11': 'forest',
+      '14,10': 'forest', '14,11': 'forest',
+      '16,8': 'building', '16,9': 'building',
     }
   }
 ];
