@@ -342,15 +342,17 @@ function isInArc(unit, other) {
 }
 
 // 固定砲塔の射界: 頂点は正面の隣接ヘクス、そこから120°に広がる
+// 中心線はユニット→隣接ヘクスの実際の幾何学的角度
 function isInFixedArc(firer, target) {
   const apex = hexNeighbor(firer.col, firer.row, firer.dir);
   if (!apex) return false;
   if (target.col === apex.col && target.row === apex.row) return true;
+  const hFirer = hexCenter(firer.col, firer.row);
   const hApex = hexCenter(apex.col, apex.row);
   const hTgt = hexCenter(target.col, target.row);
+  const centerAngle = Math.atan2(-(hApex.y - hFirer.y), hApex.x - hFirer.x);
   const angle = Math.atan2(-(hTgt.y - hApex.y), hTgt.x - hApex.x);
-  const dirRad = firer.dir * 60 * Math.PI / 180;
-  let diff = angle - dirRad;
+  let diff = angle - centerAngle;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
   return Math.abs(diff) <= Math.PI / 3;
