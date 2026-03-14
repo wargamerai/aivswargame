@@ -140,15 +140,15 @@ button.top-btn:hover { background:#556; }
   <h4>🔧 ヘクス キャリブレーション</h4>
   <div class="calib-row">
     <label>OX (横):</label>
-    <input type="number" id="inputOX" value="75" step="1">
+    <input type="number" id="inputOX" value="99.5" step="1">
   </div>
   <div class="calib-row">
     <label>OY (縦):</label>
-    <input type="number" id="inputOY" value="85" step="1">
+    <input type="number" id="inputOY" value="88.5" step="1">
   </div>
   <div class="calib-row">
     <label>HEX_SIZE:</label>
-    <input type="number" id="inputSize" value="82" step="0.5">
+    <input type="number" id="inputSize" value="103.4" step="0.5">
   </div>
   <div class="calib-info">値を調整してJPGのヘクスにグリッドを合わせてください</div>
   <button onclick="applyCalib()">この値で確定（コンソールに出力）</button>
@@ -185,11 +185,11 @@ let dragging = false, dragStartX = 0, dragStartY = 0;
 // ===== ヘクス定数（JPG画像に合わせてキャリブレーション） =====
 // MapA-Vertical: 3972x2860, 約24列×25行
 // flat-topヘクス: 幅=size*2, 高さ=size*sqrt(3)
-let HEX_SIZE = 82;  // ヘクス半径（ピクセル）
+let HEX_SIZE = 103.4;  // ヘクス半径（ピクセル）
 let HEX_W = HEX_SIZE * 2;
 let HEX_H = HEX_SIZE * Math.sqrt(3);
-let OX = 75;   // 左上ヘクス(01,01)の中心X
-let OY = 85;   // 左上ヘクス(01,01)の中心Y
+let OX = 99.5;   // 左上ヘクス(01,01)の中心X
+let OY = 88.5;   // 左上ヘクス(01,01)の中心Y
 
 // ===== ヘクス関数 =====
 // flat-topヘクス: 奇数列は半ヘクス下にずれる
