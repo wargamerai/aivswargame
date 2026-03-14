@@ -219,10 +219,33 @@ const SCENARIOS = [
       }
     },
     terrain: {
-      '13,9': 'forest', '13,10': 'forest', '13,11': 'forest',
-      '14,10': 'forest', '14,11': 'forest',
-      '16,8': 'building', '16,9': 'building',
-      '12,12': 'slope', '12,13': 'slope', '13,13': 'slope',
+      // MapA 建物（左上）
+      '4,2': 'building', '5,2': 'building', '4,3': 'building',
+      // MapA 森（右上）
+      '10,1': 'forest', '11,1': 'forest', '11,2': 'forest', '12,2': 'forest', '12,3': 'forest',
+      // MapA 森（左中央〜下、大）
+      '3,8': 'forest', '3,9': 'forest', '4,9': 'forest',
+      '3,10': 'forest', '4,10': 'forest',
+      '3,11': 'forest', '4,11': 'forest',
+      '3,12': 'forest', '4,12': 'forest', '5,12': 'forest',
+      '3,13': 'forest',
+      // MapA 森（右下）
+      '11,12': 'forest', '12,12': 'forest',
+      '11,13': 'forest', '12,13': 'forest', '13,13': 'forest',
+      '12,14': 'forest', '13,14': 'forest',
+      // MapB 丘（上部小丘）
+      '18,3': 'slope', '19,3': 'slope', '19,4': 'slope',
+      // MapB 高地+建物（右上）
+      '22,1': 'slope', '23,1': 'slope', '24,1': 'slope',
+      '22,2': 'slope', '23,2': 'building', '24,2': 'slope',
+      '22,3': 'slope', '23,3': 'slope', '24,3': 'slope',
+      '23,4': 'slope',
+      // MapB 森（左中央、大）
+      '15,8': 'forest', '16,8': 'forest',
+      '15,9': 'forest', '16,9': 'forest',
+      '15,10': 'forest', '16,10': 'forest', '17,10': 'forest',
+      '15,11': 'forest', '16,11': 'forest', '17,11': 'forest',
+      '16,12': 'forest',
     }
   }
 ];
