@@ -329,23 +329,38 @@ function getInfantryShootInfo(firer, target, dist) {
 }
 
 // ===== 射界判定 =====
-// unitの向きから見てotherが前方±60°以内か
+// unitの向きから見てotherが前方±60°以内か（装甲判定用）
 function isInArc(unit, other) {
-  const dx = other.col - unit.col;
-  const dy = other.row - unit.row;
-  const angle = Math.atan2(-dy, dx);
-  const dirAngleRad = unit.dir * 60 * Math.PI / 180;
-  let diff = angle - dirAngleRad;
+  const hSrc = hexCenter(unit.col, unit.row);
+  const hTgt = hexCenter(other.col, other.row);
+  const angle = Math.atan2(-(hTgt.y - hSrc.y), hTgt.x - hSrc.x);
+  const dirRad = unit.dir * 60 * Math.PI / 180;
+  let diff = angle - dirRad;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
   return Math.abs(diff) <= Math.PI / 3;
 }
 
-// 射撃可能か（旋回砲塔=360°、固定砲塔/AT砲=前方のみ）
+// 固定砲塔の射界: 頂点は正面の隣接ヘクス、そこから120°に広がる
+function isInFixedArc(firer, target) {
+  const apex = hexNeighbor(firer.col, firer.row, firer.dir);
+  if (!apex) return false;
+  if (target.col === apex.col && target.row === apex.row) return true;
+  const hApex = hexCenter(apex.col, apex.row);
+  const hTgt = hexCenter(target.col, target.row);
+  const angle = Math.atan2(-(hTgt.y - hApex.y), hTgt.x - hApex.x);
+  const dirRad = firer.dir * 60 * Math.PI / 180;
+  let diff = angle - dirRad;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return Math.abs(diff) <= Math.PI / 3;
+}
+
+// 射撃可能か（旋回砲塔=360°、固定砲塔/AT砲=隣接ヘクス起点120°）
 function canFireAt(firer, target) {
   const fDb = UNIT_DB[firer.name];
   if (fDb.turret === 'rotating') return true;
-  return isInArc(firer, target);
+  return isInFixedArc(firer, target);
 }
 
 // 正面装甲か側面装甲か（目標の向きから判定）
@@ -555,6 +570,26 @@ function closeResult() {
 }
 
 // ===== ヘクス関数 =====
+const HEX_SIZE = 103.4;
+const HEX_H = HEX_SIZE * Math.sqrt(3);
+const OX = 99.5, OY = 88.5;
+
+function hexCenter(col, row) {
+  const x = OX + (col - 1) * HEX_SIZE * 1.5;
+  const y = OY + (row - 1) * HEX_H + ((col % 2 === 0) ? HEX_H / 2 : 0);
+  return { x, y };
+}
+
+function hexNeighbor(col, row, dir) {
+  const odd = (col % 2 === 1);
+  const neighbors = (col % 2 === 0) ?
+    [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[0,1]] :
+    [[1,1],[1,0],[0,-1],[-1,0],[-1,1],[0,1]];
+  const d = neighbors[dir];
+  if (!d) return null;
+  return { col: col + d[0], row: row + d[1] };
+}
+
 function hexDist(c1, r1, c2, r2) {
   function toAxial(col, row) {
     const q = col - 1;

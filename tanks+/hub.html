@@ -305,6 +305,23 @@ function toggleArc() {
   draw();
 }
 
+// 射界判定: 頂点は正面の隣接ヘクス、そこから120°に広がる
+function isInFixedArc(unit, tc, tr) {
+  const apex = hexNeighbor(unit.col, unit.row, unit.dir);
+  if (!apex) return false;
+  // 正面の隣接ヘクス自体は射界内
+  if (tc === apex.col && tr === apex.row) return true;
+  // 頂点ヘクスからターゲットへの角度を計算
+  const hApex = hexCenter(apex.col, apex.row);
+  const hTgt = hexCenter(tc, tr);
+  const angle = Math.atan2(-(hTgt.y - hApex.y), hTgt.x - hApex.x);
+  const dirRad = unit.dir * 60 * Math.PI / 180;
+  let diff = angle - dirRad;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return Math.abs(diff) <= Math.PI / 3; // ±60° = 120°
+}
+
 // 射界描画: 選択ユニットの射界ヘクスを距離5hex刻みで色分け
 function drawFireArc(unit, maxCol, maxRow) {
   if (!unit || unit.col < 1) return;
@@ -328,19 +345,8 @@ function drawFireArc(unit, maxCol, maxRow) {
       const dist = hexDist(unit.col, unit.row, c, r);
       if (dist < 1 || dist > 30) continue;
 
-      // 射界チェック（旋回砲塔は全方向、固定は前方120°）
-      if (!isRotating) {
-        const dx = c - unit.col;
-        const dy = r - unit.row;
-        const hSrc = hexCenter(unit.col, unit.row);
-        const hTgt = hexCenter(c, r);
-        const angle = Math.atan2(-(hTgt.y - hSrc.y), hTgt.x - hSrc.x);
-        const dirRad = unit.dir * 60 * Math.PI / 180;
-        let diff = angle - dirRad;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        if (Math.abs(diff) > Math.PI / 3) continue; // 射界外
-      }
+      // 射界チェック（旋回砲塔は全方向、固定は頂点が隣接ヘクス）
+      if (!isRotating && !isInFixedArc(unit, c, r)) continue;
 
       const bandIdx = Math.min(Math.floor((dist - 1) / 5), bandColors.length - 1);
       const h = hexCenter(c, r);

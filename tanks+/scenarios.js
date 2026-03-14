@@ -207,6 +207,7 @@ const SCENARIOS = [
         enterEdge: null,
         units: [
           { name:'Pz IV/H', col:10, row:10, dir:0 },
+          { name:'StuG III', col:10, row:14, dir:0 },
         ]
       },
       su: {
