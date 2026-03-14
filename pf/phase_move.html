@@ -115,8 +115,16 @@ function init() {
   jpFleet = state.jpFleet || [];
   usFleet = state.usFleet || [];
 
-  // 移動パスをリセット＋回頭カウントリセット
-  [...jpFleet, ...usFleet].forEach(s => { s.path = []; s.turnCount = 0; });
+  // 移動パスをリセット＋回頭カウントリセット＋残り移動力初期化
+  [...jpFleet, ...usFleet].forEach(s => {
+    s.path = []; s.turnCount = 0;
+    if (s.status !== 'sunk' && s.col >= 0) {
+      const spd = getSpeed(s);
+      s.remainMove = s.dmgM >= s.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    } else {
+      s.remainMove = 0;
+    }
+  });
 
   console.log(`=== 移動フェーズ開始 (${state.phase}) ターン${state.combatTurn} ===`);
   dumpFleet('JP移動前', jpFleet);
@@ -329,6 +337,7 @@ function autoAdvanceIndividual(fleet) {
       var sunkAt = getSunkShip(next.col, next.row, ship);
       if (sunkAt) collisionCheck(ship, sunkAt);
     }
+    ship.remainMove = 0;
   }
 }
 
@@ -353,17 +362,20 @@ function autoAdvanceColumn(fleet) {
   for (const lead of leads) {
     const spd = Math.min(getSpeed(lead), fleetSpeed);  // 統一速力で上限
     const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    const minSpd = Math.min(getMinSpeed(lead), fleetSpeed);
+    const minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
 
     for (let step = 0; step < moveCount; step++) {
       const next = hexNeighbor(lead.col, lead.row, lead.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+      // 衝突回避: 最低速度以上なら前方占有時に停止
+      if (step >= minCount && (occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead))) break;
 
       lead.path = lead.path || [];
       lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
       lead.col = next.col;
       lead.row = next.row;
-      // 同一ヘクス進入 → 衝突チェック（止めない）
       var occ = getOccupant(next.col, next.row, lead);
       if (occ) collisionCheck(lead, occ);
       var sunkAt = getSunkShip(next.col, next.row, lead);
@@ -371,6 +383,10 @@ function autoAdvanceColumn(fleet) {
 
       moveFollowers(lead, fleet);
     }
+    // リード＋随伴の残り移動力を0に
+    lead.remainMove = 0;
+    const ci = lead.colIndex;
+    fleet.filter(s => !s.isLead && s.colIndex === ci).forEach(f => f.remainMove = 0);
   }
 
   // 整合性チェック
@@ -479,6 +495,8 @@ function aiUSMoveAnimated() {
 function aiMoveOneLead(lead, jpc, jpDir, sr) {
   const spd = getSpeed(lead);
   const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+  const minSpd = getMinSpeed(lead);
+  const minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
   const isDD = (lead.type === 'DD');
   const distToJP = hexDist(lead.col, lead.row, jpc.col, jpc.row);
   const preCol = lead.col, preRow = lead.row;
@@ -580,34 +598,39 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
       break;
     }
 
-    if (occupied(next.col, next.row, lead) && !lead.cannotTurn) {
+    const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
+    if (blocked) {
       // 回頭可能 → 隣接ヘックスで回避を試みる
-      const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
-      let avoided = false;
-      for (const offset of [1, 5]) {
-        const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
-        const altNext = hexNeighbor(lead.col, lead.row, altDir);
-        if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
-            && !occupied(altNext.col, altNext.row, lead)) {
-          lead.path = lead.path || [];
-          lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-          lead.col = altNext.col;
-          lead.row = altNext.row;
-          moveFollowers(lead, usFleet);
-          avoided = true;
-          remain--;
-          break;
+      if (!lead.cannotTurn) {
+        const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
+        let avoided = false;
+        for (const offset of [1, 5]) {
+          const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
+          const altNext = hexNeighbor(lead.col, lead.row, altDir);
+          if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
+              && !occupied(altNext.col, altNext.row, lead) && !getSunkShip(altNext.col, altNext.row, lead)) {
+            lead.path = lead.path || [];
+            lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+            lead.col = altNext.col;
+            lead.row = altNext.row;
+            moveFollowers(lead, usFleet);
+            avoided = true;
+            remain--;
+            break;
+          }
         }
+        if (avoided) { turned = false; continue; }
       }
-      if (avoided) { turned = false; continue; }
-      // 回避失敗 → そのまま突入
+      // 回避失敗: 最低速度以上なら停止
+      const moved = moveCount - remain;
+      if (moved >= minCount) break;
+      // 最低速度未達 → やむなく突入
     }
 
     lead.path = lead.path || [];
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
     lead.col = next.col;
     lead.row = next.row;
-    // 同一ヘクス進入 → 衝突チェック（止めない）
     var occAt = getOccupant(next.col, next.row, lead);
     if (occAt) collisionCheck(lead, occAt);
     var sunkAt = getSunkShip(next.col, next.row, lead);
@@ -616,6 +639,10 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
     remain--;
     moveFollowers(lead, usFleet);
   }
+  lead.remainMove = remain;
+  // 随伴艦の残り移動力も更新
+  const ci = lead.colIndex;
+  usFleet.filter(s => !s.isLead && s.colIndex === ci).forEach(f => f.remainMove = remain);
   console.log(`aiUSMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount}`);
 }
 
@@ -765,7 +792,9 @@ function aiJPMoveAnimated() {
 // 1隻のJPリード艦をAI移動
 function aiMoveOneJPLead(lead, usc, sr) {
   const spd = getSpeed(lead);
+  const minSpd = getMinSpeed(lead);
   const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+  const minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
   const isDD = (lead.type === 'DD');
   const distToUS = hexDist(lead.col, lead.row, usc.col, usc.row);
   const preCol = lead.col, preRow = lead.row;
@@ -843,14 +872,15 @@ function aiMoveOneJPLead(lead, usc, sr) {
       break;
     }
 
-    if (occupied(next.col, next.row, lead) && !lead.cannotTurn) {
+    const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
+    if (blocked && !lead.cannotTurn) {
       const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
       let avoided = false;
       for (const offset of [1, 5]) {
         const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
         const altNext = hexNeighbor(lead.col, lead.row, altDir);
         if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
-            && !occupied(altNext.col, altNext.row, lead)) {
+            && !occupied(altNext.col, altNext.row, lead) && !getSunkShip(altNext.col, altNext.row, lead)) {
           lead.path = lead.path || [];
           lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
           lead.col = altNext.col;
@@ -862,20 +892,29 @@ function aiMoveOneJPLead(lead, usc, sr) {
         }
       }
       if (avoided) { turned = false; continue; }
+      // 回避失敗: 最低速度以上なら停止
+      const moved = moveCount - remain;
+      if (moved >= minCount) break;
     }
 
     lead.path = lead.path || [];
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
     lead.col = next.col;
     lead.row = next.row;
-    var occAt = getOccupant(next.col, next.row, lead);
-    if (occAt) collisionCheck(lead, occAt);
-    var sunkAt = getSunkShip(next.col, next.row, lead);
-    if (sunkAt) collisionCheck(lead, sunkAt);
+    if (blocked) {
+      var occAt = getOccupant(next.col, next.row, lead);
+      if (occAt) collisionCheck(lead, occAt);
+      var sunkAt = getSunkShip(next.col, next.row, lead);
+      if (sunkAt) collisionCheck(lead, sunkAt);
+    }
     turned = false;
     remain--;
     moveFollowers(lead, jpFleet);
   }
+  lead.remainMove = remain;
+  // 随伴艦の残り移動力も更新
+  const jpci = lead.colIndex;
+  jpFleet.filter(s => !s.isLead && s.colIndex === jpci).forEach(f => f.remainMove = remain);
   console.log(`aiJPMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount}`);
 }
 
@@ -934,10 +973,14 @@ function allStraight() {
     var lead = unmovedLeads[t].ship;
     var spd = getSpeed(lead);
     var moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    var minSpd = getMinSpeed(lead);
+    var minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
     for (var step = 0; step < moveCount; step++) {
       var next = hexNeighbor(lead.col, lead.row, lead.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+      // 衝突回避: 最低速度以上なら前方占有時に停止
+      if (step >= minCount && (occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead))) break;
       lead.path = lead.path || [];
       lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
       lead.col = next.col;
@@ -948,6 +991,7 @@ function allStraight() {
       if (sunkAt) collisionCheck(lead, sunkAt);
       moveFollowers(lead, usFleet);
     }
+    lead.remainMove = 0;
     movedShips.add(unmovedLeads[t].idx);
     movedNames.add(lead.name);
     parent.postMessage({type:'ACTION_DONE', shipIndex:unmovedLeads[t].idx}, '*');
@@ -956,6 +1000,7 @@ function allStraight() {
     var ci = lead.colIndex;
     usFleet.forEach(function(s, i) {
       if (!s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing) {
+        s.remainMove = 0;
         movedShips.add(i);
         movedNames.add(s.name);
         parent.postMessage({type:'ACTION_DONE', shipIndex:i}, '*');
@@ -981,10 +1026,14 @@ function allStraight() {
     var idx = remaining[t].idx;
     var spd = getSpeed(ship);
     var moveCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    var minSpd = getMinSpeed(ship);
+    var minCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
     for (var step = 0; step < moveCount; step++) {
       var next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+      // 衝突回避: 最低速度以上なら前方占有時に停止
+      if (step >= minCount && (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship))) break;
       ship.col = next.col;
       ship.row = next.row;
       var occupant = getOccupant(next.col, next.row, ship);
@@ -992,6 +1041,7 @@ function allStraight() {
       var sunkAt = getSunkShip(next.col, next.row, ship);
       if (sunkAt) collisionCheck(ship, sunkAt);
     }
+    ship.remainMove = 0;
     movedShips.add(idx);
     parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
     count++;
@@ -1155,6 +1205,7 @@ function startMove(ship) {
   let spd = getSpeed(ship);
   if (ship.dmgM >= ship.capM / 2) spd = Math.max(1, Math.ceil(spd/2));
   remainMove = spd;
+  ship.remainMove = remainMove;
 
   let restriction = '';
   if (ship.cannotTurn) restriction = '\n⚠ 回頭不能 — 直進(5)のみ';
@@ -1168,6 +1219,11 @@ function getSpeed(s) {
   // クリティカルで速力変更済みならそちらを使用
   if (s.speed !== undefined && s.speed !== null) return s.speed;
   return s.spd || 4;
+}
+
+function getMinSpeed(s) {
+  const spd = getSpeed(s);
+  return spd >= 5 ? 4 : spd;
 }
 
 // Axial hex math (pointy-top offset)
@@ -1489,6 +1545,7 @@ function doUndo() {
   moving.row = snap.row;
   moving.dir = snap.dir;
   remainMove = snap.remainMove;
+  moving.remainMove = remainMove;
   turnedThisHex = snap.turnedThisHex;
   // softFinishMoveで追加されていた場合は取り消す
   const idx = usFleet.indexOf(moving);
@@ -1531,6 +1588,7 @@ function turnTo(dir) {
   moving.dir = dir;
   moving.turnCount = (moving.turnCount || 0) + 1;  // 回頭数記録（砲撃修正用）
   remainMove--;
+  moving.remainMove = remainMove;
   turnedThisHex = true;
   setInfo(`${moving.name} → ${DIR_NAMES[dir]} (回頭)\n5=直進`);
   setMoveBar(`残り移動力: ${remainMove}`);
@@ -1555,6 +1613,7 @@ function moveForward() {
   moving.row = next.row;
   turnedThisHex = false;
   remainMove--;
+  moving.remainMove = remainMove;
 
   // 同一ヘクスに他の艦がいる場合 → 衝突チェック
   var occupant = getOccupant(next.col, next.row, moving);
@@ -1616,6 +1675,7 @@ function moveFollowers(lead, fleet) {
 }
 
 function finishMove() {
+  moving.remainMove = 0;
   const idx = usFleet.indexOf(moving);
   movedShips.add(idx);
   parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
