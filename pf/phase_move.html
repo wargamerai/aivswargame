@@ -195,7 +195,8 @@ function startStraightMode() {
 
 // ========== 大破艦・射撃不能艦 自動離脱 ==========
 function autoWithdrawHeavy() {
-  const allShips = [...jpFleet, ...usFleet];
+  const jpMoving = isJPMoving();
+  const allShips = jpMoving ? jpFleet : usFleet;
   for (const ship of allShips) {
     // 大破 or (US側で射撃不能)
     const shouldWithdraw = (ship.status === 'heavy') ||
@@ -325,13 +326,16 @@ function autoAdvanceIndividual(fleet) {
   for (const ship of ships) {
     const spd = Math.min(getSpeed(ship), fleetSpeed);  // 統一速力で上限
     const moveCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    const minSpd = Math.min(getMinSpeed(ship), fleetSpeed);
+    const minCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
     for (let step = 0; step < moveCount; step++) {
       const next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+      // 衝突回避: 最低速度以上なら前方占有時に停止
+      if (step >= minCount && (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship))) break;
       ship.col = next.col;
       ship.row = next.row;
-      // 同一ヘクス進入 → 衝突チェック（止めない）
       var occ = getOccupant(next.col, next.row, ship);
       if (occ) collisionCheck(ship, occ);
       var sunkAt = getSunkShip(next.col, next.row, ship);
@@ -945,8 +949,21 @@ function startFreeMode() {
 // 全艦直進コマンド（やり直し可能）
 let allStraightBackup = null;  // 全艦直進前の状態を保存
 function allStraight() {
-  // 現在操作中の艦を確定
   if (moving) finishMove();
+
+  // shipStatesに一時保存されている手動移動済み艦を復元
+  for (const name in shipStates) {
+    const saved = shipStates[name];
+    const ship = usFleet.find(s => s.name === name);
+    if (ship && saved) {
+      ship.col = saved.col; ship.row = saved.row; ship.dir = saved.dir;
+      ship.remainMove = 0;
+      const idx = usFleet.indexOf(ship);
+      movedShips.add(idx);
+      parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
+    }
+    delete shipStates[name];
+  }
 
   // やり直し用に全状態を保存
   allStraightBackup = {
