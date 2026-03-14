@@ -351,7 +351,7 @@ function isInFixedArc(unit, tc, tr) {
 }
 
 // 視線判定（LOS）: ユニットからターゲットまでの間に遮蔽物があるか
-// 遮蔽物: forest, building
+// 遮蔽物: forest, building, slope（丘）
 function hasLOS(fromCol, fromRow, toCol, toRow) {
   if (!state || !state.terrain) return true;
   const h1 = hexCenter(fromCol, fromRow);
@@ -370,7 +370,7 @@ function hasLOS(fromCol, fromRow, toCol, toRow) {
     if (mid.col === fromCol && mid.row === fromRow) continue;
     if (mid.col === toCol && mid.row === toRow) continue;
     const terrain = state.terrain[`${mid.col},${mid.row}`];
-    if (terrain === 'forest' || terrain === 'building') return false;
+    if (terrain === 'forest' || terrain === 'building' || terrain === 'slope') return false;
   }
   return true;
 }
