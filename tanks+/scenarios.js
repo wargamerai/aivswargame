@@ -222,6 +222,7 @@ const SCENARIOS = [
       '13,9': 'forest', '13,10': 'forest', '13,11': 'forest',
       '14,10': 'forest', '14,11': 'forest',
       '16,8': 'building', '16,9': 'building',
+      '12,12': 'slope', '12,13': 'slope', '13,13': 'slope',
     }
   }
 ];
