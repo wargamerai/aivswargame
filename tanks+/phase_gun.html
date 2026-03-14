@@ -281,9 +281,16 @@ function updateShootInfo() {
     hitChance = Math.round(hitChance / 36 * 100);
   }
 
-  // 射界判定
-  const inArc = isInFireArc(firer, target);
-  const armor = tDb.armor - (inArc ? 0 : 2);
+  // 射界チェック（固定砲塔/AT砲は前方のみ）
+  if (!canFireAt(firer, target)) {
+    el.textContent = '射界外（前方120°のみ射撃可能）';
+    btn.disabled = true;
+    return;
+  }
+
+  // 装甲判定（目標の正面か側面か）
+  const frontHit = isHittingFrontArmor(firer, target);
+  const armor = tDb.armor - (frontHit ? 0 : 2);
   const penDiff = pen - Math.max(0, armor);
 
   // 対歩兵の場合
@@ -294,7 +301,7 @@ function updateShootInfo() {
   if (mod !== 0) html += ` (修正${mod >= 0 ? '+' : ''}${mod} → 有効${effectiveHit})`;
   html += `<br>命中率: <b style="color:${hitChance>=50?'#2a7a2a':'#cc3311'}">${hitChance}%</b>`;
   if (!vsInfantry) {
-    html += ` | 装甲: ${tDb.armor}${inArc?'':'(射界外-2→'+armor+')'} | 貫通差: ${penDiff >= 0 ? '+' : ''}${penDiff}`;
+    html += ` | 装甲: ${tDb.armor}${frontHit?'':'(側面-2→'+armor+')'} | 貫通差: ${penDiff >= 0 ? '+' : ''}${penDiff}`;
   }
   if (details.length > 0) html += `<br><span style="color:#888;font-size:0.85em">${details.join(' / ')}</span>`;
   if (autoHit) html += `<br><b style="color:#2a7a2a">距離0: 必中</b>`;
@@ -322,16 +329,28 @@ function getInfantryShootInfo(firer, target, dist) {
 }
 
 // ===== 射界判定 =====
-function isInFireArc(firer, target) {
-  // 簡易射界判定: firerの向き(dir)を基準に±1方向（60度）が射界内
-  const dx = target.col - firer.col;
-  const dy = target.row - firer.row;
-  const angle = Math.atan2(-dy, dx); // 画面座標系
-  const dirAngleRad = firer.dir * 60 * Math.PI / 180;
+// unitの向きから見てotherが前方±60°以内か
+function isInArc(unit, other) {
+  const dx = other.col - unit.col;
+  const dy = other.row - unit.row;
+  const angle = Math.atan2(-dy, dx);
+  const dirAngleRad = unit.dir * 60 * Math.PI / 180;
   let diff = angle - dirAngleRad;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
-  return Math.abs(diff) <= Math.PI / 3; // ±60度
+  return Math.abs(diff) <= Math.PI / 3;
+}
+
+// 射撃可能か（旋回砲塔=360°、固定砲塔/AT砲=前方のみ）
+function canFireAt(firer, target) {
+  const fDb = UNIT_DB[firer.name];
+  if (fDb.turret === 'rotating') return true;
+  return isInArc(firer, target);
+}
+
+// 正面装甲か側面装甲か（目標の向きから判定）
+function isHittingFrontArmor(firer, target) {
+  return isInArc(target, firer);
 }
 
 // ===== 射撃実行 =====
@@ -416,8 +435,8 @@ function doShoot() {
       }
     } else {
       // 対戦車: 撃破判定
-      const inArc = isInFireArc(firer, target);
-      const armor = tDb.armor - (inArc ? 0 : 2);
+      const frontHit = isHittingFrontArmor(firer, target);
+      const armor = tDb.armor - (frontHit ? 0 : 2);
       const penDiff = pen - Math.max(0, armor);
       const dd1 = roll(), dd2 = roll();
       const dmgTotal = dd1 + dd2;
@@ -425,7 +444,7 @@ function doShoot() {
       const effMod = autoHit ? 3 : penDiff;
       const result = getDestructionResult(effMod, dmgTotal);
 
-      resultHtml += `<div class="r-row"><span class="r-label">装甲</span><span class="r-value">${tDb.armor}${inArc?'':' (射界外-2→'+armor+')'}</span></div>`;
+      resultHtml += `<div class="r-row"><span class="r-label">装甲</span><span class="r-value">${tDb.armor}${frontHit?'':' (側面-2→'+armor+')'}</span></div>`;
       resultHtml += `<div class="r-row"><span class="r-label">貫通差</span><span class="r-value">${effMod >= 0 ? '+' : ''}${effMod}</span></div>`;
       resultHtml += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</div>`;
 

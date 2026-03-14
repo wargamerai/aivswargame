@@ -126,7 +126,7 @@ const DESTRUCTION_TABLE = {
    '0': { destroyed:[2,5],   noEffect:[6,10],  immobilized:[11,12] },
    '1': { destroyed:[2,6],   noEffect:[7,10],  immobilized:[11,12] },
    '2': { destroyed:[2,7],   noEffect:[8,10],  immobilized:[11,12] },
-   '3': { destroyed:[2,9],   noEffect:[10,10], immobilized:[11,12] },  // +3以上
+   '3': { destroyed:[2,9],   noEffect:[10,10], immobilized:[11,12] },  // 3以上
 };
 
 function getDestructionResult(modifier, diceTotal) {
