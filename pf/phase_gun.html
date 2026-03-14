@@ -816,6 +816,13 @@ function autoJPShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of jp) {
+    // 第一砲撃で魚雷持ち艦は砲撃をスキップ（雷撃を温存）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b')
+        && firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
+      log(`${firer.name}: 雷撃温存（砲撃スキップ）`);
+      continue;
+    }
+
     // 目標選択: 最も近い敵、損傷大ほど後回し
     let bestTarget = null, bestScore = 999;
     for (const t of us) {
