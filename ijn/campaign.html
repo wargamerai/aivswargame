@@ -473,8 +473,7 @@ function phaseSortie() {
         actualThreat   += (s.type==='BB'||s.type==='OBB') ? 4 : s.type==='CA' ? 2 : 1;
     });
 
-    // 米軍: usedフラグをリセット（沈没艦を除く）
-    usAllShips.forEach(s => { if (s.status !== 'sunk') s.used = false; });
+    // 米軍: usedフラグはリセットしない（一度使用した艦は再利用不可）
 
     // 難易度取得
     const difficulty = document.getElementById('difficultySelect').value;
@@ -486,11 +485,11 @@ function phaseSortie() {
 
     if (difficulty === 'practice') {
         // 練習モード: ニューオリンズ1隻のみ
-        const no = usAllShips.find(s => s.name === 'NEW ORLEANS' && s.status !== 'sunk');
+        const no = usAllShips.find(s => s.name === 'NEW ORLEANS' && !s.used && s.status !== 'sunk');
         if (no) { currentUsFleet.push(no); no.used = true; }
         else {
-            // ニューオリンズが沈没済みなら残りのCAから1隻
-            const altCA = usAllShips.find(s => s.type === 'CA' && s.status !== 'sunk');
+            // ニューオリンズが使用済み/沈没なら残りのCAから1隻
+            const altCA = usAllShips.find(s => s.type === 'CA' && !s.used && s.status !== 'sunk');
             if (altCA) { currentUsFleet.push(altCA); altCA.used = true; }
         }
         logMsg('【練習モード】米軍: 重巡1隻のみ');
