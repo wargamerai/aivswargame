@@ -41,6 +41,7 @@ button.undo-btn:hover { background:#ffd8c0; }
 
 <div id="manualControls" style="display:none">
   <button onclick="doUndo()" class="undo-btn" id="btnUndo" disabled>◀ やり直し</button>
+  <button onclick="resetAllMoves()" class="undo-btn" id="btnResetAll">◀◀ 全リセット</button>
   <button onclick="allStraight()" id="btnAllStraight">全艦直進 ▶</button>
   <button onclick="undoAllStraight()" id="btnUndoAll" style="display:none">◀ 全艦直進やり直し</button>
 </div>
@@ -67,6 +68,7 @@ let turnedThisHex = false;
 let movedShips = new Set();  // 移動済み艦のインデックス（移動力消費完了）
 let undoStack = [];
 let shipStates = {};  // 艦名→{col, row, dir, remainMove, undoStack, turnedThisHex} 一時保存
+let phaseStartBackup = null;  // フェーズ開始時の全艦状態バックアップ
 
 const COLS = 36;
 const JP_LINE_COL = 9;
@@ -933,6 +935,9 @@ function startFreeMode() {
   document.getElementById('manualControls').style.display = 'block';
   document.getElementById('btnDone').style.display = '';
 
+  // フェーズ開始時の全艦位置をバックアップ（全リセット用）
+  phaseStartBackup = usFleet.map(s => ({...s, crits: [...(s.crits||[])]}));
+
   // 移動不可の艦を自動スキップ
   usFleet.forEach((s, i) => {
     if (!canShipMove(s)) {
@@ -1094,6 +1099,44 @@ function undoAllStraight() {
   renderList();
 }
 
+// 全艦をフェーズ開始時の状態にリセット
+function resetAllMoves() {
+  if (!phaseStartBackup) return;
+  // 現在の移動操作を終了
+  moving = null;
+  remainMove = 0;
+  undoStack = [];
+  turnedThisHex = false;
+  shipStates = {};
+  allStraightBackup = null;
+  // 全艦を復元
+  for (let i = 0; i < usFleet.length; i++) {
+    Object.assign(usFleet[i], phaseStartBackup[i]);
+  }
+  // movedShipsクリア＋ACTION_UNDO送信
+  const oldMoved = new Set(movedShips);
+  movedShips = new Set();
+  oldMoved.forEach(i => {
+    parent.postMessage({type:'ACTION_UNDO', shipIndex:i}, '*');
+  });
+  // 移動不可の艦を再スキップ
+  usFleet.forEach((s, i) => {
+    if (!canShipMove(s)) {
+      movedShips.add(i);
+      parent.postMessage({type:'ACTION_DONE', shipIndex:i}, '*');
+    }
+  });
+  document.getElementById('btnUndo').disabled = true;
+  document.getElementById('btnUndoAll').style.display = 'none';
+  document.getElementById('btnAllStraight').style.display = '';
+  setInfo('全艦の移動をリセットしました\n艦をクリックかTabで選択');
+  setMoveBar('');
+  parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
+  pushState();
+  renderList();
+  checkAllMoved();
+}
+
 function setInfo(t) { document.getElementById('info').textContent = t; }
 function setMoveBar(t) { document.getElementById('moveBar').textContent = t; }
 
@@ -1181,6 +1224,9 @@ function clickShip(i) {
     // 完了済みの船はmovedShipsに残す
     moving = null;
   }
+
+  // マップ上の艦をハイライト
+  parent.postMessage({type:'HIGHLIGHT', firer:s.name, target:null}, '*');
 
   // 保存状態があれば復元
   if (shipStates[s.name]) {
