@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<script src="scenarios.js"></script>
+<style>
+body { background:#f5f5fa; color:#222; font-family:monospace; padding:8px; font-size:1em; }
+h3 { color:#1a5a8a; margin-bottom:6px; font-size:1.1em; }
+
+.section-label { color:#555; font-size:0.9em; margin:8px 0 4px; font-weight:bold; }
+.unit-cards { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px; }
+.card {
+  background:#e0e8f4; border:2px solid #99b; padding:4px 8px;
+  border-radius:4px; cursor:pointer; font-size:0.9em; transition:all 0.15s;
+}
+.card:hover { background:#c8d8f0; }
+.card.atk-sel { border-color:#cc3311; background:#ffe8e0; }
+.card.def-sel { border-color:#2255cc; background:#e0e8ff; }
+.card.disabled { opacity:0.3; pointer-events:none; }
+.card .c-name { font-weight:bold; }
+.card .c-info { color:#666; font-size:0.85em; }
+
+#combatInfo {
+  background:#e8f0e8; border:1px solid #8a8; padding:6px;
+  margin:6px 0; border-radius:3px; font-size:0.95em; line-height:1.6; min-height:24px;
+}
+
+button {
+  background:#dde4f0; color:#334; border:1px solid #99a;
+  padding:6px 12px; font-size:0.9em; cursor:pointer; border-radius:3px; font-weight:bold;
+  margin:2px;
+}
+button:hover { background:#c8d4ee; }
+button:disabled { background:#e8e8e8; color:#999; cursor:default; }
+#btnAttack { background:#cc3311; color:#fff; border-color:#aa2200; font-size:1.05em; padding:8px 20px; }
+#btnAttack:hover { background:#ee4422; }
+#btnAttack:disabled { background:#ddd; color:#999; }
+button.done-btn { background:#cc3311; color:#fff; border-color:#aa2200; }
+
+/* 結果オーバーレイ */
+#resultOverlay {
+  position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.5); display:none; justify-content:center; align-items:center; z-index:100;
+}
+#resultBox {
+  background:#fff; border:2px solid #aa8833; border-radius:8px; padding:16px 20px;
+  max-width:320px; width:90%; font-size:1.1em; line-height:1.7; color:#222;
+}
+#resultTitle { color:#8a6a00; font-size:1.2em; font-weight:bold; text-align:center; margin-bottom:8px; border-bottom:2px solid #ddd; padding-bottom:6px; }
+.r-row { display:flex; justify-content:space-between; }
+.r-label { color:#666; } .r-value { font-weight:bold; }
+.r-dice { color:#222; font-size:1.1em; text-align:center; margin:6px 0; }
+.r-hit { text-align:center; font-size:1.3em; font-weight:bold; margin:4px 0; }
+.r-hit.hit { color:#8a6a00; } .r-hit.miss { color:#999; }
+.r-dmg { text-align:center; color:#cc2200; font-size:1.1em; font-weight:bold; margin:4px 0; }
+#resultBox button { display:block; margin:10px auto 0; padding:8px 24px; background:#2a8a2a; border-color:#1a6a1a; color:#fff; }
+
+#log {
+  background:#f0f0f0; border:1px solid #ccc; padding:6px;
+  height:120px; overflow-y:auto; font-size:0.85em; line-height:1.5; margin-top:8px; color:#333;
+}
+.hit-text { color:#8a6a00; } .dmg-text { color:#cc2200; }
+</style>
+</head>
+<body>
+<h3 id="phTitle">歩兵フェーズ</h3>
+
+<div class="section-label">▼ 攻撃ユニットを選択（歩兵・対戦車砲）</div>
+<div id="attackerList" class="unit-cards"></div>
+
+<div class="section-label">▼ 目標を選択</div>
+<div id="targetList" class="unit-cards"></div>
+
+<div id="combatInfo">攻撃ユニットと目標を選択してください</div>
+
+<div>
+  <button id="btnAttack" onclick="doAttack()" disabled>攻撃</button>
+  <button onclick="donePhase()" class="done-btn">フェーズ終了</button>
+</div>
+
+<div id="resultOverlay" onclick="closeResult()">
+  <div id="resultBox" onclick="event.stopPropagation()">
+    <div id="resultTitle"></div>
+    <div id="resultBody"></div>
+    <button onclick="closeResult()">閉じる</button>
+  </div>
+</div>
+
+<div id="log"></div>
+
+<script>
+/* ===== 歩兵フェーズ（シェル） =====
+ * 対戦車攻撃: INF_VS_TANK テーブル使用
+ * 対歩兵攻撃: ANTI_INF_TABLE テーブル使用
+ * MG射撃: 機関銃による対歩兵射撃
+ * 白兵戦: 同一ヘクスでの近接戦闘
+ *
+ * TODO: 中身を実装
+ */
+
+let state = null;
+let selectedAttacker = null;
+let selectedTarget = null;
+let phaseType = '';  // 'inf_atk' etc.
+
+/* --- hub通信 --- */
+window.addEventListener('message', e => {
+  if (e.data && e.data.type === 'STATE_UPDATE') {
+    state = e.data.state;
+    phaseType = state.phaseType || '';
+    document.getElementById('phTitle').textContent = '歩兵フェーズ';
+    buildUI();
+  }
+});
+
+function sendToHub(msg) {
+  window.parent.postMessage(msg, '*');
+}
+
+/* --- UI構築 --- */
+function buildUI() {
+  // TODO: 歩兵・対戦車砲ユニットのカード一覧を構築
+  const atkDiv = document.getElementById('attackerList');
+  const tgtDiv = document.getElementById('targetList');
+  atkDiv.innerHTML = '<span style="color:#999">（未実装）</span>';
+  tgtDiv.innerHTML = '<span style="color:#999">（未実装）</span>';
+}
+
+/* --- 攻撃実行 --- */
+function doAttack() {
+  // TODO: 攻撃種別判定（対戦車/対歩兵/白兵戦）
+  // TODO: テーブル参照 → 2d6判定
+  // TODO: 結果表示
+}
+
+/* --- 結果表示 --- */
+function showResult(title, html) {
+  document.getElementById('resultTitle').textContent = title;
+  document.getElementById('resultBody').innerHTML = html;
+  document.getElementById('resultOverlay').style.display = 'flex';
+}
+
+function closeResult() {
+  document.getElementById('resultOverlay').style.display = 'none';
+}
+
+/* --- ログ --- */
+function addLog(msg) {
+  const log = document.getElementById('log');
+  log.innerHTML += msg + '<br>';
+  log.scrollTop = log.scrollHeight;
+}
+
+/* --- フェーズ終了 --- */
+function donePhase() {
+  sendToHub({ type: 'PHASE_DONE', state: state });
+}
+</script>
+</body>
+</html>
