@@ -611,108 +611,126 @@ function doShoot() {
   if (arcCheck.mult === 0) { log(`${arcCheck.arc} — この方向には射撃できません`); return; }
 
   const {mod, details} = calcModifiers(firer, target, dist);
-
-  // ダイスロール
-  const d1 = roll(), d2 = roll();
-  const diceTotal = d1 + d2 + mod;
-  const isDouble1 = (d1 === d2);
-  const hits = getHits(diceTotal, dist);
-
-  // hub.htmlに弾丸アニメーション通知
-  parent.postMessage({type:'SHOOT_ANIM',
-    from: {col: firer.col, row: firer.row},
-    to: {col: target.col, row: target.row}
-  }, '*');
-
-  // 射界
   const arcInfo = getArcInfo(firer, target);
 
-  // ログ
-  const jpHitPct = calcHitChance(mod, dist);
-  log(`${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, ${arcInfo.arc}, 命中率${jpHitPct}%)`);
-  log(`  ダイス: ${d1}+${d2}=${d1+d2}${mod!==0?` →${diceTotal}`:''}${isDouble1?' [ゾロ目!]':''}`);
-  log(`  <span class="hit">命中数: ${hits}発</span>`);
+  // ① プレビュー表示（命中率等、ダイス結果なし）
+  const hitPct = calcHitChance(mod, dist);
+  const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
+  const body = document.getElementById('resultBody');
+  let html = `
+    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${firer.name}(${firer.type})</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${target.name}(${target.type})</span></div>
+    <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${dist}hex</span></div>
+    <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${arcInfo.mult<1?'#fa6':'#6a6'}">${arcInfo.arc}${arcInfo.mult<1?' (火力½)':''}</span></div>
+    <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${mod >= 0 ? '+' : ''}${mod}</span></div>`;
+  if (details.length > 0) {
+    html += `<div style="color:#aa8;font-size:0.8em;text-align:right">${details.join(' / ')}</div>`;
+  }
+  html += `<div class="r-row"><span class="r-label">命中率</span> <span class="r-value" style="color:${pctColor};font-size:1.1em;font-weight:bold">${hitPct}%</span></div>`;
+  body.innerHTML = html;
+  document.getElementById('resultOverlay').style.display = 'flex';
 
-  // 損害計算
-  let dmgText = '外れ';
-  let dmgG = 0, dmgM = 0, critText = '';
-  let ratioLabel = '';
-  let dmgDice = '';
+  // ② 「射撃！」ボタンでダイスロール→結果
+  const okBtn = document.getElementById('resultOK');
+  okBtn.textContent = '射撃！';
+  okBtn.onclick = function() {
+    document.getElementById('resultOverlay').style.display = 'none';
 
-  if (hits > 0) {
-    const rawAtk = getAttack(firer);
-    const effAtk = arcInfo.mult < 1 ? Math.ceil(rawAtk * arcInfo.mult) : rawAtk;
-    const fp = hits * effAtk;
-    const def = getDefense(target);
-    const rc = ratioCol(fp, def);
-    const ratioLabels = ['1:2','1:1','2:1','3:1','4:1','5:1','6:1','7:1','8:1','9:1','10:1'];
-    ratioLabel = `${ratioLabels[rc]} (火力${fp}/防御${def})`;
-    log(`  戦力比: ${ratioLabel}`);
+    // ダイスロール
+    const d1 = roll(), d2 = roll();
+    const diceTotal = d1 + d2 + mod;
+    const isDouble1 = (d1 === d2);
+    const hits = getHits(diceTotal, dist);
 
-    const d3 = roll(), d4 = roll();
-    const isDouble2 = (d3 === d4);
-    const dmgStr = getDmgResult(d3+d4, rc);
-    const dmg = parseDmg(dmgStr);
-    dmgG = dmg.g; dmgM = dmg.m;
-    dmgText = dmgStr;
-    dmgDice = `${d3}+${d4}=${d3+d4}${isDouble2?' [ゾロ目!]':''}`;
-    log(`  損害ダイス: ${dmgDice} → <span class="dmg">${dmgStr}</span>`);
+    // 弾丸アニメーション
+    parent.postMessage({type:'SHOOT_ANIM',
+      from: {col: firer.col, row: firer.row},
+      to: {col: target.col, row: target.row}
+    }, '*');
 
-    // クリティカル（ダメージ0なら発生しない、両方ゾロ目なら2回判定）
+    // ログ
+    log(`${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, ${arcInfo.arc}, 命中率${hitPct}%)`);
+    log(`  ダイス: ${d1}+${d2}=${d1+d2}${mod!==0?` →${diceTotal}`:''}${isDouble1?' [ゾロ目!]':''}`);
+    log(`  <span class="hit">命中数: ${hits}発</span>`);
+
+    // 損害計算
+    let dmgText = '外れ';
+    let dmgG = 0, dmgM = 0, critText = '';
+    let ratioLabel = '';
+    let dmgDice = '';
     let critSunk = false;
-    const critCount = (isDouble1 && isDouble2) ? 2 : (isDouble1 || isDouble2) ? 1 : 0;
-    if (critCount > 0 && (dmgG > 0 || dmgM > 0)) {
-      const critTexts = [];
-      for (let ci = 0; ci < critCount; ci++) {
-        const cd = roll()+roll();
-        const crit = applyCritical(target, cd);
-        critTexts.push(crit.text);
-        dmgG += crit.extraG;
-        dmgM += crit.extraM;
-        if (crit.sunk) critSunk = true;
-        log(`  <span class="crit">クリティカル${critCount>1?'('+(ci+1)+')':''}! ${crit.text}</span>`);
-        if (crit.extraG > 0 || crit.extraM > 0) log(`  クリティカル追加損害: G${crit.extraG} M${crit.extraM}`);
+
+    if (hits > 0) {
+      const rawAtk = getAttack(firer);
+      const effAtk = arcInfo.mult < 1 ? Math.ceil(rawAtk * arcInfo.mult) : rawAtk;
+      const fp = hits * effAtk;
+      const def = getDefense(target);
+      const rc = ratioCol(fp, def);
+      const ratioLabels = ['1:2','1:1','2:1','3:1','4:1','5:1','6:1','7:1','8:1','9:1','10:1'];
+      ratioLabel = `${ratioLabels[rc]} (火力${fp}/防御${def})`;
+      log(`  戦力比: ${ratioLabel}`);
+
+      const d3 = roll(), d4 = roll();
+      const isDouble2 = (d3 === d4);
+      const dmgStr = getDmgResult(d3+d4, rc);
+      const dmg = parseDmg(dmgStr);
+      dmgG = dmg.g; dmgM = dmg.m;
+      dmgText = dmgStr;
+      dmgDice = `${d3}+${d4}=${d3+d4}${isDouble2?' [ゾロ目!]':''}`;
+      log(`  損害ダイス: ${dmgDice} → <span class="dmg">${dmgStr}</span>`);
+
+      // クリティカル
+      const critCount = (isDouble1 && isDouble2) ? 2 : (isDouble1 || isDouble2) ? 1 : 0;
+      if (critCount > 0 && (dmgG > 0 || dmgM > 0)) {
+        const critTexts = [];
+        for (let ci = 0; ci < critCount; ci++) {
+          const cd = roll()+roll();
+          const crit = applyCritical(target, cd);
+          critTexts.push(crit.text);
+          dmgG += crit.extraG;
+          dmgM += crit.extraM;
+          if (crit.sunk) critSunk = true;
+          log(`  <span class="crit">クリティカル${critCount>1?'('+(ci+1)+')':''}! ${crit.text}</span>`);
+          if (crit.extraG > 0 || crit.extraM > 0) log(`  クリティカル追加損害: G${crit.extraG} M${crit.extraM}`);
+        }
+        critText = critTexts.join(' / ');
       }
-      critText = critTexts.join(' / ');
+
+      // 蓄積損害
+      const totalG = dmgG, totalM = dmgM;
+      if (totalG > 0 || totalM > 0 || critSunk) {
+        const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+        pending.push({name: target.name, side:'jp', g:totalG, m:totalM, critText: critText, critSunk: critSunk});
+        localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+        log(`  → 損害蓄積: G${totalG} M${totalM}${critSunk ? ' [轟沈判定]' : ''}`);
+      }
+    } else {
+      log('  → 外れ');
     }
 
-    // 蓄積損害
-    const totalG = dmgG, totalM = dmgM;
-    if (totalG > 0 || totalM > 0 || critSunk) {
-      const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
-      pending.push({name: target.name, side:'jp', g:totalG, m:totalM, critText: critText, critSunk: critSunk});
-      localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
-      log(`  → 損害蓄積: G${totalG} M${totalM}${critSunk ? ' [轟沈判定]' : ''}`);
+    // 射撃済みマーク
+    firedShips.add(selectedFirer);
+    firer.revealed = true;
+    if (target) target.revealed = true;
+    var origIdx = (state.usFleet||[]).indexOf(firer);
+    parent.postMessage({type:'ACTION_DONE', shipIndex: origIdx >= 0 ? origIdx : selectedFirer}, '*');
+
+    if (subPhase === 'gun1a' || subPhase === 'gun1b') {
+      firer.firedGun1 = true;
     }
-  } else {
-    log('  → 外れ');
-  }
 
-  // 射撃済みマーク（同一フェーズ内で再射撃防止）
-  firedShips.add(selectedFirer);
-  firer.revealed = true;  // 発砲した艦は敵から視認可能
-  if (target) target.revealed = true;  // 射撃目標も視認可能
-  // usFleet内の元インデックスでACTION_DONEを送信（フィルタ後のインデックスではなく）
-  var origIdx = (state.usFleet||[]).indexOf(firer);
-  parent.postMessage({type:'ACTION_DONE', shipIndex: origIdx >= 0 ? origIdx : selectedFirer}, '*');
+    localStorage.setItem('hubState', JSON.stringify(state));
+    targetShotCount[target.name] = (targetShotCount[target.name] || 0) + 1;
 
-  // 第一砲撃で射撃した艦をマーク → 雷撃不可
-  if (subPhase === 'gun1a' || subPhase === 'gun1b') {
-    firer.firedGun1 = true;
-  }
-
-  // クリティカル効果をstateに保存（火災・砲撃不能等が次フェーズに引き継がれる）
-  localStorage.setItem('hubState', JSON.stringify(state));
-
-  // 合同射撃カウント加算
-  targetShotCount[target.name] = (targetShotCount[target.name] || 0) + 1;
-
-  // 結果オーバーレイ表示
-  showResult({
-    firer, target, dist, mod, details,
-    d1, d2, hits, dmgText, critText,
-    ratioLabel, dmgDice, arcInfo, critSunk
-  });
+    // ③ 結果オーバーレイ表示
+    setTimeout(() => {
+      showResult({
+        firer, target, dist, mod, details,
+        d1, d2, hits, dmgText, critText,
+        ratioLabel, dmgDice, arcInfo, critSunk
+      });
+    }, 600);
+  };
 }
 
 function showJPPreview(r) {
@@ -895,11 +913,11 @@ function autoJPShoot(title) {
     contactMade:state.contactMade
   }, '*');
 
-  // 1隻ずつ: プレビュー→決定→アニメーション→結果オーバーレイ
+  // 1隻ずつ自動処理（オーバーレイなし、ログ+アニメーションのみ）
   let idx = 0;
   const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
 
-  function showNext() {
+  function processNext() {
     if (idx >= results.length) {
       localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
       localStorage.setItem('hubState', JSON.stringify(state));
@@ -912,50 +930,31 @@ function autoJPShoot(title) {
     const r = results[idx];
     idx++;
 
-    // ① プレビュー表示（命中率等の情報のみ、ダイス結果なし）
-    showJPPreview(r);
+    // 弾丸アニメーション
+    parent.postMessage({type:'SHOOT_ANIM',
+      from: {col: r.firer.col, row: r.firer.row},
+      to: {col: r.target.col, row: r.target.row}
+    }, '*');
 
-    // 決定ボタンでアニメーション→結果へ
-    const okBtn = document.getElementById('resultOK');
-    okBtn.textContent = '射撃！';
-    okBtn.onclick = function() {
-      document.getElementById('resultOverlay').style.display = 'none';
-
-      // ② 弾丸アニメーション
-      parent.postMessage({type:'SHOOT_ANIM',
-        from: {col: r.firer.col, row: r.firer.row},
-        to: {col: r.target.col, row: r.target.row}
-      }, '*');
-
-      // ③ ログ
-      const jpHitPct = calcHitChance(r.mod, r.dist);
-      log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${jpHitPct}%)`);
-      if (r.hits > 0) {
-        log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
-        log(`  損害: <span class="dmg">${r.dmgText}</span>`);
-        if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
-        if (r.dmgG > 0 || r.dmgM > 0 || r.critSunk) {
-          pending.push({name: r.target.name, side:'us', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.critSunk});
-        }
-      } else {
-        log('  外れ');
+    // ログ出力
+    const jpHitPct = calcHitChance(r.mod, r.dist);
+    log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${jpHitPct}%)`);
+    if (r.hits > 0) {
+      log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
+      log(`  損害: <span class="dmg">${r.dmgText}</span>`);
+      if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
+      if (r.dmgG > 0 || r.dmgM > 0 || r.critSunk) {
+        pending.push({name: r.target.name, side:'us', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.critSunk});
       }
+    } else {
+      log('  外れ');
+    }
 
-      // ④ 結果オーバーレイ
-      setTimeout(() => {
-        showResult(r);
-        const okBtn2 = document.getElementById('resultOK');
-        okBtn2.textContent = '確認';
-        okBtn2.onclick = function() {
-          document.getElementById('resultOverlay').style.display = 'none';
-          okBtn2.onclick = function() { closeResult(); };
-          showNext();
-        };
-      }, 600);
-    };
+    // 次の射撃へ（少し間を空ける）
+    setTimeout(() => processNext(), 800);
   }
 
-  showNext();
+  processNext();
 }
 
 // ===== 損害確定 =====
