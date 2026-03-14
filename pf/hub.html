@@ -1002,6 +1002,19 @@ function drawShip(ship) {
       ctx.textBaseline = 'alphabetic';
     }
   }
+
+  // 残り移動力表示（移動フェーズ中のみ）
+  if (state.phase === 'move' && ship.remainMove !== undefined && ship.remainMove > 0) {
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#ffff00';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.textAlign = 'left';
+    const mx = x + drawSz + 6;
+    const my = y + 4;
+    ctx.strokeText(ship.remainMove, mx, my);
+    ctx.fillText(ship.remainMove, mx, my);
+  }
 }
 
 function fogOwnStatus(ship) {
@@ -1228,6 +1241,8 @@ window.addEventListener('message', (e) => {
         break;
       }
       state._lastPhaseDone = phaseKey;
+      // 残り移動力表示をクリア
+      [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => delete s.remainMove);
       dbg(`msg: PHASE_DONE (nextPhase=${msg.nextPhase||'none'}, curPhase=${state.phase})`);
       onPhaseDone(msg.nextPhase);
       break;
