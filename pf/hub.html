@@ -1530,7 +1530,7 @@ function buildFleets(data) {
     vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
     isLead: false, colIndex:-1, followOrder:0,
     status:'ok', faceUp:true,
-    radar: ['BB','CA','CL','CLAA'].includes(s.type),
+    radar: true,
     path:[],
   }));
 
