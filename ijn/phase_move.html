@@ -158,6 +158,8 @@ function startStraightMode() {
 
   if (jpMoving) {
     autoAdvanceIndividual(jpFleet);  // JP: 各艦個別に直進
+    // 自動直進した艦をmovedShipsに登録（接触時のdonePhase未移動チェック対策）
+    jpFleet.forEach((s, i) => { if (canShipMove(s)) movedShips.add(i); });
   } else {
     autoAdvanceColumn(usFleet);     // US: 旗艦+随伴グループ移動
   }
