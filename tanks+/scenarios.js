@@ -203,27 +203,17 @@ const SCENARIOS = [
     firstPlayer: 'ge',
     sides: {
       ge: {
-        setup: 'deploy', // 'deploy'=盤上配置, 'enter'=盤外進入
+        setup: 'deploy',
         enterEdge: null,
         units: [
-          { name:'Pz IV/H', col:5, row:10, dir:1 },
-          { name:'Pz IV/H', col:5, row:12, dir:1 },
-          { name:'StuG III', col:4, row:11, dir:1 },
-          { name:'GE Infantry', col:6, row:10 },
-          { name:'GE Infantry', col:6, row:12 },
-          { name:'PAK40', col:3, row:8, dir:1 },
+          { name:'Pz IV/H', col:10, row:10, dir:0 },
         ]
       },
       su: {
         setup: 'enter',
         enterEdge: 'east',
         units: [
-          { name:'T34/85', col:20, row:8, dir:4 },
-          { name:'T34/85', col:20, row:10, dir:4 },
-          { name:'T34/85', col:20, row:12, dir:4 },
-          { name:'T34/76', col:21, row:9, dir:4 },
-          { name:'T34/76', col:21, row:11, dir:4 },
-          { name:'SU Infantry', col:22, row:10 },
+          { name:'T34/85', col:20, row:10, dir:3 },
         ]
       }
     }

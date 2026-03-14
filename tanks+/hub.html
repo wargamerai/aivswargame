@@ -102,6 +102,7 @@ button.top-btn:hover { background:#556; }
   <div id="phaseBar"></div>
   <span class="info" id="playerInfo"></span>
   <button class="top-btn" onclick="endPhase()">フェーズ終了</button>
+  <button class="top-btn" id="arcBtn" onclick="toggleArc()">射界表示</button>
 </div>
 
 <!-- メインエリア -->
@@ -149,6 +150,7 @@ const canvas = document.getElementById('mapCanvas');
 const ctx = canvas.getContext('2d');
 let camX = 0, camY = 0, zoom = 0.4;
 let dragging = false, dragStartX = 0, dragStartY = 0;
+let showArc = false; // 射界表示モード
 
 // ===== ヘクス定数（JPG画像に合わせてキャリブレーション） =====
 // MapA-Vertical: 3972x2860, 約24列×25行
@@ -263,6 +265,11 @@ function draw() {
     }
   }
 
+  // 射界オーバーレイ
+  if (showArc && state && state.selectedUnit !== null && state.selectedUnit !== undefined) {
+    drawFireArc(state.units[state.selectedUnit], maxCol, maxRow);
+  }
+
   // ユニット描画
   if (state && state.units) {
     for (const u of state.units) {
@@ -289,6 +296,71 @@ function draw() {
   }
 
   ctx.restore();
+}
+
+function toggleArc() {
+  showArc = !showArc;
+  document.getElementById('arcBtn').style.background = showArc ? '#c8a020' : '';
+  document.getElementById('arcBtn').style.color = showArc ? '#000' : '';
+  draw();
+}
+
+// 射界描画: 選択ユニットの射界ヘクスを距離5hex刻みで色分け
+function drawFireArc(unit, maxCol, maxRow) {
+  if (!unit || unit.col < 1) return;
+  const db = UNIT_DB[unit.name];
+  if (!db) return;
+  const isRotating = (db.turret === 'rotating');
+
+  // 距離帯ごとの色（5hex刻み）
+  const bandColors = [
+    'rgba(255,50,50,0.35)',   // 1-5
+    'rgba(255,160,0,0.30)',   // 6-10
+    'rgba(255,255,0,0.25)',   // 11-15
+    'rgba(0,200,0,0.25)',     // 16-20
+    'rgba(0,150,255,0.20)',   // 21-25
+    'rgba(150,80,255,0.20)',  // 26-30
+  ];
+
+  for (let c = 1; c <= maxCol; c++) {
+    for (let r = 1; r <= maxRow; r++) {
+      if (c === unit.col && r === unit.row) continue;
+      const dist = hexDist(unit.col, unit.row, c, r);
+      if (dist < 1 || dist > 30) continue;
+
+      // 射界チェック（旋回砲塔は全方向、固定は前方120°）
+      if (!isRotating) {
+        const dx = c - unit.col;
+        const dy = r - unit.row;
+        const hSrc = hexCenter(unit.col, unit.row);
+        const hTgt = hexCenter(c, r);
+        const angle = Math.atan2(-(hTgt.y - hSrc.y), hTgt.x - hSrc.x);
+        const dirRad = unit.dir * 60 * Math.PI / 180;
+        let diff = angle - dirRad;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        if (Math.abs(diff) > Math.PI / 3) continue; // 射界外
+      }
+
+      const bandIdx = Math.min(Math.floor((dist - 1) / 5), bandColors.length - 1);
+      const h = hexCenter(c, r);
+      const corners = hexCorners(h.x, h.y);
+
+      ctx.fillStyle = bandColors[bandIdx];
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+      ctx.closePath();
+      ctx.fill();
+
+      // 距離数字
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.font = `${HEX_SIZE * 0.25}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(dist, h.x, h.y);
+    }
+  }
 }
 
 function drawUnit(u) {
