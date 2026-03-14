@@ -329,13 +329,16 @@ function autoAdvanceIndividual(fleet) {
   for (const ship of ships) {
     const spd = Math.min(getSpeed(ship), fleetSpeed);  // 統一速力で上限
     const moveCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    const minSpd = Math.min(getMinSpeed(ship), fleetSpeed);
+    const minCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
     for (let step = 0; step < moveCount; step++) {
       const next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+      // 衝突回避: 最低速度以上なら前方占有時に停止
+      if (step >= minCount && (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship))) break;
       ship.col = next.col;
       ship.row = next.row;
-      // 同一ヘクス進入 → 衝突チェック（止めない）
       var occ = getOccupant(next.col, next.row, ship);
       if (occ) collisionCheck(ship, occ);
       var sunkAt = getSunkShip(next.col, next.row, ship);
