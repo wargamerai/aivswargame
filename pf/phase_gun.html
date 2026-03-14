@@ -538,8 +538,8 @@ function calcModifiers(firer, target, dist) {
     mod -= 1; details.push('半速-1');
   }
 
-  // レーダー射撃 +1（視認距離外からの射撃）
-  if (firer.radar && dist > (state.spotRange || 5)) { mod += 1; details.push('レーダー+1'); }
+  // レーダー射撃 +1（視認距離外かつ目標が未視認の場合のみ）
+  if (firer.radar && dist > (state.spotRange || 5) && !target.revealed) { mod += 1; details.push('レーダー+1'); }
 
   // DD目標 +1
   if (target.type === 'DD') { mod += 1; details.push('DD+1'); }
