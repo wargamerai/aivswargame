@@ -755,6 +755,25 @@ function closeResult() {
   parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
 }
 
+// ===== 米軍射撃プレビュー（命中率等の情報表示、ダイス結果なし）=====
+function showUSPreview(r) {
+  const body = document.getElementById('resultBody');
+  const hitPct = calcHitChance(r.mod, r.dist);
+  const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
+  let html = `
+    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
+    <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
+    <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${r.arcInfo.mult<1?'#fa6':'#6a6'}">${r.arcInfo.arc}${r.arcInfo.mult<1?' (火力½)':''}</span></div>
+    <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>`;
+  if (r.details.length > 0) {
+    html += `<div style="color:#aa8;font-size:0.8em;text-align:right">${r.details.join(' / ')}</div>`;
+  }
+  html += `<div class="r-row"><span class="r-label">命中率</span> <span class="r-value" style="color:${pctColor};font-size:1.1em;font-weight:bold">${hitPct}%</span></div>`;
+  body.innerHTML = html;
+  document.getElementById('resultOverlay').style.display = 'flex';
+}
+
 // ===== 米軍射撃（自動）=====
 function autoUSShoot(title) {
   document.getElementById('phTitle').textContent = title;
@@ -906,7 +925,7 @@ function autoUSShoot(title) {
     contactMade:state.contactMade
   }, '*');
 
-  // 1隻ずつアニメーション + オーバーレイ表示
+  // 1隻ずつ: プレビュー→決定→アニメーション→結果オーバーレイ
   let idx = 0;
   const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
 
@@ -923,35 +942,46 @@ function autoUSShoot(title) {
     const r = results[idx];
     idx++;
 
-    // 弾丸アニメーション
-    parent.postMessage({type:'SHOOT_ANIM',
-      from: {col: r.firer.col, row: r.firer.row},
-      to: {col: r.target.col, row: r.target.row}
-    }, '*');
+    // ① プレビュー表示（命中率等の情報のみ、ダイス結果なし）
+    showUSPreview(r);
 
-    // ログ
-    const usHitPct = calcHitChance(r.mod, r.dist);
-    log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${usHitPct}%)`);
-    if (r.hits > 0) {
-      log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
-      log(`  損害: <span class="dmg">${r.dmgText}</span>`);
-      if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
-      if (r.dmgG > 0 || r.dmgM > 0 || r.critSunk) {
-        pending.push({name: r.target.name, side:'jp', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.critSunk});
-      }
-    } else {
-      log('  外れ');
-    }
-
-    // 結果オーバーレイ（日本軍と同じ形式）
-    showResult(r);
-
-    // 確認ボタンで次へ進む
+    // 決定ボタンでアニメーション→結果へ
     const okBtn = document.getElementById('resultOK');
+    okBtn.textContent = '射撃！';
     okBtn.onclick = function() {
       document.getElementById('resultOverlay').style.display = 'none';
-      okBtn.onclick = function() { closeResult(); };
-      showNext();
+
+      // ② 弾丸アニメーション
+      parent.postMessage({type:'SHOOT_ANIM',
+        from: {col: r.firer.col, row: r.firer.row},
+        to: {col: r.target.col, row: r.target.row}
+      }, '*');
+
+      // ③ ログ
+      const usHitPct = calcHitChance(r.mod, r.dist);
+      log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${usHitPct}%)`);
+      if (r.hits > 0) {
+        log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
+        log(`  損害: <span class="dmg">${r.dmgText}</span>`);
+        if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
+        if (r.dmgG > 0 || r.dmgM > 0 || r.critSunk) {
+          pending.push({name: r.target.name, side:'jp', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.critSunk});
+        }
+      } else {
+        log('  外れ');
+      }
+
+      // ④ 結果オーバーレイ（アニメーション後に表示）
+      setTimeout(() => {
+        showResult(r);
+        const okBtn2 = document.getElementById('resultOK');
+        okBtn2.textContent = '確認';
+        okBtn2.onclick = function() {
+          document.getElementById('resultOverlay').style.display = 'none';
+          okBtn2.onclick = function() { closeResult(); };
+          showNext();
+        };
+      }, 600);
     };
   }
 
