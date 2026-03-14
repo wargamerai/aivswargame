@@ -265,6 +265,32 @@ function draw() {
     }
   }
 
+  // 地形描画
+  if (state && state.terrain) {
+    for (const key in state.terrain) {
+      const [c, r] = key.split(',').map(Number);
+      const t = state.terrain[key];
+      const h = hexCenter(c, r);
+      const corners = hexCorners(h.x, h.y);
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+      ctx.closePath();
+      if (t === 'forest') { ctx.fillStyle = 'rgba(34,120,34,0.4)'; }
+      else if (t === 'building') { ctx.fillStyle = 'rgba(140,100,60,0.5)'; }
+      else if (t === 'slope') { ctx.fillStyle = 'rgba(160,140,80,0.3)'; }
+      else { ctx.fillStyle = 'rgba(100,100,100,0.2)'; }
+      ctx.fill();
+      // 地形ラベル
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${HEX_SIZE * 0.22}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const labels = { forest:'森', building:'建', slope:'丘', bocage:'ボ' };
+      ctx.fillText(labels[t] || t, h.x, h.y);
+    }
+  }
+
   // 射界オーバーレイ
   if (showArc && state && state.selectedUnit !== null && state.selectedUnit !== undefined) {
     drawFireArc(state.units[state.selectedUnit], maxCol, maxRow);
@@ -324,6 +350,31 @@ function isInFixedArc(unit, tc, tr) {
   return Math.abs(diff) <= Math.PI / 3 + 0.05; // 境界ヘクスを含める余裕
 }
 
+// 視線判定（LOS）: ユニットからターゲットまでの間に遮蔽物があるか
+// 遮蔽物: forest, building
+function hasLOS(fromCol, fromRow, toCol, toRow) {
+  if (!state || !state.terrain) return true;
+  const h1 = hexCenter(fromCol, fromRow);
+  const h2 = hexCenter(toCol, toRow);
+  const dist = hexDist(fromCol, fromRow, toCol, toRow);
+  if (dist <= 1) return true; // 隣接ヘクスは常に見える
+
+  // 始点→終点の線上のヘクスをサンプリング
+  // 途中のヘクス（始点・終点を除く）に遮蔽物があればLOS遮断
+  for (let step = 1; step < dist; step++) {
+    const t = step / dist;
+    const px = h1.x + (h2.x - h1.x) * t;
+    const py = h1.y + (h2.y - h1.y) * t;
+    const mid = pixelToHex(px, py);
+    // 始点・終点自体はスキップ
+    if (mid.col === fromCol && mid.row === fromRow) continue;
+    if (mid.col === toCol && mid.row === toRow) continue;
+    const terrain = state.terrain[`${mid.col},${mid.row}`];
+    if (terrain === 'forest' || terrain === 'building') return false;
+  }
+  return true;
+}
+
 // 射界描画: 選択ユニットの射界ヘクスを距離5hex刻みで色分け
 function drawFireArc(unit, maxCol, maxRow) {
   if (!unit || unit.col < 1) return;
@@ -350,11 +401,14 @@ function drawFireArc(unit, maxCol, maxRow) {
       // 射界チェック（旋回砲塔は全方向、固定は頂点が隣接ヘクス）
       if (!isRotating && !isInFixedArc(unit, c, r)) continue;
 
+      // LOS判定
+      const los = hasLOS(unit.col, unit.row, c, r);
+
       const bandIdx = Math.min(Math.floor((dist - 1) / 5), bandColors.length - 1);
       const h = hexCenter(c, r);
       const corners = hexCorners(h.x, h.y);
 
-      ctx.fillStyle = bandColors[bandIdx];
+      ctx.fillStyle = los ? bandColors[bandIdx] : 'rgba(80,80,80,0.4)';
       ctx.beginPath();
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
