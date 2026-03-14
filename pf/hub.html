@@ -792,9 +792,9 @@ function drawArcOverlay(ship, x, y) {
   ctx.restore();
 }
 
-// 敵艦ラベル（大型艦 / 小型艦 の2種類のみ）
+// 米艦ラベル（艦名の先頭4文字）
 function usShipLabel(ship) {
-  return ['BB','OBB','CA'].includes(ship.type) ? '大型艦' : '小型艦';
+  return ship.name.substring(0, 4);
 }
 
 function drawShip(ship) {
