@@ -118,18 +118,19 @@ const FIRE_TABLE = {
 
 // --- 戦車撃破表 ---
 // DESTRUCTION_TABLE[modifier] = { destroyed:[min,max], noEffect:[min,max], immobilized:[min,max] }
-// modifier: -3以下～+2以上 (clamped)
+// modifier: -3以下～+3以上 (clamped)
 const DESTRUCTION_TABLE = {
-  '-3': { destroyed:[2,3],  noEffect:[4,10],  immobilized:[11,12] },
-  '-2': { destroyed:[2,4],  noEffect:[5,10],  immobilized:[11,12] },
-  '-1': { destroyed:[2,5],  noEffect:[6,10],  immobilized:[11,12] },
-   '0': { destroyed:[2,6],  noEffect:[7,10],  immobilized:[11,12] },
-   '1': { destroyed:[2,7],  noEffect:[8,10],  immobilized:[11,12] },
-   '2': { destroyed:[2,9],  noEffect:[10,10], immobilized:[11,12] },
+  '-3': { destroyed:[2,2],   noEffect:[3,10],  immobilized:[11,12] },  // -3以下
+  '-2': { destroyed:[2,3],   noEffect:[4,10],  immobilized:[11,12] },
+  '-1': { destroyed:[2,4],   noEffect:[5,10],  immobilized:[11,12] },
+   '0': { destroyed:[2,5],   noEffect:[6,10],  immobilized:[11,12] },
+   '1': { destroyed:[2,6],   noEffect:[7,10],  immobilized:[11,12] },
+   '2': { destroyed:[2,7],   noEffect:[8,10],  immobilized:[11,12] },
+   '3': { destroyed:[2,9],   noEffect:[10,10], immobilized:[11,12] },  // +3以上
 };
 
 function getDestructionResult(modifier, diceTotal) {
-  const key = String(Math.max(-3, Math.min(2, modifier)));
+  const key = String(Math.max(-3, Math.min(3, modifier)));
   const t = DESTRUCTION_TABLE[key];
   if (diceTotal >= t.destroyed[0] && diceTotal <= t.destroyed[1]) return 'destroyed';
   if (diceTotal >= t.immobilized[0] && diceTotal <= t.immobilized[1]) return 'immobilized';
