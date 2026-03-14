@@ -953,14 +953,14 @@ function autoJPShoot(title) {
       log('  外れ');
     }
 
-    // オーバーレイで結果表示
-    showResult(r);
-    const okBtn = document.getElementById('resultOK');
-    okBtn.textContent = '確認';
-    okBtn.onclick = function() {
-      closeResult();
-      setTimeout(() => processNext(), 300);
-    };
+    // 確認ボタンで次へ
+    const btn = document.createElement('button');
+    btn.textContent = '確認';
+    btn.style.cssText = 'margin:6px 0;padding:4px 16px;font-size:1em;cursor:pointer;';
+    btn.onclick = function() { btn.remove(); setTimeout(() => processNext(), 300); };
+    const logEl = document.getElementById('log');
+    logEl.appendChild(btn);
+    logEl.scrollTop = logEl.scrollHeight;
   }
 
   processNext();
