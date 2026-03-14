@@ -519,8 +519,7 @@ function phaseSortie() {
     // 日本軍ミッション判定
     jpMission = currentJpFleet.some(s => s.type === 'BB' || s.type === 'OBB' || s.type === 'CA') ? 'bombard' : 'transport';
 
-    // 米軍usedフラグリセット（沈没艦除く）
-    usAllShips.forEach(s => { if (s.status !== 'sunk') s.used = false; });
+    // 米軍usedフラグはリセットしない（一度使用した艦は再利用不可）
 
     // 索敵結果表示
     showScoutResults();
