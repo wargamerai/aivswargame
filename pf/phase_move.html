@@ -362,23 +362,26 @@ function autoAdvanceColumn(fleet) {
     return 0;
   });
 
-  // 直進モード統一速力: OBBがいたら3、なければ4
+  // 直進モード統一速力: OBBがいたら3、なければ4。損傷艦も含め全リードで統一
   const activeShips = fleet.filter(s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
   const hasOBB = activeShips.some(s => s.type === 'OBB');
   const fleetSpeed = hasOBB ? 3 : 4;
 
-  for (const lead of leads) {
-    const spd = Math.min(getSpeed(lead), fleetSpeed);  // 統一速力で上限
-    const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
-    const minSpd = Math.min(getMinSpeed(lead), fleetSpeed);
-    const minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
+  // 全リードの実移動力を計算し、最小値に統一（損傷艦に合わせる）
+  let unifiedMove = fleetSpeed;
+  for (const ld of leads) {
+    const spd = Math.min(getSpeed(ld), fleetSpeed);
+    const mc = ld.dmgM >= ld.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+    if (mc < unifiedMove) unifiedMove = mc;
+  }
 
-    for (let step = 0; step < moveCount; step++) {
+  for (const lead of leads) {
+    for (let step = 0; step < unifiedMove; step++) {
       const next = hexNeighbor(lead.col, lead.row, lead.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
-      // 衝突回避: 最低速度以上なら前方占有時に停止
-      if (step >= minCount && (occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead))) break;
+      // 沈没艦の残骸回避: 停止
+      if (getSunkShip(next.col, next.row, lead)) break;
 
       lead.path = lead.path || [];
       lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
@@ -386,8 +389,6 @@ function autoAdvanceColumn(fleet) {
       lead.row = next.row;
       var occ = getOccupant(next.col, next.row, lead);
       if (occ) collisionCheck(lead, occ);
-      var sunkAt = getSunkShip(next.col, next.row, lead);
-      if (sunkAt) collisionCheck(lead, sunkAt);
 
       moveFollowers(lead, fleet);
     }
