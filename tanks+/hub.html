@@ -306,20 +306,22 @@ function toggleArc() {
 }
 
 // 射界判定: 頂点は正面の隣接ヘクス、そこから120°に広がる
+// 中心線はユニット→隣接ヘクスの実際の幾何学的角度
 function isInFixedArc(unit, tc, tr) {
   const apex = hexNeighbor(unit.col, unit.row, unit.dir);
   if (!apex) return false;
-  // 正面の隣接ヘクス自体は射界内
   if (tc === apex.col && tr === apex.row) return true;
-  // 頂点ヘクスからターゲットへの角度を計算
+  const hUnit = hexCenter(unit.col, unit.row);
   const hApex = hexCenter(apex.col, apex.row);
   const hTgt = hexCenter(tc, tr);
+  // 中心線: ユニット→隣接ヘクスの実角度
+  const centerAngle = Math.atan2(-(hApex.y - hUnit.y), hApex.x - hUnit.x);
+  // 頂点→ターゲットの角度
   const angle = Math.atan2(-(hTgt.y - hApex.y), hTgt.x - hApex.x);
-  const dirRad = unit.dir * 60 * Math.PI / 180;
-  let diff = angle - dirRad;
+  let diff = angle - centerAngle;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
-  return Math.abs(diff) <= Math.PI / 3; // ±60° = 120°
+  return Math.abs(diff) <= Math.PI / 3;
 }
 
 // 射界描画: 選択ユニットの射界ヘクスを距離5hex刻みで色分け
