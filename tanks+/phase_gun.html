@@ -355,7 +355,7 @@ function isInFixedArc(firer, target) {
   let diff = angle - centerAngle;
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
-  return Math.abs(diff) <= Math.PI / 3;
+  return Math.abs(diff) <= Math.PI / 3 + 0.05; // 境界ヘクスを含める余裕
 }
 
 // 射撃可能か（旋回砲塔=360°、固定砲塔/AT砲=隣接ヘクス起点120°）
