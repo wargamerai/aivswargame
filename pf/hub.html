@@ -1502,17 +1502,36 @@ const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
 const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
 
 function buildFleets(data) {
-  // PF: 日本軍(AI)は自動配置（左側）
+  // PF: 日本軍(AI)は自動配置（左側）— 単縦陣、開始行ランダム、たまに斜め
   var jpData = data.jpFleet || [];
   var jpMain = jpData.filter(s => s.type !== 'DD');
   var jpDD   = jpData.filter(s => s.type === 'DD');
   var jpBuilt = [];
-  // 主力列（col=2）
+
+  // 進行方向: 東(6)固定
+  var jpDir = 6;
+  // 反対方向（単縦陣で後続艦を並べる用）
+  var reverseDir = 4;
+
+  // hexNeighborローカル版
+  function hexN(c, r, d) {
+    var even = (r % 2 === 0);
+    var nb = {6:[1,0],4:[-1,0],3:even?[0,1]:[1,1],1:even?[-1,1]:[0,1],9:even?[0,-1]:[1,-1],7:even?[-1,-1]:[0,-1]};
+    var dd = nb[d]; if (!dd) return null;
+    return {col:c+dd[0], row:r+dd[1]};
+  }
+
+  // 主力列 — 開始行ランダム（艦数分の余裕を確保）
+  var mainLen = jpMain.length;
+  var mainStartRow = Math.floor(Math.random() * Math.max(1, ROWS - mainLen - 4)) + 2;
+  var mainStartCol = 2;
   jpMain.forEach((s, i) => {
+    var pos = {col: mainStartCol, row: mainStartRow};
+    for (var k = 0; k < i; k++) { var n = hexN(pos.col, pos.row, reverseDir); if (n) pos = n; }
     jpBuilt.push({
       name: s.name, type: s.type, side: 'jp',
-      col: 2, row: Math.min(ROWS-1, 6 + i),
-      dir: 6, speed: s.spd||4,
+      col: pos.col, row: Math.max(0, Math.min(ROWS-1, pos.row)),
+      dir: jpDir, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
       vp: s.vp, torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : (TORPEDOES[s.type]||'-'),
@@ -1521,12 +1540,18 @@ function buildFleets(data) {
       path:[],
     });
   });
-  // 駆逐列（col=3）
+
+  // 駆逐列 — 主力列と1列ずらし、開始行も別にランダム
+  var ddLen = jpDD.length;
+  var ddStartRow = Math.floor(Math.random() * Math.max(1, ROWS - ddLen - 4)) + 2;
+  var ddStartCol = 3;
   jpDD.forEach((s, i) => {
+    var pos = {col: ddStartCol, row: ddStartRow};
+    for (var k = 0; k < i; k++) { var n = hexN(pos.col, pos.row, reverseDir); if (n) pos = n; }
     jpBuilt.push({
       name: s.name, type: s.type, side: 'jp',
-      col: 3, row: Math.min(ROWS-1, 6 + i),
-      dir: 6, speed: s.spd||4,
+      col: pos.col, row: Math.max(0, Math.min(ROWS-1, pos.row)),
+      dir: jpDir, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
       vp: s.vp, torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : (TORPEDOES[s.type]||'-'),
