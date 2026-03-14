@@ -197,7 +197,9 @@ function startStraightMode() {
 
 // ========== 大破艦・射撃不能艦 自動離脱 ==========
 function autoWithdrawHeavy() {
-  const allShips = [...jpFleet, ...usFleet];
+  // この移動ターンの該当側のみ離脱処理（JP移動ターンならJP艦のみ）
+  const jpMoving = isJPMoving();
+  const allShips = jpMoving ? jpFleet : usFleet;
   for (const ship of allShips) {
     // 大破 or (US側で射撃不能)
     const shouldWithdraw = (ship.status === 'heavy') ||
