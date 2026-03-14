@@ -754,6 +754,22 @@ function allStraight() {
   // 現在操作中の艦を確定
   if (moving) finishMove();
 
+  // 一時保存中の艦を確定（位置を復元してmovedShipsに登録）
+  for (const name in shipStates) {
+    const saved = shipStates[name];
+    const ship = jpFleet.find(s => s.name === name);
+    if (ship && saved) {
+      ship.col = saved.col;
+      ship.row = saved.row;
+      ship.dir = saved.dir;
+      ship.remainMove = 0;
+      const idx = jpFleet.indexOf(ship);
+      movedShips.add(idx);
+      parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
+    }
+    delete shipStates[name];
+  }
+
   // やり直し用に全状態を保存
   allStraightBackup = {
     fleet: jpFleet.map(s => ({...s, crits: [...(s.crits||[])]})),
