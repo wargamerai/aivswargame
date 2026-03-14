@@ -1257,12 +1257,13 @@ function phaseNextTurn() {
             if (ratio < 0.25) {
                 // 小破: 1ターンで修理完了
                 s.dmgG = 0; s.dmgM = 0; s.status = 'ok'; s.used = false;
+                delete s.speed; delete s.crits; delete s.critHitMod; delete s.onFire;
                 logMsg(`${s.name} の修理完了、戦線復帰。`);
             } else if (ratio < 0.5) {
                 // 中破: ダメージ半減
                 s.dmgG = Math.floor(s.dmgG / 2);
                 s.dmgM = Math.floor(s.dmgM / 2);
-                if (s.dmgG + s.dmgM === 0) { s.status = 'ok'; }
+                if (s.dmgG + s.dmgM === 0) { s.status = 'ok'; delete s.speed; delete s.crits; delete s.critHitMod; delete s.onFire; }
                 else { s.status = 'light'; }
                 s.used = false;
                 logMsg(`${s.name} の修理進行中（中破→${statusLabel(s.status)}）`);
@@ -1280,6 +1281,7 @@ function phaseNextTurn() {
                 s.dmgG = 0;
                 s.dmgM = 0;
                 s.status = 'ok';
+                delete s.speed; delete s.crits; delete s.critHitMod; delete s.onFire;
                 logMsg(`${s.name} の修理完了、戦線復帰。`);
             }
         }
