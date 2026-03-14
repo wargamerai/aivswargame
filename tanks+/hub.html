@@ -100,8 +100,7 @@ button.top-btn:hover { background:#556; }
 #calibPanel h4 { color:#c8a020; margin:0 0 8px; font-size:1em; }
 #calibPanel .calib-row { display:flex; align-items:center; gap:8px; margin:4px 0; }
 #calibPanel .calib-row label { width:80px; text-align:right; color:#aaa; }
-#calibPanel .calib-row input[type=range] { flex:1; }
-#calibPanel .calib-row .calib-val { width:50px; color:#ff0; font-weight:bold; text-align:right; }
+#calibPanel .calib-row input[type=number] { width:70px; background:#333; color:#ff0; border:1px solid #666; padding:3px 6px; font-size:1em; font-family:monospace; text-align:right; border-radius:3px; }
 #calibPanel .calib-info { color:#888; font-size:0.8em; margin-top:6px; }
 #calibPanel button { margin-top:8px; background:#c8a020; color:#000; border:none; padding:4px 12px; border-radius:3px; cursor:pointer; font-weight:bold; }
 #calibPanel button:hover { background:#dab030; }
@@ -141,18 +140,15 @@ button.top-btn:hover { background:#556; }
   <h4>🔧 ヘクス キャリブレーション</h4>
   <div class="calib-row">
     <label>OX (横):</label>
-    <input type="range" id="sliderOX" min="0" max="500" value="75">
-    <span class="calib-val" id="valOX">75</span>
+    <input type="number" id="inputOX" value="75" step="1">
   </div>
   <div class="calib-row">
     <label>OY (縦):</label>
-    <input type="range" id="sliderOY" min="0" max="500" value="85">
-    <span class="calib-val" id="valOY">85</span>
+    <input type="number" id="inputOY" value="85" step="1">
   </div>
   <div class="calib-row">
     <label>HEX_SIZE:</label>
-    <input type="range" id="sliderSize" min="30" max="150" value="82" step="0.5">
-    <span class="calib-val" id="valSize">82</span>
+    <input type="number" id="inputSize" value="82" step="0.5">
   </div>
   <div class="calib-info">値を調整してJPGのヘクスにグリッドを合わせてください</div>
   <button onclick="applyCalib()">この値で確定（コンソールに出力）</button>
@@ -793,28 +789,22 @@ window.addEventListener('message', (e) => {
 
 // ===== キャリブレーション =====
 function setupCalibSliders() {
-  const sOX = document.getElementById('sliderOX');
-  const sOY = document.getElementById('sliderOY');
-  const sSize = document.getElementById('sliderSize');
-  const vOX = document.getElementById('valOX');
-  const vOY = document.getElementById('valOY');
-  const vSize = document.getElementById('valSize');
+  const iOX = document.getElementById('inputOX');
+  const iOY = document.getElementById('inputOY');
+  const iSize = document.getElementById('inputSize');
 
-  sOX.addEventListener('input', () => {
-    OX = parseFloat(sOX.value);
-    vOX.textContent = OX;
+  iOX.addEventListener('input', () => {
+    OX = parseFloat(iOX.value) || 0;
     draw();
   });
-  sOY.addEventListener('input', () => {
-    OY = parseFloat(sOY.value);
-    vOY.textContent = OY;
+  iOY.addEventListener('input', () => {
+    OY = parseFloat(iOY.value) || 0;
     draw();
   });
-  sSize.addEventListener('input', () => {
-    HEX_SIZE = parseFloat(sSize.value);
+  iSize.addEventListener('input', () => {
+    HEX_SIZE = parseFloat(iSize.value) || 50;
     HEX_W = HEX_SIZE * 2;
     HEX_H = HEX_SIZE * Math.sqrt(3);
-    vSize.textContent = HEX_SIZE;
     draw();
   });
 }
