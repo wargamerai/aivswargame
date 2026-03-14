@@ -26,6 +26,14 @@ h3 { color:#1a5a8a; margin-bottom:6px; font-size:1.1em; }
   min-height:24px;
 }
 
+#modeLabel {
+  display:inline-block; padding:2px 8px; border-radius:3px;
+  font-weight:bold; font-size:0.9em; margin-bottom:4px;
+}
+#modeLabel.moving { background:#2a7a2a; color:#fff; }
+#modeLabel.facing { background:#cc7700; color:#fff; }
+#modeLabel.idle { background:#999; color:#fff; }
+
 .controls { margin:8px 0; display:flex; flex-wrap:wrap; gap:4px; }
 button {
   background:#dde4f0; color:#334; border:1px solid #99a;
@@ -39,12 +47,32 @@ button.danger { background:#cc3311; color:#fff; border-color:#aa2200; }
 
 #log {
   background:#f0f0f0; border:1px solid #ccc; padding:6px;
-  height:120px; overflow-y:auto; font-size:0.85em; line-height:1.5; margin-top:8px; color:#333;
+  height:150px; overflow-y:auto; font-size:0.85em; line-height:1.5; margin-top:8px; color:#333;
 }
+.hit-text { color:#c00; font-weight:bold; }
+.dmg-text { color:#c00; font-weight:bold; }
+
+/* 防御射撃オーバーレイ */
+#dfOverlay {
+  display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.6); z-index:100;
+  justify-content:center; align-items:center;
+}
+#dfBody {
+  background:#fff; border:3px solid #c33; border-radius:8px;
+  padding:16px; max-width:350px; width:90%; text-align:center; font-size:0.95em;
+}
+#dfBody .r-dice { color:#1a5a8a; font-size:1.1em; margin:4px 0; }
+#dfBody .r-hit { font-size:1.2em; font-weight:bold; margin:6px 0; }
+#dfBody .r-hit.hit { color:#c00; }
+#dfBody .r-hit.miss { color:#888; }
+#dfBody .r-dmg { color:#c00; font-size:1.3em; font-weight:bold; margin:4px 0; }
 </style>
 </head>
 <body>
 <h3 id="phTitle">移動フェーズ</h3>
+
+<div id="modeLabel" class="idle">待機</div>
 
 <div class="section-label">▼ ユニットを選択</div>
 <div id="unitCards" class="unit-cards"></div>
@@ -52,23 +80,30 @@ button.danger { background:#cc3311; color:#fff; border-color:#aa2200; }
 <div id="moveInfo">ユニットを選択してください</div>
 
 <div class="controls">
-  <button onclick="rotateLeft()" id="btnRotL">↺ 左回転</button>
-  <button onclick="moveForward()" id="btnFwd">▲ 前進</button>
-  <button onclick="moveBackward()" id="btnBack">▼ 後退</button>
-  <button onclick="rotateRight()" id="btnRotR">↻ 右回転</button>
-  <button onclick="undoMove()" id="btnUndo">戻す</button>
-  <button onclick="confirmUnit()" id="btnConfirm" class="action">確定</button>
+  <button onclick="undoMove()" id="btnUndo" disabled>戻す</button>
+  <button onclick="skipFacing()" id="btnSkipFace" disabled>向き変更なし</button>
+  <button onclick="confirmUnit()" id="btnConfirm" class="action" disabled>確定</button>
   <button onclick="donePhase()" class="danger">フェーズ終了</button>
 </div>
 
 <div id="log"></div>
+
+<!-- 防御射撃結果オーバーレイ -->
+<div id="dfOverlay" onclick="closeDfOverlay()">
+  <div id="dfBody"></div>
+</div>
 
 <script>
 let state = null;
 let phase = '';
 let activeSide = '';
 let selectedIdx = -1;
-let moveHistory = []; // { col, row, dir, mp } の配列（undo用）
+let moveMode = 'idle'; // 'idle' | 'moving' | 'facing'
+let moveHistory = []; // { col, row, dir, mp } の配列
+let dfHistory = [];   // 防御射撃履歴（Undoできない位置を記録）
+let dfFirers = {};    // このフェーズで防御射撃した敵ユニットIDX
+
+const DIR_LABELS = ['東','北東','北西','西','南西','南東'];
 
 function log(text) {
   const el = document.getElementById('log');
@@ -76,6 +111,8 @@ function log(text) {
   el.scrollTop = el.scrollHeight;
   parent.postMessage({ type:'GAME_LOG', text:text }, '*');
 }
+
+function roll() { return Math.floor(Math.random() * 6) + 1; }
 
 function init() {
   const params = new URLSearchParams(window.location.search);
@@ -102,19 +139,15 @@ function init() {
     if (u.status === 'destroyed') continue;
     const db = UNIT_DB[u.name];
     if (!db) continue;
-    // 準備射撃した艦は移動不可
     if (u.fired) { u.remainMove = 0; continue; }
-    // 移動不能
     if (u.status === 'immobilized') { u.remainMove = 0; continue; }
-    // 対戦車砲は移動0（回転のみ）
     u.remainMove = db.move;
     u.moved = false;
   }
 
   log(`=== ${document.getElementById('phTitle').textContent} ===`);
   renderCards();
-  updateMoveInfo();
-  updateButtons();
+  updateUI();
 }
 
 // ===== カード表示 =====
@@ -144,7 +177,6 @@ function renderCards() {
 
 function selectUnit(idx) {
   if (selectedIdx >= 0 && selectedIdx !== idx) {
-    // 前のユニットの移動を自動確定
     if (moveHistory.length > 0) confirmUnit();
   }
 
@@ -154,195 +186,197 @@ function selectUnit(idx) {
 
   selectedIdx = idx;
   moveHistory = [];
-  renderCards();
-  updateMoveInfo();
-  updateButtons();
+  dfHistory = [];
 
-  // 親にハイライト通知
+  const db = UNIT_DB[u.name];
+  if (db.type === 'atgun') {
+    // 対戦車砲は向き変更のみ
+    moveMode = 'facing';
+  } else {
+    moveMode = 'moving';
+  }
+
+  renderCards();
+  updateUI();
   parent.postMessage({ type:'HIGHLIGHT', unitIdx:idx }, '*');
 }
 
-function updateMoveInfo() {
-  const el = document.getElementById('moveInfo');
+function updateUI() {
+  const modeEl = document.getElementById('modeLabel');
+  modeEl.className = moveMode;
+
+  if (moveMode === 'idle') modeEl.textContent = '待機';
+  else if (moveMode === 'moving') modeEl.textContent = '移動中（隣接ヘクスをクリック）';
+  else if (moveMode === 'facing') modeEl.textContent = '向き指定（ヘクスサイドをクリック）';
+
+  const infoEl = document.getElementById('moveInfo');
   if (selectedIdx < 0) {
-    el.textContent = 'ユニットを選択してください';
+    infoEl.textContent = 'ユニットを選択してください';
+  } else {
+    const u = state.units[selectedIdx];
+    const db = UNIT_DB[u.name];
+    const dir = u.dir !== undefined ? DIR_LABELS[u.dir] : '-';
+    infoEl.innerHTML = `<b>${u.name}</b> | 残りMP: <b style="color:${u.remainMove>0?'#2a7a2a':'#c00'}">${u.remainMove}</b> | 向き: ${dir} | 位置: (${u.col},${u.row})`;
+  }
+
+  document.getElementById('btnUndo').disabled = (moveHistory.length === 0);
+  document.getElementById('btnSkipFace').disabled = (moveMode !== 'facing');
+  document.getElementById('btnConfirm').disabled = (selectedIdx < 0 || moveMode === 'moving');
+}
+
+// ===== マップクリック処理 =====
+function handleMapSelect(col, row, side, unitIdx) {
+  if (moveMode === 'idle') {
+    // ユニット選択
+    if (unitIdx >= 0) selectUnit(unitIdx);
     return;
   }
-  const u = state.units[selectedIdx];
-  const db = UNIT_DB[u.name];
-  const dirLabel = ['東','北東','北西','西','南西','南東'];
-  const dir = u.dir !== undefined ? dirLabel[u.dir] : '-';
-  el.innerHTML = `<b>${u.name}</b> (${db.type}) | 残りMP: ${u.remainMove} | 向き: ${dir} | 位置: (${u.col},${u.row})`;
+
+  if (moveMode === 'moving') {
+    handleMove(col, row);
+    return;
+  }
+
+  if (moveMode === 'facing') {
+    handleFacing(side);
+    return;
+  }
 }
 
-function updateButtons() {
-  const hasUnit = selectedIdx >= 0;
-  const u = hasUnit ? state.units[selectedIdx] : null;
-  const db = hasUnit ? UNIT_DB[u.name] : null;
-  const mp = hasUnit ? u.remainMove : 0;
-  const isATGun = db && db.type === 'atgun';
-  const isInf = db && db.type === 'infantry';
-
-  document.getElementById('btnFwd').disabled = !hasUnit || mp < 1 || isATGun;
-  document.getElementById('btnBack').disabled = !hasUnit || mp < 2 || isATGun || isInf;
-  document.getElementById('btnRotL').disabled = !hasUnit || (mp < 1 && !isATGun) || isInf;
-  document.getElementById('btnRotR').disabled = !hasUnit || (mp < 1 && !isATGun) || isInf;
-  document.getElementById('btnUndo').disabled = moveHistory.length === 0;
-  document.getElementById('btnConfirm').disabled = selectedIdx < 0;
-}
-
-// ===== 移動操作 =====
-function getTerrainCost(col, row) {
-  const key = `${col},${row}`;
-  const t = state.terrain[key];
-  return TERRAIN_COST[t] || 1;
-}
-
-function moveForward() {
+// ===== 移動処理 =====
+function handleMove(col, row) {
   if (selectedIdx < 0) return;
   const u = state.units[selectedIdx];
   const db = UNIT_DB[u.name];
-  if (db.type === 'atgun') return;
 
-  let targetHex;
-  if (db.type === 'infantry') {
-    // 歩兵: とりあえず前方向に進む（実際にはクリックで移動先選択）
-    targetHex = hexNeighbor(u.col, u.row, u.dir || 0);
-  } else {
-    targetHex = hexNeighbor(u.col, u.row, u.dir);
+  // 隣接ヘクスかチェック
+  const neighbors = getNeighbors(u.col, u.row);
+  const moveDir = neighbors.findIndex(n => n && n.col === col && n.row === row);
+  if (moveDir < 0) {
+    log('隣接ヘクスを選択してください');
+    return;
   }
-  if (!targetHex) { log('移動不可（マップ外）'); return; }
 
-  const cost = db.type === 'infantry' ? 1 : getTerrainCost(targetHex.col, targetHex.row);
-  if (u.remainMove < cost) { log(`MP不足（必要:${cost}, 残り:${u.remainMove}）`); return; }
+  // 旋回コスト計算
+  let rotateCost = 0;
+  if (db.type !== 'infantry') {
+    rotateCost = getRotateCost(u.dir, moveDir);
+  }
+
+  // 地形コスト
+  const terrainCost = db.type === 'infantry' ? 1 : getTerrainCost(col, row);
+
+  // 後退判定: 移動方向が後方3方向
+  let backwardExtra = 0;
+  if (db.type !== 'infantry') {
+    const diff = ((moveDir - u.dir) % 6 + 6) % 6;
+    if (diff >= 3 && diff <= 5) { // dir+3, dir+4, dir+5 が後方
+      backwardExtra = 1;
+    }
+  }
+
+  const totalCost = rotateCost + terrainCost + backwardExtra;
+
+  if (u.remainMove < totalCost) {
+    log(`MP不足（旋回${rotateCost}+地形${terrainCost}${backwardExtra?'+後退1':''}=${totalCost}, 残り${u.remainMove}）`);
+    return;
+  }
 
   // スタックチェック
-  if (!checkStacking(targetHex.col, targetHex.row, u)) {
-    log('スタック制限超過'); return;
+  if (!checkStacking(col, row, u)) {
+    log('スタック制限超過');
+    return;
   }
 
   // 移動実行
   moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
-  u.col = targetHex.col;
-  u.row = targetHex.row;
-  u.remainMove -= cost;
-
-  log(`${u.name}: (${u.col},${u.row})へ前進 MP-${cost}`);
-  pushState();
-  updateMoveInfo();
-  updateButtons();
-  renderCards();
-}
-
-function moveBackward() {
-  if (selectedIdx < 0) return;
-  const u = state.units[selectedIdx];
-  const db = UNIT_DB[u.name];
-  if (db.type === 'atgun' || db.type === 'infantry') return;
-
-  const backDir = (u.dir + 3) % 6;
-  const targetHex = hexNeighbor(u.col, u.row, backDir);
-  if (!targetHex) { log('後退不可（マップ外）'); return; }
-
-  const cost = getTerrainCost(targetHex.col, targetHex.row) + 1; // 後退は+1
-  if (u.remainMove < cost) { log(`MP不足（後退必要:${cost}, 残り:${u.remainMove}）`); return; }
-
-  if (!checkStacking(targetHex.col, targetHex.row, u)) {
-    log('スタック制限超過'); return;
+  u.col = col;
+  u.row = row;
+  // 戦車は移動方向に向きを更新（歩兵は向きなし）
+  if (db.type !== 'infantry') {
+    u.dir = moveDir;
   }
+  u.remainMove -= totalCost;
 
-  moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
-  u.col = targetHex.col;
-  u.row = targetHex.row;
-  u.remainMove -= cost;
+  const costDetail = [];
+  if (rotateCost > 0) costDetail.push(`旋回${rotateCost}`);
+  costDetail.push(`地形${terrainCost}`);
+  if (backwardExtra > 0) costDetail.push('後退+1');
+  log(`${u.name}: (${col},${row})へ移動 MP-${totalCost} (${costDetail.join('+')})`);
 
-  log(`${u.name}: (${u.col},${u.row})へ後退 MP-${cost}`);
   pushState();
-  updateMoveInfo();
-  updateButtons();
   renderCards();
-}
 
-function rotateLeft() {
-  if (selectedIdx < 0) return;
-  const u = state.units[selectedIdx];
-  const db = UNIT_DB[u.name];
-  if (db.type === 'infantry') return;
-
-  // 対戦車砲: 射撃マーカーなしなら自由に回転（MPコストなし）
-  if (db.type === 'atgun') {
-    moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
-    u.dir = (u.dir + 1) % 6;
-    log(`${u.name}: 左回転 → ${['東','北東','北西','西','南西','南東'][u.dir]}`);
-    pushState();
-    updateMoveInfo();
+  // 防御射撃判定
+  const dfResult = resolveDefensiveFire(u, selectedIdx);
+  if (dfResult === 'destroyed') {
+    // 破壊された
+    moveMode = 'idle';
+    selectedIdx = -1;
+    renderCards();
+    updateUI();
+    parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
+    return;
+  }
+  if (dfResult === 'immobilized') {
+    // 移動不能 → 向き指定へ
+    u.remainMove = 0;
+    moveMode = 'facing';
+    renderCards();
+    updateUI();
     return;
   }
 
-  if (u.remainMove < 1) { log('MP不足'); return; }
-  moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
-  u.dir = (u.dir + 1) % 6;
-  u.remainMove -= 1;
-  log(`${u.name}: 左回転 → ${['東','北東','北西','西','南西','南東'][u.dir]} MP-1`);
-  pushState();
-  updateMoveInfo();
-  updateButtons();
-  renderCards();
+  // 防御射撃の記録（この位置からしかUndoできない）
+  if (dfResult === 'fired') {
+    dfHistory.push(moveHistory.length);
+  }
+
+  // MP残りチェック
+  if (u.remainMove <= 0) {
+    moveMode = 'facing';
+    log(`${u.name}: MP切れ → 向きを指定してください`);
+  }
+
+  updateUI();
 }
 
-function rotateRight() {
+// ===== 向き指定 =====
+function handleFacing(side) {
   if (selectedIdx < 0) return;
   const u = state.units[selectedIdx];
   const db = UNIT_DB[u.name];
-  if (db.type === 'infantry') return;
 
-  if (db.type === 'atgun') {
-    moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
-    u.dir = (u.dir + 5) % 6;
-    log(`${u.name}: 右回転 → ${['東','北東','北西','西','南西','南東'][u.dir]}`);
-    pushState();
-    updateMoveInfo();
+  if (db.type === 'infantry') {
+    // 歩兵は向きなし、そのまま確定
+    confirmUnit();
     return;
   }
 
-  if (u.remainMove < 1) { log('MP不足'); return; }
   moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
-  u.dir = (u.dir + 5) % 6;
-  u.remainMove -= 1;
-  log(`${u.name}: 右回転 → ${['東','北東','北西','西','南西','南東'][u.dir]} MP-1`);
+  u.dir = side;
+  log(`${u.name}: 向き → ${DIR_LABELS[side]}`);
   pushState();
-  updateMoveInfo();
-  updateButtons();
-  renderCards();
+  confirmUnit();
 }
 
-function undoMove() {
-  if (moveHistory.length === 0 || selectedIdx < 0) return;
-  const prev = moveHistory.pop();
-  const u = state.units[selectedIdx];
-  u.col = prev.col;
-  u.row = prev.row;
-  u.dir = prev.dir;
-  u.remainMove = prev.mp;
-  log(`${u.name}: 移動を取り消し`);
-  pushState();
-  updateMoveInfo();
-  updateButtons();
-  renderCards();
+function skipFacing() {
+  if (selectedIdx < 0 || moveMode !== 'facing') return;
+  confirmUnit();
 }
 
-function confirmUnit() {
-  if (selectedIdx < 0) return;
-  const u = state.units[selectedIdx];
-  u.moved = true;
-  moveHistory = [];
-  log(`${u.name}: 移動確定`);
-  selectedIdx = -1;
-  pushState();
-  renderCards();
-  updateMoveInfo();
-  updateButtons();
-  parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
+// ===== 旋回コスト =====
+function getRotateCost(currentDir, targetDir) {
+  const diff = ((targetDir - currentDir) % 6 + 6) % 6;
+  // 最短旋回: 0→0, 1→1, 2→2, 3→3, 4→2, 5→1
+  return Math.min(diff, 6 - diff);
+}
+
+// ===== 地形コスト =====
+function getTerrainCost(col, row) {
+  const key = `${col},${row}`;
+  const t = state.terrain[key];
+  return TERRAIN_COST[t] || 1;
 }
 
 // ===== スタックチェック =====
@@ -350,7 +384,7 @@ function checkStacking(col, row, movingUnit) {
   const db = UNIT_DB[movingUnit.name];
   const friendly = state.units.filter(u =>
     u.side === movingUnit.side && u.col === col && u.row === row &&
-    u.status !== 'destroyed' && u.id !== movingUnit.id
+    u.status !== 'destroyed' && u !== movingUnit
   );
 
   if (db.type === 'tank' || db.type === 'apc') {
@@ -370,10 +404,176 @@ function checkStacking(col, row, movingUnit) {
   return true;
 }
 
-// ===== ヘクス関数（hub.htmlと同じ） =====
-const HEX_SIZE = 82;
+// ===== 防御射撃 =====
+function resolveDefensiveFire(movingUnit, movingIdx) {
+  const enemies = [];
+  state.units.forEach((e, ei) => {
+    if (e.side === activeSide) return;
+    if (e.status === 'destroyed') return;
+    if (e.ammoOut) return;
+    if (dfFirers[ei]) return; // 既に防御射撃済み
+    const eDb = UNIT_DB[e.name];
+    if (!eDb) return;
+    if (eDb.type === 'infantry') return; // 歩兵は防御射撃しない
+
+    // 射程チェック
+    const dist = hexDist(e.col, e.row, movingUnit.col, movingUnit.row);
+    const di = distKey(dist);
+    if (di < 0 || !FIRE_TABLE[e.name]) return;
+    const ft = FIRE_TABLE[e.name][di];
+    if (!ft) return;
+
+    // 射界チェック
+    if (eDb.turret !== 'rotating') {
+      if (!isInFixedArc(e, movingUnit)) return;
+    }
+
+    // LOS チェック
+    if (!hasLOS(e.col, e.row, movingUnit.col, movingUnit.row)) return;
+
+    enemies.push({ idx: ei, unit: e, db: eDb, dist, ft });
+  });
+
+  if (enemies.length === 0) return 'none';
+
+  let result = 'fired';
+  let allHtml = '';
+
+  for (const enemy of enemies) {
+    dfFirers[enemy.idx] = true;
+    const e = enemy.unit;
+    const eDb = enemy.db;
+    const ft = enemy.ft;
+    const pen = ft[0];
+    const hitNum = ft[1];
+
+    // 修正: 防御射撃+1
+    let mod = HIT_MODIFIERS.defensiveFire;
+    const details = ['防御射撃+1'];
+    const mTerrain = state.terrain[`${movingUnit.col},${movingUnit.row}`] || 'plain';
+    if (mTerrain === 'forest') { mod += 2; details.push('森+2'); }
+    if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
+    const mDb = UNIT_DB[movingUnit.name];
+    if (mDb.small) { mod += 1; details.push('小型+1'); }
+
+    const d1 = roll(), d2 = roll();
+    const rawTotal = d1 + d2;
+    const modTotal = rawTotal + mod;
+    const isHit = (modTotal <= hitNum);
+
+    let html = `<div style="margin-bottom:8px;padding:4px;border-bottom:1px solid #ddd">`;
+    html += `<b>防御射撃: ${e.name}</b> → ${movingUnit.name}<br>`;
+    html += `<span class="r-dice">🎲 ${d1}+${d2}=${rawTotal} 修正+${mod} → ${modTotal} (命中数${hitNum})</span><br>`;
+
+    if (isHit) {
+      html += `<span class="r-hit hit">命中！</span><br>`;
+      log(`防御射撃: ${e.name} → ${movingUnit.name}: 命中 (${d1}+${d2}=${rawTotal}+${mod}=${modTotal})`);
+
+      // 撃破判定
+      const frontHit = isInArc(movingUnit, e); // 移動中ユニットの正面に敵がいるか
+      const armor = mDb.armor - (frontHit ? 0 : 2);
+      const penDiff = pen - Math.max(0, armor);
+      const dd1 = roll(), dd2 = roll();
+      const dmgTotal = dd1 + dd2;
+      const dmgResult = getDestructionResult(penDiff, dmgTotal);
+
+      html += `装甲${mDb.armor}${frontHit?'':'(側面-2→'+armor+')'} 貫通差${penDiff>=0?'+':''}${penDiff}<br>`;
+      html += `<span class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</span><br>`;
+
+      if (dmgResult === 'destroyed') {
+        movingUnit.status = 'destroyed';
+        html += `<span class="r-dmg">破壊！</span>`;
+        log(`  → ${movingUnit.name} 破壊！`);
+        result = 'destroyed';
+      } else if (dmgResult === 'immobilized') {
+        movingUnit.status = 'immobilized';
+        html += `<span style="color:#cc0;font-weight:bold">移動不能</span>`;
+        log(`  → ${movingUnit.name} 移動不能`);
+        result = 'immobilized';
+      } else {
+        html += `<span style="color:#888">無効果</span>`;
+        log(`  → 無効果`);
+      }
+    } else {
+      html += `<span class="r-hit miss">外れ</span>`;
+      log(`防御射撃: ${e.name} → ${movingUnit.name}: 外れ`);
+    }
+
+    // 特殊判定
+    if (rawTotal === 12) {
+      e.ammoOut = true;
+      html += `<br><span style="color:#f00">⚠ ${e.name} 弾薬切れ</span>`;
+      log(`  ★ ${e.name} 弾薬切れ`);
+    }
+
+    html += `</div>`;
+    allHtml += html;
+
+    if (result === 'destroyed' || result === 'immobilized') break;
+  }
+
+  // オーバーレイ表示
+  document.getElementById('dfBody').innerHTML = allHtml +
+    `<div style="margin-top:8px;color:#666;font-size:0.85em">クリックで閉じる</div>`;
+  document.getElementById('dfOverlay').style.display = 'flex';
+
+  pushState();
+  return result;
+}
+
+function closeDfOverlay() {
+  document.getElementById('dfOverlay').style.display = 'none';
+}
+
+// ===== Undo =====
+function undoMove() {
+  if (moveHistory.length === 0 || selectedIdx < 0) return;
+
+  // 防御射撃が発生した位置より前には戻せない
+  if (dfHistory.length > 0 && moveHistory.length <= dfHistory[dfHistory.length - 1]) {
+    log('防御射撃後のため、これ以上戻せません');
+    return;
+  }
+
+  const prev = moveHistory.pop();
+  const u = state.units[selectedIdx];
+  u.col = prev.col;
+  u.row = prev.row;
+  u.dir = prev.dir;
+  u.remainMove = prev.mp;
+  moveMode = 'moving';
+  log(`${u.name}: 移動を取り消し`);
+  pushState();
+  renderCards();
+  updateUI();
+}
+
+// ===== 確定 =====
+function confirmUnit() {
+  if (selectedIdx < 0) return;
+  const u = state.units[selectedIdx];
+  u.moved = true;
+  moveHistory = [];
+  dfHistory = [];
+  log(`${u.name}: 移動確定`);
+  selectedIdx = -1;
+  moveMode = 'idle';
+  pushState();
+  renderCards();
+  updateUI();
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
+}
+
+// ===== ヘクス関数 =====
+const HEX_SIZE = 103.4;
 const HEX_H = HEX_SIZE * Math.sqrt(3);
-const OX = 75, OY = 85;
+const OX = 99.5, OY = 88.5;
+
+function hexCenter(col, row) {
+  const x = OX + (col - 1) * HEX_SIZE * 1.5;
+  const y = OY + (row - 1) * HEX_H + ((col % 2 === 0) ? HEX_H / 2 : 0);
+  return { x, y };
+}
 
 function hexNeighbor(col, row, dir) {
   const even = (col % 2 === 0);
@@ -388,6 +588,87 @@ function hexNeighbor(col, row, dir) {
   return { col: nc, row: nr };
 }
 
+function getNeighbors(col, row) {
+  const result = [];
+  for (let d = 0; d < 6; d++) {
+    result.push(hexNeighbor(col, row, d));
+  }
+  return result;
+}
+
+function hexDist(c1, r1, c2, r2) {
+  function toCube(col, row) {
+    const x = col - 1;
+    const z = row - 1 - Math.floor((col - 1) / 2);
+    const y = -x - z;
+    return { x, y, z };
+  }
+  const a = toCube(c1, r1);
+  const b = toCube(c2, r2);
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+}
+
+// ===== 射界判定（phase_gunと同じ） =====
+function isInArc(unit, other) {
+  const hSrc = hexCenter(unit.col, unit.row);
+  const hTgt = hexCenter(other.col, other.row);
+  const angle = Math.atan2(-(hTgt.y - hSrc.y), hTgt.x - hSrc.x);
+  const dirRad = unit.dir * 60 * Math.PI / 180;
+  let diff = angle - dirRad;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return Math.abs(diff) <= Math.PI / 3;
+}
+
+function isInFixedArc(firer, target) {
+  const apex = hexNeighbor(firer.col, firer.row, firer.dir);
+  if (!apex) return false;
+  if (target.col === apex.col && target.row === apex.row) return true;
+  const hFirer = hexCenter(firer.col, firer.row);
+  const hApex = hexCenter(apex.col, apex.row);
+  const hTgt = hexCenter(target.col, target.row);
+  const centerAngle = Math.atan2(-(hApex.y - hFirer.y), hApex.x - hFirer.x);
+  const angle = Math.atan2(-(hTgt.y - hApex.y), hTgt.x - hApex.x);
+  let diff = angle - centerAngle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return Math.abs(diff) <= Math.PI / 3 + 0.05;
+}
+
+// ===== LOS判定 =====
+function hasLOS(c1, r1, c2, r2) {
+  const h1 = hexCenter(c1, r1);
+  const h2 = hexCenter(c2, r2);
+  const dist = hexDist(c1, r1, c2, r2);
+  if (dist <= 1) return true;
+  for (let i = 1; i < dist; i++) {
+    const t = i / dist;
+    const mx = h1.x + (h2.x - h1.x) * t;
+    const my = h1.y + (h2.y - h1.y) * t;
+    const mid = pixelToHex(mx, my);
+    if (mid.col === c1 && mid.row === r1) continue;
+    if (mid.col === c2 && mid.row === r2) continue;
+    const terrain = state.terrain[`${mid.col},${mid.row}`];
+    if (terrain === 'forest' || terrain === 'building' || terrain === 'slope') return false;
+  }
+  return true;
+}
+
+function pixelToHex(px, py) {
+  let bestCol = 1, bestRow = 1, bestDist = Infinity;
+  const approxCol = Math.round((px - OX) / (HEX_SIZE * 1.5)) + 1;
+  const approxRow = Math.round((py - OY) / HEX_H) + 1;
+  for (let c = approxCol - 2; c <= approxCol + 2; c++) {
+    for (let r = approxRow - 2; r <= approxRow + 2; r++) {
+      if (c < 1 || r < 1) continue;
+      const h = hexCenter(c, r);
+      const d = (px - h.x) ** 2 + (py - h.y) ** 2;
+      if (d < bestDist) { bestDist = d; bestCol = c; bestRow = r; }
+    }
+  }
+  return { col: bestCol, row: bestRow };
+}
+
 // ===== state送信 =====
 function pushState() {
   localStorage.setItem('tanksState', JSON.stringify(state));
@@ -395,7 +676,7 @@ function pushState() {
 }
 
 function donePhase() {
-  if (selectedIdx >= 0 && moveHistory.length > 0) confirmUnit();
+  if (selectedIdx >= 0 && moveMode === 'facing') confirmUnit();
   log('--- 移動フェーズ終了 ---');
   pushState();
   parent.postMessage({ type:'PHASE_DONE' }, '*');
@@ -404,9 +685,8 @@ function donePhase() {
 // ===== 親からのメッセージ =====
 window.addEventListener('message', (e) => {
   if (!e.data || !e.data.type) return;
-  if (e.data.type === 'MAP_SELECT' && e.data.unitIdx >= 0) {
-    const u = state.units[e.data.unitIdx];
-    if (u && u.side === activeSide) selectUnit(e.data.unitIdx);
+  if (e.data.type === 'MAP_SELECT') {
+    handleMapSelect(e.data.col, e.data.row, e.data.side, e.data.unitIdx);
   }
   if (e.data.type === 'SELECT_UNIT') {
     selectUnit(e.data.unitIdx);
