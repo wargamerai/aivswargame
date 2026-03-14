@@ -480,9 +480,10 @@ function doInfantryShoot(firer, target, dist) {
   let total = d1 + d2;
 
   let mod = 0;
-  if (isAdvanceFire) mod += 1;
+  if (isAdvanceFire) mod += HIT_MODIFIERS.advanceFire.infantry;  // 歩兵前進射撃+1
   const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
-  if (tTerrain === 'forest' || tTerrain === 'building') mod += 1;
+  if (tTerrain === 'forest') mod += HIT_MODIFIERS.forest;    // +2
+  if (tTerrain === 'building') mod += HIT_MODIFIERS.building; // +2
   total += mod;
 
   let resultHtml = '';

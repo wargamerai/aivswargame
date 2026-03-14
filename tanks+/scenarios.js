@@ -171,9 +171,7 @@ const HIT_MODIFIERS = {
   smallTarget: 1,   // 小型目標
   immobilized: -1,  // 目標が移動不能
   defensiveFire: 1, // 防御射撃
-  advanceFire: { ge:2, us:2, uk:2, su:3 }, // 前進射撃（国別）
-  infForest: 1,     // 対歩兵: 森/建物の目標
-  infDefAdv: 1,     // 対歩兵: 防御/前進射撃
+  advanceFire: { ge:2, su:3, us:2, uk:2, infantry:1 }, // 前進射撃（国別、歩兵は+1）
 };
 
 // --- 地形コスト ---
