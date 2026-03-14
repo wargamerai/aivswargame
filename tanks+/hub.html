@@ -91,19 +91,6 @@ button.top-btn:hover { background:#556; }
   padding:4px 8px; border-top:1px solid #555; line-height:1.5; display:none;
 }
 
-/* --- キャリブレーションパネル --- */
-#calibPanel {
-  position:fixed; bottom:10px; left:10px; background:rgba(0,0,0,0.85);
-  border:1px solid #c8a020; border-radius:6px; padding:10px 14px; z-index:300;
-  color:#ddd; font-size:0.85em; font-family:monospace; min-width:320px;
-}
-#calibPanel h4 { color:#c8a020; margin:0 0 8px; font-size:1em; }
-#calibPanel .calib-row { display:flex; align-items:center; gap:8px; margin:4px 0; }
-#calibPanel .calib-row label { width:80px; text-align:right; color:#aaa; }
-#calibPanel .calib-row input[type=number] { width:70px; background:#333; color:#ff0; border:1px solid #666; padding:3px 6px; font-size:1em; font-family:monospace; text-align:right; border-radius:3px; }
-#calibPanel .calib-info { color:#888; font-size:0.8em; margin-top:6px; }
-#calibPanel button { margin-top:8px; background:#c8a020; color:#000; border:none; padding:4px 12px; border-radius:3px; cursor:pointer; font-weight:bold; }
-#calibPanel button:hover { background:#dab030; }
 </style>
 </head>
 <body>
@@ -133,25 +120,6 @@ button.top-btn:hover { background:#556; }
     <iframe id="phaseFrame" src="about:blank"></iframe>
   </div>
   <div id="gameLog"></div>
-</div>
-
-<!-- キャリブレーションパネル -->
-<div id="calibPanel">
-  <h4>🔧 ヘクス キャリブレーション</h4>
-  <div class="calib-row">
-    <label>OX (横):</label>
-    <input type="number" id="inputOX" value="99.5" step="1">
-  </div>
-  <div class="calib-row">
-    <label>OY (縦):</label>
-    <input type="number" id="inputOY" value="88.5" step="1">
-  </div>
-  <div class="calib-row">
-    <label>HEX_SIZE:</label>
-    <input type="number" id="inputSize" value="103.4" step="0.5">
-  </div>
-  <div class="calib-info">値を調整してJPGのヘクスにグリッドを合わせてください</div>
-  <button onclick="applyCalib()">この値で確定（コンソールに出力）</button>
 </div>
 
 <!-- シナリオ選択 -->
@@ -185,11 +153,11 @@ let dragging = false, dragStartX = 0, dragStartY = 0;
 // ===== ヘクス定数（JPG画像に合わせてキャリブレーション） =====
 // MapA-Vertical: 3972x2860, 約24列×25行
 // flat-topヘクス: 幅=size*2, 高さ=size*sqrt(3)
-let HEX_SIZE = 103.4;  // ヘクス半径（ピクセル）
-let HEX_W = HEX_SIZE * 2;
-let HEX_H = HEX_SIZE * Math.sqrt(3);
-let OX = 99.5;   // 左上ヘクス(01,01)の中心X
-let OY = 88.5;   // 左上ヘクス(01,01)の中心Y
+const HEX_SIZE = 103.4;  // ヘクス半径（ピクセル）
+const HEX_W = HEX_SIZE * 2;
+const HEX_H = HEX_SIZE * Math.sqrt(3);
+const OX = 99.5;   // 左上ヘクス(01,01)の中心X
+const OY = 88.5;   // 左上ヘクス(01,01)の中心Y
 
 // ===== ヘクス関数 =====
 // flat-topヘクス: 奇数列は半ヘクス下にずれる
@@ -279,9 +247,9 @@ function draw() {
     }
   }
 
-  // ヘクスグリッド
-  ctx.strokeStyle = 'rgba(255,0,0,0.35)';
-  ctx.lineWidth = 1.5;
+  // ヘクスグリッド（薄い線）
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1;
   const maxCol = 48, maxRow = 30;
   for (let c = 1; c <= maxCol; c++) {
     for (let r = 1; r <= maxRow; r++) {
@@ -292,11 +260,6 @@ function draw() {
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
       ctx.closePath();
       ctx.stroke();
-      // 座標ラベル（キャリブレーション用）
-      ctx.fillStyle = 'rgba(255,255,0,0.6)';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${String(c).padStart(2,'0')},${String(r).padStart(2,'0')}`, h.x, h.y + 4);
     }
   }
 
@@ -787,39 +750,11 @@ window.addEventListener('message', (e) => {
   }
 });
 
-// ===== キャリブレーション =====
-function setupCalibSliders() {
-  const iOX = document.getElementById('inputOX');
-  const iOY = document.getElementById('inputOY');
-  const iSize = document.getElementById('inputSize');
-
-  iOX.addEventListener('input', () => {
-    OX = parseFloat(iOX.value) || 0;
-    draw();
-  });
-  iOY.addEventListener('input', () => {
-    OY = parseFloat(iOY.value) || 0;
-    draw();
-  });
-  iSize.addEventListener('input', () => {
-    HEX_SIZE = parseFloat(iSize.value) || 50;
-    HEX_W = HEX_SIZE * 2;
-    HEX_H = HEX_SIZE * Math.sqrt(3);
-    draw();
-  });
-}
-
-function applyCalib() {
-  console.log(`確定値: HEX_SIZE = ${HEX_SIZE}, OX = ${OX}, OY = ${OY}`);
-  alert(`確定値をコンソールに出力しました:\nHEX_SIZE = ${HEX_SIZE}\nOX = ${OX}\nOY = ${OY}`);
-}
-
 // ===== 初期化 =====
 window.addEventListener('resize', resizeCanvas);
 window.addEventListener('load', () => {
   resizeCanvas();
   initScenarioScreen();
-  setupCalibSliders();
 });
 </script>
 </body>
