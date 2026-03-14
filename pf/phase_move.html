@@ -192,7 +192,7 @@ function startStraightMode() {
   renderList();
   dumpFleet('JP移動後', jpFleet);
 
-  setTimeout(() => donePhase(), 1500);
+  setTimeout(() => donePhase(true), 1500);
 }
 
 // ========== 大破艦・射撃不能艦 自動離脱 ==========
@@ -1744,9 +1744,9 @@ window.addEventListener('message', function(e) {
   }
 });
 
-function donePhase() {
-  // 未移動艦チェック（米軍手動移動モード時のみ）
-  if (state.usFreeMove && !isJPMoving()) {
+function donePhase(fromStraight) {
+  // 未移動艦チェック（米軍手動移動モード時のみ、直進モードからは除外）
+  if (!fromStraight && state.usFreeMove && !isJPMoving()) {
     // 現在操作中の艦を確定
     if (moving) {
       const idx = usFleet.indexOf(moving);
