@@ -467,12 +467,12 @@ function draw() {
       } else {
         // PF: 米軍(プレイヤー)の視認範囲を基準に
         inRange = state.usFleet.some(s =>
-          s.status !== 'sunk' && hexDist(c,r,s.col,s.row) <= state.spotRange
+          s.status !== 'sunk' && s.col >= 0 && hexDist(c,r,s.col,s.row) <= state.spotRange
         );
         // レーダー射程(20hex)と砲撃射程(16hex)の薄い表示
         if (!inRange) {
           var inRadar = state.usFleet.some(s =>
-            s.status !== 'sunk' && s.radar && hexDist(c,r,s.col,s.row) <= 20
+            s.status !== 'sunk' && s.col >= 0 && s.radar && hexDist(c,r,s.col,s.row) <= 20
           );
           if (inRadar) inWeapon = true; // レーダー範囲を薄く表示
         }
@@ -505,11 +505,11 @@ function draw() {
       } else {
         // PF: 米軍の視認範囲基準
         inRange = state.usFleet.some(s =>
-          s.status !== 'sunk' && hexDist(c,r,s.col,s.row) <= state.spotRange
+          s.status !== 'sunk' && s.col >= 0 && hexDist(c,r,s.col,s.row) <= state.spotRange
         );
         if (!inRange) {
           var inRadar2 = state.usFleet.some(s =>
-            s.status !== 'sunk' && s.radar && hexDist(c,r,s.col,s.row) <= 20
+            s.status !== 'sunk' && s.col >= 0 && s.radar && hexDist(c,r,s.col,s.row) <= 20
           );
           if (inRadar2) inWeapon2 = true;
         }
