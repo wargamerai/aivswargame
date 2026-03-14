@@ -932,9 +932,16 @@ function saveAndNotify() {
 }
 
 function promoteLeads() {
-  // 大破/沈没した旗艦のフラグ解除（昇格はしない）
-  (state.jpFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
-  (state.usFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
+  // 大破/沈没した旗艦 → 次の生存艦に旗艦昇格
+  [state.jpFleet||[], state.usFleet||[]].forEach(fleet => {
+    fleet.filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(oldLead => {
+      oldLead.isLead = false;
+      const ci = oldLead.colIndex;
+      const next = fleet.filter(s => s !== oldLead && s.colIndex === ci && s.status !== 'sunk' && s.status !== 'heavy' && s.col >= 0)
+                        .sort((a,b) => (a.followOrder||0) - (b.followOrder||0))[0];
+      if (next) { next.isLead = true; }
+    });
+  });
 }
 
 function donePhase() {

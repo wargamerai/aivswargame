@@ -100,7 +100,7 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
   <div id="shootInfo">雷撃艦と目標を選んでください</div>
 
   <button id="btnShoot" onclick="doTorpedo()" disabled>🐟 雷撃！</button>
-  <button onclick="donePhase()">フェーズ終了</button>
+  <button onclick="finishUSManual()">雷撃完了</button>
 </div>
 
 <div id="resultOverlay">
@@ -196,6 +196,8 @@ let state = null;
 let selectedFirer = null;
 let selectedTarget = null;
 let firedShips = new Set();
+let currentSide = 'us';  // 手動操作中の側（常にus）
+let usManualCallback = null;  // 手動完了後のコールバック
 
 function toAxial(c,r){return{q:c-(r-(r&1))/2, r:r};}
 function hexDist(c1,r1,c2,r2){
@@ -322,31 +324,49 @@ function init() {
   }
 
   const ini = state.initiative || 'jp';
-  if (ini === 'us') {
-    // 米軍先攻 → 自動雷撃
-    autoUSTorpedo();
+  if (ini === 'jp') {
+    // 日本軍先攻 → JP自動雷撃 → US手動
+    autoJPTorpedo(function() {
+      startUSManual();
+    });
   } else {
-    // 日本軍先攻 → 手動カードUI
-    document.getElementById('shootUI').style.display = 'block';
-    renderCards();
+    // 米軍先攻 → US手動 → JP自動雷撃
+    startUSManual(function() {
+      autoJPTorpedo(function() {
+        donePhase();
+      });
+    });
   }
 }
 
+function startUSManual(onDone) {
+  const us = (state.usFleet||[]).filter(s =>
+    (s.status==='ok'||s.status==='light'||s.status==='medium') &&
+    getTorpPower(s) > 0 && s.col >= 0 && !s.sharedHex && !s.torpedoFired && !s.cannotTorpedo
+  );
+  if (us.length === 0) {
+    log('米軍: 雷撃可能な艦なし');
+    if (onDone) { setTimeout(onDone, 300); } else { setTimeout(() => donePhase(), 300); }
+    return;
+  }
+  usManualCallback = onDone || null;
+  currentSide = 'us';
+  document.getElementById('shootUI').style.display = 'block';
+  renderCards();
+}
+
 function getFirerFleet() {
-  const ini = state.initiative || 'jp';
-  return ini==='jp' ? (state.jpFleet||[]) : (state.usFleet||[]);
+  return state.usFleet||[];
 }
 function getTargetFleet() {
-  const ini = state.initiative || 'jp';
-  return ini==='jp' ? (state.usFleet||[]) : (state.jpFleet||[]);
+  return state.jpFleet||[];
 }
 
 function renderCards() {
-  const ini = state.initiative || 'jp';
   const ff = getFirerFleet();
   const tf = getTargetFleet();
 
-  // 雷撃艦カード
+  // 米軍雷撃艦カード
   let fHtml = '';
   ff.forEach((s, i) => {
     const tp = getTorpPower(s);
@@ -354,7 +374,6 @@ function renderCards() {
                     tp > 0 && !firedShips.has(s.name) && s.col >= 0 && !s.sharedHex;
     const sel = selectedFirer === i ? ' firer-sel' : '';
     const dis = !canFire ? ' disabled' : '';
-    const side = ini === 'jp' ? 'jp' : 'us';
     // 雷撃不可理由の表示
     let reason = '';
     if (s.sharedHex) reason = ' [同一ヘクス]';
@@ -363,16 +382,16 @@ function renderCards() {
     else if (s.cannotTorpedo) reason = ' [雷撃不能]';
     else if (firedShips.has(s.name)) reason = ' [発射済]';
     else if (!s.torpedo || s.torpedo === '-') reason = ' [魚雷なし]';
-    fHtml += `<div class="card ${side}${sel}${dis}" onclick="clickFirer(${i})">
+    fHtml += `<div class="card us${sel}${dis}" onclick="clickFirer(${i})">
       <span class="c-name">${s.name}${reason}</span>
       <span class="c-info">${s.type} 魚雷:${s.torpedo||'-'}</span>
     </div>`;
   });
   document.getElementById('firerCards').innerHTML = fHtml;
 
-  // 目標カード
+  // 目標カード（日本軍）
   let tHtml = '';
-  const firerSide = ini === 'jp' ? 'jp' : 'us';
+  const firerSide = 'us';
   tf.forEach((s, i) => {
     let canTarget = s.status !== 'sunk' && s.col >= 0;
     // 魚雷用視認チェック（レーダー不可、火災・発砲炎は可）
@@ -386,8 +405,7 @@ function renderCards() {
     }
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
-    const side = ini === 'jp' ? 'us' : 'jp';
-    tHtml += `<div class="card ${side}${sel}${dis}" onclick="clickTarget(${i})">
+    tHtml += `<div class="card jp${sel}${dis}" onclick="clickTarget(${i})">
       <span class="c-name">${s.name}</span>
       <span class="c-info">${s.type}</span>
     </div>`;
@@ -777,32 +795,44 @@ function closeResult() {
   parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
 }
 
-// ===== 米軍自動雷撃 =====
-function autoUSTorpedo() {
+// ===== 米軍手動完了 =====
+function finishUSManual() {
   document.getElementById('shootUI').style.display = 'none';
-  log('=== 米軍雷撃（自動） ===');
+  log('--- 米軍雷撃完了 ---');
+  saveAndNotify();
+  if (usManualCallback) {
+    setTimeout(usManualCallback, 300);
+  } else {
+    setTimeout(() => donePhase(), 300);
+  }
+}
 
-  const us = (state.usFleet||[]).filter(s =>
+// ===== 日本軍自動雷撃 =====
+function autoJPTorpedo(onDone) {
+  document.getElementById('shootUI').style.display = 'none';
+  log('=== 日本軍雷撃（自動） ===');
+
+  const jp = (state.jpFleet||[]).filter(s =>
     (s.status==='ok'||s.status==='light'||s.status==='medium') &&
     getTorpPower(s) > 0 && s.col >= 0
   );
-  const jp = (state.jpFleet||[]).filter(s =>
-    s.status !== 'sunk' && s.col >= 0 && isTorpTargetVisible(s, 'us')
+  const us = (state.usFleet||[]).filter(s =>
+    s.status !== 'sunk' && s.col >= 0 && isTorpTargetVisible(s, 'jp')
   );
 
-  if (us.length === 0 || jp.length === 0) {
-    log('雷撃可能な艦なし');
-    setTimeout(() => donePhase(), 400);
+  if (jp.length === 0 || us.length === 0) {
+    log('日本軍: 雷撃可能な艦なし');
+    if (onDone) { setTimeout(onDone, 400); } else { setTimeout(() => donePhase(), 400); }
     return;
   }
 
   // 全結果を事前計算
   const results = [];
-  for (const firer of us) {
-    // 最寄りの舷側にいるJP艦を選択（広く浅く、損傷大ほど後回し）
+  for (const firer of jp) {
+    // 最寄りの舷側にいるUS艦を選択（広く浅く、損傷大ほど後回し）
     let bestTarget = null, bestScore = 999;
-    const allShips = [...us, ...jp];
-    for (const t of jp) {
+    const allShips = [...jp, ...us];
+    for (const t of us) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
       if (!checkBroadside(firer, t)) continue;
@@ -878,17 +908,17 @@ function autoUSTorpedo() {
 
   if (results.length === 0) {
     log('射程内に目標なし');
-    setTimeout(() => donePhase(), 400);
+    if (onDone) { setTimeout(onDone, 400); } else { setTimeout(() => donePhase(), 400); }
     return;
   }
 
-  // 1隻ずつアニメ+オーバーレイ表示
+  // 1隻ずつログ+確認ボタン表示
   let idx = 0;
   function showNext() {
     if (idx >= results.length) {
       saveAndNotify();
-      log('--- 米軍雷撃完了 ---');
-      setTimeout(() => donePhase(), 400);
+      log('--- 日本軍雷撃完了 ---');
+      if (onDone) { setTimeout(onDone, 400); } else { setTimeout(() => donePhase(), 400); }
       return;
     }
 
@@ -900,8 +930,8 @@ function autoUSTorpedo() {
       to: {col: r.target.col, row: r.target.row}
     }, '*');
 
-    const usHitChance = calcTorpHitChance(r.mod, r.dist);
-    log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist}, 命中率${usHitChance}%)`);
+    const hitChance = calcTorpHitChance(r.mod, r.dist);
+    log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist}, 命中率${hitChance}%)`);
     if (r.hits > 0) {
       log(`  <span class="hit">命中${r.hits}発</span> ${r.dmgText}`);
       if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
@@ -909,14 +939,14 @@ function autoUSTorpedo() {
       log('  外れ');
     }
 
-    showResult(r);
-
-    const okBtn = document.getElementById('resultOK');
-    okBtn.onclick = function() {
-      document.getElementById('resultOverlay').style.display = 'none';
-      okBtn.onclick = function() { closeResult(); };
-      showNext();
-    };
+    // 確認ボタン（オーバーレイなし）
+    const btn = document.createElement('button');
+    btn.textContent = '確認';
+    btn.style.cssText = 'margin:6px 0;padding:4px 16px;font-size:1em;cursor:pointer;';
+    btn.onclick = function() { btn.remove(); setTimeout(() => showNext(), 300); };
+    const logEl = document.getElementById('log');
+    logEl.appendChild(btn);
+    logEl.scrollTop = logEl.scrollHeight;
   }
 
   showNext();
@@ -933,9 +963,16 @@ function saveAndNotify() {
 }
 
 function promoteLeads() {
-  // 大破/沈没した旗艦のフラグ解除（昇格はしない）
-  (state.jpFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
-  (state.usFleet||[]).filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(s => { s.isLead = false; });
+  // 大破/沈没した旗艦 → 次の生存艦に旗艦昇格
+  [state.jpFleet||[], state.usFleet||[]].forEach(fleet => {
+    fleet.filter(s => s.isLead && (s.status === 'heavy' || s.status === 'sunk')).forEach(oldLead => {
+      oldLead.isLead = false;
+      const ci = oldLead.colIndex;
+      const next = fleet.filter(s => s !== oldLead && s.colIndex === ci && s.status !== 'sunk' && s.status !== 'heavy' && s.col >= 0)
+                        .sort((a,b) => (a.followOrder||0) - (b.followOrder||0))[0];
+      if (next) { next.isLead = true; log(`${next.name} が第${ci+1}艦隊旗艦に昇格`); }
+    });
+  });
 }
 
 function donePhase() {
