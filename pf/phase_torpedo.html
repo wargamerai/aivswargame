@@ -813,6 +813,7 @@ function autoUSTorpedo() {
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
     if (!bestTarget) continue;
+    const bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
     const tp = getTorpPower(firer);
     const {mod, details} = calcModifiers(firer, bestTarget);
