@@ -375,29 +375,23 @@ function autoAdvanceColumn(fleet) {
     if (mc < unifiedMove) unifiedMove = mc;
   }
 
-  // 全リードを1ステップずつ交互に進める（列間の衝突を防ぐ）
+  // 直進モード: 全艦を各自の方向に同じ歩数だけ進める（フォロワーもリードと同様に個別直進）
   const stopped = new Set();
   for (let step = 0; step < unifiedMove; step++) {
-    for (const lead of leads) {
-      if (stopped.has(lead.name)) continue;
-      const next = hexNeighbor(lead.col, lead.row, lead.dir);
-      if (!next || next.col < 0 || next.col >= COLS || next.row < 0) { stopped.add(lead.name); continue; }
-      if (getSunkShip(next.col, next.row, lead)) { stopped.add(lead.name); continue; }
+    for (const ship of activeShips) {
+      if (stopped.has(ship.name)) continue;
+      const next = hexNeighbor(ship.col, ship.row, ship.dir);
+      if (!next || next.col < 0 || next.col >= COLS || next.row < 0) { stopped.add(ship.name); continue; }
+      if (getSunkShip(next.col, next.row, ship)) { stopped.add(ship.name); continue; }
 
-      lead.path = lead.path || [];
-      lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-      lead.col = next.col;
-      lead.row = next.row;
-      var occ = getOccupant(next.col, next.row, lead);
-      if (occ) collisionCheck(lead, occ);
-
-      moveFollowers(lead, fleet);
+      ship.col = next.col;
+      ship.row = next.row;
+      var occ = getOccupant(next.col, next.row, ship);
+      if (occ) collisionCheck(ship, occ);
     }
   }
-  for (const lead of leads) {
-    lead.remainMove = 0;
-    const ci = lead.colIndex;
-    fleet.filter(s => !s.isLead && s.colIndex === ci).forEach(f => f.remainMove = 0);
+  for (const ship of activeShips) {
+    ship.remainMove = 0;
   }
 
   // 整合性チェック
@@ -997,90 +991,39 @@ function allStraight() {
     return 0;
   });
 
-  // 全リードの速度を統一（最遅に合わせる）
-  var unifiedLeadMove = 99;
-  for (var t = 0; t < unmovedLeads.length; t++) {
-    var ld = unmovedLeads[t].ship;
-    var sp = getSpeed(ld);
-    var mc = ld.dmgM >= ld.capM / 2 ? Math.max(1, Math.ceil(sp/2)) : sp;
-    if (mc < unifiedLeadMove) unifiedLeadMove = mc;
-  }
-  if (unmovedLeads.length === 0) unifiedLeadMove = 0;
-
-  // 全リードを1ステップずつ交互に進める（列間の衝突を防ぐ）
-  var leadStopped = {};
-  for (var step = 0; step < unifiedLeadMove; step++) {
-    for (var t = 0; t < unmovedLeads.length; t++) {
-      var lead = unmovedLeads[t].ship;
-      if (leadStopped[lead.name]) continue;
-      var next = hexNeighbor(lead.col, lead.row, lead.dir);
-      if (!next || next.col < 0 || next.col >= COLS || next.row < 0) { leadStopped[lead.name] = true; continue; }
-      if (getSunkShip(next.col, next.row, lead)) { leadStopped[lead.name] = true; continue; }
-      lead.path = lead.path || [];
-      lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-      lead.col = next.col;
-      lead.row = next.row;
-      var occupant = getOccupant(next.col, next.row, lead);
-      if (occupant) collisionCheck(lead, occupant);
-      moveFollowers(lead, usFleet);
-    }
-  }
-  for (var t = 0; t < unmovedLeads.length; t++) {
-    var lead = unmovedLeads[t].ship;
-    lead.remainMove = 0;
-    movedShips.add(unmovedLeads[t].idx);
-    movedNames.add(lead.name);
-    parent.postMessage({type:'ACTION_DONE', shipIndex:unmovedLeads[t].idx}, '*');
-    count++;
-    var ci = lead.colIndex;
-    usFleet.forEach(function(s, i) {
-      if (!s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing) {
-        s.remainMove = 0;
-        movedShips.add(i);
-        movedNames.add(s.name);
-        parent.postMessage({type:'ACTION_DONE', shipIndex:i}, '*');
-        count++;
-      }
-    });
-  }
-
-  // 残りの未移動艦（リードでも随伴でもない独立艦）を個別に直進
-  var remaining = [];
+  // リード・フォロワー・独立艦を全て含む未移動艦リスト
+  var allUnmoved = [];
   usFleet.forEach(function(s, i) {
-    if (canShipMove(s) && !movedShips.has(i) && !movedNames.has(s.name)) remaining.push({ship:s, idx:i});
+    if (canShipMove(s) && !movedShips.has(i)) allUnmoved.push({ship:s, idx:i});
   });
-  remaining.sort(function(a, b) {
-    var aE = [6,3,9].indexOf(a.ship.dir) >= 0;
-    var bE = [6,3,9].indexOf(b.ship.dir) >= 0;
-    if (aE && bE) return b.ship.col - a.ship.col;
-    if (!aE && !bE) return a.ship.col - b.ship.col;
-    return 0;
-  });
-  // 独立艦も速度統一＋1ステップずつ交互
-  var unifiedRemMove = 99;
-  for (var t = 0; t < remaining.length; t++) {
-    var sp2 = getSpeed(remaining[t].ship);
-    var mc2 = remaining[t].ship.dmgM >= remaining[t].ship.capM / 2 ? Math.max(1, Math.ceil(sp2/2)) : sp2;
-    if (mc2 < unifiedRemMove) unifiedRemMove = mc2;
+
+  // 全未移動艦の速度を統一（最遅に合わせる）
+  var unifiedAllMove = 99;
+  for (var t = 0; t < allUnmoved.length; t++) {
+    var sp = getSpeed(allUnmoved[t].ship);
+    var mc = allUnmoved[t].ship.dmgM >= allUnmoved[t].ship.capM / 2 ? Math.max(1, Math.ceil(sp/2)) : sp;
+    if (mc < unifiedAllMove) unifiedAllMove = mc;
   }
-  if (remaining.length === 0) unifiedRemMove = 0;
-  var remStopped = {};
-  for (var step = 0; step < unifiedRemMove; step++) {
-    for (var t = 0; t < remaining.length; t++) {
-      var ship = remaining[t].ship;
-      if (remStopped[ship.name]) continue;
+  if (allUnmoved.length === 0) unifiedAllMove = 0;
+
+  // 全艦を各自の方向に同じ歩数だけ個別直進
+  var usStopped = {};
+  for (var step = 0; step < unifiedAllMove; step++) {
+    for (var t = 0; t < allUnmoved.length; t++) {
+      var ship = allUnmoved[t].ship;
+      if (usStopped[ship.name]) continue;
       var next = hexNeighbor(ship.col, ship.row, ship.dir);
-      if (!next || next.col < 0 || next.col >= COLS || next.row < 0) { remStopped[ship.name] = true; continue; }
-      if (getSunkShip(next.col, next.row, ship)) { remStopped[ship.name] = true; continue; }
+      if (!next || next.col < 0 || next.col >= COLS || next.row < 0) { usStopped[ship.name] = true; continue; }
+      if (getSunkShip(next.col, next.row, ship)) { usStopped[ship.name] = true; continue; }
       ship.col = next.col;
       ship.row = next.row;
       var occupant = getOccupant(next.col, next.row, ship);
       if (occupant) collisionCheck(ship, occupant);
     }
   }
-  for (var t = 0; t < remaining.length; t++) {
-    var ship = remaining[t].ship;
-    var idx = remaining[t].idx;
+  for (var t = 0; t < allUnmoved.length; t++) {
+    var ship = allUnmoved[t].ship;
+    var idx = allUnmoved[t].idx;
     ship.remainMove = 0;
     movedShips.add(idx);
     parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
