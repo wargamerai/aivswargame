@@ -744,6 +744,7 @@ function isEnemyVisible(enemyUnit) {
 // ===== 地形エディタ =====
 let terrainEditMode = false;
 let teBrush = 'forest'; // forest|building|slope|eraser
+let bocageFirstHex = null; // ボカージュ配置の1クリック目
 
 function toggleTerrainEdit() {
   terrainEditMode = !terrainEditMode;
@@ -769,6 +770,7 @@ function zoomFit() {
 
 function setTeBrush(t) {
   teBrush = t;
+  bocageFirstHex = null;
   document.querySelectorAll('.te-b').forEach(b => {
     const active = b.dataset.t === t;
     b.style.background = active ? '#c8a020' : '';
@@ -1095,12 +1097,35 @@ canvas.addEventListener('click', (e) => {
   // 地形エディタモード
   if (terrainEditMode) {
     if (teBrush === 'bocage') {
-      // ヘクスサイドに配置
-      const side = nearestHexSide(mx, my);
-      if (side) {
-        if (!state.hexsideTerrain) state.hexsideTerrain = {};
-        state.hexsideTerrain[side.key] = 'bocage';
+      // 2クリック方式: 1つ目のヘクス→2つ目の隣接ヘクスでサイド指定
+      if (!bocageFirstHex) {
+        bocageFirstHex = { col: hex.col, row: hex.row };
+        draw();
+        // 選択中のヘクスをハイライト表示
+        const hc = hexCenter(hex.col, hex.row);
+        const corners = hexCorners(hc.x, hc.y);
+        const ctx2 = document.querySelector('canvas').getContext('2d');
+        ctx2.save(); ctx2.translate(camX, camY); ctx2.scale(zoom, zoom);
+        ctx2.beginPath(); ctx2.moveTo(corners[0].x, corners[0].y);
+        for (let i = 1; i < 6; i++) ctx2.lineTo(corners[i].x, corners[i].y);
+        ctx2.closePath(); ctx2.fillStyle = 'rgba(255,200,0,0.4)'; ctx2.fill();
+        ctx2.strokeStyle = '#ff0'; ctx2.lineWidth = 4; ctx2.stroke();
+        ctx2.restore();
+        return;
       }
+      // 2クリック目: 隣接チェック
+      const dist = hexDist(bocageFirstHex.col, bocageFirstHex.row, hex.col, hex.row);
+      if (dist !== 1) {
+        bocageFirstHex = null;
+        draw();
+        return;
+      }
+      const a = `${bocageFirstHex.col},${bocageFirstHex.row}`;
+      const b = `${hex.col},${hex.row}`;
+      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+      if (!state.hexsideTerrain) state.hexsideTerrain = {};
+      state.hexsideTerrain[key] = 'bocage';
+      bocageFirstHex = null;
     } else if (teBrush === 'eraser') {
       // ヘクス地形とヘクスサイド地形の両方を消す
       const key = `${hex.col},${hex.row}`;
