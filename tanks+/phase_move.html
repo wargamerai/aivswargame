@@ -947,24 +947,65 @@ function aiMovePhase() {
     moveableUnits.push(i);
   });
 
+  // 集団行動: 最寄りの敵との距離と移動力を計算
+  const deployed = moveableUnits.filter(i => state.units[i].col >= 1);
+  const undeployed = moveableUnits.filter(i => state.units[i].col < 1);
+
+  // 配置済みユニットの中で最も遅いユニットの移動力
+  let slowestMove = Infinity;
+  deployed.forEach(i => {
+    const db = UNIT_DB[state.units[i].name];
+    if (db && db.move < slowestMove) slowestMove = db.move;
+  });
+  if (slowestMove === Infinity) slowestMove = 3;
+
+  // 配置済みユニットから敵への最短距離（集団の先頭位置）
+  let minDistToEnemy = Infinity;
+  deployed.forEach(i => {
+    const u = state.units[i];
+    const enemy = aiNearestEnemy(u);
+    if (enemy) {
+      const d = hexDist(u.col, u.row, enemy.col, enemy.row);
+      if (d < minDistToEnemy) minDistToEnemy = d;
+    }
+  });
+
+  // 集団移動制限: 速いユニットが先行しすぎないよう、最遅ユニットとの距離差を制限
+  // 最遅ユニットの位置から2ヘクス以上先に行かない
+  let slowestDistToEnemy = 0;
+  deployed.forEach(i => {
+    const u = state.units[i];
+    const db = UNIT_DB[u.name];
+    if (db && db.move <= slowestMove) {
+      const enemy = aiNearestEnemy(u);
+      if (enemy) {
+        const d = hexDist(u.col, u.row, enemy.col, enemy.row);
+        if (d > slowestDistToEnemy) slowestDistToEnemy = d;
+      }
+    }
+  });
+
+  // 集団移動の前進限界: 遅いユニットより2ヘクス以上先に行かない
+  const groupAdvanceLimit = Math.max(1, slowestDistToEnemy - 2);
+  // stateに保存してaiDoMovementで参照
+  state._aiGroupAdvanceLimit = groupAdvanceLimit;
+
   // 弱いユニットから先に動かす（防御射撃を引きつけて強いユニットが安全に接近）
-  moveableUnits.sort((a, b) => {
-    const ua = state.units[a], ub = state.units[b];
-    const da = UNIT_DB[ua.name], db2 = UNIT_DB[ub.name];
-    // 未配置は先に配置
-    if ((ua.col < 1) !== (ub.col < 1)) return ua.col < 1 ? -1 : 1;
-    // 装甲が低い（弱い）順
+  // 未配置は最優先で配置
+  const sorted = [...undeployed, ...deployed.sort((a, b) => {
+    const da = UNIT_DB[state.units[a].name], db2 = UNIT_DB[state.units[b].name];
     const armorA = da ? da.armor : 0, armorB = db2 ? db2.armor : 0;
     return armorA - armorB;
-  });
+  })];
 
   let step = 0;
   function processNext() {
-    if (step >= moveableUnits.length) {
+    if (step >= sorted.length) {
+      delete state._aiGroupAdvanceLimit;
       donePhase();
       return;
     }
-    const idx = moveableUnits[step];
+    const idx = sorted[step];
     const u = state.units[idx];
     if (u.status === 'destroyed' || u.moved) { step++; processNext(); return; }
     aiMoveUnit(idx, () => { step++; setTimeout(processNext, 300); });
@@ -1136,9 +1177,18 @@ function aiDoMovement(u, db, callback) {
   const isDecoy = db.armor <= 3 && db.type === 'tank';
   const targetDist = isDecoy ? 1 : bestDist;
 
+  // 集団行動: 遅いユニットより先行しすぎない
+  const groupLimit = state._aiGroupAdvanceLimit || 1;
+  const minStopDist = isDecoy ? 1 : Math.max(targetDist, groupLimit);
+
   // 射撃可能な位置にいるなら停止判断
   const canEngage = aiCanEngageAny(u);
-  if (canEngage && distToEnemy <= targetDist + 1 && distToEnemy >= (isDecoy ? 1 : 2)) {
+  if (canEngage && distToEnemy <= minStopDist + 1 && distToEnemy >= (isDecoy ? 1 : 2)) {
+    callback();
+    return;
+  }
+  // 集団制限に達したら停止（射撃できなくても待つ）
+  if (!isDecoy && distToEnemy <= groupLimit) {
     callback();
     return;
   }
@@ -1155,8 +1205,9 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
 
   const distNow = hexDist(u.col, u.row, targetEnemy.col, targetEnemy.row);
   const isDecoy = db.armor <= 3 && db.type === 'tank';
+  const groupLimit = state._aiGroupAdvanceLimit || 1;
 
-  // 囮は距離1まで突っ込む、それ以外は最適距離で停止
+  // 囮は距離1まで突っ込む、それ以外は最適距離 or 集団制限で停止
   if (!isDecoy) {
     const eDb = UNIT_DB[targetEnemy.name];
     let bestDist = 3, bestValue = -Infinity;
@@ -1166,7 +1217,13 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
       const value = my.kill - en.kill;
       if (value > bestValue) { bestValue = value; bestDist = d; }
     }
-    if (aiCanEngageAny(u) && distNow <= bestDist + 1 && distNow >= 2) {
+    const stopDist = Math.max(bestDist, groupLimit);
+    if (aiCanEngageAny(u) && distNow <= stopDist + 1 && distNow >= 2) {
+      callback();
+      return;
+    }
+    // 集団制限に達したら停止
+    if (distNow <= groupLimit) {
       callback();
       return;
     }
