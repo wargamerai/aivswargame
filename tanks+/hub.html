@@ -621,15 +621,22 @@ function draw() {
     ctx.moveTo(fCorners[0].x, fCorners[0].y);
     for (let i = 1; i < 6; i++) ctx.lineTo(fCorners[i].x, fCorners[i].y);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    const hlSide = state ? getActiveSide(state.phase) : null;
+    const hlFirst = hlSide === (state ? state.firstPlayer : null);
+    const hlColor = hlFirst ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
+    const hlStroke = hlFirst ? '#4488ff' : '#ff4444';
+    ctx.fillStyle = hlColor;
     ctx.fill();
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = hlStroke;
     ctx.lineWidth = 6;
     ctx.stroke();
-    // 矢印描画（白）
+    // 矢印描画（先攻=青、後攻=赤）
+    const arrowSide = state ? getActiveSide(state.phase) : null;
+    const isFirst = arrowSide === (state ? state.firstPlayer : null);
+    const arrowColor = isFirst ? '#4488ff' : '#ff4444';
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
-    const headLen = HEX_SIZE * 0.4;
-    ctx.strokeStyle = '#ffffff';
+    const headLen = HEX_SIZE * 0.5;
+    ctx.strokeStyle = arrowColor;
     ctx.lineWidth = 8;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -637,7 +644,7 @@ function draw() {
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
     // 矢じり
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = arrowColor;
     ctx.beginPath();
     ctx.moveTo(to.x, to.y);
     ctx.lineTo(to.x - headLen * Math.cos(angle - 0.4), to.y - headLen * Math.sin(angle - 0.4));
