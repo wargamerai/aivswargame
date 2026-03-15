@@ -591,8 +591,21 @@ function showDfStep1() {
   document.getElementById('dfBody').innerHTML = html;
   document.getElementById('dfOverlay').style.display = 'flex';
 
-  // AI自動射撃
-  if (isAI) setTimeout(() => executeDfShot(), 600);
+  // AI自動射撃（戦術判断付き）
+  if (isAI) setTimeout(() => {
+    // 防御射撃をスキップすべきか判断
+    const dist = enemy.dist;
+    const remainMP = dfMovingUnit.remainMove;
+    const effHit = hitNum - mod; // 修正後の実質命中数
+
+    // 命中率が低すぎる（修正後4以下）→ スキップ
+    if (effHit <= 4) { nextDfStep(); return; }
+
+    // 残りMPが多い＆遠距離 → 通過するだけかもしれないのでスキップ
+    if (remainMP >= 3 && dist > 2) { nextDfStep(); return; }
+
+    executeDfShot();
+  }, 600);
 }
 
 // ステップ2: サイコロ振って結果表示
@@ -926,6 +939,17 @@ function aiMovePhase() {
     moveableUnits.push(i);
   });
 
+  // 弱いユニットから先に動かす（防御射撃を引きつけて強いユニットが安全に接近）
+  moveableUnits.sort((a, b) => {
+    const ua = state.units[a], ub = state.units[b];
+    const da = UNIT_DB[ua.name], db2 = UNIT_DB[ub.name];
+    // 未配置は先に配置
+    if ((ua.col < 1) !== (ub.col < 1)) return ua.col < 1 ? -1 : 1;
+    // 装甲が低い（弱い）順
+    const armorA = da ? da.armor : 0, armorB = db2 ? db2.armor : 0;
+    return armorA - armorB;
+  });
+
   let step = 0;
   function processNext() {
     if (step >= moveableUnits.length) {
@@ -1006,8 +1030,34 @@ function aiPlaceUnit(u, db, callback) {
 
   if (valid.length === 0) { callback(); return; }
 
-  // ランダムに配置
-  const pick = valid[Math.floor(Math.random() * valid.length)];
+  // 戦略的配置: 森/建物を優先、散開、敵進入辺に面する位置
+  let pick;
+  if (!edge) {
+    // free配置: 地形を活用し散開
+    const scored = valid.map(h => {
+      let s = 0;
+      const t = state.terrain ? state.terrain[`${h.col},${h.row}`] : null;
+      if (t === 'forest' || t === 'building') s += 10;
+      // 味方から2-4ヘクス離れた位置を優先（散開）
+      for (const ally of state.units) {
+        if (ally.side !== u.side || ally.col < 1 || ally === u) continue;
+        const ad = hexDist(h.col, h.row, ally.col, ally.row);
+        if (ad >= 2 && ad <= 4) s += 2;
+        if (ad <= 1) s -= 5;
+      }
+      // マップ中央寄りを少し優先
+      const cx = maxCol / 2, cy = maxRow / 2;
+      const cd = Math.abs(h.col - cx) + Math.abs(h.row - cy);
+      s -= cd * 0.3;
+      return { h, s };
+    });
+    scored.sort((a, b) => b.s - a.s);
+    // 上位候補からランダムに選ぶ（少し変化をつける）
+    const top = scored.slice(0, Math.min(5, scored.length));
+    pick = top[Math.floor(Math.random() * top.length)].h;
+  } else {
+    pick = valid[Math.floor(Math.random() * valid.length)];
+  }
   moveMode = 'placing';
   renderCards();
   updateUI();
@@ -1019,44 +1069,81 @@ function aiPlaceUnit(u, db, callback) {
   }, 400);
 }
 
+function aiIsOutgunned(u) {
+  // 自軍と敵軍の中距離(index=3)での平均命中力を比較
+  let myHit = 0, myCnt = 0, enemyHit = 0, enemyCnt = 0;
+  for (const unit of state.units) {
+    if (unit.status === 'destroyed' || unit.col < 1) continue;
+    const ft = FIRE_TABLE[unit.name];
+    if (!ft || !ft[3]) continue;
+    if (unit.side === u.side) { myHit += ft[3][1]; myCnt++; }
+    else { enemyHit += ft[3][1]; enemyCnt++; }
+  }
+  if (myCnt === 0 || enemyCnt === 0) return false;
+  return (myHit / myCnt) < (enemyHit / enemyCnt);
+}
+
+function aiCanEngageAny(u) {
+  // 現在位置からいずれかの敵に射撃可能か
+  const ft = FIRE_TABLE[u.name];
+  if (!ft) return false; // 歩兵等は別扱い
+  for (const e of state.units) {
+    if (e.side === u.side || e.status === 'destroyed' || e.col < 1) continue;
+    const d = hexDist(u.col, u.row, e.col, e.row);
+    if (distKey(d) < 0) continue; // 射程外
+    if (!hasLOS(u.col, u.row, e.col, e.row)) continue;
+    // 固定砲塔チェック
+    const db = UNIT_DB[u.name];
+    if (db && db.turret === 'fixed') {
+      if (!isInFixedArc(u, e)) continue;
+    }
+    return true;
+  }
+  return false;
+}
+
 function aiDoMovement(u, db, callback) {
-  // 最も近い敵を探す
   const enemy = aiNearestEnemy(u);
   if (!enemy) { callback(); return; }
 
-  // 射撃可能距離なら止まる
   const distToEnemy = hexDist(u.col, u.row, enemy.col, enemy.row);
   const effectiveRange = aiGetEffectiveRange(u);
-  if (distToEnemy <= effectiveRange && distToEnemy >= 2) {
+  const outgunned = aiIsOutgunned(u);
+
+  // 射撃可能な位置にいるなら停止判断、そうでなければ移動続行
+  const canEngage = aiCanEngageAny(u);
+  const stopDist = outgunned ? 3 : effectiveRange;
+  if (canEngage && distToEnemy <= stopDist && distToEnemy >= 2) {
     callback();
     return;
   }
 
-  aiMoveStep(u, db, enemy, callback);
+  aiMoveStep(u, db, enemy, outgunned, callback);
 }
 
-function aiMoveStep(u, db, targetEnemy, callback) {
+function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
   if (u.remainMove <= 0 || u.status === 'destroyed' || u.status === 'immobilized') {
     callback();
     return;
   }
 
-  // 射程内に入ったら停止
   const distNow = hexDist(u.col, u.row, targetEnemy.col, targetEnemy.row);
-  const effectiveRange = aiGetEffectiveRange(u);
-  if (distNow <= effectiveRange && distNow >= 2) {
+  const stopDist = outgunned ? 3 : aiGetEffectiveRange(u);
+  // 射撃可能な位置にいるときだけ停止
+  if (aiCanEngageAny(u) && distNow <= stopDist && distNow >= 2) {
     callback();
     return;
   }
 
-  // 隣接ヘクスから最も敵に近づけるヘクスを選ぶ
+  // 隣接ヘクスをスコアリングで評価
   const neighbors = getNeighbors(u.col, u.row);
-  let bestDir = -1, bestDist = Infinity, bestCost = Infinity;
+  const curTerrain = state.terrain ? state.terrain[`${u.col},${u.row}`] : null;
+  let bestDir = -1, bestScore = -Infinity;
+
   for (let d = 0; d < 6; d++) {
     const n = neighbors[d];
     if (!n) continue;
     const nd = hexDist(n.col, n.row, targetEnemy.col, targetEnemy.row);
-    if (nd >= distNow) continue; // 接近しないなら無視
 
     const rotateCost = db.type !== 'infantry' ? getRotateCost(u.dir, d) : 0;
     const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
@@ -1070,20 +1157,36 @@ function aiMoveStep(u, db, targetEnemy, callback) {
     if (totalCost > u.remainMove) continue;
     if (!checkStacking(n.col, n.row, u)) continue;
 
-    if (nd < bestDist || (nd === bestDist && totalCost < bestCost)) {
-      bestDist = nd;
-      bestCost = totalCost;
+    // 迂回は敵距離+2まで許容（劣勢時のみ）
+    if (!outgunned && nd >= distNow) continue;
+    if (outgunned && nd > distNow + 2) continue;
+
+    let score = 0;
+    // 接近が最重要
+    score += (distNow - nd) * 10;
+    // コストが低いほうがよい
+    score -= totalCost;
+
+    // 劣勢時: 地形を重視
+    if (outgunned) {
+      const nTerrain = state.terrain ? state.terrain[`${n.col},${n.row}`] : null;
+      if (nTerrain === 'forest' || nTerrain === 'building') score += 8;
+      // 現在地が森なら森を出ないルートを優先
+      if ((curTerrain === 'forest' || curTerrain === 'building') &&
+          nTerrain === curTerrain) score += 3;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
       bestDir = d;
     }
   }
 
   if (bestDir < 0) { callback(); return; }
 
-  // 移動実行（handleMoveを呼ぶ）
   const target = neighbors[bestDir];
   moveMode = 'moving';
 
-  // 防御射撃のafterDefensiveFireをフックしてAI継続
   const origAfterDf = afterDefensiveFire;
   afterDefensiveFire = function(result) {
     origAfterDf(result);
@@ -1092,8 +1195,7 @@ function aiMoveStep(u, db, targetEnemy, callback) {
       callback();
       return;
     }
-    // 次のステップへ
-    setTimeout(() => aiMoveStep(u, db, targetEnemy, callback), 300);
+    setTimeout(() => aiMoveStep(u, db, targetEnemy, outgunned, callback), 300);
   };
 
   handleMove(target.col, target.row);
