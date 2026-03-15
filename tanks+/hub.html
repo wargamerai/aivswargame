@@ -641,8 +641,8 @@ function drawUnit(u) {
     // 戦車・対戦車砲は向きに合わせて画像を回転描画
     const shouldRotate = (db.type === 'tank' || db.type === 'atgun') && u.dir !== undefined;
     if (shouldRotate) {
-      // 画像デフォルト=上向き(北)、dir 0=東 → まず+90°、さらにdir*60°時計回り
-      const rotAngle = (90 - u.dir * 60) * Math.PI / 180;
+      // dir * 60° 刻みで時計回りに回転（ヘクスサイド準拠）
+      const rotAngle = u.dir * Math.PI / 3;
       ctx.rotate(rotAngle);
     }
 
@@ -663,7 +663,7 @@ function drawUnit(u) {
     }
 
     if (shouldRotate) {
-      ctx.rotate(-(90 - u.dir * 60) * Math.PI / 180); // 回転を戻す
+      ctx.rotate(-u.dir * Math.PI / 3); // 回転を戻す
     }
   }
 
