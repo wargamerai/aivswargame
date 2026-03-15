@@ -80,11 +80,11 @@ button.danger { background:#cc3311; color:#fff; border-color:#aa2200; }
 <div id="moveInfo">ユニット選択</div>
 
 <div class="controls">
-  <button onclick="undoMove()" id="btnUndo" disabled>戻す</button>
-  <button onclick="stopMoving()" id="btnStopMove" disabled>移動終了</button>
-  <button onclick="skipFacing()" id="btnSkipFace" disabled>向き変更なし</button>
-  <button onclick="confirmUnit()" id="btnConfirm" class="action" disabled>確定</button>
-  <button onclick="donePhase()" class="danger">フェーズ終了</button>
+  <button onclick="undoMove()" id="btnUndo" disabled title="直前の移動を取り消す">戻す</button>
+  <button onclick="stopMoving()" id="btnStopMove" disabled title="このユニットの移動をやめて向き指定へ進む">移動終了</button>
+  <button onclick="skipFacing()" id="btnSkipFace" disabled title="現在の向きのまま確定する">向き変更なし</button>
+  <button onclick="confirmUnit()" id="btnConfirm" class="action" disabled title="向きを決定してこのユニットの行動を完了する">確定</button>
+  <button onclick="donePhase()" class="danger" title="全ユニットの移動フェーズを終了する">フェーズ終了</button>
 </div>
 
 <div id="log"></div>
@@ -244,10 +244,10 @@ function updateUI() {
   const modeEl = document.getElementById('modeLabel');
   modeEl.className = moveMode;
 
-  if (moveMode === 'idle') modeEl.textContent = '待機';
-  else if (moveMode === 'placing') modeEl.textContent = '配置（マップ端をクリック）';
-  else if (moveMode === 'moving') modeEl.textContent = '移動中（隣接ヘクスをクリック）';
-  else if (moveMode === 'facing') modeEl.textContent = '向き指定（隣接ヘクスをクリック → 確定）';
+  if (moveMode === 'idle') modeEl.textContent = '待機 — ユニットを選択してください';
+  else if (moveMode === 'placing') modeEl.textContent = '配置 — マップ端のヘクスをクリックして配置';
+  else if (moveMode === 'moving') modeEl.textContent = '移動中 — 隣接ヘクスをクリックで移動 ／「移動終了」で向き指定へ';
+  else if (moveMode === 'facing') modeEl.textContent = '向き指定 — 隣接ヘクスをクリックで方向変更 ／「確定」で行動完了';
 
   const infoEl = document.getElementById('moveInfo');
   if (selectedIdx < 0) {
@@ -589,7 +589,10 @@ function showDfStep1() {
   html += `<tr><td style="color:#666">命中数:</td><td>${hitNum}以下</td></tr>`;
   html += `<tr><td style="color:#666">修正:</td><td>+${mod} (${details.join(', ')})</td></tr>`;
   html += `</table>`;
-  html += `<button onclick="executeDfShot()" style="background:#c33;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer;margin-top:4px">射撃実行</button>`;
+  html += `<div style="display:flex;gap:8px;margin-top:4px">`;
+  html += `<button onclick="executeDfShot()" style="background:#c33;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer">射撃実行</button>`;
+  html += `<button onclick="nextDfStep()" style="background:#555;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer">スキップ</button>`;
+  html += `</div>`;
   html += `</div>`;
 
   document.getElementById('dfBody').innerHTML = html;
