@@ -820,13 +820,11 @@ canvas.addEventListener('contextmenu', (e) => {
   const hc = hexCenter(hex.col, hex.row);
   const dx = mx - hc.x;
   const dy = my - hc.y; // Canvas Y下向き
-  // atan2でラジアン→度、Y下向きなので上が-90°
-  let angle = Math.atan2(dy, dx) * 180 / Math.PI; // -180~180, 右=0, 下=90, 上=-90
-  // 上=dir0 として60°刻みに割り当て（時計回り）
-  // 上=-90° → dir0, 右上=-30° → dir1, 右下=30° → dir2, 下=90° → dir3, 左下=150° → dir4, 左上=-150° → dir5
-  angle += 90; // 上を0°に
-  if (angle < 0) angle += 360;
-  u.dir = Math.round(angle / 60) % 6;
+  // atan2: 右=0°, 下=90°, 左=±180°, 上=-90°
+  let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  if (angle < 0) angle += 360; // 0~360に正規化
+  // 上(270°)=dir0, 時計回りに60°刻み: 330°=dir1, 30°=dir2, 90°=dir3, 150°=dir4, 210°=dir5
+  u.dir = Math.floor(((angle + 120) % 360) / 60);
   state.selectedUnit = idx;
   draw();
   renderUnitList();
