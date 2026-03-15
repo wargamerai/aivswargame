@@ -160,19 +160,20 @@ function init(stateData) {
     firers.push(i);
   });
 
-  // 目標候補（視認距離チェック: いずれかの味方が視認できる敵のみ）
+  // 目標候補
   targets = [];
   state.units.forEach((u, i) => {
     if (u.side !== enemySide) return;
     if (u.status === 'destroyed') return;
     if (u.col < 1) return;
-    if (u.hidden) return;
-    // いずれかの味方ユニットが視認可能か
-    const spotted = state.units.some(f =>
-      f.side === activeSide && f.status !== 'destroyed' && f.col >= 1 &&
-      canSpot(f, u, state.terrain || {})
-    );
-    if (!spotted) return;
+    // 隠匿ユニットは視認距離チェックが必要
+    if (u.hidden) {
+      const spotted = state.units.some(f =>
+        f.side === activeSide && f.status !== 'destroyed' && f.col >= 1 &&
+        canSpot(f, u, state.terrain || {})
+      );
+      if (!spotted) return;
+    }
     targets.push(i);
   });
 
