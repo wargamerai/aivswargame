@@ -731,7 +731,9 @@ function donePhase() {
 // ===== 親からのメッセージ =====
 window.addEventListener('message', (e) => {
   if (!e.data || !e.data.type) return;
+  console.log(`[phase_move] MSG受信: ${e.data.type}`, e.data);
   if (e.data.type === 'MAP_SELECT') {
+    console.log(`[phase_move] MAP_SELECT hex(${e.data.col},${e.data.row}) side=${e.data.side} unit=${e.data.unitIdx} moveMode=${moveMode}`);
     handleMapSelect(e.data.col, e.data.row, e.data.side, e.data.unitIdx);
   }
   if (e.data.type === 'SELECT_UNIT') {
