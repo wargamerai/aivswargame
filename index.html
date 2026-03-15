@@ -133,6 +133,33 @@
             letter-spacing: 1px;
         }
 
+        /* コナミコマンド隠しボタン */
+        .secret-btn {
+            display: none;
+            animation: secretReveal 0.6s ease-out;
+        }
+        .secret-btn.revealed {
+            display: block;
+        }
+        @keyframes secretReveal {
+            0% { opacity: 0; transform: scale(0.8); }
+            50% { transform: scale(1.05); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .secret-btn .theater-btn {
+            border: 2px solid #333;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            color: #666;
+            text-shadow: none;
+        }
+        .secret-btn .theater-btn:hover {
+            border-left: 6px solid #444;
+            color: #999;
+        }
+        .secret-btn .theater-btn span {
+            color: #444;
+        }
+
         /* サブメニュー（展開式） */
         .sub-menu {
             display: none;
@@ -417,6 +444,14 @@
             太平洋艦隊
             <span>Pacific Fleet (USN)</span>
         </a>
+
+        <!-- コナミコマンドで出現 -->
+        <div class="secret-btn" id="secret-tanks">
+            <a href="tanks+/hub.html" class="theater-btn">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
+            </a>
+        </div>
     </div>
 
     <div class="footer">
@@ -549,6 +584,23 @@
         div.textContent = text;
         return div.innerHTML;
     }
+
+    // コナミコマンド: ↑↑↓↓←→←→BA
+    (function() {
+        const code = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+        let pos = 0;
+        document.addEventListener('keydown', function(e) {
+            if (e.key === code[pos] || e.key.toLowerCase() === code[pos]) {
+                pos++;
+                if (pos === code.length) {
+                    document.getElementById('secret-tanks').classList.add('revealed');
+                    pos = 0;
+                }
+            } else {
+                pos = 0;
+            }
+        });
+    })();
 </script>
 
 </body>
