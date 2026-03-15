@@ -721,10 +721,13 @@ function resizeCanvas() {
 }
 
 let dragMoved = false;
+let dragOriginX = 0, dragOriginY = 0;
 canvas.addEventListener('mousedown', (e) => {
   if (e.button === 0) {
     dragging = true;
     dragMoved = false;
+    dragOriginX = e.clientX;
+    dragOriginY = e.clientY;
     dragStartX = e.clientX - camX;
     dragStartY = e.clientY - camY;
     canvas.style.cursor = 'grabbing';
@@ -732,7 +735,8 @@ canvas.addEventListener('mousedown', (e) => {
 });
 canvas.addEventListener('mousemove', (e) => {
   if (dragging) {
-    dragMoved = true;
+    const dx = e.clientX - dragOriginX, dy = e.clientY - dragOriginY;
+    if (dx*dx + dy*dy > 25) dragMoved = true; // 5px以上動いたらドラッグ
     camX = e.clientX - dragStartX;
     camY = e.clientY - dragStartY;
     draw();
