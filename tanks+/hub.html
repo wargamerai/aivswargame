@@ -775,11 +775,15 @@ function exportTerrain() {
     }
     text += ',\nhexsideTerrain: {\n  ' + hsLines.join(',\n  ') + '\n}';
   }
-  navigator.clipboard.writeText(text).then(() => {
-    alert('地形データをクリップボードにコピーしました');
-  }).catch(() => {
-    prompt('コピーしてください（Ctrl+A → Ctrl+C）:', text);
-  });
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `<div style="background:#333;padding:20px;border-radius:8px;max-width:600px;width:90%">
+    <p style="color:#fff;margin-bottom:8px">地形データ（全選択してコピー）</p>
+    <textarea style="width:100%;height:300px;font-size:12px;font-family:monospace;background:#1a1a1a;color:#0f0;border:1px solid #555;padding:8px">${text.replace(/</g,'&lt;')}</textarea>
+    <br><button onclick="this.closest('div[style]').remove()" style="margin-top:8px;padding:6px 20px;cursor:pointer">閉じる</button>
+  </div>`;
+  document.body.appendChild(div);
+  div.querySelector('textarea').select();
 }
 
 // 射界判定: 頂点は正面の隣接ヘクス、そこから120°に広がる
