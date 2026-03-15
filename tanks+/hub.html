@@ -1174,6 +1174,24 @@ function initScenarioScreen() {
     opt.textContent = sc.name;
     sel.appendChild(opt);
   }
+  sel.addEventListener('change', updateSideSelect);
+  updateSideSelect();
+}
+
+function updateSideSelect() {
+  const scId = document.getElementById('selScenario').value;
+  const sc = SCENARIOS.find(s => s.id === scId);
+  if (!sc) return;
+  const sides = Object.keys(sc.sides);
+  const s1 = sides[0];
+  const s2 = sides[1];
+  const n1 = NATION_COLORS[s1] ? NATION_COLORS[s1].label : s1;
+  const n2 = NATION_COLORS[s2] ? NATION_COLORS[s2].label : s2;
+  const sel = document.getElementById('selSide');
+  sel.innerHTML = '';
+  sel.innerHTML = `<option value="side1">先攻 ${n1}</option>` +
+    `<option value="side2">後攻 ${n2}</option>` +
+    `<option value="hotseat">ホットシート（両方手動）</option>`;
 }
 
 // コナミコマンド: ↑↑↓↓←→←→BA で隠しシナリオ解放
