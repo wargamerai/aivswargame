@@ -1466,21 +1466,56 @@ function checkVictory() {
   if (!state) return null;
   const s1 = state.side1;
   const s2 = state.side2;
-  const isOut = u => u.status === 'destroyed' || u.ammoOut;
+  const isOut = u => u.status === 'destroyed' || u.ammoOut || u.status === 'escaped';
   const alive1 = state.units.filter(u => u.side === s1 && !isOut(u));
   const alive2 = state.units.filter(u => u.side === s2 && !isOut(u));
   const total1 = state.units.filter(u => u.side === s1).length;
   const total2 = state.units.filter(u => u.side === s2).length;
-  const destroyed1 = total1 - alive1.length;
-  const destroyed2 = total2 - alive2.length;
+  const destroyed1 = state.units.filter(u => u.side === s1 && (u.status === 'destroyed' || u.ammoOut)).length;
+  const destroyed2 = state.units.filter(u => u.side === s2 && (u.status === 'destroyed' || u.ammoOut)).length;
+  const escaped1 = state.units.filter(u => u.side === s1 && u.status === 'escaped').length;
+  const escaped2 = state.units.filter(u => u.side === s2 && u.status === 'escaped').length;
+
+  // 突破シナリオの脱出勝利判定
+  const scId = state.scenarioId;
+  if (scId === 'sc2') {
+    // ドイツ: 1ユニット以上脱出で勝利
+    if (escaped1 >= 1 && state.firstPlayer === 'ge') {
+      return { winner:'ge', reason:'breakthrough', destroyed1, destroyed2, total1, total2, escaped: escaped1 };
+    }
+    if (escaped2 >= 1 && state.firstPlayer !== 'ge') {
+      return { winner:'ge', reason:'breakthrough', destroyed1, destroyed2, total1, total2, escaped: escaped2 };
+    }
+    // ドイツ全滅（射撃不能含む）→ ソ連勝利
+    const geAlive = state.units.filter(u => u.side === 'ge' && u.status !== 'destroyed' && !u.ammoOut && u.status !== 'escaped');
+    if (geAlive.length === 0) {
+      const suSide = s1 === 'ge' ? s2 : s1;
+      return { winner:suSide, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
+    }
+  }
+  if (scId === 'sc3') {
+    // ドイツ: 2ユニット以上脱出で勝利
+    const geEscaped = state.units.filter(u => u.side === 'ge' && u.status === 'escaped').length;
+    if (geEscaped >= 2) {
+      return { winner:'ge', reason:'breakthrough', destroyed1, destroyed2, total1, total2, escaped: geEscaped };
+    }
+    // ドイツが脱出不可能（残り生存1以下）→ ソ連勝利
+    const geAlive = state.units.filter(u => u.side === 'ge' && u.status !== 'destroyed' && !u.ammoOut && u.status !== 'escaped');
+    if (geAlive.length <= 1 && geEscaped === 0) {
+      const suSide = s1 === 'ge' ? s2 : s1;
+      return { winner:suSide, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
+    }
+  }
 
   // 全滅判定
   if (alive1.length === 0) return { winner:s2, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
   if (alive2.length === 0) return { winner:s1, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
 
-  // 半数以上破壊判定
-  if (destroyed1 > total1 / 2) return { winner:s2, reason:'majority', destroyed1, destroyed2, total1, total2 };
-  if (destroyed2 > total2 / 2) return { winner:s1, reason:'majority', destroyed1, destroyed2, total1, total2 };
+  // 半数以上破壊判定（突破シナリオ以外）
+  if (scId !== 'sc2' && scId !== 'sc3') {
+    if (destroyed1 > total1 / 2) return { winner:s2, reason:'majority', destroyed1, destroyed2, total1, total2 };
+    if (destroyed2 > total2 / 2) return { winner:s1, reason:'majority', destroyed1, destroyed2, total1, total2 };
+  }
 
   return null;
 }
@@ -1494,7 +1529,8 @@ function showGameOver(result) {
 
   document.getElementById('goTitle').textContent = 'ゲーム終了';
   const reasonText = result.reason === 'annihilation' ? '全滅' :
-                     result.reason === 'majority' ? '過半数撃破' : 'ターン終了';
+                     result.reason === 'majority' ? '過半数撃破' :
+                     result.reason === 'breakthrough' ? `突破（${result.escaped || 0}ユニット脱出）` : 'ターン終了';
   document.getElementById('goResult').innerHTML =
     `<span style="color:${winnerNc?winnerNc.fill:'#fff'};font-size:1.4em">${winnerNc?winnerNc.label:result.winner}</span> の勝利！<br><span style="font-size:0.8em;color:#aaa">(${reasonText})</span>`;
 
@@ -1597,9 +1633,11 @@ function renderSideList(containerId, side) {
     const div = document.createElement('div');
     div.className = 'unit-item' +
       (u.status === 'destroyed' ? ' destroyed' : '') +
+      (u.status === 'escaped' ? ' destroyed' : '') +
       (u.status === 'immobilized' ? ' immobilized' : '') +
       (state.selectedUnit === i ? ' selected' : '');
     const statusText = u.status === 'destroyed' ? '撃破' :
+                       u.status === 'escaped' ? '★脱出' :
                        u.status === 'immobilized' ? '移動不能' :
                        u.ammoOut ? '弾切' :
                        u.col < 1 ? '未配置' : '';

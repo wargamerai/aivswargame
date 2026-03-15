@@ -461,9 +461,51 @@ function handleMove(col, row) {
 
   renderCards();
 
+  // マップ脱出チェック（突破シナリオ）
+  if (checkMapExit(u)) return;
+
   // 防御射撃判定（非同期ステップ実行）
   startDefensiveFire(u, selectedIdx);
   // 以降の処理はafterDefensiveFire()で継続
+}
+
+// ===== マップ脱出判定（突破シナリオ） =====
+function checkMapExit(u) {
+  const scId = state.scenarioId;
+  if (scId !== 'sc2' && scId !== 'sc3' && scId !== 'sc4') return false;
+
+  const maxRow = state.mapMaxRow || 16;
+  let canExit = false;
+
+  // sc2: enterBottom → 上端(row=1)から脱出
+  if (scId === 'sc2' && u.enterEdge === 'bottom' && u.row === 1) canExit = true;
+  // sc3: enterTop → 下端(row=maxRow)から脱出
+  if (scId === 'sc3' && u.enterEdge === 'top' && u.row === maxRow) canExit = true;
+  // sc4: enterTop → 下端から脱出
+  if (scId === 'sc4' && u.enterEdge === 'top' && u.row === maxRow) canExit = true;
+
+  if (!canExit) return false;
+
+  // 脱出処理
+  u.escaped = true;
+  u.status = 'escaped';
+  u.col = -99;
+  u.row = -99;
+  u.remainMove = 0;
+  u.moved = true;
+  log(`★ ${u.name} がマップから脱出！`);
+
+  moveMode = 'idle';
+  selectedIdx = -1;
+  moveHistory = [];
+  dfHistory = [];
+  pushState();
+  renderCards();
+  updateUI();
+  parent.postMessage({ type:'STATE_UPDATE', units: state.units }, '*');
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
+  parent.postMessage({ type:'MOVE_PATH', path:null }, '*');
+  return true;
 }
 
 // ===== 向き指定 =====
@@ -1266,21 +1308,26 @@ function aiDoMovement(u, db, callback) {
 function aiBreakthroughMove(u, db, callback) {
   if (u.remainMove <= 0 || u.status !== 'ok') { callback(); return; }
 
-  let rearRow = 0;
+  // sc2: 上端(row小)へ脱出, sc3: 下端(row大)へ脱出
+  const goingUp = (state.scenarioId === 'sc2');
+
+  // 集団: 最も後方の味方より2ヘクス以上先行しない
+  let shouldWait = false;
   for (const ally of state.units) {
-    if (ally.side !== u.side || ally.status === 'destroyed' || ally.col < 1 || ally === u) continue;
-    if (ally.row > rearRow) rearRow = ally.row;
+    if (ally.side !== u.side || ally.status === 'destroyed' || ally.status === 'escaped' || ally.col < 1 || ally === u) continue;
+    if (goingUp && u.row < ally.row - 1) shouldWait = true;
+    if (!goingUp && u.row > ally.row + 1) shouldWait = true;
   }
-  if (rearRow > 0 && u.row < rearRow - 1) { callback(); return; }
+  if (shouldWait) { callback(); return; }
 
   function stepForward() {
     if (u.remainMove <= 0 || u.status === 'destroyed' || u.status === 'immobilized') { callback(); return; }
-    let curRearRow = 0;
+    // 集団制限の再チェック
     for (const ally of state.units) {
-      if (ally.side !== u.side || ally.status === 'destroyed' || ally.col < 1 || ally === u) continue;
-      if (ally.row > curRearRow) curRearRow = ally.row;
+      if (ally.side !== u.side || ally.status === 'destroyed' || ally.status === 'escaped' || ally.col < 1 || ally === u) continue;
+      if (goingUp && u.row < ally.row - 1) { callback(); return; }
+      if (!goingUp && u.row > ally.row + 1) { callback(); return; }
     }
-    if (curRearRow > 0 && u.row < curRearRow - 1) { callback(); return; }
 
     const neighbors = getNeighbors(u.col, u.row);
     let bestDir = -1, bestScore = -Infinity;
@@ -1298,8 +1345,10 @@ function aiBreakthroughMove(u, db, callback) {
       const totalCost = rotateCost + terrainCost + backwardExtra;
       if (totalCost > u.remainMove) continue;
       if (!checkStacking(n.col, n.row, u)) continue;
-      if (n.row >= u.row) continue;
-      let score = (u.row - n.row) * 20;
+      // 進行方向チェック
+      if (goingUp && n.row >= u.row) continue;   // 上へ: row減少のみ
+      if (!goingUp && n.row <= u.row) continue;   // 下へ: row増加のみ
+      let score = Math.abs(u.row - n.row) * 20;
       score -= Math.abs(n.col - cx) * 0.5;
       score -= totalCost;
       if (score > bestScore) { bestScore = score; bestDir = d; }
@@ -1311,6 +1360,7 @@ function aiBreakthroughMove(u, db, callback) {
       origAfterDf(result);
       afterDefensiveFire = origAfterDf;
       if (result === 'destroyed' || result === 'immobilized') { callback(); return; }
+      if (u.status === 'escaped') { callback(); return; }
       setTimeout(stepForward, 300);
     };
     handleMove(neighbors[bestDir].col, neighbors[bestDir].row);
@@ -1328,32 +1378,69 @@ function aiGetGroupTarget(side) {
   return best;
 }
 
-// ソ連: 追撃判定を一括計算（誰かが圏内なら周囲4hex以内の仲間も全員追撃）
+// ソ連: 追撃判定を一括計算
+// ドイツの脱出口までの残りターン数を逆算し、間に合わなくなる前に全員追撃開始
 function aiCalcChaseFlags() {
   if (state._aiChaseComputed) return;
   state._aiChaseComputed = true;
   state._aiChaseFlag = {};
 
   const suSide = state.side1 === 'ge' ? state.side2 : state.side1;
-  const target = aiGetGroupTarget(suSide);
-  if (!target) return;
+  const maxRow = state.mapMaxRow || 16;
 
-  const enemyMove = 2;
+  // 敵（ドイツ）の脱出口までの最短残りターン数を計算
+  const geUnits = state.units.filter(u =>
+    u.side === 'ge' && u.status !== 'destroyed' && u.status !== 'escaped' && u.col >= 1
+  );
+  if (geUnits.length === 0) return;
+
+  let minEnemyTurns = Infinity;
+  let primaryTarget = null;
+  for (const ge of geUnits) {
+    const geDb = UNIT_DB[ge.name];
+    const geMove = geDb ? geDb.move : 2;
+    // 脱出口までの距離
+    let distToExit;
+    if (state.scenarioId === 'sc2') {
+      distToExit = ge.row - 1; // row=1が脱出口
+    } else {
+      distToExit = maxRow - ge.row; // row=maxRowが脱出口
+    }
+    const turnsToExit = Math.ceil(distToExit / geMove);
+    if (turnsToExit < minEnemyTurns) {
+      minEnemyTurns = turnsToExit;
+      primaryTarget = ge;
+    }
+  }
+  if (!primaryTarget) return;
+
   const suUnits = state.units.filter(u =>
     u.side === suSide && u.status !== 'destroyed' && u.col >= 1
   );
 
-  // 1) 距離 ≦ 自分の移動力 + 敵移動力 → 追撃フラグON
+  // 各ソ連ユニットが敵に到達するまでのターン数を計算
+  // 敵が脱出するまでに追いつけないなら追撃開始
   for (const u of suUnits) {
-    const dist = hexDist(u.col, u.row, target.col, target.row);
     const uDb = UNIT_DB[u.name];
     const myMove = uDb ? uDb.move : 3;
-    if (dist <= myMove + enemyMove) {
+
+    // 最も近い敵への距離
+    let minDistToEnemy = Infinity;
+    for (const ge of geUnits) {
+      const d = hexDist(u.col, u.row, ge.col, ge.row);
+      if (d < minDistToEnemy) minDistToEnemy = d;
+    }
+
+    const turnsToReach = Math.ceil(Math.max(0, minDistToEnemy - 1) / myMove);
+
+    // 敵が脱出するまでに到達できるギリギリ → 追撃開始
+    // 余裕を持って: 敵の脱出まで残り(自分の到達ターン+1)以下なら動く
+    if (minEnemyTurns <= turnsToReach + 2) {
       state._aiChaseFlag[u.id] = true;
     }
   }
 
-  // 2) 追撃フラグONの仲間の4ヘクス以内にいる味方も全員追撃（連鎖）
+  // 追撃フラグONの仲間の6ヘクス以内にいる味方も全員追撃（連鎖）
   let changed = true;
   while (changed) {
     changed = false;
@@ -1361,7 +1448,7 @@ function aiCalcChaseFlags() {
       if (state._aiChaseFlag[u.id]) continue;
       for (const a of suUnits) {
         if (!state._aiChaseFlag[a.id]) continue;
-        if (hexDist(u.col, u.row, a.col, a.row) <= 4) {
+        if (hexDist(u.col, u.row, a.col, a.row) <= 6) {
           state._aiChaseFlag[u.id] = true;
           changed = true;
           break;
