@@ -670,9 +670,10 @@ function hexDist(c1, r1, c2, r2) {
 }
 
 // ===== LOS判定 =====
-function isBlockingTerrain(col, row) {
+function isBlockingTerrain(col, row, skipSlope) {
   if (!state || !state.terrain) return false;
   const t = state.terrain[`${col},${row}`];
+  if (skipSlope && t === 'slope') return false;
   return t === 'forest' || t === 'building' || t === 'slope';
 }
 
@@ -701,6 +702,10 @@ function hasLOS(c1, r1, c2, r2) {
   const h2 = hexCenter(c2, r2);
   const dist = hexDist(c1, r1, c2, r2);
   if (dist <= 1) return true;
+  // 両方が丘にいる場合、途中の丘はブロックしない
+  const t1 = (state && state.terrain) ? state.terrain[`${c1},${r1}`] : null;
+  const t2 = (state && state.terrain) ? state.terrain[`${c2},${r2}`] : null;
+  const skipSlope = (t1 === 'slope' && t2 === 'slope');
   const steps = dist * 2;
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
@@ -714,9 +719,9 @@ function hasLOS(c1, r1, c2, r2) {
     const onHexside = result.dist2 < result.dist1 * 1.05;
     if (onHexside) {
       const skip2 = (m2.col === c1 && m2.row === r1) || (m2.col === c2 && m2.row === r2);
-      if (isBlockingTerrain(m1.col, m1.row) && (skip2 || isBlockingTerrain(m2.col, m2.row))) return false;
+      if (isBlockingTerrain(m1.col, m1.row, skipSlope) && (skip2 || isBlockingTerrain(m2.col, m2.row, skipSlope))) return false;
     } else {
-      if (isBlockingTerrain(m1.col, m1.row)) return false;
+      if (isBlockingTerrain(m1.col, m1.row, skipSlope)) return false;
     }
   }
   return true;
