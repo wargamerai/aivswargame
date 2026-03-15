@@ -149,6 +149,7 @@ button.top-btn:hover { background:#556; }
   <button class="top-btn" onclick="endPhase()">フェーズ終了</button>
   <button class="top-btn" id="arcBtn" onclick="toggleArc()">射界表示</button>
   <button class="top-btn" id="fogBtn" onclick="toggleFog()">視認外非表示</button>
+  <button class="top-btn" onclick="zoomFit()">全体</button>
   <button class="top-btn" onclick="toggleDebug()" style="background:#030;color:#0f0">DBG</button>
   <span style="margin-left:20px;color:#888">|</span>
   <button class="top-btn" id="teBtn" onclick="toggleTerrainEdit()">地形編集</button>
@@ -750,6 +751,20 @@ function toggleTerrainEdit() {
   document.getElementById('teBtn').style.color = terrainEditMode ? '#000' : '';
   document.getElementById('teBrush').style.display = terrainEditMode ? 'flex' : 'none';
   if (terrainEditMode) setTeBrush('forest');
+}
+
+function zoomFit() {
+  const cv = document.querySelector('canvas');
+  const mc = (state && state.mapMaxCol) || 24;
+  const mr = (state && state.mapMaxRow) || 15;
+  const mapW = mc * HEX_SIZE * 1.5 + HEX_SIZE;
+  const mapH = mr * HEX_H + HEX_H;
+  const zx = cv.width / mapW;
+  const zy = cv.height / mapH;
+  zoom = Math.min(zx, zy) * 0.95;
+  camX = (cv.width - mapW * zoom) / 2;
+  camY = (cv.height - mapH * zoom) / 2;
+  draw();
 }
 
 function setTeBrush(t) {
