@@ -232,13 +232,16 @@ const SCENARIOS = [
       }
     },
     terrain: {
-      '4,2':'building', '5,2':'building', '4,3':'building',
-      '10,1':'forest', '11,1':'forest', '11,2':'forest', '12,2':'forest', '12,3':'forest',
-      '3,8':'forest', '3,9':'forest', '4,9':'forest',
-      '3,10':'forest', '4,10':'forest', '3,11':'forest', '4,11':'forest',
-      '3,12':'forest', '4,12':'forest', '5,12':'forest', '3,13':'forest',
-      '11,12':'forest', '12,12':'forest', '11,13':'forest', '12,13':'forest',
-      '13,13':'forest', '12,14':'forest', '13,14':'forest',
+      '4,8':'forest', '4,9':'forest', '5,9':'forest', '5,10':'forest',
+      '5,11':'forest', '5,12':'forest', '6,9':'forest', '6,10':'forest',
+      '6,11':'forest', '6,12':'forest',
+      '9,2':'slope', '9,3':'slope', '10,2':'slope', '10,3':'slope',
+      '17,3':'forest', '17,4':'forest', '18,2':'forest', '18,3':'forest',
+      '19,3':'forest', '19,4':'forest', '19,5':'forest',
+      '20,3':'forest', '20,4':'forest', '20,5':'forest',
+      '21,4':'forest', '21,5':'forest',
+      '22,13':'forest', '22,14':'forest', '23,14':'forest',
+      '23,15':'forest', '24,14':'forest',
     }
   },
   // シナリオ2: エレファント（隠し）
