@@ -107,13 +107,17 @@ function log(text) {
   parent.postMessage({ type:'GAME_LOG', text:text }, '*');
 }
 
-function init() {
+function init(stateData) {
   const params = new URLSearchParams(window.location.search);
   phase = params.get('phase') || 'pf1';
 
-  const raw = localStorage.getItem('tanksState');
-  if (!raw) { log('状態なし'); return; }
-  state = JSON.parse(raw);
+  if (stateData) {
+    state = stateData;
+  } else {
+    const raw = localStorage.getItem('tanksState');
+    if (!raw) { log('状態なし — 親からのINIT_STATE待ち'); return; }
+    state = JSON.parse(raw);
+  }
 
   // 射撃する側を決定
   if (phase.endsWith('1')) {
@@ -654,6 +658,10 @@ function donePhase() {
 // ===== 親からのメッセージ =====
 window.addEventListener('message', (e) => {
   if (!e.data || !e.data.type) return;
+  if (e.data.type === 'INIT_STATE') {
+    init(e.data.state);
+    return;
+  }
   if (e.data.type === 'MAP_SELECT' && e.data.unitIdx >= 0) {
     const u = state.units[e.data.unitIdx];
     if (u.side === activeSide && firers.includes(e.data.unitIdx)) {

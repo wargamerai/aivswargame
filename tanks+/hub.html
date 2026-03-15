@@ -143,7 +143,10 @@ button.top-btn:hover { background:#556; }
 <!-- 方向メニュー（右クリック） -->
 <div id="dirMenu"></div>
 <!-- デバッグパネル -->
-<div id="debugPanel"></div>
+<div id="debugPanel">
+  <button onclick="copyDebug()" style="background:#030;color:#0f0;border:1px solid #0f0;padding:2px 8px;cursor:pointer;margin-right:4px;font-size:11px">コピー</button>
+  <button onclick="clearDebug()" style="background:#300;color:#f00;border:1px solid #f00;padding:2px 8px;cursor:pointer;font-size:11px">クリア</button>
+</div>
 
 <!-- メインエリア -->
 <div id="main">
@@ -186,6 +189,17 @@ function toggleDebug() {
   debugVisible = !debugVisible;
   document.getElementById('debugPanel').classList.toggle('visible', debugVisible);
   if (debugVisible) dbgRefresh();
+}
+function copyDebug() {
+  const p = document.getElementById('debugPanel');
+  const text = Array.from(p.children).filter(c => c.tagName !== 'BUTTON').map(c => c.textContent).join('\n');
+  navigator.clipboard.writeText(text).then(() => { dbg('コピーしました'); });
+}
+function clearDebug() {
+  const p = document.getElementById('debugPanel');
+  const btns = Array.from(p.querySelectorAll('button'));
+  p.innerHTML = '';
+  btns.forEach(b => p.appendChild(b));
 }
 function dbg(msg, cls='') {
   const p = document.getElementById('debugPanel');
@@ -1077,6 +1091,13 @@ function loadPhase() {
   saveState();
 
   const frame = document.getElementById('phaseFrame');
+  frame.onload = () => {
+    // file://ではlocalStorageが共有されないため、postMessageでstateを直接渡す
+    if (frame.contentWindow) {
+      dbg(`→iframe INIT_STATE (${state.units.length}units)`);
+      frame.contentWindow.postMessage({ type:'INIT_STATE', state: JSON.parse(JSON.stringify(state)) }, '*');
+    }
+  };
   frame.src = `${file}?phase=${phase}`;
 }
 

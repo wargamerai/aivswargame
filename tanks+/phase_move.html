@@ -114,14 +114,23 @@ function log(text) {
 
 function roll() { return Math.floor(Math.random() * 6) + 1; }
 
-function init() {
+function init(stateData) {
   const params = new URLSearchParams(window.location.search);
   phase = params.get('phase') || 'mv1';
 
-  const raw = localStorage.getItem('tanksState');
-  if (!raw) { log('状態なし'); return; }
-  state = JSON.parse(raw);
+  if (stateData) {
+    state = stateData;
+    console.log('[phase_move] INIT_STATEからstate受信', state.units.length, 'units');
+  } else {
+    const raw = localStorage.getItem('tanksState');
+    if (!raw) { log('状態なし — 親からのINIT_STATE待ち'); return; }
+    state = JSON.parse(raw);
+  }
 
+  initPhase();
+}
+
+function initPhase() {
   // 移動する側を決定
   if (phase.endsWith('1')) {
     activeSide = state.firstPlayer;
@@ -732,6 +741,11 @@ function donePhase() {
 window.addEventListener('message', (e) => {
   if (!e.data || !e.data.type) return;
   console.log(`[phase_move] MSG受信: ${e.data.type}`, e.data);
+  if (e.data.type === 'INIT_STATE') {
+    console.log('[phase_move] INIT_STATE受信');
+    init(e.data.state);
+    return;
+  }
   if (e.data.type === 'MAP_SELECT') {
     console.log(`[phase_move] MAP_SELECT hex(${e.data.col},${e.data.row}) side=${e.data.side} unit=${e.data.unitIdx} moveMode=${moveMode}`);
     handleMapSelect(e.data.col, e.data.row, e.data.side, e.data.unitIdx);

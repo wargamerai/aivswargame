@@ -105,6 +105,12 @@ let phaseType = '';  // 'inf_atk' etc.
 
 /* --- hub通信 --- */
 window.addEventListener('message', e => {
+  if (e.data && e.data.type === 'INIT_STATE') {
+    state = e.data.state;
+    phaseType = state.phaseType || '';
+    document.getElementById('phTitle').textContent = '歩兵フェーズ';
+    buildUI();
+  }
   if (e.data && e.data.type === 'STATE_UPDATE') {
     state = e.data.state;
     phaseType = state.phaseType || '';
