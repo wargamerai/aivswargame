@@ -579,6 +579,14 @@ function getTerrainCost(col, row, fromCol, fromRow) {
 // ===== スタックチェック =====
 function checkStacking(col, row, movingUnit) {
   const db = UNIT_DB[movingUnit.name];
+
+  // 敵ユニットがいるヘクスには進入禁止
+  const enemy = state.units.some(u =>
+    u.side !== movingUnit.side && u.col === col && u.row === row &&
+    u.status !== 'destroyed' && u.status !== 'escaped'
+  );
+  if (enemy) return false;
+
   const friendly = state.units.filter(u =>
     u.side === movingUnit.side && u.col === col && u.row === row &&
     u.status !== 'destroyed' && u !== movingUnit
@@ -1174,19 +1182,52 @@ function aiPlaceUnit(u, db, callback) {
   // 戦略的配置
   let pick;
   const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
-  if (!edge) {
-    // free配置: 地形を活用し散開
+  if (!edge && isSc2or3) {
+    // シナリオ2/3: 左右の森にスタック配置で挟み撃ち
+    // KV-1Cは上の森（遅いので前方待ち伏せ）、他は左右の森
+    const cx = maxCol / 2;
+    const isKV = u.name === 'KV-1C';
+
+    // 森ヘクスだけを候補に
+    const forestHexes = valid.filter(h => {
+      const t = state.terrain ? state.terrain[`${h.col},${h.row}`] : null;
+      return t === 'forest';
+    });
+
+    if (forestHexes.length > 0) {
+      const scored = forestHexes.map(h => {
+        let s = 0;
+        if (isKV) {
+          // KV-1C: 上の森（row小さい＝脱出口側）を優先
+          s -= h.row * 3; // 上の方が高スコア
+          s -= Math.abs(h.col - cx) * 0.5; // 中央寄り
+        } else {
+          // T34/SU-76: 左右の森（中央の行付近）でスタック
+          const midRow = maxRow / 2;
+          s -= Math.abs(h.row - midRow) * 1; // マップ中央の高さ
+          // 左右どちらかの森に偏らせる（既に配置済みの味方に寄せる）
+          for (const ally of state.units) {
+            if (ally.side !== u.side || ally.col < 1 || ally === u) continue;
+            if (ally.name === 'KV-1C') continue; // KV-1Cは別グループ
+            const ad = hexDist(h.col, h.row, ally.col, ally.row);
+            if (ad <= 2) s += 5; // スタック/近接を優先
+          }
+        }
+        return { h, s };
+      });
+      scored.sort((a, b) => b.s - a.s);
+      const top = scored.slice(0, Math.min(3, scored.length));
+      pick = top[Math.floor(Math.random() * top.length)].h;
+    } else {
+      // 森がなければ地形重視で適当に
+      pick = valid[Math.floor(Math.random() * valid.length)];
+    }
+  } else if (!edge) {
+    // 通常free配置: 地形を活用し散開
     const scored = valid.map(h => {
       let s = 0;
       const t = state.terrain ? state.terrain[`${h.col},${h.row}`] : null;
-      if (isSc2or3) {
-        // シナリオ2/3: 森に隠れて待ち伏せ最優先
-        if (t === 'forest') s += 50;
-        else if (t === 'building') s += 30;
-        else s -= 20; // 平地は避ける
-      } else {
-        if (t === 'forest' || t === 'building') s += 10;
-      }
+      if (t === 'forest' || t === 'building') s += 10;
       // 味方から2-4ヘクス離れた位置を優先（散開）
       for (const ally of state.units) {
         if (ally.side !== u.side || ally.col < 1 || ally === u) continue;
@@ -1194,10 +1235,9 @@ function aiPlaceUnit(u, db, callback) {
         if (ad >= 2 && ad <= 4) s += 2;
         if (ad <= 1) s -= 5;
       }
-      // マップ中央寄りを優先（突破ルート上に配置）
       const cx = maxCol / 2, cy = maxRow / 2;
       const cd = Math.abs(h.col - cx) + Math.abs(h.row - cy);
-      s -= cd * (isSc2or3 ? 0.5 : 0.3);
+      s -= cd * 0.3;
       return { h, s };
     });
     scored.sort((a, b) => b.s - a.s);
@@ -1498,8 +1538,6 @@ function aiPredictEnemyPos(ge, turns) {
   const geMove = geDb ? geDb.move : 2;
   const maxRow = state.mapMaxRow || 16;
   const goingUp = (state.scenarioId === 'sc2');
-
-  // 3ターン分の移動を予測（直線的に脱出口へ向かう想定）
   let predRow = ge.row;
   for (let t = 0; t < turns; t++) {
     if (goingUp) {
@@ -1511,14 +1549,21 @@ function aiPredictEnemyPos(ge, turns) {
   return { col: ge.col, row: predRow };
 }
 
-// ソ連: 待ち伏せ or 先回り追撃
+// ソ連: 射界外から回り込んで隣接射撃を狙う
 function aiAmbushChaseMove(u, db, callback) {
   aiCalcChaseFlags();
 
-  const enemy = aiGetGroupTarget(u.side);
-  if (!enemy) { callback(); return; }
+  // 最も近い敵を目標
+  let nearestEnemy = null, nearestDist = Infinity;
+  for (const e of state.units) {
+    if (e.side === u.side || e.status === 'destroyed' || e.status === 'escaped' || e.col < 1) continue;
+    const d = hexDist(u.col, u.row, e.col, e.row);
+    if (d < nearestDist) { nearestDist = d; nearestEnemy = e; }
+  }
+  if (!nearestEnemy) { callback(); return; }
 
-  if (hexDist(u.col, u.row, enemy.col, enemy.row) <= 1) { callback(); return; }
+  // 既に隣接 → 停止（射撃フェーズで撃つ）
+  if (nearestDist <= 1) { callback(); return; }
 
   // 追撃フラグなし → 待ち伏せ（動かない）
   if (!state._aiChaseFlag || !state._aiChaseFlag[u.id]) {
@@ -1526,37 +1571,67 @@ function aiAmbushChaseMove(u, db, callback) {
     return;
   }
 
-  // 先回り目標: 敵の3ターン後の予測位置
-  const uDb = UNIT_DB[u.name];
-  const myMove = uDb ? uDb.move : 3;
-  const distToEnemy = hexDist(u.col, u.row, enemy.col, enemy.row);
-
-  // 敵の予測位置を計算（1~3ターン先）
-  // 自分の移動力で到達可能な最も先の予測位置を選択
-  let interceptTarget = enemy;
-  for (let t = 3; t >= 1; t--) {
-    const pred = aiPredictEnemyPos(enemy, t);
-    const distToPred = hexDist(u.col, u.row, pred.col, pred.row);
-    const turnsToReach = Math.ceil(Math.max(0, distToPred - 1) / myMove);
-    // 予測位置に敵より先に着けるなら先回り
-    if (turnsToReach <= t) {
-      interceptTarget = pred;
-      break;
-    }
-  }
-
-  // 現在地が既に先回り位置に近い（2ヘクス以内）なら待機
-  const distToIntercept = hexDist(u.col, u.row, interceptTarget.col, interceptTarget.row);
-  if (distToIntercept <= 1) {
-    callback();
+  // 目標: 敵の射界外の隣接ヘクスを狙う
+  // 射界外がなければ予測位置の射界外を狙う
+  const targetHex = aiFindFlankHex(u, nearestEnemy);
+  if (!targetHex) {
+    // フランクが見つからなければ直接接近
+    aiMoveToward(u, db, nearestEnemy, callback);
     return;
   }
 
-  // 先回り地点への移動（aiMoveStepの代わりに直接目標指定）
-  aiMoveToward(u, db, interceptTarget, callback);
+  aiMoveToward(u, db, targetHex, callback);
 }
 
-// 指定位置に向かって移動（先回り用）
+// 敵の射界外の隣接ヘクスを探す（側面・背面から回り込む）
+function aiFindFlankHex(suUnit, geUnit) {
+  const geDb = UNIT_DB[geUnit.name];
+  const neighbors = getNeighbors(geUnit.col, geUnit.row);
+  let bestHex = null, bestScore = -Infinity;
+
+  for (let d = 0; d < 6; d++) {
+    const n = neighbors[d];
+    if (!n) continue;
+    if (!checkStacking(n.col, n.row, suUnit)) continue;
+
+    const distFromMe = hexDist(suUnit.col, suUnit.row, n.col, n.row);
+    let score = -distFromMe; // 近い方がいい
+
+    // 射界外のヘクスを大幅に優先
+    if (geDb && geDb.turret === 'fixed') {
+      if (!isInFixedArcMove(geUnit, n.col, n.row)) {
+        score += 50; // 射界外ボーナス
+      }
+    }
+
+    // 森なら安全
+    const t = state.terrain ? state.terrain[`${n.col},${n.row}`] : null;
+    if (t === 'forest') score += 5;
+
+    if (score > bestScore) { bestScore = score; bestHex = n; }
+  }
+
+  // 射界外のヘクスが見つからなかった場合、
+  // 3ターン先の予測位置の射界外を試す
+  if (bestScore < 30) {
+    for (let t = 1; t <= 3; t++) {
+      const pred = aiPredictEnemyPos(geUnit, t);
+      const predNeighbors = getNeighbors(pred.col, pred.row);
+      for (let d = 0; d < 6; d++) {
+        const n = predNeighbors[d];
+        if (!n) continue;
+        const distFromMe = hexDist(suUnit.col, suUnit.row, n.col, n.row);
+        // 予測位置の周辺で射界外になりそうな方向
+        let score = -distFromMe + 20; // 先回りボーナス
+        if (score > bestScore) { bestScore = score; bestHex = n; }
+      }
+    }
+  }
+
+  return bestHex;
+}
+
+// 指定位置に向かって移動
 function aiMoveToward(u, db, target, callback) {
   if (u.remainMove <= 0 || u.status === 'destroyed' || u.status === 'immobilized') {
     callback();
@@ -1564,7 +1639,7 @@ function aiMoveToward(u, db, target, callback) {
   }
 
   const distNow = hexDist(u.col, u.row, target.col, target.row);
-  if (distNow <= 1) { callback(); return; }
+  if (distNow <= 0) { callback(); return; }
 
   const neighbors = getNeighbors(u.col, u.row);
   let bestDir = -1, bestScore = -Infinity;
@@ -1588,9 +1663,17 @@ function aiMoveToward(u, db, target, callback) {
 
     let score = (distNow - nd) * 10;
     score -= totalCost;
-    // 森を通れるなら安全（敵から見えにくい）
+    // 森を通ると安全
     const nTerrain = state.terrain ? state.terrain[`${n.col},${n.row}`] : null;
     if (nTerrain === 'forest' || nTerrain === 'building') score += 3;
+    // 敵の射界外を通るルートを優先
+    for (const ge of state.units) {
+      if (ge.side === u.side || ge.status === 'destroyed' || ge.col < 1) continue;
+      const geDb = UNIT_DB[ge.name];
+      if (geDb && geDb.turret === 'fixed' && !isInFixedArcMove(ge, n.col, n.row)) {
+        score += 5; // 射界外ボーナス
+      }
+    }
 
     if (score > bestScore) { bestScore = score; bestDir = d; }
   }
