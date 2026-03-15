@@ -1444,8 +1444,9 @@ function checkVictory() {
   if (!state) return null;
   const s1 = state.side1;
   const s2 = state.side2;
-  const alive1 = state.units.filter(u => u.side === s1 && u.status !== 'destroyed');
-  const alive2 = state.units.filter(u => u.side === s2 && u.status !== 'destroyed');
+  const isOut = u => u.status === 'destroyed' || u.ammoOut;
+  const alive1 = state.units.filter(u => u.side === s1 && !isOut(u));
+  const alive2 = state.units.filter(u => u.side === s2 && !isOut(u));
   const total1 = state.units.filter(u => u.side === s1).length;
   const total2 = state.units.filter(u => u.side === s2).length;
   const destroyed1 = total1 - alive1.length;
