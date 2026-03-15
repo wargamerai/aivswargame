@@ -241,6 +241,7 @@ let mapImg1 = null, mapImg2 = null;
 let mapLoaded = 0;
 let movePath = null; // 移動経路表示用 [{col,row,mp}, ...]
 let completedPaths = []; // 確定済み移動経路 [{path:[{col,row}], side:'...'}]
+let unitOffsets = {}; // ユニットインデックス→描画オフセット {dx,dy}
 
 // ユニット画像キャッシュ
 const unitImages = {};
@@ -511,12 +512,37 @@ function draw() {
     drawFireArc(state.units[state.selectedUnit], maxCol, maxRow);
   }
 
-  // ユニット描画
+  // ユニット描画（スタッキングオフセット付き）
   if (state && state.units) {
-    for (const u of state.units) {
-      if (u.status === 'destroyed' && !u.showWreck) continue;
-      if (u.col < 1 || u.row < 1) continue;
-      drawUnit(u);
+    // 同一ヘクスのユニットをグループ化してオフセット計算
+    const hexGroups = {};
+    state.units.forEach((u, i) => {
+      if (u.status === 'destroyed' && !u.showWreck) return;
+      if (u.col < 1 || u.row < 1) return;
+      const key = `${u.col},${u.row}`;
+      if (!hexGroups[key]) hexGroups[key] = [];
+      hexGroups[key].push(i);
+    });
+    // オフセットテーブル（斜め上方向にずらす）
+    const STACK_OFFSETS = [
+      [{ dx:0, dy:0 }],                                              // 1体
+      [{ dx:-0.2, dy:0.15 }, { dx:0.2, dy:-0.15 }],                 // 2体
+      [{ dx:-0.25, dy:0.15 }, { dx:0.25, dy:0.15 }, { dx:0, dy:-0.2 }], // 3体
+      [{ dx:-0.2, dy:0.2 }, { dx:0.2, dy:0.2 }, { dx:-0.2, dy:-0.15 }, { dx:0.2, dy:-0.15 }], // 4体
+    ];
+    unitOffsets = {};
+    for (const key in hexGroups) {
+      const group = hexGroups[key];
+      const offsets = STACK_OFFSETS[Math.min(group.length, 4) - 1];
+      const scale = group.length > 1 ? 0.7 : 1.0;
+      for (let gi = 0; gi < group.length; gi++) {
+        const idx = group[gi];
+        const u = state.units[idx];
+        const off = offsets[Math.min(gi, offsets.length - 1)];
+        const dx = off.dx * HEX_SIZE, dy = off.dy * HEX_SIZE;
+        unitOffsets[idx] = { dx, dy };
+        drawUnit(u, dx, dy, scale);
+      }
     }
   }
 
@@ -774,15 +800,18 @@ function drawFireArc(unit, maxCol, maxRow) {
   }
 }
 
-function drawUnit(u) {
+function drawUnit(u, offsetX, offsetY, scale) {
+  offsetX = offsetX || 0;
+  offsetY = offsetY || 0;
+  scale = scale || 1.0;
   const db = UNIT_DB[u.name];
   if (!db) return;
   const nc = NATION_COLORS[db.nation] || { fill:'#888', stroke:'#444' };
   const h = hexCenter(u.col, u.row);
-  const sz = HEX_SIZE * 0.55;
+  const sz = HEX_SIZE * 0.55 * scale;
 
   ctx.save();
-  ctx.translate(h.x, h.y);
+  ctx.translate(h.x + offsetX, h.y + offsetY);
 
   // 背景形状 or 画像
   if (u.hidden) {
@@ -937,10 +966,24 @@ canvas.addEventListener('click', (e) => {
     return;
   }
 
-  // そのヘクスにいるユニットを探す
-  const idx = state.units.findIndex(u =>
-    u.col === hex.col && u.row === hex.row && u.status !== 'destroyed'
-  );
+  // そのヘクスにいるユニットを探す（複数いる場合クリック位置に最も近いものを選択）
+  const hexUnits = [];
+  state.units.forEach((u, i) => {
+    if (u.col === hex.col && u.row === hex.row && u.status !== 'destroyed') hexUnits.push(i);
+  });
+  let idx = -1;
+  if (hexUnits.length === 1) {
+    idx = hexUnits[0];
+  } else if (hexUnits.length > 1) {
+    const hc2 = hexCenter(hex.col, hex.row);
+    let bestDist = Infinity;
+    for (const ui of hexUnits) {
+      const off = unitOffsets[ui] || { dx:0, dy:0 };
+      const ux = hc2.x + off.dx, uy = hc2.y + off.dy;
+      const d = (mx - ux) * (mx - ux) + (my - uy) * (my - uy);
+      if (d < bestDist) { bestDist = d; idx = ui; }
+    }
+  }
   dbg(`click hex(${hex.col},${hex.row}) unitIdx=${idx} dragMoved=${dragMoved}`);
   if (idx >= 0) {
     state.selectedUnit = idx;
