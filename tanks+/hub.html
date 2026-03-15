@@ -448,7 +448,7 @@ function draw() {
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
       ctx.closePath();
-      if (t === 'forest') { continue; }
+      if (t === 'forest') { ctx.fillStyle = 'rgba(34,80,34,0.45)'; }
       else if (t === 'building') { ctx.fillStyle = 'rgba(140,100,60,0.5)'; }
       else if (t === 'slope') { ctx.fillStyle = 'rgba(160,140,80,0.3)'; }
       else { ctx.fillStyle = 'rgba(100,100,100,0.2)'; }
