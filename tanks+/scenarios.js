@@ -191,68 +191,194 @@ const NATION_COLORS = {
   uk: { fill:'#B8860B', stroke:'#8a6a0a', label:'イギリス' },
 };
 
-// --- テストシナリオ ---
+// --- シナリオ ---
 const SCENARIOS = [
+  // シナリオ1: 赤軍の反抗（通常表示）
   {
-    id: 'test1',
-    name: 'テストシナリオ（東部戦線）',
+    id: 'sc1',
+    name: '赤軍の反抗',
     front: 'east',
     map1: 'A', map1orient: 'Vertical',
     map2: null, map2orient: null,
-    maxTurns: 10,
+    maxTurns: 99,
     firstPlayer: 'ge',
+    victory: '先に半数以上破壊した側の勝利',
     sides: {
       ge: {
-        setup: 'fixed',
-        enterEdge: null,
+        setup: 'enterRight',
+        enterEdge: 'right',
         units: [
-          { name:'Pz IV/H', col:3, row:3, dir:0 },
-          { name:'Tiger I', col:3, row:5, dir:0 },
-          { name:'StuG III', col:3, row:7, dir:0 },
-          { name:'PAK40', col:5, row:2, dir:0 },
-          { name:'GE Infantry', col:5, row:4, dir:0 },
-          { name:'Hetzer', col:5, row:6, dir:0 },
+          { name:'Pz III/J', col:0, row:0, dir:2 },
+          { name:'Pz III/J', col:0, row:0, dir:2 },
+          { name:'Pz IV/H', col:0, row:0, dir:2 },
+          { name:'Pz IV/H', col:0, row:0, dir:2 },
         ]
       },
       su: {
-        setup: 'fixed',
-        enterEdge: null,
+        setup: 'enterLeft',
+        enterEdge: 'left',
         units: [
-          { name:'T34/85', col:14, row:3, dir:3 },
-          { name:'IS-II', col:14, row:5, dir:3 },
-          { name:'SU-76', col:14, row:7, dir:3 },
-          { name:'76.2mm', col:12, row:2, dir:3 },
-          { name:'SU Infantry', col:12, row:4, dir:3 },
-          { name:'KV-1C', col:12, row:6, dir:3 },
+          { name:'KV-1C', col:0, row:0, dir:0 },
+          { name:'KV-1C', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
         ]
       }
     },
-    terrain: {
-      '4,8': 'forest', '4,9': 'forest',
-      '5,9': 'forest', '5,10': 'forest', '5,11': 'forest', '5,12': 'forest',
-      '6,9': 'forest', '6,10': 'forest', '6,11': 'forest', '6,12': 'forest',
-      '9,2': 'slope', '9,3': 'slope',
-      '10,2': 'slope', '10,3': 'slope',
-      '17,3': 'forest', '17,4': 'forest',
-      '18,2': 'forest', '18,3': 'forest',
-      '19,3': 'forest', '19,4': 'forest', '19,5': 'forest',
-      '20,3': 'forest', '20,4': 'forest', '20,5': 'forest',
-      '21,4': 'forest', '21,5': 'forest',
-      '22,13': 'forest', '22,14': 'forest',
-      '23,14': 'forest', '23,15': 'forest',
-      '24,14': 'forest',
-    }
-  }
+    terrain: {}
+  },
+  // シナリオ2: エレファント（隠し）
+  {
+    id: 'sc2',
+    name: 'エレファント',
+    hidden: true,
+    front: 'east',
+    map1: 'A', map1orient: 'Vertical',
+    map2: null, map2orient: null,
+    maxTurns: 99,
+    firstPlayer: 'ge',
+    victory: 'ドイツ: 1ユニット以上をマップから脱出 / ソ連: 阻止（射撃不能は破壊扱い）',
+    sides: {
+      ge: {
+        setup: 'enterBottom',
+        enterEdge: 'bottom',
+        units: [
+          { name:'Ferdinand', col:0, row:0, dir:1 },
+          { name:'Ferdinand', col:0, row:0, dir:1 },
+          { name:'Ferdinand', col:0, row:0, dir:1 },
+        ]
+      },
+      su: {
+        setup: 'free',
+        enterEdge: null,
+        units: [
+          { name:'KV-1C', col:0, row:0, dir:0 },
+          { name:'KV-1C', col:0, row:0, dir:0 },
+          { name:'KV-1C', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'T34/76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+          { name:'SU-76', col:0, row:0, dir:0 },
+        ]
+      }
+    },
+    terrain: {}
+  },
+  // シナリオ3: ドニエプル（隠し）
+  {
+    id: 'sc3',
+    name: 'ドニエプル',
+    hidden: true,
+    front: 'east',
+    map1: 'B', map1orient: 'Vertical',
+    map2: null, map2orient: null,
+    maxTurns: 99,
+    firstPlayer: 'ge',
+    victory: 'ドイツ: 2ユニット以上をマップ下から脱出 / ソ連: 阻止（射撃不能は破壊扱い）',
+    sides: {
+      ge: {
+        setup: 'enterTop',
+        enterEdge: 'top',
+        units: [
+          { name:'Pz V/G', col:0, row:0, dir:4 },
+          { name:'Pz V/G', col:0, row:0, dir:4 },
+          { name:'Pz V/G', col:0, row:0, dir:4 },
+          { name:'Pz IV/H', col:0, row:0, dir:4 },
+          { name:'Pz IV/H', col:0, row:0, dir:4 },
+          { name:'StuG III', col:0, row:0, dir:4 },
+          { name:'StuG III', col:0, row:0, dir:4 },
+          { name:'StuG III', col:0, row:0, dir:4 },
+        ]
+      },
+      su: {
+        setup: 'free',
+        enterEdge: null,
+        units: [
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+        ]
+      }
+    },
+    terrain: {}
+  },
+  // シナリオ4: フューリー（隠し）
+  {
+    id: 'sc4',
+    name: 'フューリー',
+    hidden: true,
+    front: 'west',
+    map1: 'A', map1orient: 'Vertical',
+    map2: null, map2orient: null,
+    maxTurns: 99,
+    firstPlayer: 'ge',
+    victory: 'ドイツ: M4を全て破壊 / アメリカ: ドイツ破壊またはM4が下側から突破',
+    specialRules: { noAmmoOut: true },
+    sides: {
+      ge: {
+        setup: 'enterBottom',
+        enterEdge: 'bottom',
+        units: [
+          { name:'Tiger I', col:0, row:0, dir:1 },
+        ]
+      },
+      us: {
+        setup: 'enterTop',
+        enterEdge: 'top',
+        units: [
+          { name:'M4A3', col:0, row:0, dir:4 },
+          { name:'M4A3', col:0, row:0, dir:4 },
+          { name:'M4A3', col:0, row:0, dir:4 },
+          { name:'M4A3', col:0, row:0, dir:4 },
+        ]
+      }
+    },
+    terrain: {}
+  },
 ];
 
 // --- 視認距離 ---
 // 戦車: 森5ヘクス, 他10ヘクス
-// それ以外: 20ヘクス
+// その他: 森10ヘクス, 他20ヘクス
 function getSpottingRange(observerType, targetTerrain) {
   if (observerType === 'tank') {
     return targetTerrain === 'forest' ? 5 : 10;
   }
-  return 20;
+  return targetTerrain === 'forest' ? 10 : 20;
 }
 
 function canSpot(observer, target, terrain) {
