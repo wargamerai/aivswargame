@@ -1492,7 +1492,26 @@ function aiCalcChaseFlags() {
   }
 }
 
-// ソ連: 待ち伏せ or 集団追撃
+// ドイツの3ターン先の予測位置を計算（移動力2、直進）
+function aiPredictEnemyPos(ge, turns) {
+  const geDb = UNIT_DB[ge.name];
+  const geMove = geDb ? geDb.move : 2;
+  const maxRow = state.mapMaxRow || 16;
+  const goingUp = (state.scenarioId === 'sc2');
+
+  // 3ターン分の移動を予測（直線的に脱出口へ向かう想定）
+  let predRow = ge.row;
+  for (let t = 0; t < turns; t++) {
+    if (goingUp) {
+      predRow = Math.max(1, predRow - geMove);
+    } else {
+      predRow = Math.min(maxRow, predRow + geMove);
+    }
+  }
+  return { col: ge.col, row: predRow };
+}
+
+// ソ連: 待ち伏せ or 先回り追撃
 function aiAmbushChaseMove(u, db, callback) {
   aiCalcChaseFlags();
 
@@ -1507,8 +1526,86 @@ function aiAmbushChaseMove(u, db, callback) {
     return;
   }
 
-  // 追撃: 全力で同じ目標の隣接へ
-  aiMoveStep(u, db, enemy, false, callback);
+  // 先回り目標: 敵の3ターン後の予測位置
+  const uDb = UNIT_DB[u.name];
+  const myMove = uDb ? uDb.move : 3;
+  const distToEnemy = hexDist(u.col, u.row, enemy.col, enemy.row);
+
+  // 敵の予測位置を計算（1~3ターン先）
+  // 自分の移動力で到達可能な最も先の予測位置を選択
+  let interceptTarget = enemy;
+  for (let t = 3; t >= 1; t--) {
+    const pred = aiPredictEnemyPos(enemy, t);
+    const distToPred = hexDist(u.col, u.row, pred.col, pred.row);
+    const turnsToReach = Math.ceil(Math.max(0, distToPred - 1) / myMove);
+    // 予測位置に敵より先に着けるなら先回り
+    if (turnsToReach <= t) {
+      interceptTarget = pred;
+      break;
+    }
+  }
+
+  // 現在地が既に先回り位置に近い（2ヘクス以内）なら待機
+  const distToIntercept = hexDist(u.col, u.row, interceptTarget.col, interceptTarget.row);
+  if (distToIntercept <= 1) {
+    callback();
+    return;
+  }
+
+  // 先回り地点への移動（aiMoveStepの代わりに直接目標指定）
+  aiMoveToward(u, db, interceptTarget, callback);
+}
+
+// 指定位置に向かって移動（先回り用）
+function aiMoveToward(u, db, target, callback) {
+  if (u.remainMove <= 0 || u.status === 'destroyed' || u.status === 'immobilized') {
+    callback();
+    return;
+  }
+
+  const distNow = hexDist(u.col, u.row, target.col, target.row);
+  if (distNow <= 1) { callback(); return; }
+
+  const neighbors = getNeighbors(u.col, u.row);
+  let bestDir = -1, bestScore = -Infinity;
+
+  for (let d = 0; d < 6; d++) {
+    const n = neighbors[d];
+    if (!n) continue;
+    const nd = hexDist(n.col, n.row, target.col, target.row);
+
+    const rotateCost = (db.type !== 'infantry' && !u.justEntered) ? getRotateCost(u.dir, d) : 0;
+    const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
+    let backwardExtra = 0;
+    if (db.type !== 'infantry' && !u.justEntered) {
+      const diff = ((d - u.dir) % 6 + 6) % 6;
+      const absDiff = Math.min(diff, 6 - diff);
+      if (absDiff >= 2) backwardExtra = 1;
+    }
+    const totalCost = rotateCost + terrainCost + backwardExtra;
+    if (totalCost > u.remainMove) continue;
+    if (!checkStacking(n.col, n.row, u)) continue;
+
+    let score = (distNow - nd) * 10;
+    score -= totalCost;
+    // 森を通れるなら安全（敵から見えにくい）
+    const nTerrain = state.terrain ? state.terrain[`${n.col},${n.row}`] : null;
+    if (nTerrain === 'forest' || nTerrain === 'building') score += 3;
+
+    if (score > bestScore) { bestScore = score; bestDir = d; }
+  }
+
+  if (bestDir < 0) { callback(); return; }
+
+  moveMode = 'moving';
+  const origAfterDf = afterDefensiveFire;
+  afterDefensiveFire = function(result) {
+    origAfterDf(result);
+    afterDefensiveFire = origAfterDf;
+    if (result === 'destroyed' || result === 'immobilized') { callback(); return; }
+    setTimeout(() => aiMoveToward(u, db, target, callback), 300);
+  };
+  handleMove(neighbors[bestDir].col, neighbors[bestDir].row);
 }
 
 function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
