@@ -654,8 +654,8 @@ function drawUnit(u) {
     // 戦車・対戦車砲は向きに合わせて画像を回転描画
     const shouldRotate = (db.type === 'tank' || db.type === 'atgun') && u.dir !== undefined;
     if (shouldRotate) {
-      // dir * 60° 刻みで時計回りに回転（ヘクスサイド準拠）
-      const rotAngle = u.dir * Math.PI / 3;
+      // hexNeighbor準拠: dir 0=右上,1=上,2=左上,3=左下,4=下,5=右下
+      const rotAngle = (1 - u.dir) * Math.PI / 3;
       ctx.rotate(rotAngle);
     }
 
@@ -676,7 +676,7 @@ function drawUnit(u) {
     }
 
     if (shouldRotate) {
-      ctx.rotate(-u.dir * Math.PI / 3); // 回転を戻す
+      ctx.rotate(-(1 - u.dir) * Math.PI / 3); // 回転を戻す
     }
   }
 
@@ -822,7 +822,8 @@ canvas.addEventListener('click', (e) => {
 });
 
 // 右クリックで方向メニュー表示
-const DIR_LABELS = ['上','右上','右下','下','左下','左上'];
+// hexNeighbor準拠: 0=右上, 1=上, 2=左上, 3=左下, 4=下, 5=右下
+const DIR_LABELS = ['右上','上','左上','左下','下','右下'];
 const dirMenu = document.getElementById('dirMenu');
 let dirMenuUnitIdx = -1;
 
@@ -1120,7 +1121,13 @@ window.addEventListener('message', (e) => {
       endPhase();
       break;
     case 'STATE_UPDATE':
-      if (e.data.units) state.units = e.data.units;
+      if (e.data.units) {
+        // iframeからのユニット更新時にdirを保持
+        const oldDirs = {};
+        state.units.forEach((u, i) => { if (u.dir !== undefined) oldDirs[i] = u.dir; });
+        state.units = e.data.units;
+        state.units.forEach((u, i) => { if (u.dir === undefined && oldDirs[i] !== undefined) u.dir = oldDirs[i]; });
+      }
       saveState();
       renderUnitList();
       draw();
