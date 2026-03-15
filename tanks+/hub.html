@@ -32,8 +32,8 @@ button.top-btn:hover { background:#556; }
 
 /* --- 左パネル（ユニット一覧） --- */
 #leftPanel {
-  width:150px; background:#1e1e28; border-right:1px solid #444;
-  overflow-y:auto; padding:4px; font-size:0.78em; flex:0 0 150px;
+  width:110px; background:#1e1e28; border-right:1px solid #444;
+  overflow-y:auto; padding:4px; font-size:0.78em; flex:0 0 110px;
 }
 #leftPanel h4 { color:#c8a020; margin:6px 0 4px; font-size:0.95em; }
 .unit-item {
@@ -53,8 +53,8 @@ button.top-btn:hover { background:#556; }
 
 /* --- 右パネル（iframe） --- */
 #rightPanel {
-  width:280px; background:#1a1a24; border-left:1px solid #444;
-  display:flex; flex-direction:column; flex:0 0 280px;
+  width:200px; background:#1a1a24; border-left:1px solid #444;
+  display:flex; flex-direction:column; flex:0 0 200px;
 }
 #rightPanel iframe {
   width:100%; flex:1; border:none; background:#f5f5fa;
@@ -83,6 +83,17 @@ button.top-btn:hover { background:#556; }
 #scenarioBox button { background:#c8a020; color:#000; font-weight:bold; cursor:pointer; border:none; }
 #scenarioBox button:hover { background:#dab030; }
 #scenarioBox label { display:block; margin:8px 0 4px; color:#aaa; font-size:0.9em; }
+
+/* --- 方向メニュー（右クリック） --- */
+#dirMenu {
+  display:none; position:fixed; z-index:300;
+  background:#2a2a34; border:2px solid #c8a020; border-radius:6px;
+  padding:4px 0; min-width:80px; box-shadow:0 4px 12px rgba(0,0,0,0.6);
+}
+#dirMenu div {
+  padding:5px 14px; cursor:pointer; font-size:0.9em; color:#ddd; white-space:nowrap;
+}
+#dirMenu div:hover { background:#445; color:#fff; }
 
 /* --- ログパネル --- */
 #gameLog {
@@ -114,6 +125,9 @@ button.top-btn:hover { background:#556; }
     <button class="top-btn" onclick="exportTerrain()" style="background:#364;color:#8f8">出力</button>
   </span>
 </div>
+
+<!-- 方向メニュー（右クリック） -->
+<div id="dirMenu"></div>
 
 <!-- メインエリア -->
 <div id="main">
@@ -403,7 +417,7 @@ function draw() {
       const corners = hexCorners(h.x, h.y);
       // 外側に黒い縁取り（視認性向上）
       ctx.strokeStyle = '#000';
-      ctx.lineWidth = 16;
+      ctx.lineWidth = 24;
       ctx.beginPath();
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
@@ -411,7 +425,7 @@ function draw() {
       ctx.stroke();
       // 内側に赤
       ctx.strokeStyle = '#ff0000';
-      ctx.lineWidth = 10;
+      ctx.lineWidth = 16;
       ctx.beginPath();
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
@@ -800,15 +814,22 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
-// 右クリックでユニットの向きを直接指定（クリック位置の方向に向く）
+// 右クリックで方向メニュー表示
+const DIR_LABELS = ['上','右上','右下','下','左下','左上'];
+const dirMenu = document.getElementById('dirMenu');
+let dirMenuUnitIdx = -1;
+
+function closeDirMenu() { dirMenu.style.display = 'none'; dirMenuUnitIdx = -1; }
+document.addEventListener('click', closeDirMenu);
+
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault();
+  closeDirMenu();
   if (!state) return;
   const rect = canvas.getBoundingClientRect();
   const mx = (e.clientX - rect.left - camX) / zoom;
   const my = (e.clientY - rect.top - camY) / zoom;
   const hex = pixelToHex(mx, my);
-  // そのヘクスのユニットを探す
   const idx = state.units.findIndex(u =>
     u.col === hex.col && u.row === hex.row && u.status !== 'destroyed'
   );
@@ -816,15 +837,31 @@ canvas.addEventListener('contextmenu', (e) => {
   const u = state.units[idx];
   const db = UNIT_DB[u.name];
   if (db && (db.type === 'infantry' || db.type === 'apc')) return;
-  // ヘクス中心からクリック位置への角度で6方向を決定（左クリックのsideDirと同じ方式）
-  const hc = hexCenter(hex.col, hex.row);
-  const clickAngle = Math.atan2(-(my - hc.y), mx - hc.x); // Y上向き（数学座標）
-  let newDir = Math.round(clickAngle / (Math.PI / 3));
-  if (newDir < 0) newDir += 6;
-  u.dir = newDir % 6;
+  dirMenuUnitIdx = idx;
   state.selectedUnit = idx;
-  draw();
-  renderUnitList();
+  // メニュー構築
+  dirMenu.innerHTML = '';
+  DIR_LABELS.forEach((label, d) => {
+    const item = document.createElement('div');
+    item.textContent = label;
+    if (u.dir === d) item.style.cssText = 'color:#c8a020;font-weight:bold';
+    item.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      state.units[dirMenuUnitIdx].dir = d;
+      closeDirMenu();
+      draw();
+      renderUnitList();
+    });
+    dirMenu.appendChild(item);
+  });
+  // 表示位置（画面端からはみ出さない調整）
+  let menuX = e.clientX, menuY = e.clientY;
+  dirMenu.style.display = 'block';
+  const mw = dirMenu.offsetWidth, mh = dirMenu.offsetHeight;
+  if (menuX + mw > window.innerWidth) menuX = window.innerWidth - mw - 4;
+  if (menuY + mh > window.innerHeight) menuY = window.innerHeight - mh - 4;
+  dirMenu.style.left = menuX + 'px';
+  dirMenu.style.top = menuY + 'px';
 });
 
 // ===== シナリオ選択 =====
