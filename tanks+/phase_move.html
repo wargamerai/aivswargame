@@ -81,6 +81,7 @@ button.danger { background:#cc3311; color:#fff; border-color:#aa2200; }
 
 <div class="controls">
   <button onclick="undoMove()" id="btnUndo" disabled>戻す</button>
+  <button onclick="stopMoving()" id="btnStopMove" disabled>移動終了</button>
   <button onclick="skipFacing()" id="btnSkipFace" disabled>向き変更なし</button>
   <button onclick="confirmUnit()" id="btnConfirm" class="action" disabled>確定</button>
   <button onclick="donePhase()" class="danger">フェーズ終了</button>
@@ -242,6 +243,7 @@ function updateUI() {
   }
 
   document.getElementById('btnUndo').disabled = (moveHistory.length === 0);
+  document.getElementById('btnStopMove').disabled = (selectedIdx < 0 || moveMode !== 'moving');
   document.getElementById('btnSkipFace').disabled = (moveMode !== 'facing');
   document.getElementById('btnConfirm').disabled = (selectedIdx < 0 || moveMode === 'moving');
 }
@@ -387,11 +389,27 @@ function handleFacing(col, row) {
     return;
   }
 
+  // 旋回コストチェック
+  const rotateCost = getRotateCost(u.dir, dir);
+  if (rotateCost > u.remainMove) {
+    log(`MP不足で旋回できません（旋回コスト${rotateCost}, 残りMP${u.remainMove}）`);
+    return;
+  }
+  u.remainMove -= rotateCost;
+
   u.dir = dir;
-  log(`${u.name}: 向き → ${DIR_LABELS[dir]}（確定ボタンで決定）`);
+  log(`${u.name}: 向き → ${DIR_LABELS[dir]}（旋回コスト${rotateCost}, 残りMP${u.remainMove}）（確定ボタンで決定）`);
   pushState();
   updateUI();
   parent.postMessage({ type:'HIGHLIGHT', unitIdx:selectedIdx }, '*');
+}
+
+function stopMoving() {
+  if (selectedIdx < 0 || moveMode !== 'moving') return;
+  const u = state.units[selectedIdx];
+  moveMode = 'facing';
+  log(`${u.name}: 移動終了 → 向きを指定してください（残りMP: ${u.remainMove}）`);
+  updateUI();
 }
 
 function skipFacing() {
@@ -475,6 +493,7 @@ function resolveDefensiveFire(movingUnit, movingIdx) {
 
   for (const enemy of enemies) {
     dfFirers[enemy.idx] = true;
+    state.units[enemy.idx].dfFired = true; // hub側ハイライト用
     const e = enemy.unit;
     const eDb = enemy.db;
     const ft = enemy.ft;
