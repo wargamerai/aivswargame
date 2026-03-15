@@ -146,40 +146,6 @@
             50% { transform: scale(1.05); }
             100% { opacity: 1; transform: scale(1); }
         }
-        .secret-btn .theater-btn {
-            border: 2px solid #333;
-            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-            color: #666;
-            text-shadow: none;
-        }
-        .secret-btn .theater-btn:hover {
-            border-left: 6px solid #444;
-            color: #999;
-        }
-        .secret-btn .theater-btn span {
-            color: #444;
-        }
-        .secret-title {
-            display: none;
-        }
-        .secret-btn.decoded .secret-cover {
-            display: none;
-        }
-        .secret-btn.decoded .secret-title {
-            display: inline;
-        }
-        .secret-btn.decoded .theater-btn {
-            border: 2px solid var(--border-color);
-            background: var(--btn-bg);
-            color: var(--text-main);
-        }
-        .secret-btn.decoded .theater-btn:hover {
-            color: var(--text-accent);
-            border-left: 6px solid var(--accent-red);
-        }
-        .secret-btn.decoded .theater-btn span {
-            color: #7b8084;
-        }
 
         /* サブメニュー（展開式） */
         .sub-menu {
@@ -458,26 +424,23 @@
 
         <!-- コナミコマンドで出現 -->
         <div class="secret-btn" id="secret-ijn">
-            <a href="ijn/campaign.html" class="theater-btn">
-                <span class="secret-cover">████████</span>
-                <span class="secret-title">連合艦隊</span>
-                <span><span class="secret-cover">CLASSIFIED - ACCESS GRANTED</span><span class="secret-title">Grand Fleet (IJN)</span></span>
+            <a href="ijn/campaign.html" class="theater-btn" data-title="連合艦隊" data-sub="Grand Fleet (IJN)">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
             </a>
         </div>
 
         <div class="secret-btn" id="secret-pf">
-            <a href="pf/campaign.html" class="theater-btn">
-                <span class="secret-cover">████████</span>
-                <span class="secret-title">太平洋艦隊</span>
-                <span><span class="secret-cover">CLASSIFIED - ACCESS GRANTED</span><span class="secret-title">Pacific Fleet (USN)</span></span>
+            <a href="pf/campaign.html" class="theater-btn" data-title="太平洋艦隊" data-sub="Pacific Fleet (USN)">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
             </a>
         </div>
 
         <div class="secret-btn" id="secret-tanks">
-            <a href="tanks+/hub.html" class="theater-btn">
-                <span class="secret-cover">████████</span>
-                <span class="secret-title">TANKS+</span>
-                <span><span class="secret-cover">CLASSIFIED - ACCESS GRANTED</span><span class="secret-title">Tactical Armor Combat</span></span>
+            <a href="tanks+/hub.html" class="theater-btn" data-title="TANKS+" data-sub="Tactical Armor Combat">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
             </a>
         </div>
     </div>
@@ -628,7 +591,13 @@
                     const secrets = document.querySelectorAll('.secret-btn');
                     secrets.forEach(el => el.classList.add('revealed'));
                     setTimeout(() => {
-                        secrets.forEach(el => el.classList.add('decoded'));
+                        secrets.forEach(el => {
+                            const btn = el.querySelector('.theater-btn');
+                            const title = btn.dataset.title;
+                            const sub = btn.dataset.sub;
+                            btn.childNodes[0].textContent = '\n                ' + title + '\n                ';
+                            btn.querySelector('span').textContent = sub;
+                        });
                     }, 800);
                     pos = 0;
                 }
