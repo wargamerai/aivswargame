@@ -173,6 +173,9 @@ function init(stateData) {
         canSpot(f, u, state.terrain || {})
       );
       if (!spotted) return;
+      u.hidden = false; // 視認成功 → 表返し
+      log(`${u.name} を視認！`);
+      parent.postMessage({ type:'STATE_UPDATE', units: state.units }, '*');
     }
     targets.push(i);
   });

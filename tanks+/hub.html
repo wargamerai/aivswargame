@@ -1336,7 +1336,7 @@ function startGame() {
         moved: false,
         ammoOut: false,
         gunDisabled: false,
-        hidden: (sd.setup === 'deploy'),
+        hidden: (sd.setup === 'deploy' || sd.setup === 'free'),
         isDummy: false,
         carrying: null,     // 輸送中の歩兵ID
         showWreck: true,
