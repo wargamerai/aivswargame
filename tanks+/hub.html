@@ -127,6 +127,7 @@ button.top-btn:hover { background:#556; }
   <span class="info" id="playerInfo"></span>
   <button class="top-btn" onclick="endPhase()">フェーズ終了</button>
   <button class="top-btn" id="arcBtn" onclick="toggleArc()">射界表示</button>
+  <button class="top-btn" id="fogBtn" onclick="toggleFog()">視認外非表示</button>
   <button class="top-btn" onclick="toggleDebug()" style="background:#030;color:#0f0">DBG</button>
   <span style="margin-left:20px;color:#888">|</span>
   <button class="top-btn" id="teBtn" onclick="toggleTerrainEdit()">地形編集</button>
@@ -265,6 +266,7 @@ const ctx = canvas.getContext('2d');
 let camX = 0, camY = 0, zoom = 0.4;
 let dragging = false, dragStartX = 0, dragStartY = 0;
 let showArc = false; // 射界表示モード
+let showFog = false; // 視認外の敵を非表示
 
 // ===== ヘクス定数（JPG画像に合わせてキャリブレーション） =====
 // MapA-Vertical: 3972x2860, 約24列×25行
@@ -520,6 +522,7 @@ function draw() {
     state.units.forEach((u, i) => {
       if (u.status === 'destroyed' && !u.showWreck) return;
       if (u.col < 1 || u.row < 1) return;
+      if (showFog && !isEnemyVisible(u)) return; // 視認外は非表示
       const key = `${u.col},${u.row}`;
       if (!hexGroups[key]) hexGroups[key] = [];
       hexGroups[key].push(i);
@@ -557,15 +560,15 @@ function draw() {
     ctx.moveTo(fCorners[0].x, fCorners[0].y);
     for (let i = 1; i < 6; i++) ctx.lineTo(fCorners[i].x, fCorners[i].y);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(255,0,0,0.35)';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.fill();
-    ctx.strokeStyle = '#f00';
+    ctx.strokeStyle = '#fff';
     ctx.lineWidth = 6;
     ctx.stroke();
-    // 矢印描画
+    // 矢印描画（白）
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
     const headLen = HEX_SIZE * 0.4;
-    ctx.strokeStyle = '#ff2200';
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 8;
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -573,7 +576,7 @@ function draw() {
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
     // 矢じり
-    ctx.fillStyle = '#ff2200';
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.moveTo(to.x, to.y);
     ctx.lineTo(to.x - headLen * Math.cos(angle - 0.4), to.y - headLen * Math.sin(angle - 0.4));
@@ -649,6 +652,24 @@ function toggleArc() {
   document.getElementById('arcBtn').style.background = showArc ? '#c8a020' : '';
   document.getElementById('arcBtn').style.color = showArc ? '#000' : '';
   draw();
+}
+
+function toggleFog() {
+  showFog = !showFog;
+  document.getElementById('fogBtn').style.background = showFog ? '#c8a020' : '';
+  document.getElementById('fogBtn').style.color = showFog ? '#000' : '';
+  draw();
+}
+
+// 敵ユニットが味方から視認可能か
+function isEnemyVisible(enemyUnit) {
+  if (!state || !state.playerSide) return true;
+  if (enemyUnit.side === state.playerSide) return true; // 味方は常に見える
+  // いずれかの味方ユニットが視認可能か
+  return state.units.some(f =>
+    f.side === state.playerSide && f.status !== 'destroyed' && f.col >= 1 &&
+    canSpot(f, enemyUnit, state.terrain || {})
+  );
 }
 
 // ===== 地形エディタ =====
@@ -893,12 +914,18 @@ function drawUnit(u, offsetX, offsetY, scale) {
 
   // 状態マーカー
   if (u.status === 'destroyed') {
-    ctx.strokeStyle = '#f00';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-sz, -sz); ctx.lineTo(sz, sz);
-    ctx.moveTo(sz, -sz); ctx.lineTo(-sz, sz);
-    ctx.stroke();
+    // 残骸表示: 暗くして煙マーク
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(-sz, -sz, sz*2, sz*2);
+    // 炎マーク
+    ctx.font = `${sz*0.9}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🔥', 0, 0);
+    // 「撃破」ラベル
+    ctx.font = `bold ${sz*0.35}px sans-serif`;
+    ctx.fillStyle = '#f44';
+    ctx.fillText('撃破', 0, sz*0.7);
   }
   if (u.status === 'immobilized') {
     ctx.strokeStyle = '#cc0';
@@ -1151,7 +1178,7 @@ function startGame() {
         hidden: (sd.setup === 'deploy'),
         isDummy: false,
         carrying: null,     // 輸送中の歩兵ID
-        showWreck: false,
+        showWreck: true,
       });
     }
   }

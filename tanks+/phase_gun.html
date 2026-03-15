@@ -157,15 +157,19 @@ function init(stateData) {
     firers.push(i);
   });
 
-  // 目標候補
+  // 目標候補（視認距離チェック: いずれかの味方が視認できる敵のみ）
   targets = [];
   state.units.forEach((u, i) => {
     if (u.side !== enemySide) return;
     if (u.status === 'destroyed') return;
     if (u.col < 1) return;
-    // 秘匿ユニットは視認できない（発見されたもののみ）
-    // 簡易: hiddenでないユニットのみ
     if (u.hidden) return;
+    // いずれかの味方ユニットが視認可能か
+    const spotted = state.units.some(f =>
+      f.side === activeSide && f.status !== 'destroyed' && f.col >= 1 &&
+      canSpot(f, u, state.terrain || {})
+    );
+    if (!spotted) return;
     targets.push(i);
   });
 
@@ -230,6 +234,7 @@ function updateShootInfo() {
   if (selectedFirer < 0 || selectedTarget < 0) {
     el.textContent = '射撃/目標を選択';
     btn.disabled = true;
+    parent.postMessage({ type:'DF_ARROW', arrow: null }, '*');
     return;
   }
 
@@ -237,6 +242,12 @@ function updateShootInfo() {
   const target = state.units[selectedTarget];
   const fDb = UNIT_DB[firer.name];
   const tDb = UNIT_DB[target.name];
+
+  // hub.htmlに射撃ライン表示
+  parent.postMessage({ type:'DF_ARROW', arrow: {
+    fromCol: firer.col, fromRow: firer.row,
+    toCol: target.col, toRow: target.row
+  }}, '*');
 
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
   const di = distKey(dist);
@@ -653,6 +664,7 @@ function pushState() {
 
 function donePhase() {
   log('--- 射撃フェーズ終了 ---');
+  parent.postMessage({ type:'DF_ARROW', arrow: null }, '*');
   pushState();
   parent.postMessage({ type:'PHASE_DONE' }, '*');
 }

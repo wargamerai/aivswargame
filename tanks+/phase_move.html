@@ -459,6 +459,9 @@ function startDefensiveFire(movingUnit, movingIdx) {
     }
     if (!hasLOS(e.col, e.row, movingUnit.col, movingUnit.row)) return;
 
+    // 視認距離チェック
+    if (!canSpot(e, movingUnit, state.terrain || {})) return;
+
     dfQueue.push({ idx: ei, unit: e, db: eDb, dist, ft });
   });
 
