@@ -313,6 +313,7 @@ function handleMove(col, row) {
     // 破壊された
     moveMode = 'idle';
     selectedIdx = -1;
+    pushState();
     renderCards();
     updateUI();
     parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
@@ -322,6 +323,7 @@ function handleMove(col, row) {
     // 移動不能 → 向き指定へ
     u.remainMove = 0;
     moveMode = 'facing';
+    pushState();
     renderCards();
     updateUI();
     return;
