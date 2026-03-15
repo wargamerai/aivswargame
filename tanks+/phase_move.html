@@ -368,7 +368,7 @@ function handleMove(col, row) {
   }
 
   // 地形コスト
-  const terrainCost = getTerrainCost(col, row);
+  const terrainCost = getTerrainCost(col, row, u.col, u.row);
 
   // 後退判定: 移動方向が後方3方向（120°/180°/240°）
   let backwardExtra = 0;
@@ -474,9 +474,14 @@ function getRotateCost(currentDir, targetDir) {
 }
 
 // ===== 地形コスト =====
-function getTerrainCost(col, row) {
+function getTerrainCost(col, row, fromCol, fromRow) {
   const key = `${col},${row}`;
   const t = state.terrain[key];
+  // 丘→丘は同じ高さなのでコスト1
+  if (t === 'slope' && fromCol !== undefined) {
+    const fromT = state.terrain[`${fromCol},${fromRow}`];
+    if (fromT === 'slope') return 1;
+  }
   return TERRAIN_COST[t] || 1;
 }
 
@@ -1054,7 +1059,7 @@ function aiMoveStep(u, db, targetEnemy, callback) {
     if (nd >= distNow) continue; // 接近しないなら無視
 
     const rotateCost = db.type !== 'infantry' ? getRotateCost(u.dir, d) : 0;
-    const terrainCost = getTerrainCost(n.col, n.row);
+    const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
     let backwardExtra = 0;
     if (db.type !== 'infantry') {
       const diff = ((d - u.dir) % 6 + 6) % 6;
