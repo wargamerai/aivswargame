@@ -313,7 +313,7 @@ function handlePlacement(col, row) {
   }
 
   // 地形コスト
-  const terrainCost = db.type === 'infantry' ? 1 : getTerrainCost(col, row);
+  const terrainCost = getTerrainCost(col, row);
   if (u.remainMove < terrainCost) {
     log(`MP不足（必要:${terrainCost}, 残り:${u.remainMove}）`);
     return;
@@ -368,7 +368,7 @@ function handleMove(col, row) {
   }
 
   // 地形コスト
-  const terrainCost = db.type === 'infantry' ? 1 : getTerrainCost(col, row);
+  const terrainCost = getTerrainCost(col, row);
 
   // 後退判定: 移動方向が後方3方向（120°/180°/240°）
   let backwardExtra = 0;
@@ -989,7 +989,7 @@ function aiPlaceUnit(u, db, callback) {
   // スタック可能かつMP足りるヘクスをフィルタ
   const valid = candidates.filter(h => {
     if (!checkStacking(h.col, h.row, u)) return false;
-    const cost = db.type === 'infantry' ? 1 : getTerrainCost(h.col, h.row);
+    const cost = getTerrainCost(h.col, h.row);
     return u.remainMove >= cost;
   });
 
@@ -1048,7 +1048,7 @@ function aiMoveStep(u, db, targetEnemy, callback) {
     if (nd >= distNow) continue; // 接近しないなら無視
 
     const rotateCost = db.type !== 'infantry' ? getRotateCost(u.dir, d) : 0;
-    const terrainCost = db.type === 'infantry' ? 1 : getTerrainCost(n.col, n.row);
+    const terrainCost = getTerrainCost(n.col, n.row);
     let backwardExtra = 0;
     if (db.type !== 'infantry') {
       const diff = ((d - u.dir) % 6 + 6) % 6;
