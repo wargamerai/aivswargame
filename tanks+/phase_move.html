@@ -288,11 +288,12 @@ function handleMove(col, row) {
   // 地形コスト
   const terrainCost = db.type === 'infantry' ? 1 : getTerrainCost(col, row);
 
-  // 後退判定: 移動方向が後方3方向
+  // 後退判定: 移動方向が後方3方向（120°/180°/240°）
   let backwardExtra = 0;
   if (db.type !== 'infantry') {
     const diff = ((moveDir - u.dir) % 6 + 6) % 6;
-    if (diff >= 3 && diff <= 5) { // dir+3, dir+4, dir+5 が後方
+    const absDiff = Math.min(diff, 6 - diff); // 最短角度差
+    if (absDiff >= 2) { // 120°以上 = 後方（diff 2,3,4）
       backwardExtra = 1;
     }
   }
