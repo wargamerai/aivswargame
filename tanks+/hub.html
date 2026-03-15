@@ -32,8 +32,8 @@ button.top-btn:hover { background:#556; }
 
 /* --- 左パネル（ユニット一覧） --- */
 #leftPanel {
-  width:200px; background:#1e1e28; border-right:1px solid #444;
-  overflow-y:auto; padding:6px; font-size:0.82em; flex:0 0 200px;
+  width:150px; background:#1e1e28; border-right:1px solid #444;
+  overflow-y:auto; padding:4px; font-size:0.78em; flex:0 0 150px;
 }
 #leftPanel h4 { color:#c8a020; margin:6px 0 4px; font-size:0.95em; }
 .unit-item {
@@ -53,8 +53,8 @@ button.top-btn:hover { background:#556; }
 
 /* --- 右パネル（iframe） --- */
 #rightPanel {
-  width:380px; background:#1a1a24; border-left:1px solid #444;
-  display:flex; flex-direction:column; flex:0 0 380px;
+  width:280px; background:#1a1a24; border-left:1px solid #444;
+  display:flex; flex-direction:column; flex:0 0 280px;
 }
 #rightPanel iframe {
   width:100%; flex:1; border:none; background:#f5f5fa;
@@ -155,6 +155,21 @@ let state = null;
 let mapImg1 = null, mapImg2 = null;
 let mapLoaded = 0;
 
+// ユニット画像キャッシュ
+const unitImages = {};
+function preloadUnitImages() {
+  const loaded = {};
+  for (const name in UNIT_DB) {
+    const imgFile = UNIT_DB[name].img;
+    if (imgFile && !loaded[imgFile]) {
+      loaded[imgFile] = true;
+      const img = new Image();
+      img.src = 'images/' + imgFile;
+      unitImages[imgFile] = img;
+    }
+  }
+}
+
 // Canvas
 const canvas = document.getElementById('mapCanvas');
 const ctx = canvas.getContext('2d');
@@ -216,19 +231,14 @@ function hexDist(c1, r1, c2, r2) {
   return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs((a.q + a.r) - (b.q + b.r)));
 }
 
-// 6方向（flat-top hex）: 1=NE, 2=N(未使用), 3=NW, 4=SW, 5=S(未使用), 6=SE
-// flat-topで使う6方向: 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE
-const DIR_LABELS = ['東','北東','北西','西','南西','南東'];
+// flat-top hex、even-q offset（偶数列が下にずれる）
+// 6方向: 0=NE(30°), 1=N(90°), 2=NW(150°), 3=SW(210°), 4=S(270°), 5=SE(330°)
+const DIR_LABELS = ['北東','北','北西','南西','南','南東'];
 function hexNeighbor(col, row, dir) {
-  const odd = (col % 2 === 1);
-  const deltas = odd ?
-    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]] :  // 奇数列
-    [[1,1],[1,0],[0,-1],[-1,0],[-1,-1],[0,1]];    // 偶数列（未確定）
-  // flat-top: dir 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE
-  const even = !odd;
+  const even = (col % 2 === 0);
   const neighbors = even ?
-    [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[0,1]] :
-    [[1,1],[1,0],[0,-1],[-1,0],[-1,1],[0,1]];
+    [[1,0],[0,-1],[-1,0],[-1,1],[0,1],[1,1]] :   // 偶数列（下にずれ）
+    [[1,-1],[0,-1],[-1,-1],[-1,0],[0,1],[1,0]];  // 奇数列（ずれなし）
   const d = neighbors[dir];
   if (!d) return null;
   return { col: col + d[0], row: row + d[1] };
@@ -261,9 +271,13 @@ function nearestHexSide(px, py) {
   return { key, v1: corners[bestDir], v2: corners[j] };
 }
 
-// 向き矢印の角度（flat-top）: dir 0=E(0°), 1=NE(60°), 2=NW(120°), 3=W(180°), 4=SW(240°), 5=SE(300°)
+// 向き角度（flat-top）: dir 0=E(0°), 1=NE(60°), 2=NW(120°), 3=W(180°), 4=SW(240°), 5=SE(300°)
 function dirAngle(dir) {
   return dir * 60 * Math.PI / 180;
+}
+// 矢印描画用: ヘクスサイド方向（+30°オフセット）
+function dirArrowAngle(dir) {
+  return (dir * 60 + 30) * Math.PI / 180;
 }
 
 // ===== 描画 =====
@@ -313,7 +327,7 @@ function draw() {
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
       ctx.closePath();
-      if (t === 'forest') { ctx.fillStyle = 'rgba(34,120,34,0.4)'; }
+      if (t === 'forest') { continue; }
       else if (t === 'building') { ctx.fillStyle = 'rgba(140,100,60,0.5)'; }
       else if (t === 'slope') { ctx.fillStyle = 'rgba(160,140,80,0.3)'; }
       else { ctx.fillStyle = 'rgba(100,100,100,0.2)'; }
@@ -476,8 +490,34 @@ function isInFixedArc(unit, tc, tr) {
   return Math.abs(diff) <= Math.PI / 3 + 0.05; // 境界ヘクスを含める余裕
 }
 
+// 地形が遮蔽物かどうか
+function isBlockingTerrain(col, row) {
+  if (!state || !state.terrain) return false;
+  const t = state.terrain[`${col},${row}`];
+  return t === 'forest' || t === 'building' || t === 'slope';
+}
+
+// ピクセル座標から最も近い2つのヘクスを返す（ヘクスサイド判定用）
+function pixelToHexTwo(px, py) {
+  let best1 = null, best2 = null, d1 = Infinity, d2 = Infinity;
+  for (let c = 1; c <= 48; c++) {
+    for (let r = 1; r <= 30; r++) {
+      const h = hexCenter(c, r);
+      const d = (px - h.x) ** 2 + (py - h.y) ** 2;
+      if (d < d1) {
+        best2 = best1; d2 = d1;
+        best1 = { col: c, row: r }; d1 = d;
+      } else if (d < d2) {
+        best2 = { col: c, row: r }; d2 = d;
+      }
+    }
+  }
+  return { hex1: best1, hex2: best2, dist1: d1, dist2: d2 };
+}
+
 // 視線判定（LOS）: ユニットからターゲットまでの間に遮蔽物があるか
 // 遮蔽物: forest, building, slope（丘）
+// ヘクスサイド並行: 境界上の点は両側のヘクスを確認、両方遮蔽物の場合のみ遮断
 function hasLOS(fromCol, fromRow, toCol, toRow) {
   if (!state || !state.terrain) return true;
   const h1 = hexCenter(fromCol, fromRow);
@@ -487,16 +527,31 @@ function hasLOS(fromCol, fromRow, toCol, toRow) {
 
   // 始点→終点の線上のヘクスをサンプリング
   // 途中のヘクス（始点・終点を除く）に遮蔽物があればLOS遮断
-  for (let step = 1; step < dist; step++) {
-    const t = step / dist;
+  const steps = dist * 2; // 細かくサンプリング
+  for (let step = 1; step < steps; step++) {
+    const t = step / steps;
     const px = h1.x + (h2.x - h1.x) * t;
     const py = h1.y + (h2.y - h1.y) * t;
-    const mid = pixelToHex(px, py);
+    const result = pixelToHexTwo(px, py);
+    const m1 = result.hex1;
+    const m2 = result.hex2;
     // 始点・終点自体はスキップ
-    if (mid.col === fromCol && mid.row === fromRow) continue;
-    if (mid.col === toCol && mid.row === toRow) continue;
-    const terrain = state.terrain[`${mid.col},${mid.row}`];
-    if (terrain === 'forest' || terrain === 'building' || terrain === 'slope') return false;
+    if (m1.col === fromCol && m1.row === fromRow) continue;
+    if (m1.col === toCol && m1.row === toRow) continue;
+
+    // ヘクスサイド上（2つのヘクスにほぼ等距離）かどうか判定
+    const onHexside = result.dist2 < result.dist1 * 1.05;
+    if (onHexside) {
+      // ヘクスサイド並行: 両方が遮蔽物の場合のみ遮断
+      const skip2 = (m2.col === fromCol && m2.row === fromRow) ||
+                     (m2.col === toCol && m2.row === toRow);
+      if (isBlockingTerrain(m1.col, m1.row) && (skip2 || isBlockingTerrain(m2.col, m2.row))) {
+        return false;
+      }
+    } else {
+      // 明確にヘクス内を通過: そのヘクスの遮蔽物で遮断
+      if (isBlockingTerrain(m1.col, m1.row)) return false;
+    }
   }
   return true;
 }
@@ -561,7 +616,7 @@ function drawUnit(u) {
   ctx.save();
   ctx.translate(h.x, h.y);
 
-  // 背景形状
+  // 背景形状 or 画像
   if (u.hidden) {
     // 秘匿: グレー四角
     ctx.fillStyle = '#666';
@@ -573,18 +628,31 @@ function drawUnit(u) {
     ctx.font = `${sz*0.6}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText('?', 0, sz*0.2);
-  } else if (db.type === 'tank' || db.type === 'apc') {
-    // 戦車/APC: 四角+向き矢印
-    ctx.fillStyle = nc.fill;
-    ctx.fillRect(-sz, -sz*0.7, sz*2, sz*1.4);
-    ctx.strokeStyle = nc.stroke;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(-sz, -sz*0.7, sz*2, sz*1.4);
-    // 向き矢印
+  } else {
+    const img = db.img ? unitImages[db.img] : null;
+    if (img && img.complete && img.naturalWidth > 0) {
+      // PNG画像を描画（回転なし）
+      ctx.drawImage(img, -sz, -sz, sz*2, sz*2);
+    } else {
+      // フォールバック: 色付き四角
+      ctx.fillStyle = nc.fill;
+      ctx.fillRect(-sz, -sz*0.7, sz*2, sz*1.4);
+      ctx.strokeStyle = nc.stroke;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-sz, -sz*0.7, sz*2, sz*1.4);
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${sz*0.4}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(u.name.substring(0, 8), 0, sz*0.15);
+    }
+
+    // 向き矢印オーバーレイ（全ユニットタイプ共通）
     if (u.dir !== undefined) {
-      const angle = dirAngle(u.dir);
-      const ax = Math.cos(angle) * sz * 1.2;
-      const ay = -Math.sin(angle) * sz * 1.2;
+      const angle = dirArrowAngle(u.dir);
+      const arrowLen = sz * 1.3;
+      const ax = Math.cos(angle) * arrowLen;
+      const ay = -Math.sin(angle) * arrowLen;
+      // 矢印の線
       ctx.strokeStyle = '#ff0';
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -602,52 +670,6 @@ function drawUnit(u) {
       ctx.lineTo(ax + Math.cos(a2)*headLen, ay - Math.sin(a2)*headLen);
       ctx.stroke();
     }
-    // 名前
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${sz*0.45}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(u.name.substring(0, 8), 0, sz*0.15);
-  } else if (db.type === 'infantry') {
-    // 歩兵: 円
-    ctx.fillStyle = nc.fill;
-    ctx.beginPath();
-    ctx.arc(0, 0, sz*0.8, 0, Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle = nc.stroke;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${sz*0.4}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText('歩', 0, sz*0.15);
-  } else if (db.type === 'atgun') {
-    // 対戦車砲: 三角
-    ctx.fillStyle = nc.fill;
-    ctx.beginPath();
-    ctx.moveTo(0, -sz*0.9);
-    ctx.lineTo(sz*0.8, sz*0.6);
-    ctx.lineTo(-sz*0.8, sz*0.6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = nc.stroke;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    // 向き矢印
-    if (u.dir !== undefined) {
-      const angle = dirAngle(u.dir);
-      const ax = Math.cos(angle) * sz;
-      const ay = -Math.sin(angle) * sz;
-      ctx.strokeStyle = '#ff0';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(ax, ay);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${sz*0.35}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(u.name.substring(0, 6), 0, sz*0.15);
   }
 
   // 状態マーカー
@@ -859,6 +881,7 @@ function startGame() {
 
   // 地図画像ロード
   loadMaps();
+  preloadUnitImages();
 
   // UI更新
   document.getElementById('scenarioScreen').style.display = 'none';
