@@ -1191,7 +1191,8 @@ function updateSideSelect() {
   sel.innerHTML = '';
   sel.innerHTML = `<option value="side1">先攻 ${n1}</option>` +
     `<option value="side2">後攻 ${n2}</option>` +
-    `<option value="hotseat">ホットシート（両方手動）</option>`;
+    `<option value="hotseat">ホットシート（両方手動）</option>` +
+    `<option value="watch">AI観戦（両方AI）</option>`;
 }
 
 // コナミコマンド: ↑↑↓↓←→←→BA で隠しシナリオ解放
@@ -1236,6 +1237,7 @@ function startGame() {
   let playerSide = null;
   if (sideChoice === 'side1') playerSide = side1;
   else if (sideChoice === 'side2') playerSide = side2;
+  else if (sideChoice === 'watch') playerSide = 'watch';
   else playerSide = 'hotseat';
 
   // ユニット生成
@@ -1359,6 +1361,7 @@ function updateTopbar() {
 
 function isPlayerPhase() {
   if (state.playerSide === 'hotseat') return true;
+  if (state.playerSide === 'watch') return false;
   return getActiveSide(state.phase) === state.playerSide;
 }
 
@@ -1372,8 +1375,9 @@ function loadPhase() {
   frame.onload = () => {
     // file://ではlocalStorageが共有されないため、postMessageでstateを直接渡す
     if (frame.contentWindow) {
-      dbg(`→iframe INIT_STATE (${state.units.length}units)`);
-      frame.contentWindow.postMessage({ type:'INIT_STATE', state: JSON.parse(JSON.stringify(state)) }, '*');
+      const aiFlag = !isPlayerPhase();
+      dbg(`→iframe INIT_STATE (${state.units.length}units) isAI=${aiFlag}`);
+      frame.contentWindow.postMessage({ type:'INIT_STATE', state: JSON.parse(JSON.stringify(state)), isAI: aiFlag }, '*');
     }
   };
   frame.src = `${file}?phase=${phase}`;

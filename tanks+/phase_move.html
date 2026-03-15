@@ -126,7 +126,7 @@ function init(stateData) {
   const params = new URLSearchParams(window.location.search);
   phase = params.get('phase') || 'mv1';
 
-  if (stateData) {
+  if (stateData && stateData.units) {
     state = stateData;
     console.log('[phase_move] INIT_STATEからstate受信', state.units.length, 'units');
   } else {
