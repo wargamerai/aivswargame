@@ -588,9 +588,10 @@ function hexCenter(col, row) {
 
 function hexNeighbor(col, row, dir) {
   const even = (col % 2 === 0);
+  // hub.htmlと同じテーブル（flat-top, even-q offset）
   const neighbors = even ?
-    [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[0,1]] :
-    [[1,1],[1,0],[0,-1],[-1,0],[-1,1],[0,1]];
+    [[1,0],[0,-1],[-1,0],[-1,1],[0,1],[1,1]] :   // 偶数列（下にずれ）
+    [[1,-1],[0,-1],[-1,-1],[-1,0],[0,1],[1,0]];  // 奇数列（ずれなし）
   const d = neighbors[dir];
   if (!d) return null;
   const nc = col + d[0];

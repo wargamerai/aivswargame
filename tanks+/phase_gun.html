@@ -623,10 +623,10 @@ function hexCenter(col, row) {
 }
 
 function hexNeighbor(col, row, dir) {
-  const odd = (col % 2 === 1);
+  // hub.htmlと同じテーブル（flat-top, even-q offset）
   const neighbors = (col % 2 === 0) ?
-    [[1,0],[1,-1],[0,-1],[-1,-1],[-1,0],[0,1]] :
-    [[1,1],[1,0],[0,-1],[-1,0],[-1,1],[0,1]];
+    [[1,0],[0,-1],[-1,0],[-1,1],[0,1],[1,1]] :   // 偶数列（下にずれ）
+    [[1,-1],[0,-1],[-1,-1],[-1,0],[0,1],[1,0]];  // 奇数列（ずれなし）
   const d = neighbors[dir];
   if (!d) return null;
   return { col: col + d[0], row: row + d[1] };
