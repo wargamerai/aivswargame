@@ -205,6 +205,26 @@ const MAP_TERRAIN = {
     '22,13':'forest', '22,14':'forest', '23,14':'forest',
     '23,15':'forest', '24,14':'forest',
   },
+  B: {
+    '3,9':'forest', '3,10':'forest', '4,8':'forest', '4,9':'forest',
+    '4,10':'forest', '5,9':'forest', '5,10':'forest', '5,11':'forest',
+    '6,10':'forest', '6,11':'forest', '6,12':'forest',
+    '7,11':'forest', '7,12':'forest',
+    '19,3':'slope', '19,4':'slope', '19,5':'slope', '19,6':'slope',
+    '20,2':'slope', '20,3':'slope', '20,4':'slope', '20,5':'slope', '20,6':'slope',
+    '21,3':'slope', '21,4':'slope', '21,5':'building', '21,6':'slope', '21,7':'slope',
+    '22,3':'slope', '22,4':'building', '22,5':'slope', '22,6':'slope',
+    '23,3':'slope', '23,4':'slope', '23,5':'slope', '23,6':'slope',
+    '24,5':'slope',
+  },
+};
+
+const MAP_HEXSIDE_TERRAIN = {
+  B: {
+    '6,4-6,5':'bocage', '6,5-7,5':'bocage', '7,5-7,6':'bocage',
+    '7,5-8,5':'bocage', '8,4-8,5':'bocage', '8,5-9,5':'bocage',
+    '9,5-9,6':'bocage',
+  },
 };
 
 // --- シナリオ ---
@@ -350,7 +370,8 @@ const SCENARIOS = [
         ]
       }
     },
-    terrain: {}
+    terrain: MAP_TERRAIN.B,
+    hexsideTerrain: MAP_HEXSIDE_TERRAIN.B
   },
   // シナリオ4: フューリー（隠し）
   {
