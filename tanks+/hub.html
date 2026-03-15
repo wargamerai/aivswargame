@@ -865,7 +865,7 @@ function drawUnit(u, offsetX, offsetY, scale) {
   if (!db) return;
   const nc = NATION_COLORS[db.nation] || { fill:'#888', stroke:'#444' };
   const h = hexCenter(u.col, u.row);
-  const sz = HEX_SIZE * 0.55 * scale;
+  const sz = HEX_SIZE * 0.65 * scale;
 
   ctx.save();
   ctx.translate(h.x + offsetX, h.y + offsetY);
@@ -912,27 +912,29 @@ function drawUnit(u, offsetX, offsetY, scale) {
     }
   }
 
-  // 状態マーカー
-  if (u.status === 'destroyed') {
-    // 残骸表示: 暗くして煙マーク
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(-sz, -sz, sz*2, sz*2);
-    // 炎マーク
-    ctx.font = `${sz*0.9}px sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🔥', 0, 0);
-    // 「撃破」ラベル
-    ctx.font = `bold ${sz*0.35}px sans-serif`;
-    ctx.fillStyle = '#f44';
-    ctx.fillText('撃破', 0, sz*0.7);
-  }
-  if (u.status === 'immobilized') {
-    ctx.strokeStyle = '#cc0';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([4,4]);
-    ctx.strokeRect(-sz*1.1, -sz*0.9, sz*2.2, sz*1.8);
-    ctx.setLineDash([]);
+  // 状態マーカー（ラベルをずらして重ならないように）
+  {
+    const labels = [];
+    if (u.status === 'destroyed') labels.push({ text:'撃破', color:'#f44' });
+    if (u.status === 'immobilized') labels.push({ text:'移動不能', color:'#cc0' });
+    if (u.gunDisabled) labels.push({ text:'射撃不能', color:'#88f' });
+
+    if (labels.length > 0) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const fontSize = sz * 0.45;
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      for (let li = 0; li < labels.length; li++) {
+        const ly = -sz * 0.3 + li * fontSize * 1.3;
+        // 背景
+        const tw = ctx.measureText(labels[li].text).width;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(-tw/2 - 4, ly - fontSize*0.5, tw + 8, fontSize * 1.1);
+        // テキスト
+        ctx.fillStyle = labels[li].color;
+        ctx.fillText(labels[li].text, 0, ly);
+      }
+    }
   }
   if (u.fired) {
     ctx.fillStyle = 'rgba(255,100,0,0.5)';
