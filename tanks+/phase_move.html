@@ -289,6 +289,45 @@ function handleMapSelect(col, row, side, unitIdx) {
   }
 }
 
+// ===== 視認チェック =====
+// 移動/配置のたびに双方向で隠匿ユニットの視認判定
+function checkSpotting(movedUnit) {
+  let revealed = false;
+
+  // 1) 移動した側から敵の隠匿ユニットを発見
+  for (const target of state.units) {
+    if (target.side === movedUnit.side || !target.hidden) continue;
+    if (target.status === 'destroyed' || target.col < 1) continue;
+    const spotted = state.units.some(f =>
+      f.side === movedUnit.side && f.status !== 'destroyed' && f.col >= 1 &&
+      canSpot(f, target, state.terrain || {})
+    );
+    if (spotted) {
+      target.hidden = false;
+      log(`${target.name} を視認！`);
+      revealed = true;
+    }
+  }
+
+  // 2) 移動したユニット自身が隠匿なら、敵から視認されるかチェック
+  if (movedUnit.hidden && movedUnit.col >= 1) {
+    const enemySide = movedUnit.side === state.side1 ? state.side2 : state.side1;
+    const spotted = state.units.some(f =>
+      f.side === enemySide && f.status !== 'destroyed' && f.col >= 1 &&
+      canSpot(f, movedUnit, state.terrain || {})
+    );
+    if (spotted) {
+      movedUnit.hidden = false;
+      log(`${movedUnit.name} が敵に視認された！`);
+      revealed = true;
+    }
+  }
+
+  if (revealed) {
+    parent.postMessage({ type:'STATE_UPDATE', units: state.units }, '*');
+  }
+}
+
 // ===== 配置処理 =====
 function handlePlacement(col, row) {
   if (selectedIdx < 0) return;
@@ -336,6 +375,9 @@ function handlePlacement(col, row) {
   log(`${u.name}: (${col},${row})に配置 [コスト${terrainCost}, 残りMP:${u.remainMove}]`);
 
   pushState();
+
+  // 配置先で隠匿敵ユニットの視認チェック
+  checkSpotting(u);
 
   if (u.remainMove > 0 && db.type !== 'atgun') {
     moveMode = 'moving';
@@ -413,6 +455,10 @@ function handleMove(col, row) {
 
   pushState();
   sendMovePath();
+
+  // 移動先で隠匿敵ユニットの視認チェック
+  checkSpotting(u);
+
   renderCards();
 
   // 防御射撃判定（非同期ステップ実行）
