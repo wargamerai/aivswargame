@@ -846,18 +846,19 @@ function aiFindBestTarget(firerIdx) {
     if (!canFireAt(firer, target)) continue;
     if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
 
-    const pen = ft[0];
-    const hitNum = ft[1];
+    // 撃破率を計算
     const frontHit = isHittingFrontArmor(firer, target);
-    const armor = tDb.armor - (frontHit ? 0 : 2);
-    const penDiff = pen - Math.max(0, armor);
+    const chance = calcKillChance(firer.name, target.name, dist, frontHit);
 
-    // スコア: 命中数が高く、貫通差が大きく、距離が近いほど高い
-    let score = hitNum * 2 + penDiff * 3 - dist;
-    // 装甲が低い敵を優先（弱い＝倒しやすい）
-    score += (10 - Math.max(0, tDb.armor)) * 2;
+    // 撃破率が低すぎたら撃たない（弾薬温存）― 移動不能の敵はトドメなので除外
+    if (chance.kill < 0.02 && target.status !== 'immobilized') continue;
+
+    // スコア: 撃破率ベース
+    let score = chance.kill * 100;
     // 移動不能の敵を優先（トドメ）
-    if (target.status === 'immobilized') score += 5;
+    if (target.status === 'immobilized') score += 20;
+    // 距離が近い敵を優先
+    score -= dist;
 
     if (score > bestScore) { bestScore = score; bestIdx = ti; }
   }

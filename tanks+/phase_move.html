@@ -1115,17 +1115,35 @@ function aiDoMovement(u, db, callback) {
   if (!enemy) { callback(); return; }
 
   const distToEnemy = hexDist(u.col, u.row, enemy.col, enemy.row);
-  const effectiveRange = aiGetEffectiveRange(u);
-  const outgunned = aiIsOutgunned(u);
+  const eDb = UNIT_DB[enemy.name];
 
-  // 射撃可能な位置にいるなら停止判断、そうでなければ移動続行
+  // 各距離での撃破率を比較して最適距離を決定
+  const myChances = [];
+  const enemyChances = [];
+  for (let d = 1; d <= 12; d++) {
+    myChances[d] = calcKillChance(u.name, enemy.name, d, true);
+    enemyChances[d] = eDb ? calcKillChance(enemy.name, u.name, d, true) : { kill: 0 };
+  }
+
+  // 最適距離: 自分の撃破率が敵の撃破率を最も上回る距離
+  let bestDist = 3, bestValue = -Infinity;
+  for (let d = 1; d <= 12; d++) {
+    const value = myChances[d].kill - enemyChances[d].kill;
+    if (value > bestValue) { bestValue = value; bestDist = d; }
+  }
+
+  // 弱いユニット（装甲3以下）は囮役: とにかく接近して防御射撃を引きつける
+  const isDecoy = db.armor <= 3 && db.type === 'tank';
+  const targetDist = isDecoy ? 1 : bestDist;
+
+  // 射撃可能な位置にいるなら停止判断
   const canEngage = aiCanEngageAny(u);
-  const stopDist = outgunned ? 3 : effectiveRange;
-  if (canEngage && distToEnemy <= stopDist && distToEnemy >= 2) {
+  if (canEngage && distToEnemy <= targetDist + 1 && distToEnemy >= (isDecoy ? 1 : 2)) {
     callback();
     return;
   }
 
+  const outgunned = aiIsOutgunned(u);
   aiMoveStep(u, db, enemy, outgunned, callback);
 }
 
@@ -1136,11 +1154,22 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
   }
 
   const distNow = hexDist(u.col, u.row, targetEnemy.col, targetEnemy.row);
-  const stopDist = outgunned ? 3 : aiGetEffectiveRange(u);
-  // 射撃可能な位置にいるときだけ停止
-  if (aiCanEngageAny(u) && distNow <= stopDist && distNow >= 2) {
-    callback();
-    return;
+  const isDecoy = db.armor <= 3 && db.type === 'tank';
+
+  // 囮は距離1まで突っ込む、それ以外は最適距離で停止
+  if (!isDecoy) {
+    const eDb = UNIT_DB[targetEnemy.name];
+    let bestDist = 3, bestValue = -Infinity;
+    for (let d = 1; d <= 12; d++) {
+      const my = calcKillChance(u.name, targetEnemy.name, d, true);
+      const en = eDb ? calcKillChance(targetEnemy.name, u.name, d, true) : { kill: 0 };
+      const value = my.kill - en.kill;
+      if (value > bestValue) { bestValue = value; bestDist = d; }
+    }
+    if (aiCanEngageAny(u) && distNow <= bestDist + 1 && distNow >= 2) {
+      callback();
+      return;
+    }
   }
 
   // 隣接ヘクスをスコアリングで評価
@@ -1165,9 +1194,14 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
     if (totalCost > u.remainMove) continue;
     if (!checkStacking(n.col, n.row, u)) continue;
 
-    // 迂回は敵距離+2まで許容（劣勢時のみ）
-    if (!outgunned && nd >= distNow) continue;
-    if (outgunned && nd > distNow + 2) continue;
+    // 囮は常に接近、それ以外は迂回許容
+    if (isDecoy) {
+      if (nd >= distNow) continue; // 囮はとにかく前進のみ
+    } else if (!outgunned && nd >= distNow) {
+      continue;
+    } else if (outgunned && nd > distNow + 2) {
+      continue;
+    }
 
     let score = 0;
     // 接近が最重要
@@ -1175,11 +1209,13 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
     // コストが低いほうがよい
     score -= totalCost;
 
-    // 劣勢時: 地形を重視
-    if (outgunned) {
-      const nTerrain = state.terrain ? state.terrain[`${n.col},${n.row}`] : null;
+    const nTerrain = state.terrain ? state.terrain[`${n.col},${n.row}`] : null;
+    if (isDecoy) {
+      // 囮: 接近最優先、地形はあればラッキー程度
+      if (nTerrain === 'forest' || nTerrain === 'building') score += 2;
+    } else if (outgunned) {
+      // 劣勢時: 地形を重視
       if (nTerrain === 'forest' || nTerrain === 'building') score += 8;
-      // 現在地が森なら森を出ないルートを優先
       if ((curTerrain === 'forest' || curTerrain === 'building') &&
           nTerrain === curTerrain) score += 3;
     }
