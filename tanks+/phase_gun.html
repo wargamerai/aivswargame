@@ -97,6 +97,7 @@ let isAdvanceFire = false;
 let selectedFirer = -1, selectedTarget = -1;
 let firers = [], targets = [];
 let contFireUnit = -1, contFireTarget = -1; // 連続射撃の強制目標
+let isAI = false;
 
 function roll() { return Math.floor(Math.random() * 6) + 1; }
 
@@ -186,6 +187,11 @@ function init(stateData) {
 
   renderCards();
   updateShootInfo();
+
+  if (isAI) {
+    document.getElementById('phTitle').textContent += '（AI思考中…）';
+    setTimeout(aiFirePhase, 800);
+  }
 }
 
 // ===== カード表示 =====
@@ -656,6 +662,152 @@ function hexDist(c1, r1, c2, r2) {
   return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs((a.q + a.r) - (b.q + b.r)));
 }
 
+// ===== AI射撃ロジック =====
+function aiFirePhase() {
+  // 射撃可能ユニットを順に処理
+  const firerQueue = firers.filter(i => !state.units[i].fired);
+  let step = 0;
+
+  function processNext() {
+    // 連続射撃処理
+    if (contFireUnit >= 0) {
+      aiHandleContFire();
+      return;
+    }
+
+    if (step >= firerQueue.length) {
+      donePhase();
+      return;
+    }
+
+    const fi = firerQueue[step];
+    const firer = state.units[fi];
+    if (firer.fired || firer.status === 'destroyed') { step++; processNext(); return; }
+
+    // 最適な目標を選ぶ
+    const bestTarget = aiFindBestTarget(fi);
+    if (bestTarget < 0) { step++; processNext(); return; }
+
+    // 射撃実行
+    selectedFirer = fi;
+    selectedTarget = bestTarget;
+    renderCards();
+    updateShootInfo();
+
+    // 矢印表示してから射撃
+    setTimeout(() => {
+      doShoot();
+      // closeResultを待ってから次へ
+      aiWaitForResult(() => { step++; setTimeout(processNext, 300); });
+    }, 500);
+  }
+
+  function aiHandleContFire() {
+    const fi = contFireUnit;
+    const firer = state.units[fi];
+    if (firer.status === 'destroyed' || firer.ammoOut) {
+      contFireUnit = -1; contFireTarget = -1;
+      processNext();
+      return;
+    }
+
+    let ti = contFireTarget;
+    if (ti < 0) {
+      // 別の目標を選択
+      ti = aiFindBestTarget(fi);
+    }
+    if (ti < 0) {
+      contFireUnit = -1; contFireTarget = -1;
+      processNext();
+      return;
+    }
+
+    selectedFirer = fi;
+    selectedTarget = ti;
+    renderCards();
+    updateShootInfo();
+
+    setTimeout(() => {
+      doShoot();
+      aiWaitForResult(() => setTimeout(processNext, 300));
+    }, 500);
+  }
+
+  processNext();
+}
+
+function aiFindBestTarget(firerIdx) {
+  const firer = state.units[firerIdx];
+  const fDb = UNIT_DB[firer.name];
+  let bestScore = -Infinity, bestIdx = -1;
+
+  for (const ti of targets) {
+    const target = state.units[ti];
+    if (target.status === 'destroyed') continue;
+    if (target.col < 1) continue;
+
+    const dist = hexDist(firer.col, firer.row, target.col, target.row);
+    const tDb = UNIT_DB[target.name];
+
+    // 歩兵の射撃評価
+    if (fDb.type === 'infantry') {
+      if (tDb.type === 'tank' || tDb.type === 'apc') {
+        const table = INF_VS_TANK[fDb.nation];
+        if (!table || table[dist] === undefined) continue;
+        const score = table[dist] - dist;
+        if (score > bestScore) { bestScore = score; bestIdx = ti; }
+      } else {
+        const key = fDb.nation + '_inf';
+        const table = ANTI_INF_TABLE[key];
+        if (!table || table[dist] === undefined) continue;
+        const score = table[dist] - dist;
+        if (score > bestScore) { bestScore = score; bestIdx = ti; }
+      }
+      continue;
+    }
+
+    // 戦車/砲の射撃評価
+    const di = distKey(dist);
+    if (di < 0 || !FIRE_TABLE[firer.name]) continue;
+    const ft = FIRE_TABLE[firer.name][di];
+    if (!ft) continue;
+
+    // 射界チェック
+    if (!canFireAt(firer, target)) continue;
+
+    const pen = ft[0];
+    const hitNum = ft[1];
+    const frontHit = isHittingFrontArmor(firer, target);
+    const armor = tDb.armor - (frontHit ? 0 : 2);
+    const penDiff = pen - Math.max(0, armor);
+
+    // スコア: 命中数が高く、貫通差が大きく、距離が近いほど高い
+    let score = hitNum * 2 + penDiff * 3 - dist;
+    // 側面を向いている敵を優先
+    if (!frontHit) score += 3;
+    // 移動不能の敵を優先
+    if (target.status === 'immobilized') score += 2;
+
+    if (score > bestScore) { bestScore = score; bestIdx = ti; }
+  }
+
+  return bestIdx;
+}
+
+function aiWaitForResult(callback) {
+  // resultOverlayが表示されたら自動で閉じる
+  const check = setInterval(() => {
+    const overlay = document.getElementById('resultOverlay');
+    if (overlay && overlay.style.display === 'flex') {
+      clearInterval(check);
+      setTimeout(() => {
+        closeResult();
+        callback();
+      }, 800);
+    }
+  }, 100);
+}
+
 // ===== state送信 =====
 function pushState() {
   localStorage.setItem('tanksState', JSON.stringify(state));
@@ -673,6 +825,7 @@ function donePhase() {
 window.addEventListener('message', (e) => {
   if (!e.data || !e.data.type) return;
   if (e.data.type === 'INIT_STATE') {
+    isAI = e.data.isAI || false;
     init(e.data.state);
     return;
   }

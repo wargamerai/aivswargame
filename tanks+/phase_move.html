@@ -100,6 +100,7 @@ let phase = '';
 let activeSide = '';
 let selectedIdx = -1;
 let moveMode = 'idle'; // 'idle' | 'moving' | 'facing'
+let isAI = false;
 let moveHistory = []; // { col, row, dir, mp } の配列
 let dfHistory = [];   // 防御射撃履歴（Undoできない位置を記録）
 let dfFirers = {};    // このフェーズで防御射撃した敵ユニットIDX
@@ -164,6 +165,11 @@ function initPhase() {
   log(`=== ${document.getElementById('phTitle').textContent} ===`);
   renderCards();
   updateUI();
+
+  if (isAI) {
+    document.getElementById('phTitle').textContent += '（AI思考中…）';
+    setTimeout(aiMovePhase, 800);
+  }
 }
 
 // ===== カード表示 =====
@@ -579,6 +585,9 @@ function showDfStep1() {
 
   document.getElementById('dfBody').innerHTML = html;
   document.getElementById('dfOverlay').style.display = 'flex';
+
+  // AI自動射撃
+  if (isAI) setTimeout(() => executeDfShot(), 600);
 }
 
 // ステップ2: サイコロ振って結果表示
@@ -658,6 +667,9 @@ function executeDfShot() {
 
   document.getElementById('dfBody').innerHTML = html;
   pushState();
+
+  // AI自動確認
+  if (isAI) setTimeout(() => nextDfStep(), 600);
 }
 
 // 次の射撃へ or 終了
@@ -764,7 +776,9 @@ function hexNeighbor(col, row, dir) {
   if (!d) return null;
   const nc = col + d[0];
   const nr = row + d[1];
-  if (nc < 1 || nr < 1 || nc > 48 || nr > 30) return null;
+  const mc = (state && state.mapMaxCol) || 48;
+  const mr = (state && state.mapMaxRow) || 30;
+  if (nc < 1 || nr < 1 || nc > mc || nr > mr) return null;
   return { col: nc, row: nr };
 }
 
@@ -893,6 +907,249 @@ function pixelToHex(px, py) {
   return { col: bestCol, row: bestRow };
 }
 
+// ===== AI移動ロジック =====
+function aiMovePhase() {
+  // 移動可能なユニットを収集
+  const moveableUnits = [];
+  state.units.forEach((u, i) => {
+    if (u.side !== activeSide) return;
+    if (u.status === 'destroyed') return;
+    if (u.fired || u.status === 'immobilized' || u.moved) return;
+    moveableUnits.push(i);
+  });
+
+  let step = 0;
+  function processNext() {
+    if (step >= moveableUnits.length) {
+      donePhase();
+      return;
+    }
+    const idx = moveableUnits[step];
+    const u = state.units[idx];
+    if (u.status === 'destroyed' || u.moved) { step++; processNext(); return; }
+    aiMoveUnit(idx, () => { step++; setTimeout(processNext, 300); });
+  }
+  processNext();
+}
+
+function aiMoveUnit(idx, callback) {
+  const u = state.units[idx];
+  const db = UNIT_DB[u.name];
+  if (!db) { callback(); return; }
+
+  selectedIdx = idx;
+  moveHistory = [];
+  dfHistory = [];
+
+  // 未配置 → 配置
+  if (u.col < 1) {
+    aiPlaceUnit(u, db, () => {
+      if (u.status === 'destroyed') { selectedIdx = -1; moveMode = 'idle'; callback(); return; }
+      if (u.remainMove > 0 && db.type !== 'atgun') {
+        aiDoMovement(u, db, () => aiFinishUnit(u, db, callback));
+      } else {
+        aiFinishUnit(u, db, callback);
+      }
+    });
+    return;
+  }
+
+  // 配置済み → 移動
+  moveMode = db.type === 'atgun' ? 'facing' : 'moving';
+  renderCards();
+  updateUI();
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:idx }, '*');
+
+  if (db.type === 'atgun') {
+    aiFinishUnit(u, db, callback);
+    return;
+  }
+
+  aiDoMovement(u, db, () => aiFinishUnit(u, db, callback));
+}
+
+function aiPlaceUnit(u, db, callback) {
+  const maxCol = state.mapMaxCol || 25;
+  const maxRow = state.mapMaxRow || 16;
+  const edge = u.enterEdge;
+  if (!edge) { callback(); return; }
+
+  // エッジヘクスの候補を収集
+  const candidates = [];
+  if (edge === 'right') {
+    for (let r = 1; r <= maxRow; r++) candidates.push({ col:maxCol, row:r });
+  } else if (edge === 'left') {
+    for (let r = 1; r <= maxRow; r++) candidates.push({ col:1, row:r });
+  } else if (edge === 'top') {
+    for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:1 });
+  } else if (edge === 'bottom') {
+    for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:maxRow });
+  }
+
+  // スタック可能かつMP足りるヘクスをフィルタ
+  const valid = candidates.filter(h => {
+    if (!checkStacking(h.col, h.row, u)) return false;
+    const cost = db.type === 'infantry' ? 1 : getTerrainCost(h.col, h.row);
+    return u.remainMove >= cost;
+  });
+
+  if (valid.length === 0) { callback(); return; }
+
+  // ランダムに配置
+  const pick = valid[Math.floor(Math.random() * valid.length)];
+  moveMode = 'placing';
+  renderCards();
+  updateUI();
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:selectedIdx }, '*');
+
+  setTimeout(() => {
+    handlePlacement(pick.col, pick.row);
+    setTimeout(callback, 400);
+  }, 400);
+}
+
+function aiDoMovement(u, db, callback) {
+  // 最も近い敵を探す
+  const enemy = aiNearestEnemy(u);
+  if (!enemy) { callback(); return; }
+
+  // 射撃可能距離なら止まる
+  const distToEnemy = hexDist(u.col, u.row, enemy.col, enemy.row);
+  const effectiveRange = aiGetEffectiveRange(u);
+  if (distToEnemy <= effectiveRange && distToEnemy >= 2) {
+    callback();
+    return;
+  }
+
+  aiMoveStep(u, db, enemy, callback);
+}
+
+function aiMoveStep(u, db, targetEnemy, callback) {
+  if (u.remainMove <= 0 || u.status === 'destroyed' || u.status === 'immobilized') {
+    callback();
+    return;
+  }
+
+  // 射程内に入ったら停止
+  const distNow = hexDist(u.col, u.row, targetEnemy.col, targetEnemy.row);
+  const effectiveRange = aiGetEffectiveRange(u);
+  if (distNow <= effectiveRange && distNow >= 2) {
+    callback();
+    return;
+  }
+
+  // 隣接ヘクスから最も敵に近づけるヘクスを選ぶ
+  const neighbors = getNeighbors(u.col, u.row);
+  let bestDir = -1, bestDist = Infinity, bestCost = Infinity;
+  for (let d = 0; d < 6; d++) {
+    const n = neighbors[d];
+    if (!n) continue;
+    const nd = hexDist(n.col, n.row, targetEnemy.col, targetEnemy.row);
+    if (nd >= distNow) continue; // 接近しないなら無視
+
+    const rotateCost = db.type !== 'infantry' ? getRotateCost(u.dir, d) : 0;
+    const terrainCost = db.type === 'infantry' ? 1 : getTerrainCost(n.col, n.row);
+    let backwardExtra = 0;
+    if (db.type !== 'infantry') {
+      const diff = ((d - u.dir) % 6 + 6) % 6;
+      const absDiff = Math.min(diff, 6 - diff);
+      if (absDiff >= 2) backwardExtra = 1;
+    }
+    const totalCost = rotateCost + terrainCost + backwardExtra;
+    if (totalCost > u.remainMove) continue;
+    if (!checkStacking(n.col, n.row, u)) continue;
+
+    if (nd < bestDist || (nd === bestDist && totalCost < bestCost)) {
+      bestDist = nd;
+      bestCost = totalCost;
+      bestDir = d;
+    }
+  }
+
+  if (bestDir < 0) { callback(); return; }
+
+  // 移動実行（handleMoveを呼ぶ）
+  const target = neighbors[bestDir];
+  moveMode = 'moving';
+
+  // 防御射撃のafterDefensiveFireをフックしてAI継続
+  const origAfterDf = afterDefensiveFire;
+  afterDefensiveFire = function(result) {
+    origAfterDf(result);
+    afterDefensiveFire = origAfterDf;
+    if (result === 'destroyed' || result === 'immobilized') {
+      callback();
+      return;
+    }
+    // 次のステップへ
+    setTimeout(() => aiMoveStep(u, db, targetEnemy, callback), 300);
+  };
+
+  handleMove(target.col, target.row);
+}
+
+function aiNearestEnemy(u) {
+  let best = null, bestDist = Infinity;
+  for (const e of state.units) {
+    if (e.side === activeSide) continue;
+    if (e.status === 'destroyed') continue;
+    if (e.col < 1) continue;
+    const d = hexDist(u.col, u.row, e.col, e.row);
+    if (d < bestDist) { bestDist = d; best = e; }
+  }
+  return best;
+}
+
+function aiGetEffectiveRange(u) {
+  // FIRE_TABLEから有効射程を推定（命中数5以上のレンジ）
+  const ft = FIRE_TABLE[u.name];
+  if (!ft) return 3; // 歩兵等
+  for (let i = ft.length - 1; i >= 0; i--) {
+    if (ft[i][1] >= 5) return DIST_RANGES[i];
+  }
+  return 3;
+}
+
+function aiFinishUnit(u, db, callback) {
+  // 向きを最寄りの敵に向ける
+  if (db.type !== 'infantry') {
+    const enemy = aiNearestEnemy(u);
+    if (enemy) {
+      const hSrc = hexCenter(u.col, u.row);
+      const hTgt = hexCenter(enemy.col, enemy.row);
+      const angle = Math.atan2(-(hTgt.y - hSrc.y), hTgt.x - hSrc.x);
+      // 最も近い方向を選ぶ
+      let bestDir = 0, bestDiff = Infinity;
+      for (let d = 0; d < 6; d++) {
+        const dirRad = d * 60 * Math.PI / 180;
+        let diff = Math.abs(angle - dirRad);
+        if (diff > Math.PI) diff = 2 * Math.PI - diff;
+        if (diff < bestDiff) { bestDiff = diff; bestDir = d; }
+      }
+      // 旋回コスト確認
+      const cost = getRotateCost(u.dir, bestDir);
+      if (cost <= u.remainMove) {
+        u.dir = bestDir;
+        u.remainMove -= cost;
+      }
+    }
+  }
+
+  // 確定
+  u.moved = true;
+  moveHistory = [];
+  dfHistory = [];
+  selectedIdx = -1;
+  moveMode = 'idle';
+  log(`${u.name}: AI移動確定`);
+  pushState();
+  parent.postMessage({ type:'MOVE_PATH', path:null }, '*');
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
+  renderCards();
+  updateUI();
+  callback();
+}
+
 // ===== state送信 =====
 function pushState() {
   localStorage.setItem('tanksState', JSON.stringify(state));
@@ -912,6 +1169,7 @@ window.addEventListener('message', (e) => {
   console.log(`[phase_move] MSG受信: ${e.data.type}`, e.data);
   if (e.data.type === 'INIT_STATE') {
     console.log('[phase_move] INIT_STATE受信');
+    isAI = e.data.isAI || false;
     init(e.data.state);
     return;
   }
