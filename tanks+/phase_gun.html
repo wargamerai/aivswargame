@@ -864,15 +864,19 @@ function aiFindBestTarget(firerIdx) {
 }
 
 function aiWaitForResult(callback) {
-  // resultOverlayが表示されたら自動で閉じる
+  // ユーザーが確認ボタンを押すまで待つ
   const check = setInterval(() => {
     const overlay = document.getElementById('resultOverlay');
     if (overlay && overlay.style.display === 'flex') {
       clearInterval(check);
-      setTimeout(() => {
+      // 確認ボタンにコールバックを設定
+      const btn = overlay.querySelector('button');
+      const origClick = btn.onclick;
+      btn.onclick = function() {
+        btn.onclick = origClick; // 元に戻す
         closeResult();
         callback();
-      }, 800);
+      };
     }
   }, 100);
 }
