@@ -1132,16 +1132,47 @@ canvas.addEventListener('contextmenu', (e) => {
 });
 
 // ===== シナリオ選択 =====
+let scenariosUnlocked = false;
+
 function initScenarioScreen() {
   const sel = document.getElementById('selScenario');
   sel.innerHTML = '';
   for (const sc of SCENARIOS) {
+    if (sc.hidden && !scenariosUnlocked) continue;
     const opt = document.createElement('option');
     opt.value = sc.id;
     opt.textContent = sc.name;
     sel.appendChild(opt);
   }
 }
+
+// コナミコマンド: ↑↑↓↓←→←→BA で隠しシナリオ解放
+const KONAMI_SEQ = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+let konamiIdx = 0;
+document.addEventListener('keydown', (e) => {
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (key === KONAMI_SEQ[konamiIdx]) {
+    konamiIdx++;
+    if (konamiIdx >= KONAMI_SEQ.length) {
+      konamiIdx = 0;
+      if (!scenariosUnlocked) {
+        scenariosUnlocked = true;
+        initScenarioScreen();
+        // 演出
+        const box = document.getElementById('scenarioBox');
+        if (box) {
+          const msg = document.createElement('div');
+          msg.textContent = '🔓 全シナリオが解放されました！';
+          msg.style.cssText = 'color:#0f0;text-align:center;margin:8px 0;font-weight:bold;font-size:1.1em;';
+          box.insertBefore(msg, box.querySelector('button'));
+          setTimeout(() => msg.remove(), 3000);
+        }
+      }
+    }
+  } else {
+    konamiIdx = key === KONAMI_SEQ[0] ? 1 : 0;
+  }
+});
 
 function startGame() {
   const scId = document.getElementById('selScenario').value;
