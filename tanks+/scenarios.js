@@ -231,7 +231,15 @@ const SCENARIOS = [
         ]
       }
     },
-    terrain: {}
+    terrain: {
+      '4,2':'building', '5,2':'building', '4,3':'building',
+      '10,1':'forest', '11,1':'forest', '11,2':'forest', '12,2':'forest', '12,3':'forest',
+      '3,8':'forest', '3,9':'forest', '4,9':'forest',
+      '3,10':'forest', '4,10':'forest', '3,11':'forest', '4,11':'forest',
+      '3,12':'forest', '4,12':'forest', '5,12':'forest', '3,13':'forest',
+      '11,12':'forest', '12,12':'forest', '11,13':'forest', '12,13':'forest',
+      '13,13':'forest', '12,14':'forest', '13,14':'forest',
+    }
   },
   // シナリオ2: エレファント（隠し）
   {
