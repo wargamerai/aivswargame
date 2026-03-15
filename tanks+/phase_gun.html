@@ -146,6 +146,8 @@ function init(stateData) {
     if (u.status === 'destroyed') return;
     if (u.col < 1) return;
     if (u.ammoOut || u.gunDisabled) return;
+    // 防御射撃済みのユニットは前進射撃不可
+    if (isAdvanceFire && u.dfFired) return;
 
     const db = UNIT_DB[u.name];
     if (!db) return;
