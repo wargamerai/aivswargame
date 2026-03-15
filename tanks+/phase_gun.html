@@ -859,9 +859,10 @@ function aiFindBestTarget(firerIdx) {
 
     const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
 
-    // シナリオ2/3 ドイツ: T34を優先（移動力高く隣接されると危険）、KV-1Cは後回し
+    // シナリオ2/3 ドイツ: 5ヘクス以内のみ射撃（弾温存）、KV-1Cは後回し
     if (isSc2or3 && firer.side === 'ge') {
-      if (target.name === 'KV-1C' && chance.kill < 0.15) continue; // KV-1Cは撃破率低いなら撃たない
+      if (dist > 5) continue; // 遠距離は撃たない
+      if (target.name === 'KV-1C' && chance.kill < 0.15) continue;
     }
 
     // シナリオ2/3 ソ連: 1-2ヘクスのみ射撃（遠距離は弾の無駄）
