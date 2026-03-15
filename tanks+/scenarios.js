@@ -33,7 +33,7 @@ const UNIT_DB = {
   'PAK43':           { type:'atgun', nation:'ge', armor:0, move:0, antiInf:9, turret:null, small:true, score:10, img:'DE_PAK43.png' },
   'FLAK37':          { type:'atgun', nation:'ge', armor:0, move:0, antiInf:9, turret:null, small:true, score:7, img:'DE_FLAK37.png' },
   'GE Infantry':     { type:'infantry', nation:'ge', armor:0, move:2, antiInf:0, turret:'rotating', small:false, score:1, img:'DE_Infantry.png' },
-  'APC':             { type:'apc', nation:'ge', armor:1, move:5, antiInf:0, turret:null, small:false, score:2, img:'DE_APC.png' },
+  'APC':             { type:'apc', nation:'ge', armor:1, move:5, antiInf:0, turret:'rotating', small:false, score:2, img:'DE_APC.png' },
 
   // ソ連軍
   'T34/76':          { type:'tank', nation:'su', armor:5, move:4, antiInf:8, turret:'rotating', small:false, score:3, img:'SU_T-34-76.png' },
