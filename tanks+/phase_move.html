@@ -90,7 +90,7 @@ button.danger { background:#cc3311; color:#fff; border-color:#aa2200; }
 <div id="log"></div>
 
 <!-- 防御射撃結果オーバーレイ -->
-<div id="dfOverlay" onclick="closeDfOverlay()">
+<div id="dfOverlay">
   <div id="dfBody"></div>
 </div>
 
@@ -103,6 +103,12 @@ let moveMode = 'idle'; // 'idle' | 'moving' | 'facing'
 let moveHistory = []; // { col, row, dir, mp } の配列
 let dfHistory = [];   // 防御射撃履歴（Undoできない位置を記録）
 let dfFirers = {};    // このフェーズで防御射撃した敵ユニットIDX
+// 防御射撃ステップ管理
+let dfQueue = [];      // 射撃可能な敵 [{idx,unit,db,dist,ft}]
+let dfCurrentIdx = 0;  // 現在処理中のキューインデックス
+let dfMovingUnit = null;
+let dfMovingIdx = -1;
+let dfResult = 'none'; // 最終結果
 
 const DIR_LABELS = ['東','北東','北西','西','南西','南東'];
 
@@ -333,40 +339,9 @@ function handleMove(col, row) {
   sendMovePath();
   renderCards();
 
-  // 防御射撃判定
-  const dfResult = resolveDefensiveFire(u, selectedIdx);
-  if (dfResult === 'destroyed') {
-    // 破壊された
-    moveMode = 'idle';
-    selectedIdx = -1;
-    pushState();
-    renderCards();
-    updateUI();
-    parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
-    return;
-  }
-  if (dfResult === 'immobilized') {
-    // 移動不能 → 向き指定へ
-    u.remainMove = 0;
-    moveMode = 'facing';
-    pushState();
-    renderCards();
-    updateUI();
-    return;
-  }
-
-  // 防御射撃の記録（この位置からしかUndoできない）
-  if (dfResult === 'fired') {
-    dfHistory.push(moveHistory.length);
-  }
-
-  // MP残りチェック
-  if (u.remainMove <= 0) {
-    moveMode = 'facing';
-    log(`${u.name}: MP切れ → 向きを指定してください`);
-  }
-
-  updateUI();
+  // 防御射撃判定（非同期ステップ実行）
+  startDefensiveFire(u, selectedIdx);
+  // 以降の処理はafterDefensiveFire()で継続
 }
 
 // ===== 向き指定 =====
@@ -456,126 +431,206 @@ function checkStacking(col, row, movingUnit) {
   return true;
 }
 
-// ===== 防御射撃 =====
-function resolveDefensiveFire(movingUnit, movingIdx) {
-  const enemies = [];
+// ===== 防御射撃（ステップ実行） =====
+function startDefensiveFire(movingUnit, movingIdx) {
+  dfQueue = [];
+  dfCurrentIdx = 0;
+  dfMovingUnit = movingUnit;
+  dfMovingIdx = movingIdx;
+  dfResult = 'none';
+
   state.units.forEach((e, ei) => {
     if (e.side === activeSide) return;
     if (e.status === 'destroyed') return;
     if (e.ammoOut) return;
-    if (dfFirers[ei]) return; // 既に防御射撃済み
+    if (dfFirers[ei]) return;
     const eDb = UNIT_DB[e.name];
     if (!eDb) return;
-    if (eDb.type === 'infantry') return; // 歩兵は防御射撃しない
+    if (eDb.type === 'infantry') return;
 
-    // 射程チェック
     const dist = hexDist(e.col, e.row, movingUnit.col, movingUnit.row);
     const di = distKey(dist);
     if (di < 0 || !FIRE_TABLE[e.name]) return;
     const ft = FIRE_TABLE[e.name][di];
     if (!ft) return;
 
-    // 射界チェック
     if (eDb.turret !== 'rotating') {
       if (!isInFixedArc(e, movingUnit)) return;
     }
-
-    // LOS チェック
     if (!hasLOS(e.col, e.row, movingUnit.col, movingUnit.row)) return;
 
-    enemies.push({ idx: ei, unit: e, db: eDb, dist, ft });
+    dfQueue.push({ idx: ei, unit: e, db: eDb, dist, ft });
   });
 
-  if (enemies.length === 0) return 'none';
-
-  let result = 'fired';
-  let allHtml = '';
-
-  for (const enemy of enemies) {
-    dfFirers[enemy.idx] = true;
-    state.units[enemy.idx].dfFired = true; // hub側ハイライト用
-    const e = enemy.unit;
-    const eDb = enemy.db;
-    const ft = enemy.ft;
-    const pen = ft[0];
-    const hitNum = ft[1];
-
-    // 修正: 防御射撃+1
-    let mod = HIT_MODIFIERS.defensiveFire;
-    const details = ['防御射撃+1'];
-    const mTerrain = state.terrain[`${movingUnit.col},${movingUnit.row}`] || 'plain';
-    if (mTerrain === 'forest') { mod += 2; details.push('森+2'); }
-    if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
-    const mDb = UNIT_DB[movingUnit.name];
-    if (mDb.small) { mod += 1; details.push('小型+1'); }
-
-    const d1 = roll(), d2 = roll();
-    const rawTotal = d1 + d2;
-    const modTotal = rawTotal + mod;
-    const isHit = (modTotal <= hitNum);
-
-    let html = `<div style="margin-bottom:8px;padding:4px;border-bottom:1px solid #ddd">`;
-    html += `<b>防御射撃: ${e.name}</b> → ${movingUnit.name}<br>`;
-    html += `<span class="r-dice">🎲 ${d1}+${d2}=${rawTotal} 修正+${mod} → ${modTotal} (命中数${hitNum})</span><br>`;
-
-    if (isHit) {
-      html += `<span class="r-hit hit">命中！</span><br>`;
-      log(`防御射撃: ${e.name} → ${movingUnit.name}: 命中 (${d1}+${d2}=${rawTotal}+${mod}=${modTotal})`);
-
-      // 撃破判定
-      const frontHit = isInArc(movingUnit, e); // 移動中ユニットの正面に敵がいるか
-      const armor = mDb.armor - (frontHit ? 0 : 2);
-      const penDiff = pen - Math.max(0, armor);
-      const dd1 = roll(), dd2 = roll();
-      const dmgTotal = dd1 + dd2;
-      const dmgResult = getDestructionResult(penDiff, dmgTotal);
-
-      html += `装甲${mDb.armor}${frontHit?'':'(側面-2→'+armor+')'} 貫通差${penDiff>=0?'+':''}${penDiff}<br>`;
-      html += `<span class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</span><br>`;
-
-      if (dmgResult === 'destroyed') {
-        movingUnit.status = 'destroyed';
-        html += `<span class="r-dmg">破壊！</span>`;
-        log(`  → ${movingUnit.name} 破壊！`);
-        result = 'destroyed';
-      } else if (dmgResult === 'immobilized') {
-        movingUnit.status = 'immobilized';
-        html += `<span style="color:#cc0;font-weight:bold">移動不能</span>`;
-        log(`  → ${movingUnit.name} 移動不能`);
-        result = 'immobilized';
-      } else {
-        html += `<span style="color:#888">無効果</span>`;
-        log(`  → 無効果`);
-      }
-    } else {
-      html += `<span class="r-hit miss">外れ</span>`;
-      log(`防御射撃: ${e.name} → ${movingUnit.name}: 外れ`);
-    }
-
-    // 特殊判定
-    if (rawTotal === 12) {
-      e.ammoOut = true;
-      html += `<br><span style="color:#f00">⚠ ${e.name} 弾薬切れ</span>`;
-      log(`  ★ ${e.name} 弾薬切れ`);
-    }
-
-    html += `</div>`;
-    allHtml += html;
-
-    if (result === 'destroyed' || result === 'immobilized') break;
+  if (dfQueue.length === 0) {
+    afterDefensiveFire('none');
+    return;
   }
 
-  // オーバーレイ表示
-  document.getElementById('dfBody').innerHTML = allHtml +
-    `<div style="margin-top:8px;color:#666;font-size:0.85em">クリックで閉じる</div>`;
-  document.getElementById('dfOverlay').style.display = 'flex';
-
-  pushState();
-  return result;
+  showDfStep1();
 }
 
-function closeDfOverlay() {
-  document.getElementById('dfOverlay').style.display = 'none';
+// ステップ1: 射撃情報表示（サイコロ振る前）
+function showDfStep1() {
+  const enemy = dfQueue[dfCurrentIdx];
+  const e = enemy.unit;
+  const ft = enemy.ft;
+  const pen = ft[0];
+  const hitNum = ft[1];
+  const mDb = UNIT_DB[dfMovingUnit.name];
+
+  // 修正値計算
+  let mod = HIT_MODIFIERS.defensiveFire;
+  const details = ['防御射撃+1'];
+  const mTerrain = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
+  if (mTerrain === 'forest') { mod += 2; details.push('森+2'); }
+  if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
+  if (mDb.small) { mod += 1; details.push('小型+1'); }
+
+  // hub.htmlに矢印表示
+  parent.postMessage({ type:'DF_ARROW', arrow: {
+    fromCol: e.col, fromRow: e.row,
+    toCol: dfMovingUnit.col, toRow: dfMovingUnit.row
+  }}, '*');
+
+  let html = `<div style="margin-bottom:12px">`;
+  html += `<div style="font-size:1.2em;font-weight:bold;margin-bottom:8px">防御射撃 (${dfCurrentIdx+1}/${dfQueue.length})</div>`;
+  html += `<table style="width:100%;text-align:left;margin:8px 0;font-size:0.95em">`;
+  html += `<tr><td style="color:#666">攻撃:</td><td><b>${e.name}</b></td></tr>`;
+  html += `<tr><td style="color:#666">目標:</td><td><b>${dfMovingUnit.name}</b></td></tr>`;
+  html += `<tr><td style="color:#666">距離:</td><td>${enemy.dist}ヘクス</td></tr>`;
+  html += `<tr><td style="color:#666">貫通力:</td><td>${pen}</td></tr>`;
+  html += `<tr><td style="color:#666">命中数:</td><td>${hitNum}以下</td></tr>`;
+  html += `<tr><td style="color:#666">修正:</td><td>+${mod} (${details.join(', ')})</td></tr>`;
+  html += `</table>`;
+  html += `<button onclick="executeDfShot()" style="background:#c33;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer;margin-top:4px">射撃実行</button>`;
+  html += `</div>`;
+
+  document.getElementById('dfBody').innerHTML = html;
+  document.getElementById('dfOverlay').style.display = 'flex';
+}
+
+// ステップ2: サイコロ振って結果表示
+function executeDfShot() {
+  const enemy = dfQueue[dfCurrentIdx];
+  const e = enemy.unit;
+  const eDb = enemy.db;
+  const ft = enemy.ft;
+  const pen = ft[0];
+  const hitNum = ft[1];
+  const mDb = UNIT_DB[dfMovingUnit.name];
+
+  dfFirers[enemy.idx] = true;
+  state.units[enemy.idx].dfFired = true;
+
+  let mod = HIT_MODIFIERS.defensiveFire;
+  const details = ['防御射撃+1'];
+  const mTerrain = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
+  if (mTerrain === 'forest') { mod += 2; details.push('森+2'); }
+  if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
+  if (mDb.small) { mod += 1; details.push('小型+1'); }
+
+  const d1 = roll(), d2 = roll();
+  const rawTotal = d1 + d2;
+  const modTotal = rawTotal + mod;
+  const isHit = (modTotal <= hitNum);
+
+  let html = `<div style="margin-bottom:12px">`;
+  html += `<div style="font-size:1.1em;font-weight:bold;margin-bottom:8px">${e.name} → ${dfMovingUnit.name}</div>`;
+  html += `<div class="r-dice">🎲 ${d1}+${d2}=${rawTotal} 修正+${mod} → ${modTotal} (命中${hitNum}以下)</div>`;
+
+  if (isHit) {
+    html += `<div class="r-hit hit" style="margin:8px 0">命中！</div>`;
+    log(`防御射撃: ${e.name} → ${dfMovingUnit.name}: 命中 (${d1}+${d2}=${rawTotal}+${mod}=${modTotal})`);
+
+    const frontHit = isInArc(dfMovingUnit, e);
+    const armor = mDb.armor - (frontHit ? 0 : 2);
+    const penDiff = pen - Math.max(0, armor);
+    const dd1 = roll(), dd2 = roll();
+    const dmgTotal = dd1 + dd2;
+    const dmgResult = getDestructionResult(penDiff, dmgTotal);
+
+    html += `<div style="margin:4px 0">装甲${mDb.armor}${frontHit?'':'(側面-2→'+armor+')'} 貫通差${penDiff>=0?'+':''}${penDiff}</div>`;
+    html += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</div>`;
+
+    if (dmgResult === 'destroyed') {
+      dfMovingUnit.status = 'destroyed';
+      html += `<div class="r-dmg" style="margin:8px 0">破壊！</div>`;
+      log(`  → ${dfMovingUnit.name} 破壊！`);
+      dfResult = 'destroyed';
+    } else if (dmgResult === 'immobilized') {
+      dfMovingUnit.status = 'immobilized';
+      html += `<div style="color:#cc0;font-weight:bold;margin:8px 0">移動不能</div>`;
+      log(`  → ${dfMovingUnit.name} 移動不能`);
+      dfResult = 'immobilized';
+    } else {
+      html += `<div style="color:#888;margin:8px 0">無効果</div>`;
+      log(`  → 無効果`);
+    }
+  } else {
+    html += `<div class="r-hit miss" style="margin:8px 0">外れ</div>`;
+    log(`防御射撃: ${e.name} → ${dfMovingUnit.name}: 外れ`);
+  }
+
+  if (dfResult === 'none') dfResult = 'fired';
+
+  if (rawTotal === 12) {
+    e.ammoOut = true;
+    html += `<div style="color:#f00;margin:4px 0">⚠ ${e.name} 弾薬切れ</div>`;
+    log(`  ★ ${e.name} 弾薬切れ`);
+  }
+
+  const isLast = (dfCurrentIdx >= dfQueue.length - 1) || dfResult === 'destroyed' || dfResult === 'immobilized';
+  const btnLabel = isLast ? '確認' : '確認 → 次の射撃';
+  html += `<button onclick="nextDfStep()" style="background:#2a7a2a;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer;margin-top:8px">${btnLabel}</button>`;
+  html += `</div>`;
+
+  document.getElementById('dfBody').innerHTML = html;
+  pushState();
+}
+
+// 次の射撃へ or 終了
+function nextDfStep() {
+  dfCurrentIdx++;
+  if (dfResult === 'destroyed' || dfResult === 'immobilized' || dfCurrentIdx >= dfQueue.length) {
+    // 終了
+    document.getElementById('dfOverlay').style.display = 'none';
+    parent.postMessage({ type:'DF_ARROW', arrow: null }, '*');
+    afterDefensiveFire(dfResult);
+    return;
+  }
+  showDfStep1();
+}
+
+// 防御射撃完了後の移動処理継続
+function afterDefensiveFire(result) {
+  const u = dfMovingUnit;
+  if (result === 'destroyed') {
+    moveMode = 'idle';
+    selectedIdx = -1;
+    pushState();
+    renderCards();
+    updateUI();
+    parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');
+    return;
+  }
+  if (result === 'immobilized') {
+    u.remainMove = 0;
+    moveMode = 'facing';
+    pushState();
+    renderCards();
+    updateUI();
+    return;
+  }
+  if (result === 'fired') {
+    dfHistory.push(moveHistory.length);
+  }
+  if (u.remainMove <= 0) {
+    moveMode = 'facing';
+    log(`${u.name}: MP切れ → 向きを指定してください`);
+  }
+  updateUI();
+}
 }
 
 // ===== Undo =====
