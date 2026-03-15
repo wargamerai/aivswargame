@@ -720,9 +720,11 @@ function resizeCanvas() {
   draw();
 }
 
+let dragMoved = false;
 canvas.addEventListener('mousedown', (e) => {
   if (e.button === 0) {
     dragging = true;
+    dragMoved = false;
     dragStartX = e.clientX - camX;
     dragStartY = e.clientY - camY;
     canvas.style.cursor = 'grabbing';
@@ -730,6 +732,7 @@ canvas.addEventListener('mousedown', (e) => {
 });
 canvas.addEventListener('mousemove', (e) => {
   if (dragging) {
+    dragMoved = true;
     camX = e.clientX - dragStartX;
     camY = e.clientY - dragStartY;
     draw();
@@ -752,6 +755,7 @@ canvas.addEventListener('wheel', (e) => {
 
 // ヘクスクリック
 canvas.addEventListener('click', (e) => {
+  if (dragMoved) return; // ドラッグ操作はクリックとして扱わない
   if (!state) return;
   const rect = canvas.getBoundingClientRect();
   const mx = (e.clientX - rect.left - camX) / zoom;
