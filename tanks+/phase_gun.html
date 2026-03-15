@@ -852,10 +852,10 @@ function aiFindBestTarget(firerIdx) {
 
     // スコア: 命中数が高く、貫通差が大きく、距離が近いほど高い
     let score = hitNum * 2 + penDiff * 3 - dist;
-    // 側面を向いている敵を優先
-    if (!frontHit) score += 3;
-    // 移動不能の敵を優先
-    if (target.status === 'immobilized') score += 2;
+    // 装甲が低い敵を優先（弱い＝倒しやすい）
+    score += (10 - Math.max(0, tDb.armor)) * 2;
+    // 移動不能の敵を優先（トドメ）
+    if (target.status === 'immobilized') score += 5;
 
     if (score > bestScore) { bestScore = score; bestIdx = ti; }
   }
