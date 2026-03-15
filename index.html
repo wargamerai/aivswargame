@@ -435,17 +435,21 @@
             <span>F-16 Air Combat Simulator</span>
         </a>
 
-        <a href="ijn/campaign.html" class="theater-btn">
-            連合艦隊
-            <span>Grand Fleet (IJN)</span>
-        </a>
-
-        <a href="pf/campaign.html" class="theater-btn">
-            太平洋艦隊
-            <span>Pacific Fleet (USN)</span>
-        </a>
-
         <!-- コナミコマンドで出現 -->
+        <div class="secret-btn" id="secret-ijn">
+            <a href="ijn/campaign.html" class="theater-btn">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
+            </a>
+        </div>
+
+        <div class="secret-btn" id="secret-pf">
+            <a href="pf/campaign.html" class="theater-btn">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
+            </a>
+        </div>
+
         <div class="secret-btn" id="secret-tanks">
             <a href="tanks+/hub.html" class="theater-btn">
                 ████████
@@ -593,7 +597,7 @@
             if (e.key === code[pos] || e.key.toLowerCase() === code[pos]) {
                 pos++;
                 if (pos === code.length) {
-                    document.getElementById('secret-tanks').classList.add('revealed');
+                    document.querySelectorAll('.secret-btn').forEach(el => el.classList.add('revealed'));
                     pos = 0;
                 }
             } else {
