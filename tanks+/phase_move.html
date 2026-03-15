@@ -972,7 +972,6 @@ function aiPlaceUnit(u, db, callback) {
   const maxCol = state.mapMaxCol || 25;
   const maxRow = state.mapMaxRow || 16;
   const edge = u.enterEdge;
-  if (!edge) { callback(); return; }
 
   // エッジヘクスの候補を収集
   const candidates = [];
@@ -984,6 +983,10 @@ function aiPlaceUnit(u, db, callback) {
     for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:1 });
   } else if (edge === 'bottom') {
     for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:maxRow });
+  } else {
+    // free配置: マップ全体から候補
+    for (let c = 1; c <= maxCol; c++)
+      for (let r = 1; r <= maxRow; r++) candidates.push({ col:c, row:r });
   }
 
   // スタック可能かつMP足りるヘクスをフィルタ
