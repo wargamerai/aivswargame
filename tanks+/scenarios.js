@@ -191,6 +191,22 @@ const NATION_COLORS = {
   uk: { fill:'#B8860B', stroke:'#8a6a0a', label:'イギリス' },
 };
 
+// --- マップ地形 ---
+const MAP_TERRAIN = {
+  A: {
+    '4,8':'forest', '4,9':'forest', '5,9':'forest', '5,10':'forest',
+    '5,11':'forest', '5,12':'forest', '6,9':'forest', '6,10':'forest',
+    '6,11':'forest', '6,12':'forest',
+    '9,2':'slope', '9,3':'slope', '10,2':'slope', '10,3':'slope',
+    '17,3':'forest', '17,4':'forest', '18,2':'forest', '18,3':'forest',
+    '19,3':'forest', '19,4':'forest', '19,5':'forest',
+    '20,3':'forest', '20,4':'forest', '20,5':'forest',
+    '21,4':'forest', '21,5':'forest',
+    '22,13':'forest', '22,14':'forest', '23,14':'forest',
+    '23,15':'forest', '24,14':'forest',
+  },
+};
+
 // --- シナリオ ---
 const SCENARIOS = [
   // シナリオ1: 赤軍の反抗（通常表示）
@@ -231,18 +247,7 @@ const SCENARIOS = [
         ]
       }
     },
-    terrain: {
-      '4,8':'forest', '4,9':'forest', '5,9':'forest', '5,10':'forest',
-      '5,11':'forest', '5,12':'forest', '6,9':'forest', '6,10':'forest',
-      '6,11':'forest', '6,12':'forest',
-      '9,2':'slope', '9,3':'slope', '10,2':'slope', '10,3':'slope',
-      '17,3':'forest', '17,4':'forest', '18,2':'forest', '18,3':'forest',
-      '19,3':'forest', '19,4':'forest', '19,5':'forest',
-      '20,3':'forest', '20,4':'forest', '20,5':'forest',
-      '21,4':'forest', '21,5':'forest',
-      '22,13':'forest', '22,14':'forest', '23,14':'forest',
-      '23,15':'forest', '24,14':'forest',
-    }
+    terrain: MAP_TERRAIN.A
   },
   // シナリオ2: エレファント（隠し）
   {
@@ -295,7 +300,7 @@ const SCENARIOS = [
         ]
       }
     },
-    terrain: {}
+    terrain: MAP_TERRAIN.A
   },
   // シナリオ3: ドニエプル（隠し）
   {
@@ -378,7 +383,7 @@ const SCENARIOS = [
         ]
       }
     },
-    terrain: {}
+    terrain: MAP_TERRAIN.A
   },
 ];
 

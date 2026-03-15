@@ -1317,7 +1317,7 @@ function startGame() {
     map2: sc.map2,
     map2orient: sc.map2orient,
     selectedUnit: null,
-    terrain: sc.terrain || {},
+    terrain: Object.assign({}, sc.terrain || {}),
     hexsideTerrain: sc.hexsideTerrain || {},
     specialRules: sc.specialRules || {},
   };
