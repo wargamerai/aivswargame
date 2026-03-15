@@ -331,6 +331,7 @@ function handlePlacement(col, row) {
   u.row = row;
   u.dir = u.dir !== undefined && u.dir !== 0 ? u.dir : initDir;
   u.remainMove -= terrainCost;
+  u.justEntered = true;  // 初回回頭無料フラグ
 
   log(`${u.name}: (${col},${row})に配置 [コスト${terrainCost}, 残りMP:${u.remainMove}]`);
 
@@ -361,9 +362,9 @@ function handleMove(col, row) {
     return;
   }
 
-  // 旋回コスト計算
+  // 旋回コスト計算（侵入直後の初回は無料）
   let rotateCost = 0;
-  if (db.type !== 'infantry') {
+  if (db.type !== 'infantry' && !u.justEntered) {
     rotateCost = getRotateCost(u.dir, moveDir);
   }
 
@@ -402,6 +403,7 @@ function handleMove(col, row) {
     u.dir = moveDir;
   }
   u.remainMove -= totalCost;
+  if (u.justEntered) delete u.justEntered;
 
   const costDetail = [];
   if (rotateCost > 0) costDetail.push(`旋回${rotateCost}`);
@@ -438,13 +440,14 @@ function handleFacing(col, row) {
     return;
   }
 
-  // 旋回コストチェック
-  const rotateCost = getRotateCost(u.dir, dir);
+  // 旋回コストチェック（侵入直後の初回回頭は無料）
+  const rotateCost = u.justEntered ? 0 : getRotateCost(u.dir, dir);
   if (rotateCost > u.remainMove) {
     log(`MP不足で旋回できません（旋回コスト${rotateCost}, 残りMP${u.remainMove}）`);
     return;
   }
   u.remainMove -= rotateCost;
+  if (u.justEntered) delete u.justEntered;
 
   u.dir = dir;
   log(`${u.name}: 向き → ${DIR_LABELS[dir]}（旋回コスト${rotateCost}, 残りMP${u.remainMove}）（確定ボタンで決定）`);
@@ -1145,10 +1148,10 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
     if (!n) continue;
     const nd = hexDist(n.col, n.row, targetEnemy.col, targetEnemy.row);
 
-    const rotateCost = db.type !== 'infantry' ? getRotateCost(u.dir, d) : 0;
+    const rotateCost = (db.type !== 'infantry' && !u.justEntered) ? getRotateCost(u.dir, d) : 0;
     const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
     let backwardExtra = 0;
-    if (db.type !== 'infantry') {
+    if (db.type !== 'infantry' && !u.justEntered) {
       const diff = ((d - u.dir) % 6 + 6) % 6;
       const absDiff = Math.min(diff, 6 - diff);
       if (absDiff >= 2) backwardExtra = 1;
@@ -1239,11 +1242,12 @@ function aiFinishUnit(u, db, callback) {
         if (diff > Math.PI) diff = 2 * Math.PI - diff;
         if (diff < bestDiff) { bestDiff = diff; bestDir = d; }
       }
-      // 旋回コスト確認
-      const cost = getRotateCost(u.dir, bestDir);
+      // 旋回コスト確認（侵入直後の初回は無料）
+      const cost = u.justEntered ? 0 : getRotateCost(u.dir, bestDir);
       if (cost <= u.remainMove) {
         u.dir = bestDir;
         u.remainMove -= cost;
+        if (u.justEntered) delete u.justEntered;
       }
     }
   }
