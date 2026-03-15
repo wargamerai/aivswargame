@@ -244,3 +244,30 @@ const SCENARIOS = [
     }
   }
 ];
+
+// --- 視認距離 ---
+// 戦車: 森5ヘクス, 他10ヘクス
+// それ以外: 20ヘクス
+function getSpottingRange(observerType, targetTerrain) {
+  if (observerType === 'tank') {
+    return targetTerrain === 'forest' ? 5 : 10;
+  }
+  return 20;
+}
+
+function canSpot(observer, target, terrain) {
+  const obsDb = UNIT_DB[observer.name];
+  if (!obsDb) return true;
+  // hexDist inline
+  function toAxial(col, row) {
+    const q = col - 1;
+    const r = row - 1 - Math.floor((col - 1) / 2);
+    return { q, r };
+  }
+  const a = toAxial(observer.col, observer.row);
+  const b = toAxial(target.col, target.row);
+  const dist = Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs((a.q + a.r) - (b.q + b.r)));
+  const tTerrain = terrain[`${target.col},${target.row}`] || 'plain';
+  const range = getSpottingRange(obsDb.type, tTerrain);
+  return dist <= range;
+}
