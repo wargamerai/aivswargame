@@ -184,6 +184,18 @@ function renderCards() {
   });
 }
 
+function sendMovePath() {
+  // 移動経路をhubに送信（描画用）
+  if (selectedIdx < 0) {
+    parent.postMessage({ type:'MOVE_PATH', path:null }, '*');
+    return;
+  }
+  const u = state.units[selectedIdx];
+  const path = moveHistory.map(h => ({ col:h.col, row:h.row, mp:h.mp }));
+  path.push({ col:u.col, row:u.row, mp:u.remainMove });
+  parent.postMessage({ type:'MOVE_PATH', path:path }, '*');
+}
+
 function selectUnit(idx) {
   if (selectedIdx >= 0 && selectedIdx !== idx) {
     if (moveHistory.length > 0) confirmUnit();
@@ -207,6 +219,7 @@ function selectUnit(idx) {
 
   renderCards();
   updateUI();
+  sendMovePath();
   parent.postMessage({ type:'HIGHLIGHT', unitIdx:idx }, '*');
 }
 
@@ -216,7 +229,7 @@ function updateUI() {
 
   if (moveMode === 'idle') modeEl.textContent = '待機';
   else if (moveMode === 'moving') modeEl.textContent = '移動中（隣接ヘクスをクリック）';
-  else if (moveMode === 'facing') modeEl.textContent = '向き指定（ヘクスサイドをクリック）';
+  else if (moveMode === 'facing') modeEl.textContent = '向き指定（隣接ヘクスをクリック → 確定）';
 
   const infoEl = document.getElementById('moveInfo');
   if (selectedIdx < 0) {
@@ -247,7 +260,7 @@ function handleMapSelect(col, row, side, unitIdx) {
   }
 
   if (moveMode === 'facing') {
-    handleFacing(side);
+    handleFacing(col, row);
     return;
   }
 }
@@ -314,6 +327,7 @@ function handleMove(col, row) {
   log(`${u.name}: (${col},${row})へ移動 MP-${totalCost} (${costDetail.join('+')})`);
 
   pushState();
+  sendMovePath();
   renderCards();
 
   // 防御射撃判定
@@ -353,7 +367,7 @@ function handleMove(col, row) {
 }
 
 // ===== 向き指定 =====
-function handleFacing(side) {
+function handleFacing(col, row) {
   if (selectedIdx < 0) return;
   const u = state.units[selectedIdx];
   const db = UNIT_DB[u.name];
@@ -364,11 +378,19 @@ function handleFacing(side) {
     return;
   }
 
-  moveHistory.push({ col:u.col, row:u.row, dir:u.dir, mp:u.remainMove });
-  u.dir = side;
-  log(`${u.name}: 向き → ${DIR_LABELS[side]}`);
+  // クリックした隣接ヘクスの方向を向く
+  const neighbors = getNeighbors(u.col, u.row);
+  const dir = neighbors.findIndex(n => n && n.col === col && n.row === row);
+  if (dir < 0) {
+    log('隣接ヘクスをクリックして向きを指定');
+    return;
+  }
+
+  u.dir = dir;
+  log(`${u.name}: 向き → ${DIR_LABELS[dir]}（確定ボタンで決定）`);
   pushState();
-  confirmUnit();
+  updateUI();
+  parent.postMessage({ type:'HIGHLIGHT', unitIdx:selectedIdx }, '*');
 }
 
 function skipFacing() {
@@ -570,6 +592,7 @@ function confirmUnit() {
   selectedIdx = -1;
   moveMode = 'idle';
   pushState();
+  parent.postMessage({ type:'MOVE_PATH', path:null }, '*');
   renderCards();
   updateUI();
   parent.postMessage({ type:'HIGHLIGHT', unitIdx:null }, '*');

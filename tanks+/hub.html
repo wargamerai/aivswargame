@@ -239,6 +239,7 @@ function dbgRefresh() {
 let state = null;
 let mapImg1 = null, mapImg2 = null;
 let mapLoaded = 0;
+let movePath = null; // 移動経路表示用 [{col,row,mp}, ...]
 
 // ユニット画像キャッシュ
 const unitImages = {};
@@ -501,6 +502,40 @@ function draw() {
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
       ctx.closePath();
       ctx.stroke();
+    }
+  }
+
+  // 移動経路表示
+  if (movePath && movePath.length >= 2) {
+    // 赤い太線で経路を描画
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    const p0 = hexCenter(movePath[0].col, movePath[0].row);
+    ctx.moveTo(p0.x, p0.y);
+    for (let i = 1; i < movePath.length; i++) {
+      const p = hexCenter(movePath[i].col, movePath[i].row);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+
+    // 各ウェイポイントに残りMPを表示
+    for (let i = 0; i < movePath.length; i++) {
+      const p = hexCenter(movePath[i].col, movePath[i].row);
+      const mp = movePath[i].mp;
+      // 背景付きラベル
+      const label = `MP${mp}`;
+      ctx.font = `bold ${HEX_SIZE * 0.3}px sans-serif`;
+      const tw = ctx.measureText(label).width;
+      const lx = p.x, ly = p.y - HEX_SIZE * 0.6;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(lx - tw/2 - 3, ly - HEX_SIZE*0.15, tw + 6, HEX_SIZE*0.35);
+      ctx.fillStyle = '#ff4444';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, lx, ly);
     }
   }
 
@@ -1224,6 +1259,10 @@ window.addEventListener('message', (e) => {
     case 'HIGHLIGHT':
       dbg(`HIGHLIGHT: unitIdx=${e.data.unitIdx}`);
       state.selectedUnit = e.data.unitIdx || null;
+      draw();
+      break;
+    case 'MOVE_PATH':
+      movePath = e.data.path;
       draw();
       break;
     case 'SHOOT_ANIM':
