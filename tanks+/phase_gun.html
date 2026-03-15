@@ -71,7 +71,7 @@ button.done-btn { background:#cc3311; color:#fff; border-color:#aa2200; }
 <div class="section-label">▼ 目標を選択</div>
 <div id="targetList" class="unit-cards"></div>
 
-<div id="shootInfo">射撃ユニットと目標を選択してください</div>
+<div id="shootInfo">射撃/目標を選択</div>
 
 <div>
   <button id="btnShoot" onclick="doShoot()" disabled>射撃</button>
@@ -222,7 +222,7 @@ function updateShootInfo() {
   const btn = document.getElementById('btnShoot');
 
   if (selectedFirer < 0 || selectedTarget < 0) {
-    el.textContent = '射撃ユニットと目標を選択してください';
+    el.textContent = '射撃/目標を選択';
     btn.disabled = true;
     return;
   }
