@@ -264,6 +264,13 @@ function updateShootInfo() {
     return;
   }
 
+  // LOS チェック（歩兵含む全ユニット）
+  if (!hasLOS(firer.col, firer.row, target.col, target.row)) {
+    el.textContent = '射線なし（遮蔽物で遮られています）';
+    btn.disabled = true;
+    return;
+  }
+
   // 歩兵の射撃処理
   if (fDb.type === 'infantry') {
     el.innerHTML = getInfantryShootInfo(firer, target, dist);
@@ -662,6 +669,59 @@ function hexDist(c1, r1, c2, r2) {
   return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs((a.q + a.r) - (b.q + b.r)));
 }
 
+// ===== LOS判定 =====
+function isBlockingTerrain(col, row) {
+  if (!state || !state.terrain) return false;
+  const t = state.terrain[`${col},${row}`];
+  return t === 'forest' || t === 'building' || t === 'slope';
+}
+
+function pixelToHexTwo(px, py) {
+  let best1 = null, best2 = null, d1 = Infinity, d2 = Infinity;
+  const approxCol = Math.round((px - OX) / (HEX_SIZE * 1.5)) + 1;
+  const approxRow = Math.round((py - OY) / HEX_H) + 1;
+  for (let c = approxCol - 2; c <= approxCol + 2; c++) {
+    for (let r = approxRow - 2; r <= approxRow + 2; r++) {
+      if (c < 1 || r < 1) continue;
+      const h = hexCenter(c, r);
+      const d = (px - h.x) ** 2 + (py - h.y) ** 2;
+      if (d < d1) {
+        best2 = best1; d2 = d1;
+        best1 = { col: c, row: r }; d1 = d;
+      } else if (d < d2) {
+        best2 = { col: c, row: r }; d2 = d;
+      }
+    }
+  }
+  return { hex1: best1, hex2: best2, dist1: d1, dist2: d2 };
+}
+
+function hasLOS(c1, r1, c2, r2) {
+  const h1 = hexCenter(c1, r1);
+  const h2 = hexCenter(c2, r2);
+  const dist = hexDist(c1, r1, c2, r2);
+  if (dist <= 1) return true;
+  const steps = dist * 2;
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const mx = h1.x + (h2.x - h1.x) * t;
+    const my = h1.y + (h2.y - h1.y) * t;
+    const result = pixelToHexTwo(mx, my);
+    const m1 = result.hex1;
+    const m2 = result.hex2;
+    if (m1.col === c1 && m1.row === r1) continue;
+    if (m1.col === c2 && m1.row === r2) continue;
+    const onHexside = result.dist2 < result.dist1 * 1.05;
+    if (onHexside) {
+      const skip2 = (m2.col === c1 && m2.row === r1) || (m2.col === c2 && m2.row === r2);
+      if (isBlockingTerrain(m1.col, m1.row) && (skip2 || isBlockingTerrain(m2.col, m2.row))) return false;
+    } else {
+      if (isBlockingTerrain(m1.col, m1.row)) return false;
+    }
+  }
+  return true;
+}
+
 // ===== AI射撃ロジック =====
 function aiFirePhase() {
   // 射撃可能ユニットを順に処理
@@ -749,6 +809,9 @@ function aiFindBestTarget(firerIdx) {
     const dist = hexDist(firer.col, firer.row, target.col, target.row);
     const tDb = UNIT_DB[target.name];
 
+    // LOS チェック（全ユニット共通）
+    if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
+
     // 歩兵の射撃評価
     if (fDb.type === 'infantry') {
       if (tDb.type === 'tank' || tDb.type === 'apc') {
@@ -772,8 +835,9 @@ function aiFindBestTarget(firerIdx) {
     const ft = FIRE_TABLE[firer.name][di];
     if (!ft) continue;
 
-    // 射界チェック
+    // 射界・LOSチェック
     if (!canFireAt(firer, target)) continue;
+    if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
 
     const pen = ft[0];
     const hitNum = ft[1];

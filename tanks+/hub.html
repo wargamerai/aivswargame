@@ -84,6 +84,27 @@ button.top-btn:hover { background:#556; }
 #scenarioBox button:hover { background:#dab030; }
 #scenarioBox label { display:block; margin:8px 0 4px; color:#aaa; font-size:0.9em; }
 
+/* --- ゲーム終了画面 --- */
+#gameOverScreen {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.85); display:none; justify-content:center; align-items:center;
+  z-index:200;
+}
+#gameOverBox {
+  background:#2a2a34; border:3px solid #c8a020; border-radius:10px;
+  padding:32px; max-width:480px; width:90%; text-align:center;
+}
+#gameOverBox h2 { color:#c8a020; font-size:1.8em; margin-bottom:16px; }
+#gameOverBox .go-result { color:#fff; font-size:1.3em; margin:12px 0; }
+#gameOverBox .go-stats { color:#aaa; font-size:0.95em; margin:16px 0; line-height:1.8; text-align:left; }
+#gameOverBox .go-stats b { color:#ddd; }
+#gameOverBox button {
+  display:block; width:100%; margin:16px 0 0; padding:12px;
+  font-size:1.1em; border-radius:4px; background:#c8a020; color:#000;
+  font-weight:bold; cursor:pointer; border:none;
+}
+#gameOverBox button:hover { background:#dab030; }
+
 /* --- 方向メニュー（右クリック） --- */
 #dirMenu {
   display:none; position:fixed; z-index:300;
@@ -180,6 +201,16 @@ button.top-btn:hover { background:#556; }
       <option value="hotseat">ホットシート（両方手動）</option>
     </select>
     <button onclick="startGame()">ゲーム開始</button>
+  </div>
+</div>
+
+<!-- ゲーム終了画面 -->
+<div id="gameOverScreen">
+  <div id="gameOverBox">
+    <h2 id="goTitle">ゲーム終了</h2>
+    <div class="go-result" id="goResult"></div>
+    <div class="go-stats" id="goStats"></div>
+    <button onclick="backToTitle()">タイトルに戻る</button>
   </div>
 </div>
 
@@ -1383,7 +1414,66 @@ function loadPhase() {
   frame.src = `${file}?phase=${phase}`;
 }
 
+function checkVictory() {
+  if (!state) return null;
+  const s1 = state.side1;
+  const s2 = state.side2;
+  const alive1 = state.units.filter(u => u.side === s1 && u.status !== 'destroyed');
+  const alive2 = state.units.filter(u => u.side === s2 && u.status !== 'destroyed');
+  const total1 = state.units.filter(u => u.side === s1).length;
+  const total2 = state.units.filter(u => u.side === s2).length;
+  const destroyed1 = total1 - alive1.length;
+  const destroyed2 = total2 - alive2.length;
+
+  // 全滅判定
+  if (alive1.length === 0) return { winner:s2, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
+  if (alive2.length === 0) return { winner:s1, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
+
+  // 半数以上破壊判定
+  if (destroyed1 > total1 / 2) return { winner:s2, reason:'majority', destroyed1, destroyed2, total1, total2 };
+  if (destroyed2 > total2 / 2) return { winner:s1, reason:'majority', destroyed1, destroyed2, total1, total2 };
+
+  return null;
+}
+
+function showGameOver(result) {
+  const nc1 = NATION_COLORS[state.side1];
+  const nc2 = NATION_COLORS[state.side2];
+  const winnerNc = NATION_COLORS[result.winner];
+  const loser = result.winner === state.side1 ? state.side2 : state.side1;
+  const loserNc = NATION_COLORS[loser];
+
+  document.getElementById('goTitle').textContent = 'ゲーム終了';
+  const reasonText = result.reason === 'annihilation' ? '全滅' :
+                     result.reason === 'majority' ? '過半数撃破' : 'ターン終了';
+  document.getElementById('goResult').innerHTML =
+    `<span style="color:${winnerNc?winnerNc.fill:'#fff'};font-size:1.4em">${winnerNc?winnerNc.label:result.winner}</span> の勝利！<br><span style="font-size:0.8em;color:#aaa">(${reasonText})</span>`;
+
+  const n1 = nc1 ? nc1.label : state.side1;
+  const n2 = nc2 ? nc2.label : state.side2;
+  let statsHtml = `<b>ターン:</b> ${state.turn}<br>`;
+  statsHtml += `<b>${n1}:</b> 撃破 ${result.destroyed1}/${result.total1}<br>`;
+  statsHtml += `<b>${n2}:</b> 撃破 ${result.destroyed2}/${result.total2}`;
+  document.getElementById('goStats').innerHTML = statsHtml;
+
+  document.getElementById('gameOverScreen').style.display = 'flex';
+  gameLog(`<b style="color:#c8a020">══ ゲーム終了 ══ ${winnerNc?winnerNc.label:result.winner}の勝利（${reasonText}）</b>`);
+}
+
+function backToTitle() {
+  document.getElementById('gameOverScreen').style.display = 'none';
+  document.getElementById('scenarioScreen').style.display = 'flex';
+  state = null;
+}
+
 function endPhase() {
+  // 勝利判定
+  const victory = checkVictory();
+  if (victory) {
+    showGameOver(victory);
+    return;
+  }
+
   // フェーズ終了 → 次フェーズ
   // 先攻手番終了（af1終了時）→ 全フラグ・経路クリア
   if (state.phase === 'af1') {
@@ -1412,7 +1502,14 @@ function endPhase() {
     state.phaseIdx = 0;
     state.turn++;
     if (state.turn > state.maxTurns) {
-      alert('ゲーム終了');
+      // ターン超過 → 引き分け or 残存数判定
+      const v = checkVictory();
+      if (v) { showGameOver(v); return; }
+      showGameOver({ winner: state.side1, reason: 'timeout',
+        destroyed1: state.units.filter(u=>u.side===state.side1&&u.status==='destroyed').length,
+        destroyed2: state.units.filter(u=>u.side===state.side2&&u.status==='destroyed').length,
+        total1: state.units.filter(u=>u.side===state.side1).length,
+        total2: state.units.filter(u=>u.side===state.side2).length });
       return;
     }
     gameLog(`<b style="color:#c8a020">══ 第${state.turn}ターン ══</b>`);
