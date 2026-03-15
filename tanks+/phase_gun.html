@@ -448,7 +448,7 @@ function doShoot() {
 
   // 特殊判定
   let continuousFire = (rawTotal === 2); // ゾロ目2=連続射撃
-  let ammoOut = (rawTotal === 12);        // ゾロ目12=弾薬切れ
+  let ammoOut = (rawTotal === 12) && !(state.specialRules && state.specialRules.noAmmoOut); // ゾロ目12=弾薬切れ
 
   let resultHtml = '';
   resultHtml += `<div class="r-row"><span class="r-label">射撃</span><span class="r-value">${firer.name}</span></div>`;

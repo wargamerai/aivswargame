@@ -183,8 +183,9 @@ function renderCards() {
       (u.fired || u.status === 'immobilized' ? ' disabled' : '');
 
     const mp = u.remainMove !== undefined ? u.remainMove : db.move;
+    const unplaced = u.col < 1 ? ' <span style="color:#0c0;font-size:0.8em">[未配置]</span>' : '';
     card.innerHTML = `<span class="c-name">${u.name}</span>
-      <span class="c-info"> MP:${mp} ${db.type==='atgun'?'(砲)':''}</span>`;
+      <span class="c-info"> MP:${mp} ${db.type==='atgun'?'(砲)':''}${unplaced}</span>`;
 
     card.onclick = () => selectUnit(i);
     el.appendChild(card);
@@ -217,7 +218,10 @@ function selectUnit(idx) {
   dfHistory = [];
 
   const db = UNIT_DB[u.name];
-  if (db.type === 'atgun') {
+  if (u.col < 1) {
+    // 未配置ユニット → 配置モード
+    moveMode = 'placing';
+  } else if (db.type === 'atgun') {
     // 対戦車砲は向き変更のみ
     moveMode = 'facing';
   } else {
@@ -235,6 +239,7 @@ function updateUI() {
   modeEl.className = moveMode;
 
   if (moveMode === 'idle') modeEl.textContent = '待機';
+  else if (moveMode === 'placing') modeEl.textContent = '配置（マップ端をクリック）';
   else if (moveMode === 'moving') modeEl.textContent = '移動中（隣接ヘクスをクリック）';
   else if (moveMode === 'facing') modeEl.textContent = '向き指定（隣接ヘクスをクリック → 確定）';
 
@@ -251,7 +256,7 @@ function updateUI() {
   document.getElementById('btnUndo').disabled = (moveHistory.length === 0);
   document.getElementById('btnStopMove').disabled = (selectedIdx < 0 || moveMode !== 'moving');
   document.getElementById('btnSkipFace').disabled = (moveMode !== 'facing');
-  document.getElementById('btnConfirm').disabled = (selectedIdx < 0 || moveMode === 'moving');
+  document.getElementById('btnConfirm').disabled = (selectedIdx < 0 || moveMode === 'moving' || moveMode === 'placing');
 }
 
 // ===== マップクリック処理 =====
@@ -259,6 +264,11 @@ function handleMapSelect(col, row, side, unitIdx) {
   if (moveMode === 'idle') {
     // ユニット選択
     if (unitIdx >= 0) selectUnit(unitIdx);
+    return;
+  }
+
+  if (moveMode === 'placing') {
+    handlePlacement(col, row);
     return;
   }
 
@@ -271,6 +281,63 @@ function handleMapSelect(col, row, side, unitIdx) {
     handleFacing(col, row);
     return;
   }
+}
+
+// ===== 配置処理 =====
+function handlePlacement(col, row) {
+  if (selectedIdx < 0) return;
+  const u = state.units[selectedIdx];
+  const db = UNIT_DB[u.name];
+  if (!db) return;
+
+  const maxCol = 48, maxRow = 30;
+  const edge = u.enterEdge;
+
+  // 進入辺の検証
+  if (edge === 'right' && col !== maxCol) { log('右端のヘクスを選択してください'); return; }
+  if (edge === 'left' && col !== 1) { log('左端のヘクスを選択してください'); return; }
+  if (edge === 'top' && row !== 1) { log('上端のヘクスを選択してください'); return; }
+  if (edge === 'bottom' && row !== maxRow) { log('下端のヘクスを選択してください'); return; }
+
+  // スタッキングチェック
+  if (!checkStacking(col, row, u)) {
+    log('スタック制限超過');
+    return;
+  }
+
+  // 地形コスト
+  const terrainCost = db.type === 'infantry' ? 1 : getTerrainCost(col, row);
+  if (u.remainMove < terrainCost) {
+    log(`MP不足（必要:${terrainCost}, 残り:${u.remainMove}）`);
+    return;
+  }
+
+  // 初期方向: 進入辺の反対側
+  let initDir = 0;
+  if (edge === 'right') initDir = 3;      // West
+  else if (edge === 'left') initDir = 0;   // East
+  else if (edge === 'top') initDir = 5;    // SE
+  else if (edge === 'bottom') initDir = 2; // NW
+
+  // 配置実行
+  u.col = col;
+  u.row = row;
+  u.dir = u.dir !== undefined && u.dir !== 0 ? u.dir : initDir;
+  u.remainMove -= terrainCost;
+
+  log(`${u.name}: (${col},${row})に配置 [コスト${terrainCost}, 残りMP:${u.remainMove}]`);
+
+  pushState();
+
+  if (u.remainMove > 0 && db.type !== 'atgun') {
+    moveMode = 'moving';
+  } else {
+    moveMode = 'facing';
+  }
+
+  renderCards();
+  updateUI();
+  sendMovePath();
 }
 
 // ===== 移動処理 =====
@@ -577,7 +644,7 @@ function executeDfShot() {
 
   if (dfResult === 'none') dfResult = 'fired';
 
-  if (rawTotal === 12) {
+  if (rawTotal === 12 && !(state.specialRules && state.specialRules.noAmmoOut)) {
     e.ammoOut = true;
     html += `<div style="color:#f00;margin:4px 0">⚠ ${e.name} 弾薬切れ</div>`;
     log(`  ★ ${e.name} 弾薬切れ`);
