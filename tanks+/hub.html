@@ -475,16 +475,18 @@ function draw() {
   if (state && state.selectedUnit !== null && state.selectedUnit !== undefined) {
     const selU = state.units[state.selectedUnit];
     if (selU && selU.col < 1 && selU.enterEdge) {
+      const mc = state.mapMaxCol || maxCol;
+      const mr = state.mapMaxRow || maxRow;
       ctx.fillStyle = 'rgba(0,200,0,0.25)';
       ctx.strokeStyle = 'rgba(0,200,0,0.5)';
       ctx.lineWidth = 3;
-      for (let c = 1; c <= maxCol; c++) {
-        for (let r = 1; r <= maxRow; r++) {
+      for (let c = 1; c <= mc; c++) {
+        for (let r = 1; r <= mr; r++) {
           let valid = false;
-          if (selU.enterEdge === 'right' && c === maxCol) valid = true;
+          if (selU.enterEdge === 'right' && c === mc) valid = true;
           if (selU.enterEdge === 'left' && c === 1) valid = true;
           if (selU.enterEdge === 'top' && r === 1) valid = true;
-          if (selU.enterEdge === 'bottom' && r === maxRow) valid = true;
+          if (selU.enterEdge === 'bottom' && r === mr) valid = true;
           if (!valid) continue;
           const h = hexCenter(c, r);
           const corners = hexCorners(h.x, h.y);
@@ -1278,13 +1280,27 @@ function startGame() {
   loadPhase();
 }
 
+function calcMapSize() {
+  // マップ画像サイズからヘクスグリッドの列数・行数を算出
+  if (!mapImg1) return;
+  const w = mapImg1.naturalWidth;
+  const h = mapImg1.naturalHeight;
+  state.mapMaxCol = Math.floor((w - OX) / (HEX_SIZE * 1.5)) + 1;
+  state.mapMaxRow = Math.floor((h - OY) / HEX_H) + 1;
+  // iframe にもマップサイズを通知
+  const frame = document.getElementById('phaseFrame');
+  if (frame && frame.contentWindow) {
+    frame.contentWindow.postMessage({ type:'MAP_SIZE', mapMaxCol: state.mapMaxCol, mapMaxRow: state.mapMaxRow }, '*');
+  }
+}
+
 function loadMaps() {
   mapImg1 = new Image();
   mapImg2 = null;
   const needTwo = state.map2 && state.map2orient;
   const total = needTwo ? 2 : 1;
   mapLoaded = 0;
-  mapImg1.onload = () => { mapLoaded++; if (mapLoaded >= total) draw(); };
+  mapImg1.onload = () => { mapLoaded++; calcMapSize(); if (mapLoaded >= total) draw(); };
   mapImg1.src = `Map${state.map1}-${state.map1orient}.jpg`;
   if (needTwo) {
     mapImg2 = new Image();
