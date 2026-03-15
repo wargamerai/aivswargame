@@ -403,15 +403,15 @@ function draw() {
       const corners = hexCorners(h.x, h.y);
       // 外側に黒い縁取り（視認性向上）
       ctx.strokeStyle = '#000';
-      ctx.lineWidth = 8;
+      ctx.lineWidth = 16;
       ctx.beginPath();
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
       ctx.closePath();
       ctx.stroke();
-      // 内側に明るい黄色
-      ctx.strokeStyle = '#ff0';
-      ctx.lineWidth = 5;
+      // 内側に赤
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 10;
       ctx.beginPath();
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
