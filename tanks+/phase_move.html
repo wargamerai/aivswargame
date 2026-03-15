@@ -290,7 +290,8 @@ function handlePlacement(col, row) {
   const db = UNIT_DB[u.name];
   if (!db) return;
 
-  const maxCol = 48, maxRow = 30;
+  const maxCol = state.mapMaxCol || 25;
+  const maxRow = state.mapMaxRow || 16;
   const edge = u.enterEdge;
 
   // 進入辺の検証
@@ -917,6 +918,11 @@ window.addEventListener('message', (e) => {
   if (e.data.type === 'MAP_SELECT') {
     console.log(`[phase_move] MAP_SELECT hex(${e.data.col},${e.data.row}) side=${e.data.side} unit=${e.data.unitIdx} moveMode=${moveMode}`);
     handleMapSelect(e.data.col, e.data.row, e.data.side, e.data.unitIdx);
+  }
+  if (e.data.type === 'MAP_SIZE') {
+    state.mapMaxCol = e.data.mapMaxCol;
+    state.mapMaxRow = e.data.mapMaxRow;
+    return;
   }
   if (e.data.type === 'SELECT_UNIT') {
     selectUnit(e.data.unitIdx);
