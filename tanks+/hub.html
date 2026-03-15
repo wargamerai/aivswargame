@@ -400,9 +400,18 @@ function draw() {
     const su = state.units[state.selectedUnit];
     if (su && su.col >= 1) {
       const h = hexCenter(su.col, su.row);
-      ctx.strokeStyle = '#ff0';
-      ctx.lineWidth = 3;
       const corners = hexCorners(h.x, h.y);
+      // 外側に黒い縁取り（視認性向上）
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+      ctx.closePath();
+      ctx.stroke();
+      // 内側に明るい黄色
+      ctx.strokeStyle = '#ff0';
+      ctx.lineWidth = 5;
       ctx.beginPath();
       ctx.moveTo(corners[0].x, corners[0].y);
       for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
