@@ -857,12 +857,30 @@ function aiFindBestTarget(firerIdx) {
     // 撃破率が低すぎたら撃たない（弾薬温存）― 移動不能の敵はトドメなので除外
     if (chance.kill < 0.02 && target.status !== 'immobilized') continue;
 
+    const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
+
+    // シナリオ2/3 ドイツ: T34を優先（移動力高く隣接されると危険）、KV-1Cは後回し
+    if (isSc2or3 && firer.side === 'ge') {
+      if (target.name === 'KV-1C' && chance.kill < 0.15) continue; // KV-1Cは撃破率低いなら撃たない
+    }
+
+    // シナリオ2/3 ソ連: 1-2ヘクスのみ射撃（遠距離は弾の無駄）
+    if (isSc2or3 && firer.side !== 'ge') {
+      if (dist > 2) continue;
+    }
+
     // スコア: 撃破率ベース
     let score = chance.kill * 100;
     // 移動不能の敵を優先（トドメ）
     if (target.status === 'immobilized') score += 20;
     // 距離が近い敵を優先
     score -= dist;
+
+    // シナリオ2/3 ドイツ: T34/SU-76を優先（移動力5で隣接される脅威）
+    if (isSc2or3 && firer.side === 'ge') {
+      const tMove = tDb ? tDb.move : 3;
+      if (tMove >= 5) score += 30; // T34/SU-76優先
+    }
 
     if (score > bestScore) { bestScore = score; bestIdx = ti; }
   }

@@ -984,6 +984,10 @@ function pixelToHex(px, py) {
 
 // ===== AI移動ロジック =====
 function aiMovePhase() {
+  // シナリオ2/3追撃判定リセット
+  delete state._aiChaseComputed;
+  delete state._aiChaseFlag;
+
   // 移動可能なユニットを収集
   const moveableUnits = [];
   state.units.forEach((u, i) => {
@@ -1125,14 +1129,22 @@ function aiPlaceUnit(u, db, callback) {
 
   if (valid.length === 0) { callback(); return; }
 
-  // 戦略的配置: 森/建物を優先、散開、敵進入辺に面する位置
+  // 戦略的配置
   let pick;
+  const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
   if (!edge) {
     // free配置: 地形を活用し散開
     const scored = valid.map(h => {
       let s = 0;
       const t = state.terrain ? state.terrain[`${h.col},${h.row}`] : null;
-      if (t === 'forest' || t === 'building') s += 10;
+      if (isSc2or3) {
+        // シナリオ2/3: 森に隠れて待ち伏せ最優先
+        if (t === 'forest') s += 50;
+        else if (t === 'building') s += 30;
+        else s -= 20; // 平地は避ける
+      } else {
+        if (t === 'forest' || t === 'building') s += 10;
+      }
       // 味方から2-4ヘクス離れた位置を優先（散開）
       for (const ally of state.units) {
         if (ally.side !== u.side || ally.col < 1 || ally === u) continue;
@@ -1140,14 +1152,13 @@ function aiPlaceUnit(u, db, callback) {
         if (ad >= 2 && ad <= 4) s += 2;
         if (ad <= 1) s -= 5;
       }
-      // マップ中央寄りを少し優先
+      // マップ中央寄りを優先（突破ルート上に配置）
       const cx = maxCol / 2, cy = maxRow / 2;
       const cd = Math.abs(h.col - cx) + Math.abs(h.row - cy);
-      s -= cd * 0.3;
+      s -= cd * (isSc2or3 ? 0.5 : 0.3);
       return { h, s };
     });
     scored.sort((a, b) => b.s - a.s);
-    // 上位候補からランダムに選ぶ（少し変化をつける）
     const top = scored.slice(0, Math.min(5, scored.length));
     pick = top[Math.floor(Math.random() * top.length)].h;
   } else {
@@ -1198,13 +1209,24 @@ function aiCanEngageAny(u) {
 }
 
 function aiDoMovement(u, db, callback) {
+  const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
+
+  if (isSc2or3 && u.side === 'ge') {
+    aiBreakthroughMove(u, db, callback);
+    return;
+  }
+  if (isSc2or3 && u.side !== 'ge') {
+    aiAmbushChaseMove(u, db, callback);
+    return;
+  }
+
+  // 通常AI
   const enemy = aiNearestEnemy(u);
   if (!enemy) { callback(); return; }
 
   const distToEnemy = hexDist(u.col, u.row, enemy.col, enemy.row);
   const eDb = UNIT_DB[enemy.name];
 
-  // 各距離での撃破率を比較して最適距離を決定
   const myChances = [];
   const enemyChances = [];
   for (let d = 1; d <= 12; d++) {
@@ -1212,28 +1234,23 @@ function aiDoMovement(u, db, callback) {
     enemyChances[d] = eDb ? calcKillChance(enemy.name, u.name, d, true) : { kill: 0 };
   }
 
-  // 最適距離: 自分の撃破率が敵の撃破率を最も上回る距離
   let bestDist = 3, bestValue = -Infinity;
   for (let d = 1; d <= 12; d++) {
     const value = myChances[d].kill - enemyChances[d].kill;
     if (value > bestValue) { bestValue = value; bestDist = d; }
   }
 
-  // 弱いユニット（装甲3以下）は囮役: とにかく接近して防御射撃を引きつける
   const isDecoy = db.armor <= 3 && db.type === 'tank';
   const targetDist = isDecoy ? 1 : bestDist;
 
-  // 集団行動: 遅いユニットより先行しすぎない
   const groupLimit = state._aiGroupAdvanceLimit || 1;
   const minStopDist = isDecoy ? 1 : Math.max(targetDist, groupLimit);
 
-  // 射撃可能な位置にいるなら停止判断
   const canEngage = aiCanEngageAny(u);
   if (canEngage && distToEnemy <= minStopDist + 1 && distToEnemy >= (isDecoy ? 1 : 2)) {
     callback();
     return;
   }
-  // 集団制限に達したら停止（射撃できなくても待つ）
   if (!isDecoy && distToEnemy <= groupLimit) {
     callback();
     return;
@@ -1241,6 +1258,136 @@ function aiDoMovement(u, db, callback) {
 
   const outgunned = aiIsOutgunned(u);
   aiMoveStep(u, db, enemy, outgunned, callback);
+}
+
+// === シナリオ2/3専用AI ===
+
+// ドイツ: 集団で脱出口へ突破
+function aiBreakthroughMove(u, db, callback) {
+  if (u.remainMove <= 0 || u.status !== 'ok') { callback(); return; }
+
+  let rearRow = 0;
+  for (const ally of state.units) {
+    if (ally.side !== u.side || ally.status === 'destroyed' || ally.col < 1 || ally === u) continue;
+    if (ally.row > rearRow) rearRow = ally.row;
+  }
+  if (rearRow > 0 && u.row < rearRow - 1) { callback(); return; }
+
+  function stepForward() {
+    if (u.remainMove <= 0 || u.status === 'destroyed' || u.status === 'immobilized') { callback(); return; }
+    let curRearRow = 0;
+    for (const ally of state.units) {
+      if (ally.side !== u.side || ally.status === 'destroyed' || ally.col < 1 || ally === u) continue;
+      if (ally.row > curRearRow) curRearRow = ally.row;
+    }
+    if (curRearRow > 0 && u.row < curRearRow - 1) { callback(); return; }
+
+    const neighbors = getNeighbors(u.col, u.row);
+    let bestDir = -1, bestScore = -Infinity;
+    const cx = (state.mapMaxCol || 25) / 2;
+    for (let d = 0; d < 6; d++) {
+      const n = neighbors[d];
+      if (!n) continue;
+      const rotateCost = (!u.justEntered) ? getRotateCost(u.dir, d) : 0;
+      const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
+      let backwardExtra = 0;
+      if (!u.justEntered) {
+        const diff = ((d - u.dir) % 6 + 6) % 6;
+        if (Math.min(diff, 6 - diff) >= 2) backwardExtra = 1;
+      }
+      const totalCost = rotateCost + terrainCost + backwardExtra;
+      if (totalCost > u.remainMove) continue;
+      if (!checkStacking(n.col, n.row, u)) continue;
+      if (n.row >= u.row) continue;
+      let score = (u.row - n.row) * 20;
+      score -= Math.abs(n.col - cx) * 0.5;
+      score -= totalCost;
+      if (score > bestScore) { bestScore = score; bestDir = d; }
+    }
+    if (bestDir < 0) { callback(); return; }
+    moveMode = 'moving';
+    const origAfterDf = afterDefensiveFire;
+    afterDefensiveFire = function(result) {
+      origAfterDf(result);
+      afterDefensiveFire = origAfterDf;
+      if (result === 'destroyed' || result === 'immobilized') { callback(); return; }
+      setTimeout(stepForward, 300);
+    };
+    handleMove(neighbors[bestDir].col, neighbors[bestDir].row);
+  }
+  stepForward();
+}
+
+// ソ連の集中攻撃目標（最も前方の敵）
+function aiGetGroupTarget(side) {
+  let best = null, bestRow = Infinity;
+  for (const e of state.units) {
+    if (e.side === side || e.status === 'destroyed' || e.col < 1) continue;
+    if (e.row < bestRow) { bestRow = e.row; best = e; }
+  }
+  return best;
+}
+
+// ソ連: 追撃判定を一括計算（誰かが圏内なら周囲4hex以内の仲間も全員追撃）
+function aiCalcChaseFlags() {
+  if (state._aiChaseComputed) return;
+  state._aiChaseComputed = true;
+  state._aiChaseFlag = {};
+
+  const suSide = state.side1 === 'ge' ? state.side2 : state.side1;
+  const target = aiGetGroupTarget(suSide);
+  if (!target) return;
+
+  const enemyMove = 2;
+  const suUnits = state.units.filter(u =>
+    u.side === suSide && u.status !== 'destroyed' && u.col >= 1
+  );
+
+  // 1) 距離 ≦ 自分の移動力 + 敵移動力 → 追撃フラグON
+  for (const u of suUnits) {
+    const dist = hexDist(u.col, u.row, target.col, target.row);
+    const uDb = UNIT_DB[u.name];
+    const myMove = uDb ? uDb.move : 3;
+    if (dist <= myMove + enemyMove) {
+      state._aiChaseFlag[u.id] = true;
+    }
+  }
+
+  // 2) 追撃フラグONの仲間の4ヘクス以内にいる味方も全員追撃（連鎖）
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const u of suUnits) {
+      if (state._aiChaseFlag[u.id]) continue;
+      for (const a of suUnits) {
+        if (!state._aiChaseFlag[a.id]) continue;
+        if (hexDist(u.col, u.row, a.col, a.row) <= 4) {
+          state._aiChaseFlag[u.id] = true;
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+}
+
+// ソ連: 待ち伏せ or 集団追撃
+function aiAmbushChaseMove(u, db, callback) {
+  aiCalcChaseFlags();
+
+  const enemy = aiGetGroupTarget(u.side);
+  if (!enemy) { callback(); return; }
+
+  if (hexDist(u.col, u.row, enemy.col, enemy.row) <= 1) { callback(); return; }
+
+  // 追撃フラグなし → 待ち伏せ（動かない）
+  if (!state._aiChaseFlag || !state._aiChaseFlag[u.id]) {
+    callback();
+    return;
+  }
+
+  // 追撃: 全力で同じ目標の隣接へ
+  aiMoveStep(u, db, enemy, false, callback);
 }
 
 function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
