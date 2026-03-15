@@ -420,7 +420,7 @@ function getSpottingRange(observerType, targetTerrain) {
 
 function canSpot(observer, target, terrain) {
   const obsDb = UNIT_DB[observer.name];
-  if (!obsDb) return true;
+  if (!obsDb) return false;  // UNIT_DB未登録なら視認不可
   // hexDist inline
   function toAxial(col, row) {
     const q = col - 1;

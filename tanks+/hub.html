@@ -616,25 +616,22 @@ function draw() {
   if (dfArrow) {
     const from = hexCenter(dfArrow.fromCol, dfArrow.fromRow);
     const to = hexCenter(dfArrow.toCol, dfArrow.toRow);
-    // 射撃ユニットのヘクスを赤く
+    // 射撃ユニットのヘクスをハイライト（射撃側の色で表示）
     const fCorners = hexCorners(from.x, from.y);
     ctx.beginPath();
     ctx.moveTo(fCorners[0].x, fCorners[0].y);
     for (let i = 1; i < 6; i++) ctx.lineTo(fCorners[i].x, fCorners[i].y);
     ctx.closePath();
-    const hlSide = state ? getActiveSide(state.phase) : null;
-    const hlFirst = hlSide === (state ? state.firstPlayer : null);
-    const hlColor = hlFirst ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
-    const hlStroke = hlFirst ? '#4488ff' : '#ff4444';
+    const shooterIsFirst = dfArrow.shooterSide === (state ? state.firstPlayer : null);
+    const hlColor = shooterIsFirst ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
+    const hlStroke = shooterIsFirst ? '#4488ff' : '#ff4444';
     ctx.fillStyle = hlColor;
     ctx.fill();
     ctx.strokeStyle = hlStroke;
     ctx.lineWidth = 6;
     ctx.stroke();
-    // 矢印描画（先攻=青、後攻=赤）
-    const arrowSide = state ? getActiveSide(state.phase) : null;
-    const isFirst = arrowSide === (state ? state.firstPlayer : null);
-    const arrowColor = isFirst ? '#4488ff' : '#ff4444';
+    // 矢印描画（射撃側の色）
+    const arrowColor = shooterIsFirst ? '#4488ff' : '#ff4444';
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
     const headLen = HEX_SIZE * 0.5;
     ctx.strokeStyle = arrowColor;

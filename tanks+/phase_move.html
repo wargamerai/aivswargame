@@ -572,10 +572,11 @@ function showDfStep1() {
   if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
   if (mDb.small) { mod += 1; details.push('小型+1'); }
 
-  // hub.htmlに矢印表示
+  // hub.htmlに矢印表示（射撃側のsideを渡す）
   parent.postMessage({ type:'DF_ARROW', arrow: {
     fromCol: e.col, fromRow: e.row,
-    toCol: dfMovingUnit.col, toRow: dfMovingUnit.row
+    toCol: dfMovingUnit.col, toRow: dfMovingUnit.row,
+    shooterSide: e.side
   }}, '*');
 
   let html = `<div style="margin-bottom:12px">`;
@@ -594,8 +595,9 @@ function showDfStep1() {
   document.getElementById('dfBody').innerHTML = html;
   document.getElementById('dfOverlay').style.display = 'flex';
 
-  // AI自動射撃（戦術判断付き）
-  if (isAI) setTimeout(() => {
+  // 防御射撃の自動判断: 射撃側がAI（=移動側がプレイヤー）の場合のみ自動
+  const dfShooterIsAI = !isAI;
+  if (dfShooterIsAI) setTimeout(() => {
     // 防御射撃をスキップすべきか判断
     const dist = enemy.dist;
     const remainMP = dfMovingUnit.remainMove;
@@ -689,8 +691,8 @@ function executeDfShot() {
   document.getElementById('dfBody').innerHTML = html;
   pushState();
 
-  // AI自動確認
-  if (isAI) setTimeout(() => nextDfStep(), 600);
+  // 射撃側がAI（=移動側がプレイヤー）の場合のみ自動確認
+  if (!isAI) setTimeout(() => nextDfStep(), 600);
 }
 
 // 次の射撃へ or 終了
