@@ -800,6 +800,38 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
+// 右クリックでユニットの向きを直接指定（クリック位置の方向に向く）
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (!state) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left - camX) / zoom;
+  const my = (e.clientY - rect.top - camY) / zoom;
+  const hex = pixelToHex(mx, my);
+  // そのヘクスのユニットを探す
+  const idx = state.units.findIndex(u =>
+    u.col === hex.col && u.row === hex.row && u.status !== 'destroyed'
+  );
+  if (idx < 0) return;
+  const u = state.units[idx];
+  const db = UNIT_DB[u.name];
+  if (db && (db.type === 'infantry' || db.type === 'apc')) return;
+  // ヘクス中心からクリック位置への角度で6方向を決定
+  const hc = hexCenter(hex.col, hex.row);
+  const dx = mx - hc.x;
+  const dy = my - hc.y; // Canvas Y下向き
+  // atan2でラジアン→度、Y下向きなので上が-90°
+  let angle = Math.atan2(dy, dx) * 180 / Math.PI; // -180~180, 右=0, 下=90, 上=-90
+  // 上=dir0 として60°刻みに割り当て（時計回り）
+  // 上=-90° → dir0, 右上=-30° → dir1, 右下=30° → dir2, 下=90° → dir3, 左下=150° → dir4, 左上=-150° → dir5
+  angle += 90; // 上を0°に
+  if (angle < 0) angle += 360;
+  u.dir = Math.round(angle / 60) % 6;
+  state.selectedUnit = idx;
+  draw();
+  renderUnitList();
+});
+
 // ===== シナリオ選択 =====
 function initScenarioScreen() {
   const sel = document.getElementById('selScenario');
