@@ -136,6 +136,8 @@ function init(stateData) {
 
   log(`=== ${document.getElementById('phTitle').textContent} ===`);
 
+  if (!state || !state.units) { log('状態なし — 親からのINIT_STATE待ち'); return; }
+
   // 射撃可能ユニットをフィルタ
   firers = [];
   state.units.forEach((u, i) => {
