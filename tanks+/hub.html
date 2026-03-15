@@ -102,6 +102,19 @@ button.top-btn:hover { background:#556; }
   padding:4px 8px; border-top:1px solid #555; line-height:1.5; display:none;
 }
 
+/* --- デバッグパネル --- */
+#debugPanel {
+  position:fixed; bottom:0; right:0; width:400px; max-height:300px;
+  background:rgba(0,0,0,0.9); color:#0f0; font-family:monospace; font-size:11px;
+  padding:6px; overflow-y:auto; z-index:999; border:1px solid #0f0;
+  display:none;
+}
+#debugPanel.visible { display:block; }
+#debugPanel .dbg-err { color:#f44; }
+#debugPanel .dbg-warn { color:#ff0; }
+#debugPanel .dbg-info { color:#0af; }
+#debugPanel .dbg-head { color:#0f0; font-weight:bold; border-bottom:1px solid #0f0; margin:4px 0 2px; }
+
 </style>
 </head>
 <body>
@@ -114,6 +127,7 @@ button.top-btn:hover { background:#556; }
   <span class="info" id="playerInfo"></span>
   <button class="top-btn" onclick="endPhase()">フェーズ終了</button>
   <button class="top-btn" id="arcBtn" onclick="toggleArc()">射界表示</button>
+  <button class="top-btn" onclick="toggleDebug()" style="background:#030;color:#0f0">DBG</button>
   <span style="margin-left:20px;color:#888">|</span>
   <button class="top-btn" id="teBtn" onclick="toggleTerrainEdit()">地形編集</button>
   <span id="teBrush" style="display:none; gap:4px; align-items:center;">
@@ -128,6 +142,8 @@ button.top-btn:hover { background:#556; }
 
 <!-- 方向メニュー（右クリック） -->
 <div id="dirMenu"></div>
+<!-- デバッグパネル -->
+<div id="debugPanel"></div>
 
 <!-- メインエリア -->
 <div id="main">
@@ -164,6 +180,47 @@ button.top-btn:hover { background:#556; }
 </div>
 
 <script>
+// ===== デバッグ =====
+let debugVisible = false;
+function toggleDebug() {
+  debugVisible = !debugVisible;
+  document.getElementById('debugPanel').classList.toggle('visible', debugVisible);
+  if (debugVisible) dbgRefresh();
+}
+function dbg(msg, cls='') {
+  const p = document.getElementById('debugPanel');
+  if (!p) return;
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  p.appendChild(d);
+  p.scrollTop = p.scrollHeight;
+  // 最大200行
+  while (p.children.length > 200) p.removeChild(p.firstChild);
+  console.log(`[DBG${cls?':'+cls:''}] ${msg}`);
+}
+function dbgRefresh() {
+  const p = document.getElementById('debugPanel');
+  if (!p || !debugVisible) return;
+  // 状態サマリーを表示
+  const head = document.createElement('div');
+  head.className = 'dbg-head';
+  const units = state ? state.units : [];
+  const alive = units.filter(u => u.status !== 'destroyed');
+  head.textContent = `STATE: phase=${state?.phase} turn=${state?.turn} sel=${state?.selectedUnit} units=${alive.length}/${units.length}`;
+  p.appendChild(head);
+  if (state) {
+    alive.forEach((u, i) => {
+      const realIdx = units.indexOf(u);
+      const d = document.createElement('div');
+      d.className = 'dbg-info';
+      d.textContent = `  [${realIdx}] ${u.name} ${u.side} (${u.col},${u.row}) dir=${u.dir} st=${u.status||'ok'} mv=${u.moved?'Y':'N'} fi=${u.fired?'Y':'N'}`;
+      p.appendChild(d);
+    });
+  }
+  p.scrollTop = p.scrollHeight;
+}
+
 // ===== グローバル状態 =====
 let state = null;
 let mapImg1 = null, mapImg2 = null;
@@ -759,8 +816,8 @@ canvas.addEventListener('wheel', (e) => {
 
 // ヘクスクリック
 canvas.addEventListener('click', (e) => {
-  if (dragMoved) return; // ドラッグ操作はクリックとして扱わない
-  if (!state) return;
+  if (dragMoved) { dbg('click無視(drag)', 'dbg-warn'); return; }
+  if (!state) { dbg('click無視(state=null)', 'dbg-err'); return; }
   const rect = canvas.getBoundingClientRect();
   const mx = (e.clientX - rect.left - camX) / zoom;
   const my = (e.clientY - rect.top - camY) / zoom;
@@ -795,8 +852,10 @@ canvas.addEventListener('click', (e) => {
   const idx = state.units.findIndex(u =>
     u.col === hex.col && u.row === hex.row && u.status !== 'destroyed'
   );
+  dbg(`click hex(${hex.col},${hex.row}) unitIdx=${idx} dragMoved=${dragMoved}`);
   if (idx >= 0) {
     state.selectedUnit = idx;
+    dbg(`選択: ${state.units[idx].name} st=${state.units[idx].status||'ok'}`);
   } else {
     state.selectedUnit = null;
   }
@@ -812,12 +871,15 @@ canvas.addEventListener('click', (e) => {
   // iframeに選択を通知
   const frame = document.getElementById('phaseFrame');
   if (frame.contentWindow) {
+    dbg(`→iframe MAP_SELECT hex(${hex.col},${hex.row}) side=${sideDir} unit=${idx}`);
     frame.contentWindow.postMessage({
       type: 'MAP_SELECT',
       col: hex.col, row: hex.row,
       side: sideDir,
       unitIdx: idx
     }, '*');
+  } else {
+    dbg('iframe.contentWindow=null!', 'dbg-err');
   }
 });
 
@@ -1115,13 +1177,17 @@ function gameLog(text) {
 // ===== iframe通信 =====
 window.addEventListener('message', (e) => {
   if (!e.data || !e.data.type) return;
+  dbg(`MSG受信: ${e.data.type} origin=${e.origin}`, 'dbg-info');
 
   switch (e.data.type) {
     case 'PHASE_DONE':
+      dbg('PHASE_DONE → endPhase()');
       endPhase();
       break;
-    case 'STATE_UPDATE':
+    case 'STATE_UPDATE': {
       if (e.data.units) {
+        const destroyed = e.data.units.filter(u => u.status === 'destroyed').map(u => u.name);
+        dbg(`STATE_UPDATE: ${e.data.units.length}units, destroyed=[${destroyed.join(',')}]`, 'dbg-warn');
         // iframeからのユニット更新時にdirを保持
         const oldDirs = {};
         state.units.forEach((u, i) => { if (u.dir !== undefined) oldDirs[i] = u.dir; });
@@ -1131,8 +1197,11 @@ window.addEventListener('message', (e) => {
       saveState();
       renderUnitList();
       draw();
+      if (debugVisible) dbgRefresh();
       break;
+    }
     case 'HIGHLIGHT':
+      dbg(`HIGHLIGHT: unitIdx=${e.data.unitIdx}`);
       state.selectedUnit = e.data.unitIdx || null;
       draw();
       break;
