@@ -614,23 +614,22 @@
     }
 
     // コナミコマンド: ↑↑↓↓←→←→BA
-    // 1回目: 墨消し状態で出現、2回目: タイトル表示
+    // 墨消しで出現 → 0.8秒後にタイトル解読
     (function() {
         const code = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
         let pos = 0;
-        let phase = 0; // 0=未入力, 1=出現済み, 2=解読済み
+        let activated = false;
         document.addEventListener('keydown', function(e) {
+            if (activated) return;
             if (e.key === code[pos] || e.key.toLowerCase() === code[pos]) {
                 pos++;
                 if (pos === code.length) {
+                    activated = true;
                     const secrets = document.querySelectorAll('.secret-btn');
-                    if (phase === 0) {
-                        secrets.forEach(el => el.classList.add('revealed'));
-                        phase = 1;
-                    } else if (phase === 1) {
+                    secrets.forEach(el => el.classList.add('revealed'));
+                    setTimeout(() => {
                         secrets.forEach(el => el.classList.add('decoded'));
-                        phase = 2;
-                    }
+                    }, 800);
                     pos = 0;
                 }
             } else {
