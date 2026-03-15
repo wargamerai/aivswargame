@@ -1378,8 +1378,39 @@ function aiGetGroupTarget(side) {
   return best;
 }
 
+// 固定砲塔の射界チェック（phase_move用簡易版）
+function isInFixedArcMove(firer, targetCol, targetRow) {
+  const apex = hexNeighbor(firer.col, firer.row, firer.dir);
+  if (!apex) return false;
+  if (targetCol === apex.col && targetRow === apex.row) return true;
+  const hFirer = hexCenter(firer.col, firer.row);
+  const hApex = hexCenter(apex.col, apex.row);
+  const hTgt = hexCenter(targetCol, targetRow);
+  const centerAngle = Math.atan2(-(hApex.y - hFirer.y), hApex.x - hFirer.x);
+  const angle = Math.atan2(-(hTgt.y - hApex.y), hTgt.x - hApex.x);
+  let diff = angle - centerAngle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return Math.abs(diff) <= Math.PI / 3 + 0.05;
+}
+
+// ソ連ユニットがドイツの脅威を受けるか判定
+// 固定砲塔の射界外 or LOS遮断 → 安全（脅威なし）
+function aiIsSafeFromEnemy(suUnit, geUnit) {
+  const geDb = UNIT_DB[geUnit.name];
+  if (!geDb) return false;
+  // 固定砲塔: 射界外なら安全
+  if (geDb.turret === 'fixed') {
+    if (!isInFixedArcMove(geUnit, suUnit.col, suUnit.row)) return true;
+  }
+  // LOS遮断なら安全
+  if (!hasLOS(geUnit.col, geUnit.row, suUnit.col, suUnit.row)) return true;
+  return false;
+}
+
 // ソ連: 追撃判定を一括計算
 // ドイツの脱出口までの残りターン数を逆算し、間に合わなくなる前に全員追撃開始
+// 敵の射界外・LOS遮断なら安全なので早期に移動開始
 function aiCalcChaseFlags() {
   if (state._aiChaseComputed) return;
   state._aiChaseComputed = true;
@@ -1399,12 +1430,11 @@ function aiCalcChaseFlags() {
   for (const ge of geUnits) {
     const geDb = UNIT_DB[ge.name];
     const geMove = geDb ? geDb.move : 2;
-    // 脱出口までの距離
     let distToExit;
     if (state.scenarioId === 'sc2') {
-      distToExit = ge.row - 1; // row=1が脱出口
+      distToExit = ge.row - 1;
     } else {
-      distToExit = maxRow - ge.row; // row=maxRowが脱出口
+      distToExit = maxRow - ge.row;
     }
     const turnsToExit = Math.ceil(distToExit / geMove);
     if (turnsToExit < minEnemyTurns) {
@@ -1418,8 +1448,6 @@ function aiCalcChaseFlags() {
     u.side === suSide && u.status !== 'destroyed' && u.col >= 1
   );
 
-  // 各ソ連ユニットが敵に到達するまでのターン数を計算
-  // 敵が脱出するまでに追いつけないなら追撃開始
   for (const u of suUnits) {
     const uDb = UNIT_DB[u.name];
     const myMove = uDb ? uDb.move : 3;
@@ -1433,8 +1461,14 @@ function aiCalcChaseFlags() {
 
     const turnsToReach = Math.ceil(Math.max(0, minDistToEnemy - 1) / myMove);
 
-    // 敵が脱出するまでに到達できるギリギリ → 追撃開始
-    // 余裕を持って: 敵の脱出まで残り(自分の到達ターン+1)以下なら動く
+    // 全ての敵の射界外 or LOS遮断 → 安全なので即座に追撃開始
+    const isSafe = geUnits.every(ge => aiIsSafeFromEnemy(u, ge));
+    if (isSafe) {
+      state._aiChaseFlag[u.id] = true;
+      continue;
+    }
+
+    // 脅威下: 敵が脱出するまでに到達できるギリギリ → 追撃開始
     if (minEnemyTurns <= turnsToReach + 2) {
       state._aiChaseFlag[u.id] = true;
     }
