@@ -778,8 +778,7 @@ function exportTerrain() {
   navigator.clipboard.writeText(text).then(() => {
     alert('地形データをクリップボードにコピーしました');
   }).catch(() => {
-    console.log(text);
-    alert('コンソールに出力しました');
+    prompt('コピーしてください（Ctrl+A → Ctrl+C）:', text);
   });
 }
 
