@@ -471,6 +471,34 @@ function draw() {
     }
   }
 
+  // 進入可能ヘクスのハイライト（未配置ユニット選択時）
+  if (state && state.selectedUnit !== null && state.selectedUnit !== undefined) {
+    const selU = state.units[state.selectedUnit];
+    if (selU && selU.col < 1 && selU.enterEdge) {
+      ctx.fillStyle = 'rgba(0,200,0,0.25)';
+      ctx.strokeStyle = 'rgba(0,200,0,0.5)';
+      ctx.lineWidth = 3;
+      for (let c = 1; c <= maxCol; c++) {
+        for (let r = 1; r <= maxRow; r++) {
+          let valid = false;
+          if (selU.enterEdge === 'right' && c === maxCol) valid = true;
+          if (selU.enterEdge === 'left' && c === 1) valid = true;
+          if (selU.enterEdge === 'top' && r === 1) valid = true;
+          if (selU.enterEdge === 'bottom' && r === maxRow) valid = true;
+          if (!valid) continue;
+          const h = hexCenter(c, r);
+          const corners = hexCorners(h.x, h.y);
+          ctx.beginPath();
+          ctx.moveTo(corners[0].x, corners[0].y);
+          for (let i = 1; i < 6; i++) ctx.lineTo(corners[i].x, corners[i].y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
   // 行動済みユニットのヘクスハイライト
   if (state && state.units) {
     for (const u of state.units) {
@@ -1212,6 +1240,7 @@ function startGame() {
         isDummy: false,
         carrying: null,     // 輸送中の歩兵ID
         showWreck: true,
+        enterEdge: sd.enterEdge || null,
       });
     }
   }
@@ -1234,6 +1263,7 @@ function startGame() {
     selectedUnit: null,
     terrain: sc.terrain || {},
     hexsideTerrain: sc.hexsideTerrain || {},
+    specialRules: sc.specialRules || {},
   };
 
   // 地図画像ロード
@@ -1387,7 +1417,8 @@ function renderSideList(containerId, side) {
       (state.selectedUnit === i ? ' selected' : '');
     const statusText = u.status === 'destroyed' ? '撃破' :
                        u.status === 'immobilized' ? '移動不能' :
-                       u.ammoOut ? '弾切' : '';
+                       u.ammoOut ? '弾切' :
+                       u.col < 1 ? '未配置' : '';
     div.innerHTML = `<span class="u-name">${u.name}</span><span class="u-status">${statusText}</span>`;
     div.onclick = () => {
       state.selectedUnit = i;
