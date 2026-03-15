@@ -15,12 +15,12 @@ function distKey(d) {
 // small: 小型目標
 const UNIT_DB = {
   // ドイツ軍
-  'Pz III/J':       { type:'tank', nation:'ge', armor:4, move:3, antiInf:7, turret:'rotating', small:false, score:6, img:'DE_Pz III-J.png' },
-  'Pz III/J late':  { type:'tank', nation:'ge', armor:4, move:3, antiInf:7, turret:'rotating', small:false, score:6, img:'DE_Pz III-J.png' },
+  'Pz III/J':       { type:'tank', nation:'ge', armor:3, move:4, antiInf:7, turret:'rotating', small:false, score:6, img:'DE_Pz III-J.png' },
+  'Pz III/J late':  { type:'tank', nation:'ge', armor:3, move:4, antiInf:7, turret:'rotating', small:false, score:6, img:'DE_Pz III-J.png' },
   'Pz IV/H':        { type:'tank', nation:'ge', armor:4, move:4, antiInf:8, turret:'rotating', small:false, score:8, img:'DE_Pz IV-H.png' },
   'Pz V/G':         { type:'tank', nation:'ge', armor:6, move:5, antiInf:8, turret:'rotating', small:false, score:20, img:'DE_Pz V-G.png' },
   'Tiger I':         { type:'tank', nation:'ge', armor:6, move:3, antiInf:9, turret:'rotating', small:false, score:15, img:'DE_Tiger I.png' },
-  'Tiger II':        { type:'tank', nation:'ge', armor:6, move:3, antiInf:9, turret:'rotating', small:false, score:30, img:'DE_Tiger II.png' },
+  'Tiger II':        { type:'tank', nation:'ge', armor:8, move:3, antiInf:9, turret:'rotating', small:false, score:30, img:'DE_Tiger II.png' },
   'StuG III':        { type:'tank', nation:'ge', armor:4, move:4, antiInf:8, turret:'fixed', small:true, score:8, img:'DE_StuG III.png' },
   'JP IV':           { type:'tank', nation:'ge', armor:5, move:4, antiInf:8, turret:'fixed', small:true, score:18, img:'DE_JP IV.png' },
   'Hetzer':          { type:'tank', nation:'ge', armor:4, move:3, antiInf:8, turret:'fixed', small:true, score:9, img:'DE_Hetzer.png' },
