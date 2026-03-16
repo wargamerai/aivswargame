@@ -1183,8 +1183,7 @@ function aiPlaceUnit(u, db, callback) {
   let pick;
   const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
   if (!edge && isSc2or3) {
-    // シナリオ2/3: 左右の森にスタック配置で挟み撃ち
-    // KV-1Cは上の森（遅いので前方待ち伏せ）、他は左右の森
+    // シナリオ2/3: 森に配置。右下の森（敵突破ルート上）にも必ず配置
     const cx = maxCol / 2;
     const isKV = u.name === 'KV-1C';
 
@@ -1194,23 +1193,33 @@ function aiPlaceUnit(u, db, callback) {
       return t === 'forest';
     });
 
+    // 右下の森ヘクス（敵の突破ルートを塞ぐ重要拠点）
+    const bottomForest = forestHexes.filter(h => h.row >= maxRow * 0.7);
+    // 右下の森に既に配置済みの味方数
+    const bottomAllyCount = state.units.filter(a =>
+      a.side === u.side && a.col >= 1 && a !== u && a.row >= maxRow * 0.7 &&
+      state.terrain && state.terrain[`${a.col},${a.row}`] === 'forest'
+    ).length;
+    // 右下の森に最低3ユニット配置を目指す
+    const needBottom = bottomAllyCount < 3 && bottomForest.length > 0;
+
     if (forestHexes.length > 0) {
-      const scored = forestHexes.map(h => {
+      const candidates = needBottom ? bottomForest : forestHexes;
+      const scored = candidates.map(h => {
         let s = 0;
         if (isKV) {
-          // KV-1C: 上の森（row小さい＝脱出口側）を優先
-          s -= h.row * 3; // 上の方が高スコア
-          s -= Math.abs(h.col - cx) * 0.5; // 中央寄り
+          // KV-1C: 脱出口側を優先（row小=上側）
+          s -= h.row * 3;
+          s -= Math.abs(h.col - cx) * 0.5;
         } else {
-          // T34/SU-76: 左右の森（中央の行付近）でスタック
-          const midRow = maxRow / 2;
-          s -= Math.abs(h.row - midRow) * 1; // マップ中央の高さ
-          // 左右どちらかの森に偏らせる（既に配置済みの味方に寄せる）
+          // 敵の進入方向に近い森を優先（row大=下側=敵が来る方）
+          s += h.row * 1.5;
+          // 既に配置済みの味方に寄せる（スタック）
           for (const ally of state.units) {
             if (ally.side !== u.side || ally.col < 1 || ally === u) continue;
-            if (ally.name === 'KV-1C') continue; // KV-1Cは別グループ
+            if (ally.name === 'KV-1C') continue;
             const ad = hexDist(h.col, h.row, ally.col, ally.row);
-            if (ad <= 2) s += 5; // スタック/近接を優先
+            if (ad <= 2) s += 5;
           }
         }
         return { h, s };
@@ -1219,7 +1228,6 @@ function aiPlaceUnit(u, db, callback) {
       const top = scored.slice(0, Math.min(3, scored.length));
       pick = top[Math.floor(Math.random() * top.length)].h;
     } else {
-      // 森がなければ地形重視で適当に
       pick = valid[Math.floor(Math.random() * valid.length)];
     }
   } else if (!edge) {
