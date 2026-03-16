@@ -1560,13 +1560,21 @@ function aiDoMovement(u, db, callback) {
   const groupLimit = state._aiGroupAdvanceLimit || 1;
   const minStopDist = isDecoy ? 1 : Math.max(targetDist, groupLimit);
 
-  const canEngage = aiCanEngageAny(u);
-  // 歩兵目標: bestDistまで必ず接近（遠距離で停止しない）
-  if (targetIsInfantry) {
-    if (distToEnemy <= minStopDist) { callback(); return; }
-  } else if (canEngage && distToEnemy <= minStopDist + 1 && distToEnemy >= (isDecoy ? 1 : 2)) {
-    callback();
-    return;
+  // 停止判定: 現在距離での撃破率が十分なら停止
+  if (!isDecoy && distToEnemy >= 2) {
+    const myKill = (distToEnemy <= 12) ? (myChances[distToEnemy] || {kill:0}).kill : 0;
+    const enKill = (distToEnemy <= 12) ? (enemyChances[distToEnemy] || {kill:0}).kill : 0;
+    const advantage = myKill - enKill;
+    // 撃破率5%以上かつ優位差がbestDistと同等なら停止
+    if (myKill >= 0.05 && advantage >= bestValue * 0.8 && distToEnemy <= minStopDist + 1) {
+      callback();
+      return;
+    }
+    // 歩兵目標: bestDistに到達したら停止
+    if (targetIsInfantry && distToEnemy <= minStopDist) {
+      callback();
+      return;
+    }
   }
   if (!isDecoy && distToEnemy <= groupLimit) {
     callback();
@@ -1965,11 +1973,17 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
       }
     }
     const stopDist = Math.max(bestDist, groupLimit);
-    if (targetIsInf) {
-      if (distNow <= stopDist) { callback(); return; }
-    } else if (aiCanEngageAny(u) && distNow <= stopDist + 1 && distNow >= 2) {
-      callback();
-      return;
+    // 撃破率ベースの停止判定
+    if (distNow >= 2) {
+      const myKill = calcKillChance(u.name, targetEnemy.name, distNow, true).kill;
+      const enKill = eDb ? calcKillChance(targetEnemy.name, u.name, distNow, true).kill : 0;
+      const advantage = myKill - enKill;
+      if (myKill >= 0.05 && advantage >= bestValue * 0.8 && distNow <= stopDist + 1) {
+        callback(); return;
+      }
+      if (targetIsInf && distNow <= stopDist) {
+        callback(); return;
+      }
     }
     // 集団制限に達したら停止
     if (distNow <= groupLimit) {
