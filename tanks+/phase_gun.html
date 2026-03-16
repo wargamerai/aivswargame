@@ -821,11 +821,12 @@ function hexDist(c1, r1, c2, r2) {
 }
 
 // ===== LOS判定 =====
-function isBlockingTerrain(col, row, skipSlope) {
+function isBlockingTerrain(col, row, skipSlope, virtualSlopes) {
   if (!state || !state.terrain) return false;
   const t = state.terrain[`${col},${row}`];
-  if (skipSlope && t === 'slope') return false;
-  return t === 'forest' || t === 'building' || t === 'slope';
+  const isSlope = t === 'slope' || (virtualSlopes && virtualSlopes.has(`${col},${row}`));
+  if (skipSlope && isSlope) return false;
+  return t === 'forest' || t === 'building' || isSlope;
 }
 
 function pixelToHexTwo(px, py) {
@@ -852,20 +853,48 @@ function hasLOS(c1, r1, c2, r2) {
   const h1 = hexCenter(c1, r1);
   const h2 = hexCenter(c2, r2);
   const dist = hexDist(c1, r1, c2, r2);
-  // DEBUG: 崖データ確認
-  if (state && state.hexsideTerrain) {
-    const slopeKeys = Object.entries(state.hexsideTerrain).filter(([k,v])=>v==='slope');
-    if (slopeKeys.length > 0) console.log(`[崖LOS] hasLOS(${c1},${r1}→${c2},${r2}) dist=${dist} 崖数=${slopeKeys.length}`);
-  } else {
-    console.log(`[崖LOS] hasLOS called but hexsideTerrain=${state?'null/empty':'no state'}`);
-  }
   if (dist <= 1) return true;
-  // 両方が丘にいる場合、途中の丘ヘクス・崖はブロックしない
+
+  const steps = Math.max(dist * 4, 8);
+
+  // --- 崖プリスキャン: 射線が通過する崖ヘクスサイドを検出し、
+  //     崖の向こう側（射手から遠い方）のヘクスを仮想丘とする ---
+  const virtualSlopes = new Set();
+  if (state && state.hexsideTerrain) {
+    const checkedCliff = {};
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const mx = h1.x + (h2.x - h1.x) * t;
+      const my = h1.y + (h2.y - h1.y) * t;
+      const res = pixelToHexTwo(mx, my);
+      const m1 = res.hex1, m2 = res.hex2;
+      if (!m2) continue;
+      if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
+        const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (!checkedCliff[key] && state.hexsideTerrain[key] === 'slope') {
+          checkedCliff[key] = true;
+          // 射手から遠い方のヘクスを仮想丘にする
+          const d1 = hexDist(m1.col, m1.row, c1, r1);
+          const d2 = hexDist(m2.col, m2.row, c1, r1);
+          if (d1 >= d2) {
+            virtualSlopes.add(`${m1.col},${m1.row}`);
+          } else {
+            virtualSlopes.add(`${m2.col},${m2.row}`);
+          }
+        }
+      }
+    }
+  }
+
+  // skipSlope: 両方が丘（実際 or 仮想）なら途中の丘はブロックしない
   const t1 = (state && state.terrain) ? state.terrain[`${c1},${r1}`] : null;
   const t2 = (state && state.terrain) ? state.terrain[`${c2},${r2}`] : null;
-  const skipSlope = (t1 === 'slope' && t2 === 'slope');
-  const steps = Math.max(dist * 4, 8);
-  const checked = {};
+  const c1Hill = t1 === 'slope' || virtualSlopes.has(`${c1},${r1}`);
+  const c2Hill = t2 === 'slope' || virtualSlopes.has(`${c2},${r2}`);
+  const skipSlope = c1Hill && c2Hill;
+
+  // --- 通常のLOSチェック（仮想丘も丘として扱う） ---
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     const mx = h1.x + (h2.x - h1.x) * t;
@@ -876,30 +905,12 @@ function hasLOS(c1, r1, c2, r2) {
     if (m1.col === c1 && m1.row === r1) continue;
     if (m1.col === c2 && m1.row === r2) continue;
 
-    // 崖チェック（hexsideTerrain の slope）
-    if (!skipSlope && m2 && state && state.hexsideTerrain) {
-      if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
-        const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
-        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
-        if (!checked[key]) {
-          checked[key] = true;
-          if (state.hexsideTerrain[key] === 'slope') {
-            // 崖が射手/目標の横なら通過、中間なら遮断
-            const atEnd = (m1.col===c1&&m1.row===r1)||(m1.col===c2&&m1.row===r2)
-                        ||(m2.col===c1&&m2.row===r1)||(m2.col===c2&&m2.row===r2);
-            console.log(`[崖LOS] from(${c1},${r1})→to(${c2},${r2}) cliff=${key} m1=(${m1.col},${m1.row}) m2=(${m2.col},${m2.row}) atEnd=${atEnd} → ${atEnd?'通過':'遮断'}`);
-            if (!atEnd) return false;
-          }
-        }
-      }
-    }
-
     const onHexside = result.dist2 < result.dist1 * 1.05;
     if (onHexside) {
       const skip2 = (m2.col === c1 && m2.row === r1) || (m2.col === c2 && m2.row === r2);
-      if (isBlockingTerrain(m1.col, m1.row, skipSlope) && (skip2 || isBlockingTerrain(m2.col, m2.row, skipSlope))) return false;
+      if (isBlockingTerrain(m1.col, m1.row, skipSlope, virtualSlopes) && (skip2 || isBlockingTerrain(m2.col, m2.row, skipSlope, virtualSlopes))) return false;
     } else {
-      if (isBlockingTerrain(m1.col, m1.row, skipSlope)) return false;
+      if (isBlockingTerrain(m1.col, m1.row, skipSlope, virtualSlopes)) return false;
     }
   }
   return true;
@@ -1085,11 +1096,21 @@ function aiFindBestTarget(firerIdx) {
     const frontHit = isHittingFrontArmor(firer, target);
     const chance = calcKillChance(firer.name, target.name, dist, frontHit);
 
-    // 弾薬温存: 撃破率が弾切れリスク(約2.8%)以下なら撃たない
-    // 最終2ターンや移動不能の敵は例外（トドメ優先）
+    // 準備射撃: 撃破率50%以上でないと撃たない（移動で有利な位置を取る方が重要）
+    // 前進射撃: 移動後なので弾薬温存基準で判定
+    // 最終2ターンはほぼ撃つ
     const remainTurns = (state.maxTurns || 99) - (state.turn || 1);
-    const ammoRisk = 1 / 36; // 2d6で12 ≒ 2.78%
-    const minKill = (remainTurns <= 2) ? 0.01 : ammoRisk;
+    let minKill;
+    if (remainTurns <= 2) {
+      minKill = 0.01;
+    } else if (!isAdvanceFire) {
+      // 準備射撃: 50%以上でないと撃たない
+      minKill = 0.50;
+    } else {
+      // 前進射撃: 弾切れリスク基準
+      const ammoRisk = 1 / 36;
+      minKill = ammoRisk * Math.min(remainTurns, 4);
+    }
     if (chance.kill < minKill && target.status !== 'immobilized') continue;
 
     const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
