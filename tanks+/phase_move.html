@@ -1544,17 +1544,14 @@ function aiDoMovement(u, db, callback) {
     if (value > bestValue) { bestValue = value; bestDist = d; }
   }
 
-  // 戦車→歩兵: ソ連歩兵(AT射程0)にはMG接近、他はHE距離維持
+  // 戦車→歩兵: 歩兵のAT射程外まで積極接近
   const targetIsInfantry = eDb && (eDb.type === 'infantry' || eDb.type === 'atgun');
   if (db.type === 'tank' && targetIsInfantry) {
     const eNation = eDb.nation || '';
     const atTable = INF_VS_TANK[eNation];
     const maxAtRange = atTable ? Math.max(...Object.keys(atTable).map(Number)) : 0;
-    if (maxAtRange <= 0) {
-      // ソ連歩兵等: AT射程なし → MG射程まで積極接近
-      bestDist = db.noMG ? 1 : 2;
-    }
-    // 英米独歩兵: AT射程あり → calcKillChanceのbestDistを維持(HE距離)
+    // ソ連(AT射程0) → MG射程2まで、他(AT射程3等) → AT射程+1まで接近
+    bestDist = (maxAtRange <= 0) ? (db.noMG ? 1 : 2) : maxAtRange + 1;
   }
 
   const isDecoy = db.armor <= 3 && db.type === 'tank';
@@ -1564,7 +1561,10 @@ function aiDoMovement(u, db, callback) {
   const minStopDist = isDecoy ? 1 : Math.max(targetDist, groupLimit);
 
   const canEngage = aiCanEngageAny(u);
-  if (canEngage && distToEnemy <= minStopDist + 1 && distToEnemy >= (isDecoy ? 1 : 2)) {
+  // 歩兵目標: bestDistまで必ず接近（遠距離で停止しない）
+  if (targetIsInfantry) {
+    if (distToEnemy <= minStopDist) { callback(); return; }
+  } else if (canEngage && distToEnemy <= minStopDist + 1 && distToEnemy >= (isDecoy ? 1 : 2)) {
     callback();
     return;
   }
@@ -1950,21 +1950,12 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
     const eDb = UNIT_DB[targetEnemy.name];
     const targetIsInf = eDb && (eDb.type === 'infantry' || eDb.type === 'atgun');
     let bestDist = 3, bestValue = -Infinity;
-    // 戦車→ソ連歩兵(AT射程0): MG射程まで接近
     if (db.type === 'tank' && targetIsInf) {
+      // 歩兵のAT射程外まで積極接近
       const eNation = eDb.nation || '';
       const atTable = INF_VS_TANK[eNation];
       const maxAtRange = atTable ? Math.max(...Object.keys(atTable).map(Number)) : 0;
-      if (maxAtRange <= 0) {
-        bestDist = db.noMG ? 1 : 2;
-      } else {
-        for (let d = 1; d <= 12; d++) {
-          const my = calcKillChance(u.name, targetEnemy.name, d, true);
-          const en = eDb ? calcKillChance(targetEnemy.name, u.name, d, true) : { kill: 0 };
-          const value = my.kill - en.kill;
-          if (value > bestValue) { bestValue = value; bestDist = d; }
-        }
-      }
+      bestDist = (maxAtRange <= 0) ? (db.noMG ? 1 : 2) : maxAtRange + 1;
     } else {
       for (let d = 1; d <= 12; d++) {
         const my = calcKillChance(u.name, targetEnemy.name, d, true);
@@ -1974,7 +1965,9 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
       }
     }
     const stopDist = Math.max(bestDist, groupLimit);
-    if (aiCanEngageAny(u) && distNow <= stopDist + 1 && distNow >= 2) {
+    if (targetIsInf) {
+      if (distNow <= stopDist) { callback(); return; }
+    } else if (aiCanEngageAny(u) && distNow <= stopDist + 1 && distNow >= 2) {
       callback();
       return;
     }
