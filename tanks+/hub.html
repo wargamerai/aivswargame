@@ -167,8 +167,8 @@ button.top-btn:hover { background:#556; }
     <button class="top-btn" onclick="adjustMap('x',1)">→</button>
     <button class="top-btn" onclick="adjustMap('y',-1)">↑</button>
     <button class="top-btn" onclick="adjustMap('y',1)">↓</button>
-    <button class="top-btn" onclick="adjustMap('r',-0.1)">↺</button>
-    <button class="top-btn" onclick="adjustMap('r',0.1)">↻</button>
+    <button class="top-btn" onclick="adjustMap('r',-0.05)">↺</button>
+    <button class="top-btn" onclick="adjustMap('r',0.05)">↻</button>
     <span id="mapAdjustInfo" style="color:#aaa;font-size:0.8em"></span>
     <button class="top-btn" onclick="exportMapOffset()" style="background:#364;color:#8f8">出力</button>
   </span>
@@ -423,20 +423,39 @@ function draw() {
   ctx.scale(zoom, zoom);
 
   // 地図画像
-  if (mapImg1 && mapImg1.complete) ctx.drawImage(mapImg1, 0, 0);
-  if (mapImg2 && mapImg2.complete) {
-    // 2枚目の位置: 基本位置 + mapOffset微調整
-    const mo = (state && state.mapOffset) || { x:0, y:0 };
-    const rot = (state && state.mapRotate) || 0; // 度
-    let baseX, baseY;
-    if (state && state.map1orient === 'Vertical') {
-      baseX = mapImg1.width; baseY = 0;
+  const mapOrient = (state && state.mapOrient) || 'vertical'; // vertical=そのまま, horizontal=90度回転
+  if (mapImg1 && mapImg1.complete && mapImg1.naturalWidth) {
+    if (mapOrient === 'horizontal') {
+      ctx.save();
+      ctx.translate(0, mapImg1.width);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(mapImg1, 0, 0);
+      ctx.restore();
     } else {
-      baseX = 0; baseY = mapImg1.height;
+      ctx.drawImage(mapImg1, 0, 0);
+    }
+  }
+  // map1の描画後サイズ（回転後）
+  const m1W = (mapImg1 && mapImg1.naturalWidth) ? (mapOrient === 'horizontal' ? mapImg1.height : mapImg1.width) : 0;
+  const m1H = (mapImg1 && mapImg1.naturalWidth) ? (mapOrient === 'horizontal' ? mapImg1.width : mapImg1.height) : 0;
+  if (mapImg2 && mapImg2.complete && mapImg2.naturalWidth) {
+    const mo = (state && state.mapOffset) || { x:0, y:0 };
+    const rot = (state && state.mapRotate) || 0;
+    let baseX, baseY;
+    if (state && state.mapJoin === 'horizontal') {
+      baseX = m1W; baseY = 0;  // 左右連結
+    } else {
+      baseX = 0; baseY = m1H;  // 上下連結（デフォルト）
     }
     const dx = baseX + (mo.x || 0);
     const dy = baseY + (mo.y || 0);
-    if (rot) {
+    if (mapOrient === 'horizontal') {
+      ctx.save();
+      ctx.translate(dx, dy + mapImg2.width);
+      ctx.rotate(-Math.PI / 2);
+      ctx.drawImage(mapImg2, 0, 0);
+      ctx.restore();
+    } else if (rot) {
       ctx.save();
       const cx = dx + mapImg2.width / 2;
       const cy = dy + mapImg2.height / 2;
@@ -791,7 +810,7 @@ function adjustMap(axis, delta) {
   const info = document.getElementById('mapAdjustInfo');
   if (info) {
     const mo = state.mapOffset || {x:0,y:0};
-    info.textContent = `x:${mo.x} y:${mo.y} r:${(state.mapRotate||0).toFixed(1)}°`;
+    info.textContent = `x:${mo.x} y:${mo.y} r:${(state.mapRotate||0).toFixed(2)}°`;
   }
   saveState();
   draw();
@@ -1433,6 +1452,8 @@ function startGame() {
     map1orient: sc.map1orient,
     map2: sc.map2,
     map2orient: sc.map2orient,
+    mapJoin: sc.mapJoin || 'vertical',
+    mapOrient: sc.mapOrient || 'vertical',
     mapOffset: sc.mapOffset || { x:0, y:0 },
     mapRotate: sc.mapRotate || 0,
     selectedUnit: null,
@@ -1459,8 +1480,15 @@ function startGame() {
 function calcMapSize() {
   // マップ画像サイズからヘクスグリッドの列数・行数を算出
   if (!mapImg1) return;
-  const w = mapImg1.naturalWidth;
-  const h = mapImg1.naturalHeight;
+  let w = mapImg1.naturalWidth;
+  let h = mapImg1.naturalHeight;
+  if (mapImg2 && mapImg2.naturalWidth) {
+    if (state.mapJoin === 'horizontal') {
+      w += mapImg2.naturalWidth;
+    } else {
+      h += mapImg2.naturalHeight;
+    }
+  }
   state.mapMaxCol = Math.floor((w - OX) / (HEX_SIZE * 1.5)) + 1;
   state.mapMaxRow = Math.floor((h - OY) / HEX_H) + 1;
   // iframe にもマップサイズを通知
@@ -1473,15 +1501,15 @@ function calcMapSize() {
 function loadMaps() {
   mapImg1 = new Image();
   mapImg2 = null;
-  const needTwo = state.map2 && state.map2orient;
+  const needTwo = !!state.map2;
   const total = needTwo ? 2 : 1;
   mapLoaded = 0;
   mapImg1.onload = () => { mapLoaded++; calcMapSize(); if (mapLoaded >= total) draw(); };
-  mapImg1.src = `Map${state.map1}-${state.map1orient}.jpg`;
+  mapImg1.src = `Map${state.map1}-Vertical.jpg`;
   if (needTwo) {
     mapImg2 = new Image();
-    mapImg2.onload = () => { mapLoaded++; if (mapLoaded >= total) draw(); };
-    mapImg2.src = `Map${state.map2}-${state.map2orient}.jpg`;
+    mapImg2.onload = () => { mapLoaded++; calcMapSize(); if (mapLoaded >= total) draw(); };
+    mapImg2.src = `Map${state.map2}-Vertical.jpg`;
   }
 }
 
@@ -1598,6 +1626,35 @@ function checkVictory() {
     }
   }
 
+  // sc5: 建物支配判定（ターン終了時）
+  if (scId === 'sc5' && state.turn > state.maxTurns) {
+    // 建物ヘクス(13,11)にいるユニットの側を判定
+    const buildingHexes = [];
+    if (state.terrain) {
+      for (const [key, val] of Object.entries(state.terrain)) {
+        if (val === 'building') {
+          const [c, r] = key.split(',').map(Number);
+          buildingHexes.push({ col: c, row: r });
+        }
+      }
+    }
+    // 各陣営の建物上ユニット数
+    let ctrl1 = 0, ctrl2 = 0;
+    state.units.forEach(u => {
+      if (u.status === 'destroyed') return;
+      if (buildingHexes.some(h => h.col === u.col && h.row === u.row)) {
+        if (u.side === s1) ctrl1++;
+        else if (u.side === s2) ctrl2++;
+      }
+    });
+    if (ctrl1 > 0 || ctrl2 > 0) {
+      const winner = ctrl1 >= ctrl2 ? s1 : s2;
+      return { winner, reason:'building_control', destroyed1, destroyed2, total1, total2 };
+    }
+    // 建物に誰もいない → 先に配置していた側（ドイツ）が支配とみなす
+    return { winner:'ge', reason:'building_control', destroyed1, destroyed2, total1, total2 };
+  }
+
   // 全滅判定
   if (alive1.length === 0) return { winner:s2, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
   if (alive2.length === 0) return { winner:s1, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
@@ -1621,7 +1678,8 @@ function showGameOver(result) {
   document.getElementById('goTitle').textContent = 'ゲーム終了';
   const reasonText = result.reason === 'annihilation' ? '全滅' :
                      result.reason === 'majority' ? '過半数撃破' :
-                     result.reason === 'breakthrough' ? `突破（${result.escaped || 0}ユニット脱出）` : 'ターン終了';
+                     result.reason === 'breakthrough' ? `突破（${result.escaped || 0}ユニット脱出）` :
+                     result.reason === 'building_control' ? '建物支配' : 'ターン終了';
   document.getElementById('goResult').innerHTML =
     `<span style="color:${winnerNc?winnerNc.fill:'#fff'};font-size:1.4em">${winnerNc?winnerNc.label:result.winner}</span> の勝利！<br><span style="font-size:0.8em;color:#aaa">(${reasonText})</span>`;
 
