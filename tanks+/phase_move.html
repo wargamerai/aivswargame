@@ -344,6 +344,7 @@ function handlePlacement(col, row) {
   if (edge === 'left' && col !== 1) { log('左端のヘクスを選択してください'); return; }
   if (edge === 'top' && row !== 1) { log('上端のヘクスを選択してください'); return; }
   if (edge === 'bottom' && row !== maxRow) { log('下端のヘクスを選択してください'); return; }
+  if (edge === 'topRight' && (row !== 1 || col <= Math.floor(maxCol / 2))) { log('上端右半分のヘクスを選択してください'); return; }
 
   // スタッキングチェック
   if (!checkStacking(col, row, u)) {
@@ -1196,6 +1197,8 @@ function aiPlaceUnit(u, db, callback) {
     for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:1 });
   } else if (edge === 'bottom') {
     for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:maxRow });
+  } else if (edge === 'topRight') {
+    for (let c = Math.floor(maxCol / 2) + 1; c <= maxCol; c++) candidates.push({ col:c, row:1 });
   } else {
     // free配置: マップ全体から候補
     for (let c = 1; c <= maxCol; c++)

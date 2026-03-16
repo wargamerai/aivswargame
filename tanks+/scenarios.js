@@ -514,6 +514,7 @@ const SCENARIOS = [
     reinforcement: {
       turn: 5,
       side: 'ge',
+      enterEdge: 'topRight',
       diceTable: {
         1: { name:'Jagdpanzer V', col:0, row:0, dir:2 },
         2: { name:'Pz IV/H', col:0, row:0, dir:2 },
