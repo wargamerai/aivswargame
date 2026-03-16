@@ -48,6 +48,7 @@ button.undo-btn:hover { background:#ffd8c0; }
 <div id="shipList"></div>
 
 <button onclick="donePhase()" id="btnDone" style="display:none">次フェーズへ</button>
+<label style="float:right;font-size:0.9em;cursor:pointer;margin-top:-24px;"><input type="checkbox" id="jpAI" onchange="toggleJPAI()"> AI委任</label>
 
 <div id="keyHint" style="display:none">
   テンキー操作:<br>
@@ -132,6 +133,10 @@ function init() {
   // 大破艦・射撃不能艦 自動離脱
   autoWithdrawHeavy();
 
+  // AI委任チェックボックス状態復元
+  const cb = document.getElementById('jpAI');
+  if (cb) cb.checked = isJPAutoAI();
+
   const jpMoving = isJPMoving();
 
   if (jpMoving && !state.jpFreeMove) {
@@ -141,7 +146,21 @@ function init() {
   } else if (!jpMoving) {
     startAutoUSMove();
   } else {
-    startFreeMode();
+    if (isJPAutoAI()) {
+      autoJPMove();
+    } else {
+      startFreeMode();
+    }
+  }
+}
+
+function isJPAutoAI() { return localStorage.getItem('jpAutoAI') === '1'; }
+
+function toggleJPAI() {
+  const checked = document.getElementById('jpAI').checked;
+  localStorage.setItem('jpAutoAI', checked ? '1' : '0');
+  if (checked && document.getElementById('btnDone').style.display !== 'none') {
+    autoJPMove();
   }
 }
 
@@ -724,6 +743,234 @@ function aiTurnStep(curDir, targetDir) {
   const ccwDist = (ci - ti + 6) % 6;
   if (cwDist <= ccwDist) return DIR_CW_AI[(ci + 1) % 6];
   return DIR_CW_AI[(ci + 5) % 6];
+}
+
+// US艦隊の重心
+function usCenter() {
+  const alive = usFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
+  if (alive.length === 0) return {col: COLS - 1, row: 10};
+  const sc = alive.reduce((a,s) => a + s.col, 0) / alive.length;
+  const sr2 = alive.reduce((a,s) => a + s.row, 0) / alive.length;
+  return {col: Math.round(sc), row: Math.round(sr2)};
+}
+
+// US艦隊の主要進行方向
+function usMainDir() {
+  const alive = usFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
+  if (alive.length === 0) return 4;
+  const counts = {};
+  for (const s of alive) { counts[s.dir] = (counts[s.dir]||0)+1; }
+  let best = 4, bv = 0;
+  for (const [d,c] of Object.entries(counts)) { if (c > bv) { bv=c; best=parseInt(d); } }
+  return best;
+}
+
+// US進行方向に対して垂直な方向（JP用T字）
+function perpDirToUS(usDir, jpCol, jpRow, usCol, usRow) {
+  const ci = DIR_CW_AI.indexOf(usDir);
+  const perp1 = DIR_CW_AI[(ci + 2) % 6];
+  const perp2 = DIR_CW_AI[(ci + 4) % 6];
+  const n1 = hexNeighbor(jpCol, jpRow, perp1);
+  const n2 = hexNeighbor(jpCol, jpRow, perp2);
+  if (!n1) return perp2;
+  if (!n2) return perp1;
+  const d1 = hexDist(n1.col, n1.row, usCol, usRow);
+  const d2 = hexDist(n2.col, n2.row, usCol, usRow);
+  const ideal = 8;
+  return Math.abs(d1 - ideal) <= Math.abs(d2 - ideal) ? perp1 : perp2;
+}
+
+// ========== 日本軍AI移動 ==========
+function autoJPMove() {
+  const label = isFirstMove() ? '先攻' : '後攻';
+  document.getElementById('phTitle').textContent = `${label}移動 — 日本軍（自動）`;
+  setInfo('日本軍AI移動中...');
+  document.getElementById('keyHint').style.display = 'none';
+  document.getElementById('manualControls').style.display = 'none';
+  document.getElementById('btnDone').style.display = 'none';
+
+  if (state.contactMade || state.jpFreeMove) {
+    aiJPMoveAnimated();
+  } else {
+    autoAdvanceIndividual(jpFleet);
+    jpFleet.forEach((s, i) => { if (canShipMove(s)) movedShips.add(i); });
+    markSharedHex();
+    pushState();
+    renderList();
+    setTimeout(() => donePhase(), 2000);
+  }
+}
+
+// 日本軍戦術AI移動（段階表示版）
+function aiJPMoveAnimated() {
+  const usc = usCenter();
+  const usDir = usMainDir();
+  const sr = state.spotRange || 6;
+  const leads = jpFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
+
+  // 前方の艦から先にソート（東向き=col大→小ではなく、敵に近い順）
+  leads.sort((a, b) => {
+    const dA = hexDist(a.col, a.row, usc.col, usc.row);
+    const dB = hexDist(b.col, b.row, usc.col, usc.row);
+    return dA - dB;
+  });
+
+  let idx = 0;
+  function moveNext() {
+    if (idx >= leads.length) {
+      markSharedHex();
+      pushState();
+      renderList();
+      setTimeout(() => donePhase(), 1500);
+      return;
+    }
+    const lead = leads[idx];
+    aiJPMoveOneLead(lead, usc, usDir, sr);
+    pushState();
+    idx++;
+    setTimeout(moveNext, 600);
+  }
+  moveNext();
+}
+
+// 1隻のJPリード艦を移動する
+function aiJPMoveOneLead(lead, usc, usDir, sr) {
+  const spd = getSpeed(lead);
+  const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
+  const minSpd = getMinSpeed(lead);
+  const minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
+  const isDD = (lead.type === 'DD');
+  const distToUS = hexDist(lead.col, lead.row, usc.col, usc.row);
+  const preCol = lead.col, preRow = lead.row;
+
+  let targetDir;
+  if (isDD) {
+    if (lead.torpedoFired) {
+      // 魚雷発射済み → 退避（西方向）
+      targetDir = 4;
+    } else {
+      // 魚雷未発射 → 最寄りの米艦に接近（雷撃射程3を目指す）
+      let closestUS = null, closestDist = 999;
+      for (const us of usFleet) {
+        if (us.status === 'sunk' || us.col < 0) continue;
+        const d = hexDist(lead.col, lead.row, us.col, us.row);
+        if (d < closestDist) { closestDist = d; closestUS = us; }
+      }
+      if (closestUS) {
+        if (closestDist <= 3) {
+          // 射程内 → 横方向展開して舷側を向ける
+          targetDir = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
+        } else {
+          targetDir = bestDirToward(lead.col, lead.row, closestUS.col, closestUS.row);
+        }
+      } else {
+        targetDir = lead.dir;
+      }
+    }
+  } else {
+    // 日本軍主力艦の移動戦略: 積極的に接近して砲戦距離に持ち込む
+    const jpAlive = jpFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
+    const usAlive = usFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
+    const jpPower = jpAlive.reduce((s, u) => s + (u.capG - u.dmgG), 0);
+    const usPower = usAlive.reduce((s, u) => s + (u.capG - u.dmgG), 0);
+
+    // 日本軍は積極接近: 理想距離5〜7（砲撃有効射程）
+    // 戦力劣勢なら距離8〜10でアウトレンジ
+    const IDEAL_RANGE = (jpPower < usPower * 0.5) ? 10 : 6;
+
+    if (distToUS > IDEAL_RANGE + 3) {
+      // 遠い → 接近
+      targetDir = bestDirToward(lead.col, lead.row, usc.col, usc.row);
+    } else if (distToUS < IDEAL_RANGE - 2) {
+      // 近すぎ → 少し離れる
+      targetDir = bestDirAway(lead.col, lead.row, usc.col, usc.row);
+    } else if (distToUS >= IDEAL_RANGE - 2 && distToUS <= IDEAL_RANGE + 2) {
+      // 理想距離帯 → 横方向に平行移動して全火力維持
+      targetDir = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
+    } else {
+      // やや遠い → じわじわ接近
+      targetDir = bestDirToward(lead.col, lead.row, usc.col, usc.row);
+    }
+  }
+
+  let remain = moveCount;
+  let turned = false;
+  while (remain > 0) {
+    if (lead.dir !== targetDir && !turned && !lead.cannotTurn) {
+      lead.dir = aiTurnStep(lead.dir, targetDir);
+      lead.turnCount = (lead.turnCount || 0) + 1;
+      remain--;
+      turned = true;
+      if (remain <= 0) break;
+    }
+    const next = hexNeighbor(lead.col, lead.row, lead.dir);
+    if (!next) break;
+    if (next.row < 0) break;
+    // マップ端到達 → 退場
+    if (next.col < 0 || next.col >= COLS) {
+      lead.col = -1;
+      lead.status = 'exited';
+      lead.withdrawing = true;
+      console.log(`${lead.name} マップ端到達 → 退場`);
+      const ci = lead.colIndex;
+      const followers = jpFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0);
+      for (const f of followers) {
+        f.col = -1;
+        f.status = 'exited';
+        f.withdrawing = true;
+        console.log(`${f.name} (随伴) → 退場`);
+      }
+      break;
+    }
+
+    const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
+    if (blocked) {
+      if (!lead.cannotTurn) {
+        const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
+        let avoided = false;
+        for (const offset of [1, 5]) {
+          const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
+          const altNext = hexNeighbor(lead.col, lead.row, altDir);
+          if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
+              && !occupied(altNext.col, altNext.row, lead) && !getSunkShip(altNext.col, altNext.row, lead)) {
+            lead.path = lead.path || [];
+            lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+            lead.col = altNext.col;
+            lead.row = altNext.row;
+            moveFollowers(lead, jpFleet);
+            avoided = true;
+            remain--;
+            break;
+          }
+        }
+        if (avoided) { turned = false; continue; }
+      }
+      const moved = moveCount - remain;
+      if (moved >= minCount) break;
+    }
+
+    lead.path = lead.path || [];
+    lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+    lead.col = next.col;
+    lead.row = next.row;
+    var occAt = getOccupant(next.col, next.row, lead);
+    if (occAt) collisionCheck(lead, occAt);
+    var sunkAt = getSunkShip(next.col, next.row, lead);
+    if (sunkAt) collisionCheck(lead, sunkAt);
+    turned = false;
+    remain--;
+    moveFollowers(lead, jpFleet);
+  }
+  lead.remainMove = remain;
+  const ci = lead.colIndex;
+  jpFleet.filter(s => !s.isLead && s.colIndex === ci).forEach(f => f.remainMove = remain);
+  // movedShipsに登録
+  const leadIdx = jpFleet.indexOf(lead);
+  if (leadIdx >= 0) movedShips.add(leadIdx);
+  jpFleet.forEach((s, i) => {
+    if (!s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0) movedShips.add(i);
+  });
+  console.log(`aiJPMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount}`);
 }
 
 // ========== 自由移動モード（接触後・日本軍ターン）==========
