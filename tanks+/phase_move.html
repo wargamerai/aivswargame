@@ -1560,23 +1560,24 @@ function aiDoMovement(u, db, callback) {
   const groupLimit = state._aiGroupAdvanceLimit || 1;
   const minStopDist = isDecoy ? 1 : Math.max(targetDist, groupLimit);
 
-  // 停止判定: 敵の被撃破率が低ければ前進、高ければ停止
-  if (!isDecoy && distToEnemy >= 2) {
-    const enKill = (distToEnemy <= 12) ? (enemyChances[distToEnemy] || {kill:0}).kill : 0;
-    // 1ヘクス近づいた場合の被撃破率
-    const enKillCloser = (distToEnemy - 1 >= 1 && distToEnemy - 1 <= 12)
-      ? (enemyChances[distToEnemy - 1] || {kill:0}).kill : 0;
-    // 被撃破率が低い(弾切れリスク以下)なら前進継続
-    // 被撃破率が高い or 接近で急増するなら停止
-    const ammoRisk = 1 / 36;
-    const threatened = enKill > ammoRisk;
-    const riskJump = enKillCloser > enKill * 2 && enKillCloser > ammoRisk;
-    if ((threatened || riskJump) && distToEnemy <= minStopDist + 1) {
+  // 停止判定: 接近の損得で判断
+  // 1ヘクス近づいた時の自分の撃破率向上 vs 敵の撃破率向上を比較
+  if (!isDecoy && distToEnemy >= 2 && distToEnemy <= minStopDist + 1) {
+    const d = distToEnemy;
+    const d1 = d - 1;
+    const myNow = (d <= 12) ? (myChances[d] || {kill:0}).kill : 0;
+    const myCloser = (d1 >= 1 && d1 <= 12) ? (myChances[d1] || {kill:0}).kill : 0;
+    const enNow = (d <= 12) ? (enemyChances[d] || {kill:0}).kill : 0;
+    const enCloser = (d1 >= 1 && d1 <= 12) ? (enemyChances[d1] || {kill:0}).kill : 0;
+    const myGain = myCloser - myNow;   // 接近による自分の撃破率向上
+    const enGain = enCloser - enNow;   // 接近による敵の撃破率向上
+    // 接近で敵の方が得をする(敵の伸び > 自分の伸び)なら停止
+    if (enGain > myGain && myNow > 0) {
       callback();
       return;
     }
     // 歩兵目標: bestDistに到達したら停止
-    if (targetIsInfantry && distToEnemy <= minStopDist) {
+    if (targetIsInfantry && d <= minStopDist) {
       callback();
       return;
     }
@@ -1978,15 +1979,16 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
       }
     }
     const stopDist = Math.max(bestDist, groupLimit);
-    // 被撃破率ベースの停止判定: 敵に撃破されにくいなら前進
-    if (distNow >= 2) {
-      const enKill = eDb ? calcKillChance(targetEnemy.name, u.name, distNow, true).kill : 0;
-      const enKillCloser = (distNow - 1 >= 1 && eDb)
-        ? calcKillChance(targetEnemy.name, u.name, distNow - 1, true).kill : 0;
-      const ammoRisk = 1 / 36;
-      const threatened = enKill > ammoRisk;
-      const riskJump = enKillCloser > enKill * 2 && enKillCloser > ammoRisk;
-      if ((threatened || riskJump) && distNow <= stopDist + 1) {
+    // 接近の損得判定: 近づいて敵の方が得するなら停止
+    if (distNow >= 2 && distNow <= stopDist + 1) {
+      const d1 = distNow - 1;
+      const myNow = calcKillChance(u.name, targetEnemy.name, distNow, true).kill;
+      const myCloser = (d1 >= 1) ? calcKillChance(u.name, targetEnemy.name, d1, true).kill : 0;
+      const enNow = eDb ? calcKillChance(targetEnemy.name, u.name, distNow, true).kill : 0;
+      const enCloser = (d1 >= 1 && eDb) ? calcKillChance(targetEnemy.name, u.name, d1, true).kill : 0;
+      const myGain = myCloser - myNow;
+      const enGain = enCloser - enNow;
+      if (enGain > myGain && myNow > 0) {
         callback(); return;
       }
       if (targetIsInf && distNow <= stopDist) {
