@@ -49,6 +49,10 @@ function init() {
   // 自動修理→プレイヤーが「ターン終了」ボタンを押して進行
   repairAll();
   renderList();
+  // AI委任時は自動でターン終了
+  if (localStorage.getItem('jpAutoAI') === '1') {
+    setTimeout(() => donePhase(), 2000);
+  }
 }
 
 function statusClass(s) {

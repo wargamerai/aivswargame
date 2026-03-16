@@ -108,6 +108,10 @@ function init() {
     const btn = document.getElementById('btnNextTurn');
     if (btn) { btn.disabled = true; btn.textContent = '戦闘終了（10ターン経過）'; }
   }
+  // AI委任時は自動で次ターンへ（10ターン未満のみ）
+  if (localStorage.getItem('jpAutoAI') === '1' && state.combatTurn < 10) {
+    setTimeout(() => goNextTurn(), 3000);
+  }
 }
 
 function renderReport() {

@@ -129,6 +129,8 @@ function startBattle() {
         radarTypes: ['CL'],    // レーダー搭載艦種（通常BB/CA/CL/CLAA）
         jpHandicap: 36         // 日本軍ハンディキャップ（得点に加算）
     }));
+    // シナリオモードはAI委任デフォルトON
+    localStorage.setItem('jpAutoAI', '1');
     window.location.href = 'hub.html';
 }
 </script>
