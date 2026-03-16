@@ -852,6 +852,13 @@ function hasLOS(c1, r1, c2, r2) {
   const h1 = hexCenter(c1, r1);
   const h2 = hexCenter(c2, r2);
   const dist = hexDist(c1, r1, c2, r2);
+  // DEBUG: 崖データ確認
+  if (state && state.hexsideTerrain) {
+    const slopeKeys = Object.entries(state.hexsideTerrain).filter(([k,v])=>v==='slope');
+    if (slopeKeys.length > 0) console.log(`[崖LOS] hasLOS(${c1},${r1}→${c2},${r2}) dist=${dist} 崖数=${slopeKeys.length}`);
+  } else {
+    console.log(`[崖LOS] hasLOS called but hexsideTerrain=${state?'null/empty':'no state'}`);
+  }
   if (dist <= 1) return true;
   // 両方が丘にいる場合、途中の丘ヘクス・崖はブロックしない
   const t1 = (state && state.terrain) ? state.terrain[`${c1},${r1}`] : null;
@@ -880,6 +887,7 @@ function hasLOS(c1, r1, c2, r2) {
             // 崖が射手/目標の横なら通過、中間なら遮断
             const atEnd = (m1.col===c1&&m1.row===r1)||(m1.col===c2&&m1.row===r2)
                         ||(m2.col===c1&&m2.row===r1)||(m2.col===c2&&m2.row===r2);
+            console.log(`[崖LOS] from(${c1},${r1})→to(${c2},${r2}) cliff=${key} m1=(${m1.col},${m1.row}) m2=(${m2.col},${m2.row}) atEnd=${atEnd} → ${atEnd?'通過':'遮断'}`);
             if (!atEnd) return false;
           }
         }
