@@ -232,15 +232,26 @@ function isLineBlocked(firer, target, allShips) {
     var rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz);
     var dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
     var diffs = [dx, dy, dz].sort(function(a,b){return b-a;});
-    // 上位2つの差が近い＝ヘクスサイド上 → 通過扱い（ブロックしない）
-    if (diffs[0] > 0.01 && (diffs[0] - diffs[1]) < 0.01) continue;
+    // ヘクスサイド上（境界線上）→ 隣接する2ヘクスの両方をチェック
     var rounded = cubeRound(cx, cy, cz);
     var off = cubeToOffset(rounded.x, rounded.y, rounded.z);
-    for (var j = 0; j < allShips.length; j++) {
-      var s = allShips[j];
-      if (s === firer || s === target) continue;
-      if (s.status === 'sunk' || s.col < 0) continue;
-      if (s.col === off.col && s.row === off.row) return true;
+    var checkHexes = [{col: off.col, row: off.row}];
+    if (diffs[0] > 0.01 && (diffs[0] - diffs[1]) < 0.05) {
+      var rx2 = rx, ry2 = ry, rz2 = rz;
+      if (dx === diffs[0]) rx2 = -ry - rz;
+      else if (dy === diffs[0]) ry2 = -rx - rz;
+      else rz2 = -rx - ry;
+      var off2 = cubeToOffset(rx2, ry2, rz2);
+      checkHexes.push({col: off2.col, row: off2.row});
+    }
+    for (var hi = 0; hi < checkHexes.length; hi++) {
+      var h = checkHexes[hi];
+      for (var j = 0; j < allShips.length; j++) {
+        var s = allShips[j];
+        if (s === firer || s === target) continue;
+        if (s.status === 'sunk' || s.col < 0) continue;
+        if (s.col === h.col && s.row === h.row) return true;
+      }
     }
   }
   return false;

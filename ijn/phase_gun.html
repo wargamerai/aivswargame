@@ -843,11 +843,11 @@ function autoJPShoot(title) {
   const assignCount = {};
 
   for (const firer of jp) {
-    // 雷撃温存: 第一砲撃で魚雷搭載艦は近距離の敵がいれば砲撃をスキップ
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
+    // 雷撃温存: DDのみ第一砲撃で近距離なら砲撃スキップ（CA/CLは常に射撃）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') && firer.type === 'DD' &&
         firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
       const closestDist = Math.min(...us.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
-      if (closestDist <= 5) {
+      if (closestDist <= 3) {
         log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
         continue;
       }
@@ -860,7 +860,8 @@ function autoJPShoot(title) {
       const arcInfo = getArcInfo(firer, t);
       if (arcInfo.mult === 0) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      const score = d + (assignCount[t.name] || 0) * 5 + dmgRate * 30;
+      const arcPenalty = arcInfo.mult < 1 ? 3 : 0; // 舷側を優先
+      const score = d + (assignCount[t.name] || 0) * 5 + dmgRate * 30 + arcPenalty;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
     if (!bestTarget) continue;
@@ -1065,15 +1066,6 @@ function autoUSShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of us) {
-    // 雷撃温存: 第一砲撃で魚雷搭載艦は近距離の敵がいれば砲撃をスキップ
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
-        firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
-      const closestDist = Math.min(...jp.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
-      if (closestDist <= 5) {
-        log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
-        continue;
-      }
-    }
 
     // 目標選択: 広く浅く — 損傷大ほど後回し
     // 米BBだけは大和/長門/陸奥をしつこく狙う（ダメージ蓄積で次回出撃を潰す）
@@ -1092,7 +1084,10 @@ function autoUSShoot(title) {
       // BBが撃つ場合のみ高価値艦の損傷ペナルティ免除
       const isHV = isBBFirer && HIGH_VALUE.includes(t.name);
       const dmgPenalty = isHV ? 0 : dmgRate * 30;
-      const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty;
+      const arcInfo = getArcInfo(firer, t);
+      if (arcInfo.mult === 0) continue;
+      const arcPenalty = arcInfo.mult < 1 ? 3 : 0; // 舷側を優先
+      const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty + arcPenalty;
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
     if (!bestTarget) continue;
