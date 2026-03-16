@@ -1505,16 +1505,23 @@ function buildFleets(data) {
   var usDD   = usData.filter(s => s.type === 'DD');
   var usBuilt = [];
 
-  // ランダム配置: 右半分(col 22-33)、row 2-(ROWS-4)、方向はランダム
-  var usBaseCol = 22 + Math.floor(Math.random() * 12); // 22-33
-  var usBaseRow = 2 + Math.floor(Math.random() * (ROWS - 8)); // 上下に余裕
+  // ランダム配置: 主力列・DD列それぞれ別の縦列(col)に横一列、最低5ヘクス離す
   var usDir = 4; // 左向き固定
+  var mainCol = 22 + Math.floor(Math.random() * 12); // 22-33
+  var mainRow = 2 + Math.floor(Math.random() * (ROWS - 4 - usMain.length));
+  // DD列: mainRowから最低5離す
+  var ddCol = 22 + Math.floor(Math.random() * 12);
+  var ddRowRange = ROWS - 4 - usDD.length;
+  var ddRow;
+  do {
+    ddRow = 2 + Math.floor(Math.random() * ddRowRange);
+  } while (Math.abs(ddRow - mainRow) < 5 && ddRowRange > 10);
 
-  // 主力列
+  // 主力列（横一列: 同じrow、colをずらす）
   usMain.forEach((s, i) => {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
-      col: Math.max(0, Math.min(COLS-1, usBaseCol)), row: Math.max(0, Math.min(ROWS-1, usBaseRow + i * 2)),
+      col: Math.max(0, Math.min(COLS-1, mainCol + i)), row: Math.max(0, Math.min(ROWS-1, mainRow)),
       dir: usDir, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
@@ -1525,11 +1532,11 @@ function buildFleets(data) {
       path:[],
     });
   });
-  // 駆逐列（主力列の1ヘクス東）
+  // DD列（横一列: 同じrow、colをずらす）
   usDD.forEach((s, i) => {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
-      col: Math.max(0, Math.min(COLS-1, usBaseCol + 1)), row: Math.max(0, Math.min(ROWS-1, usBaseRow + i * 2)),
+      col: Math.max(0, Math.min(COLS-1, ddCol + i)), row: Math.max(0, Math.min(ROWS-1, ddRow)),
       dir: usDir, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
