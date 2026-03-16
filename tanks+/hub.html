@@ -158,6 +158,7 @@ button.top-btn:hover { background:#556; }
     <button class="top-btn te-b" data-t="building" onclick="setTeBrush('building')">建物</button>
     <button class="top-btn te-b" data-t="slope" onclick="setTeBrush('slope')">丘</button>
     <button class="top-btn te-b" data-t="bocage" onclick="setTeBrush('bocage')">ボカージュ</button>
+    <button class="top-btn te-b" data-t="hexslope" onclick="setTeBrush('hexslope')">丘(辺)</button>
     <button class="top-btn te-b" data-t="eraser" onclick="setTeBrush('eraser')">消去</button>
     <button class="top-btn" onclick="exportTerrain()" style="background:#364;color:#8f8">出力</button>
   </span>
@@ -485,11 +486,12 @@ function draw() {
         }
       }
       if (shared.length >= 2) {
+        const hsType = state.hexsideTerrain[key];
         ctx.beginPath();
         ctx.moveTo(shared[0].x, shared[0].y);
         ctx.lineTo(shared[1].x, shared[1].y);
-        ctx.strokeStyle = '#8B4513';
-        ctx.lineWidth = 6;
+        ctx.strokeStyle = hsType === 'slope' ? '#8B7355' : '#8B4513';
+        ctx.lineWidth = hsType === 'slope' ? 8 : 6;
         ctx.stroke();
         // ラベル
         const mx = (shared[0].x + shared[1].x) / 2;
@@ -498,7 +500,7 @@ function draw() {
         ctx.font = `bold ${HEX_SIZE * 0.18}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('ボ', mx, my);
+        ctx.fillText(hsType === 'slope' ? '丘' : 'ボ', mx, my);
       }
     }
   }
@@ -1093,8 +1095,9 @@ canvas.addEventListener('click', (e) => {
 
   // 地形エディタモード
   if (terrainEditMode) {
-    if (teBrush === 'bocage') {
+    if (teBrush === 'bocage' || teBrush === 'hexslope') {
       // 2クリック方式: 1つ目のヘクス→2つ目の隣接ヘクスでサイド指定
+      const hsType = teBrush === 'bocage' ? 'bocage' : 'slope';
       if (!bocageFirstHex) {
         bocageFirstHex = { col: hex.col, row: hex.row };
         draw();
@@ -1121,7 +1124,12 @@ canvas.addEventListener('click', (e) => {
       const b = `${hex.col},${hex.row}`;
       const key = a < b ? `${a}-${b}` : `${b}-${a}`;
       if (!state.hexsideTerrain) state.hexsideTerrain = {};
-      state.hexsideTerrain[key] = 'bocage';
+      // 同じ辺に同じ地形が既にある → 削除（トグル）
+      if (state.hexsideTerrain[key] === hsType) {
+        delete state.hexsideTerrain[key];
+      } else {
+        state.hexsideTerrain[key] = hsType;
+      }
       bocageFirstHex = null;
     } else if (teBrush === 'eraser') {
       // ヘクス地形とヘクスサイド地形の両方を消す
