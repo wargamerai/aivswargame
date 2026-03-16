@@ -603,7 +603,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
       const IDEAL_RANGE = (usPower > jpPower * 2) ? 5 : 10;
 
       if (distToJP > sr + 3) {
-        // 索敵圏外 → flank側から接近して射程に入る
+        // 索敵圏外 → flank側から斜め接近（舷側意識）
         let goalCol = jpc.col, goalRow = jpc.row;
         for (let i = 0; i < sr + 2; i++) {
           const n = hexNeighbor(goalCol, goalRow, jpDir);
@@ -617,14 +617,11 @@ function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
         }
         targetDir = bestDirToward(lead.col, lead.row, goalCol, goalRow);
       } else if (distToJP < IDEAL_RANGE - 2) {
-        // 近すぎ → 距離を取る
-        targetDir = bestDirAway(lead.col, lead.row, jpc.col, jpc.row);
-      } else if (distToJP >= IDEAL_RANGE - 2 && distToJP <= IDEAL_RANGE + 2) {
-        // 理想距離帯 → 横方向に平行移動して全火力維持
+        // 近すぎ → 横移動しつつ離脱（舷側維持）
         targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row, flankSide||0);
       } else {
-        // やや遠い → じわじわ接近
-        targetDir = bestDirToward(lead.col, lead.row, jpc.col, jpc.row);
+        // 理想距離帯 or やや遠い → 横方向に平行移動して全火力維持
+        targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row, flankSide||0);
       }
     }
   }
@@ -916,17 +913,20 @@ function aiJPMoveOneLead(lead, usc, usDir, sr) {
     const IDEAL_RANGE = (jpPower < usPower * 0.5) ? 10 : 6;
 
     if (distToUS > IDEAL_RANGE + 3) {
-      // 遠い → 接近
-      targetDir = bestDirToward(lead.col, lead.row, usc.col, usc.row);
+      // 遠い → 斜め接近（舷側を意識しつつ接近）
+      const direct = bestDirToward(lead.col, lead.row, usc.col, usc.row);
+      const perp = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
+      // 直進と横方向の中間（直進寄り）を選択
+      const di = DIR_CW_AI.indexOf(direct);
+      const pi = DIR_CW_AI.indexOf(perp);
+      const diff = ((pi - di) % 6 + 6) % 6;
+      targetDir = (diff <= 1 || diff >= 5) ? direct : DIR_CW_AI[(di + (diff < 3 ? 1 : 5)) % 6];
     } else if (distToUS < IDEAL_RANGE - 2) {
-      // 近すぎ → 少し離れる
-      targetDir = bestDirAway(lead.col, lead.row, usc.col, usc.row);
-    } else if (distToUS >= IDEAL_RANGE - 2 && distToUS <= IDEAL_RANGE + 2) {
-      // 理想距離帯 → 横方向に平行移動して全火力維持
+      // 近すぎ → 横移動しつつ離脱（舷側維持）
       targetDir = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
     } else {
-      // やや遠い → じわじわ接近
-      targetDir = bestDirToward(lead.col, lead.row, usc.col, usc.row);
+      // 理想距離帯 → 横方向に平行移動して全火力維持
+      targetDir = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
     }
   }
 

@@ -234,15 +234,28 @@ function isLineBlocked(firer, target, allShips) {
     var rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz);
     var dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
     var diffs = [dx, dy, dz].sort(function(a,b){return b-a;});
-    // 上位2つの差が近い＝ヘクスサイド上 → 通過扱い（ブロックしない）
-    if (diffs[0] > 0.01 && (diffs[0] - diffs[1]) < 0.01) continue;
+    // ヘクスサイド上（境界線上）→ 隣接する2ヘクスの両方をチェック
     var rounded = cubeRound(cx, cy, cz);
     var off = cubeToOffset(rounded.x, rounded.y, rounded.z);
-    for (var j = 0; j < allShips.length; j++) {
-      var s = allShips[j];
-      if (s === firer || s === target) continue;
-      if (s.status === 'sunk' || s.col < 0) continue;
-      if (s.col === off.col && s.row === off.row) return true;
+    var checkHexes = [{col: off.col, row: off.row}];
+    // ヘクスサイド判定: 上位2つの丸め差が近い場合、もう一方のヘクスも追加
+    if (diffs[0] > 0.01 && (diffs[0] - diffs[1]) < 0.05) {
+      // 2番目に大きいdiffを持つ軸を反転してもう1ヘクスを得る
+      var rx2 = rx, ry2 = ry, rz2 = rz;
+      if (dx === diffs[0]) rx2 = -ry - rz;
+      else if (dy === diffs[0]) ry2 = -rx - rz;
+      else rz2 = -rx - ry;
+      var off2 = cubeToOffset(rx2, ry2, rz2);
+      checkHexes.push({col: off2.col, row: off2.row});
+    }
+    for (var hi = 0; hi < checkHexes.length; hi++) {
+      var h = checkHexes[hi];
+      for (var j = 0; j < allShips.length; j++) {
+        var s = allShips[j];
+        if (s === firer || s === target) continue;
+        if (s.status === 'sunk' || s.col < 0) continue;
+        if (s.col === h.col && s.row === h.row) return true;
+      }
     }
   }
   return false;
@@ -818,16 +831,16 @@ function autoJPTorpedo() {
 
   const results = [];
   const allShips = [...jp, ...us];
-  const assignCount = {}; // 目標分散用
   for (const firer of jp) {
     let bestTarget = null, bestScore = 999, bestDist = 0;
     for (const t of us) {
+      if (t.status === 'sunk') continue; // 撃沈確定艦をスキップ
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
       if (!checkBroadside(firer, t)) continue;
       if (isLineBlocked(firer, t, allShips)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      const score = d + (assignCount[t.name] || 0) * 5 + dmgRate * 30;
+      const score = d + dmgRate * 30;
       if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
     }
     if (!bestTarget) continue;
@@ -955,23 +968,20 @@ function autoUSTorpedo() {
 
   // 全結果を事前計算
   const results = [];
-  const assignCount = {}; // 目標分散用
   for (const firer of us) {
-    // 最寄りの舷側にいるJP艦を選択（広く浅く、損傷大ほど後回し）
     let bestTarget = null, bestScore = 999, bestDist = 99;
     const allShips = [...us, ...jp];
     for (const t of jp) {
+      if (t.status === 'sunk') continue; // 撃沈確定艦をスキップ
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
       if (!checkBroadside(firer, t)) continue;
       if (isLineBlocked(firer, t, allShips)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      const dmgPenalty = dmgRate * 30;
-      const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty;
+      const score = d + dmgRate * 30;
       if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
     }
     if (!bestTarget) continue;
-    assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
 
     const tp = getTorpPower(firer);
     const {mod, details} = calcModifiers(firer, bestTarget);

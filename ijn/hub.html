@@ -657,7 +657,7 @@ function renderFleetList() {
     var g = s.dmgG || 0, m = s.dmgM || 0;
     var gStr = g > 0 ? g + '/' + s.capG : '-';
     var mStr = m > 0 ? m + '/' + s.capM : '-';
-    var ct = critText(s);
+    var ct = s.status === 'sunk' ? '撃沈' : critText(s);
     html += '<tr class="' + cls + '">';
     html += '<td class="name-cell" style="color:#cc3311">' + lead + s.name + done + '</td>';
     html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
@@ -680,7 +680,7 @@ function renderFleetList() {
       var g = s.dmgG || 0, m = s.dmgM || 0;
       var gStr = g > 0 ? g + '/' + s.capG : '-';
       var mStr = m > 0 ? m + '/' + s.capM : '-';
-      var ct = critText(s);
+      var ct = s.status === 'sunk' ? '撃沈' : critText(s);
       html += '<tr class="' + cls + '">';
       html += '<td class="name-cell" style="color:#2255cc">' + s.name + '</td>';
       html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
