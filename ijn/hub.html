@@ -1503,11 +1503,11 @@ function buildFleets(data) {
   var usMain = usData.filter(s => s.type !== 'DD');
   var usDD   = usData.filter(s => s.type === 'DD');
   var usBuilt = [];
-  // 主力列（col=33）
+  // 主力列（col=33、2hex間隔）
   usMain.forEach((s, i) => {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
-      col: 33, row: Math.min(ROWS-1, 6 + i),
+      col: 33, row: Math.min(ROWS-1, 4 + i * 2),
       dir: 4, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
@@ -1518,11 +1518,11 @@ function buildFleets(data) {
       path:[],
     });
   });
-  // 駆逐列（col=34、主力列の1ヘクス東）
+  // 駆逐列（col=34、主力列の1ヘクス東、2hex間隔）
   usDD.forEach((s, i) => {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
-      col: Math.min(COLS-1, 34), row: Math.min(ROWS-1, 6 + i),
+      col: Math.min(COLS-1, 34), row: Math.min(ROWS-1, 4 + i * 2),
       dir: 4, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,

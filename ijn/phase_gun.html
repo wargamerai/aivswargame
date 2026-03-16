@@ -1074,6 +1074,8 @@ function autoUSShoot(title) {
       if (d > getMaxRange(t, firer)) continue;
       // レーダー非搭載艦は視認距離外の目標を撃てない
       if (d > (state.spotRange || 0) && !firer.radar && !t.onFire && !t.revealed) continue;
+      // 接触前はレーダー射撃を控える（発砲で位置が暴露→集中攻撃されるリスク）
+      if (!state.contactMade && d > (state.spotRange || 0) && !t.onFire && !t.revealed) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
       // BBが撃つ場合のみ高価値艦の損傷ペナルティ免除
       const isHV = isBBFirer && HIGH_VALUE.includes(t.name);
