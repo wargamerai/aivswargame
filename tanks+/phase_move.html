@@ -1565,8 +1565,9 @@ function aiDoMovement(u, db, callback) {
     const myKill = (distToEnemy <= 12) ? (myChances[distToEnemy] || {kill:0}).kill : 0;
     const enKill = (distToEnemy <= 12) ? (enemyChances[distToEnemy] || {kill:0}).kill : 0;
     const advantage = myKill - enKill;
-    // 撃破率5%以上かつ優位差がbestDistと同等なら停止
-    if (myKill >= 0.05 && advantage >= bestValue * 0.8 && distToEnemy <= minStopDist + 1) {
+    // 撃破率が弾切れリスク(2.8%)を上回り、優位差が最適距離と同等なら停止
+    const ammoRisk = 1 / 36;
+    if (myKill > ammoRisk && advantage >= bestValue * 0.8 && distToEnemy <= minStopDist + 1) {
       callback();
       return;
     }
@@ -1978,7 +1979,8 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
       const myKill = calcKillChance(u.name, targetEnemy.name, distNow, true).kill;
       const enKill = eDb ? calcKillChance(targetEnemy.name, u.name, distNow, true).kill : 0;
       const advantage = myKill - enKill;
-      if (myKill >= 0.05 && advantage >= bestValue * 0.8 && distNow <= stopDist + 1) {
+      const ammoRisk = 1 / 36;
+      if (myKill > ammoRisk && advantage >= bestValue * 0.8 && distNow <= stopDist + 1) {
         callback(); return;
       }
       if (targetIsInf && distNow <= stopDist) {

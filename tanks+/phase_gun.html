@@ -1072,8 +1072,12 @@ function aiFindBestTarget(firerIdx) {
     const frontHit = isHittingFrontArmor(firer, target);
     const chance = calcKillChance(firer.name, target.name, dist, frontHit);
 
-    // 撃破率が低すぎたら撃たない（弾薬温存）― 移動不能の敵はトドメなので除外
-    if (chance.kill < 0.02 && target.status !== 'immobilized') continue;
+    // 弾薬温存: 撃破率が弾切れリスク(約2.8%)以下なら撃たない
+    // 最終2ターンや移動不能の敵は例外（トドメ優先）
+    const remainTurns = (state.maxTurns || 99) - (state.turn || 1);
+    const ammoRisk = 1 / 36; // 2d6で12 ≒ 2.78%
+    const minKill = (remainTurns <= 2) ? 0.01 : ammoRisk;
+    if (chance.kill < minKill && target.status !== 'immobilized') continue;
 
     const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
 
