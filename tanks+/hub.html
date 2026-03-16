@@ -1493,6 +1493,13 @@ function checkVictory() {
       const suSide = s1 === 'ge' ? s2 : s1;
       return { winner:suSide, reason:'majority', destroyed1, destroyed2, total1, total2 };
     }
+    // ソ連半数以上撃破 → ドイツ勝利
+    const suSide2 = s1 === 'ge' ? s2 : s1;
+    const suTotal = state.units.filter(u => u.side === suSide2).length;
+    const suOut = state.units.filter(u => u.side === suSide2 && (u.status === 'destroyed' || u.ammoOut)).length;
+    if (suOut > suTotal / 2) {
+      return { winner:'ge', reason:'majority', destroyed1, destroyed2, total1, total2 };
+    }
     // ドイツ全滅 → ソ連勝利
     const geAlive = state.units.filter(u => u.side === 'ge' && u.status !== 'destroyed' && !u.ammoOut && u.status !== 'escaped');
     if (geAlive.length === 0) {
