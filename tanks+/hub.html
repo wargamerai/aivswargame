@@ -912,11 +912,13 @@ function isInFixedArc(unit, tc, tr) {
   return Math.abs(diff) <= Math.PI / 3 + 0.05; // 境界ヘクスを含める余裕
 }
 
-// 地形が遮蔽物かどうか
-function isBlockingTerrain(col, row) {
+// 地形が遮蔽物かどうか（virtualSlopes: 崖による仮想丘）
+function isBlockingTerrain(col, row, skipSlope, virtualSlopes) {
   if (!state || !state.terrain) return false;
   const t = state.terrain[`${col},${row}`];
-  return t === 'forest' || t === 'building' || t === 'slope';
+  const isSlope = t === 'slope' || (virtualSlopes && virtualSlopes.has(`${col},${row}`));
+  if (skipSlope && isSlope) return false;
+  return t === 'forest' || t === 'building' || isSlope;
 }
 
 // ピクセル座標から最も近い2つのヘクスを返す（ヘクスサイド判定用）
@@ -947,9 +949,46 @@ function hasLOS(fromCol, fromRow, toCol, toRow) {
   const dist = hexDist(fromCol, fromRow, toCol, toRow);
   if (dist <= 1) return true; // 隣接ヘクスは常に見える
 
-  // 始点→終点の線上のヘクスをサンプリング
-  // 途中のヘクス（始点・終点を除く）に遮蔽物があればLOS遮断
-  const steps = dist * 2; // 細かくサンプリング
+  const steps = Math.max(dist * 4, 8);
+
+  // --- 崖プリスキャン: 射線が通過する崖ヘクスサイドを検出し、
+  //     崖の向こう側（射手から遠い方）のヘクスを仮想丘とする ---
+  const virtualSlopes = new Set();
+  if (state.hexsideTerrain) {
+    const checkedCliff = {};
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const mx = h1.x + (h2.x - h1.x) * t;
+      const my = h1.y + (h2.y - h1.y) * t;
+      const res = pixelToHexTwo(mx, my);
+      const m1 = res.hex1, m2 = res.hex2;
+      if (!m2) continue;
+      if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
+        const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (!checkedCliff[key] && state.hexsideTerrain[key] === 'slope') {
+          checkedCliff[key] = true;
+          // 射手から遠い方のヘクスを仮想丘にする
+          const d1 = hexDist(m1.col, m1.row, fromCol, fromRow);
+          const d2 = hexDist(m2.col, m2.row, fromCol, fromRow);
+          if (d1 >= d2) {
+            virtualSlopes.add(`${m1.col},${m1.row}`);
+          } else {
+            virtualSlopes.add(`${m2.col},${m2.row}`);
+          }
+        }
+      }
+    }
+  }
+
+  // skipSlope: 両方が丘（実際 or 仮想）なら途中の丘はブロックしない
+  const t1 = state.terrain[`${fromCol},${fromRow}`] || null;
+  const t2 = state.terrain[`${toCol},${toRow}`] || null;
+  const c1Hill = t1 === 'slope' || virtualSlopes.has(`${fromCol},${fromRow}`);
+  const c2Hill = t2 === 'slope' || virtualSlopes.has(`${toCol},${toRow}`);
+  const skipSlope = c1Hill && c2Hill;
+
+  // --- 通常のLOSチェック（仮想丘も丘として扱う） ---
   for (let step = 1; step < steps; step++) {
     const t = step / steps;
     const px = h1.x + (h2.x - h1.x) * t;
@@ -957,22 +996,18 @@ function hasLOS(fromCol, fromRow, toCol, toRow) {
     const result = pixelToHexTwo(px, py);
     const m1 = result.hex1;
     const m2 = result.hex2;
-    // 始点・終点自体はスキップ
     if (m1.col === fromCol && m1.row === fromRow) continue;
     if (m1.col === toCol && m1.row === toRow) continue;
 
-    // ヘクスサイド上（2つのヘクスにほぼ等距離）かどうか判定
     const onHexside = result.dist2 < result.dist1 * 1.05;
     if (onHexside) {
-      // ヘクスサイド並行: 両方が遮蔽物の場合のみ遮断
       const skip2 = (m2.col === fromCol && m2.row === fromRow) ||
                      (m2.col === toCol && m2.row === toRow);
-      if (isBlockingTerrain(m1.col, m1.row) && (skip2 || isBlockingTerrain(m2.col, m2.row))) {
+      if (isBlockingTerrain(m1.col, m1.row, skipSlope, virtualSlopes) && (skip2 || isBlockingTerrain(m2.col, m2.row, skipSlope, virtualSlopes))) {
         return false;
       }
     } else {
-      // 明確にヘクス内を通過: そのヘクスの遮蔽物で遮断
-      if (isBlockingTerrain(m1.col, m1.row)) return false;
+      if (isBlockingTerrain(m1.col, m1.row, skipSlope, virtualSlopes)) return false;
     }
   }
   return true;
@@ -1568,7 +1603,7 @@ function loadPhase() {
       frame.contentWindow.postMessage({ type:'INIT_STATE', state: JSON.parse(JSON.stringify(state)), isAI: aiFlag }, '*');
     }
   };
-  frame.src = `${file}?phase=${phase}`;
+  frame.src = `${file}?phase=${phase}&_t=${Date.now()}`;
 }
 
 // sc5: 建物ヘクスに最後にいた側を記録
