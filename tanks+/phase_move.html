@@ -1202,7 +1202,7 @@ function hasLOS(c1, r1, c2, r2) {
     if (m1.col === c1 && m1.row === r1) continue;
     if (m1.col === c2 && m1.row === r2) continue;
 
-    // 丘ヘクスサイドチェック（hexsideTerrain の slope）
+    // 崖チェック（hexsideTerrain の slope）
     if (!skipSlope && m2 && state && state.hexsideTerrain) {
       if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
         const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;

@@ -158,7 +158,7 @@ button.top-btn:hover { background:#556; }
     <button class="top-btn te-b" data-t="building" onclick="setTeBrush('building')">建物</button>
     <button class="top-btn te-b" data-t="slope" onclick="setTeBrush('slope')">丘</button>
     <button class="top-btn te-b" data-t="bocage" onclick="setTeBrush('bocage')">ボカージュ</button>
-    <button class="top-btn te-b" data-t="hexslope" onclick="setTeBrush('hexslope')">丘(辺)</button>
+    <button class="top-btn te-b" data-t="hexslope" onclick="setTeBrush('hexslope')">崖</button>
     <button class="top-btn te-b" data-t="eraser" onclick="setTeBrush('eraser')">消去</button>
     <button class="top-btn" onclick="exportTerrain()" style="background:#364;color:#8f8">出力</button>
   </span>
@@ -545,7 +545,7 @@ function draw() {
         ctx.font = `bold ${HEX_SIZE * 0.18}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(hsType === 'slope' ? '丘' : 'ボ', mx, my);
+        ctx.fillText(hsType === 'slope' ? '崖' : 'ボ', mx, my);
       }
     }
   }
