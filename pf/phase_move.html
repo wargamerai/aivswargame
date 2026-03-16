@@ -49,6 +49,7 @@ button.undo-btn:hover { background:#ffd8c0; }
 <div id="shipList"></div>
 
 <button onclick="donePhase()" id="btnDone" style="display:none">次フェーズへ</button>
+<label style="float:right;font-size:0.9em;cursor:pointer;margin-top:-24px;"><input type="checkbox" id="usAI" onchange="toggleUSAI()"> AI委任</label>
 
 <div id="keyHint" style="display:none">
   テンキー操作:<br>
@@ -134,6 +135,9 @@ function init() {
   // 大破艦・射撃不能艦 自動離脱
   autoWithdrawHeavy();
 
+  const cb = document.getElementById('usAI');
+  if (cb) cb.checked = isUSAutoAI();
+
   const jpMoving = isJPMoving();
 
   if (jpMoving && !state.jpFreeMove) {
@@ -143,7 +147,20 @@ function init() {
   } else if (jpMoving) {
     startAutoJPMove();    // PF: 日本軍(AI)自動移動
   } else {
-    startFreeMode();      // PF: 米軍(プレイヤー)手動移動
+    if (isUSAutoAI()) {
+      autoUSMove();
+    } else {
+      startFreeMode();      // PF: 米軍(プレイヤー)手動移動
+    }
+  }
+}
+
+function isUSAutoAI() { return localStorage.getItem('usAutoAI') === '1'; }
+function toggleUSAI() {
+  const checked = document.getElementById('usAI').checked;
+  localStorage.setItem('usAutoAI', checked ? '1' : '0');
+  if (checked && document.getElementById('btnDone').style.display !== 'none') {
+    autoUSMove();
   }
 }
 
@@ -921,6 +938,27 @@ function aiMoveOneJPLead(lead, usc, sr) {
   const jpci = lead.colIndex;
   jpFleet.filter(s => !s.isLead && s.colIndex === jpci).forEach(f => f.remainMove = remain);
   console.log(`aiJPMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount}`);
+}
+
+// ========== 米軍AI委任移動 ==========
+function autoUSMove() {
+  const label = isFirstMove() ? '先攻' : '後攻';
+  document.getElementById('phTitle').textContent = `${label}移動 — 米軍（自動）`;
+  setInfo('米軍AI移動中...');
+  document.getElementById('keyHint').style.display = 'none';
+  document.getElementById('manualControls').style.display = 'none';
+  document.getElementById('btnDone').style.display = 'none';
+
+  if (state.contactMade || state.usFreeMove) {
+    aiUSMoveAnimated();
+  } else {
+    autoAdvanceColumn(usFleet);
+    usFleet.forEach((s, i) => { if (canShipMove(s)) movedShips.add(i); });
+    markSharedHex();
+    pushState();
+    renderList();
+    setTimeout(() => donePhase(), 2000);
+  }
 }
 
 // ========== 自由移動モード（接触後・米軍プレイヤーターン）==========
