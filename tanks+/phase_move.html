@@ -1593,9 +1593,12 @@ function aiGetPath(visited, targetKey) {
   return path;
 }
 
-// === ヘクス評価: 攻撃力と安全性を同時計算 ===
+// === ヘクス評価: 安全かつ命中率の高いヘクスを選ぶ ===
 function aiEvalPosition(u, db, col, row, enemies, bestDist) {
-  let bestScore = -Infinity;
+  // 全敵を見て: 最高の攻撃力と最大の脅威を算出
+  let bestMyKill = 0;
+  let maxEnKill = 0;
+  let bestEnemy = null;
 
   for (const enemy of enemies) {
     const eDb = UNIT_DB[enemy.name];
@@ -1604,13 +1607,9 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     // --- 自分の撃破確率 ---
     let myKill = 0;
     if (d >= 1 && d <= 12 && hasLOS(col, row, enemy.col, enemy.row)) {
-      const ft = FIRE_TABLE[u.name];
-      if (ft) {
-        // 固定砲塔: 射界外なら撃てない（向きは移動後に敵に向けるので、概算で正面射界とする）
-        const chance = calcKillChance(u.name, enemy.name, d, true);
-        myKill = chance.kill;
+      if (FIRE_TABLE[u.name]) {
+        myKill = calcKillChance(u.name, enemy.name, d, true).kill;
       }
-      // 歩兵の対戦車攻撃
       if (db.type === 'infantry' && eDb && eDb.type === 'tank') {
         const atTable = INF_VS_TANK[db.nation || ''];
         if (atTable && atTable[d] !== undefined) {
@@ -1619,22 +1618,18 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
         }
       }
     }
+    if (myKill > bestMyKill) { bestMyKill = myKill; bestEnemy = enemy; }
 
     // --- 敵の撃破確率 ---
     let enKill = 0;
     if (eDb && d >= 1 && d <= 12 && hasLOS(enemy.col, enemy.row, col, row)) {
-      // 固定砲塔の射界チェック
       if (eDb.turret === 'fixed') {
         if (isInFixedArcMove(enemy, col, row)) {
-          const chance = calcKillChance(enemy.name, u.name, d, true);
-          enKill = chance.kill;
+          enKill = calcKillChance(enemy.name, u.name, d, true).kill;
         }
-        // 射界外 → enKill = 0
       } else {
-        const chance = calcKillChance(enemy.name, u.name, d, true);
-        enKill = chance.kill;
+        enKill = calcKillChance(enemy.name, u.name, d, true).kill;
       }
-      // 歩兵の対戦車攻撃（敵が歩兵の場合）
       if (eDb.type === 'infantry' && db.type === 'tank') {
         const atTable = INF_VS_TANK[eDb.nation || ''];
         if (atTable && atTable[d] !== undefined) {
@@ -1643,27 +1638,30 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
         }
       }
     }
-
-    // --- スコア: 命中率重視、安全性はタイブレーカー ---
-    let score = myKill * 50 - enKill * 30;
-
-    // 地形ボーナス（安全性向上）
-    const terrain = state.terrain ? state.terrain[`${col},${row}`] : null;
-    if (terrain === 'forest' || terrain === 'building') score += 4;
-
-    // 固定砲塔の射界外（安全かつ接近可能）
-    if (eDb && eDb.turret === 'fixed' && !isInFixedArcMove(enemy, col, row)) {
-      score += 6;
-    }
-
-    // ボカージュ越し（安全性向上）
-    const bocage = countBocage(col, row, enemy.col, enemy.row);
-    score += bocage * 3;
-
-    if (score > bestScore) bestScore = score;
+    if (enKill > maxEnKill) maxEnKill = enKill;
   }
 
-  return bestScore;
+  // スコア: 命中率重視、安全性はタイブレーカー
+  let score = bestMyKill * 50 - maxEnKill * 30;
+
+  // 地形ボーナス
+  const terrain = state.terrain ? state.terrain[`${col},${row}`] : null;
+  if (terrain === 'forest' || terrain === 'building') score += 4;
+
+  // 固定砲塔の射界外
+  if (bestEnemy) {
+    const beDb = UNIT_DB[bestEnemy.name];
+    if (beDb && beDb.turret === 'fixed' && !isInFixedArcMove(bestEnemy, col, row)) {
+      score += 6;
+    }
+  }
+
+  // ボカージュ越し
+  if (bestEnemy) {
+    score += countBocage(col, row, bestEnemy.col, bestEnemy.row) * 3;
+  }
+
+  return score;
 }
 
 // === パスに沿って1歩ずつ移動（防御射撃対応） ===
