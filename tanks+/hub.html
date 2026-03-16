@@ -1461,7 +1461,11 @@ function startGame() {
     hexsideTerrain: Object.assign({}, sc.hexsideTerrain || {}),
     specialRules: sc.specialRules || {},
     reinforcement: sc.reinforcement || null,
+    buildingControl: null,  // sc5: 建物を最後に支配した側
   };
+
+  // sc5: 初期配置で建物にいる側を記録
+  if (sc.id === 'sc5') updateBuildingControl();
 
   // 地図画像ロード
   loadMaps();
@@ -1567,6 +1571,22 @@ function loadPhase() {
   frame.src = `${file}?phase=${phase}`;
 }
 
+// sc5: 建物ヘクスに最後にいた側を記録
+function updateBuildingControl() {
+  if (!state || state.scenarioId !== 'sc5') return;
+  if (!state.terrain) return;
+  for (const [key, val] of Object.entries(state.terrain)) {
+    if (val !== 'building') continue;
+    const [c, r] = key.split(',').map(Number);
+    for (const u of state.units) {
+      if (u.status === 'destroyed') continue;
+      if (u.col === c && u.row === r) {
+        state.buildingControl = u.side;
+      }
+    }
+  }
+}
+
 function checkVictory() {
   if (!state) return null;
   const s1 = state.side1;
@@ -1626,33 +1646,14 @@ function checkVictory() {
     }
   }
 
-  // sc5: 建物支配判定（ターン終了時）
-  if (scId === 'sc5' && state.turn > state.maxTurns) {
-    // 建物ヘクス(13,11)にいるユニットの側を判定
-    const buildingHexes = [];
-    if (state.terrain) {
-      for (const [key, val] of Object.entries(state.terrain)) {
-        if (val === 'building') {
-          const [c, r] = key.split(',').map(Number);
-          buildingHexes.push({ col: c, row: r });
-        }
-      }
-    }
-    // 各陣営の建物上ユニット数
-    let ctrl1 = 0, ctrl2 = 0;
-    state.units.forEach(u => {
-      if (u.status === 'destroyed') return;
-      if (buildingHexes.some(h => h.col === u.col && h.row === u.row)) {
-        if (u.side === s1) ctrl1++;
-        else if (u.side === s2) ctrl2++;
-      }
-    });
-    if (ctrl1 > 0 || ctrl2 > 0) {
-      const winner = ctrl1 >= ctrl2 ? s1 : s2;
+  // sc5: 建物支配のみで判定（最終ターン終了時）
+  // 途中の全滅・過半数は判定しない — 最後に建物にいた側の勝利
+  if (scId === 'sc5') {
+    if (state.turn > state.maxTurns) {
+      const winner = state.buildingControl || 'ge';
       return { winner, reason:'building_control', destroyed1, destroyed2, total1, total2 };
     }
-    // 建物に誰もいない → 先に配置していた側（ドイツ）が支配とみなす
-    return { winner:'ge', reason:'building_control', destroyed1, destroyed2, total1, total2 };
+    return null;  // sc5はターン終了まで続行
   }
 
   // 全滅判定
@@ -1752,6 +1753,9 @@ function checkReinforcement() {
 }
 
 function endPhase() {
+  // sc5: 建物支配の追跡更新
+  updateBuildingControl();
+
   // 勝利判定
   const victory = checkVictory();
   if (victory) {
