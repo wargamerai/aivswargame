@@ -818,6 +818,7 @@ function autoJPTorpedo() {
 
   const results = [];
   const allShips = [...jp, ...us];
+  const assignCount = {}; // 目標分散用
   for (const firer of jp) {
     let bestTarget = null, bestScore = 999, bestDist = 0;
     for (const t of us) {
@@ -826,7 +827,7 @@ function autoJPTorpedo() {
       if (!checkBroadside(firer, t)) continue;
       if (isLineBlocked(firer, t, allShips)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
-      const score = d + dmgRate * 30;
+      const score = d + (assignCount[t.name] || 0) * 5 + dmgRate * 30;
       if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
     }
     if (!bestTarget) continue;
@@ -954,6 +955,7 @@ function autoUSTorpedo() {
 
   // 全結果を事前計算
   const results = [];
+  const assignCount = {}; // 目標分散用
   for (const firer of us) {
     // 最寄りの舷側にいるJP艦を選択（広く浅く、損傷大ほど後回し）
     let bestTarget = null, bestScore = 999, bestDist = 99;
@@ -965,10 +967,11 @@ function autoUSTorpedo() {
       if (isLineBlocked(firer, t, allShips)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
       const dmgPenalty = dmgRate * 30;
-      const score = d + dmgPenalty;
+      const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty;
       if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
     }
     if (!bestTarget) continue;
+    assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
 
     const tp = getTorpPower(firer);
     const {mod, details} = calcModifiers(firer, bestTarget);
