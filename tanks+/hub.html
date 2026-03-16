@@ -521,6 +521,7 @@ function draw() {
           if (selU.enterEdge === 'left' && c === 1) valid = true;
           if (selU.enterEdge === 'top' && r === 1) valid = true;
           if (selU.enterEdge === 'bottom' && r === mr) valid = true;
+          if (selU.enterEdge === 'topRight' && r === 1 && c > Math.floor(mc / 2)) valid = true;
           if (!valid) continue;
           const h = hexCenter(c, r);
           const corners = hexCorners(h.x, h.y);
@@ -1615,7 +1616,7 @@ function checkReinforcement() {
     isDummy: false,
     carrying: null,
     showWreck: true,
-    enterEdge: sd ? sd.enterEdge : null,
+    enterEdge: rf.enterEdge || (sd ? sd.enterEdge : null),
   });
 
   gameLog(`🎲 増援ダイス: ${dieRoll}${modText} → <b style="color:#2a2">${entry.name} が増援で到着！</b>`);
