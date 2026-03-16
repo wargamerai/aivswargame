@@ -162,7 +162,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 
 <div id="phaseFlash"></div>
 
-<div id="dmgSummaryOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:800; justify-content:center; align-items:center;">
+<div id="dmgSummaryOverlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:800; justify-content:center; align-items:flex-start; padding-top:55vh;">
   <div id="dmgSummaryBox" style="background:#fff; border:2px solid #cc8; border-radius:8px; padding:18px 24px; max-width:420px; width:90%; max-height:70vh; overflow-y:auto; color:#222; font-family:monospace;">
     <div id="dmgSummaryTitle" style="font-size:1.2em; font-weight:bold; color:#8a6a00; text-align:center; margin-bottom:12px; border-bottom:2px solid #ddd; padding-bottom:8px;"></div>
     <div id="dmgSummaryBody" style="font-size:1em; line-height:1.8;"></div>
@@ -562,6 +562,24 @@ function draw() {
   ctx.fillText('米軍配置線', eLineX, 14);
   ctx.fillStyle = '#6666cc';
   ctx.fillText('日本配置線', wLineX, 14);
+
+  // 移動軌跡線
+  [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
+    if (s.prevCol !== undefined && s.status !== 'sunk' && s.col >= 0 &&
+        (s.col !== s.prevCol || s.row !== s.prevRow)) {
+      const from = hexPt(s.prevCol, s.prevRow);
+      const to = hexPt(s.col, s.row);
+      ctx.save();
+      ctx.strokeStyle = s.side === 'jp' ? 'rgba(255,100,100,0.6)' : 'rgba(100,100,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+      // 始点に小さい丸
+      ctx.fillStyle = s.side === 'jp' ? 'rgba(255,100,100,0.4)' : 'rgba(100,100,255,0.4)';
+      ctx.beginPath(); ctx.arc(from.x, from.y, 3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  });
 
   // Ships
   [...state.jpFleet, ...state.usFleet].forEach(s => drawShip(s));
@@ -1094,6 +1112,16 @@ function loadPhase(phase) {
     if (fresh.jpFreeMove)  state.jpFreeMove  = true;
     if (fresh.usFreeMove)  state.usFreeMove  = true;
     if (fresh.contactMade) state.contactMade = true;
+  }
+  // 移動フェーズ開始時: 現在位置を保存（軌跡線用）
+  if (phase === 'move1' || phase === 'move2') {
+    [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
+      if (s.col >= 0 && s.status !== 'sunk') { s.prevCol = s.col; s.prevRow = s.row; }
+    });
+  }
+  // 移動以外のフェーズ: 軌跡クリア
+  if (phase !== 'move1' && phase !== 'move2') {
+    [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => { delete s.prevCol; delete s.prevRow; });
   }
   state.phase = phase;
   state.actionDone = [];  // フェーズ遷移で行動済みリストクリア
