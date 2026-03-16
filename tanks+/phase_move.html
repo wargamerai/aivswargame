@@ -1560,26 +1560,20 @@ function aiDoMovement(u, db, callback) {
   const groupLimit = state._aiGroupAdvanceLimit || 1;
   const minStopDist = isDecoy ? 1 : Math.max(targetDist, groupLimit);
 
-  // 停止判定: 接近の損得で判断
-  // 1ヘクス近づいた時の自分の撃破率向上 vs 敵の撃破率向上を比較
-  if (!isDecoy && distToEnemy >= 2 && distToEnemy <= minStopDist + 1) {
-    const d = distToEnemy;
-    const d1 = d - 1;
-    const myNow = (d <= 12) ? (myChances[d] || {kill:0}).kill : 0;
-    const myCloser = (d1 >= 1 && d1 <= 12) ? (myChances[d1] || {kill:0}).kill : 0;
-    const enNow = (d <= 12) ? (enemyChances[d] || {kill:0}).kill : 0;
-    const enCloser = (d1 >= 1 && d1 <= 12) ? (enemyChances[d1] || {kill:0}).kill : 0;
-    const myGain = myCloser - myNow;   // 接近による自分の撃破率向上
-    const enGain = enCloser - enNow;   // 接近による敵の撃破率向上
-    // 接近で敵の方が得をする(敵の伸び > 自分の伸び)なら停止
-    if (enGain > myGain && myNow > 0) {
-      callback();
-      return;
-    }
-    // 歩兵目標: bestDistに到達したら停止
-    if (targetIsInfantry && d <= minStopDist) {
-      callback();
-      return;
+  // 停止判定: bestDistまでは必ず前進、以降は損得判定
+  if (!isDecoy && distToEnemy >= 2) {
+    if (distToEnemy > minStopDist) {
+      // 最適距離に未到達 → 前進継続（判定しない）
+    } else {
+      // bestDist以下: さらに踏み込むか損得判定
+      const d = distToEnemy, d1 = d - 1;
+      const myNow = (d <= 12) ? (myChances[d] || {kill:0}).kill : 0;
+      const myCloser = (d1 >= 1 && d1 <= 12) ? (myChances[d1] || {kill:0}).kill : 0;
+      const enNow = (d <= 12) ? (enemyChances[d] || {kill:0}).kill : 0;
+      const enCloser = (d1 >= 1 && d1 <= 12) ? (enemyChances[d1] || {kill:0}).kill : 0;
+      const myGain = myCloser - myNow;
+      const enGain = enCloser - enNow;
+      if (enGain >= myGain) { callback(); return; }
     }
   }
   if (!isDecoy && distToEnemy <= groupLimit) {
@@ -1980,19 +1974,20 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
     }
     const stopDist = Math.max(bestDist, groupLimit);
     // 接近の損得判定: 近づいて敵の方が得するなら停止
-    if (distNow >= 2 && distNow <= stopDist + 1) {
-      const d1 = distNow - 1;
-      const myNow = calcKillChance(u.name, targetEnemy.name, distNow, true).kill;
-      const myCloser = (d1 >= 1) ? calcKillChance(u.name, targetEnemy.name, d1, true).kill : 0;
-      const enNow = eDb ? calcKillChance(targetEnemy.name, u.name, distNow, true).kill : 0;
-      const enCloser = (d1 >= 1 && eDb) ? calcKillChance(targetEnemy.name, u.name, d1, true).kill : 0;
-      const myGain = myCloser - myNow;
-      const enGain = enCloser - enNow;
-      if (enGain > myGain && myNow > 0) {
-        callback(); return;
-      }
-      if (targetIsInf && distNow <= stopDist) {
-        callback(); return;
+    // bestDistまでは必ず前進、以降は損得判定
+    if (distNow >= 2) {
+      if (distNow > stopDist) {
+        // 最適距離に未到達 → 前進継続
+      } else {
+        // bestDist以下: さらに踏み込むか損得判定
+        const d1 = distNow - 1;
+        const myNow = calcKillChance(u.name, targetEnemy.name, distNow, true).kill;
+        const myCloser = (d1 >= 1) ? calcKillChance(u.name, targetEnemy.name, d1, true).kill : 0;
+        const enNow = eDb ? calcKillChance(targetEnemy.name, u.name, distNow, true).kill : 0;
+        const enCloser = (d1 >= 1 && eDb) ? calcKillChance(targetEnemy.name, u.name, d1, true).kill : 0;
+        const myGain = myCloser - myNow;
+        const enGain = enCloser - enNow;
+        if (enGain >= myGain) { callback(); return; }
       }
     }
     // 集団制限に達したら停止
@@ -2040,14 +2035,29 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
     score -= totalCost;
 
     const nTerrain = state.terrain ? state.terrain[`${n.col},${n.row}`] : null;
+    const eDb2 = UNIT_DB[targetEnemy.name];
     if (isDecoy) {
       // 囮: 接近最優先、地形はあればラッキー程度
       if (nTerrain === 'forest' || nTerrain === 'building') score += 2;
-    } else if (outgunned) {
-      // 劣勢時: 地形を重視
-      if (nTerrain === 'forest' || nTerrain === 'building') score += 8;
-      if ((curTerrain === 'forest' || curTerrain === 'building') &&
-          nTerrain === curTerrain) score += 3;
+    } else {
+      // 全ユニット: 遮蔽地形は常に有利
+      if (nTerrain === 'forest' || nTerrain === 'building') score += 3;
+      // 固定砲塔の射界外を優先
+      if (eDb2 && eDb2.turret === 'fixed') {
+        if (!isInFixedArcMove(targetEnemy, n.col, n.row)) {
+          score += 6;
+          if (nd < distNow) score += 6; // 射界外で接近=最優先
+        }
+      }
+      if (outgunned) {
+        // 劣勢時: 地形をさらに重視（合計+8）
+        if (nTerrain === 'forest' || nTerrain === 'building') score += 5;
+        if ((curTerrain === 'forest' || curTerrain === 'building') &&
+            nTerrain === curTerrain) score += 3;
+        // ボカージュ越しの位置を好む
+        const bocage = countBocage(n.col, n.row, targetEnemy.col, targetEnemy.row);
+        score += bocage * 4;
+      }
     }
 
     if (score > bestScore) {
