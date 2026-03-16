@@ -1580,11 +1580,15 @@ function checkReinforcement() {
   if (rf.done) return; // 既に処理済み
   if (state.turn !== rf.turn) return;
 
-  const dieRoll = Math.floor(Math.random() * 6) + 1;
+  const rawRoll = Math.floor(Math.random() * 6) + 1;
+  // ドイツ軍に撃破ユニットがあれば-1修正
+  const geLoss = state.units.some(u => u.side === rf.side && u.status === 'destroyed') ? -1 : 0;
+  const dieRoll = Math.max(1, rawRoll + geLoss);
+  const modText = geLoss ? ` (出目${rawRoll}、損害修正${geLoss})` : '';
   const entry = rf.diceTable[dieRoll];
 
   if (!entry) {
-    gameLog(`🎲 増援ダイス: ${dieRoll} → <b>増援なし</b>`);
+    gameLog(`🎲 増援ダイス: ${dieRoll}${modText} → <b>増援なし</b>`);
     rf.done = true;
     saveState();
     return;
@@ -1614,7 +1618,7 @@ function checkReinforcement() {
     enterEdge: sd ? sd.enterEdge : null,
   });
 
-  gameLog(`🎲 増援ダイス: ${dieRoll} → <b style="color:#2a2">${entry.name} が増援で到着！</b>`);
+  gameLog(`🎲 増援ダイス: ${dieRoll}${modText} → <b style="color:#2a2">${entry.name} が増援で到着！</b>`);
   rf.done = true;
   saveState();
   renderUnitList();
