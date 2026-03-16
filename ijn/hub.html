@@ -540,10 +540,11 @@ function draw() {
   ctx.fillStyle = '#6666cc';
   ctx.fillText('日本配置線', wLineX, 14);
 
-  // 移動軌跡線
+  // 移動軌跡線（未発見の米軍艦は非表示）
   [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
     if (s.prevCol !== undefined && s.status !== 'sunk' && s.col >= 0 &&
-        (s.col !== s.prevCol || s.row !== s.prevRow)) {
+        (s.col !== s.prevCol || s.row !== s.prevRow) &&
+        (s.side !== 'us' || s.faceUp || s.revealed)) {
       const from = hexPt(s.prevCol, s.prevRow);
       const to = hexPt(s.col, s.row);
       ctx.save();
@@ -1503,12 +1504,19 @@ function buildFleets(data) {
   var usMain = usData.filter(s => s.type !== 'DD');
   var usDD   = usData.filter(s => s.type === 'DD');
   var usBuilt = [];
-  // 主力列（col=33、2hex間隔）
+
+  // ランダム配置: 右半分(col 22-33)、row 2-(ROWS-4)、方向はランダム
+  var usBaseCol = 22 + Math.floor(Math.random() * 12); // 22-33
+  var usBaseRow = 2 + Math.floor(Math.random() * (ROWS - 8)); // 上下に余裕
+  var usDirs = [1, 2, 3, 4, 5, 6]; // 6方向からランダム
+  var usDir = usDirs[Math.floor(Math.random() * usDirs.length)];
+
+  // 主力列
   usMain.forEach((s, i) => {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
-      col: 33, row: Math.min(ROWS-1, 4 + i * 2),
-      dir: 4, speed: s.spd||4,
+      col: Math.max(0, Math.min(COLS-1, usBaseCol)), row: Math.max(0, Math.min(ROWS-1, usBaseRow + i * 2)),
+      dir: usDir, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
       vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
@@ -1518,12 +1526,12 @@ function buildFleets(data) {
       path:[],
     });
   });
-  // 駆逐列（col=34、主力列の1ヘクス東、2hex間隔）
+  // 駆逐列（主力列の1ヘクス東）
   usDD.forEach((s, i) => {
     usBuilt.push({
       name: s.name, type: s.type, side: 'us',
-      col: Math.min(COLS-1, 34), row: Math.min(ROWS-1, 4 + i * 2),
-      dir: 4, speed: s.spd||4,
+      col: Math.max(0, Math.min(COLS-1, usBaseCol + 1)), row: Math.max(0, Math.min(ROWS-1, usBaseRow + i * 2)),
+      dir: usDir, speed: s.spd||4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
       vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
