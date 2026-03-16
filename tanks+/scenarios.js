@@ -236,7 +236,11 @@ const MAP_TERRAIN = {
     '22,13':'forest', '22,14':'forest', '23,14':'forest',
     '23,15':'forest', '24,14':'forest',
   },
-  C: {},
+  C: {
+    '6,4':'forest', '7,5':'forest', '7,6':'forest', '8,5':'forest',
+    '11,13':'forest', '13,11':'building', '20,14':'forest',
+    '21,15':'forest', '22,5':'forest', '22,6':'forest', '23,7':'forest'
+  },
   B: {
     '3,9':'forest', '3,10':'forest', '4,8':'forest', '4,9':'forest',
     '4,10':'forest', '5,9':'forest', '5,10':'forest', '5,11':'forest',
@@ -256,6 +260,38 @@ const MAP_HEXSIDE_TERRAIN = {
     '6,4-6,5':'bocage', '6,5-7,5':'bocage', '7,5-7,6':'bocage',
     '7,5-8,5':'bocage', '8,4-8,5':'bocage', '8,5-9,5':'bocage',
     '9,5-9,6':'bocage',
+  },
+  C: {
+    '1,11-1,12':'bocage', '1,12-2,11':'bocage', '1,8-1,9':'bocage', '1,8-2,8':'bocage',
+    '10,11-9,11':'bocage', '10,11-9,12':'bocage', '10,12-9,12':'bocage',
+    '11,10-12,10':'slope', '11,14-12,14':'bocage', '11,15-12,14':'bocage',
+    '11,15-12,15':'bocage', '11,16-12,15':'bocage', '11,4-12,4':'bocage',
+    '11,5-12,4':'bocage', '11,5-12,5':'bocage', '11,6-12,5':'bocage',
+    '12,10-12,9':'slope', '12,3-12,4':'bocage', '12,4-13,4':'bocage',
+    '12,9-13,10':'slope', '13,10-13,9':'slope', '13,10-14,9':'slope',
+    '14,10-14,9':'slope', '14,10-15,10':'slope', '14,10-15,11':'slope',
+    '14,11-15,11':'slope', '2,11-2,12':'bocage', '2,11-3,12':'bocage',
+    '2,4-2,5':'bocage', '2,4-3,5':'bocage', '2,5-2,6':'bocage',
+    '2,6-3,6':'bocage', '2,7-2,8':'bocage', '2,8-3,8':'bocage',
+    '3,11-3,12':'bocage', '3,12-4,11':'bocage', '3,13-4,13':'bocage',
+    '3,14-4,13':'bocage', '3,14-4,14':'bocage', '3,15-4,14':'bocage',
+    '3,15-4,15':'bocage', '3,2-4,2':'bocage', '3,3-4,2':'bocage',
+    '3,4-3,5':'bocage', '3,5-4,4':'bocage', '3,5-4,5':'bocage',
+    '3,6-3,7':'bocage', '3,6-4,5':'bocage', '3,6-4,6':'bocage',
+    '3,8-3,9':'bocage', '3,8-4,8':'bocage', '4,1-4,2':'bocage',
+    '4,1-5,2':'bocage', '4,10-5,10':'bocage', '4,10-5,11':'bocage',
+    '4,11-4,12':'bocage', '4,11-5,11':'bocage', '4,11-5,12':'bocage',
+    '4,12-4,13':'bocage', '4,13-5,13':'bocage', '4,2-4,3':'bocage',
+    '4,2-5,3':'bocage', '4,7-4,8':'bocage', '4,8-5,8':'bocage',
+    '4,8-5,9':'bocage', '4,9-5,10':'bocage', '4,9-5,9':'bocage',
+    '5,1-5,2':'bocage', '5,13-5,14':'bocage', '5,13-6,13':'bocage',
+    '5,2-5,3':'bocage', '5,2-6,1':'bocage', '5,2-6,2':'bocage',
+    '6,12-6,13':'bocage', '6,13-7,13':'bocage', '6,13-7,14':'bocage',
+    '6,14-7,14':'bocage', '6,14-7,15':'bocage', '6,15-7,15':'bocage',
+    '7,10-8,9':'bocage', '7,8-8,8':'bocage', '7,9-8,8':'bocage',
+    '7,9-8,9':'bocage', '8,1-9,1':'bocage', '8,1-9,2':'bocage',
+    '8,10-8,9':'bocage', '8,2-9,2':'bocage', '8,2-9,3':'bocage',
+    '8,7-8,8':'bocage',
   },
 };
 
@@ -468,7 +504,8 @@ const SCENARIOS = [
         ]
       }
     },
-    terrain: MAP_TERRAIN.C
+    terrain: MAP_TERRAIN.C,
+    hexsideTerrain: MAP_HEXSIDE_TERRAIN.C
   },
 ];
 
