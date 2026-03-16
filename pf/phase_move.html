@@ -483,6 +483,17 @@ function aiUSMoveAnimated() {
   const jpc = jpCenter();
   const jpDir = jpMainDir();
   const sr = state.spotRange || 6;
+  // リード艦が損傷なら健全な随伴艦にリードを委譲
+  for (const lead of usFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0)) {
+    if (isShipCrippled(lead)) {
+      const replacement = usFleet.find(s => !s.isLead && s.colIndex === lead.colIndex && s.status !== 'sunk' && s.col >= 0 && !isShipCrippled(s));
+      if (replacement) {
+        lead.isLead = false;
+        replacement.isLead = true;
+        console.log(`US旗艦交代: ${lead.name} → ${replacement.name} (損傷のため)`);
+      }
+    }
+  }
   const leads = usFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
 
   // 前方の艦からソート
@@ -783,6 +794,17 @@ function usMainDir() {
 function aiJPMoveAnimated() {
   const usc = usCenter();
   const sr = state.spotRange || 6;
+  // リード艦が損傷なら健全な随伴艦にリードを委譲
+  for (const lead of jpFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0)) {
+    if (isShipCrippled(lead)) {
+      const replacement = jpFleet.find(s => !s.isLead && s.colIndex === lead.colIndex && s.status !== 'sunk' && s.col >= 0 && !isShipCrippled(s));
+      if (replacement) {
+        lead.isLead = false;
+        replacement.isLead = true;
+        console.log(`JP旗艦交代: ${lead.name} → ${replacement.name} (損傷のため)`);
+      }
+    }
+  }
   const leads = jpFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
 
   leads.sort((a, b) => {
@@ -1711,11 +1733,16 @@ function softFinishMove() {
   // moving, undoStackはそのまま維持 → undo可能
 }
 
+function isShipCrippled(s) {
+  // 航行不能、速力0、機関損傷で速力半減 → 追従不能
+  return s.speed === 0 || s.dmgM >= s.capM || s.status === 'heavy';
+}
+
 // US列用の随伴艦追従（USのみ使用）
 function moveFollowers(lead, fleet) {
   const ci = lead.colIndex;
   const followers = fleet
-    .filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing)
+    .filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && !isShipCrippled(s))
     .sort((a,b) => a.followOrder - b.followOrder);
 
   const chain = [lead, ...followers];
