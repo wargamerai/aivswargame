@@ -102,6 +102,7 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
 
   <button id="btnShoot" onclick="doShoot()" disabled>射撃！</button>
   <button onclick="doneSubPhase()" id="btnDone">射撃終了 →</button>
+  <label style="float:right;margin-top:6px;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="usAI" onchange="toggleUSAI()"> AI委任</label>
 </div>
 
 <div id="resultOverlay">
@@ -383,11 +384,32 @@ function getMaxRange(target, firer) {
   return (target.revealed || target.onFire) ? 16 : (state.spotRange || 5);
 }
 
+function isUSAutoAI() { return localStorage.getItem('usAutoAI') === '1'; }
+
+function usShootOrAuto(title) {
+  if (isUSAutoAI()) {
+    autoUSShoot(title + '（自動）');
+  } else {
+    setupUSShoot(title);
+  }
+}
+
+function toggleUSAI() {
+  const checked = document.getElementById('usAI').checked;
+  localStorage.setItem('usAutoAI', checked ? '1' : '0');
+  if (checked && document.getElementById('shootUI').style.display !== 'none') {
+    const title = document.getElementById('phTitle').textContent;
+    autoUSShoot(title + '（自動）');
+  }
+}
+
 // ===== 初期化 =====
 function init() {
   const raw = localStorage.getItem('hubState');
   if (!raw) { log('hubStateなし'); return; }
   state = JSON.parse(raw);
+  const cb = document.getElementById('usAI');
+  if (cb) cb.checked = isUSAutoAI();
   subPhase = state.phase || '';
 
   const isJPFirst = (state.initiative === 'jp');
@@ -399,11 +421,11 @@ function init() {
     if (isJPFirst) {
       autoJPShoot('第一砲撃 — 日本軍射撃（自動）');
     } else {
-      setupUSShoot('第一砲撃 — 米軍射撃');
+      usShootOrAuto('第一砲撃 — 米軍射撃');
     }
   } else if (subPhase === 'gun1b') {
     if (isJPFirst) {
-      setupUSShoot('第一砲撃 — 米軍射撃');
+      usShootOrAuto('第一砲撃 — 米軍射撃');
     } else {
       autoJPShoot('第一砲撃 — 日本軍射撃（自動）');
     }
@@ -412,7 +434,7 @@ function init() {
   } else if (subPhase === 'gun2a') {
     localStorage.removeItem(PENDING_KEY);
     if (isJPFirst) {
-      setupUSShoot('第二砲撃 — 米軍射撃');
+      usShootOrAuto('第二砲撃 — 米軍射撃');
     } else {
       autoJPShoot('第二砲撃 — 日本軍射撃（自動）');
     }
@@ -420,17 +442,19 @@ function init() {
     if (isJPFirst) {
       autoJPShoot('第二砲撃 — 日本軍射撃（自動）');
     } else {
-      setupUSShoot('第二砲撃 — 米軍射撃');
+      usShootOrAuto('第二砲撃 — 米軍射撃');
     }
   } else if (subPhase === 'gun2r') {
     resolveDamage('第二砲撃 — 損害確定');
   } else {
-    setupUSShoot('砲撃フェーズ');
+    usShootOrAuto('砲撃フェーズ');
   }
 }
 
 // ===== 米軍射撃（手動・カード式）=====
 function setupUSShoot(title) {
+  const cb = document.getElementById('usAI');
+  if (cb) cb.checked = isUSAutoAI();
   document.getElementById('phTitle').textContent = title;
 
   firerShips = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
@@ -792,6 +816,187 @@ function closeResult() {
   renderCards();
   updateShootInfo();
   parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
+}
+
+// ===== 米軍射撃（自動・AI委任）=====
+function autoUSShoot(title) {
+  document.getElementById('phTitle').textContent = title;
+  document.getElementById('shootUI').style.display = 'none';
+  log(`=== ${title} ===`);
+
+  const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
+  const jp = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToUS(s));
+
+  if (us.length === 0 || jp.length === 0) {
+    log('射撃可能な艦なし');
+    setTimeout(() => doneSubPhase(), 400);
+    return;
+  }
+
+  const results = [];
+  const usShotCount = {};
+  const assignCount = {};
+
+  for (const firer of us) {
+    // 第一砲撃で魚雷持ち艦は砲撃をスキップ（雷撃を温存）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b')
+        && firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
+      log(`${firer.name}: 雷撃温存（砲撃スキップ）`);
+      continue;
+    }
+
+    // 目標選択: 最も近い敵、損傷大ほど後回し
+    let bestTarget = null, bestScore = 999, bestDist = 999;
+    for (const t of jp) {
+      const d = hexDist(firer.col, firer.row, t.col, t.row);
+      if (d > getMaxRange(t, firer)) continue;
+      const arcInfo = getArcInfo(firer, t);
+      if (arcInfo.mult === 0) continue;
+      const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
+      const dmgPenalty = dmgRate * 30;
+      const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty;
+      if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
+    }
+    if (!bestTarget) continue;
+    assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
+
+    firer.revealed = true;
+    if (subPhase === 'gun1a' || subPhase === 'gun1b') {
+      firer.firedGun1 = true;
+    }
+    bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
+
+    const arcInfo = getArcInfo(firer, bestTarget);
+    const rawAtk = getAttack(firer);
+    const atk = arcInfo.mult < 1 ? Math.ceil(rawAtk * arcInfo.mult) : rawAtk;
+
+    let mod = 0;
+    const details = [];
+    // レーダー射撃修正（米軍）
+    if (firer.radar && bestDist > (state.spotRange || 5) && !bestTarget.revealed) { mod += 1; details.push('レーダー+1'); }
+    if (bestTarget.onFire) { mod -= 2; details.push('火災-2'); }
+    const tc = firer.turnCount || 0;
+    if (tc > 0) { mod += tc; details.push(`転舵+${tc}`); }
+    if (bestTarget.type === 'DD') { mod += 1; details.push('DD+1'); }
+    if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
+    const prevShots = usShotCount[bestTarget.name] || 0;
+    if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
+
+    const d1 = roll(), d2 = roll();
+    const diceTotal = d1 + d2 + mod;
+    const hits = getHits(diceTotal, bestDist);
+    usShotCount[bestTarget.name] = prevShots + 1;
+
+    let dmgText = '外れ', dmgG = 0, dmgM = 0, critText = '', ratioLabel = '', dmgDice = '';
+    var usCritSunk = false;
+
+    if (hits > 0) {
+      const fp = hits * atk;
+      const def = getDefense(bestTarget);
+      const rc = ratioCol(fp, def);
+      const ratioLabels = ['1:2','1:1','2:1','3:1','4:1','5:1','6:1','7:1','8:1','9:1','10:1'];
+      ratioLabel = `${ratioLabels[rc]} (火力${fp}/防御${def})`;
+
+      const d3 = roll(), d4 = roll();
+      const dmgStr = getDmgResult(d3+d4, rc);
+      const dmg = parseDmg(dmgStr);
+      dmgG = dmg.g; dmgM = dmg.m;
+      dmgText = dmgStr;
+      dmgDice = `${d3}+${d4}=${d3+d4}${d3===d4?' [ゾロ目!]':''}`;
+
+      const usCritCount = (d1===d2 && d3===d4) ? 2 : (d1===d2 || d3===d4) ? 1 : 0;
+      if (usCritCount > 0 && (dmgG > 0 || dmgM > 0)) {
+        const critTexts = [];
+        for (let ci = 0; ci < usCritCount; ci++) {
+          const cd = roll()+roll();
+          const crit = applyCritical(bestTarget, cd);
+          critTexts.push(crit.text);
+          dmgG += crit.extraG;
+          dmgM += crit.extraM;
+          if (crit.sunk) usCritSunk = true;
+        }
+        critText = critTexts.join(' / ');
+      }
+    }
+
+    results.push({
+      firer, target: bestTarget, dist: bestDist, mod, details,
+      d1, d2, hits, dmgText, dmgG, dmgM, critText, critSunk: usCritSunk, ratioLabel, dmgDice, arcInfo
+    });
+  }
+
+  if (results.length === 0) {
+    log('射撃可能な艦なし');
+    setTimeout(() => doneSubPhase(), 400);
+    return;
+  }
+
+  // 日本軍が攻撃を受けた → 接触確認
+  const jpWasHit = results.some(r => r.hits > 0);
+  if (jpWasHit && !state.jpDetected) {
+    state.jpDetected = true;
+    state.jpFreeMove = true;
+    state.contactMade = true;
+    log('日本軍: 砲撃を受けた → 敵発見、自由移動可能');
+  }
+
+  // 発砲した米軍艦のrevealed状態をアニメ開始前にマップへ即時反映
+  localStorage.setItem('hubState', JSON.stringify(state));
+  parent.postMessage({type:'STATE_UPDATE',
+    usFleet:state.usFleet, jpFleet:state.jpFleet,
+    jpDetected:state.jpDetected,
+    jpFreeMove:state.jpFreeMove,
+    contactMade:state.contactMade
+  }, '*');
+
+  // 1隻ずつオーバーレイ表示、「確認」で次へ
+  let idx = 0;
+  const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+
+  function processNext() {
+    if (idx >= results.length) {
+      localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+      localStorage.setItem('hubState', JSON.stringify(state));
+      parent.postMessage({type:'STATE_UPDATE', usFleet:state.usFleet}, '*');
+      log('--- 米軍射撃完了 ---');
+      setTimeout(() => doneSubPhase(), 400);
+      return;
+    }
+
+    const r = results[idx];
+    idx++;
+
+    // 弾丸アニメーション
+    parent.postMessage({type:'SHOOT_ANIM',
+      from: {col: r.firer.col, row: r.firer.row},
+      to: {col: r.target.col, row: r.target.row}
+    }, '*');
+
+    // ログ出力
+    const usHitPct = calcHitChance(r.mod, r.dist);
+    log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${usHitPct}%)`);
+    if (r.hits > 0) {
+      log(`  <span class="hit">命中${r.hits}発</span> ${r.ratioLabel}`);
+      log(`  損害: <span class="dmg">${r.dmgText}</span>`);
+      if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
+      if (r.dmgG > 0 || r.dmgM > 0 || r.critSunk) {
+        pending.push({name: r.target.name, side:'jp', g:r.dmgG, m:r.dmgM, critText: r.critText, critSunk: r.critSunk});
+      }
+    } else {
+      log('  外れ');
+    }
+
+    // 確認ボタンで次へ
+    const btn = document.createElement('button');
+    btn.textContent = '確認';
+    btn.style.cssText = 'margin:6px 0;padding:4px 16px;font-size:1em;cursor:pointer;';
+    btn.onclick = function() { btn.remove(); setTimeout(() => processNext(), 300); };
+    const logEl = document.getElementById('log');
+    logEl.appendChild(btn);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  processNext();
 }
 
 // ===== 日本軍射撃（自動）=====
