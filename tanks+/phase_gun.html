@@ -1071,6 +1071,24 @@ function aiFindBestTarget(firerIdx) {
       if (friendlyCount < enemyCount) continue;
     }
 
+    // 前進射撃: 戦車/砲は30%未満なら撃たない（弾切れリスク）。歩兵は弾切れなし。
+    if (isAdvanceFire && fDb.type !== 'infantry' && target.status !== 'immobilized') {
+      let estKill_af = 0;
+      if (tDb.type === 'infantry' || tDb.type === 'atgun') {
+        const di = distKey(dist);
+        if (di >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di]) {
+          const hitNum = FIRE_TABLE[firer.name][di][1];
+          const hitProb = hitNum >= 12 ? 1 : hitNum <= 1 ? 0 : (DICE_2D6_CUM[hitNum] || 0);
+          const kp = fDb.antiInf >= 12 ? 1 : fDb.antiInf <= 1 ? 0 : (DICE_2D6_CUM[fDb.antiInf] || 0);
+          estKill_af = hitProb * kp;
+        }
+      } else {
+        const frontHit_af = isHittingFrontArmor(firer, target);
+        estKill_af = calcKillChance(firer.name, target.name, dist, frontHit_af).kill;
+      }
+      if (estKill_af < 0.30) continue;
+    }
+
     // 歩兵の射撃評価
     if (fDb.type === 'infantry') {
       if (tDb.type === 'tank' || tDb.type === 'apc') {
@@ -1125,14 +1143,7 @@ function aiFindBestTarget(firerIdx) {
     const frontHit = isHittingFrontArmor(firer, target);
     const chance = calcKillChance(firer.name, target.name, dist, frontHit);
 
-    // 前進射撃: 弾薬温存基準（準備射撃は共通判定で処理済み）
-    if (isAdvanceFire && remainTurns_common > 2) {
-      const ammoRisk = 1 / 36;
-      const minKill = ammoRisk * Math.min(remainTurns_common, 4);
-      if (chance.kill < minKill && target.status !== 'immobilized') continue;
-    } else if (remainTurns_common <= 2) {
-      if (chance.kill < 0.01 && target.status !== 'immobilized') continue;
-    }
+    // 前進射撃の弾切れ判定は共通判定（30%閾値）で処理済み
 
     const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
 
