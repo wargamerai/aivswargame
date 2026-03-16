@@ -1159,9 +1159,10 @@ function isBlockingTerrain(col, row, skipSlope, virtualSlopes) {
   return t === 'forest' || t === 'building' || isSlope;
 }
 
-// ピクセル座標から最も近い2つのヘクスを返す（ヘクスサイド判定用）
+// ピクセル座標から最も近い3つのヘクスを返す（頂点判定対応）
 function pixelToHexTwo(px, py) {
-  let best1 = null, best2 = null, d1 = Infinity, d2 = Infinity;
+  let best1 = null, best2 = null, best3 = null;
+  let d1 = Infinity, d2 = Infinity, d3 = Infinity;
   const approxCol = Math.round((px - OX) / (HEX_SIZE * 1.5)) + 1;
   const approxRow = Math.round((py - OY) / HEX_H) + 1;
   for (let c = approxCol - 2; c <= approxCol + 2; c++) {
@@ -1170,14 +1171,18 @@ function pixelToHexTwo(px, py) {
       const h = hexCenter(c, r);
       const d = (px - h.x) ** 2 + (py - h.y) ** 2;
       if (d < d1) {
+        best3 = best2; d3 = d2;
         best2 = best1; d2 = d1;
         best1 = { col: c, row: r }; d1 = d;
       } else if (d < d2) {
+        best3 = best2; d3 = d2;
         best2 = { col: c, row: r }; d2 = d;
+      } else if (d < d3) {
+        best3 = { col: c, row: r }; d3 = d;
       }
     }
   }
-  return { hex1: best1, hex2: best2, dist1: d1, dist2: d2 };
+  return { hex1: best1, hex2: best2, hex3: best3, dist1: d1, dist2: d2, dist3: d3 };
 }
 
 // ===== LOS判定 =====
@@ -1188,10 +1193,11 @@ function hasLOS(c1, r1, c2, r2) {
   const dist = hexDist(c1, r1, c2, r2);
   if (dist <= 1) return true;
 
-  const steps = Math.max(dist * 4, 8);
+  const steps = Math.max(dist * 6, 12);
 
   // --- 崖プリスキャン: 射線が通過する崖ヘクスサイドを検出し、
   //     崖の向こう側（射手から遠い方）のヘクスを仮想丘とする ---
+  // 3ヘクスの頂点部分で検出漏れしないよう、最近3ヘクスの全ペアをチェック
   const virtualSlopes = new Set();
   if (state && state.hexsideTerrain) {
     const checkedCliff = {};
@@ -1200,20 +1206,19 @@ function hasLOS(c1, r1, c2, r2) {
       const mx = h1.x + (h2.x - h1.x) * t;
       const my = h1.y + (h2.y - h1.y) * t;
       const res = pixelToHexTwo(mx, my);
-      const m1 = res.hex1, m2 = res.hex2;
-      if (!m2) continue;
-      if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
-        const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
-        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
-        if (!checkedCliff[key] && state.hexsideTerrain[key] === 'slope') {
-          checkedCliff[key] = true;
-          // 射手から遠い方のヘクスを仮想丘にする
-          const d1 = hexDist(m1.col, m1.row, c1, r1);
-          const d2 = hexDist(m2.col, m2.row, c1, r1);
-          if (d1 >= d2) {
-            virtualSlopes.add(`${m1.col},${m1.row}`);
-          } else {
-            virtualSlopes.add(`${m2.col},${m2.row}`);
+      const nearby = [res.hex1, res.hex2, res.hex3].filter(h => h);
+      for (let a = 0; a < nearby.length; a++) {
+        for (let b = a + 1; b < nearby.length; b++) {
+          const ha = nearby[a], hb = nearby[b];
+          if (hexDist(ha.col, ha.row, hb.col, hb.row) !== 1) continue;
+          const ka = `${ha.col},${ha.row}`, kb = `${hb.col},${hb.row}`;
+          const key = ka < kb ? `${ka}-${kb}` : `${kb}-${ka}`;
+          if (!checkedCliff[key] && state.hexsideTerrain[key] === 'slope') {
+            checkedCliff[key] = true;
+            const da = hexDist(ha.col, ha.row, c1, r1);
+            const db = hexDist(hb.col, hb.row, c1, r1);
+            if (da >= db) virtualSlopes.add(ka);
+            else virtualSlopes.add(kb);
           }
         }
       }
@@ -1235,13 +1240,21 @@ function hasLOS(c1, r1, c2, r2) {
     const result = pixelToHexTwo(mx, my);
     const m1 = result.hex1;
     const m2 = result.hex2;
+    const m3 = result.hex3;
     if (m1.col === c1 && m1.row === r1) continue;
     if (m1.col === c2 && m1.row === r2) continue;
 
+    const isEnd = (h) => (h.col === c1 && h.row === r1) || (h.col === c2 && h.row === r2);
+    const onVertex = result.dist3 < result.dist1 * 1.15;
     const onHexside = result.dist2 < result.dist1 * 1.05;
-    if (onHexside) {
-      const skip2 = (m2.col === c1 && m2.row === r1) ||
-                     (m2.col === c2 && m2.row === r2);
+
+    if (onVertex && m3) {
+      const b1 = isEnd(m1) ? false : isBlockingTerrain(m1.col, m1.row, skipSlope, virtualSlopes);
+      const b2 = isEnd(m2) ? false : isBlockingTerrain(m2.col, m2.row, skipSlope, virtualSlopes);
+      const b3 = isEnd(m3) ? false : isBlockingTerrain(m3.col, m3.row, skipSlope, virtualSlopes);
+      if ((b1 ? 1 : 0) + (b2 ? 1 : 0) + (b3 ? 1 : 0) >= 2) return false;
+    } else if (onHexside) {
+      const skip2 = isEnd(m2);
       if (isBlockingTerrain(m1.col, m1.row, skipSlope, virtualSlopes) && (skip2 || isBlockingTerrain(m2.col, m2.row, skipSlope, virtualSlopes))) {
         return false;
       }
