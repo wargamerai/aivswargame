@@ -1047,6 +1047,18 @@ function autoUSShoot(title) {
     state.usWaitTurns = 0;  // 射撃開始 → カウントリセット
   }
 
+  // レーダー射撃の数的判断: レーダーで撃てる味方数 vs 撃ち返される敵数
+  // 数的不利なら発砲で位置暴露→集中攻撃のリスクがあるため控える
+  const radarShooters = us.filter(s => s.radar && jp.some(t => {
+    const d = hexDist(s.col, s.row, t.col, t.row);
+    return d <= getMaxRange(t, s) && d > (state.spotRange || 0);
+  })).length;
+  const jpCanReturn = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0).length;
+  const suppressRadar = !state.contactMade && radarShooters < jpCanReturn;
+  if (suppressRadar && radarShooters > 0) {
+    log(`米軍レーダー射撃抑制（射撃可能${radarShooters}隻 vs 敵${jpCanReturn}隻）`);
+  }
+
   // 全射撃結果を事前計算してキューに入れる
   const results = [];
   const usShotCount = {};
@@ -1074,8 +1086,8 @@ function autoUSShoot(title) {
       if (d > getMaxRange(t, firer)) continue;
       // レーダー非搭載艦は視認距離外の目標を撃てない
       if (d > (state.spotRange || 0) && !firer.radar && !t.onFire && !t.revealed) continue;
-      // 接触前はレーダー射撃を控える（発砲で位置が暴露→集中攻撃されるリスク）
-      if (!state.contactMade && d > (state.spotRange || 0) && !t.onFire && !t.revealed) continue;
+      // 数的不利ならレーダー射撃を控える
+      if (suppressRadar && d > (state.spotRange || 0) && !t.onFire && !t.revealed) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
       // BBが撃つ場合のみ高価値艦の損傷ペナルティ免除
       const isHV = isBBFirer && HIGH_VALUE.includes(t.name);
