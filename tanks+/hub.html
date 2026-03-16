@@ -162,6 +162,16 @@ button.top-btn:hover { background:#556; }
     <button class="top-btn te-b" data-t="eraser" onclick="setTeBrush('eraser')">消去</button>
     <button class="top-btn" onclick="exportTerrain()" style="background:#364;color:#8f8">出力</button>
   </span>
+  <span id="mapAdjust" style="display:none; gap:4px; align-items:center;">
+    <button class="top-btn" onclick="adjustMap('x',-1)">←</button>
+    <button class="top-btn" onclick="adjustMap('x',1)">→</button>
+    <button class="top-btn" onclick="adjustMap('y',-1)">↑</button>
+    <button class="top-btn" onclick="adjustMap('y',1)">↓</button>
+    <button class="top-btn" onclick="adjustMap('r',-0.1)">↺</button>
+    <button class="top-btn" onclick="adjustMap('r',0.1)">↻</button>
+    <span id="mapAdjustInfo" style="color:#aaa;font-size:0.8em"></span>
+    <button class="top-btn" onclick="exportMapOffset()" style="background:#364;color:#8f8">出力</button>
+  </span>
 </div>
 
 <!-- 方向メニュー（右クリック） -->
@@ -415,11 +425,27 @@ function draw() {
   // 地図画像
   if (mapImg1 && mapImg1.complete) ctx.drawImage(mapImg1, 0, 0);
   if (mapImg2 && mapImg2.complete) {
-    // 2枚目は右に並べる（Verticalなら横に、Horizontalなら縦に）
+    // 2枚目の位置: 基本位置 + mapOffset微調整
+    const mo = (state && state.mapOffset) || { x:0, y:0 };
+    const rot = (state && state.mapRotate) || 0; // 度
+    let baseX, baseY;
     if (state && state.map1orient === 'Vertical') {
-      ctx.drawImage(mapImg2, mapImg1.width, 0);
+      baseX = mapImg1.width; baseY = 0;
     } else {
-      ctx.drawImage(mapImg2, 0, mapImg1.height);
+      baseX = 0; baseY = mapImg1.height;
+    }
+    const dx = baseX + (mo.x || 0);
+    const dy = baseY + (mo.y || 0);
+    if (rot) {
+      ctx.save();
+      const cx = dx + mapImg2.width / 2;
+      const cy = dy + mapImg2.height / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate(rot * Math.PI / 180);
+      ctx.drawImage(mapImg2, -mapImg2.width / 2, -mapImg2.height / 2);
+      ctx.restore();
+    } else {
+      ctx.drawImage(mapImg2, dx, dy);
     }
   }
 
@@ -752,6 +778,44 @@ function toggleTerrainEdit() {
   document.getElementById('teBtn').style.color = terrainEditMode ? '#000' : '';
   document.getElementById('teBrush').style.display = terrainEditMode ? 'flex' : 'none';
   if (terrainEditMode) setTeBrush('forest');
+}
+
+function adjustMap(axis, delta) {
+  if (!state) return;
+  if (axis === 'r') {
+    state.mapRotate = (state.mapRotate || 0) + delta;
+  } else {
+    if (!state.mapOffset) state.mapOffset = { x:0, y:0 };
+    state.mapOffset[axis] += delta;
+  }
+  const info = document.getElementById('mapAdjustInfo');
+  if (info) {
+    const mo = state.mapOffset || {x:0,y:0};
+    info.textContent = `x:${mo.x} y:${mo.y} r:${(state.mapRotate||0).toFixed(1)}°`;
+  }
+  saveState();
+  draw();
+}
+
+function exportMapOffset() {
+  const mo = state.mapOffset || {x:0,y:0};
+  const r = state.mapRotate || 0;
+  let text = `mapOffset: { x:${mo.x}, y:${mo.y} }`;
+  if (r) text += `,\nmapRotate: ${r.toFixed(1)}`;
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999';
+  div.innerHTML = `<div style="background:#333;padding:20px;border-radius:8px;max-width:400px;width:90%">
+    <p style="color:#fff;margin-bottom:8px">マップオフセット（コピー用）</p>
+    <textarea style="width:100%;height:60px;font-family:monospace;font-size:0.9em" readonly>${text}</textarea>
+    <button onclick="this.parentElement.parentElement.remove()" style="margin-top:8px;padding:6px 16px">閉じる</button>
+  </div>`;
+  document.body.appendChild(div);
+  div.querySelector('textarea').select();
+}
+
+function showMapAdjust() {
+  const el = document.getElementById('mapAdjust');
+  if (el && state && state.map2) el.style.display = 'flex';
 }
 
 function zoomFit() {
@@ -1369,6 +1433,8 @@ function startGame() {
     map1orient: sc.map1orient,
     map2: sc.map2,
     map2orient: sc.map2orient,
+    mapOffset: sc.mapOffset || { x:0, y:0 },
+    mapRotate: sc.mapRotate || 0,
     selectedUnit: null,
     terrain: Object.assign({}, sc.terrain || {}),
     hexsideTerrain: Object.assign({}, sc.hexsideTerrain || {}),
@@ -1379,6 +1445,7 @@ function startGame() {
   // 地図画像ロード
   loadMaps();
   preloadUnitImages();
+  showMapAdjust();
 
   // UI更新
   document.getElementById('scenarioScreen').style.display = 'none';
