@@ -1508,8 +1508,7 @@ function buildFleets(data) {
   // ランダム配置: 右半分(col 22-33)、row 2-(ROWS-4)、方向はランダム
   var usBaseCol = 22 + Math.floor(Math.random() * 12); // 22-33
   var usBaseRow = 2 + Math.floor(Math.random() * (ROWS - 8)); // 上下に余裕
-  var usDirs = [1, 2, 3, 4, 5, 6]; // 6方向からランダム
-  var usDir = usDirs[Math.floor(Math.random() * usDirs.length)];
+  var usDir = 4; // 左向き固定
 
   // 主力列
   usMain.forEach((s, i) => {
