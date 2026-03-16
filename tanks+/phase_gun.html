@@ -1071,20 +1071,36 @@ function aiFindBestTarget(firerIdx) {
       if (friendlyCount < enemyCount) continue;
     }
 
-    // 前進射撃: 戦車/砲は30%未満なら撃たない（弾切れリスク）。歩兵は弾切れなし。
+    // 前進射撃: 戦車/砲は修正後30%未満なら撃たない（弾切れリスク）。歩兵は弾切れなし。
     if (isAdvanceFire && fDb.type !== 'infantry' && target.status !== 'immobilized') {
       let estKill_af = 0;
-      if (tDb.type === 'infantry' || tDb.type === 'atgun') {
-        const di = distKey(dist);
-        if (di >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di]) {
-          const hitNum = FIRE_TABLE[firer.name][di][1];
-          const hitProb = hitNum >= 12 ? 1 : hitNum <= 1 ? 0 : (DICE_2D6_CUM[hitNum] || 0);
+      const di_af = distKey(dist);
+      if (di_af >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di_af]) {
+        const rawHit = FIRE_TABLE[firer.name][di_af][1];
+        // 修正適用: 前進射撃 + 地形 + ボカージュ + 小型
+        let afMod = HIT_MODIFIERS.advanceFire[fDb.nation] || 2;
+        const tTerrain_af = state.terrain ? (state.terrain[`${target.col},${target.row}`] || 'plain') : 'plain';
+        if (tTerrain_af === 'forest') afMod += HIT_MODIFIERS.forest;
+        if (tTerrain_af === 'building') afMod += HIT_MODIFIERS.building;
+        const bc_af = countBocage(firer.col, firer.row, target.col, target.row);
+        if (bc_af > 0) afMod += bc_af * HIT_MODIFIERS.bocage;
+        if (tDb.small) afMod += HIT_MODIFIERS.smallTarget;
+        const effHit = rawHit - afMod;
+        const hitProb_af = effHit >= 12 ? 1 : effHit <= 1 ? 0 : (DICE_2D6_CUM[effHit] || 0);
+
+        if (tDb.type === 'infantry' || tDb.type === 'atgun') {
           const kp = fDb.antiInf >= 12 ? 1 : fDb.antiInf <= 1 ? 0 : (DICE_2D6_CUM[fDb.antiInf] || 0);
-          estKill_af = hitProb * kp;
+          estKill_af = hitProb_af * kp;
+        } else {
+          // 戦車: 命中後の撃破率も計算
+          const pen_af = FIRE_TABLE[firer.name][di_af][0];
+          const frontHit_af = isHittingFrontArmor(firer, target);
+          const armor_af = tDb.armor - (frontHit_af !== false ? 0 : 2);
+          const penDiff_af = pen_af - Math.max(0, armor_af);
+          const dKey = String(Math.max(-3, Math.min(3, penDiff_af)));
+          const dt_af = DESTRUCTION_TABLE[dKey];
+          estKill_af = hitProb_af * ((dt_af.destroyed[1] - dt_af.destroyed[0] + 1) / 11);
         }
-      } else {
-        const frontHit_af = isHittingFrontArmor(firer, target);
-        estKill_af = calcKillChance(firer.name, target.name, dist, frontHit_af).kill;
       }
       if (estKill_af < 0.30) continue;
     }
