@@ -222,6 +222,8 @@ function dirToAngle(dir) {
 }
 
 // ========== GAME STATE ==========
+var _sr = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
+var RADAR_RANGE = (_sr && _sr.radarRange) || 20;
 let gameState = {
   turn: 1,
   phase: 'init', // init, jp_move, us_move, done
@@ -267,7 +269,7 @@ function isVisible(ship) {
     const dist = hexDistance(ship.col, ship.row, e.col, e.row);
     if (dist <= gameState.spotRange) return true;
     // Radar (US ships, BB/CA/CL)
-    if (e.radar && dist <= 20) return true;
+    if (e.radar && dist <= RADAR_RANGE) return true;
   }
   return false;
 }

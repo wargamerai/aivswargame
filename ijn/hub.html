@@ -298,6 +298,11 @@ let state = {
   contactMade: false,  // 後方互換（jpDetected || usDetected）
 };
 
+// シナリオ特別ルール（savo.html等から設定）
+var scenarioRules = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
+var RADAR_RANGE = (scenarioRules && scenarioRules.radarRange) || 20;
+var RADAR_TYPES = (scenarioRules && scenarioRules.radarTypes) || ['BB','CA','CL','CLAA'];
+
 function saveState() {
   localStorage.setItem('hubState', JSON.stringify(state));
 }
@@ -375,7 +380,7 @@ function checkContact() {
     for (const us of usShips) {
       const d = hexDist(jp.col, jp.row, us.col, us.row);
       if (d <= state.spotRange) { visualContact = true; break; }
-      if (us.radar && d <= 20) { radarContact = true; }
+      if (us.radar && d <= RADAR_RANGE) { radarContact = true; }
     }
     if (visualContact) break;
   }
@@ -535,6 +540,24 @@ function draw() {
   ctx.fillStyle = '#6666cc';
   ctx.fillText('日本配置線', wLineX, 14);
 
+  // 移動軌跡線
+  [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
+    if (s.prevCol !== undefined && s.status !== 'sunk' && s.col >= 0 &&
+        (s.col !== s.prevCol || s.row !== s.prevRow)) {
+      const from = hexPt(s.prevCol, s.prevRow);
+      const to = hexPt(s.col, s.row);
+      ctx.save();
+      ctx.strokeStyle = s.side === 'jp' ? 'rgba(255,100,100,0.6)' : 'rgba(100,100,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
+      // 始点に小さい丸
+      ctx.fillStyle = s.side === 'jp' ? 'rgba(255,100,100,0.4)' : 'rgba(100,100,255,0.4)';
+      ctx.beginPath(); ctx.arc(from.x, from.y, 3, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  });
+
   // Ships
   [...state.jpFleet, ...state.usFleet].forEach(s => drawShip(s));
 
@@ -677,7 +700,7 @@ function isSpotted(ship) {
     if (f.status === 'sunk') return false;
     const d = hexDist(ship.col, ship.row, f.col, f.row);
     if (d <= state.spotRange) return true;
-    if (f.radar && d <= 20) return true;
+    if (f.radar && d <= RADAR_RANGE) return true;
     return false;
   });
 }
@@ -1042,6 +1065,16 @@ function loadPhase(phase) {
     if (fresh.usFreeMove)  state.usFreeMove  = true;
     if (fresh.contactMade) state.contactMade = true;
   }
+  // 移動フェーズ開始時: 現在位置を保存（軌跡線用）
+  if (phase === 'move1' || phase === 'move2') {
+    [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
+      if (s.col >= 0 && s.status !== 'sunk') { s.prevCol = s.col; s.prevRow = s.row; }
+    });
+  }
+  // 移動以外のフェーズ: 軌跡クリア
+  if (phase !== 'move1' && phase !== 'move2') {
+    [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => { delete s.prevCol; delete s.prevRow; });
+  }
   state.phase = phase;
   state.actionDone = [];  // フェーズ遷移で行動済みリストクリア
   saveState();
@@ -1389,7 +1422,13 @@ function returnToCampaign() {
     ships: result
   };
   localStorage.setItem('battleResultForCampaign', JSON.stringify(meta));
-  setTimeout(function() { window.location.href = 'campaign.html'; }, 2000);
+  var scenarioMode = localStorage.getItem('scenarioMode');
+  if (scenarioMode) {
+    localStorage.removeItem('scenarioMode');
+    setTimeout(function() { window.location.href = scenarioMode === 'savo' ? 'savo.html' : '../index.html'; }, 2000);
+  } else {
+    setTimeout(function() { window.location.href = 'campaign.html'; }, 2000);
+  }
 }
 
 function loadCampaign() {
@@ -1471,7 +1510,7 @@ function buildFleets(data) {
       vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
       isLead: i===0, colIndex:0, followOrder:i,
       status:'ok', faceUp:false,
-      radar: ['BB','CA','CL','CLAA'].includes(s.type),
+      radar: RADAR_TYPES.includes(s.type),
       path:[],
     });
   });

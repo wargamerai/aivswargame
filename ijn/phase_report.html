@@ -54,6 +54,8 @@ button.send:hover { background:#b8e8b8; }
 
 <script>
 let state = null;
+var _sr = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
+var JP_HANDICAP = (_sr && _sr.jpHandicap) || 0;
 
 function statusLabel(s) {
   return {ok:'無傷',light:'小破',medium:'中破',heavy:'大破',sunk:'沈没',exited:'離脱'}[s]||s;
@@ -168,7 +170,7 @@ function renderReport() {
       }
     }
   }
-  const jpEarned = jpCombat + jpBonus;
+  const jpEarned = jpCombat + jpBonus + JP_HANDICAP;
 
   let html = '';
 
@@ -221,6 +223,12 @@ function renderReport() {
     html += `</div>`;
   } else if (usAllGone && combatTurn >= 10) {
     html += `<div style="color:#889;margin:4px 0 4px 16px;font-size:0.85em">※ 敵全滅も10ターン経過のためボーナスなし</div>`;
+  }
+
+  // ハンディキャップ表示
+  if (JP_HANDICAP > 0) {
+    html += `<div style="font-size:0.95em;margin:6px 0 2px 0;padding:3px 8px;background:#fff8e0;border-radius:3px;display:flex;justify-content:space-between">
+      <span>ハンディキャップ</span><span>+${JP_HANDICAP} pt</span></div>`;
   }
 
   // 日本軍合計
