@@ -64,7 +64,7 @@
     <label style="font-weight:bold; margin-right:6px;">ハルゼーの性格:</label>
     <select id="difficultySelect" style="font-size:1em; padding:4px 8px; margin-right:12px;">
         <option value="practice">練習（CA1隻のみ）</option>
-        <option value="moderate" selected>油断している</option>
+        <option value="moderate" selected>傲慢</option>
         <option value="hard">慎重</option>
     </select>
     <button id="btnSortie" onclick="phaseSortie()">1. 出撃編成＆索敵</button>
@@ -518,7 +518,7 @@ function phaseSortie() {
             }
         }
         const usThreatSum = currentUsFleet.reduce((sum, s) => sum + usThreatOf(s), 0);
-        logMsg(`【油断】米軍: BB${jpTypeCount.BB} CA${jpTypeCount.CA} CL${jpTypeCount.CL} DD${jpTypeCount.DD} に合わせて${currentUsFleet.length}隻編成 (脅威値${usThreatSum})`);
+        logMsg(`【傲慢】米軍: BB${jpTypeCount.BB} CA${jpTypeCount.CA} CL${jpTypeCount.CL} DD${jpTypeCount.DD} に合わせて${currentUsFleet.length}隻編成 (脅威値${usThreatSum})`);
 
     } else {
         // 慎重モード: 日本軍の編成を見て逆張りする
