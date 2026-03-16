@@ -299,6 +299,10 @@ function updateShootInfo() {
   if (tTerrain === 'forest') { mod += HIT_MODIFIERS.forest; details.push(`森+${HIT_MODIFIERS.forest}`); }
   if (tTerrain === 'building') { mod += HIT_MODIFIERS.building; details.push(`建物+${HIT_MODIFIERS.building}`); }
 
+  // ボカージュ
+  const bocageCount = countBocage(firer.col, firer.row, target.col, target.row);
+  if (bocageCount > 0) { mod += bocageCount * HIT_MODIFIERS.bocage; details.push(`ボカージュ+${bocageCount}`); }
+
   // 小型目標
   if (tDb.small) { mod += HIT_MODIFIERS.smallTarget; details.push('小型+1'); }
 
@@ -447,6 +451,8 @@ function doShoot() {
   const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
   if (tTerrain === 'forest') { mod += 2; details.push('森+2'); }
   if (tTerrain === 'building') { mod += 2; details.push('建物+2'); }
+  const bocageCount2 = countBocage(firer.col, firer.row, target.col, target.row);
+  if (bocageCount2 > 0) { mod += bocageCount2; details.push(`ボカージュ+${bocageCount2}`); }
   if (tDb.small) { mod += 1; details.push('小型+1'); }
   if (target.status === 'immobilized') { mod -= 1; details.push('移動不能-1'); }
   if (isAdvanceFire) { const am = HIT_MODIFIERS.advanceFire[fDb.nation]||2; mod += am; details.push(`前進+${am}`); }
@@ -585,6 +591,8 @@ function doInfantryShoot(firer, target, dist) {
   const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
   if (tTerrain === 'forest') mod += HIT_MODIFIERS.forest;    // +2
   if (tTerrain === 'building') mod += HIT_MODIFIERS.building; // +2
+  const bocageCountInf = countBocage(firer.col, firer.row, target.col, target.row);
+  if (bocageCountInf > 0) mod += bocageCountInf;  // ボカージュ+N
   total += mod;
 
   let resultHtml = '';
@@ -731,6 +739,36 @@ function hasLOS(c1, r1, c2, r2) {
     }
   }
   return true;
+}
+
+// ===== ボカージュ修正 =====
+// 射線が通過するボカージュ辺の数を数える（平行含む）
+function countBocage(c1, r1, c2, r2) {
+  if (!state || !state.hexsideTerrain) return 0;
+  const h1 = hexCenter(c1, r1);
+  const h2 = hexCenter(c2, r2);
+  const checked = {};
+  let count = 0;
+  const dist = hexDist(c1, r1, c2, r2);
+  const steps = Math.max(dist * 4, 8);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const px = h1.x + (h2.x - h1.x) * t;
+    const py = h1.y + (h2.y - h1.y) * t;
+    const res = pixelToHexTwo(px, py);
+    const m1 = res.hex1, m2 = res.hex2;
+    if (!m2) continue;
+    // 近接する2ヘクス間の辺をチェック
+    if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
+      const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
+      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+      if (!checked[key]) {
+        checked[key] = true;
+        if (state.hexsideTerrain[key] === 'bocage') count++;
+      }
+    }
+  }
+  return count;
 }
 
 // ===== AI射撃ロジック =====

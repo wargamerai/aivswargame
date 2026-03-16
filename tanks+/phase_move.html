@@ -609,6 +609,34 @@ function checkStacking(col, row, movingUnit) {
   return true;
 }
 
+// ===== ボカージュ修正 =====
+function countBocage(c1, r1, c2, r2) {
+  if (!state || !state.hexsideTerrain) return 0;
+  const h1 = hexCenter(c1, r1);
+  const h2 = hexCenter(c2, r2);
+  const checked = {};
+  let count = 0;
+  const dist = hexDist(c1, r1, c2, r2);
+  const steps = Math.max(dist * 4, 8);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const px = h1.x + (h2.x - h1.x) * t;
+    const py = h1.y + (h2.y - h1.y) * t;
+    const res = pixelToHexTwo(px, py);
+    const m1 = res.hex1, m2 = res.hex2;
+    if (!m2) continue;
+    if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
+      const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
+      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+      if (!checked[key]) {
+        checked[key] = true;
+        if (state.hexsideTerrain[key] === 'bocage') count++;
+      }
+    }
+  }
+  return count;
+}
+
 // ===== 防御射撃（ステップ実行） =====
 function startDefensiveFire(movingUnit, movingIdx) {
   dfQueue = [];
@@ -666,6 +694,8 @@ function showDfStep1() {
   const mTerrain = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
   if (mTerrain === 'forest') { mod += 2; details.push('森+2'); }
   if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
+  const bocageDF1 = countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
+  if (bocageDF1 > 0) { mod += bocageDF1; details.push(`ボカージュ+${bocageDF1}`); }
   if (mDb.small) { mod += 1; details.push('小型+1'); }
 
   // hub.htmlに矢印表示（射撃側のsideを渡す）
@@ -730,6 +760,8 @@ function executeDfShot() {
   const mTerrain = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
   if (mTerrain === 'forest') { mod += 2; details.push('森+2'); }
   if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
+  const bocageDF2 = countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
+  if (bocageDF2 > 0) { mod += bocageDF2; details.push(`ボカージュ+${bocageDF2}`); }
   if (mDb.small) { mod += 1; details.push('小型+1'); }
 
   const d1 = roll(), d2 = roll();
