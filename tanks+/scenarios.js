@@ -489,8 +489,8 @@ const SCENARIOS = [
         setup: 'enterRight',
         enterEdge: 'right',
         units: [
-          { name:'Infantry', col:0, row:0, dir:2 },
-          { name:'Infantry', col:0, row:0, dir:2 },
+          { name:'Infantry', col:13, row:11, dir:2, deployed:true },
+          { name:'Infantry', col:13, row:11, dir:2, deployed:true },
           { name:'Tiger I', col:0, row:0, dir:2 },
           { name:'Pz IV/H', col:0, row:0, dir:2 },
           { name:'Pz IV/H', col:0, row:0, dir:2 },

@@ -1413,7 +1413,7 @@ function startGame() {
         isDummy: false,
         carrying: null,     // 輸送中の歩兵ID
         showWreck: true,
-        enterEdge: sd.enterEdge || null,
+        enterEdge: (u.deployed || (u.col && u.col > 0)) ? null : (sd.enterEdge || null),
       });
     }
   }
