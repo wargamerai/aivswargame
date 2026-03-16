@@ -1042,6 +1042,35 @@ function aiFindBestTarget(firerIdx) {
     // LOS チェック（全ユニット共通）
     if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
 
+    // 準備射撃の共通判定（全ユニット種別に適用）
+    const remainTurns_common = (state.maxTurns || 99) - (state.turn || 1);
+    if (!isAdvanceFire && remainTurns_common > 2 && target.status !== 'immobilized') {
+      // 撃破率を概算（対戦車は正面前提、対歩兵はantiInf基準）
+      let estKill = 0;
+      if (tDb.type === 'infantry' || tDb.type === 'atgun') {
+        const di = distKey(dist);
+        if (di >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di]) {
+          const hitNum = FIRE_TABLE[firer.name][di][1];
+          const hitProb = hitNum >= 12 ? 1 : hitNum <= 1 ? 0 : (DICE_2D6_CUM[hitNum] || 0);
+          const kp = fDb.antiInf >= 12 ? 1 : fDb.antiInf <= 1 ? 0 : (DICE_2D6_CUM[fDb.antiInf] || 0);
+          estKill = hitProb * kp;
+        }
+      } else {
+        const frontHit0 = isHittingFrontArmor(firer, target);
+        estKill = calcKillChance(firer.name, target.name, dist, frontHit0).kill;
+      }
+      // 50%未満 → 撃たない
+      if (estKill < 0.50) continue;
+      // 味方が敵を下回る → 移動優先
+      const friendlyCount = state.units.filter(a =>
+        a.side === firer.side && a.status !== 'destroyed' && a.col >= 1
+      ).length;
+      const enemyCount = state.units.filter(e =>
+        e.side !== firer.side && e.status !== 'destroyed' && e.col >= 1
+      ).length;
+      if (friendlyCount < enemyCount) continue;
+    }
+
     // 歩兵の射撃評価
     if (fDb.type === 'infantry') {
       if (tDb.type === 'tank' || tDb.type === 'apc') {
@@ -1096,26 +1125,12 @@ function aiFindBestTarget(firerIdx) {
     const frontHit = isHittingFrontArmor(firer, target);
     const chance = calcKillChance(firer.name, target.name, dist, frontHit);
 
-    const remainTurns = (state.maxTurns || 99) - (state.turn || 1);
-    if (!isAdvanceFire && remainTurns > 2 && target.status !== 'immobilized') {
-      // 準備射撃: 撃破率50%以上 + 安全ゾーン拡大 + 味方数≧敵数なら撃つ
-      if (chance.kill < 0.50) continue;
-      // 味方と敵の数を比較
-      const friendlyCount = state.units.filter(a =>
-        a.side === firer.side && a.status !== 'destroyed' && a.col >= 1
-      ).length;
-      const enemyCount = state.units.filter(e =>
-        e.side !== firer.side && e.status !== 'destroyed' && e.col >= 1
-      ).length;
-      // 味方が敵を下回る → 全滅リスク → 移動優先
-      if (friendlyCount < enemyCount) continue;
-    } else if (isAdvanceFire && remainTurns > 2) {
-      // 前進射撃: 弾薬温存基準
+    // 前進射撃: 弾薬温存基準（準備射撃は共通判定で処理済み）
+    if (isAdvanceFire && remainTurns_common > 2) {
       const ammoRisk = 1 / 36;
-      const minKill = ammoRisk * Math.min(remainTurns, 4);
+      const minKill = ammoRisk * Math.min(remainTurns_common, 4);
       if (chance.kill < minKill && target.status !== 'immobilized') continue;
-    } else if (remainTurns <= 2) {
-      // 最終2ターン: ほぼ撃つ
+    } else if (remainTurns_common <= 2) {
       if (chance.kill < 0.01 && target.status !== 'immobilized') continue;
     }
 
