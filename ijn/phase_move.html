@@ -611,7 +611,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
       // === 接触後: 距離10維持でアウトレンジ ===
       // 日本が接近 → 正面向き → 火力半減、米は横向きで全火力
       // 戦力比2倍以上なら突撃して仕留める
-      const IDEAL_RANGE = (usPower > jpPower * 2) ? 5 : 10;
+      const IDEAL_RANGE = (usPower > jpPower * 2) ? 5 : sr;
 
       if (distToJP > sr + 3) {
         // 索敵圏外 → flank側から斜め接近（舷側意識）
