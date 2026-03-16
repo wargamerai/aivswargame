@@ -838,11 +838,14 @@ function autoUSShoot(title) {
   const assignCount = {};
 
   for (const firer of us) {
-    // 第一砲撃で魚雷持ち艦は砲撃をスキップ（雷撃を温存）
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b')
-        && firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
-      log(`${firer.name}: 雷撃温存（砲撃スキップ）`);
-      continue;
+    // 雷撃温存: DDのみ第一砲撃で近距離なら砲撃スキップ（雷撃優先）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') && firer.type === 'DD' &&
+        firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
+      const closestDist = Math.min(...jp.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
+      if (closestDist <= 3) {
+        log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
+        continue;
+      }
     }
 
     // 目標選択: 最も近い敵、損傷大ほど後回し
@@ -1022,11 +1025,14 @@ function autoJPShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of jp) {
-    // 第一砲撃で魚雷持ち艦は砲撃をスキップ（雷撃を温存）
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b')
-        && firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
-      log(`${firer.name}: 雷撃温存（砲撃スキップ）`);
-      continue;
+    // 雷撃温存: DDのみ第一砲撃で近距離なら砲撃スキップ（CA/CLは常に射撃）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') && firer.type === 'DD' &&
+        firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
+      const closestDist = Math.min(...us.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
+      if (closestDist <= 3) {
+        log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
+        continue;
+      }
     }
 
     // 目標選択: 最も近い敵、損傷大ほど後回し
