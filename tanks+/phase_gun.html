@@ -1098,19 +1098,17 @@ function aiFindBestTarget(firerIdx) {
 
     const remainTurns = (state.maxTurns || 99) - (state.turn || 1);
     if (!isAdvanceFire && remainTurns > 2 && target.status !== 'immobilized') {
-      // 準備射撃: 撃破すれば移動範囲内の安全性が上がるなら撃つ
-      // 移動範囲内(dist-move ~ dist)で敵が最も脅威となる距離での撃破率を計算
-      const fDb = UNIT_DB[firer.name];
-      const moveRange = fDb ? fDb.move : 3;
-      let maxEnThreat = 0;
-      for (let td = Math.max(1, dist - moveRange); td <= Math.min(12, dist + 1); td++) {
-        const t = calcKillChance(target.name, firer.name, td, true).kill;
-        if (t > maxEnThreat) maxEnThreat = t;
-      }
-      // 期待安全改善 = 撃破率 × 移動範囲内での敵脅威
-      // 弾薬リスク(1/36)を上回らなければ撃たない
-      const safetyGain = chance.kill * maxEnThreat;
-      if (safetyGain < 1 / 36) continue;
+      // 準備射撃: 撃破率50%以上 + 安全ゾーン拡大 + 味方数≧敵数なら撃つ
+      if (chance.kill < 0.50) continue;
+      // 味方と敵の数を比較
+      const friendlyCount = state.units.filter(a =>
+        a.side === firer.side && a.status !== 'destroyed' && a.col >= 1
+      ).length;
+      const enemyCount = state.units.filter(e =>
+        e.side !== firer.side && e.status !== 'destroyed' && e.col >= 1
+      ).length;
+      // 味方が敵を下回る → 全滅リスク → 移動優先
+      if (friendlyCount < enemyCount) continue;
     } else if (isAdvanceFire && remainTurns > 2) {
       // 前進射撃: 弾薬温存基準
       const ammoRisk = 1 / 36;
