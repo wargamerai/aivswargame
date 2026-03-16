@@ -489,8 +489,8 @@ const SCENARIOS = [
         setup: 'enterRight',
         enterEdge: 'right',
         units: [
-          { name:'Infantry', col:13, row:11, dir:2, deployed:true },
-          { name:'Infantry', col:13, row:11, dir:2, deployed:true },
+          { name:'GE Infantry', col:13, row:11, dir:2, deployed:true },
+          { name:'GE Infantry', col:13, row:11, dir:2, deployed:true },
           { name:'Tiger I', col:0, row:0, dir:2 },
           { name:'Pz IV/H', col:0, row:0, dir:2 },
           { name:'Pz IV/H', col:0, row:0, dir:2 },
@@ -516,7 +516,7 @@ const SCENARIOS = [
       side: 'ge',
       enterEdge: 'topRight',
       diceTable: {
-        1: { name:'Jagdpanzer V', col:0, row:0, dir:2 },
+        1: { name:'J.Panther', col:0, row:0, dir:2 },
         2: { name:'Pz IV/H', col:0, row:0, dir:2 },
         3: { name:'Marder III', col:0, row:0, dir:2 },
         4: { name:'StuG III', col:0, row:0, dir:2 },
