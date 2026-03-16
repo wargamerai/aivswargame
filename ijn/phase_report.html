@@ -102,24 +102,26 @@ function init() {
   const raw = localStorage.getItem('hubState');
   if (!raw) { document.getElementById('reportContent').textContent='データなし'; return; }
   state = JSON.parse(raw);
-  renderReport();
-  // 10ターン経過 → 次ターンボタン無効化
-  if (state.combatTurn >= 10) {
+  const isSuddenDeath = renderReport();
+  // 10ターン経過またはサドンデス → 次ターンボタン無効化
+  if (state.combatTurn >= 10 || isSuddenDeath) {
     const btn = document.getElementById('btnNextTurn');
-    if (btn) { btn.disabled = true; btn.textContent = '戦闘終了（10ターン経過）'; }
+    const reason = isSuddenDeath ? 'サドンデス' : '10ターン経過';
+    if (btn) { btn.disabled = true; btn.textContent = `戦闘終了（${reason}）`; }
   }
   // シナリオモードではボタンラベルを変更
   if (localStorage.getItem('scenarioMode')) {
     const sendBtn = document.querySelector('.send');
     if (sendBtn) sendBtn.textContent = 'トップに戻る（戦闘終了）';
   }
-  // AI委任時は自動で次ターンへ（10ターン未満のみ）
-  if (localStorage.getItem('jpAutoAI') === '1' && state.combatTurn < 10) {
+  // AI委任時は自動で次ターンへ（サドンデスでなく10ターン未満のみ）
+  if (localStorage.getItem('jpAutoAI') === '1' && state.combatTurn < 10 && !isSuddenDeath) {
     setTimeout(() => goNextTurn(), 3000);
   }
 }
 
 function renderReport() {
+  let suddenDeath = false;
   const jp = state.jpFleet || [];
   const us = state.usFleet || [];
 
@@ -276,6 +278,34 @@ function renderReport() {
       <div class="result-label ${winClass}">${winLabel}</div>
       <div style="font-size:0.85em;color:#666;margin-top:4px">${jpEarned} 対 ${usEarned}（差: ${diff}pt / 比率: ${ratio}）</div>
     </div>`;
+
+    // サドンデス判定: 残存敵艦を全て撃沈しても逆転不可能なら戦闘終了
+    if (combatTurn < 10) {
+      // 日本軍が残りの米艦を全撃沈した場合の最大追加VP
+      const jpMaxMore = us.filter(s => s.status !== 'sunk').reduce((sum, s) => {
+        const alreadyScored = ((s.dmgG||0) + (s.dmgM||0)) * s.vp;
+        const maxIfSunk = (s.capG + s.capM) * s.vp;
+        return sum + (maxIfSunk - alreadyScored);
+      }, 0);
+      // 米軍が残りの日本艦を全撃沈した場合の最大追加VP
+      const usMaxMore = jp.filter(s => s.status !== 'sunk').reduce((sum, s) => {
+        const alreadyScored = ((s.dmgG||0) + (s.dmgM||0)) * s.vp;
+        const maxIfSunk = (s.capG + s.capM) * s.vp;
+        return sum + (maxIfSunk - alreadyScored);
+      }, 0);
+      const jpMaxTotal = jpEarned + jpMaxMore;
+      const usMaxTotal = usEarned + usMaxMore;
+      // 負けている側が全力で攻撃しても追いつけない場合
+      if (jpEarned > usEarned && usMaxTotal < jpEarned) {
+        suddenDeath = true;
+        html += `<div style="margin:10px 0;padding:8px 12px;background:#ffe0e0;border:2px solid #cc3333;border-radius:4px;text-align:center;font-weight:bold;color:#cc3333;">
+          ⚡ サドンデス — 米軍は逆転不可能（最大${usMaxTotal}pt < 日本軍${jpEarned}pt）</div>`;
+      } else if (usEarned > jpEarned && jpMaxTotal < usEarned) {
+        suddenDeath = true;
+        html += `<div style="margin:10px 0;padding:8px 12px;background:#e0e0ff;border:2px solid #3333cc;border-radius:4px;text-align:center;font-weight:bold;color:#3333cc;">
+          ⚡ サドンデス — 日本軍は逆転不可能（最大${jpMaxTotal}pt < 米軍${usEarned}pt）</div>`;
+      }
+    }
   } else {
     html += `<div style="color:#889;padding:8px">未接触 — 米軍得点: 不明</div>`;
   }
@@ -347,6 +377,7 @@ function renderReport() {
     speed:  s.speed !== undefined && s.speed !== null ? s.speed : -1,
   }));
   localStorage.setItem('battleResult', JSON.stringify(result));
+  return suddenDeath;
 }
 
 function sendToCampaign() {

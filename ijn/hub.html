@@ -142,6 +142,10 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
   <button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
   <button id="btnCampaign" onclick="loadCampaign()">読込</button>
   <button id="btnReturn" onclick="if(confirm('戦闘を終了して結果を表示しますか？'))showTurnEndReport()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
+  <span style="margin-left:8px;">
+    <button onclick="zoomBtn(-1)" style="font-size:1em;padding:2px 8px;font-weight:bold;">−</button>
+    <button onclick="zoomBtn(1)" style="font-size:1em;padding:2px 8px;font-weight:bold;">＋</button>
+  </span>
 </div>
 
 <div id="main">
@@ -336,6 +340,16 @@ const maparea = document.getElementById('maparea');
 // ズーム/パン変数（draw()より前に必要）
 let zoomLevel = 1.0;
 const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5, ZOOM_STEP = 0.1;
+function zoomBtn(dir) {
+  const rect = maparea.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const oldZoom = zoomLevel;
+  zoomLevel = dir > 0 ? Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP) : Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP);
+  const ratio = zoomLevel / oldZoom;
+  panX = cx - ratio * (cx - panX);
+  panY = cy - ratio * (cy - panY);
+  draw();
+}
 let panX = 0, panY = 0;
 let isDragging = false, wasDragged = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
 
