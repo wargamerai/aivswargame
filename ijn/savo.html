@@ -84,6 +84,13 @@
         </div>
     </div>
 
+    <div style="text-align:center;margin:15px 0;">
+        <label style="font-size:1.1em;cursor:pointer;color:#ffd700;">
+            <input type="checkbox" id="chkAI" checked style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">
+            AI観戦モード（日本軍もAIが操作）
+        </label>
+    </div>
+
     <div class="btn-area">
         <button class="btn-start" onclick="startBattle()">戦闘開始</button>
         <a href="../index.html" class="btn-back">トップへ戻る</a>
@@ -129,8 +136,8 @@ function startBattle() {
         radarTypes: ['CL'],    // レーダー搭載艦種（通常BB/CA/CL/CLAA）
         jpHandicap: 36         // 日本軍ハンディキャップ（得点に加算）
     }));
-    // シナリオモードはAI委任デフォルトON
-    localStorage.setItem('jpAutoAI', '1');
+    // AI観戦モード選択
+    localStorage.setItem('jpAutoAI', document.getElementById('chkAI').checked ? '1' : '0');
     window.location.href = 'hub.html';
 }
 </script>
