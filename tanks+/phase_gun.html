@@ -1096,22 +1096,30 @@ function aiFindBestTarget(firerIdx) {
     const frontHit = isHittingFrontArmor(firer, target);
     const chance = calcKillChance(firer.name, target.name, dist, frontHit);
 
-    // 準備射撃: 撃破率50%以上でないと撃たない（移動で有利な位置を取る方が重要）
-    // 前進射撃: 移動後なので弾薬温存基準で判定
-    // 最終2ターンはほぼ撃つ
     const remainTurns = (state.maxTurns || 99) - (state.turn || 1);
-    let minKill;
-    if (remainTurns <= 2) {
-      minKill = 0.01;
-    } else if (!isAdvanceFire) {
-      // 準備射撃: 50%以上でないと撃たない
-      minKill = 0.50;
-    } else {
-      // 前進射撃: 弾切れリスク基準
+    if (!isAdvanceFire && remainTurns > 2 && target.status !== 'immobilized') {
+      // 準備射撃: 撃破すれば移動範囲内の安全性が上がるなら撃つ
+      // 移動範囲内(dist-move ~ dist)で敵が最も脅威となる距離での撃破率を計算
+      const fDb = UNIT_DB[firer.name];
+      const moveRange = fDb ? fDb.move : 3;
+      let maxEnThreat = 0;
+      for (let td = Math.max(1, dist - moveRange); td <= Math.min(12, dist + 1); td++) {
+        const t = calcKillChance(target.name, firer.name, td, true).kill;
+        if (t > maxEnThreat) maxEnThreat = t;
+      }
+      // 期待安全改善 = 撃破率 × 移動範囲内での敵脅威
+      // 弾薬リスク(1/36)を上回らなければ撃たない
+      const safetyGain = chance.kill * maxEnThreat;
+      if (safetyGain < 1 / 36) continue;
+    } else if (isAdvanceFire && remainTurns > 2) {
+      // 前進射撃: 弾薬温存基準
       const ammoRisk = 1 / 36;
-      minKill = ammoRisk * Math.min(remainTurns, 4);
+      const minKill = ammoRisk * Math.min(remainTurns, 4);
+      if (chance.kill < minKill && target.status !== 'immobilized') continue;
+    } else if (remainTurns <= 2) {
+      // 最終2ターン: ほぼ撃つ
+      if (chance.kill < 0.01 && target.status !== 'immobilized') continue;
     }
-    if (chance.kill < minKill && target.status !== 'immobilized') continue;
 
     const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
 
