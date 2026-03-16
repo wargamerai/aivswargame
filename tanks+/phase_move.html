@@ -353,7 +353,7 @@ function handlePlacement(col, row) {
   }
 
   // 地形コスト
-  const terrainCost = getTerrainCost(col, row);
+  const terrainCost = getTerrainCost(col, row, undefined, undefined, u.name);
   if (u.remainMove < terrainCost) {
     log(`MP不足（必要:${terrainCost}, 残り:${u.remainMove}）`);
     return;
@@ -412,7 +412,7 @@ function handleMove(col, row) {
   }
 
   // 地形コスト
-  const terrainCost = getTerrainCost(col, row, u.col, u.row);
+  const terrainCost = getTerrainCost(col, row, u.col, u.row, u.name);
 
   // 後退判定: 移動方向が後方3方向（120°/180°/240°）
   let backwardExtra = 0;
@@ -566,7 +566,12 @@ function getRotateCost(currentDir, targetDir) {
 }
 
 // ===== 地形コスト =====
-function getTerrainCost(col, row, fromCol, fromRow) {
+function getTerrainCost(col, row, fromCol, fromRow, unitName) {
+  // 歩兵は全地形1MP（ルール9.1(2)）
+  if (unitName) {
+    const udb = UNIT_DB[unitName];
+    if (udb && udb.type === 'infantry') return 1;
+  }
   const key = `${col},${row}`;
   const t = state.terrain[key];
   // 丘→丘は同じ高さなのでコスト1
@@ -653,9 +658,33 @@ function startDefensiveFire(movingUnit, movingIdx) {
     if (dfFirers[ei]) return;
     const eDb = UNIT_DB[e.name];
     if (!eDb) return;
-    if (eDb.type === 'infantry') return;
 
     const dist = hexDist(e.col, e.row, movingUnit.col, movingUnit.row);
+    if (!hasLOS(e.col, e.row, movingUnit.col, movingUnit.row)) return;
+
+    // 隠匿ユニットのみ視認距離チェック
+    if (movingUnit.hidden && !canSpot(e, movingUnit, state.terrain || {})) return;
+
+    // 歩兵の防御射撃（ルール9.4(5)/9.5(3)）
+    if (eDb.type === 'infantry') {
+      const mDb = UNIT_DB[movingUnit.name];
+      if (mDb && (mDb.type === 'tank' || mDb.type === 'apc')) {
+        // 対戦車攻撃（range依存）
+        const table = INF_VS_TANK[eDb.nation];
+        if (table && table[dist] !== undefined) {
+          dfQueue.push({ idx: ei, unit: e, db: eDb, dist, ft: null, isInfantry: true });
+        }
+      } else {
+        // 対歩兵攻撃
+        const key = eDb.nation + '_inf';
+        const table = ANTI_INF_TABLE[key];
+        if (table && table[dist] !== undefined) {
+          dfQueue.push({ idx: ei, unit: e, db: eDb, dist, ft: null, isInfantry: true });
+        }
+      }
+      return;
+    }
+
     const di = distKey(dist);
     if (di < 0 || !FIRE_TABLE[e.name]) return;
     const ft = FIRE_TABLE[e.name][di];
@@ -664,10 +693,6 @@ function startDefensiveFire(movingUnit, movingIdx) {
     if (eDb.turret !== 'rotating') {
       if (!isInFixedArc(e, movingUnit)) return;
     }
-    if (!hasLOS(e.col, e.row, movingUnit.col, movingUnit.row)) return;
-
-    // 隠匿ユニットのみ視認距離チェック（通常ユニットは射程内なら防御射撃可能）
-    if (movingUnit.hidden && !canSpot(e, movingUnit, state.terrain || {})) return;
 
     dfQueue.push({ idx: ei, unit: e, db: eDb, dist, ft });
   });
@@ -684,10 +709,60 @@ function startDefensiveFire(movingUnit, movingIdx) {
 function showDfStep1() {
   const enemy = dfQueue[dfCurrentIdx];
   const e = enemy.unit;
+  const eDb = enemy.db;
+  const mDb = UNIT_DB[dfMovingUnit.name];
+
+  // hub.htmlに矢印表示
+  parent.postMessage({ type:'DF_ARROW', arrow: {
+    fromCol: e.col, fromRow: e.row,
+    toCol: dfMovingUnit.col, toRow: dfMovingUnit.row,
+    shooterSide: e.side
+  }}, '*');
+
+  // 歩兵の防御射撃プレビュー
+  if (enemy.isInfantry) {
+    const mTerrain = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
+    let mod = 1; const details = ['防御射撃+1'];
+    let hitNum = 0, atkType = '';
+    if (mDb.type === 'tank' || mDb.type === 'apc') {
+      atkType = '対戦車攻撃';
+      const table = INF_VS_TANK[eDb.nation];
+      hitNum = table ? table[enemy.dist] : 0;
+    } else {
+      atkType = '対歩兵';
+      const key = eDb.nation + '_inf';
+      const table = ANTI_INF_TABLE[key];
+      hitNum = table ? table[enemy.dist] : 0;
+      if (mTerrain === 'forest') { mod += 1; details.push('森+1'); }
+      if (mTerrain === 'building') { mod += 1; details.push('建物+1'); }
+    }
+    const bc = countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
+    if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+
+    let html = `<div style="margin-bottom:12px">`;
+    html += `<div style="font-size:1.2em;font-weight:bold;margin-bottom:8px">防御射撃 (${dfCurrentIdx+1}/${dfQueue.length})</div>`;
+    html += `<table style="width:100%;text-align:left;margin:8px 0;font-size:0.95em">`;
+    html += `<tr><td style="color:#666">攻撃:</td><td><b>${e.name}</b> (${atkType})</td></tr>`;
+    html += `<tr><td style="color:#666">目標:</td><td><b>${dfMovingUnit.name}</b></td></tr>`;
+    html += `<tr><td style="color:#666">距離:</td><td>${enemy.dist}ヘクス</td></tr>`;
+    html += `<tr><td style="color:#666">撃破:</td><td>${hitNum}以下</td></tr>`;
+    html += `<tr><td style="color:#666">修正:</td><td>+${mod} (${details.join(', ')})</td></tr>`;
+    html += `</table>`;
+    html += `<div style="display:flex;gap:8px;margin-top:4px">`;
+    html += `<button onclick="executeDfShot()" style="background:#c33;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer">射撃実行</button>`;
+    html += `<button onclick="nextDfStep()" style="background:#555;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer">スキップ</button>`;
+    html += `</div></div>`;
+    document.getElementById('dfBody').innerHTML = html;
+    document.getElementById('dfOverlay').style.display = 'flex';
+    // AI自動判断
+    const dfShooterIsAI = !isAI;
+    if (dfShooterIsAI) setTimeout(() => executeDfShot(), 400);
+    return;
+  }
+
   const ft = enemy.ft;
   const pen = ft[0];
   const hitNum = ft[1];
-  const mDb = UNIT_DB[dfMovingUnit.name];
 
   // 修正値計算
   let mod = HIT_MODIFIERS.defensiveFire;
@@ -698,13 +773,6 @@ function showDfStep1() {
   const bocageDF1 = countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
   if (bocageDF1 > 0) { mod += bocageDF1; details.push(`ボカージュ+${bocageDF1}`); }
   if (mDb.small) { mod += 1; details.push('小型+1'); }
-
-  // hub.htmlに矢印表示（射撃側のsideを渡す）
-  parent.postMessage({ type:'DF_ARROW', arrow: {
-    fromCol: e.col, fromRow: e.row,
-    toCol: dfMovingUnit.col, toRow: dfMovingUnit.row,
-    shooterSide: e.side
-  }}, '*');
 
   let html = `<div style="margin-bottom:12px">`;
   html += `<div style="font-size:1.2em;font-weight:bold;margin-bottom:8px">防御射撃 (${dfCurrentIdx+1}/${dfQueue.length})</div>`;
@@ -748,17 +816,93 @@ function executeDfShot() {
   const enemy = dfQueue[dfCurrentIdx];
   const e = enemy.unit;
   const eDb = enemy.db;
-  const ft = enemy.ft;
-  const pen = ft[0];
-  const hitNum = ft[1];
   const mDb = UNIT_DB[dfMovingUnit.name];
 
   dfFirers[enemy.idx] = true;
   state.units[enemy.idx].dfFired = true;
 
+  const mTerrain = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
+
+  // 歩兵の防御射撃
+  if (enemy.isInfantry) {
+    const d1 = roll(), d2 = roll();
+    let total = d1 + d2;
+    let mod = 1; // 防御射撃+1
+    const details = ['防御射撃+1'];
+
+    if (mDb.type === 'tank' || mDb.type === 'apc') {
+      // 対戦車攻撃
+      const table = INF_VS_TANK[eDb.nation];
+      const hitNum = table ? table[enemy.dist] : 0;
+      const bc = countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
+      if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+      total += mod;
+
+      let html = `<div style="margin-bottom:12px">`;
+      html += `<div style="font-size:1.2em;font-weight:bold;margin-bottom:8px">防御射撃 (${dfCurrentIdx+1}/${dfQueue.length})</div>`;
+      html += `<div style="font-size:1.1em;font-weight:bold;margin-bottom:8px">${e.name} → ${dfMovingUnit.name} (対戦車攻撃)</div>`;
+      html += `<div class="r-dice">🎲 ${d1}+${d2}=${d1+d2} 修正+${mod} → ${total} (${hitNum}以下で撃破)</div>`;
+      html += `<div style="color:#888;font-size:0.8em">${details.join(' / ')}</div>`;
+      if (total <= hitNum) {
+        dfMovingUnit.status = 'destroyed';
+        html += `<div class="r-dmg" style="margin:8px 0">撃破！</div>`;
+        log(`防御射撃: ${e.name} → ${dfMovingUnit.name}: 対戦車攻撃 撃破`);
+        dfResult = 'destroyed';
+      } else {
+        html += `<div style="color:#888;margin:8px 0">無効</div>`;
+        log(`防御射撃: ${e.name} → ${dfMovingUnit.name}: 対戦車攻撃 無効`);
+      }
+      const isLast = (dfCurrentIdx >= dfQueue.length - 1) || dfResult === 'destroyed';
+      const btnLabel = isLast ? '確認' : '確認 → 次の射撃';
+      html += `<button onclick="nextDfStep()" style="background:#2a7a2a;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer;margin-top:8px">${btnLabel}</button>`;
+      html += `</div>`;
+      document.getElementById('dfBody').innerHTML = html;
+      pushState();
+      if (!isAI) setTimeout(() => nextDfStep(), 600);
+      return;
+    } else {
+      // 対歩兵攻撃
+      const key = eDb.nation + '_inf';
+      const table = ANTI_INF_TABLE[key];
+      const hitNum = table ? table[enemy.dist] : 0;
+      if (mTerrain === 'forest') { mod += 1; details.push('森+1'); }
+      if (mTerrain === 'building') { mod += 1; details.push('建物+1'); }
+      const bc = countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
+      if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+      total += mod;
+
+      let html = `<div style="margin-bottom:12px">`;
+      html += `<div style="font-size:1.2em;font-weight:bold;margin-bottom:8px">防御射撃 (${dfCurrentIdx+1}/${dfQueue.length})</div>`;
+      html += `<div style="font-size:1.1em;font-weight:bold;margin-bottom:8px">${e.name} → ${dfMovingUnit.name} (対歩兵)</div>`;
+      html += `<div class="r-dice">🎲 ${d1}+${d2}=${d1+d2} 修正+${mod} → ${total} (${hitNum}以下で撃破)</div>`;
+      html += `<div style="color:#888;font-size:0.8em">${details.join(' / ')}</div>`;
+      if (total <= hitNum) {
+        dfMovingUnit.status = 'destroyed';
+        html += `<div class="r-dmg" style="margin:8px 0">撃破！</div>`;
+        log(`防御射撃: ${e.name} → ${dfMovingUnit.name}: 対歩兵射撃 撃破`);
+        dfResult = 'destroyed';
+      } else {
+        html += `<div style="color:#888;margin:8px 0">無効</div>`;
+        log(`防御射撃: ${e.name} → ${dfMovingUnit.name}: 対歩兵射撃 無効`);
+      }
+      const isLast = (dfCurrentIdx >= dfQueue.length - 1) || dfResult === 'destroyed';
+      const btnLabel = isLast ? '確認' : '確認 → 次の射撃';
+      html += `<button onclick="nextDfStep()" style="background:#2a7a2a;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer;margin-top:8px">${btnLabel}</button>`;
+      html += `</div>`;
+      document.getElementById('dfBody').innerHTML = html;
+      pushState();
+      if (!isAI) setTimeout(() => nextDfStep(), 600);
+      return;
+    }
+  }
+
+  // 戦車/砲の防御射撃
+  const ft = enemy.ft;
+  const pen = ft[0];
+  const hitNum = ft[1];
+
   let mod = HIT_MODIFIERS.defensiveFire;
   const details = ['防御射撃+1'];
-  const mTerrain = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
   if (mTerrain === 'forest') { mod += 2; details.push('森+2'); }
   if (mTerrain === 'building') { mod += 2; details.push('建物+2'); }
   const bocageDF2 = countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
@@ -778,29 +922,50 @@ function executeDfShot() {
     html += `<div class="r-hit hit" style="margin:8px 0">命中！</div>`;
     log(`防御射撃: ${e.name} → ${dfMovingUnit.name}: 命中 (${d1}+${d2}=${rawTotal}+${mod}=${modTotal})`);
 
-    const frontHit = isInArc(dfMovingUnit, e);
-    const armor = mDb.armor - (frontHit ? 0 : 2);
-    const penDiff = pen - Math.max(0, armor);
-    const dd1 = roll(), dd2 = roll();
-    const dmgTotal = dd1 + dd2;
-    const dmgResult = getDestructionResult(penDiff, dmgTotal);
-
-    html += `<div style="margin:4px 0">装甲${mDb.armor}${frontHit?'':'(側面-2→'+armor+')'} 貫通差${penDiff>=0?'+':''}${penDiff}</div>`;
-    html += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</div>`;
-
-    if (dmgResult === 'destroyed') {
-      dfMovingUnit.status = 'destroyed';
-      html += `<div class="r-dmg" style="margin:8px 0">破壊！</div>`;
-      log(`  → ${dfMovingUnit.name} 破壊！`);
-      dfResult = 'destroyed';
-    } else if (dmgResult === 'immobilized') {
-      dfMovingUnit.status = 'immobilized';
-      html += `<div style="color:#cc0;font-weight:bold;margin:8px 0">移動不能</div>`;
-      log(`  → ${dfMovingUnit.name} 移動不能`);
-      dfResult = 'immobilized';
+    if (mDb.type === 'infantry' || mDb.type === 'atgun') {
+      // 対歩兵: 榴弾射撃の撃破判定（ルール9.6(3)(4)）
+      const antiInf = eDb.antiInf || 7;
+      const dd1 = roll(), dd2 = roll();
+      let dmgRoll = dd1 + dd2;
+      if (mTerrain === 'forest' || mTerrain === 'building') dmgRoll += 1;
+      const destroyed = (dmgRoll <= antiInf);
+      html += `<div style="margin:4px 0">対歩兵力: ${antiInf}</div>`;
+      html += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dd1+dd2}${(mTerrain==='forest'||mTerrain==='building')?'+1':''} → ${dmgRoll}</div>`;
+      if (destroyed) {
+        dfMovingUnit.status = 'destroyed';
+        html += `<div class="r-dmg" style="margin:8px 0">撃破！</div>`;
+        log(`  → ${dfMovingUnit.name} 撃破！`);
+        dfResult = 'destroyed';
+      } else {
+        html += `<div style="color:#888;margin:8px 0">無効果</div>`;
+        log(`  → 無効果`);
+      }
     } else {
-      html += `<div style="color:#888;margin:8px 0">無効果</div>`;
-      log(`  → 無効果`);
+      // 対戦車: 通常撃破判定
+      const frontHit = isInArc(dfMovingUnit, e);
+      const armor = mDb.armor - (frontHit ? 0 : 2);
+      const penDiff = pen - Math.max(0, armor);
+      const dd1 = roll(), dd2 = roll();
+      const dmgTotal = dd1 + dd2;
+      const dmgResult = getDestructionResult(penDiff, dmgTotal);
+
+      html += `<div style="margin:4px 0">装甲${mDb.armor}${frontHit?'':'(側面-2→'+armor+')'} 貫通差${penDiff>=0?'+':''}${penDiff}</div>`;
+      html += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</div>`;
+
+      if (dmgResult === 'destroyed') {
+        dfMovingUnit.status = 'destroyed';
+        html += `<div class="r-dmg" style="margin:8px 0">破壊！</div>`;
+        log(`  → ${dfMovingUnit.name} 破壊！`);
+        dfResult = 'destroyed';
+      } else if (dmgResult === 'immobilized') {
+        dfMovingUnit.status = 'immobilized';
+        html += `<div style="color:#cc0;font-weight:bold;margin:8px 0">移動不能</div>`;
+        log(`  → ${dfMovingUnit.name} 移動不能`);
+        dfResult = 'immobilized';
+      } else {
+        html += `<div style="color:#888;margin:8px 0">無効果</div>`;
+        log(`  → 無効果`);
+      }
     }
   } else {
     html += `<div class="r-hit miss" style="margin:8px 0">外れ</div>`;
@@ -1208,7 +1373,7 @@ function aiPlaceUnit(u, db, callback) {
   // スタック可能かつMP足りるヘクスをフィルタ
   const valid = candidates.filter(h => {
     if (!checkStacking(h.col, h.row, u)) return false;
-    const cost = getTerrainCost(h.col, h.row);
+    const cost = getTerrainCost(h.col, h.row, undefined, undefined, u.name);
     return u.remainMove >= cost;
   });
 
@@ -1419,7 +1584,7 @@ function aiBreakthroughMove(u, db, callback) {
       const n = neighbors[d];
       if (!n) continue;
       const rotateCost = (!u.justEntered) ? getRotateCost(u.dir, d) : 0;
-      const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
+      const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row, u.name);
       let backwardExtra = 0;
       if (!u.justEntered) {
         const diff = ((d - u.dir) % 6 + 6) % 6;
@@ -1702,7 +1867,7 @@ function aiMoveToward(u, db, target, callback) {
     const nd = hexDist(n.col, n.row, target.col, target.row);
 
     const rotateCost = (db.type !== 'infantry' && !u.justEntered) ? getRotateCost(u.dir, d) : 0;
-    const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
+    const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row, u.name);
     let backwardExtra = 0;
     if (db.type !== 'infantry' && !u.justEntered) {
       const diff = ((d - u.dir) % 6 + 6) % 6;
@@ -1786,7 +1951,7 @@ function aiMoveStep(u, db, targetEnemy, outgunned, callback) {
     const nd = hexDist(n.col, n.row, targetEnemy.col, targetEnemy.row);
 
     const rotateCost = (db.type !== 'infantry' && !u.justEntered) ? getRotateCost(u.dir, d) : 0;
-    const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row);
+    const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row, u.name);
     let backwardExtra = 0;
     if (db.type !== 'infantry' && !u.justEntered) {
       const diff = ((d - u.dir) % 6 + 6) % 6;

@@ -98,6 +98,7 @@ let selectedFirer = -1, selectedTarget = -1;
 let firers = [], targets = [];
 let contFireUnit = -1, contFireTarget = -1; // 連続射撃の強制目標
 let isAI = false;
+let shootMode = 'he'; // 'he'=榴弾, 'mg'=機銃
 
 function roll() { return Math.floor(Math.random() * 6) + 1; }
 
@@ -233,7 +234,7 @@ function renderCards() {
     card.className = 'card' + (i === selectedTarget ? ' target-sel' : '') + (targetLocked ? ' disabled' : '');
     card.innerHTML = `<span class="c-name">${u.name}</span>
       <span class="c-info">${u.status === 'immobilized' ? ' 移動不能' : ''}</span>`;
-    card.onclick = () => { if (!targetLocked) { selectedTarget = i; renderCards(); updateShootInfo(); } };
+    card.onclick = () => { if (!targetLocked) { selectedTarget = i; shootMode = 'he'; renderCards(); updateShootInfo(); } };
     tEl.appendChild(card);
   }
 }
@@ -264,12 +265,6 @@ function updateShootInfo() {
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
   const di = distKey(dist);
 
-  if (di < 0 || !FIRE_TABLE[firer.name]) {
-    el.textContent = `射程外（距離${dist}）`;
-    btn.disabled = true;
-    return;
-  }
-
   // LOS チェック（歩兵含む全ユニット）
   if (!hasLOS(firer.col, firer.row, target.col, target.row)) {
     el.textContent = '射線なし（遮蔽物で遮られています）';
@@ -277,10 +272,16 @@ function updateShootInfo() {
     return;
   }
 
-  // 歩兵の射撃処理
+  // 歩兵の射撃処理（FIRE_TABLE不要）
   if (fDb.type === 'infantry') {
     el.innerHTML = getInfantryShootInfo(firer, target, dist);
     btn.disabled = false;
+    return;
+  }
+
+  if (di < 0 || !FIRE_TABLE[firer.name]) {
+    el.textContent = `射程外（距離${dist}）`;
+    btn.disabled = true;
     return;
   }
 
@@ -345,15 +346,74 @@ function updateShootInfo() {
   // 対歩兵の場合
   const vsInfantry = (tDb.type === 'infantry' || tDb.type === 'atgun');
 
-  let html = `<b>${firer.name}</b> → <b>${target.name}</b><br>`;
+  // 機銃射撃の自動判定（戦車→歩兵のみ）
+  if (vsInfantry && (fDb.type === 'tank' || fDb.type === 'apc')) {
+    const hasMG = !fDb.noMG;
+    const mgTable = ANTI_INF_TABLE.tankMG;
+    const mgInRange = hasMG && mgTable && mgTable[dist] !== undefined;
+
+    // dist===0: HE不可、MGのみ（ルール9.6(1)）
+    if (dist === 0) {
+      if (!mgInRange) {
+        el.textContent = fDb.noMG ? '機銃未搭載（同一ヘクス歩兵にはHE不可）' : '射程外';
+        btn.disabled = true; return;
+      }
+      shootMode = 'mg';
+    } else if (dist > 2 || !hasMG) {
+      shootMode = 'he'; // MG射程外 or 機銃なし
+    }
+    // dist 1-2 && hasMG: ユーザー選択（shootModeはそのまま維持）
+
+    if (shootMode === 'mg') {
+      // 機銃射撃情報
+      const mgHitNum = mgTable[dist];
+      let mgMod = 0; const mgDetails = [];
+      const tt = state.terrain[`${target.col},${target.row}`] || 'plain';
+      if (tt === 'forest') { mgMod += 1; mgDetails.push('森+1'); }
+      if (tt === 'building') { mgMod += 1; mgDetails.push('建物+1'); }
+      if (isAdvanceFire) { mgMod += 1; mgDetails.push('前進射撃+1'); }
+      const bc = countBocage(firer.col, firer.row, target.col, target.row);
+      if (bc > 0) { mgMod += bc; mgDetails.push(`ボカージュ+${bc}`); }
+
+      // 射界チェック（機銃も射界内のみ）
+      if (!canFireAt(firer, target)) {
+        el.textContent = '射界外（機銃射撃は射界内のみ）';
+        btn.disabled = true; return;
+      }
+
+      let html = `<b>${firer.name}</b> → <b>${target.name}</b> <b style="color:#c60">【機銃】</b><br>`;
+      html += `距離:${dist} | ${mgHitNum}以下で撃破`;
+      if (mgMod) html += ` (修正+${mgMod})`;
+      if (mgDetails.length) html += `<br><span style="color:#888;font-size:0.85em">${mgDetails.join(' / ')}</span>`;
+      // モード切替（dist 1-2 で両方可能な場合）
+      if (dist >= 1 && dist <= 2 && hasMG) {
+        html += `<br><button onclick="shootMode='he';updateShootInfo()" style="font-size:0.8em;padding:2px 8px">榴弾に切替</button>`;
+      }
+      el.innerHTML = html;
+      btn.disabled = false;
+      return;
+    }
+    // shootMode === 'he' の場合: 通常のHE処理へ（下に続く）
+    // ただしdist===0ではHE不可（上でreturn済み）
+  }
+
+  let html = `<b>${firer.name}</b> → <b>${target.name}</b>`;
+  if (vsInfantry && (fDb.type === 'tank' || fDb.type === 'apc')) html += ` <b style="color:#36a">【榴弾】</b>`;
+  html += `<br>`;
   html += `距離: ${dist}hex | 貫通力: ${pen} | 命中数: ${hitNum}`;
   if (mod !== 0) html += ` (修正${mod >= 0 ? '+' : ''}${mod} → 有効${effectiveHit})`;
   html += `<br>命中率: <b style="color:${hitChance>=50?'#2a7a2a':'#cc3311'}">${hitChance}%</b>`;
   if (!vsInfantry) {
     html += ` | 装甲: ${tDb.armor}${frontHit?'':'(側面-2→'+armor+')'} | 貫通差: ${penDiff >= 0 ? '+' : ''}${penDiff}`;
+  } else {
+    html += ` | 対歩兵力: ${fDb.antiInf}`;
   }
   if (details.length > 0) html += `<br><span style="color:#888;font-size:0.85em">${details.join(' / ')}</span>`;
   if (autoHit) html += `<br><b style="color:#2a7a2a">距離0: 必中</b>`;
+  // 機銃切替ボタン（dist 1-2 で機銃可能な場合）
+  if (vsInfantry && (fDb.type === 'tank' || fDb.type === 'apc') && !fDb.noMG && dist >= 1 && dist <= 2) {
+    html += `<br><button onclick="shootMode='mg';updateShootInfo()" style="font-size:0.8em;padding:2px 8px">機銃に切替</button>`;
+  }
 
   el.innerHTML = html;
   btn.disabled = false;
@@ -362,18 +422,34 @@ function updateShootInfo() {
 function getInfantryShootInfo(firer, target, dist) {
   const tDb = UNIT_DB[target.name];
   const fDb = UNIT_DB[firer.name];
+  const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
 
   if (tDb.type === 'tank' || tDb.type === 'apc') {
     // 対戦車攻撃
     const table = INF_VS_TANK[fDb.nation];
     if (!table || table[dist] === undefined) return `射程外（対戦車攻撃は距離${Object.keys(table).pop()}まで）`;
-    return `<b>${firer.name}</b> → <b>${target.name}</b> (対戦車攻撃)<br>距離:${dist} | ${table[dist]}以下で撃破`;
+    let mod = 0; const details = [];
+    if (isAdvanceFire) { mod += 1; details.push('前進射撃+1'); }
+    const bc = countBocage(firer.col, firer.row, target.col, target.row);
+    if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+    let html = `<b>${firer.name}</b> → <b>${target.name}</b> (対戦車攻撃)<br>距離:${dist} | ${table[dist]}以下で撃破`;
+    if (details.length) html += `<br><span style="color:#888;font-size:0.85em">${details.join(' / ')}</span>`;
+    return html;
   } else {
     // 対歩兵攻撃
     const key = fDb.nation + '_inf';
     const table = ANTI_INF_TABLE[key];
     if (!table || table[dist] === undefined) return `射程外`;
-    return `<b>${firer.name}</b> → <b>${target.name}</b> (対歩兵攻撃)<br>距離:${dist} | ${table[dist]}以下で撃破`;
+    let mod = 0; const details = [];
+    if (tTerrain === 'forest') { mod += 1; details.push('森+1'); }
+    if (tTerrain === 'building') { mod += 1; details.push('建物+1'); }
+    if (isAdvanceFire) { mod += 1; details.push('前進射撃+1'); }
+    const bc = countBocage(firer.col, firer.row, target.col, target.row);
+    if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+    let html = `<b>${firer.name}</b> → <b>${target.name}</b> (対歩兵攻撃)<br>距離:${dist} | ${table[dist]}以下で撃破`;
+    if (mod) html += ` (修正+${mod})`;
+    if (details.length) html += `<br><span style="color:#888;font-size:0.85em">${details.join(' / ')}</span>`;
+    return html;
   }
 }
 
@@ -435,6 +511,13 @@ function doShoot() {
   // 歩兵の射撃
   if (fDb.type === 'infantry') {
     doInfantryShoot(firer, target, dist);
+    return;
+  }
+
+  // 機銃射撃（戦車→歩兵、MG選択時）
+  const vsInf = (tDb.type === 'infantry' || tDb.type === 'atgun');
+  if (vsInf && shootMode === 'mg') {
+    doMGShoot(firer, target, dist);
     return;
   }
 
@@ -587,12 +670,23 @@ function doInfantryShoot(firer, target, dist) {
   let total = d1 + d2;
 
   let mod = 0;
-  if (isAdvanceFire) mod += HIT_MODIFIERS.advanceFire.infantry;  // 歩兵前進射撃+1
+  const details = [];
   const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
-  if (tTerrain === 'forest') mod += HIT_MODIFIERS.forest;    // +2
-  if (tTerrain === 'building') mod += HIT_MODIFIERS.building; // +2
-  const bocageCountInf = countBocage(firer.col, firer.row, target.col, target.row);
-  if (bocageCountInf > 0) mod += bocageCountInf;  // ボカージュ+N
+
+  if (tDb.type === 'tank' || tDb.type === 'apc') {
+    // 対戦車攻撃: 防御射撃+1（ルール9.4(5)）、前進射撃は通常通り
+    if (isAdvanceFire) { mod += 1; details.push('前進射撃+1'); }
+    // ボカージュ
+    const bc = countBocage(firer.col, firer.row, target.col, target.row);
+    if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+  } else {
+    // 対歩兵攻撃: 森/建物+1、前進射撃+1（ルール9.5(3)）
+    if (tTerrain === 'forest') { mod += 1; details.push('森+1'); }
+    if (tTerrain === 'building') { mod += 1; details.push('建物+1'); }
+    if (isAdvanceFire) { mod += 1; details.push('前進射撃+1'); }
+    const bc = countBocage(firer.col, firer.row, target.col, target.row);
+    if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+  }
   total += mod;
 
   let resultHtml = '';
@@ -604,6 +698,7 @@ function doInfantryShoot(firer, target, dist) {
     const table = INF_VS_TANK[fDb.nation];
     const hitNum = table ? table[dist] : 0;
     resultHtml += `<div class="r-dice">🎲 ${d1}+${d2}=${d1+d2} ${mod?`修正+${mod}→${total}`:''} (${hitNum}以下で撃破)</div>`;
+    if (details.length) resultHtml += `<div style="color:#888;font-size:0.8em;text-align:center">${details.join(' / ')}</div>`;
     if (total <= hitNum) {
       target.status = 'destroyed';
       resultHtml += `<div class="r-dmg">撃破！</div>`;
@@ -618,6 +713,7 @@ function doInfantryShoot(firer, target, dist) {
     const table = ANTI_INF_TABLE[key];
     const hitNum = table ? table[dist] : 0;
     resultHtml += `<div class="r-dice">🎲 ${d1}+${d2}=${d1+d2} ${mod?`修正+${mod}→${total}`:''} (${hitNum}以下で撃破)</div>`;
+    if (details.length) resultHtml += `<div style="color:#888;font-size:0.8em;text-align:center">${details.join(' / ')}</div>`;
     if (total <= hitNum) {
       target.status = 'destroyed';
       resultHtml += `<div class="r-dmg">撃破！</div>`;
@@ -629,6 +725,47 @@ function doInfantryShoot(firer, target, dist) {
   }
 
   firer.fired = true;
+  document.getElementById('resultBody').innerHTML = resultHtml;
+  document.getElementById('resultOverlay').style.display = 'flex';
+  pushState();
+}
+
+// ===== 機銃射撃（戦車→歩兵） =====
+function doMGShoot(firer, target, dist) {
+  const fDb = UNIT_DB[firer.name];
+  const mgTable = ANTI_INF_TABLE.tankMG;
+  const hitNum = mgTable ? mgTable[dist] : 0;
+
+  const d1 = roll(), d2 = roll();
+  let total = d1 + d2;
+
+  let mod = 0;
+  const details = [];
+  const tTerrain = state.terrain[`${target.col},${target.row}`] || 'plain';
+  if (tTerrain === 'forest') { mod += 1; details.push('森+1'); }
+  if (tTerrain === 'building') { mod += 1; details.push('建物+1'); }
+  if (isAdvanceFire) { mod += 1; details.push('前進射撃+1'); }
+  const bc = countBocage(firer.col, firer.row, target.col, target.row);
+  if (bc > 0) { mod += bc; details.push(`ボカージュ+${bc}`); }
+  total += mod;
+
+  let resultHtml = '';
+  resultHtml += `<div class="r-row"><span class="r-label">機銃射撃</span><span class="r-value">${firer.name}</span></div>`;
+  resultHtml += `<div class="r-row"><span class="r-label">目標</span><span class="r-value">${target.name}</span></div>`;
+  resultHtml += `<div class="r-dice">🎲 ${d1}+${d2}=${d1+d2} ${mod ? `修正+${mod}→${total}` : ''} (${hitNum}以下で撃破)</div>`;
+  if (details.length) resultHtml += `<div style="color:#888;font-size:0.8em;text-align:center">${details.join(' / ')}</div>`;
+
+  if (total <= hitNum) {
+    target.status = 'destroyed';
+    resultHtml += `<div class="r-dmg">撃破！</div>`;
+    log(`${firer.name} → ${target.name}: <span class="dmg-text">機銃射撃 撃破</span>`);
+  } else {
+    resultHtml += `<div style="text-align:center;color:#888">無効</div>`;
+    log(`${firer.name} → ${target.name}: 機銃射撃 無効`);
+  }
+
+  firer.fired = true;
+  shootMode = 'he'; // リセット
   document.getElementById('resultBody').innerHTML = resultHtml;
   document.getElementById('resultOverlay').style.display = 'flex';
   pushState();
@@ -794,12 +931,13 @@ function aiFirePhase() {
     if (firer.fired || firer.status === 'destroyed') { step++; processNext(); return; }
 
     // 最適な目標を選ぶ
-    const bestTarget = aiFindBestTarget(fi);
-    if (bestTarget < 0) { step++; processNext(); return; }
+    const best = aiFindBestTarget(fi);
+    if (best.idx < 0) { step++; processNext(); return; }
 
     // 射撃実行
     selectedFirer = fi;
-    selectedTarget = bestTarget;
+    selectedTarget = best.idx;
+    shootMode = best.mode; // AI: MG/HE自動選択
     renderCards();
     updateShootInfo();
 
@@ -821,9 +959,12 @@ function aiFirePhase() {
     }
 
     let ti = contFireTarget;
+    let mode = 'he';
     if (ti < 0) {
       // 別の目標を選択
-      ti = aiFindBestTarget(fi);
+      const best = aiFindBestTarget(fi);
+      ti = best.idx;
+      mode = best.mode;
     }
     if (ti < 0) {
       contFireUnit = -1; contFireTarget = -1;
@@ -833,6 +974,7 @@ function aiFirePhase() {
 
     selectedFirer = fi;
     selectedTarget = ti;
+    shootMode = mode;
     renderCards();
     updateShootInfo();
 
@@ -849,6 +991,7 @@ function aiFindBestTarget(firerIdx) {
   const firer = state.units[firerIdx];
   const fDb = UNIT_DB[firer.name];
   let bestScore = -Infinity, bestIdx = -1;
+  let bestMode = 'he'; // AI用: 最適射撃モード
 
   for (const ti of targets) {
     const target = state.units[ti];
@@ -867,13 +1010,37 @@ function aiFindBestTarget(firerIdx) {
         const table = INF_VS_TANK[fDb.nation];
         if (!table || table[dist] === undefined) continue;
         const score = table[dist] - dist;
-        if (score > bestScore) { bestScore = score; bestIdx = ti; }
+        if (score > bestScore) { bestScore = score; bestIdx = ti; bestMode = 'he'; }
       } else {
         const key = fDb.nation + '_inf';
         const table = ANTI_INF_TABLE[key];
         if (!table || table[dist] === undefined) continue;
         const score = table[dist] - dist;
-        if (score > bestScore) { bestScore = score; bestIdx = ti; }
+        if (score > bestScore) { bestScore = score; bestIdx = ti; bestMode = 'he'; }
+      }
+      continue;
+    }
+
+    // 対歩兵: MG vs HE の最適選択
+    if (tDb.type === 'infantry' || tDb.type === 'atgun') {
+      if (!canFireAt(firer, target)) continue;
+
+      // MG評価（射程2以内、機銃搭載）
+      const hasMG = !fDb.noMG;
+      const mgTable = ANTI_INF_TABLE.tankMG;
+      if (hasMG && mgTable && mgTable[dist] !== undefined) {
+        const mgScore = mgTable[dist] - dist + 5; // 歩兵優先度低め
+        if (mgScore > bestScore) { bestScore = mgScore; bestIdx = ti; bestMode = 'mg'; }
+      }
+      // HE評価（dist>0のみ、同一ヘクスはHE不可）
+      if (dist > 0) {
+        const di = distKey(dist);
+        if (di >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di]) {
+          const heScore = fDb.antiInf - dist + 3;
+          if (heScore > bestScore) { bestScore = heScore; bestIdx = ti; bestMode = 'he'; }
+        }
+      } else if (!hasMG) {
+        continue; // dist=0 で機銃なし→撃てない
       }
       continue;
     }
@@ -886,7 +1053,6 @@ function aiFindBestTarget(firerIdx) {
 
     // 射界・LOSチェック
     if (!canFireAt(firer, target)) continue;
-    if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
 
     // 撃破率を計算
     const frontHit = isHittingFrontArmor(firer, target);
@@ -921,10 +1087,10 @@ function aiFindBestTarget(firerIdx) {
       if (tMove >= 5) score += 30; // T34/SU-76優先
     }
 
-    if (score > bestScore) { bestScore = score; bestIdx = ti; }
+    if (score > bestScore) { bestScore = score; bestIdx = ti; bestMode = 'he'; }
   }
 
-  return bestIdx;
+  return { idx: bestIdx, mode: bestMode };
 }
 
 function aiWaitForResult(callback) {
