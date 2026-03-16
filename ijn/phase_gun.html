@@ -843,6 +843,16 @@ function autoJPShoot(title) {
   const assignCount = {};
 
   for (const firer of jp) {
+    // 雷撃温存: 第一砲撃で魚雷搭載艦は近距離の敵がいれば砲撃をスキップ
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
+        firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
+      const closestDist = Math.min(...us.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
+      if (closestDist <= 5) {
+        log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
+        continue;
+      }
+    }
+
     let bestTarget = null, bestScore = 999;
     for (const t of us) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
@@ -1043,6 +1053,16 @@ function autoUSShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of us) {
+    // 雷撃温存: 第一砲撃で魚雷搭載艦は近距離の敵がいれば砲撃をスキップ
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
+        firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
+      const closestDist = Math.min(...jp.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
+      if (closestDist <= 5) {
+        log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
+        continue;
+      }
+    }
+
     // 目標選択: 広く浅く — 損傷大ほど後回し
     // 米BBだけは大和/長門/陸奥をしつこく狙う（ダメージ蓄積で次回出撃を潰す）
     // DD/CL/CAで大型艦を撃っても装甲で弾かれるので小型艦を狙う
