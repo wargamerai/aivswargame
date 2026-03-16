@@ -1372,6 +1372,7 @@ function startGame() {
     terrain: Object.assign({}, sc.terrain || {}),
     hexsideTerrain: Object.assign({}, sc.hexsideTerrain || {}),
     specialRules: sc.specialRules || {},
+    reinforcement: sc.reinforcement || null,
   };
 
   // 地図画像ロード
@@ -1573,6 +1574,53 @@ function backToTitle() {
   state = null;
 }
 
+function checkReinforcement() {
+  if (!state.reinforcement) return;
+  const rf = state.reinforcement;
+  if (rf.done) return; // 既に処理済み
+  if (state.turn !== rf.turn) return;
+
+  const dieRoll = Math.floor(Math.random() * 6) + 1;
+  const entry = rf.diceTable[dieRoll];
+
+  if (!entry) {
+    gameLog(`🎲 増援ダイス: ${dieRoll} → <b>増援なし</b>`);
+    rf.done = true;
+    saveState();
+    return;
+  }
+
+  // ユニットを追加（侵入待ち状態で配置）
+  const side = rf.side;
+  const sc = SCENARIOS.find(s => s.id === state.scenarioId);
+  const sd = sc ? sc.sides[side] : null;
+  const db = UNIT_DB[entry.name];
+
+  state.units.push({
+    name: entry.name,
+    side: side,
+    col: -1,
+    row: -1,
+    dir: entry.dir || 0,
+    status: 'ok',
+    fired: false,
+    moved: false,
+    ammoOut: false,
+    gunDisabled: false,
+    hidden: false,
+    isDummy: false,
+    carrying: null,
+    showWreck: true,
+    enterEdge: sd ? sd.enterEdge : null,
+  });
+
+  gameLog(`🎲 増援ダイス: ${dieRoll} → <b style="color:#2a2">${entry.name} が増援で到着！</b>`);
+  rf.done = true;
+  saveState();
+  renderUnitList();
+  draw();
+}
+
 function endPhase() {
   // 勝利判定
   const victory = checkVictory();
@@ -1620,6 +1668,8 @@ function endPhase() {
       return;
     }
     gameLog(`<b style="color:#c8a020">══ 第${state.turn}ターン ══</b>`);
+    // 増援チェック
+    checkReinforcement();
   }
   state.phase = PHASE_SEQ[state.phaseIdx];
   saveState();
