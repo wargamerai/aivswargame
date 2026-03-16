@@ -1644,25 +1644,21 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
       }
     }
 
-    // --- スコア = (自分の撃破率 - 敵の撃破率) * 100 ---
-    let score = (myKill - enKill) * 100;
+    // --- スコア: 命中率重視、安全性はタイブレーカー ---
+    let score = myKill * 50 - enKill * 30;
 
-    // 距離ボーナス: bestDistに近いほど高評価
-    const distDiff = Math.abs(d - bestDist);
-    score += Math.max(0, 10 - distDiff * 2);
-
-    // 地形ボーナス
+    // 地形ボーナス（安全性向上）
     const terrain = state.terrain ? state.terrain[`${col},${row}`] : null;
-    if (terrain === 'forest' || terrain === 'building') score += 5;
+    if (terrain === 'forest' || terrain === 'building') score += 4;
 
-    // 固定砲塔の射界外ボーナス
+    // 固定砲塔の射界外（安全かつ接近可能）
     if (eDb && eDb.turret === 'fixed' && !isInFixedArcMove(enemy, col, row)) {
-      score += 8;
+      score += 6;
     }
 
-    // ボカージュ越しボーナス
+    // ボカージュ越し（安全性向上）
     const bocage = countBocage(col, row, enemy.col, enemy.row);
-    score += bocage * 4;
+    score += bocage * 3;
 
     if (score > bestScore) bestScore = score;
   }
