@@ -654,6 +654,7 @@ function startDefensiveFire(movingUnit, movingIdx) {
   state.units.forEach((e, ei) => {
     if (e.side === activeSide) return;
     if (e.status === 'destroyed') return;
+    if (e.col < 1) return; // マップ外（未配置/増援待ち）
     if (e.ammoOut) return;
     if (dfFirers[ei]) return;
     const eDb = UNIT_DB[e.name];
