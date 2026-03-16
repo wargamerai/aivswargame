@@ -236,6 +236,7 @@ const MAP_TERRAIN = {
     '22,13':'forest', '22,14':'forest', '23,14':'forest',
     '23,15':'forest', '24,14':'forest',
   },
+  C: {},
   B: {
     '3,9':'forest', '3,10':'forest', '4,8':'forest', '4,9':'forest',
     '4,10':'forest', '5,9':'forest', '5,10':'forest', '5,11':'forest',
@@ -436,6 +437,38 @@ const SCENARIOS = [
       }
     },
     terrain: MAP_TERRAIN.A
+  },
+  // シナリオ5: カーン近郊
+  {
+    id: 'sc5',
+    name: 'カーン近郊',
+    hidden: true,
+    front: 'west',
+    map1: 'C', map1orient: 'Vertical',
+    map2: null, map2orient: null,
+    maxTurns: 99,
+    firstPlayer: 'uk',
+    victory: '先に半数以上破壊した側の勝利',
+    sides: {
+      ge: {
+        setup: 'enterRight',
+        enterEdge: 'right',
+        units: [
+          { name:'Pz IV/H', col:0, row:0, dir:2 },
+          { name:'Pz IV/H', col:0, row:0, dir:2 },
+        ]
+      },
+      uk: {
+        setup: 'enterLeft',
+        enterEdge: 'left',
+        units: [
+          { name:'Cromwell', col:0, row:0, dir:0 },
+          { name:'Cromwell', col:0, row:0, dir:0 },
+          { name:'Firefly', col:0, row:0, dir:0 },
+        ]
+      }
+    },
+    terrain: MAP_TERRAIN.C
   },
 ];
 
