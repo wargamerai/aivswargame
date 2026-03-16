@@ -232,6 +232,8 @@ function getArcInfo(firer, target) {
 let state = null;
 let subPhase = '';
 const PENDING_KEY = 'gunPendingDmg';
+var _sr = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
+var RADAR_RANGE = (_sr && _sr.radarRange) || 20;
 
 let jpShips = [];  // 射撃可能な日本艦
 let usShips = [];  // 射撃可能な米艦
@@ -373,7 +375,7 @@ function isVisibleToUS(jpShip) {
     if (f.status === 'sunk' || f.col < 0) return false;
     const d = hexDist(jpShip.col, jpShip.row, f.col, f.row);
     if (d <= (state.spotRange || 0)) return true;
-    if (f.radar && d <= 20) return true;
+    if (f.radar && d <= RADAR_RANGE) return true;
     return false;
   });
 }

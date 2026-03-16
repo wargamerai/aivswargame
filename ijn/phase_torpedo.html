@@ -196,6 +196,8 @@ function roll() { return Math.ceil(Math.random()*6); }
 let state = null;
 let selectedFirer = null;
 let selectedTarget = null;
+var _sr = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
+var RADAR_RANGE = (_sr && _sr.radarRange) || 20;
 let firedShips = new Set();
 
 function toAxial(c,r){return{q:c-(r-(r&1))/2, r:r};}
@@ -282,7 +284,7 @@ function isVisibleToUS(jpShip) {
     if (f.status === 'sunk' || f.col < 0) return false;
     const d = hexDist(jpShip.col, jpShip.row, f.col, f.row);
     if (d <= (state.spotRange || 0)) return true;
-    if (f.radar && d <= 20) return true;
+    if (f.radar && d <= RADAR_RANGE) return true;
     return false;
   });
 }
