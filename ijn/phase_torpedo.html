@@ -956,7 +956,7 @@ function autoUSTorpedo() {
   const results = [];
   for (const firer of us) {
     // 最寄りの舷側にいるJP艦を選択（広く浅く、損傷大ほど後回し）
-    let bestTarget = null, bestScore = 999;
+    let bestTarget = null, bestScore = 999, bestDist = 99;
     const allShips = [...us, ...jp];
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
@@ -966,7 +966,7 @@ function autoUSTorpedo() {
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
       const dmgPenalty = dmgRate * 30;
       const score = d + dmgPenalty;
-      if (score < bestScore) { bestScore = score; bestTarget = t; }
+      if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
     }
     if (!bestTarget) continue;
 
