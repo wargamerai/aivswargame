@@ -478,18 +478,20 @@ const SCENARIOS = [
   {
     id: 'sc5',
     name: 'カーン近郊',
-    hidden: true,
     front: 'west',
     map1: 'C', map1orient: 'Vertical',
     map2: null, map2orient: null,
-    maxTurns: 99,
+    maxTurns: 10,
     firstPlayer: 'uk',
-    victory: '先に半数以上破壊した側の勝利',
+    victory: '建物を支配している側の勝利',
     sides: {
       ge: {
         setup: 'enterRight',
         enterEdge: 'right',
         units: [
+          { name:'Infantry', col:0, row:0, dir:2 },
+          { name:'Infantry', col:0, row:0, dir:2 },
+          { name:'Tiger I', col:0, row:0, dir:2 },
           { name:'Pz IV/H', col:0, row:0, dir:2 },
           { name:'Pz IV/H', col:0, row:0, dir:2 },
         ]
@@ -500,8 +502,25 @@ const SCENARIOS = [
         units: [
           { name:'Cromwell', col:0, row:0, dir:0 },
           { name:'Cromwell', col:0, row:0, dir:0 },
+          { name:'Cromwell', col:0, row:0, dir:0 },
+          { name:'Cromwell', col:0, row:0, dir:0 },
+          { name:'Cromwell', col:0, row:0, dir:0 },
+          { name:'Cromwell', col:0, row:0, dir:0 },
+          { name:'Firefly', col:0, row:0, dir:0 },
           { name:'Firefly', col:0, row:0, dir:0 },
         ]
+      }
+    },
+    reinforcement: {
+      turn: 5,
+      side: 'ge',
+      diceTable: {
+        1: { name:'Jagdpanzer V', col:0, row:0, dir:2 },
+        2: { name:'Pz IV/H', col:0, row:0, dir:2 },
+        3: { name:'Marder III', col:0, row:0, dir:2 },
+        4: { name:'StuG III', col:0, row:0, dir:2 },
+        5: { name:'StuG III', col:0, row:0, dir:2 },
+        6: null
       }
     },
     terrain: MAP_TERRAIN.C,
