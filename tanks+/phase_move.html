@@ -1561,7 +1561,7 @@ function aiGetReachableHexes(u, db) {
       const rotateCost = (db.type !== 'infantry' && !isFirst) ? getRotateCost(cv.dir, d) : 0;
       const terrainCost = getTerrainCost(n.col, n.row, cv.col, cv.row, u.name);
       let backwardExtra = 0;
-      if (db.type !== 'infantry' && !isFirst) {
+      if (db.type !== 'infantry') {
         const diff = ((d - cv.dir) % 6 + 6) % 6;
         if (Math.min(diff, 6 - diff) >= 2) backwardExtra = 1;
       }
@@ -1667,6 +1667,7 @@ function aiFollowPath(u, db, path, callback) {
     stepIdx++;
 
     moveMode = 'moving';
+    const prevCol = u.col, prevRow = u.row;
     const origAfterDf = afterDefensiveFire;
     afterDefensiveFire = function(result) {
       origAfterDf(result);
@@ -1678,6 +1679,12 @@ function aiFollowPath(u, db, path, callback) {
       setTimeout(nextStep, 300);
     };
     handleMove(target.col, target.row);
+    // handleMoveが拒否した場合（MP不足等）、startDefensiveFireが呼ばれず
+    // afterDefensiveFireが永久に発火しない → callbackチェーン断裂を防ぐ
+    if (u.col === prevCol && u.row === prevRow) {
+      afterDefensiveFire = origAfterDf;
+      callback();
+    }
   }
   nextStep();
 }
