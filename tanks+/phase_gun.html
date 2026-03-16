@@ -876,7 +876,12 @@ function hasLOS(c1, r1, c2, r2) {
         const key = a < b ? `${a}-${b}` : `${b}-${a}`;
         if (!checked[key]) {
           checked[key] = true;
-          if (state.hexsideTerrain[key] === 'slope') return false;
+          if (state.hexsideTerrain[key] === 'slope') {
+            // 崖が射手/目標の横なら通過、中間なら遮断
+            const atEnd = (m1.col===c1&&m1.row===r1)||(m1.col===c2&&m1.row===r2)
+                        ||(m2.col===c1&&m2.row===r1)||(m2.col===c2&&m2.row===r2);
+            if (!atEnd) return false;
+          }
         }
       }
     }
