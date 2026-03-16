@@ -81,7 +81,7 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
 /* ログ */
 #log {
   background:#f0f0f0; border:1px solid #ccc; padding:8px;
-  height:130px; overflow-y:auto; font-size:0.92em; line-height:1.6; margin:8px 0; color:#333;
+  min-height:80px; max-height:45vh; overflow-y:auto; font-size:0.92em; line-height:1.6; margin:8px 0; color:#333;
 }
 .hit { color:#8a6a00; } .dmg { color:#cc2200; } .crit { color:#aa00aa; }
 
@@ -91,6 +91,9 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
 <body>
 <h3 id="phTitle">砲撃フェーズ</h3>
 
+<div id="jpAIBar" style="text-align:right;margin:4px 0;">
+  <label style="font-size:1.15em;cursor:pointer;font-weight:bold;"><input type="checkbox" id="jpAI" onchange="toggleJPAI()" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;"> AI委任</label>
+</div>
 <div id="shootUI">
   <div class="section-label">▼ 射撃艦を選択</div>
   <div id="firerList" class="ship-cards"></div>
@@ -102,7 +105,6 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
 
   <button id="btnShoot" onclick="doShoot()" disabled>射撃！</button>
   <button onclick="doneSubPhase()" id="btnDone">射撃終了 →</button>
-  <label style="float:right;margin-top:6px;font-size:0.9em;cursor:pointer;"><input type="checkbox" id="jpAI" onchange="toggleJPAI()"> AI委任</label>
 </div>
 
 <div id="resultOverlay">
@@ -970,6 +972,8 @@ function autoJPShoot(title) {
       const logEl = document.getElementById('log');
       logEl.appendChild(btn);
       logEl.scrollTop = logEl.scrollHeight;
+      // AI委任時は自動確認
+      if (isJPAutoAI()) { setTimeout(() => { if (btn.parentNode) btn.click(); }, 2500); }
     }, 600);
   }
 
@@ -1048,6 +1052,8 @@ function autoUSShoot(title) {
     for (const t of jp) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getMaxRange(t, firer)) continue;
+      // レーダー非搭載艦は視認距離外の目標を撃てない
+      if (d > (state.spotRange || 0) && !firer.radar && !t.onFire && !t.revealed) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
       // BBが撃つ場合のみ高価値艦の損傷ペナルティ免除
       const isHV = isBBFirer && HIGH_VALUE.includes(t.name);
@@ -1193,6 +1199,8 @@ function autoUSShoot(title) {
       const logEl = document.getElementById('log');
       logEl.appendChild(btn);
       logEl.scrollTop = logEl.scrollHeight;
+      // AI委任時は自動確認
+      if (isJPAutoAI()) { setTimeout(() => { if (btn.parentNode) btn.click(); }, 2500); }
     }, 600);
   }
 

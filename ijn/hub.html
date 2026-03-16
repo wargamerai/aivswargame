@@ -1174,6 +1174,10 @@ function showDmgSummary(title, lines) {
   }).join('');
   const ov = document.getElementById('dmgSummaryOverlay');
   ov.style.display = 'flex';
+  // AI委任時は自動確認
+  if (localStorage.getItem('jpAutoAI') === '1') {
+    setTimeout(() => { if (ov.style.display !== 'none') closeDmgSummary(); }, 3000);
+  }
 }
 function closeDmgSummary() {
   document.getElementById('dmgSummaryOverlay').style.display = 'none';
