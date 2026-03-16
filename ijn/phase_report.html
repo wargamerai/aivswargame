@@ -108,6 +108,11 @@ function init() {
     const btn = document.getElementById('btnNextTurn');
     if (btn) { btn.disabled = true; btn.textContent = '戦闘終了（10ターン経過）'; }
   }
+  // シナリオモードではボタンラベルを変更
+  if (localStorage.getItem('scenarioMode')) {
+    const sendBtn = document.querySelector('.send');
+    if (sendBtn) sendBtn.textContent = 'トップに戻る（戦闘終了）';
+  }
   // AI委任時は自動で次ターンへ（10ターン未満のみ）
   if (localStorage.getItem('jpAutoAI') === '1' && state.combatTurn < 10) {
     setTimeout(() => goNextTurn(), 3000);
@@ -351,8 +356,14 @@ function sendToCampaign() {
   const ships = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status, speed:s.speed}));
   const forCampaign = { endTurn: state.combatTurn || 0, ships: ships };
   localStorage.setItem('battleResultForCampaign', JSON.stringify(forCampaign));
-  // キャンペーン画面を開く（同じタブで遷移）
-  window.top.location.href = 'campaign.html';
+  // シナリオモードならトップへ、キャンペーンならcampaign.htmlへ
+  var scenarioMode = localStorage.getItem('scenarioMode');
+  if (scenarioMode) {
+    localStorage.removeItem('scenarioMode');
+    window.top.location.href = '../index.html';
+  } else {
+    window.top.location.href = 'campaign.html';
+  }
 }
 
 function goNextTurn() {

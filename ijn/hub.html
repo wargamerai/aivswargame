@@ -1429,7 +1429,7 @@ function returnToCampaign() {
   var scenarioMode = localStorage.getItem('scenarioMode');
   if (scenarioMode) {
     localStorage.removeItem('scenarioMode');
-    setTimeout(function() { window.location.href = scenarioMode === 'savo' ? 'savo.html' : '../index.html'; }, 2000);
+    setTimeout(function() { window.location.href = '../index.html'; }, 2000);
   } else {
     setTimeout(function() { window.location.href = 'campaign.html'; }, 2000);
   }
