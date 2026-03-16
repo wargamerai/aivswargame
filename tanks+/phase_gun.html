@@ -853,11 +853,12 @@ function hasLOS(c1, r1, c2, r2) {
   const h2 = hexCenter(c2, r2);
   const dist = hexDist(c1, r1, c2, r2);
   if (dist <= 1) return true;
-  // 両方が丘にいる場合、途中の丘はブロックしない
+  // 両方が丘にいる場合、途中の丘ヘクス・丘ヘクスサイドはブロックしない
   const t1 = (state && state.terrain) ? state.terrain[`${c1},${r1}`] : null;
   const t2 = (state && state.terrain) ? state.terrain[`${c2},${r2}`] : null;
   const skipSlope = (t1 === 'slope' && t2 === 'slope');
-  const steps = dist * 2;
+  const steps = Math.max(dist * 4, 8);
+  const checked = {};
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
     const mx = h1.x + (h2.x - h1.x) * t;
@@ -867,6 +868,19 @@ function hasLOS(c1, r1, c2, r2) {
     const m2 = result.hex2;
     if (m1.col === c1 && m1.row === r1) continue;
     if (m1.col === c2 && m1.row === r2) continue;
+
+    // 丘ヘクスサイドチェック（hexsideTerrain の slope）
+    if (!skipSlope && m2 && state && state.hexsideTerrain) {
+      if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
+        const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (!checked[key]) {
+          checked[key] = true;
+          if (state.hexsideTerrain[key] === 'slope') return false;
+        }
+      }
+    }
+
     const onHexside = result.dist2 < result.dist1 * 1.05;
     if (onHexside) {
       const skip2 = (m2.col === c1 && m2.row === r1) || (m2.col === c2 && m2.row === r2);
