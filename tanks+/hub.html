@@ -1486,7 +1486,14 @@ function checkVictory() {
     if (escaped2 >= 1 && state.firstPlayer !== 'ge') {
       return { winner:'ge', reason:'breakthrough', destroyed1, destroyed2, total1, total2, escaped: escaped2 };
     }
-    // ドイツ全滅（射撃不能含む）→ ソ連勝利
+    // ドイツ半数以上撃破（射撃不能含む）→ ソ連勝利
+    const geTotal = state.units.filter(u => u.side === 'ge').length;
+    const geOut = state.units.filter(u => u.side === 'ge' && (u.status === 'destroyed' || u.ammoOut)).length;
+    if (geOut > geTotal / 2) {
+      const suSide = s1 === 'ge' ? s2 : s1;
+      return { winner:suSide, reason:'majority', destroyed1, destroyed2, total1, total2 };
+    }
+    // ドイツ全滅 → ソ連勝利
     const geAlive = state.units.filter(u => u.side === 'ge' && u.status !== 'destroyed' && !u.ammoOut && u.status !== 'escaped');
     if (geAlive.length === 0) {
       const suSide = s1 === 'ge' ? s2 : s1;
