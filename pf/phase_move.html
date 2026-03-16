@@ -1734,8 +1734,9 @@ function softFinishMove() {
 }
 
 function isShipCrippled(s) {
-  // 航行不能、速力0、機関損傷で速力半減 → 追従不能
-  return s.speed === 0 || s.dmgM >= s.capM || s.status === 'heavy';
+  // 速力0、大破、回頭不能、砲撃不能、速力半減 → 追従不能・旗艦不適格
+  var hasCrit = (s.crits || []).includes('速力半減');
+  return s.speed === 0 || s.status === 'heavy' || s.cannotTurn || s.cannotShoot || hasCrit;
 }
 
 // US列用の随伴艦追従（USのみ使用）

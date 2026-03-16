@@ -794,7 +794,7 @@ function showResult(r) {
   if (r.critText) {
     html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
   }
-  if (r.sunk || r.target.status === 'sunk') {
+  if (r.sunk) {
     html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 撃沈！</div>`;
   }
   body.innerHTML = html;
