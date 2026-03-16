@@ -1565,10 +1565,19 @@ function aiAmbushChaseMove(u, db, callback) {
   // 既に隣接 → 停止（射撃フェーズで撃つ）
   if (nearestDist <= 1) { callback(); return; }
 
-  // 追撃フラグなし → 待ち伏せ（動かない）
+  // 追撃フラグなし → 敵の射程内にいるか確認
   if (!state._aiChaseFlag || !state._aiChaseFlag[u.id]) {
-    callback();
-    return;
+    // 敵の攻撃範囲内かつ射界内 → 止まっていてもやられるだけなので接近
+    let underThreat = false;
+    for (const e of state.units) {
+      if (e.side === u.side || e.status === 'destroyed' || e.status === 'escaped' || e.col < 1) continue;
+      if (!aiIsSafeFromEnemy(u, e)) { underThreat = true; break; }
+    }
+    if (!underThreat) {
+      callback();
+      return;
+    }
+    // 脅威下 → フラグ強制ONにして接近
   }
 
   // 目標: 敵の射界外の隣接ヘクスを狙う
