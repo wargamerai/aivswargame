@@ -660,6 +660,7 @@ function doShoot() {
   // 結果表示
   document.getElementById('resultBody').innerHTML = resultHtml;
   document.getElementById('resultOverlay').style.display = 'flex';
+  if (autoPlay) setTimeout(() => closeResult(), 1200);
 
   pushState();
 }
@@ -728,6 +729,7 @@ function doInfantryShoot(firer, target, dist) {
   firer.fired = true;
   document.getElementById('resultBody').innerHTML = resultHtml;
   document.getElementById('resultOverlay').style.display = 'flex';
+  if (autoPlay) setTimeout(() => closeResult(), 1200);
   pushState();
 }
 
@@ -769,6 +771,7 @@ function doMGShoot(firer, target, dist) {
   shootMode = 'he'; // リセット
   document.getElementById('resultBody').innerHTML = resultHtml;
   document.getElementById('resultOverlay').style.display = 'flex';
+  if (autoPlay) setTimeout(() => closeResult(), 1200);
   pushState();
 }
 
