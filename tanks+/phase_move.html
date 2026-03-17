@@ -586,13 +586,7 @@ function getTerrainCost(col, row, fromCol, fromRow, unitName) {
 function checkStacking(col, row, movingUnit) {
   const db = UNIT_DB[movingUnit.name];
 
-  // 敵ユニットがいるヘクスには進入禁止
-  const enemy = state.units.some(u =>
-    u.side !== movingUnit.side && u.col === col && u.row === row &&
-    u.status !== 'destroyed' && u.status !== 'escaped'
-  );
-  if (enemy) return false;
-
+  // 敵味方同ヘクス進入可能（味方スタック制限のみ適用）
   const friendly = state.units.filter(u =>
     u.side === movingUnit.side && u.col === col && u.row === row &&
     u.status !== 'destroyed' && u !== movingUnit
@@ -1338,6 +1332,22 @@ function aiMovePhase() {
   // stateに保存してaiDoMovementで参照
   state._aiGroupAdvanceLimit = groupAdvanceLimit;
 
+  // === 未配置ユニットの配置先を一括計画 ===
+  // 先にすべての侵入先を決めてから実行（味方どんづまり防止）
+  if (undeployed.length > 0) {
+    const reservedHexes = []; // 予約済み配置先
+    for (const idx of undeployed) {
+      const u = state.units[idx];
+      const db2 = UNIT_DB[u.name];
+      if (!db2) continue;
+      const planned = aiPlanPlacement(u, db2, reservedHexes);
+      if (planned) {
+        u._plannedPlace = planned;
+        reservedHexes.push(planned);
+      }
+    }
+  }
+
   // 弱いユニットから先に動かす（防御射撃を引きつけて強いユニットが安全に接近）
   // 未配置は最優先で配置
   const sorted = [...undeployed, ...deployed.sort((a, b) => {
@@ -1397,7 +1407,99 @@ function aiMoveUnit(idx, callback) {
   aiDoMovement(u, db, () => aiFinishUnit(u, db, callback));
 }
 
+// === 配置先計画（一括計画用）: 予約済みヘクスを避けて最適配置先を返す ===
+function aiPlanPlacement(u, db, reservedHexes) {
+  const maxCol = state.mapMaxCol || 25;
+  const maxRow = state.mapMaxRow || 16;
+  const edge = u.enterEdge;
+  if (!edge) return null; // free配置は個別処理
+
+  // エッジヘクスの候補を収集
+  const candidates = [];
+  if (edge === 'right') {
+    for (let r = 1; r <= maxRow; r++) candidates.push({ col:maxCol, row:r });
+  } else if (edge === 'left') {
+    for (let r = 1; r <= maxRow; r++) candidates.push({ col:1, row:r });
+  } else if (edge === 'top') {
+    for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:1 });
+  } else if (edge === 'bottom') {
+    for (let c = 1; c <= maxCol; c++) candidates.push({ col:c, row:maxRow });
+  } else if (edge === 'topRight') {
+    for (let c = Math.floor(maxCol / 2) + 1; c <= maxCol; c++) candidates.push({ col:c, row:1 });
+  }
+
+  // スタック可能かつMP足りるヘクス（予約済みも考慮）
+  const valid = candidates.filter(h => {
+    if (!checkStacking(h.col, h.row, u)) return false;
+    // 予約済みヘクスのスタック上限もチェック
+    const reservedCount = reservedHexes.filter(r => r.col === h.col && r.row === h.row).length;
+    if (db.type === 'tank' || db.type === 'apc') {
+      const existingTanks = state.units.filter(a =>
+        a.side === u.side && a.col === h.col && a.row === h.row && a !== u &&
+        a.status !== 'destroyed' && UNIT_DB[a.name] && (UNIT_DB[a.name].type === 'tank' || UNIT_DB[a.name].type === 'apc')
+      ).length;
+      if (existingTanks + reservedCount >= 2) return false;
+    }
+    if (db.type === 'infantry') {
+      const existingInf = state.units.filter(a =>
+        a.side === u.side && a.col === h.col && a.row === h.row && a !== u &&
+        a.status !== 'destroyed' && UNIT_DB[a.name] && UNIT_DB[a.name].type === 'infantry'
+      ).length;
+      if (existingInf + reservedCount >= 4) return false;
+    }
+    const cost = getTerrainCost(h.col, h.row, undefined, undefined, u.name);
+    return u.remainMove >= cost;
+  });
+
+  if (valid.length === 0) return null;
+
+  const enemies = state.units.filter(e =>
+    e.side !== u.side && e.status !== 'destroyed' && e.col >= 1
+  );
+  if (enemies.length === 0) {
+    return valid[Math.floor(Math.random() * valid.length)];
+  }
+
+  // 安全ゾーン評価
+  const scored = valid.map(h => {
+    let threatCount = 0;
+    let nearestEnemyDist = Infinity;
+    for (const enemy of enemies) {
+      const eDb = UNIT_DB[enemy.name];
+      if (!eDb) continue;
+      const d = hexDist(h.col, h.row, enemy.col, enemy.row);
+      if (d < nearestEnemyDist) nearestEnemyDist = d;
+      const maxRange = aiGetMaxRange(eDb, enemy, db);
+      if (d <= maxRange && hasLOS(enemy.col, enemy.row, h.col, h.row)) {
+        threatCount++;
+      }
+    }
+    return { h, threatCount, nearestEnemyDist };
+  });
+
+  const minThreat = Math.min(...scored.map(s => s.threatCount));
+  const bestGroup = scored.filter(s => s.threatCount === minThreat);
+  bestGroup.sort((a, b) => a.nearestEnemyDist - b.nearestEnemyDist);
+  const top = bestGroup.slice(0, Math.min(3, bestGroup.length));
+  return top[Math.floor(Math.random() * top.length)].h;
+}
+
 function aiPlaceUnit(u, db, callback) {
+  // 計画済みの配置先があればそれを使用
+  if (u._plannedPlace) {
+    const pick = u._plannedPlace;
+    delete u._plannedPlace;
+    moveMode = 'placing';
+    renderCards();
+    updateUI();
+    parent.postMessage({ type:'HIGHLIGHT', unitIdx:selectedIdx }, '*');
+    setTimeout(() => {
+      handlePlacement(pick.col, pick.row);
+      setTimeout(callback, 400);
+    }, 400);
+    return;
+  }
+
   const maxCol = state.mapMaxCol || 25;
   const maxRow = state.mapMaxRow || 16;
   const edge = u.enterEdge;
@@ -1502,7 +1604,40 @@ function aiPlaceUnit(u, db, callback) {
     const top = scored.slice(0, Math.min(5, scored.length));
     pick = top[Math.floor(Math.random() * top.length)].h;
   } else {
-    pick = valid[Math.floor(Math.random() * valid.length)];
+    // === エッジ侵入: 安全ゾーン＋敵最寄りで配置 ===
+    const enemies = state.units.filter(e =>
+      e.side !== u.side && e.status !== 'destroyed' && e.col >= 1
+    );
+    if (enemies.length === 0) {
+      // 敵なし → ランダム
+      pick = valid[Math.floor(Math.random() * valid.length)];
+    } else {
+      // 各候補ヘクスの脅威数と最寄り敵距離を計算
+      const scored = valid.map(h => {
+        let threatCount = 0;
+        let nearestEnemyDist = Infinity;
+        for (const enemy of enemies) {
+          const eDb = UNIT_DB[enemy.name];
+          if (!eDb) continue;
+          const d = hexDist(h.col, h.row, enemy.col, enemy.row);
+          if (d < nearestEnemyDist) nearestEnemyDist = d;
+          const maxRange = aiGetMaxRange(eDb, enemy, db);
+          if (d <= maxRange && hasLOS(enemy.col, enemy.row, h.col, h.row)) {
+            threatCount++;
+          }
+        }
+        return { h, threatCount, nearestEnemyDist };
+      });
+
+      // 脅威数が最小のものを選び、その中で敵に最も近いものを優先
+      const minThreat = Math.min(...scored.map(s => s.threatCount));
+      const bestGroup = scored.filter(s => s.threatCount === minThreat);
+      bestGroup.sort((a, b) => a.nearestEnemyDist - b.nearestEnemyDist);
+
+      // 最良ヘクスを中心に近隣からランダム選定（上位3候補）
+      const top = bestGroup.slice(0, Math.min(3, bestGroup.length));
+      pick = top[Math.floor(Math.random() * top.length)].h;
+    }
   }
   moveMode = 'placing';
   renderCards();
@@ -1527,6 +1662,64 @@ function aiIsOutgunned(u) {
   }
   if (myCnt === 0 || enemyCnt === 0) return false;
   return (myHit / myCnt) < (enemyHit / enemyCnt);
+}
+
+// === 敵の実際の武器射程を取得 ===
+function aiGetMaxRange(enemyDb, enemyUnit, targetDb) {
+  let maxRange = 0;
+  // 戦車のFIRE_TABLE射程（対戦車・対ATガン）
+  const ft = FIRE_TABLE[enemyUnit.name];
+  if (ft && (targetDb.type === 'tank' || targetDb.type === 'atgun')) {
+    for (let i = DIST_RANGES.length - 1; i >= 0; i--) {
+      if (ft[i]) { maxRange = DIST_RANGES[i]; break; }
+    }
+  }
+  // 歩兵の対戦車射程（INF_VS_TANK）
+  if (enemyDb.type === 'infantry' && targetDb.type === 'tank') {
+    const atTable = INF_VS_TANK[enemyDb.nation || ''];
+    if (atTable) {
+      for (const r in atTable) { if (+r > maxRange) maxRange = +r; }
+    }
+  }
+  // 対歩兵射程（ANTI_INF_TABLE）
+  if (targetDb.type === 'infantry' || targetDb.type === 'atgun') {
+    // 戦車MG
+    if (enemyDb.type === 'tank') {
+      const mgTable = ANTI_INF_TABLE['tankMG'];
+      if (mgTable) {
+        for (const r in mgTable) { if (+r > maxRange) maxRange = +r; }
+      }
+    }
+    // 歩兵の対歩兵
+    if (enemyDb.type === 'infantry') {
+      const nation = enemyDb.nation || '';
+      const infTable = ANTI_INF_TABLE[nation + '_inf'];
+      if (infTable) {
+        for (const r in infTable) { if (+r > maxRange) maxRange = +r; }
+      }
+    }
+  }
+  // FIRE_TABLE対歩兵（HE等）
+  if (ft && (targetDb.type === 'infantry' || targetDb.type === 'atgun')) {
+    for (let i = DIST_RANGES.length - 1; i >= 0; i--) {
+      if (ft[i] && DIST_RANGES[i] > maxRange) { maxRange = DIST_RANGES[i]; break; }
+    }
+  }
+  return maxRange;
+}
+
+// === 安全ヘクス判定: 盤面上の全敵の実武器射程+LOS外か ===
+function aiIsSafeHex(col, row, targetDb, enemies) {
+  for (const enemy of enemies) {
+    const eDb = UNIT_DB[enemy.name];
+    if (!eDb) continue;
+    const d = hexDist(col, row, enemy.col, enemy.row);
+    const maxRange = aiGetMaxRange(eDb, enemy, targetDb);
+    if (d > maxRange) continue; // この敵の射程外 → 安全
+    if (!hasLOS(enemy.col, enemy.row, col, row)) continue; // LOS通らない → 安全
+    return false; // 射程内かつLOS通る → 危険
+  }
+  return true; // どの敵からも攻撃されない
 }
 
 function aiCanEngageAny(u) {
@@ -1725,8 +1918,14 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   // === スコア: 撃破率差をメインに ===
   const killAdvantage = (totalMyKill - totalEnKill) * 100;
 
-  // 射程外だが敵に近い方が良い（接近フェーズ）
-  const approachScore = (totalMyKill <= 0 && nearestDist > 0) ? -nearestDist * 2 : 0;
+  // 射程外の場合: コラムベースで接近（同コラム内は移動不要）
+  let approachScore = 0;
+  if (totalMyKill <= 0 && nearestDist > 0) {
+    // 最寄り敵へのコラムが小さいほど良い（射程に近い）
+    const col_idx = distKey(nearestDist);
+    // 射程外（col_idx < 0）なら最大ペナルティ、射程内ならコラム値でペナルティ
+    approachScore = col_idx < 0 ? -20 : -col_idx * 3;
+  }
 
   // 固定砲塔の射界外ボーナス
   let arcBonus = 0;
@@ -1737,7 +1936,14 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     }
   }
 
-  return killAdvantage + approachScore + arcBonus;
+  // sc5: 建物支配ボーナス（勝利条件）
+  let buildingBonus = 0;
+  if (state.scenarioId === 'sc5' && myTerrain === 'building') {
+    // 建物にいるだけで高ポイント。装甲が厚いほど居座る価値が高い
+    buildingBonus = 50 + (db.armor || 0) * 5;
+  }
+
+  return killAdvantage + approachScore + arcBonus + buildingBonus;
 }
 
 // === パスに沿って1歩ずつ移動（防御射撃対応） ===
@@ -1777,25 +1983,6 @@ function aiFollowPath(u, db, path, callback) {
   nextStep();
 }
 
-// === 安全ヘクス判定: 全敵のLOS外 or 射程外 ===
-function aiIsSafeHex(col, row, enemies) {
-  for (const enemy of enemies) {
-    const eDb = UNIT_DB[enemy.name];
-    if (!eDb) continue;
-    const d = hexDist(col, row, enemy.col, enemy.row);
-    if (!hasLOS(enemy.col, enemy.row, col, row)) continue; // LOS外→安全
-    // LOS通るが射程外かチェック
-    const ft = FIRE_TABLE[enemy.name];
-    const maxRange = ft ? DIST_RANGES[ft.length - 1] : 0;
-    // 歩兵のAT射程もチェック
-    const atTable = INF_VS_TANK[eDb.nation || ''];
-    const maxAtRange = atTable ? Math.max(...Object.keys(atTable).map(Number)) : 0;
-    const effectiveRange = Math.max(maxRange, maxAtRange);
-    if (d <= effectiveRange) return false; // 射程内→危険
-  }
-  return true;
-}
-
 // === 数的優劣判断 ===
 function aiCountBalance(side) {
   let allies = 0, foes = 0;
@@ -1819,7 +2006,7 @@ function aiDoMovement(u, db, callback) {
     return;
   }
 
-  // === BFS方式: 到達可能な全ヘクスを評価し、最良ヘクスへ移動 ===
+  // === 全敵を取得 ===
   const enemies = state.units.filter(e =>
     e.side !== u.side && e.status !== 'destroyed' && e.col >= 1
   );
@@ -1836,17 +2023,40 @@ function aiDoMovement(u, db, callback) {
 
   // BFS: 到達可能な全ヘクスを探索
   const visited = aiGetReachableHexes(u, db);
-
-  // 現在位置のスコア
   const startKey = `${u.col},${u.row}`;
+
+  // === フェーズ1: 安全エリア接近 ===
+  // 現在位置が安全で、かつどの敵にも撃てない場合 → 敵に最も近い安全ヘクスへ移動
+  const currentSafe = aiIsSafeHex(u.col, u.row, db, enemies);
+  const canEngage = aiCanEngageAny(u);
+
+  if (currentSafe && !canEngage) {
+    // 安全エリア内から敵に最も近い安全ヘクスを探す
+    let bestSafeKey = null, bestSafeDist = Infinity;
+    const nearestEnemyDist = hexDist(u.col, u.row, enemy.col, enemy.row);
+
+    for (const key in visited) {
+      if (key === startKey) continue;
+      const v = visited[key];
+      if (!aiIsSafeHex(v.col, v.row, db, enemies)) continue;
+      const d = hexDist(v.col, v.row, enemy.col, enemy.row);
+      if (d < bestSafeDist) { bestSafeDist = d; bestSafeKey = key; }
+    }
+
+    // 現在位置より敵に近い安全ヘクスがあれば移動
+    if (bestSafeKey && bestSafeDist < nearestEnemyDist) {
+      const path = aiGetPath(visited, bestSafeKey);
+      if (path.length > 0) {
+        aiFollowPath(u, db, path, callback);
+        return;
+      }
+    }
+    // 安全ヘクスがこれ以上近づけない → フェーズ2へ進む
+  }
+
+  // === フェーズ2: 撃破率比較で最適ヘクスへ移動 ===
   const currentScore = aiEvalPosition(u, db, u.col, u.row, enemies, 0);
-
-  // === フェーズ判定: 安全エリアにいるか ===
-  const currentlySafe = aiIsSafeHex(u.col, u.row, enemies);
-
-  // 全到達可能ヘクスを評価
   let bestHexKey = null, bestHexScore = currentScore;
-  const groupLimit = state._aiGroupAdvanceLimit || 1;
 
   // 集団移動: 味方の最後尾より2ヘクス以上先行しない
   let rearAllyDist = 0;
@@ -1864,23 +2074,8 @@ function aiDoMovement(u, db, callback) {
     // 集団制限: 最後尾の味方より2ヘクス以上先行しない
     if (rearAllyDist > 0 && dToEnemy < rearAllyDist - 2) continue;
 
-    // 初期接近フェーズ: 安全エリアにいるなら安全エリア内で敵に最も近いヘクスを優先
-    if (currentlySafe) {
-      const hexSafe = aiIsSafeHex(v.col, v.row, enemies);
-      if (hexSafe) {
-        // 安全エリア内: 敵に近いほど良い
-        const score = -dToEnemy * 10;
-        if (score > bestHexScore) { bestHexScore = score; bestHexKey = key; }
-      } else {
-        // 安全→危険エリアへの移動: 撃破率差が十分有利なら許可
-        const score = aiEvalPosition(u, db, v.col, v.row, enemies, 0);
-        if (score > bestHexScore && score > 10) { bestHexScore = score; bestHexKey = key; }
-      }
-    } else {
-      // 交戦フェーズ: 撃破率比較で最適ヘクスを選択
-      const score = aiEvalPosition(u, db, v.col, v.row, enemies, 0);
-      if (score > bestHexScore) { bestHexScore = score; bestHexKey = key; }
-    }
+    const score = aiEvalPosition(u, db, v.col, v.row, enemies, 0);
+    if (score > bestHexScore) { bestHexScore = score; bestHexKey = key; }
   }
 
   // 移動先が見つからない（現在位置が最良）→ 停止
@@ -1898,6 +2093,26 @@ function aiDoMovement(u, db, callback) {
 // ドイツ: 集団で脱出口へ突破
 function aiBreakthroughMove(u, db, callback) {
   if (u.remainMove <= 0 || u.status !== 'ok') { callback(); return; }
+
+  // === 安全エリア接近（共通） ===
+  const btEnemies = state.units.filter(e => e.side !== u.side && e.status !== 'destroyed' && e.col >= 1);
+  if (btEnemies.length > 0 && aiIsSafeHex(u.col, u.row, db, btEnemies) && !aiCanEngageAny(u)) {
+    const btVisited = aiGetReachableHexes(u, db);
+    const btStartDist = hexDist(u.col, u.row, btEnemies[0].col, btEnemies[0].row);
+    let btBestKey = null, btBestDist = Infinity;
+    for (const key in btVisited) {
+      if (key === `${u.col},${u.row}`) continue;
+      const v = btVisited[key];
+      if (!aiIsSafeHex(v.col, v.row, db, btEnemies)) continue;
+      let minD = Infinity;
+      for (const e of btEnemies) { const d = hexDist(v.col, v.row, e.col, e.row); if (d < minD) minD = d; }
+      if (minD < btBestDist) { btBestDist = minD; btBestKey = key; }
+    }
+    if (btBestKey && btBestDist < btStartDist) {
+      const path = aiGetPath(btVisited, btBestKey);
+      if (path.length > 0) { aiFollowPath(u, db, path, callback); return; }
+    }
+  }
 
   // sc2: 上端(row小)へ脱出, sc3: 下端(row大)へ脱出
   const goingUp = (state.scenarioId === 'sc2');
@@ -2103,6 +2318,27 @@ function aiPredictEnemyPos(ge, turns) {
 // ソ連: 射界外から回り込んで隣接射撃を狙う
 function aiAmbushChaseMove(u, db, callback) {
   aiCalcChaseFlags();
+
+  // === 安全エリア接近（共通） ===
+  const acEnemies = state.units.filter(e => e.side !== u.side && e.status !== 'destroyed' && e.status !== 'escaped' && e.col >= 1);
+  if (acEnemies.length > 0 && aiIsSafeHex(u.col, u.row, db, acEnemies) && !aiCanEngageAny(u)) {
+    const acVisited = aiGetReachableHexes(u, db);
+    let acNearestD = Infinity;
+    for (const e of acEnemies) { const d = hexDist(u.col, u.row, e.col, e.row); if (d < acNearestD) acNearestD = d; }
+    let acBestKey = null, acBestDist = Infinity;
+    for (const key in acVisited) {
+      if (key === `${u.col},${u.row}`) continue;
+      const v = acVisited[key];
+      if (!aiIsSafeHex(v.col, v.row, db, acEnemies)) continue;
+      let minD = Infinity;
+      for (const e of acEnemies) { const d = hexDist(v.col, v.row, e.col, e.row); if (d < minD) minD = d; }
+      if (minD < acBestDist) { acBestDist = minD; acBestKey = key; }
+    }
+    if (acBestKey && acBestDist < acNearestD) {
+      const path = aiGetPath(acVisited, acBestKey);
+      if (path.length > 0) { aiFollowPath(u, db, path, callback); return; }
+    }
+  }
 
   // 最も近い敵を目標
   let nearestEnemy = null, nearestDist = Infinity;
