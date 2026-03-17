@@ -31,22 +31,26 @@ function sc1_distToRally(col, row) {
   return minD;
 }
 
-// ドイツが森を迂回してきたか判定
-// 条件: いずれかのドイツユニットが
-//   (A) 森ヘクスに距離2以内 または
-//   (B) 森の西側(col<=7)に回り込み、かつ森ヘクスにLOSが通る
+// ドイツが射界に入ったか判定
+// 条件: ゴールヘクスにいるソ連ユニットからドイツにLOSが通る
 function sc1_isGermanFlanking() {
   var enemies = state.units.filter(function(u) {
     return u.side === 'ge' && u.status !== 'destroyed' && u.col >= 1;
   });
-  for (var i = 0; i < enemies.length; i++) {
-    var e = enemies[i];
-    for (var j = 0; j < SC1_RALLY_HEXES.length; j++) {
-      var rh = SC1_RALLY_HEXES[j];
-      // (A) 距離2以内
-      if (hexDist(e.col, e.row, rh[0], rh[1]) <= 2) return true;
-      // (B) 西側に回り込んで射界を取った
-      if (e.col <= 7 && hasLOS(e.col, e.row, rh[0], rh[1])) return true;
+  var allies = state.units.filter(function(u) {
+    return u.side !== 'ge' && u.status !== 'destroyed' && u.col >= 1;
+  });
+  for (var ai = 0; ai < allies.length; ai++) {
+    var a = allies[ai];
+    // ドイツが2ヘクス以内に接近したら発動
+    for (var ei = 0; ei < enemies.length; ei++) {
+      var e = enemies[ei];
+      if (hexDist(a.col, a.row, e.col, e.row) <= 2) return true;
+    }
+    if (!sc1_isGoalHex(a.col, a.row)) continue;
+    for (var ei = 0; ei < enemies.length; ei++) {
+      var e = enemies[ei];
+      if (hasLOS(a.col, a.row, e.col, e.row)) return true;
     }
   }
   return false;
@@ -338,19 +342,35 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
 }
 
 // ============================================================
-//  ソ連: 強制的に森の左奥へ移動してスタック
+//  ソ連: 強制的に森の左4ヘクスへ移動してスタック
 // ============================================================
-// 森の左端ヘクス（col小さい順）をスタックで詰める
-var SC1_HIDE_HEXES = [
-  [4,8],[4,9],           // col 4 — 最も左奥
-  [5,9],[5,10],[5,11],[5,12], // col 5
-  [6,9],[6,10],[6,11],[6,12]  // col 6 — 森の右端（最後に使う）
-];
+// 目標ヘクス: 5ヘクスに各2体ずつ強制割り当て
+var SC1_GOAL_HEXES = [[5,12],[5,11],[5,10],[4,9],[4,10]];
+
+// ソ連ユニットのインデックスからゴールヘクスを取得（2体ずつ）
+function sc1_getGoalHex(u) {
+  var suUnits = state.units.filter(function(e) {
+    return e.side !== 'ge' && e.status !== 'destroyed';
+  });
+  var idx = -1;
+  for (var i = 0; i < suUnits.length; i++) {
+    if (suUnits[i] === u) { idx = i; break; }
+  }
+  if (idx < 0) idx = 0;
+  var hexIdx = Math.floor(idx / 2);
+  if (hexIdx >= SC1_GOAL_HEXES.length) hexIdx = SC1_GOAL_HEXES.length - 1;
+  return SC1_GOAL_HEXES[hexIdx];
+}
+
+function sc1_isGoalHex(col, row) {
+  return SC1_GOAL_HEXES.some(function(h) { return h[0] === col && h[1] === row; });
+}
 
 function sc1_moveToForest(u, db, callback) {
-  // 既に森ヘクスにいてcol<=5なら動かない（十分奥）
-  if (sc1_isRallyHex(u.col, u.row) && u.col <= 5) {
-    console.log('[AI-sc1] ' + u.name + ' 森の奥で待機 (' + u.col + ',' + u.row + ')');
+  var goal = sc1_getGoalHex(u);
+  // 既にゴールにいる → 動くな
+  if (u.col === goal[0] && u.row === goal[1]) {
+    console.log('[AI-sc1] ' + u.name + ' 待機 (' + u.col + ',' + u.row + ')');
     callback();
     return;
   }
@@ -358,37 +378,23 @@ function sc1_moveToForest(u, db, callback) {
   var visited = aiGetReachableHexes(u, db);
   var startKey = u.col + ',' + u.row;
 
-  // 目標: SC1_HIDE_HEXESの順番で、到達可能な最も左奥のヘクスへ行く
-  var bestKey = null;
-  var bestCol = 99;
-  var bestRow = 99;
+  // ゴールに直接入れるか
+  var goalKey = goal[0] + ',' + goal[1];
+  if (visited[goalKey]) {
+    console.log('[AI-sc1] ' + u.name + ' → ' + goalKey);
+    var path = aiGetPath(visited, goalKey);
+    if (path.length > 0) { aiFollowPath(u, db, path, callback); return; }
+  }
 
+  // ゴールに最も近いヘクスへ
+  var bestKey = null;
+  var bestDist = hexDist(u.col, u.row, goal[0], goal[1]);
   for (var key in visited) {
     if (key === startKey) continue;
     var v = visited[key];
-    if (!sc1_isRallyHex(v.col, v.row)) continue;
-
-    // col小さい方優先、同colならrow中心(10)に近い方
-    if (v.col < bestCol || (v.col === bestCol && Math.abs(v.row - 10) < Math.abs(bestRow - 10))) {
-      bestKey = key;
-      bestCol = v.col;
-      bestRow = v.row;
-    }
-  }
-
-  // 森ヘクスに到達できない → とにかく森に近づく（col小さい方向）
-  if (!bestKey) {
-    var bestDist = Infinity;
-    for (var key2 in visited) {
-      if (key2 === startKey) continue;
-      var v2 = visited[key2];
-      var d = sc1_distToRally(v2.col, v2.row);
-      // 距離同じならcol小さい方
-      if (d < bestDist || (d === bestDist && v2.col < bestCol)) {
-        bestKey = key2;
-        bestDist = d;
-        bestCol = v2.col;
-      }
+    var d = hexDist(v.col, v.row, goal[0], goal[1]);
+    if (d < bestDist) {
+      bestKey = key; bestDist = d;
     }
   }
 
@@ -398,7 +404,7 @@ function sc1_moveToForest(u, db, callback) {
     return;
   }
 
-  console.log('[AI-sc1] ' + u.name + ' → 森左奥 ' + bestKey);
+  console.log('[AI-sc1] ' + u.name + ' → ' + bestKey);
   var path = aiGetPath(visited, bestKey);
   if (path.length === 0) { callback(); return; }
   aiFollowPath(u, db, path, callback);
@@ -506,7 +512,8 @@ function sc1_geMovement(u, db, callback) {
 // ============================================================
 function aiDoMovement(u, db, callback) {
   if (u.side === 'ge') {
-    sc1_geMovement(u, db, callback);
+    // ドイツはbase aiDoMovementを使用（LOS探索移動含む）
+    _baseAiDoMovement(u, db, callback);
     return;
   }
 
@@ -533,6 +540,9 @@ function aiPlanPlacement(u, db, reservedHexes) {
   var edge = u.enterEdge;
   if (!edge) return null;
 
+  var isSoviet = (u.side !== 'ge');
+  var goal = isSoviet ? sc1_getGoalHex(u) : null;
+
   var candidates = [];
   for (var r = 1; r <= maxRow; r++) {
     var c;
@@ -545,18 +555,21 @@ function aiPlanPlacement(u, db, reservedHexes) {
     if (edge === 'left') c = 1;
     if (edge === 'right') c = maxCol;
 
-    if (typeof checkStacking === 'function' && !checkStacking(c, r, u)) continue;
-    var reserved = false;
-    for (var ri = 0; ri < reservedHexes.length; ri++) {
-      if (reservedHexes[ri].col === c && reservedHexes[ri].row === r) { reserved = true; break; }
+    // ドイツのみスタック/予約チェック
+    if (!isSoviet) {
+      if (typeof checkStacking === 'function' && !checkStacking(c, r, u)) continue;
+      var reserved = false;
+      for (var ri = 0; ri < reservedHexes.length; ri++) {
+        if (reservedHexes[ri].col === c && reservedHexes[ri].row === r) { reserved = true; break; }
+      }
+      if (reserved) continue;
     }
-    if (reserved) continue;
 
     var score = 0;
 
-    if (u.side !== 'ge') {
-      var distToForest = sc1_distToRally(c, r);
-      score = -distToForest * 10;
+    if (isSoviet) {
+      // ソ連: ゴールヘクスに最短の侵入ヘクスを選ぶ
+      score = -hexDist(c, r, goal[0], goal[1]);
     } else {
       var enemies = state.units.filter(function(e) {
         return e.side !== u.side && e.status !== 'destroyed' && e.col >= 1;
