@@ -1129,7 +1129,7 @@ function aiCalcPrepFireFlags() {
           const eDk = distKey(td);
           if (eFt && eDk >= 0 && eFt[eDk]) enHitThere = eFt[eDk][1] - myMod;
         }
-        if (enHitThere >= 5) continue;
+        if (enHitThere > 5) continue;
 
         movementBetter = true;
         break;
