@@ -99,7 +99,7 @@ function aiPlanPlacement(u, db, reservedHexes) {
 }
 
 // フェルディナンド3両の向きを分散配置
-// 1両目: 左上(dir=2)、2両目: 右上(dir=0)、3両目: 上(dir=1)
+// 1両目: 右上(dir=0, 右60°)、2両目: 左上(dir=2, 左60°)、3両目: 上(dir=1)
 function _sc2_assignDir(u, reservedHexes, maxCol) {
   // 既に配置予約されたドイツユニット数で何両目か判定
   var geReserved = 0;
@@ -107,14 +107,30 @@ function _sc2_assignDir(u, reservedHexes, maxCol) {
     geReserved++;
   }
 
-  // 0両目=左上, 1両目=右上, 2両目=上
+  // 0両目=右60°(右上), 1両目=左60°(左上), 2両目=正面(上)
   if (geReserved === 0) {
-    u.dir = 2;  // 左上
+    u.dir = 0;  // 右上（右60°）
   } else if (geReserved === 1) {
-    u.dir = 0;  // 右上
+    u.dir = 2;  // 左上（左60°）
   } else {
     u.dir = 1;  // 上（正面）
   }
+}
+
+// ============================================================
+//  移動判断メイン (phase_move.html用)
+//  ドイツ: 侵入後その場で停止（長距離射撃に専念）
+// ============================================================
+function aiDoMovement(u, db, callback) {
+  if (u.side === 'ge') {
+    // フェルディナンド: その場で停止
+    console.log('[AI-sc2] ' + u.name + ' 停止 (' + u.col + ',' + u.row + ') dir=' + u.dir);
+    callback();
+    return;
+  }
+
+  // ソ連: デフォルトの追撃AI
+  _baseAiDoMovement(u, db, callback);
 }
 
 console.log('[AI] ai_sc2.js loaded — シナリオ2専用AI（フェルディナンド配置最適化）');
