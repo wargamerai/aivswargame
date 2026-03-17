@@ -1837,6 +1837,39 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   }
   const safetyScore = -maxEnKill * 200;
 
+  // 第3.5軸: bestDist以内での損得判定
+  // bestDistより近い場合、1歩近づく利得vs損失を比較しペナルティ
+  let approachPenalty = 0;
+  if (d < bestDist && d >= 1) {
+    // 自分の撃破率: 現在距離と1歩遠い距離を比較
+    const myNow = calcKillChance(u.name, primaryEnemy.name, d, true).kill;
+    const myFar = (d + 1 <= 30) ? calcKillChance(u.name, primaryEnemy.name, d + 1, true).kill : 0;
+    // 歩兵ATも考慮
+    let enNow = 0, enFar = 0;
+    const peDb = UNIT_DB[primaryEnemy.name];
+    if (peDb && peDb.type === 'infantry' && db.type === 'tank') {
+      const atTable = INF_VS_TANK[peDb.nation || ''];
+      if (atTable) {
+        if (atTable[d] !== undefined) {
+          const h = atTable[d];
+          enNow = h >= 12 ? 1 : h <= 1 ? 0 : (DICE_2D6_CUM[h] || 0);
+        }
+        if (atTable[d + 1] !== undefined) {
+          const h = atTable[d + 1];
+          enFar = h >= 12 ? 1 : h <= 1 ? 0 : (DICE_2D6_CUM[h] || 0);
+        }
+      }
+    } else {
+      enNow = (d <= 12) ? calcKillChance(primaryEnemy.name, u.name, d, true).kill : 0;
+      enFar = (d + 1 <= 12) ? calcKillChance(primaryEnemy.name, u.name, d + 1, true).kill : 0;
+    }
+    const myGain = myNow - myFar;   // 近づいた利得
+    const enGain = enNow - enFar;   // 近づいた損失
+    if (enGain >= myGain) {
+      approachPenalty = -2000; // 損なので絶対に行かない
+    }
+  }
+
   // 第4軸: 地形・戦術ボーナス
   let terrainScore = 0;
   const terrain = state.terrain ? state.terrain[`${col},${row}`] : null;
@@ -1874,7 +1907,7 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     }
   }
 
-  return columnScore + distScore + safetyScore + terrainScore + buildingBonus;
+  return columnScore + distScore + safetyScore + terrainScore + buildingBonus + approachPenalty;
 }
 
 // === パスに沿って1歩ずつ移動（防御射撃対応） ===
