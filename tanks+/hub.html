@@ -1728,14 +1728,15 @@ function checkVictory() {
     }
   }
 
-  // sc5: 建物支配のみで判定（最終ターン終了時）
-  // 途中の全滅・過半数は判定しない — 最後に建物にいた側の勝利
+  // sc5: 全滅ならサドンデス、それ以外は最終ターンの建物支配で判定
   if (scId === 'sc5') {
+    if (alive1.length === 0) return { winner:s2, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
+    if (alive2.length === 0) return { winner:s1, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
     if (state.turn > state.maxTurns) {
       const winner = state.buildingControl || 'ge';
       return { winner, reason:'building_control', destroyed1, destroyed2, total1, total2 };
     }
-    return null;  // sc5はターン終了まで続行
+    return null;
   }
 
   // 全滅判定
