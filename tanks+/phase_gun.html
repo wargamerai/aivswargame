@@ -1083,9 +1083,27 @@ function aiCalcPrepFireFlags() {
     }
 
     // 7以上確保 → 準備射撃確定、BFS総当たり不要
+    // ただしsc5で味方のいない建物がある場合は占拠優先で移動検討
     if (bestCurEffHit >= 7) {
-      firer._prepFireRecommended = true;
-      continue;
+      let emptyBuilding = false;
+      if (state.scenarioId === 'sc5') {
+        const myTerrain = state.terrain ? state.terrain[`${firer.col},${firer.row}`] : null;
+        if (myTerrain !== 'building') {
+          for (const key in state.terrain) {
+            if (state.terrain[key] !== 'building') continue;
+            const [bc, br] = key.split(',').map(Number);
+            const hasAlly = state.units.some(a =>
+              a.side === firer.side && a.col === bc && a.row === br &&
+              a.status !== 'destroyed' && a !== firer
+            );
+            if (!hasAlly) { emptyBuilding = true; break; }
+          }
+        }
+      }
+      if (!emptyBuilding) {
+        firer._prepFireRecommended = true;
+        continue;
+      }
     }
 
     // BFSで実際の到達可能ヘクスを取得
