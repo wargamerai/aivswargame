@@ -1849,7 +1849,7 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     }
     if (enKill > maxEnKill) maxEnKill = enKill;
   }
-  const safetyScore = -maxEnKill * 30;
+  const safetyScore = -maxEnKill * 200;
 
   // 第4軸: 地形・戦術ボーナス
   let terrainScore = 0;
