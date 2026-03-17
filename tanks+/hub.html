@@ -151,7 +151,7 @@ button.top-btn:hover { background:#556; }
   <button class="top-btn" id="fogBtn" onclick="toggleFog()">視認外非表示</button>
   <button class="top-btn" onclick="zoomFit()">全体</button>
   <button class="top-btn" onclick="toggleDebug()" style="background:#030;color:#0f0">DBG</button>
-  <button class="top-btn" id="autoPlayBtn" onclick="toggleAutoPlay()" style="background:#333;color:#888;display:none">自動:OFF</button>
+  <button class="top-btn" id="autoPlayBtn" onclick="toggleAutoPlay()" style="background:#333;color:#888">自動:OFF</button>
   <span style="margin-left:20px;color:#888">|</span>
   <button class="top-btn" id="teBtn" onclick="toggleTerrainEdit()">地形編集</button>
   <span id="teBrush" style="display:none; gap:4px; align-items:center;">
@@ -332,9 +332,10 @@ function updateAutoPlayBtn() {
     btn.textContent = '自動:ON';
     btn.style.background = '#c8a020';
     btn.style.color = '#000';
-    btn.style.display = '';
   } else {
-    btn.style.display = 'none';
+    btn.textContent = '自動:OFF';
+    btn.style.background = '#333';
+    btn.style.color = '#888';
   }
 }
 
