@@ -1952,7 +1952,7 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     if (eFt && eDkHere >= 0 && eFt[eDkHere]) enHitHere = eFt[eDkHere][1] - enTMod;
   }
 
-  // スコア計算: LOSが通る敵への有効命中率をスコアにする
+  // スコア計算: penDiff差（破壊表の有利不利）ベース
   let score = 0;
 
   if (myHitNum >= 7 && enHitHere > 5) {
@@ -1960,26 +1960,47 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     return null;
   }
 
-  // 全敵に対してLOS込みの最良effHitをスコアにする
-  let bestEffHit = 0;
+  // 全敵に対してLOS込みのpenDiff優位をスコアにする
+  let bestAdvantage = -Infinity;
   for (const en of enemies) {
     if (!hasLOS(col, row, en.col, en.row)) continue;
     const ed = hexDist(col, row, en.col, en.row);
     const edk = distKey(ed);
-    const ft = FIRE_TABLE[u.name];
-    if (!ft || edk < 0 || !ft[edk]) continue;
+    const myFt2 = FIRE_TABLE[u.name];
+    if (!myFt2 || edk < 0 || !myFt2[edk]) continue;
     const enDb2 = UNIT_DB[en.name];
-    const et = state.terrain ? (state.terrain[`${en.col},${en.row}`] || 'plain') : 'plain';
-    let mod = 0;
-    if (et === 'forest') mod += HIT_MODIFIERS.forest;
-    if (et === 'building') mod += HIT_MODIFIERS.building;
-    mod += countBocage(col, row, en.col, en.row);
-    if (enDb2 && enDb2.small) mod += HIT_MODIFIERS.smallTarget;
-    const effHit = ft[edk][1] - mod;
-    if (effHit > bestEffHit) bestEffHit = effHit;
+    if (!enDb2) continue;
+
+    // 自分のpenDiff（自分のpen - 敵のarmor）
+    const myPen = myFt2[edk][0];
+    const enArmor = enDb2.armor || 0;
+    const myPenDiff = Math.max(-3, Math.min(3, myPen - enArmor));
+
+    // 敵のpenDiff（敵のpen - 自分のarmor）
+    let enPenDiff = -3;
+    if (enDb2.type === 'infantry') {
+      // 歩兵ATは別処理: 射程内なら脅威あり
+      const atTable = INF_VS_TANK[enDb2.nation || ''];
+      if (atTable && atTable[ed] !== undefined) {
+        enPenDiff = 0; // 歩兵ATは命中=破壊なので中立扱い
+      }
+    } else {
+      const enFt = FIRE_TABLE[en.name];
+      if (enFt && edk >= 0 && enFt[edk]) {
+        const enPen = enFt[edk][0];
+        const myArmor = db.armor || 0;
+        enPenDiff = Math.max(-3, Math.min(3, enPen - myArmor));
+      }
+    }
+
+    // 優位 = 自分のpenDiff - 敵のpenDiff（大きいほど有利）
+    const advantage = myPenDiff - enPenDiff;
+    if (advantage > bestAdvantage) bestAdvantage = advantage;
   }
-  score += bestEffHit * 10;
-  console.log(`[AI]     eval(${col},${row}) d=${d} myHit=${myHitNum} enHit=${enHitHere} bestEffHit=${bestEffHit} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
+  if (bestAdvantage > -Infinity) {
+    score += bestAdvantage * 15;
+  }
+  console.log(`[AI]     eval(${col},${row}) d=${d} myHit=${myHitNum} enHit=${enHitHere} penAdv=${bestAdvantage} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
 
   // 固定砲塔の射界外ボーナス
   if (peDb && peDb.turret === 'fixed' && !isInFixedArcMove(primaryEnemy, col, row)) {
