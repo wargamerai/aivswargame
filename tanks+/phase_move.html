@@ -1841,12 +1841,25 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   // bestDistより近い場合、1歩近づく利得vs損失を比較しペナルティ
   let approachPenalty = 0;
   if (d < bestDist && d >= 1) {
-    // 自分の撃破率: 現在距離と1歩遠い距離を比較
-    const myNow = calcKillChance(u.name, primaryEnemy.name, d, true).kill;
-    const myFar = (d + 1 <= 30) ? calcKillChance(u.name, primaryEnemy.name, d + 1, true).kill : 0;
-    // 歩兵ATも考慮
-    let enNow = 0, enFar = 0;
     const peDb = UNIT_DB[primaryEnemy.name];
+    // 自分の撃破率（歩兵ATも含む）
+    let myNow = calcKillChance(u.name, primaryEnemy.name, d, true).kill;
+    let myFar = (d + 1 <= 30) ? calcKillChance(u.name, primaryEnemy.name, d + 1, true).kill : 0;
+    if (db.type === 'infantry' && peDb && peDb.type === 'tank') {
+      const atTable = INF_VS_TANK[db.nation || ''];
+      if (atTable) {
+        if (atTable[d] !== undefined) {
+          const h = atTable[d];
+          myNow = h >= 12 ? 1 : h <= 1 ? 0 : (DICE_2D6_CUM[h] || 0);
+        }
+        if (atTable[d + 1] !== undefined) {
+          const h = atTable[d + 1];
+          myFar = h >= 12 ? 1 : h <= 1 ? 0 : (DICE_2D6_CUM[h] || 0);
+        }
+      }
+    }
+    // 敵の撃破率（歩兵ATも含む）
+    let enNow = 0, enFar = 0;
     if (peDb && peDb.type === 'infantry' && db.type === 'tank') {
       const atTable = INF_VS_TANK[peDb.nation || ''];
       if (atTable) {
