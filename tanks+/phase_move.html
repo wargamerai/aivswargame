@@ -2001,6 +2001,11 @@ function aiDoMovement(u, db, callback) {
     const maxAtRange = atTable ? Math.max(...Object.keys(atTable).map(Number)) : 0;
     bestDist = (maxAtRange <= 0) ? (db.noMG ? 1 : 2) : maxAtRange + 1;
   }
+  // 歩兵→戦車: 距離0が最強（AT射程内に入りたい）
+  const targetIsTank = eDb && eDb.type === 'tank';
+  if (db.type === 'infantry' && targetIsTank) {
+    bestDist = 0;
+  }
 
   // BFS: 到達可能な全ヘクスを探索
   const visited = aiGetReachableHexes(u, db);
