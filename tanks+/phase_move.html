@@ -1488,8 +1488,13 @@ function aiPlanPlacement(u, db, reservedHexes) {
 
   const minThreat = Math.min(...scored.map(s => s.threatCount));
   const bestGroup = scored.filter(s => s.threatCount === minThreat);
+  for (let i = bestGroup.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bestGroup[i], bestGroup[j]] = [bestGroup[j], bestGroup[i]];
+  }
   bestGroup.sort((a, b) => a.nearestEnemyDist - b.nearestEnemyDist);
-  const top = bestGroup.slice(0, Math.min(3, bestGroup.length));
+  const bestDist = bestGroup[0].nearestEnemyDist;
+  const top = bestGroup.filter(s => s.nearestEnemyDist === bestDist);
   return top[Math.floor(Math.random() * top.length)].h;
 }
 
@@ -1655,10 +1660,16 @@ function aiPlaceUnit(u, db, callback) {
       // 脅威数が最小のものを選び、その中で目標に最も近いものを優先
       const minThreat = Math.min(...scored.map(s => s.threatCount));
       const bestGroup = scored.filter(s => s.threatCount === minThreat);
+      // 同スコア内をシャッフル（安定ソートの偏り防止）
+      for (let i = bestGroup.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bestGroup[i], bestGroup[j]] = [bestGroup[j], bestGroup[i]];
+      }
       bestGroup.sort((a, b) => a.objectiveDist - b.objectiveDist);
 
-      // 最良ヘクスを中心に近隣からランダム選定（上位3候補）
-      const top = bestGroup.slice(0, Math.min(3, bestGroup.length));
+      // 最良距離と同じ距離の候補全てからランダム選定
+      const bestDist = bestGroup[0].objectiveDist;
+      const top = bestGroup.filter(s => s.objectiveDist === bestDist);
       pick = top[Math.floor(Math.random() * top.length)].h;
     }
   }
