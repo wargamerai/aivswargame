@@ -1861,7 +1861,34 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   }
   terrainScore += countBocage(col, row, primaryEnemy.col, primaryEnemy.row) * 3;
 
-  return columnScore + distScore + safetyScore + terrainScore;
+  // 第5軸: 町の支配ボーナス（sc5）— 町にいるなら出ない
+  let buildingBonus = 0;
+  if (state.scenarioId === 'sc5' && terrain === 'building') {
+    buildingBonus = 1500;
+    // 例外: 残り敵1体で高確率撃破できるなら前に出てよい
+    const aliveEnemies = enemies.filter(e => e.status !== 'destroyed');
+    if (aliveEnemies.length === 1) {
+      const lastEnemy = aliveEnemies[0];
+      const lastEDb = UNIT_DB[lastEnemy.name];
+      const lastDist = hexDist(col, row, lastEnemy.col, lastEnemy.row);
+      let myKill = 0;
+      if (lastEDb) {
+        const kc = calcKillChance(u.name, lastEnemy.name, lastDist, true);
+        myKill = kc.kill;
+        // 歩兵ATも考慮
+        if (db.type === 'infantry' && lastEDb.type === 'tank') {
+          const atTable = INF_VS_TANK[db.nation || ''];
+          if (atTable && atTable[lastDist] !== undefined) {
+            const hitNum = atTable[lastDist];
+            myKill = hitNum >= 12 ? 1 : hitNum <= 1 ? 0 : (DICE_2D6_CUM[hitNum] || 0);
+          }
+        }
+      }
+      if (myKill >= 0.5) buildingBonus = 0; // 50%以上で倒せるなら出てよい
+    }
+  }
+
+  return columnScore + distScore + safetyScore + terrainScore + buildingBonus;
 }
 
 // === パスに沿って1歩ずつ移動（防御射撃対応） ===
