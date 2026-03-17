@@ -1486,8 +1486,13 @@ function aiPlanPlacement(u, db, reservedHexes) {
     return { h, threatCount, nearestEnemyDist };
   });
 
-  const minThreat = Math.min(...scored.map(s => s.threatCount));
-  const bestGroup = scored.filter(s => s.threatCount === minThreat);
+  let bestGroup;
+  if (state.scenarioId === 'sc5') {
+    bestGroup = scored.slice();
+  } else {
+    const minThreat = Math.min(...scored.map(s => s.threatCount));
+    bestGroup = scored.filter(s => s.threatCount === minThreat);
+  }
   for (let i = bestGroup.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [bestGroup[i], bestGroup[j]] = [bestGroup[j], bestGroup[i]];
@@ -1657,9 +1662,15 @@ function aiPlaceUnit(u, db, callback) {
         return { h, threatCount, objectiveDist };
       });
 
-      // 脅威数が最小のものを選び、その中で目標に最も近いものを優先
-      const minThreat = Math.min(...scored.map(s => s.threatCount));
-      const bestGroup = scored.filter(s => s.threatCount === minThreat);
+      // sc5: 町への距離だけで選定（安全性無視）
+      // 他シナリオ: 脅威数が最小のものを選び、その中で目標に最も近いものを優先
+      let bestGroup;
+      if (state.scenarioId === 'sc5') {
+        bestGroup = scored.slice();
+      } else {
+        const minThreat = Math.min(...scored.map(s => s.threatCount));
+        bestGroup = scored.filter(s => s.threatCount === minThreat);
+      }
       // 同スコア内をシャッフル（安定ソートの偏り防止）
       for (let i = bestGroup.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
