@@ -101,6 +101,7 @@ let activeSide = '';
 let selectedIdx = -1;
 let moveMode = 'idle'; // 'idle' | 'moving' | 'facing'
 let isAI = false;
+let autoPlay = false;
 let moveHistory = []; // { col, row, dir, mp } の配列
 let dfHistory = [];   // 防御射撃履歴（Undoできない位置を記録）
 let dfFirers = {};    // このフェーズで防御射撃した敵ユニットIDX
@@ -983,8 +984,8 @@ function executeDfShot() {
   document.getElementById('dfBody').innerHTML = html;
   pushState();
 
-  // 射撃側がAI（=移動側がプレイヤー）の場合のみ自動確認
-  if (!isAI) setTimeout(() => nextDfStep(), 600);
+  // 射撃側がAI、または自動再生モードなら自動確認
+  if (!isAI || autoPlay) setTimeout(() => nextDfStep(), autoPlay ? 800 : 600);
 }
 
 // 次の射撃へ or 終了
@@ -2712,7 +2713,12 @@ window.addEventListener('message', (e) => {
   if (e.data.type === 'INIT_STATE') {
     console.log('[phase_move] INIT_STATE受信');
     isAI = e.data.isAI || false;
+    autoPlay = e.data.autoPlay || false;
     init(e.data.state);
+    return;
+  }
+  if (e.data.type === 'SET_AUTOPLAY') {
+    autoPlay = e.data.autoPlay || false;
     return;
   }
   if (e.data.type === 'MAP_SELECT') {

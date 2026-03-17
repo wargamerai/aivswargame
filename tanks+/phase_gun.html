@@ -1253,6 +1253,10 @@ window.addEventListener('message', (e) => {
     init(e.data.state);
     return;
   }
+  if (e.data.type === 'SET_AUTOPLAY') {
+    autoPlay = e.data.autoPlay || false;
+    return;
+  }
   if (e.data.type === 'MAP_SELECT' && e.data.unitIdx >= 0) {
     const u = state.units[e.data.unitIdx];
     if (u.side === activeSide && firers.includes(e.data.unitIdx)) {

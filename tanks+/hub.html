@@ -151,7 +151,7 @@ button.top-btn:hover { background:#556; }
   <button class="top-btn" id="fogBtn" onclick="toggleFog()">視認外非表示</button>
   <button class="top-btn" onclick="zoomFit()">全体</button>
   <button class="top-btn" onclick="toggleDebug()" style="background:#030;color:#0f0">DBG</button>
-  <button class="top-btn" id="autoPlayBtn" onclick="toggleAutoPlay()" style="background:#333;color:#888">自動:OFF</button>
+  <button class="top-btn" id="autoPlayBtn" onclick="toggleAutoPlay()" style="background:#333;color:#888;display:none">自動:OFF</button>
   <span style="margin-left:20px;color:#888">|</span>
   <button class="top-btn" id="teBtn" onclick="toggleTerrainEdit()">地形編集</button>
   <span id="teBrush" style="display:none; gap:4px; align-items:center;">
@@ -213,6 +213,10 @@ button.top-btn:hover { background:#556; }
       <option value="side2">後攻側</option>
       <option value="hotseat">ホットシート（両方手動）</option>
     </select>
+    <label style="display:flex;align-items:center;gap:8px;margin:8px 0;cursor:pointer;font-size:0.95em">
+      <input type="checkbox" id="chkAutoPlay" style="width:18px;height:18px;cursor:pointer">
+      AI自動再生（射撃結果を自動で閉じる）
+    </label>
     <button onclick="startGame()">ゲーム開始</button>
   </div>
 </div>
@@ -315,10 +319,23 @@ let autoPlay = false; // AI射撃自動再生
 
 function toggleAutoPlay() {
   autoPlay = !autoPlay;
+  updateAutoPlayBtn();
+  // 現在のiframeにもリアルタイム通知
+  const frame = document.getElementById('phaseFrame');
+  if (frame && frame.contentWindow) {
+    frame.contentWindow.postMessage({ type:'SET_AUTOPLAY', autoPlay: autoPlay }, '*');
+  }
+}
+function updateAutoPlayBtn() {
   const btn = document.getElementById('autoPlayBtn');
-  btn.textContent = autoPlay ? '自動:ON' : '自動:OFF';
-  btn.style.background = autoPlay ? '#c8a020' : '#333';
-  btn.style.color = autoPlay ? '#000' : '#888';
+  if (autoPlay) {
+    btn.textContent = '自動:ON';
+    btn.style.background = '#c8a020';
+    btn.style.color = '#000';
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
 }
 
 // ===== ヘクス定数（JPG画像に合わせてキャリブレーション） =====
@@ -1458,6 +1475,8 @@ document.addEventListener('keydown', (e) => {
 function startGame() {
   const scId = document.getElementById('selScenario').value;
   const sideChoice = document.getElementById('selSide').value;
+  autoPlay = document.getElementById('chkAutoPlay').checked;
+  updateAutoPlayBtn();
   const sc = SCENARIOS.find(s => s.id === scId);
   if (!sc) return;
 
