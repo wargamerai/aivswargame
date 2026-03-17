@@ -129,8 +129,13 @@ function aiDoMovement(u, db, callback) {
     return;
   }
 
-  // ソ連: デフォルトの追撃AI
-  _baseAiDoMovement(u, db, callback);
+  // ソ連: 汎用移動AI使用（sc2専用のaiAmbushChaseMoveを回避）
+  var origId = state.scenarioId;
+  state.scenarioId = '_sc2_bypass';
+  _baseAiDoMovement(u, db, function() {
+    state.scenarioId = origId;
+    callback();
+  });
 }
 
 console.log('[AI] ai_sc2.js loaded — シナリオ2専用AI（フェルディナンド配置最適化）');
