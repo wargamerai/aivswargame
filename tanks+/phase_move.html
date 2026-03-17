@@ -590,28 +590,14 @@ function getTerrainCost(col, row, fromCol, fromRow, unitName) {
 
 // ===== スタックチェック =====
 function checkStacking(col, row, movingUnit) {
-  const db = UNIT_DB[movingUnit.name];
-
-  // 敵味方同ヘクス進入可能（味方スタック制限のみ適用）
-  const friendly = state.units.filter(u =>
-    u.side === movingUnit.side && u.col === col && u.row === row &&
+  // 味方2個まで、敵味方合計4個まで
+  const alive = state.units.filter(u =>
+    u.col === col && u.row === row &&
     u.status !== 'destroyed' && u !== movingUnit
   );
-
-  if (db.type === 'tank' || db.type === 'apc') {
-    const tanks = friendly.filter(u => {
-      const d = UNIT_DB[u.name];
-      return d && (d.type === 'tank' || d.type === 'apc');
-    });
-    if (tanks.length >= 2) return false;
-  }
-  if (db.type === 'infantry') {
-    const infs = friendly.filter(u => {
-      const d = UNIT_DB[u.name];
-      return d && d.type === 'infantry';
-    });
-    if (infs.length >= 4) return false;
-  }
+  const friendly = alive.filter(u => u.side === movingUnit.side);
+  if (friendly.length >= 2) return false;
+  if (alive.length >= 4) return false;
   return true;
 }
 
