@@ -1426,7 +1426,8 @@ function aiPlanPlacement(u, db, reservedHexes) {
   // エッジヘクスの候補を収集
   const candidates = [];
   if (edge === 'right') {
-    for (let r = 1; r <= maxRow; r++) candidates.push({ col:maxCol, row:r });
+    const rStart = (state.scenarioId === 'sc5') ? Math.ceil(maxRow / 2) : 1;
+    for (let r = rStart; r <= maxRow; r++) candidates.push({ col:maxCol, row:r });
   } else if (edge === 'left') {
     for (let r = 1; r <= maxRow; r++) candidates.push({ col:1, row:r });
   } else if (edge === 'top') {
@@ -1540,7 +1541,8 @@ function aiPlaceUnit(u, db, callback) {
   // エッジヘクスの候補を収集
   const candidates = [];
   if (edge === 'right') {
-    for (let r = 1; r <= maxRow; r++) candidates.push({ col:maxCol, row:r });
+    const rStart = (state.scenarioId === 'sc5') ? Math.ceil(maxRow / 2) : 1;
+    for (let r = rStart; r <= maxRow; r++) candidates.push({ col:maxCol, row:r });
   } else if (edge === 'left') {
     for (let r = 1; r <= maxRow; r++) candidates.push({ col:1, row:r });
   } else if (edge === 'top') {
