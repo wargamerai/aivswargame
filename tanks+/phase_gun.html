@@ -982,8 +982,163 @@ function countBocage(c1, r1, c2, r2) {
   return count;
 }
 
+// ===== 移動コスト関数（phase_moveと同じ） =====
+function getRotateCost(currentDir, targetDir) {
+  const diff = ((targetDir - currentDir) % 6 + 6) % 6;
+  return Math.min(diff, 6 - diff);
+}
+function getTerrainCost(col, row, fromCol, fromRow, unitName) {
+  if (unitName) {
+    const udb = UNIT_DB[unitName];
+    if (udb && udb.type === 'infantry') return 1;
+  }
+  const key = `${col},${row}`;
+  const t = state.terrain[key];
+  if (t === 'slope' && fromCol !== undefined) {
+    const fromT = state.terrain[`${fromCol},${fromRow}`];
+    if (fromT === 'slope') return 1;
+  }
+  return TERRAIN_COST[t] || 1;
+}
+function getNeighbors(col, row) {
+  const result = [];
+  for (let d = 0; d < 6; d++) result.push(hexNeighbor(col, row, d));
+  return result;
+}
+function checkStacking(col, row, movingUnit) {
+  const alive = state.units.filter(u =>
+    u.col === col && u.row === row &&
+    u.status !== 'destroyed' && u !== movingUnit
+  );
+  const friendly = alive.filter(u => u.side === movingUnit.side);
+  if (friendly.length >= 2) return false;
+  if (alive.length >= 4) return false;
+  return true;
+}
+// BFS到達可能ヘクス（Dijkstra）
+function aiGetReachableHexes(u, db) {
+  const startKey = `${u.col},${u.row}`;
+  const visited = {};
+  visited[startKey] = { col: u.col, row: u.row, cost: 0, prevKey: null, dir: u.dir };
+  const queue = [{ key: startKey, cost: 0 }];
+  const mp = db.move || 3;
+  while (queue.length > 0) {
+    queue.sort((a, b) => a.cost - b.cost);
+    const cur = queue.shift();
+    const cv = visited[cur.key];
+    if (cur.cost > cv.cost) continue;
+    const neighbors = getNeighbors(cv.col, cv.row);
+    for (let d = 0; d < 6; d++) {
+      const n = neighbors[d];
+      if (!n) continue;
+      const rotateCost = (db.type !== 'infantry') ? getRotateCost(cv.dir, d) : 0;
+      const terrainCost = getTerrainCost(n.col, n.row, cv.col, cv.row, u.name);
+      let backwardExtra = 0;
+      if (db.type !== 'infantry') {
+        const diff = ((d - cv.dir) % 6 + 6) % 6;
+        if (Math.min(diff, 6 - diff) >= 2) backwardExtra = 1;
+      }
+      const totalCost = cv.cost + rotateCost + terrainCost + backwardExtra;
+      if (totalCost > mp) continue;
+      if (!checkStacking(n.col, n.row, u)) continue;
+      const nKey = `${n.col},${n.row}`;
+      if (visited[nKey] && visited[nKey].cost <= totalCost) continue;
+      visited[nKey] = { col: n.col, row: n.row, cost: totalCost, prevKey: cur.key, dir: d };
+      queue.push({ key: nKey, cost: totalCost });
+    }
+  }
+  return visited;
+}
+
+// ===== 手番開始: 実移動可能ヘクス総当たりで準備射撃判定 =====
+function aiCalcPrepFireFlags() {
+  const enemies = state.units.filter(e =>
+    e.side !== activeSide && e.status !== 'destroyed' && e.col >= 1
+  );
+  if (enemies.length === 0) return;
+
+  for (const fi of firers) {
+    const firer = state.units[fi];
+    const fDb = UNIT_DB[firer.name];
+    if (!fDb || firer.status === 'destroyed') continue;
+
+    const curFt = FIRE_TABLE[firer.name];
+
+    // 現在地から各敵への最良effHit（LOS＋地形修正込み）
+    let bestCurEffHit = 0;
+    for (const en of enemies) {
+      if (!hasLOS(firer.col, firer.row, en.col, en.row)) continue;
+      const dist = hexDist(firer.col, firer.row, en.col, en.row);
+      const dk = distKey(dist);
+      if (!curFt || dk < 0 || !curFt[dk]) continue;
+      const enDb = UNIT_DB[en.name];
+      const eTerrain = state.terrain ? (state.terrain[`${en.col},${en.row}`] || 'plain') : 'plain';
+      let eMod = 0;
+      if (eTerrain === 'forest') eMod += HIT_MODIFIERS.forest;
+      if (eTerrain === 'building') eMod += HIT_MODIFIERS.building;
+      eMod += countBocage(firer.col, firer.row, en.col, en.row);
+      if (enDb && enDb.small) eMod += HIT_MODIFIERS.smallTarget;
+      const effHit = curFt[dk][1] - eMod;
+      if (effHit > bestCurEffHit) bestCurEffHit = effHit;
+    }
+
+    // BFSで実際の到達可能ヘクスを取得
+    const reachable = aiGetReachableHexes(firer, fDb);
+
+    // 到達可能ヘクスを総当たり: 命中率が上がり、かつ敵確率が上がらないヘクスがあるか
+    let movementBetter = false;
+    for (const key in reachable) {
+      const rh = reachable[key];
+      if (rh.col === firer.col && rh.row === firer.row) continue;
+
+      for (const en of enemies) {
+        const enDb = UNIT_DB[en.name];
+        if (!hasLOS(rh.col, rh.row, en.col, en.row)) continue;
+        const td = hexDist(rh.col, rh.row, en.col, en.row);
+        const dk = distKey(td);
+        if (!curFt || dk < 0 || !curFt[dk]) continue;
+
+        // 移動先での自分のeffHit
+        const eTerrain = state.terrain ? (state.terrain[`${en.col},${en.row}`] || 'plain') : 'plain';
+        let eMod = 0;
+        if (eTerrain === 'forest') eMod += HIT_MODIFIERS.forest;
+        if (eTerrain === 'building') eMod += HIT_MODIFIERS.building;
+        eMod += countBocage(rh.col, rh.row, en.col, en.row);
+        if (enDb && enDb.small) eMod += HIT_MODIFIERS.smallTarget;
+        const newEffHit = curFt[dk][1] - eMod;
+        if (newEffHit <= bestCurEffHit) continue;
+
+        // 移動先での敵のhitNum
+        let enHitThere = 0;
+        const myTerrain = state.terrain ? (state.terrain[`${rh.col},${rh.row}`] || 'plain') : 'plain';
+        let myMod = 0;
+        if (myTerrain === 'forest' || myTerrain === 'building') myMod += 2;
+        if (fDb.small) myMod += 1;
+        myMod += countBocage(en.col, en.row, rh.col, rh.row);
+        if (enDb && enDb.type === 'infantry' && fDb.type === 'tank') {
+          const atTable = INF_VS_TANK[enDb.nation || ''];
+          if (atTable && atTable[td] !== undefined) enHitThere = atTable[td] - myMod;
+        } else if (enDb && enDb.type !== 'infantry' && enDb.type !== 'atgun') {
+          const eFt = FIRE_TABLE[en.name];
+          const eDk = distKey(td);
+          if (eFt && eDk >= 0 && eFt[eDk]) enHitThere = eFt[eDk][1] - myMod;
+        }
+        if (enHitThere >= 5) continue;
+
+        movementBetter = true;
+        break;
+      }
+      if (movementBetter) break;
+    }
+
+    // フラグ設定: 移動で改善できないなら準備射撃推奨
+    firer._prepFireRecommended = !movementBetter;
+  }
+}
+
 // ===== AI射撃ロジック =====
 function aiFirePhase() {
+  aiCalcPrepFireFlags();
   // 射撃可能ユニットを順に処理
   const firerQueue = firers.filter(i => !state.units[i].fired);
   let step = 0;
@@ -1078,22 +1233,11 @@ function aiFindBestTarget(firerIdx) {
     // LOS チェック（全ユニット共通）
     if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
 
-    // 準備射撃: 撃破すれば移動範囲内の安全性が上がるなら撃つ
+    // 準備射撃: 手番開始の総当たり結果を参照
     const remainTurns = (state.maxTurns || 99) - (state.turn || 1);
     if (!isAdvanceFire && remainTurns > 2 && target.status !== 'immobilized') {
-      // 移動範囲内(dist-move ~ dist)で敵が最も脅威となる距離での撃破率を計算
-      const moveRange = fDb ? fDb.move : 3;
-      let maxEnThreat = 0;
-      for (let td = Math.max(1, dist - moveRange); td <= Math.min(12, dist + 1); td++) {
-        const t = calcKillChance(target.name, firer.name, td, true).kill;
-        if (t > maxEnThreat) maxEnThreat = t;
-      }
-      // 期待安全改善 = 撃破率 × 移動範囲内での敵脅威
-      // 弾薬リスク(1/36)を上回らなければ撃たない
-      const frontHit0 = isHittingFrontArmor(firer, target);
-      const myKillChance = calcKillChance(firer.name, target.name, dist, frontHit0).kill;
-      const safetyGain = myKillChance * maxEnThreat;
-      if (safetyGain < 1 / 36) continue;
+      // 移動で改善できる → 射撃しない（移動優先）
+      if (!firer._prepFireRecommended) continue;
     }
 
     // 前進射撃: 戦車/砲は修正後30%未満なら撃たない（弾切れリスク）。歩兵は弾切れなし。
