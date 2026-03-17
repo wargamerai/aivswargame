@@ -98,6 +98,7 @@ let selectedFirer = -1, selectedTarget = -1;
 let firers = [], targets = [];
 let contFireUnit = -1, contFireTarget = -1; // 連続射撃の強制目標
 let isAI = false;
+let autoPlay = false;
 let shootMode = 'he'; // 'he'=榴弾, 'mg'=機銃
 
 function roll() { return Math.floor(Math.random() * 6) + 1; }
@@ -1209,19 +1210,23 @@ function aiFindBestTarget(firerIdx) {
 }
 
 function aiWaitForResult(callback) {
-  // ユーザーが確認ボタンを押すまで待つ
   const check = setInterval(() => {
     const overlay = document.getElementById('resultOverlay');
     if (overlay && overlay.style.display === 'flex') {
       clearInterval(check);
-      // 確認ボタンにコールバックを設定
-      const btn = overlay.querySelector('button');
-      const origClick = btn.onclick;
-      btn.onclick = function() {
-        btn.onclick = origClick; // 元に戻す
-        closeResult();
-        callback();
-      };
+      if (autoPlay) {
+        // 自動モード: 少し待ってから自動で閉じる
+        setTimeout(() => { closeResult(); callback(); }, 1200);
+      } else {
+        // 手動モード: ユーザーが確認ボタンを押すまで待つ
+        const btn = overlay.querySelector('button');
+        const origClick = btn.onclick;
+        btn.onclick = function() {
+          btn.onclick = origClick;
+          closeResult();
+          callback();
+        };
+      }
     }
   }, 100);
 }
@@ -1244,6 +1249,7 @@ window.addEventListener('message', (e) => {
   if (!e.data || !e.data.type) return;
   if (e.data.type === 'INIT_STATE') {
     isAI = e.data.isAI || false;
+    autoPlay = e.data.autoPlay || false;
     init(e.data.state);
     return;
   }
