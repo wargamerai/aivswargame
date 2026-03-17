@@ -1725,19 +1725,41 @@ function aiIsSafeHex(col, row, targetDb, enemies) {
 
 function aiCanEngageAny(u) {
   // 現在位置からいずれかの敵に射撃可能か
+  const db = UNIT_DB[u.name];
+  if (!db) return false;
   const ft = FIRE_TABLE[u.name];
-  if (!ft) return false; // 歩兵等は別扱い
+
   for (const e of state.units) {
     if (e.side === u.side || e.status === 'destroyed' || e.col < 1) continue;
+    const eDb = UNIT_DB[e.name];
+    if (!eDb) continue;
     const d = hexDist(u.col, u.row, e.col, e.row);
-    if (distKey(d) < 0) continue; // 射程外
     if (!hasLOS(u.col, u.row, e.col, e.row)) continue;
-    // 固定砲塔チェック
-    const db = UNIT_DB[u.name];
-    if (db && db.turret === 'fixed') {
-      if (!isInFixedArc(u, e)) continue;
+
+    // 戦車: FIRE_TABLE射程内チェック
+    if (ft) {
+      if (distKey(d) >= 0) {
+        if (db.turret === 'fixed') {
+          if (isInFixedArc(u, e)) return true;
+        } else {
+          return true;
+        }
+      }
     }
-    return true;
+    // 歩兵AT: 敵が戦車の場合
+    if (db.type === 'infantry' && eDb.type === 'tank') {
+      const atTable = INF_VS_TANK[db.nation || ''];
+      if (atTable && atTable[d] !== undefined) return true;
+    }
+    // 歩兵対歩兵 / 戦車MG
+    if (db.type === 'infantry' && (eDb.type === 'infantry' || eDb.type === 'atgun')) {
+      const aiTable = ANTI_INF_TABLE[db.nation + '_inf'];
+      if (aiTable && aiTable[d] !== undefined) return true;
+    }
+    if (db.type === 'tank' && (eDb.type === 'infantry' || eDb.type === 'atgun')) {
+      const mgTable = ANTI_INF_TABLE['tankMG'];
+      if (mgTable && mgTable[d] !== undefined) return true;
+    }
   }
   return false;
 }
@@ -1919,13 +1941,12 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   // === スコア: 撃破率差をメインに ===
   const killAdvantage = (totalMyKill - totalEnKill) * 100;
 
-  // 射程外の場合: コラムベースで接近（同コラム内は移動不要）
+  // 距離接近インセンティブ: コラムベース（常に適用 — 射撃可能でも近距離を好む）
   let approachScore = 0;
-  if (totalMyKill <= 0 && nearestDist > 0) {
-    // 最寄り敵へのコラムが小さいほど良い（射程に近い）
+  if (nearestDist > 0) {
     const col_idx = distKey(nearestDist);
-    // 射程外（col_idx < 0）なら最大ペナルティ、射程内ならコラム値でペナルティ
-    approachScore = col_idx < 0 ? -20 : -col_idx * 3;
+    // 射程外なら最大ペナルティ、射程内ならコラム値でペナルティ
+    approachScore = col_idx < 0 ? -30 : -col_idx * 5;
   }
 
   // 固定砲塔の射界外ボーナス
@@ -2072,8 +2093,8 @@ function aiDoMovement(u, db, callback) {
     const v = visited[key];
     const dToEnemy = hexDist(v.col, v.row, enemy.col, enemy.row);
 
-    // 集団制限: 最後尾の味方より2ヘクス以上先行しない
-    if (rearAllyDist > 0 && dToEnemy < rearAllyDist - 2) continue;
+    // 集団制限: 最後尾の味方より4ヘクス以上先行しない
+    if (rearAllyDist > 0 && dToEnemy < rearAllyDist - 4) continue;
 
     const score = aiEvalPosition(u, db, v.col, v.row, enemies, 0);
     if (score > bestHexScore) { bestHexScore = score; bestHexKey = key; }
