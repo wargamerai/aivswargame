@@ -1645,8 +1645,8 @@ function loadPhase() {
   frame.onload = () => {
     // file://ではlocalStorageが共有されないため、postMessageでstateを直接渡す
     if (frame.contentWindow) {
-      const aiFlag = !isPlayerPhase();
-      dbg(`→iframe INIT_STATE (${state.units.length}units) isAI=${aiFlag}`);
+      const aiFlag = !isPlayerPhase() || autoPlay;
+      dbg(`→iframe INIT_STATE (${state.units.length}units) isAI=${aiFlag} autoPlay=${autoPlay}`);
       frame.contentWindow.postMessage({ type:'INIT_STATE', state: JSON.parse(JSON.stringify(state)), isAI: aiFlag, autoPlay: autoPlay }, '*');
     }
   };
@@ -1984,6 +1984,12 @@ window.addEventListener('message', (e) => {
       if (debugVisible) dbgRefresh();
       break;
     }
+    case 'BUILDING_CONTROL':
+      if (e.data.side) {
+        state.buildingControl = e.data.side;
+        dbg(`建物支配: ${e.data.side}`);
+      }
+      break;
     case 'HIGHLIGHT':
       dbg(`HIGHLIGHT: unitIdx=${e.data.unitIdx}`);
       state.selectedUnit = e.data.unitIdx || null;
