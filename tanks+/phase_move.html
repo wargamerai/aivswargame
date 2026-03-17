@@ -854,7 +854,7 @@ function executeDfShot() {
       html += `</div>`;
       document.getElementById('dfBody').innerHTML = html;
       pushState();
-      if (!isAI) setTimeout(() => nextDfStep(), 600);
+      if (!isAI || autoPlay) setTimeout(() => nextDfStep(), autoPlay ? 800 : 600);
       return;
     } else {
       // 対歩兵攻撃
@@ -887,7 +887,7 @@ function executeDfShot() {
       html += `</div>`;
       document.getElementById('dfBody').innerHTML = html;
       pushState();
-      if (!isAI) setTimeout(() => nextDfStep(), 600);
+      if (!isAI || autoPlay) setTimeout(() => nextDfStep(), autoPlay ? 800 : 600);
       return;
     }
   }
