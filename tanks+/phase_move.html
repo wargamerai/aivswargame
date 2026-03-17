@@ -2027,7 +2027,7 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   if (bestAdvantage > -Infinity) {
     score += bestAdvantage * 15;
   }
-  console.log(`[AI]     eval(${col},${row}) d=${d} myHit=${myHitNum} enHit=${enHitHere} penAdv=${bestAdvantage} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
+  // ログはreturn前に移動（町ボーナス込みの最終スコアを出力）
 
   // 固定砲塔の射界外ボーナス
   if (peDb && peDb.turret === 'fixed' && !isInFixedArcMove(primaryEnemy, col, row)) {
@@ -2056,6 +2056,7 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     }
   }
 
+  console.log(`[AI]     eval(${col},${row}) d=${d} penAdv=${bestAdvantage} score=${score} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
   return score;
 }
 
