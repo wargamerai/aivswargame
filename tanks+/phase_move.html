@@ -1982,8 +1982,8 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   // スコア計算: penDiff差（破壊表の有利不利）ベース
   let score = 0;
 
-  if (myHitNum >= 7 && enHitHere > 5) {
-    // こちら7以上確保、敵6以上 → このヘクスは侵入禁止
+  if (myHitNum >= 7 && enHitHere > 5 && peDb && (peDb.type === 'infantry' || peDb.type === 'atgun')) {
+    // 敵歩兵/対戦車砲: こちら7以上確保、敵6以上 → 侵入禁止
     return null;
   }
 
