@@ -118,22 +118,30 @@ function _sc2_assignDir(u, reservedHexes, maxCol) {
 
 // ============================================================
 //  移動判断メイン (phase_move.html用)
-//  ドイツ: 侵入後その場で停止（長距離射撃に専念）
+//  ドイツ: 初回のみ向き割り当て、以降は突破AI
 // ============================================================
 function aiDoMovement(u, db, callback) {
   if (u.side === 'ge') {
-    // 保存した向きを適用（handlePlacementでdir=0が上書きされる対策）
-    if (u._sc2dir !== undefined) {
-      u.dir = u._sc2dir;
-      delete u._sc2dir;
+    // フェーズ間で_sc2dirが消失するため、GE生存ユニットのインデックスで向きを割り当て
+    // 1両目=NE(dir=0), 2両目=NW(dir=2), 3両目=N(dir=1)
+    if (u.justEntered) {
+      var dirs = [0, 2, 1];
+      var geAlive = state.units.filter(function(e) {
+        return e.side === 'ge' && e.status !== 'destroyed';
+      });
+      var myIdx = 0;
+      for (var i = 0; i < geAlive.length; i++) {
+        if (geAlive[i] === u) { myIdx = i; break; }
+      }
+      u.dir = dirs[myIdx % dirs.length];
+      console.log('[AI-sc2] ' + u.name + ' 向き割当 dir=' + u.dir + ' (idx=' + myIdx + ')');
     }
-    // フェルディナンド: その場で停止
-    console.log('[AI-sc2] ' + u.name + ' 停止 (' + u.col + ',' + u.row + ') dir=' + u.dir);
-    callback();
+    // 突破AIで前進
+    _baseAiDoMovement(u, db, callback);
     return;
   }
 
-  // ソ連: デフォルトの追撃AI
+  // ソ連: デフォルトAI
   _baseAiDoMovement(u, db, callback);
 }
 
