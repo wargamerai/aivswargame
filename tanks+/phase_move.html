@@ -750,9 +750,9 @@ function showDfStep1() {
     html += `</div></div>`;
     document.getElementById('dfBody').innerHTML = html;
     document.getElementById('dfOverlay').style.display = 'flex';
-    // AI自動判断
-    const dfShooterIsAI = !isAI;
-    if (dfShooterIsAI) setTimeout(() => executeDfShot(), 400);
+    // AI自動判断（autoPlayなら常に自動）
+    const dfShooterIsAI = !isAI || autoPlay;
+    if (dfShooterIsAI) setTimeout(() => executeDfShot(), autoPlay ? 300 : 400);
     return;
   }
 
@@ -789,8 +789,8 @@ function showDfStep1() {
   document.getElementById('dfBody').innerHTML = html;
   document.getElementById('dfOverlay').style.display = 'flex';
 
-  // 防御射撃の自動判断: 射撃側がAI（=移動側がプレイヤー）の場合のみ自動
-  const dfShooterIsAI = !isAI;
+  // 防御射撃の自動判断: 射撃側がAI、またはautoPlayなら自動
+  const dfShooterIsAI = !isAI || autoPlay;
   if (dfShooterIsAI) setTimeout(() => {
     // 防御射撃をスキップすべきか判断
     const dist = enemy.dist;
