@@ -657,11 +657,15 @@ function draw() {
   if (state && state.units) {
     // 同一ヘクスのユニットをグループ化してオフセット計算
     const hexGroups = {};
+    const hexHasWreck = {}; // 同ヘクスの残骸は1つだけ
     state.units.forEach((u, i) => {
-      if (u.status === 'destroyed' && !u.showWreck) return;
       if (u.col < 1 || u.row < 1) return;
       if (showFog && !isEnemyVisible(u)) return; // 視認外は非表示
       const key = `${u.col},${u.row}`;
+      if (u.status === 'destroyed') {
+        if (hexHasWreck[key]) return; // 同ヘクス2つ目以降の残骸はスキップ
+        hexHasWreck[key] = true;
+      }
       if (!hexGroups[key]) hexGroups[key] = [];
       hexGroups[key].push(i);
     });
@@ -1120,6 +1124,46 @@ function drawUnit(u, offsetX, offsetY, scale) {
 
   ctx.save();
   ctx.translate(h.x + offsetX, h.y + offsetY);
+
+  // 撃破ユニット → 残骸シルエット
+  if (u.status === 'destroyed') {
+    const wSz = sz * 0.9;
+    // 黒煙の影
+    ctx.fillStyle = 'rgba(30,30,30,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(0, wSz*0.1, wSz*1.1, wSz*0.5, 0, 0, Math.PI*2);
+    ctx.fill();
+    // 残骸本体（暗い色）
+    ctx.fillStyle = '#2a2a2a';
+    ctx.beginPath();
+    // 車体
+    ctx.moveTo(-wSz*0.8, wSz*0.3);
+    ctx.lineTo(-wSz*0.6, -wSz*0.1);
+    ctx.lineTo(-wSz*0.2, -wSz*0.3);
+    ctx.lineTo(wSz*0.3, -wSz*0.35);
+    ctx.lineTo(wSz*0.7, -wSz*0.1);
+    ctx.lineTo(wSz*0.8, wSz*0.3);
+    ctx.closePath();
+    ctx.fill();
+    // 砲塔残骸（ずれた角度）
+    ctx.fillStyle = '#222';
+    ctx.save();
+    ctx.rotate(0.3);
+    ctx.fillRect(-wSz*0.15, -wSz*0.5, wSz*0.3, wSz*0.35);
+    // 砲身（折れた感じ）
+    ctx.fillRect(wSz*0.1, -wSz*0.55, wSz*0.5, wSz*0.1);
+    ctx.restore();
+    // 煙
+    ctx.fillStyle = 'rgba(80,80,80,0.4)';
+    ctx.beginPath();
+    ctx.arc(-wSz*0.1, -wSz*0.5, wSz*0.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(wSz*0.15, -wSz*0.7, wSz*0.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
 
   // 背景形状 or 画像
   if (u.hidden) {
