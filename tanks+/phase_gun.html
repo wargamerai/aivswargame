@@ -1078,33 +1078,22 @@ function aiFindBestTarget(firerIdx) {
     // LOS チェック（全ユニット共通）
     if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
 
-    // 準備射撃の共通判定（全ユニット種別に適用）
-    const remainTurns_common = (state.maxTurns || 99) - (state.turn || 1);
-    if (!isAdvanceFire && remainTurns_common > 2 && target.status !== 'immobilized') {
-      // 撃破率を概算（対戦車は正面前提、対歩兵はantiInf基準）
-      let estKill = 0;
-      if (tDb.type === 'infantry' || tDb.type === 'atgun') {
-        const di = distKey(dist);
-        if (di >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di]) {
-          const hitNum = FIRE_TABLE[firer.name][di][1];
-          const hitProb = hitNum >= 12 ? 1 : hitNum <= 1 ? 0 : (DICE_2D6_CUM[hitNum] || 0);
-          const kp = fDb.antiInf >= 12 ? 1 : fDb.antiInf <= 1 ? 0 : (DICE_2D6_CUM[fDb.antiInf] || 0);
-          estKill = hitProb * kp;
-        }
-      } else {
-        const frontHit0 = isHittingFrontArmor(firer, target);
-        estKill = calcKillChance(firer.name, target.name, dist, frontHit0).kill;
+    // 準備射撃: 撃破すれば移動範囲内の安全性が上がるなら撃つ
+    const remainTurns = (state.maxTurns || 99) - (state.turn || 1);
+    if (!isAdvanceFire && remainTurns > 2 && target.status !== 'immobilized') {
+      // 移動範囲内(dist-move ~ dist)で敵が最も脅威となる距離での撃破率を計算
+      const moveRange = fDb ? fDb.move : 3;
+      let maxEnThreat = 0;
+      for (let td = Math.max(1, dist - moveRange); td <= Math.min(12, dist + 1); td++) {
+        const t = calcKillChance(target.name, firer.name, td, true).kill;
+        if (t > maxEnThreat) maxEnThreat = t;
       }
-      // 50%未満 → 撃たない
-      if (estKill < 0.50) continue;
-      // 味方が敵を下回る → 移動優先
-      const friendlyCount = state.units.filter(a =>
-        a.side === firer.side && a.status !== 'destroyed' && a.col >= 1
-      ).length;
-      const enemyCount = state.units.filter(e =>
-        e.side !== firer.side && e.status !== 'destroyed' && e.col >= 1
-      ).length;
-      if (friendlyCount < enemyCount) continue;
+      // 期待安全改善 = 撃破率 × 移動範囲内での敵脅威
+      // 弾薬リスク(1/36)を上回らなければ撃たない
+      const frontHit0 = isHittingFrontArmor(firer, target);
+      const myKillChance = calcKillChance(firer.name, target.name, dist, frontHit0).kill;
+      const safetyGain = myKillChance * maxEnThreat;
+      if (safetyGain < 1 / 36) continue;
     }
 
     // 前進射撃: 戦車/砲は修正後30%未満なら撃たない（弾切れリスク）。歩兵は弾切れなし。
