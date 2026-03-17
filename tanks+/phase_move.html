@@ -1808,51 +1808,23 @@ function aiGetPath(visited, targetKey) {
   return path;
 }
 
-// === ヘクス評価: コラム + 撃破率直接比較（地形修正込み） ===
-function aiEvalPosition(u, db, col, row, enemies, bestDist) {
-  // 最寄りの敵を基準
-  let nearestDist = Infinity, primaryEnemy = null;
-  for (const e of enemies) {
-    const d = hexDist(col, row, e.col, e.row);
-    if (d < nearestDist) { nearestDist = d; primaryEnemy = e; }
-  }
-  if (!primaryEnemy) return -1000;
-
-  const d = nearestDist;
-
-  // 第1軸: コラム — 近いコラムほど高得点
-  const myColumn = distKey(d);
-  const columnScore = (myColumn >= 0) ? (10 - myColumn) * 100 : -100;
-
-  // 第2軸: 同コラム内距離 — 近いほど次ターンで上のコラムに届く
-  const distScore = -d;
-
-  // 自分の地形修正（敵から撃たれる時の防御）
-  const myTerrain = state.terrain ? state.terrain[`${col},${row}`] : null;
-  let myTerrainMod = 0;
-  if (myTerrain === 'forest' || myTerrain === 'building') myTerrainMod += 2;
-  if (db.small) myTerrainMod += 1;
-
-  // 敵の地形修正（自分が撃つ時の敵の防御）
-  const eTerrain = state.terrain ? state.terrain[`${primaryEnemy.col},${primaryEnemy.row}`] : null;
-  let eTerrainMod = 0;
-  if (eTerrain === 'forest' || eTerrain === 'building') eTerrainMod += 2;
-  const peDb = UNIT_DB[primaryEnemy.name];
-  if (peDb && peDb.small) eTerrainMod += 1;
-  eTerrainMod += countBocage(col, row, primaryEnemy.col, primaryEnemy.row);
-
-  // 第3軸: 自分の撃破率（最寄り敵に対して、敵の地形修正込み）
-  let myKill = calcKillChance(u.name, primaryEnemy.name, d, true, eTerrainMod).kill;
+// === 自分の撃破率を取得（地形修正・歩兵AT込み） ===
+function aiGetMyKill(u, db, target, dist, eTerrainMod) {
+  const peDb = UNIT_DB[target.name];
+  let myKill = calcKillChance(u.name, target.name, dist, true, eTerrainMod).kill;
   if (db.type === 'infantry' && peDb && peDb.type === 'tank') {
     const atTable = INF_VS_TANK[db.nation || ''];
-    if (atTable && atTable[d] !== undefined) {
-      const hitNum = atTable[d];
+    if (atTable && atTable[dist] !== undefined) {
+      const hitNum = atTable[dist];
       const atKill = hitNum >= 12 ? 1 : hitNum <= 1 ? 0 : (DICE_2D6_CUM[hitNum] || 0);
       if (atKill > myKill) myKill = atKill;
     }
   }
+  return myKill;
+}
 
-  // 第4軸: 敵の撃破率（全敵の最大脅威、自分の地形修正込み）
+// === 敵の最大撃破率を取得（地形修正・歩兵AT込み） ===
+function aiGetMaxEnKill(u, db, col, row, enemies, myTerrainMod) {
   let maxEnKill = 0;
   for (const enemy of enemies) {
     const eDb = UNIT_DB[enemy.name];
@@ -1878,27 +1850,93 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     }
     if (enKill > maxEnKill) maxEnKill = enKill;
   }
+  return maxEnKill;
+}
 
-  // 撃破率差 × 100 → -100〜+100点
-  const killAdvantage = (myKill - maxEnKill) * 100;
-
-  // 固定砲塔の射界外ボーナス
-  let arcBonus = 0;
-  if (peDb && peDb.turret === 'fixed' && !isInFixedArcMove(primaryEnemy, col, row)) {
-    arcBonus = 6;
+// === ヘクス評価: コラム変化による増加率比較 ===
+function aiEvalPosition(u, db, col, row, enemies, bestDist) {
+  // 最寄りの敵を基準
+  let nearestDist = Infinity, primaryEnemy = null;
+  for (const e of enemies) {
+    const d = hexDist(col, row, e.col, e.row);
+    if (d < nearestDist) { nearestDist = d; primaryEnemy = e; }
   }
+  if (!primaryEnemy) return -1000;
 
-  // 町の支配ボーナス（sc5）— 町にいるなら出ない
-  let buildingBonus = 0;
-  if (state.scenarioId === 'sc5' && myTerrain === 'building') {
-    buildingBonus = 1500;
-    const aliveEnemies = enemies.filter(e => e.status !== 'destroyed');
-    if (aliveEnemies.length === 1) {
-      if (myKill >= 0.5) buildingBonus = 0;
+  const d = nearestDist;
+  const peDb = UNIT_DB[primaryEnemy.name];
+
+  // 地形修正
+  const myTerrain = state.terrain ? state.terrain[`${col},${row}`] : null;
+  let myTerrainMod = 0;
+  if (myTerrain === 'forest' || myTerrain === 'building') myTerrainMod += 2;
+  if (db.small) myTerrainMod += 1;
+
+  const eTerrain = state.terrain ? state.terrain[`${primaryEnemy.col},${primaryEnemy.row}`] : null;
+  let eTerrainMod = 0;
+  if (eTerrain === 'forest' || eTerrain === 'building') eTerrainMod += 2;
+  if (peDb && peDb.small) eTerrainMod += 1;
+  eTerrainMod += countBocage(col, row, primaryEnemy.col, primaryEnemy.row);
+
+  // 自分と敵の撃破率
+  const myKill = aiGetMyKill(u, db, primaryEnemy, d, eTerrainMod);
+  const maxEnKill = aiGetMaxEnKill(u, db, col, row, enemies, myTerrainMod);
+
+  // 危険ヘクス判定: 敵の撃破率 > 自分の撃破率 → 除外
+  if (maxEnKill > myKill) return -9999;
+
+  // コラム変化による増加率比較
+  // 1ヘクス近づいた時のコラム（hitNum）変化を比較
+  const myCol = distKey(d);
+  const myColFar = distKey(d + 1);
+  const myKillFar = (d + 1 <= 30) ? aiGetMyKill(u, db, primaryEnemy, d + 1, eTerrainMod) : 0;
+  const myGain = myKill - myKillFar;  // 近づいた利得
+
+  // 敵の増加率（最寄り敵に対して）
+  const enKillHere = maxEnKill;
+  // 1ヘクス遠い位置での敵の撃破率を概算（最寄り敵との距離+1）
+  let enKillFar = 0;
+  if (peDb && d + 1 <= 30) {
+    const tMod = myTerrainMod + countBocage(primaryEnemy.col, primaryEnemy.row, col, row);
+    if (peDb.type === 'infantry' && db.type === 'tank') {
+      const atTable = INF_VS_TANK[peDb.nation || ''];
+      if (atTable && atTable[d + 1] !== undefined) {
+        const h = atTable[d + 1];
+        enKillFar = h >= 12 ? 1 : h <= 1 ? 0 : (DICE_2D6_CUM[h] || 0);
+      }
+    } else {
+      enKillFar = calcKillChance(primaryEnemy.name, u.name, d + 1, true, tMod).kill;
     }
   }
+  const enGain = enKillHere - enKillFar;  // 近づいた損失
 
-  return columnScore + distScore + killAdvantage + arcBonus + buildingBonus;
+  // スコア計算
+  let score = 0;
+
+  if (myGain > enGain) {
+    // 自分の増加 > 敵の増加 → 前進有利、killAdvantageで評価
+    score = (myKill - maxEnKill) * 1000;
+  } else if (myGain === enGain || (myCol === myColFar)) {
+    // 増加率同じ or 同コラム内 → columnScoreで接近を促す
+    score = (myKill - maxEnKill) * 1000 + ((myCol >= 0) ? (10 - myCol) * 10 : -10) - d;
+  } else {
+    // 敵の増加 > 自分の増加 → 停止すべき、低スコア
+    score = (myKill - maxEnKill) * 1000 - 500;
+  }
+
+  // 固定砲塔の射界外ボーナス
+  if (peDb && peDb.turret === 'fixed' && !isInFixedArcMove(primaryEnemy, col, row)) {
+    score += 6;
+  }
+
+  // 町の支配ボーナス（sc5）
+  if (state.scenarioId === 'sc5' && myTerrain === 'building') {
+    score += 1500;
+    const aliveEnemies = enemies.filter(e => e.status !== 'destroyed');
+    if (aliveEnemies.length === 1 && myKill >= 0.5) score -= 1500;
+  }
+
+  return score;
 }
 
 // === パスに沿って1歩ずつ移動（防御射撃対応） ===
