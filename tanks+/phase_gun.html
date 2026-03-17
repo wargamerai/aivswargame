@@ -198,8 +198,27 @@ function init(stateData) {
 
   if (isAI) {
     document.getElementById('phTitle').textContent += '（AI思考中…）';
-    setTimeout(aiFirePhase, 800);
+    loadScenarioAI(function() {
+      setTimeout(aiFirePhase, 800);
+    });
   }
+}
+
+// ===== シナリオAI動的ロード =====
+function loadScenarioAI(callback) {
+  if (window._scenarioAILoaded === state.scenarioId) { callback(); return; }
+  var script = document.createElement('script');
+  script.src = 'ai_' + state.scenarioId + '.js';
+  script.onload = function() {
+    window._scenarioAILoaded = state.scenarioId;
+    console.log('[phase_gun] Scenario AI loaded: ' + state.scenarioId);
+    callback();
+  };
+  script.onerror = function() {
+    console.warn('[phase_gun] Scenario AI not found: ' + state.scenarioId + ', using defaults');
+    callback();
+  };
+  document.head.appendChild(script);
 }
 
 // ===== カード表示 =====
@@ -912,6 +931,7 @@ function hasLOS(c1, r1, c2, r2) {
     const m1 = result.hex1;
     const m2 = result.hex2;
     const m3 = result.hex3;
+    if (!m1) continue;
     if (m1.col === c1 && m1.row === r1) continue;
     if (m1.col === c2 && m1.row === r2) continue;
 
@@ -1105,6 +1125,10 @@ function aiCalcPrepFireFlags() {
         continue;
       }
     }
+
+    // effHit < 7 → 移動
+    firer._prepFireRecommended = false;
+    continue;
 
     // BFSで実際の到達可能ヘクスを取得
     const reachable = aiGetReachableHexes(firer, fDb);

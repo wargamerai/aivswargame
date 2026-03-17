@@ -2187,32 +2187,24 @@ function aiDoMovement(u, db, callback) {
 
   // === 毎ターン盤面スキャン: 有利なヘクスを探して移動 ===
   if (enemy) {
-    const curAdv = currentEval ? currentEval.advantage : -99;
     const myFt = FIRE_TABLE[u.name];
 
-    // コラム差計算ヘルパー
+    // calcKillChanceベース有利度: myKill - enKill
     function calcHexAdv(c, r) {
       let best = -Infinity;
       for (let ei = 0; ei < enemies.length; ei++) {
         const en = enemies[ei];
         if (!hasLOS(c, r, en.col, en.row)) continue;
         const ed = hexDist(c, r, en.col, en.row);
-        const edk = distKey(ed);
-        if (!myFt || edk < 0 || !myFt[edk]) continue;
         const enDb2 = UNIT_DB[en.name];
         if (!enDb2) continue;
-        const myPenDiff = Math.max(-3, Math.min(3, myFt[edk][0] - (enDb2.armor || 0)));
-        let enPenDiff = -3;
-        if (enDb2.type === 'infantry') {
-          const atTbl = INF_VS_TANK[enDb2.nation || ''];
-          if (atTbl && atTbl[ed] !== undefined) enPenDiff = 0;
-        } else {
-          const enFt = FIRE_TABLE[en.name];
-          if (enFt && edk >= 0 && enFt[edk]) {
-            enPenDiff = Math.max(-3, Math.min(3, enFt[edk][0] - (db.armor || 0)));
-          }
-        }
-        const adv = myPenDiff - enPenDiff;
+        const enTerrain = state.terrain ? (state.terrain[en.col+','+en.row] || '') : '';
+        const enMod = (enTerrain === 'forest' || enTerrain === 'building') ? 2 : 0;
+        const myKill = calcKillChance(u.name, en.name, ed, true, enMod).kill;
+        const myTerrain = state.terrain ? (state.terrain[c+','+r] || '') : '';
+        const myMod = (myTerrain === 'forest' || myTerrain === 'building') ? 2 : 0;
+        const enKill = calcKillChance(en.name, u.name, ed, true, myMod).kill;
+        const adv = myKill - enKill;
         if (adv > best) best = adv;
       }
       return best;
@@ -2234,11 +2226,12 @@ function aiDoMovement(u, db, callback) {
         }
       }
     }
-    console.log(`[AI] ${u.name} 盤面最有利: ${mapGoal ? mapGoal.col+','+mapGoal.row : 'なし'} adv=${mapGoalAdv} dist=${mapGoalMeDist}`);
+    console.log(`[AI] ${u.name} 盤面最有利: ${mapGoal ? mapGoal.col+','+mapGoal.row : 'なし'} adv=${mapGoalAdv === -Infinity ? '-Inf' : mapGoalAdv.toFixed(3)} dist=${mapGoalMeDist}`);
 
     // 現在位置が既に最有利以上なら停止
-    if (mapGoal && curAdv >= mapGoalAdv && curAdv > -99) {
-      console.log(`[AI] ${u.name} 現在位置が最有利(adv=${curAdv}) → 停止`);
+    const curAdv = calcHexAdv(u.col, u.row);
+    if (mapGoal && curAdv >= mapGoalAdv && curAdv > -Infinity) {
+      console.log(`[AI] ${u.name} 現在位置が最有利(adv=${curAdv.toFixed(3)}) → 停止`);
       callback(); return;
     }
 
