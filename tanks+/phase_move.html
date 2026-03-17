@@ -1483,7 +1483,20 @@ function aiPlanPlacement(u, db, reservedHexes) {
         threatCount++;
       }
     }
-    return { h, threatCount, nearestEnemyDist };
+    // sc5: 町への距離も計算
+    let objectiveDist = nearestEnemyDist;
+    if (state.scenarioId === 'sc5') {
+      let minBldDist = Infinity;
+      for (const key in state.terrain) {
+        if (state.terrain[key] === 'building') {
+          const [bc, br] = key.split(',').map(Number);
+          const bd = hexDist(h.col, h.row, bc, br);
+          if (bd < minBldDist) minBldDist = bd;
+        }
+      }
+      if (minBldDist < Infinity) objectiveDist = minBldDist;
+    }
+    return { h, threatCount, nearestEnemyDist, objectiveDist };
   });
 
   let bestGroup;
@@ -1497,9 +1510,10 @@ function aiPlanPlacement(u, db, reservedHexes) {
     const j = Math.floor(Math.random() * (i + 1));
     [bestGroup[i], bestGroup[j]] = [bestGroup[j], bestGroup[i]];
   }
-  bestGroup.sort((a, b) => a.nearestEnemyDist - b.nearestEnemyDist);
-  const bestDist = bestGroup[0].nearestEnemyDist;
-  const top = bestGroup.filter(s => s.nearestEnemyDist === bestDist);
+  const sortKey = state.scenarioId === 'sc5' ? 'objectiveDist' : 'nearestEnemyDist';
+  bestGroup.sort((a, b) => a[sortKey] - b[sortKey]);
+  const bestDist = bestGroup[0][sortKey];
+  const top = bestGroup.filter(s => s[sortKey] === bestDist);
   return top[Math.floor(Math.random() * top.length)].h;
 }
 
