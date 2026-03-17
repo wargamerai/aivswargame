@@ -1952,19 +1952,34 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     if (eFt && eDkHere >= 0 && eFt[eDkHere]) enHitHere = eFt[eDkHere][1] - enTMod;
   }
 
-  // スコア計算
+  // スコア計算: LOSが通る敵への有効命中率をスコアにする
   let score = 0;
-  let colScore = 0;
 
   if (myHitNum >= 7 && enHitHere > 5) {
     // こちら7以上確保、敵6以上 → このヘクスは侵入禁止
     return null;
-  } else {
-    // こちら7未満 or 敵5未満 → columnScoreで接近を促す
-    colScore = ((myDk >= 0) ? (10 - myDk) * 10 : -10) - d;
-    score += colScore;
   }
-  console.log(`[AI]     eval(${col},${row}) d=${d} myHit=${myHitNum} enHit=${enHitHere} myKill=${myKill.toFixed(3)} enKill=${maxEnKill.toFixed(3)} colScore=${colScore} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
+
+  // 全敵に対してLOS込みの最良effHitをスコアにする
+  let bestEffHit = 0;
+  for (const en of enemies) {
+    if (!hasLOS(col, row, en.col, en.row)) continue;
+    const ed = hexDist(col, row, en.col, en.row);
+    const edk = distKey(ed);
+    const ft = FIRE_TABLE[u.name];
+    if (!ft || edk < 0 || !ft[edk]) continue;
+    const enDb2 = UNIT_DB[en.name];
+    const et = state.terrain ? (state.terrain[`${en.col},${en.row}`] || 'plain') : 'plain';
+    let mod = 0;
+    if (et === 'forest') mod += HIT_MODIFIERS.forest;
+    if (et === 'building') mod += HIT_MODIFIERS.building;
+    mod += countBocage(col, row, en.col, en.row);
+    if (enDb2 && enDb2.small) mod += HIT_MODIFIERS.smallTarget;
+    const effHit = ft[edk][1] - mod;
+    if (effHit > bestEffHit) bestEffHit = effHit;
+  }
+  score += bestEffHit * 10;
+  console.log(`[AI]     eval(${col},${row}) d=${d} myHit=${myHitNum} enHit=${enHitHere} bestEffHit=${bestEffHit} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
 
   // 固定砲塔の射界外ボーナス
   if (peDb && peDb.turret === 'fixed' && !isInFixedArcMove(primaryEnemy, col, row)) {
