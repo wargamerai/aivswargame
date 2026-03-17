@@ -140,14 +140,15 @@ function getDestructionResult(modifier, diceTotal) {
 // --- AI用: 撃破率計算 ---
 const DICE_2D6_CUM = [0,0, 1/36, 3/36, 6/36, 10/36, 15/36, 21/36, 26/36, 30/36, 33/36, 35/36, 1];
 
-function calcKillChance(shooterName, targetName, dist, frontHit) {
+function calcKillChance(shooterName, targetName, dist, frontHit, terrainMod) {
   const di = distKey(dist);
   if (di < 0) return { kill: 0, immob: 0, hit: 0 };
   const ft = FIRE_TABLE[shooterName];
   if (!ft || !ft[di]) return { kill: 0, immob: 0, hit: 0 };
   const tDb = UNIT_DB[targetName];
   if (!tDb) return { kill: 0, immob: 0, hit: 0 };
-  const pen = ft[di][0], hitNum = ft[di][1];
+  const pen = ft[di][0];
+  const hitNum = ft[di][1] - (terrainMod || 0);
   const hitProb = hitNum >= 12 ? 1 : hitNum <= 1 ? 0 : (DICE_2D6_CUM[hitNum] || 0);
   if (hitProb <= 0) return { kill: 0, immob: 0, hit: 0 };
 
@@ -161,9 +162,12 @@ function calcKillChance(shooterName, targetName, dist, frontHit) {
   const penDiff = pen - Math.max(0, armor);
   const key = String(Math.max(-3, Math.min(3, penDiff)));
   const dt = DESTRUCTION_TABLE[key];
+  const destroyProb = DICE_2D6_CUM[dt.destroyed[1]] || 0;
+  const immobUpper = dt.immobilized ? DICE_2D6_CUM[dt.immobilized[1]] || 0 : 0;
+  const immobLower = dt.immobilized ? DICE_2D6_CUM[dt.immobilized[0] - 1] || 0 : 0;
   return {
-    kill: hitProb * ((dt.destroyed[1] - dt.destroyed[0] + 1) / 11),
-    immob: hitProb * ((dt.immobilized[1] - dt.immobilized[0] + 1) / 11),
+    kill: hitProb * destroyProb,
+    immob: hitProb * (immobUpper - immobLower),
     hit: hitProb
   };
 }
