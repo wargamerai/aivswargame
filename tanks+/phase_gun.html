@@ -1082,6 +1082,12 @@ function aiCalcPrepFireFlags() {
       if (effHit > bestCurEffHit) bestCurEffHit = effHit;
     }
 
+    // 7以上確保 → 準備射撃確定、BFS総当たり不要
+    if (bestCurEffHit >= 7) {
+      firer._prepFireRecommended = true;
+      continue;
+    }
+
     // BFSで実際の到達可能ヘクスを取得
     const reachable = aiGetReachableHexes(firer, fDb);
 
