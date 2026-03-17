@@ -919,6 +919,23 @@ function hasLOS(c1, r1, c2, r2) {
     const onVertex = result.dist3 < result.dist1 * 1.15;
     const onHexside = result.dist2 < result.dist1 * 1.05;
 
+    // 崖ヘクスサイド直接チェック: 隣接2ヘクス間に崖があればブロック
+    if (onHexside || onVertex) {
+      const pairs = onVertex && m3
+        ? [[m1,m2],[m1,m3],[m2,m3]]
+        : [[m1,m2]];
+      for (const [ha, hb] of pairs) {
+        if (!ha || !hb) continue;
+        if (hexDist(ha.col, ha.row, hb.col, hb.row) !== 1) continue;
+        if (isEnd(ha) && isEnd(hb)) continue;
+        const ka = `${ha.col},${ha.row}`, kb = `${hb.col},${hb.row}`;
+        const cliffKey = ka < kb ? `${ka}-${kb}` : `${kb}-${ka}`;
+        if (state && state.hexsideTerrain && state.hexsideTerrain[cliffKey] === 'slope') {
+          if (!skipSlope) return false;
+        }
+      }
+    }
+
     if (onVertex && m3) {
       // 頂点付近: 3ヘクスのうち2つ以上が遮蔽物ならブロック
       const b1 = isEnd(m1) ? false : isBlockingTerrain(m1.col, m1.row, skipSlope, virtualSlopes);
