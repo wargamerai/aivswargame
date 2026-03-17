@@ -1683,6 +1683,10 @@ function checkVictory() {
   const escaped1 = state.units.filter(u => u.side === s1 && u.status === 'escaped').length;
   const escaped2 = state.units.filter(u => u.side === s2 && u.status === 'escaped').length;
 
+  // 全滅サドンデス（全シナリオ共通）
+  if (alive1.length === 0) return { winner:s2, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
+  if (alive2.length === 0) return { winner:s1, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
+
   // 突破シナリオの脱出勝利判定
   const scId = state.scenarioId;
   if (scId === 'sc2') {
@@ -1707,12 +1711,6 @@ function checkVictory() {
     if (suOut > suTotal / 2) {
       return { winner:'ge', reason:'majority', destroyed1, destroyed2, total1, total2 };
     }
-    // ドイツ全滅 → ソ連勝利
-    const geAlive = state.units.filter(u => u.side === 'ge' && u.status !== 'destroyed' && !u.ammoOut && u.status !== 'escaped');
-    if (geAlive.length === 0) {
-      const suSide = s1 === 'ge' ? s2 : s1;
-      return { winner:suSide, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
-    }
   }
   if (scId === 'sc3') {
     // ドイツ: 2ユニット以上脱出で勝利
@@ -1720,28 +1718,16 @@ function checkVictory() {
     if (geEscaped >= 2) {
       return { winner:'ge', reason:'breakthrough', destroyed1, destroyed2, total1, total2, escaped: geEscaped };
     }
-    // ドイツが脱出不可能（残り生存1以下）→ ソ連勝利
-    const geAlive = state.units.filter(u => u.side === 'ge' && u.status !== 'destroyed' && !u.ammoOut && u.status !== 'escaped');
-    if (geAlive.length <= 1 && geEscaped === 0) {
-      const suSide = s1 === 'ge' ? s2 : s1;
-      return { winner:suSide, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
-    }
   }
 
-  // sc5: 全滅ならサドンデス、それ以外は最終ターンの建物支配で判定
+  // sc5: 最終ターンの建物支配で判定
   if (scId === 'sc5') {
-    if (alive1.length === 0) return { winner:s2, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
-    if (alive2.length === 0) return { winner:s1, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
     if (state.turn > state.maxTurns) {
       const winner = state.buildingControl || 'ge';
       return { winner, reason:'building_control', destroyed1, destroyed2, total1, total2 };
     }
     return null;
   }
-
-  // 全滅判定
-  if (alive1.length === 0) return { winner:s2, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
-  if (alive2.length === 0) return { winner:s1, reason:'annihilation', destroyed1, destroyed2, total1, total2 };
 
   // 半数以上破壊判定（突破シナリオ以外）
   if (scId !== 'sc2' && scId !== 'sc3') {
