@@ -99,21 +99,20 @@ function aiPlanPlacement(u, db, reservedHexes) {
 }
 
 // フェルディナンド3両の向きを分散配置
-// 1両目: 右上(dir=0, 右60°)、2両目: 左上(dir=2, 左60°)、3両目: 上(dir=1)
+// handlePlacementでdir=0が上書きされるため、_sc2dirに保存しaiDoMovementで適用
 function _sc2_assignDir(u, reservedHexes, maxCol) {
-  // 既に配置予約されたドイツユニット数で何両目か判定
   var geReserved = 0;
   for (var i = 0; i < reservedHexes.length; i++) {
     geReserved++;
   }
 
-  // 0両目=右60°(右上), 1両目=左60°(左上), 2両目=正面(上)
+  // 0両目=右斜め上(dir=0), 1両目=左斜め上(dir=2), 2両目=正面(dir=1)
   if (geReserved === 0) {
-    u.dir = 0;  // 右上（右60°）
+    u._sc2dir = 0;
   } else if (geReserved === 1) {
-    u.dir = 2;  // 左上（左60°）
+    u._sc2dir = 2;
   } else {
-    u.dir = 1;  // 上（正面）
+    u._sc2dir = 1;
   }
 }
 
@@ -123,6 +122,11 @@ function _sc2_assignDir(u, reservedHexes, maxCol) {
 // ============================================================
 function aiDoMovement(u, db, callback) {
   if (u.side === 'ge') {
+    // 保存した向きを適用（handlePlacementでdir=0が上書きされる対策）
+    if (u._sc2dir !== undefined) {
+      u.dir = u._sc2dir;
+      delete u._sc2dir;
+    }
     // フェルディナンド: その場で停止
     console.log('[AI-sc2] ' + u.name + ' 停止 (' + u.col + ',' + u.row + ') dir=' + u.dir);
     callback();
