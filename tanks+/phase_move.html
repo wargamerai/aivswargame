@@ -449,6 +449,11 @@ function handleMove(col, row) {
   u.remainMove -= totalCost;
   if (u.justEntered) delete u.justEntered;
 
+  // 建物通過で支配更新（hub側へ通知）
+  if (state.terrain && state.terrain[`${col},${row}`] === 'building') {
+    parent.postMessage({ type:'BUILDING_CONTROL', side: u.side }, '*');
+  }
+
   const costDetail = [];
   if (rotateCost > 0) costDetail.push(`旋回${rotateCost}`);
   costDetail.push(`地形${terrainCost}`);
