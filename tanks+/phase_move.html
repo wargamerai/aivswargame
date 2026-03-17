@@ -1621,7 +1621,8 @@ function aiPlaceUnit(u, db, callback) {
       // 敵なし → ランダム
       pick = valid[Math.floor(Math.random() * valid.length)];
     } else {
-      // 各候補ヘクスの脅威数と最寄り敵距離を計算
+      // 各候補ヘクスの脅威数と目標距離を計算
+      // シナリオごとの目標ヘクス: sc5=町(building)、他=最寄り敵
       const scored = valid.map(h => {
         let threatCount = 0;
         let nearestEnemyDist = Infinity;
@@ -1635,13 +1636,26 @@ function aiPlaceUnit(u, db, callback) {
             threatCount++;
           }
         }
-        return { h, threatCount, nearestEnemyDist };
+        // 目標距離: シナリオの最高得点ヘクスへの距離
+        let objectiveDist = nearestEnemyDist;
+        if (state.scenarioId === 'sc5') {
+          let minBldDist = Infinity;
+          for (const key in state.terrain) {
+            if (state.terrain[key] === 'building') {
+              const [bc, br] = key.split(',').map(Number);
+              const bd = hexDist(h.col, h.row, bc, br);
+              if (bd < minBldDist) minBldDist = bd;
+            }
+          }
+          if (minBldDist < Infinity) objectiveDist = minBldDist;
+        }
+        return { h, threatCount, objectiveDist };
       });
 
-      // 脅威数が最小のものを選び、その中で敵に最も近いものを優先
+      // 脅威数が最小のものを選び、その中で目標に最も近いものを優先
       const minThreat = Math.min(...scored.map(s => s.threatCount));
       const bestGroup = scored.filter(s => s.threatCount === minThreat);
-      bestGroup.sort((a, b) => a.nearestEnemyDist - b.nearestEnemyDist);
+      bestGroup.sort((a, b) => a.objectiveDist - b.objectiveDist);
 
       // 最良ヘクスを中心に近隣からランダム選定（上位3候補）
       const top = bestGroup.slice(0, Math.min(3, bestGroup.length));
@@ -1866,7 +1880,28 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
     const d = hexDist(col, row, e.col, e.row);
     if (d < nearestDist) { nearestDist = d; primaryEnemy = e; }
   }
-  if (!primaryEnemy) return -1000;
+  // sc5: 敵全滅後は町ボーナスだけで評価
+  if (!primaryEnemy) {
+    if (state.scenarioId === 'sc5') {
+      let score = 0;
+      const myTerrain = state.terrain ? state.terrain[`${col},${row}`] : null;
+      if (myTerrain === 'building') {
+        score += 1500;
+      } else {
+        let minBldDist = Infinity;
+        for (const key in state.terrain) {
+          if (state.terrain[key] === 'building') {
+            const [bc, br] = key.split(',').map(Number);
+            const bd = hexDist(col, row, bc, br);
+            if (bd < minBldDist) minBldDist = bd;
+          }
+        }
+        if (minBldDist < Infinity) score += (20 - minBldDist) * 50;
+      }
+      return score;
+    }
+    return -1000;
+  }
 
   const d = nearestDist;
   const peDb = UNIT_DB[primaryEnemy.name];
@@ -1907,18 +1942,18 @@ function aiEvalPosition(u, db, col, row, enemies, bestDist) {
   }
 
   // スコア計算
-  const killAdv = (myKill - maxEnKill) * 1000;
-  let score = killAdv;
+  let score = 0;
   let colScore = 0;
 
   if (myHitNum >= 7 && enHitHere >= 5) {
-    // こちら7以上確保、敵5以上 → これ以上近づかない（columnScore付けない）
+    // こちら7以上確保、敵5以上 → このヘクスは侵入禁止
+    return null;
   } else {
     // こちら7未満 or 敵5未満 → columnScoreで接近を促す
     colScore = ((myDk >= 0) ? (10 - myDk) * 10 : -10) - d;
     score += colScore;
   }
-  console.log(`[AI]     eval(${col},${row}) d=${d} myHit=${myHitNum} enHit=${enHitHere} myKill=${myKill.toFixed(3)} enKill=${maxEnKill.toFixed(3)} killAdv=${killAdv.toFixed(0)} colScore=${colScore} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
+  console.log(`[AI]     eval(${col},${row}) d=${d} myHit=${myHitNum} enHit=${enHitHere} myKill=${myKill.toFixed(3)} enKill=${maxEnKill.toFixed(3)} colScore=${colScore} LOS=${hasLOS(col,row,primaryEnemy.col,primaryEnemy.row)}`);
 
   // 固定砲塔の射界外ボーナス
   if (peDb && peDb.turret === 'fixed' && !isInFixedArcMove(primaryEnemy, col, row)) {
@@ -2004,34 +2039,36 @@ function aiDoMovement(u, db, callback) {
   const enemies = state.units.filter(e =>
     e.side !== u.side && e.status !== 'destroyed' && e.col >= 1
   );
-  if (enemies.length === 0) { callback(); return; }
+  if (enemies.length === 0 && state.scenarioId !== 'sc5') { callback(); return; }
 
   // 最寄りの敵を基準にbestDistを計算
   const enemy = aiNearestEnemy(u);
-  if (!enemy) { callback(); return; }
-  const eDb = UNIT_DB[enemy.name];
+  if (!enemy && state.scenarioId !== 'sc5') { callback(); return; }
+  const eDb = enemy ? UNIT_DB[enemy.name] : null;
 
   // bestDist: 距離ごとの撃破率差が最大になる距離
   let bestDist = 3, bestValue = -Infinity;
-  for (let d = 1; d <= 12; d++) {
-    const my = calcKillChance(u.name, enemy.name, d, true);
-    const en = eDb ? calcKillChance(enemy.name, u.name, d, true) : { kill: 0 };
-    const value = my.kill - en.kill;
-    if (value > bestValue) { bestValue = value; bestDist = d; }
-  }
+  if (enemy) {
+    for (let d = 1; d <= 12; d++) {
+      const my = calcKillChance(u.name, enemy.name, d, true);
+      const en = eDb ? calcKillChance(enemy.name, u.name, d, true) : { kill: 0 };
+      const value = my.kill - en.kill;
+      if (value > bestValue) { bestValue = value; bestDist = d; }
+    }
 
-  // 戦車→歩兵: AT射程外まで接近
-  const targetIsInfantry = eDb && (eDb.type === 'infantry' || eDb.type === 'atgun');
-  if (db.type === 'tank' && targetIsInfantry) {
-    const eNation = eDb.nation || '';
-    const atTable = INF_VS_TANK[eNation];
-    const maxAtRange = atTable ? Math.max(...Object.keys(atTable).map(Number)) : 0;
-    bestDist = (maxAtRange <= 0) ? (db.noMG ? 1 : 2) : maxAtRange + 1;
-  }
-  // 歩兵→戦車: 距離0が最強（AT射程内に入りたい）
-  const targetIsTank = eDb && eDb.type === 'tank';
-  if (db.type === 'infantry' && targetIsTank) {
-    bestDist = 0;
+    // 戦車→歩兵: AT射程外まで接近
+    const targetIsInfantry = eDb && (eDb.type === 'infantry' || eDb.type === 'atgun');
+    if (db.type === 'tank' && targetIsInfantry) {
+      const eNation = eDb.nation || '';
+      const atTable = INF_VS_TANK[eNation];
+      const maxAtRange = atTable ? Math.max(...Object.keys(atTable).map(Number)) : 0;
+      bestDist = (maxAtRange <= 0) ? (db.noMG ? 1 : 2) : maxAtRange + 1;
+    }
+    // 歩兵→戦車: 距離0が最強（AT射程内に入りたい）
+    const targetIsTank = eDb && eDb.type === 'tank';
+    if (db.type === 'infantry' && targetIsTank) {
+      bestDist = 0;
+    }
   }
 
   // BFS: 到達可能な全ヘクスを探索
@@ -2053,14 +2090,15 @@ function aiDoMovement(u, db, callback) {
     const v = visited[key];
 
     // 集団制限: 囮以外はgroupLimitより先に行かない
-    if (!isDecoy) {
+    if (!isDecoy && enemy) {
       const dToEnemy = hexDist(v.col, v.row, enemy.col, enemy.row);
       if (dToEnemy < groupLimit) { console.log(`[AI]   skip ${key} groupLimit d=${dToEnemy}`); continue; }
     }
 
     const score = aiEvalPosition(u, db, v.col, v.row, enemies, bestDist);
+    if (score === null) continue; // 侵入禁止ヘクス
     reachCount++;
-    const dToE = hexDist(v.col, v.row, enemy.col, enemy.row);
+    const dToE = enemy ? hexDist(v.col, v.row, enemy.col, enemy.row) : -1;
     console.log(`[AI]   ${key} score=${score} dToEnemy=${dToE}`);
     if (score > bestHexScore) {
       bestHexScore = score;
