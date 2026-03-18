@@ -455,24 +455,24 @@ const SCENARIOS = [
     map2: null, map2orient: null,
     maxTurns: 99,
     firstPlayer: 'ge',
-    victory: 'ドイツ: M4を全て破壊 / アメリカ: ドイツ破壊またはM4が下側から突破',
+    victory: 'ドイツ: M4を全て破壊 / アメリカ: ドイツ破壊またはM4が右側から突破',
     specialRules: { noAmmoOut: true },
     sides: {
       ge: {
-        setup: 'enterBottom',
-        enterEdge: 'bottom',
+        setup: 'enterRight',
+        enterEdge: 'right',
         units: [
-          { name:'Tiger I', col:0, row:0, dir:1 },
+          { name:'Tiger I', col:0, row:0, dir:3 },
         ]
       },
       us: {
-        setup: 'enterTop',
-        enterEdge: 'top',
+        setup: 'enterLeft',
+        enterEdge: 'left',
         units: [
-          { name:'M4A3', col:0, row:0, dir:4 },
-          { name:'M4A3', col:0, row:0, dir:4 },
-          { name:'M4A3', col:0, row:0, dir:4 },
-          { name:'M4A3', col:0, row:0, dir:4 },
+          { name:'M4A3', col:0, row:0, dir:0 },
+          { name:'M4A3', col:0, row:0, dir:0 },
+          { name:'M4A3', col:0, row:0, dir:0 },
+          { name:'M4A3', col:0, row:0, dir:0 },
         ]
       }
     },
