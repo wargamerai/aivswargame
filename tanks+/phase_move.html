@@ -510,8 +510,9 @@ function checkMapExit(u) {
   if (scId === 'sc2' && u.enterEdge === 'bottom' && u.row === 1) canExit = true;
   // sc3: enterTop → 下端(row=maxRow)から脱出
   if (scId === 'sc3' && u.enterEdge === 'top' && u.row === maxRow) canExit = true;
-  // sc4: enterTop → 下端から脱出
-  if (scId === 'sc4' && u.enterEdge === 'top' && u.row === maxRow) canExit = true;
+  // sc4: enterLeft → 右端(col=maxCol)から脱出
+  const maxCol = state.mapMaxCol || 25;
+  if (scId === 'sc4' && u.enterEdge === 'left' && u.col === maxCol) canExit = true;
 
   if (!canExit) return false;
 
