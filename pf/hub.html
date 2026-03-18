@@ -60,9 +60,9 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 #debugPanel {
   position: fixed; bottom: 0; left: 0; width: 100%; max-height: 200px;
   background: #f5f5f5ee; border-top: 2px solid #aaa; z-index: 999;
-  display: none; flex-direction: column;
+  display: none !important; flex-direction: column;
 }
-#debugPanel.open { display: flex; }
+#debugPanel.open { display: none !important; }
 #debugBar { display: flex; align-items: center; gap: 6px; padding: 3px 10px; background: #e8e8ee; }
 #debugBar button { font-size: 0.82em; padding: 3px 8px; }
 #debugLog {
@@ -414,7 +414,8 @@ function checkContact() {
   if (visualContact && !state.jpDetected) {
     state.jpDetected = true;
     state.jpFreeMove = true;
-    dbg('日本軍: 視認範囲内に敵発見 → 自由移動');
+    state.usFreeMove = true; // 視認 = 相互発見 → 米軍も自由移動
+    dbg('日本軍: 視認範囲内に敵発見 → 両軍自由移動');
     showPhaseFlash('敵艦発見！');
   }
 
@@ -1272,7 +1273,12 @@ window.addEventListener('message', (e) => {
       }
       if (msg.initiative) state.initiative = msg.initiative;
       // 検出フラグ同期（true方向のみ — 一度発見したら戻さない）
-      if (msg.jpDetected)  { state.jpDetected  = true; dbg('STATE_UPDATE: jpDetected=true (from iframe)'); }
+      if (msg.jpDetected)  {
+        state.jpDetected  = true;
+        // 日本軍が発見された = 砲撃を受けた → 米軍も自由移動（敵位置確認済み）
+        if (!state.usFreeMove) { state.usFreeMove = true; dbg('STATE_UPDATE: usFreeMove=true (jpDetected連動)'); }
+        dbg('STATE_UPDATE: jpDetected=true (from iframe)');
+      }
       if (msg.usDetected)  { state.usDetected  = true; }
       if (msg.jpFreeMove)  { state.jpFreeMove  = true; dbg('STATE_UPDATE: jpFreeMove=true (from iframe)'); }
       if (msg.usFreeMove)  { state.usFreeMove  = true; }
@@ -1581,12 +1587,16 @@ function buildFleets(data) {
       groups[mergeIdx] = groups[mergeIdx].concat(groups[smallIdx]);
       groups.splice(smallIdx, 1);
     }
-    // 最大3グループ
-    while (groups.length > 3) {
-      groups.sort(function(a,b){ return a.length - b.length; });
-      groups[1] = groups[0].concat(groups[1]);
-      groups.shift();
+    // 8隻超のグループは分割
+    var splitGroups = [];
+    for (var si = 0; si < groups.length; si++) {
+      var g = groups[si];
+      while (g.length > 8) {
+        splitGroups.push(g.splice(0, 8));
+      }
+      splitGroups.push(g);
     }
+    groups = splitGroups;
   }
 
   // 各グループ内を大型艦順にソート（BB→OBB→CA→CL→DD）
@@ -1746,11 +1756,16 @@ function autoDeployUS() {
       groups[mergeIdx] = groups[mergeIdx].concat(groups[smallIdx]);
       groups.splice(smallIdx, 1);
     }
-    while (groups.length > 3) {
-      groups.sort(function(a,b){ return a.length - b.length; });
-      groups[1] = groups[0].concat(groups[1]);
-      groups.shift();
+    // 8隻超のグループは分割
+    var splitGroups = [];
+    for (var si = 0; si < groups.length; si++) {
+      var g = groups[si];
+      while (g.length > 8) {
+        splitGroups.push(g.splice(0, 8));
+      }
+      splitGroups.push(g);
     }
+    groups = splitGroups;
   }
 
   var TYPE_ORDER = { BB: 0, OBB: 1, CA: 2, CL: 3, CLAA: 3, DD: 4 };

@@ -236,6 +236,7 @@ function autoWithdrawHeavy() {
     ship.withdrawing = true;
     ship.retreatDir = ship.side === 'jp' ? 4 : 6;  // JP=西, US=東
     const reason = ship.status === 'heavy' ? '大破' : '射撃不能';
+    console.log(`[PF-WITHDRAW] ${ship.name} 離脱開始 dir=${ship.dir} retreatDir=${ship.retreatDir} pos=(${ship.col},${ship.row}) spd=${getSpeed(ship)}`);
     setInfo(`${ship.name} ${reason}！ 離脱開始`);
     if (getSpeed(ship) > 0) withdrawMove(ship);
   }
@@ -294,6 +295,7 @@ function withdrawMove(ship) {
   if (ship.dmgM >= ship.capM / 2) spd = Math.max(1, Math.ceil(spd / 2));  // M損害半分以上なら半速
   let remain = spd;
 
+  console.log(`[PF-WITHDRAW] ${ship.name} withdrawMove: dir=${ship.dir} cannotTurn=${!!ship.cannotTurn} spd=${spd} pos=(${ship.col},${ship.row})`);
   while (remain > 0) {
     // 毎ステップ退却方向を再計算
     var target = ship.cannotTurn ? ship.dir : getRetreatDir(ship);
