@@ -69,7 +69,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
   flex: 1; overflow-y: auto; padding: 5px 10px; font-size: 0.85em;
   font-family: monospace; color: #333; line-height: 1.6;
 }
-#btnDebugToggle { position: fixed; bottom: 4px; left: 4px; z-index: 1000; font-size: 0.78em; padding: 3px 8px; opacity: 0.6; }
+#btnDebugToggle { position: fixed; bottom: 4px; left: 4px; z-index: 1000; font-size: 0.78em; padding: 3px 8px; opacity: 0.6; display: none; }
 #btnDebugToggle:hover { opacity: 1; }
 
 #left {
@@ -407,8 +407,13 @@ function checkContact() {
   // --- 米軍検出: レーダー or 視認（日本軍プレイヤーには通知しない）---
   if ((visualContact || radarContact) && !state.usDetected) {
     state.usDetected = true;
-    state.usFreeMove = true;
-    dbg('米軍: レーダー/視認で敵を探知 → 自由移動');
+    // 視認の場合のみ自由移動、レーダーのみでは直進継続
+    if (visualContact) {
+      state.usFreeMove = true;
+      dbg('米軍: 視認で敵を発見 → 自由移動');
+    } else {
+      dbg('米軍: レーダー探知 → 直進継続（砲撃は可能）');
+    }
     // ※日本軍プレイヤーにはレーダー探知は見えない → フラッシュなし
   }
 
@@ -554,11 +559,12 @@ function draw() {
   ctx.fillStyle = '#6666cc';
   ctx.fillText('日本配置線', wLineX, 14);
 
-  // 移動軌跡線（未発見の米軍艦は非表示）
+  // 移動軌跡線（AI対戦時は両軍表示、通常は未発見の米軍艦は非表示）
+  const bothAI = localStorage.getItem('jpAutoAI') === '1';
   [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
     if (s.prevCol !== undefined && s.status !== 'sunk' && s.col >= 0 &&
         (s.col !== s.prevCol || s.row !== s.prevRow) &&
-        (s.side !== 'us' || s.faceUp || s.revealed)) {
+        (s.side !== 'us' || s.faceUp || s.revealed || bothAI)) {
       const from = hexPt(s.prevCol, s.prevRow);
       const to = hexPt(s.col, s.row);
       ctx.save();
