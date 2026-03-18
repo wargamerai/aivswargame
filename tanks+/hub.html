@@ -1814,6 +1814,13 @@ function checkVictory() {
       return { winner:'ge', reason:'breakthrough', destroyed1, destroyed2, total1, total2, escaped: geEscaped };
     }
   }
+  if (scId === 'sc4') {
+    // アメリカ: M4が1ユニット以上脱出で勝利
+    const usEscaped = state.units.filter(u => u.side === 'us' && u.status === 'escaped').length;
+    if (usEscaped >= 1) {
+      return { winner:'us', reason:'breakthrough', destroyed1, destroyed2, total1, total2, escaped: usEscaped };
+    }
+  }
 
   // sc5: 最終ターンの建物支配で判定
   if (scId === 'sc5') {
@@ -1825,7 +1832,7 @@ function checkVictory() {
   }
 
   // 半数以上破壊判定（突破シナリオ以外）
-  if (scId !== 'sc2' && scId !== 'sc3') {
+  if (scId !== 'sc2' && scId !== 'sc3' && scId !== 'sc4') {
     if (destroyed1 > total1 / 2) return { winner:s2, reason:'majority', destroyed1, destroyed2, total1, total2 };
     if (destroyed2 > total2 / 2) return { winner:s1, reason:'majority', destroyed1, destroyed2, total1, total2 };
   }
