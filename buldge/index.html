@@ -41,9 +41,9 @@ body { background: #333; overflow: hidden; }
   border-radius: 8px; font-size: 14px; font-family: monospace;
 }
 
-#mapContainer { position: relative; display: inline-block; }
-#mapImage { display: block; user-select: none; -webkit-user-drag: none; }
-#hexCanvas { position: absolute; top: 0; left: 0; }
+#mapContainer { position: relative; display: inline-block; padding: 80px; }
+#mapImage { display: block; user-select: none; -webkit-user-drag: none; position: relative; z-index: 0; }
+#hexCanvas { position: absolute; top: 0; left: 0; z-index: 1; }
 #scrollWrapper { width: 100vw; height: 100vh; overflow: auto; }
 </style>
 </head>
@@ -147,11 +147,18 @@ function drawHexPath(cx, cy, size) {
 }
 
 // --- 描画 ---
+const PAD = 80; // 端ヘクス用の余白
+
 function drawHexGrid() {
   const p = getParams();
-  canvas.width = img.naturalWidth || img.width;
-  canvas.height = img.naturalHeight || img.height;
+  const imgW = img.naturalWidth || img.width;
+  const imgH = img.naturalHeight || img.height;
+  canvas.width = imgW + PAD * 2;
+  canvas.height = imgH + PAD * 2;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // 描画座標にPADを加算（画像がPAD,PADから始まるため）
+  p.offsetX += PAD;
+  p.offsetY += PAD;
 
   for (let c = 0; c < p.cols; c++) {
     for (let r = 0; r < p.rows; r++) {
@@ -273,6 +280,8 @@ function drawHexGrid() {
 // --- ヘクス判定 ---
 function pixelToHex(px, py) {
   const p = getParams();
+  p.offsetX += PAD;
+  p.offsetY += PAD;
   let closest = null, minDist = Infinity;
   for (let c = 0; c < p.cols; c++) {
     for (let r = 0; r < p.rows; r++) {
@@ -282,7 +291,7 @@ function pixelToHex(px, py) {
       if (dist < minDist) { minDist = dist; closest = { col: c, row: r }; }
     }
   }
-  if (closest && minDist < p.hexSize * p.hexSize) return closest;
+  if (closest && minDist < (p.hexSize * 1.5) * (p.hexSize * 1.5)) return closest;
   return null;
 }
 
