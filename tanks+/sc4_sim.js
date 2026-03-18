@@ -208,7 +208,7 @@ function createGameState() {
     { name: 'M4A3', side: 'us', col: 1, row: m4Rows[3], dir: 0, status: 'ok', remainMove: 4, fired: false },
   ];
 
-  return { units, turn: 1, maxTurns: 20 };
+  return { units, turn: 1, maxTurns: 20, initPos: { tigerRow, m4Rows: [...m4Rows] } };
 }
 
 // --- AI判断: 行動候補の生成 ---
@@ -448,7 +448,7 @@ function processGunPhase(gs, side) {
 // --- 1ゲーム実行 ---
 function runGame(weights) {
   const gs = createGameState();
-  let result = { winner: null, turns: 0, tigerKills: 0, tigerSurvived: false };
+  let result = { winner: null, turns: 0, tigerKills: 0, tigerSurvived: false, initPos: gs.initPos };
 
   for (let turn = 1; turn <= gs.maxTurns; turn++) {
     gs.turn = turn;

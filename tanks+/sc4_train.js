@@ -29,6 +29,40 @@ function randomWeights() {
   };
 }
 
+// --- 勝ちパターン記録 ---
+const winPatterns = []; // { tigerRow, m4Rows, count }
+
+function recordWinPattern(initPos) {
+  // TigerのRowと各M4との距離差をパターンとして記録
+  const key = `${initPos.tigerRow}_${initPos.m4Rows.sort((a,b)=>a-b).join(',')}`;
+  const existing = winPatterns.find(p => p.key === key);
+  if (existing) {
+    existing.count++;
+  } else {
+    winPatterns.push({ key, tigerRow: initPos.tigerRow, m4Rows: initPos.m4Rows, count: 1 });
+  }
+}
+
+function getWinPatternBonus(initPos) {
+  // 勝ちパターンとの類似度でボーナス
+  if (winPatterns.length === 0) return 0;
+  let bonus = 0;
+  const tr = initPos.tigerRow;
+  const m4s = initPos.m4Rows.sort((a,b) => a-b);
+  for (const wp of winPatterns) {
+    // Tiger行の近さ + M4行の近さで類似度
+    const tigerSim = Math.max(0, 3 - Math.abs(tr - wp.tigerRow)); // 0-3
+    const wpM4 = wp.m4Rows.sort((a,b) => a-b);
+    let m4Sim = 0;
+    for (let i = 0; i < 4; i++) {
+      m4Sim += Math.max(0, 3 - Math.abs(m4s[i] - wpM4[i]));
+    }
+    const similarity = (tigerSim + m4Sim) / 15; // 0-1
+    bonus += similarity * wp.count * 0.1; // 勝利回数×類似度でボーナス
+  }
+  return Math.min(bonus, 3); // 最大3点
+}
+
 // --- 個体評価 ---
 function evaluate(weights) {
   let totalScore = 0;
@@ -38,13 +72,17 @@ function evaluate(weights) {
 
   for (let i = 0; i < GAMES_PER_EVAL; i++) {
     const result = runGame(weights);
-    if (result.winner === 'ge') wins++;
+    if (result.winner === 'ge') {
+      wins++;
+      recordWinPattern(result.initPos);
+    }
     totalKills += result.tigerKills;
     if (result.tigerSurvived) survived++;
-    // スコア: 勝利10点 + 撃破数×2 + 生存3点 + ターン短縮ボーナス - 突破ペナルティ
+    // スコア: 勝利10点 + 撃破数×2 + 生存3点 + ターン短縮ボーナス - 突破ペナルティ + 勝ちパターンボーナス
     let gameScore = (result.winner === 'ge' ? 10 : 0) + result.tigerKills * 2 + (result.tigerSurvived ? 3 : 0);
     if (result.winner === 'ge') gameScore += Math.max(0, (20 - result.turns) * 0.2);
     if (result.usEscaped) gameScore -= result.usEscaped * 5; // 突破されたらペナルティ
+    if (result.winner === 'ge') gameScore += getWinPatternBonus(result.initPos);
     totalScore += gameScore;
   }
 
@@ -159,6 +197,15 @@ function train() {
   console.log(`Win rate: ${(bestEver.stats.winRate * 100).toFixed(1)}%`);
   console.log(`Avg kills: ${bestEver.stats.avgKills.toFixed(2)}`);
   console.log(`Survival: ${(bestEver.stats.survivalRate * 100).toFixed(1)}%`);
+
+  // 勝ちパターン上位表示
+  winPatterns.sort((a, b) => b.count - a.count);
+  console.log(`\nTop win patterns (${winPatterns.length} total):`);
+  for (let i = 0; i < Math.min(10, winPatterns.length); i++) {
+    const p = winPatterns[i];
+    console.log(`  Tiger row=${p.tigerRow}, M4 rows=[${p.m4Rows.join(',')}] x${p.count}`);
+  }
+
   console.log('\nWeights:');
   console.log(JSON.stringify(bestEver.weights, null, 2));
 
@@ -173,6 +220,7 @@ function train() {
     avgKills: bestEver.stats.avgKills,
     survivalRate: bestEver.stats.survivalRate,
     weights: bestEver.weights,
+    winPatterns: winPatterns.sort((a,b) => b.count - a.count).slice(0, 20),
   };
 
   fs.writeFileSync(__dirname + '/ai_sc4_weights.json', JSON.stringify(output, null, 2));
