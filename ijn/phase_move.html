@@ -336,12 +336,22 @@ function withdrawMove(ship) {
 // ========== JP: 各艦個別に直進（接触前） ==========
 function autoAdvanceIndividual(fleet) {
   const ships = fleet.filter(s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && getSpeed(s) > 0);
-  // 前方の艦から先に動かす（ブロック回避）
+  // 移動順: 同グループ内はリード艦→followOrder順、異グループ間は火力大→速力遅い順
   ships.sort((a, b) => {
-    const aEast = [6,3,9].includes(a.dir);
-    const bEast = [6,3,9].includes(b.dir);
-    if (aEast && bEast) return b.col - a.col;
-    if (!aEast && !bEast) return a.col - b.col;
+    // 同グループ内: リード艦→followOrder順
+    if (a.colIndex === b.colIndex) {
+      if (a.isLead && !b.isLead) return -1;
+      if (!a.isLead && b.isLead) return 1;
+      return (a.followOrder||0) - (b.followOrder||0);
+    }
+    // 異グループ間: 火力大きい方が先
+    const capA = (a.capG||0) - (a.dmgG||0);
+    const capB = (b.capG||0) - (b.dmgG||0);
+    if (capA !== capB) return capB - capA;
+    // 火力同じなら速力遅い方が先
+    const spdA = a.speed || 4;
+    const spdB = b.speed || 4;
+    if (spdA !== spdB) return spdA - spdB;
     return 0;
   });
 
