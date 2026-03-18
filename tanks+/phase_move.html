@@ -2130,12 +2130,6 @@ function aiFollowPath(u, db, path, callback) {
 
 // === 数的優劣判断 ===
 function aiDoMovement(u, db, callback) {
-  const isSc2or3 = state.scenarioId === 'sc2' || state.scenarioId === 'sc3';
-
-  if (isSc2or3 && u.side === 'ge') {
-    aiBreakthroughMove(u, db, callback);
-    return;
-  }
   // === BFS方式: 到達可能な全ヘクスを評価し、最良ヘクスへ移動 ===
   const enemies = state.units.filter(e =>
     e.side !== u.side && e.status !== 'destroyed' && e.col >= 1
@@ -2184,7 +2178,7 @@ function aiDoMovement(u, db, callback) {
   if (enemy) {
     const myFt = FIRE_TABLE[u.name];
 
-    // calcKillChanceベース有利度: myKill - enKill
+    // calcKillChanceベース有利度: myKill - enKill（固定砲塔の射界を考慮）
     function calcHexAdv(c, r) {
       let best = -Infinity;
       for (let ei = 0; ei < enemies.length; ei++) {
@@ -2193,27 +2187,36 @@ function aiDoMovement(u, db, callback) {
         const ed = hexDist(c, r, en.col, en.row);
         const enDb2 = UNIT_DB[en.name];
         if (!enDb2) continue;
-        const enTerrain = state.terrain ? (state.terrain[en.col+','+en.row] || '') : '';
-        const enMod = (enTerrain === 'forest' || enTerrain === 'building') ? 2 : 0;
-        const myKill = calcKillChance(u.name, en.name, ed, true, enMod).kill;
-        const myTerrain = state.terrain ? (state.terrain[c+','+r] || '') : '';
-        const myMod = (myTerrain === 'forest' || myTerrain === 'building') ? 2 : 0;
-        const enKill = calcKillChance(en.name, u.name, ed, true, myMod).kill;
+        // 自分が固定砲塔で射界外なら撃てない
+        let myKill = 0;
+        const myInArc = !(db.turret === 'fixed' && typeof isInFixedArcMove === 'function' && !isInFixedArcMove(u, en.col, en.row));
+        if (myInArc) {
+          const enTerrain = state.terrain ? (state.terrain[en.col+','+en.row] || '') : '';
+          const enMod = (enTerrain === 'forest' || enTerrain === 'building') ? 2 : 0;
+          myKill = calcKillChance(u.name, en.name, ed, true, enMod).kill;
+        }
+        // 敵が固定砲塔で射界外ならこちらは撃たれない
+        let enKill = 0;
+        const enInArc = !(enDb2.turret === 'fixed' && typeof isInFixedArcMove === 'function' && !isInFixedArcMove(en, c, r));
+        if (enInArc) {
+          const myTerrain = state.terrain ? (state.terrain[c+','+r] || '') : '';
+          const myMod = (myTerrain === 'forest' || myTerrain === 'building') ? 2 : 0;
+          enKill = calcKillChance(en.name, u.name, ed, true, myMod).kill;
+        }
         const adv = myKill - enKill;
         if (adv > best) best = adv;
       }
       return best;
     }
 
-    // 経路リスク算出: 自分から候補ヘクスへの直線経路上で敵LOSを受けるヘクス数
+    // 経路リスク算出: ルート上で射撃可能な敵ユニット数 - 数的優位
     function calcRouteRisk(toCol, toRow) {
       const dist = hexDist(u.col, u.row, toCol, toRow);
       if (dist <= 1) return 0;
-      let risk = 0;
-      // 直線経路をヘクス単位で辿る
+      // ルート上のヘクスに射撃可能な敵ユニットを集める
+      const canFire = {};
       let cc = u.col, cr = u.row;
       for (let step = 0; step < dist - 1; step++) {
-        // 次のヘクス: 目標に最も近い隣接ヘクスを選ぶ
         let bestNb = null, bestD = Infinity;
         for (let d = 0; d < 6; d++) {
           const nb = hexNeighbor(cc, cr, d);
@@ -2223,13 +2226,18 @@ function aiDoMovement(u, db, callback) {
         }
         if (!bestNb) break;
         cc = bestNb.col; cr = bestNb.row;
-        // このヘクスが敵LOSに入っているか
         for (let ei = 0; ei < enemies.length; ei++) {
+          if (canFire[ei]) continue;
           const en = enemies[ei];
-          if (hasLOS(cc, cr, en.col, en.row)) { risk++; break; }
+          if (hasLOS(cc, cr, en.col, en.row)) canFire[ei] = true;
         }
       }
-      return risk;
+      const threatCount = Object.keys(canFire).length;
+      const friendlies = state.units.filter(function(f) {
+        return f.side === u.side && f.status !== 'destroyed' && f.col >= 1;
+      }).length;
+      const adjusted = threatCount - (friendlies - enemies.length);
+      return Math.max(0, adjusted);
     }
 
     // 盤面全体スキャン: adv - リスクで最善候補を選ぶ
@@ -2294,101 +2302,6 @@ function aiDoMovement(u, db, callback) {
 
   console.log(`[AI] ${u.name} → 停止`);
   callback();
-}
-
-// === シナリオ2/3専用AI ===
-
-// ドイツ: 集団で脱出口へ突破
-function aiBreakthroughMove(u, db, callback) {
-  if (u.remainMove <= 0 || u.status !== 'ok') { callback(); return; }
-
-  // === 安全エリア接近（共通） ===
-  const btEnemies = state.units.filter(e => e.side !== u.side && e.status !== 'destroyed' && e.col >= 1);
-  if (btEnemies.length > 0 && aiIsSafeHex(u.col, u.row, db, btEnemies) && !aiCanEngageAny(u)) {
-    const btVisited = aiGetReachableHexes(u, db);
-    const btStartDist = hexDist(u.col, u.row, btEnemies[0].col, btEnemies[0].row);
-    let btBestKey = null, btBestDist = Infinity;
-    for (const key in btVisited) {
-      if (key === `${u.col},${u.row}`) continue;
-      const v = btVisited[key];
-      if (!aiIsSafeHex(v.col, v.row, db, btEnemies)) continue;
-      let minD = Infinity;
-      for (const e of btEnemies) { const d = hexDist(v.col, v.row, e.col, e.row); if (d < minD) minD = d; }
-      if (minD < btBestDist) { btBestDist = minD; btBestKey = key; }
-    }
-    if (btBestKey && btBestDist < btStartDist) {
-      const path = aiGetPath(btVisited, btBestKey);
-      if (path.length > 0) { aiFollowPath(u, db, path, callback); return; }
-    }
-  }
-
-  // sc2: 上端(row小)へ脱出, sc3: 下端(row大)へ脱出
-  const goingUp = (state.scenarioId === 'sc2');
-
-  // 集団: 最も後方の味方より2ヘクス以上先行しない
-  let shouldWait = false;
-  for (const ally of state.units) {
-    if (ally.side !== u.side || ally.status === 'destroyed' || ally.status === 'escaped' || ally.col < 1 || ally === u) continue;
-    if (goingUp && u.row < ally.row - 1) shouldWait = true;
-    if (!goingUp && u.row > ally.row + 1) shouldWait = true;
-  }
-  if (shouldWait) { callback(); return; }
-
-  function stepForward() {
-    if (u.remainMove <= 0 || u.status === 'destroyed' || u.status === 'immobilized') { callback(); return; }
-    // 集団制限の再チェック
-    for (const ally of state.units) {
-      if (ally.side !== u.side || ally.status === 'destroyed' || ally.status === 'escaped' || ally.col < 1 || ally === u) continue;
-      if (goingUp && u.row < ally.row - 1) { callback(); return; }
-      if (!goingUp && u.row > ally.row + 1) { callback(); return; }
-    }
-
-    const neighbors = getNeighbors(u.col, u.row);
-    let bestDir = -1, bestScore = -Infinity;
-    const cx = (state.mapMaxCol || 25) / 2;
-    for (let d = 0; d < 6; d++) {
-      const n = neighbors[d];
-      if (!n) continue;
-      const rotateCost = (!u.justEntered) ? getRotateCost(u.dir, d) : 0;
-      const terrainCost = getTerrainCost(n.col, n.row, u.col, u.row, u.name);
-      let backwardExtra = 0;
-      if (!u.justEntered) {
-        const diff = ((d - u.dir) % 6 + 6) % 6;
-        if (Math.min(diff, 6 - diff) >= 2) backwardExtra = 1;
-      }
-      const totalCost = rotateCost + terrainCost + backwardExtra;
-      if (totalCost > u.remainMove) continue;
-      // 進行方向チェック
-      if (goingUp && n.row >= u.row) continue;   // 上へ: row減少のみ
-      if (!goingUp && n.row <= u.row) continue;   // 下へ: row増加のみ
-      let score = Math.abs(u.row - n.row) * 20;
-      score -= Math.abs(n.col - cx) * 0.5;
-      score -= totalCost;
-      if (score > bestScore) { bestScore = score; bestDir = d; }
-    }
-    if (bestDir < 0) { callback(); return; }
-    moveMode = 'moving';
-    const origAfterDf = afterDefensiveFire;
-    afterDefensiveFire = function(result) {
-      origAfterDf(result);
-      afterDefensiveFire = origAfterDf;
-      if (result === 'destroyed' || result === 'immobilized') { callback(); return; }
-      if (u.status === 'escaped') { callback(); return; }
-      setTimeout(stepForward, 300);
-    };
-    handleMove(neighbors[bestDir].col, neighbors[bestDir].row);
-  }
-  stepForward();
-}
-
-// ソ連の集中攻撃目標（最も前方の敵）
-function aiGetGroupTarget(side) {
-  let best = null, bestRow = Infinity;
-  for (const e of state.units) {
-    if (e.side === side || e.status === 'destroyed' || e.col < 1) continue;
-    if (e.row < bestRow) { bestRow = e.row; best = e; }
-  }
-  return best;
 }
 
 // 固定砲塔の射界チェック（phase_move用簡易版）
@@ -2571,22 +2484,48 @@ function aiGetEffectiveRange(u) {
 }
 
 function aiFinishUnit(u, db, callback) {
-  // 向きを最寄りの敵に向ける
+  // 向きを決定（固定砲塔は射界内の敵数・距離で最適方向を選ぶ）
   if (db.type !== 'infantry') {
-    const enemy = aiNearestEnemy(u);
-    if (enemy) {
-      const hSrc = hexCenter(u.col, u.row);
-      const hTgt = hexCenter(enemy.col, enemy.row);
-      const angle = Math.atan2(-(hTgt.y - hSrc.y), hTgt.x - hSrc.x);
-      // 最も近い方向を選ぶ
-      let bestDir = 0, bestDiff = Infinity;
-      for (let d = 0; d < 6; d++) {
-        const dirRad = d * 60 * Math.PI / 180;
-        let diff = Math.abs(angle - dirRad);
-        if (diff > Math.PI) diff = 2 * Math.PI - diff;
-        if (diff < bestDiff) { bestDiff = diff; bestDir = d; }
+    const allEnemies = state.units.filter(e =>
+      e.side !== u.side && e.status !== 'destroyed' && e.col >= 1
+    );
+    if (allEnemies.length > 0) {
+      let bestDir = u.dir, bestScore = -Infinity;
+      const origDir = u.dir;
+
+      if (db.turret === 'fixed' && typeof isInFixedArcMove === 'function') {
+        // 固定砲塔: 各方向で射界内の敵数・近さを評価
+        for (let d = 0; d < 6; d++) {
+          const cost = u.justEntered ? 0 : getRotateCost(origDir, d);
+          if (cost > u.remainMove) continue;
+          u.dir = d;
+          let score = 0;
+          for (let ei = 0; ei < allEnemies.length; ei++) {
+            const en = allEnemies[ei];
+            if (!isInFixedArcMove(u, en.col, en.row)) continue;
+            const dist = hexDist(u.col, u.row, en.col, en.row);
+            score += 10 / (dist + 1); // 近い敵ほど高スコア
+          }
+          if (score > bestScore) { bestScore = score; bestDir = d; }
+        }
+        u.dir = origDir;
+      } else {
+        // 回転砲塔: 最寄りの敵に向ける
+        const enemy = aiNearestEnemy(u);
+        if (enemy) {
+          const hSrc = hexCenter(u.col, u.row);
+          const hTgt = hexCenter(enemy.col, enemy.row);
+          const angle = Math.atan2(-(hTgt.y - hSrc.y), hTgt.x - hSrc.x);
+          let bestDiff = Infinity;
+          for (let d = 0; d < 6; d++) {
+            const dirRad = d * 60 * Math.PI / 180;
+            let diff = Math.abs(angle - dirRad);
+            if (diff > Math.PI) diff = 2 * Math.PI - diff;
+            if (diff < bestDiff) { bestDiff = diff; bestDir = d; }
+          }
+        }
       }
-      // 旋回コスト確認（侵入直後の初回は無料）
+
       const cost = u.justEntered ? 0 : getRotateCost(u.dir, bestDir);
       if (cost <= u.remainMove) {
         u.dir = bestDir;
