@@ -81,7 +81,7 @@
     // 重み付きスコア
     score += W.killChance * totalKillChance;
     score += W.canShoot * canShoot;
-    score += W.threat * totalThreat;
+    score += W.threat * totalThreat * canBeShot;
     score += W.canBeShot * canBeShot;
     score += W.distance * minDist;
     score += W.terrainCover * terrainCover;
