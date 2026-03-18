@@ -1624,12 +1624,88 @@ function angleToDir(deg) {
 }
 
 function startDeploy() {
+  // AI委任時は自動配置
+  if (localStorage.getItem('jpAutoAI') === '1') {
+    autoDeployJP();
+    return;
+  }
   state.deployMode = true;
   state.deployIdx = 0;
   deployCol = 0;
   saveState();
   draw();
   showDeployPrompt();
+}
+
+// AI用: 日本軍を速力別グループに分けて自動配置
+function autoDeployJP() {
+  const fleet = state.jpFleet;
+  if (fleet.length === 0) { finishDeploy(); return; }
+
+  // 速力別にグループ分け（同じ速力の艦を同グループ）
+  const speedMap = {};
+  fleet.forEach(s => {
+    const spd = s.speed || SPEEDS[s.type] || 4;
+    if (!speedMap[spd]) speedMap[spd] = [];
+    speedMap[spd].push(s);
+  });
+  // 速力の遅い順にソート（大型艦が先）
+  const speedGroups = Object.keys(speedMap).map(Number).sort((a, b) => a - b);
+
+  // 8隻未満なら1グループにまとめる
+  let groups;
+  if (fleet.length < 8) {
+    groups = [fleet.slice()];
+  } else {
+    groups = speedGroups.map(spd => speedMap[spd]);
+    // 小さすぎるグループは隣接グループに統合（2隻以下）
+    while (groups.length > 1) {
+      const smallIdx = groups.findIndex(g => g.length <= 2);
+      if (smallIdx < 0) break;
+      const mergeIdx = smallIdx > 0 ? smallIdx - 1 : smallIdx + 1;
+      groups[mergeIdx] = groups[mergeIdx].concat(groups[smallIdx]);
+      groups.splice(smallIdx, 1);
+    }
+    // 最大3グループ
+    while (groups.length > 3) {
+      // 最小の2グループを統合
+      groups.sort((a, b) => a.length - b.length);
+      groups[1] = groups[0].concat(groups[1]);
+      groups.shift();
+    }
+  }
+
+  // 各グループ内を大型艦順にソート（BB→OBB→CA→CL→DD）
+  const TYPE_ORDER = { BB: 0, OBB: 1, CA: 2, CL: 3, CLAA: 3, DD: 4 };
+  groups.forEach(g => g.sort((a, b) => {
+    const ta = TYPE_ORDER[a.type] ?? 9;
+    const tb = TYPE_ORDER[b.type] ?? 9;
+    if (ta !== tb) return ta - tb;
+    return (b.capG||0) - (a.capG||0);
+  }));
+
+  // 配置: 各グループを縦列で配置、グループ間は最低5ヘクス離す
+  const jpDir = 6; // 東向き
+  const baseCol = 2 + Math.floor(Math.random() * 4); // col 2-5
+  const totalRows = groups.reduce((s, g) => s + g.length, 0) + (groups.length - 1) * 5;
+  let startRow = Math.max(2, Math.floor((ROWS - totalRows) / 2));
+
+  groups.forEach((group, gi) => {
+    group.forEach((ship, si) => {
+      ship.col = Math.min(baseCol + si, DEPLOY_MAX_COL);
+      ship.row = Math.max(0, Math.min(ROWS - 1, startRow + si));
+      ship.dir = jpDir;
+      ship.colIndex = gi;
+      ship.isLead = (si === 0);
+      ship.followOrder = si;
+    });
+    startRow += group.length + 5; // 次グループは5ヘクス離す
+  });
+
+  console.log(`[AI配置] ${groups.length}グループ: ${groups.map(g => g.length + '隻').join(', ')}`);
+  saveState();
+  draw();
+  finishDeploy();
 }
 
 function shipStats(ship) {
