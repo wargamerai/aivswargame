@@ -1228,6 +1228,10 @@ function showDmgSummary(title, lines) {
   }).join('');
   const ov = document.getElementById('dmgSummaryOverlay');
   ov.style.display = 'flex';
+  // fullAutoAI時は自動で閉じる（3秒後）
+  if (localStorage.getItem('fullAutoAI') === '1') {
+    setTimeout(() => { if (ov.style.display !== 'none') closeDmgSummary(); }, 3000);
+  }
 }
 function closeDmgSummary() {
   document.getElementById('dmgSummaryOverlay').style.display = 'none';
@@ -1690,12 +1694,97 @@ function angleToDir(deg) {
 }
 
 function startDeploy() {
+  // fullAutoAI時は米軍も自動配置
+  if (localStorage.getItem('fullAutoAI') === '1') {
+    autoDeployUS();
+    return;
+  }
   state.deployMode = true;
   state.deployIdx = 0;
   deployCol = 0;
   saveState();
   draw();
   showDeployPrompt();
+}
+
+// AI用: 米軍を速力別グループに分けて自動配置（右側）
+function autoDeployUS() {
+  var fleet = state.usFleet;
+  if (fleet.length === 0) { finishDeploy(); return; }
+
+  var US_LINE = COLS - 10; // 米軍配置線
+  var usDir = 4; // 西向き
+  var reverseDir = 6;
+
+  function hexN(c, r, d) {
+    var even = (r % 2 === 0);
+    var nb = {6:[1,0],4:[-1,0],3:even?[0,1]:[1,1],1:even?[-1,1]:[0,1],9:even?[0,-1]:[1,-1],7:even?[-1,-1]:[0,-1]};
+    var dd = nb[d]; if (!dd) return null;
+    return {col:c+dd[0], row:r+dd[1]};
+  }
+
+  // 速力別グループ分け
+  var speedMap = {};
+  fleet.forEach(function(s) {
+    var spd = s.speed || SPEEDS[s.type] || 4;
+    if (!speedMap[spd]) speedMap[spd] = [];
+    speedMap[spd].push(s);
+  });
+  var speedKeys = Object.keys(speedMap).map(Number).sort(function(a,b){ return a - b; });
+
+  var groups;
+  if (fleet.length < 8) {
+    groups = [fleet.slice()];
+  } else {
+    groups = speedKeys.map(function(spd){ return speedMap[spd]; });
+    while (groups.length > 1) {
+      var smallIdx = -1;
+      for (var gi = 0; gi < groups.length; gi++) { if (groups[gi].length <= 2) { smallIdx = gi; break; } }
+      if (smallIdx < 0) break;
+      var mergeIdx = smallIdx > 0 ? smallIdx - 1 : smallIdx + 1;
+      groups[mergeIdx] = groups[mergeIdx].concat(groups[smallIdx]);
+      groups.splice(smallIdx, 1);
+    }
+    while (groups.length > 3) {
+      groups.sort(function(a,b){ return a.length - b.length; });
+      groups[1] = groups[0].concat(groups[1]);
+      groups.shift();
+    }
+  }
+
+  var TYPE_ORDER = { BB: 0, OBB: 1, CA: 2, CL: 3, CLAA: 3, DD: 4 };
+  groups.forEach(function(g) {
+    g.sort(function(a, b) {
+      var ta = TYPE_ORDER[a.type] !== undefined ? TYPE_ORDER[a.type] : 9;
+      var tb = TYPE_ORDER[b.type] !== undefined ? TYPE_ORDER[b.type] : 9;
+      if (ta !== tb) return ta - tb;
+      return (b.capG||0) - (a.capG||0);
+    });
+  });
+
+  var baseCol = COLS - 3;
+  var totalNeeded = 0;
+  for (var gi = 0; gi < groups.length; gi++) totalNeeded += groups[gi].length;
+  totalNeeded += (groups.length - 1) * 5;
+  var startRow = Math.max(2, Math.floor((ROWS - totalNeeded) / 2));
+
+  groups.forEach(function(group, gi) {
+    group.forEach(function(s, si) {
+      var pos = {col: baseCol - gi, row: startRow};
+      for (var k = 0; k < si; k++) { var n = hexN(pos.col, pos.row, reverseDir); if (n) pos = n; }
+      s.col = pos.col;
+      s.row = Math.max(0, Math.min(ROWS-1, pos.row));
+      s.dir = usDir;
+      s.colIndex = gi;
+      s.isLead = (si === 0);
+      s.followOrder = si;
+    });
+    startRow += group.length + 5;
+  });
+
+  saveState();
+  draw();
+  finishDeploy();
 }
 
 function shipStats(ship) {

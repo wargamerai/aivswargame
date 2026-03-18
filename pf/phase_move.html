@@ -1877,8 +1877,10 @@ function donePhase(fromStraight) {
     const unmoved = usFleet.filter((s, i) => canShipMove(s) && !movedShips.has(i));
     if (unmoved.length > 0) {
       const names = unmoved.map(s => s.name).join(', ');
-      if (!confirm(`${unmoved.length}隻が未移動です（${names}）。\n未移動艦は直進します。よろしいですか？`)) {
-        return;
+      if (localStorage.getItem('fullAutoAI') !== '1') {
+        if (!confirm(`${unmoved.length}隻が未移動です（${names}）。\n未移動艦は直進します。よろしいですか？`)) {
+          return;
+        }
       }
       // 未移動艦を直進させる
       allStraight();
