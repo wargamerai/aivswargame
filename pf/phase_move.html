@@ -139,6 +139,7 @@ function init() {
   if (cb) cb.checked = isUSAutoAI();
 
   const jpMoving = isJPMoving();
+  console.log(`[PF-MOVE] phase=${state.phase} jpMoving=${jpMoving} jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove} jpDetected=${state.jpDetected} usDetected=${state.usDetected} contactMade=${state.contactMade} usAutoAI=${isUSAutoAI()}`);
 
   if (jpMoving && !state.jpFreeMove) {
     startStraightMode();
@@ -187,6 +188,7 @@ function startStraightMode() {
   const visual = checkVisualSpotting();
   const radar = checkRadar();
 
+  console.log(`[PF-MOVE] 接触チェック: visual=${visual} radar=${radar} jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove}`);
   if (visual) {
     state.jpDetected = true;
     state.usDetected = true;
@@ -195,6 +197,7 @@ function startStraightMode() {
     state.contactMade = true;
     pushState();
     setInfo('敵艦発見！ 両軍自由移動可能');
+    console.log('[PF-MOVE] 視認発見 → jpFreeMove=true, usFreeMove=true');
   } else if (radar) {
     if (!state.usDetected) {
       state.usDetected = true;
@@ -203,6 +206,7 @@ function startStraightMode() {
       pushState();
     }
     setInfo('レーダー探知！ 直進継続（自由移動は視認発見後）');
+    console.log('[PF-MOVE] レーダー探知のみ → usFreeMove変更なし');
   } else if (!visual && !radar) {
     checkLineReach();
     setInfo(`${side}直進完了 — 敵未発見`);
@@ -363,9 +367,9 @@ function autoAdvanceIndividual(fleet) {
       const next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
-      const blocked = occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship);
-      if (blocked) {
-        // 最低速度以上なら停止
+      const liveBlocked = occupied(next.col, next.row, ship);
+      if (liveBlocked) {
+        // 生存艦によるブロック: 最低速度以上なら停止
         if (step >= minCount) break;
         // 最低速度未満: 隣接ヘクスで回避を試みる
         const curDirIdx = DIR_CW_AI.indexOf(ship.dir);
@@ -374,7 +378,7 @@ function autoAdvanceIndividual(fleet) {
           const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
           const altNext = hexNeighbor(ship.col, ship.row, altDir);
           if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
-              && !occupied(altNext.col, altNext.row, ship) && !getSunkShip(altNext.col, altNext.row, ship)) {
+              && !occupied(altNext.col, altNext.row, ship)) {
             ship.col = altNext.col;
             ship.row = altNext.row;
             avoided = true;
@@ -387,11 +391,10 @@ function autoAdvanceIndividual(fleet) {
           ship.row = next.row;
           var occ2 = getOccupant(next.col, next.row, ship);
           if (occ2) collisionCheck(ship, occ2);
-          var sunkAt2 = getSunkShip(next.col, next.row, ship);
-          if (sunkAt2) collisionCheck(ship, sunkAt2);
         }
         continue;
       }
+      // 沈没艦は通過可能（衝突判定のみ）
       ship.col = next.col;
       ship.row = next.row;
       var occ = getOccupant(next.col, next.row, ship);
