@@ -146,8 +146,70 @@ function drawHexPath(cx, cy, size) {
   ctx.closePath();
 }
 
+// --- 隣接ヘクス計算 (even-r offset, pointy-top) ---
+function getNeighbors(col, row) {
+  const even = row % 2 === 0;
+  if (even) {
+    return [
+      [col,   row-1], // NE
+      [col+1, row],   // E
+      [col,   row+1], // SE
+      [col-1, row+1], // SW
+      [col-1, row],   // W
+      [col-1, row-1], // NW
+    ];
+  } else {
+    return [
+      [col+1, row-1], // NE
+      [col+1, row],   // E
+      [col+1, row+1], // SE
+      [col,   row+1], // SW
+      [col-1, row],   // W
+      [col,   row-1], // NW
+    ];
+  }
+}
+
 // --- 描画 ---
 const PAD = 80; // 端ヘクス用の余白
+
+function drawRoadLines(p) {
+  // 路線ごとに隣接ヘクス間に線を引く
+  for (let route = 1; route <= 5; route++) {
+    // この路線を持つヘクスを収集
+    const hexes = new Set();
+    for (const [id, routes] of Object.entries(roadData)) {
+      if (routes.includes(route)) hexes.add(id);
+    }
+    if (hexes.size === 0) continue;
+
+    ctx.strokeStyle = ROAD_COLORS[route].replace(/[\d.]+\)$/, '0.9)');
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+
+    // 描画済みペアを記録（重複防止）
+    const drawn = new Set();
+    for (const id of hexes) {
+      const col = parseInt(id.substring(0, 2)) - 1;
+      const row = parseInt(id.substring(2, 4)) - 1;
+      const center1 = hexCenter(col, row, p.hexSize, p.offsetX, p.offsetY);
+      const neighbors = getNeighbors(col, row);
+      for (const [nc, nr] of neighbors) {
+        if (nc < 0 || nc >= p.cols || nr < 0 || nr >= p.rows) continue;
+        const nid = hexId(nc, nr);
+        if (!hexes.has(nid)) continue;
+        const pairKey = [id, nid].sort().join('-');
+        if (drawn.has(pairKey)) continue;
+        drawn.add(pairKey);
+        const center2 = hexCenter(nc, nr, p.hexSize, p.offsetX, p.offsetY);
+        ctx.beginPath();
+        ctx.moveTo(center1.x, center1.y);
+        ctx.lineTo(center2.x, center2.y);
+        ctx.stroke();
+      }
+    }
+  }
+}
 
 function drawHexGrid() {
   const p = getParams();
@@ -275,6 +337,9 @@ function drawHexGrid() {
       }
     }
   }
+
+  // 道路の線を描画
+  drawRoadLines(p);
 }
 
 // --- ヘクス判定 ---
