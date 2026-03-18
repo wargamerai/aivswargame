@@ -202,12 +202,11 @@ function startStraightMode() {
   } else if (radar) {
     if (!state.usDetected) {
       state.usDetected = true;
-      // レーダー探知のみ: 移動の自由は次ターンの視認発見から
-      // contactMadeは砲撃フェーズ用にセット（射撃は可能）
+      state.usFreeMove = true;
       state.contactMade = true;
       pushState();
     }
-    setInfo('レーダー探知！ 直進継続（自由移動は視認発見後）');
+    setInfo('レーダー探知！ 米軍自由移動可能');
   } else if (!visual && !radar) {
     checkLineReach();
     setInfo(`${side}直進完了 — 敵未発見`);
@@ -359,35 +358,8 @@ function autoAdvanceIndividual(fleet) {
       const next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
-      const blocked = occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship);
-      if (blocked) {
-        // 最低速度以上なら停止
-        if (step >= minCount) break;
-        // 最低速度未満: 隣接ヘクスで回避を試みる
-        const curDirIdx = DIR_CW_AI.indexOf(ship.dir);
-        let avoided = false;
-        for (const offset of [1, 5]) {
-          const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
-          const altNext = hexNeighbor(ship.col, ship.row, altDir);
-          if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
-              && !occupied(altNext.col, altNext.row, ship) && !getSunkShip(altNext.col, altNext.row, ship)) {
-            ship.col = altNext.col;
-            ship.row = altNext.row;
-            avoided = true;
-            break;
-          }
-        }
-        if (!avoided) {
-          // 回避不可: やむなく突入
-          ship.col = next.col;
-          ship.row = next.row;
-          var occ2 = getOccupant(next.col, next.row, ship);
-          if (occ2) collisionCheck(ship, occ2);
-          var sunkAt2 = getSunkShip(next.col, next.row, ship);
-          if (sunkAt2) collisionCheck(ship, sunkAt2);
-        }
-        continue;
-      }
+      // 衝突回避: 最低速度以上なら前方占有時に停止
+      if (step >= minCount && (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship))) break;
       ship.col = next.col;
       ship.row = next.row;
       var occ = getOccupant(next.col, next.row, ship);
