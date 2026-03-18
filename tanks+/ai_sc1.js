@@ -15,6 +15,10 @@ var SC1_RALLY_HEXES = [
   [4,8],[4,9],[5,9],[5,10],[5,11],[5,12],[6,9],[6,10],[6,11],[6,12]
 ];
 
+// 待ち伏せ解禁距離: ゲーム開始時にランダム(0〜3)
+var SC1_TRIGGER_DIST = Math.floor(Math.random() * 4);
+console.log('[AI-sc1] 待ち伏せ解禁距離: ' + SC1_TRIGGER_DIST);
+
 // ============================================================
 //  ユーティリティ
 // ============================================================
@@ -45,7 +49,7 @@ function sc1_isGermanFlanking() {
     // ドイツが2ヘクス以内に接近したら発動
     for (var ei = 0; ei < enemies.length; ei++) {
       var e = enemies[ei];
-      if (hexDist(a.col, a.row, e.col, e.row) <= 2) return true;
+      if (hexDist(a.col, a.row, e.col, e.row) <= SC1_TRIGGER_DIST) return true;
     }
     if (!sc1_isGoalHex(a.col, a.row)) continue;
     for (var ei = 0; ei < enemies.length; ei++) {
