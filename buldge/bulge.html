@@ -407,6 +407,25 @@ function draw() {
     }
   }
 
+  // 退却可能hexハイライト（緑）
+  if (G.opPhase === 'retreat' && G.combat.retreatingUnits.length > 0) {
+    const ru = G.combat.retreatingUnits[0];
+    const unit = G.units.find(u => u.id === ru);
+    if (unit) {
+      const retreatHexes = getRetreatHexes(unit);
+      for (const hid of retreatHexes) {
+        const { col, row } = parseHexId(hid);
+        const center = hexCenter(col, row);
+        drawHexPath(center.x, center.y, HEX_SIZE);
+        ctx.fillStyle = 'rgba(80,255,80,0.3)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(80,255,80,0.7)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+  }
+
   // NW突破マーカー
   if (G.exitMarkers) {
     for (const hid of G.exitMarkers) {
@@ -1659,7 +1678,14 @@ function updateRightPanel() {
       const ru = G.combat.retreatingUnits[0];
       const unit = ru ? G.units.find(u => u.id === ru) : null;
       desc.textContent = unit ? `${unit.name} の退却先を選択` : '退却先を選択';
-      panel.innerHTML = `<div class="combat-info">退却先のhexをクリック</div>`;
+      let retreatInfo = '';
+      if (unit) {
+        const retreatHexes = getRetreatHexes(unit);
+        retreatInfo = retreatHexes.length > 0
+          ? `<div style="color:#5f5;margin:4px 0;">退却可能: ${retreatHexes.join(', ')}</div><div>緑色のhexをクリックしてください</div>`
+          : `<div style="color:#f55;margin:4px 0;">退却先なし — ユニット除去</div>`;
+      }
+      panel.innerHTML = `<div class="combat-info"><b>${unit ? unit.name : '?'}</b> (${unit ? unit.hexId : '?'})<br>${retreatInfo}</div>`;
     } else if (G.opPhase === 'advance') {
       desc.textContent = '戦闘後前進';
       panel.innerHTML = `<div class="combat-info">${G.combat.defHex} をクリックで前進</div>
