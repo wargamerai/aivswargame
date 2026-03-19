@@ -1346,8 +1346,10 @@ function calcVP() {
   for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
     if (fac !== 'c') continue;
     const units = getUnitsAt(hid);
-    if (units.some(u => u.side === 'german')) G.vpGerman++;
-    if (units.some(u => u.side === 'allied' && !units.some(v => v.side === 'german'))) G.vpAllied++;
+    const hasGerman = units.some(u => u.side === 'german');
+    const hasAllied = units.some(u => u.side === 'allied');
+    if (hasGerman && !hasAllied) G.vpGerman++;
+    if (hasAllied && !hasGerman) G.vpAllied++;
   }
 }
 
