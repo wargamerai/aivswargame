@@ -619,6 +619,17 @@ function drawUnits() {
   }
 }
 
+// hexを画面中央にパン
+function panToHex(hid) {
+  const { col, row } = parseHexId(hid);
+  const center = hexCenter(col, row);
+  const rect = mapArea.getBoundingClientRect();
+  panX = rect.width / 2 - center.x * zoom;
+  panY = rect.height / 2 - center.y * zoom;
+  clampPan();
+  draw();
+}
+
 // ========== マップ操作 ==========
 function pixelToHex(px, py) {
   // canvas座標に変換
@@ -2089,6 +2100,7 @@ function aiDoMovement() {
       pair.movePath = [fromHex, ...info.path];
     }
     addLog('move', `[AI] ${unit.name} → ${bestHex}`);
+    panToHex(bestHex);
 
     // 隣接敵チェック → 攻撃フェーズ or サイド切替
     const adjEnemy = getNeighborIds(bestHex).some(nid =>
@@ -2273,8 +2285,9 @@ function aiDoAttack() {
     const atkNames = bestAttack.attackers.map(id => { const u = G.units.find(x => x.id === id); return u ? u.name : ''; }).join(', ');
     const defNames = bestAttack.defenders.map(u => u.name).join(', ');
     addLog('combat', `[AI] ${atkNames} → ${defNames} (${bestAttack.defHex}) を攻撃`);
+    // 戦闘hexに画面をパン
+    panToHex(bestAttack.defHex);
     updateRightPanel();
-    draw();
     // 攻撃ハイライトを見せてから実行（2秒待ち）
     setTimeout(() => {
       executeCombat();
