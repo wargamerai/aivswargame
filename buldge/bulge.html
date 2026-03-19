@@ -1004,10 +1004,10 @@ function eliminateUnit(unit) {
 // ========== ターン管理 ==========
 function endPhase() {
   if (G.phase === 'reinforce') {
-    // 増援配置
     placeReinforcements();
     G.phase = 'recovery';
     doRecovery();
+    addLog('turn', `回復フェーズ完了`);
     G.phase = 'operation';
     G.opPhase = 'select';
     G.activeSide = 'german';
@@ -1119,14 +1119,36 @@ function placeReinforcements() {
 
 function doRecovery() {
   // 裏面(混乱)ユニットを表面に戻す
-  let count = 0;
+  // ドイツ軍: 第3ターン以降は燃料制限 → D+4で回復判定
+  let recovered = 0, failed = 0;
   for (const u of G.units) {
-    if (u.flipped && !u.eliminated) {
+    if (!u.flipped || u.eliminated) continue;
+
+    if (u.side === 'german' && G.turn >= 3) {
+      // ドイツ軍燃料制限: D1+4 で判定
+      const die = Math.floor(Math.random() * 6) + 1;
+      const result = die + 4;
+      // 燃料集積所（hex 1304）にドイツ軍ユニットがいれば+2
+      const fuelBonus = getUnitsAt('1304').some(f => f.side === 'german') ? 2 : 0;
+      const total = result + fuelBonus;
+      // 判定: 合計が一定以上なら回復（ターン記録トラックの燃料制限値を参照）
+      // 簡易: 合計7以上で回復
+      if (total >= 7) {
+        u.flipped = false;
+        recovered++;
+        addLog('turn', `${u.name}: 回復 (D${die}+4${fuelBonus ? '+2燃料' : ''}=${total})`);
+      } else {
+        failed++;
+        addLog('turn', `${u.name}: 回復失敗 (D${die}+4${fuelBonus ? '+2燃料' : ''}=${total})`);
+      }
+    } else {
+      // 連合軍 & ドイツ軍ターン1-2: 自動回復
       u.flipped = false;
-      count++;
+      recovered++;
     }
   }
-  if (count > 0) addLog('turn', `回復: ${count}ユニットが回復`);
+  if (recovered > 0) addLog('turn', `回復: ${recovered}ユニットが回復`);
+  if (failed > 0) addLog('turn', `回復失敗: ${failed}ユニット`);
 }
 
 function endGame() {
