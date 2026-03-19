@@ -1063,7 +1063,9 @@ function executeCombat() {
   // 攻撃参加ユニットのmustAttackをクリア
   for (const u of attackers) { delete u.mustAttack; }
 
-  setTimeout(() => applyCombatResult(result, attackers, defenders, defHexId), 1500);
+  // AI戦闘は長めに表示して結果を確認できるようにする
+  const delay = isAISide(G.activeSide) ? 3000 : 1500;
+  setTimeout(() => applyCombatResult(result, attackers, defenders, defHexId), delay);
 }
 
 function applyCombatResult(result, attackers, defenders, defHexId) {
@@ -2160,18 +2162,22 @@ function aiDoAttack() {
       const u = G.units.find(x => x.id === uid);
       if (u) u._aiAttacked = true;
     }
-    // 戦闘実行
+    // 戦闘セットアップ（人間と同じUI表示）
     resetCombat();
     G.combat.defHex = bestAttack.defHex;
     G.combat.defenders = bestAttack.defenders;
     G.combat.attackers = bestAttack.attackers;
-    addLog('combat', `[AI] ${bestAttack.defHex} を攻撃`);
+    // 攻撃対象hexと攻撃参加hexをハイライト
+    G.attackTargets = new Set([bestAttack.defHex]);
+    const atkNames = bestAttack.attackers.map(id => { const u = G.units.find(x => x.id === id); return u ? u.name : ''; }).join(', ');
+    const defNames = bestAttack.defenders.map(u => u.name).join(', ');
+    addLog('combat', `[AI] ${atkNames} → ${defNames} (${bestAttack.defHex}) を攻撃`);
     updateRightPanel();
     draw();
+    // 攻撃ハイライトを見せてから実行（2秒待ち）
     setTimeout(() => {
       executeCombat();
-      // executeCombat内でapplyCombatResultが呼ばれ、そこからaiTickが呼ばれる
-    }, 600);
+    }, 2000);
   } else {
     // 攻撃なし → mustAttackクリアして裏にしてサイド切替
     G.units.filter(u => u.side === side).forEach(u => { delete u.mustAttack; });
@@ -2223,7 +2229,7 @@ function aiDoRetreat() {
     }
     updateRightPanel();
     draw();
-    setTimeout(() => aiTick(), 500);
+    setTimeout(() => aiTick(), 1500);
   } else {
     // 退却先なし → ユニット除去
     eliminateUnit(unit);
@@ -2234,7 +2240,7 @@ function aiDoRetreat() {
     }
     updateRightPanel();
     draw();
-    setTimeout(() => aiTick(), 500);
+    setTimeout(() => aiTick(), 1500);
   }
 }
 
