@@ -1899,6 +1899,16 @@ function donePhase(fromStraight) {
   // 同一ヘクス残留チェック
   markSharedHex();
   pushState();
+  // デバッグ: 移動確認ボタン（一時的）
+  if (localStorage.getItem('fullAutoAI') === '1') {
+    document.getElementById('btnDone').textContent = '移動確認 → 次へ';
+    document.getElementById('btnDone').style.display = 'block';
+    document.getElementById('btnDone').onclick = function() {
+      this.style.display = 'none';
+      parent.postMessage({ type:'PHASE_DONE' }, '*');
+    };
+    return;
+  }
   parent.postMessage({ type:'PHASE_DONE' }, '*');
 }
 
