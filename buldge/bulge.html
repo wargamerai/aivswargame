@@ -174,6 +174,7 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
 
 <script src="mapdata.js"></script>
 <script src="bulge_units.js"></script>
+<script src="bulge_mcts.js"></script>
 <script>
 'use strict';
 
@@ -2385,8 +2386,8 @@ function aiDoMovement() {
     return;
   }
 
-  // 最適な移動先を選択
-  const bestHex = aiPickMoveTarget(unit, reachable);
+  // 最適な移動先を選択（モンテカルロ）
+  const bestHex = mcPickMove(unit, reachable);
   if (bestHex && bestHex !== unit.hexId) {
     const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
     if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
@@ -2580,6 +2581,18 @@ function aiDoAttack() {
   }
 
   if (bestAttack) {
+    // モンテカルロで攻撃すべきか判断
+    const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
+    if (!mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
+      // 攻撃見送り → mustAttackクリアしてサイド切替
+      G.units.filter(u => u.side === side).forEach(u => { delete u.mustAttack; });
+      G.units.filter(u => u.side === side && u.acted && !u.flipped).forEach(u => {
+        u.flipped = true; expireMovePath(u);
+      });
+      addLog('combat', `[AI] 攻撃見送り (MC判断)`);
+      switchSide();
+      return;
+    }
     // 攻撃参加ユニットにフラグ
     for (const uid of bestAttack.attackers) {
       const u = G.units.find(x => x.id === uid);
