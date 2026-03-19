@@ -1325,10 +1325,11 @@ function switchSide() {
   G.attackTargets = null;
   const sideName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
   addLog('turn', `${sideName}の手番`);
+  showFlash(`${sideName}の手番`, nextSide);
   updateUI();
   draw();
-  // AIチェック
-  scheduleAI(800);
+  // AIチェック（フラッシュが見えるよう長めに待つ）
+  scheduleAI(1800);
 }
 
 function nextTurn() {
