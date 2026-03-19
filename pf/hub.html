@@ -186,7 +186,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 function gameLog(text) {
   const gl = document.getElementById('gameLog');
   if (gl) {
-    gl.style.display = '';
+    // ログは非表示のまま蓄積（表示しない）
     gl.innerHTML += `<div>${text}</div>`;
     gl.scrollTop = gl.scrollHeight;
   }
