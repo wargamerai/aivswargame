@@ -608,9 +608,10 @@ function clampPan() {
   const H = (mapImg.naturalHeight || 2000) * zoom;
   const rect = mapArea.getBoundingClientRect();
   const vw = rect.width, vh = rect.height;
-  const margin = 100; // マップが最低100px見えるように
-  panX = Math.max(-W + margin, Math.min(vw - margin, panX));
-  panY = Math.max(-H + margin, Math.min(vh - margin, panY));
+  if (W >= vw) { panX = Math.max(-W + vw, Math.min(0, panX)); }
+  else { panX = (vw - W) / 2; }
+  if (H >= vh) { panY = Math.max(-H + vh, Math.min(0, panY)); }
+  else { panY = (vh - H) / 2; }
 }
 
 // パン
