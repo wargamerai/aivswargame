@@ -58,6 +58,13 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
 #startScreen .mode-btn:hover { background:#1a508b; border-color:#e94560; }
 #startScreen .mode-btn .desc { font-size:0.8em; color:#888; margin-top:4px; }
 
+/* === フラッシュ通知 === */
+#flashOverlay { position:fixed; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; z-index:200; pointer-events:none; opacity:0; transition:opacity 0.3s; }
+#flashOverlay.show { opacity:1; }
+#flashOverlay .flash-text { font-size:2.5em; font-weight:bold; padding:20px 50px; border-radius:12px; text-shadow:0 0 30px rgba(0,0,0,0.8); }
+#flashOverlay.german .flash-text { background:rgba(80,80,100,0.9); color:#fff; border:3px solid #888; }
+#flashOverlay.allied .flash-text { background:rgba(60,100,60,0.9); color:#fff; border:3px solid #6a8a6a; }
+
 /* === ダイス演出 === */
 .dice-result { font-size:2em; font-weight:bold; color:#ffa657; text-align:center; padding:10px; animation: diceFlash 0.3s ease; }
 @keyframes diceFlash { 0% { transform:scale(1.5); opacity:0; } 100% { transform:scale(1); opacity:1; } }
@@ -134,6 +141,8 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
     <div id="logPanel"></div>
   </div>
 </div>
+
+<div id="flashOverlay"><div class="flash-text"></div></div>
 
 <script src="mapdata.js"></script>
 <script src="bulge_units.js"></script>
@@ -1003,6 +1012,7 @@ function eliminateUnit(unit) {
 
 // ========== ターン管理 ==========
 function endPhase() {
+  G.passCount = 0; // 通常のフェーズ終了ではパスカウントリセット
   if (G.phase === 'reinforce') {
     placeReinforcements();
     G.phase = 'recovery';
@@ -1265,7 +1275,7 @@ function updateRightPanel() {
         panel.innerHTML = html;
       } else {
         desc.textContent = '敵hexをクリックして攻撃対象を選択';
-        panel.innerHTML = `<div class="section"><button class="btn primary" onclick="endPhase()">攻撃終了 → 相手へ</button></div>`;
+        panel.innerHTML = `<div class="section"><button class="btn primary" onclick="endPhase()">攻撃終了 → 相手へ</button> <button class="btn" onclick="passPhase()">パス</button></div>`;
       }
     } else if (G.opPhase === 'retreat') {
       const ru = G.combat.retreatingUnits[0];
@@ -1291,6 +1301,7 @@ function updateRightPanel() {
       html += '</div>';
       html += `<div class="section">
         <button class="btn primary" onclick="endPhase()">移動終了 → 攻撃へ</button>
+        <button class="btn" onclick="passPhase()" style="margin-left:8px;">パス</button>
       </div>`;
       panel.innerHTML = html;
     }
@@ -1329,6 +1340,68 @@ function addLog(type, msg) {
 
 function undoAction() {
   // TODO: undo
+}
+
+// フラッシュ通知
+function showFlash(text, side) {
+  const el = document.getElementById('flashOverlay');
+  el.className = 'show ' + (side || '');
+  el.querySelector('.flash-text').textContent = text;
+  setTimeout(() => { el.className = ''; }, 1500);
+}
+
+// パス
+function passPhase() {
+  const sideName = G.activeSide === 'german' ? 'ドイツ軍' : '連合軍';
+  showFlash(`${sideName} パス`, G.activeSide);
+  addLog('turn', `${sideName}: パス`);
+
+  // パスフラグ管理
+  if (!G.passCount) G.passCount = 0;
+  G.passCount++;
+
+  // 両軍パスでターンエンド
+  if (G.passCount >= 2) {
+    addLog('turn', `両軍パス → ターン終了`);
+    showFlash('ターン終了', '');
+    G.passCount = 0;
+    setTimeout(() => nextTurn(), 1600);
+    return;
+  }
+
+  // 相手側へ
+  if (G.activeSide === 'german') {
+    G.germanDone = true;
+    if (!G.alliedDone) {
+      G.activeSide = 'allied';
+      G.opPhase = 'select';
+      G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; delete u.movePath; });
+      setTimeout(() => { showFlash('連合軍の手番', 'allied'); }, 1600);
+      addLog('turn', `連合軍の作戦フェーズ`);
+    } else {
+      G.passCount = 0;
+      nextTurn();
+      return;
+    }
+  } else {
+    G.alliedDone = true;
+    if (!G.germanDone) {
+      G.activeSide = 'german';
+      G.opPhase = 'select';
+      G.units.filter(u => u.side === 'german').forEach(u => { u.acted = false; delete u.movePath; });
+      setTimeout(() => { showFlash('ドイツ軍の手番', 'german'); }, 1600);
+      addLog('turn', `ドイツ軍の作戦フェーズ`);
+    } else {
+      G.passCount = 0;
+      nextTurn();
+      return;
+    }
+  }
+  G.selectedUnit = null;
+  G.reachable = null;
+  G.attackTargets = null;
+  updateUI();
+  draw();
 }
 
 // ========== ゲーム開始 ==========
