@@ -9,7 +9,7 @@ const IMG_BACK = 'cmj46_ssbulge_v1/images/123/';
 const INITIAL_SETUP = {
   german: [
     // === 戦車KG 初期配置（機械化師団ペア）===
-    { id:'de_1ss_1', name:'1SS(1)', side:'german', nation:'de', type:'panzer', atk:4, def:3, hexId:'2010', mechPair:'de_1ss_2', img:'fg_1ss_1.jpg', imgBack:'bg_1ss_1.jpg', flipped:false },
+    { id:'de_1ss_1', name:'1SS(1)', side:'german', nation:'de', type:'panzer', atk:4, def:3, hexId:'2107', mechPair:'de_1ss_2', img:'fg_1ss_1.jpg', imgBack:'bg_1ss_1.jpg', flipped:false },
     { id:'de_1ss_2', name:'1SS(2)', side:'german', nation:'de', type:'panzer', atk:3, def:2, hexId:'2107', mechPair:'de_1ss_1', img:'fg_1ss_2.jpg', imgBack:'bg_1ss_2.jpg', flipped:false },
     { id:'de_12ss_1', name:'12SS(1)', side:'german', nation:'de', type:'panzer', atk:3, def:2, hexId:'2006', mechPair:'de_12ss_2', img:'fg_12ss_1.jpg', imgBack:'bg_12ss_1.jpg', flipped:false },
     { id:'de_12ss_2', name:'12SS(2)', side:'german', nation:'de', type:'panzer', atk:3, def:2, hexId:'2006', mechPair:'de_12ss_1', img:'fg_12ss_2.jpg', imgBack:'bg_12ss_2.jpg', flipped:false },
