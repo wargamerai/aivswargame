@@ -602,6 +602,17 @@ function pixelToHex(px, py) {
   return null;
 }
 
+// パン制限: マップが画面外に出すぎないようにする
+function clampPan() {
+  const W = (mapImg.naturalWidth || 2400) * zoom;
+  const H = (mapImg.naturalHeight || 2000) * zoom;
+  const rect = mapArea.getBoundingClientRect();
+  const vw = rect.width, vh = rect.height;
+  const margin = 100; // マップが最低100px見えるように
+  panX = Math.max(-W + margin, Math.min(vw - margin, panX));
+  panY = Math.max(-H + margin, Math.min(vh - margin, panY));
+}
+
 // パン
 mapArea.addEventListener('mousedown', e => {
   if (e.button === 0) {
@@ -616,6 +627,7 @@ window.addEventListener('mousemove', e => {
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragStart.moved = true;
     panX = e.clientX - dragStart.x;
     panY = e.clientY - dragStart.y;
+    clampPan();
     draw();
   }
 });
@@ -640,11 +652,13 @@ mapArea.addEventListener('wheel', e => {
     const my = e.clientY - rect.top;
     panX = mx - (mx - panX) * (zoom / oldZoom);
     panY = my - (my - panY) * (zoom / oldZoom);
+    clampPan();
     syncZoomSlider();
   } else {
     // 通常スクロール = パン（上下左右）
     panX -= e.deltaX * 1.5;
     panY -= e.deltaY * 1.5;
+    clampPan();
   }
   draw();
 }, { passive: false });
@@ -1793,6 +1807,7 @@ zoomSlider.addEventListener('input', () => {
   panX = cx - (cx - panX) * (zoom / oldZoom);
   panY = cy - (cy - panY) * (zoom / oldZoom);
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
+  clampPan();
   draw();
 });
 function syncZoomSlider() {
