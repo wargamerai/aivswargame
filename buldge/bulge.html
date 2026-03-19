@@ -928,6 +928,7 @@ function getMoveCost(fromId, toId, unit) {
   // 河川: +2（道路沿いなら不要）
   if (riverCross && !sharedRoad) cost += 2;
 
+  dbg('MoveCost', dispHex(fromId)+'→'+dispHex(toId), {terrain, road:sharedRoad, river:riverCross, cost, unit:unit.name});
   return cost;
 }
 
@@ -972,17 +973,22 @@ function calcReachable(unit) {
     // ZOC判定: 味方がカバーしている敵のZOCは無効
     // 敵ZOCから敵ZOCへの1hex移動は可能
     if (hid !== start) {
+      let zocLog = [];
       const hasActiveEnemyZOC = getNeighborIds(hid).some(adj => {
         const enemies = getUnitsAt(adj).filter(e => e.side !== unit.side);
         if (enemies.length === 0) return false;
         // この敵hexに味方が隣接していればZOC無効（移動中のユニット自身は除く）
-        const enemyHasFriendlyNeighbor = getNeighborIds(adj).some(fn =>
+        const covers = getNeighborIds(adj).filter(fn =>
           getUnitsAt(fn).some(f => f.side === unit.side && f.id !== unit.id)
         );
-        return !enemyHasFriendlyNeighbor;
+        const active = covers.length === 0;
+        zocLog.push({enemyHex:dispHex(adj), enemies:enemies.map(e=>e.name), coveredBy:covers.map(c=>dispHex(c)), active});
+        return active;
       });
+      if (zocLog.length > 0) {
+        dbg('ZOC', dispHex(hid), 'unit:', unit.name, 'stop:', hasActiveEnemyZOC, zocLog);
+      }
       if (hasActiveEnemyZOC) {
-        // ZOC内で停止 — ただし開始hexが敵ZOC内なら1hex移動は許可済み（prevから1hexで到達）
         continue;
       }
     }
@@ -1213,6 +1219,7 @@ function getRetreatHexes(unit) {
       }
     }
   }
+  dbg('RETREAT', unit.name, 'from:', dispHex(unit.hexId), 'valid:', result.map(h=>dispHex(h)));
   return result;
 }
 
@@ -1250,6 +1257,12 @@ function executeCombat() {
   const result = lookupCRT(diff, modDie);
   cb.result = result;
 
+  dbg('COMBAT', {
+    defHex: dispHex(defHexId), terrain, facility,
+    attackers: attackers.map(u => ({name:u.name, hex:dispHex(u.hexId), atk:u.atk, def:u.def, flipped:u.flipped, power:u.flipped?u.def:u.atk})),
+    defenders: defenders.map(u => ({name:u.name, hex:dispHex(u.hexId||defHexId), atk:u.atk, def:u.def, flipped:u.flipped, power:u.flipped?u.def:u.atk})),
+    atkPower, defPower, diff, support, forestMod, die, modDie, result
+  });
   addLog('combat', `━━━ 戦闘解決 ━━━`);
   addLog('combat', `攻撃力: ${atkPower} vs 防御力: ${defPower} (差分: ${diff > 0 ? '+' : ''}${diff})`);
   if (support > 0) addLog('combat', `戦闘支援: +${support}`);
