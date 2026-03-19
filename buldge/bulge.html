@@ -536,16 +536,69 @@ function draw() {
 }
 
 // ========== 移動経路描画 ==========
+const MOVE_PATH_DURATION = 4000; // 経路表示時間(ms)
+
+function clearExpiredPaths() {
+  const now = Date.now();
+  for (const u of G.units) {
+    if (u._movePathExpiry && now > u._movePathExpiry) {
+      delete u.movePath;
+      delete u._movePathExpiry;
+      delete u._lastMovedAt;
+    }
+  }
+}
+
+// movePath削除を即時ではなく遅延にする
+function expireMovePath(unit) {
+  if (unit.movePath) {
+    unit._movePathExpiry = Date.now() + MOVE_PATH_DURATION;
+    unit._lastMovedAt = Date.now();
+    startPathAnimation();
+  }
+}
+
+// 経路表示中のアニメーションループ
+let _pathAnimId = null;
+function startPathAnimation() {
+  if (_pathAnimId) return;
+  function tick() {
+    const hasActive = G.units.some(u => u._movePathExpiry && Date.now() < u._movePathExpiry);
+    if (hasActive) {
+      draw();
+      _pathAnimId = requestAnimationFrame(tick);
+    } else {
+      _pathAnimId = null;
+      draw(); // 最終クリア描画
+    }
+  }
+  _pathAnimId = requestAnimationFrame(tick);
+}
+
 function drawMovePaths() {
-  const PATH_COLORS = { german: 'rgba(255,100,100,0.7)', allied: 'rgba(100,180,255,0.7)' };
+  clearExpiredPaths();
+  const now = Date.now();
+  const PATH_COLORS = { german: 'rgba(255,100,100,', allied: 'rgba(100,180,255,' };
   for (const u of G.units) {
     if (!u.movePath || u.movePath.length < 2 || u.eliminated || u.exited) continue;
-    const color = PATH_COLORS[u.side] || 'rgba(255,255,100,0.7)';
+    // フェードアウト計算
+    let alpha = 0.8;
+    if (u._movePathExpiry) {
+      const remaining = u._movePathExpiry - now;
+      alpha = Math.max(0.1, Math.min(0.8, remaining / MOVE_PATH_DURATION));
+    }
+    const baseColor = PATH_COLORS[u.side] || 'rgba(255,255,100,';
+    const color = baseColor + alpha + ')';
+
+    // 経路線（太く＋グロー）
+    ctx.save();
+    ctx.shadowColor = baseColor + '0.6)';
+    ctx.shadowBlur = 15;
     ctx.strokeStyle = color;
-    ctx.lineWidth = 9;
+    ctx.lineWidth = 10;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.setLineDash([12, 8]);
+    ctx.setLineDash([14, 8]);
     ctx.beginPath();
     for (let i = 0; i < u.movePath.length; i++) {
       const { col, row } = parseHexId(u.movePath[i]);
@@ -555,29 +608,49 @@ function drawMovePaths() {
     }
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
 
-    // 移動元に小さい丸
+    // 移動元に丸
     const start = parseHexId(u.movePath[0]);
     const sc = hexCenter(start.col, start.row);
     ctx.beginPath();
-    ctx.arc(sc.x, sc.y, 12, 0, Math.PI * 2);
+    ctx.arc(sc.x, sc.y, 14, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
 
-    // 矢印（最後の2点から方向を計算）
+    // 矢印（太く）
     const last = parseHexId(u.movePath[u.movePath.length - 1]);
     const prev = parseHexId(u.movePath[u.movePath.length - 2]);
     const lc = hexCenter(last.col, last.row);
     const pc = hexCenter(prev.col, prev.row);
     const angle = Math.atan2(lc.y - pc.y, lc.x - pc.x);
-    const arrLen = 24;
+    const arrLen = 28;
+    ctx.save();
+    ctx.shadowColor = baseColor + '0.8)';
+    ctx.shadowBlur = 10;
     ctx.beginPath();
     ctx.moveTo(lc.x, lc.y);
     ctx.lineTo(lc.x - arrLen * Math.cos(angle - 0.4), lc.y - arrLen * Math.sin(angle - 0.4));
     ctx.moveTo(lc.x, lc.y);
     ctx.lineTo(lc.x - arrLen * Math.cos(angle + 0.4), lc.y - arrLen * Math.sin(angle + 0.4));
     ctx.strokeStyle = color;
-    ctx.lineWidth = 7;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 最後に動いたユニットのhex強調（パルスグロー）
+  for (const u of G.units) {
+    if (!u._lastMovedAt || u.eliminated || u.exited) continue;
+    const elapsed = now - u._lastMovedAt;
+    if (elapsed > MOVE_PATH_DURATION) continue;
+    const { col, row } = parseHexId(u.hexId);
+    const center = hexCenter(col, row);
+    const pulse = 0.4 + 0.3 * Math.sin(elapsed / 200);
+    const glowColor = u.side === 'german' ? `rgba(255,100,100,${pulse})` : `rgba(100,180,255,${pulse})`;
+    drawHexPath(center.x, center.y, HEX_SIZE * 1.05);
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 4;
     ctx.stroke();
   }
 }
@@ -1002,8 +1075,8 @@ function onMoveClick(hid) {
       addLog('turn', `━ ${movedUnit.name} 攻撃フェーズ ━`);
     } else {
       // 敵隣接なし → 即サイド切替
-      movedUnit.flipped = true; delete movedUnit.movePath;
-      if (stacked && pair) { pair.flipped = true; delete pair.movePath; }
+      movedUnit.flipped = true; expireMovePath(movedUnit);
+      if (stacked && pair) { pair.flipped = true; expireMovePath(pair); }
       switchSide();
     }
     updateRightPanel();
@@ -1277,7 +1350,7 @@ function finishCombat() {
   dbg('finishCombat', {side:G.activeSide, defHex:G.combat.defHex});
   // 操作ユニットを裏にする
   G.units.filter(u => u.side === G.activeSide && u.acted && !u.flipped).forEach(u => {
-    u.flipped = true; delete u.movePath;
+    u.flipped = true; expireMovePath(u);
   });
   resetCombat();
   G.attackTargets = null;
@@ -1349,7 +1422,7 @@ function switchSide() {
   // 操作済みユニットを裏にする（今操作した1ユニット分）
   // actedかつまだflippedでないユニットをflip
   G.units.filter(u => u.side === G.activeSide && u.acted && !u.flipped).forEach(u => {
-    u.flipped = true; delete u.movePath;
+    u.flipped = true; expireMovePath(u);
   });
   // サイド切り替え
   const nextSide = G.activeSide === 'german' ? 'allied' : 'german';
@@ -1375,7 +1448,7 @@ function nextTurn() {
     return;
   }
   G.phase = 'reinforce';
-  G.units.forEach(u => { u.acted = false; u.mustAttack = false; delete u.movePath; delete u._unstacked; delete u._aiAttacked; });
+  G.units.forEach(u => { u.acted = false; u.mustAttack = false; delete u.movePath; delete u._movePathExpiry; delete u._lastMovedAt; delete u._unstacked; delete u._aiAttacked; });
   addLog('turn', `═══ ターン${G.turn} ═══`);
   updateUI();
   draw();
@@ -2297,8 +2370,8 @@ function aiDoMovement() {
       // AI攻撃へ
       scheduleAI(600);
     } else {
-      unit.flipped = true; delete unit.movePath;
-      if (stacked && pair) { pair.flipped = true; delete pair.movePath; }
+      unit.flipped = true; expireMovePath(unit);
+      if (stacked && pair) { pair.flipped = true; expireMovePath(pair); }
       switchSide();
     }
   } else {
@@ -2476,7 +2549,7 @@ function aiDoAttack() {
     // 攻撃なし → mustAttackクリアして裏にしてサイド切替
     G.units.filter(u => u.side === side).forEach(u => { delete u.mustAttack; });
     G.units.filter(u => u.side === side && u.acted && !u.flipped).forEach(u => {
-      u.flipped = true; delete u.movePath;
+      u.flipped = true; expireMovePath(u);
     });
     switchSide();
   }
