@@ -683,8 +683,16 @@ mapArea.addEventListener('wheel', e => {
 
 // ========== マップクリック ==========
 function handleMapClick(e) {
-  // AI操作中はクリック無効
-  if (G.phase === 'operation' && isAISide(G.activeSide)) return;
+  // AI操作中はクリック無効（ただし退却/前進は人間ユニットかもしれないので許可）
+  if (G.phase === 'operation' && isAISide(G.activeSide)) {
+    if (G.opPhase !== 'retreat' && G.opPhase !== 'advance') return;
+    // 退却/前進: 退却ユニットが人間側なら許可
+    const ru = G.combat.retreatingUnits && G.combat.retreatingUnits[0];
+    const retreatUnit = ru ? G.units.find(u => u.id === ru) : null;
+    const advUnit = G.combat.advanceEligible && G.combat.advanceEligible[0] ? G.units.find(u => u.id === G.combat.advanceEligible[0]) : null;
+    const checkUnit = G.opPhase === 'retreat' ? retreatUnit : advUnit;
+    if (checkUnit && isAISide(checkUnit.side)) return; // AIユニットならブロック
+  }
   const hex = pixelToHex(e.clientX, e.clientY);
   if (!hex) return;
   const hid = hexId(hex.col, hex.row);
