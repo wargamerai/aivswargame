@@ -932,7 +932,7 @@ function getMoveCost(fromId, toId, unit) {
   // 河川: +2（道路沿いなら不要）
   if (riverCross && !sharedRoad) cost += 2;
 
-  dbg('MoveCost', dispHex(fromId)+'→'+dispHex(toId), {terrain, road:sharedRoad, river:riverCross, cost, unit:unit.name});
+  dbg('MoveCost', `${dispHex(fromId)}→${dispHex(toId)} 地形:${terrain} 道路:${sharedRoad} 河川:${riverCross} cost:${cost} ${unit.name}`);
   return cost;
 }
 
@@ -990,7 +990,8 @@ function calcReachable(unit) {
         return active;
       });
       if (zocLog.length > 0) {
-        dbg('ZOC', dispHex(hid), 'unit:', unit.name, 'stop:', hasActiveEnemyZOC, zocLog);
+        const zocStr = zocLog.map(z => `敵${z.enemyHex}[${z.enemies}]${z.active?'→ZOC有効':'→味方'+z.coveredBy+'でカバー'}`).join(' | ');
+        dbg('ZOC', `${dispHex(hid)} unit:${unit.name} stop:${hasActiveEnemyZOC} ${zocStr}`);
       }
       if (hasActiveEnemyZOC) {
         continue;
@@ -1223,7 +1224,7 @@ function getRetreatHexes(unit) {
       }
     }
   }
-  dbg('RETREAT', unit.name, 'from:', dispHex(unit.hexId), 'valid:', result.map(h=>dispHex(h)));
+  dbg('RETREAT', `${unit.name} from:${dispHex(unit.hexId)} valid:[${result.map(h=>dispHex(h)).join(',')}]`);
   return result;
 }
 
@@ -1261,12 +1262,9 @@ function executeCombat() {
   const result = lookupCRT(diff, modDie);
   cb.result = result;
 
-  dbg('COMBAT', {
-    defHex: dispHex(defHexId), terrain, facility,
-    attackers: attackers.map(u => ({name:u.name, hex:dispHex(u.hexId), atk:u.atk, def:u.def, flipped:u.flipped, power:u.flipped?u.def:u.atk})),
-    defenders: defenders.map(u => ({name:u.name, hex:dispHex(u.hexId||defHexId), atk:u.atk, def:u.def, flipped:u.flipped, power:u.flipped?u.def:u.atk})),
-    atkPower, defPower, diff, support, forestMod, die, modDie, result
-  });
+  const atkDetail = attackers.map(u => `${u.name}@${dispHex(u.hexId)}${u.flipped?'(裏)':''}=${u.flipped?u.def:u.atk}`).join(', ');
+  const defDetail = defenders.map(u => `${u.name}@${dispHex(u.hexId||defHexId)}${u.flipped?'(裏)':''}=${u.flipped?u.def:u.atk}`).join(', ');
+  dbg('COMBAT', `def:${dispHex(defHexId)} 地形:${terrain} 施設:${facility||'なし'} | ATK[${atkDetail}]=${atkPower} DEF[${defDetail}]=${defPower} diff:${diff} support:${support} forest:${forestMod} die:${die} mod:${modDie} → ${result}`);
   addLog('combat', `━━━ 戦闘解決 ━━━`);
   addLog('combat', `攻撃力: ${atkPower} vs 防御力: ${defPower} (差分: ${diff > 0 ? '+' : ''}${diff})`);
   if (support > 0) addLog('combat', `戦闘支援: +${support}`);
