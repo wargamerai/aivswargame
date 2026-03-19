@@ -703,11 +703,15 @@ function getMoveCost(fromId, toId, unit) {
   }
 
   let cost;
-  if (sharedRoad && unit.side === 'allied') {
-    // 道路移動: 連合軍のみ1/3（ドイツ軍は道路ボーナスなし）
-    cost = 1/3;
-    // ただし森林内の道路は非機械化部隊は1MP
-    if (terrain === 'f' && !isMechanized(unit)) cost = 1;
+  if (sharedRoad) {
+    if (unit.side === 'allied') {
+      // 連合軍: 道路1/3（森林非機械化は1）
+      cost = 1/3;
+      if (terrain === 'f' && !isMechanized(unit)) cost = 1;
+    } else {
+      // ドイツ軍: 道路沿いは1
+      cost = 1;
+    }
   } else {
     switch (terrain) {
       case 'p': cost = 1; break;
