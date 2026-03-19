@@ -1784,7 +1784,7 @@ function isShipCrippled(s) {
   return s.speed === 0 || s.status === 'heavy' || s.cannotTurn || s.cannotShoot || hasCrit;
 }
 
-// US列用の随伴艦追従（USのみ使用）
+// 随伴艦追従（ワープ禁止: 隣接hex移動のみ）
 function moveFollowers(lead, fleet) {
   const ci = lead.colIndex;
   const followers = fleet
@@ -1796,11 +1796,27 @@ function moveFollowers(lead, fleet) {
     const ahead = chain[i-1];
     if (!ahead.path || ahead.path.length === 0) continue;
     const target = ahead.path[0];
-    chain[i].path = chain[i].path || [];
-    chain[i].path.push({col: chain[i].col, row: chain[i].row, dir: chain[i].dir});
-    chain[i].col = target.col;
-    chain[i].row = target.row;
-    if (!chain[i].cannotTurn) chain[i].dir = target.dir;
+    const fol = chain[i];
+    const dist = hexDist(fol.col, fol.row, target.col, target.row);
+
+    fol.path = fol.path || [];
+    fol.path.push({col: fol.col, row: fol.row, dir: fol.dir});
+
+    if (dist <= 1) {
+      // 隣接 → そのまま追従
+      fol.col = target.col;
+      fol.row = target.row;
+      if (!fol.cannotTurn) fol.dir = target.dir;
+    } else {
+      // 遠い → 旗艦方向へ1ヘクス直進（追いかける）
+      const chaseDir = bestDirToward(fol.col, fol.row, target.col, target.row);
+      const next = hexNeighbor(fol.col, fol.row, chaseDir);
+      if (next && next.col >= 0 && next.col < COLS && next.row >= 0) {
+        fol.col = next.col;
+        fol.row = next.row;
+        if (!fol.cannotTurn) fol.dir = chaseDir;
+      }
+    }
     ahead.path.shift();
   }
   if (chain.length > 1) {
