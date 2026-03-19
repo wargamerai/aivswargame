@@ -164,9 +164,15 @@ function init() {
 
   const jpMoving = isJPMoving();
 
-  if (jpMoving && !state.jpFreeMove) {
+  // 直進移動済みかチェック（同フェーズ内の二重移動防止）
+  const straightDoneKey = 'straightDone_' + state.phase + '_' + state.combatTurn;
+  const alreadyStraight = localStorage.getItem(straightDoneKey);
+
+  if (!alreadyStraight && jpMoving && !state.jpFreeMove) {
+    localStorage.setItem(straightDoneKey, '1');
     startStraightMode();
-  } else if (!jpMoving && !state.usFreeMove) {
+  } else if (!alreadyStraight && !jpMoving && !state.usFreeMove) {
+    localStorage.setItem(straightDoneKey, '1');
     startStraightMode();
   } else if (jpMoving) {
     startAutoJPMove();    // PF: 日本軍(AI)自動移動
@@ -214,19 +220,22 @@ function startStraightMode() {
   if (visual) {
     state.jpDetected = true;
     state.usDetected = true;
+    // 視認発見: 自由移動は次の移動フェーズから（同フェーズ内で二重移動防止）
     state.jpFreeMove = true;
     state.usFreeMove = true;
     state.contactMade = true;
     pushState();
-    setInfo('敵艦発見！ 両軍自由移動可能');
+    setInfo('敵艦発見！ 自由移動は次の移動フェーズから');
+    console.log('[PF-MOVE] 視認発見 → freeMove設定（ただし同フェーズ内では追加移動なし）');
   } else if (radar) {
     if (!state.usDetected) {
       state.usDetected = true;
-      state.usFreeMove = true;
+      // レーダー探知: 砲撃は可能だが自由移動は次の移動フェーズから
       state.contactMade = true;
       pushState();
     }
-    setInfo('レーダー探知！ 米軍自由移動可能');
+    setInfo('レーダー探知！ 直進継続（自由移動は次の移動フェーズから）');
+    console.log('[PF-MOVE] レーダー探知のみ → usFreeMove変更なし（次フェーズから）');
   } else if (!visual && !radar) {
     checkLineReach();
     setInfo(`${side}直進完了 — 敵未発見`);

@@ -1095,6 +1095,8 @@ const SKIP_IF_NO_CONTACT = ['gun1a','gun1b','gun1r','torpedo','gun2a','gun2b','g
 
 function loadPhase(phase) {
   dbg(`loadPhase(${phase}) — prev=${state.phase}`);
+  // 直進移動済みフラグをクリア（二重移動防止用）
+  localStorage.removeItem('straightDone_' + phase + '_' + state.combatTurn);
   // iframeがlocalStorageに保存した最新stateを取り込む
   // （iframeがSTATE_UPDATEを送らずにPHASE_DONEだけ送る場合があるため）
   const freshRaw = localStorage.getItem('hubState');
