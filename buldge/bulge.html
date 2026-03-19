@@ -664,6 +664,8 @@ mapArea.addEventListener('wheel', e => {
 
 // ========== マップクリック ==========
 function handleMapClick(e) {
+  // AI操作中はクリック無効
+  if (G.phase === 'operation' && isAISide(G.activeSide)) return;
   const hex = pixelToHex(e.clientX, e.clientY);
   if (!hex) return;
   const hid = hexId(hex.col, hex.row);
@@ -1062,6 +1064,7 @@ function applyCombatResult(result, attackers, defenders, defHexId) {
       G.opPhase = 'retreat';
       updateRightPanel();
       draw();
+      setTimeout(() => aiTick(), 600);
       return;
     case 'NE':
       finishCombat();
@@ -1071,6 +1074,7 @@ function applyCombatResult(result, attackers, defenders, defHexId) {
       G.opPhase = 'retreat';
       updateRightPanel();
       draw();
+      setTimeout(() => aiTick(), 600);
       return;
     case 'DD':
       for (const u of defenders) u.flipped = true;
@@ -1078,6 +1082,7 @@ function applyCombatResult(result, attackers, defenders, defHexId) {
       G.opPhase = 'retreat';
       updateRightPanel();
       draw();
+      setTimeout(() => aiTick(), 600);
       return;
     case 'EX':
       // 攻撃側1ユニット除去、防御側1ユニット除去
@@ -1110,6 +1115,7 @@ function checkAdvance() {
       addLog('combat', `戦闘後前進: ${cb.defHex} をクリックで前進（スキップ可）`);
       updateRightPanel();
       draw();
+      setTimeout(() => aiTick(), 600);
       return;
     }
   }
@@ -1122,6 +1128,9 @@ function finishCombat() {
   G.attackTargets = null;
   updateRightPanel();
   draw();
+
+  // AIチェック（戦闘終了後に次の攻撃orフェーズ終了）
+  setTimeout(() => aiTick(), 600);
 }
 
 function skipAdvance() {
@@ -1137,6 +1146,8 @@ function eliminateUnit(unit) {
 
 // ========== ターン管理 ==========
 function endPhase() {
+  // AI操作中は人間のボタンクリック無効（AI自身からの呼び出しは許可）
+  if (G.phase === 'operation' && isAISide(G.activeSide) && !aiRunning) return;
   G.passCount = 0; // 通常のフェーズ終了ではパスカウントリセット
   if (G.phase === 'reinforce') {
     placeReinforcements();
@@ -1194,6 +1205,9 @@ function endPhase() {
   G.attackTargets = null;
   updateUI();
   draw();
+
+  // AIチェック
+  setTimeout(() => aiTick(), 600);
 }
 
 function nextTurn() {
@@ -1207,6 +1221,9 @@ function nextTurn() {
   addLog('turn', `═══ ターン${G.turn} ═══`);
   updateUI();
   draw();
+
+  // AIチェック
+  setTimeout(() => aiTick(), 800);
 }
 
 function placeReinforcements() {
@@ -1764,6 +1781,459 @@ function passPhase() {
   G.attackTargets = null;
   updateUI();
   draw();
+
+  // AIチェック
+  setTimeout(() => aiTick(), 1800); // フラッシュ表示後にAI開始
+}
+
+// ========== AI ==========
+
+// AI制御判定: そのサイドがAI操作かどうか
+function isAISide(side) {
+  if (G.mode === 'watch') return true;
+  if (G.mode === 'hotseat') return false;
+  if (G.mode === 'german') return side === 'allied';   // プレイヤー=独、AI=連合
+  if (G.mode === 'allied') return side === 'german';    // プレイヤー=連合、AI=独
+  return false;
+}
+
+// AI処理中フラグ（二重起動防止）
+let aiRunning = false;
+
+// AIメインループ: 現在のフェーズに応じて1アクション実行
+function aiTick() {
+  if (aiRunning) return;
+  if (G.turn > G.maxTurn) return;
+
+  // 増援・回復フェーズはactiveSideに関係なく両軍処理
+  if (G.phase === 'reinforce') {
+    // 英軍投入選択（T3以降、未投入）
+    if (G.turn >= 3 && G.britishDeployedTurn === 0) {
+      if (isAISide('allied')) {
+        // AI連合: ターン5でデフォルト投入（VP1で済む）
+        if (G.turn >= 5) {
+          aiRunning = true;
+          setTimeout(() => {
+            addLog('turn', `[AI] 英軍投入決定 (T${G.turn})`);
+            deployBritish();
+            aiRunning = false;
+            aiTick();
+          }, 500);
+          return;
+        }
+        // T3-4: AIは見送り → そのまま増援終了へ
+      } else {
+        // 人間が連合軍 → 英軍投入選択は人間に任せる（ボタンクリック待ち）
+        return;
+      }
+    }
+    // 両軍ともAIか、人間の判断が不要な場合 → 増援フェーズ自動終了
+    // ホットシートの場合は人間がボタンを押す
+    if (G.mode === 'hotseat') return;
+    aiRunning = true;
+    setTimeout(() => {
+      endPhase();
+      aiRunning = false;
+    }, 300);
+    return;
+  }
+
+  if (G.phase === 'recovery') {
+    // 回復フェーズ: ドイツ軍手動回復が必要な場合
+    if (isAISide('german') && G.recovery && G.recovery.remaining > 0) {
+      aiRunning = true;
+      setTimeout(() => {
+        aiDoRecovery();
+        aiRunning = false;
+        // 回復後、再度aiTickで回復フェーズ終了を処理
+        setTimeout(() => aiTick(), 300);
+      }, 300);
+      return;
+    }
+    // 人間がドイツ軍で回復選択が必要な場合はスキップ
+    if (!isAISide('german') && G.recovery && G.recovery.remaining > 0) {
+      return; // 人間が手動で回復選択
+    }
+    // ホットシートの場合は人間がボタンを押す
+    if (G.mode === 'hotseat') return;
+    // 回復フェーズ終了（endPhase内でaiTickが呼ばれる）
+    aiRunning = true;
+    setTimeout(() => {
+      endPhase();
+      aiRunning = false;
+    }, 300);
+    return;
+  }
+
+  if (G.phase === 'operation') {
+    if (!isAISide(G.activeSide)) return; // 人間の手番
+
+    if (G.opPhase === 'select' || G.opPhase === 'move') {
+      aiRunning = true;
+      setTimeout(() => {
+        aiDoMovement();
+        aiRunning = false;
+      }, 500);
+      return;
+    }
+
+    if (G.opPhase === 'attack') {
+      aiRunning = true;
+      setTimeout(() => {
+        aiDoAttack();
+        aiRunning = false;
+      }, 500);
+      return;
+    }
+
+    if (G.opPhase === 'retreat') {
+      // 退却ユニットのサイドをチェック（攻撃側退却の場合もある）
+      const retreatingUnit = G.combat.retreatingUnits[0] ?
+        G.units.find(u => u.id === G.combat.retreatingUnits[0]) : null;
+      const retreatSide = retreatingUnit ? retreatingUnit.side : G.activeSide;
+      if (isAISide(retreatSide)) {
+        aiRunning = true;
+        setTimeout(() => {
+          aiDoRetreat();
+          aiRunning = false;
+        }, 500);
+        return;
+      }
+      return; // 人間が退却先を選択
+    }
+
+    if (G.opPhase === 'advance') {
+      aiRunning = true;
+      setTimeout(() => {
+        aiDoAdvance();
+        aiRunning = false;
+      }, 500);
+      return;
+    }
+  }
+}
+
+// AI回復: 攻撃力の高いユニットから優先回復
+function aiDoRecovery() {
+  if (!G.recovery || G.recovery.remaining <= 0) return;
+  const flipped = G.units.filter(u => u.side === 'german' && u.flipped && !u.eliminated);
+  // 攻撃力降順でソート
+  flipped.sort((a, b) => b.atk - a.atk);
+  while (G.recovery.remaining > 0 && flipped.length > 0) {
+    const u = flipped.shift();
+    recoverUnit(u.id);
+    addLog('turn', `[AI] ${u.name} を回復`);
+  }
+}
+
+// AI移動: 全ユニットを順番に移動
+function aiDoMovement() {
+  const side = G.activeSide;
+  const units = G.units.filter(u =>
+    u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
+  );
+
+  if (units.length === 0) {
+    // 全ユニット移動済み → 攻撃フェーズへ（endPhase内でaiTickが呼ばれる）
+    endPhase();
+    return;
+  }
+
+  // NW突破チェック（ドイツAI）
+  if (side === 'german') {
+    for (const u of units) {
+      if (canExitNW(u)) {
+        addLog('turn', `[AI] ${u.name} NW突破`);
+        exitUnitNW(u.id);
+        setTimeout(() => aiTick(), 500);
+        return;
+      }
+    }
+  }
+
+  // 機械化ユニットを先に移動（ドイツAIのみ）
+  if (side === 'german') {
+    units.sort((a, b) => {
+      const am = isMechanized(a) ? 0 : 1;
+      const bm = isMechanized(b) ? 0 : 1;
+      return am - bm;
+    });
+  }
+
+  const unit = units[0];
+  const reachable = calcReachable(unit);
+
+  if (reachable.size === 0) {
+    // 移動先なし → 行動済みにする
+    unit.acted = true;
+    addLog('move', `[AI] ${unit.name}: 移動先なし`);
+    draw();
+    setTimeout(() => aiTick(), 300);
+    return;
+  }
+
+  // 最適な移動先を選択
+  const bestHex = aiPickMoveTarget(unit, reachable);
+  if (bestHex && bestHex !== unit.hexId) {
+    // 移動実行（onMoveClickと同等の処理）
+    const info = reachable.get(bestHex);
+    const fromHex = unit.hexId;
+    const stacked = isStacked(unit);
+    const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
+    unit.movePath = [fromHex, ...info.path];
+    unit.hexId = bestHex;
+    unit.acted = true;
+    if (stacked && pair && !pair.acted) {
+      pair.hexId = bestHex;
+      pair.acted = true;
+      pair.movePath = [fromHex, ...info.path];
+    }
+    // 隣接敵チェック
+    const adjEnemy = getNeighborIds(bestHex).some(nid =>
+      getUnitsAt(nid).some(u => u.side !== side)
+    );
+    if (adjEnemy) unit.mustAttack = true;
+    addLog('move', `[AI] ${unit.name} → ${bestHex}`);
+  } else {
+    unit.acted = true;
+    addLog('move', `[AI] ${unit.name}: 待機`);
+  }
+
+  G.selectedUnit = null;
+  G.reachable = null;
+  updateRightPanel();
+  draw();
+  setTimeout(() => aiTick(), 400);
+}
+
+// AI移動先選択: サイドに応じた戦略
+function aiPickMoveTarget(unit, reachable) {
+  const side = unit.side;
+  let bestHex = null;
+  let bestScore = -Infinity;
+
+  for (const [hid, info] of reachable) {
+    let score = 0;
+    const { col, row } = parseHexId(hid);
+    const isCity = FACILITY_MAP && FACILITY_MAP[hid] === 'c';
+    const isRoad = ROAD_MAP && ROAD_MAP[hid] && ROAD_MAP[hid].length > 0;
+
+    if (side === 'german') {
+      // ドイツAI: 西（col小さい）・都市・NW突破hex方向へ
+      score -= col * 3; // 西へ行くほど高得点
+      if (isCity) score += 20;
+      // NW突破hex近さ
+      const nwHexes = getNWExitHexes();
+      if (nwHexes.length > 0 && isMechanized(unit)) {
+        const minDist = Math.min(...nwHexes.map(nh => hexDist(hid, nh)));
+        score -= minDist * 2; // 近いほど高得点
+        if (nwHexes.includes(hid)) score += 30;
+      }
+      if (isRoad) score += 2;
+    } else {
+      // 連合AI: 都市防衛・退却
+      if (isCity) score += 25;
+      // 圧倒的劣勢なら後方へ退却（row小さい=北）
+      const adjEnemies = getNeighborIds(hid).reduce((s, nid) => {
+        return s + getUnitsAt(nid).filter(e => e.side !== side).reduce((es, e) => es + (e.flipped ? e.def : e.atk), 0);
+      }, 0);
+      const myPower = unit.flipped ? unit.def : unit.atk;
+      if (adjEnemies > myPower * 2) {
+        // 圧倒的劣勢 → 逃げる
+        score += col * 2; // 東（後方）へ
+      } else {
+        // 都市に近づく
+        const cityHexes = [];
+        if (FACILITY_MAP) {
+          for (const [fhid, fac] of Object.entries(FACILITY_MAP)) {
+            if (fac === 'c') cityHexes.push(fhid);
+          }
+        }
+        if (cityHexes.length > 0) {
+          const minCityDist = Math.min(...cityHexes.map(ch => hexDist(hid, ch)));
+          score -= minCityDist * 2;
+        }
+      }
+    }
+
+    // 敵に隣接している場合のボーナス/ペナルティ
+    const adjEnemyCount = getNeighborIds(hid).filter(nid =>
+      getUnitsAt(nid).some(e => e.side !== side)
+    ).length;
+    if (side === 'german') {
+      score += adjEnemyCount * 2; // 攻撃的
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestHex = hid;
+    }
+  }
+  return bestHex;
+}
+
+// AI攻撃: 有利な戦闘を実行
+function aiDoAttack() {
+  const side = G.activeSide;
+  const enemySide = side === 'german' ? 'allied' : 'german';
+
+  // 行動済み味方ユニットに隣接する敵hexを探す
+  const actedUnits = G.units.filter(u =>
+    u.side === side && u.acted && !u.eliminated && !u.exited
+  );
+
+  // 攻撃可能な敵hexを収集
+  const enemyHexes = new Set();
+  for (const u of actedUnits) {
+    for (const nid of getNeighborIds(u.hexId)) {
+      const enemies = getUnitsAt(nid).filter(e => e.side === enemySide);
+      if (enemies.length > 0) enemyHexes.add(nid);
+    }
+  }
+
+  // 各敵hexについて攻撃力を計算し、有利なら攻撃
+  let bestAttack = null;
+  let bestDiff = -Infinity;
+
+  for (const defHex of enemyHexes) {
+    const defenders = getUnitsAt(defHex).filter(u => u.side === enemySide);
+    const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+
+    // 隣接する行動済み味方ユニットを攻撃参加候補に
+    const adjFriendly = [];
+    for (const nid of getNeighborIds(defHex)) {
+      const friends = getUnitsAt(nid).filter(u =>
+        u.side === side && u.acted && !u.eliminated && !u.exited
+      );
+      adjFriendly.push(...friends);
+    }
+
+    const atkPower = adjFriendly.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+    const diff = atkPower - defPower;
+
+    // 有利（攻撃力>=防御力）なら攻撃候補
+    if (atkPower >= defPower && diff > bestDiff) {
+      bestDiff = diff;
+      bestAttack = { defHex, attackers: adjFriendly.map(u => u.id), defenders };
+    }
+  }
+
+  if (bestAttack) {
+    // 戦闘実行
+    resetCombat();
+    G.combat.defHex = bestAttack.defHex;
+    G.combat.defenders = bestAttack.defenders;
+    G.combat.attackers = bestAttack.attackers;
+    addLog('combat', `[AI] ${bestAttack.defHex} を攻撃`);
+    updateRightPanel();
+    draw();
+    setTimeout(() => {
+      executeCombat();
+      // executeCombat内でapplyCombatResultが呼ばれ、そこからaiTickが呼ばれる
+    }, 600);
+  } else {
+    // 攻撃なし → フェーズ終了（endPhase内でaiTickが呼ばれる）
+    endPhase();
+  }
+}
+
+// AI退却: 最初の有効な退却先を選択
+function aiDoRetreat() {
+  const ru = G.combat.retreatingUnits[0];
+  if (!ru) {
+    checkAdvance();
+    setTimeout(() => aiTick(), 500);
+    return;
+  }
+  const unit = G.units.find(u => u.id === ru);
+  if (!unit) {
+    G.combat.retreatingUnits.shift();
+    setTimeout(() => aiTick(), 300);
+    return;
+  }
+  const validHexes = getRetreatHexes(unit);
+  if (validHexes.length > 0) {
+    // 退却先を選択: サイドに応じた方向
+    let bestHex = validHexes[0];
+    if (unit.side === 'german') {
+      // ドイツ: 東（col大）方向へ退却
+      bestHex = validHexes.reduce((best, h) => {
+        const bc = parseHexId(best).col;
+        const hc = parseHexId(h).col;
+        return hc > bc ? h : best;
+      }, validHexes[0]);
+    } else {
+      // 連合: 西（col大）方向へ退却（後方）
+      bestHex = validHexes.reduce((best, h) => {
+        const bc = parseHexId(best).col;
+        const hc = parseHexId(h).col;
+        return hc > bc ? h : best;
+      }, validHexes[0]);
+    }
+    unit.hexId = bestHex;
+    addLog('combat', `[AI] ${unit.name} → ${bestHex} に退却`);
+    G.combat.retreatingUnits.shift();
+    if (G.combat.retreatingUnits.length === 0) {
+      checkAdvance();
+    }
+    updateRightPanel();
+    draw();
+    setTimeout(() => aiTick(), 500);
+  } else {
+    // 退却先なし → ユニット除去
+    eliminateUnit(unit);
+    addLog('combat', `[AI] ${unit.name}: 退却先なし → 除去`);
+    G.combat.retreatingUnits.shift();
+    if (G.combat.retreatingUnits.length === 0) {
+      checkAdvance();
+    }
+    updateRightPanel();
+    draw();
+    setTimeout(() => aiTick(), 500);
+  }
+}
+
+// AI戦闘後前進: 常に前進
+function aiDoAdvance() {
+  if (G.combat.advanceEligible.length === 0) {
+    finishCombat();
+    setTimeout(() => aiTick(), 500);
+    return;
+  }
+  const uid = G.combat.advanceEligible[0];
+  const unit = G.units.find(u => u.id === uid);
+  const defHex = G.combat.defHex;
+
+  if (unit && defHex) {
+    // 装甲部隊が森に前進する場合、道路経由でのみ可能
+    const defTerrain = TERRAIN_MAP[defHex];
+    if (defTerrain === 'f' && isMechanized(unit)) {
+      const fromRoutes = ROAD_MAP[unit.hexId] || [];
+      const toRoutes = ROAD_MAP[defHex] || [];
+      const sharedRoad = fromRoutes.some(r => toRoutes.includes(r));
+      if (!sharedRoad) {
+        addLog('combat', `[AI] ${unit.name}: 装甲部隊は道路なしで森に前進不可`);
+        G.combat.advanceEligible.shift();
+        if (G.combat.advanceEligible.length === 0) finishCombat();
+        updateRightPanel();
+        draw();
+        setTimeout(() => aiTick(), 500);
+        return;
+      }
+    }
+    G.combat.advanceEligible.shift();
+    unit.hexId = defHex;
+    addLog('combat', `[AI] ${unit.name} → ${defHex} に前進`);
+  } else {
+    G.combat.advanceEligible.shift();
+  }
+
+  if (G.combat.advanceEligible.length === 0) {
+    finishCombat();
+  }
+  updateRightPanel();
+  draw();
+  setTimeout(() => aiTick(), 500);
 }
 
 // ========== ゲーム開始 ==========
@@ -1788,6 +2258,9 @@ function startGame(mode) {
   G.phase = 'reinforce';
   updateUI();
   draw();
+
+  // AI開始チェック
+  setTimeout(() => aiTick(), 800);
 }
 
 // ========== 初期化 ==========
