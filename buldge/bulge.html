@@ -1689,8 +1689,17 @@ function updateRightPanel() {
     if (G.reinforceQueue && G.reinforceQueue.length > 0) {
       const u = G.reinforceQueue[0];
       desc.textContent = `配置するユニットを選んでください（残り${G.reinforceQueue.length}）`;
+      const imgBase = u.flipped && u.imgBack ? IMG_BACK : IMG_BASE;
+      const imgFile = u.flipped && u.imgBack ? u.imgBack : u.img;
+      const imgTag = imgFile ? `<img src="${imgBase}${imgFile}" style="width:64px;height:64px;object-fit:contain;border-radius:3px;border:1px solid #555;">` : '';
       reinHtml = `<div class="section">
-        <div style="color:#79c0ff;font-size:1.1em;margin-bottom:8px;"><b>${u.name}</b></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          ${imgTag}
+          <div>
+            <div style="color:#79c0ff;font-size:1.1em;"><b>${u.name}</b></div>
+            <div style="color:#aaa;font-size:0.85em;">攻撃:${u.atk} 防御:${u.def} (${u.type})</div>
+          </div>
+        </div>
         <div style="color:#aaa;font-size:0.85em;">黄色のハイライトhexをクリックして配置</div>
         <div style="color:#aaa;font-size:0.85em;">登場エリア: ${u.entryTag || '不明'}</div>
       </div>`;
@@ -1723,12 +1732,8 @@ function updateRightPanel() {
       const deFlipped = G.units.filter(u => u.side === 'german' && u.flipped && !u.eliminated);
       let html = '<div class="section"><h4>裏面のユニット（クリックで回復）</h4>';
       for (const u of deFlipped) {
-        const imgBase = u.imgBack ? IMG_BACK : IMG_BASE;
-        const imgFile = u.imgBack || u.img;
-        const imgTag = imgFile ? `<img src="${imgBase}${imgFile}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border-radius:2px;">` : '';
-        html += `<div class="unit-card" onclick="recoverUnit('${u.id}')" style="gap:6px;">
-          ${imgTag}
-          <span class="name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${u.name}</span>
+        html += `<div class="unit-card" onclick="recoverUnit('${u.id}')">
+          <span class="name">${u.name}</span>
           <span class="stats">${u.type} [${u.hexId}]</span>
         </div>`;
       }
@@ -1816,12 +1821,8 @@ function updateRightPanel() {
       let html = '<div class="section"><h4>ユニット一覧</h4>';
       for (const u of sideUnits) {
         const status = u.acted ? '✓' : u.flipped ? '混乱' : '';
-        const imgBase = u.flipped && u.imgBack ? IMG_BACK : IMG_BASE;
-        const imgFile = u.flipped && u.imgBack ? u.imgBack : u.img;
-        const imgTag = imgFile ? `<img src="${imgBase}${imgFile}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border-radius:2px;">` : '';
-        html += `<div class="unit-card" onclick="selectUnit('${u.id}')" style="gap:6px;">
-          ${imgTag}
-          <span class="name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${u.name}</span>
+        html += `<div class="unit-card" onclick="selectUnit('${u.id}')">
+          <span class="name">${u.name}</span>
           <span class="stats">${u.atk}/${u.def} ${status}</span>
         </div>`;
       }
