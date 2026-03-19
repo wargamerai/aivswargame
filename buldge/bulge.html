@@ -725,6 +725,15 @@ function calcReachable(unit) {
     const [cost, hid] = pq.shift();
     if (cost > dist.get(hid)) continue;
 
+    // ZOC: 敵隣接hexにいる場合、そこから先に進めない（ZOC内で停止）
+    // ただし開始hexからは移動可能
+    if (hid !== start) {
+      const inEnemyZOC = getNeighborIds(hid).some(adj =>
+        getUnitsAt(adj).some(u => u.side !== unit.side)
+      );
+      if (inEnemyZOC) continue; // ZOC内で停止 → ここから先に進めない
+    }
+
     const nids = getNeighborIds(hid);
     for (const nid of nids) {
       if (!canEnter(nid, unit) && nid !== start) continue;
