@@ -745,7 +745,10 @@ function calcReachable(unit) {
 
     const nids = getNeighborIds(hid);
     for (const nid of nids) {
-      if (!canEnter(nid, unit) && nid !== start) continue;
+      const terrain = TERRAIN_MAP[nid];
+      if (!terrain || terrain === 'x') continue;
+      // 敵がいるhexには入れない
+      if (getUnitsAt(nid).some(u => u.side !== unit.side)) continue;
       const mc = getMoveCost(hid, nid, unit);
       const nc = cost + mc;
       if (nc <= maxMP && (!dist.has(nid) || nc < dist.get(nid))) {
@@ -759,6 +762,13 @@ function calcReachable(unit) {
   dist.delete(start);
   const result = new Map();
   for (const [hid, cost] of dist) {
+    // 停止可能チェック: 味方がいるhexには停止不可（mechPairのみ例外）
+    const friendly = getUnitsAt(hid).filter(u => u.side === unit.side);
+    if (friendly.length > 0) {
+      if (!unit.mechPair) continue; // スタック不可
+      if (friendly.length >= 2) continue; // 既に2ユニット
+      if (friendly[0].id !== unit.mechPair) continue; // ペア相手ではない
+    }
     // パスを逆算
     const path = [];
     let cur = hid;
