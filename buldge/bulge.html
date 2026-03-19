@@ -1494,6 +1494,11 @@ function prepareNextReinforce() {
 }
 
 function placeReinforcements() {
+  // 二重実行ガード
+  if (!G._reinforcedTurns) G._reinforcedTurns = [];
+  if (G._reinforcedTurns.includes(G.turn)) return;
+  G._reinforcedTurns.push(G.turn);
+
   const reinforcements = REINFORCEMENTS[G.turn];
   if (!reinforcements || reinforcements.length === 0) return;
 
@@ -2109,7 +2114,7 @@ function passPhase() {
     addLog('turn', `両軍パス → ターン終了`);
     showFlash('ターン終了', '');
     G.passCount = 0;
-    setTimeout(() => nextTurn(), 1600);
+    scheduleAI(1600, nextTurn);
     return;
   }
 
@@ -2144,11 +2149,19 @@ function isAISide(side) {
 // AI処理中フラグ（二重起動防止）
 let aiRunning = false;
 
-// AIタイマー管理（重複防止）
+// AIタイマー管理（重複防止）— 全AI処理はこれを通す
 let aiTimerId = null;
-function scheduleAI(delay) {
+function scheduleAI(delay, fn) {
   if (aiTimerId) clearTimeout(aiTimerId);
-  aiTimerId = setTimeout(() => { aiTimerId = null; aiTick(); }, delay);
+  aiTimerId = setTimeout(() => {
+    aiTimerId = null;
+    if (fn) {
+      aiRunning = true;
+      fn();
+      aiRunning = false;
+    }
+    aiTick();
+  }, delay);
 }
 
 // デバッグログ
@@ -2167,13 +2180,10 @@ function aiTick() {
       if (isAISide('allied')) {
         // AI連合: ターン5でデフォルト投入（VP1で済む）
         if (G.turn >= 5) {
-          aiRunning = true;
-          setTimeout(() => {
+          scheduleAI(500, () => {
             addLog('turn', `[AI] 英軍投入決定 (T${G.turn})`);
             deployBritish();
-            aiRunning = false;
-            aiTick();
-          }, 500);
+          });
           return;
         }
         // T3-4: AIは見送り → そのまま増援終了へ
@@ -2185,24 +2195,14 @@ function aiTick() {
     // 両軍ともAIか、人間の判断が不要な場合 → 増援フェーズ自動終了
     // ホットシートの場合は人間がボタンを押す
     if (G.mode === 'hotseat') return;
-    aiRunning = true;
-    setTimeout(() => {
-      endPhase();
-      aiRunning = false;
-    }, 300);
+    scheduleAI(300, endPhase);
     return;
   }
 
   if (G.phase === 'recovery') {
     // 回復フェーズ: ドイツ軍手動回復が必要な場合
     if (isAISide('german') && G.recovery && G.recovery.remaining > 0) {
-      aiRunning = true;
-      setTimeout(() => {
-        aiDoRecovery();
-        aiRunning = false;
-        // 回復後、再度aiTickで回復フェーズ終了を処理
-        scheduleAI(300);
-      }, 300);
+      scheduleAI(300, aiDoRecovery);
       return;
     }
     // 人間がドイツ軍で回復選択が必要な場合はスキップ
@@ -2211,12 +2211,8 @@ function aiTick() {
     }
     // ホットシートの場合は人間がボタンを押す
     if (G.mode === 'hotseat') return;
-    // 回復フェーズ終了（endPhase内でaiTickが呼ばれる）
-    aiRunning = true;
-    setTimeout(() => {
-      endPhase();
-      aiRunning = false;
-    }, 300);
+    // 回復フェーズ終了
+    scheduleAI(300, endPhase);
     return;
   }
 
@@ -2227,11 +2223,7 @@ function aiTick() {
         G.units.find(u => u.id === G.combat.retreatingUnits[0]) : null;
       const retreatSide = retreatingUnit ? retreatingUnit.side : G.activeSide;
       if (isAISide(retreatSide)) {
-        aiRunning = true;
-        setTimeout(() => {
-          aiDoRetreat();
-          aiRunning = false;
-        }, 500);
+        scheduleAI(500, aiDoRetreat);
         return;
       }
       return; // 人間が退却先を選択
@@ -2239,11 +2231,7 @@ function aiTick() {
 
     if (G.opPhase === 'advance') {
       if (isAISide(G.activeSide)) {
-        aiRunning = true;
-        setTimeout(() => {
-          aiDoAdvance();
-          aiRunning = false;
-        }, 500);
+        scheduleAI(500, aiDoAdvance);
         return;
       }
       return; // 人間が前進選択
@@ -2252,20 +2240,12 @@ function aiTick() {
     if (!isAISide(G.activeSide)) return; // 人間の手番
 
     if (G.opPhase === 'select' || G.opPhase === 'move') {
-      aiRunning = true;
-      setTimeout(() => {
-        aiDoMovement();
-        aiRunning = false;
-      }, 500);
+      scheduleAI(500, aiDoMovement);
       return;
     }
 
     if (G.opPhase === 'attack') {
-      aiRunning = true;
-      setTimeout(() => {
-        aiDoAttack();
-        aiRunning = false;
-      }, 500);
+      scheduleAI(500, aiDoAttack);
       return;
     }
 
