@@ -1494,6 +1494,11 @@ function prepareNextReinforce() {
 }
 
 function placeReinforcements() {
+  // 同ターン二重実行防止
+  if (!G._reinforcedTurns) G._reinforcedTurns = [];
+  if (G._reinforcedTurns.includes(G.turn)) return;
+  G._reinforcedTurns.push(G.turn);
+
   const reinforcements = REINFORCEMENTS[G.turn];
   if (!reinforcements || reinforcements.length === 0) return;
 
