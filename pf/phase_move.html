@@ -339,18 +339,13 @@ function withdrawMove(ship) {
     if (!next) { ship.col = -1; break; }
     if (next.col < 0 || next.col >= COLS || next.row < 0) { ship.col = -1; break; }
     if (occupied(next.col, next.row, ship)) {
-      // 回頭不能なら強制進入+衝突チェック
-      if (ship.cannotTurn) {
-        var occ = getOccupant(next.col, next.row, ship);
-        if (occ) {
-          ship.col = next.col;
-          ship.row = next.row;
-          collisionCheck(ship, occ);
-          remain--;
-          continue;
-        }
-      }
-      break;
+      // 船は停止できない → 強制進入+衝突チェック
+      var occ = getOccupant(next.col, next.row, ship);
+      ship.col = next.col;
+      ship.row = next.row;
+      if (occ) collisionCheck(ship, occ);
+      remain--;
+      continue;
     }
     ship.col = next.col;
     ship.row = next.row;
