@@ -458,6 +458,24 @@ function drawMovePaths() {
   }
 }
 
+// ========== ユニット画像プリロード ==========
+const unitImgCache = {};
+function getUnitImg(u) {
+  const isFlipped = u.acted || u.flipped;
+  const imgFile = isFlipped && u.imgBack ? u.imgBack : u.img;
+  if (!imgFile) return null;
+  const base = isFlipped && u.imgBack ? IMG_BACK : IMG_BASE;
+  const key = base + imgFile;
+  if (!unitImgCache[key]) {
+    const img = new Image();
+    img.src = key;
+    img.onload = () => { if (!unitImgCache[key]._loaded) { unitImgCache[key]._loaded = true; draw(); } };
+    unitImgCache[key] = img;
+    unitImgCache[key]._loaded = false;
+  }
+  return unitImgCache[key]._loaded ? unitImgCache[key] : null;
+}
+
 // ========== ユニット描画 ==========
 const UNIT_COLORS = {
   de: { bg: '#4a4a5a', border: '#777', text: '#fff', flippedBg: '#2a2a35' },
@@ -477,67 +495,52 @@ function drawUnits() {
     const { col, row } = parseHexId(hid);
     const center = hexCenter(col, row);
     const count = units.length;
-    // hexいっぱいのサイズ（スタック時は少し小さく）
-    const baseSize = HEX_SIZE * 0.88;
-    const sz = count > 1 ? baseSize * 0.75 : baseSize;
+    const baseSize = HEX_SIZE * 0.92;
+    const sz = count > 1 ? baseSize * 0.72 : baseSize;
 
     for (let i = 0; i < count; i++) {
       const u = units[i];
-      // スタック時: 少しずらす
-      const offsetX = count > 1 ? (i === 0 ? -sz * 0.2 : sz * 0.2) : 0;
+      const offsetX = count > 1 ? (i === 0 ? -sz * 0.22 : sz * 0.22) : 0;
       const offsetY = count > 1 ? (i === 0 ? -sz * 0.15 : sz * 0.15) : 0;
       const ux = center.x + offsetX;
       const uy = center.y + offsetY;
-      const colors = UNIT_COLORS[u.nation] || UNIT_COLORS.de;
-      const isFlipped = u.acted || u.flipped;
+      const half = sz / 2;
+      const isSelected = G.selectedUnit === u;
 
       // 選択中ハイライト
-      if (G.selectedUnit === u) {
-        ctx.shadowColor = '#e94560';
-        ctx.shadowBlur = 12;
-      }
+      if (isSelected) { ctx.shadowColor = '#e94560'; ctx.shadowBlur = 14; }
 
-      // カウンター背景（正方形、hexに収まるサイズ）
-      const half = sz / 2;
-      ctx.fillStyle = isFlipped ? colors.flippedBg : colors.bg;
-      ctx.strokeStyle = G.selectedUnit === u ? '#e94560' : colors.border;
-      ctx.lineWidth = G.selectedUnit === u ? 3 : 1.5;
-      ctx.beginPath();
-      ctx.roundRect(ux - half, uy - half, sz, sz, 4);
-      ctx.fill();
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // 戦闘力（大きく中央に表示）
-      const power = isFlipped ? u.def : u.atk;
-      const fontSize = Math.round(sz * 0.55);
-
-      if (isFlipped) {
-        // 裏面: 白抜き文字（アウトライン）
-        ctx.font = `bold ${fontSize}px monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.strokeText(power, ux, uy);
-        ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        ctx.fillText(power, ux, uy);
+      // 画像があれば画像で描画
+      const img = getUnitImg(u);
+      if (img) {
+        ctx.drawImage(img, ux - half, uy - half, sz, sz);
+        // 選択時の枠
+        if (isSelected) {
+          ctx.strokeStyle = '#e94560';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(ux - half, uy - half, sz, sz);
+        }
       } else {
-        // 表面: 通常の白文字
+        // フォールバック: 色付き矩形+数字
+        const colors = UNIT_COLORS[u.nation] || UNIT_COLORS.de;
+        const isFlipped = u.acted || u.flipped;
+        ctx.fillStyle = isFlipped ? colors.flippedBg : colors.bg;
+        ctx.strokeStyle = isSelected ? '#e94560' : colors.border;
+        ctx.lineWidth = isSelected ? 3 : 1.5;
+        ctx.beginPath();
+        ctx.roundRect(ux - half, uy - half, sz, sz, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        const power = isFlipped ? u.def : u.atk;
+        const fontSize = Math.round(sz * 0.55);
         ctx.fillStyle = colors.text;
         ctx.font = `bold ${fontSize}px monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(power, ux, uy);
       }
-
-      // タイプインジケータ（戦車=小さいバー、歩兵=なし）
-      if (u.type === 'panzer' || u.type === 'panzergrenadier') {
-        const barW = sz * 0.5;
-        const barH = sz * 0.08;
-        ctx.fillStyle = isFlipped ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)';
-        ctx.fillRect(ux - barW/2, uy + half - barH - sz*0.08, barW, barH);
-      }
+      ctx.shadowBlur = 0;
     }
   }
 }
