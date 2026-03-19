@@ -7,7 +7,8 @@
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5fa; color: #222; margin: 20px; }
         h1, h2, h3 { color: #1a5a8a; font-size: 1.3em; }
         .panel { background-color: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.1); border: 1px solid #ddd; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 1em; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9em; table-layout: fixed; }
+        table th, table td { font-size: 0.9em; padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         th, td { border: 1px solid #ccc; padding: 7px; text-align: center; }
         th { background-color: #e0e8f0; color: #333; }
         .status-ok { color: #2a8a2a; }
@@ -129,14 +130,14 @@
         <div style="flex:1; min-width:300px;">
             <h3 style="color:#cc3311;">日本軍</h3>
             <table id="jpTable">
-                <thead><tr><th>艦名</th><th>艦種</th><th>速力</th><th>火力</th><th>装甲</th><th>魚雷</th></tr></thead>
+                <thead><tr><th style="width:35%">艦名</th><th style="width:13%">艦種</th><th style="width:13%">速力</th><th style="width:13%">火力</th><th style="width:13%">装甲</th><th style="width:13%">魚雷</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
         <div style="flex:1; min-width:300px;">
             <h3 style="color:#2255cc;">米軍（あなた）</h3>
             <table id="usTable">
-                <thead><tr><th>艦名</th><th>艦種</th><th>速力</th><th>火力</th><th>装甲</th><th>魚雷</th></tr></thead>
+                <thead><tr><th style="width:35%">艦名</th><th style="width:13%">艦種</th><th style="width:13%">速力</th><th style="width:13%">火力</th><th style="width:13%">装甲</th><th style="width:13%">魚雷</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
