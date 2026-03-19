@@ -569,8 +569,9 @@ function draw() {
   ctx.fillStyle = '#6666cc';
   ctx.fillText('日本配置線', wLineX, 14);
 
-  // 移動軌跡線（JP: 発見後のみ表示、US: 常時表示）
-  [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
+  // 移動軌跡線（移動フェーズ中のみ表示、JP: 発見後のみ）
+  const isMovPhase = state.phase === 'move1' || state.phase === 'move2';
+  if (isMovPhase) [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
     if (s.prevCol !== undefined && s.status !== 'sunk' && s.col >= 0 &&
         (s.col !== s.prevCol || s.row !== s.prevRow) &&
         (s.side !== 'jp' || state.jpDetected)) {
