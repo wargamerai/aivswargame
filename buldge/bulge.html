@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>バルジの戦い — Panzers in the Snow</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; font-family:'Segoe UI',Arial,sans-serif; }
+
+/* === トップバー === */
+#topbar { display:flex; align-items:center; justify-content:space-between; height:40px; background:#16213e; border-bottom:1px solid #333; padding:0 12px; font-size:0.9em; }
+#topbar .info { display:flex; gap:16px; align-items:center; }
+#topbar .info span { white-space:nowrap; }
+.phase-label { background:#0f3460; padding:2px 10px; border-radius:3px; font-weight:bold; color:#e94560; }
+.vp-box { display:flex; gap:8px; }
+.vp-de { color:#c55; } .vp-al { color:#5a5; }
+#topbar button { background:#0f3460; color:#e0e0e0; border:1px solid #444; padding:3px 12px; border-radius:3px; cursor:pointer; font-size:0.85em; }
+#topbar button:hover { background:#1a508b; }
+
+/* === メインレイアウト === */
+#main { display:flex; height:calc(100% - 40px); }
+
+/* === 中央マップ === */
+#mapArea { flex:1; position:relative; overflow:hidden; background:#1a1a2e; cursor:grab; }
+#mapArea.dragging { cursor:grabbing; }
+#mapCanvas { position:absolute; top:0; left:0; image-rendering:auto; }
+
+/* === 右パネル === */
+#rightPanel { width:320px; min-width:280px; background:#16213e; border-left:1px solid #333; display:flex; flex-direction:column; overflow:hidden; }
+#phaseInfo { padding:10px; border-bottom:1px solid #333; }
+#phaseInfo h3 { font-size:1em; color:#e94560; margin-bottom:6px; }
+#actionPanel { flex:1; overflow-y:auto; padding:10px; }
+#actionPanel .section { margin-bottom:12px; }
+#actionPanel .section h4 { font-size:0.85em; color:#aaa; margin-bottom:4px; border-bottom:1px solid #333; padding-bottom:2px; }
+.unit-card { background:#0f3460; border:1px solid #444; border-radius:4px; padding:6px 8px; margin-bottom:4px; cursor:pointer; font-size:0.85em; display:flex; justify-content:space-between; align-items:center; }
+.unit-card:hover { background:#1a508b; }
+.unit-card.selected { border-color:#e94560; background:#2a1040; }
+.unit-card .name { font-weight:bold; }
+.unit-card .stats { color:#aaa; font-size:0.8em; }
+.btn { display:inline-block; background:#0f3460; color:#e0e0e0; border:1px solid #555; padding:5px 14px; border-radius:3px; cursor:pointer; font-size:0.85em; margin:2px; }
+.btn:hover { background:#1a508b; }
+.btn.primary { background:#e94560; border-color:#e94560; color:#fff; }
+.btn.primary:hover { background:#c03050; }
+.btn:disabled { opacity:0.4; cursor:default; }
+
+/* === ログ === */
+#logPanel { height:120px; border-top:1px solid #333; overflow-y:auto; padding:6px 10px; font-size:0.8em; font-family:monospace; background:#0d1117; color:#8b949e; }
+#logPanel .log-turn { color:#e94560; font-weight:bold; }
+#logPanel .log-combat { color:#ffa657; }
+#logPanel .log-move { color:#79c0ff; }
+
+/* === スタート画面 === */
+#startScreen { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,10,30,0.95); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
+#startScreen h1 { font-size:2em; color:#e94560; margin-bottom:8px; text-shadow:0 0 20px rgba(233,69,96,0.5); }
+#startScreen h2 { font-size:1.1em; color:#aaa; margin-bottom:30px; }
+#startScreen .mode-btn { display:block; width:300px; padding:14px; margin:6px; background:#0f3460; border:2px solid #333; border-radius:6px; color:#e0e0e0; font-size:1em; cursor:pointer; text-align:center; }
+#startScreen .mode-btn:hover { background:#1a508b; border-color:#e94560; }
+#startScreen .mode-btn .desc { font-size:0.8em; color:#888; margin-top:4px; }
+
+/* === ダイス演出 === */
+.dice-result { font-size:2em; font-weight:bold; color:#ffa657; text-align:center; padding:10px; animation: diceFlash 0.3s ease; }
+@keyframes diceFlash { 0% { transform:scale(1.5); opacity:0; } 100% { transform:scale(1); opacity:1; } }
+
+/* === 戦闘パネル === */
+.combat-info { background:#1a1a2e; border:1px solid #444; border-radius:4px; padding:8px; margin:6px 0; font-size:0.85em; }
+.combat-info .ratio { font-size:1.2em; font-weight:bold; color:#e94560; text-align:center; }
+.combat-info .mods { color:#aaa; font-size:0.8em; }
+</style>
+</head>
+<body>
+
+<!-- スタート画面 -->
+<div id="startScreen">
+  <h1>バルジの戦い</h1>
+  <h2>Panzers in the Snow</h2>
+  <button class="mode-btn" onclick="startGame('german')">
+    ドイツ軍でプレイ
+    <div class="desc">連合軍はAIが操作</div>
+  </button>
+  <button class="mode-btn" onclick="startGame('allied')">
+    連合軍でプレイ
+    <div class="desc">ドイツ軍はAIが操作</div>
+  </button>
+  <button class="mode-btn" onclick="startGame('hotseat')">
+    2人対戦（ホットシート）
+    <div class="desc">両方人間が操作</div>
+  </button>
+  <button class="mode-btn" onclick="startGame('watch')">
+    AI観戦
+    <div class="desc">両方AIが自動進行</div>
+  </button>
+</div>
+
+<!-- トップバー -->
+<div id="topbar">
+  <div class="info">
+    <span id="turnLabel">ターン 1/6</span>
+    <span class="phase-label" id="phaseLabel">増援フェーズ</span>
+    <span id="sideLabel">ドイツ軍</span>
+  </div>
+  <div class="vp-box">
+    <span class="vp-de">独: <b id="vpGerman">0</b>VP</span>
+    <span class="vp-al">連: <b id="vpAllied">0</b>VP</span>
+  </div>
+  <div>
+    <button onclick="undoAction()">元に戻す</button>
+    <button onclick="endPhase()">フェーズ終了</button>
+  </div>
+</div>
+
+<!-- メイン -->
+<div id="main">
+  <!-- 中央マップ -->
+  <div id="mapArea">
+    <canvas id="mapCanvas"></canvas>
+  </div>
+
+  <!-- 右パネル -->
+  <div id="rightPanel">
+    <div id="phaseInfo">
+      <h3 id="phaseTitle">増援フェーズ</h3>
+      <div id="phaseDesc">増援ユニットを配置してください</div>
+    </div>
+    <div id="actionPanel">
+      <!-- 動的に更新 -->
+    </div>
+    <div id="logPanel"></div>
+  </div>
+</div>
+
+<script src="mapdata.js"></script>
+<script src="bulge_units.js"></script>
+<script>
+'use strict';
+
+// ========== 定数 ==========
+const COLS = MAP_CONFIG.cols;
+const ROWS = MAP_CONFIG.rows;
+const HEX_SIZE = MAP_CONFIG.hexSize;
+const BASE_OX = MAP_CONFIG.offsetX;
+const BASE_OY = MAP_CONFIG.offsetY;
+
+// ========== ゲーム状態 ==========
+const G = {
+  turn: 1,
+  maxTurn: 6,
+  phase: 'reinforce',     // reinforce, recovery, operation
+  opPhase: 'select',      // select, move, attack, done
+  activeSide: 'german',
+  germanDone: false,
+  alliedDone: false,
+  units: [],
+  selectedUnit: null,
+  reachable: null,         // Map: hexId -> {cost, path}
+  attackTargets: null,     // Set of hexIds
+  vpGerman: 0,
+  vpAllied: 0,
+  mode: 'german',          // german, allied, hotseat, watch
+  log: [],
+  undoStack: [],
+};
+
+// ========== マップ描画 ==========
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+const mapArea = document.getElementById('mapArea');
+let mapImg = new Image();
+let mapLoaded = false;
+
+// パン・ズーム
+let panX = 0, panY = 0, zoom = 0.7;
+let dragStart = null;
+
+function hexCorner(cx, cy, size, i) {
+  const angle = Math.PI / 180 * (60 * i + 30);
+  return { x: cx + size * Math.cos(angle), y: cy + size * Math.sin(angle) };
+}
+
+function hexCenter(col, row) {
+  const s = HEX_SIZE;
+  const w = Math.sqrt(3) * s;
+  const h = s * 2;
+  let x = BASE_OX + col * w + w / 2;
+  const y = BASE_OY + row * h * 0.75 + s;
+  if (row % 2 === 1) x += w / 2;
+  return { x, y };
+}
+
+function hexId(col, row) {
+  return String(col + 1).padStart(2, '0') + String(row + 1).padStart(2, '0');
+}
+
+function parseHexId(id) {
+  return { col: parseInt(id.substring(0, 2)) - 1, row: parseInt(id.substring(2, 4)) - 1 };
+}
+
+function getNeighbors(col, row) {
+  const even = row % 2 === 0;
+  if (even) {
+    return [[col, row-1],[col+1, row],[col, row+1],[col-1, row+1],[col-1, row],[col-1, row-1]];
+  } else {
+    return [[col+1, row-1],[col+1, row],[col+1, row+1],[col, row+1],[col-1, row],[col, row-1]];
+  }
+}
+
+function getNeighborIds(hid) {
+  const { col, row } = parseHexId(hid);
+  return getNeighbors(col, row)
+    .filter(([c, r]) => c >= 0 && c < COLS && r >= 0 && r < ROWS)
+    .map(([c, r]) => hexId(c, r));
+}
+
+function hexDist(id1, id2) {
+  const a = parseHexId(id1), b = parseHexId(id2);
+  const ax = a.col - (a.row - (a.row & 1)) / 2;
+  const az = a.row;
+  const ay = -ax - az;
+  const bx = b.col - (b.row - (b.row & 1)) / 2;
+  const bz = b.row;
+  const by = -bx - bz;
+  return Math.max(Math.abs(ax - bx), Math.abs(ay - by), Math.abs(az - bz));
+}
+
+function drawHexPath(cx, cy, size) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const c = hexCorner(cx, cy, size, i);
+    if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
+  }
+  ctx.closePath();
+}
+
+// 道路線描画
+function drawRoads() {
+  for (let route = 1; route <= 5; route++) {
+    const hexes = new Set();
+    for (const [id, routes] of Object.entries(ROAD_MAP)) {
+      if (routes.includes(route)) hexes.add(id);
+    }
+    if (hexes.size === 0) continue;
+    ctx.strokeStyle = 'rgba(180,140,80,0.6)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    const drawn = new Set();
+    for (const id of hexes) {
+      const { col, row } = parseHexId(id);
+      const c1 = hexCenter(col, row);
+      for (const [nc, nr] of getNeighbors(col, row)) {
+        if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) continue;
+        const nid = hexId(nc, nr);
+        if (!hexes.has(nid)) continue;
+        const key = [id, nid].sort().join('-');
+        if (drawn.has(key)) continue;
+        drawn.add(key);
+        const c2 = hexCenter(nc, nr);
+        ctx.beginPath();
+        ctx.moveTo(c1.x, c1.y);
+        ctx.lineTo(c2.x, c2.y);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// 河川描画
+function drawRivers() {
+  if (!RIVER_MAP) return;
+  ctx.strokeStyle = 'rgba(80,140,255,0.7)';
+  ctx.lineWidth = 3;
+  for (const [id1, id2] of RIVER_MAP) {
+    const a = parseHexId(id1), b = parseHexId(id2);
+    const c1 = hexCenter(a.col, a.row), c2 = hexCenter(b.col, b.row);
+    const mx = (c1.x + c2.x) / 2, my = (c1.y + c2.y) / 2;
+    // 辺の中点付近に線を引く
+    const dx = c2.x - c1.x, dy = c2.y - c1.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    const nx = -dy / len * HEX_SIZE * 0.4, ny = dx / len * HEX_SIZE * 0.4;
+    ctx.beginPath();
+    ctx.moveTo(mx - nx, my - ny);
+    ctx.lineTo(mx + nx, my + ny);
+    ctx.stroke();
+  }
+}
+
+// メイン描画
+function draw() {
+  const W = mapImg.naturalWidth || 2400;
+  const H = mapImg.naturalHeight || 2000;
+  canvas.width = W;
+  canvas.height = H;
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+  canvas.style.transformOrigin = '0 0';
+
+  ctx.clearRect(0, 0, W, H);
+
+  // 背景画像
+  if (mapLoaded) ctx.drawImage(mapImg, 0, 0);
+
+  // 地形オーバーレイ
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const id = hexId(c, r);
+      const terrain = TERRAIN_MAP[id] || 'p';
+      if (terrain === 'x') continue;
+      const center = hexCenter(c, r);
+      drawHexPath(center.x, center.y, HEX_SIZE);
+      ctx.fillStyle = TERRAIN_COLORS[terrain] || 'rgba(0,0,0,0)';
+      ctx.fill();
+
+      // 施設
+      const fac = FACILITY_MAP && FACILITY_MAP[id];
+      if (fac && FACILITY_COLORS[fac]) {
+        drawHexPath(center.x, center.y, HEX_SIZE * 0.5);
+        ctx.fillStyle = FACILITY_COLORS[fac];
+        ctx.fill();
+      }
+    }
+  }
+
+  // 道路・河川
+  drawRoads();
+  drawRivers();
+
+  // hexグリッド線
+  ctx.strokeStyle = 'rgba(200,200,200,0.15)';
+  ctx.lineWidth = 0.5;
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const id = hexId(c, r);
+      if (TERRAIN_MAP[id] === 'x') continue;
+      const center = hexCenter(c, r);
+      drawHexPath(center.x, center.y, HEX_SIZE);
+      ctx.stroke();
+    }
+  }
+
+  // 到達可能hexハイライト
+  if (G.reachable) {
+    for (const [hid, info] of G.reachable) {
+      const { col, row } = parseHexId(hid);
+      const center = hexCenter(col, row);
+      drawHexPath(center.x, center.y, HEX_SIZE);
+      ctx.fillStyle = 'rgba(100,200,255,0.25)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(100,200,255,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  // 攻撃可能hexハイライト
+  if (G.attackTargets) {
+    for (const hid of G.attackTargets) {
+      const { col, row } = parseHexId(hid);
+      const center = hexCenter(col, row);
+      drawHexPath(center.x, center.y, HEX_SIZE);
+      ctx.fillStyle = 'rgba(255,80,80,0.3)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,80,80,0.6)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // ユニット描画
+  drawUnits();
+
+  // hex番号（小さく）
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = `${Math.round(HEX_SIZE * 0.2)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const id = hexId(c, r);
+      if (TERRAIN_MAP[id] === 'x') continue;
+      const center = hexCenter(c, r);
+      ctx.fillText(id, center.x, center.y - HEX_SIZE * 0.85);
+    }
+  }
+}
+
+// ========== ユニット描画 ==========
+const UNIT_COLORS = {
+  de: { bg: '#555', border: '#888', text: '#fff' },
+  us: { bg: '#3a5a3a', border: '#6a8a6a', text: '#fff' },
+  uk: { bg: '#5a4a3a', border: '#8a7a5a', text: '#fff' },
+};
+
+function drawUnits() {
+  const unitsByHex = {};
+  for (const u of G.units) {
+    if (u.eliminated || u.exited) continue;
+    if (!unitsByHex[u.hexId]) unitsByHex[u.hexId] = [];
+    unitsByHex[u.hexId].push(u);
+  }
+
+  for (const [hid, units] of Object.entries(unitsByHex)) {
+    const { col, row } = parseHexId(hid);
+    const center = hexCenter(col, row);
+    const count = units.length;
+
+    for (let i = 0; i < count; i++) {
+      const u = units[i];
+      const offsetY = i * (HEX_SIZE * 0.45);
+      const ux = center.x;
+      const uy = center.y - HEX_SIZE * 0.2 + offsetY;
+      const w = HEX_SIZE * 0.8;
+      const h = HEX_SIZE * 0.4;
+      const colors = UNIT_COLORS[u.nation] || UNIT_COLORS.de;
+
+      // 選択中ハイライト
+      if (G.selectedUnit === u) {
+        ctx.shadowColor = '#e94560';
+        ctx.shadowBlur = 10;
+      }
+
+      // カウンター背景
+      ctx.fillStyle = u.flipped ? '#333' : colors.bg;
+      ctx.strokeStyle = G.selectedUnit === u ? '#e94560' : colors.border;
+      ctx.lineWidth = G.selectedUnit === u ? 2 : 1;
+      ctx.beginPath();
+      ctx.roundRect(ux - w/2, uy - h/2, w, h, 3);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // テキスト
+      ctx.fillStyle = colors.text;
+      ctx.font = `bold ${Math.round(h * 0.35)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // 攻撃力/防御力
+      ctx.fillText(`${u.atk}/${u.def}`, ux, uy - h * 0.15);
+      // 名前
+      ctx.font = `${Math.round(h * 0.28)}px sans-serif`;
+      ctx.fillText(u.name.substring(0, 6), ux, uy + h * 0.25);
+
+      // 行動済みマーク
+      if (u.acted) {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.beginPath();
+        ctx.roundRect(ux - w/2, uy - h/2, w, h, 3);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+// ========== マップ操作 ==========
+function pixelToHex(px, py) {
+  // canvas座標に変換
+  const rect = canvas.getBoundingClientRect();
+  const cx = (px - rect.left) / zoom;
+  const cy = (py - rect.top) / zoom;
+
+  let closest = null, minDist = Infinity;
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS; r++) {
+      const center = hexCenter(c, r);
+      const dx = cx - center.x, dy = cy - center.y;
+      const dist = dx * dx + dy * dy;
+      if (dist < minDist) { minDist = dist; closest = { col: c, row: r }; }
+    }
+  }
+  if (closest && minDist < (HEX_SIZE * 1.2) * (HEX_SIZE * 1.2)) return closest;
+  return null;
+}
+
+// パン
+mapArea.addEventListener('mousedown', e => {
+  if (e.button === 0) {
+    dragStart = { x: e.clientX - panX, y: e.clientY - panY, moved: false };
+    mapArea.classList.add('dragging');
+  }
+});
+window.addEventListener('mousemove', e => {
+  if (dragStart) {
+    const dx = e.clientX - dragStart.x - panX;
+    const dy = e.clientY - dragStart.y - panY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragStart.moved = true;
+    panX = e.clientX - dragStart.x;
+    panY = e.clientY - dragStart.y;
+    draw();
+  }
+});
+window.addEventListener('mouseup', e => {
+  if (dragStart && !dragStart.moved) {
+    handleMapClick(e);
+  }
+  dragStart = null;
+  mapArea.classList.remove('dragging');
+});
+
+// ズーム
+mapArea.addEventListener('wheel', e => {
+  e.preventDefault();
+  const oldZoom = zoom;
+  zoom *= e.deltaY < 0 ? 1.1 : 0.9;
+  zoom = Math.max(0.3, Math.min(2.0, zoom));
+  // ズーム中心をマウス位置にする
+  const rect = mapArea.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  panX = mx - (mx - panX) * (zoom / oldZoom);
+  panY = my - (my - panY) * (zoom / oldZoom);
+  draw();
+}, { passive: false });
+
+// ========== マップクリック ==========
+function handleMapClick(e) {
+  const hex = pixelToHex(e.clientX, e.clientY);
+  if (!hex) return;
+  const hid = hexId(hex.col, hex.row);
+
+  if (G.phase === 'operation') {
+    if (G.opPhase === 'select' || G.opPhase === 'move') {
+      onMoveClick(hid);
+    } else if (G.opPhase === 'attack') {
+      onAttackClick(hid);
+    }
+  }
+}
+
+// ========== 移動システム ==========
+function getMoveCost(fromId, toId, unit) {
+  const terrain = TERRAIN_MAP[toId] || 'p';
+  if (terrain === 'x') return Infinity;
+
+  const facility = FACILITY_MAP && FACILITY_MAP[toId];
+  const fromRoutes = ROAD_MAP[fromId] || [];
+  const toRoutes = ROAD_MAP[toId] || [];
+  const sharedRoad = fromRoutes.some(r => toRoutes.includes(r));
+
+  // 河川チェック
+  let riverCross = false;
+  if (RIVER_MAP) {
+    const pair1 = fromId + '-' + toId;
+    const pair2 = toId + '-' + fromId;
+    for (const [a, b] of RIVER_MAP) {
+      if ((a === fromId && b === toId) || (a === toId && b === fromId)) {
+        riverCross = true;
+        break;
+      }
+    }
+  }
+
+  let cost;
+  if (sharedRoad) {
+    // 道路移動: 1/3（切り上げは呼び出し側で処理）
+    cost = 1/3;
+    // ただし森林内の道路は非機械化部隊は1MP
+    if (terrain === 'f' && !isMechanized(unit)) cost = 1;
+  } else {
+    switch (terrain) {
+      case 'p': cost = 1; break;
+      case 'r': cost = 3; break;
+      case 'f': cost = 3; break;
+      default: cost = 1;
+    }
+  }
+
+  // 河川: +2（道路沿いなら不要）
+  if (riverCross && !sharedRoad) cost += 2;
+
+  return cost;
+}
+
+function isMechanized(unit) {
+  return unit.type === 'panzer' || unit.type === 'panzergrenadier';
+}
+
+function getUnitsAt(hexId) {
+  return G.units.filter(u => u.hexId === hexId && !u.eliminated && !u.exited);
+}
+
+function canEnter(hexId, unit) {
+  const terrain = TERRAIN_MAP[hexId];
+  if (!terrain || terrain === 'x') return false;
+  // 敵ユニットのいるhexには入れない
+  const occupants = getUnitsAt(hexId);
+  if (occupants.some(u => u.side !== unit.side)) return false;
+  // スタック制限: 同hex同側2ユニットまで（機械化師団のみ）
+  const friendly = occupants.filter(u => u.side === unit.side);
+  if (friendly.length >= 1) {
+    // 機械化師団ペアのみ可
+    if (!unit.mechPair) return false;
+    if (friendly.length >= 2) return false;
+    if (friendly[0].id !== unit.mechPair) return false;
+  }
+  return true;
+}
+
+function calcReachable(unit) {
+  const start = unit.hexId;
+  const maxMP = 6; // 全ユニット移動力6
+  const dist = new Map();
+  const prev = new Map();
+  const pq = [[0, start]];
+  dist.set(start, 0);
+
+  while (pq.length > 0) {
+    pq.sort((a, b) => a[0] - b[0]);
+    const [cost, hid] = pq.shift();
+    if (cost > dist.get(hid)) continue;
+
+    const nids = getNeighborIds(hid);
+    for (const nid of nids) {
+      if (!canEnter(nid, unit) && nid !== start) continue;
+      const mc = getMoveCost(hid, nid, unit);
+      const nc = cost + mc;
+      if (nc <= maxMP && (!dist.has(nid) || nc < dist.get(nid))) {
+        dist.set(nid, nc);
+        prev.set(nid, hid);
+        pq.push([nc, nid]);
+      }
+    }
+  }
+
+  dist.delete(start);
+  const result = new Map();
+  for (const [hid, cost] of dist) {
+    // パスを逆算
+    const path = [];
+    let cur = hid;
+    while (cur && cur !== start) {
+      path.unshift(cur);
+      cur = prev.get(cur);
+    }
+    result.set(hid, { cost, path });
+  }
+  return result;
+}
+
+function onMoveClick(hid) {
+  // ユニット選択
+  const units = getUnitsAt(hid).filter(u => u.side === G.activeSide && !u.acted && !u.flipped);
+  if (units.length > 0 && (!G.selectedUnit || !G.reachable || !G.reachable.has(hid))) {
+    G.selectedUnit = units[0];
+    G.reachable = calcReachable(G.selectedUnit);
+    G.opPhase = 'move';
+    updateRightPanel();
+    draw();
+    return;
+  }
+
+  // 移動実行
+  if (G.selectedUnit && G.reachable && G.reachable.has(hid)) {
+    const info = G.reachable.get(hid);
+    G.selectedUnit.hexId = hid;
+    G.selectedUnit.acted = true;
+    addLog('move', `${G.selectedUnit.name} → ${hid} (${info.cost.toFixed(1)}MP)`);
+
+    // 隣接敵チェック → 攻撃必須
+    const adjEnemy = getNeighborIds(hid).some(nid =>
+      getUnitsAt(nid).some(u => u.side !== G.activeSide)
+    );
+    if (adjEnemy) {
+      G.selectedUnit.mustAttack = true;
+    }
+
+    G.selectedUnit = null;
+    G.reachable = null;
+    G.opPhase = 'select';
+    updateRightPanel();
+    draw();
+  }
+}
+
+// ========== 戦闘システム ==========
+function onAttackClick(hid) {
+  // TODO: 戦闘解決
+  const defenders = getUnitsAt(hid).filter(u => u.side !== G.activeSide);
+  if (defenders.length === 0) return;
+
+  // 隣接する自軍ユニット（行動済み＋mustAttack）を攻撃者に
+  const adjIds = getNeighborIds(hid);
+  const attackers = [];
+  for (const aid of adjIds) {
+    for (const u of getUnitsAt(aid)) {
+      if (u.side === G.activeSide && u.acted) {
+        attackers.push(u);
+      }
+    }
+  }
+  if (attackers.length === 0) return;
+
+  resolveCombat(attackers, defenders, hid);
+}
+
+function resolveCombat(attackers, defenders, defHexId) {
+  const atkPower = attackers.reduce((s, u) => s + u.atk, 0);
+  const defPower = defenders.reduce((s, u) => s + u.def, 0);
+  let diff = atkPower - defPower;
+
+  // 修正: 戦闘支援（攻撃側に隣接する味方）
+  const defNeighbors = getNeighborIds(defHexId);
+  const facility = FACILITY_MAP && FACILITY_MAP[defHexId];
+  if (facility !== 'c') { // 都市では戦闘支援なし
+    let support = 0;
+    for (const nid of defNeighbors) {
+      const friendly = getUnitsAt(nid).filter(u => u.side === G.activeSide && !attackers.includes(u));
+      if (friendly.length > 0) support++;
+    }
+    diff += support;
+  }
+
+  // 修正: 森林防御 +1段階シフト
+  const terrain = TERRAIN_MAP[defHexId];
+  if (terrain === 'f') diff -= 1;
+
+  // ダイスロール
+  const die = Math.floor(Math.random() * 6) + 1;
+
+  // CRT参照
+  const colIdx = Math.max(0, Math.min(8, diff + 2)); // -2以下=0, +6以上=8
+  const rowIdx = Math.max(0, Math.min(8, die - 1));
+  const result = CRT[rowIdx][colIdx];
+
+  addLog('combat', `攻撃: ${atkPower} vs 防御: ${defPower} 差分:${diff > 0 ? '+' : ''}${diff} ダイス:${die} → ${result}`);
+
+  applyCombatResult(result, attackers, defenders, defHexId);
+  draw();
+  updateRightPanel();
+}
+
+function applyCombatResult(result, attackers, defenders, defHexId) {
+  switch (result) {
+    case 'AR': // 攻撃側退却
+      for (const u of attackers) retreatUnit(u, defHexId);
+      addLog('combat', '→ 攻撃側退却');
+      break;
+    case 'NE': // 効果なし
+      addLog('combat', '→ 効果なし');
+      break;
+    case 'DR': // 防御側退却
+      for (const u of defenders) retreatUnit(u, null);
+      addLog('combat', '→ 防御側退却');
+      break;
+    case 'DD': // 防御側混乱退却
+      for (const u of defenders) {
+        retreatUnit(u, null);
+        u.flipped = true;
+      }
+      addLog('combat', '→ 防御側混乱');
+      break;
+    case 'EX': // 交換
+      eliminateUnit(attackers[0]);
+      eliminateUnit(defenders[0]);
+      addLog('combat', '→ 相互損害');
+      break;
+    case 'DE': // 防御側壊滅
+      for (const u of defenders) eliminateUnit(u);
+      addLog('combat', '→ 防御側壊滅');
+      break;
+  }
+}
+
+function retreatUnit(unit, awayFromHex) {
+  // 持ち主が退却先を決定（簡易: 敵から離れる方向で空きhex）
+  const neighbors = getNeighborIds(unit.hexId);
+  for (const nid of neighbors) {
+    if (canEnter(nid, unit) && !getUnitsAt(nid).some(u => u.side !== unit.side)) {
+      unit.hexId = nid;
+      return;
+    }
+  }
+  // 退却先なし → 除去
+  eliminateUnit(unit);
+}
+
+function eliminateUnit(unit) {
+  unit.eliminated = true;
+  unit.hexId = 'eliminated';
+  addLog('combat', `${unit.name} 除去`);
+}
+
+// ========== ターン管理 ==========
+function endPhase() {
+  if (G.phase === 'reinforce') {
+    G.phase = 'recovery';
+    doRecovery();
+    G.phase = 'operation';
+    G.opPhase = 'select';
+    G.activeSide = 'german';
+    G.germanDone = false;
+    G.alliedDone = false;
+    addLog('turn', `ターン${G.turn} 作戦フェーズ開始 — ドイツ軍`);
+  } else if (G.phase === 'operation') {
+    // 現在の側の作戦終了
+    if (G.activeSide === 'german') {
+      G.germanDone = true;
+      if (!G.alliedDone) {
+        G.activeSide = 'allied';
+        G.opPhase = 'select';
+        // ユニットの行動済みリセット
+        G.units.filter(u => u.side === 'allied').forEach(u => u.acted = false);
+        addLog('turn', `連合軍の作戦フェーズ`);
+      } else {
+        nextTurn();
+      }
+    } else {
+      G.alliedDone = true;
+      if (!G.germanDone) {
+        G.activeSide = 'german';
+        G.opPhase = 'select';
+        G.units.filter(u => u.side === 'german').forEach(u => u.acted = false);
+        addLog('turn', `ドイツ軍の作戦フェーズ`);
+      } else {
+        nextTurn();
+      }
+    }
+  }
+  G.selectedUnit = null;
+  G.reachable = null;
+  G.attackTargets = null;
+  updateUI();
+  draw();
+}
+
+function nextTurn() {
+  G.turn++;
+  if (G.turn > G.maxTurn) {
+    endGame();
+    return;
+  }
+  G.phase = 'reinforce';
+  G.units.forEach(u => { u.acted = false; u.mustAttack = false; });
+  addLog('turn', `═══ ターン${G.turn} ═══`);
+  updateUI();
+  draw();
+}
+
+function doRecovery() {
+  // 裏面(混乱)ユニットを表面に戻す
+  let count = 0;
+  for (const u of G.units) {
+    if (u.flipped && !u.eliminated) {
+      u.flipped = false;
+      count++;
+    }
+  }
+  if (count > 0) addLog('turn', `回復: ${count}ユニットが回復`);
+}
+
+function endGame() {
+  // VP計算
+  calcVP();
+  const winner = G.vpGerman > G.vpAllied ? 'ドイツ軍' : G.vpGerman < G.vpAllied ? '連合軍' : '引き分け';
+  addLog('turn', `═══ ゲーム終了 ═══`);
+  addLog('turn', `独${G.vpGerman}VP vs 連${G.vpAllied}VP → ${winner}の勝利！`);
+  updateUI();
+}
+
+function calcVP() {
+  // 都市にいるユニットでVPを計算
+  G.vpGerman = 0;
+  G.vpAllied = 0;
+  if (!FACILITY_MAP) return;
+  for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
+    if (fac !== 'c') continue;
+    const units = getUnitsAt(hid);
+    if (units.some(u => u.side === 'german')) G.vpGerman++;
+    if (units.some(u => u.side === 'allied' && !units.some(v => v.side === 'german'))) G.vpAllied++;
+  }
+}
+
+// ========== UI更新 ==========
+function updateUI() {
+  document.getElementById('turnLabel').textContent = `ターン ${G.turn}/${G.maxTurn}`;
+  const phaseNames = { reinforce: '増援フェーズ', recovery: '回復フェーズ', operation: '作戦フェーズ' };
+  document.getElementById('phaseLabel').textContent = phaseNames[G.phase] || G.phase;
+  document.getElementById('sideLabel').textContent = G.activeSide === 'german' ? 'ドイツ軍' : '連合軍';
+  document.getElementById('vpGerman').textContent = G.vpGerman;
+  document.getElementById('vpAllied').textContent = G.vpAllied;
+  updateRightPanel();
+}
+
+function updateRightPanel() {
+  const title = document.getElementById('phaseTitle');
+  const desc = document.getElementById('phaseDesc');
+  const panel = document.getElementById('actionPanel');
+
+  if (G.phase === 'reinforce') {
+    title.textContent = '増援フェーズ';
+    desc.textContent = '「フェーズ終了」で作戦に進みます';
+    panel.innerHTML = '<div class="section"><h4>増援ユニット</h4><div>（データ未設定）</div></div>';
+  } else if (G.phase === 'operation') {
+    const sideName = G.activeSide === 'german' ? 'ドイツ軍' : '連合軍';
+    title.textContent = `作戦フェーズ — ${sideName}`;
+
+    if (G.selectedUnit) {
+      const u = G.selectedUnit;
+      desc.textContent = `${u.name} を移動中`;
+      panel.innerHTML = `
+        <div class="section">
+          <h4>選択中のユニット</h4>
+          <div class="combat-info">
+            <div><b>${u.name}</b> (${u.type})</div>
+            <div>攻撃: ${u.atk} / 防御: ${u.def}</div>
+            <div>位置: ${u.hexId}</div>
+          </div>
+          <button class="btn" onclick="cancelSelect()">選択解除</button>
+        </div>`;
+    } else {
+      desc.textContent = 'ユニットをクリックして移動';
+      // ユニットリスト
+      const sideUnits = G.units.filter(u => u.side === G.activeSide && !u.eliminated && !u.exited);
+      let html = '<div class="section"><h4>ユニット一覧</h4>';
+      for (const u of sideUnits) {
+        const cls = u.acted ? 'unit-card' : 'unit-card';
+        const status = u.acted ? '✓' : u.flipped ? '混乱' : '';
+        html += `<div class="${cls}" onclick="selectUnit('${u.id}')">
+          <span class="name">${u.name}</span>
+          <span class="stats">${u.atk}/${u.def} ${status}</span>
+        </div>`;
+      }
+      html += '</div>';
+      html += `<div class="section">
+        <button class="btn primary" onclick="endPhase()">作戦終了</button>
+      </div>`;
+      panel.innerHTML = html;
+    }
+  }
+}
+
+function cancelSelect() {
+  G.selectedUnit = null;
+  G.reachable = null;
+  G.opPhase = 'select';
+  updateRightPanel();
+  draw();
+}
+
+function selectUnit(id) {
+  const unit = G.units.find(u => u.id === id);
+  if (unit && !unit.acted && !unit.flipped) {
+    G.selectedUnit = unit;
+    G.reachable = calcReachable(unit);
+    G.opPhase = 'move';
+    updateRightPanel();
+    draw();
+  }
+}
+
+// ========== ログ ==========
+function addLog(type, msg) {
+  G.log.push({ type, msg });
+  const el = document.getElementById('logPanel');
+  const div = document.createElement('div');
+  div.className = 'log-' + type;
+  div.textContent = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function undoAction() {
+  // TODO: undo
+}
+
+// ========== ゲーム開始 ==========
+function startGame(mode) {
+  G.mode = mode;
+  document.getElementById('startScreen').style.display = 'none';
+
+  // ユニット初期化
+  G.units = [];
+  if (typeof INITIAL_SETUP !== 'undefined') {
+    for (const u of INITIAL_SETUP.german) {
+      G.units.push(Object.assign({}, u, { side: 'german', acted: false, flipped: false, eliminated: false, exited: false }));
+    }
+    for (const u of INITIAL_SETUP.allied) {
+      G.units.push(Object.assign({}, u, { side: 'allied', acted: false, flipped: false, eliminated: false, exited: false }));
+    }
+  }
+
+  addLog('turn', `═══ ターン1 ═══`);
+  addLog('turn', `モード: ${mode === 'watch' ? 'AI観戦' : mode === 'hotseat' ? '2人対戦' : mode + 'プレイ'}`);
+
+  G.phase = 'reinforce';
+  updateUI();
+  draw();
+}
+
+// ========== 初期化 ==========
+mapImg.onload = () => { mapLoaded = true; draw(); };
+mapImg.onerror = () => { mapLoaded = false; draw(); };
+mapImg.src = 'ssbulgemap12.png';
+
+// 初期描画
+draw();
+</script>
+</body>
+</html>
