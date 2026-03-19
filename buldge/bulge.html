@@ -915,9 +915,25 @@ function getRetreatHexes(unit) {
   return neighbors.filter(nid => {
     const terrain = TERRAIN_MAP[nid];
     if (!terrain || terrain === 'x') return false;
-    // 敵がいないこと
+    // 敵がいるhexには退却不可
     if (getUnitsAt(nid).some(u => u.side !== unit.side)) return false;
-    // 敵に隣接しないhexが優先だが、全て列挙
+    // 味方がいるhexには退却不可（スタック禁止）
+    const friendly = getUnitsAt(nid).filter(u => u.side === unit.side);
+    if (friendly.length > 0) {
+      if (!unit.mechPair) return false;
+      if (friendly.length >= 2) return false;
+      if (friendly[0].id !== unit.mechPair) return false;
+    }
+    // 敵ZOCには退却不可（有効なZOCのみ）
+    const inEnemyZOC = getNeighborIds(nid).some(adj => {
+      const enemies = getUnitsAt(adj).filter(e => e.side !== unit.side);
+      if (enemies.length === 0) return false;
+      const covered = getNeighborIds(adj).some(fn =>
+        getUnitsAt(fn).some(f => f.side === unit.side)
+      );
+      return !covered;
+    });
+    if (inEnemyZOC) return false;
     return true;
   });
 }
