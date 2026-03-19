@@ -216,6 +216,14 @@ function hexId(col, row) {
   return String(col + 1).padStart(2, '0') + String(row + 1).padStart(2, '0');
 }
 
+// 内部hexId → マップ表示用番号に変換
+function dispHex(id) {
+  if (!id || id === 'eliminated' || id === 'exited') return id || '';
+  const cc = parseInt(id.substring(0, 2));
+  const rr = id.substring(2, 4);
+  return rr + String(22 - cc).padStart(2, '0');
+}
+
 function parseHexId(id) {
   return { col: parseInt(id.substring(0, 2)) - 1, row: parseInt(id.substring(2, 4)) - 1 };
 }
@@ -494,7 +502,7 @@ function draw() {
       const id = hexId(c, r);
       if (TERRAIN_MAP[id] === 'x') continue;
       const center = hexCenter(c, r);
-      ctx.fillText(id, center.x, center.y - HEX_SIZE * 0.85);
+      ctx.fillText(dispHex(id), center.x, center.y - HEX_SIZE * 0.85);
     }
   }
 }
@@ -761,7 +769,7 @@ function onReinforceClick(hid) {
   const u = G.reinforceQueue[0];
   u.hexId = hid;
   G.units.push(u);
-  addLog('turn', `増援配置: ${u.name} → ${hid}`);
+  addLog('turn', `増援配置: ${u.name} → ${dispHex(hid)}`);
   G.reinforceQueue.shift();
   if (G.reinforceQueue.length > 0) {
     prepareNextReinforce();
@@ -944,10 +952,10 @@ function onMoveClick(hid) {
       pair.hexId = hid;
       pair.acted = true;
       pair.movePath = [fromHex, ...info.path];
-      addLog('move', `${pair.name} → ${hid} (スタック移動)`);
+      addLog('move', `${pair.name} → ${dispHex(hid)} (スタック移動)`);
     }
     // 裏にはしない — 相手の手番開始時にまとめて裏にする
-    addLog('move', `${G.selectedUnit.name} → ${hid} (${info.cost.toFixed(1)}MP)`);
+    addLog('move', `${G.selectedUnit.name} → ${dispHex(hid)} (${info.cost.toFixed(1)}MP)`);
 
     // 隣接敵チェック → 攻撃フェーズへ
     const movedUnit = G.selectedUnit;
@@ -1024,7 +1032,7 @@ function onAttackClick(hid) {
     const validRetreats = getRetreatHexes(unit);
     if (validRetreats.includes(hid)) {
       unit.hexId = hid;
-      addLog('combat', `${unit.name} → ${hid} に退却`);
+      addLog('combat', `${unit.name} → ${dispHex(hid)} に退却`);
       G.combat.retreatingUnits.shift();
       if (G.combat.retreatingUnits.length === 0) {
         // 退却完了 → 戦闘後前進チェック
@@ -1058,7 +1066,7 @@ function onAttackClick(hid) {
         }
         G.combat.advanceEligible.shift();
         unit.hexId = hid;
-        addLog('combat', `${unit.name} → ${hid} に前進`);
+        addLog('combat', `${unit.name} → ${dispHex(hid)} に前進`);
       }
     }
     if (G.combat.advanceEligible.length === 0) {
@@ -1227,7 +1235,7 @@ function checkAdvance() {
     if (attackers.length > 0) {
       cb.advanceEligible = attackers.map(u => u.id);
       G.opPhase = 'advance';
-      addLog('combat', `戦闘後前進: ${cb.defHex} をクリックで前進（スキップ可）`);
+      addLog('combat', `戦闘後前進: ${dispHex(cb.defHex)} をクリックで前進（スキップ可）`);
       updateRightPanel();
       draw();
       scheduleAI(600);
@@ -1398,7 +1406,7 @@ function placeReinforcements() {
     if (!u.entryTag && u.hexId) {
       // hexId直接指定 → 自動配置
       G.units.push(u);
-      addLog('turn', `増援: ${u.name} → ${u.hexId}`);
+      addLog('turn', `増援: ${u.name} → ${dispHex(u.hexId)}`);
     } else if (u.entryTag) {
       G.reinforceQueue.push(u);
     }
@@ -1412,7 +1420,7 @@ function placeReinforcements() {
     if (valid.length > 0) {
       u.hexId = valid[0];
       G.units.push(u);
-      addLog('turn', `増援: ${u.name} → ${u.hexId}`);
+      addLog('turn', `増援: ${u.name} → ${dispHex(u.hexId)}`);
     } else {
       addLog('turn', `${u.name}: 登場hex使用不可 → 次ターンに延期`);
     }
@@ -1625,7 +1633,7 @@ function deployBritish() {
       }
       if (!u.hexId) continue;
       G.units.push(u);
-      addLog('turn', `英軍増援: ${u.name} → ${u.hexId}`);
+      addLog('turn', `英軍増援: ${u.name} → ${dispHex(u.hexId)}`);
     }
   }
 
@@ -1735,7 +1743,7 @@ function updateRightPanel() {
       for (const u of deFlipped) {
         html += `<div class="unit-card" onclick="recoverUnit('${u.id}')">
           <span class="name">${u.name}</span>
-          <span class="stats">${u.type} [${u.hexId}]</span>
+          <span class="stats">${u.type} [${dispHex(u.hexId)}]</span>
         </div>`;
       }
       if (deFlipped.length === 0) html += '<div style="color:#888;">回復対象なし</div>';
@@ -1768,7 +1776,7 @@ function updateRightPanel() {
           <h4>選択中のユニット</h4>
           <div class="combat-info">
             ${infoHtml}
-            <div>位置: ${u.hexId}</div>
+            <div>位置: ${dispHex(u.hexId)}</div>
           </div>
           <button class="btn" onclick="cancelSelect()">選択解除</button>
           <button class="btn" onclick="stayInPlace()" style="margin-left:6px;">移動しない</button>
@@ -1779,7 +1787,7 @@ function updateRightPanel() {
       // 攻撃フェーズ
       const cb = G.combat;
       if (cb.defHex) {
-        desc.textContent = `攻撃対象: ${cb.defHex}`;
+        desc.textContent = `攻撃対象: ${dispHex(cb.defHex)}`;
         const defs = cb.defenders.map(u => `${u.name}(${u.flipped ? u.def : u.atk})`).join(', ');
         const atks = cb.attackers.map(id => {
           const u = G.units.find(x => x.id === id);
@@ -1787,7 +1795,7 @@ function updateRightPanel() {
         }).join(', ');
         const atkTotal = cb.attackers.reduce((s, id) => { const u = G.units.find(x => x.id === id); return s + (u ? (u.flipped ? u.def : u.atk) : 0); }, 0);
         const defTotal = cb.defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-        let html = `<div class="section"><h4>防御側 (${cb.defHex})</h4><div class="combat-info">${defs}<div class="ratio">防御力: ${defTotal}</div></div></div>`;
+        let html = `<div class="section"><h4>防御側 (${dispHex(cb.defHex)})</h4><div class="combat-info">${defs}<div class="ratio">防御力: ${defTotal}</div></div></div>`;
         html += `<div class="section"><h4>攻撃参加ユニット</h4><div class="combat-info">${atks || '（隣接する自軍hexをクリック）'}<div class="ratio">攻撃力: ${atkTotal}</div></div></div>`;
         if (cb.attackers.length > 0) {
           html += `<button class="btn primary" onclick="executeCombat()">攻撃実行</button> `;
@@ -1807,13 +1815,13 @@ function updateRightPanel() {
       if (unit) {
         const retreatHexes = getRetreatHexes(unit);
         retreatInfo = retreatHexes.length > 0
-          ? `<div style="color:#5f5;margin:4px 0;">退却可能: ${retreatHexes.join(', ')}</div><div>緑色のhexをクリックしてください</div>`
+          ? `<div style="color:#5f5;margin:4px 0;">退却可能: ${retreatHexes.map(h => dispHex(h)).join(', ')}</div><div>緑色のhexをクリックしてください</div>`
           : `<div style="color:#f55;margin:4px 0;">退却先なし — ユニット除去</div>`;
       }
-      panel.innerHTML = `<div class="combat-info"><b>${unit ? unit.name : '?'}</b> (${unit ? unit.hexId : '?'})<br>${retreatInfo}</div>`;
+      panel.innerHTML = `<div class="combat-info"><b>${unit ? unit.name : '?'}</b> (${unit ? dispHex(unit.hexId) : '?'})<br>${retreatInfo}</div>`;
     } else if (G.opPhase === 'advance') {
       desc.textContent = '戦闘後前進';
-      panel.innerHTML = `<div class="combat-info">${G.combat.defHex} をクリックで前進</div>
+      panel.innerHTML = `<div class="combat-info">${dispHex(G.combat.defHex)} をクリックで前進</div>
         <button class="btn" onclick="skipAdvance()">前進しない</button>`;
     } else {
       desc.textContent = 'ユニットをクリックして移動';
@@ -2192,7 +2200,7 @@ function aiDoMovement() {
       pair.acted = true;
       pair.movePath = [fromHex, ...info.path];
     }
-    addLog('move', `[AI] ${unit.name} → ${bestHex}`);
+    addLog('move', `[AI] ${unit.name} → ${dispHex(bestHex)}`);
     panToHex(bestHex);
 
     // 隣接敵チェック → 攻撃フェーズ or サイド切替
@@ -2377,7 +2385,7 @@ function aiDoAttack() {
     G.attackTargets = new Set([bestAttack.defHex]);
     const atkNames = bestAttack.attackers.map(id => { const u = G.units.find(x => x.id === id); return u ? u.name : ''; }).join(', ');
     const defNames = bestAttack.defenders.map(u => u.name).join(', ');
-    addLog('combat', `[AI] ${atkNames} → ${defNames} (${bestAttack.defHex}) を攻撃`);
+    addLog('combat', `[AI] ${atkNames} → ${defNames} (${dispHex(bestAttack.defHex)}) を攻撃`);
     // 戦闘hexに画面をパン
     panToHex(bestAttack.defHex);
     updateRightPanel();
@@ -2430,7 +2438,7 @@ function aiDoRetreat() {
       }, validHexes[0]);
     }
     unit.hexId = bestHex;
-    addLog('combat', `[AI] ${unit.name} → ${bestHex} に退却`);
+    addLog('combat', `[AI] ${unit.name} → ${dispHex(bestHex)} に退却`);
     G.combat.retreatingUnits.shift();
     if (G.combat.retreatingUnits.length === 0) {
       checkAdvance();
@@ -2483,7 +2491,7 @@ function aiDoAdvance() {
     }
     G.combat.advanceEligible.shift();
     unit.hexId = defHex;
-    addLog('combat', `[AI] ${unit.name} → ${defHex} に前進`);
+    addLog('combat', `[AI] ${unit.name} → ${dispHex(defHex)} に前進`);
   } else {
     G.combat.advanceEligible.shift();
   }
