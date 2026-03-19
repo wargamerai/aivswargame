@@ -110,6 +110,12 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
     <span class="vp-de">独: <b id="vpGerman">0</b>VP</span>
     <span class="vp-al">連: <b id="vpAllied">0</b>VP</span>
   </div>
+  <div style="display:flex;align-items:center;gap:4px;">
+    <button onclick="zoomBy(-10)" style="background:#0f3460;color:#e0e0e0;border:1px solid #444;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:1em;font-weight:bold;">−</button>
+    <input type="range" id="zoomSlider" min="30" max="200" value="70" style="width:140px;vertical-align:middle;">
+    <button onclick="zoomBy(10)" style="background:#0f3460;color:#e0e0e0;border:1px solid #444;padding:3px 10px;border-radius:3px;cursor:pointer;font-size:1em;font-weight:bold;">+</button>
+    <span id="zoomLabel" style="font-size:0.75em;min-width:30px;">70%</span>
+  </div>
   <div>
     <button onclick="undoAction()">元に戻す</button>
     <button onclick="endPhase()">フェーズ終了</button>
@@ -121,12 +127,6 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
   <!-- 中央マップ -->
   <div id="mapArea">
     <canvas id="mapCanvas"></canvas>
-    <div id="zoomControl">
-      <span style="font-size:0.7em">−</span>
-      <input type="range" id="zoomSlider" min="30" max="200" value="70" style="width:120px;vertical-align:middle;">
-      <span style="font-size:0.7em">+</span>
-      <span id="zoomLabel" style="font-size:0.75em;margin-left:4px;">70%</span>
-    </div>
   </div>
 
   <!-- 右パネル -->
@@ -1808,6 +1808,17 @@ zoomSlider.addEventListener('input', () => {
   clampPan();
   draw();
 });
+function zoomBy(delta) {
+  const rect = mapArea.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const oldZoom = zoom;
+  zoom = Math.max(0.3, Math.min(2.0, (Math.round(zoom * 100) + delta) / 100));
+  panX = cx - (cx - panX) * (zoom / oldZoom);
+  panY = cy - (cy - panY) * (zoom / oldZoom);
+  clampPan();
+  syncZoomSlider();
+  draw();
+}
 function syncZoomSlider() {
   zoomSlider.value = Math.round(zoom * 100);
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
