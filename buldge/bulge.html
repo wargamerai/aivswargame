@@ -434,10 +434,10 @@ function drawMovePaths() {
     if (!u.movePath || u.movePath.length < 2 || u.eliminated || u.exited) continue;
     const color = PATH_COLORS[u.side] || 'rgba(255,255,100,0.7)';
     ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 9;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.setLineDash([6, 4]);
+    ctx.setLineDash([12, 8]);
     ctx.beginPath();
     for (let i = 0; i < u.movePath.length; i++) {
       const { col, row } = parseHexId(u.movePath[i]);
@@ -452,7 +452,7 @@ function drawMovePaths() {
     const start = parseHexId(u.movePath[0]);
     const sc = hexCenter(start.col, start.row);
     ctx.beginPath();
-    ctx.arc(sc.x, sc.y, 5, 0, Math.PI * 2);
+    ctx.arc(sc.x, sc.y, 12, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
 
@@ -462,14 +462,14 @@ function drawMovePaths() {
     const lc = hexCenter(last.col, last.row);
     const pc = hexCenter(prev.col, prev.row);
     const angle = Math.atan2(lc.y - pc.y, lc.x - pc.x);
-    const arrLen = 10;
+    const arrLen = 24;
     ctx.beginPath();
     ctx.moveTo(lc.x, lc.y);
     ctx.lineTo(lc.x - arrLen * Math.cos(angle - 0.4), lc.y - arrLen * Math.sin(angle - 0.4));
     ctx.moveTo(lc.x, lc.y);
     ctx.lineTo(lc.x - arrLen * Math.cos(angle + 0.4), lc.y - arrLen * Math.sin(angle + 0.4));
     ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 7;
     ctx.stroke();
   }
 }
