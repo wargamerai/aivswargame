@@ -572,6 +572,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
   let targetDir;
   if (isDD) {
     if (lead.torpedoFired) {
+      // 魚雷発射済み → 離脱（東へ）
       targetDir = 6;
     } else {
       let closestJP = null, closestDist = 999;
@@ -581,7 +582,14 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
         if (d < closestDist) { closestDist = d; closestJP = jp; }
       }
       if (closestJP) {
-        targetDir = bestDirToward(lead.col, lead.row, closestJP.col, closestJP.row);
+        const DD_IDEAL = 3;  // DD: 魚雷射程の3ヘクスまで接近
+        if (closestDist > DD_IDEAL + 2) {
+          targetDir = bestDirToward(lead.col, lead.row, closestJP.col, closestJP.row);
+        } else if (closestDist < DD_IDEAL) {
+          targetDir = bestDirAway(lead.col, lead.row, closestJP.col, closestJP.row);
+        } else {
+          targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row);
+        }
       } else {
         targetDir = lead.dir;
       }
@@ -608,29 +616,19 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
         targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row);
       }
     } else {
-      // === 接触後: 距離10維持でアウトレンジ ===
-      // 日本が接近 → 正面向き → 火力半減、米は横向きで全火力
-      // 戦力比2倍以上なら突撃して仕留める
-      const IDEAL_RANGE = (usPower > jpPower * 2) ? 5 : sr;
+      // === 接触後: 等距離維持 ===
+      // 主力艦はspotRange付近の距離を保つ。突撃しない。
+      const IDEAL_RANGE = sr;
 
-      if (distToJP > sr + 3) {
-        // 索敵圏外 → 接近して射程に入る
-        let goalCol = jpc.col, goalRow = jpc.row;
-        for (let i = 0; i < sr + 2; i++) {
-          const n = hexNeighbor(goalCol, goalRow, jpDir);
-          if (!n) break;
-          goalCol = n.col; goalRow = n.row;
-        }
-        targetDir = bestDirToward(lead.col, lead.row, goalCol, goalRow);
-      } else if (distToJP < IDEAL_RANGE - 2) {
+      if (distToJP > IDEAL_RANGE + 2) {
+        // 遠い → 接近
+        targetDir = bestDirToward(lead.col, lead.row, jpc.col, jpc.row);
+      } else if (distToJP < IDEAL_RANGE - 1) {
         // 近すぎ → 距離を取る
         targetDir = bestDirAway(lead.col, lead.row, jpc.col, jpc.row);
-      } else if (distToJP >= IDEAL_RANGE - 2 && distToJP <= IDEAL_RANGE + 2) {
-        // 理想距離帯 → 横方向に平行移動して全火力維持
-        targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row);
       } else {
-        // やや遠い → じわじわ接近
-        targetDir = bestDirToward(lead.col, lead.row, jpc.col, jpc.row);
+        // 等距離帯 → 横方向に平行移動
+        targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row);
       }
     }
   }
@@ -893,7 +891,7 @@ function aiMoveOneJPLead(lead, usc, sr) {
       // 雷撃済み → 西へ退避
       targetDir = 4;
     } else {
-      // 最寄りのUS艦に突撃（雷撃距離へ）
+      // DD: 魚雷射程3ヘクスまで接近して維持
       let closestUS = null, closestDist = 999;
       for (const us of usFleet) {
         if (us.status === 'sunk' || us.col < 0) continue;
@@ -901,34 +899,31 @@ function aiMoveOneJPLead(lead, usc, sr) {
         if (d < closestDist) { closestDist = d; closestUS = us; }
       }
       if (closestUS) {
-        targetDir = bestDirToward(lead.col, lead.row, closestUS.col, closestUS.row);
+        const DD_IDEAL = 3;
+        if (closestDist > DD_IDEAL + 2) {
+          targetDir = bestDirToward(lead.col, lead.row, closestUS.col, closestUS.row);
+        } else if (closestDist < DD_IDEAL) {
+          targetDir = bestDirAway(lead.col, lead.row, closestUS.col, closestUS.row);
+        } else {
+          const usDir = usMainDir();
+          targetDir = perpDirToJP(usDir, lead.col, lead.row, usc.col, usc.row);
+        }
       } else {
         targetDir = lead.dir;
       }
     }
   } else {
-    // 日本主力艦: 積極的に接近して砲撃距離を詰める
-    const IDEAL_RANGE = 6;
-    if (distToUS > IDEAL_RANGE + 3) {
+    // 日本主力艦: 等距離維持（spotRange付近）
+    const IDEAL_RANGE = sr;
+    if (distToUS > IDEAL_RANGE + 2) {
       targetDir = bestDirToward(lead.col, lead.row, usc.col, usc.row);
-    } else if (distToUS < IDEAL_RANGE - 2) {
-      // 近すぎ → 平行移動（T字を避ける）
-      const usDir = usMainDir();
-      const ci = DIR_CW_AI.indexOf(usDir);
-      const perp1 = DIR_CW_AI[(ci + 2) % 6];
-      const perp2 = DIR_CW_AI[(ci + 4) % 6];
-      const n1 = hexNeighbor(lead.col, lead.row, perp1);
-      const n2 = hexNeighbor(lead.col, lead.row, perp2);
-      if (!n1) targetDir = perp2;
-      else if (!n2) targetDir = perp1;
-      else {
-        const d1 = hexDist(n1.col, n1.row, usc.col, usc.row);
-        const d2 = hexDist(n2.col, n2.row, usc.col, usc.row);
-        targetDir = Math.abs(d1 - IDEAL_RANGE) <= Math.abs(d2 - IDEAL_RANGE) ? perp1 : perp2;
-      }
+    } else if (distToUS < IDEAL_RANGE - 1) {
+      // 近すぎ → 距離を取る
+      targetDir = bestDirAway(lead.col, lead.row, usc.col, usc.row);
     } else {
-      // 理想距離帯 → 接近方向を維持しつつ砲撃
-      targetDir = bestDirToward(lead.col, lead.row, usc.col, usc.row);
+      // 等距離帯 → 横方向に平行移動
+      const usDir = usMainDir();
+      targetDir = perpDirToJP(usDir, lead.col, lead.row, usc.col, usc.row);
     }
   }
 
