@@ -63,6 +63,7 @@ body { background: #333; overflow: hidden; }
     <button id="btnModeFacility">施設</button>
     <button id="btnModeTag">タグ</button>
     <button id="btnModeRoad">道路</button>
+    <button id="btnModeRiver">川</button>
   </div>
   <div id="legend"></div>
   <hr style="border-color:#555;">
@@ -95,8 +96,14 @@ const roadData = {};
 for (const [id, routes] of Object.entries(ROAD_MAP)) {
   roadData[id] = Array.isArray(routes) ? [...routes] : [routes];
 }
+// 川データ: Set of "hexId1-hexId2" (sorted)
+const riverData = new Set();
+for (const pair of RIVER_MAP) {
+  riverData.add([...pair].sort().join('-'));
+}
+let riverFirstHex = null; // 川モード: 1つ目のヘクス選択状態
 let currentBrush = 'p';
-let editMode = 'terrain'; // 'terrain', 'facility', 'tag', or 'road'
+let editMode = 'terrain'; // 'terrain', 'facility', 'tag', 'road', or 'river'
 
 const inputs = {
   hexSize: document.getElementById('hexSize'),
@@ -211,6 +218,32 @@ function drawRoadLines(p) {
   }
 }
 
+function drawRiverLines(p) {
+  ctx.strokeStyle = 'rgba(255,30,30,0.9)';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  for (const pairKey of riverData) {
+    const [id1, id2] = pairKey.split('-');
+    const c1 = parseInt(id1.substring(0,2)) - 1, r1 = parseInt(id1.substring(2,4)) - 1;
+    const c2 = parseInt(id2.substring(0,2)) - 1, r2 = parseInt(id2.substring(2,4)) - 1;
+    const center1 = hexCenter(c1, r1, p.hexSize, p.offsetX, p.offsetY);
+    const center2 = hexCenter(c2, r2, p.hexSize, p.offsetX, p.offsetY);
+    // ヘクスサイドの中点（2つの中心の中点）
+    const mx = (center1.x + center2.x) / 2;
+    const my = (center1.y + center2.y) / 2;
+    // サイドに沿った線を描く（中点を中心に、2中心を結ぶ線に直交する線）
+    const dx = center2.x - center1.x;
+    const dy = center2.y - center1.y;
+    const len = p.hexSize * 0.45;
+    const nx = -dy, ny = dx;
+    const nl = Math.sqrt(nx*nx + ny*ny);
+    ctx.beginPath();
+    ctx.moveTo(mx - nx/nl*len, my - ny/nl*len);
+    ctx.lineTo(mx + nx/nl*len, my + ny/nl*len);
+    ctx.stroke();
+  }
+}
+
 function drawHexGrid() {
   const p = getParams();
   const imgW = img.naturalWidth || img.width;
@@ -228,17 +261,17 @@ function drawHexGrid() {
       const id = hexId(c, r);
       const terrain = terrainData[id] || 'p';
       const facility = facilityData[id] || '';
-      const isRoadMode = editMode === 'road';
+      const hideOverlay = editMode === 'road' || editMode === 'river';
 
-      // 地形色で塗り（道路モード時は非表示）
-      if (!isRoadMode) {
+      // 地形色で塗り（道路/川モード時は非表示）
+      if (!hideOverlay) {
         drawHexPath(center.x, center.y, p.hexSize);
         ctx.fillStyle = TERRAIN_COLORS[terrain] || 'rgba(0,0,0,0)';
         ctx.fill();
       }
 
       // 施設の上塗り（道路モード時は非表示）
-      if (!isRoadMode && facility && FACILITY_COLORS[facility]) {
+      if (!hideOverlay && facility && FACILITY_COLORS[facility]) {
         drawHexPath(center.x, center.y, p.hexSize * 0.55);
         ctx.fillStyle = FACILITY_COLORS[facility];
         ctx.fill();
@@ -246,7 +279,7 @@ function drawHexGrid() {
 
       // タグマーカー（道路モード時は非表示）
       const tag = tagData[id] || '';
-      if (!isRoadMode && tag && TAG_COLORS[tag]) {
+      if (!hideOverlay && tag && TAG_COLORS[tag]) {
         const tx = center.x + p.hexSize * 0.3;
         const ty = center.y + p.hexSize * 0.3;
         const tr = p.hexSize * 0.18;
@@ -340,6 +373,20 @@ function drawHexGrid() {
 
   // 道路の線を描画
   drawRoadLines(p);
+
+  // 川の線を描画
+  drawRiverLines(p);
+
+  // 川モード: 1つ目のヘクスをハイライト
+  if (editMode === 'river' && riverFirstHex) {
+    const fc = parseInt(riverFirstHex.substring(0,2)) - 1;
+    const fr = parseInt(riverFirstHex.substring(2,4)) - 1;
+    const fCenter = hexCenter(fc, fr, p.hexSize, p.offsetX, p.offsetY);
+    drawHexPath(fCenter.x, fCenter.y, p.hexSize);
+    ctx.strokeStyle = 'rgba(255,30,30,1)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
 }
 
 // --- ヘクス判定 ---
@@ -393,11 +440,13 @@ canvas.addEventListener('mousemove', (e) => {
     if (editMode === 'terrain') brushName = TERRAIN_NAMES[currentBrush] || currentBrush;
     else if (editMode === 'facility') brushName = currentBrush === '' ? 'なし' : FACILITY_NAMES[currentBrush] || currentBrush;
     else if (editMode === 'tag') brushName = currentBrush === '' ? 'なし' : TAG_NAMES[currentBrush] || currentBrush;
+    else if (editMode === 'river') brushName = currentBrush === 'erase' ? '消去' : '川を描く';
     else brushName = currentBrush === 0 ? '消去' : ROAD_NAMES[currentBrush] || currentBrush;
-    const modeLabel = editMode === 'terrain' ? '地形' : editMode === 'facility' ? '施設' : editMode === 'tag' ? 'タグ' : '道路';
-    hexInfoEl.textContent = `${id}${place} : ${TERRAIN_NAMES[t]}${facilityStr}${tagStr}${roadStr} | [${modeLabel}] ブラシ: ${brushName}`;
+    const modeLabel = {terrain:'地形', facility:'施設', tag:'タグ', road:'道路', river:'川'}[editMode];
+    const riverInfo = editMode === 'river' && riverFirstHex ? ` | 始点: ${riverFirstHex}` : '';
+    hexInfoEl.textContent = `${id}${place} : ${TERRAIN_NAMES[t]}${facilityStr}${tagStr}${roadStr} | [${modeLabel}] ブラシ: ${brushName}${riverInfo}`;
   }
-  if (isPainting) { isDragging = true; paintHex(e); }
+  if (isPainting && editMode !== 'river') { isDragging = true; paintHex(e); }
 });
 canvas.addEventListener('mouseup', () => { isPainting = false; isDragging = false; });
 canvas.addEventListener('mouseleave', () => { isPainting = false; isDragging = false; });
@@ -419,6 +468,37 @@ function paintHex(e) {
     } else if (editMode === 'tag') {
       if (currentBrush === '') { delete tagData[id]; }
       else { tagData[id] = currentBrush; }
+    } else if (editMode === 'river') {
+      if (currentBrush === 'erase') {
+        // 消しゴム: このヘクスに接する全ての川を削除
+        const toDelete = [];
+        for (const pk of riverData) {
+          if (pk.startsWith(id + '-') || pk.endsWith('-' + id)) toDelete.push(pk);
+        }
+        toDelete.forEach(pk => riverData.delete(pk));
+        riverFirstHex = null;
+      } else if (!riverFirstHex) {
+        // 1つ目のヘクス選択
+        riverFirstHex = id;
+      } else if (riverFirstHex === id) {
+        // 同じヘクスをクリック→選択解除
+        riverFirstHex = null;
+      } else {
+        // 2つ目のヘクス: 隣接チェック
+        const fc = parseInt(riverFirstHex.substring(0,2)) - 1;
+        const fr = parseInt(riverFirstHex.substring(2,4)) - 1;
+        const neighbors = getNeighbors(fc, fr);
+        const isAdj = neighbors.some(([nc,nr]) => nc === hex.col && nr === hex.row);
+        if (isAdj) {
+          const pairKey = [riverFirstHex, id].sort().join('-');
+          if (riverData.has(pairKey)) {
+            riverData.delete(pairKey); // トグル削除
+          } else {
+            riverData.add(pairKey);
+          }
+        }
+        riverFirstHex = null;
+      }
     } else if (editMode === 'road') {
       if (currentBrush === 0) {
         // 消しゴム: 全路線削除
@@ -444,14 +524,17 @@ const btnTerrain = document.getElementById('btnModeTerrain');
 const btnFacility = document.getElementById('btnModeFacility');
 const btnTag = document.getElementById('btnModeTag');
 const btnRoad = document.getElementById('btnModeRoad');
-const modes = ['terrain', 'facility', 'tag', 'road'];
+const btnRiver = document.getElementById('btnModeRiver');
+const modes = ['terrain', 'facility', 'tag', 'road', 'river'];
 
 function switchMode(mode) {
   editMode = mode;
+  riverFirstHex = null;
   btnTerrain.classList.toggle('active-mode', mode === 'terrain');
   btnFacility.classList.toggle('active-mode', mode === 'facility');
   btnTag.classList.toggle('active-mode', mode === 'tag');
   btnRoad.classList.toggle('active-mode', mode === 'road');
+  btnRiver.classList.toggle('active-mode', mode === 'river');
   buildLegend();
   drawHexGrid();
 }
@@ -460,6 +543,7 @@ btnTerrain.addEventListener('click', () => switchMode('terrain'));
 btnFacility.addEventListener('click', () => switchMode('facility'));
 btnTag.addEventListener('click', () => switchMode('tag'));
 btnRoad.addEventListener('click', () => switchMode('road'));
+btnRiver.addEventListener('click', () => switchMode('river'));
 
 // --- 凡例（ブラシ選択）---
 function buildLegend() {
@@ -524,6 +608,29 @@ function buildLegend() {
       item.addEventListener('click', () => selectBrush(rt));
       legendEl.appendChild(item);
     });
+  } else if (editMode === 'river') {
+    currentBrush = 'draw';
+    const riverOpts = [
+      { brush: 'draw', color: 'rgba(30,120,255,0.8)', label: '1:川を描く' },
+      { brush: 'erase', color: '#444', label: '2:消去' },
+    ];
+    riverOpts.forEach(opt => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (opt.brush === currentBrush ? ' active' : '');
+      item.dataset.brush = opt.brush;
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = opt.color;
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(opt.label));
+      item.addEventListener('click', () => selectBrush(opt.brush));
+      legendEl.appendChild(item);
+    });
+    // 操作説明
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:10px;color:#aaa;margin-top:2px;';
+    info.textContent = '2つのヘクスを順にクリック';
+    legendEl.appendChild(info);
   }
 }
 
@@ -548,7 +655,8 @@ document.addEventListener('keydown', (e) => {
 
   // 数字キーでブラシ切替
   const num = parseInt(e.key);
-  const cycle = editMode === 'terrain' ? TERRAIN_CYCLE : editMode === 'facility' ? FACILITY_CYCLE : editMode === 'tag' ? TAG_CYCLE : ROAD_CYCLE;
+  const riverCycle = ['draw', 'erase'];
+  const cycle = editMode === 'terrain' ? TERRAIN_CYCLE : editMode === 'facility' ? FACILITY_CYCLE : editMode === 'tag' ? TAG_CYCLE : editMode === 'road' ? ROAD_CYCLE : riverCycle;
   if (num >= 1 && num <= cycle.length) {
     selectBrush(cycle[num - 1]);
     e.preventDefault();
@@ -622,7 +730,15 @@ document.getElementById('btnExport').addEventListener('click', () => {
       rEntries.push(`  "${id}": [${routes.sort().join(',')}]`);
     }
   }
-  out += rEntries.join(',\n') + '\n};\n';
+  out += rEntries.join(',\n') + '\n};\n\n';
+
+  // 川データ
+  out += 'const RIVER_MAP = [\n';
+  const riverEntries = [...riverData].sort().map(pk => {
+    const [a, b] = pk.split('-');
+    return `  ["${a}","${b}"]`;
+  });
+  out += riverEntries.join(',\n') + '\n];\n';
 
   console.log(out);
   const msg = document.getElementById('exportMsg');

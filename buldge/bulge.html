@@ -1138,6 +1138,7 @@ function checkAdvance() {
 }
 
 function finishCombat() {
+  dbg('finishCombat', {side:G.activeSide, defHex:G.combat.defHex});
   // 操作ユニットを裏にする
   G.units.filter(u => u.side === G.activeSide && u.acted && !u.flipped).forEach(u => {
     u.flipped = true; delete u.movePath;
@@ -1161,6 +1162,7 @@ function eliminateUnit(unit) {
 
 // ========== ターン管理 ==========
 function endPhase() {
+  dbg('endPhase', {phase:G.phase, opPhase:G.opPhase, side:G.activeSide});
   // AI操作中は人間のボタンクリック無効（AI自身からの呼び出しは許可）
   if (G.phase === 'operation' && isAISide(G.activeSide) && !aiRunning) return;
   G.passCount = 0; // 通常のフェーズ終了ではパスカウントリセット
@@ -1205,6 +1207,7 @@ function endPhase() {
 
 // 1ユニット操作後のサイド切り替え
 function switchSide() {
+  dbg('switchSide', {from:G.activeSide});
   // 操作済みユニットを裏にする（今操作した1ユニット分）
   // actedかつまだflippedでないユニットをflip
   G.units.filter(u => u.side === G.activeSide && u.acted && !u.flipped).forEach(u => {
@@ -1744,6 +1747,7 @@ function showFlash(text, side) {
 
 // パス
 function passPhase() {
+  dbg('passPhase', {side:G.activeSide, passCount:G.passCount});
   const sideName = G.activeSide === 'german' ? 'ドイツ軍' : '連合軍';
   showFlash(`${sideName} パス`, G.activeSide);
   addLog('turn', `${sideName}: パス`);
@@ -1792,8 +1796,12 @@ function isAISide(side) {
 // AI処理中フラグ（二重起動防止）
 let aiRunning = false;
 
+// デバッグログ
+function dbg(...args) { console.log('[BULGE]', ...args); }
+
 // AIメインループ: 現在のフェーズに応じて1アクション実行
 function aiTick() {
+  dbg('aiTick', {phase:G.phase, opPhase:G.opPhase, side:G.activeSide, aiRunning, turn:G.turn});
   if (aiRunning) return;
   if (G.turn > G.maxTurn) return;
 
@@ -1924,6 +1932,7 @@ function aiDoRecovery() {
 
 // AI移動: 1ユニット移動→攻撃or切替
 function aiDoMovement() {
+  dbg('aiDoMovement', {side:G.activeSide});
   const side = G.activeSide;
   const units = G.units.filter(u =>
     u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
@@ -2091,6 +2100,7 @@ function aiPickMoveTarget(unit, reachable) {
 
 // AI攻撃: 有利な戦闘を実行
 function aiDoAttack() {
+  dbg('aiDoAttack', {side:G.activeSide});
   const side = G.activeSide;
   const enemySide = side === 'german' ? 'allied' : 'german';
 
@@ -2190,6 +2200,7 @@ function aiDoAttack() {
 
 // AI退却: 最初の有効な退却先を選択
 function aiDoRetreat() {
+  dbg('aiDoRetreat', {retreating:G.combat.retreatingUnits});
   const ru = G.combat.retreatingUnits[0];
   if (!ru) {
     checkAdvance();
@@ -2246,6 +2257,7 @@ function aiDoRetreat() {
 
 // AI戦闘後前進: 常に前進
 function aiDoAdvance() {
+  dbg('aiDoAdvance', {eligible:G.combat.advanceEligible});
   if (G.combat.advanceEligible.length === 0) {
     finishCombat();
     setTimeout(() => aiTick(), 500);
