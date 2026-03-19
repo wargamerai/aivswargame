@@ -1347,9 +1347,8 @@ function calcVP() {
     if (fac !== 'c') continue;
     const units = getUnitsAt(hid);
     const hasGerman = units.some(u => u.side === 'german');
-    const hasAllied = units.some(u => u.side === 'allied');
-    if (hasGerman && !hasAllied) G.vpGerman++;
-    if (hasAllied && !hasGerman) G.vpAllied++;
+    if (hasGerman) G.vpGerman++;
+    else G.vpAllied++;
   }
 }
 
