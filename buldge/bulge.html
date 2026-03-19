@@ -1975,6 +1975,16 @@ function aiDoMovement() {
   // 最適な移動先を選択
   const bestHex = aiPickMoveTarget(unit, reachable);
   if (bestHex && bestHex !== unit.hexId) {
+    // 移動先のスタック最終チェック
+    const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
+    if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
+      // スタック違反 → 移動しない
+      unit.acted = true;
+      addLog('move', `[AI] ${unit.name}: スタック制限で移動不可`);
+      draw();
+      setTimeout(() => aiTick(), 300);
+      return;
+    }
     // 移動実行（onMoveClickと同等の処理）
     const info = reachable.get(bestHex);
     const fromHex = unit.hexId;
