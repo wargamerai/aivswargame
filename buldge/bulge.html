@@ -797,19 +797,19 @@ function onMoveClick(hid) {
   if (G.selectedUnit && G.reachable && G.reachable.has(hid)) {
     const info = G.reachable.get(hid);
     const fromHex = G.selectedUnit.hexId;
+    // スタック判定は移動前に行う（hexId変更前）
+    const stacked = isStacked(G.selectedUnit);
+    const pair = stacked ? G.units.find(u => u.id === G.selectedUnit.mechPair) : null;
     // 経路を記録（移動元を先頭に追加）
     G.selectedUnit.movePath = [fromHex, ...info.path];
     G.selectedUnit.hexId = hid;
     G.selectedUnit.acted = true;
     // スタック中なら相方も一緒に移動
-    if (isStacked(G.selectedUnit)) {
-      const pair = G.units.find(u => u.id === G.selectedUnit.mechPair);
-      if (pair && !pair.acted) {
-        pair.hexId = hid;
-        pair.acted = true;
-        pair.movePath = [fromHex, ...info.path];
-        addLog('move', `${pair.name} → ${hid} (スタック移動)`);
-      }
+    if (stacked && pair && !pair.acted) {
+      pair.hexId = hid;
+      pair.acted = true;
+      pair.movePath = [fromHex, ...info.path];
+      addLog('move', `${pair.name} → ${hid} (スタック移動)`);
     }
     // 裏にはしない — 相手の手番開始時にまとめて裏にする
     addLog('move', `${G.selectedUnit.name} → ${hid} (${info.cost.toFixed(1)}MP)`);
