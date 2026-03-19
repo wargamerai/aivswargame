@@ -360,6 +360,20 @@ function draw() {
     }
   }
 
+  // 増援配置可能hexハイライト
+  if (G.reinforceValidHexes) {
+    for (const hid of G.reinforceValidHexes) {
+      const { col, row } = parseHexId(hid);
+      const center = hexCenter(col, row);
+      drawHexPath(center.x, center.y, HEX_SIZE);
+      ctx.fillStyle = 'rgba(255,200,0,0.35)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,200,0,0.7)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
   // 到達可能hexハイライト
   if (G.reachable) {
     for (const [hid, info] of G.reachable) {
@@ -726,12 +740,37 @@ function handleMapClick(e) {
   if (!hex) return;
   const hid = hexId(hex.col, hex.row);
 
+  // 増援配置モード
+  if (G.phase === 'reinforce' && G.reinforceQueue && G.reinforceQueue.length > 0) {
+    onReinforceClick(hid);
+    return;
+  }
+
   if (G.phase === 'operation') {
     if (G.opPhase === 'select' || G.opPhase === 'move') {
       onMoveClick(hid);
     } else if (G.opPhase === 'attack' || G.opPhase === 'retreat' || G.opPhase === 'advance') {
       onAttackClick(hid);
     }
+  }
+}
+
+// 増援配置クリック処理
+function onReinforceClick(hid) {
+  if (!G.reinforceValidHexes || !G.reinforceValidHexes.includes(hid)) return;
+  const u = G.reinforceQueue[0];
+  u.hexId = hid;
+  G.units.push(u);
+  addLog('turn', `増援配置: ${u.name} → ${hid}`);
+  G.reinforceQueue.shift();
+  if (G.reinforceQueue.length > 0) {
+    prepareNextReinforce();
+  } else {
+    G.reinforceValidHexes = null;
+    // 全増援配置完了 → 回復フェーズへ
+    G.phase = 'recovery';
+    startRecoveryPhase();
+    updateUI(); draw();
   }
 }
 
@@ -1229,6 +1268,8 @@ function endPhase() {
   G.passCount = 0; // 通常のフェーズ終了ではパスカウントリセット
   if (G.phase === 'reinforce') {
     placeReinforcements();
+    // 人間の手動配置待ちの場合はここで止める
+    if (G.reinforceQueue && G.reinforceQueue.length > 0) return;
     G.phase = 'recovery';
     startRecoveryPhase();
     updateUI(); draw();
@@ -1306,60 +1347,80 @@ function nextTurn() {
   setTimeout(() => aiTick(), 800);
 }
 
+function getEntryHexes(tag) {
+  const hexes = [];
+  if (typeof TAG_MAP !== 'undefined') {
+    for (const [hid, t] of Object.entries(TAG_MAP)) {
+      if (t === tag) hexes.push(hid);
+    }
+  }
+  return hexes;
+}
+
+function getValidEntryHexes(u) {
+  if (!u.entryTag) return [];
+  const entryHexes = getEntryHexes(u.entryTag);
+  return entryHexes.filter(hid => {
+    // 敵がいるhexは不可
+    if (getUnitsAt(hid).some(o => o.side !== u.side)) return false;
+    // スタックチェック
+    const friendlyCount = getUnitsAt(hid).filter(o => o.side === u.side).length;
+    if (friendlyCount === 0) return true;
+    if (u.mechPair && friendlyCount < 2) return true;
+    return false;
+  });
+}
+
+function prepareNextReinforce() {
+  const u = G.reinforceQueue[0];
+  G.reinforceValidHexes = getValidEntryHexes(u);
+  if (G.reinforceValidHexes.length === 0) {
+    addLog('turn', `${u.name}: 登場hex使用不可 → 次ターンに延期`);
+    G.reinforceQueue.shift();
+    if (G.reinforceQueue.length > 0) { prepareNextReinforce(); return; }
+    G.reinforceValidHexes = null;
+  }
+  updateUI(); draw();
+}
+
 function placeReinforcements() {
   const reinforcements = REINFORCEMENTS[G.turn];
   if (!reinforcements || reinforcements.length === 0) return;
 
-  // entryTagに対応するhexを検索
-  function getEntryHexes(tag) {
-    const hexes = [];
-    if (typeof TAG_MAP !== 'undefined') {
-      for (const [hid, t] of Object.entries(TAG_MAP)) {
-        if (t === tag) hexes.push(hid);
-      }
-    }
-    return hexes;
-  }
-
+  // 配置キューを作成
+  G.reinforceQueue = [];
   for (const rUnit of reinforcements) {
-    // イギリス軍は自動配置しない（選択制）
     if (rUnit.nation === 'uk') continue;
-
     const u = Object.assign({}, rUnit, {
       acted: false, flipped: false, eliminated: false, exited: false
     });
-
-    if (u.entryTag) {
-      // 増援hexを探す
-      const entryHexes = getEntryHexes(u.entryTag);
-      let placed = false;
-      for (const hid of entryHexes) {
-        // 敵がいるhexからは登場不可
-        if (getUnitsAt(hid).some(o => o.side !== u.side)) continue;
-        // 空いているhexに配置（機械化師団ペアは同hex可）
-        const occupants = getUnitsAt(hid);
-        const friendlyCount = occupants.filter(o => o.side === u.side).length;
-        if (friendlyCount === 0 || (u.mechPair && friendlyCount < 2)) {
-          u.hexId = hid;
-          placed = true;
-          break;
-        }
-      }
-      if (!placed && entryHexes.length > 0) {
-        // 全て敵占領 or 埋まっている → 登場延期
-        addLog('turn', `${u.name}: 登場hex使用不可 → 次ターンに延期`);
-        continue;
-      } else if (!placed) {
-        // entryTagに対応するhexがない → スキップ
-        addLog('turn', `${u.name}: 登場hex未設定（${u.entryTag}）`);
-        continue;
-      }
+    if (!u.entryTag && u.hexId) {
+      // hexId直接指定 → 自動配置
+      G.units.push(u);
+      addLog('turn', `増援: ${u.name} → ${u.hexId}`);
+    } else if (u.entryTag) {
+      G.reinforceQueue.push(u);
     }
-    // hexIdが既に設定されている場合（初期配置hex指定）はそのまま
-    if (!u.hexId) continue;
+  }
 
-    G.units.push(u);
-    addLog('turn', `増援: ${u.name} → ${u.hexId}`);
+  // AI側は自動配置
+  const aiUnits = G.reinforceQueue.filter(u => isAISide(u.side));
+  const humanUnits = G.reinforceQueue.filter(u => !isAISide(u.side));
+  for (const u of aiUnits) {
+    const valid = getValidEntryHexes(u);
+    if (valid.length > 0) {
+      u.hexId = valid[0];
+      G.units.push(u);
+      addLog('turn', `増援: ${u.name} → ${u.hexId}`);
+    } else {
+      addLog('turn', `${u.name}: 登場hex使用不可 → 次ターンに延期`);
+    }
+  }
+
+  // 人間側は手動配置
+  G.reinforceQueue = humanUnits;
+  if (G.reinforceQueue.length > 0) {
+    prepareNextReinforce();
   }
 }
 
@@ -1623,13 +1684,25 @@ function updateRightPanel() {
 
   if (G.phase === 'reinforce') {
     title.textContent = '増援フェーズ';
-    const rein = REINFORCEMENTS[G.turn];
-    if (rein && rein.length > 0) {
-      desc.textContent = `${rein.length}ユニットが所定hexに配置されます`;
+    let reinHtml = '';
+    // 手動配置中
+    if (G.reinforceQueue && G.reinforceQueue.length > 0) {
+      const u = G.reinforceQueue[0];
+      desc.textContent = `配置するユニットを選んでください（残り${G.reinforceQueue.length}）`;
+      reinHtml = `<div class="section">
+        <div style="color:#79c0ff;font-size:1.1em;margin-bottom:8px;"><b>${u.name}</b></div>
+        <div style="color:#aaa;font-size:0.85em;">黄色のハイライトhexをクリックして配置</div>
+        <div style="color:#aaa;font-size:0.85em;">登場エリア: ${u.entryTag || '不明'}</div>
+      </div>`;
     } else {
-      desc.textContent = 'このターンの増援はありません';
+      const rein = REINFORCEMENTS[G.turn];
+      if (rein && rein.length > 0) {
+        desc.textContent = `増援配置完了`;
+      } else {
+        desc.textContent = 'このターンの増援はありません';
+      }
+      reinHtml = '<div class="section"><button class="btn primary" onclick="endPhase()">増援配置 → 回復へ</button></div>';
     }
-    let reinHtml = '<div class="section"><button class="btn primary" onclick="endPhase()">増援配置 → 回復へ</button></div>';
     // 英軍投入選択（T3以降、未投入の場合）
     if (G.turn >= 3 && G.britishDeployedTurn === 0) {
       const vpCost = BRITISH_VP_COST[G.turn] || 0;
