@@ -539,6 +539,8 @@ function draw() {
 const MOVE_PATH_DURATION = 4000; // 経路表示時間(ms)
 
 function clearExpiredPaths() {
+  // 確認待ち中は経路を消さない
+  if (G._awaitConfirm) return;
   const now = Date.now();
   for (const u of G.units) {
     if (u._movePathExpiry && now > u._movePathExpiry) {
@@ -2024,6 +2026,14 @@ function stayInPlace() {
 // AI行動確認後に進行
 function confirmAI() {
   G._awaitConfirm = false;
+  // 経路表示をクリア
+  for (const u of G.units) {
+    if (u._movePathExpiry) {
+      delete u.movePath;
+      delete u._movePathExpiry;
+      delete u._lastMovedAt;
+    }
+  }
   updateRightPanel();
   draw();
 }
