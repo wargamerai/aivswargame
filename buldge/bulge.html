@@ -827,9 +827,9 @@ function calcReachable(unit) {
       const hasActiveEnemyZOC = getNeighborIds(hid).some(adj => {
         const enemies = getUnitsAt(adj).filter(e => e.side !== unit.side);
         if (enemies.length === 0) return false;
-        // この敵hexに味方が隣接していればZOC無効
+        // この敵hexに味方が隣接していればZOC無効（移動中のユニット自身は除く）
         const enemyHasFriendlyNeighbor = getNeighborIds(adj).some(fn =>
-          getUnitsAt(fn).some(f => f.side === unit.side)
+          getUnitsAt(fn).some(f => f.side === unit.side && f.id !== unit.id)
         );
         return !enemyHasFriendlyNeighbor;
       });
