@@ -182,6 +182,7 @@ function mcPickMove(unit, reachable) {
   }
 
   console.log(`[MC]   → 選択: ${dispHex(bestHex)} (score=${bestScore.toFixed(1)})`);
+  addLog('move', `[AI] ${unit.name}: ${dispHex(bestHex)}を選択 (MC=${bestScore.toFixed(1)})`);
   return bestHex;
 }
 
@@ -244,5 +245,6 @@ function mcDecideAttack(attackers, defenders, defHexId) {
   const shouldAttack = (side === 'german') ? (atkAvg > noAtkAvg) : (atkAvg < noAtkAvg);
 
   console.log(`[MC] ATTACK? ${dispHex(defHexId)} atk_score=${atkAvg.toFixed(1)} no_atk=${noAtkAvg.toFixed(1)} → ${shouldAttack ? '攻撃' : '見送り'}`);
+  addLog('combat', `[AI] ${dispHex(defHexId)}攻撃${shouldAttack ? '実行' : '見送り'} (atk=${atkAvg.toFixed(1)} / skip=${noAtkAvg.toFixed(1)})`);
   return shouldAttack;
 }
