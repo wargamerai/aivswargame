@@ -1184,37 +1184,23 @@ function endPhase() {
       addLog('combat', `攻撃必須のユニットがあります: ${mustAttackUnits.map(u => u.name).join(', ')}`);
       return;
     }
-    // AI側またはチェック通過: mustAttackフラグをクリア
+    // mustAttackフラグをクリア
     G.units.filter(u => u.side === G.activeSide).forEach(u => { delete u.mustAttack; });
-    // 攻撃終了 → 相手側へ
-    if (G.activeSide === 'german') {
-      G.germanDone = true;
-      if (!G.alliedDone) {
-        G.activeSide = 'allied';
-        G.opPhase = 'select';
-        // ユニットの行動済みリセット
-        // ドイツ軍の行動済みユニットを裏にしてからリセット
-        G.units.filter(u => u.side === 'german' && u.acted).forEach(u => { u.flipped = true; delete u.movePath; });
-        G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; delete u.movePath; delete u._aiAttacked; });
-        addLog('turn', `連合軍の作戦フェーズ`);
-        showFlash('連合軍の手番', 'allied');
-      } else {
-        nextTurn();
-      }
-    } else {
-      G.alliedDone = true;
-      if (!G.germanDone) {
-        G.activeSide = 'german';
-        G.opPhase = 'select';
-        // 連合軍の行動済みユニットを裏にしてからリセット
-        G.units.filter(u => u.side === 'allied' && u.acted).forEach(u => { u.flipped = true; delete u.movePath; });
-        G.units.filter(u => u.side === 'german').forEach(u => { u.acted = false; delete u.movePath; delete u._aiAttacked; });
-        addLog('turn', `ドイツ軍の作戦フェーズ`);
-        showFlash('ドイツ軍の手番', 'german');
-      } else {
-        nextTurn();
-      }
-    }
+    // 攻撃終了 → 相手側へ交代（actedはリセットしない、ターン通して維持）
+    // 現サイドのactedユニットを裏にする
+    G.units.filter(u => u.side === G.activeSide && u.acted).forEach(u => {
+      u.flipped = true; delete u.movePath;
+    });
+    // _aiAttackedフラグだけクリア
+    G.units.filter(u => u.side === G.activeSide).forEach(u => { delete u._aiAttacked; });
+    // サイド切り替え
+    const nextSide = G.activeSide === 'german' ? 'allied' : 'german';
+    G.activeSide = nextSide;
+    G.opPhase = 'select';
+    G.passCount = 0; // 通常終了でパスカウントリセット
+    const sideName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
+    addLog('turn', `${sideName}の作戦フェーズ`);
+    showFlash(`${sideName}の手番`, nextSide);
   }
   G.selectedUnit = null;
   G.reachable = null;
@@ -1762,36 +1748,18 @@ function passPhase() {
     return;
   }
 
-  // 相手側へ
-  if (G.activeSide === 'german') {
-    G.germanDone = true;
-    if (!G.alliedDone) {
-      G.units.filter(u => u.side === 'german' && u.acted).forEach(u => { u.flipped = true; delete u.movePath; });
-      G.activeSide = 'allied';
-      G.opPhase = 'select';
-      G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; delete u.movePath; delete u._aiAttacked; });
-      setTimeout(() => { showFlash('連合軍の手番', 'allied'); }, 1600);
-      addLog('turn', `連合軍の作戦フェーズ`);
-    } else {
-      G.passCount = 0;
-      nextTurn();
-      return;
-    }
-  } else {
-    G.alliedDone = true;
-    if (!G.germanDone) {
-      G.units.filter(u => u.side === 'allied' && u.acted).forEach(u => { u.flipped = true; delete u.movePath; });
-      G.activeSide = 'german';
-      G.opPhase = 'select';
-      G.units.filter(u => u.side === 'german').forEach(u => { u.acted = false; delete u.movePath; delete u._aiAttacked; });
-      setTimeout(() => { showFlash('ドイツ軍の手番', 'german'); }, 1600);
-      addLog('turn', `ドイツ軍の作戦フェーズ`);
-    } else {
-      G.passCount = 0;
-      nextTurn();
-      return;
-    }
-  }
+  // 相手側へ（actedはリセットしない）
+  // 現サイドのactedユニットを裏にする
+  G.units.filter(u => u.side === G.activeSide && u.acted).forEach(u => {
+    u.flipped = true; delete u.movePath;
+  });
+  G.units.filter(u => u.side === G.activeSide).forEach(u => { delete u._aiAttacked; });
+  const nextSide = G.activeSide === 'german' ? 'allied' : 'german';
+  G.activeSide = nextSide;
+  G.opPhase = 'select';
+  const nextName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
+  setTimeout(() => { showFlash(`${nextName}の手番`, nextSide); }, 1600);
+  addLog('turn', `${nextName}の作戦フェーズ`);
   G.selectedUnit = null;
   G.reachable = null;
   G.attackTargets = null;
@@ -1950,8 +1918,8 @@ function aiDoMovement() {
   );
 
   if (units.length === 0) {
-    // 全ユニット移動済み → 攻撃フェーズへ（endPhase内でaiTickが呼ばれる）
-    endPhase();
+    // 未行動ユニットなし → パス（連続パスでターン終了を判定）
+    passPhase();
     return;
   }
 
