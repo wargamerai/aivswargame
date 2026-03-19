@@ -801,6 +801,16 @@ function onMoveClick(hid) {
     G.selectedUnit.movePath = [fromHex, ...info.path];
     G.selectedUnit.hexId = hid;
     G.selectedUnit.acted = true;
+    // スタック中なら相方も一緒に移動
+    if (isStacked(G.selectedUnit)) {
+      const pair = G.units.find(u => u.id === G.selectedUnit.mechPair);
+      if (pair && !pair.acted) {
+        pair.hexId = hid;
+        pair.acted = true;
+        pair.movePath = [fromHex, ...info.path];
+        addLog('move', `${pair.name} → ${hid} (スタック移動)`);
+      }
+    }
     // 裏にはしない — 相手の手番開始時にまとめて裏にする
     addLog('move', `${G.selectedUnit.name} → ${hid} (${info.cost.toFixed(1)}MP)`);
 
@@ -1116,7 +1126,7 @@ function nextTurn() {
     return;
   }
   G.phase = 'reinforce';
-  G.units.forEach(u => { u.acted = false; u.mustAttack = false; delete u.movePath; });
+  G.units.forEach(u => { u.acted = false; u.mustAttack = false; delete u.movePath; delete u._unstacked; });
   addLog('turn', `═══ ターン${G.turn} ═══`);
   updateUI();
   draw();
@@ -1288,16 +1298,23 @@ function updateRightPanel() {
 
     if (G.selectedUnit) {
       const u = G.selectedUnit;
-      desc.textContent = `${u.name} を移動中`;
+      const stacked = isStacked(u);
+      const pairUnit = stacked ? G.units.find(x => x.id === u.mechPair) : null;
+      desc.textContent = stacked ? `${u.name} + ${pairUnit.name} を移動中` : `${u.name} を移動中`;
+      let infoHtml = `<div><b>${u.name}</b> (${u.type}) 攻撃:${u.atk} 防御:${u.def}</div>`;
+      if (stacked && pairUnit) {
+        infoHtml += `<div><b>${pairUnit.name}</b> (${pairUnit.type}) 攻撃:${pairUnit.atk} 防御:${pairUnit.def}</div>`;
+        infoHtml += `<div style="color:#ffa657;font-size:0.8em;margin-top:4px;">⚡ 機械化師団スタック中</div>`;
+      }
       panel.innerHTML = `
         <div class="section">
           <h4>選択中のユニット</h4>
           <div class="combat-info">
-            <div><b>${u.name}</b> (${u.type})</div>
-            <div>攻撃: ${u.atk} / 防御: ${u.def}</div>
+            ${infoHtml}
             <div>位置: ${u.hexId}</div>
           </div>
           <button class="btn" onclick="cancelSelect()">選択解除</button>
+          ${stacked ? `<button class="btn" onclick="unstackUnit('${u.id}')" style="margin-left:6px;">スタック解除</button>` : ''}
         </div>`;
     } else if (G.opPhase === 'attack') {
       // 攻撃フェーズ
@@ -1360,6 +1377,28 @@ function cancelSelect() {
   G.opPhase = 'select';
   updateRightPanel();
   draw();
+}
+
+// スタック解除: mechPairを一時的に無効化して個別行動可能に
+function unstackUnit(id) {
+  const unit = G.units.find(u => u.id === id);
+  if (!unit || !unit.mechPair) return;
+  unit._unstacked = true;
+  const pair = G.units.find(u => u.id === unit.mechPair);
+  if (pair) pair._unstacked = true;
+  addLog('move', `${unit.name} スタック解除`);
+  G.selectedUnit = null;
+  G.reachable = null;
+  updateRightPanel();
+  draw();
+}
+
+// スタック中かチェック
+function isStacked(unit) {
+  if (!unit.mechPair || unit._unstacked) return false;
+  const pair = G.units.find(u => u.id === unit.mechPair);
+  if (!pair || pair.eliminated || pair._unstacked) return false;
+  return unit.hexId === pair.hexId;
 }
 
 function selectUnit(id) {
