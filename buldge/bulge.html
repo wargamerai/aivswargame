@@ -145,7 +145,7 @@ const G = {
   turn: 1,
   maxTurn: 6,
   phase: 'reinforce',     // reinforce, recovery, operation
-  opPhase: 'select',      // select, move, attack, done
+  opPhase: 'select',      // select, move, attack, retreat, advance, done
   activeSide: 'german',
   germanDone: false,
   alliedDone: false,
@@ -153,6 +153,15 @@ const G = {
   selectedUnit: null,
   reachable: null,         // Map: hexId -> {cost, path}
   attackTargets: null,     // Set of hexIds
+  // 戦闘状態
+  combat: {
+    defHex: null,          // 防御側hex
+    attackers: [],         // 攻撃参加ユニットID
+    defenders: [],         // 防御側ユニット（自動: defHex内の全敵）
+    result: null,          // CRT結果
+    retreatingUnits: [],   // 退却待ちユニット
+    advanceEligible: [],   // 戦闘後前進可能ユニット
+  },
   vpGerman: 0,
   vpAllied: 0,
   mode: 'german',          // german, allied, hotseat, watch
@@ -357,6 +366,25 @@ function draw() {
       ctx.fillStyle = 'rgba(255,80,80,0.3)';
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,80,80,0.6)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // 攻撃参加ユニットのhexハイライト
+  if (G.combat && G.combat.attackers.length > 0) {
+    const atkHexes = new Set();
+    for (const id of G.combat.attackers) {
+      const u = G.units.find(x => x.id === id);
+      if (u) atkHexes.add(u.hexId);
+    }
+    for (const hid of atkHexes) {
+      const { col, row } = parseHexId(hid);
+      const center = hexCenter(col, row);
+      drawHexPath(center.x, center.y, HEX_SIZE);
+      ctx.fillStyle = 'rgba(255,200,50,0.25)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,200,50,0.6)';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -583,7 +611,7 @@ function handleMapClick(e) {
   if (G.phase === 'operation') {
     if (G.opPhase === 'select' || G.opPhase === 'move') {
       onMoveClick(hid);
-    } else if (G.opPhase === 'attack') {
+    } else if (G.opPhase === 'attack' || G.opPhase === 'retreat' || G.opPhase === 'advance') {
       onAttackClick(hid);
     }
   }
@@ -738,105 +766,216 @@ function onMoveClick(hid) {
 }
 
 // ========== 戦闘システム ==========
-function onAttackClick(hid) {
-  // TODO: 戦闘解決
-  const defenders = getUnitsAt(hid).filter(u => u.side !== G.activeSide);
-  if (defenders.length === 0) return;
+function resetCombat() {
+  G.combat = { defHex: null, attackers: [], defenders: [], result: null, retreatingUnits: [], advanceEligible: [] };
+}
 
-  // 隣接する自軍ユニット（行動済み＋mustAttack）を攻撃者に
-  const adjIds = getNeighborIds(hid);
-  const attackers = [];
-  for (const aid of adjIds) {
-    for (const u of getUnitsAt(aid)) {
-      if (u.side === G.activeSide && u.acted) {
-        attackers.push(u);
+function onAttackClick(hid) {
+  const enemySide = G.activeSide === 'german' ? 'allied' : 'german';
+
+  if (G.opPhase === 'attack') {
+    // 敵hexクリック → 防御対象選択
+    const defenders = getUnitsAt(hid).filter(u => u.side === enemySide);
+    if (defenders.length > 0) {
+      resetCombat();
+      G.combat.defHex = hid;
+      G.combat.defenders = defenders;
+      // 隣接自軍を攻撃候補としてハイライト
+      G.attackTargets = new Set([hid]);
+      updateRightPanel();
+      draw();
+      return;
+    }
+
+    // 自軍hexクリック → 攻撃参加トグル
+    if (G.combat.defHex) {
+      const myUnits = getUnitsAt(hid).filter(u => u.side === G.activeSide && u.acted);
+      // このhexが防御hexに隣接しているか
+      if (myUnits.length > 0 && getNeighborIds(G.combat.defHex).includes(hid)) {
+        for (const u of myUnits) {
+          const idx = G.combat.attackers.indexOf(u.id);
+          if (idx >= 0) G.combat.attackers.splice(idx, 1);
+          else G.combat.attackers.push(u.id);
+        }
+        updateRightPanel();
+        draw();
+        return;
       }
     }
   }
-  if (attackers.length === 0) return;
 
-  resolveCombat(attackers, defenders, hid);
-}
-
-function resolveCombat(attackers, defenders, defHexId) {
-  const atkPower = attackers.reduce((s, u) => s + u.atk, 0);
-  const defPower = defenders.reduce((s, u) => s + u.def, 0);
-  let diff = atkPower - defPower;
-
-  // 修正: 戦闘支援（攻撃側に隣接する味方）
-  const defNeighbors = getNeighborIds(defHexId);
-  const facility = FACILITY_MAP && FACILITY_MAP[defHexId];
-  if (facility !== 'c') { // 都市では戦闘支援なし
-    let support = 0;
-    for (const nid of defNeighbors) {
-      const friendly = getUnitsAt(nid).filter(u => u.side === G.activeSide && !attackers.includes(u));
-      if (friendly.length > 0) support++;
+  // 退却先選択
+  if (G.opPhase === 'retreat') {
+    const ru = G.combat.retreatingUnits[0];
+    if (!ru) return;
+    const unit = G.units.find(u => u.id === ru);
+    if (!unit) return;
+    // 退却先として有効か
+    const validRetreats = getRetreatHexes(unit);
+    if (validRetreats.includes(hid)) {
+      unit.hexId = hid;
+      addLog('combat', `${unit.name} → ${hid} に退却`);
+      G.combat.retreatingUnits.shift();
+      if (G.combat.retreatingUnits.length === 0) {
+        // 退却完了 → 戦闘後前進チェック
+        checkAdvance();
+      }
+      updateRightPanel();
+      draw();
     }
-    diff += support;
+    return;
   }
 
-  // 修正: 森林防御 +1段階シフト
-  const terrain = TERRAIN_MAP[defHexId];
-  if (terrain === 'f') diff -= 1;
+  // 戦闘後前進
+  if (G.opPhase === 'advance') {
+    if (hid === G.combat.defHex && G.combat.advanceEligible.length > 0) {
+      const uid = G.combat.advanceEligible.shift();
+      const unit = G.units.find(u => u.id === uid);
+      if (unit) {
+        unit.hexId = hid;
+        addLog('combat', `${unit.name} → ${hid} に前進`);
+      }
+    }
+    if (G.combat.advanceEligible.length === 0) {
+      finishCombat();
+    }
+    updateRightPanel();
+    draw();
+    return;
+  }
+}
 
-  // ダイスロール
+function getRetreatHexes(unit) {
+  const neighbors = getNeighborIds(unit.hexId);
+  return neighbors.filter(nid => {
+    const terrain = TERRAIN_MAP[nid];
+    if (!terrain || terrain === 'x') return false;
+    // 敵がいないこと
+    if (getUnitsAt(nid).some(u => u.side !== unit.side)) return false;
+    // 敵に隣接しないhexが優先だが、全て列挙
+    return true;
+  });
+}
+
+function executeCombat() {
+  const cb = G.combat;
+  if (!cb.defHex || cb.attackers.length === 0) return;
+
+  const attackers = cb.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
+  const defenders = cb.defenders;
+  const defHexId = cb.defHex;
+
+  const atkPower = attackers.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+  const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+  let diff = atkPower - defPower;
+
+  // 戦闘支援: 防御hexに隣接する自軍で攻撃に参加していないユニット
+  const facility = FACILITY_MAP && FACILITY_MAP[defHexId];
+  let support = 0;
+  if (facility !== 'c') {
+    for (const nid of getNeighborIds(defHexId)) {
+      const friendly = getUnitsAt(nid).filter(u => u.side === G.activeSide && !cb.attackers.includes(u.id));
+      if (friendly.length > 0) support++;
+    }
+  }
+
+  // 森林防御: +1段階シフト（差分から引く）
+  const terrain = TERRAIN_MAP[defHexId];
+  const forestMod = terrain === 'f' ? 1 : 0;
+
+  // ダイスロール (1d6) + 戦闘支援 - 森林修正
   const die = Math.floor(Math.random() * 6) + 1;
+  const modDie = die + support - forestMod;
 
   // CRT参照
-  const colIdx = Math.max(0, Math.min(8, diff + 2)); // -2以下=0, +6以上=8
-  const rowIdx = Math.max(0, Math.min(8, die - 1));
-  const result = CRT[rowIdx][colIdx];
+  const result = lookupCRT(diff, modDie);
+  cb.result = result;
 
-  addLog('combat', `攻撃: ${atkPower} vs 防御: ${defPower} 差分:${diff > 0 ? '+' : ''}${diff} ダイス:${die} → ${result}`);
+  addLog('combat', `━━━ 戦闘解決 ━━━`);
+  addLog('combat', `攻撃力: ${atkPower} vs 防御力: ${defPower} (差分: ${diff > 0 ? '+' : ''}${diff})`);
+  if (support > 0) addLog('combat', `戦闘支援: +${support}`);
+  if (forestMod > 0) addLog('combat', `森林防御: -${forestMod}`);
+  addLog('combat', `ダイス: ${die}${support || forestMod ? ` → 修正後: ${modDie}` : ''} → 結果: ${result}`);
 
   applyCombatResult(result, attackers, defenders, defHexId);
-  draw();
-  updateRightPanel();
 }
 
 function applyCombatResult(result, attackers, defenders, defHexId) {
+  const cb = G.combat;
+  const RESULT_NAMES = { AR:'攻撃側退却', NE:'効果なし', DR:'防御側退却', DD:'防御側混乱退却', EX:'相互損害', DE:'防御側壊滅' };
+  addLog('combat', `→ ${RESULT_NAMES[result] || result}`);
+
   switch (result) {
-    case 'AR': // 攻撃側退却
-      for (const u of attackers) retreatUnit(u, defHexId);
-      addLog('combat', '→ 攻撃側退却');
-      break;
-    case 'NE': // 効果なし
-      addLog('combat', '→ 効果なし');
-      break;
-    case 'DR': // 防御側退却
-      for (const u of defenders) retreatUnit(u, null);
-      addLog('combat', '→ 防御側退却');
-      break;
-    case 'DD': // 防御側混乱退却
-      for (const u of defenders) {
-        retreatUnit(u, null);
-        u.flipped = true;
-      }
-      addLog('combat', '→ 防御側混乱');
-      break;
-    case 'EX': // 交換
+    case 'AR':
+      cb.retreatingUnits = attackers.map(u => u.id);
+      G.opPhase = 'retreat';
+      updateRightPanel();
+      draw();
+      return;
+    case 'NE':
+      finishCombat();
+      return;
+    case 'DR':
+      cb.retreatingUnits = defenders.map(u => u.id);
+      G.opPhase = 'retreat';
+      updateRightPanel();
+      draw();
+      return;
+    case 'DD':
+      for (const u of defenders) u.flipped = true;
+      cb.retreatingUnits = defenders.map(u => u.id);
+      G.opPhase = 'retreat';
+      updateRightPanel();
+      draw();
+      return;
+    case 'EX':
+      // 攻撃側1ユニット除去、防御側1ユニット除去
       eliminateUnit(attackers[0]);
       eliminateUnit(defenders[0]);
-      addLog('combat', '→ 相互損害');
-      break;
-    case 'DE': // 防御側壊滅
+      // 残り防御側がいなければ前進可能
+      if (defenders.filter(u => !u.eliminated).length === 0) {
+        checkAdvance();
+      } else {
+        finishCombat();
+      }
+      return;
+    case 'DE':
       for (const u of defenders) eliminateUnit(u);
-      addLog('combat', '→ 防御側壊滅');
-      break;
+      checkAdvance();
+      return;
   }
 }
 
-function retreatUnit(unit, awayFromHex) {
-  // 持ち主が退却先を決定（簡易: 敵から離れる方向で空きhex）
-  const neighbors = getNeighborIds(unit.hexId);
-  for (const nid of neighbors) {
-    if (canEnter(nid, unit) && !getUnitsAt(nid).some(u => u.side !== unit.side)) {
-      unit.hexId = nid;
+function checkAdvance() {
+  const cb = G.combat;
+  if (!cb.defHex) { finishCombat(); return; }
+  // 防御hexが空なら攻撃側が前進可能
+  const remaining = getUnitsAt(cb.defHex).filter(u => !u.eliminated);
+  if (remaining.length === 0) {
+    const attackers = cb.attackers.map(id => G.units.find(u => u.id === id)).filter(u => u && !u.eliminated);
+    if (attackers.length > 0) {
+      cb.advanceEligible = attackers.map(u => u.id);
+      G.opPhase = 'advance';
+      addLog('combat', `戦闘後前進: ${cb.defHex} をクリックで前進（スキップ可）`);
+      updateRightPanel();
+      draw();
       return;
     }
   }
-  // 退却先なし → 除去
-  eliminateUnit(unit);
+  finishCombat();
+}
+
+function finishCombat() {
+  resetCombat();
+  G.opPhase = 'attack';
+  G.attackTargets = null;
+  updateRightPanel();
+  draw();
+}
+
+function skipAdvance() {
+  G.combat.advanceEligible = [];
+  finishCombat();
 }
 
 function eliminateUnit(unit) {
@@ -856,8 +995,15 @@ function endPhase() {
     G.germanDone = false;
     G.alliedDone = false;
     addLog('turn', `ターン${G.turn} 作戦フェーズ開始 — ドイツ軍`);
-  } else if (G.phase === 'operation') {
-    // 現在の側の作戦終了
+  } else if (G.phase === 'operation' && (G.opPhase === 'select' || G.opPhase === 'move')) {
+    // 移動終了 → 攻撃フェーズへ
+    G.opPhase = 'attack';
+    G.selectedUnit = null;
+    G.reachable = null;
+    resetCombat();
+    addLog('turn', `━ 攻撃フェーズ ━ 敵hexをクリックして攻撃対象を選択`);
+  } else if (G.phase === 'operation' && (G.opPhase === 'attack')) {
+    // 攻撃終了 → 相手側へ
     if (G.activeSide === 'german') {
       G.germanDone = true;
       if (!G.alliedDone) {
@@ -972,22 +1118,54 @@ function updateRightPanel() {
           </div>
           <button class="btn" onclick="cancelSelect()">選択解除</button>
         </div>`;
+    } else if (G.opPhase === 'attack') {
+      // 攻撃フェーズ
+      const cb = G.combat;
+      if (cb.defHex) {
+        desc.textContent = `攻撃対象: ${cb.defHex}`;
+        const defs = cb.defenders.map(u => `${u.name}(${u.flipped ? u.def : u.atk})`).join(', ');
+        const atks = cb.attackers.map(id => {
+          const u = G.units.find(x => x.id === id);
+          return u ? `${u.name}(${u.flipped ? u.def : u.atk})` : '';
+        }).join(', ');
+        const atkTotal = cb.attackers.reduce((s, id) => { const u = G.units.find(x => x.id === id); return s + (u ? (u.flipped ? u.def : u.atk) : 0); }, 0);
+        const defTotal = cb.defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+        let html = `<div class="section"><h4>防御側 (${cb.defHex})</h4><div class="combat-info">${defs}<div class="ratio">防御力: ${defTotal}</div></div></div>`;
+        html += `<div class="section"><h4>攻撃参加ユニット</h4><div class="combat-info">${atks || '（隣接する自軍hexをクリック）'}<div class="ratio">攻撃力: ${atkTotal}</div></div></div>`;
+        if (cb.attackers.length > 0) {
+          html += `<button class="btn primary" onclick="executeCombat()">攻撃実行</button> `;
+        }
+        html += `<button class="btn" onclick="resetCombat();updateRightPanel();draw();">キャンセル</button>`;
+        html += `<br><br><button class="btn" onclick="endPhase()">攻撃終了 → 相手へ</button>`;
+        panel.innerHTML = html;
+      } else {
+        desc.textContent = '敵hexをクリックして攻撃対象を選択';
+        panel.innerHTML = `<div class="section"><button class="btn primary" onclick="endPhase()">攻撃終了 → 相手へ</button></div>`;
+      }
+    } else if (G.opPhase === 'retreat') {
+      const ru = G.combat.retreatingUnits[0];
+      const unit = ru ? G.units.find(u => u.id === ru) : null;
+      desc.textContent = unit ? `${unit.name} の退却先を選択` : '退却先を選択';
+      panel.innerHTML = `<div class="combat-info">退却先のhexをクリック</div>`;
+    } else if (G.opPhase === 'advance') {
+      desc.textContent = '戦闘後前進';
+      panel.innerHTML = `<div class="combat-info">${G.combat.defHex} をクリックで前進</div>
+        <button class="btn" onclick="skipAdvance()">前進しない</button>`;
     } else {
       desc.textContent = 'ユニットをクリックして移動';
       // ユニットリスト
       const sideUnits = G.units.filter(u => u.side === G.activeSide && !u.eliminated && !u.exited);
       let html = '<div class="section"><h4>ユニット一覧</h4>';
       for (const u of sideUnits) {
-        const cls = u.acted ? 'unit-card' : 'unit-card';
         const status = u.acted ? '✓' : u.flipped ? '混乱' : '';
-        html += `<div class="${cls}" onclick="selectUnit('${u.id}')">
+        html += `<div class="unit-card" onclick="selectUnit('${u.id}')">
           <span class="name">${u.name}</span>
           <span class="stats">${u.atk}/${u.def} ${status}</span>
         </div>`;
       }
       html += '</div>';
       html += `<div class="section">
-        <button class="btn primary" onclick="endPhase()">作戦終了</button>
+        <button class="btn primary" onclick="endPhase()">移動終了 → 攻撃へ</button>
       </div>`;
       panel.innerHTML = html;
     }
