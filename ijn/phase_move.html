@@ -98,7 +98,8 @@ function dumpFleet(label, fleet) {
     if (getSpeed(s) === 0) flags.push('航行不能');
     if (s.cannotTurn) flags.push('回頭不能');
     if (s.cannotShoot) flags.push('射撃不能');
-    console.log(`  ${s.name}(${s.type}) pos=(${s.col},${s.row}) dir=${s.dir} ${flags.join(' ')}`);
+    const dmgInfo = `spd=${getSpeed(s)} rm=${s.remainMove||0} dmgG=${s.dmgG||0}/${s.capG||0} dmgM=${s.dmgM||0}/${s.capM||0}`;
+    console.log(`  ${s.name}(${s.type}) pos=(${s.col},${s.row}) dir=${s.dir} ${dmgInfo} ${flags.join(' ')}`);
   });
 }
 
@@ -131,8 +132,10 @@ function init() {
 
   console.log(`=== 移動フェーズ開始 (${state.phase}) ターン${state.combatTurn} ===`);
   dumpFleet('JP移動前', jpFleet);
+  dumpFleet('US移動前', usFleet);
+  console.log(`[IJN-MOVE] phase=${state.phase} jpMoving=${isJPMoving()} jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove} jpDetected=${state.jpDetected} usDetected=${state.usDetected} contactMade=${state.contactMade}`);
 
-  // 大破艦・射撃不能艦 自動離脱
+  // 大破艦等 自動離脱
   autoWithdrawHeavy();
 
   // AI委任チェックボックス状態復元
@@ -645,14 +648,17 @@ function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
     }
   }
 
+  console.log(`[US-AI] ${lead.name} start=(${lead.col},${lead.row}) dir=${lead.dir} targetDir=${targetDir} spd=${spd} moveCount=${moveCount}`);
   let remain = moveCount;
   let turned = false;
   while (remain > 0) {
     if (lead.dir !== targetDir && !turned && !lead.cannotTurn) {
+      const oldDir = lead.dir;
       lead.dir = aiTurnStep(lead.dir, targetDir);
       lead.turnCount = (lead.turnCount || 0) + 1;
       remain--;
       turned = true;
+      console.log(`[STEP] ${lead.name}: turn ${oldDir}→${lead.dir} remain=${remain} pos=(${lead.col},${lead.row})`);
       if (remain <= 0) break;
     }
     const next = hexNeighbor(lead.col, lead.row, lead.dir);
@@ -691,6 +697,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
             lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
             lead.col = altNext.col;
             lead.row = altNext.row;
+            console.log(`[STEP] ${lead.name}: avoid (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${altNext.col},${altNext.row}) altDir=${altDir} remain=${remain-1}`);
             moveFollowers(lead, usFleet);
             avoided = true;
             remain--;
@@ -709,6 +716,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
     lead.col = next.col;
     lead.row = next.row;
+    console.log(`[STEP] ${lead.name}: move (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${next.col},${next.row}) dir=${lead.dir} remain=${remain-1}`);
     var occAt = getOccupant(next.col, next.row, lead);
     if (occAt) collisionCheck(lead, occAt);
     var sunkAt = getSunkShip(next.col, next.row, lead);
@@ -960,14 +968,17 @@ function aiJPMoveOneLead(lead, usc, usDir, sr) {
     }
   }
 
+  console.log(`[JP-AI] ${lead.name} start=(${lead.col},${lead.row}) dir=${lead.dir} targetDir=${targetDir} spd=${spd} moveCount=${moveCount}`);
   let remain = moveCount;
   let turned = false;
   while (remain > 0) {
     if (lead.dir !== targetDir && !turned && !lead.cannotTurn) {
+      const oldDir = lead.dir;
       lead.dir = aiTurnStep(lead.dir, targetDir);
       lead.turnCount = (lead.turnCount || 0) + 1;
       remain--;
       turned = true;
+      console.log(`[STEP] ${lead.name}: turn ${oldDir}→${lead.dir} remain=${remain} pos=(${lead.col},${lead.row})`);
       if (remain <= 0) break;
     }
     const next = hexNeighbor(lead.col, lead.row, lead.dir);
@@ -1004,6 +1015,7 @@ function aiJPMoveOneLead(lead, usc, usDir, sr) {
             lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
             lead.col = altNext.col;
             lead.row = altNext.row;
+            console.log(`[STEP] ${lead.name}: avoid (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${altNext.col},${altNext.row}) altDir=${altDir} remain=${remain-1}`);
             moveFollowers(lead, jpFleet);
             avoided = true;
             remain--;
@@ -1020,6 +1032,7 @@ function aiJPMoveOneLead(lead, usc, usDir, sr) {
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
     lead.col = next.col;
     lead.row = next.row;
+    console.log(`[STEP] ${lead.name}: move (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${next.col},${next.row}) dir=${lead.dir} remain=${remain-1}`);
     var occAt = getOccupant(next.col, next.row, lead);
     if (occAt) collisionCheck(lead, occAt);
     var sunkAt = getSunkShip(next.col, next.row, lead);
@@ -1866,6 +1879,9 @@ function donePhase(fromStraight) {
     movedShips.add(idx);
     moving = null;
   }
+  // デバッグ: 最終状態
+  dumpFleet('JP最終', jpFleet);
+  dumpFleet('US最終', usFleet);
   // 同一ヘクス残留チェック
   markSharedHex();
   pushState();
