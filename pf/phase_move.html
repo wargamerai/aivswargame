@@ -98,7 +98,29 @@ function dumpFleet(label, fleet) {
     if (getSpeed(s) === 0) flags.push('航行不能');
     if (s.cannotTurn) flags.push('回頭不能');
     if (s.cannotShoot) flags.push('射撃不能');
-    console.log(`  ${s.name}(${s.type}) pos=(${s.col},${s.row}) dir=${s.dir} ${flags.join(' ')}`);
+    const spd = getSpeed(s);
+    const rm = s.remainMove !== undefined ? s.remainMove : '-';
+    const dmg = `dmgG=${s.dmgG||0}/${s.capG||0} dmgM=${s.dmgM||0}/${s.capM||0}`;
+    console.log(`  ${s.name}(${s.type}) pos=(${s.col},${s.row}) dir=${s.dir} spd=${spd} rm=${rm} ${dmg} ${flags.join(' ')}`);
+  });
+}
+
+// 移動前の位置を保存（移動量計算用）
+var moveStartPos = {};
+function saveStartPositions(fleet) {
+  fleet.forEach(s => { moveStartPos[s.name] = {col:s.col, row:s.row, dir:s.dir}; });
+}
+function dumpMoveResult(label, fleet) {
+  console.log(`[MOVE-RESULT] ${label}:`);
+  fleet.forEach(s => {
+    if (s.status === 'sunk' || s.col < 0) return;
+    const start = moveStartPos[s.name];
+    if (!start) return;
+    const dc = Math.abs(s.col - start.col) + Math.abs(s.row - start.row);
+    const moved = (s.col !== start.col || s.row !== start.row);
+    if (moved) {
+      console.log(`  ${s.name}: (${start.col},${start.row})→(${s.col},${s.row}) dir=${start.dir}→${s.dir} 距離≈${dc} spd=${getSpeed(s)} rm=${s.remainMove||0}`);
+    }
   });
 }
 
@@ -130,7 +152,9 @@ function init() {
   });
 
   console.log(`=== 移動フェーズ開始 (${state.phase}) ターン${state.combatTurn} ===`);
+  saveStartPositions([...jpFleet, ...usFleet]);
   dumpFleet('JP移動前', jpFleet);
+  dumpFleet('US移動前', usFleet);
 
   // 大破艦・射撃不能艦 自動離脱
   autoWithdrawHeavy();
@@ -139,7 +163,6 @@ function init() {
   if (cb) cb.checked = isUSAutoAI();
 
   const jpMoving = isJPMoving();
-  console.log(`[PF-MOVE] phase=${state.phase} jpMoving=${jpMoving} jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove} jpDetected=${state.jpDetected} usDetected=${state.usDetected} contactMade=${state.contactMade} usAutoAI=${isUSAutoAI()}`);
 
   if (jpMoving && !state.jpFreeMove) {
     startStraightMode();
@@ -188,7 +211,6 @@ function startStraightMode() {
   const visual = checkVisualSpotting();
   const radar = checkRadar();
 
-  console.log(`[PF-MOVE] 接触チェック: visual=${visual} radar=${radar} jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove}`);
   if (visual) {
     state.jpDetected = true;
     state.usDetected = true;
@@ -197,16 +219,14 @@ function startStraightMode() {
     state.contactMade = true;
     pushState();
     setInfo('敵艦発見！ 両軍自由移動可能');
-    console.log('[PF-MOVE] 視認発見 → jpFreeMove=true, usFreeMove=true');
   } else if (radar) {
     if (!state.usDetected) {
       state.usDetected = true;
-      // レーダー探知のみ: 移動は直進継続、砲撃は可能
+      state.usFreeMove = true;
       state.contactMade = true;
       pushState();
     }
-    setInfo('レーダー探知！ 直進継続（自由移動は視認発見後）');
-    console.log('[PF-MOVE] レーダー探知のみ → usFreeMove変更なし');
+    setInfo('レーダー探知！ 米軍自由移動可能');
   } else if (!visual && !radar) {
     checkLineReach();
     setInfo(`${side}直進完了 — 敵未発見`);
@@ -214,6 +234,8 @@ function startStraightMode() {
 
   renderList();
   dumpFleet('JP移動後', jpFleet);
+  dumpFleet('US移動後', usFleet);
+  dumpMoveResult('直進移動結果', [...jpFleet, ...usFleet]);
 
   setTimeout(() => donePhase(true), 1500);
 }
@@ -236,7 +258,6 @@ function autoWithdrawHeavy() {
     ship.withdrawing = true;
     ship.retreatDir = ship.side === 'jp' ? 4 : 6;  // JP=西, US=東
     const reason = ship.status === 'heavy' ? '大破' : '射撃不能';
-    console.log(`[PF-WITHDRAW] ${ship.name} 離脱開始 dir=${ship.dir} retreatDir=${ship.retreatDir} pos=(${ship.col},${ship.row}) spd=${getSpeed(ship)}`);
     setInfo(`${ship.name} ${reason}！ 離脱開始`);
     if (getSpeed(ship) > 0) withdrawMove(ship);
   }
@@ -295,7 +316,6 @@ function withdrawMove(ship) {
   if (ship.dmgM >= ship.capM / 2) spd = Math.max(1, Math.ceil(spd / 2));  // M損害半分以上なら半速
   let remain = spd;
 
-  console.log(`[PF-WITHDRAW] ${ship.name} withdrawMove: dir=${ship.dir} cannotTurn=${!!ship.cannotTurn} spd=${spd} pos=(${ship.col},${ship.row})`);
   while (remain > 0) {
     // 毎ステップ退却方向を再計算
     var target = ship.cannotTurn ? ship.dir : getRetreatDir(ship);
@@ -337,22 +357,12 @@ function withdrawMove(ship) {
 // ========== JP: 各艦個別に直進（接触前） ==========
 function autoAdvanceIndividual(fleet) {
   const ships = fleet.filter(s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && getSpeed(s) > 0);
-  // 移動順: 同グループ内はリード艦→followOrder順、異グループ間は火力大→速力遅い順
+  // 前方の艦から先に動かす（ブロック回避）
   ships.sort((a, b) => {
-    // 同グループ内: リード艦→followOrder順
-    if (a.colIndex === b.colIndex) {
-      if (a.isLead && !b.isLead) return -1;
-      if (!a.isLead && b.isLead) return 1;
-      return (a.followOrder||0) - (b.followOrder||0);
-    }
-    // 異グループ間: 火力大きい方が先
-    const capA = (a.capG||0) - (a.dmgG||0);
-    const capB = (b.capG||0) - (b.dmgG||0);
-    if (capA !== capB) return capB - capA;
-    // 火力同じなら速力遅い方が先
-    const spdA = a.speed || 4;
-    const spdB = b.speed || 4;
-    if (spdA !== spdB) return spdA - spdB;
+    const aEast = [6,3,9].includes(a.dir);
+    const bEast = [6,3,9].includes(b.dir);
+    if (aEast && bEast) return b.col - a.col;
+    if (!aEast && !bEast) return a.col - b.col;
     return 0;
   });
 
@@ -369,34 +379,8 @@ function autoAdvanceIndividual(fleet) {
       const next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
-      const liveBlocked = occupied(next.col, next.row, ship);
-      if (liveBlocked) {
-        // 生存艦によるブロック: 最低速度以上なら停止
-        if (step >= minCount) break;
-        // 最低速度未満: 隣接ヘクスで回避を試みる
-        const curDirIdx = DIR_CW_AI.indexOf(ship.dir);
-        let avoided = false;
-        for (const offset of [1, 5]) {
-          const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
-          const altNext = hexNeighbor(ship.col, ship.row, altDir);
-          if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
-              && !occupied(altNext.col, altNext.row, ship)) {
-            ship.col = altNext.col;
-            ship.row = altNext.row;
-            avoided = true;
-            break;
-          }
-        }
-        if (!avoided) {
-          // 回避不可: やむなく突入
-          ship.col = next.col;
-          ship.row = next.row;
-          var occ2 = getOccupant(next.col, next.row, ship);
-          if (occ2) collisionCheck(ship, occ2);
-        }
-        continue;
-      }
-      // 沈没艦は通過可能（衝突判定のみ）
+      // 衝突回避: 最低速度以上なら前方占有時に停止
+      if (step >= minCount && (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship))) break;
       ship.col = next.col;
       ship.row = next.row;
       var occ = getOccupant(next.col, next.row, ship);
@@ -644,10 +628,12 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
 
   let remain = moveCount;
   let turned = false;
+  let totalTurns = 0;  // 回頭回数（基本1回まで）
   while (remain > 0) {
-    if (lead.dir !== targetDir && !turned && !lead.cannotTurn) {
+    if (lead.dir !== targetDir && !turned && !lead.cannotTurn && totalTurns < 1) {
       lead.dir = aiTurnStep(lead.dir, targetDir);
       lead.turnCount = (lead.turnCount || 0) + 1;
+      totalTurns++;
       remain--;
       turned = true;
       if (remain <= 0) break;
@@ -715,9 +701,16 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
     moveFollowers(lead, usFleet);
   }
   lead.remainMove = remain;
-  // 随伴艦の残り移動力も更新
+  // 随伴艦の残り移動力も更新 + movedShips登録
   const ci = lead.colIndex;
-  usFleet.filter(s => !s.isLead && s.colIndex === ci).forEach(f => f.remainMove = remain);
+  const leadIdx = usFleet.indexOf(lead);
+  if (leadIdx >= 0) movedShips.add(leadIdx);
+  usFleet.forEach((f, fi) => {
+    if (!f.isLead && f.colIndex === ci && f.status !== 'sunk' && f.col >= 0) {
+      f.remainMove = remain;
+      movedShips.add(fi);
+    }
+  });
   console.log(`aiUSMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount}`);
 }
 
@@ -932,10 +925,12 @@ function aiMoveOneJPLead(lead, usc, sr) {
 
   let remain = moveCount;
   let turned = false;
+  let totalTurns = 0;  // 回頭回数（基本1回まで）
   while (remain > 0) {
-    if (lead.dir !== targetDir && !turned && !lead.cannotTurn) {
+    if (lead.dir !== targetDir && !turned && !lead.cannotTurn && totalTurns < 1) {
       lead.dir = aiTurnStep(lead.dir, targetDir);
       lead.turnCount = (lead.turnCount || 0) + 1;
+      totalTurns++;
       remain--;
       turned = true;
       if (remain <= 0) break;
@@ -1000,7 +995,11 @@ function aiMoveOneJPLead(lead, usc, sr) {
   lead.remainMove = remain;
   // 随伴艦の残り移動力も更新
   const jpci = lead.colIndex;
-  jpFleet.filter(s => !s.isLead && s.colIndex === jpci).forEach(f => f.remainMove = remain);
+  jpFleet.forEach((f, fi) => {
+    if (!f.isLead && f.colIndex === jpci && f.status !== 'sunk' && f.col >= 0) {
+      f.remainMove = remain;
+    }
+  });
   console.log(`aiJPMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount}`);
 }
 
@@ -1797,7 +1796,7 @@ function moveFollowers(lead, fleet) {
     chain[i].path.push({col: chain[i].col, row: chain[i].row, dir: chain[i].dir});
     chain[i].col = target.col;
     chain[i].row = target.row;
-    if (!chain[i].cannotTurn) chain[i].dir = target.dir;  // 回頭不能なら方向維持
+    if (!chain[i].cannotTurn) chain[i].dir = target.dir;
     ahead.path.shift();
   }
   if (chain.length > 1) {
@@ -1880,12 +1879,11 @@ function donePhase(fromStraight) {
       delete shipStates[name];
     }
     const unmoved = usFleet.filter((s, i) => canShipMove(s) && !movedShips.has(i));
+    console.log(`[PF-DONE] movedShips=[${[...movedShips]}] unmoved=[${unmoved.map(s=>s.name)}]`);
     if (unmoved.length > 0) {
       const names = unmoved.map(s => s.name).join(', ');
-      if (localStorage.getItem('fullAutoAI') !== '1') {
-        if (!confirm(`${unmoved.length}隻が未移動です（${names}）。\n未移動艦は直進します。よろしいですか？`)) {
-          return;
-        }
+      if (!confirm(`${unmoved.length}隻が未移動です（${names}）。\n未移動艦は直進します。よろしいですか？`)) {
+        return;
       }
       // 未移動艦を直進させる
       allStraight();
@@ -1898,8 +1896,11 @@ function donePhase(fromStraight) {
   }
   // 同一ヘクス残留チェック
   markSharedHex();
+  dumpFleet('JP最終', jpFleet);
+  dumpFleet('US最終', usFleet);
+  dumpMoveResult('移動結果', [...jpFleet, ...usFleet]);
   pushState();
-  // デバッグ: 移動確認ボタン（一時的）
+  // fullAutoAI時: 移動フェーズだけ確認ボタンで停止
   if (localStorage.getItem('fullAutoAI') === '1') {
     document.getElementById('btnDone').textContent = '移動確認 → 次へ';
     document.getElementById('btnDone').style.display = 'block';

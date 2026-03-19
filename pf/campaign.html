@@ -99,7 +99,7 @@
 <div>
     <button id="btnSortie" onclick="phaseSortie()">1. 索敵＆艦隊編成</button>
     <button id="btnCombat" onclick="openBattle()" disabled style="background-color: #cc6600; color:#fff;">2. 戦闘開始</button>
-    <button id="btnAICombat" onclick="openBattleAI()" disabled style="background-color: #336699; color:#fff;">2. AIで出撃</button>
+    <button id="btnAutoAI" onclick="openBattleAutoAI()" disabled style="background-color: #006699; color:#fff;">AI観戦</button>
     <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
     <button onclick="resetCampaign()" style="background-color: #cc2200; color:#fff; float:right; font-size:0.9em;">キャンペーンリセット</button>
 </div>
@@ -423,29 +423,25 @@ function loadCampaignState() {
         // ボタン状態復元
         if (currentPhase === 'selecting') {
             document.getElementById('btnSortie').disabled = true;
-            document.getElementById('btnCombat').disabled = true;
-            document.getElementById('btnAICombat').disabled = true;
+            document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
             document.getElementById('btnNext').disabled = true;
             showScoutResults();
             showFleetSelection();
         } else if (currentPhase === 'combat') {
             document.getElementById('btnSortie').disabled = true;
-            document.getElementById('btnCombat').disabled = false;
-            document.getElementById('btnAICombat').disabled = false;
+            document.getElementById('btnCombat').disabled = false; document.getElementById('btnAutoAI').disabled = false;
             document.getElementById('btnNext').disabled = true;
             document.getElementById('fleetPanel').style.display = 'block';
             renderFleetTables();
         } else if (currentPhase === 'next') {
             document.getElementById('btnSortie').disabled = true;
-            document.getElementById('btnCombat').disabled = true;
-            document.getElementById('btnAICombat').disabled = true;
+            document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
             document.getElementById('btnNext').disabled = false;
             document.getElementById('fleetPanel').style.display = 'block';
             renderFleetTables();
         } else {
             document.getElementById('btnSortie').disabled = false;
-            document.getElementById('btnCombat').disabled = true;
-            document.getElementById('btnAICombat').disabled = true;
+            document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
             document.getElementById('btnNext').disabled = true;
         }
 
@@ -535,8 +531,7 @@ function phaseSortie() {
 
     currentPhase = 'selecting';
     document.getElementById('btnSortie').disabled = true;
-    document.getElementById('btnCombat').disabled = true;
-            document.getElementById('btnAICombat').disabled = true;
+    document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
     saveCampaignState();
 }
 
@@ -740,8 +735,7 @@ function confirmFleet() {
     renderFleetTables();
 
     currentPhase = 'combat';
-    document.getElementById('btnCombat').disabled = false;
-            document.getElementById('btnAICombat').disabled = false;
+    document.getElementById('btnCombat').disabled = false; document.getElementById('btnAutoAI').disabled = false;
     exportJson();
     saveCampaignState();
 }
@@ -782,19 +776,17 @@ function exportJson() {
 
 // --- 戦闘開始 → hub.htmlへ遷移 ---
 function openBattle() {
+    localStorage.removeItem('fullAutoAI');
     exportJson();
     saveCampaignState();
-    localStorage.removeItem('fullAutoAI');
     localStorage.setItem('campaignReady', 'true');
     window.location.href = 'hub.html';
 }
 
-// --- AIで出撃 → 両軍AI自動進行 ---
-function openBattleAI() {
+function openBattleAutoAI() {
+    localStorage.setItem('fullAutoAI', '1');
     exportJson();
     saveCampaignState();
-    localStorage.setItem('fullAutoAI', '1');
-    localStorage.setItem('usAutoAI', '1');
     localStorage.setItem('campaignReady', 'true');
     window.location.href = 'hub.html';
 }
@@ -932,8 +924,7 @@ function applyBattleResultData(importData, endTurn) {
     renderBattleHistory();
 
     currentPhase = 'next';
-    document.getElementById('btnCombat').disabled = true;
-            document.getElementById('btnAICombat').disabled = true;
+    document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
     document.getElementById('btnNext').disabled = true;
     saveCampaignState();
 

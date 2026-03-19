@@ -106,14 +106,6 @@ function init() {
     const btn = document.getElementById('btnNextTurn');
     if (btn) { btn.disabled = true; btn.textContent = '戦闘終了（10ターン経過）'; }
   }
-  // fullAutoAI: レポートを3秒表示してから自動で次ターンへ
-  if (localStorage.getItem('fullAutoAI') === '1') {
-    if (state.combatTurn >= 10) {
-      setTimeout(() => sendToCampaign(), 3000);
-    } else {
-      setTimeout(() => goNextTurn(), 3000);
-    }
-  }
 }
 
 function renderReport() {
