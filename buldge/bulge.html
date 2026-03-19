@@ -1450,15 +1450,17 @@ function switchSide() {
   G.attackTargets = null;
   const sideName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
   addLog('turn', `${sideName}の手番`);
-  showFlash(`${sideName}の手番`, nextSide);
-  updateUI();
-  draw();
-  // 人間vsAI: 人間の手番に戻る時は確認待ち
+  // 人間vsAI: 人間の手番に戻る時は確認待ち（フラッシュは確認後に出す）
   if (!isAISide(nextSide) && G.mode !== 'hotseat' && G.mode !== 'watch') {
     G._awaitConfirm = true;
+    updateUI();
+    draw();
     updateRightPanel();
     return; // 自動進行しない
   }
+  showFlash(`${sideName}の手番`, nextSide);
+  updateUI();
+  draw();
   // AIチェック（フラッシュが見えるよう長めに待つ）
   scheduleAI(1800);
 }
@@ -2034,6 +2036,8 @@ function confirmAI() {
       delete u._lastMovedAt;
     }
   }
+  const sideName = G.activeSide === 'german' ? 'ドイツ軍' : '連合軍';
+  showFlash(`${sideName}の手番`, G.activeSide);
   updateRightPanel();
   draw();
 }
