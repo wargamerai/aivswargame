@@ -23,6 +23,7 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
 /* === 中央マップ === */
 #mapArea { flex:1; position:relative; overflow:hidden; background:#1a1a2e; cursor:grab; }
 #mapArea.dragging { cursor:grabbing; }
+#zoomControl { position:absolute; top:8px; left:50%; transform:translateX(-50%); background:rgba(22,33,62,0.85); padding:4px 12px; border-radius:16px; display:flex; align-items:center; gap:4px; z-index:10; color:#aaa; }
 #mapCanvas { position:absolute; top:0; left:0; image-rendering:auto; }
 
 /* === 右パネル === */
@@ -113,6 +114,12 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
   <!-- 中央マップ -->
   <div id="mapArea">
     <canvas id="mapCanvas"></canvas>
+    <div id="zoomControl">
+      <span style="font-size:0.7em">−</span>
+      <input type="range" id="zoomSlider" min="30" max="200" value="70" style="width:120px;vertical-align:middle;">
+      <span style="font-size:0.7em">+</span>
+      <span id="zoomLabel" style="font-size:0.75em;margin-left:4px;">70%</span>
+    </div>
   </div>
 
   <!-- 右パネル -->
@@ -603,6 +610,7 @@ mapArea.addEventListener('wheel', e => {
     const my = e.clientY - rect.top;
     panX = mx - (mx - panX) * (zoom / oldZoom);
     panY = my - (my - panY) * (zoom / oldZoom);
+    syncZoomSlider();
   } else {
     // 通常スクロール = パン（上下左右）
     panX -= e.deltaX * 1.5;
@@ -1296,6 +1304,24 @@ function startGame(mode) {
 mapImg.onload = () => { mapLoaded = true; draw(); };
 mapImg.onerror = () => { mapLoaded = false; draw(); };
 mapImg.src = 'ssbulgemap12.png';
+
+// ズームスライダー
+const zoomSlider = document.getElementById('zoomSlider');
+const zoomLabel = document.getElementById('zoomLabel');
+zoomSlider.addEventListener('input', () => {
+  const rect = mapArea.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const oldZoom = zoom;
+  zoom = parseInt(zoomSlider.value) / 100;
+  panX = cx - (cx - panX) * (zoom / oldZoom);
+  panY = cy - (cy - panY) * (zoom / oldZoom);
+  zoomLabel.textContent = Math.round(zoom * 100) + '%';
+  draw();
+});
+function syncZoomSlider() {
+  zoomSlider.value = Math.round(zoom * 100);
+  zoomLabel.textContent = Math.round(zoom * 100) + '%';
+}
 
 // 初期描画
 draw();
