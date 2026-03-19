@@ -1674,6 +1674,7 @@ function updateRightPanel() {
             <div>位置: ${u.hexId}</div>
           </div>
           <button class="btn" onclick="cancelSelect()">選択解除</button>
+          <button class="btn" onclick="stayInPlace()" style="margin-left:6px;">移動しない</button>
           ${stacked ? `<button class="btn" onclick="unstackUnit('${u.id}')" style="margin-left:6px;">スタック解除</button>` : ''}
           ${canExitNW(u) ? `<button class="btn primary" onclick="exitUnitNW('${u.id}')" style="margin-top:6px;display:block;width:100%;">NW突破 (+1VP)</button>` : ''}
         </div>`;
@@ -1742,6 +1743,39 @@ function cancelSelect() {
   G.selectedUnit = null;
   G.reachable = null;
   G.opPhase = 'select';
+  updateRightPanel();
+  draw();
+}
+
+// 移動しない: その場に留まり、隣接敵がいれば攻撃フェーズへ
+function stayInPlace() {
+  if (!G.selectedUnit) return;
+  const unit = G.selectedUnit;
+  const stacked = isStacked(unit);
+  const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
+  unit.acted = true;
+  if (stacked && pair && !pair.acted) { pair.acted = true; }
+  addLog('move', `${unit.name}: 移動せず`);
+
+  // 隣接敵チェック → 攻撃フェーズ or サイド切替
+  const adjEnemy = getNeighborIds(unit.hexId).some(nid =>
+    getUnitsAt(nid).some(u => u.side !== G.activeSide)
+  );
+  G.selectedUnit = null;
+  G.reachable = null;
+
+  if (adjEnemy) {
+    unit.mustAttack = true;
+    if (stacked && pair) pair.mustAttack = true;
+    G.opPhase = 'attack';
+    resetCombat();
+    addLog('turn', `━ ${unit.name} 攻撃フェーズ ━`);
+  } else {
+    unit.flipped = true;
+    if (stacked && pair) pair.flipped = true;
+    switchSide();
+    return;
+  }
   updateRightPanel();
   draw();
 }
