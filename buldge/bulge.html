@@ -362,6 +362,9 @@ function draw() {
     }
   }
 
+  // 移動経路線の描画
+  drawMovePaths();
+
   // ユニット描画
   drawUnits();
 
@@ -380,11 +383,58 @@ function draw() {
   }
 }
 
+// ========== 移動経路描画 ==========
+function drawMovePaths() {
+  const PATH_COLORS = { german: 'rgba(255,100,100,0.7)', allied: 'rgba(100,180,255,0.7)' };
+  for (const u of G.units) {
+    if (!u.movePath || u.movePath.length < 2 || u.eliminated || u.exited) continue;
+    const color = PATH_COLORS[u.side] || 'rgba(255,255,100,0.7)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    for (let i = 0; i < u.movePath.length; i++) {
+      const { col, row } = parseHexId(u.movePath[i]);
+      const c = hexCenter(col, row);
+      if (i === 0) ctx.moveTo(c.x, c.y);
+      else ctx.lineTo(c.x, c.y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 移動元に小さい丸
+    const start = parseHexId(u.movePath[0]);
+    const sc = hexCenter(start.col, start.row);
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // 矢印（最後の2点から方向を計算）
+    const last = parseHexId(u.movePath[u.movePath.length - 1]);
+    const prev = parseHexId(u.movePath[u.movePath.length - 2]);
+    const lc = hexCenter(last.col, last.row);
+    const pc = hexCenter(prev.col, prev.row);
+    const angle = Math.atan2(lc.y - pc.y, lc.x - pc.x);
+    const arrLen = 10;
+    ctx.beginPath();
+    ctx.moveTo(lc.x, lc.y);
+    ctx.lineTo(lc.x - arrLen * Math.cos(angle - 0.4), lc.y - arrLen * Math.sin(angle - 0.4));
+    ctx.moveTo(lc.x, lc.y);
+    ctx.lineTo(lc.x - arrLen * Math.cos(angle + 0.4), lc.y - arrLen * Math.sin(angle + 0.4));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+}
+
 // ========== ユニット描画 ==========
 const UNIT_COLORS = {
-  de: { bg: '#555', border: '#888', text: '#fff' },
-  us: { bg: '#3a5a3a', border: '#6a8a6a', text: '#fff' },
-  uk: { bg: '#5a4a3a', border: '#8a7a5a', text: '#fff' },
+  de: { bg: '#4a4a5a', border: '#777', text: '#fff', flippedBg: '#2a2a35' },
+  us: { bg: '#3a6a3a', border: '#5a9a5a', text: '#fff', flippedBg: '#1a3a1a' },
+  uk: { bg: '#6a5a3a', border: '#9a8a5a', text: '#fff', flippedBg: '#3a2a1a' },
 };
 
 function drawUnits() {
@@ -399,49 +449,66 @@ function drawUnits() {
     const { col, row } = parseHexId(hid);
     const center = hexCenter(col, row);
     const count = units.length;
+    // hexいっぱいのサイズ（スタック時は少し小さく）
+    const baseSize = HEX_SIZE * 0.88;
+    const sz = count > 1 ? baseSize * 0.75 : baseSize;
 
     for (let i = 0; i < count; i++) {
       const u = units[i];
-      const offsetY = i * (HEX_SIZE * 0.45);
-      const ux = center.x;
-      const uy = center.y - HEX_SIZE * 0.2 + offsetY;
-      const w = HEX_SIZE * 0.8;
-      const h = HEX_SIZE * 0.4;
+      // スタック時: 少しずらす
+      const offsetX = count > 1 ? (i === 0 ? -sz * 0.2 : sz * 0.2) : 0;
+      const offsetY = count > 1 ? (i === 0 ? -sz * 0.15 : sz * 0.15) : 0;
+      const ux = center.x + offsetX;
+      const uy = center.y + offsetY;
       const colors = UNIT_COLORS[u.nation] || UNIT_COLORS.de;
+      const isFlipped = u.acted || u.flipped;
 
       // 選択中ハイライト
       if (G.selectedUnit === u) {
         ctx.shadowColor = '#e94560';
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 12;
       }
 
-      // カウンター背景
-      ctx.fillStyle = u.flipped ? '#333' : colors.bg;
+      // カウンター背景（正方形、hexに収まるサイズ）
+      const half = sz / 2;
+      ctx.fillStyle = isFlipped ? colors.flippedBg : colors.bg;
       ctx.strokeStyle = G.selectedUnit === u ? '#e94560' : colors.border;
-      ctx.lineWidth = G.selectedUnit === u ? 2 : 1;
+      ctx.lineWidth = G.selectedUnit === u ? 3 : 1.5;
       ctx.beginPath();
-      ctx.roundRect(ux - w/2, uy - h/2, w, h, 3);
+      ctx.roundRect(ux - half, uy - half, sz, sz, 4);
       ctx.fill();
       ctx.stroke();
       ctx.shadowBlur = 0;
 
-      // テキスト
-      ctx.fillStyle = colors.text;
-      ctx.font = `bold ${Math.round(h * 0.35)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      // 攻撃力/防御力
-      ctx.fillText(`${u.atk}/${u.def}`, ux, uy - h * 0.15);
-      // 名前
-      ctx.font = `${Math.round(h * 0.28)}px sans-serif`;
-      ctx.fillText(u.name.substring(0, 6), ux, uy + h * 0.25);
+      // 戦闘力（大きく中央に表示）
+      const power = isFlipped ? u.def : u.atk;
+      const fontSize = Math.round(sz * 0.55);
 
-      // 行動済みマーク
-      if (u.acted) {
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.beginPath();
-        ctx.roundRect(ux - w/2, uy - h/2, w, h, 3);
-        ctx.fill();
+      if (isFlipped) {
+        // 裏面: 白抜き文字（アウトライン）
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeText(power, ux, uy);
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.fillText(power, ux, uy);
+      } else {
+        // 表面: 通常の白文字
+        ctx.fillStyle = colors.text;
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(power, ux, uy);
+      }
+
+      // タイプインジケータ（戦車=小さいバー、歩兵=なし）
+      if (u.type === 'panzer' || u.type === 'panzergrenadier') {
+        const barW = sz * 0.5;
+        const barH = sz * 0.08;
+        ctx.fillStyle = isFlipped ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)';
+        ctx.fillRect(ux - barW/2, uy + half - barH - sz*0.08, barW, barH);
       }
     }
   }
@@ -647,6 +714,9 @@ function onMoveClick(hid) {
   // 移動実行
   if (G.selectedUnit && G.reachable && G.reachable.has(hid)) {
     const info = G.reachable.get(hid);
+    const fromHex = G.selectedUnit.hexId;
+    // 経路を記録（移動元を先頭に追加）
+    G.selectedUnit.movePath = [fromHex, ...info.path];
     G.selectedUnit.hexId = hid;
     G.selectedUnit.acted = true;
     addLog('move', `${G.selectedUnit.name} → ${hid} (${info.cost.toFixed(1)}MP)`);
@@ -794,7 +864,7 @@ function endPhase() {
         G.activeSide = 'allied';
         G.opPhase = 'select';
         // ユニットの行動済みリセット
-        G.units.filter(u => u.side === 'allied').forEach(u => u.acted = false);
+        G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; delete u.movePath; });
         addLog('turn', `連合軍の作戦フェーズ`);
       } else {
         nextTurn();
@@ -804,7 +874,7 @@ function endPhase() {
       if (!G.germanDone) {
         G.activeSide = 'german';
         G.opPhase = 'select';
-        G.units.filter(u => u.side === 'german').forEach(u => u.acted = false);
+        G.units.filter(u => u.side === 'german').forEach(u => { u.acted = false; delete u.movePath; });
         addLog('turn', `ドイツ軍の作戦フェーズ`);
       } else {
         nextTurn();
@@ -825,7 +895,7 @@ function nextTurn() {
     return;
   }
   G.phase = 'reinforce';
-  G.units.forEach(u => { u.acted = false; u.mustAttack = false; });
+  G.units.forEach(u => { u.acted = false; u.mustAttack = false; delete u.movePath; });
   addLog('turn', `═══ ターン${G.turn} ═══`);
   updateUI();
   draw();
