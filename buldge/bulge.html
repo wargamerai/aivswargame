@@ -1856,6 +1856,34 @@ function aiTick() {
   }
 
   if (G.phase === 'operation') {
+    // retreat/advanceは敵サイドのユニットの可能性があるので先にチェック
+    if (G.opPhase === 'retreat') {
+      const retreatingUnit = G.combat.retreatingUnits[0] ?
+        G.units.find(u => u.id === G.combat.retreatingUnits[0]) : null;
+      const retreatSide = retreatingUnit ? retreatingUnit.side : G.activeSide;
+      if (isAISide(retreatSide)) {
+        aiRunning = true;
+        setTimeout(() => {
+          aiDoRetreat();
+          aiRunning = false;
+        }, 500);
+        return;
+      }
+      return; // 人間が退却先を選択
+    }
+
+    if (G.opPhase === 'advance') {
+      if (isAISide(G.activeSide)) {
+        aiRunning = true;
+        setTimeout(() => {
+          aiDoAdvance();
+          aiRunning = false;
+        }, 500);
+        return;
+      }
+      return; // 人間が前進選択
+    }
+
     if (!isAISide(G.activeSide)) return; // 人間の手番
 
     if (G.opPhase === 'select' || G.opPhase === 'move') {
@@ -1876,30 +1904,6 @@ function aiTick() {
       return;
     }
 
-    if (G.opPhase === 'retreat') {
-      // 退却ユニットのサイドをチェック（攻撃側退却の場合もある）
-      const retreatingUnit = G.combat.retreatingUnits[0] ?
-        G.units.find(u => u.id === G.combat.retreatingUnits[0]) : null;
-      const retreatSide = retreatingUnit ? retreatingUnit.side : G.activeSide;
-      if (isAISide(retreatSide)) {
-        aiRunning = true;
-        setTimeout(() => {
-          aiDoRetreat();
-          aiRunning = false;
-        }, 500);
-        return;
-      }
-      return; // 人間が退却先を選択
-    }
-
-    if (G.opPhase === 'advance') {
-      aiRunning = true;
-      setTimeout(() => {
-        aiDoAdvance();
-        aiRunning = false;
-      }, 500);
-      return;
-    }
   }
 }
 
@@ -2059,6 +2063,12 @@ function aiPickMoveTarget(unit, reachable) {
           score -= minCityDist * 2;
         }
       }
+    }
+
+    // 装甲部隊は道路なし森を避ける（出られなくなる）
+    const terrain = TERRAIN_MAP[hid];
+    if (terrain === 'f' && isMechanized(unit) && !isRoad) {
+      score -= 50; // 大幅減点
     }
 
     // 敵に隣接している場合のボーナス/ペナルティ
