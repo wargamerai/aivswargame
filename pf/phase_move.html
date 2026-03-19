@@ -254,9 +254,12 @@ function autoWithdrawHeavy() {
   const jpMoving = isJPMoving();
   const allShips = jpMoving ? jpFleet : usFleet;
   for (const ship of allShips) {
-    // 大破 or (US側で射撃不能)
+    // 大破、航行不能、回頭不能、速力半減 → 離脱
+    const hasCrit = (ship.crits || []).includes('速力半減');
     const shouldWithdraw = (ship.status === 'heavy') ||
-                           (ship.side === 'us' && ship.cannotShoot);
+                           (getSpeed(ship) === 0) ||
+                           ship.cannotTurn ||
+                           hasCrit;
     if (!shouldWithdraw || ship.col < 0 || ship.status === 'sunk') continue;
     if (ship.withdrawing) {
       // 既に離脱中 → 退却移動（航行不能なら移動不可）
