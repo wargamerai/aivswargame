@@ -590,18 +590,24 @@ window.addEventListener('mouseup', e => {
   mapArea.classList.remove('dragging');
 });
 
-// ズーム
+// スクロール: 通常=パン、Ctrl/Cmd=ズーム
 mapArea.addEventListener('wheel', e => {
   e.preventDefault();
-  const oldZoom = zoom;
-  zoom *= e.deltaY < 0 ? 1.1 : 0.9;
-  zoom = Math.max(0.3, Math.min(2.0, zoom));
-  // ズーム中心をマウス位置にする
-  const rect = mapArea.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-  panX = mx - (mx - panX) * (zoom / oldZoom);
-  panY = my - (my - panY) * (zoom / oldZoom);
+  if (e.ctrlKey || e.metaKey) {
+    // Ctrl+スクロール = ズーム
+    const oldZoom = zoom;
+    zoom *= e.deltaY < 0 ? 1.1 : 0.9;
+    zoom = Math.max(0.3, Math.min(2.0, zoom));
+    const rect = mapArea.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    panX = mx - (mx - panX) * (zoom / oldZoom);
+    panY = my - (my - panY) * (zoom / oldZoom);
+  } else {
+    // 通常スクロール = パン（上下左右）
+    panX -= e.deltaX * 1.5;
+    panY -= e.deltaY * 1.5;
+  }
   draw();
 }, { passive: false });
 
