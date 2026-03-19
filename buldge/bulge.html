@@ -850,18 +850,27 @@ function onMoveClick(hid) {
     // 裏にはしない — 相手の手番開始時にまとめて裏にする
     addLog('move', `${G.selectedUnit.name} → ${hid} (${info.cost.toFixed(1)}MP)`);
 
-    // 隣接敵チェック → 攻撃必須
+    // 隣接敵チェック → 攻撃フェーズへ
+    const movedUnit = G.selectedUnit;
     const adjEnemy = getNeighborIds(hid).some(nid =>
       getUnitsAt(nid).some(u => u.side !== G.activeSide)
     );
-    if (adjEnemy) {
-      G.selectedUnit.mustAttack = true;
-      if (stacked && pair) pair.mustAttack = true;
-    }
-
     G.selectedUnit = null;
     G.reachable = null;
-    G.opPhase = 'select';
+
+    if (adjEnemy) {
+      // 敵隣接 → この1ユニットで攻撃フェーズ（必須）
+      movedUnit.mustAttack = true;
+      if (stacked && pair) pair.mustAttack = true;
+      G.opPhase = 'attack';
+      resetCombat();
+      addLog('turn', `━ ${movedUnit.name} 攻撃フェーズ ━`);
+    } else {
+      // 敵隣接なし → 即サイド切替
+      movedUnit.flipped = true; delete movedUnit.movePath;
+      if (stacked && pair) { pair.flipped = true; delete pair.movePath; }
+      switchSide();
+    }
     updateRightPanel();
     draw();
   }
@@ -1127,14 +1136,14 @@ function checkAdvance() {
 }
 
 function finishCombat() {
+  // 操作ユニットを裏にする
+  G.units.filter(u => u.side === G.activeSide && u.acted && !u.flipped).forEach(u => {
+    u.flipped = true; delete u.movePath;
+  });
   resetCombat();
-  G.opPhase = 'attack';
   G.attackTargets = null;
-  updateRightPanel();
-  draw();
-
-  // AIチェック（戦闘終了後に次の攻撃orフェーズ終了）
-  setTimeout(() => aiTick(), 600);
+  // 1ユニット操作完了 → サイド切替
+  switchSide();
 }
 
 function skipAdvance() {
@@ -1168,13 +1177,6 @@ function endPhase() {
     G.germanDone = false;
     G.alliedDone = false;
     addLog('turn', `ターン${G.turn} 作戦フェーズ開始 — ドイツ軍`);
-  } else if (G.phase === 'operation' && (G.opPhase === 'select' || G.opPhase === 'move')) {
-    // 移動終了 → 攻撃フェーズへ
-    G.opPhase = 'attack';
-    G.selectedUnit = null;
-    G.reachable = null;
-    resetCombat();
-    addLog('turn', `━ 攻撃フェーズ ━ 敵hexをクリックして攻撃対象を選択`);
   } else if (G.phase === 'operation' && (G.opPhase === 'attack')) {
     // 攻撃必須チェック: mustAttackフラグが残っているユニットがいれば終了不可
     const mustAttackUnits = G.units.filter(u =>
@@ -1186,21 +1188,8 @@ function endPhase() {
     }
     // mustAttackフラグをクリア
     G.units.filter(u => u.side === G.activeSide).forEach(u => { delete u.mustAttack; });
-    // 攻撃終了 → 相手側へ交代（actedはリセットしない、ターン通して維持）
-    // 現サイドのactedユニットを裏にする
-    G.units.filter(u => u.side === G.activeSide && u.acted).forEach(u => {
-      u.flipped = true; delete u.movePath;
-    });
-    // _aiAttackedフラグだけクリア
-    G.units.filter(u => u.side === G.activeSide).forEach(u => { delete u._aiAttacked; });
-    // サイド切り替え
-    const nextSide = G.activeSide === 'german' ? 'allied' : 'german';
-    G.activeSide = nextSide;
-    G.opPhase = 'select';
-    G.passCount = 0; // 通常終了でパスカウントリセット
-    const sideName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
-    addLog('turn', `${sideName}の作戦フェーズ`);
-    showFlash(`${sideName}の手番`, nextSide);
+    // 1ユニット操作完了 → 相手側へ交代
+    switchSide();
   }
   G.selectedUnit = null;
   G.reachable = null;
@@ -1210,6 +1199,29 @@ function endPhase() {
 
   // AIチェック（フラッシュ表示のため長めに待つ）
   setTimeout(() => aiTick(), 2000);
+}
+
+// 1ユニット操作後のサイド切り替え
+function switchSide() {
+  // 操作済みユニットを裏にする（今操作した1ユニット分）
+  // actedかつまだflippedでないユニットをflip
+  G.units.filter(u => u.side === G.activeSide && u.acted && !u.flipped).forEach(u => {
+    u.flipped = true; delete u.movePath;
+  });
+  // サイド切り替え
+  const nextSide = G.activeSide === 'german' ? 'allied' : 'german';
+  G.activeSide = nextSide;
+  G.opPhase = 'select';
+  G.passCount = 0; // 操作したらパスカウントリセット
+  G.selectedUnit = null;
+  G.reachable = null;
+  G.attackTargets = null;
+  const sideName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
+  addLog('turn', `${sideName}の手番`);
+  updateUI();
+  draw();
+  // AIチェック
+  setTimeout(() => aiTick(), 800);
 }
 
 function nextTurn() {
@@ -1657,8 +1669,7 @@ function updateRightPanel() {
       }
       html += '</div>';
       html += `<div class="section">
-        <button class="btn primary" onclick="endPhase()">移動終了 → 攻撃へ</button>
-        <button class="btn" onclick="passPhase()" style="margin-left:8px;">パス</button>
+        <button class="btn" onclick="passPhase()">パス</button>
       </div>`;
       panel.innerHTML = html;
     }
@@ -1748,26 +1759,21 @@ function passPhase() {
     return;
   }
 
-  // 相手側へ（actedはリセットしない）
-  // 現サイドのactedユニットを裏にする
-  G.units.filter(u => u.side === G.activeSide && u.acted).forEach(u => {
-    u.flipped = true; delete u.movePath;
-  });
-  G.units.filter(u => u.side === G.activeSide).forEach(u => { delete u._aiAttacked; });
+  // 相手側へ
   const nextSide = G.activeSide === 'german' ? 'allied' : 'german';
   G.activeSide = nextSide;
   G.opPhase = 'select';
-  const nextName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
-  setTimeout(() => { showFlash(`${nextName}の手番`, nextSide); }, 1600);
-  addLog('turn', `${nextName}の作戦フェーズ`);
   G.selectedUnit = null;
   G.reachable = null;
   G.attackTargets = null;
+  const nextName = nextSide === 'german' ? 'ドイツ軍' : '連合軍';
+  setTimeout(() => { showFlash(`${nextName}の手番`, nextSide); }, 1600);
+  addLog('turn', `${nextName}の手番`);
   updateUI();
   draw();
 
   // AIチェック
-  setTimeout(() => aiTick(), 1800); // フラッシュ表示後にAI開始
+  setTimeout(() => aiTick(), 1800);
 }
 
 // ========== AI ==========
@@ -1910,7 +1916,7 @@ function aiDoRecovery() {
   }
 }
 
-// AI移動: 全ユニットを順番に移動
+// AI移動: 1ユニット移動→攻撃or切替
 function aiDoMovement() {
   const side = G.activeSide;
   const units = G.units.filter(u =>
@@ -1918,7 +1924,7 @@ function aiDoMovement() {
   );
 
   if (units.length === 0) {
-    // 未行動ユニットなし → パス（連続パスでターン終了を判定）
+    // 未行動ユニットなし → パス
     passPhase();
     return;
   }
@@ -1929,7 +1935,8 @@ function aiDoMovement() {
       if (canExitNW(u)) {
         addLog('turn', `[AI] ${u.name} NW突破`);
         exitUnitNW(u.id);
-        setTimeout(() => aiTick(), 500);
+        // NW突破後サイド切替
+        switchSide();
         return;
       }
     }
@@ -1937,39 +1944,32 @@ function aiDoMovement() {
 
   // 機械化ユニットを先に移動（ドイツAIのみ）
   if (side === 'german') {
-    units.sort((a, b) => {
-      const am = isMechanized(a) ? 0 : 1;
-      const bm = isMechanized(b) ? 0 : 1;
-      return am - bm;
-    });
+    units.sort((a, b) => (isMechanized(a) ? 0 : 1) - (isMechanized(b) ? 0 : 1));
   }
 
   const unit = units[0];
   const reachable = calcReachable(unit);
 
   if (reachable.size === 0) {
-    // 移動先なし → 行動済みにする
+    // 移動先なし → 行動済み、裏にしてサイド切替
     unit.acted = true;
+    unit.flipped = true;
     addLog('move', `[AI] ${unit.name}: 移動先なし`);
-    draw();
-    setTimeout(() => aiTick(), 300);
+    switchSide();
     return;
   }
 
   // 最適な移動先を選択
   const bestHex = aiPickMoveTarget(unit, reachable);
   if (bestHex && bestHex !== unit.hexId) {
-    // 移動先のスタック最終チェック
     const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
     if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
-      // スタック違反 → 移動しない
       unit.acted = true;
+      unit.flipped = true;
       addLog('move', `[AI] ${unit.name}: スタック制限で移動不可`);
-      draw();
-      setTimeout(() => aiTick(), 300);
+      switchSide();
       return;
     }
-    // 移動実行（onMoveClickと同等の処理）
     const info = reachable.get(bestHex);
     const fromHex = unit.hexId;
     const stacked = isStacked(unit);
@@ -1982,25 +1982,33 @@ function aiDoMovement() {
       pair.acted = true;
       pair.movePath = [fromHex, ...info.path];
     }
-    // 隣接敵チェック
+    addLog('move', `[AI] ${unit.name} → ${bestHex}`);
+
+    // 隣接敵チェック → 攻撃フェーズ or サイド切替
     const adjEnemy = getNeighborIds(bestHex).some(nid =>
       getUnitsAt(nid).some(u => u.side !== side)
     );
     if (adjEnemy) {
       unit.mustAttack = true;
       if (stacked && pair) pair.mustAttack = true;
+      G.opPhase = 'attack';
+      resetCombat();
+      addLog('turn', `━ [AI] ${unit.name} 攻撃 ━`);
+      updateRightPanel();
+      draw();
+      // AI攻撃へ
+      setTimeout(() => aiTick(), 600);
+    } else {
+      unit.flipped = true; delete unit.movePath;
+      if (stacked && pair) { pair.flipped = true; delete pair.movePath; }
+      switchSide();
     }
-    addLog('move', `[AI] ${unit.name} → ${bestHex}`);
   } else {
     unit.acted = true;
+    unit.flipped = true;
     addLog('move', `[AI] ${unit.name}: 待機`);
+    switchSide();
   }
-
-  G.selectedUnit = null;
-  G.reachable = null;
-  updateRightPanel();
-  draw();
-  setTimeout(() => aiTick(), 400);
 }
 
 // AI移動先選択: サイドに応じた戦略
@@ -2155,8 +2163,12 @@ function aiDoAttack() {
       // executeCombat内でapplyCombatResultが呼ばれ、そこからaiTickが呼ばれる
     }, 600);
   } else {
-    // 攻撃なし → フェーズ終了（endPhase内でaiTickが呼ばれる）
-    endPhase();
+    // 攻撃なし → mustAttackクリアして裏にしてサイド切替
+    G.units.filter(u => u.side === side).forEach(u => { delete u.mustAttack; });
+    G.units.filter(u => u.side === side && u.acted && !u.flipped).forEach(u => {
+      u.flipped = true; delete u.movePath;
+    });
+    switchSide();
   }
 }
 
