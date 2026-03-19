@@ -1131,46 +1131,52 @@ function doRecovery() {
   const deFlipped = G.units.filter(u => u.side === 'german' && u.flipped && !u.eliminated);
   if (deFlipped.length === 0) return;
 
-  // 燃料集積所ボーナス: hex 1304にドイツ軍がいれば毎ターン+2
-  const fuelBonus = getUnitsAt('1304').some(f => f.side === 'german') ? 2 : 0;
+  // 燃料集積所ボーナス: hex 1304にドイツ軍がいれば機械化部隊の回復上限+2
+  const hasFuel = getUnitsAt('1304').some(f => f.side === 'german');
+  const isMech = u => u.type === 'panzer' || u.type === 'panzergrenadier';
+  const fuelBonus = hasFuel ? 2 : 0;
 
   if (G.turn <= 2) {
     // ターン1-2: 全て表面に戻す
     for (const u of deFlipped) u.flipped = false;
     addLog('turn', `ドイツ軍: 全${deFlipped.length}ユニット回復（燃料制限なし）`);
-  } else if (G.turn === 3) {
-    // ターン3: 最大12ユニット (+燃料ボーナス) 回復
-    const maxRecover = 12 + fuelBonus;
+  } else if (G.turn === 3 || G.turn === 4) {
+    // ターン3: 最大12、ターン4: 最大10 (+燃料ボーナスは機械化部隊のみ)
+    const baseMax = G.turn === 3 ? 12 : 10;
+    // 歩兵と機械化を分けて処理
+    const mechFlipped = deFlipped.filter(isMech);
+    const infFlipped = deFlipped.filter(u => !isMech(u));
     let count = 0;
-    for (const u of deFlipped) {
-      if (count >= maxRecover) break;
+    // まず歩兵を回復（上限内）
+    for (const u of infFlipped) {
+      if (count >= baseMax) break;
       u.flipped = false;
       count++;
     }
-    addLog('turn', `ドイツ軍: ${count}/${deFlipped.length}ユニット回復（上限${maxRecover}${fuelBonus ? ' 燃料+2' : ''}）`);
-  } else if (G.turn === 4) {
-    // ターン4: 最大10ユニット (+燃料ボーナス) 回復
-    const maxRecover = 10 + fuelBonus;
-    let count = 0;
-    for (const u of deFlipped) {
-      if (count >= maxRecover) break;
+    // 次に機械化を回復（上限 + 燃料ボーナス内）
+    const mechMax = baseMax + fuelBonus - count; // 残り枠 + 燃料ボーナス
+    let mechCount = 0;
+    for (const u of mechFlipped) {
+      if (count + mechCount >= baseMax + fuelBonus) break;
       u.flipped = false;
-      count++;
+      mechCount++;
     }
-    addLog('turn', `ドイツ軍: ${count}/${deFlipped.length}ユニット回復（上限${maxRecover}${fuelBonus ? ' 燃料+2' : ''}）`);
+    const total = count + mechCount;
+    addLog('turn', `ドイツ軍: ${total}/${deFlipped.length}ユニット回復（上限${baseMax}${fuelBonus ? ' +機械化'+fuelBonus : ''}）`);
   } else {
-    // ターン5-6: D+4判定
+    // ターン5-6: D+4判定（燃料ボーナスは機械化部隊のみ）
     let recovered = 0, failed = 0;
     for (const u of deFlipped) {
       const die = Math.floor(Math.random() * 6) + 1;
-      const total = die + 4 + fuelBonus;
+      const mechBonus = isMech(u) ? fuelBonus : 0;
+      const total = die + 4 + mechBonus;
       if (total >= 7) {
         u.flipped = false;
         recovered++;
-        addLog('turn', `${u.name}: 回復 (D${die}+4${fuelBonus ? '+2燃料' : ''}=${total})`);
+        addLog('turn', `${u.name}: 回復 (D${die}+4${mechBonus ? '+2燃料' : ''}=${total})`);
       } else {
         failed++;
-        addLog('turn', `${u.name}: 回復失敗 (D${die}+4${fuelBonus ? '+2燃料' : ''}=${total})`);
+        addLog('turn', `${u.name}: 回復失敗 (D${die}+4${mechBonus ? '+2燃料' : ''}=${total})`);
       }
     }
     if (recovered > 0) addLog('turn', `ドイツ軍: ${recovered}ユニット回復`);
