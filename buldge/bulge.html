@@ -59,11 +59,27 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
 #startScreen .mode-btn .desc { font-size:0.8em; color:#888; margin-top:4px; }
 
 /* === フラッシュ通知 === */
-#flashOverlay { position:fixed; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; z-index:200; pointer-events:none; opacity:0; transition:opacity 0.3s; }
+#flashOverlay { position:fixed; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; z-index:200; pointer-events:none; opacity:0; transition:opacity 0.4s; }
 #flashOverlay.show { opacity:1; }
-#flashOverlay .flash-text { font-size:2.5em; font-weight:bold; padding:20px 50px; border-radius:12px; text-shadow:0 0 30px rgba(0,0,0,0.8); }
-#flashOverlay.german .flash-text { background:rgba(80,80,100,0.9); color:#fff; border:3px solid #888; }
-#flashOverlay.allied .flash-text { background:rgba(60,100,60,0.9); color:#fff; border:3px solid #6a8a6a; }
+#flashOverlay .flash-text { font-size:3.2em; font-weight:bold; padding:24px 60px; border-radius:14px; text-shadow:0 0 40px rgba(0,0,0,0.9), 0 2px 8px rgba(0,0,0,0.6); letter-spacing:0.05em; }
+#flashOverlay.german .flash-text { background:rgba(120,60,60,0.95); color:#ffd; border:3px solid #e94560; box-shadow:0 0 60px rgba(233,69,96,0.5); }
+#flashOverlay.allied .flash-text { background:rgba(40,100,60,0.95); color:#ffd; border:3px solid #5ae960; box-shadow:0 0 60px rgba(90,233,96,0.5); }
+#flashOverlay .flash-text { animation: flashPop 0.4s ease-out; }
+@keyframes flashPop { 0% { transform:scale(0.6); opacity:0; } 60% { transform:scale(1.1); } 100% { transform:scale(1); opacity:1; } }
+
+/* === 履歴パネル === */
+#historyOverlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,10,30,0.85); z-index:150; display:none; }
+#historyOverlay.show { display:flex; align-items:center; justify-content:center; }
+#historyPanel { width:500px; max-width:90vw; max-height:80vh; background:#16213e; border:2px solid #444; border-radius:8px; display:flex; flex-direction:column; overflow:hidden; }
+#historyPanel .hist-header { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid #333; }
+#historyPanel .hist-header h3 { color:#e94560; font-size:1em; margin:0; }
+#historyPanel .hist-tabs { display:flex; gap:4px; padding:8px 14px; border-bottom:1px solid #333; flex-wrap:wrap; }
+#historyPanel .hist-tab { background:#0f3460; color:#aaa; border:1px solid #333; padding:3px 10px; border-radius:3px; cursor:pointer; font-size:0.85em; }
+#historyPanel .hist-tab.active { background:#e94560; color:#fff; border-color:#e94560; }
+#historyPanel .hist-body { flex:1; overflow-y:auto; padding:10px 14px; font-size:0.85em; font-family:monospace; color:#8b949e; }
+#historyPanel .hist-body .log-turn { color:#e94560; font-weight:bold; }
+#historyPanel .hist-body .log-combat { color:#ffa657; }
+#historyPanel .hist-body .log-move { color:#79c0ff; }
 
 /* === ダイス演出 === */
 .dice-result { font-size:2em; font-weight:bold; color:#ffa657; text-align:center; padding:10px; animation: diceFlash 0.3s ease; }
@@ -117,7 +133,7 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
     <span id="zoomLabel" style="font-size:0.75em;min-width:30px;">70%</span>
   </div>
   <div>
-    <button onclick="undoAction()">元に戻す</button>
+    <button onclick="toggleHistory()">履歴</button>
     <button onclick="endPhase()">フェーズ終了</button>
   </div>
 </div>
@@ -143,6 +159,18 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
 </div>
 
 <div id="flashOverlay"><div class="flash-text"></div></div>
+
+<!-- 履歴パネル -->
+<div id="historyOverlay" onclick="if(event.target===this)closeHistory()">
+  <div id="historyPanel">
+    <div class="hist-header">
+      <h3>行動履歴</h3>
+      <button class="btn" onclick="closeHistory()" style="padding:2px 10px;">✕</button>
+    </div>
+    <div class="hist-tabs" id="histTabs"></div>
+    <div class="hist-body" id="histBody"></div>
+  </div>
+</div>
 
 <script src="mapdata.js"></script>
 <script src="bulge_units.js"></script>
@@ -1929,16 +1957,67 @@ function addLog(type, msg) {
   el.scrollTop = el.scrollHeight;
 }
 
-function undoAction() {
-  // TODO: undo
-}
 
 // フラッシュ通知
 function showFlash(text, side) {
   const el = document.getElementById('flashOverlay');
   el.className = 'show ' + (side || '');
   el.querySelector('.flash-text').textContent = text;
-  setTimeout(() => { el.className = ''; }, 1500);
+  setTimeout(() => { el.className = ''; }, 2500);
+}
+
+// ========== 行動履歴 ==========
+function toggleHistory() {
+  const el = document.getElementById('historyOverlay');
+  if (el.classList.contains('show')) { closeHistory(); return; }
+  el.classList.add('show');
+  buildHistoryTabs();
+}
+function closeHistory() {
+  document.getElementById('historyOverlay').classList.remove('show');
+}
+function buildHistoryTabs() {
+  // ログをターンごとに分類
+  const turns = {};
+  let curTurn = 1;
+  for (const entry of G.log) {
+    const m = entry.msg.match(/═══ ターン(\d+)/);
+    if (m) curTurn = parseInt(m[1]);
+    if (!turns[curTurn]) turns[curTurn] = [];
+    turns[curTurn].push(entry);
+  }
+  const tabs = document.getElementById('histTabs');
+  const turnKeys = Object.keys(turns).map(Number).sort((a, b) => a - b);
+  tabs.innerHTML = turnKeys.map(t =>
+    `<div class="hist-tab${t === G.turn ? ' active' : ''}" onclick="showHistoryTurn(${t})">${t === G.turn ? '現在' : 'T' + t}</div>`
+  ).join('') + `<div class="hist-tab" onclick="showHistoryTurn(0)">全て</div>`;
+  showHistoryTurn(G.turn);
+}
+function showHistoryTurn(turn) {
+  // タブのactive更新
+  document.querySelectorAll('#histTabs .hist-tab').forEach(tab => {
+    tab.classList.remove('active');
+    if ((turn === 0 && tab.textContent === '全て') ||
+        (turn === G.turn && tab.textContent === '現在') ||
+        (turn !== 0 && turn !== G.turn && tab.textContent === 'T' + turn)) {
+      tab.classList.add('active');
+    }
+  });
+  // ログ表示
+  const body = document.getElementById('histBody');
+  let entries = G.log;
+  if (turn > 0) {
+    let curTurn = 1;
+    entries = G.log.filter(entry => {
+      const m = entry.msg.match(/═══ ターン(\d+)/);
+      if (m) curTurn = parseInt(m[1]);
+      return curTurn === turn;
+    });
+  }
+  body.innerHTML = entries.map(e =>
+    `<div class="log-${e.type}">${e.msg}</div>`
+  ).join('');
+  body.scrollTop = body.scrollHeight;
 }
 
 // パス
