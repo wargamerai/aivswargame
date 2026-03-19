@@ -406,6 +406,26 @@ function draw() {
     }
   }
 
+  // NW突破マーカー
+  if (G.exitMarkers) {
+    for (const hid of G.exitMarkers) {
+      const { col, row } = parseHexId(hid);
+      const center = hexCenter(col, row);
+      drawHexPath(center.x, center.y, HEX_SIZE);
+      ctx.fillStyle = 'rgba(255,200,0,0.35)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,200,0,0.7)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      // 突破テキスト
+      ctx.fillStyle = 'rgba(255,200,0,0.9)';
+      ctx.font = `bold ${Math.round(HEX_SIZE * 0.25)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('突破', center.x, center.y);
+    }
+  }
+
   // 移動経路線の描画
   drawMovePaths();
 
@@ -1339,17 +1359,59 @@ function endGame() {
 }
 
 function calcVP() {
-  // 都市にいるユニットでVPを計算
+  // 都市VP
   G.vpGerman = 0;
   G.vpAllied = 0;
-  if (!FACILITY_MAP) return;
-  for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
-    if (fac !== 'c') continue;
-    const units = getUnitsAt(hid);
-    const hasGerman = units.some(u => u.side === 'german');
-    if (hasGerman) G.vpGerman++;
-    else G.vpAllied++;
+  if (FACILITY_MAP) {
+    for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
+      if (fac !== 'c') continue;
+      const hasGerman = getUnitsAt(hid).some(u => u.side === 'german');
+      if (hasGerman) G.vpGerman++;
+      else G.vpAllied++;
+    }
   }
+  // NW突破ボーナス
+  const exitCount = G.units.filter(u => u.side === 'german' && u.exited && u._exitedNW).length;
+  G.vpGerman += exitCount;
+}
+
+// NW突破hexリスト
+function getNWExitHexes() {
+  const hexes = [];
+  if (typeof TAG_MAP !== 'undefined') {
+    for (const [hid, t] of Object.entries(TAG_MAP)) {
+      if (t === 'reinforce_nw') hexes.push(hid);
+    }
+  }
+  return hexes;
+}
+
+function canExitNW(unit) {
+  if (!unit || unit.side !== 'german' || !isMechanized(unit)) return false;
+  if (unit.eliminated || unit.exited || unit.acted) return false;
+  return getNWExitHexes().includes(unit.hexId);
+}
+
+function exitUnitNW(id) {
+  const unit = G.units.find(u => u.id === id);
+  if (!unit || unit.side !== 'german' || !isMechanized(unit)) return;
+  const nwHexes = getNWExitHexes();
+  if (!nwHexes.includes(unit.hexId)) return;
+  unit.exited = true;
+  unit._exitedNW = true;
+  unit.acted = true;
+  unit.hexId = 'exited';
+  addLog('turn', `${unit.name} NW突破! (+1VP)`);
+  // 選択解除
+  G.selectedUnit = null;
+  G.reachable = null;
+  G.opPhase = 'select';
+  // 突破マーカー記録
+  if (!G.exitMarkers) G.exitMarkers = [];
+  G.exitMarkers.push(unit.hexId);
+  calcVP();
+  updateUI();
+  draw();
 }
 
 // ========== UI更新 ==========
@@ -1423,6 +1485,7 @@ function updateRightPanel() {
           </div>
           <button class="btn" onclick="cancelSelect()">選択解除</button>
           ${stacked ? `<button class="btn" onclick="unstackUnit('${u.id}')" style="margin-left:6px;">スタック解除</button>` : ''}
+          ${canExitNW(u) ? `<button class="btn primary" onclick="exitUnitNW('${u.id}')" style="margin-top:6px;display:block;width:100%;">NW突破 (+1VP)</button>` : ''}
         </div>`;
     } else if (G.opPhase === 'attack') {
       // 攻撃フェーズ
