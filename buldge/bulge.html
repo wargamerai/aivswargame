@@ -426,6 +426,24 @@ function draw() {
     }
   }
 
+  // 前進可能hexハイライト（青緑）
+  if (G.opPhase === 'advance' && G.combat.defHex && G.combat.advanceEligible.length > 0) {
+    const { col, row } = parseHexId(G.combat.defHex);
+    const center = hexCenter(col, row);
+    drawHexPath(center.x, center.y, HEX_SIZE);
+    ctx.fillStyle = 'rgba(80,200,255,0.35)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(80,200,255,0.8)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // 「前進」テキスト
+    ctx.fillStyle = 'rgba(80,200,255,0.9)';
+    ctx.font = `bold ${Math.round(HEX_SIZE * 0.25)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('前進', center.x, center.y);
+  }
+
   // NW突破マーカー
   if (G.exitMarkers) {
     for (const hid of G.exitMarkers) {
@@ -1150,6 +1168,7 @@ function applyCombatResult(result, attackers, defenders, defHexId) {
 
 function checkAdvance() {
   const cb = G.combat;
+  dbg('checkAdvance', {defHex:cb.defHex, attackers:cb.attackers});
   if (!cb.defHex) { finishCombat(); return; }
   // 防御hexが空なら攻撃側が前進可能
   const remaining = getUnitsAt(cb.defHex).filter(u => !u.eliminated);
@@ -2295,7 +2314,7 @@ function aiDoRetreat() {
 
 // AI戦闘後前進: 常に前進
 function aiDoAdvance() {
-  dbg('aiDoAdvance', {eligible:G.combat.advanceEligible});
+  dbg('aiDoAdvance', {eligible:G.combat.advanceEligible, defHex:G.combat.defHex});
   if (G.combat.advanceEligible.length === 0) {
     finishCombat();
     setTimeout(() => aiTick(), 500);
