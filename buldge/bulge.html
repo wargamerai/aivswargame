@@ -725,13 +725,22 @@ function calcReachable(unit) {
     const [cost, hid] = pq.shift();
     if (cost > dist.get(hid)) continue;
 
-    // ZOC: 敵隣接hexにいる場合、そこから先に進めない（ZOC内で停止）
-    // ただし開始hexからは移動可能
+    // ZOC判定: 味方がカバーしている敵のZOCは無効
+    // 敵ZOCから敵ZOCへの1hex移動は可能
     if (hid !== start) {
-      const inEnemyZOC = getNeighborIds(hid).some(adj =>
-        getUnitsAt(adj).some(u => u.side !== unit.side)
-      );
-      if (inEnemyZOC) continue; // ZOC内で停止 → ここから先に進めない
+      const hasActiveEnemyZOC = getNeighborIds(hid).some(adj => {
+        const enemies = getUnitsAt(adj).filter(e => e.side !== unit.side);
+        if (enemies.length === 0) return false;
+        // この敵hexに味方が隣接していればZOC無効
+        const enemyHasFriendlyNeighbor = getNeighborIds(adj).some(fn =>
+          getUnitsAt(fn).some(f => f.side === unit.side)
+        );
+        return !enemyHasFriendlyNeighbor;
+      });
+      if (hasActiveEnemyZOC) {
+        // ZOC内で停止 — ただし開始hexが敵ZOC内なら1hex移動は許可済み（prevから1hexで到達）
+        continue;
+      }
     }
 
     const nids = getNeighborIds(hid);
