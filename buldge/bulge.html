@@ -1334,6 +1334,8 @@ function placeReinforcements() {
       const entryHexes = getEntryHexes(u.entryTag);
       let placed = false;
       for (const hid of entryHexes) {
+        // 敵がいるhexからは登場不可
+        if (getUnitsAt(hid).some(o => o.side !== u.side)) continue;
         // 空いているhexに配置（機械化師団ペアは同hex可）
         const occupants = getUnitsAt(hid);
         const friendlyCount = occupants.filter(o => o.side === u.side).length;
@@ -1344,8 +1346,9 @@ function placeReinforcements() {
         }
       }
       if (!placed && entryHexes.length > 0) {
-        // 全て埋まっている → 最初のhexに強制配置
-        u.hexId = entryHexes[0];
+        // 全て敵占領 or 埋まっている → 登場延期
+        addLog('turn', `${u.name}: 登場hex使用不可 → 次ターンに延期`);
+        continue;
       } else if (!placed) {
         // entryTagに対応するhexがない → スキップ
         addLog('turn', `${u.name}: 登場hex未設定（${u.entryTag}）`);
