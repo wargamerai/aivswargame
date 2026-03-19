@@ -990,14 +990,18 @@ function autoUSShoot(title) {
       log('  外れ');
     }
 
-    // 確認ボタンで次へ
-    const btn = document.createElement('button');
-    btn.textContent = '確認';
-    btn.style.cssText = 'margin:6px 0;padding:4px 16px;font-size:1em;cursor:pointer;';
-    btn.onclick = function() { btn.remove(); setTimeout(() => processNext(), 300); };
-    const logEl = document.getElementById('log');
-    logEl.appendChild(btn);
-    logEl.scrollTop = logEl.scrollHeight;
+    // 確認ボタンで次へ（AI時は自動進行）
+    if (localStorage.getItem('usAutoAI') === '1') {
+      setTimeout(() => processNext(), 600);
+    } else {
+      const btn = document.createElement('button');
+      btn.textContent = '確認';
+      btn.style.cssText = 'margin:6px 0;padding:4px 16px;font-size:1em;cursor:pointer;';
+      btn.onclick = function() { btn.remove(); setTimeout(() => processNext(), 300); };
+      const logEl = document.getElementById('log');
+      logEl.appendChild(btn);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
   }
 
   processNext();
@@ -1175,14 +1179,18 @@ function autoJPShoot(title) {
       log('  外れ');
     }
 
-    // 確認ボタンで次へ
-    const btn = document.createElement('button');
-    btn.textContent = '確認';
-    btn.style.cssText = 'margin:6px 0;padding:4px 16px;font-size:1em;cursor:pointer;';
-    btn.onclick = function() { btn.remove(); setTimeout(() => processNext(), 300); };
-    const logEl = document.getElementById('log');
-    logEl.appendChild(btn);
-    logEl.scrollTop = logEl.scrollHeight;
+    // 確認ボタンで次へ（AI時は自動進行）
+    if (localStorage.getItem('usAutoAI') === '1') {
+      setTimeout(() => processNext(), 600);
+    } else {
+      const btn = document.createElement('button');
+      btn.textContent = '確認';
+      btn.style.cssText = 'margin:6px 0;padding:4px 16px;font-size:1em;cursor:pointer;';
+      btn.onclick = function() { btn.remove(); setTimeout(() => processNext(), 300); };
+      const logEl = document.getElementById('log');
+      logEl.appendChild(btn);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
   }
 
   processNext();
