@@ -990,6 +990,8 @@ function eliminateUnit(unit) {
 // ========== ターン管理 ==========
 function endPhase() {
   if (G.phase === 'reinforce') {
+    // 増援配置
+    placeReinforcements();
     G.phase = 'recovery';
     doRecovery();
     G.phase = 'operation';
@@ -1048,6 +1050,57 @@ function nextTurn() {
   addLog('turn', `═══ ターン${G.turn} ═══`);
   updateUI();
   draw();
+}
+
+function placeReinforcements() {
+  const reinforcements = REINFORCEMENTS[G.turn];
+  if (!reinforcements || reinforcements.length === 0) return;
+
+  // entryTagに対応するhexを検索
+  function getEntryHexes(tag) {
+    const hexes = [];
+    if (typeof TAG_MAP !== 'undefined') {
+      for (const [hid, t] of Object.entries(TAG_MAP)) {
+        if (t === tag) hexes.push(hid);
+      }
+    }
+    return hexes;
+  }
+
+  for (const rUnit of reinforcements) {
+    const u = Object.assign({}, rUnit, {
+      acted: false, flipped: false, eliminated: false, exited: false
+    });
+
+    if (u.entryTag) {
+      // 増援hexを探す
+      const entryHexes = getEntryHexes(u.entryTag);
+      let placed = false;
+      for (const hid of entryHexes) {
+        // 空いているhexに配置（機械化師団ペアは同hex可）
+        const occupants = getUnitsAt(hid);
+        const friendlyCount = occupants.filter(o => o.side === u.side).length;
+        if (friendlyCount === 0 || (u.mechPair && friendlyCount < 2)) {
+          u.hexId = hid;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed && entryHexes.length > 0) {
+        // 全て埋まっている → 最初のhexに強制配置
+        u.hexId = entryHexes[0];
+      } else if (!placed) {
+        // entryTagに対応するhexがない → スキップ
+        addLog('turn', `${u.name}: 登場hex未設定（${u.entryTag}）`);
+        continue;
+      }
+    }
+    // hexIdが既に設定されている場合（初期配置hex指定）はそのまま
+    if (!u.hexId) continue;
+
+    G.units.push(u);
+    addLog('turn', `増援: ${u.name} → ${u.hexId}`);
+  }
 }
 
 function doRecovery() {
