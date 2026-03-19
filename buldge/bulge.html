@@ -1056,7 +1056,8 @@ function onMoveClick(hid) {
       addLog('move', `${pair.name} → ${dispHex(hid)} (スタック移動)`);
     }
     // 裏にはしない — 相手の手番開始時にまとめて裏にする
-    addLog('move', `${G.selectedUnit.name} → ${dispHex(hid)} (${info.cost.toFixed(1)}MP)`);
+    const pathStr = G.selectedUnit.movePath.map(h => dispHex(h)).join('→');
+    addLog('move', `${G.selectedUnit.name}: ${pathStr} (${info.cost.toFixed(1)}MP)`);
 
     // 隣接敵チェック → 攻撃フェーズへ
     const movedUnit = G.selectedUnit;
@@ -1437,6 +1438,12 @@ function switchSide() {
   showFlash(`${sideName}の手番`, nextSide);
   updateUI();
   draw();
+  // 人間vsAI: 人間の手番に戻る時は確認待ち
+  if (!isAISide(nextSide) && G.mode !== 'hotseat' && G.mode !== 'watch') {
+    G._awaitConfirm = true;
+    updateRightPanel();
+    return; // 自動進行しない
+  }
   // AIチェック（フラッシュが見えるよう長めに待つ）
   scheduleAI(1800);
 }
@@ -1867,6 +1874,16 @@ function updateRightPanel() {
     const sideName = G.activeSide === 'german' ? 'ドイツ軍' : '連合軍';
     title.textContent = `作戦フェーズ — ${sideName}`;
 
+    // AI行動確認待ち
+    if (G._awaitConfirm) {
+      desc.textContent = 'AIの行動を確認してください';
+      panel.innerHTML = `<div class="section" style="text-align:center;padding:16px;">
+        <div style="color:#ffa657;font-size:1em;margin-bottom:12px;">ログを確認して続行</div>
+        <button class="btn primary" onclick="confirmAI()" style="font-size:1.1em;padding:8px 30px;">確認 → 続行</button>
+      </div>`;
+      return;
+    }
+
     if (G.selectedUnit) {
       const u = G.selectedUnit;
       const stacked = isStacked(u);
@@ -1987,6 +2004,13 @@ function stayInPlace() {
     switchSide();
     return;
   }
+  updateRightPanel();
+  draw();
+}
+
+// AI行動確認後に進行
+function confirmAI() {
+  G._awaitConfirm = false;
   updateRightPanel();
   draw();
 }
@@ -2357,7 +2381,8 @@ function aiDoMovement() {
       pair.acted = true;
       pair.movePath = [fromHex, ...info.path];
     }
-    addLog('move', `[AI] ${unit.name} → ${dispHex(bestHex)}`);
+    const pathStr = unit.movePath.map(h => dispHex(h)).join('→');
+    addLog('move', `[AI] ${unit.name}: ${pathStr}`);
     panToHex(bestHex);
 
     // 隣接敵チェック → 攻撃フェーズ or サイド切替
