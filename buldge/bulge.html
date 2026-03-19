@@ -1079,19 +1079,12 @@ function executeCombat() {
   const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
   let diff = atkPower - defPower;
 
-  // 戦闘支援: 防御hexに隣接する自軍hexで、攻撃者がいないhexの味方ユニット数
-  // 攻撃者と同じhexにいるユニットは支援にカウントしない
+  // 戦闘支援: 防御hexに隣接する自軍hexで、攻撃者を除いた味方がいるhex数
   const facility = FACILITY_MAP && FACILITY_MAP[defHexId];
   let support = 0;
   if (facility !== 'c') {
-    const attackerHexes = new Set();
-    for (const id of cb.attackers) {
-      const u = G.units.find(x => x.id === id);
-      if (u) attackerHexes.add(u.hexId);
-    }
     for (const nid of getNeighborIds(defHexId)) {
-      if (attackerHexes.has(nid)) continue; // 攻撃者のhexはスキップ
-      const friendly = getUnitsAt(nid).filter(u => u.side === G.activeSide);
+      const friendly = getUnitsAt(nid).filter(u => u.side === G.activeSide && !cb.attackers.includes(u.id));
       if (friendly.length > 0) support++;
     }
   }
