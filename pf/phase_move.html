@@ -1920,14 +1920,9 @@ function donePhase(fromStraight) {
   dumpFleet('US最終', usFleet);
   dumpMoveResult('移動結果', [...jpFleet, ...usFleet]);
   pushState();
-  // fullAutoAI時: 移動フェーズだけ確認ボタンで停止
+  // fullAutoAI時: 自動進行
   if (localStorage.getItem('fullAutoAI') === '1') {
-    document.getElementById('btnDone').textContent = '移動確認 → 次へ';
-    document.getElementById('btnDone').style.display = 'block';
-    document.getElementById('btnDone').onclick = function() {
-      this.style.display = 'none';
-      parent.postMessage({ type:'PHASE_DONE' }, '*');
-    };
+    parent.postMessage({ type:'PHASE_DONE' }, '*');
     return;
   }
   parent.postMessage({ type:'PHASE_DONE' }, '*');
