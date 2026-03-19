@@ -477,7 +477,7 @@ function drawMovePaths() {
 // ========== ユニット画像プリロード ==========
 const unitImgCache = {};
 function getUnitImg(u) {
-  const isFlipped = u.acted || u.flipped;
+  const isFlipped = u.flipped; // actedでは裏にしない、flippedのみ
   const imgFile = isFlipped && u.imgBack ? u.imgBack : u.img;
   if (!imgFile) return null;
   const base = isFlipped && u.imgBack ? IMG_BACK : IMG_BASE;
@@ -539,7 +539,7 @@ function drawUnits() {
       } else {
         // フォールバック: 色付き矩形+数字
         const colors = UNIT_COLORS[u.nation] || UNIT_COLORS.de;
-        const isFlipped = u.acted || u.flipped;
+        const isFlipped = u.flipped;
         ctx.fillStyle = isFlipped ? colors.flippedBg : colors.bg;
         ctx.strokeStyle = isSelected ? '#e94560' : colors.border;
         ctx.lineWidth = isSelected ? 3 : 1.5;
@@ -791,6 +791,7 @@ function onMoveClick(hid) {
     G.selectedUnit.movePath = [fromHex, ...info.path];
     G.selectedUnit.hexId = hid;
     G.selectedUnit.acted = true;
+    // 裏にはしない — 相手の手番開始時にまとめて裏にする
     addLog('move', `${G.selectedUnit.name} → ${hid} (${info.cost.toFixed(1)}MP)`);
 
     // 隣接敵チェック → 攻撃必須
@@ -941,7 +942,20 @@ function executeCombat() {
   if (forestMod > 0) addLog('combat', `森林防御: -${forestMod}`);
   addLog('combat', `ダイス: ${die}${support || forestMod ? ` → 修正後: ${modDie}` : ''} → 結果: ${result}`);
 
-  applyCombatResult(result, attackers, defenders, defHexId);
+  // 右パネルに戦闘結果を大きく表示
+  const RESULT_NAMES_JP = { AR:'攻撃側退却', NE:'効果なし', DR:'防御側退却', DD:'防御側混乱', EX:'相互損害', DE:'防御側壊滅' };
+  const panel = document.getElementById('actionPanel');
+  panel.innerHTML = `
+    <div style="text-align:center;padding:10px;">
+      <div style="font-size:0.9em;color:#aaa;margin-bottom:8px;">攻撃 ${atkPower} vs 防御 ${defPower} (${diff > 0 ? '+' : ''}${diff})</div>
+      ${support > 0 ? `<div style="color:#79c0ff;font-size:0.85em;">戦闘支援 +${support}</div>` : ''}
+      ${forestMod > 0 ? `<div style="color:#3fb950;font-size:0.85em;">森林防御 -${forestMod}</div>` : ''}
+      <div class="dice-result" style="margin:12px 0;">🎲 ${die}${(support || forestMod) ? ` → ${modDie}` : ''}</div>
+      <div style="font-size:2em;font-weight:bold;color:${result === 'DE' ? '#e94560' : result === 'NE' ? '#aaa' : '#ffa657'};margin:8px 0;">${RESULT_NAMES_JP[result] || result}</div>
+      <div style="font-size:1.1em;color:#888;margin-top:4px;">(${result})</div>
+    </div>`;
+
+  setTimeout(() => applyCombatResult(result, attackers, defenders, defHexId), 1500);
 }
 
 function applyCombatResult(result, attackers, defenders, defHexId) {
@@ -1057,6 +1071,8 @@ function endPhase() {
         G.activeSide = 'allied';
         G.opPhase = 'select';
         // ユニットの行動済みリセット
+        // ドイツ軍の行動済みユニットを裏にしてからリセット
+        G.units.filter(u => u.side === 'german' && u.acted).forEach(u => { u.flipped = true; });
         G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; delete u.movePath; });
         addLog('turn', `連合軍の作戦フェーズ`);
       } else {
@@ -1067,6 +1083,8 @@ function endPhase() {
       if (!G.germanDone) {
         G.activeSide = 'german';
         G.opPhase = 'select';
+        // 連合軍の行動済みユニットを裏にしてからリセット
+        G.units.filter(u => u.side === 'allied' && u.acted).forEach(u => { u.flipped = true; });
         G.units.filter(u => u.side === 'german').forEach(u => { u.acted = false; delete u.movePath; });
         addLog('turn', `ドイツ軍の作戦フェーズ`);
       } else {
@@ -1391,6 +1409,7 @@ function passPhase() {
   if (G.activeSide === 'german') {
     G.germanDone = true;
     if (!G.alliedDone) {
+      G.units.filter(u => u.side === 'german' && u.acted).forEach(u => { u.flipped = true; });
       G.activeSide = 'allied';
       G.opPhase = 'select';
       G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; delete u.movePath; });
@@ -1404,6 +1423,7 @@ function passPhase() {
   } else {
     G.alliedDone = true;
     if (!G.germanDone) {
+      G.units.filter(u => u.side === 'allied' && u.acted).forEach(u => { u.flipped = true; });
       G.activeSide = 'german';
       G.opPhase = 'select';
       G.units.filter(u => u.side === 'german').forEach(u => { u.acted = false; delete u.movePath; });
