@@ -213,6 +213,7 @@ const G = {
   log: [],
   undoStack: [],
   britishDeployedTurn: 0,  // 英軍投入ターン（0=未投入）
+  useMC: false,            // モンテカルロAI（コンソールで G.useMC=true で有効化）
 };
 
 // ========== マップ描画 ==========
@@ -2386,8 +2387,8 @@ function aiDoMovement() {
     return;
   }
 
-  // 最適な移動先を選択（モンテカルロ）
-  const bestHex = mcPickMove(unit, reachable);
+  // 最適な移動先を選択
+  const bestHex = G.useMC ? mcPickMove(unit, reachable) : aiPickMoveTarget(unit, reachable);
   if (bestHex && bestHex !== unit.hexId) {
     const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
     if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
@@ -2581,9 +2582,9 @@ function aiDoAttack() {
   }
 
   if (bestAttack) {
-    // モンテカルロで攻撃すべきか判断
+    // モンテカルロで攻撃すべきか判断（MC有効時のみ）
     const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
-    if (!mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
+    if (G.useMC && !mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
       // 攻撃見送り → mustAttackクリアしてサイド切替
       G.units.filter(u => u.side === side).forEach(u => { delete u.mustAttack; });
       G.units.filter(u => u.side === side && u.acted && !u.flipped).forEach(u => {
