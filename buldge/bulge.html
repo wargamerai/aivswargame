@@ -537,8 +537,8 @@ function drawUnits() {
 
     for (let i = 0; i < count; i++) {
       const u = units[i];
-      const offsetX = count > 1 ? (i === 0 ? -sz * 0.25 : sz * 0.25) : 0;
-      const offsetY = count > 1 ? (i === 0 ? sz * 0.22 : -sz * 0.22) : 0;
+      const offsetX = count > 1 ? (i === 0 ? -sz * 0.15 : sz * 0.3) : 0;
+      const offsetY = count > 1 ? (i === 0 ? sz * 0.15 : -sz * 0.35) : 0;
       const ux = center.x + offsetX;
       const uy = center.y + offsetY;
       const half = sz / 2;
@@ -856,6 +856,7 @@ function onMoveClick(hid) {
     );
     if (adjEnemy) {
       G.selectedUnit.mustAttack = true;
+      if (stacked && pair) pair.mustAttack = true;
     }
 
     G.selectedUnit = null;
@@ -1050,6 +1051,9 @@ function executeCombat() {
       <div style="font-size:1.1em;color:#888;margin-top:4px;">(${result})</div>
     </div>`;
 
+  // 攻撃参加ユニットのmustAttackをクリア
+  for (const u of attackers) { delete u.mustAttack; }
+
   setTimeout(() => applyCombatResult(result, attackers, defenders, defHexId), 1500);
 }
 
@@ -1172,6 +1176,16 @@ function endPhase() {
     resetCombat();
     addLog('turn', `━ 攻撃フェーズ ━ 敵hexをクリックして攻撃対象を選択`);
   } else if (G.phase === 'operation' && (G.opPhase === 'attack')) {
+    // 攻撃必須チェック: mustAttackフラグが残っているユニットがいれば終了不可
+    const mustAttackUnits = G.units.filter(u =>
+      u.side === G.activeSide && u.mustAttack && !u.eliminated && !u.exited
+    );
+    if (mustAttackUnits.length > 0 && !isAISide(G.activeSide)) {
+      addLog('combat', `攻撃必須のユニットがあります: ${mustAttackUnits.map(u => u.name).join(', ')}`);
+      return;
+    }
+    // AI側またはチェック通過: mustAttackフラグをクリア
+    G.units.filter(u => u.side === G.activeSide).forEach(u => { delete u.mustAttack; });
     // 攻撃終了 → 相手側へ
     if (G.activeSide === 'german') {
       G.germanDone = true;
@@ -1183,6 +1197,7 @@ function endPhase() {
         G.units.filter(u => u.side === 'german' && u.acted).forEach(u => { u.flipped = true; delete u.movePath; });
         G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; delete u.movePath; delete u._aiAttacked; });
         addLog('turn', `連合軍の作戦フェーズ`);
+        showFlash('連合軍の手番', 'allied');
       } else {
         nextTurn();
       }
@@ -1195,6 +1210,7 @@ function endPhase() {
         G.units.filter(u => u.side === 'allied' && u.acted).forEach(u => { u.flipped = true; delete u.movePath; });
         G.units.filter(u => u.side === 'german').forEach(u => { u.acted = false; delete u.movePath; delete u._aiAttacked; });
         addLog('turn', `ドイツ軍の作戦フェーズ`);
+        showFlash('ドイツ軍の手番', 'german');
       } else {
         nextTurn();
       }
@@ -1206,8 +1222,8 @@ function endPhase() {
   updateUI();
   draw();
 
-  // AIチェック
-  setTimeout(() => aiTick(), 600);
+  // AIチェック（フラッシュ表示のため長めに待つ）
+  setTimeout(() => aiTick(), 2000);
 }
 
 function nextTurn() {
@@ -2002,7 +2018,10 @@ function aiDoMovement() {
     const adjEnemy = getNeighborIds(bestHex).some(nid =>
       getUnitsAt(nid).some(u => u.side !== side)
     );
-    if (adjEnemy) unit.mustAttack = true;
+    if (adjEnemy) {
+      unit.mustAttack = true;
+      if (stacked && pair) pair.mustAttack = true;
+    }
     addLog('move', `[AI] ${unit.name} → ${bestHex}`);
   } else {
     unit.acted = true;
@@ -2125,6 +2144,27 @@ function aiDoAttack() {
     if (atkPower >= defPower && diff > bestDiff) {
       bestDiff = diff;
       bestAttack = { defHex, attackers: adjFriendly.map(u => u.id), defenders };
+    }
+  }
+
+  // 有利な攻撃がない場合、mustAttackユニットの強制攻撃を探す
+  if (!bestAttack) {
+    const mustUnits = G.units.filter(u =>
+      u.side === side && u.mustAttack && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
+    );
+    for (const mu of mustUnits) {
+      for (const nid of getNeighborIds(mu.hexId)) {
+        const enemies = getUnitsAt(nid).filter(e => e.side === enemySide);
+        if (enemies.length > 0) {
+          // 同hexの味方も参加させる
+          const coAttackers = getUnitsAt(mu.hexId).filter(u =>
+            u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
+          );
+          bestAttack = { defHex: nid, attackers: coAttackers.map(u => u.id), defenders: enemies };
+          break;
+        }
+      }
+      if (bestAttack) break;
     }
   }
 
