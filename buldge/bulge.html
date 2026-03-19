@@ -1178,7 +1178,7 @@ function applyCombatResult(result, attackers, defenders, defHexId) {
       G.opPhase = 'retreat';
       updateRightPanel();
       draw();
-      setTimeout(() => aiTick(), 600);
+      scheduleAI(600);
       return;
     case 'NE':
       finishCombat();
@@ -1188,7 +1188,7 @@ function applyCombatResult(result, attackers, defenders, defHexId) {
       G.opPhase = 'retreat';
       updateRightPanel();
       draw();
-      setTimeout(() => aiTick(), 600);
+      scheduleAI(600);
       return;
     case 'DD':
       for (const u of defenders) u.flipped = true;
@@ -1196,7 +1196,7 @@ function applyCombatResult(result, attackers, defenders, defHexId) {
       G.opPhase = 'retreat';
       updateRightPanel();
       draw();
-      setTimeout(() => aiTick(), 600);
+      scheduleAI(600);
       return;
     case 'EX':
       // 攻撃側1ユニット除去、防御側1ユニット除去
@@ -1230,7 +1230,7 @@ function checkAdvance() {
       addLog('combat', `戦闘後前進: ${cb.defHex} をクリックで前進（スキップ可）`);
       updateRightPanel();
       draw();
-      setTimeout(() => aiTick(), 600);
+      scheduleAI(600);
       return;
     }
   }
@@ -1304,7 +1304,7 @@ function endPhase() {
   draw();
 
   // AIチェック（フラッシュ表示のため長めに待つ）
-  setTimeout(() => aiTick(), 2000);
+  scheduleAI(2000);
 }
 
 // 1ユニット操作後のサイド切り替え
@@ -1328,7 +1328,7 @@ function switchSide() {
   updateUI();
   draw();
   // AIチェック
-  setTimeout(() => aiTick(), 800);
+  scheduleAI(800);
 }
 
 function nextTurn() {
@@ -1344,7 +1344,7 @@ function nextTurn() {
   draw();
 
   // AIチェック
-  setTimeout(() => aiTick(), 800);
+  scheduleAI(800);
 }
 
 function getEntryHexes(tag) {
@@ -1723,8 +1723,12 @@ function updateRightPanel() {
       const deFlipped = G.units.filter(u => u.side === 'german' && u.flipped && !u.eliminated);
       let html = '<div class="section"><h4>裏面のユニット（クリックで回復）</h4>';
       for (const u of deFlipped) {
-        html += `<div class="unit-card" onclick="recoverUnit('${u.id}')">
-          <span class="name">${u.name}</span>
+        const imgBase = u.imgBack ? IMG_BACK : IMG_BASE;
+        const imgFile = u.imgBack || u.img;
+        const imgTag = imgFile ? `<img src="${imgBase}${imgFile}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border-radius:2px;">` : '';
+        html += `<div class="unit-card" onclick="recoverUnit('${u.id}')" style="gap:6px;">
+          ${imgTag}
+          <span class="name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${u.name}</span>
           <span class="stats">${u.type} [${u.hexId}]</span>
         </div>`;
       }
@@ -1812,8 +1816,12 @@ function updateRightPanel() {
       let html = '<div class="section"><h4>ユニット一覧</h4>';
       for (const u of sideUnits) {
         const status = u.acted ? '✓' : u.flipped ? '混乱' : '';
-        html += `<div class="unit-card" onclick="selectUnit('${u.id}')">
-          <span class="name">${u.name}</span>
+        const imgBase = u.flipped && u.imgBack ? IMG_BACK : IMG_BASE;
+        const imgFile = u.flipped && u.imgBack ? u.imgBack : u.img;
+        const imgTag = imgFile ? `<img src="${imgBase}${imgFile}" style="width:32px;height:32px;object-fit:contain;flex-shrink:0;border-radius:2px;">` : '';
+        html += `<div class="unit-card" onclick="selectUnit('${u.id}')" style="gap:6px;">
+          ${imgTag}
+          <span class="name" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;">${u.name}</span>
           <span class="stats">${u.atk}/${u.def} ${status}</span>
         </div>`;
       }
@@ -1957,7 +1965,7 @@ function passPhase() {
   draw();
 
   // AIチェック
-  setTimeout(() => aiTick(), 1800);
+  scheduleAI(1800);
 }
 
 // ========== AI ==========
@@ -1973,6 +1981,13 @@ function isAISide(side) {
 
 // AI処理中フラグ（二重起動防止）
 let aiRunning = false;
+
+// AIタイマー管理（重複防止）
+let aiTimerId = null;
+function scheduleAI(delay) {
+  if (aiTimerId) clearTimeout(aiTimerId);
+  aiTimerId = setTimeout(() => { aiTimerId = null; aiTick(); }, delay);
+}
 
 // デバッグログ
 function dbg(...args) { console.log('[BULGE]', ...args); }
@@ -2024,7 +2039,7 @@ function aiTick() {
         aiDoRecovery();
         aiRunning = false;
         // 回復後、再度aiTickで回復フェーズ終了を処理
-        setTimeout(() => aiTick(), 300);
+        scheduleAI(300);
       }, 300);
       return;
     }
@@ -2191,7 +2206,7 @@ function aiDoMovement() {
       updateRightPanel();
       draw();
       // AI攻撃へ
-      setTimeout(() => aiTick(), 600);
+      scheduleAI(600);
     } else {
       unit.flipped = true; delete unit.movePath;
       if (stacked && pair) { pair.flipped = true; delete pair.movePath; }
@@ -2384,13 +2399,13 @@ function aiDoRetreat() {
   const ru = G.combat.retreatingUnits[0];
   if (!ru) {
     checkAdvance();
-    setTimeout(() => aiTick(), 500);
+    scheduleAI(500);
     return;
   }
   const unit = G.units.find(u => u.id === ru);
   if (!unit) {
     G.combat.retreatingUnits.shift();
-    setTimeout(() => aiTick(), 300);
+    scheduleAI(300);
     return;
   }
   const validHexes = getRetreatHexes(unit);
@@ -2420,7 +2435,7 @@ function aiDoRetreat() {
     }
     updateRightPanel();
     draw();
-    setTimeout(() => aiTick(), 1500);
+    scheduleAI(1500);
   } else {
     // 退却先なし → ユニット除去
     eliminateUnit(unit);
@@ -2431,7 +2446,7 @@ function aiDoRetreat() {
     }
     updateRightPanel();
     draw();
-    setTimeout(() => aiTick(), 1500);
+    scheduleAI(1500);
   }
 }
 
@@ -2440,7 +2455,7 @@ function aiDoAdvance() {
   dbg('aiDoAdvance', {eligible:G.combat.advanceEligible, defHex:G.combat.defHex});
   if (G.combat.advanceEligible.length === 0) {
     finishCombat();
-    setTimeout(() => aiTick(), 500);
+    scheduleAI(500);
     return;
   }
   const uid = G.combat.advanceEligible[0];
@@ -2460,7 +2475,7 @@ function aiDoAdvance() {
         if (G.combat.advanceEligible.length === 0) finishCombat();
         updateRightPanel();
         draw();
-        setTimeout(() => aiTick(), 500);
+        scheduleAI(500);
         return;
       }
     }
@@ -2476,7 +2491,7 @@ function aiDoAdvance() {
   }
   updateRightPanel();
   draw();
-  setTimeout(() => aiTick(), 500);
+  scheduleAI(500);
 }
 
 // ========== ゲーム開始 ==========
@@ -2503,7 +2518,7 @@ function startGame(mode) {
   draw();
 
   // AI開始チェック
-  setTimeout(() => aiTick(), 800);
+  scheduleAI(800);
 }
 
 // ========== 初期化 ==========
