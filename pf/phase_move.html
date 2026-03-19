@@ -628,28 +628,29 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
     }
   }
 
+  console.log(`[US-AI] ${lead.name} start=(${preCol},${preRow}) dir=${lead.dir} targetDir=${targetDir} spd=${spd} moveCount=${moveCount}`);
   let remain = moveCount;
   let turned = false;
-  let totalTurns = 0;  // 回頭回数（基本1回まで）
+  let totalTurns = 0;
   while (remain > 0) {
     if (lead.dir !== targetDir && !turned && !lead.cannotTurn && totalTurns < 1) {
+      const oldDir = lead.dir;
       lead.dir = aiTurnStep(lead.dir, targetDir);
       lead.turnCount = (lead.turnCount || 0) + 1;
       totalTurns++;
       remain--;
+      console.log(`[STEP] ${lead.name}: turn ${oldDir}→${lead.dir} remain=${remain} pos=(${lead.col},${lead.row})`);
       turned = true;
       if (remain <= 0) break;
     }
     const next = hexNeighbor(lead.col, lead.row, lead.dir);
     if (!next) break;
     if (next.row < 0) break;
-    // マップ端到達 → 退場
     if (next.col < 0 || next.col >= COLS) {
       lead.col = -1;
       lead.status = 'exited';
       lead.withdrawing = true;
       console.log(`${lead.name} マップ端到達 → 退場`);
-      // 随伴艦も退場
       const ci = lead.colIndex;
       const followers = usFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0);
       for (const f of followers) {
@@ -663,7 +664,6 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
 
     const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
     if (blocked) {
-      // 回頭可能 → 隣接ヘックスで回避を試みる
       if (!lead.cannotTurn) {
         const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
         let avoided = false;
@@ -674,6 +674,7 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
               && !occupied(altNext.col, altNext.row, lead) && !getSunkShip(altNext.col, altNext.row, lead)) {
             lead.path = lead.path || [];
             lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+            console.log(`[STEP] ${lead.name}: avoid (${lead.col},${lead.row})→(${altNext.col},${altNext.row}) altDir=${altDir} remain=${remain-1}`);
             lead.col = altNext.col;
             lead.row = altNext.row;
             moveFollowers(lead, usFleet);
@@ -684,14 +685,13 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
         }
         if (avoided) { turned = false; continue; }
       }
-      // 回避失敗: 最低速度以上なら停止
       const moved = moveCount - remain;
       if (moved >= minCount) break;
-      // 最低速度未達 → やむなく突入
     }
 
     lead.path = lead.path || [];
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+    console.log(`[STEP] ${lead.name}: move (${lead.col},${lead.row})→(${next.col},${next.row}) dir=${lead.dir} remain=${remain-1}`);
     lead.col = next.col;
     lead.row = next.row;
     var occAt = getOccupant(next.col, next.row, lead);
@@ -703,7 +703,6 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
     moveFollowers(lead, usFleet);
   }
   lead.remainMove = remain;
-  // 随伴艦の残り移動力も更新 + movedShips登録
   const ci = lead.colIndex;
   const leadIdx = usFleet.indexOf(lead);
   if (leadIdx >= 0) movedShips.add(leadIdx);
@@ -922,15 +921,18 @@ function aiMoveOneJPLead(lead, usc, sr) {
     }
   }
 
+  console.log(`[JP-AI] ${lead.name} start=(${preCol},${preRow}) dir=${lead.dir} targetDir=${targetDir} spd=${spd} moveCount=${moveCount}`);
   let remain = moveCount;
   let turned = false;
-  let totalTurns = 0;  // 回頭回数（基本1回まで）
+  let totalTurns = 0;
   while (remain > 0) {
     if (lead.dir !== targetDir && !turned && !lead.cannotTurn && totalTurns < 1) {
+      const oldDir = lead.dir;
       lead.dir = aiTurnStep(lead.dir, targetDir);
       lead.turnCount = (lead.turnCount || 0) + 1;
       totalTurns++;
       remain--;
+      console.log(`[STEP] ${lead.name}: turn ${oldDir}→${lead.dir} remain=${remain} pos=(${lead.col},${lead.row})`);
       turned = true;
       if (remain <= 0) break;
     }
@@ -963,6 +965,7 @@ function aiMoveOneJPLead(lead, usc, sr) {
             && !occupied(altNext.col, altNext.row, lead) && !getSunkShip(altNext.col, altNext.row, lead)) {
           lead.path = lead.path || [];
           lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+          console.log(`[STEP] ${lead.name}: avoid (${lead.col},${lead.row})→(${altNext.col},${altNext.row}) altDir=${altDir} remain=${remain-1}`);
           lead.col = altNext.col;
           lead.row = altNext.row;
           moveFollowers(lead, jpFleet);
@@ -972,13 +975,13 @@ function aiMoveOneJPLead(lead, usc, sr) {
         }
       }
       if (avoided) { turned = false; continue; }
-      // 回避失敗: 最低速度以上なら停止
       const moved = moveCount - remain;
       if (moved >= minCount) break;
     }
 
     lead.path = lead.path || [];
     lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+    console.log(`[STEP] ${lead.name}: move (${lead.col},${lead.row})→(${next.col},${next.row}) dir=${lead.dir} remain=${remain-1}`);
     lead.col = next.col;
     lead.row = next.row;
     if (blocked) {
@@ -992,7 +995,6 @@ function aiMoveOneJPLead(lead, usc, sr) {
     moveFollowers(lead, jpFleet);
   }
   lead.remainMove = remain;
-  // 随伴艦の残り移動力も更新
   const jpci = lead.colIndex;
   jpFleet.forEach((f, fi) => {
     if (!f.isLead && f.colIndex === jpci && f.status !== 'sunk' && f.col >= 0) {
