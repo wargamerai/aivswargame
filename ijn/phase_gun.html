@@ -843,8 +843,8 @@ function autoJPShoot(title) {
   const assignCount = {};
 
   for (const firer of jp) {
-    // 雷撃温存: DDのみ第一砲撃で近距離なら砲撃スキップ（CA/CLは常に射撃）
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b') && firer.type === 'DD' &&
+    // 雷撃温存: 魚雷搭載艦が第一砲撃で近距離なら砲撃スキップ（雷撃優先）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
         firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
       const closestDist = Math.min(...us.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
       if (closestDist <= 6) {
@@ -1066,8 +1066,8 @@ function autoUSShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of us) {
-    // 雷撃温存: DDのみ第一砲撃で近距離なら砲撃スキップ（雷撃優先）
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b') && firer.type === 'DD' &&
+    // 雷撃温存: 魚雷搭載艦が第一砲撃で近距離なら砲撃スキップ（雷撃優先）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
         firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
       const closestDist = Math.min(...jp.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
       if (closestDist <= 6) {
@@ -1253,7 +1253,7 @@ function resolveDamage(title) {
 
   const pending = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
   const summaryLines = []; // hub表示用サマリー
-  let jpWasHit = false; // 二重安全網（通常はautoUSShootで既にjpDetected=true）
+  let jpWasShot = false; // 砲撃を受けたか（命中/外れ問わず）
 
   if (pending.length === 0) {
     log('蓄積損害なし');
@@ -1267,7 +1267,7 @@ function resolveDamage(title) {
       const ship = arr && arr.find(s => s.name === d.name);
       if (!ship) continue;
 
-      if (d.side === 'jp' && (d.g > 0 || d.m > 0 || d.critSunk)) jpWasHit = true;
+      if (d.side === 'jp') jpWasShot = true;
 
       if (ship.status === 'sunk') {
         // 既に沈没（クリティカル轟沈等）— ダメージだけ加算（VP計算用）
@@ -1350,7 +1350,7 @@ function resolveDamage(title) {
   });
 
   // 二重安全網: autoUSShootで設定済みのはずだが、念のため
-  if (jpWasHit && !state.jpDetected) {
+  if (jpWasShot && !state.jpDetected) {
     state.jpDetected = true;
     state.jpFreeMove = true;
     state.contactMade = true;
