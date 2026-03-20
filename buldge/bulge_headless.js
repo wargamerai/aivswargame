@@ -154,6 +154,12 @@ function calcReachable(unit) {
       const terrain = TERRAIN_MAP[nid];
       if (!terrain || terrain === 'x') continue;
       if (getUnitsAt(nid).some(u => u.side !== unit.side)) continue;
+      // 装甲部隊は道路なし森に入れない
+      if (terrain === 'f' && isMechanized(unit)) {
+        const fromRoads = ROAD_MAP[hid] || [];
+        const toRoads = ROAD_MAP[nid] || [];
+        if (!fromRoads.some(r => toRoads.includes(r))) continue;
+      }
       const mc = getMoveCost(hid, nid, unit);
       const nc = cost + mc;
       if (nc <= maxMP && (!dist.has(nid) || nc < dist.get(nid))) {
