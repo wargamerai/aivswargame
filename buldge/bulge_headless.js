@@ -473,16 +473,106 @@ function aiPickMoveTarget(unit, reachable) {
   return bestHex;
 }
 
-// ========== 同期AI: 1ユニットだけ処理してtrue返す。処理なしならfalse ==========
+// ========== 全体スキャン評価: 盤面全体のスコア（ドイツ視点） ==========
+function evalGlobalBoard(units) {
+  let score = 0;
+  const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
+  const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
+
+  // 都市支配
+  if (FACILITY_MAP) {
+    for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
+      if (fac !== 'c') continue;
+      if (germanAlive.some(u => u.hexId === hid)) score += 10;
+      else if (alliedAlive.some(u => u.hexId === hid)) score -= 8;
+      else score += 2;
+    }
+  }
+
+  // 部隊
+  for (const u of units) {
+    if (u.eliminated) { score += u.side === 'allied' ? 6 : -7; continue; }
+    if (u.exited) { if (u._exitedNW) score += 5; continue; }
+    const power = u.flipped ? u.def : u.atk;
+    if (u.side === 'german') {
+      score += power * 0.5;
+      const col = parseInt(u.hexId.substring(0, 2)) - 1;
+      score += (20 - col) * 0.4;
+    } else {
+      score -= power * 0.6;
+      // 包囲度
+      const retreats = mcCountRetreats(units, u);
+      if (retreats === 0) score += 12;
+      else if (retreats === 1) score += 5;
+    }
+  }
+
+  // 連合戦線: 味方隣接でZOC壁
+  for (const au of alliedAlive) {
+    const adjFriends = getNeighborIds(au.hexId).filter(nid =>
+      alliedAlive.some(f => f.id !== au.id && f.hexId === nid)
+    ).length;
+    score -= adjFriends * 1.5; // 戦線が繋がっている = ドイツ不利
+    // 道路ブロック
+    const rv = mcRoadValue(au.hexId);
+    if (rv > 0) score -= rv * 1.2;
+    // 敵隣接ペナルティ: 連合が敵に隣接 = 包囲・攻撃リスク（ドイツ有利）
+    const adjEnemy = getNeighborIds(au.hexId).filter(nid =>
+      germanAlive.some(gu => gu.hexId === nid)
+    ).length;
+    if (adjEnemy > 0) {
+      const retreats = mcCountRetreats(units, au);
+      score += adjEnemy * 3; // 敵隣接 = ドイツ有利
+      if (retreats <= 1) score += 8; // 退路なし = さらにドイツ有利
+    }
+  }
+
+  // ドイツ包囲圧力: ドイツが連合に隣接してZOCで囲んでいる
+  for (const gu of germanAlive) {
+    const adjAllied = getNeighborIds(gu.hexId).filter(nid =>
+      alliedAlive.some(au => au.hexId === nid)
+    ).length;
+    if (adjAllied > 0) score += adjAllied * 2;
+  }
+
+  return score;
+}
+
+// ========== 同期AI: 全ユニット×全候補をスキャンして最善の1手を実行 ==========
 function aiPlayOneUnit(side) {
   G.activeSide = side;
   const enemySide = side === 'german' ? 'allied' : 'german';
 
-  // 未行動ユニット
   const units = G.units.filter(u =>
     u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
   );
-  if (units.length === 0) return false; // パス
+  if (units.length === 0) return false;
+
+  // === 連合軍: 自発的パス ===
+  if (side === 'allied') {
+    const germanRemaining = G.units.filter(u =>
+      u.side === 'german' && !u.acted && !u.flipped && !u.eliminated && !u.exited
+    ).length;
+    if (germanRemaining > 0) {
+      // 緊急チェック: 包囲危機 or 都市直接脅威
+      let urgent = false;
+      for (const u of units) {
+        const adjEnemy = getNeighborIds(u.hexId).some(nid =>
+          getUnitsAt(nid).some(e => e.side === 'german')
+        );
+        if (adjEnemy) {
+          const retreats = getRetreatHexes ? getRetreatHexes(u).length : 3;
+          if (retreats <= 1) { urgent = true; break; }
+        }
+        if (FACILITY_MAP && FACILITY_MAP[u.hexId] === 'c' && adjEnemy) {
+          urgent = true; break;
+        }
+      }
+      if (!urgent && germanRemaining > units.length) {
+        return false; // パスして待つ
+      }
+    }
+  }
 
   // NW突破（ドイツ）
   if (side === 'german') {
@@ -491,95 +581,139 @@ function aiPlayOneUnit(side) {
     }
   }
 
-  // 機械化を先に移動（ドイツ）
-  if (side === 'german') {
-    units.sort((a, b) => (isMechanized(a) ? 0 : 1) - (isMechanized(b) ? 0 : 1));
+  // === 全体スキャン: 現在の盤面スコア ===
+  const sign = side === 'german' ? 1 : -1; // ドイツ=最大化、連合=最小化
+  const baseScore = evalGlobalBoard(G.units);
+
+  // === 全ユニット×全候補hexをスキャン ===
+  let bestUnit = null, bestHex = null, bestDelta = -Infinity;
+
+  for (const unit of units) {
+    const reachable = calcReachable(unit);
+    // 待機も候補
+    const candidates = [unit.hexId];
+    for (const [hid] of reachable) candidates.push(hid);
+
+    for (const hid of candidates) {
+      // スタック制限チェック
+      if (hid !== unit.hexId) {
+        const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
+        if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
+      }
+
+      // 仮想移動して盤面評価
+      const savedHex = unit.hexId;
+      const stacked = isStacked(unit);
+      const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
+      const savedPairHex = pair ? pair.hexId : null;
+
+      unit.hexId = hid;
+      if (stacked && pair) pair.hexId = hid;
+
+      const newScore = evalGlobalBoard(G.units);
+      const delta = (newScore - baseScore) * sign; // 正=自軍有利に改善
+
+      // 連合防御: 敵隣接への移動はペナルティ（攻撃誘発リスク）
+      let penalty = 0;
+      if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
+        const adjEnemy = getNeighborIds(hid).some(nid =>
+          getUnitsAt(nid).some(e => e.side === 'german')
+        );
+        if (adjEnemy && hid !== savedHex) penalty = 8; // 新たに敵隣接に入る
+      }
+
+      // 局所ボーナス（全体評価に反映されにくい要素を補完）
+      let localBonus = 0;
+      if (G.useMC) localBonus = mcEvalPosition(hid, unit, G.units) * 0.1;
+
+      const totalDelta = delta - penalty + localBonus;
+
+      if (totalDelta > bestDelta) {
+        bestDelta = totalDelta;
+        bestUnit = unit;
+        bestHex = hid;
+      }
+
+      // 元に戻す
+      unit.hexId = savedHex;
+      if (pair) pair.hexId = savedPairHex;
+    }
   }
 
-  const unit = units[0];
-  const reachable = calcReachable(unit);
+  if (!bestUnit) return false;
 
-  if (reachable.size === 0) {
+  // === 最善手を実行 ===
+  const unit = bestUnit;
+  if (bestHex === unit.hexId) {
+    // 待機が最善
     unit.acted = true; unit.flipped = true;
     return true;
   }
 
-  // 移動先選択
-  const bestHex = G.useMC ? mcPickMove(unit, reachable) : aiPickMoveTarget(unit, reachable);
+  const stacked = isStacked(unit);
+  const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
+  unit.hexId = bestHex;
+  unit.acted = true;
+  if (stacked && pair && !pair.acted) {
+    pair.hexId = bestHex;
+    pair.acted = true;
+  }
 
-  if (bestHex && bestHex !== unit.hexId) {
-    const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
-    if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
-      unit.acted = true; unit.flipped = true;
-      return true;
-    }
-    const stacked = isStacked(unit);
-    const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
-    unit.hexId = bestHex;
-    unit.acted = true;
-    if (stacked && pair && !pair.acted) {
-      pair.hexId = bestHex;
-      pair.acted = true;
-    }
-
-    // 隣接敵 → 攻撃判定
-    const adjEnemy = getNeighborIds(bestHex).some(nid =>
-      getUnitsAt(nid).some(u => u.side !== side)
+  // 隣接敵 → 攻撃判定
+  const adjEnemy = getNeighborIds(bestHex).some(nid =>
+    getUnitsAt(nid).some(u => u.side !== side)
+  );
+  if (adjEnemy) {
+    const enemyHexes = new Set();
+    const actedUnits = G.units.filter(u =>
+      u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
     );
-    if (adjEnemy) {
-      const enemyHexes = new Set();
-      const actedUnits = G.units.filter(u =>
-        u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
-      );
-      for (const au of actedUnits) {
-        for (const nid of getNeighborIds(au.hexId)) {
-          if (getUnitsAt(nid).some(e => e.side === enemySide)) enemyHexes.add(nid);
+    for (const au of actedUnits) {
+      for (const nid of getNeighborIds(au.hexId)) {
+        if (getUnitsAt(nid).some(e => e.side === enemySide)) enemyHexes.add(nid);
+      }
+    }
+    let bestAttack = null, bestDiff = -Infinity;
+    for (const defHex of enemyHexes) {
+      const defenders = getUnitsAt(defHex).filter(u => u.side === enemySide);
+      const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+      const adjF = [];
+      for (const nid of getNeighborIds(defHex)) {
+        adjF.push(...getUnitsAt(nid).filter(u =>
+          u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
+        ));
+      }
+      const atkPower = adjF.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+      const d = atkPower - defPower;
+      if (atkPower >= defPower && d > bestDiff) {
+        bestDiff = d;
+        bestAttack = { defHex, attackers: adjF.map(u => u.id), defenders };
+      }
+    }
+    if (bestAttack) {
+      if (G.useMC) {
+        const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
+        if (!mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
+          unit.flipped = true; if (stacked && pair) pair.flipped = true;
+          return true;
         }
       }
-      let bestAttack = null, bestDiff = -Infinity;
-      for (const defHex of enemyHexes) {
-        const defenders = getUnitsAt(defHex).filter(u => u.side === enemySide);
-        const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-        const adjF = [];
-        for (const nid of getNeighborIds(defHex)) {
-          adjF.push(...getUnitsAt(nid).filter(u =>
-            u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
-          ));
-        }
-        const atkPower = adjF.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-        const d = atkPower - defPower;
-        if (atkPower >= defPower && d > bestDiff) {
-          bestDiff = d;
-          bestAttack = { defHex, attackers: adjF.map(u => u.id), defenders };
-        }
+      for (const uid of bestAttack.attackers) {
+        const u = G.units.find(x => x.id === uid);
+        if (u) u._aiAttacked = true;
       }
-      if (bestAttack) {
-        if (G.useMC) {
-          const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
-          if (!mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
-            unit.flipped = true; if (stacked && pair) pair.flipped = true;
-            return true;
-          }
-        }
-        for (const uid of bestAttack.attackers) {
-          const u = G.units.find(x => x.id === uid);
-          if (u) u._aiAttacked = true;
-        }
-        resetCombat();
-        G.combat.defHex = bestAttack.defHex;
-        G.combat.defenders = bestAttack.defenders;
-        G.combat.attackers = bestAttack.attackers;
-        executeCombatSync();
-      } else {
-        unit.flipped = true;
-        if (stacked && pair) pair.flipped = true;
-      }
+      resetCombat();
+      G.combat.defHex = bestAttack.defHex;
+      G.combat.defenders = bestAttack.defenders;
+      G.combat.attackers = bestAttack.attackers;
+      executeCombatSync();
     } else {
       unit.flipped = true;
       if (stacked && pair) pair.flipped = true;
     }
   } else {
-    unit.acted = true; unit.flipped = true;
+    unit.flipped = true;
+    if (stacked && pair) pair.flipped = true;
   }
   return true;
 }
@@ -646,9 +780,11 @@ function playOneGame(useMC) {
 const args = process.argv.slice(2);
 const numGames = parseInt(args.find(a => !a.startsWith('-')) || '100');
 const useMC = args.includes('--mc');
+const simsArg = args.find(a => a.startsWith('--sims='));
+if (simsArg && typeof MC !== 'undefined') MC.SIMS = parseInt(simsArg.split('=')[1]) || 30;
 
 console.log(`=== バルジの戦い AI対局 ===`);
-console.log(`対局数: ${numGames}, MC: ${useMC ? 'ON' : 'OFF'}`);
+console.log(`対局数: ${numGames}, MC: ${useMC ? 'ON' : 'OFF'}${useMC ? ' (sims=' + MC.SIMS + ')' : ''}`);
 console.log('');
 
 let germanWins = 0, alliedWins = 0, draws = 0;
