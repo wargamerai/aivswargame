@@ -508,10 +508,7 @@ function mcGlobalScanMove(side) {
     const reachable = calcReachable(unit);
     const candidates = [unit.hexId];
     for (const [hid] of reachable) {
-      // 連合防御: 候補を2hex以内に制限（全力後退禁止）
-      if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
-        if (hexDist(unit.hexId, hid) > 2) continue;
-      }
+      // （距離制限なし: evalGlobalBoardのドイツ到達hex数で自然に判定）
       candidates.push(hid);
     }
 
