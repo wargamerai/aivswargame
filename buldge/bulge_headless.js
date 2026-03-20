@@ -569,7 +569,13 @@ function aiPlayOneUnit(side) {
     const reachable = calcReachable(unit);
     // 待機も候補
     const candidates = [unit.hexId];
-    for (const [hid] of reachable) candidates.push(hid);
+    for (const [hid] of reachable) {
+      // 連合防御: 候補を2hex以内に制限
+      if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
+        if (hexDist(unit.hexId, hid) > 2) continue;
+      }
+      candidates.push(hid);
+    }
 
     for (const hid of candidates) {
       // スタック制限チェック
