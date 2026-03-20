@@ -2688,8 +2688,10 @@ function aiDoRetreat() {
           getUnitsAt(adj).some(f => f.side === unit.side && f.id !== unit.id)
         )) zocLink++;
       }
-      score += adjFriendDirect * 3; // 味方隣接
-      score += zocLink * 5;          // ZOC連結（1hex離れ戦線）が最高
+      // 味方隣接はZOC無駄 → 低評価。1hex離れ（ZOC連結）が最高
+      if (adjFriendDirect > 0 && zocLink === 0) score += 1; // 隣接だけ = 低い
+      else if (adjFriendDirect === 0 && zocLink > 0) score += zocLink * 8; // ZOC連結のみ = 最高
+      else score += zocLink * 6 + adjFriendDirect * 1; // 混合
 
       // 道路交差点 → ブロック位置として優先
       const roads = ROAD_MAP && ROAD_MAP[h];

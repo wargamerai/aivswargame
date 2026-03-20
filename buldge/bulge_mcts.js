@@ -436,6 +436,14 @@ function evalGlobalBoard(units) {
   const germanReach = mcCalcGermanReach();
   score += germanReach * 0.3;
 
+  // ZOC無効化: ドイツが連合に隣接 → その連合のZOCが無効化され戦線に穴
+  for (const au of alliedAlive) {
+    const adjGerman = getNeighborIds(au.hexId).filter(nid =>
+      germanAlive.some(gu => gu.hexId === nid)
+    ).length;
+    if (adjGerman > 0) score += adjGerman * 4; // ZOC無効化 = ドイツ大有利
+  }
+
   return score;
 }
 
@@ -497,17 +505,25 @@ function mcShouldAlliedPass() {
   );
   if (germanRemaining === 0 || alliedUnits.length === 0) return false;
 
-  // 緊急: 包囲危機 or 都市直接脅威
+  // 緊急: 包囲危機 or 都市脅威 or 西側に敵が回り込んでいる
   for (const u of alliedUnits) {
-    const adjEnemy = getNeighborIds(u.hexId).some(nid =>
+    const unitCol = parseInt(u.hexId.substring(0, 2)) - 1;
+    const adjEnemyHexes = getNeighborIds(u.hexId).filter(nid =>
       getUnitsAt(nid).some(e => e.side === 'german')
     );
-    if (adjEnemy) {
+    if (adjEnemyHexes.length > 0) {
       const retreats = typeof getRetreatHexes === 'function' ? getRetreatHexes(u).length : 3;
-      if (retreats <= 1) return false; // 緊急 → 動く
+      if (retreats <= 2) return false; // 退路3未満 → 緊急離脱
+      // 敵が西側（col小さい）にいる → 回り込まれている
+      const enemyOnWest = adjEnemyHexes.some(nid => {
+        const ec = parseInt(nid.substring(0, 2)) - 1;
+        return ec < unitCol;
+      });
+      if (enemyOnWest) return false; // 西側に回り込まれた → 即離脱
     }
-    if (FACILITY_MAP && FACILITY_MAP[u.hexId] === 'c' && adjEnemy) {
-      return false; // 都市防衛 → 動く
+    // 都市に敵隣接
+    if (FACILITY_MAP && FACILITY_MAP[u.hexId] === 'c' && adjEnemyHexes.length > 0) {
+      return false;
     }
   }
   // ドイツ残り多い → パス

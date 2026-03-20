@@ -295,7 +295,8 @@ function doRetreat(unit) {
       const adjFriend = adjToH.filter(nid =>
         G.units.some(f => f.hexId === nid && f.side === unit.side && f.id !== unit.id && !f.eliminated && !f.exited)
       ).length;
-      score += adjFriend * 3;
+      // 味方隣接はZOC無駄 → 低い。ZOC連結（1hex離れ）を優先
+      if (adjFriend > 0) score += 1; // 隣接は低評価
       // 道路交差点
       const roads = ROAD_MAP && ROAD_MAP[h];
       if (roads && roads.length > 0) score += roads.length * 3;
