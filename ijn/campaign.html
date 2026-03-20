@@ -733,8 +733,10 @@ function applyBattleResultData(importData, endTurn) {
             if (data.status === 'sunk' && ship.status !== 'sunk') {
                 ship.status = 'sunk';
                 ship.rest = 99;
-                if (isUs) jpScore += (ship.capG + ship.capM) * ship.vp;
-                else usScore += (ship.capG + ship.capM) * ship.vp;
+                const sunkScore = (ship.capG + ship.capM) * ship.vp;
+                const dmgScored = (addG + addM) * ship.vp;
+                if (isUs) jpScore += sunkScore - dmgScored;
+                else usScore += sunkScore - dmgScored;
                 logMsg(`${ship.name} クリティカル轟沈！`);
             }
         }
