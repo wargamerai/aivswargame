@@ -419,7 +419,7 @@ function mcDecideAttack(attackers, defenders, defHexId) {
   const noAtkAvg = noAtkTotalScore / MC.SIMS;
   const shouldAttack = (side === 'german') ? (atkAvg > noAtkAvg) : (atkAvg < noAtkAvg);
 
-  console.log(`[MC] ATTACK? ${dispHex(defHexId)} atk=${atkAvg.toFixed(1)} skip=${noAtkAvg.toFixed(1)} sup=${support || 0} → ${shouldAttack ? '攻撃' : '見送り'}`);
+  console.log(`[MC] ATTACK? ${dispHex(defHexId)} atk=${atkAvg.toFixed(1)} skip=${noAtkAvg.toFixed(1)} → ${shouldAttack ? '攻撃' : '見送り'}`);
   addLog('combat', `[AI] ${dispHex(defHexId)}攻撃${shouldAttack ? '実行' : '見送り'} (atk=${atkAvg.toFixed(1)} / skip=${noAtkAvg.toFixed(1)})`);
   return shouldAttack;
 }
