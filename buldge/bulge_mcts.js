@@ -381,22 +381,32 @@ function mcCalcGermanReach() {
   const reachSet = new Set();
   for (const gu of germanAlive) {
     reachSet.add(gu.hexId);
+    const guRoads = ROAD_MAP[gu.hexId] || [];
     for (const n1 of getNeighborIds(gu.hexId)) {
       const t1 = TERRAIN_MAP[n1];
       if (!t1 || t1 === 'x') continue;
       if (alliedHexes.has(n1)) continue;
+      // 装甲は道路なし森に入れない
+      if (t1 === 'f') {
+        const n1Roads = ROAD_MAP[n1] || [];
+        if (!guRoads.some(r => n1Roads.includes(r))) continue;
+      }
       reachSet.add(n1);
-      if (alliedZOC.has(n1)) continue; // ZOCで停止
+      if (alliedZOC.has(n1)) continue;
+      const n1Roads = ROAD_MAP[n1] || [];
       for (const n2 of getNeighborIds(n1)) {
         const t2 = TERRAIN_MAP[n2];
         if (!t2 || t2 === 'x') continue;
         if (alliedHexes.has(n2)) continue;
+        if (t2 === 'f' && !n1Roads.some(r => (ROAD_MAP[n2]||[]).includes(r))) continue;
         reachSet.add(n2);
         if (alliedZOC.has(n2)) continue;
+        const n2Roads = ROAD_MAP[n2] || [];
         for (const n3 of getNeighborIds(n2)) {
           const t3 = TERRAIN_MAP[n3];
           if (!t3 || t3 === 'x') continue;
           if (alliedHexes.has(n3)) continue;
+          if (t3 === 'f' && !n2Roads.some(r => (ROAD_MAP[n3]||[]).includes(r))) continue;
           reachSet.add(n3);
         }
       }
@@ -442,6 +452,23 @@ function evalGlobalBoard(units) {
   // ドイツ到達可能hex数（多い=ドイツ有利、連合がブロックしていない）
   const germanReach = mcCalcGermanReach();
   score += germanReach * 0.5;
+
+  // 装甲が道路なし森にいる = 閉じ込めリスク（ドイツ不利）
+  for (const gu of germanAlive) {
+    if (isMechanized(gu)) {
+      const t = TERRAIN_MAP[gu.hexId];
+      if (t === 'f') {
+        const roads = ROAD_MAP[gu.hexId] || [];
+        // 隣接hexへの道路接続を確認
+        const canEscape = getNeighborIds(gu.hexId).some(nid => {
+          const nRoads = ROAD_MAP[nid] || [];
+          return roads.some(r => nRoads.includes(r));
+        });
+        if (!canEscape) score -= 8; // 完全に閉じ込め
+        else if (roads.length === 0) score -= 4; // 道路なし森
+      }
+    }
+  }
 
   // ZOC無効化: ドイツが連合に隣接 → その連合のZOCが無効化され戦線に穴
   for (const au of alliedAlive) {
