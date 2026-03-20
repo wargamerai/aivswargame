@@ -364,30 +364,7 @@ function draw() {
   // 背景画像
   if (mapLoaded) ctx.drawImage(mapImg, 0, 0);
 
-  // 地形オーバーレイ
-  for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS; r++) {
-      const id = hexId(c, r);
-      const terrain = TERRAIN_MAP[id] || 'p';
-      if (terrain === 'x') continue;
-      const center = hexCenter(c, r);
-      drawHexPath(center.x, center.y, HEX_SIZE);
-      ctx.fillStyle = TERRAIN_COLORS[terrain] || 'rgba(0,0,0,0)';
-      ctx.fill();
-
-      // 施設
-      const fac = FACILITY_MAP && FACILITY_MAP[id];
-      if (fac && FACILITY_COLORS[fac]) {
-        drawHexPath(center.x, center.y, HEX_SIZE * 0.5);
-        ctx.fillStyle = FACILITY_COLORS[fac];
-        ctx.fill();
-      }
-    }
-  }
-
-  // 道路・河川
-  drawRoads();
-  drawRivers();
+  // 地形・道路・河川オーバーレイは非表示（マップ画像に含まれるため）
 
   // hexグリッド線
   ctx.strokeStyle = 'rgba(200,200,200,0.15)';
