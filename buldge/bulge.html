@@ -2200,9 +2200,26 @@ function isAISide(side) {
 // AI処理中フラグ（二重起動防止）
 let aiRunning = false;
 
+// AI一時停止（スペースキーでトグル）
+let aiPaused = false;
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && G.mode === 'watch') {
+    e.preventDefault();
+    aiPaused = !aiPaused;
+    if (aiPaused) {
+      showFlash('⏸ 一時停止', '');
+      if (aiTimerId) { clearTimeout(aiTimerId); aiTimerId = null; }
+    } else {
+      showFlash('▶ 再開', '');
+      scheduleAI(300);
+    }
+  }
+});
+
 // AIタイマー管理（重複防止）
 let aiTimerId = null;
 function scheduleAI(delay) {
+  if (aiPaused) return; // 一時停止中はスケジュールしない
   if (aiTimerId) clearTimeout(aiTimerId);
   aiTimerId = setTimeout(() => { aiTimerId = null; aiTick(); }, delay);
 }
