@@ -178,6 +178,10 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
 <script>
 'use strict';
 
+// ブラウザバック無効化（マップ横移動でジェスチャー誤爆防止）
+history.pushState(null, '', location.href);
+window.addEventListener('popstate', () => history.pushState(null, '', location.href));
+
 // ========== 定数 ==========
 const COLS = MAP_CONFIG.cols;
 const ROWS = MAP_CONFIG.rows;
