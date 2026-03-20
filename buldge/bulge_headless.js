@@ -243,10 +243,15 @@ function executeCombatSync() {
     }
   }
   const terrain = TERRAIN_MAP[defHexId];
-  const forestMod = terrain === 'f' ? 1 : 0;
+  const isForest = terrain === 'f';
   const die = Math.floor(Math.random() * 6) + 1;
-  const modDie = die + support - forestMod;
-  const result = lookupCRT(diff, modDie);
+  const modDie = die + support;
+  let result = lookupCRT(diff, modDie);
+  // 森林結果修正: 1段階防御側有利にシフト
+  if (isForest) {
+    const FOREST_SHIFT = { DE:'EX', EX:'DD', DD:'DR', DR:'NE', NE:'AR', AR:'AR' };
+    result = FOREST_SHIFT[result] || result;
+  }
   cb.result = result;
   applyCombatSync(result, attackers, defenders, defHexId);
 }
