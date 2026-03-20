@@ -1892,10 +1892,13 @@ function updateRightPanel() {
       }
       if (deFlipped.length === 0) html += '<div style="color:#888;">回復対象なし</div>';
       html += '</div>';
+      // 回復対象がいて回復回数が残っている間は完了ボタンを無効化
+      const canFinish = deFlipped.length === 0 || G.recovery.remaining === 0;
       html += `<div class="section" style="display:flex;gap:8px;">
         <button class="btn" onclick="undoRecovery()">やり直し</button>
-        <button class="btn primary" onclick="endPhase()">回復完了 → 作戦へ</button>
+        <button class="btn primary" onclick="endPhase()" ${canFinish ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"'}>回復完了 → 作戦へ</button>
       </div>`;
+      if (!canFinish) html += `<div style="color:#ffa657;font-size:0.85em;margin-top:4px;">回復対象を選択してください（残り${G.recovery.remaining}回）</div>`;
       panel.innerHTML = html;
     } else {
       desc.textContent = G.recovery ? '回復完了' : '回復対象なし';
