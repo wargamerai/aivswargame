@@ -421,14 +421,25 @@ function evalGlobalBoard(units) {
   const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
   const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
 
-  // 都市VP（重みを下げる — 戦線維持のほうが重要）
+  // 都市VP（低め — 交差点のほうが重要）
   if (FACILITY_MAP) {
     for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
       if (fac !== 'c') continue;
-      if (germanAlive.some(u => u.hexId === hid)) score += 5;
-      else if (alliedAlive.some(u => u.hexId === hid)) score -= 3;
+      if (germanAlive.some(u => u.hexId === hid)) score += 3;
+      else if (alliedAlive.some(u => u.hexId === hid)) score -= 2;
       else score += 1;
     }
+  }
+
+  // 道路交差点の支配（都市より重要）
+  for (const au of alliedAlive) {
+    const roads = ROAD_MAP[au.hexId] || [];
+    if (roads.length >= 2) score -= roads.length * 3; // 複数路線交差 = ドイツ不利
+    else if (roads.length === 1) score -= 1;
+  }
+  for (const gu of germanAlive) {
+    const roads = ROAD_MAP[gu.hexId] || [];
+    if (roads.length >= 2) score += roads.length * 2;
   }
 
   // 部隊残存
@@ -475,7 +486,7 @@ function evalGlobalBoard(units) {
     const adjGerman = getNeighborIds(au.hexId).filter(nid =>
       germanAlive.some(gu => gu.hexId === nid)
     ).length;
-    if (adjGerman > 0) score += adjGerman * 4; // ZOC無効化 = ドイツ大有利
+    if (adjGerman > 0) score += adjGerman * 6; // ZOC無効化+戦闘支援 = ドイツ大有利
   }
 
   return score;
@@ -496,7 +507,13 @@ function mcGlobalScanMove(side) {
   for (const unit of units) {
     const reachable = calcReachable(unit);
     const candidates = [unit.hexId];
-    for (const [hid] of reachable) candidates.push(hid);
+    for (const [hid] of reachable) {
+      // 連合防御: 候補を2hex以内に制限（全力後退禁止）
+      if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
+        if (hexDist(unit.hexId, hid) > 2) continue;
+      }
+      candidates.push(hid);
+    }
 
     for (const hid of candidates) {
       if (hid !== unit.hexId) {
