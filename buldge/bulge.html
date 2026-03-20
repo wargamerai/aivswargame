@@ -1902,7 +1902,11 @@ function updateRightPanel() {
       panel.innerHTML = html;
     } else {
       desc.textContent = G.recovery ? '回復完了' : '回復対象なし';
-      panel.innerHTML = '<div class="section"><button class="btn primary" onclick="endPhase()">回復完了 → 作戦へ</button></div>';
+      const hasRecovered = G.recovery && G.recovery.recovered && G.recovery.recovered.length > 0;
+      panel.innerHTML = `<div class="section" style="display:flex;gap:8px;">
+        ${hasRecovered ? '<button class="btn" onclick="undoRecovery()">やり直し</button>' : ''}
+        <button class="btn primary" onclick="endPhase()">回復完了 → 作戦へ</button>
+      </div>`;
     }
   } else if (G.phase === 'operation') {
     const sideName = G.activeSide === 'german' ? 'ドイツ軍' : '連合軍';
