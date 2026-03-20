@@ -370,6 +370,7 @@ function usThreatOf(s) {
 function saveCampaignState() {
     const state = {
         currentTurn, jpScore, usScore, usedRolls, maxUsHandicap, currentPhase, jpMission,
+        lastJpHandicap, lastUsHandicap,
         jpAllShipsState: jpAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, rest: s.rest })),
         usAllShipsState: usAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, used: s.used })),
         currentJpFleetNames: currentJpFleet.map(s => s.name),
@@ -395,6 +396,8 @@ function loadCampaignState() {
         battleHistory = state.battleHistory || [];
         scoutResults = state.scoutResults || [];
         maxUsHandicap = state.maxUsHandicap || 0;
+        lastJpHandicap = state.lastJpHandicap || 0;
+        lastUsHandicap = state.lastUsHandicap || 0;
 
         if (state.jpAllShipsState) {
             state.jpAllShipsState.forEach(saved => {
@@ -1097,8 +1100,12 @@ function applyDamageToShip(ship, addG, addM, isUs) {
 
 // --- 海戦結果サマリー表示 ---
 function showBattleSummary(b) {
-    const jpGain = b.jpScoreGain || 0;
-    const usGain = b.usScoreGain || 0;
+    const jpDmg = b.jpScoreGain || 0;
+    const usDmg = b.usScoreGain || 0;
+    const jpHandi = b.jpHandicap || 0;
+    const usHandi = b.usHandicap || 0;
+    const jpGain = jpDmg + jpHandi;
+    const usGain = usDmg + usHandi;
     const diff = usGain - jpGain; // PF版: 米軍視点
 
     let verdict, verdictColor;
@@ -1116,16 +1123,13 @@ function showBattleSummary(b) {
     document.getElementById('summaryUsScore').textContent = usGain;
     document.getElementById('summaryJpScore').textContent = jpGain;
 
-    const dmgUs = usGain - (b.usHandicap||0);
-    const dmgJp = jpGain - (b.jpHandicap||0) - (b.jpBonus||0);
-
     let html = '<div style="background:#2a3a4a; border-radius:8px; padding:14px; margin-bottom:12px;">';
     html += '<h3 style="color:#ccc; margin:0 0 10px 0;">得点内訳</h3>';
     html += '<table style="width:100%; border-collapse:collapse; font-size:1em;">';
-    html += `<tr><td style="color:#aaa; padding:5px 8px;">損害得点</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">米軍 +${dmgUs}</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">日本軍 +${dmgJp}</td></tr>`;
+    html += `<tr><td style="color:#aaa; padding:5px 8px;">損害得点</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">米軍 +${usDmg}</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">日本軍 +${jpDmg}</td></tr>`;
 
-    if ((b.jpHandicap||0) > 0 || (b.usHandicap||0) > 0) {
-        html += `<tr><td style="color:#aaa; padding:5px 8px;">ハンディキャップ</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">${(b.usHandicap||0) > 0 ? '+'+b.usHandicap : '-'}</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">${(b.jpHandicap||0) > 0 ? '+'+b.jpHandicap : '-'}</td></tr>`;
+    if (jpHandi > 0 || usHandi > 0) {
+        html += `<tr><td style="color:#aaa; padding:5px 8px;">ハンディキャップ</td><td style="color:#88aaff; padding:5px 8px; text-align:right;">${usHandi > 0 ? '+'+usHandi : '-'}</td><td style="color:#ff8888; padding:5px 8px; text-align:right;">${jpHandi > 0 ? '+'+jpHandi : '-'}</td></tr>`;
     }
 
     if ((b.jpBonus||0) > 0) {
@@ -1209,20 +1213,25 @@ function showCampaignSummary() {
         battlesHtml += `<h3 style="color:#ffd700; margin:0 0 8px 0;">${b.battleName}</h3>`;
         battlesHtml += `<table style="width:100%; border-collapse:collapse; font-size:0.9em;">`;
 
-        const dmgUs = b.usScoreGain - (b.usHandicap||0);
-        const dmgJp = b.jpScoreGain - (b.jpHandicap||0) - (b.jpBonus||0);
+        const bJpHandi = b.jpHandicap || 0;
+        const bUsHandi = b.usHandicap || 0;
+        const bJpBonus = b.jpBonus || 0;
+        const dmgUs = b.usScoreGain;
+        const dmgJp = b.jpScoreGain;
+        const totalUs = dmgUs + bUsHandi;
+        const totalJp = dmgJp + bJpHandi + bJpBonus;
         battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">損害得点</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">米軍 +${dmgUs}</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">日本軍 +${dmgJp}</td></tr>`;
 
-        if ((b.jpHandicap||0) > 0 || (b.usHandicap||0) > 0) {
-            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">ハンディキャップ</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">${(b.usHandicap||0) > 0 ? '+'+b.usHandicap : '-'}</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">${(b.jpHandicap||0) > 0 ? '+'+b.jpHandicap : '-'}</td></tr>`;
+        if (bJpHandi > 0 || bUsHandi > 0) {
+            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">ハンディキャップ</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">${bUsHandi > 0 ? '+'+bUsHandi : '-'}</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">${bJpHandi > 0 ? '+'+bJpHandi : '-'}</td></tr>`;
         }
 
-        if ((b.jpBonus||0) > 0) {
+        if (bJpBonus > 0) {
             const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
-            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">日本軍ボーナス(${mLabel})</td><td style="padding:3px 8px; text-align:right; color:#666;">-</td><td style="color:#ffcc00; padding:3px 8px; text-align:right;">+${b.jpBonus}</td></tr>`;
+            battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">日本軍ボーナス(${mLabel})</td><td style="padding:3px 8px; text-align:right; color:#666;">-</td><td style="color:#ffcc00; padding:3px 8px; text-align:right;">+${bJpBonus}</td></tr>`;
         }
 
-        battlesHtml += `<tr style="border-top:1px solid #555;"><td style="color:#ddd; padding:3px 8px; font-weight:bold;">小計</td><td style="color:#4488ff; padding:3px 8px; text-align:right; font-weight:bold;">+${b.usScoreGain}</td><td style="color:#ff4444; padding:3px 8px; text-align:right; font-weight:bold;">+${b.jpScoreGain}</td></tr>`;
+        battlesHtml += `<tr style="border-top:1px solid #555;"><td style="color:#ddd; padding:3px 8px; font-weight:bold;">小計</td><td style="color:#4488ff; padding:3px 8px; text-align:right; font-weight:bold;">+${totalUs}</td><td style="color:#ff4444; padding:3px 8px; text-align:right; font-weight:bold;">+${totalJp}</td></tr>`;
 
         if (b.usSunk.length > 0) battlesHtml += `<tr><td colspan="3" style="color:#6688ff; padding:3px 8px; font-size:0.85em;">米軍沈没: ${b.usSunk.join(', ')}</td></tr>`;
         if (b.jpSunk.length > 0) battlesHtml += `<tr><td colspan="3" style="color:#ff6666; padding:3px 8px; font-size:0.85em;">日本軍沈没: ${b.jpSunk.join(', ')}</td></tr>`;
