@@ -414,7 +414,7 @@ function mcCalcGermanReach() {
       }
     }
   }
-  return reachSet.size;
+  return reachSet;
 }
 
 // ========== 全体盤面評価（ドイツ視点、正=ドイツ有利）==========
@@ -423,10 +423,14 @@ function evalGlobalBoard(units) {
   const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
   const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
 
-  // 都市VP（低め — 交差点のほうが重要）
+  // ドイツ戦車到達可能hex
+  const germanReachSet = mcCalcGermanReach();
+
+  // 都市VP（ドイツ戦車リーチ内の都市のみ評価）
   if (FACILITY_MAP) {
     for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
       if (fac !== 'c') continue;
+      if (!germanReachSet.has(hid)) continue; // リーチ外の都市は評価しない
       if (germanAlive.some(u => u.hexId === hid)) score += 3;
       else if (alliedAlive.some(u => u.hexId === hid)) score -= 2;
       else score += 1;
@@ -463,8 +467,7 @@ function evalGlobalBoard(units) {
   }
 
   // ドイツ到達可能hex数（多い=ドイツ有利、連合がブロックしていない）
-  const germanReach = mcCalcGermanReach();
-  score += germanReach * 0.5;
+  score += germanReachSet.size * 0.5;
 
   // 装甲が道路なし森にいる = 閉じ込めリスク（ドイツ不利）
   for (const gu of germanAlive) {
