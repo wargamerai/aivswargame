@@ -435,6 +435,31 @@ function evalGlobalBoard(units) {
     else if (retreats === 2) score += 3;   // 危険
   }
 
+  // === 評価3: ZOC戦線の連結度（穴があるとドイツ有利）===
+  const alliedHexes = new Set(alliedAlive.map(u => u.hexId));
+  // 各連合ユニットのZOCが隣の連合ユニットのZOCと繋がっているか
+  for (const au of alliedAlive) {
+    const myAdj = getNeighborIds(au.hexId);
+    // 隣接する味方がいるか（ZOC連結チェック）
+    let zocLinked = false;
+    for (const nid of myAdj) {
+      // 2hex先に味方 = ZOCが重なる = 戦線が繋がっている
+      if (getNeighborIds(nid).some(n2 => alliedHexes.has(n2) && n2 !== au.hexId)) {
+        zocLinked = true;
+        break;
+      }
+      // 直接隣接の味方でもOK（密な戦線）
+      if (alliedHexes.has(nid)) {
+        zocLinked = true;
+        break;
+      }
+    }
+    if (!zocLinked) score += 6; // 孤立 = ドイツ有利（ZOCに穴）
+
+    // ドイツ戦車リーチ内にいるのに孤立 = さらに危険
+    if (!zocLinked && germanReachSet.has(au.hexId)) score += 4;
+  }
+
   // === ドイツ側: 部隊残存・進出度（ドイツAI用）===
   for (const gu of germanAlive) {
     const power = gu.flipped ? gu.def : gu.atk;
