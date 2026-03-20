@@ -358,12 +358,53 @@ function mcDecideAttack(attackers, defenders, defHexId) {
   return shouldAttack;
 }
 
+// ========== ドイツ到達可能hex数（軽量版: BFS 2段でZOC考慮） ==========
+function mcCalcGermanReach() {
+  const germanAlive = G.units.filter(u => u.side === 'german' && !u.eliminated && !u.exited && isMechanized(u));
+  const alliedAlive = G.units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
+  const alliedHexes = new Set(alliedAlive.map(u => u.hexId));
+  // 連合ZOCがかかっているhex（味方カバーなし）
+  const alliedZOC = new Set();
+  for (const au of alliedAlive) {
+    for (const nid of getNeighborIds(au.hexId)) {
+      const t = TERRAIN_MAP[nid];
+      if (!t || t === 'x') continue;
+      if (alliedHexes.has(nid)) continue;
+      // この敵ZOCがドイツ味方にカバーされているか
+      const covered = getNeighborIds(au.hexId).some(fn =>
+        germanAlive.some(gu => gu.hexId === fn)
+      );
+      if (!covered) alliedZOC.add(nid);
+    }
+  }
+  // ドイツユニットからBFS 2段（移動力6 ≈ 平地2-3hex）
+  const reachSet = new Set();
+  for (const gu of germanAlive) {
+    reachSet.add(gu.hexId);
+    for (const n1 of getNeighborIds(gu.hexId)) {
+      const t1 = TERRAIN_MAP[n1];
+      if (!t1 || t1 === 'x') continue;
+      if (alliedHexes.has(n1)) continue; // 敵がいるhexは通過不可
+      reachSet.add(n1);
+      if (alliedZOC.has(n1)) continue; // ZOCで停止
+      for (const n2 of getNeighborIds(n1)) {
+        const t2 = TERRAIN_MAP[n2];
+        if (!t2 || t2 === 'x') continue;
+        if (alliedHexes.has(n2)) continue;
+        reachSet.add(n2);
+      }
+    }
+  }
+  return reachSet.size;
+}
+
 // ========== 全体盤面評価（ドイツ視点、正=ドイツ有利）==========
 function evalGlobalBoard(units) {
   let score = 0;
   const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
   const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
-  // 都市
+
+  // 都市VP
   if (FACILITY_MAP) {
     for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
       if (fac !== 'c') continue;
@@ -372,7 +413,8 @@ function evalGlobalBoard(units) {
       else score += 2;
     }
   }
-  // 部隊
+
+  // 部隊残存
   for (const u of units) {
     if (u.eliminated) { score += u.side === 'allied' ? 6 : -7; continue; }
     if (u.exited) { if (u._exitedNW) score += 5; continue; }
@@ -383,34 +425,17 @@ function evalGlobalBoard(units) {
       score += (20 - col) * 0.4;
     } else {
       score -= power * 0.6;
+      // 包囲度（退路なし=壊滅リスク）
       const retreats = mcCountRetreats(units, u);
       if (retreats === 0) score += 12;
       else if (retreats === 1) score += 5;
     }
   }
-  // 連合戦線
-  for (const au of alliedAlive) {
-    const adjFriends = getNeighborIds(au.hexId).filter(nid =>
-      alliedAlive.some(f => f.id !== au.id && f.hexId === nid)
-    ).length;
-    score -= adjFriends * 1.5;
-    const rv = mcRoadValue(au.hexId);
-    if (rv > 0) score -= rv * 1.2;
-    const adjEnemy = getNeighborIds(au.hexId).filter(nid =>
-      germanAlive.some(gu => gu.hexId === nid)
-    ).length;
-    if (adjEnemy > 0) {
-      const retreats = mcCountRetreats(units, au);
-      score += adjEnemy * 3;
-      if (retreats <= 1) score += 8;
-    }
-  }
-  for (const gu of germanAlive) {
-    const adjAllied = getNeighborIds(gu.hexId).filter(nid =>
-      alliedAlive.some(au => au.hexId === nid)
-    ).length;
-    if (adjAllied > 0) score += adjAllied * 2;
-  }
+
+  // ドイツ到達可能hex数（多い=ドイツ有利、連合がブロックしていない）
+  const germanReach = mcCalcGermanReach();
+  score += germanReach * 0.3;
+
   return score;
 }
 
@@ -447,13 +472,7 @@ function mcGlobalScanMove(side) {
       const newScore = evalGlobalBoard(G.units);
       let delta = (newScore - baseScore) * sign;
 
-      // 連合防御: 敵隣接ペナルティ
-      if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
-        const adjEnemy = getNeighborIds(hid).some(nid =>
-          getUnitsAt(nid).some(e => e.side === 'german')
-        );
-        if (adjEnemy && hid !== savedHex) delta -= 8;
-      }
+      // （敵隣接ペナルティ廃止: ドイツ到達hex数で自然判定）
 
       if (delta > bestDelta) {
         bestDelta = delta;

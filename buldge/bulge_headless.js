@@ -448,6 +448,8 @@ global.TERRAIN_MAP = TERRAIN_MAP;
 global.FACILITY_MAP = FACILITY_MAP;
 global.ROAD_MAP = ROAD_MAP;
 global.getNWExitHexes = getNWExitHexes;
+global.calcReachable = calcReachable;
+global.isStacked = isStacked;
 vm.runInThisContext(fs.readFileSync(path.join(dir, 'bulge_mcts.js'), 'utf8'));
 
 // ========== AI移動先選択（ヒューリスティック）==========
@@ -501,69 +503,7 @@ function aiPickMoveTarget(unit, reachable) {
 }
 
 // ========== 全体スキャン評価: 盤面全体のスコア（ドイツ視点） ==========
-function evalGlobalBoard(units) {
-  let score = 0;
-  const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
-  const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
-
-  // 都市支配
-  if (FACILITY_MAP) {
-    for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
-      if (fac !== 'c') continue;
-      if (germanAlive.some(u => u.hexId === hid)) score += 10;
-      else if (alliedAlive.some(u => u.hexId === hid)) score -= 8;
-      else score += 2;
-    }
-  }
-
-  // 部隊
-  for (const u of units) {
-    if (u.eliminated) { score += u.side === 'allied' ? 6 : -7; continue; }
-    if (u.exited) { if (u._exitedNW) score += 5; continue; }
-    const power = u.flipped ? u.def : u.atk;
-    if (u.side === 'german') {
-      score += power * 0.5;
-      const col = parseInt(u.hexId.substring(0, 2)) - 1;
-      score += (20 - col) * 0.4;
-    } else {
-      score -= power * 0.6;
-      // 包囲度
-      const retreats = mcCountRetreats(units, u);
-      if (retreats === 0) score += 12;
-      else if (retreats === 1) score += 5;
-    }
-  }
-
-  // 連合戦線: 味方隣接でZOC壁
-  for (const au of alliedAlive) {
-    const adjFriends = getNeighborIds(au.hexId).filter(nid =>
-      alliedAlive.some(f => f.id !== au.id && f.hexId === nid)
-    ).length;
-    score -= adjFriends * 1.5; // 戦線が繋がっている = ドイツ不利
-    // 道路ブロック
-    const rv = mcRoadValue(au.hexId);
-    if (rv > 0) score -= rv * 1.2;
-    // 敵隣接ペナルティ: 連合が敵に隣接 = 包囲・攻撃リスク（ドイツ有利）
-    const adjEnemy = getNeighborIds(au.hexId).filter(nid =>
-      germanAlive.some(gu => gu.hexId === nid)
-    ).length;
-    if (adjEnemy > 0) {
-      const retreats = mcCountRetreats(units, au);
-      score += adjEnemy * 3; // 敵隣接 = ドイツ有利
-      if (retreats <= 1) score += 8; // 退路なし = さらにドイツ有利
-    }
-  }
-
-  // ドイツ包囲圧力: ドイツが連合に隣接してZOCで囲んでいる
-  for (const gu of germanAlive) {
-    const adjAllied = getNeighborIds(gu.hexId).filter(nid =>
-      alliedAlive.some(au => au.hexId === nid)
-    ).length;
-    if (adjAllied > 0) score += adjAllied * 2;
-  }
-
-  return score;
-}
+// bulge_mcts.jsのevalGlobalBoardを使用（mcCalcGermanReach含む）
 
 // ========== 同期AI: 全ユニット×全候補をスキャンして最善の1手を実行 ==========
 function aiPlayOneUnit(side) {
@@ -640,20 +580,8 @@ function aiPlayOneUnit(side) {
       const newScore = evalGlobalBoard(G.units);
       const delta = (newScore - baseScore) * sign; // 正=自軍有利に改善
 
-      // 連合防御: 敵隣接への移動はペナルティ（攻撃誘発リスク）
-      let penalty = 0;
-      if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
-        const adjEnemy = getNeighborIds(hid).some(nid =>
-          getUnitsAt(nid).some(e => e.side === 'german')
-        );
-        if (adjEnemy && hid !== savedHex) penalty = 8; // 新たに敵隣接に入る
-      }
-
-      // 局所ボーナス（全体評価に反映されにくい要素を補完）
-      let localBonus = 0;
-      if (G.useMC) localBonus = mcEvalPosition(hid, unit, G.units) * 0.1;
-
-      const totalDelta = delta - penalty + localBonus;
+      // （敵隣接ペナルティ廃止: ドイツ到達hex数で自然判定）
+      const totalDelta = delta;
 
       if (totalDelta > bestDelta) {
         bestDelta = totalDelta;
