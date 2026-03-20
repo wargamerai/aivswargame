@@ -377,14 +377,14 @@ function mcCalcGermanReach() {
       if (!covered) alliedZOC.add(nid);
     }
   }
-  // ドイツユニットからBFS 2段（移動力6 ≈ 平地2-3hex）
+  // ドイツユニットからBFS 3段（2ターン移動力12 ≈ 平地3-4hex）
   const reachSet = new Set();
   for (const gu of germanAlive) {
     reachSet.add(gu.hexId);
     for (const n1 of getNeighborIds(gu.hexId)) {
       const t1 = TERRAIN_MAP[n1];
       if (!t1 || t1 === 'x') continue;
-      if (alliedHexes.has(n1)) continue; // 敵がいるhexは通過不可
+      if (alliedHexes.has(n1)) continue;
       reachSet.add(n1);
       if (alliedZOC.has(n1)) continue; // ZOCで停止
       for (const n2 of getNeighborIds(n1)) {
@@ -392,6 +392,13 @@ function mcCalcGermanReach() {
         if (!t2 || t2 === 'x') continue;
         if (alliedHexes.has(n2)) continue;
         reachSet.add(n2);
+        if (alliedZOC.has(n2)) continue;
+        for (const n3 of getNeighborIds(n2)) {
+          const t3 = TERRAIN_MAP[n3];
+          if (!t3 || t3 === 'x') continue;
+          if (alliedHexes.has(n3)) continue;
+          reachSet.add(n3);
+        }
       }
     }
   }
@@ -404,13 +411,13 @@ function evalGlobalBoard(units) {
   const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
   const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
 
-  // 都市VP
+  // 都市VP（重みを下げる — 戦線維持のほうが重要）
   if (FACILITY_MAP) {
     for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
       if (fac !== 'c') continue;
-      if (germanAlive.some(u => u.hexId === hid)) score += 10;
-      else if (alliedAlive.some(u => u.hexId === hid)) score -= 8;
-      else score += 2;
+      if (germanAlive.some(u => u.hexId === hid)) score += 5;
+      else if (alliedAlive.some(u => u.hexId === hid)) score -= 3;
+      else score += 1;
     }
   }
 
@@ -434,7 +441,7 @@ function evalGlobalBoard(units) {
 
   // ドイツ到達可能hex数（多い=ドイツ有利、連合がブロックしていない）
   const germanReach = mcCalcGermanReach();
-  score += germanReach * 0.3;
+  score += germanReach * 0.5;
 
   // ZOC無効化: ドイツが連合に隣接 → その連合のZOCが無効化され戦線に穴
   for (const au of alliedAlive) {
@@ -505,21 +512,30 @@ function mcShouldAlliedPass() {
   );
   if (germanRemaining === 0 || alliedUnits.length === 0) return false;
 
-  // 緊急: 包囲危機 or 都市脅威 or 西側に敵が回り込んでいる
+  // 緊急: 包囲危機 or 都市脅威 or 西側に敵が接近
+  const germanMech = G.units.filter(e => e.side === 'german' && !e.eliminated && !e.exited && isMechanized(e));
   for (const u of alliedUnits) {
     const unitCol = parseInt(u.hexId.substring(0, 2)) - 1;
+    // 隣接敵チェック
     const adjEnemyHexes = getNeighborIds(u.hexId).filter(nid =>
       getUnitsAt(nid).some(e => e.side === 'german')
     );
     if (adjEnemyHexes.length > 0) {
       const retreats = typeof getRetreatHexes === 'function' ? getRetreatHexes(u).length : 3;
-      if (retreats <= 2) return false; // 退路3未満 → 緊急離脱
-      // 敵が西側（col小さい）にいる → 回り込まれている
+      if (retreats <= 2) return false; // 退路3未満
       const enemyOnWest = adjEnemyHexes.some(nid => {
         const ec = parseInt(nid.substring(0, 2)) - 1;
         return ec < unitCol;
       });
-      if (enemyOnWest) return false; // 西側に回り込まれた → 即離脱
+      if (enemyOnWest) return false; // 西側に回り込まれた
+    }
+    // 2hex以内に敵装甲が西側（左斜め上/左斜め下）にいる → 逃げる準備
+    for (const gm of germanMech) {
+      const dist = hexDist(u.hexId, gm.hexId);
+      if (dist <= 2) {
+        const gc = parseInt(gm.hexId.substring(0, 2)) - 1;
+        if (gc <= unitCol) return false; // 敵装甲が同列か西にいる → 即動く
+      }
     }
     // 都市に敵隣接
     if (FACILITY_MAP && FACILITY_MAP[u.hexId] === 'c' && adjEnemyHexes.length > 0) {
