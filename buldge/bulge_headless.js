@@ -279,10 +279,37 @@ function doRetreat(unit) {
   if (unit.eliminated) return;
   const valid = getRetreatHexes(unit);
   if (valid.length > 0) {
-    // 方向選択: ドイツ=東、連合=東（後方）
-    let best = valid[0];
+    // スコアリングで退却先選択
+    let best = valid[0], bestScore = -Infinity;
     for (const h of valid) {
-      if (parseHexId(h).col > parseHexId(best).col) best = h;
+      let score = 0;
+      const { col } = parseHexId(h);
+      const adjToH = getNeighborIds(h);
+      // ZOC連結: 味方の2hex先にいる → ZOC壁形成
+      for (const nid of adjToH) {
+        if (getNeighborIds(nid).some(adj =>
+          G.units.some(f => f.hexId === adj && f.side === unit.side && f.id !== unit.id && !f.eliminated && !f.exited)
+        )) score += 5;
+      }
+      // 味方隣接
+      const adjFriend = adjToH.filter(nid =>
+        G.units.some(f => f.hexId === nid && f.side === unit.side && f.id !== unit.id && !f.eliminated && !f.exited)
+      ).length;
+      score += adjFriend * 3;
+      // 道路交差点
+      const roads = ROAD_MAP && ROAD_MAP[h];
+      if (roads && roads.length > 0) score += roads.length * 3;
+      if (TERRAIN_MAP[h] === 'f' && roads && roads.length > 0) score += 4;
+      // 都市
+      if (FACILITY_MAP && FACILITY_MAP[h] === 'c') score += 6;
+      // 後方
+      score += col * 0.5;
+      // 敵から離れる
+      const adjEnemy = adjToH.filter(nid =>
+        G.units.some(e => e.hexId === nid && e.side !== unit.side && !e.eliminated && !e.exited)
+      ).length;
+      score -= adjEnemy * 4;
+      if (score > bestScore) { bestScore = score; best = h; }
     }
     unit.hexId = best;
   } else {
