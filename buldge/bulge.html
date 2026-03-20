@@ -1246,7 +1246,7 @@ function executeCombat() {
   if (facility !== 'c') {
     for (const nid of getNeighborIds(defHexId)) {
       const friendly = getUnitsAt(nid).filter(u => u.side === G.activeSide && !cb.attackers.includes(u.id));
-      if (friendly.length > 0) support++;
+      support += friendly.length;
     }
   }
 
