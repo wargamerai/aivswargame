@@ -3,18 +3,18 @@
 // 学習済み重みによるTiger移動AI
 
 (function() {
-  // 学習済み重み（sc4_train.js 500世代, winRate=0.60）
+  // 学習済み重み（sc4_train.js 500世代, winRate=0.625, avgKills=2.775, survival=0.80）
   const W = {
-    killChance: 0.06122602741833063,
-    canShoot: 0.000050547060782386146,
-    threat: -2.3869175308083523,
-    canBeShot: -0.0811099084493853,
-    distance: -0.006199703268995069,
-    terrainCover: 0.11873763109907254,
-    flankThreat: -0.22348325054863713,
-    killable: 0.0007544334167694595,
-    edgePenalty: -227.73361398844276,
-    aliveEnemies: -0.4724024995597076
+    killChance: 0.01703973658145598,
+    canShoot: 0.000004723581192565387,
+    threat: -0.564443228514407,
+    canBeShot: -13.114873489743164,
+    distance: -0.022278090795918526,
+    terrainCover: 0.013318084514188604,
+    flankThreat: -0.001207551589175228,
+    killable: 0.00006438881555641944,
+    edgePenalty: -62.553820747325474,
+    aliveEnemies: -0.26496271530608523
   };
 
   // Tiger評価関数（学習済み重み付き）
