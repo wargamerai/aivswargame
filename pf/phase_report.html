@@ -168,7 +168,19 @@ function renderReport() {
       }
     }
   }
-  const jpEarned = jpCombat + jpBonus;
+  // ハンディキャップ読み込み（キャンペーンモード時）
+  let jpHandicap = 0, usHandicap = 0;
+  try {
+    const campRaw = localStorage.getItem('pfCampaignState');
+    if (campRaw) {
+      const campState = JSON.parse(campRaw);
+      jpHandicap = campState.lastJpHandicap || 0;
+      usHandicap = campState.lastUsHandicap || 0;
+    }
+  } catch(e) {}
+
+  const jpEarned = jpCombat + jpBonus + jpHandicap;
+  const usEarnedTotal = usVPDetail.total + usHandicap;
 
   let html = '';
 
@@ -223,6 +235,14 @@ function renderReport() {
     html += `<div style="color:#889;margin:4px 0 4px 16px;font-size:0.85em">※ 敵全滅も10ターン経過のためボーナスなし</div>`;
   }
 
+  // 日本軍ハンディキャップ
+  if (jpHandicap > 0) {
+    html += `<div class="ship-vp" style="margin-top:4px">
+      <span>⚖️ ハンディキャップ</span>
+      <span class="vp-val" style="color:#cc9900">+${jpHandicap} pt</span>
+    </div>`;
+  }
+
   // 日本軍合計
   html += `<div style="font-size:1.1em;font-weight:bold;margin:8px 0 4px 0;padding:4px 8px;background:#ffe8e0;border-radius:3px;display:flex;justify-content:space-between">
     <span>🎌 日本軍 合計得点</span><span>${jpEarned} pt</span></div>`;
@@ -245,19 +265,26 @@ function renderReport() {
     } else {
       html += `<div style="color:#889;margin:4px 0 4px 16px;font-size:0.85em">戦闘損害なし</div>`;
     }
+    // 米軍ハンディキャップ
+    if (usHandicap > 0) {
+      html += `<div class="ship-vp" style="margin-top:4px">
+        <span>⚖️ ハンディキャップ</span>
+        <span class="vp-val" style="color:#cc9900">+${usHandicap} pt</span>
+      </div>`;
+    }
     html += `<div style="font-size:1.1em;font-weight:bold;margin:8px 0 4px 0;padding:4px 8px;background:#e0e8ff;border-radius:3px;display:flex;justify-content:space-between">
-      <span>🦅 米軍 合計得点</span><span>${usEarned} pt</span></div>`;
+      <span>🦅 米軍 合計得点</span><span>${usEarnedTotal} pt</span></div>`;
 
-    // 勝敗判定
+    // 勝敗判定（ハンディキャップ込み）
     let winLabel, winClass;
-    if (jpEarned > usEarned) { winLabel = '日本軍の勝利！'; winClass = 'jp-win'; }
-    else if (jpEarned < usEarned) { winLabel = '米軍の勝利…'; winClass = 'us-win'; }
+    if (jpEarned > usEarnedTotal) { winLabel = '日本軍の勝利！'; winClass = 'jp-win'; }
+    else if (jpEarned < usEarnedTotal) { winLabel = '米軍の勝利…'; winClass = 'us-win'; }
     else { winLabel = '引き分け'; winClass = 'draw'; }
-    const diff = Math.abs(jpEarned - usEarned);
-    const ratio = usEarned > 0 ? (jpEarned / usEarned).toFixed(1) : '∞';
+    const diff = Math.abs(jpEarned - usEarnedTotal);
+    const ratio = usEarnedTotal > 0 ? (jpEarned / usEarnedTotal).toFixed(1) : '∞';
     html += `<div class="winner-box">
       <div class="result-label ${winClass}">${winLabel}</div>
-      <div style="font-size:0.85em;color:#666;margin-top:4px">${jpEarned} 対 ${usEarned}（差: ${diff}pt / 比率: ${ratio}）</div>
+      <div style="font-size:0.85em;color:#666;margin-top:4px">${jpEarned} 対 ${usEarnedTotal}（差: ${diff}pt / 比率: ${ratio}）</div>
     </div>`;
   } else {
     html += `<div style="color:#889;padding:8px">未接触 — 米軍得点: 不明</div>`;
