@@ -2618,17 +2618,10 @@ function aiDoAttack() {
   }
 
   if (bestAttack) {
-    // モンテカルロで攻撃すべきか判断（MC有効時のみ）
+    // 攻撃は強制（隣接=必ず攻撃）— mcDecideAttackはログ出力のみ
     const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
-    if (G.useMC && !mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
-      // 攻撃見送り → mustAttackクリアしてサイド切替
-      G.units.filter(u => u.side === side).forEach(u => { delete u.mustAttack; });
-      G.units.filter(u => u.side === side && u.acted && !u.flipped).forEach(u => {
-        u.flipped = true; expireMovePath(u);
-      });
-      addLog('combat', `[AI] 攻撃見送り (MC判断)`);
-      switchSide();
-      return;
+    if (G.useMC) mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex); // ログのみ
+    if (false) { // 攻撃見送り無効化（ルール: 隣接=攻撃強制）
     }
     // 攻撃参加ユニットにフラグ
     for (const uid of bestAttack.attackers) {

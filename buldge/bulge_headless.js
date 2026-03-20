@@ -659,12 +659,10 @@ function aiPlayOneUnit(side) {
       }
     }
     if (bestAttack) {
+      // 攻撃は強制（隣接=必ず攻撃）
       if (G.useMC) {
         const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
-        if (!mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
-          unit.flipped = true; if (stacked && pair) pair.flipped = true;
-          return true;
-        }
+        mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex); // ログのみ
       }
       for (const uid of bestAttack.attackers) {
         const u = G.units.find(x => x.id === uid);
