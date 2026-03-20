@@ -642,6 +642,38 @@ function drawMovePaths() {
 
 // ========== ユニット画像プリロード ==========
 const unitImgCache = {};
+
+function preloadAllUnitImages() {
+  const allUnits = [].concat(
+    (typeof INITIAL_SETUP !== 'undefined' ? INITIAL_SETUP.german : []),
+    (typeof INITIAL_SETUP !== 'undefined' ? INITIAL_SETUP.allied : []),
+    (typeof REINFORCEMENTS !== 'undefined' ? Object.values(REINFORCEMENTS).flat() : [])
+  );
+  for (const u of allUnits) {
+    // 表面
+    if (u.img) {
+      const keyF = IMG_BASE + u.img;
+      if (!unitImgCache[keyF]) {
+        const img = new Image();
+        img.src = keyF;
+        img.onload = () => { unitImgCache[keyF]._loaded = true; };
+        unitImgCache[keyF] = img;
+        unitImgCache[keyF]._loaded = false;
+      }
+    }
+    // 裏面
+    if (u.imgBack) {
+      const keyB = IMG_BACK + u.imgBack;
+      if (!unitImgCache[keyB]) {
+        const img = new Image();
+        img.src = keyB;
+        img.onload = () => { unitImgCache[keyB]._loaded = true; };
+        unitImgCache[keyB] = img;
+        unitImgCache[keyB]._loaded = false;
+      }
+    }
+  }
+}
 function getUnitImg(u) {
   const isFlipped = u.flipped; // actedでは裏にしない、flippedのみ
   const imgFile = isFlipped && u.imgBack ? u.imgBack : u.img;
@@ -2486,6 +2518,13 @@ function aiDoMovement() {
     const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
     if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
       unit.acted = true; unit.flipped = true;
+      // スタックペアも行動済みにする
+      if (unit.mechPair) {
+        const pair = G.units.find(u => u.id === unit.mechPair);
+        if (pair && pair.hexId === unit.hexId && !pair.acted) {
+          pair.acted = true; pair.flipped = true;
+        }
+      }
       addLog('move', `[AI] ${unit.name}: スタック制限で移動不可`);
       switchSide();
       return;
@@ -2873,6 +2912,7 @@ function startGame(mode) {
 }
 
 // ========== 初期化 ==========
+preloadAllUnitImages();
 mapImg.onload = () => { mapLoaded = true; draw(); };
 mapImg.onerror = () => { mapLoaded = false; draw(); };
 mapImg.src = 'ssbulgemap12.png';
