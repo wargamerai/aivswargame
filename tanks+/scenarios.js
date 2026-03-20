@@ -482,6 +482,7 @@ const SCENARIOS = [
   {
     id: 'sc5',
     name: 'カーン近郊',
+    hidden: true,
     front: 'west',
     map1: 'C', map1orient: 'Vertical',
     map2: null, map2orient: null,
