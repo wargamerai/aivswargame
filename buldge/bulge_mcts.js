@@ -476,6 +476,124 @@ function evalGlobalBoard(units) {
   return score;
 }
 
+// ========== ドイツT1-T2 モンテカルロ深探索 ==========
+// 全未行動ユニットの移動をランダムに組み合わせて総当たり評価
+// 返り値: { unit, hex, delta } — 次に動かすべき1ユニットと移動先
+function mcGermanDeepSearch() {
+  const NUM_TRIALS = 5000;
+  const activeUnits = G.units.filter(u =>
+    u.side === 'german' && !u.acted && !u.flipped && !u.eliminated && !u.exited
+  );
+  if (activeUnits.length === 0) return null;
+
+  // 各ユニットのreachable候補をプリ計算（重い処理を1回だけ）
+  const unitCandidates = [];
+  for (const u of activeUnits) {
+    const reachable = calcReachable(u);
+    const candidates = [u.hexId]; // 待機も候補
+    for (const [hid] of reachable) candidates.push(hid);
+    unitCandidates.push({ unit: u, candidates });
+  }
+
+  // 東（col大）から順にソート（基本順序）
+  unitCandidates.sort((a, b) => {
+    const colA = parseInt(a.unit.hexId.substring(0, 2));
+    const colB = parseInt(b.unit.hexId.substring(0, 2));
+    return colB - colA; // 東→西
+  });
+
+  let bestScore = -Infinity;
+  let bestMoves = null; // [{unitIdx, hex}, ...]
+
+  for (let trial = 0; trial < NUM_TRIALS; trial++) {
+    // 順序にランダム摂動（隣接要素を30%の確率でスワップ）
+    const order = unitCandidates.map((uc, i) => i);
+    for (let i = 0; i < order.length - 1; i++) {
+      if (Math.random() < 0.3) {
+        const tmp = order[i]; order[i] = order[i + 1]; order[i + 1] = tmp;
+      }
+    }
+
+    // 全ユニットの移動をシミュレーション
+    const moves = [];
+    const savedHexes = [];
+    const occupiedHexes = new Set();
+    // 既存の味方ユニット位置（acted済み含む）を記録
+    for (const u of G.units) {
+      if (u.side === 'german' && !u.eliminated && !u.exited && u.acted) {
+        occupiedHexes.add(u.hexId);
+      }
+    }
+
+    let valid = true;
+    for (const idx of order) {
+      const uc = unitCandidates[idx];
+      const u = uc.unit;
+      savedHexes.push({ unit: u, hex: u.hexId });
+
+      // スタック相方も保存
+      const stacked = u.mechPair && G.units.some(p => p.id === u.mechPair && p.hexId === u.hexId && !p.acted);
+      const pair = stacked ? G.units.find(p => p.id === u.mechPair) : null;
+      if (pair) savedHexes.push({ unit: pair, hex: pair.hexId });
+
+      // 有効な候補（他のユニットと衝突しない）をフィルタ
+      const validCandidates = uc.candidates.filter(hid => {
+        if (hid === u.hexId) return true; // 待機は常にOK
+        if (occupiedHexes.has(hid)) {
+          // mechPairの場合のみスタック可
+          if (u.mechPair) {
+            const atHex = G.units.filter(x => x.hexId === hid && x.side === 'german' && !x.eliminated);
+            if (atHex.length < 2 && atHex.some(x => x.id === u.mechPair)) return true;
+          }
+          return false;
+        }
+        return true;
+      });
+
+      if (validCandidates.length === 0) { valid = false; break; }
+
+      // ランダムに移動先を選択
+      const chosen = validCandidates[Math.floor(Math.random() * validCandidates.length)];
+      u.hexId = chosen;
+      if (stacked && pair) pair.hexId = chosen;
+      occupiedHexes.add(chosen);
+      moves.push({ idx, hex: chosen });
+    }
+
+    if (valid) {
+      // 全ユニット移動後の盤面を評価
+      const score = evalGlobalBoard(G.units);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMoves = moves.slice(); // コピー
+      }
+    }
+
+    // 全ユニットの位置を復元
+    for (const sh of savedHexes) {
+      sh.unit.hexId = sh.hex;
+    }
+  }
+
+  if (!bestMoves || bestMoves.length === 0) return null;
+
+  // 最善プランの「最初の1手」を返す
+  const firstMove = bestMoves[0];
+  const firstUnit = unitCandidates[firstMove.idx].unit;
+  const baseScore = evalGlobalBoard(G.units);
+  // deltaを計算（この1手だけの効果）
+  const savedHex = firstUnit.hexId;
+  const pair = firstUnit.mechPair ? G.units.find(p => p.id === firstUnit.mechPair && p.hexId === firstUnit.hexId) : null;
+  const savedPairHex = pair ? pair.hexId : null;
+  firstUnit.hexId = firstMove.hex;
+  if (pair) pair.hexId = firstMove.hex;
+  const newScore = evalGlobalBoard(G.units);
+  firstUnit.hexId = savedHex;
+  if (pair) pair.hexId = savedPairHex;
+
+  return { unit: firstUnit, hex: firstMove.hex, delta: newScore - baseScore };
+}
+
 // ========== 全体スキャン移動: 全ユニット×全候補を比較 ==========
 // ブラウザ版aiDoMovementから呼ばれる。bestUnit+bestHexを返す
 function mcGlobalScanMove(side) {

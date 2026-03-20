@@ -563,6 +563,75 @@ function aiPlayOneUnit(side) {
     }
   }
 
+  // === T1-T2ドイツ: モンテカルロ深探索 ===
+  if (G.useMC && G.turn <= 2 && side === 'german') {
+    const deepResult = mcGermanDeepSearch();
+    if (deepResult) {
+      const unit = deepResult.unit;
+      const bestHex = deepResult.hex;
+      const stacked = unit.mechPair && G.units.some(p => p.id === unit.mechPair && p.hexId === unit.hexId && !p.acted);
+      const pair = stacked ? G.units.find(p => p.id === unit.mechPair) : null;
+      unit.hexId = bestHex;
+      unit.acted = true;
+      if (stacked && pair) { pair.hexId = bestHex; pair.acted = true; }
+      // 隣接敵 → 攻撃
+      const adjEnemy = getNeighborIds(bestHex).some(nid =>
+        getUnitsAt(nid).some(u => u.side !== side)
+      );
+      if (adjEnemy) {
+        unit.mustAttack = true;
+        if (stacked && pair) pair.mustAttack = true;
+        // 攻撃処理（既存ロジック流用）
+        const enemySide = side === 'german' ? 'allied' : 'german';
+        const enemyHexes = new Set();
+        const actedUnits = G.units.filter(u =>
+          u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
+        );
+        for (const au of actedUnits) {
+          for (const nid of getNeighborIds(au.hexId)) {
+            if (getUnitsAt(nid).some(e => e.side === enemySide)) enemyHexes.add(nid);
+          }
+        }
+        let bestAttack = null, bestDiff = -Infinity;
+        for (const defHex of enemyHexes) {
+          const defenders = getUnitsAt(defHex).filter(u => u.side === enemySide);
+          if (side === 'allied' && defenders.some(u => !u.flipped)) continue;
+          const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+          const adjF = [];
+          for (const nid of getNeighborIds(defHex)) {
+            adjF.push(...getUnitsAt(nid).filter(u =>
+              u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
+            ));
+          }
+          const atkPower = adjF.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+          const d = atkPower - defPower;
+          if (atkPower >= defPower && d > bestDiff) {
+            bestDiff = d;
+            bestAttack = { defHex, attackers: adjF.map(u => u.id), defenders };
+          }
+        }
+        if (bestAttack) {
+          if (G.useMC) {
+            const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
+            mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex);
+          }
+          for (const uid of bestAttack.attackers) {
+            const u = G.units.find(x => x.id === uid);
+            if (u) u._aiAttacked = true;
+          }
+          resetCombat();
+          G.combat.defHex = bestAttack.defHex;
+          G.combat.defenders = bestAttack.defenders;
+          G.combat.attackers = bestAttack.attackers;
+          executeCombatSync();
+        }
+      }
+      if (!adjEnemy) { unit.flipped = true; if (stacked && pair) pair.flipped = true; }
+      for (const u of G.units) { if (u.side === side) delete u._aiAttacked; }
+      return true;
+    }
+  }
+
   // === 全体スキャン: 現在の盤面スコア ===
   const sign = side === 'german' ? 1 : -1; // ドイツ=最大化、連合=最小化
   const baseScore = evalGlobalBoard(G.units);
