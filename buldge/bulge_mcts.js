@@ -1,425 +1,359 @@
-// bulge_mcts.js — モンテカルロAI（包囲・ZOC戦術対応）
+// bulge_mcts.js — 静的評価AI（ドクトリンベース、プレイアウト廃止）
 'use strict';
 
-const MC = {
-  SIMS: 30,         // 候補あたりシミュレーション回数
-  PLAYOUT_DEPTH: 8, // プレイアウトの手数（両軍合計）
-};
+const MC = { SIMS: 0 }; // 互換用（未使用）
+
+// ========== VP都市リスト ==========
+function mcGetCityHexes() {
+  const cities = [];
+  if (!FACILITY_MAP) return cities;
+  for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
+    if (fac === 'c') cities.push(hid);
+  }
+  return cities;
+}
+
+// ========== 戦力比較: 連合攻勢モード判定 ==========
+function mcIsAlliedOffensive(units) {
+  const germanReady = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited && !u.flipped).length;
+  const alliedReady = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited && !u.flipped).length;
+  return alliedReady >= germanReady;
+}
+
+// ========== 道路交差点・チョークポイント ==========
+function mcRoadValue(hid) {
+  const roads = ROAD_MAP && ROAD_MAP[hid];
+  if (!roads || roads.length === 0) return 0;
+  let v = roads.length;
+  if (TERRAIN_MAP[hid] === 'f') v += 2; // 森林道路 = チョークポイント
+  return v;
+}
+
+// ========== 退却先カウント（高速版）==========
+function mcCountRetreats(units, unit) {
+  let count = 0;
+  for (const nid of getNeighborIds(unit.hexId)) {
+    const t = TERRAIN_MAP[nid];
+    if (!t || t === 'x') continue;
+    if (units.some(u => u.hexId === nid && u.side !== unit.side && !u.eliminated && !u.exited)) continue;
+    let blocked = false;
+    for (const adj of getNeighborIds(nid)) {
+      if (!units.some(e => e.hexId === adj && e.side !== unit.side && !e.eliminated && !e.exited)) continue;
+      const covered = getNeighborIds(adj).some(fn =>
+        units.some(f => f.hexId === fn && f.side === unit.side && f.id !== unit.id && !f.eliminated && !f.exited)
+      );
+      if (!covered) { blocked = true; break; }
+    }
+    if (!blocked) count++;
+  }
+  return count;
+}
 
 // ========== 盤面コピー ==========
 function mcCloneUnits() {
   return G.units.map(u => Object.assign({}, u));
 }
 
-// ========== 評価関数 ==========
-// ドイツ視点スコア（正=ドイツ有利）。連合は符号反転して使う
-function mcEvaluate(units) {
+// ========== ドイツ脅威マップ: 各hexへのドイツ到達可能性 ==========
+function mcGermanThreatMap(units) {
+  const threat = {};
+  const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited && !u.flipped);
+  for (const gu of germanAlive) {
+    // 簡易: 距離2以内のhexに脅威マーク（移動力6 ≈ 平地2-3hex）
+    const visited = new Set();
+    const queue = [[gu.hexId, 0]];
+    visited.add(gu.hexId);
+    while (queue.length > 0) {
+      const [hid, dist] = queue.shift();
+      if (dist > 2) continue;
+      if (!threat[hid]) threat[hid] = 0;
+      threat[hid] += (3 - dist); // 近いほど高脅威
+      for (const nid of getNeighborIds(hid)) {
+        if (visited.has(nid)) continue;
+        const t = TERRAIN_MAP[nid];
+        if (!t || t === 'x') continue;
+        visited.add(nid);
+        queue.push([nid, dist + 1]);
+      }
+    }
+  }
+  return threat;
+}
+
+// ========== 局所静的評価: あるhexに移動した場合のスコア ==========
+function mcEvalPosition(hid, unit, units) {
   let score = 0;
+  const side = unit.side;
+  const { col, row } = parseHexId(hid);
+  const isCity = FACILITY_MAP && FACILITY_MAP[hid] === 'c';
+  const isTown = FACILITY_MAP && FACILITY_MAP[hid] === 't';
+  const terrain = TERRAIN_MAP[hid];
+  const roads = ROAD_MAP && ROAD_MAP[hid];
+  const isRoad = roads && roads.length > 0;
+  const alliedOffensive = mcIsAlliedOffensive(units);
 
-  // 都市支配
-  if (FACILITY_MAP) {
-    for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
-      if (fac !== 'c') continue;
-      const hasGerman = units.some(u => u.side === 'german' && u.hexId === hid && !u.eliminated && !u.exited);
-      const hasAllied = units.some(u => u.side === 'allied' && u.hexId === hid && !u.eliminated && !u.exited);
-      if (hasGerman) score += 8;
-      else if (hasAllied) score -= 5;
-      else score += 2;
+  const enemySide = side === 'german' ? 'allied' : 'german';
+  const friendlies = units.filter(u => u.side === side && !u.eliminated && !u.exited);
+  const enemies = units.filter(u => u.side === enemySide && !u.eliminated && !u.exited);
+
+  // 隣接敵/味方
+  const adjEnemyHexes = getNeighborIds(hid).filter(nid =>
+    enemies.some(e => e.hexId === nid)
+  );
+  const adjFriendHexes = getNeighborIds(hid).filter(nid =>
+    friendlies.some(f => f.id !== unit.id && f.hexId === nid)
+  );
+  const adjEnemyPower = adjEnemyHexes.reduce((s, nid) => {
+    return s + enemies.filter(e => e.hexId === nid).reduce((es, e) => es + (e.flipped ? e.def : e.atk), 0);
+  }, 0);
+  const myPower = unit.flipped ? unit.def : unit.atk;
+
+  // 仮想退却先
+  const tempUnit = Object.assign({}, unit, { hexId: hid });
+  const retreatCount = mcCountRetreats(units, tempUnit);
+
+  if (side === 'german') {
+    // === ドイツ軍 ===
+    // 西進
+    score += (20 - col) * 3;
+    // 都市占領
+    if (isCity) score += 25;
+    if (isTown) score += 10;
+    // NW突破hex
+    const nwHexes = getNWExitHexes();
+    if (nwHexes.includes(hid) && isMechanized(unit)) score += 40;
+    else if (nwHexes.length > 0 && isMechanized(unit)) {
+      const minDist = Math.min(...nwHexes.map(nh => hexDist(hid, nh)));
+      score += Math.max(0, 20 - minDist * 3);
     }
-  }
-
-  // 部隊残存・位置評価
-  const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
-  const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
-
-  for (const u of units) {
-    if (u.eliminated) {
-      score += u.side === 'allied' ? 5 : -5;
-      continue;
+    // 道路利用
+    if (isRoad) score += 3;
+    // 包囲価値: 敵の退却先を塞ぐ
+    for (const enemyHex of adjEnemyHexes) {
+      const enemy = enemies.find(e => e.hexId === enemyHex);
+      if (enemy) {
+        const eRetreats = mcCountRetreats(units, enemy);
+        score += (6 - eRetreats) * 5; // 退却先0 = +30
+        if (eRetreats === 0) score += 20; // 包囲壊滅ボーナス
+        score += 5; // ピン価値（味方のZOC迂回を可能に）
+      }
     }
-    if (u.exited) continue;
+    // 自分の安全（退却先）
+    if (retreatCount === 0) score -= 10;
+    // 森林に機械化は入らない（道路なし）
+    if (terrain === 'f' && isMechanized(unit) && !isRoad) score -= 80;
 
-    const power = u.flipped ? u.def : u.atk;
-    if (u.side === 'german') {
-      score += power * 0.5;
-      // 西進度ボーナス（col小さい=西）
-      const col = parseInt(u.hexId.substring(0, 2)) - 1;
-      score += (20 - col) * 0.3;
+  } else {
+    // === 連合軍 ===
+    if (alliedOffensive) {
+      // 攻勢モード: ドイツ占領都市への集中攻撃
+      const cityHexes = mcGetCityHexes();
+      for (const ch of cityHexes) {
+        if (enemies.some(e => e.hexId === ch)) {
+          const dist = hexDist(hid, ch);
+          score += Math.max(0, 20 - dist * 4);
+        }
+      }
+      // 包囲壊滅チャンス最優先
+      for (const enemyHex of adjEnemyHexes) {
+        const enemy = enemies.find(e => e.hexId === enemyHex);
+        if (enemy) {
+          const eRetreats = mcCountRetreats(units, enemy);
+          if (eRetreats === 0) score += 40; // 包囲壊滅
+          else if (eRetreats === 1) score += 15;
+        }
+      }
+      // 味方連携
+      score += adjFriendHexes.length * 3;
     } else {
-      score -= power * 0.5;
-      // 包囲度（退却先の少ないユニットほどドイツ有利）
-      const retreatCount = mcCountRetreats(units, u);
-      if (retreatCount === 0) score += 10;     // 完全包囲 → 壊滅確実
-      else if (retreatCount === 1) score += 5;  // ほぼ包囲
-      else if (retreatCount === 2) score += 2;  // 圧迫
-    }
-  }
+      // 防御モード
 
-  // ZOC圧力: ドイツユニットが連合ユニットの周囲にいるほど高評価
-  for (const au of alliedAlive) {
-    const neighbors = getNeighborIds(au.hexId);
-    let zocHexes = 0;
-    let friendlyCover = 0;
-    for (const nid of neighbors) {
-      const t = TERRAIN_MAP[nid];
-      if (!t || t === 'x') continue;
-      // このhexにドイツ軍がいる → 直接ZOC
-      if (germanAlive.some(gu => gu.hexId === nid)) {
-        zocHexes++;
+      // 1. 都市前方防御（最重要: 都市の東側で守る）
+      const cityHexes = mcGetCityHexes();
+      for (const ch of cityHexes) {
+        const cc = parseInt(ch.substring(0, 2)) - 1;
+        const dist = hexDist(hid, ch);
+        if (dist === 1 && col > cc) score += 20; // 都市の直前
+        else if (dist === 1) score += 10; // 都市の隣
+        else if (dist === 2 && col >= cc) score += 6;
       }
-      // このhexの隣にドイツ軍がいる → ZOCが掛かっている
-      else if (getNeighborIds(nid).some(adj =>
-        germanAlive.some(gu => gu.hexId === adj)
-      )) {
-        zocHexes += 0.5;
+
+      // 2. 都市そのもの（最終防衛線）
+      if (isCity) score += 15;
+
+      // 3. 道路チョークポイント
+      score += mcRoadValue(hid) * 5;
+
+      // 4. 味方連携（ZOC戦線構築）
+      score += adjFriendHexes.length * 6;
+      // ZOC重複: 味方2hex離れでもZOCが繋がる
+      for (const nid of getNeighborIds(hid)) {
+        if (getNeighborIds(nid).some(adj =>
+          friendlies.some(f => f.id !== unit.id && f.hexId === adj)
+        )) score += 2;
       }
-      // 連合味方がカバーしていれば多少安全
-      if (alliedAlive.some(f => f.id !== au.id && f.hexId === nid)) {
-        friendlyCover++;
-      }
+
+      // 5. 退路確保（包囲されない）
+      score += retreatCount * 3;
+      if (retreatCount === 0) score -= 50; // 退路なし = 壊滅リスク
+      if (retreatCount === 1) score -= 15;
+
+      // 6. 敵圧力回避（劣勢時は敵から離れる）
+      if (adjEnemyPower > myPower * 1.5) score -= 20;
+      if (adjEnemyPower > 0 && adjEnemyPower <= myPower) score += 5; // 互角なら守れる
+
+      // 7. ドイツ脅威マップ: ドイツが来そうな場所に先回り
+      // （重い計算なのでquickScoreでは省略、pickMoveで使う）
     }
-    score += (zocHexes - friendlyCover * 0.3) * 1.5;
+
+    // 森林に機械化は入らない（道路なし）
+    if (terrain === 'f' && isMechanized(unit) && !isRoad) score -= 80;
   }
 
   return score;
 }
 
-// 簡易退却先カウント（高速版）
-// ルール4.2対応: 味方が隣接している敵のZOCは無効
-function mcCountRetreats(units, unit) {
-  let count = 0;
-  const nids = getNeighborIds(unit.hexId);
-  for (const nid of nids) {
-    const terrain = TERRAIN_MAP[nid];
-    if (!terrain || terrain === 'x') continue;
-    // 敵がいる → 退却不可
-    if (units.some(u => u.hexId === nid && u.side !== unit.side && !u.eliminated && !u.exited)) continue;
-    // 敵ZOCチェック（味方カバーで無効化考慮）
-    let blockedByZOC = false;
-    const adjToNid = getNeighborIds(nid);
-    for (const adj of adjToNid) {
-      const hasEnemy = units.some(e => e.hexId === adj && e.side !== unit.side && !e.eliminated && !e.exited);
-      if (!hasEnemy) continue;
-      // この敵に味方が隣接していればZOC無効（移動ユニット自身は除外）
-      const enemyCovered = getNeighborIds(adj).some(fn =>
-        units.some(f => f.hexId === fn && f.side === unit.side && f.id !== unit.id && !f.eliminated && !f.exited)
-      );
-      if (!enemyCovered) {
-        blockedByZOC = true;
+// ========== CRT期待値計算（確定的）==========
+function mcExpectedCombat(atkPower, defPower, support, isForest, defRetreatCount) {
+  const diff = atkPower - defPower;
+  const forestMod = isForest ? 1 : 0;
+
+  let atkLoss = 0, defLoss = 0;
+  for (let die = 1; die <= 6; die++) {
+    const modDie = die + support - forestMod;
+    const result = lookupCRT(diff, modDie);
+    switch (result) {
+      case 'DE': defLoss += 1.0; break;
+      case 'EX': defLoss += 0.5; atkLoss += 0.5; break;
+      case 'DD': defLoss += 0.2; break;
+      case 'DR':
+        if (defRetreatCount === 0) defLoss += 1.0; // 退却先なし=壊滅
+        else defLoss += 0.1;
         break;
-      }
+      case 'AR': atkLoss += 0.3; break;
+      case 'NE': break;
     }
-    if (blockedByZOC) continue;
-    count++;
   }
-  return count;
+  return { atkLoss: atkLoss / 6, defLoss: defLoss / 6 };
 }
 
-// ========== シミュレーション ==========
-// 戦術プレイアウト: ドイツは包囲志向、連合は退避志向
-function mcPlayout(units, startSide) {
-  let side = startSide;
-  for (let step = 0; step < MC.PLAYOUT_DEPTH; step++) {
-    const available = units.filter(u =>
-      u.side === side && !u._simActed && !u.eliminated && !u.exited && !u.flipped
-    );
-    if (available.length === 0) {
-      side = side === 'german' ? 'allied' : 'german';
-      continue;
-    }
-    const unit = available[Math.floor(Math.random() * available.length)];
-    unit._simActed = true;
-
-    // 移動先候補（隣接hex）
-    const nids = getNeighborIds(unit.hexId).filter(nid => {
-      const t = TERRAIN_MAP[nid];
-      if (!t || t === 'x') return false;
-      // 敵がいるhexには移動不可
-      if (units.some(u => u.hexId === nid && u.side !== unit.side && !u.eliminated && !u.exited)) return false;
-      // スタック制限（同一hexに味方2ユニット以上いたら不可）
-      const friendsAt = units.filter(u => u.hexId === nid && u.side === unit.side && !u.eliminated && !u.exited);
-      if (friendsAt.length >= 2) return false;
-      return true;
-    });
-
-    if (nids.length > 0 && Math.random() < 0.8) {
-      if (unit.side === 'german') {
-        // ドイツ: 敵に隣接するhexを優先（包囲のため）
-        const adjToEnemy = nids.filter(nid =>
-          getNeighborIds(nid).some(adj =>
-            units.some(e => e.hexId === adj && e.side === 'allied' && !e.eliminated && !e.exited)
-          )
-        );
-        // 70%で敵隣接hex、30%でランダム
-        if (adjToEnemy.length > 0 && Math.random() < 0.7) {
-          unit.hexId = adjToEnemy[Math.floor(Math.random() * adjToEnemy.length)];
-        } else {
-          // 西寄りのhexを優先
-          nids.sort((a, b) => parseInt(a.substring(0, 2)) - parseInt(b.substring(0, 2)));
-          unit.hexId = nids[Math.floor(Math.random() * Math.min(3, nids.length))];
-        }
-      } else {
-        // 連合: 敵から離れるhexを優先（退避）、都市は守る
-        const safest = nids.filter(nid => {
-          const adjEnemyCount = getNeighborIds(nid).filter(adj =>
-            units.some(e => e.hexId === adj && e.side === 'german' && !e.eliminated && !e.exited)
-          ).length;
-          return adjEnemyCount === 0;
-        });
-        const isOnCity = FACILITY_MAP && FACILITY_MAP[unit.hexId] === 'c';
-        if (isOnCity && Math.random() < 0.6) {
-          // 都市にいるなら動かない確率60%
-        } else if (safest.length > 0) {
-          unit.hexId = safest[Math.floor(Math.random() * safest.length)];
-        } else {
-          unit.hexId = nids[Math.floor(Math.random() * nids.length)];
-        }
-      }
-    }
-
-    // 隣接敵がいれば戦闘判定
-    const adjEnemyHexes = getNeighborIds(unit.hexId).filter(nid =>
-      units.some(u => u.hexId === nid && u.side !== unit.side && !u.eliminated && !u.exited)
-    );
-    if (adjEnemyHexes.length > 0) {
-      // ドイツは積極的に攻撃（60%）、連合は消極的（20%）
-      const atkChance = unit.side === 'german' ? 0.6 : 0.2;
-      if (Math.random() < atkChance) {
-        const defHex = adjEnemyHexes[Math.floor(Math.random() * adjEnemyHexes.length)];
-        const defenders = units.filter(u => u.hexId === defHex && u.side !== unit.side && !u.eliminated);
-        if (defenders.length > 0) {
-          // 攻撃参加: 同hexの味方も参加
-          const coAttackers = units.filter(u =>
-            u.hexId === unit.hexId && u.side === unit.side && !u.eliminated && !u.exited
-          );
-          const atkPower = coAttackers.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-          const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-
-          // 支援計算（防御hex隣接の攻撃非参加味方ユニット数）
-          let support = 0;
-          const facility = FACILITY_MAP && FACILITY_MAP[defHex];
-          if (facility !== 'c') {
-            for (const nid of getNeighborIds(defHex)) {
-              const helpers = units.filter(u =>
-                u.hexId === nid && u.side === unit.side && !u.eliminated && !u.exited &&
-                u.hexId !== unit.hexId // 攻撃ユニットのhex以外
-              );
-              support += helpers.length;
-            }
-          }
-
-          const diff = atkPower - defPower;
-          const die = Math.floor(Math.random() * 6) + 1;
-          const modDie = Math.max(1, Math.min(6, die + support));
-          const result = lookupCRT(diff, modDie);
-
-          if (result === 'DE') {
-            defenders.forEach(u => u.eliminated = true);
-          } else if (result === 'EX') {
-            defenders[0].eliminated = true;
-            coAttackers[0].eliminated = true;
-          } else if (result === 'AR') {
-            coAttackers.forEach(u => u.flipped = true);
-          } else if (result === 'DD') {
-            defenders.forEach(u => u.flipped = true);
-          } else if (result === 'DR') {
-            // 退却: 退却先がなければ壊滅
-            for (const def of defenders) {
-              const retreats = mcCountRetreats(units, def);
-              if (retreats === 0) def.eliminated = true;
-              else def.flipped = true;
-            }
-          }
-        }
-      }
-    }
-
-    unit.flipped = true;
-    side = side === 'german' ? 'allied' : 'german';
-  }
-  return mcEvaluate(units);
-}
-
-// ========== モンテカルロ移動判断 ==========
+// ========== 移動判断: 全候補を静的評価 ==========
 function mcPickMove(unit, reachable) {
   const side = unit.side;
-  const sign = side === 'german' ? 1 : -1;
-  const candidates = [];
-
-  // 候補: 待機 + reachable
-  candidates.push({ hex: unit.hexId, label: '待機' });
+  const candidates = [{ hex: unit.hexId, label: '待機' }];
   for (const [hid] of reachable) {
     candidates.push({ hex: hid });
   }
-  // 候補が多い場合は上位8+待機に絞る
-  if (candidates.length > 9) {
-    candidates.sort((a, b) => {
-      const sa = mcQuickScore(a.hex, unit);
-      const sb = mcQuickScore(b.hex, unit);
-      return (sb - sa) * sign;
-    });
-    candidates.length = 9;
+
+  // 脅威マップ（連合防御時のみ）
+  let threatMap = null;
+  if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
+    threatMap = mcGermanThreatMap(G.units);
   }
 
-  console.log(`[MC] ${unit.name} (${side}) at ${dispHex(unit.hexId)} — ${candidates.length}候補`);
-
   let bestHex = unit.hexId;
-  let bestScore = -Infinity * sign;
+  let bestScore = -Infinity;
 
   for (const cand of candidates) {
-    let totalScore = 0;
-    for (let i = 0; i < MC.SIMS; i++) {
-      const simUnits = mcCloneUnits();
-      const simUnit = simUnits.find(u => u.id === unit.id);
-      if (simUnit) {
-        simUnit.hexId = cand.hex;
-        simUnit._simActed = true;
-        simUnit.flipped = true;
-      }
-      // スタック相方も一緒に移動（スタック解除しない場合）
-      if (unit.mechPair) {
-        const simPair = simUnits.find(u => u.id === unit.mechPair);
-        if (simPair && !simPair._simActed) {
-          simPair.hexId = cand.hex;
-          simPair._simActed = true;
-          simPair.flipped = true;
-        }
-      }
-      const enemySide = side === 'german' ? 'allied' : 'german';
-      const score = mcPlayout(simUnits, enemySide);
-      totalScore += score;
+    // 仮想移動
+    const simUnits = mcCloneUnits();
+    const simUnit = simUnits.find(u => u.id === unit.id);
+    if (simUnit) simUnit.hexId = cand.hex;
+    if (unit.mechPair) {
+      const simPair = simUnits.find(u => u.id === unit.mechPair);
+      if (simPair && simPair.hexId === unit.hexId) simPair.hexId = cand.hex;
     }
-    const avgScore = totalScore / MC.SIMS;
-    cand.score = avgScore;
-    console.log(`[MC]   ${dispHex(cand.hex)}${cand.label ? '(' + cand.label + ')' : ''}: avg=${avgScore.toFixed(1)}`);
 
-    if ((side === 'german' && avgScore > bestScore) ||
-        (side === 'allied' && avgScore < bestScore)) {
-      bestScore = avgScore;
+    // 基本スコア
+    let score = mcEvalPosition(cand.hex, unit, simUnits);
+
+    // 連合防御: 脅威マップを使って「ドイツが来そうな場所を塞ぐ」
+    if (threatMap && side === 'allied') {
+      const threat = threatMap[cand.hex] || 0;
+      if (threat > 0) score += threat * 3; // ドイツの進撃路上にいる = ブロック価値
+    }
+
+    // 相手の応答を考慮: この移動後、隣接敵がどう動けるか
+    const enemySide = side === 'german' ? 'allied' : 'german';
+    const adjEnemies = getNeighborIds(cand.hex).filter(nid =>
+      simUnits.some(u => u.hexId === nid && u.side === enemySide && !u.eliminated && !u.exited)
+    );
+
+    if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
+      // 防御時: 敵隣接は避ける（攻撃を誘発）
+      if (adjEnemies.length > 0) {
+        const adjPower = adjEnemies.reduce((s, nid) => {
+          return s + simUnits.filter(u => u.hexId === nid && u.side === 'german' && !u.eliminated).reduce((es, u) => es + (u.flipped ? u.def : u.atk), 0);
+        }, 0);
+        const myP = unit.flipped ? unit.def : unit.atk;
+        if (adjPower > myP) score -= 25; // 不利な戦闘に巻き込まれる
+      }
+    }
+
+    cand.score = score;
+    if (score > bestScore) {
+      bestScore = score;
       bestHex = cand.hex;
     }
   }
 
-  console.log(`[MC]   → 選択: ${dispHex(bestHex)} (score=${bestScore.toFixed(1)})`);
-  addLog('move', `[AI] ${unit.name}: ${dispHex(bestHex)}を選択 (MC=${bestScore.toFixed(1)})`);
+  // 連合防御: 最善候補が現在位置より悪いなら動かない
+  if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
+    const stayScore = candidates.find(c => c.hex === unit.hexId)?.score || 0;
+    if (bestScore <= stayScore + 3) bestHex = unit.hexId; // 微差なら動かない
+  }
+
+  const top3 = candidates.sort((a, b) => b.score - a.score).slice(0, 3);
+  console.log(`[AI] ${unit.name} (${side}) ${dispHex(unit.hexId)} → ${top3.map(c => `${dispHex(c.hex)}=${c.score.toFixed(0)}`).join(' ')} → ${dispHex(bestHex)}`);
+  addLog('move', `[AI] ${unit.name}: ${dispHex(bestHex)}を選択 (score=${bestScore.toFixed(0)})`);
   return bestHex;
 }
 
-// 簡易スコア（候補絞り込み用 — 上位候補をMCで精査）
-function mcQuickScore(hid, unit) {
-  let score = 0;
-  const { col } = parseHexId(hid);
-  const isCity = FACILITY_MAP && FACILITY_MAP[hid] === 'c';
-
-  if (unit.side === 'german') {
-    score -= col * 3; // 西へ行くほど加点
-    if (isCity) score += 20;
-
-    // 包囲価値: この位置から敵の退却hexをどれだけ塞げるか
-    const adjEnemyHexes = getNeighborIds(hid).filter(nid =>
-      getUnitsAt(nid).some(e => e.side === 'allied' && !e.eliminated && !e.exited)
-    );
-    for (const enemyHex of adjEnemyHexes) {
-      const enemy = getUnitsAt(enemyHex).find(e => e.side === 'allied');
-      if (enemy) {
-        // 現在の退却hex数
-        const currentRetreats = mcCountRetreats(G.units, enemy);
-        score += (6 - currentRetreats) * 3; // 退却先が少ないほど高評価
-        // ピン価値: 隣接すれば味方が敵ZOCを迂回可能
-        score += 5;
-      }
-    }
-
-    // 道路ボーナス
-    const isRoad = ROAD_MAP && ROAD_MAP[hid] && ROAD_MAP[hid].length > 0;
-    if (isRoad) score += 2;
-  } else {
-    if (isCity) score += 25;
-    // 退却先の確保
-    const retreatCount = mcCountRetreats(G.units, Object.assign({}, unit, { hexId: hid }));
-    score += retreatCount * 3;
-    // 敵から過度な圧力を受けていないか
-    const adjEnemyPower = getNeighborIds(hid).reduce((s, nid) => {
-      return s + getUnitsAt(nid).filter(e => e.side !== unit.side).reduce((es, e) => es + (e.flipped ? e.def : e.atk), 0);
-    }, 0);
-    const myPower = unit.flipped ? unit.def : unit.atk;
-    if (adjEnemyPower > myPower * 2) score -= 15; // 危険位置
-    // 味方と連携（味方隣接で孤立回避）
-    const adjFriendly = getNeighborIds(hid).filter(nid =>
-      getUnitsAt(nid).some(f => f.side === unit.side && f.id !== unit.id && !f.eliminated && !f.exited)
-    ).length;
-    score += adjFriendly * 2;
-  }
-
-  // 装甲部隊は道路なし森を避ける
-  const terrain = TERRAIN_MAP[hid];
-  const isRoad = ROAD_MAP && ROAD_MAP[hid] && ROAD_MAP[hid].length > 0;
-  if (terrain === 'f' && isMechanized(unit) && !isRoad) {
-    score -= 50;
-  }
-
-  return score;
-}
-
-// ========== モンテカルロ攻撃判断 ==========
+// ========== 攻撃判断: CRT期待値ベース ==========
 function mcDecideAttack(attackers, defenders, defHexId) {
   const side = G.activeSide;
-  const sign = side === 'german' ? 1 : -1;
+  const atkPower = attackers.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+  const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
 
-  let atkTotalScore = 0;
-  let noAtkTotalScore = 0;
-
-  for (let i = 0; i < MC.SIMS; i++) {
-    // 攻撃あり
-    const simA = mcCloneUnits();
-    const simAtk = attackers.map(u => simA.find(s => s.id === u.id)).filter(Boolean);
-    const simDef = defenders.map(u => simA.find(s => s.id === u.id)).filter(Boolean);
-    const atkPower = simAtk.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-    const defPower = simDef.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-
-    // 支援計算
-    let support = 0;
-    const facility = FACILITY_MAP && FACILITY_MAP[defHexId];
-    if (facility !== 'c') {
-      for (const nid of getNeighborIds(defHexId)) {
-        const helpers = simA.filter(u =>
-          u.side === side && !u.eliminated && !u.exited && u.hexId === nid &&
-          !simAtk.some(a => a.id === u.id)
-        );
-        support += helpers.length;
-      }
+  // 支援計算
+  let support = 0;
+  const facility = FACILITY_MAP && FACILITY_MAP[defHexId];
+  if (facility !== 'c') {
+    for (const nid of getNeighborIds(defHexId)) {
+      support += getUnitsAt(nid).filter(u =>
+        u.side === side && !attackers.some(a => a.id === u.id)
+      ).length;
     }
-
-    const diff = atkPower - defPower;
-    const die = Math.floor(Math.random() * 6) + 1;
-    const modDie = Math.max(1, Math.min(6, die + support));
-    const result = lookupCRT(diff, modDie);
-
-    if (result === 'DE') simDef.forEach(u => u.eliminated = true);
-    else if (result === 'EX') { if (simDef[0]) simDef[0].eliminated = true; if (simAtk[0]) simAtk[0].eliminated = true; }
-    else if (result === 'DD') simDef.forEach(u => u.flipped = true);
-    else if (result === 'AR') simAtk.forEach(u => u.flipped = true);
-    else if (result === 'DR') {
-      for (const def of simDef) {
-        const retreats = mcCountRetreats(simA, def);
-        if (retreats === 0) def.eliminated = true;
-        else def.flipped = true;
-      }
-    }
-
-    const enemySide = side === 'german' ? 'allied' : 'german';
-    atkTotalScore += mcPlayout(simA, enemySide);
-
-    // 攻撃なし
-    const simB = mcCloneUnits();
-    noAtkTotalScore += mcPlayout(simB, enemySide);
   }
 
-  const atkAvg = atkTotalScore / MC.SIMS;
-  const noAtkAvg = noAtkTotalScore / MC.SIMS;
-  const shouldAttack = (side === 'german') ? (atkAvg > noAtkAvg) : (atkAvg < noAtkAvg);
+  const isForest = TERRAIN_MAP[defHexId] === 'f';
+  const defRetreatCount = defenders.reduce((min, d) => {
+    const r = mcCountRetreats(G.units, d);
+    return r < min ? r : min;
+  }, 6);
 
-  console.log(`[MC] ATTACK? ${dispHex(defHexId)} atk=${atkAvg.toFixed(1)} skip=${noAtkAvg.toFixed(1)} → ${shouldAttack ? '攻撃' : '見送り'}`);
-  addLog('combat', `[AI] ${dispHex(defHexId)}攻撃${shouldAttack ? '実行' : '見送り'} (atk=${atkAvg.toFixed(1)} / skip=${noAtkAvg.toFixed(1)})`);
+  const { atkLoss, defLoss } = mcExpectedCombat(atkPower, defPower, support, isForest, defRetreatCount);
+
+  const alliedOffensive = mcIsAlliedOffensive(G.units);
+
+  let shouldAttack;
+  if (side === 'german') {
+    // ドイツ: 期待防御損失が攻撃損失を上回れば攻撃
+    // 包囲壊滅なら必ず攻撃
+    if (defRetreatCount === 0) shouldAttack = true;
+    else shouldAttack = defLoss > atkLoss * 1.2;
+  } else {
+    if (alliedOffensive) {
+      // 攻勢: 包囲壊滅なら必ず攻撃、そうでなければ有利な時だけ
+      if (defRetreatCount === 0) shouldAttack = true;
+      else shouldAttack = defLoss > atkLoss * 1.5;
+    } else {
+      // 防御: 基本攻撃しない。包囲壊滅チャンスのみ
+      shouldAttack = defRetreatCount === 0 && defLoss > atkLoss;
+    }
+  }
+
+  console.log(`[AI] ATTACK? ${dispHex(defHexId)} atk=${atkPower} def=${defPower} sup=${support} forest=${isForest?1:0} retreat=${defRetreatCount} E[atkLoss]=${atkLoss.toFixed(2)} E[defLoss]=${defLoss.toFixed(2)} → ${shouldAttack ? '攻撃' : '見送り'}`);
+  addLog('combat', `[AI] ${dispHex(defHexId)}攻撃${shouldAttack ? '実行' : '見送り'} (E[損]=${atkLoss.toFixed(2)}/${defLoss.toFixed(2)})`);
   return shouldAttack;
 }
