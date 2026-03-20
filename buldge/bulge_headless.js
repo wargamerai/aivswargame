@@ -473,130 +473,118 @@ function aiPickMoveTarget(unit, reachable) {
   return bestHex;
 }
 
-// ========== 同期AI: 1手番を実行 ==========
-function aiPlayOneSide(side) {
+// ========== 同期AI: 1ユニットだけ処理してtrue返す。処理なしならfalse ==========
+function aiPlayOneUnit(side) {
   G.activeSide = side;
-  const maxOps = 50; // 無限ループ防止
-  let ops = 0;
+  const enemySide = side === 'german' ? 'allied' : 'german';
 
-  while (ops++ < maxOps) {
-    // 未行動ユニット
-    const units = G.units.filter(u =>
-      u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
-    );
-    if (units.length === 0) break;
+  // 未行動ユニット
+  const units = G.units.filter(u =>
+    u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
+  );
+  if (units.length === 0) return false; // パス
 
-    // NW突破
-    if (side === 'german') {
-      let exited = false;
-      for (const u of units) {
-        if (canExitNW(u)) { exitUnitNW(u.id); exited = true; break; }
-      }
-      if (exited) continue;
+  // NW突破（ドイツ）
+  if (side === 'german') {
+    for (const u of units) {
+      if (canExitNW(u)) { exitUnitNW(u.id); return true; }
     }
+  }
 
-    // 機械化を先に移動（ドイツ）
-    if (side === 'german') {
-      units.sort((a, b) => (isMechanized(a) ? 0 : 1) - (isMechanized(b) ? 0 : 1));
-    }
+  // 機械化を先に移動（ドイツ）
+  if (side === 'german') {
+    units.sort((a, b) => (isMechanized(a) ? 0 : 1) - (isMechanized(b) ? 0 : 1));
+  }
 
-    const unit = units[0];
-    const reachable = calcReachable(unit);
+  const unit = units[0];
+  const reachable = calcReachable(unit);
 
-    if (reachable.size === 0) {
+  if (reachable.size === 0) {
+    unit.acted = true; unit.flipped = true;
+    return true;
+  }
+
+  // 移動先選択
+  const bestHex = G.useMC ? mcPickMove(unit, reachable) : aiPickMoveTarget(unit, reachable);
+
+  if (bestHex && bestHex !== unit.hexId) {
+    const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
+    if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
       unit.acted = true; unit.flipped = true;
-      continue;
+      return true;
+    }
+    const stacked = isStacked(unit);
+    const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
+    unit.hexId = bestHex;
+    unit.acted = true;
+    if (stacked && pair && !pair.acted) {
+      pair.hexId = bestHex;
+      pair.acted = true;
     }
 
-    // 移動先選択
-    const bestHex = G.useMC ? mcPickMove(unit, reachable) : aiPickMoveTarget(unit, reachable);
-
-    if (bestHex && bestHex !== unit.hexId) {
-      const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
-      if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
-        unit.acted = true; unit.flipped = true;
-        continue;
-      }
-      const info = reachable.get(bestHex);
-      const stacked = isStacked(unit);
-      const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
-      unit.hexId = bestHex;
-      unit.acted = true;
-      if (stacked && pair && !pair.acted) {
-        pair.hexId = bestHex;
-        pair.acted = true;
-      }
-
-      // 隣接敵 → 攻撃
-      const adjEnemy = getNeighborIds(bestHex).some(nid =>
-        getUnitsAt(nid).some(u => u.side !== side)
+    // 隣接敵 → 攻撃判定
+    const adjEnemy = getNeighborIds(bestHex).some(nid =>
+      getUnitsAt(nid).some(u => u.side !== side)
+    );
+    if (adjEnemy) {
+      const enemyHexes = new Set();
+      const actedUnits = G.units.filter(u =>
+        u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
       );
-      if (adjEnemy) {
-        // 攻撃実行
-        const enemySide = side === 'german' ? 'allied' : 'german';
-        const enemyHexes = new Set();
-        const actedUnits = G.units.filter(u =>
-          u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
-        );
-        for (const au of actedUnits) {
-          for (const nid of getNeighborIds(au.hexId)) {
-            if (getUnitsAt(nid).some(e => e.side === enemySide)) enemyHexes.add(nid);
+      for (const au of actedUnits) {
+        for (const nid of getNeighborIds(au.hexId)) {
+          if (getUnitsAt(nid).some(e => e.side === enemySide)) enemyHexes.add(nid);
+        }
+      }
+      let bestAttack = null, bestDiff = -Infinity;
+      for (const defHex of enemyHexes) {
+        const defenders = getUnitsAt(defHex).filter(u => u.side === enemySide);
+        const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+        const adjF = [];
+        for (const nid of getNeighborIds(defHex)) {
+          adjF.push(...getUnitsAt(nid).filter(u =>
+            u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
+          ));
+        }
+        const atkPower = adjF.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+        const d = atkPower - defPower;
+        if (atkPower >= defPower && d > bestDiff) {
+          bestDiff = d;
+          bestAttack = { defHex, attackers: adjF.map(u => u.id), defenders };
+        }
+      }
+      if (bestAttack) {
+        if (G.useMC) {
+          const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
+          if (!mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
+            unit.flipped = true; if (stacked && pair) pair.flipped = true;
+            return true;
           }
         }
-        let bestAttack = null, bestDiff = -Infinity;
-        for (const defHex of enemyHexes) {
-          const defenders = getUnitsAt(defHex).filter(u => u.side === enemySide);
-          const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-          const adjF = [];
-          for (const nid of getNeighborIds(defHex)) {
-            adjF.push(...getUnitsAt(nid).filter(u =>
-              u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
-            ));
-          }
-          const atkPower = adjF.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-          const d = atkPower - defPower;
-          if (atkPower >= defPower && d > bestDiff) {
-            bestDiff = d;
-            bestAttack = { defHex, attackers: adjF.map(u => u.id), defenders };
-          }
+        for (const uid of bestAttack.attackers) {
+          const u = G.units.find(x => x.id === uid);
+          if (u) u._aiAttacked = true;
         }
-        if (bestAttack) {
-          // MC攻撃判断
-          if (G.useMC) {
-            const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
-            if (!mcDecideAttack(atkUnits, bestAttack.defenders, bestAttack.defHex)) {
-              // 攻撃見送り
-              G.units.filter(u => u.side === side && u.acted && !u.flipped).forEach(u => {
-                u.flipped = true; delete u.mustAttack;
-              });
-              continue;
-            }
-          }
-          for (const uid of bestAttack.attackers) {
-            const u = G.units.find(x => x.id === uid);
-            if (u) u._aiAttacked = true;
-          }
-          resetCombat();
-          G.combat.defHex = bestAttack.defHex;
-          G.combat.defenders = bestAttack.defenders;
-          G.combat.attackers = bestAttack.attackers;
-          executeCombatSync();
-        } else {
-          // 有利な攻撃なし
-          unit.flipped = true;
-          if (stacked && pair) pair.flipped = true;
-        }
+        resetCombat();
+        G.combat.defHex = bestAttack.defHex;
+        G.combat.defenders = bestAttack.defenders;
+        G.combat.attackers = bestAttack.attackers;
+        executeCombatSync();
       } else {
         unit.flipped = true;
         if (stacked && pair) pair.flipped = true;
       }
     } else {
-      unit.acted = true; unit.flipped = true;
+      unit.flipped = true;
+      if (stacked && pair) pair.flipped = true;
     }
+  } else {
+    unit.acted = true; unit.flipped = true;
   }
+  return true;
 }
 
-// ========== 1ゲーム実行 ==========
+// ========== 1ゲーム実行（1ユニットずつ交互） ==========
 function playOneGame(useMC) {
   initGame(useMC);
 
@@ -615,21 +603,29 @@ function playOneGame(useMC) {
     // 回復
     doRecovery();
 
-    // 作戦フェーズ
+    // 作戦フェーズ: 1ユニットずつ交互
     G.phase = 'operation';
-    // ユニットリセット
     G.units.forEach(u => {
-      u.acted = false; delete u.mustAttack; delete u.movePath;
+      u.acted = false; u.flipped = false;
+      delete u.mustAttack; delete u.movePath;
       delete u._movePathExpiry; delete u._lastMovedAt;
       delete u._unstacked; delete u._aiAttacked;
     });
 
-    // ドイツ軍 → 連合軍 を交互に
-    // 簡易版: 各サイドが全ユニットを動かす
-    aiPlayOneSide('german');
-    // ドイツ軍全ユニットリセット（連合軍の番）
-    G.units.filter(u => u.side === 'allied').forEach(u => { u.acted = false; u.flipped = false; delete u._aiAttacked; });
-    aiPlayOneSide('allied');
+    let currentSide = 'german';
+    let passCount = 0;
+    let maxOps = 200; // 無限ループ防止
+
+    while (passCount < 2 && maxOps-- > 0) {
+      const didSomething = aiPlayOneUnit(currentSide);
+      if (!didSomething) {
+        passCount++;
+      } else {
+        passCount = 0;
+      }
+      // サイド交代
+      currentSide = currentSide === 'german' ? 'allied' : 'german';
+    }
   }
 
   calcVP();
