@@ -423,75 +423,29 @@ function evalGlobalBoard(units) {
   const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
   const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
 
-  // ドイツ戦車到達可能hex
+  // === 評価1: ドイツ戦車到達可能hex数（戦線維持の指標）===
   const germanReachSet = mcCalcGermanReach();
-
-  // 都市VP（ドイツ戦車リーチ内の都市のみ評価）
-  if (FACILITY_MAP) {
-    for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
-      if (fac !== 'c') continue;
-      if (!germanReachSet.has(hid)) continue; // リーチ外の都市は評価しない
-      if (germanAlive.some(u => u.hexId === hid)) score += 3;
-      else if (alliedAlive.some(u => u.hexId === hid)) score -= 2;
-      else score += 1;
-    }
-  }
-
-  // 道路交差点の支配（都市より重要）
-  for (const au of alliedAlive) {
-    const roads = ROAD_MAP[au.hexId] || [];
-    if (roads.length >= 2) score -= roads.length * 3; // 複数路線交差 = ドイツ不利
-    else if (roads.length === 1) score -= 1;
-  }
-  for (const gu of germanAlive) {
-    const roads = ROAD_MAP[gu.hexId] || [];
-    if (roads.length >= 2) score += roads.length * 2;
-  }
-
-  // 部隊残存
-  for (const u of units) {
-    if (u.eliminated) { score += u.side === 'allied' ? 6 : -7; continue; }
-    if (u.exited) { if (u._exitedNW) score += 5; continue; }
-    const power = u.flipped ? u.def : u.atk;
-    if (u.side === 'german') {
-      score += power * 0.5;
-      const col = parseInt(u.hexId.substring(0, 2)) - 1;
-      score += (20 - col) * 0.4;
-    } else {
-      score -= power * 0.6;
-      // 包囲度（退路なし=壊滅リスク）
-      const retreats = mcCountRetreats(units, u);
-      if (retreats === 0) score += 12;
-      else if (retreats === 1) score += 5;
-    }
-  }
-
-  // ドイツ到達可能hex数（多い=ドイツ有利、連合がブロックしていない）
   score += germanReachSet.size * 0.5;
 
-  // 装甲が道路なし森にいる = 閉じ込めリスク（ドイツ不利）
-  for (const gu of germanAlive) {
-    if (isMechanized(gu)) {
-      const t = TERRAIN_MAP[gu.hexId];
-      if (t === 'f') {
-        const roads = ROAD_MAP[gu.hexId] || [];
-        // 隣接hexへの道路接続を確認
-        const canEscape = getNeighborIds(gu.hexId).some(nid => {
-          const nRoads = ROAD_MAP[nid] || [];
-          return roads.some(r => nRoads.includes(r));
-        });
-        if (!canEscape) score -= 8; // 完全に閉じ込め
-        else if (roads.length === 0) score -= 4; // 道路なし森
-      }
-    }
+  // === 評価2: 連合ユニットの包囲回避 ===
+  for (const au of alliedAlive) {
+    const retreats = mcCountRetreats(units, au);
+    if (retreats === 0) score += 15;      // 完全包囲 = ドイツ大有利
+    else if (retreats === 1) score += 8;   // ほぼ包囲
+    else if (retreats === 2) score += 3;   // 危険
   }
 
-  // ZOC無効化: ドイツが連合に隣接 → その連合のZOCが無効化され戦線に穴
-  for (const au of alliedAlive) {
-    const adjGerman = getNeighborIds(au.hexId).filter(nid =>
-      germanAlive.some(gu => gu.hexId === nid)
-    ).length;
-    if (adjGerman > 0) score += adjGerman * 6; // ZOC無効化+戦闘支援 = ドイツ大有利
+  // === ドイツ側: 部隊残存・進出度（ドイツAI用）===
+  for (const gu of germanAlive) {
+    const power = gu.flipped ? gu.def : gu.atk;
+    score += power * 0.5;
+    const col = parseInt(gu.hexId.substring(0, 2)) - 1;
+    score += (20 - col) * 0.4;
+  }
+  // 壊滅ペナルティ
+  for (const u of units) {
+    if (u.eliminated) { score += u.side === 'allied' ? 4 : -5; }
+    if (u.exited && u._exitedNW) score += 5;
   }
 
   return score;

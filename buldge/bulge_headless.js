@@ -649,6 +649,8 @@ function aiPlayOneUnit(side) {
     let bestAttack = null, bestDiff = -Infinity;
     for (const defHex of enemyHexes) {
       const defenders = getUnitsAt(defHex).filter(u => u.side === enemySide);
+      // 連合軍: 防御側が全員裏の場合のみ攻撃（表の敵には攻撃しない）
+      if (side === 'allied' && defenders.some(u => !u.flipped)) continue;
       const defPower = defenders.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
       const adjF = [];
       for (const nid of getNeighborIds(defHex)) {
