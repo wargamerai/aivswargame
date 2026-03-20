@@ -216,12 +216,14 @@ function mcEvalPosition(hid, unit, units) {
 // ========== CRT期待値計算（確定的）==========
 function mcExpectedCombat(atkPower, defPower, support, isForest, defRetreatCount) {
   const diff = atkPower - defPower;
-  const forestMod = isForest ? 1 : 0;
+  const FOREST_SHIFT = { DE:'EX', EX:'DD', DD:'DR', DR:'NE', NE:'AR', AR:'AR' };
 
   let atkLoss = 0, defLoss = 0;
   for (let die = 1; die <= 6; die++) {
-    const modDie = die + support - forestMod;
-    const result = lookupCRT(diff, modDie);
+    const modDie = die + support;
+    let result = lookupCRT(diff, modDie);
+    // 森林結果修正: 1段階防御側有利にシフト
+    if (isForest) result = FOREST_SHIFT[result] || result;
     switch (result) {
       case 'DE': defLoss += 1.0; break;
       case 'EX': defLoss += 0.5; atkLoss += 0.5; break;
