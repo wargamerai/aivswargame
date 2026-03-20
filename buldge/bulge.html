@@ -1965,7 +1965,7 @@ function updateRightPanel() {
         const retreatHexes = getRetreatHexes(unit);
         retreatInfo = retreatHexes.length > 0
           ? `<div style="color:#5f5;margin:4px 0;">退却可能: ${retreatHexes.map(h => dispHex(h)).join(', ')}</div><div>緑色のhexをクリックしてください</div>`
-          : `<div style="color:#f55;margin:4px 0;">退却先なし — ユニット除去</div>`;
+          : `<div style="color:#f55;margin:4px 0;">退却先なし</div><button class="btn" style="background:#e94560;margin-top:6px;" onclick="eliminateNoRetreat()">ユニット除去</button>`;
       }
       panel.innerHTML = `<div class="combat-info"><b>${unit ? unit.name : '?'}</b> (${unit ? dispHex(unit.hexId) : '?'})<br>${retreatInfo}</div>`;
     } else if (G.opPhase === 'advance') {
@@ -1985,12 +1985,70 @@ function updateRightPanel() {
         </div>`;
       }
       html += '</div>';
-      html += `<div class="section">
+      html += `<div class="section" style="display:flex;gap:8px;">
         <button class="btn" onclick="passPhase()">パス</button>
+        <button class="btn" onclick="undoLastMove()" style="background:#555;">移動やり直し</button>
       </div>`;
       panel.innerHTML = html;
     }
   }
+}
+
+// 退却先なしユニットを除去して次へ進む
+function eliminateNoRetreat() {
+  const ru = G.combat.retreatingUnits[0];
+  if (!ru) return;
+  const unit = G.units.find(u => u.id === ru);
+  if (!unit) return;
+  eliminateUnit(unit);
+  addLog('combat', `${unit.name}: 退却先なし → 除去`);
+  G.combat.retreatingUnits.shift();
+  if (G.combat.retreatingUnits.length === 0) {
+    checkAdvance();
+  }
+  updateRightPanel();
+  draw();
+  scheduleAI(500);
+}
+
+// 最後に移動したユニットを元の位置に戻す
+function undoLastMove() {
+  // 今のターンで移動済み（acted=true）かつmovePathがあるユニットから最後のものを探す
+  const movedUnits = G.units.filter(u =>
+    u.side === G.activeSide && u.acted && u.movePath && u.movePath.length > 0 && !u.eliminated && !u.exited
+  );
+  if (movedUnits.length === 0) {
+    addLog('move', '移動やり直し: 対象なし');
+    return;
+  }
+  // 最後に移動したユニット（配列の末尾）
+  const unit = movedUnits[movedUnits.length - 1];
+  const origHex = unit.movePath[0];
+  addLog('move', `移動やり直し: ${unit.name} → ${dispHex(origHex)} に戻す`);
+  unit.hexId = origHex;
+  unit.acted = false;
+  delete unit.movePath;
+  delete unit.mustAttack;
+  // スタック相方も戻す
+  if (unit.mechPair) {
+    const pair = G.units.find(u => u.id === unit.mechPair);
+    if (pair && pair.acted && pair.movePath && pair.movePath[0]) {
+      pair.hexId = pair.movePath[0];
+      pair.acted = false;
+      delete pair.movePath;
+      delete pair.mustAttack;
+      addLog('move', `移動やり直し: ${pair.name} → ${dispHex(pair.hexId)} に戻す`);
+    }
+  }
+  // 攻撃フェーズ中ならselectに戻す
+  if (G.opPhase === 'attack') {
+    G.opPhase = 'select';
+    resetCombat();
+  }
+  G.selectedUnit = null;
+  G.reachable = null;
+  updateRightPanel();
+  draw();
 }
 
 function cancelSelect() {
