@@ -357,3 +357,141 @@ function mcDecideAttack(attackers, defenders, defHexId) {
   addLog('combat', `[AI] ${dispHex(defHexId)}攻撃${shouldAttack ? '実行' : '見送り'} (E[損]=${atkLoss.toFixed(2)}/${defLoss.toFixed(2)})`);
   return shouldAttack;
 }
+
+// ========== 全体盤面評価（ドイツ視点、正=ドイツ有利）==========
+function evalGlobalBoard(units) {
+  let score = 0;
+  const germanAlive = units.filter(u => u.side === 'german' && !u.eliminated && !u.exited);
+  const alliedAlive = units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
+  // 都市
+  if (FACILITY_MAP) {
+    for (const [hid, fac] of Object.entries(FACILITY_MAP)) {
+      if (fac !== 'c') continue;
+      if (germanAlive.some(u => u.hexId === hid)) score += 10;
+      else if (alliedAlive.some(u => u.hexId === hid)) score -= 8;
+      else score += 2;
+    }
+  }
+  // 部隊
+  for (const u of units) {
+    if (u.eliminated) { score += u.side === 'allied' ? 6 : -7; continue; }
+    if (u.exited) { if (u._exitedNW) score += 5; continue; }
+    const power = u.flipped ? u.def : u.atk;
+    if (u.side === 'german') {
+      score += power * 0.5;
+      const col = parseInt(u.hexId.substring(0, 2)) - 1;
+      score += (20 - col) * 0.4;
+    } else {
+      score -= power * 0.6;
+      const retreats = mcCountRetreats(units, u);
+      if (retreats === 0) score += 12;
+      else if (retreats === 1) score += 5;
+    }
+  }
+  // 連合戦線
+  for (const au of alliedAlive) {
+    const adjFriends = getNeighborIds(au.hexId).filter(nid =>
+      alliedAlive.some(f => f.id !== au.id && f.hexId === nid)
+    ).length;
+    score -= adjFriends * 1.5;
+    const rv = mcRoadValue(au.hexId);
+    if (rv > 0) score -= rv * 1.2;
+    const adjEnemy = getNeighborIds(au.hexId).filter(nid =>
+      germanAlive.some(gu => gu.hexId === nid)
+    ).length;
+    if (adjEnemy > 0) {
+      const retreats = mcCountRetreats(units, au);
+      score += adjEnemy * 3;
+      if (retreats <= 1) score += 8;
+    }
+  }
+  for (const gu of germanAlive) {
+    const adjAllied = getNeighborIds(gu.hexId).filter(nid =>
+      alliedAlive.some(au => au.hexId === nid)
+    ).length;
+    if (adjAllied > 0) score += adjAllied * 2;
+  }
+  return score;
+}
+
+// ========== 全体スキャン移動: 全ユニット×全候補を比較 ==========
+// ブラウザ版aiDoMovementから呼ばれる。bestUnit+bestHexを返す
+function mcGlobalScanMove(side) {
+  const sign = side === 'german' ? 1 : -1;
+  const units = G.units.filter(u =>
+    u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
+  );
+  if (units.length === 0) return null;
+
+  const baseScore = evalGlobalBoard(G.units);
+  let bestUnit = null, bestHex = null, bestDelta = -Infinity;
+
+  for (const unit of units) {
+    const reachable = calcReachable(unit);
+    const candidates = [unit.hexId];
+    for (const [hid] of reachable) candidates.push(hid);
+
+    for (const hid of candidates) {
+      if (hid !== unit.hexId) {
+        const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
+        if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
+      }
+      const savedHex = unit.hexId;
+      const stacked = isStacked(unit);
+      const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
+      const savedPairHex = pair ? pair.hexId : null;
+
+      unit.hexId = hid;
+      if (stacked && pair) pair.hexId = hid;
+
+      const newScore = evalGlobalBoard(G.units);
+      let delta = (newScore - baseScore) * sign;
+
+      // 連合防御: 敵隣接ペナルティ
+      if (side === 'allied' && !mcIsAlliedOffensive(G.units)) {
+        const adjEnemy = getNeighborIds(hid).some(nid =>
+          getUnitsAt(nid).some(e => e.side === 'german')
+        );
+        if (adjEnemy && hid !== savedHex) delta -= 8;
+      }
+
+      if (delta > bestDelta) {
+        bestDelta = delta;
+        bestUnit = unit;
+        bestHex = hid;
+      }
+
+      unit.hexId = savedHex;
+      if (pair) pair.hexId = savedPairHex;
+    }
+  }
+  return bestUnit ? { unit: bestUnit, hex: bestHex, delta: bestDelta } : null;
+}
+
+// ========== 連合自発的パス判定 ==========
+function mcShouldAlliedPass() {
+  const germanRemaining = G.units.filter(u =>
+    u.side === 'german' && !u.acted && !u.flipped && !u.eliminated && !u.exited
+  ).length;
+  const alliedUnits = G.units.filter(u =>
+    u.side === 'allied' && !u.acted && !u.flipped && !u.eliminated && !u.exited
+  );
+  if (germanRemaining === 0 || alliedUnits.length === 0) return false;
+
+  // 緊急: 包囲危機 or 都市直接脅威
+  for (const u of alliedUnits) {
+    const adjEnemy = getNeighborIds(u.hexId).some(nid =>
+      getUnitsAt(nid).some(e => e.side === 'german')
+    );
+    if (adjEnemy) {
+      const retreats = typeof getRetreatHexes === 'function' ? getRetreatHexes(u).length : 3;
+      if (retreats <= 1) return false; // 緊急 → 動く
+    }
+    if (FACILITY_MAP && FACILITY_MAP[u.hexId] === 'c' && adjEnemy) {
+      return false; // 都市防衛 → 動く
+    }
+  }
+  // ドイツ残り多い → パス
+  if (germanRemaining > alliedUnits.length) return true;
+  return false;
+}

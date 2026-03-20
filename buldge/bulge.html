@@ -2350,7 +2350,13 @@ function aiDoMovement() {
   );
 
   if (units.length === 0) {
-    // 未行動ユニットなし → パス
+    passPhase();
+    return;
+  }
+
+  // === 連合軍: 自発的パス（MC有効時のみ）===
+  if (G.useMC && side === 'allied' && mcShouldAlliedPass()) {
+    addLog('move', `[AI] 連合軍パス（ドイツの動きを待つ）`);
     passPhase();
     return;
   }
@@ -2361,54 +2367,62 @@ function aiDoMovement() {
       if (canExitNW(u)) {
         addLog('turn', `[AI] ${u.name} NW突破`);
         exitUnitNW(u.id);
-        // NW突破後サイド切替
         switchSide();
         return;
       }
     }
   }
 
-  // 機械化ユニットを先に移動（ドイツAIのみ）
-  if (side === 'german') {
-    units.sort((a, b) => (isMechanized(a) ? 0 : 1) - (isMechanized(b) ? 0 : 1));
+  // === 全体スキャン移動（MC有効時）===
+  let unit, bestHex;
+  if (G.useMC) {
+    const result = mcGlobalScanMove(side);
+    if (!result) {
+      passPhase();
+      return;
+    }
+    unit = result.unit;
+    bestHex = result.hex;
+  } else {
+    // 旧ロジック: 最初のユニットを移動
+    if (side === 'german') {
+      units.sort((a, b) => (isMechanized(a) ? 0 : 1) - (isMechanized(b) ? 0 : 1));
+    }
+    unit = units[0];
+    const reachable = calcReachable(unit);
+    if (reachable.size === 0) {
+      unit.acted = true; unit.flipped = true;
+      addLog('move', `[AI] ${unit.name}: 移動先なし`);
+      switchSide();
+      return;
+    }
+    bestHex = aiPickMoveTarget(unit, reachable);
   }
 
-  const unit = units[0];
-  const reachable = calcReachable(unit);
-
-  if (reachable.size === 0) {
-    // 移動先なし → 行動済み、裏にしてサイド切替
-    unit.acted = true;
-    unit.flipped = true;
-    addLog('move', `[AI] ${unit.name}: 移動先なし`);
-    switchSide();
-    return;
-  }
-
-  // 最適な移動先を選択
-  const bestHex = G.useMC ? mcPickMove(unit, reachable) : aiPickMoveTarget(unit, reachable);
   if (bestHex && bestHex !== unit.hexId) {
     const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
     if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
-      unit.acted = true;
-      unit.flipped = true;
+      unit.acted = true; unit.flipped = true;
       addLog('move', `[AI] ${unit.name}: スタック制限で移動不可`);
       switchSide();
       return;
     }
+    const reachable = calcReachable(unit);
     const info = reachable.get(bestHex);
     const fromHex = unit.hexId;
     const stacked = isStacked(unit);
     const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
-    unit.movePath = [fromHex, ...info.path];
+    if (info) {
+      unit.movePath = [fromHex, ...info.path];
+    }
     unit.hexId = bestHex;
     unit.acted = true;
     if (stacked && pair && !pair.acted) {
       pair.hexId = bestHex;
       pair.acted = true;
-      pair.movePath = [fromHex, ...info.path];
+      if (info) pair.movePath = [fromHex, ...info.path];
     }
-    const pathStr = unit.movePath.map(h => dispHex(h)).join('→');
+    const pathStr = unit.movePath ? unit.movePath.map(h => dispHex(h)).join('→') : dispHex(bestHex);
     addLog('move', `[AI] ${unit.name}: ${pathStr}`);
     panToHex(bestHex);
 
@@ -2424,7 +2438,6 @@ function aiDoMovement() {
       addLog('turn', `━ [AI] ${unit.name} 攻撃 ━`);
       updateRightPanel();
       draw();
-      // AI攻撃へ
       scheduleAI(600);
     } else {
       unit.flipped = true; expireMovePath(unit);
@@ -2432,8 +2445,7 @@ function aiDoMovement() {
       switchSide();
     }
   } else {
-    unit.acted = true;
-    unit.flipped = true;
+    unit.acted = true; unit.flipped = true;
     addLog('move', `[AI] ${unit.name}: 待機`);
     switchSide();
   }
