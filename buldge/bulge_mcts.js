@@ -3,6 +3,16 @@
 
 const MC = { SIMS: 0 }; // 互換用（未使用）
 
+// ========== 死守都市 ==========
+const HOLD_CITIES = ['1508', '1114']; // ST.VITH, BASTOGNE
+
+// 死守都市にいる歩兵は移動禁止（DRによる退却は別処理なので影響しない）
+function mustHoldCity(unit) {
+  if (unit.side !== 'allied') return false;
+  if (isMechanized(unit)) return false; // 歩兵のみ対象
+  return HOLD_CITIES.includes(unit.hexId);
+}
+
 // ========== VP都市リスト ==========
 function mcGetCityHexes() {
   const cities = [];
@@ -489,6 +499,9 @@ function mcGlobalScanMove(side) {
   let bestUnit = null, bestHex = null, bestDelta = -Infinity;
 
   for (const unit of units) {
+    // 死守都市の歩兵は動かさない
+    if (mustHoldCity(unit)) continue;
+
     const reachable = calcReachable(unit);
     const candidates = [unit.hexId];
     for (const [hid] of reachable) {
