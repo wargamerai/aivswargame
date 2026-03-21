@@ -620,3 +620,216 @@ function mcShouldAlliedPass() {
   if (germanRemaining > alliedUnits.length) return true;
   return false;
 }
+
+// ========== 連合軍ドクトリン移動 ==========
+
+// ZOC戦線構築: 地図の端（上下）からZOC+ユニットが途切れなく連なる線を検出
+function buildAlliedLine() {
+  const alliedAlive = G.units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
+  const unitHexSet = new Set(alliedAlive.map(u => u.hexId));
+
+  // 連合ユニットのZOC領域（ユニットhex + 敵のいない隣接hex）
+  const zocSet = new Set();
+  for (const u of alliedAlive) {
+    zocSet.add(u.hexId);
+    for (const nid of getNeighborIds(u.hexId)) {
+      const enemyThere = G.units.some(e => e.hexId === nid && e.side === 'german' && !e.eliminated && !e.exited);
+      if (!enemyThere) zocSet.add(nid);
+    }
+  }
+
+  // BFS: 地図の上端(row=0)・下端(row=ROWS-1)からzocSetを通じて到達可能なhexを探索
+  const visited = new Set();
+  const queue = [];
+  for (let c = 0; c < COLS; c++) {
+    const topHex = hexId(c, 0);
+    const botHex = hexId(c, ROWS - 1);
+    if (zocSet.has(topHex)) { queue.push(topHex); visited.add(topHex); }
+    if (zocSet.has(botHex) && !visited.has(botHex)) { queue.push(botHex); visited.add(botHex); }
+  }
+  while (queue.length > 0) {
+    const hex = queue.shift();
+    for (const nid of getNeighborIds(hex)) {
+      if (zocSet.has(nid) && !visited.has(nid)) {
+        visited.add(nid);
+        queue.push(nid);
+      }
+    }
+  }
+
+  // 戦線上のユニットを判定
+  const onLine = new Set();
+  for (const u of alliedAlive) {
+    if (visited.has(u.hexId)) onLine.add(u.id);
+  }
+
+  return { lineHexes: visited, onLine, zocSet, unitHexSet };
+}
+
+// 表の敵に隣接しているかチェック
+function hasAdjacentFaceUpEnemy(hid) {
+  return getNeighborIds(hid).some(nid =>
+    G.units.some(e => e.hexId === nid && e.side === 'german' && !e.eliminated && !e.exited && !e.flipped)
+  );
+}
+
+// 道路hex上で戦線にいるか（動かしてはいけないユニット）
+function isRoadGuard(unit, lineInfo) {
+  if (!lineInfo.onLine.has(unit.id)) return false;
+  const roads = ROAD_MAP && ROAD_MAP[unit.hexId];
+  return roads && roads.length > 0;
+}
+
+// 連合軍ドクトリン移動メイン
+function mcAlliedDoctrineMove() {
+  const units = G.units.filter(u =>
+    u.side === 'allied' && !u.acted && !u.flipped && !u.eliminated && !u.exited
+  );
+  if (units.length === 0) return null;
+
+  const movable = units.filter(u => !mustHoldCity(u) && mustMarchToCity(u) === null);
+  if (movable.length === 0) return null;
+
+  const lineInfo = buildAlliedLine();
+
+  // 優先1: 包囲されそう（退却先<=1）→ 逃げる（道路ガードでも逃げる）
+  for (const unit of movable) {
+    const retreats = mcCountRetreats(G.units, unit);
+    if (retreats <= 1) {
+      const result = findSafeHex(unit, lineInfo);
+      if (result) return result;
+    }
+  }
+
+  // 優先2: 表の敵に隣接されている → 早めに逃げる（道路ガードは除く）
+  for (const unit of movable) {
+    if (isRoadGuard(unit, lineInfo)) continue;
+    if (hasAdjacentFaceUpEnemy(unit.hexId)) {
+      const result = findSafeHex(unit, lineInfo);
+      if (result) return result;
+    }
+  }
+
+  // 優先3: 戦線から離れたユニット → 穴埋めに移動
+  const disconnected = movable.filter(u => !lineInfo.onLine.has(u.id));
+  if (disconnected.length > 0) {
+    let bestResult = null, bestScore = -Infinity;
+    for (const unit of disconnected) {
+      const result = findGapFillHex(unit, lineInfo);
+      if (result && result.score > bestScore) {
+        bestScore = result.score;
+        bestResult = { unit: result.unit, hex: result.hex };
+      }
+    }
+    if (bestResult) return bestResult;
+  }
+
+  // 戦線上のユニット → 動かない（パス）
+  return null;
+}
+
+// 安全なhexを探す（逃避用）
+function findSafeHex(unit, lineInfo) {
+  const reachable = calcReachable(unit);
+  const fromCol = parseInt(unit.hexId.substring(0, 2));
+  let bestHex = null, bestScore = -Infinity;
+
+  for (const [hid] of reachable) {
+    const toCol = parseInt(hid.substring(0, 2));
+    // 東方向2ヘクス以上移動禁止
+    if (toCol - fromCol >= 2) continue;
+    // 表の敵に自分から隣接しない
+    if (hasAdjacentFaceUpEnemy(hid)) continue;
+    // スタック制限
+    const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
+    if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
+
+    let score = 0;
+
+    // 退却先の多さ = 安全性
+    const tempUnit = Object.assign({}, unit, { hexId: hid });
+    const futureRetreats = mcCountRetreats(G.units, tempUnit);
+    score += futureRetreats * 8;
+    if (futureRetreats === 0) score -= 50;
+
+    // 戦線上にいる = 良い
+    if (lineInfo.lineHexes.has(hid)) score += 15;
+
+    // 道路hex = 重要防衛拠点
+    const roads = ROAD_MAP && ROAD_MAP[hid];
+    if (roads && roads.length > 0) score += roads.length * 5;
+
+    // ZOC連結: 味方の2hex先にいる = ZOC重複で壁
+    let zocLink = 0;
+    for (const nid of getNeighborIds(hid)) {
+      if (getNeighborIds(nid).some(n2 => lineInfo.unitHexSet.has(n2) && n2 !== unit.hexId)) zocLink++;
+    }
+    score += zocLink * 6;
+
+    // 味方直接隣接（密な戦線）
+    const adjFriend = getNeighborIds(hid).filter(nid =>
+      lineInfo.unitHexSet.has(nid) && nid !== unit.hexId
+    ).length;
+    score += adjFriend * 4;
+
+    // 東に行くほど減点（前に出すぎない）
+    score -= (toCol - fromCol) * 3;
+
+    if (score > bestScore) { bestScore = score; bestHex = hid; }
+  }
+
+  if (bestHex && bestHex !== unit.hexId) return { unit, hex: bestHex };
+  return null;
+}
+
+// 戦線の穴埋めhexを探す（戦線から離れたユニット用）
+function findGapFillHex(unit, lineInfo) {
+  const reachable = calcReachable(unit);
+  const fromCol = parseInt(unit.hexId.substring(0, 2));
+  let bestHex = null, bestScore = -Infinity;
+
+  for (const [hid] of reachable) {
+    const toCol = parseInt(hid.substring(0, 2));
+    // 東方向2ヘクス以上移動禁止
+    if (toCol - fromCol >= 2) continue;
+    // 表の敵に自分から隣接しない
+    if (hasAdjacentFaceUpEnemy(hid)) continue;
+    // スタック制限
+    const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
+    if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
+
+    let score = 0;
+
+    // 戦線に隣接する位置 = 穴埋め効果大
+    const adjToLine = getNeighborIds(hid).filter(nid => lineInfo.lineHexes.has(nid)).length;
+    score += adjToLine * 10;
+
+    // 戦線上 = 良い
+    if (lineInfo.lineHexes.has(hid)) score += 5;
+
+    // 道路hex優先
+    const roads = ROAD_MAP && ROAD_MAP[hid];
+    if (roads && roads.length > 0) score += roads.length * 5;
+
+    // ZOC連結
+    let zocLink = 0;
+    for (const nid of getNeighborIds(hid)) {
+      if (getNeighborIds(nid).some(n2 => lineInfo.unitHexSet.has(n2) && n2 !== unit.hexId)) zocLink++;
+    }
+    score += zocLink * 6;
+
+    // 安全性
+    const tempUnit = Object.assign({}, unit, { hexId: hid });
+    const futureRetreats = mcCountRetreats(G.units, tempUnit);
+    score += futureRetreats * 3;
+    if (futureRetreats === 0) score -= 50;
+
+    // 東に行くほど減点
+    score -= (toCol - fromCol) * 3;
+
+    if (score > bestScore) { bestScore = score; bestHex = hid; }
+  }
+
+  if (bestHex && bestHex !== unit.hexId) return { unit, hex: bestHex, score: bestScore };
+  return null;
+}

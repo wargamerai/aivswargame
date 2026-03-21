@@ -2527,8 +2527,8 @@ function aiDoMovement() {
     }
   }
 
-  // === 連合軍: 自発的パス（MC有効時のみ）===
-  if (G.useMC && side === 'allied' && mcShouldAlliedPass()) {
+  // === 連合軍: 自発的パス（ドクトリン移動がない場合のみ、旧ロジック用）===
+  if (G.useMC && side === 'allied' && typeof mcAlliedDoctrineMove !== 'function' && mcShouldAlliedPass()) {
     addLog('move', `[AI] 連合軍パス（ドイツの動きを待つ）`);
     passPhase();
     return;
@@ -2549,7 +2549,10 @@ function aiDoMovement() {
   // === 全体スキャン移動（MC有効時）===
   let unit, bestHex;
   if (G.useMC) {
-    const result = mcGlobalScanMove(side);
+    // 連合軍: ドクトリン移動（戦線維持・防御的）
+    const result = (side === 'allied' && typeof mcAlliedDoctrineMove === 'function')
+      ? mcAlliedDoctrineMove()
+      : mcGlobalScanMove(side);
     if (!result) {
       passPhase();
       return;
