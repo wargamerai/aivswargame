@@ -421,32 +421,26 @@ function mcCalcGermanReach() {
   const reachSet = new Set();
   for (const gu of germanAlive) {
     reachSet.add(gu.hexId);
-    const guRoads = ROAD_MAP[gu.hexId] || [];
     for (const n1 of getNeighborIds(gu.hexId)) {
       const t1 = TERRAIN_MAP[n1];
       if (!t1 || t1 === 'x') continue;
       if (alliedHexes.has(n1)) continue;
       // 装甲は道路なし森に入れない
-      if (t1 === 'f') {
-        const n1Roads = ROAD_MAP[n1] || [];
-        if (!guRoads.some(r => n1Roads.includes(r))) continue;
-      }
+      if (t1 === 'f' && !hasRoadBetween(gu.hexId, n1)) continue;
       reachSet.add(n1);
       if (alliedZOC.has(n1)) continue;
-      const n1Roads = ROAD_MAP[n1] || [];
       for (const n2 of getNeighborIds(n1)) {
         const t2 = TERRAIN_MAP[n2];
         if (!t2 || t2 === 'x') continue;
         if (alliedHexes.has(n2)) continue;
-        if (t2 === 'f' && !n1Roads.some(r => (ROAD_MAP[n2]||[]).includes(r))) continue;
+        if (t2 === 'f' && !hasRoadBetween(n1, n2)) continue;
         reachSet.add(n2);
         if (alliedZOC.has(n2)) continue;
-        const n2Roads = ROAD_MAP[n2] || [];
         for (const n3 of getNeighborIds(n2)) {
           const t3 = TERRAIN_MAP[n3];
           if (!t3 || t3 === 'x') continue;
           if (alliedHexes.has(n3)) continue;
-          if (t3 === 'f' && !n2Roads.some(r => (ROAD_MAP[n3]||[]).includes(r))) continue;
+          if (t3 === 'f' && !hasRoadBetween(n2, n3)) continue;
           reachSet.add(n3);
         }
       }
@@ -465,13 +459,12 @@ function mcGermanMCPlan() {
   );
   if (movableUnits.length === 0) return null;
 
-  // mechPairは1つにまとめる（スタック移動）
+  // 全ユニットを個別に扱う（スタック解除を検討可能にする）
   const seen = new Set();
   const uniqueUnits = [];
   for (const u of movableUnits) {
     if (seen.has(u.id)) continue;
     seen.add(u.id);
-    if (u.mechPair) seen.add(u.mechPair);
     uniqueUnits.push(u);
   }
 
@@ -525,13 +518,8 @@ function mcGermanMCPlan() {
       const topN = Math.min(Math.max(2, Math.ceil(scored.length * 0.3)), 5);
       const pick = scored[Math.floor(Math.random() * topN)];
 
-      // シミュレーション内で移動
-      const fromHex = simUnit.hexId;
+      // シミュレーション内で移動（ペアは連動しない＝スタック解除可能）
       simUnit.hexId = pick.hex;
-      if (origUnit.mechPair) {
-        const pair = simUnits.find(u => u.id === origUnit.mechPair);
-        if (pair && pair.hexId === fromHex) pair.hexId = pick.hex;
-      }
 
       plan.push({ unitId: origUnit.id, hex: pick.hex });
     }
@@ -551,8 +539,16 @@ function mcGermanMCPlan() {
   for (const p of bestPlan) {
     const unit = G.units.find(u => u.id === p.unitId);
     if (unit && p.hex !== unit.hexId && !unit.acted && !unit.eliminated && !unit.exited) {
-      dbg('MC-PLAN', `シミュレーション${SIMS}回 残${uniqueUnits.length}体 bestScore:${bestScore.toFixed(1)} → ${unit.name} ${dispHex(unit.hexId)}→${dispHex(p.hex)}`);
-      return { unit, hex: p.hex };
+      // ペアと別の移動先ならスタック解除
+      let unstack = false;
+      if (unit.mechPair) {
+        const pairPlan = bestPlan.find(pp => pp.unitId === unit.mechPair);
+        if (pairPlan && pairPlan.hex !== p.hex) {
+          unstack = true;
+        }
+      }
+      dbg('MC-PLAN', `シミュレーション${SIMS}回 残${uniqueUnits.length}体 bestScore:${bestScore.toFixed(1)} → ${unit.name} ${dispHex(unit.hexId)}→${dispHex(p.hex)}${unstack ? ' [スタック解除]' : ''}`);
+      return { unit, hex: p.hex, unstack };
     }
   }
 
@@ -575,13 +571,24 @@ function mcDoctrineScore(hid, unit, simUnits) {
       const dist = hexDist(hid, ST_VITH);
       score += Math.max(0, 15 - dist) * 4;
     } else {
-      // 歩兵もサンビット方面を支援
-      const dist = hexDist(hid, ST_VITH);
-      score += Math.max(0, 10 - dist) * 2;
+      // 歩兵は正面の敵を攻撃・拘束（サンビットに集中しない）
+      for (const nid of getNeighborIds(hid)) {
+        const enemy = simUnits.find(u => u.hexId === nid && u.side === 'allied' && !u.eliminated && !u.exited);
+        if (enemy) score += 8; // 敵に隣接 = 拘束価値
+      }
     }
   }
 
-  // === ターン2以降: 装甲はNW（左上）集中 ===
+  // === ターン2: サンビット未占領なら装甲はサンビット攻略優先 ===
+  if (G.turn === 2 && mech) {
+    const stVithEnemy = simUnits.some(u => u.hexId === ST_VITH && u.side === 'allied' && !u.eliminated && !u.exited);
+    if (stVithEnemy) {
+      const dist = hexDist(hid, ST_VITH);
+      score += Math.max(0, 15 - dist) * 5;
+    }
+  }
+
+  // === ターン2以降: 装甲はNW（左上）集中（サンビット占領済みor3ターン以降）===
   if (G.turn >= 2 && mech) {
     // バストーニュ方面: 1スタックは行くべき、それ以上はペナルティ
     const mechNearBast = simUnits.filter(u =>
@@ -624,9 +631,23 @@ function mcDoctrineScore(hid, unit, simUnits) {
   for (const nid of getNeighborIds(hid)) {
     const enemy = simUnits.find(u => u.hexId === nid && u.side === 'allied' && !u.eliminated && !u.exited);
     if (enemy) {
-      const retreats = mcCountRetreats(simUnits, enemy);
-      score += (6 - retreats) * 5;
-      if (retreats === 0) score += 25; // 包囲壊滅ボーナス
+      // 不利な攻撃になる敵の隣は避ける（特に都市）
+      const enemyDef = enemy.flipped ? enemy.def : enemy.atk;
+      const myAtk = unit.flipped ? unit.def : unit.atk;
+      const adjFriendAtk = simUnits.filter(u =>
+        u.side === 'german' && u.id !== unit.id && !u.eliminated && !u.exited
+        && getNeighborIds(nid).includes(u.hexId)
+      ).reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+      const totalAtk = myAtk + adjFriendAtk;
+      const isCity = FACILITY_MAP && FACILITY_MAP[nid] === 'c';
+      if (totalAtk - enemyDef < 2) {
+        // 差分+2未満の攻撃は無意味 — 都市なら大ペナルティ、それ以外もペナルティ
+        score -= isCity ? 30 : 10;
+      } else {
+        const retreats = mcCountRetreats(simUnits, enemy);
+        score += (6 - retreats) * 5;
+        if (retreats === 0) score += 25; // 包囲壊滅ボーナス
+      }
     }
   }
 
