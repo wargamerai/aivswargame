@@ -680,47 +680,27 @@ function isRoadGuard(unit, lineInfo) {
   return roads && roads.length > 0;
 }
 
-// ユニットを抜いたら戦線が切れるかチェック
-function wouldBreakLine(unit) {
-  // 戦線上にいないユニットは関係ない
-  const alliedAlive = G.units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
-  // このユニットを除いてZOC戦線を再構築
-  const without = alliedAlive.filter(u => u.id !== unit.id);
-  if (without.length === 0) return true;
+// ドイツ到達hex数で移動の可否を判定
+// 移動前の到達hexを基準に保持（ターン内で使い回す）
+let _cachedGermanReachSize = null;
+function getBaseGermanReach() {
+  if (_cachedGermanReachSize === null) {
+    _cachedGermanReachSize = mcCalcGermanReach().size;
+  }
+  return _cachedGermanReachSize;
+}
+function resetGermanReachCache() { _cachedGermanReachSize = null; }
 
-  const zocSet = new Set();
-  for (const u of without) {
-    zocSet.add(u.hexId);
-    for (const nid of getNeighborIds(u.hexId)) {
-      const enemyThere = G.units.some(e => e.hexId === nid && e.side === 'german' && !e.eliminated && !e.exited);
-      if (!enemyThere) zocSet.add(nid);
-    }
-  }
-
-  // 元の戦線上にいたユニットが、このユニットを抜いても全員まだ戦線上か確認
-  const visited = new Set();
-  const queue = [];
-  for (let c = 0; c < COLS; c++) {
-    const topHex = hexId(c, 0);
-    const botHex = hexId(c, ROWS - 1);
-    if (zocSet.has(topHex)) { queue.push(topHex); visited.add(topHex); }
-    if (zocSet.has(botHex) && !visited.has(botHex)) { queue.push(botHex); visited.add(botHex); }
-  }
-  while (queue.length > 0) {
-    const hex = queue.shift();
-    for (const nid of getNeighborIds(hex)) {
-      if (zocSet.has(nid) && !visited.has(nid)) {
-        visited.add(nid);
-        queue.push(nid);
-      }
-    }
-  }
-
-  // 残りのユニットで戦線から外れるものが出たら、このユニットは抜けない
-  for (const u of without) {
-    if (!visited.has(u.hexId)) return true; // 戦線が切れた
-  }
-  return false;
+// ユニットを仮移動してドイツ到達hexが増えるかチェック
+// 許容増加量 = maxIncrease（デフォルト2）
+function wouldIncreaseGermanReach(unit, destHex, maxIncrease) {
+  if (maxIncrease === undefined) maxIncrease = 2;
+  const baseReach = getBaseGermanReach();
+  const savedHex = unit.hexId;
+  unit.hexId = destHex;
+  const newReach = mcCalcGermanReach().size;
+  unit.hexId = savedHex;
+  return newReach > baseReach + maxIncrease;
 }
 
 // 連合軍ドクトリン移動メイン
@@ -734,8 +714,9 @@ function mcAlliedDoctrineMove() {
   if (movable.length === 0) return null;
 
   const lineInfo = buildAlliedLine();
+  resetGermanReachCache(); // ターン内キャッシュリセット
 
-  // 優先1: 包囲されそう（退却先<=1）→ 逃げる（戦線破壊でも生存優先）
+  // 優先1: 包囲されそう（退却先<=1）→ 逃げる（生存優先）
   for (const unit of movable) {
     const retreats = mcCountRetreats(G.units, unit);
     if (retreats <= 1) {
@@ -744,13 +725,11 @@ function mcAlliedDoctrineMove() {
     }
   }
 
-  // 優先2: 表の敵に隣接されている → 早めに逃げる
-  //   ただし戦線を壊すユニットは動かない（道路ガードも動かない）
+  // 優先2: 戦線上で表の敵に隣接 → 後退して新しい戦線を張る
+  //   条件: 移動後にドイツ到達hex数が大幅に増えないこと
   for (const unit of movable) {
-    if (isRoadGuard(unit, lineInfo)) continue;
-    if (!lineInfo.onLine.has(unit.id)) continue; // 戦線外は優先3で処理
+    if (!lineInfo.onLine.has(unit.id)) continue;
     if (!hasAdjacentFaceUpEnemy(unit.hexId)) continue;
-    if (wouldBreakLine(unit)) continue; // 抜けると戦線が切れる → 動かない
     const result = findSafeHex(unit, lineInfo);
     if (result) return result;
   }
@@ -789,31 +768,16 @@ function findSafeHex(unit, lineInfo) {
     const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
     if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
 
-    // 移動後に戦線が維持されるか仮チェック
-    const savedHex = unit.hexId;
-    unit.hexId = hid;
-    const newLine = buildAlliedLine();
-    // 移動後に戦線から外れるユニットが増えたら減点
-    const oldOnLineCount = lineInfo.onLine.size;
-    const newOnLineCount = newLine.onLine.size;
-    unit.hexId = savedHex;
-    // 戦線ユニット数が減ったら大幅減点
-    if (newOnLineCount < oldOnLineCount - 1) continue;
+    // ドイツ到達hex数チェック: 移動後に敵の進出範囲が広がるなら却下
+    if (wouldIncreaseGermanReach(unit, hid, 2)) continue;
 
     let score = 0;
-
-    // 戦線維持・改善ボーナス
-    if (newOnLineCount > oldOnLineCount) score += 20;
-    if (newOnLineCount === oldOnLineCount) score += 5;
 
     // 退却先の多さ = 安全性
     const tempUnit = Object.assign({}, unit, { hexId: hid });
     const futureRetreats = mcCountRetreats(G.units, tempUnit);
     score += futureRetreats * 8;
     if (futureRetreats === 0) score -= 50;
-
-    // 戦線上にいる = 良い
-    if (newLine.onLine.has(unit.id)) score += 15;
 
     // 道路hex = 重要防衛拠点
     const roads = ROAD_MAP && ROAD_MAP[hid];
@@ -858,23 +822,18 @@ function findGapFillHex(unit, lineInfo) {
     const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
     if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
 
-    // 移動後の戦線チェック
-    const savedHex = unit.hexId;
-    unit.hexId = hid;
-    const newLine = buildAlliedLine();
-    unit.hexId = savedHex;
+    // ドイツ到達hex数チェック: 移動後に敵の進出範囲が広がるなら却下
+    if (wouldIncreaseGermanReach(unit, hid, 2)) continue;
 
     let score = 0;
 
-    // 戦線ユニット数の変化（穴埋めなので増えるのが理想）
-    const oldOnLineCount = lineInfo.onLine.size;
-    const newOnLineCount = newLine.onLine.size;
-    if (newOnLineCount > oldOnLineCount) score += 30; // 戦線拡大
-    if (newOnLineCount === oldOnLineCount) score += 10;
-    if (newOnLineCount < oldOnLineCount) score -= 20; // 戦線縮小は悪い
-
-    // 自分が戦線に加わったか
-    if (newLine.onLine.has(unit.id)) score += 20;
+    // ドイツ到達hexを減らすほど高評価
+    const savedHex = unit.hexId;
+    unit.hexId = hid;
+    const newReach = mcCalcGermanReach().size;
+    unit.hexId = savedHex;
+    const reachDelta = getBaseGermanReach() - newReach;
+    score += reachDelta * 5; // 敵の到達範囲を縮めるほどボーナス
 
     // 戦線に隣接する位置 = 穴埋め効果大
     const adjToLine = getNeighborIds(hid).filter(nid => lineInfo.lineHexes.has(nid)).length;
