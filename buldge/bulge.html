@@ -272,6 +272,25 @@ function getNeighbors(col, row) {
   }
 }
 
+// fromHex→toHexの方向インデックス(0-5)を返す。隣接でなければ-1
+function getDirection(fromHex, toHex) {
+  const f = parseHexId(fromHex);
+  const neighbors = getNeighbors(f.col, f.row);
+  const t = parseHexId(toHex);
+  for (let d = 0; d < 6; d++) {
+    if (neighbors[d][0] === t.col && neighbors[d][1] === t.row) return d;
+  }
+  return -1;
+}
+
+// fromHex→toHex間に道路があるか
+function hasRoadBetween(fromHex, toHex) {
+  const dir = getDirection(fromHex, toHex);
+  if (dir < 0) return false;
+  const routes = ROAD_MAP[fromHex] || [];
+  return routes.includes(dir);
+}
+
 function getNeighborIds(hid) {
   const { col, row } = parseHexId(hid);
   return getNeighbors(col, row)
@@ -567,9 +586,9 @@ function drawMovePaths() {
   const PATH_COLORS = { german: 'rgba(255,100,100,', allied: 'rgba(100,180,255,' };
   for (const u of G.units) {
     if (!u.movePath || u.movePath.length < 2 || u.eliminated || u.exited) continue;
-    // フェードアウト計算
+    // フェードアウト計算（確認待ち中はフェードしない）
     let alpha = 0.8;
-    if (u._movePathExpiry) {
+    if (u._movePathExpiry && !G._awaitConfirm) {
       const remaining = u._movePathExpiry - now;
       alpha = Math.max(0.1, Math.min(0.8, remaining / MOVE_PATH_DURATION));
     }
@@ -908,9 +927,7 @@ function getMoveCost(fromId, toId, unit) {
   if (terrain === 'x') return Infinity;
 
   const facility = FACILITY_MAP && FACILITY_MAP[toId];
-  const fromRoutes = ROAD_MAP[fromId] || [];
-  const toRoutes = ROAD_MAP[toId] || [];
-  const sharedRoad = fromRoutes.some(r => toRoutes.includes(r));
+  const sharedRoad = hasRoadBetween(fromId, toId);
 
   // 河川チェック
   let riverCross = false;
@@ -1023,9 +1040,7 @@ function calcReachable(unit) {
       if (isMechanized(unit)) {
         const fromTerrain = TERRAIN_MAP[hid];
         if (terrain === 'f' || fromTerrain === 'f') {
-          const fromRoads = ROAD_MAP[hid] || [];
-          const toRoads = ROAD_MAP[nid] || [];
-          if (!fromRoads.some(r => toRoads.includes(r))) continue;
+          if (!hasRoadBetween(hid, nid)) continue;
         }
       }
       const mc = getMoveCost(hid, nid, unit);
@@ -1190,10 +1205,7 @@ function onAttackClick(hid) {
         // 装甲部隊が森に前進する場合、道路経由でのみ可能
         const defTerrain = TERRAIN_MAP[hid];
         if (defTerrain === 'f' && isMechanized(unit)) {
-          const fromRoutes = ROAD_MAP[unit.hexId] || [];
-          const toRoutes = ROAD_MAP[hid] || [];
-          const sharedRoad = fromRoutes.some(r => toRoutes.includes(r));
-          if (!sharedRoad) {
+          if (!hasRoadBetween(unit.hexId, hid)) {
             addLog('combat', `${unit.name}: 装甲部隊は道路なしで森に前進不可`);
             G.combat.advanceEligible.shift();
             if (G.combat.advanceEligible.length === 0) finishCombat();
@@ -1441,6 +1453,7 @@ function endPhase() {
     G.phase = 'recovery';
     startRecoveryPhase();
     updateUI(); draw();
+    scheduleAI(300);
     return;
   } else if (G.phase === 'recovery') {
     // 回復フェーズ完了 → 作戦フェーズへ
@@ -1516,6 +1529,7 @@ function nextTurn() {
   }
   G.phase = 'reinforce';
   G.units.forEach(u => { u.acted = false; u.mustAttack = false; delete u.movePath; delete u._movePathExpiry; delete u._lastMovedAt; delete u._unstacked; delete u._aiAttacked; });
+  delete G._britishSkippedThisTurn;
   addLog('turn', `═══ ターン${G.turn} ═══`);
   updateUI();
   draw();
@@ -1800,52 +1814,55 @@ function deployBritish() {
   const vpCost = BRITISH_VP_COST[G.turn] || 0;
   addLog('turn', `英軍投入! (ドイツ軍 +${vpCost}VP)`);
 
-  // 全英軍ユニットを配置
-  function getEntryHexes(tag) {
-    const hexes = [];
-    if (typeof TAG_MAP !== 'undefined') {
-      for (const [hid, t] of Object.entries(TAG_MAP)) {
-        if (t === tag) hexes.push(hid);
-      }
-    }
-    return hexes;
-  }
-
+  // 英軍ユニットを収集
+  const britishUnits = [];
   for (const turn of [3, 4, 5, 6]) {
     const rein = REINFORCEMENTS[turn];
     if (!rein) continue;
     for (const rUnit of rein) {
       if (rUnit.nation !== 'uk') continue;
-      const u = Object.assign({}, rUnit, {
+      britishUnits.push(Object.assign({}, rUnit, {
         acted: false, flipped: false, eliminated: false, exited: false
-      });
-      if (u.entryTag) {
-        const entryHexes = getEntryHexes(u.entryTag);
-        let placed = false;
-        for (const hid of entryHexes) {
-          const occupants = getUnitsAt(hid);
-          const friendlyCount = occupants.filter(o => o.side === u.side).length;
-          if (friendlyCount === 0 || (u.mechPair && friendlyCount < 2)) {
-            u.hexId = hid; placed = true; break;
-          }
-        }
-        if (!placed && entryHexes.length > 0) u.hexId = entryHexes[0];
-        else if (!placed) continue;
-      }
-      if (!u.hexId) continue;
-      G.units.push(u);
-      addLog('turn', `英軍増援: ${u.name} → ${dispHex(u.hexId)}`);
+      }));
     }
   }
 
-  calcVP();
-  updateUI();
-  draw();
+  if (britishUnits.length === 0) {
+    calcVP(); updateUI(); draw(); scheduleAI(300);
+    return;
+  }
+
+  // AI側は自動配置
+  const aiUnits = britishUnits.filter(u => isAISide(u.side));
+  const humanUnits = britishUnits.filter(u => !isAISide(u.side));
+
+  for (const u of aiUnits) {
+    const valid = getValidEntryHexes(u);
+    const safe = valid.filter(hid => !getNeighborIds(hid).some(nid =>
+      G.units.some(e => e.hexId === nid && e.side !== u.side && !e.eliminated && !e.exited)
+    ));
+    if (safe.length > 0) u.hexId = safe[0];
+    else if (valid.length > 0) u.hexId = valid[0];
+    else continue;
+    G.units.push(u);
+    addLog('turn', `英軍増援: ${u.name} → ${dispHex(u.hexId)}`);
+  }
+
+  // 人間側は手動配置（米軍増援と同じ仕組み）
+  if (humanUnits.length > 0) {
+    G.reinforceQueue = humanUnits;
+    prepareNextReinforce();
+    calcVP(); updateUI(); draw();
+  } else {
+    calcVP(); updateUI(); draw(); scheduleAI(300);
+  }
 }
 
 function skipBritish() {
   addLog('turn', `英軍投入を見送り（現在T${G.turn}: 投入時 独+${BRITISH_VP_COST[G.turn] || 0}VP）`);
+  G._britishSkippedThisTurn = true;
   updateRightPanel();
+  scheduleAI(300);
 }
 
 function canExitNW(unit) {
@@ -2299,7 +2316,7 @@ function passPhase() {
   // 両軍パスでターンエンド
   if (G.passCount >= 2) {
     addLog('turn', `両軍パス → ターン終了`);
-    showFlash('ターン終了', '');
+    showFlash('ターン終了', G.activeSide);
     G.passCount = 0;
     setTimeout(() => nextTurn(), 1600);
     return;
@@ -2385,7 +2402,7 @@ function aiTick() {
   // 増援・回復フェーズはactiveSideに関係なく両軍処理
   if (G.phase === 'reinforce') {
     // 英軍投入選択（T3以降、未投入）
-    if (G.turn >= 3 && G.britishDeployedTurn === 0) {
+    if (G.turn >= 3 && G.britishDeployedTurn === 0 && !G._britishSkippedThisTurn) {
       if (isAISide('allied')) {
         // AI連合: ターン5でデフォルト投入（VP1で済む）
         if (G.turn >= 5) {
@@ -2624,7 +2641,8 @@ function aiDoMovement() {
     }
     unit = result.unit;
     bestHex = result.hex;
-    dbg('AI-MOVE', `選択: ${unit.name} ${dispHex(unit.hexId)} → ${dispHex(bestHex)}`);
+    if (result.unstack) unit._unstacked = true;
+    dbg('AI-MOVE', `選択: ${unit.name} ${dispHex(unit.hexId)} → ${dispHex(bestHex)}${result.unstack ? ' [スタック解除]' : ''}`);
   } else {
     // 旧ロジック: 最初のユニットを移動
     if (side === 'german') {
@@ -2662,8 +2680,8 @@ function aiDoMovement() {
     const info = reachable.get(bestHex);
     const fromHex = unit.hexId;
     const stacked = isStacked(unit);
-    // 1ターン目9CC: スタック解除移動なのでペア連動しない
-    const unstacking = (G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(unit));
+    // スタック解除: 1ターン目9CC or MCプランによるスタック解除
+    const unstacking = unit._unstacked || (G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(unit));
     const pair = (stacked && !unstacking) ? G.units.find(u => u.id === unit.mechPair) : null;
     if (info) {
       unit.movePath = [fromHex, ...info.path];
@@ -2825,14 +2843,14 @@ function aiDoAttack() {
     const diff = atkPower - defPower;
     dbg('AI-ATTACK-EVAL', `def:${dispHex(defHex)} atk:${atkPower}[${adjFriendly.map(u=>u.name).join(',')}] def:${defPower}[${defenders.map(u=>u.name).join(',')}] diff:${diff} 有利:${atkPower>=defPower}`);
 
-    // 有利（攻撃力>=防御力）なら攻撃候補
-    if (atkPower >= defPower && diff > bestDiff) {
+    // 差分+2以上なら攻撃候補（+1以下は効率が悪い）
+    if (diff >= 2 && diff > bestDiff) {
       bestDiff = diff;
       bestAttack = { defHex, attackers: adjFriendly.map(u => u.id), defenders };
     }
   }
 
-  // 有利な攻撃がない場合、mustAttackユニットの強制攻撃を探す
+  // 有利な攻撃がない場合、mustAttackユニットの強制攻撃を探す（ただしマイナス差分は見送り）
   if (!bestAttack) {
     const mustUnits = G.units.filter(u =>
       u.side === side && u.mustAttack && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
@@ -2841,10 +2859,15 @@ function aiDoAttack() {
       for (const nid of getNeighborIds(mu.hexId)) {
         const enemies = getUnitsAt(nid).filter(e => e.side === enemySide);
         if (enemies.length > 0) {
-          // 同hexの味方も参加させる
           const coAttackers = getUnitsAt(mu.hexId).filter(u =>
             u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
           );
+          const atkP = coAttackers.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+          const defP = enemies.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
+          if (atkP - defP < 2) {
+            dbg('AI-ATTACK', `${mu.name}: ${dispHex(nid)}への攻撃見送り（差分${atkP - defP}、+2未満）`);
+            continue;
+          }
           bestAttack = { defHex: nid, attackers: coAttackers.map(u => u.id), defenders: enemies };
           break;
         }
@@ -2993,10 +3016,7 @@ function aiDoAdvance() {
     // 装甲部隊が森に前進する場合、道路経由でのみ可能
     const defTerrain = TERRAIN_MAP[defHex];
     if (defTerrain === 'f' && isMechanized(unit)) {
-      const fromRoutes = ROAD_MAP[unit.hexId] || [];
-      const toRoutes = ROAD_MAP[defHex] || [];
-      const sharedRoad = fromRoutes.some(r => toRoutes.includes(r));
-      if (!sharedRoad) {
+      if (!hasRoadBetween(unit.hexId, defHex)) {
         addLog('combat', `[AI] ${unit.name}: 装甲部隊は道路なしで森に前進不可`);
         G.combat.advanceEligible.shift();
         if (G.combat.advanceEligible.length === 0) finishCombat();
@@ -3006,9 +3026,33 @@ function aiDoAdvance() {
         return;
       }
     }
+    // 前進すると味方の攻撃機会を塞ぐかチェック
+    const shouldAdvance = (function() {
+      // defHexに隣接する敵ユニット
+      const adjEnemies = getNeighborIds(defHex).filter(nid =>
+        G.units.some(u => u.hexId === nid && u.side !== unit.side && !u.eliminated && !u.exited)
+      );
+      if (adjEnemies.length === 0) return true; // 敵がいなければ前進OK
+
+      // defHexに隣接する未行動の味方（自分以外）
+      const adjFriendly = getNeighborIds(defHex).filter(nid =>
+        G.units.some(u => u.hexId === nid && u.side === unit.side && !u.acted && !u.eliminated && !u.exited && u.id !== unit.id)
+      );
+      // 味方がdefHexに隣接して攻撃したい敵がいるなら、前進でヘクスを塞ぐ
+      if (adjFriendly.length > 0 && adjEnemies.length > 0) {
+        // defHexが空なら味方がそこ経由で攻撃できる
+        dbg('aiDoAdvance', `${unit.name}: 前進すると味方の攻撃機会を塞ぐ → 前進しない`);
+        addLog('combat', `[AI] ${unit.name}: 前進見送り（味方の攻撃機会確保）`);
+        return false;
+      }
+      return true;
+    })();
+
     G.combat.advanceEligible.shift();
-    unit.hexId = defHex;
-    addLog('combat', `[AI] ${unit.name} → ${dispHex(defHex)} に前進`);
+    if (shouldAdvance) {
+      unit.hexId = defHex;
+      addLog('combat', `[AI] ${unit.name} → ${dispHex(defHex)} に前進`);
+    }
   } else {
     G.combat.advanceEligible.shift();
   }
