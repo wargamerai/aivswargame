@@ -729,32 +729,8 @@ function mcAlliedDoctrineMove() {
 
   // === 1ターン目特殊ルール ===
   if (G.turn === 1) {
-    // 9CC: スタック解除（ペアと同じhexなら最短の隣接hexへ移動）
-    for (const unit of movable) {
-      if (isStVithArmor(unit)) {
-        const pair = G.units.find(u => u.id === unit.mechPair && !u.eliminated && !u.exited);
-        if (pair && pair.hexId === unit.hexId) {
-          const reachable = calcReachable(unit);
-          const fromCol = parseInt(unit.hexId.substring(0, 2));
-          let bestHex = null, bestPathLen = Infinity;
-          for (const [hid, info] of reachable) {
-            if (hid === unit.hexId) continue;
-            const toCol = parseInt(hid.substring(0, 2));
-            if (toCol >= fromCol) continue; // 東禁止
-            if (hasAdjacentFaceUpEnemy(hid)) continue; // 敵隣接禁止
-            const dest = getUnitsAt(hid).filter(u => u.side === 'allied' && u.id !== unit.id);
-            if (dest.length > 0) continue; // スタック制限
-            if (info.path.length < bestPathLen) {
-              bestPathLen = info.path.length;
-              bestHex = hid;
-            }
-          }
-          if (bestHex) return { unit, hex: bestHex };
-        }
-      }
-    }
-    // その他: 敵に隣接されていなければ動けない
-    const contacted = movable.filter(u => !isStVithArmor(u) && isContactedByEnemy(u));
+    // 敵に隣接されていなければ動けない
+    const contacted = movable.filter(u => isContactedByEnemy(u));
     if (contacted.length === 0) return null;
     // 隣接されたユニット: 裏ならスキップ（既にflippedフィルタ済み）、表なら逃避
     for (const unit of contacted) {

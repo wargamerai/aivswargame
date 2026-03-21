@@ -2594,9 +2594,7 @@ function aiDoMovement() {
     const info = reachable.get(bestHex);
     const fromHex = unit.hexId;
     const stacked = isStacked(unit);
-    // 1ターン目9CC: スタック解除移動なのでペア連動しない
-    const unstacking = (G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(unit));
-    const pair = (stacked && !unstacking) ? G.units.find(u => u.id === unit.mechPair) : null;
+    const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
     if (info) {
       unit.movePath = [fromHex, ...info.path];
     }
@@ -2718,7 +2716,6 @@ function aiDoAttack() {
   const actedUnits = G.units.filter(u =>
     u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
     && !(typeof isHoldingCity === 'function' && isHoldingCity(u))
-    && !(G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(u))
   );
 
   // 攻撃可能な敵hexを収集
