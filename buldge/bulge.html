@@ -2454,9 +2454,14 @@ function aiDoRecovery() {
 function aiDoMovement() {
   dbg('aiDoMovement', {side:G.activeSide});
   const side = G.activeSide;
-  const units = G.units.filter(u =>
+  let units = G.units.filter(u =>
     u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
   );
+
+  // 死守都市の歩兵は移動候補から除外（mustHoldCityはbulge_mcts.jsで定義）
+  if (typeof mustHoldCity === 'function') {
+    units = units.filter(u => !mustHoldCity(u));
+  }
 
   if (units.length === 0) {
     passPhase();
