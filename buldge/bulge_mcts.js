@@ -6,6 +6,13 @@ const MC = { SIMS: 0 }; // 互換用（未使用）
 // ========== 死守都市 ==========
 const HOLD_CITIES = ['1508', '1114']; // ST.VITH, BASTOGNE
 const BASTOGNE = '1114';
+const ST_VITH = '1508';
+
+// 強制都市移動の定義: { unitId, targetHex, condition }
+const FORCED_CITY_MARCH = [
+  { id: 'us_82',   target: BASTOGNE },
+  { id: 'us_1inf', target: ST_VITH }
+];
 
 // 死守都市にいる歩兵は移動禁止（DRによる退却は別処理なので影響しない）
 function mustHoldCity(unit) {
@@ -14,16 +21,30 @@ function mustHoldCity(unit) {
   return HOLD_CITIES.includes(unit.hexId);
 }
 
-// 82空挺: バストーニュ強制移動対象か（未到達で未行動）
-function mustMarchToBastogne(unit) {
-  if (unit.id !== 'us_82') return false;
-  if (unit.hexId === BASTOGNE) return false; // 既に到達済み
-  return true;
+// 強制都市移動対象か（未到達で未行動）
+// 1歩兵はサンビットに味方がいなければ強制
+function mustMarchToCity(unit) {
+  const entry = FORCED_CITY_MARCH.find(e => e.id === unit.id);
+  if (!entry) return null;
+  if (unit.hexId === entry.target) return null; // 既に到達済み
+  // 1歩兵: サンビットに味方がいれば強制しない
+  if (unit.id === 'us_1inf') {
+    const stVithUnits = getUnitsAt(ST_VITH).filter(u => u.side === 'allied');
+    if (stVithUnits.length > 0) return null;
+  }
+  return entry.target;
 }
 
-// バストーニュ死守中か（攻撃禁止判定用）
-function isHoldingBastogne(unit) {
-  return unit.id === 'us_82' && unit.hexId === BASTOGNE;
+// 82空挺互換（既存参照用）
+function mustMarchToBastogne(unit) {
+  return mustMarchToCity(unit) !== null;
+}
+
+// 死守都市にいるか（攻撃禁止判定用）
+function isHoldingCity(unit) {
+  const entry = FORCED_CITY_MARCH.find(e => e.id === unit.id);
+  if (!entry) return false;
+  return unit.hexId === entry.target;
 }
 
 // ========== VP都市リスト ==========
