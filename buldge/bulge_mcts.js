@@ -663,7 +663,53 @@ function buildAlliedLine() {
     if (visited.has(u.hexId)) onLine.add(u.id);
   }
 
-  return { lineHexes: visited, onLine, zocSet, unitHexSet };
+  // 余剰判定: このユニットを外しても戦線が繋がるなら必須ではない
+  const essential = new Set(onLine);
+  for (const uid of onLine) {
+    const unit = alliedAlive.find(u => u.id === uid);
+    if (!unit) continue;
+    // このユニットを除いたZOCを再構築
+    const testZoc = new Set();
+    for (const u of alliedAlive) {
+      if (u.id === uid) continue;
+      testZoc.add(u.hexId);
+      for (const nid of getNeighborIds(u.hexId)) {
+        const enemyThere = G.units.some(e => e.hexId === nid && e.side === 'german' && !e.eliminated && !e.exited);
+        if (!enemyThere) testZoc.add(nid);
+      }
+    }
+    // BFSで戦線チェック
+    const testVisited = new Set();
+    const testQueue = [];
+    for (let c = 0; c < COLS; c++) {
+      const topHex = hexId(c, 0);
+      const botHex = hexId(c, ROWS - 1);
+      if (testZoc.has(topHex)) { testQueue.push(topHex); testVisited.add(topHex); }
+      if (testZoc.has(botHex) && !testVisited.has(botHex)) { testQueue.push(botHex); testVisited.add(botHex); }
+    }
+    while (testQueue.length > 0) {
+      const hex = testQueue.shift();
+      for (const nid of getNeighborIds(hex)) {
+        if (testZoc.has(nid) && !testVisited.has(nid)) {
+          testVisited.add(nid);
+          testQueue.push(nid);
+        }
+      }
+    }
+    // 他の戦線ユニットが全員まだ戦線上なら、このユニットは余剰
+    let stillConnected = true;
+    for (const otherId of onLine) {
+      if (otherId === uid) continue;
+      const other = alliedAlive.find(u => u.id === otherId);
+      if (other && !testVisited.has(other.hexId)) {
+        stillConnected = false;
+        break;
+      }
+    }
+    if (stillConnected) essential.delete(uid);
+  }
+
+  return { lineHexes: visited, onLine, essential, zocSet, unitHexSet };
 }
 
 // 表の敵に隣接しているかチェック
@@ -819,8 +865,8 @@ function findLineBuildHex(unit, lineInfo) {
   const reachable = calcReachable(unit);
   const currentHex = unit.hexId;
 
-  // 既に戦線上にいるなら動かない
-  if (lineInfo.onLine.has(unit.id)) return null;
+  // 戦線に必須のユニットは動かない（余剰なら移動可）
+  if (lineInfo.essential.has(unit.id)) return null;
 
   let bestHex = null;
   let bestPathLen = Infinity;
