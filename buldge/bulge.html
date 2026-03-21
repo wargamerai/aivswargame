@@ -2716,6 +2716,7 @@ function aiDoAttack() {
   const actedUnits = G.units.filter(u =>
     u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
     && !(typeof isHoldingCity === 'function' && isHoldingCity(u))
+    && !(G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(u))
   );
 
   // 攻撃可能な敵hexを収集
