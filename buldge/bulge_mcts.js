@@ -715,45 +715,6 @@ function isContactedByEnemy(unit) {
   );
 }
 
-// 1ターン目のサンビット装甲移動: スタック解除して西方へ後退のみ
-function findStVithArmorMove(unit) {
-  // ペアと同じhexにいなければ既にスタック解除済み→動かない
-  const pair = G.units.find(u => u.id === unit.mechPair && !u.eliminated && !u.exited);
-  if (!pair || pair.hexId !== unit.hexId) return null;
-
-  const reachable = calcReachable(unit);
-  const fromCol = parseInt(unit.hexId.substring(0, 2));
-  let bestHex = null, bestScore = -Infinity;
-
-  for (const [hid] of reachable) {
-    if (hid === unit.hexId) continue;
-    const toCol = parseInt(hid.substring(0, 2));
-    // 東方向移動禁止（前に出ない）
-    if (toCol >= fromCol) continue;
-    // 表の敵に隣接禁止
-    if (hasAdjacentFaceUpEnemy(hid)) continue;
-    // スタック制限（移動先に味方がいない）
-    const dest = getUnitsAt(hid).filter(u => u.side === 'allied' && u.id !== unit.id);
-    if (dest.length > 0) continue;
-
-    let score = 0;
-    // より西へ行くほどボーナス（安全圏へ）
-    score += (fromCol - toCol) * 5;
-    // 道路hexボーナス
-    const roads = ROAD_MAP && ROAD_MAP[hid];
-    if (roads && roads.length > 0) score += roads.length * 3;
-    // 退却先の多さ
-    const tempUnit = Object.assign({}, unit, { hexId: hid });
-    const retreats = mcCountRetreats(G.units, tempUnit);
-    score += retreats * 4;
-
-    if (score > bestScore) { bestScore = score; bestHex = hid; }
-  }
-
-  if (bestHex) return { unit, hex: bestHex };
-  return null;
-}
-
 // 連合軍ドクトリン移動メイン
 function mcAlliedDoctrineMove() {
   const units = G.units.filter(u =>
@@ -764,182 +725,146 @@ function mcAlliedDoctrineMove() {
   const movable = units.filter(u => !mustHoldCity(u) && mustMarchToCity(u) === null);
   if (movable.length === 0) return null;
 
+  const lineInfo = buildAlliedLine();
+
   // === 1ターン目特殊ルール ===
   if (G.turn === 1) {
-    // サンビット装甲: スタック解除して西方後退のみ
+    // 9CC: スタック解除（ペアと同じhexならスタック解除移動）
     for (const unit of movable) {
       if (isStVithArmor(unit)) {
-        const result = findStVithArmorMove(unit);
-        if (result) return result;
+        const pair = G.units.find(u => u.id === unit.mechPair && !u.eliminated && !u.exited);
+        if (pair && pair.hexId === unit.hexId) {
+          const result = findEscapeHex(unit, lineInfo, true); // noEast=true
+          if (result) return result;
+        }
       }
     }
-    // その他の連合軍: 敵に隣接されていなければ動けない
+    // その他: 敵に隣接されていなければ動けない
     const contacted = movable.filter(u => !isStVithArmor(u) && isContactedByEnemy(u));
-    if (contacted.length === 0) return null; // 誰も接敵していない→全員パス
-
-    // 接敵されたユニットのみ通常ドクトリンで処理
-    const lineInfo = buildAlliedLine();
-    resetGermanReachCache();
+    if (contacted.length === 0) return null;
+    // 隣接されたユニット: 裏ならスキップ（既にflippedフィルタ済み）、表なら逃避
     for (const unit of contacted) {
-      const retreats = mcCountRetreats(G.units, unit);
-      if (retreats <= 1) {
-        const result = findSafeHex(unit, lineInfo);
+      if (hasAdjacentFaceUpEnemy(unit.hexId)) {
+        const result = findEscapeHex(unit, lineInfo, false);
         if (result) return result;
       }
     }
-    return null; // 接敵されているが安全な移動先がない→パス
+    return null;
   }
 
-  // === 2ターン目以降: 通常ドクトリン ===
-  const lineInfo = buildAlliedLine();
-  resetGermanReachCache(); // ターン内キャッシュリセット
+  // === 2ターン目以降 ===
 
-  // 優先1: 包囲されそう（退却先<=1）→ 逃げる（生存優先）
-  for (const unit of movable) {
-    const retreats = mcCountRetreats(G.units, unit);
-    if (retreats <= 1) {
-      const result = findSafeHex(unit, lineInfo);
-      if (result) return result;
-    }
-  }
-
-  // 優先2: 戦線上で表の敵に隣接 → 後退して新しい戦線を張る
-  //   条件: 移動後にドイツ到達hex数が大幅に増えないこと
-  for (const unit of movable) {
-    if (!lineInfo.onLine.has(unit.id)) continue;
-    if (!hasAdjacentFaceUpEnemy(unit.hexId)) continue;
-    const result = findSafeHex(unit, lineInfo);
+  // 優先1: 表の敵に隣接されているユニット（先に処理）
+  //   裏ならスキップ（flippedフィルタ済み）、表なら総当たりで逃避
+  const adjToEnemy = movable.filter(u => hasAdjacentFaceUpEnemy(u.hexId));
+  for (const unit of adjToEnemy) {
+    const result = findEscapeHex(unit, lineInfo, false);
     if (result) return result;
   }
 
-  // 優先3: 戦線から離れたユニット → 穴埋めに移動
-  const disconnected = movable.filter(u => !lineInfo.onLine.has(u.id));
-  if (disconnected.length > 0) {
-    let bestResult = null, bestScore = -Infinity;
-    for (const unit of disconnected) {
-      const result = findGapFillHex(unit, lineInfo);
-      if (result && result.score > bestScore) {
-        bestScore = result.score;
-        bestResult = { unit: result.unit, hex: result.hex };
-      }
-    }
-    if (bestResult) return bestResult;
+  // 優先2: 隣接されていないユニット
+  //   東側（戦線構築の必要性が低い）から順に戦線穴埋めへ
+  const notAdj = movable.filter(u => !hasAdjacentFaceUpEnemy(u.hexId));
+  notAdj.sort((a, b) => {
+    const colA = parseInt(a.hexId.substring(0, 2));
+    const colB = parseInt(b.hexId.substring(0, 2));
+    return colB - colA; // 東側が先
+  });
+  for (const unit of notAdj) {
+    const result = findLineBuildHex(unit, lineInfo);
+    if (result) return result;
   }
 
-  // 戦線上のユニット → 動かない（パス）
   return null;
 }
 
-// 安全なhexを探す（逃避用）
-function findSafeHex(unit, lineInfo) {
+// 逃避hex探索（総当たり）
+// 敵から離れ、戦線・道路を塞ぐ最短hexを探す
+// noEast: trueなら東方向移動を完全禁止（1ターン目9CC用）
+function findEscapeHex(unit, lineInfo, noEast) {
   const reachable = calcReachable(unit);
-  const fromCol = parseInt(unit.hexId.substring(0, 2));
-  let bestHex = null, bestScore = -Infinity;
+  const currentHex = unit.hexId;
+  const fromCol = parseInt(currentHex.substring(0, 2));
 
-  for (const [hid] of reachable) {
+  let bestHex = null;
+  let bestPathLen = Infinity;
+  let bestBlocksRoad = false;
+
+  for (const [hid, info] of reachable) {
+    if (hid === currentHex) continue;
     const toCol = parseInt(hid.substring(0, 2));
-    // 東方向2ヘクス以上移動禁止
-    if (toCol - fromCol >= 2) continue;
-    // 表の敵に自分から隣接しない
+    // 9CC 1ターン目: 東方向完全禁止
+    if (noEast && toCol >= fromCol) continue;
+    // 表の敵に隣接するhexは除外
     if (hasAdjacentFaceUpEnemy(hid)) continue;
     // スタック制限
     const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
     if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
-
-    // ドイツ到達hex数チェック: 移動後に敵の進出範囲が広がるなら却下
-    if (wouldIncreaseGermanReach(unit, hid, 2)) continue;
-
-    let score = 0;
-
-    // 退却先の多さ = 安全性
-    const tempUnit = Object.assign({}, unit, { hexId: hid });
-    const futureRetreats = mcCountRetreats(G.units, tempUnit);
-    score += futureRetreats * 8;
-    if (futureRetreats === 0) score -= 50;
-
-    // 道路hex = 重要防衛拠点
+    // 味方に隣接しない（道路hexなら許可）
     const roads = ROAD_MAP && ROAD_MAP[hid];
-    if (roads && roads.length > 0) score += roads.length * 5;
-
-    // ZOC連結: 味方の2hex先にいる = ZOC重複で壁
-    let zocLink = 0;
-    for (const nid of getNeighborIds(hid)) {
-      if (getNeighborIds(nid).some(n2 => lineInfo.unitHexSet.has(n2) && n2 !== unit.hexId)) zocLink++;
+    const isRoad = roads && roads.length > 0;
+    if (!isRoad) {
+      const adjFriendly = getNeighborIds(hid).some(nid =>
+        G.units.some(u => u.hexId === nid && u.side === 'allied' && u.id !== unit.id && !u.eliminated && !u.exited)
+      );
+      if (adjFriendly) continue;
     }
-    score += zocLink * 6;
 
-    // 味方直接隣接（密な戦線）
-    const adjFriend = getNeighborIds(hid).filter(nid =>
-      lineInfo.unitHexSet.has(nid) && nid !== unit.hexId
-    ).length;
-    score += adjFriend * 4;
-
-    // 東に行くほど減点（前に出すぎない）
-    score -= (toCol - fromCol) * 3;
-
-    if (score > bestScore) { bestScore = score; bestHex = hid; }
+    const pathLen = info.path.length;
+    // 道路hex優先、同等なら最短パス
+    if (isRoad && !bestBlocksRoad) {
+      bestHex = hid; bestPathLen = pathLen; bestBlocksRoad = true;
+    } else if (isRoad === bestBlocksRoad && pathLen < bestPathLen) {
+      bestHex = hid; bestPathLen = pathLen;
+    }
   }
 
-  if (bestHex && bestHex !== unit.hexId) return { unit, hex: bestHex };
+  if (bestHex) return { unit, hex: bestHex };
   return null;
 }
 
-// 戦線の穴埋めhexを探す（戦線から離れたユニット用）
-function findGapFillHex(unit, lineInfo) {
+// 戦線構築hex探索（穴埋め）
+// 戦線に隣接するhexへ最短距離で移動
+function findLineBuildHex(unit, lineInfo) {
   const reachable = calcReachable(unit);
-  const fromCol = parseInt(unit.hexId.substring(0, 2));
-  let bestHex = null, bestScore = -Infinity;
+  const currentHex = unit.hexId;
 
-  for (const [hid] of reachable) {
-    const toCol = parseInt(hid.substring(0, 2));
-    // 東方向2ヘクス以上移動禁止
-    if (toCol - fromCol >= 2) continue;
-    // 表の敵に自分から隣接しない
+  // 既に戦線上にいるなら動かない
+  if (lineInfo.onLine.has(unit.id)) return null;
+
+  let bestHex = null;
+  let bestPathLen = Infinity;
+  let bestAdjToLine = 0;
+
+  for (const [hid, info] of reachable) {
+    if (hid === currentHex) continue;
+    // 表の敵に隣接するhexは除外
     if (hasAdjacentFaceUpEnemy(hid)) continue;
     // スタック制限
     const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
     if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
-
-    // ドイツ到達hex数チェック: 移動後に敵の進出範囲が広がるなら却下
-    if (wouldIncreaseGermanReach(unit, hid, 2)) continue;
-
-    let score = 0;
-
-    // ドイツ到達hexを減らすほど高評価
-    const savedHex = unit.hexId;
-    unit.hexId = hid;
-    const newReach = mcCalcGermanReach().size;
-    unit.hexId = savedHex;
-    const reachDelta = getBaseGermanReach() - newReach;
-    score += reachDelta * 5; // 敵の到達範囲を縮めるほどボーナス
-
-    // 戦線に隣接する位置 = 穴埋め効果大
-    const adjToLine = getNeighborIds(hid).filter(nid => lineInfo.lineHexes.has(nid)).length;
-    score += adjToLine * 10;
-
-    // 道路hex優先
+    // 味方に隣接しない（道路hexなら許可）
     const roads = ROAD_MAP && ROAD_MAP[hid];
-    if (roads && roads.length > 0) score += roads.length * 5;
-
-    // ZOC連結
-    let zocLink = 0;
-    for (const nid of getNeighborIds(hid)) {
-      if (getNeighborIds(nid).some(n2 => lineInfo.unitHexSet.has(n2) && n2 !== unit.hexId)) zocLink++;
+    const isRoad = roads && roads.length > 0;
+    if (!isRoad) {
+      const adjFriendly = getNeighborIds(hid).some(nid =>
+        G.units.some(u => u.hexId === nid && u.side === 'allied' && u.id !== unit.id && !u.eliminated && !u.exited)
+      );
+      if (adjFriendly) continue;
     }
-    score += zocLink * 6;
 
-    // 安全性
-    const tempUnit = Object.assign({}, unit, { hexId: hid });
-    const futureRetreats = mcCountRetreats(G.units, tempUnit);
-    score += futureRetreats * 3;
-    if (futureRetreats === 0) score -= 50;
+    // 戦線への隣接数（穴埋め効果）
+    const adjToLine = getNeighborIds(hid).filter(n => lineInfo.lineHexes.has(n)).length;
+    const pathLen = info.path.length;
 
-    // 東に行くほど減点
-    score -= (toCol - fromCol) * 3;
-
-    if (score > bestScore) { bestScore = score; bestHex = hid; }
+    // 戦線隣接数が多いほど優先、同等なら最短パス
+    if (adjToLine > bestAdjToLine) {
+      bestHex = hid; bestPathLen = pathLen; bestAdjToLine = adjToLine;
+    } else if (adjToLine === bestAdjToLine && pathLen < bestPathLen) {
+      bestHex = hid; bestPathLen = pathLen;
+    }
   }
 
-  if (bestHex && bestHex !== unit.hexId) return { unit, hex: bestHex, score: bestScore };
+  if (bestHex) return { unit, hex: bestHex };
   return null;
 }

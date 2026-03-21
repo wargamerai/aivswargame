@@ -2594,7 +2594,9 @@ function aiDoMovement() {
     const info = reachable.get(bestHex);
     const fromHex = unit.hexId;
     const stacked = isStacked(unit);
-    const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
+    // 1ターン目9CC: スタック解除移動なのでペア連動しない
+    const unstacking = (G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(unit));
+    const pair = (stacked && !unstacking) ? G.units.find(u => u.id === unit.mechPair) : null;
     if (info) {
       unit.movePath = [fromHex, ...info.path];
     }
