@@ -680,6 +680,49 @@ function isRoadGuard(unit, lineInfo) {
   return roads && roads.length > 0;
 }
 
+// ユニットを抜いたら戦線が切れるかチェック
+function wouldBreakLine(unit) {
+  // 戦線上にいないユニットは関係ない
+  const alliedAlive = G.units.filter(u => u.side === 'allied' && !u.eliminated && !u.exited);
+  // このユニットを除いてZOC戦線を再構築
+  const without = alliedAlive.filter(u => u.id !== unit.id);
+  if (without.length === 0) return true;
+
+  const zocSet = new Set();
+  for (const u of without) {
+    zocSet.add(u.hexId);
+    for (const nid of getNeighborIds(u.hexId)) {
+      const enemyThere = G.units.some(e => e.hexId === nid && e.side === 'german' && !e.eliminated && !e.exited);
+      if (!enemyThere) zocSet.add(nid);
+    }
+  }
+
+  // 元の戦線上にいたユニットが、このユニットを抜いても全員まだ戦線上か確認
+  const visited = new Set();
+  const queue = [];
+  for (let c = 0; c < COLS; c++) {
+    const topHex = hexId(c, 0);
+    const botHex = hexId(c, ROWS - 1);
+    if (zocSet.has(topHex)) { queue.push(topHex); visited.add(topHex); }
+    if (zocSet.has(botHex) && !visited.has(botHex)) { queue.push(botHex); visited.add(botHex); }
+  }
+  while (queue.length > 0) {
+    const hex = queue.shift();
+    for (const nid of getNeighborIds(hex)) {
+      if (zocSet.has(nid) && !visited.has(nid)) {
+        visited.add(nid);
+        queue.push(nid);
+      }
+    }
+  }
+
+  // 残りのユニットで戦線から外れるものが出たら、このユニットは抜けない
+  for (const u of without) {
+    if (!visited.has(u.hexId)) return true; // 戦線が切れた
+  }
+  return false;
+}
+
 // 連合軍ドクトリン移動メイン
 function mcAlliedDoctrineMove() {
   const units = G.units.filter(u =>
@@ -692,7 +735,7 @@ function mcAlliedDoctrineMove() {
 
   const lineInfo = buildAlliedLine();
 
-  // 優先1: 包囲されそう（退却先<=1）→ 逃げる（道路ガードでも逃げる）
+  // 優先1: 包囲されそう（退却先<=1）→ 逃げる（戦線破壊でも生存優先）
   for (const unit of movable) {
     const retreats = mcCountRetreats(G.units, unit);
     if (retreats <= 1) {
@@ -701,13 +744,15 @@ function mcAlliedDoctrineMove() {
     }
   }
 
-  // 優先2: 表の敵に隣接されている → 早めに逃げる（道路ガードは除く）
+  // 優先2: 表の敵に隣接されている → 早めに逃げる
+  //   ただし戦線を壊すユニットは動かない（道路ガードも動かない）
   for (const unit of movable) {
     if (isRoadGuard(unit, lineInfo)) continue;
-    if (hasAdjacentFaceUpEnemy(unit.hexId)) {
-      const result = findSafeHex(unit, lineInfo);
-      if (result) return result;
-    }
+    if (!lineInfo.onLine.has(unit.id)) continue; // 戦線外は優先3で処理
+    if (!hasAdjacentFaceUpEnemy(unit.hexId)) continue;
+    if (wouldBreakLine(unit)) continue; // 抜けると戦線が切れる → 動かない
+    const result = findSafeHex(unit, lineInfo);
+    if (result) return result;
   }
 
   // 優先3: 戦線から離れたユニット → 穴埋めに移動
@@ -744,7 +789,22 @@ function findSafeHex(unit, lineInfo) {
     const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
     if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
 
+    // 移動後に戦線が維持されるか仮チェック
+    const savedHex = unit.hexId;
+    unit.hexId = hid;
+    const newLine = buildAlliedLine();
+    // 移動後に戦線から外れるユニットが増えたら減点
+    const oldOnLineCount = lineInfo.onLine.size;
+    const newOnLineCount = newLine.onLine.size;
+    unit.hexId = savedHex;
+    // 戦線ユニット数が減ったら大幅減点
+    if (newOnLineCount < oldOnLineCount - 1) continue;
+
     let score = 0;
+
+    // 戦線維持・改善ボーナス
+    if (newOnLineCount > oldOnLineCount) score += 20;
+    if (newOnLineCount === oldOnLineCount) score += 5;
 
     // 退却先の多さ = 安全性
     const tempUnit = Object.assign({}, unit, { hexId: hid });
@@ -753,7 +813,7 @@ function findSafeHex(unit, lineInfo) {
     if (futureRetreats === 0) score -= 50;
 
     // 戦線上にいる = 良い
-    if (lineInfo.lineHexes.has(hid)) score += 15;
+    if (newLine.onLine.has(unit.id)) score += 15;
 
     // 道路hex = 重要防衛拠点
     const roads = ROAD_MAP && ROAD_MAP[hid];
@@ -798,14 +858,27 @@ function findGapFillHex(unit, lineInfo) {
     const dest = getUnitsAt(hid).filter(u => u.side === unit.side);
     if (dest.length > 0 && !(unit.mechPair && dest.length < 2 && dest[0].id === unit.mechPair)) continue;
 
+    // 移動後の戦線チェック
+    const savedHex = unit.hexId;
+    unit.hexId = hid;
+    const newLine = buildAlliedLine();
+    unit.hexId = savedHex;
+
     let score = 0;
+
+    // 戦線ユニット数の変化（穴埋めなので増えるのが理想）
+    const oldOnLineCount = lineInfo.onLine.size;
+    const newOnLineCount = newLine.onLine.size;
+    if (newOnLineCount > oldOnLineCount) score += 30; // 戦線拡大
+    if (newOnLineCount === oldOnLineCount) score += 10;
+    if (newOnLineCount < oldOnLineCount) score -= 20; // 戦線縮小は悪い
+
+    // 自分が戦線に加わったか
+    if (newLine.onLine.has(unit.id)) score += 20;
 
     // 戦線に隣接する位置 = 穴埋め効果大
     const adjToLine = getNeighborIds(hid).filter(nid => lineInfo.lineHexes.has(nid)).length;
     score += adjToLine * 10;
-
-    // 戦線上 = 良い
-    if (lineInfo.lineHexes.has(hid)) score += 5;
 
     // 道路hex優先
     const roads = ROAD_MAP && ROAD_MAP[hid];
