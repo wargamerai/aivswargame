@@ -703,6 +703,57 @@ function wouldIncreaseGermanReach(unit, destHex, maxIncrease) {
   return newReach > baseReach + maxIncrease;
 }
 
+// サンビット装甲（9CC）か判定
+function isStVithArmor(unit) {
+  return unit.id === 'us_9cc_1' || unit.id === 'us_9cc_2';
+}
+
+// 1ターン目: 敵に隣接されているか判定
+function isContactedByEnemy(unit) {
+  return getNeighborIds(unit.hexId).some(nid =>
+    G.units.some(e => e.hexId === nid && e.side === 'german' && !e.eliminated && !e.exited)
+  );
+}
+
+// 1ターン目のサンビット装甲移動: スタック解除して西方へ後退のみ
+function findStVithArmorMove(unit) {
+  // ペアと同じhexにいなければ既にスタック解除済み→動かない
+  const pair = G.units.find(u => u.id === unit.mechPair && !u.eliminated && !u.exited);
+  if (!pair || pair.hexId !== unit.hexId) return null;
+
+  const reachable = calcReachable(unit);
+  const fromCol = parseInt(unit.hexId.substring(0, 2));
+  let bestHex = null, bestScore = -Infinity;
+
+  for (const [hid] of reachable) {
+    if (hid === unit.hexId) continue;
+    const toCol = parseInt(hid.substring(0, 2));
+    // 東方向移動禁止（前に出ない）
+    if (toCol >= fromCol) continue;
+    // 表の敵に隣接禁止
+    if (hasAdjacentFaceUpEnemy(hid)) continue;
+    // スタック制限（移動先に味方がいない）
+    const dest = getUnitsAt(hid).filter(u => u.side === 'allied' && u.id !== unit.id);
+    if (dest.length > 0) continue;
+
+    let score = 0;
+    // より西へ行くほどボーナス（安全圏へ）
+    score += (fromCol - toCol) * 5;
+    // 道路hexボーナス
+    const roads = ROAD_MAP && ROAD_MAP[hid];
+    if (roads && roads.length > 0) score += roads.length * 3;
+    // 退却先の多さ
+    const tempUnit = Object.assign({}, unit, { hexId: hid });
+    const retreats = mcCountRetreats(G.units, tempUnit);
+    score += retreats * 4;
+
+    if (score > bestScore) { bestScore = score; bestHex = hid; }
+  }
+
+  if (bestHex) return { unit, hex: bestHex };
+  return null;
+}
+
 // 連合軍ドクトリン移動メイン
 function mcAlliedDoctrineMove() {
   const units = G.units.filter(u =>
@@ -713,6 +764,33 @@ function mcAlliedDoctrineMove() {
   const movable = units.filter(u => !mustHoldCity(u) && mustMarchToCity(u) === null);
   if (movable.length === 0) return null;
 
+  // === 1ターン目特殊ルール ===
+  if (G.turn === 1) {
+    // サンビット装甲: スタック解除して西方後退のみ
+    for (const unit of movable) {
+      if (isStVithArmor(unit)) {
+        const result = findStVithArmorMove(unit);
+        if (result) return result;
+      }
+    }
+    // その他の連合軍: 敵に隣接されていなければ動けない
+    const contacted = movable.filter(u => !isStVithArmor(u) && isContactedByEnemy(u));
+    if (contacted.length === 0) return null; // 誰も接敵していない→全員パス
+
+    // 接敵されたユニットのみ通常ドクトリンで処理
+    const lineInfo = buildAlliedLine();
+    resetGermanReachCache();
+    for (const unit of contacted) {
+      const retreats = mcCountRetreats(G.units, unit);
+      if (retreats <= 1) {
+        const result = findSafeHex(unit, lineInfo);
+        if (result) return result;
+      }
+    }
+    return null; // 接敵されているが安全な移動先がない→パス
+  }
+
+  // === 2ターン目以降: 通常ドクトリン ===
   const lineInfo = buildAlliedLine();
   resetGermanReachCache(); // ターン内キャッシュリセット
 
