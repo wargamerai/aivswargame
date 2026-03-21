@@ -2468,22 +2468,24 @@ function aiDoMovement() {
     return;
   }
 
-  // === 82空挺: バストーニュ強制移動 ===
-  if (side === 'allied' && typeof mustMarchToBastogne === 'function') {
-    const marchUnit = units.find(u => mustMarchToBastogne(u));
+  // === 強制都市移動（82空挺→バストーニュ、1歩兵→サンビット） ===
+  if (side === 'allied' && typeof mustMarchToCity === 'function') {
+    const marchUnit = units.find(u => mustMarchToCity(u) !== null);
     if (marchUnit) {
+      const cityHex = mustMarchToCity(marchUnit);
+      const cityName = cityHex === BASTOGNE ? 'バストーニュ' : 'サンビット';
       const reachable = calcReachable(marchUnit);
-      // バストーニュに直接到達可能ならそこへ
-      let targetHex = reachable.has(BASTOGNE) ? BASTOGNE : null;
+      // 目標都市に直接到達可能ならそこへ
+      let targetHex = reachable.has(cityHex) ? cityHex : null;
       if (!targetHex) {
-        // 到達不可なら最もバストーニュに近いhexへ
-        const bCol = parseInt(BASTOGNE.substring(0, 2));
-        const bRow = parseInt(BASTOGNE.substring(2));
+        // 到達不可なら最も都市に近いhexへ
+        const tCol = parseInt(cityHex.substring(0, 2));
+        const tRow = parseInt(cityHex.substring(2));
         let bestDist = Infinity;
         for (const [hid] of reachable) {
           const c = parseInt(hid.substring(0, 2));
           const r = parseInt(hid.substring(2));
-          const d = Math.abs(c - bCol) + Math.abs(r - bRow);
+          const d = Math.abs(c - tCol) + Math.abs(r - tRow);
           if (d < bestDist) { bestDist = d; targetHex = hid; }
         }
       }
@@ -2494,10 +2496,10 @@ function aiDoMovement() {
         marchUnit.hexId = targetHex;
         marchUnit.acted = true;
         const pathStr = marchUnit.movePath ? marchUnit.movePath.map(h => dispHex(h)).join('→') : dispHex(targetHex);
-        addLog('move', `[AI] ${marchUnit.name}: ${pathStr}（バストーニュへ急行）`);
+        addLog('move', `[AI] ${marchUnit.name}: ${pathStr}（${cityName}へ急行）`);
         panToHex(targetHex);
-        // バストーニュ到達なら攻撃しない、途中なら通常判定
-        if (targetHex === BASTOGNE) {
+        // 目標都市到達なら攻撃しない、途中なら通常判定
+        if (targetHex === cityHex) {
           marchUnit.flipped = true; expireMovePath(marchUnit);
           switchSide();
         } else {
@@ -2517,7 +2519,6 @@ function aiDoMovement() {
         }
         return;
       } else {
-        // 移動先なし（既にバストーニュか到達不可）
         marchUnit.acted = true; marchUnit.flipped = true;
         addLog('move', `[AI] ${marchUnit.name}: 待機`);
         switchSide();
@@ -2711,7 +2712,7 @@ function aiDoAttack() {
   // 行動済み・未攻撃・裏でない味方ユニットに隣接する敵hexを探す
   const actedUnits = G.units.filter(u =>
     u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
-    && !(typeof isHoldingBastogne === 'function' && isHoldingBastogne(u))
+    && !(typeof isHoldingCity === 'function' && isHoldingCity(u))
   );
 
   // 攻撃可能な敵hexを収集
