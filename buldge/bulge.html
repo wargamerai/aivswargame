@@ -2859,13 +2859,12 @@ function aiDoRetreat() {
       const roads = ROAD_MAP && ROAD_MAP[h];
       const isRoad = roads && roads.length > 0;
       if (adjFriendDirect > 0 && !isRoad) score -= 20; // 味方隣接+非道路 = 強く回避
-      else if (adjFriendDirect > 0 && isRoad) score += 0; // 味方隣接+道路 = 許容
       if (zocLink > 0) score += zocLink * 8; // ZOC連結 = 最優先
 
       // 道路交差点 → ブロック位置として優先
-      if (isRoad) score += roads.length * 3;
+      if (roads && roads.length > 0) score += roads.length * 3;
       // 森林道路 → チョークポイント
-      if (TERRAIN_MAP[h] === 'f' && isRoad) score += 4;
+      if (TERRAIN_MAP[h] === 'f' && roads && roads.length > 0) score += 4;
 
       // 都市/町 → 防衛拠点
       if (FACILITY_MAP && FACILITY_MAP[h] === 'c') score += 6;
