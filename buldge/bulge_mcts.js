@@ -758,7 +758,7 @@ function mcAlliedDoctrineMove() {
   notAdj.sort((a, b) => {
     const colA = parseInt(a.hexId.substring(0, 2));
     const colB = parseInt(b.hexId.substring(0, 2));
-    return colB - colA; // 東側が先
+    return colA - colB; // 東側が先（内部col小=マップ東）
   });
   for (const unit of notAdj) {
     const result = findLineBuildHex(unit, lineInfo);
