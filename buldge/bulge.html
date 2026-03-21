@@ -2485,13 +2485,7 @@ function aiDoMovement() {
   // === 全体スキャン移動（MC有効時）===
   let unit, bestHex;
   if (G.useMC) {
-    // T1-T2ドイツのみモンテカルロ深探索
-    let result;
-    if (G.turn <= 2 && side === 'german') {
-      result = mcGermanDeepSearch();
-      if (result) addLog('move', `[AI/MC深探索] ${result.unit.name} → ${dispHex(result.hex)}`);
-    }
-    if (!result) result = mcGlobalScanMove(side);
+    const result = mcGlobalScanMove(side);
     if (!result) {
       passPhase();
       return;
