@@ -155,6 +155,7 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
       <!-- 動的に更新 -->
     </div>
     <div id="logPanel"></div>
+    <button id="copyDbgBtn" onclick="copyDebugLog()" style="position:fixed;bottom:10px;right:10px;z-index:999;padding:6px 12px;background:#444;color:#fff;border:1px solid #666;border-radius:4px;cursor:pointer;font-size:12px;">ログコピー</button>
   </div>
 </div>
 
@@ -255,7 +256,7 @@ function dispHex(id) {
   if (!id || id === 'eliminated' || id === 'exited') return id || '';
   const cc = parseInt(id.substring(0, 2));
   const rr = id.substring(2, 4);
-  return rr + String(22 - cc).padStart(2, '0');
+  return rr + String(23 - cc).padStart(2, '0');
 }
 
 function parseHexId(id) {
@@ -897,6 +898,7 @@ function onReinforceClick(hid) {
     G.phase = 'recovery';
     startRecoveryPhase();
     updateUI(); draw();
+    scheduleAI(300);
   }
 }
 
@@ -1226,22 +1228,24 @@ function getRetreatHexes(unit) {
       if (visited.has(nid)) continue;
       visited.add(nid);
       const terrain = TERRAIN_MAP[nid];
-      if (!terrain || terrain === 'x') continue;
+      if (!terrain || terrain === 'x') { dbg('RETREAT-BFS', `${dispHex(nid)} 除外:地形なし/通行不可`); continue; }
       // 敵がいるhexには退却不可
-      if (getUnitsAt(nid).some(u => u.side !== unit.side)) continue;
+      if (getUnitsAt(nid).some(u => u.side !== unit.side)) { dbg('RETREAT-BFS', `${dispHex(nid)} 除外:敵ユニット`); continue; }
       // 敵ZOCには退却不可（退却時は味方カバー無効 — 敵ZOCは常に有効）
-      const inEnemyZOC = getNeighborIds(nid).some(adj =>
+      const zocEnemies = getNeighborIds(nid).filter(adj =>
         getUnitsAt(adj).some(e => e.side !== unit.side && !e.eliminated)
       );
-      if (inEnemyZOC) continue;
+      if (zocEnemies.length > 0) { dbg('RETREAT-BFS', `${dispHex(nid)} 除外:敵ZOC [${zocEnemies.map(e=>dispHex(e)).join(',')}]`); continue; }
 
       // 味方がいるか
       const friendly = getUnitsAt(nid).filter(u => u.side === unit.side);
       if (friendly.length === 0 || (unit.mechPair && friendly.length < 2 && friendly[0].id === unit.mechPair)) {
         // 空きhex（またはmechPair可能）→ 退却先候補
+        dbg('RETREAT-BFS', `${dispHex(nid)} → 候補`);
         result.push(nid);
       } else {
         // 味方がいる → 通過してさらに奥を探索
+        dbg('RETREAT-BFS', `${dispHex(nid)} 味方あり→通過`);
         queue.push(nid);
       }
     }
@@ -1310,6 +1314,11 @@ function executeCombat() {
       <div style="font-size:2em;font-weight:bold;color:${result === 'DE' ? '#e94560' : result === 'NE' ? '#aaa' : '#ffa657'};margin:8px 0;">${RESULT_NAMES_JP[result] || result}</div>
       <div style="font-size:1.1em;color:#888;margin-top:4px;">(${result})</div>
     </div>`;
+
+  // 1ターン目のEX/DEを記録（14CC解禁用）
+  if (G.turn === 1 && (result === 'EX' || result === 'DE')) {
+    G._turn1CombatTriggered = true;
+  }
 
   // 攻撃参加ユニットのmustAttackをクリア
   for (const u of attackers) { delete u.mustAttack; }
@@ -1391,6 +1400,8 @@ function checkAdvance() {
 
 function finishCombat() {
   dbg('finishCombat', {side:G.activeSide, defHex:G.combat.defHex});
+  // 戦闘結果で盤面が変わったのでMC計画をクリア（再計算させる）
+  if (G._germanMCQueue) G._germanMCQueue = [];
   // 操作ユニットを裏にする
   G.units.filter(u => u.side === G.activeSide && u.acted && !u.flipped).forEach(u => {
     u.flipped = true; expireMovePath(u);
@@ -1407,6 +1418,11 @@ function skipAdvance() {
 }
 
 function eliminateUnit(unit) {
+  // 連合軍の除去hex記録（穴埋め用）
+  if (unit.side === 'allied' && unit.hexId !== 'eliminated') {
+    if (!G.eliminatedAlliedHexes) G.eliminatedAlliedHexes = [];
+    G.eliminatedAlliedHexes.push(unit.hexId);
+  }
   unit.eliminated = true;
   unit.hexId = 'eliminated';
   addLog('combat', `${unit.name} 除去`);
@@ -1569,18 +1585,46 @@ function placeReinforcements() {
     }
   }
 
-  // AI側は自動配置
+  // AI側は自動配置（敵隣接hexを避ける）
   const aiUnits = G.reinforceQueue.filter(u => isAISide(u.side));
   const humanUnits = G.reinforceQueue.filter(u => !isAISide(u.side));
   for (const u of aiUnits) {
-    const valid = getValidEntryHexes(u);
-    if (valid.length > 0) {
-      u.hexId = valid[0];
-      G.units.push(u);
-      addLog('turn', `増援: ${u.name} → ${dispHex(u.hexId)}`);
+    let valid = getValidEntryHexes(u);
+    // 敵に隣接しないhexを優先
+    const safe = valid.filter(hid => !getNeighborIds(hid).some(nid =>
+      G.units.some(e => e.hexId === nid && e.side !== u.side && !e.eliminated && !e.exited)
+    ));
+    if (safe.length > 0) {
+      u.hexId = safe[0];
+    } else if (valid.length > 0) {
+      // 全登場hexが敵隣接 → 別の登場エリアを試す
+      const allTags = [...new Set(Object.values(TAG_MAP).filter(t => t.startsWith('reinforce_')))];
+      let altHex = null;
+      for (const tag of allTags) {
+        if (tag === u.entryTag) continue;
+        const altHexes = getEntryHexes(tag).filter(hid => {
+          if (getUnitsAt(hid).some(o => o.side !== u.side)) return false;
+          const fc = getUnitsAt(hid).filter(o => o.side === u.side).length;
+          if (fc === 0) return true;
+          if (u.mechPair && fc < 2) return true;
+          return false;
+        }).filter(hid => !getNeighborIds(hid).some(nid =>
+          G.units.some(e => e.hexId === nid && e.side !== u.side && !e.eliminated && !e.exited)
+        ));
+        if (altHexes.length > 0) { altHex = altHexes[0]; break; }
+      }
+      if (altHex) {
+        u.hexId = altHex;
+        addLog('turn', `増援: ${u.name} 登場地点変更（敵隣接回避）`);
+      } else {
+        u.hexId = valid[0]; // どこも安全でなければ元の候補
+      }
     } else {
       addLog('turn', `${u.name}: 登場hex使用不可 → 次ターンに延期`);
+      continue;
     }
+    G.units.push(u);
+    addLog('turn', `増援: ${u.name} → ${dispHex(u.hexId)}`);
   }
 
   // 人間側は手動配置
@@ -2316,8 +2360,21 @@ function scheduleAI(delay) {
   aiTimerId = setTimeout(() => { aiTimerId = null; aiTick(); }, delay);
 }
 
-// デバッグログ
-function dbg(...args) { console.log('[BULGE]', ...args); }
+// デバッグログ（バッファに保存+コンソール出力）
+const _dbgBuf = [];
+function dbg(...args) {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  _dbgBuf.push(msg);
+  if (_dbgBuf.length > 5000) _dbgBuf.shift();
+  console.log('[BULGE]', ...args);
+}
+function copyDebugLog() {
+  const text = _dbgBuf.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyDbgBtn');
+    if (btn) { btn.textContent = 'コピー済み'; setTimeout(() => btn.textContent = 'ログコピー', 1500); }
+  });
+}
 
 // AIメインループ: 現在のフェーズに応じて1アクション実行
 function aiTick() {
@@ -2354,6 +2411,7 @@ function aiTick() {
     setTimeout(() => {
       endPhase();
       aiRunning = false;
+      scheduleAI(300);
     }, 300);
     return;
   }
@@ -2520,7 +2578,7 @@ function aiDoMovement() {
         return;
       } else {
         marchUnit.acted = true; marchUnit.flipped = true;
-        addLog('move', `[AI] ${marchUnit.name}: 待機`);
+        addLog('move', `[AI] ${marchUnit.name}: パス`);
         switchSide();
         return;
       }
@@ -2548,17 +2606,25 @@ function aiDoMovement() {
 
   // === 全体スキャン移動（MC有効時）===
   let unit, bestHex;
+  dbg('AI-MOVE', `side:${side} useMC:${G.useMC} units:${units.map(u=>u.name+'@'+dispHex(u.hexId)).join(',')}`);
   if (G.useMC) {
-    // 連合軍: ドクトリン移動（戦線維持・防御的）
-    const result = (side === 'allied' && typeof mcAlliedDoctrineMove === 'function')
-      ? mcAlliedDoctrineMove()
-      : mcGlobalScanMove(side);
+    // 連合軍: ドクトリン移動 / ドイツ: MC計画移動
+    let result;
+    if (side === 'allied' && typeof mcAlliedDoctrineMove === 'function') {
+      result = mcAlliedDoctrineMove();
+    } else if (side === 'german' && typeof mcGermanMCPlan === 'function') {
+      result = mcGermanMCPlan();
+    } else {
+      result = mcGlobalScanMove(side);
+    }
     if (!result) {
+      dbg('AI-MOVE', `結果なし → パス`);
       passPhase();
       return;
     }
     unit = result.unit;
     bestHex = result.hex;
+    dbg('AI-MOVE', `選択: ${unit.name} ${dispHex(unit.hexId)} → ${dispHex(bestHex)}`);
   } else {
     // 旧ロジック: 最初のユニットを移動
     if (side === 'german') {
@@ -2576,8 +2642,10 @@ function aiDoMovement() {
   }
 
   if (bestHex && bestHex !== unit.hexId) {
+    dbg('AI-MOVE-EXEC', `${unit.name} ${dispHex(unit.hexId)} → ${dispHex(bestHex)}`);
     const destUnits = getUnitsAt(bestHex).filter(u => u.side === unit.side);
     if (destUnits.length > 0 && !(unit.mechPair && destUnits.length < 2 && destUnits[0].id === unit.mechPair)) {
+      dbg('AI-MOVE-EXEC', `スタック制限で移動不可`);
       unit.acted = true; unit.flipped = true;
       // スタックペアも行動済みにする
       if (unit.mechPair) {
@@ -2615,6 +2683,7 @@ function aiDoMovement() {
     const adjEnemy = getNeighborIds(bestHex).some(nid =>
       getUnitsAt(nid).some(u => u.side !== side)
     );
+    dbg('AI-MOVE-EXEC', `${unit.name} 移動完了 adjEnemy:${adjEnemy}`);
     if (adjEnemy) {
       unit.mustAttack = true;
       if (stacked && pair) pair.mustAttack = true;
@@ -2631,8 +2700,8 @@ function aiDoMovement() {
     }
   } else {
     unit.acted = true; unit.flipped = true;
-    addLog('move', `[AI] ${unit.name}: 待機`);
-    switchSide();
+    addLog('move', `[AI] ${unit.name}: パス`);
+    passPhase();
   }
 }
 
@@ -2718,10 +2787,10 @@ function aiDoAttack() {
   const actedUnits = G.units.filter(u =>
     u.side === side && u.acted && !u.eliminated && !u.exited && !u.flipped && !u._aiAttacked
     && !(typeof isHoldingCity === 'function' && isHoldingCity(u))
-    && !(G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(u))
   );
 
   // 攻撃可能な敵hexを収集
+  dbg('AI-ATTACK', `actedUnits:[${actedUnits.map(u=>u.name+'@'+dispHex(u.hexId)).join(',')}]`);
   const enemyHexes = new Set();
   for (const u of actedUnits) {
     for (const nid of getNeighborIds(u.hexId)) {
@@ -2729,6 +2798,7 @@ function aiDoAttack() {
       if (enemies.length > 0) enemyHexes.add(nid);
     }
   }
+  dbg('AI-ATTACK', `enemyHexes:[${[...enemyHexes].map(h=>dispHex(h)).join(',')}]`);
 
   // 各敵hexについて攻撃力を計算し、有利なら攻撃
   let bestAttack = null;
@@ -2753,6 +2823,7 @@ function aiDoAttack() {
 
     const atkPower = adjFriendly.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
     const diff = atkPower - defPower;
+    dbg('AI-ATTACK-EVAL', `def:${dispHex(defHex)} atk:${atkPower}[${adjFriendly.map(u=>u.name).join(',')}] def:${defPower}[${defenders.map(u=>u.name).join(',')}] diff:${diff} 有利:${atkPower>=defPower}`);
 
     // 有利（攻撃力>=防御力）なら攻撃候補
     if (atkPower >= defPower && diff > bestDiff) {
@@ -2782,6 +2853,7 @@ function aiDoAttack() {
     }
   }
 
+  dbg('AI-ATTACK', `bestAttack:${bestAttack ? dispHex(bestAttack.defHex) : 'なし'}`);
   if (bestAttack) {
     // 攻撃は強制（隣接=必ず攻撃）— mcDecideAttackはログ出力のみ
     const atkUnits = bestAttack.attackers.map(id => G.units.find(u => u.id === id)).filter(Boolean);
@@ -2837,52 +2909,52 @@ function aiDoRetreat() {
   }
   const validHexes = getRetreatHexes(unit);
   if (validHexes.length > 0) {
-    // 退却先をスコアリングで選択
-    let bestHex = validHexes[0];
-    let bestScore = -Infinity;
-    for (const h of validHexes) {
-      let score = 0;
-      const { col } = parseHexId(h);
-      // 味方と1hex離れ（隣接ではなく2hex先に味方）→ ZOC戦線形成
+    // 退却先選択: 味方から1hex離れ（隣接でない）を必須条件にする
+    const unitPos = parseHexId(unit.hexId);
+    const preferredIndices = unit.side === 'german' ? [1, 0, 2] : [4, 5, 3];
+    const neighbors = getNeighbors(unitPos.col, unitPos.row);
+
+    // 味方から1hex離れたhexだけに絞る（味方に直接隣接していない）
+    const separated = validHexes.filter(h => {
       const adjToH = getNeighborIds(h);
-      const adjFriendDirect = adjToH.filter(nid =>
-        getUnitsAt(nid).some(f => f.side === unit.side && f.id !== unit.id)
-      ).length;
-      // 味方の隣接hex（2hex離れ）にいるか → ZOC重複で壁
-      let zocLink = 0;
-      for (const nid of adjToH) {
-        if (getNeighborIds(nid).some(adj =>
-          getUnitsAt(adj).some(f => f.side === unit.side && f.id !== unit.id)
-        )) zocLink++;
-      }
-      // 味方から1hex離れ（ZOC連結）が最優先。味方直接隣接は原則禁止（道路なら許容）
+      const adjFriend = adjToH.some(nid =>
+        getUnitsAt(nid).some(f => f.side === unit.side && f.id !== unit.id && !f.eliminated && !f.exited)
+      );
+      return !adjFriend;
+    });
+
+    // 候補があれば味方1hex離れのみ、なければ全候補にフォールバック
+    const candidates = separated.length > 0 ? separated : validHexes;
+    dbg('RETREAT-SELECT', `${unit.name} from:${dispHex(unit.hexId)} side:${unit.side} valid:[${validHexes.map(h=>dispHex(h)).join(',')}] separated:[${separated.map(h=>dispHex(h)).join(',')}] candidates:[${candidates.map(h=>dispHex(h)).join(',')}]`);
+
+    // 方向フィルタ: 優先方向（ドイツ=右系、連合=左系）のhexに絞る
+    const dirFiltered = candidates.filter(h => {
+      const destPos = parseHexId(h);
+      return preferredIndices.some(idx => {
+        const [nc, nr] = neighbors[idx];
+        return destPos.col === nc && destPos.row === nr;
+      });
+    });
+
+    const pool = dirFiltered.length > 0 ? dirFiltered : candidates;
+    dbg('RETREAT-DIR', `preferredIdx:[${preferredIndices}] dirFiltered:[${dirFiltered.map(h=>dispHex(h)).join(',')}] pool:[${pool.map(h=>dispHex(h)).join(',')}] fallback:${dirFiltered.length===0}`);
+
+    // 複数あれば: 道路あり+地形ありを優先
+    let bestHex = pool[0];
+    let bestScore = -Infinity;
+    for (const h of pool) {
+      let score = 0;
       const roads = ROAD_MAP && ROAD_MAP[h];
-      const isRoad = roads && roads.length > 0;
-      if (adjFriendDirect > 0 && !isRoad) score -= 20; // 味方隣接+非道路 = 強く回避
-      if (zocLink > 0) score += zocLink * 8; // ZOC連結 = 最優先
-
-      // 道路交差点 → ブロック位置として優先
-      if (roads && roads.length > 0) score += roads.length * 3;
-      // 森林道路 → チョークポイント
-      if (TERRAIN_MAP[h] === 'f' && roads && roads.length > 0) score += 4;
-
-      // 都市/町 → 防衛拠点
-      if (FACILITY_MAP && FACILITY_MAP[h] === 'c') score += 6;
+      if (roads && roads.length > 0) score += 5 + roads.length;
+      const terrain = TERRAIN_MAP[h];
+      if (terrain === 'f') score += 3; // 森林
+      if (FACILITY_MAP && FACILITY_MAP[h] === 'c') score += 4;
       if (FACILITY_MAP && FACILITY_MAP[h] === 't') score += 2;
-
-      // 後方（ドイツ=東、連合=東）
-      if (unit.side === 'german') score += col * 0.5;
-      else score += col * 0.5;
-
-      // 敵から離れる
-      const adjEnemy = adjToH.filter(nid =>
-        getUnitsAt(nid).some(e => e.side !== unit.side)
-      ).length;
-      score -= adjEnemy * 4;
-
+      dbg('RETREAT-SCORE', `${dispHex(h)} road:${!!(roads&&roads.length>0)} terrain:${terrain} score:${score}`);
       if (score > bestScore) { bestScore = score; bestHex = h; }
     }
     unit.hexId = bestHex;
+    dbg('RETREAT-RESULT', `${unit.name} → ${dispHex(bestHex)} score:${bestScore}`);
     addLog('combat', `[AI] ${unit.name} → ${dispHex(bestHex)} に退却`);
     G.combat.retreatingUnits.shift();
     if (G.combat.retreatingUnits.length === 0) {
