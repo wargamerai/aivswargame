@@ -5,12 +5,25 @@ const MC = { SIMS: 0 }; // 互換用（未使用）
 
 // ========== 死守都市 ==========
 const HOLD_CITIES = ['1508', '1114']; // ST.VITH, BASTOGNE
+const BASTOGNE = '1114';
 
 // 死守都市にいる歩兵は移動禁止（DRによる退却は別処理なので影響しない）
 function mustHoldCity(unit) {
   if (unit.side !== 'allied') return false;
   if (isMechanized(unit)) return false; // 歩兵のみ対象
   return HOLD_CITIES.includes(unit.hexId);
+}
+
+// 82空挺: バストーニュ強制移動対象か（未到達で未行動）
+function mustMarchToBastogne(unit) {
+  if (unit.id !== 'us_82') return false;
+  if (unit.hexId === BASTOGNE) return false; // 既に到達済み
+  return true;
+}
+
+// バストーニュ死守中か（攻撃禁止判定用）
+function isHoldingBastogne(unit) {
+  return unit.id === 'us_82' && unit.hexId === BASTOGNE;
 }
 
 // ========== VP都市リスト ==========
@@ -501,6 +514,8 @@ function mcGlobalScanMove(side) {
   for (const unit of units) {
     // 死守都市の歩兵は動かさない
     if (mustHoldCity(unit)) continue;
+    // バストーニュ強制移動中の82空挺はスキャン対象外（専用処理で移動）
+    if (mustMarchToBastogne(unit)) continue;
 
     const reachable = calcReachable(unit);
     const candidates = [unit.hexId];
