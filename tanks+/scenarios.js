@@ -341,11 +341,10 @@ const SCENARIOS = [
     },
     terrain: MAP_TERRAIN.A
   },
-  // シナリオ2: エレファント（隠し）
+  // シナリオ2: エレファント
   {
     id: 'sc2',
     name: 'エレファント',
-    hidden: true,
     front: 'east',
     map1: 'A', map1orient: 'Vertical',
     map2: null, map2orient: null,
@@ -394,11 +393,10 @@ const SCENARIOS = [
     },
     terrain: MAP_TERRAIN.A
   },
-  // シナリオ3: ドニエプル（隠し）
+  // シナリオ3: ドニエプル
   {
     id: 'sc3',
     name: 'ドニエプル',
-    hidden: true,
     front: 'east',
     map1: 'B', map1orient: 'Vertical',
     map2: null, map2orient: null,
@@ -445,11 +443,10 @@ const SCENARIOS = [
     terrain: MAP_TERRAIN.B,
     hexsideTerrain: MAP_HEXSIDE_TERRAIN.B
   },
-  // シナリオ4: フューリー（隠し）
+  // シナリオ4: フューリー
   {
     id: 'sc4',
     name: 'フューリー',
-    hidden: true,
     front: 'west',
     map1: 'A', map1orient: 'Vertical',
     map2: null, map2orient: null,
@@ -482,7 +479,6 @@ const SCENARIOS = [
   {
     id: 'sc5',
     name: 'カーン近郊',
-    hidden: true,
     front: 'west',
     map1: 'C', map1orient: 'Vertical',
     map2: null, map2orient: null,
