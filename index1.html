@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作戦司令室 (HQ)</title>
+    <style>
+        :root {
+            --bg-color: #151617;
+            --panel-bg: #2b2d30;
+            --text-main: #d0d3d4;
+            --text-accent: #ffffff;
+            --btn-bg: #1e2022;
+            --btn-hover: #3a3c40;
+            --border-color: #0a0a0b;
+            --accent-red: #8b0000;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-image: repeating-linear-gradient(
+                45deg,
+                rgba(0, 0, 0, 0.2) 0px,
+                rgba(0, 0, 0, 0.2) 2px,
+                transparent 2px,
+                transparent 4px
+            );
+        }
+
+        .container {
+            background-color: var(--panel-bg);
+            border: 4px solid var(--border-color);
+            border-radius: 4px;
+            padding: 40px;
+            width: 90%;
+            max-width: 900px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 0, 0, 0.6);
+        }
+
+        h1 {
+            color: var(--text-accent);
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+            letter-spacing: 3px;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #929699;
+            margin-bottom: 40px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        .briefing-text {
+            text-align: left;
+            margin-bottom: 40px;
+            line-height: 1.6;
+            background-color: #18191a;
+            padding: 20px;
+            border-left: 5px solid #5a5d60;
+            font-family: monospace;
+            font-size: 1.4em;
+            color: #b0b5b9;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .theater-btn {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            text-decoration: none;
+            background-color: var(--btn-bg);
+            color: var(--text-main);
+            padding: 15px 30px;
+            font-size: 1.8em;
+            font-weight: bold;
+            border: 2px solid var(--border-color);
+            border-radius: 2px;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.6);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            font-family: inherit;
+            text-align: center;
+        }
+
+        .theater-btn:hover {
+            background-color: var(--btn-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.8);
+            color: var(--text-accent);
+            border-left: 6px solid var(--accent-red);
+        }
+
+        .theater-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+
+        .theater-btn span {
+            display: block;
+            font-size: 0.5em;
+            font-weight: normal;
+            color: #7b8084;
+            margin-top: 5px;
+            letter-spacing: 1px;
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>作戦司令室 (HQ)</h1>
+
+    <div class="briefing-text">
+    ブラウザで遊べる戦争ゲーム集です。各タイトルからお進みください。
+    </div>
+
+    <div class="btn-group">
+        <a href="battleofnomonhan/nomonhan.html" class="theater-btn">
+            ノモンハン
+            <span>Nomonhan Incident (1939)</span>
+        </a>
+
+        <a href="f16ai/scenario.html" class="theater-btn">
+            F-16
+            <span>F-16 Air Combat Simulator</span>
+        </a>
+
+        <a href="ijn/savo.html" class="theater-btn">
+            サボ島沖海戦
+            <span>Battle of Savo Island (1942)</span>
+        </a>
+
+        <a href="ijn/campaign.html" class="theater-btn">
+            連合艦隊
+            <span>Grand Fleet (IJN)</span>
+        </a>
+
+        <a href="pf/campaign.html" class="theater-btn">
+            太平洋艦隊
+            <span>Pacific Fleet (USN)</span>
+        </a>
+
+        <a href="tanks+/hub.html" class="theater-btn">
+            TANKS+
+            <span>Tactical Armor Combat</span>
+        </a>
+
+        <a href="buldge/bulge.html" class="theater-btn">
+            バルジの戦い
+            <span>Panzers in the Snow (1944)</span>
+        </a>
+    </div>
+
+</div>
+
+</body>
+</html>

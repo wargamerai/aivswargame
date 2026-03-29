@@ -253,28 +253,11 @@ function mcEvalPosition(hid, unit, units) {
 
 // ========== CRT期待値計算（確定的）==========
 function mcExpectedCombat(atkPower, defPower, support, isForest, defRetreatCount) {
-  const diff = atkPower - defPower;
-  const FOREST_SHIFT = { DE:'EX', EX:'DD', DD:'DR', DR:'NE', NE:'AR', AR:'AR' };
-
-  let atkLoss = 0, defLoss = 0;
-  for (let die = 1; die <= 6; die++) {
-    const modDie = die + support;
-    let result = lookupCRT(diff, modDie);
-    // 森林結果修正: 1段階防御側有利にシフト
-    if (isForest) result = FOREST_SHIFT[result] || result;
-    switch (result) {
-      case 'DE': defLoss += 1.0; break;
-      case 'EX': defLoss += 0.5; atkLoss += 0.5; break;
-      case 'DD': defLoss += 0.2; break;
-      case 'DR':
-        if (defRetreatCount === 0) defLoss += 1.0; // 退却先なし=壊滅
-        else defLoss += 0.1;
-        break;
-      case 'AR': atkLoss += 0.3; break;
-      case 'NE': break;
-    }
-  }
-  return { atkLoss: atkLoss / 6, defLoss: defLoss / 6 };
+  // DR確定で計算
+  let defLoss = 0;
+  if (defRetreatCount === 0) defLoss = 1.0; // 退却先なし=壊滅
+  else defLoss = 0.1;
+  return { atkLoss: 0, defLoss };
 }
 
 // ========== 移動判断: 全候補を静的評価 ==========
@@ -452,14 +435,13 @@ function mcCalcGermanReach() {
 // ========== ドイツMC移動計画 ==========
 // 全ユニットの移動順序×配置を総当たりシミュレーションし、最良パターンを採用
 function mcGermanMCPlan() {
-  // 毎回現在の盤面で全未行動ユニットを一括シミュレーション → 最善の1体を返す
+  // 優先度ベース: 今の盤面で全ユニットをチェックし、最も価値のある行動を選ぶ
   const movableUnits = G.units.filter(u =>
     u.side === 'german' && !u.acted && !u.flipped && !u.eliminated && !u.exited
     && !mustHoldCity(u)
   );
   if (movableUnits.length === 0) return null;
 
-  // 全ユニットを個別に扱う（スタック解除を検討可能にする）
   const seen = new Set();
   const uniqueUnits = [];
   for (const u of movableUnits) {
@@ -467,92 +449,197 @@ function mcGermanMCPlan() {
     seen.add(u.id);
     uniqueUnits.push(u);
   }
+  if (uniqueUnits.length === 0) return null;
 
-  // 各ユニットの移動候補を事前計算
-  const candidatesMap = new Map();
+  let bestUnit = null;
+  let bestHex = null;
+  let bestPriority = -1;
+  let bestUnstack = false;
+
   for (const unit of uniqueUnits) {
     const reachable = calcReachable(unit);
-    const candidates = [unit.hexId]; // 待機も候補
+
     for (const [hid] of reachable) {
-      candidates.push(hid);
-    }
-    candidatesMap.set(unit.id, candidates);
-  }
+      if (hid === unit.hexId) continue; // 現在地はスキップ
 
-  const SIMS = 300;
-  let bestPlan = null;
-  let bestScore = -Infinity;
+      // スタック制限
+      const occupied = G.units.filter(u =>
+        u.hexId === hid && u.side === 'german' && !u.eliminated && !u.exited
+        && u.id !== unit.id && (!unit.mechPair || u.id !== unit.mechPair)
+      );
+      if (occupied.length > 0) continue;
 
-  for (let sim = 0; sim < SIMS; sim++) {
-    const simUnits = mcCloneUnits();
-    const plan = [];
+      // 地形制限: 装甲は道路なしで森に入れない
+      const terrain = TERRAIN_MAP[hid];
+      if (terrain === 'f' && isMechanized(unit) && !hasRoadBetween(unit.hexId, hid)) continue;
 
-    // ユニット順序をシャッフル（順序の探索）
-    const shuffled = [...uniqueUnits].sort(() => Math.random() - 0.5);
+      let priority = 0;
 
-    for (const origUnit of shuffled) {
-      const simUnit = simUnits.find(u => u.id === origUnit.id);
-      if (!simUnit || simUnit.eliminated || simUnit.exited) continue;
+      // === 優先度1: 包囲完成（敵の退路を0にできるか）===
+      const adjEnemies = getNeighborIds(hid).map(nid =>
+        G.units.find(u => u.hexId === nid && u.side === 'allied' && !u.eliminated && !u.exited)
+      ).filter(Boolean);
 
-      const candidates = candidatesMap.get(origUnit.id);
-      if (!candidates || candidates.length === 0) continue;
-
-      // スタック制限を考慮した有効候補
-      const valid = candidates.filter(hid => {
-        if (hid === simUnit.hexId) return true;
-        const dest = simUnits.filter(u =>
-          u.hexId === hid && u.side === 'german' && !u.eliminated && !u.exited
-          && u.id !== simUnit.id && (!simUnit.mechPair || u.id !== simUnit.mechPair)
-        );
-        return dest.length === 0;
-      });
-      if (valid.length === 0) continue;
-
-      // スコア計算して上位からランダム選択
-      const scored = valid.map(h => ({
-        hex: h,
-        score: mcDoctrineScore(h, origUnit, simUnits)
-      }));
-      scored.sort((a, b) => b.score - a.score);
-
-      const topN = Math.min(Math.max(2, Math.ceil(scored.length * 0.3)), 5);
-      const pick = scored[Math.floor(Math.random() * topN)];
-
-      // シミュレーション内で移動（ペアは連動しない＝スタック解除可能）
-      simUnit.hexId = pick.hex;
-
-      plan.push({ unitId: origUnit.id, hex: pick.hex });
-    }
-
-    // 全ユニット配置後の盤面評価
-    const score = evalGermanMCBoard(simUnits);
-    if (score > bestScore) {
-      bestScore = score;
-      bestPlan = plan;
-    }
-  }
-
-  if (!bestPlan || bestPlan.length === 0) return null;
-
-  // ベストプランの先頭（移動するユニット）を返す
-  // 待機（現在地と同じ）ユニットはスキップ
-  for (const p of bestPlan) {
-    const unit = G.units.find(u => u.id === p.unitId);
-    if (unit && p.hex !== unit.hexId && !unit.acted && !unit.eliminated && !unit.exited) {
-      // ペアと別の移動先ならスタック解除
-      let unstack = false;
-      if (unit.mechPair) {
-        const pairPlan = bestPlan.find(pp => pp.unitId === unit.mechPair);
-        if (pairPlan && pairPlan.hex !== p.hex) {
-          unstack = true;
+      for (const enemy of adjEnemies) {
+        // このヘクスに移動したら敵の退路がどうなるか
+        const savedHex = unit.hexId;
+        unit.hexId = hid;
+        const retreats = getRetreatHexes(enemy);
+        unit.hexId = savedHex;
+        if (retreats.length === 0) {
+          priority = Math.max(priority, 100); // 包囲完成 = 最優先
+        } else if (retreats.length <= 2) {
+          priority = Math.max(priority, 80); // 包囲に近い
         }
       }
-      dbg('MC-PLAN', `シミュレーション${SIMS}回 残${uniqueUnits.length}体 bestScore:${bestScore.toFixed(1)} → ${unit.name} ${dispHex(unit.hexId)}→${dispHex(p.hex)}${unstack ? ' [スタック解除]' : ''}`);
-      return { unit, hex: p.hex, unstack };
+
+      // === 優先度2: 都市・街に隣接 ===
+      if (FACILITY_MAP) {
+        for (const nid of getNeighborIds(hid)) {
+          const fac = FACILITY_MAP[nid];
+          if (fac === 'c' || fac === 't') {
+            const enemyThere = G.units.some(u => u.hexId === nid && u.side === 'allied' && !u.eliminated && !u.exited);
+            if (enemyThere) {
+              priority = Math.max(priority, 70); // 都市の敵に隣接
+            } else {
+              priority = Math.max(priority, 60); // 空の都市に隣接
+            }
+          }
+        }
+      }
+
+      // === 優先度3: 敵のZOCを奪う（敵に隣接） ===
+      if (adjEnemies.length > 0 && priority < 60) {
+        priority = Math.max(priority, 50);
+      }
+
+      // === 優先度4: 戦闘支援に使える（装甲が敵隣接で+2） ===
+      if (isMechanized(unit) && adjEnemies.length > 0 && priority < 50) {
+        // 隣接する敵に対して、他の味方が攻撃可能か
+        for (const enemy of adjEnemies) {
+          const otherAttackers = G.units.filter(u =>
+            u.side === 'german' && u.id !== unit.id && !u.acted && !u.eliminated && !u.exited
+            && getNeighborIds(u.hexId).includes(enemy.hexId)
+          );
+          if (otherAttackers.length > 0) {
+            priority = Math.max(priority, 45); // 戦闘支援可能
+          }
+        }
+      }
+
+      // === 優先度5: 西へ移動 ===
+      if (priority < 45) {
+        const curCol = parseInt(unit.hexId.substring(0, 2));
+        const newCol = parseInt(hid.substring(0, 2));
+        if (newCol < curCol) {
+          priority = Math.max(priority, 10 + (curCol - newCol) * 5); // 西に行くほど高い
+        }
+      }
+
+      if (priority > bestPriority) {
+        bestPriority = priority;
+        bestUnit = unit;
+        bestHex = hid;
+      }
     }
   }
 
-  return null;
+  if (!bestUnit || !bestHex) return null;
+
+  // スタック解除判定
+  let unstack = false;
+  if (bestUnit.mechPair) {
+    const pair = G.units.find(u => u.id === bestUnit.mechPair);
+    if (pair && pair.hexId === bestUnit.hexId && bestHex !== bestUnit.hexId) {
+      unstack = true;
+    }
+  }
+
+  dbg('MC-PLAN', `優先度ベース: ${bestUnit.name} ${dispHex(bestUnit.hexId)}→${dispHex(bestHex)} 優先度:${bestPriority}${unstack ? ' [スタック解除]' : ''}`);
+  return { unit: bestUnit, hex: bestHex, unstack };
+}
+
+// 戦闘後前進MC判定: 後続の到達可能ヘクス数＋攻撃可能敵数＋戦闘支援＋歩兵攻撃による道開け
+function mcEvalAdvanceScore(advancingUnit) {
+  const side = advancingUnit.side;
+  const enemySide = side === 'german' ? 'allied' : 'german';
+  let totalScore = 0;
+
+  const remaining = G.units.filter(u =>
+    u.side === side && u.id !== advancingUnit.id &&
+    !u.acted && !u.eliminated && !u.exited
+  );
+  const remainingInf = remaining.filter(u => !isMechanized(u));
+  const remainingArmor = remaining.filter(u => isMechanized(u));
+
+  const enemies = G.units.filter(u => u.side === enemySide && !u.eliminated && !u.exited);
+  const enemyPositions = new Set(enemies.map(u => u.hexId));
+
+  for (const u of remaining) {
+    const reached = calcReachable(u);
+    totalScore += reached.size;
+
+    for (const [hid] of reached) {
+      const adjEnemies = getNeighborIds(hid).filter(nid => enemyPositions.has(nid));
+      totalScore += adjEnemies.length;
+    }
+  }
+
+  // 戦闘支援+2: 装甲が敵に隣接したまま留まれば歩兵の攻撃を支援できる
+  if (isMechanized(advancingUnit)) {
+    for (const nid of getNeighborIds(advancingUnit.hexId)) {
+      if (!enemyPositions.has(nid)) continue;
+
+      // この敵に歩兵が攻撃可能か
+      const infCanAttack = remainingInf.some(u => {
+        const reached = calcReachable(u);
+        for (const [hid] of reached) {
+          if (getNeighborIds(hid).includes(nid)) return true;
+        }
+        return false;
+      });
+      if (infCanAttack) {
+        // 支援+2の価値
+        totalScore += 2;
+
+        // 歩兵がDRで敵を後退させたら後方の戦車が動けるようになる
+        // 敵が後退した場合の後続戦車の到達可能ヘクス増加を見積もる
+        const enemy = enemies.find(e => e.hexId === nid);
+        if (enemy) {
+          const retreats = getRetreatHexes(enemy);
+          if (retreats.length > 0) {
+            // 敵が消えた場合、そのZOCが解除され後続戦車の経路が開く
+            const savedHex = enemy.hexId;
+            enemy.hexId = retreats[0]; // 仮退却
+            let armorMobility = 0;
+            for (const a of remainingArmor) {
+              const reached = calcReachable(a);
+              armorMobility += reached.size;
+            }
+            enemy.hexId = savedHex; // 元に戻す
+
+            // 現状の戦車機動力
+            let armorMobilityNow = 0;
+            for (const a of remainingArmor) {
+              const reached = calcReachable(a);
+              armorMobilityNow += reached.size;
+            }
+
+            // 差分がプラスなら道が開く価値
+            totalScore += Math.max(0, armorMobility - armorMobilityNow);
+          }
+        }
+      }
+    }
+  }
+
+  // 包囲チェック: 前進によりZOCが変わり敵の退路が0になるか
+  for (const enemy of enemies) {
+    const retreats = getRetreatHexes(enemy);
+    if (retreats.length === 0) totalScore += 25; // 包囲状態
+  }
+
+  return totalScore;
 }
 
 // ドクトリンスコア（個別hex評価、シミュレーション内で使用）
@@ -564,23 +651,24 @@ function mcDoctrineScore(hid, unit, simUnits) {
   // === 西進（全ユニット共通、控えめ）===
   score += (20 - col) * 2;
 
-  // === ターン1: サンビット攻略最優先 ===
+  // === ターン1: 包囲壊滅優先 ===
   if (G.turn === 1) {
-    if (mech) {
-      // 装甲はサンビットに集中
-      const dist = hexDist(hid, ST_VITH);
-      score += Math.max(0, 15 - dist) * 4;
-    } else {
-      // 歩兵は正面の敵を攻撃・拘束（サンビットに集中しない）
-      for (const nid of getNeighborIds(hid)) {
-        const enemy = simUnits.find(u => u.hexId === nid && u.side === 'allied' && !u.eliminated && !u.exited);
-        if (enemy) score += 8; // 敵に隣接 = 拘束価値
-      }
+    const savedUnits = G.units;
+    G.units = simUnits;
+    for (const nid of getNeighborIds(hid)) {
+      const enemy = simUnits.find(u => u.hexId === nid && u.side === 'allied' && !u.eliminated && !u.exited);
+      if (!enemy) continue;
+      score += 8; // 敵隣接
+      const retreats = getRetreatHexes(enemy);
+      score += (6 - retreats.length) * 5; // 退路が少ないほど高得点
+      if (retreats.length === 0) score += 25; // 完全包囲
     }
+    G.units = savedUnits;
   }
 
-  // === ターン2: サンビット未占領なら装甲はサンビット攻略優先 ===
-  if (G.turn === 2 && mech) {
+  // === ターン2: サンビット未占領なら装甲はサンビット攻略優先（2Pz除外）===
+  const is2PzT2 = unit.id === 'de_2pz_1' || unit.id === 'de_2pz_2';
+  if (G.turn === 2 && mech && !is2PzT2) {
     const stVithEnemy = simUnits.some(u => u.hexId === ST_VITH && u.side === 'allied' && !u.eliminated && !u.exited);
     if (stVithEnemy) {
       const dist = hexDist(hid, ST_VITH);
@@ -640,13 +728,19 @@ function mcDoctrineScore(hid, unit, simUnits) {
       ).reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
       const totalAtk = myAtk + adjFriendAtk;
       const isCity = FACILITY_MAP && FACILITY_MAP[nid] === 'c';
-      if (totalAtk - enemyDef < 2) {
-        // 差分+2未満の攻撃は無意味 — 都市なら大ペナルティ、それ以外もペナルティ
-        score -= isCity ? 30 : 10;
+      if (isCity && totalAtk - enemyDef < 2) {
+        // 都市への+2未満の攻撃は見送り
+        score -= 30;
       } else {
         const retreats = mcCountRetreats(simUnits, enemy);
-        score += (6 - retreats) * 5;
-        if (retreats === 0) score += 25; // 包囲壊滅ボーナス
+        score += (6 - retreats) * 10;
+        if (retreats === 0) score += 50; // 包囲壊滅ボーナス
+        // 戦闘後前進: DR確定で敵が退却/壊滅した場合、前進先がサンビットに近いか
+        if (retreats === 0 || retreats > 0) {
+          const advDist = hexDist(nid, ST_VITH);
+          const curDist = hexDist(hid, ST_VITH);
+          if (advDist < curDist) score += (curDist - advDist) * 10; // 前進でサンビットに近づく
+        }
       }
     }
   }
@@ -1203,110 +1297,7 @@ function findRoadBlockMove(movable, lineInfo) {
 // ルール6: 82空挺→バストーニュ強制行軍（mustMarchToCityで処理済み）
 // ルール7: 9CC移動・戦闘禁止（包囲時は逃避許可）
 function mcAlliedDoctrineMove() {
-  const units = G.units.filter(u =>
-    u.side === 'allied' && !u.acted && !u.flipped && !u.eliminated && !u.exited
-  );
-  if (units.length === 0) return null;
-
-  // 9CC包囲時の緊急逃避（他のフィルタより先に判定）
-  for (const unit of units) {
-    if (isStVithArmor(unit) && is9CCSurrounded(unit)) {
-      const lineInfo = buildAlliedLine();
-      const result = findEscapeHex(unit, lineInfo, false);
-      if (result) return result;
-    }
-  }
-
-  // 9CCは通常移動禁止
-  const movable = units.filter(u => !mustHoldCity(u) && mustMarchToCity(u) === null && !isStVithArmor(u));
-
-  const lineInfo = buildAlliedLine();
-
-  // ルール9: 1ターン+ドイツパス → 9CCサンビット交代（敵非隣接が条件）
-  if (G.turn === 1 && G.passCount >= 1) {
-    const nineCCAtStV = units.filter(u => isStVithArmor(u) && u.hexId === ST_VITH);
-
-    if (nineCCAtStV.length > 0 && !hasAdjacentEnemy(ST_VITH)) {
-      // 9CCをサンビットから出す（unstackingで1ユニットずつ）
-      const nineCCUnit = nineCCAtStV.find(u => !u.acted && !u.flipped);
-      if (nineCCUnit) {
-        const result = findLineBuildHex(nineCCUnit, lineInfo);
-        if (result) return result;
-      }
-    }
-
-    // 9CCが全員出た後 → サンビットに交代要員を送る
-    const any9CCAtStV = G.units.some(u =>
-      u.hexId === ST_VITH && isStVithArmor(u) && !u.eliminated && !u.exited
-    );
-    const anyAlliedAtStV = G.units.some(u =>
-      u.hexId === ST_VITH && u.side === 'allied' && !isStVithArmor(u) && !u.eliminated && !u.exited
-    );
-    if (!any9CCAtStV && !anyAlliedAtStV) {
-      // サンビットが空 → 到達可能なユニットを送る（最優先）
-      for (const unit of movable) {
-        if (unit.acted) continue;
-        const reachable = calcReachable(unit);
-        if (!reachable.has(ST_VITH)) continue;
-        if (G.turn <= 2 && hasAdjacentEnemy(ST_VITH)) continue;
-        return { unit, hex: ST_VITH };
-      }
-    }
-  }
-
-  if (movable.length === 0) return null;
-
-  // ルール10: 1ターンにEX/DEが出たら14CCを左下2ヘクス(内部1809)へ移動（戦闘許可）
-  if (G.turn === 1 && G._turn1CombatTriggered) {
-    const unit14cc = movable.find(u => u.id === 'us_14cc');
-    if (unit14cc) {
-      const reachable = calcReachable(unit14cc);
-      if (reachable.has('1809')) {
-        const dest = getUnitsAt('1809').filter(u => u.side === 'allied');
-        if (dest.length === 0 || (unit14cc.mechPair && dest.length < 2 && dest[0].id === unit14cc.mechPair)) {
-          return { unit: unit14cc, hex: '1809' };
-        }
-      }
-    }
-  }
-
-  // ルール2: 左・左上・左下に敵がいるユニットは逃避
-  for (const unit of movable) {
-    if (hasEnemyOnLeft(unit)) {
-      const result = findEscapeHex(unit, lineInfo, false);
-      if (result) return result;
-    }
-  }
-
-  // ルール3: 除去されたユニットの穴埋め
-  if (G.eliminatedAlliedHexes && G.eliminatedAlliedHexes.length > 0) {
-    const result = findGapFillMove(movable, lineInfo);
-    if (result) return result;
-  }
-
-  // ルール4: 1ターン目 + ドイツパス済み → 道路封鎖
-  if (G.turn === 1 && G.passCount >= 1) {
-    const result = findRoadBlockMove(movable, lineInfo);
-    if (result) return result;
-  }
-
-  // ルール8: 1ターン目+ドイツパス → サンビット以外の動ける部隊は戦線構築
-  if (G.turn === 1 && G.passCount >= 1) {
-    const builders = movable.filter(u => u.hexId !== ST_VITH);
-    for (const unit of builders) {
-      const result = findLineBuildHex(unit, lineInfo);
-      if (result) return result;
-    }
-  }
-
-  // 増援ユニット + 2ターン目以降の4歩兵は戦線構築へ
-  const reinforcements = movable.filter(u => u.entryTag || (G.turn >= 2 && u.id === 'us_4inf'));
-  for (const unit of reinforcements) {
-    const result = findLineBuildHex(unit, lineInfo);
-    if (result) return result;
-  }
-
-  // デフォルトはパス
+  // 1ターン目: 全員パス
   return null;
 }
 

@@ -97,7 +97,7 @@ html, body { height:100%; overflow:hidden; background:#1a1a2e; color:#e0e0e0; fo
 <div id="startScreen">
   <h1>バルジの戦い</h1>
   <h2>Panzers in the Snow</h2>
-  <button class="mode-btn" onclick="startGame('german')">
+  <button class="mode-btn" disabled style="opacity:0.4; cursor:not-allowed;">
     ドイツ軍でプレイ
     <div class="desc">連合軍はAIが操作</div>
   </button>
@@ -944,13 +944,12 @@ function getMoveCost(fromId, toId, unit) {
 
   let cost;
   if (sharedRoad) {
-    if (unit.side === 'allied') {
-      // 連合軍: 道路1/3（森林非機械化は1）
-      cost = 1/3;
-      if (terrain === 'f' && !isMechanized(unit)) cost = 1;
-    } else {
-      // ドイツ軍: 道路沿いは1
+    if (!isMechanized(unit)) {
+      // 歩兵（両軍）: 道路1
       cost = 1;
+    } else {
+      // 戦車（両軍）: 道路1/3
+      cost = 1/3;
     }
   } else {
     switch (terrain) {
@@ -2864,8 +2863,10 @@ function aiDoAttack() {
           );
           const atkP = coAttackers.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
           const defP = enemies.reduce((s, u) => s + (u.flipped ? u.def : u.atk), 0);
-          if (atkP - defP < 2) {
-            dbg('AI-ATTACK', `${mu.name}: ${dispHex(nid)}への攻撃見送り（差分${atkP - defP}、+2未満）`);
+          // 都市への攻撃は+2未満なら見送り
+          const isCity = FACILITY_MAP && FACILITY_MAP[nid] === 'c';
+          if (isCity && atkP - defP < 2) {
+            dbg('AI-ATTACK', `${mu.name}: ${dispHex(nid)}への攻撃見送り（都市、差分${atkP - defP}、+2未満）`);
             continue;
           }
           bestAttack = { defHex: nid, attackers: coAttackers.map(u => u.id), defenders: enemies };
@@ -3026,26 +3027,25 @@ function aiDoAdvance() {
         return;
       }
     }
-    // 前進すると味方の攻撃機会を塞ぐかチェック
+    // MC判定: 前進した場合としない場合で残りの味方の攻略スコアを比較
     const shouldAdvance = (function() {
-      // defHexに隣接する敵ユニット
-      const adjEnemies = getNeighborIds(defHex).filter(nid =>
-        G.units.some(u => u.hexId === nid && u.side !== unit.side && !u.eliminated && !u.exited)
-      );
-      if (adjEnemies.length === 0) return true; // 敵がいなければ前進OK
+      const savedHex = unit.hexId;
 
-      // defHexに隣接する未行動の味方（自分以外）
-      const adjFriendly = getNeighborIds(defHex).filter(nid =>
-        G.units.some(u => u.hexId === nid && u.side === unit.side && !u.acted && !u.eliminated && !u.exited && u.id !== unit.id)
-      );
-      // 味方がdefHexに隣接して攻撃したい敵がいるなら、前進でヘクスを塞ぐ
-      if (adjFriendly.length > 0 && adjEnemies.length > 0) {
-        // defHexが空なら味方がそこ経由で攻撃できる
-        dbg('aiDoAdvance', `${unit.name}: 前進すると味方の攻撃機会を塞ぐ → 前進しない`);
-        addLog('combat', `[AI] ${unit.name}: 前進見送り（味方の攻撃機会確保）`);
+      // 前進した場合: 残り味方の到達範囲でサンビット攻略スコア計算
+      unit.hexId = defHex;
+      const scoreAdvance = mcEvalAdvanceScore(unit);
+
+      // 前進しない場合
+      unit.hexId = savedHex;
+      const scoreStay = mcEvalAdvanceScore(unit);
+
+      dbg('aiDoAdvance', `${unit.name}: 前進=${scoreAdvance} 不前進=${scoreStay}`);
+      if (scoreAdvance >= scoreStay) {
+        return true;
+      } else {
+        addLog('combat', `[AI] ${unit.name}: 前進見送り（MC判定: 前進${scoreAdvance} < 不前進${scoreStay}）`);
         return false;
       }
-      return true;
     })();
 
     G.combat.advanceEligible.shift();
