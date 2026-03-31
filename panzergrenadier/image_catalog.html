@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>PG ユニット画像マッチング</title>
+<style>
+body { background:#222; color:#ddd; font-family:sans-serif; padding:20px; }
+h1 { color:#c8a020; }
+h2 { color:#8cf; border-bottom:1px solid #555; padding-bottom:4px; margin-top:30px; }
+.info { color:#aaa; font-size:0.9em; margin:8px 0; }
+.selected-info { color:#ff0; font-size:1.1em; font-weight:bold; margin:8px 0; min-height:1.5em; }
+
+/* ユニット枠 */
+.unit-grid { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+.unit-slot {
+  background:#333; border:2px solid #555; border-radius:4px; padding:4px;
+  width:130px; text-align:center; cursor:pointer; transition:border-color 0.2s;
+}
+.unit-slot:hover { border-color:#888; }
+.unit-slot.selected { border-color:#ff0; box-shadow:0 0 10px rgba(255,255,0,0.4); }
+.unit-slot img { width:90px; height:90px; object-fit:contain; display:block; margin:0 auto; }
+.unit-slot .slot-name { font-size:0.75em; color:#c8a020; font-weight:bold; margin-bottom:2px; min-height:2em; }
+.unit-slot .slot-file { font-size:0.55em; color:#888; word-break:break-all; min-height:1.5em; }
+.unit-slot.empty img { opacity:0.3; }
+.unit-slot.matched { border-color:#4a4; }
+
+/* 未割当画像 */
+.pool { display:flex; flex-wrap:wrap; gap:4px; margin:8px 0; padding:10px; background:#1a1a1a; border:1px solid #444; border-radius:4px; }
+.pool-img {
+  width:80px; height:80px; object-fit:contain; border:2px solid #555; border-radius:3px;
+  cursor:pointer; transition:border-color 0.2s;
+}
+.pool-img:hover { border-color:#888; }
+.pool-img.selected { border-color:#ff0; box-shadow:0 0 8px rgba(255,255,0,0.4); }
+.pool-img.used { opacity:0.3; border-color:#333; }
+
+/* ボタン */
+.btn { background:#c8a020; color:#000; border:none; padding:8px 20px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:1em; margin:4px; }
+.btn:hover { background:#dab030; }
+.btn-sub { background:#556; color:#ddd; border:none; padding:6px 14px; border-radius:3px; cursor:pointer; font-size:0.9em; margin:4px; }
+.btn-sub:hover { background:#778; }
+</style>
+</head>
+<body>
+<h1>PG ユニット画像マッチング</h1>
+<div class="info">
+  ユニット枠の画像をクリック → 別のユニット枠またはプール画像をクリック → 入れ替え<br>
+  全部合ったら「対応表を保存」で JSON を出力
+</div>
+<div class="selected-info" id="selectInfo"></div>
+
+<div>
+  <button class="btn" onclick="exportMapping()">対応表を保存（JSON）</button>
+  <button class="btn-sub" onclick="autoMatchByName()">ファイル名から自動マッチ</button>
+  <button class="btn-sub" onclick="clearAll()">全リセット</button>
+</div>
+
+<div id="content"></div>
+
+<h2>未割当の画像プール</h2>
+<div class="pool" id="pool"></div>
+
+<script>
+// ===== ユニットリスト（PG_UnitList.xlsx準拠） =====
+const UNIT_LIST = {
+  'アメリカ軍': [
+    { name:'M4', count:12, type:'T' },
+    { name:'Sh.76', count:12, type:'T' },
+    { name:'Sh.105', count:2, type:'T' },
+    { name:'Sh.Jumbo', count:4, type:'T' },
+    { name:'M5', count:8, type:'T' },
+    { name:'M8', count:4, type:'AC' },
+    { name:'M18', count:4, type:'T' },
+    { name:'M36', count:6, type:'T' },
+    { name:'57ATG', count:4, type:'AT' },
+    { name:'76ATG', count:3, type:'AT' },
+    { name:'90AAG', count:3, type:'AT' },
+    { name:'40AAG', count:2, type:'AT' },
+    { name:'81 Mortar', count:6, type:'A' },
+    { name:'Infantry', count:24, type:'I' },
+    { name:'Engineer', count:3, type:'I' },
+    { name:'Parachute', count:20, type:'I' },
+    { name:'Ranger', count:1, type:'I' },
+    { name:'Leader B', count:3, type:'L' },
+    { name:'Leader C', count:5, type:'L' },
+    { name:'Dummy', count:1, type:'D' },
+  ],
+  'イギリス軍': [
+    { name:'M4', count:10, type:'T' },
+    { name:'A22', count:4, type:'T' },
+    { name:'A27', count:10, type:'T' },
+    { name:'A27 C/S', count:2, type:'T' },
+    { name:'Firefly', count:3, type:'T' },
+    { name:'Achilles', count:6, type:'T' },
+    { name:'Daimler', count:3, type:'AC' },
+    { name:'6lb ATG', count:4, type:'AT' },
+    { name:'7lb ATG', count:2, type:'AT' },
+    { name:'40 AAG', count:2, type:'AT' },
+    { name:'76Mortar', count:6, type:'A' },
+    { name:'Infantry', count:18, type:'I' },
+    { name:'Engineer', count:3, type:'I' },
+    { name:'Parachute', count:18, type:'I' },
+    { name:'Leader B', count:3, type:'L' },
+    { name:'Leader C', count:5, type:'L' },
+    { name:'Dummy', count:1, type:'D' },
+  ],
+  'ドイツ軍': [
+    { name:'Pz IIIM', count:2, type:'T' },
+    { name:'Pz IVH', count:10, type:'T' },
+    { name:'Pz VA', count:10, type:'T' },
+    { name:'Pz VIE', count:2, type:'T' },
+    { name:'Pz VIB', count:2, type:'T' },
+    { name:'Jgd Pz IVL', count:3, type:'T' },
+    { name:'Jgd Pz V', count:3, type:'T' },
+    { name:'STG III', count:6, type:'T' },
+    { name:'Hetzer', count:4, type:'T' },
+    { name:'Sd Kfz-1', count:4, type:'AC' },
+    { name:'Sd Kfz-2', count:2, type:'AC' },
+    { name:'PAK 75', count:4, type:'AT' },
+    { name:'PAK 88', count:3, type:'AT' },
+    { name:'FLAK 88', count:3, type:'AT' },
+    { name:'Nebelwerfer', count:2, type:'A' },
+    { name:'81 Mortar', count:6, type:'A' },
+    { name:'Infantry', count:24, type:'I' },
+    { name:'FJ', count:20, type:'I' },
+    { name:'MG', count:2, type:'I' },
+    { name:'Leader A', count:3, type:'L' },
+    { name:'Leader B', count:3, type:'L' },
+    { name:'Leader C', count:5, type:'L' },
+    { name:'Dummy', count:1, type:'D' },
+  ],
+  'ドイツSS': [
+    { name:'Pz VD', count:3, type:'T' },
+    { name:'Pz IVJ', count:1, type:'T' },
+    { name:'Infantry', count:6, type:'I' },
+    { name:'Leader A', count:3, type:'L' },
+    { name:'Leader B', count:3, type:'L' },
+    { name:'Dummy', count:1, type:'D' },
+  ],
+  'マーカー': [
+    { name:'陣地Lv1', count:7, type:'M' },
+    { name:'陣地Lv2', count:3, type:'M' },
+    { name:'I.P.', count:1, type:'M' },
+  ],
+};
+
+// 全画像ファイル
+const ALL_IMAGES = [
+"ge_dummy.gif","ge_inf.gif","ge_jgdpz4.gif","ge_leader_c.gif","ge_mg.gif","ge_mortar81.gif","ge_pak75.gif","ge_pak88.gif","ge_pioneer.gif","ge_pz3m.gif","ge_pz4f2.gif","ge_pz4h.gif","ge_pz5a.gif","ge_pz5f.gif","ge_sdkfz1.gif","ge_sdkfz2.gif","ge_stg105.gif","ge_stg3.gif",
+"ge表11cut16000004.jpg","ge表11cut17000005.jpg","ge表11cut22000008.jpg","ge表11cut23000009.jpg","ge表11cut24000010.jpg","ge表11cut25000011.jpg","ge表11cut26000012.jpg","ge表11cut27000013.jpg","ge表11cut29000015.jpg","ge表11cut43000017.jpg","ge表11cut54000026.jpg","ge表11cut77000037.jpg","ge表11cut78000038.jpg","ge表11cut79000039.jpg","ge表11cut83000041.jpg","ge表11cut84000042.jpg",
+"ge表1cut25000011.jpg","ge表1cut42000016.jpg","ge表1cut46000020.jpg",
+"ge表cut12000000.jpg","ge表cut22000008.jpg","ge表cut24000010.jpg","ge表cut25000011.jpg","ge表cut28000014.jpg","ge表cut42000016.jpg","ge表cut52000024.jpg","ge表cut54000026.jpg","ge表cut55000027.jpg","ge表cut57000029.jpg","ge表cut58000030.jpg",
+"ドイツcut13000001.jpg","ドイツcut14000002.jpg","ドイツcut16000004.jpg","ドイツcut18000006.jpg","ドイツcut24000010.jpg","ドイツcut47000021.jpg","ドイツcut59000031.jpg",
+"ドイツ表01cut22000008.jpg","ドイツ表01cut28000014.jpg","ドイツ表01cut58000030.jpg",
+"ドイツ表02cut17000005.jpg","ドイツ表02cut19000007.jpg","ドイツ表02cut24000010.jpg","ドイツ表02cut29000015.jpg","ドイツ表02cut43000017.jpg","ドイツ表02cut47000021.jpg","ドイツ表02cut49000023.jpg","ドイツ表02cut54000026.jpg","ドイツ表02cut73000033.jpg",
+"ドイツ表cut12000000.jpg","ドイツ表cut13000001.jpg","ドイツ表cut16000004.jpg","ドイツ表cut19000007.jpg","ドイツ表cut28000014.jpg","ドイツ表cut43000017.jpg","ドイツ表cut49000023.jpg","ドイツ表cut53000025.jpg","ドイツ表cut54000026.jpg","ドイツ表cut56000028.jpg","ドイツ表cut57000029.jpg","ドイツ表cut59000031.jpg",
+"ss_inf.jpg","ss_leader_a.jpg","ss_leader_b.jpg","ss_pz4j.jpg","ss_pz5d.gif","ss_pz5d_counter.jpg","ss_pz6b.gif","ss_pz6e.gif",
+"us_inf.gif","us_m26.gif",
+"us表01cut14000002.jpg","us表01cut15000003.jpg","us表01cut24000010.jpg","us表01cut28000014.jpg","us表01cut29000015.jpg","us表01cut43000017.jpg","us表01cut52000024.jpg",
+"us表02cut12000000.jpg","us表02cut17000005.jpg","us表02cut18000006.jpg","us表02cut22000008.jpg","us表02cut27000013.jpg","us表02cut28000014.jpg","us表02cut48000022.jpg","us表02cut49000023.jpg","us表02cut52000024.jpg","us表02cut54000026.jpg","us表02cut55000027.jpg","us表02cut57000029.jpg","us表02cut58000030.jpg","us表02cut59000031.jpg","us表02cut72000032.jpg","us表02cut76000036.jpg",
+"us表03cut17000005.jpg","us表03cut22000008.jpg","us表03cut24000010.jpg","us表03cut27000013.jpg","us表03cut28000014.jpg",
+"us表cut13000001.jpg","us表cut15000003.jpg","us表cut22000008.jpg","us表cut29000015.jpg","us表cut44000018.jpg","us表cut52000024.jpg","us表cut53000025.jpg","us表cut54000026.jpg",
+"uk_17lb_atg.jpg","uk_40aag.jpg","uk_6lb_atg.jpg","uk_76mort.jpg","uk_a22.jpg","uk_a27.jpg","uk_a27cs.jpg","uk_achilles.jpg","uk_daimler.jpg","uk_eng.jpg","uk_firefly.jpg","uk_inf.jpg","uk_leader_b.jpg","uk_leader_c.jpg","uk_m4.jpg","uk_para.jpg",
+"Am26.gif","Ea41.gif","a41UU.gif","cut12.jpg","cut24.jpg","cut27.jpg","cut29.jpg","cut42.jpg","cut47.jpg","cut52.jpg","cut54.jpg","cut55.jpg","cut56.jpg","cut58.jpg","cut59.jpg","gurd.gif","gurdUU.gif","infUU.gif","ip.jpg","m26UU.gif","minf.gif","vs.gif","vsUU.gif",
+"zinch1.jpg","zinch2.jpg","zinch3.gif","zinchi1.jpg","zinchi2.jpg","zinchi3.gif","zinchi4.gif","zinchi5.gif","zunchi5.gif"
+];
+
+// マッピング状態: { "国名/ユニット名": "filename" }
+let mapping = {};
+let selected = null; // { type:'slot', key:'...' } or { type:'pool', file:'...' }
+
+function getSlotKey(nation, unit) { return `${nation}/${unit.name}`; }
+
+function init() {
+  // ローカルストレージから復元
+  const saved = localStorage.getItem('pg_image_mapping');
+  if (saved) { try { mapping = JSON.parse(saved); } catch(e){} }
+
+  render();
+}
+
+function render() {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+
+  const usedFiles = new Set(Object.values(mapping));
+
+  for (const [nation, units] of Object.entries(UNIT_LIST)) {
+    const h = document.createElement('h2');
+    h.textContent = nation;
+    content.appendChild(h);
+
+    const grid = document.createElement('div');
+    grid.className = 'unit-grid';
+
+    units.forEach(u => {
+      const key = getSlotKey(nation, u);
+      const file = mapping[key] || '';
+      const slot = document.createElement('div');
+      const isSel = selected && selected.type === 'slot' && selected.key === key;
+      slot.className = 'unit-slot' + (isSel ? ' selected' : '') + (file ? ' matched' : ' empty');
+      slot.innerHTML = `
+        <div class="slot-name">${u.name} (${u.type}) x${u.count}</div>
+        <img src="${file ? 'images/' + file : ''}" alt="${file || '未設定'}" onerror="this.style.opacity=0.1">
+        <div class="slot-file">${file || '---'}</div>
+      `;
+      slot.onclick = () => onSlotClick(key);
+      grid.appendChild(slot);
+    });
+
+    content.appendChild(grid);
+  }
+
+  // プール
+  const pool = document.getElementById('pool');
+  pool.innerHTML = '';
+  ALL_IMAGES.forEach(f => {
+    const used = usedFiles.has(f);
+    const isSel = selected && selected.type === 'pool' && selected.file === f;
+    const img = document.createElement('img');
+    img.src = 'images/' + f;
+    img.className = 'pool-img' + (isSel ? ' selected' : '') + (used ? ' used' : '');
+    img.title = f;
+    img.onclick = () => onPoolClick(f);
+    pool.appendChild(img);
+  });
+
+  // 選択状態表示
+  const info = document.getElementById('selectInfo');
+  if (selected) {
+    if (selected.type === 'slot') info.textContent = '選択中: ' + selected.key + ' → 入れ替え先をクリック';
+    else info.textContent = '選択中: ' + selected.file + ' → 割当先のユニット枠をクリック';
+  } else {
+    info.textContent = '';
+  }
+
+  // 自動保存
+  localStorage.setItem('pg_image_mapping', JSON.stringify(mapping));
+}
+
+function onSlotClick(key) {
+  if (!selected) {
+    // 1回目: この枠を選択
+    selected = { type:'slot', key };
+  } else if (selected.type === 'slot') {
+    if (selected.key === key) {
+      // 同じ枠 → 選択解除
+      selected = null;
+    } else {
+      // 枠同士 → 画像を入れ替え
+      const f1 = mapping[selected.key] || '';
+      const f2 = mapping[key] || '';
+      if (f1) mapping[key] = f1; else delete mapping[key];
+      if (f2) mapping[selected.key] = f2; else delete mapping[selected.key];
+      selected = null;
+    }
+  } else if (selected.type === 'pool') {
+    // プール画像 → この枠に割当
+    const oldFile = mapping[key];
+    mapping[key] = selected.file;
+    selected = null;
+  }
+  render();
+}
+
+function onPoolClick(file) {
+  if (!selected) {
+    selected = { type:'pool', file };
+  } else if (selected.type === 'pool') {
+    if (selected.file === file) { selected = null; } else { selected = { type:'pool', file }; }
+  } else if (selected.type === 'slot') {
+    // 枠が選択されてる → この画像を割当
+    mapping[selected.key] = file;
+    selected = null;
+  }
+  render();
+}
+
+function autoMatchByName() {
+  const nameMap = {
+    'ge_pz3m.gif':'ドイツ軍/Pz IIIM', 'ge_pz4h.gif':'ドイツ軍/Pz IVH', 'ge_pz4f2.gif':'ドイツ軍/Pz IVH',
+    'ge_pz5a.gif':'ドイツ軍/Pz VA', 'ge_pz5f.gif':'ドイツ軍/Pz VIE',
+    'ge_jgdpz4.gif':'ドイツ軍/Jgd Pz IVL',
+    'ge_stg3.gif':'ドイツ軍/STG III', 'ge_stg105.gif':'ドイツ軍/STG III',
+    'ge_sdkfz1.gif':'ドイツ軍/Sd Kfz-1', 'ge_sdkfz2.gif':'ドイツ軍/Sd Kfz-2',
+    'ge_pak75.gif':'ドイツ軍/PAK 75', 'ge_pak88.gif':'ドイツ軍/PAK 88',
+    'ge_mortar81.gif':'ドイツ軍/81 Mortar',
+    'ge_inf.gif':'ドイツ軍/Infantry', 'ge_pioneer.gif':'ドイツ軍/FJ',
+    'ge_mg.gif':'ドイツ軍/MG',
+    'ge_leader_c.gif':'ドイツ軍/Leader C',
+    'ge_dummy.gif':'ドイツ軍/Dummy',
+    'ss_inf.jpg':'ドイツSS/Infantry',
+    'ss_pz5d.gif':'ドイツSS/Pz VD', 'ss_pz4j.jpg':'ドイツSS/Pz IVJ',
+    'ss_leader_a.jpg':'ドイツSS/Leader A', 'ss_leader_b.jpg':'ドイツSS/Leader B',
+    'us_inf.gif':'アメリカ軍/Infantry', 'us_m26.gif':'アメリカ軍/M36',
+    'uk_inf.jpg':'イギリス軍/Infantry', 'uk_para.jpg':'イギリス軍/Parachute',
+    'uk_eng.jpg':'イギリス軍/Engineer', 'uk_m4.jpg':'イギリス軍/M4',
+    'uk_a22.jpg':'イギリス軍/A22', 'uk_a27.jpg':'イギリス軍/A27',
+    'uk_a27cs.jpg':'イギリス軍/A27 C/S', 'uk_firefly.jpg':'イギリス軍/Firefly',
+    'uk_achilles.jpg':'イギリス軍/Achilles', 'uk_daimler.jpg':'イギリス軍/Daimler',
+    'uk_6lb_atg.jpg':'イギリス軍/6lb ATG', 'uk_17lb_atg.jpg':'イギリス軍/7lb ATG',
+    'uk_40aag.jpg':'イギリス軍/40 AAG', 'uk_76mort.jpg':'イギリス軍/76Mortar',
+    'uk_leader_b.jpg':'イギリス軍/Leader B', 'uk_leader_c.jpg':'イギリス軍/Leader C',
+    'ip.jpg':'マーカー/I.P.',
+  };
+  for (const [file, key] of Object.entries(nameMap)) {
+    if (!mapping[key]) mapping[key] = file;
+  }
+  selected = null;
+  render();
+  alert('ファイル名から推測できる分を自動マッチしました。残りは手動で対応付けてください。');
+}
+
+function clearAll() {
+  if (!confirm('全マッチングをリセットしますか？')) return;
+  mapping = {};
+  selected = null;
+  localStorage.removeItem('pg_image_mapping');
+  render();
+}
+
+function exportMapping() {
+  const json = JSON.stringify(mapping, null, 2);
+  const blob = new Blob([json], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pg_unit_images.json';
+  a.click();
+  alert('pg_unit_images.json をダウンロードしました');
+}
+
+init();
+</script>
+</body>
+</html>

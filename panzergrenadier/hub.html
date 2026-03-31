@@ -1,0 +1,5128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>装甲擲弾兵 — Panzer Grenadier</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#2a2a2a; color:#ddd; font-family:'Segoe UI',sans-serif; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
+
+/* --- トップバー --- */
+#topbar {
+  background:#1a1a24; padding:6px 12px; display:flex; align-items:center; gap:12px;
+  border-bottom:1px solid #555; flex:0 0 auto; font-size:0.9em;
+}
+#topbar .title { font-weight:bold; font-size:1.1em; color:#c8a020; }
+#topbar .info { color:#aaa; }
+#phaseBar { display:flex; gap:2px; }
+#phaseBar .ph {
+  padding:3px 8px; background:#333; border-radius:3px; font-size:0.8em; color:#888; cursor:pointer;
+}
+#phaseBar .ph.active { background:#c8a020; color:#000; font-weight:bold; }
+#phaseBar .ph.done { background:#555; color:#aaa; }
+button.top-btn {
+  background:#445; color:#ccc; border:1px solid #667; padding:4px 12px;
+  border-radius:3px; cursor:pointer; font-size:0.85em;
+}
+button.top-btn:hover { background:#556; }
+
+/* --- メインエリア --- */
+#main { display:flex; flex:1; overflow:hidden; }
+
+/* --- マップエリア --- */
+#mapArea { flex:1; position:relative; overflow:hidden; background:#3a3a2a; margin:0; padding:0; }
+#mapCanvas { position:absolute; top:0; left:0; cursor:grab; margin:0; padding:0; }
+
+/* --- 右パネル --- */
+#rightPanel {
+  width:320px; background:#1a1a24; border-left:1px solid #444;
+  display:flex; flex-direction:column; flex:0 0 320px; overflow-y:auto;
+}
+#rightPanel .phase-title {
+  padding:8px 12px; background:#222; color:#c8a020; font-weight:bold;
+  font-size:0.95em; border-bottom:1px solid #444;
+}
+#phaseContent { padding:10px; flex:1; }
+
+/* --- イニシアチブ・チャート --- */
+#initChart { margin:10px 0; }
+#initChart table { border-collapse:collapse; width:100%; font-size:0.8em; }
+#initChart th, #initChart td {
+  border:1px solid #555; padding:3px 6px; text-align:center; min-width:24px;
+}
+#initChart th { background:#333; color:#aaa; }
+#initChart td.a { background:#2a4a6a; color:#8cf; }
+#initChart td.g { background:#5a3a2a; color:#fa8; }
+#initChart td.marker { outline:3px solid #ff0; outline-offset:-2px; }
+
+/* マーカー位置表示 */
+#markerRow { display:flex; gap:2px; margin:8px 0; }
+#markerRow .slot {
+  flex:1; height:24px; background:#333; border:1px solid #555; border-radius:2px;
+  display:flex; align-items:center; justify-content:center; font-size:0.7em; color:#888;
+}
+#markerRow .slot.current { background:#c8a020; color:#000; font-weight:bold; }
+
+/* ダイス */
+#diceArea { text-align:center; margin:8px 0; }
+#diceResult {
+  display:inline-block; width:80px; height:80px; line-height:80px;
+  background:#111; border:3px solid #c8a020; border-radius:10px;
+  font-size:3em; font-weight:bold; color:#ff0; margin:6px;
+}
+#diceResult.rolling { animation:shake 0.08s infinite; border-color:#f44; }
+@keyframes shake {
+  0%,100% { transform:rotate(0deg) scale(1); }
+  25% { transform:rotate(-8deg) scale(1.05); }
+  75% { transform:rotate(8deg) scale(1.05); }
+}
+button.dice-btn {
+  background:#c8a020; color:#000; border:none; padding:10px 28px;
+  border-radius:4px; font-size:1.1em; font-weight:bold; cursor:pointer;
+}
+button.dice-btn:hover { background:#dab030; }
+button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
+.btn-sm { background:#556; color:#ddd; border:1px solid #778; padding:4px 12px; border-radius:3px; cursor:pointer; font-size:0.85em; }
+.btn-sm:hover { background:#778; }
+
+/* 結果表示 — 大きく */
+#initResult {
+  text-align:center; padding:12px; margin:8px 0;
+  border-radius:6px; font-weight:bold; font-size:1.3em; display:none;
+  border:2px solid;
+}
+#initResult.allied { background:#2a4a6a; color:#8cf; border-color:#4af; }
+#initResult.german { background:#5a3a2a; color:#fa8; border-color:#f84; }
+
+/* ダイス結果オーバーレイ */
+#diceOverlay {
+  display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.7); z-index:500;
+  justify-content:center; align-items:center; flex-direction:column;
+}
+#diceOverlay.show { display:flex; }
+#diceOverlay .big-result {
+  font-size:4em; font-weight:bold; padding:20px 40px;
+  border-radius:12px; margin:10px; border:3px solid;
+}
+#diceOverlay .big-die {
+  font-size:6em; font-weight:bold; color:#ff0;
+  background:#111; border:4px solid #c8a020; border-radius:14px;
+  width:120px; height:120px; line-height:120px; text-align:center; margin:10px;
+}
+#diceOverlay .big-result.allied { background:#2a4a6a; color:#8cf; border-color:#4af; }
+#diceOverlay .big-result.german { background:#5a3a2a; color:#fa8; border-color:#f84; }
+
+/* --- 砲撃結果オーバーレイ --- */
+#fireOverlay {
+  display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+  background:rgba(0,0,0,0.8); z-index:600;
+  justify-content:center; align-items:center; flex-direction:column;
+}
+#fireOverlay.show { display:flex; }
+#fireOverlay .fire-title {
+  font-size:2em; font-weight:bold; color:#f84; margin-bottom:12px;
+  text-shadow: 0 0 20px rgba(255,100,0,0.6);
+}
+#fireOverlay .fire-target {
+  font-size:1.2em; color:#c8a020; margin-bottom:16px;
+}
+#fireOverlay .fire-results {
+  max-width:600px; width:90%;
+}
+#fireOverlay .fire-row {
+  display:flex; align-items:center; gap:12px; padding:10px 16px; margin:4px 0;
+  background:rgba(30,30,30,0.9); border-radius:8px; border-left:4px solid #555;
+  animation: fireRowIn 0.3s ease-out forwards;
+  opacity:0; transform:translateX(-20px);
+}
+@keyframes fireRowIn {
+  to { opacity:1; transform:translateX(0); }
+}
+#fireOverlay .fire-row.hit-d { border-left-color:#fd8; }
+#fireOverlay .fire-row.hit-dd { border-left-color:#f84; }
+#fireOverlay .fire-row.hit-elim { border-left-color:#f22; }
+#fireOverlay .fire-row.hit-none { border-left-color:#666; }
+#fireOverlay .fire-unit-name {
+  flex:1; font-weight:bold; font-size:1.1em; color:#ddd;
+}
+#fireOverlay .fire-dice {
+  display:inline-block; width:48px; height:48px; line-height:48px; text-align:center;
+  background:#111; border:3px solid #c8a020; border-radius:8px;
+  font-size:1.8em; font-weight:bold; color:#ff0;
+}
+#fireOverlay .fire-dice.rolling { animation:shake 0.08s infinite; border-color:#f44; }
+#fireOverlay .fire-detail {
+  font-size:0.85em; color:#aaa;
+}
+#fireOverlay .fire-damage {
+  font-size:1.3em; font-weight:bold; padding:4px 12px; border-radius:4px;
+  min-width:60px; text-align:center;
+}
+#fireOverlay .fire-damage.none { background:#333; color:#888; }
+#fireOverlay .fire-damage.d { background:#6a5a20; color:#fd8; }
+#fireOverlay .fire-damage.dd { background:#6a2020; color:#f88; }
+#fireOverlay .fire-damage.eliminated { background:#800; color:#fff; }
+#fireOverlay .fire-close {
+  color:#888; font-size:0.9em; margin-top:16px; cursor:pointer;
+}
+
+/* フェイズ情報 */
+.phase-info { color:#aaa; font-size:0.85em; line-height:1.6; margin:8px 0; }
+.phase-btn-row { display:flex; gap:8px; margin:8px 0; }
+
+/* 回復フェイズ */
+.recovery-section { margin:8px 0; }
+.recovery-section h3 { color:#c8a020; font-size:0.9em; margin:8px 0 4px; border-bottom:1px solid #444; padding-bottom:2px; }
+.recovery-unit {
+  display:flex; align-items:center; gap:6px; padding:4px 6px; margin:2px 0;
+  background:#222; border-radius:3px; font-size:0.82em;
+}
+.recovery-unit .u-name { flex:1; font-weight:bold; }
+.recovery-unit .u-status { padding:1px 6px; border-radius:2px; font-size:0.9em; font-weight:bold; }
+.recovery-unit .u-status.ok { background:#2a5a2a; color:#8f8; }
+.recovery-unit .u-status.d { background:#6a5a20; color:#fd8; }
+.recovery-unit .u-status.dd { background:#6a2020; color:#f88; }
+.recovery-unit .u-status.eliminated { background:#400; color:#f44; }
+.recovery-unit .u-morale { color:#888; font-size:0.85em; }
+.recovery-unit .u-blocked { color:#f66; font-size:0.8em; }
+.recovery-unit .u-result { font-size:0.85em; padding:1px 4px; border-radius:2px; }
+.recovery-unit .u-result.success { background:#2a5a2a; color:#8f8; }
+.recovery-unit .u-result.fail { background:#444; color:#aaa; }
+.recovery-unit .u-result.critical { background:#6a2020; color:#f88; }
+.recovery-unit button {
+  background:#556; color:#ddd; border:none; padding:2px 8px; border-radius:3px;
+  cursor:pointer; font-size:0.85em;
+}
+.recovery-unit button:hover { background:#778; }
+.recovery-unit button:disabled { background:#333; color:#666; cursor:default; }
+.recovery-all-btn {
+  background:#c8a020; color:#000; border:none; padding:6px 16px; border-radius:4px;
+  font-size:0.9em; font-weight:bold; cursor:pointer; margin:6px 0;
+}
+.recovery-all-btn:hover { background:#dab030; }
+.recovery-all-btn:disabled { background:#555; color:#888; cursor:default; }
+
+/* --- ログ --- */
+#gameLog {
+  flex:0 0 auto; max-height:140px; overflow-y:auto;
+  background:#1a1a24; color:#ccc; font-size:0.8em; font-family:monospace;
+  padding:4px 8px; border-top:1px solid #555; line-height:1.5;
+}
+#gameLog .log-turn { color:#c8a020; font-weight:bold; }
+#gameLog .log-init { color:#8cf; }
+
+/* --- スタック吹き出し --- */
+#stackPopup {
+  display:none; position:fixed; z-index:400;
+  background:#1a1a24; border:2px solid #c8a020; border-radius:8px;
+  padding:8px; min-width:120px; max-width:360px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  pointer-events:auto;
+}
+#stackPopup .popup-arrow {
+  position:absolute; bottom:-8px; left:50%; transform:translateX(-50%);
+  width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent;
+  border-top:8px solid #c8a020;
+}
+#stackPopup .popup-title {
+  color:#c8a020; font-size:0.8em; font-weight:bold; margin-bottom:6px;
+  border-bottom:1px solid #444; padding-bottom:4px;
+}
+#stackPopup .popup-unit {
+  display:flex; align-items:center; gap:8px; padding:4px 2px;
+  border-bottom:1px solid #333;
+}
+#stackPopup .popup-unit:last-child { border-bottom:none; }
+#stackPopup .popup-unit img {
+  width:106px; height:106px; object-fit:contain; border:1px solid #666; border-radius:2px;
+}
+#stackPopup .popup-unit .pu-info { font-size:0.8em; }
+#stackPopup .popup-unit .pu-name { font-weight:bold; color:#ddd; }
+#stackPopup .popup-unit .pu-status {
+  display:inline-block; padding:1px 6px; border-radius:2px; font-size:0.85em; font-weight:bold; margin-top:2px;
+}
+#stackPopup .popup-unit .pu-status.ok { background:#2a5a2a; color:#8f8; }
+#stackPopup .popup-unit .pu-status.d { background:#6a5a20; color:#fd8; }
+#stackPopup .popup-unit .pu-status.dd { background:#6a2020; color:#f88; }
+</style>
+</head>
+<body>
+
+<!-- タイトル画面オーバーレイ -->
+<div id="titleOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#1a1a1a;z-index:9999;display:flex;flex-direction:column;align-items:center;overflow-y:auto;">
+  <div style="text-align:center;padding:40px 20px 20px;">
+    <h1 style="font-size:2.8em;color:#c8a020;letter-spacing:0.15em;text-shadow:2px 2px 8px rgba(0,0,0,0.8);">装甲擲弾兵</h1>
+    <h2 style="font-size:1.4em;color:#888;font-weight:normal;letter-spacing:0.3em;font-style:italic;">PANZER GRENADIER</h2>
+  </div>
+  <div style="max-width:900px;width:100%;padding:20px;" id="titleContent"></div>
+</div>
+
+<!-- トップバー -->
+<div id="topbar">
+  <span class="title">装甲擲弾兵</span>
+  <span class="info" id="turnInfo">ターン 1</span>
+  <div id="phaseBar"></div>
+  <span id="initBadge" style="display:none;"></span>
+  <span class="info" id="playerInfo"></span>
+  <button class="top-btn" onclick="nextPhase()">次のフェイズ</button>
+  <button class="top-btn" id="btnSplit" onclick="toggleStackSplit()" style="margin-left:4px;">スタック解除</button>
+  <span id="losInfo" style="color:#aaa;font-size:0.8em;display:none;"></span>
+  <span id="hexCursor" style="color:#ff0;font-size:0.85em;font-weight:bold;margin-left:8px;">--</span>
+</div>
+
+<!-- メイン -->
+<div id="main">
+  <!-- マップ -->
+  <div id="mapArea">
+    <canvas id="mapCanvas"></canvas>
+  </div>
+
+  <!-- 右パネル -->
+  <div id="rightPanel">
+    <div class="phase-title" id="phaseTitle">1. イニシアチブ・フェイズ</div>
+    <div id="phaseContent"></div>
+  </div>
+</div>
+
+<!-- ゲーム終了オーバーレイ -->
+<div id="gameOverOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;justify-content:center;align-items:center;flex-direction:column;cursor:pointer;" onclick="this.style.display='none'">
+  <div id="gameOverTitle" style="font-size:3em;font-weight:bold;text-shadow:0 0 20px currentColor;"></div>
+  <div id="gameOverDetail" style="font-size:1.5em;color:#ccc;margin-top:20px;"></div>
+  <div style="color:#666;font-size:0.9em;margin-top:30px;">クリックで閉じる</div>
+</div>
+
+<!-- ダイス結果オーバーレイ -->
+<div id="diceOverlay" onclick="closeDiceOverlay()">
+  <div class="big-die" id="overlayDie">-</div>
+  <div class="big-result" id="overlayResult"></div>
+  <div style="color:#888;font-size:0.9em;margin-top:10px;">クリックで閉じる</div>
+</div>
+
+<!-- 砲撃結果オーバーレイ -->
+<div id="fireOverlay">
+  <div class="fire-title" id="fireOverlayTitle">砲撃！</div>
+  <div class="fire-target" id="fireOverlayTarget"></div>
+  <div class="fire-results" id="fireOverlayResults"></div>
+  <div class="fire-close" onclick="closeFireOverlay()">クリックで閉じる</div>
+</div>
+
+<!-- AI配置完了オーバーレイ -->
+<div id="aiPlacementOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:none;justify-content:center;align-items:center;">
+  <div style="background:#1a1a2e;border:2px solid #c8a020;border-radius:12px;padding:30px 50px;text-align:center;max-width:500px;">
+    <div style="font-size:1.5em;color:#c8a020;font-weight:bold;margin-bottom:15px;" id="aiPlacementTitle">AI配置完了</div>
+    <div style="color:#ddd;font-size:1.1em;margin-bottom:20px;" id="aiPlacementInfo"></div>
+    <button onclick="closeAIPlacementOverlay()" style="background:#c8a020;color:#000;border:none;padding:10px 30px;border-radius:6px;font-size:1.1em;font-weight:bold;cursor:pointer;">ゲーム開始</button>
+  </div>
+</div>
+
+<!-- スタック吹き出し -->
+<div id="stackPopup">
+  <div class="popup-arrow"></div>
+  <div id="stackPopupContent"></div>
+</div>
+
+<!-- 下部バー -->
+<div id="bottomBar" style="background:#1a1a2e;border-top:1px solid #333;padding:4px 10px;font-size:0.85em;display:flex;align-items:center;gap:8px;">
+  <span id="visionDisplay" style="color:#c8a020;font-weight:bold;">--</span>
+  <span style="color:#555;">|</span>
+  <button class="top-btn" onclick="zoomFit()">全体</button>
+  <button class="top-btn" onclick="zoomStep(-10)">−</button>
+  <input type="range" id="zoomSlider" min="10" max="300" value="100" style="width:120px;vertical-align:middle;">
+  <button class="top-btn" onclick="zoomStep(10)">＋</button>
+  <span id="zoomLabel" style="color:#aaa;font-size:0.8em;">100%</span>
+  <button class="top-btn" id="btnLOS" onclick="toggleLOSMode()" style="margin-left:8px;">視認</button>
+  <button class="top-btn" id="btnLOSCheck" onclick="toggleLOSCheckMode()" style="margin-left:4px;">LOS確認</button>
+  <span id="losCheckInfo" style="color:#aaa;font-size:0.8em;margin-left:4px;"></span>
+  <span style="color:#555;margin-left:8px;">|</span>
+  <span id="breakthroughScore" style="color:#e04040;font-weight:bold;margin-left:4px;">突破: 0 / 7</span>
+  <span style="color:#555;margin-left:8px;">|</span>
+  <button class="top-btn" id="btnAIStep" onclick="toggleAIStepMode()" style="margin-left:4px;">確認:ON</button>
+</div>
+
+<!-- ログ（非表示） -->
+<div id="gameLog" style="display:none;"></div>
+
+<script>
+// シナリオに応じてマップデータを動的に読み込む
+(function() {
+  var sid = parseInt(new URLSearchParams(window.location.search).get('scenario')) || 2;
+  var mapFile = sid === 3 ? 'mapdata3.js' : 'mapdata.js';
+  document.write('<script src="' + mapFile + '"><\/script>');
+})();
+</script>
+<script src="scenario2.js"></script>
+<script src="scenario3.js"></script>
+<script>
+// ===== ゲーム状態 =====
+// URLパラメータからシナリオと陣営を取得
+const _urlParams = new URLSearchParams(window.location.search);
+const _scenarioId = parseInt(_urlParams.get('scenario')) || 2;
+const _playerSide = _urlParams.get('side') || 'allied';
+
+// シナリオ選択
+const SCENARIO_MAP = { 2: SCENARIO_2, 3: SCENARIO_3 };
+const SCENARIO = SCENARIO_MAP[_scenarioId] || SCENARIO_2;
+
+const G = {
+  turn: 1,
+  maxTurn: SCENARIO.maxTurn,
+  phase: 0, // 0-6
+  markerPos: SCENARIO.initiative.start,
+  initiative: null,
+  markerShift: SCENARIO.initiative.shift,
+  diceRolled: false,
+  visionRange: SCENARIO.visionRange,
+  playerSide: _playerSide,
+  ammoCheck: SCENARIO.ammoCheck,
+  breakthroughCount: 0, // 突破ユニット数
+};
+
+const PHASES = [
+  { id:'initiative', name:'イニシアチブ', short:'主導権' },
+  { id:'recovery',   name:'回復',         short:'回復' },
+  { id:'supportAtk', name:'先攻支援射撃',  short:'先攻支援' },
+  { id:'supportDef', name:'後攻支援射撃',  short:'後攻支援' },
+  { id:'moveFire',   name:'先攻移動・射撃', short:'移動射撃' },
+  { id:'assault',    name:'突撃',         short:'突撃' },
+  { id:'defMove',    name:'後攻移動',     short:'後攻移動' },
+  { id:'turnEnd',    name:'ターン終了',   short:'終了' },
+];
+
+// ===== ユニットデータ =====
+// morale: ユニット固有のモラルレベル（数値）
+// status: 'ok', 'd', 'dd', 'eliminated'
+// side: 'german' or 'allied'
+// type: 'T','AC','AT','A','I' (戦車/装甲車/対戦車砲/砲兵/歩兵)
+// hexId: 配置ヘクス
+// adjacentEnemy: 敵隣接フラグ（マップから計算）
+// inEnemyRange: 敵射程内フラグ
+// inCover: 遮蔽物内フラグ（森/林/町/市街地）
+// leaderM: M能力リーダーがスタックにいるか
+
+// 仮ユニット（テスト用）
+let units = [
+  // シナリオデータから読み込む — testUnits生成後に代入される
+];
+
+// ===== ダミーと偵察 (ルール7) =====
+// ダミーは独立したユニット駒として testUnits に type='dummy' で存在する
+// 旧dummyMapは互換用に残す（空オブジェクト）
+const dummyMap = {};
+
+// 国籍別ダミー画像
+const DUMMY_IMAGES = {
+  'イギリス軍': 'images/ge表1cut46000020.jpg',
+  'アメリカ軍': 'images/us表03cut28000014.jpg',
+  'ドイツ軍':   'images/ドイツcut47000021.jpg',
+};
+
+// ダミーを配置（ユニットとして生成）
+function placeDummy(hexId, side, count, nation) {
+  if (!count || count <= 0) return;
+  // nationが指定されなければ同ヘクスのユニットから推定
+  if (!nation) {
+    const mate = testUnits.find(u => u.hexId === hexId && u.side === side && u.nation);
+    nation = mate ? mate.nation : (side === 'german' ? 'ドイツ軍' : 'イギリス軍');
+  }
+  const existing = getDummyCount(hexId);
+  const toAdd = Math.min(count, 4 - existing); // 7-1-(7) 4枚まで
+  const pos = fromHexId(hexId);
+  for (let i = 0; i < toAdd; i++) {
+    const center = getHexCenter(pos.col, pos.row);
+    const dummy = {
+      id: `dummy_${side}_${hexId}_${Date.now()}_${i}`,
+      name: `ダミー`,
+      unitName: 'Dummy',
+      type: 'dummy',
+      side: side,
+      nation: nation,
+      col: pos.col, row: pos.row,
+      x: center.x, y: center.y,
+      hexId: hexId,
+      status: 'ok',
+      range: 0, fpAT: 0, fpSoft: 0, def: 0, morale: 0,
+      closeAtk: 0, closeDef: 0, move: 0,
+      src: DUMMY_IMAGES[nation] || '',
+    };
+    testUnits.push(dummy);
+  }
+}
+
+// ダミー枚数を取得
+function getDummyCount(hexId) {
+  return testUnits.filter(u =>
+    u.type === 'dummy' && u.hexId === hexId && u.status !== 'eliminated'
+  ).length;
+}
+
+// ダミーを除去（指定枚数）
+function removeDummy(hexId, count) {
+  const dummies = testUnits.filter(u =>
+    u.type === 'dummy' && u.hexId === hexId && u.status !== 'eliminated'
+  );
+  const toRemove = Math.min(dummies.length, count);
+  for (let i = 0; i < toRemove; i++) {
+    dummies[i].status = 'eliminated';
+  }
+  return toRemove;
+}
+
+// ダミーを全除去
+function removeAllDummies(hexId) {
+  const dummies = testUnits.filter(u =>
+    u.type === 'dummy' && u.hexId === hexId && u.status !== 'eliminated'
+  );
+  dummies.forEach(d => { d.status = 'eliminated'; });
+  return dummies.length;
+}
+
+// 7-1-(5): ダミーによる視認保護判定
+function isDummyProtected(hexId) {
+  if (getDummyCount(hexId) === 0) return false;
+  const terrain = getHexTerrain(hexId);
+  if (terrain === 'p' || terrain === 'r') return false;
+  return true;
+}
+
+// 7-1-(5): 平地・荒地で敵に視認された場合ダミー除去
+function checkDummyOnSpotted(hexId, spottingSide) {
+  if (getDummyCount(hexId) === 0) return false;
+  // そのヘクスのダミーが視認側の敵のものか
+  const dummies = testUnits.filter(u => u.type === 'dummy' && u.hexId === hexId && u.status !== 'eliminated');
+  if (dummies.length === 0) return false;
+  if (dummies[0].side === spottingSide) return false; // 自軍のダミーには影響なし
+  const terrain = getHexTerrain(hexId);
+  if (terrain === 'p' || terrain === 'r') {
+    const removed = removeAllDummies(hexId);
+    addLog('dummy', `ダミー除去: ${hexId} (平地/荒地で視認) ${removed}枚`);
+    return true;
+  }
+  return false;
+}
+
+// ユニット移動時のダミー視認チェック
+// 移動したユニットの視認範囲内にある敵の平地/荒地ダミーを除去
+// また、移動したユニット自身が平地/荒地にいて敵から視認される場合もダミー除去
+function checkDummyVisibility(movedUnit) {
+  const side = movedUnit.side;
+  const enemySide = side === 'german' ? 'allied' : 'german';
+
+  // 1. 移動ユニットが敵のダミーを視認
+  const visionRange = G.visionPoints || 12;
+  testUnits.forEach(u => {
+    if (u.type !== 'dummy' || u.side === side || u.status === 'eliminated') return;
+    const dist = hexDistance(movedUnit.col, movedUnit.row, u.col, u.row);
+    if (dist > 0 && dist <= visionRange) {
+      if (hasLOS(movedUnit.col, movedUnit.row, u.col, u.row)) {
+        checkDummyOnSpotted(u.hexId, side);
+      }
+    }
+  });
+
+  // 2. 移動ユニット自身が平地/荒地にいて、敵から視認される→自分のダミー除去
+  const myHexId = toHexId(movedUnit.col, movedUnit.row);
+  if (getDummyCount(myHexId) > 0) {
+    const myDummies = testUnits.filter(u => u.type === 'dummy' && u.hexId === myHexId && u.status !== 'eliminated');
+    if (myDummies.length > 0 && myDummies[0].side === side) {
+      const terrain = getHexTerrain(myHexId);
+      if (terrain === 'p' || terrain === 'r') {
+        // 敵の視認範囲内か
+        const spotted = testUnits.some(e =>
+          e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
+          hexDistance(e.col, e.row, movedUnit.col, movedUnit.row) <= visionRange &&
+          hasLOS(e.col, e.row, movedUnit.col, movedUnit.row)
+        );
+        if (spotted) {
+          checkDummyOnSpotted(myHexId, enemySide);
+        }
+      }
+    }
+  }
+}
+
+// 7-2: ダミー増加判定（ターン終了時）
+// 条件: 攻撃を受けず、行動せず、視認されず、D/DDでない
+function checkDummyIncrease(hexId, side) {
+  // 1ヘクスにつき1枚
+  if (getDummyCount(hexId) >= 4) return false; // 上限
+
+  // 同ヘクスのユニットを確認
+  const hexUnits = units.filter(u =>
+    u.hexId === hexId && u.side === side &&
+    u.status !== 'eliminated' &&
+    u.type !== 'leader' && u.type !== 'dummy'
+  );
+  if (hexUnits.length === 0) return false;
+
+  // D/DD状態のユニットがいたら不可 7-2-(4)
+  if (hexUnits.some(u => u.status === 'd' || u.status === 'dd')) return false;
+
+  // 行動フラグ・被攻撃フラグ・被視認フラグのチェック（実装時にフラグ追加）
+  if (hexUnits.some(u => u.actedThisTurn || u.attackedThisTurn || u.spottedThisTurn)) return false;
+
+  placeDummy(hexId, side, 1);
+  addLog('init', `ダミー増加: ${hexId} (+1枚, 計${getDummyCount(hexId)}枚)`);
+  return true;
+}
+
+// 7-3: ダミー除去（行動時）
+// 行動しようとしたユニットのヘクスからダミーを即除去
+// 同ヘクスに未行動ユニットがいればダミー1枚残す
+function onUnitAction(unit, batchUnits) {
+  if (!unit.hexId || unit.status === 'eliminated') return;
+  const hexId = unit.hexId;
+  if (getDummyCount(hexId) === 0) return;
+
+  // 同ヘクスの同陣営ダミーがあるか
+  const sideDummies = testUnits.filter(u =>
+    u.hexId === hexId && u.type === 'dummy' && u.side === unit.side && u.status !== 'eliminated'
+  );
+  if (sideDummies.length === 0) return;
+
+  // 同ヘクスの同陣営実ユニット
+  const hexMates = testUnits.filter(u =>
+    u.hexId === hexId && u.side === unit.side && u.status !== 'eliminated' &&
+    u.type !== 'dummy' && u.type !== 'leader'
+  );
+  // 同時行動ユニット（スタック一括移動等）を除外して未行動を判定
+  const batchSet = batchUnits ? new Set(batchUnits) : new Set([unit]);
+  const unactedMates = hexMates.filter(u =>
+    !batchSet.has(u) && !u.firedThisTurn && !u.moveComplete && !u.assaultedThisTurn
+  );
+
+  if (unactedMates.length > 0) {
+    // 未行動ユニットあり → ダミー1枚残して残り除去
+    const toRemove = sideDummies.length - 1;
+    if (toRemove > 0) {
+      for (let i = 0; i < toRemove; i++) sideDummies[i].status = 'eliminated';
+      addLog('dummy', `ダミー減少: ${hexId} ${unit.name}行動 (1枚残し)`);
+    }
+  } else {
+    // 全員行動済み → ダミー全除去
+    sideDummies.forEach(d => { d.status = 'eliminated'; });
+    addLog('dummy', `ダミー全除去: ${hexId} 行動により発見`);
+  }
+}
+
+// ===== 偵察 (ルール7-4) =====
+
+// 偵察チャート
+const RECON_CHART = [
+  1, 1, 2, 2, 3, 3, 4, 4, 0, 0  // index=ダイス目, 値=除去枚数(0=失敗)
+];
+
+// 偵察可能か判定
+function canRecon(unit) {
+  // 歩兵(I)と装甲車(AC)のみ 7-4-(1)
+  if (unit.type !== 'I' && unit.type !== 'AC') return { can: false, reason: '歩兵・装甲車のみ偵察可能' };
+  if (unit.status !== 'ok') return { can: false, reason: '正常状態でない' };
+  if (unit.reconDone) return { can: false, reason: '今ターン偵察済み' };
+  if (unit.movingFormation) return { can: false, reason: '移動隊形では偵察不可' }; // 7-4-(8)
+  return { can: true, reason: '' };
+}
+
+// 偵察実行（移動完了後に隣接ヘクスを指定）
+function executeRecon(unit, targetHexId) {
+  const check = canRecon(unit);
+  if (!check.can) return { success: false, reason: check.reason };
+
+  // 隣接チェック 7-4-(3)
+  const uPos = fromHexId(unit.hexId);
+  const tPos = fromHexId(targetHexId);
+  const dist = hexDistance(uPos.col, uPos.row, tPos.col, tPos.row);
+  if (dist !== 1) return { success: false, reason: '隣接ヘクスのみ偵察可能' };
+
+  // ダミーがあるか
+  if (getDummyCount(targetHexId) === 0) return { success: false, reason: 'ダミーなし' };
+
+  // ターンに1回制限チェック 7-4-(4)
+  // (同ヘクスに対しても1ターン1回)
+  if (dummyMap[targetHexId] && dummyMap[targetHexId].reconedThisTurn) {
+    return { success: false, reason: '今ターンこのヘクスは偵察済み' };
+  }
+
+  // ダイスロール
+  const roll = Math.floor(Math.random() * 10);
+  const removedCount = RECON_CHART[roll];
+
+  unit.reconDone = true; // 7-4-(4) このユニットは今ターン偵察済み
+  unit.firedThisTurn = true; // 7-4-(5) 偵察ターンは射撃不可
+  if (dummyMap[targetHexId]) dummyMap[targetHexId].reconedThisTurn = true;
+
+  if (removedCount === 0) {
+    addLog('init', `偵察失敗: ${unit.name} → ${targetHexId} (ダイス: ${roll})`);
+    return { success: false, roll, removed: 0, reason: '偵察失敗' };
+  }
+
+  const actualRemoved = removeDummy(targetHexId, removedCount);
+  addLog('init', `偵察成功: ${unit.name} → ${targetHexId} (ダイス: ${roll}) ダミー${actualRemoved}枚除去 (残${getDummyCount(targetHexId)}枚)`);
+  return { success: true, roll, removed: actualRemoved, remaining: getDummyCount(targetHexId) };
+}
+
+// ターン開始時に偵察フラグリセット
+function resetReconFlags() {
+  units.forEach(u => {
+    u.reconDone = false;
+    u.firedThisTurn = false;
+    u.actedThisTurn = false;
+    u.attackedThisTurn = false;
+    u.spottedThisTurn = false;
+  });
+  // ヘクスの偵察済みフラグもリセット
+  for (const hexId of Object.keys(dummyMap)) {
+    dummyMap[hexId].reconedThisTurn = false;
+  }
+}
+
+// ===== ヘクスID変換 =====
+// col,row(0-indexed) → hexId("CCRR")
+function toHexId(col, row) {
+  return String(col + 1).padStart(2, '0') + String(row + 1).padStart(2, '0');
+}
+// hexId("CCRR") → {col, row} (0-indexed)
+function fromHexId(hexId) {
+  return { col: parseInt(hexId.substring(0, 2)) - 1, row: parseInt(hexId.substring(2, 4)) - 1 };
+}
+
+// ヘクスの地形を取得（施設込み）
+function getHexTerrain(hexId) {
+  const facility = FACILITY_MAP[hexId];
+  if (facility) return facility; // 町(t)・都市(c)は施設優先
+  return TERRAIN_MAP[hexId] || 'x';
+}
+
+// ヘクスの高度レベル（斜面データから計算）
+// slope1境界の低い側=0, 高い側=1, slope2の高い側=2
+function getHexElevation(col, row) {
+  const hid = toHexId(col, row);
+  // ELEVATION_MAPがあればそれを使用（Lv2=2, Lv3=3）
+  // 未指定のヘクスはLv1（= 高さ0として扱う）
+  if (typeof ELEVATION_MAP !== 'undefined' && ELEVATION_MAP[hid]) {
+    return ELEVATION_MAP[hid] - 1; // Lv2→高さ1, Lv3→高さ2
+  }
+  return 0; // Lv1 = 高さ0
+}
+
+// ===== 視認システム (ルール6) =====
+let losMode = false;       // 視認モードON/OFF
+let losSourceUnit = null;  // 視認元ユニット
+let losVisibleHexes = {};  // { hexId: true/false }
+
+// 視線(LOS)障害判定: 森林・林・町・市街地・高地
+function isLOSBlocker(hexId) {
+  const t = getHexTerrain(hexId);
+  // 森林(f)・林(w)・町(t)・市街地(c) は障害
+  return t === 'f' || t === 'w' || t === 't' || t === 'c';
+}
+
+// 2点間のヘクスを直線で結んで通過ヘクスを列挙（ブレゼンハム風）
+function getHexesOnLine(col1, row1, col2, row2) {
+  const c1 = getHexCenter(col1, row1);
+  const c2 = getHexCenter(col2, row2);
+  const steps = Math.max(Math.abs(col2 - col1), Math.abs(row2 - row1), 1) * 3;
+  const hexes = [];
+  const seen = new Set();
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const px = c1.x + (c2.x - c1.x) * t;
+    const py = c1.y + (c2.y - c1.y) * t;
+    const nh = getNearestHex(px, py);
+    const key = `${nh.col},${nh.row}`;
+    if (seen.has(key) || (nh.col === col1 && nh.row === row1) || (nh.col === col2 && nh.row === row2)) continue;
+    // ヘクスサイド平行チェック: 最近ヘクスの中心とLOS線の距離が
+    // ヘクスサイズの一定割合以内なら境界上 → parallel フラグを付ける
+    const hc = getHexCenter(nh.col, nh.row);
+    const distToCenter = Math.sqrt((px - hc.x) ** 2 + (py - hc.y) ** 2);
+    const threshold = MAP_CONFIG.hexSize * 0.75; // ヘクスサイド近傍（中心→サイド≈0.866）
+    nh._onBorder = distToCenter > threshold;
+    nh._sampleX = px;
+    nh._sampleY = py;
+    seen.add(key);
+    hexes.push(nh);
+  }
+  return hexes;
+}
+
+
+// LOS判定: 2ヘクス間の視線が通るか
+// 斜面隣接で得られる高さボーナスを返す（0, 1, 2）
+function getSlopeBonus(col, row) {
+  const hid = toHexId(col, row);
+  let bonus = 0;
+  for (const [h1, h2, type] of RIVER_MAP) {
+    if (type === 'slope1' || type === 'slope2' || type === 'cliff') {
+      if (h1 === hid || h2 === hid) {
+        const b = (type === 'slope2') ? 2 : 1;
+        if (b > bonus) bonus = b;
+      }
+    }
+  }
+  return bonus;
+}
+
+// 地形の障害物レベル（森・林・街 = 1、それ以外 = 0）
+function getTerrainBlockLevel(hexId) {
+  const t = getHexTerrain(hexId);
+  if (t === 'f' || t === 'w' || t === 't' || t === 'c') return 1;
+  return 0;
+}
+
+// 点から直線への距離
+function _distPointToLine(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  return Math.abs(dy * px - dx * py + x2 * y1 - y2 * x1) / Math.sqrt(len2);
+}
+
+// 点から直線への垂線の足
+function _projectPointToLine(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return { x: x1, y: y1 };
+  const t = ((px - x1) * dx + (py - y1) * dy) / len2;
+  return { x: x1 + t * dx, y: y1 + t * dy };
+}
+
+// hasLOS用のLOS線座標（一時変数）
+let _losX1 = 0, _losY1 = 0, _losX2 = 0, _losY2 = 0;
+
+// LOS線が斜面ヘクスサイドを横切るかチェック
+// LOS通過ヘクスの遷移で、隣接ヘクス間にRIVER_MAPの斜面があるか判定
+function checkSlopeCrossing(col1, row1, col2, row2) {
+  const hexesOnLine = getHexesOnLine(col1, row1, col2, row2);
+  const srcSight = 1 + getHexElevation(col1, row1);
+  const tgtSight = 1 + getHexElevation(col2, row2);
+
+  // 通過ヘクス列（始点→中間→終点）
+  const fullPath = [{ col: col1, row: row1 }, ...hexesOnLine, { col: col2, row: row2 }];
+
+  // 斜面ルックアップ用マップを構築
+  const slopeMap = {};
+  for (const [h1, h2, type] of RIVER_MAP) {
+    if (type !== 'slope1' && type !== 'slope2' && type !== 'cliff') continue;
+    const key1 = `${h1}-${h2}`;
+    const key2 = `${h2}-${h1}`;
+    const level = (type === 'slope2') ? 2 : 1;
+    slopeMap[key1] = level;
+    slopeMap[key2] = level;
+  }
+
+  // LOS線の座標（かすめ判定用）
+  const _sc = getHexCenter(col1, row1);
+  const _tc = getHexCenter(col2, row2);
+  const slopeApothem = MAP_CONFIG.hexSize * 0.75;
+
+  // 連続するヘクス間に斜面があるかチェック
+  for (let i = 0; i < fullPath.length - 1; i++) {
+    const cur = fullPath[i];
+    const next = fullPath[i + 1];
+    const curId = toHexId(cur.col, cur.row);
+    const nextId = toHexId(next.col, next.row);
+    const key = `${curId}-${nextId}`;
+    const slopeLevel = slopeMap[key];
+    if (slopeLevel) {
+      // 斜面の両方のヘクスがLOS線に近いか（かすめなら横切りでない）
+      const cc = getHexCenter(cur.col, cur.row);
+      const nc = getHexCenter(next.col, next.row);
+      const curDist = _distPointToLine(cc.x, cc.y, _sc.x, _sc.y, _tc.x, _tc.y);
+      const nextDist = _distPointToLine(nc.x, nc.y, _sc.x, _sc.y, _tc.x, _tc.y);
+      if (curDist > slopeApothem || nextDist > slopeApothem) continue; // 片方がかすめ → 横切りでない
+      // 斜面を横切った
+      // 始点/終点が斜面に隣接している場合
+      const srcId = toHexId(col1, row1);
+      const tgtId = toHexId(col2, row2);
+      // 始点が斜面の高い側にいる → スキップ（下が見渡せる）
+      if ((curId === srcId || nextId === srcId) && getHexElevation(col1, row1) >= slopeLevel) continue;
+      // 終点が斜面の高い側にいる → スキップ（上から見える）
+      if ((curId === tgtId || nextId === tgtId) && getHexElevation(col2, row2) >= slopeLevel) continue;
+      // 視線レベルが斜面を越えられるか
+      // 両方が斜面より高い → 同じ高台同士で見える
+      if (srcSight > slopeLevel && tgtSight > slopeLevel) continue;
+      // 片方が斜面+1より高い → 高い場所が突き出て見える（Lv3越しにLv1からLv3が見える等）
+      if (srcSight > slopeLevel + 1 || tgtSight > slopeLevel + 1) continue;
+      return false; // 遮蔽
+    }
+  }
+  return true; // 斜面に遮られない
+}
+
+function hasLOS(col1, row1, col2, row2) {
+  if (col1 === col2 && row1 === row2) return true;
+
+  // LOS線の座標を設定
+  const _s = getHexCenter(col1, row1);
+  const _t = getHexCenter(col2, row2);
+  _losX1 = _s.x; _losY1 = _s.y; _losX2 = _t.x; _losY2 = _t.y;
+
+  // 斜面ヘクスサイドの交差チェック
+  if (!checkSlopeCrossing(col1, row1, col2, row2)) return false;
+
+  // 地形障害チェック
+  const hexesOnLine = getHexesOnLine(col1, row1, col2, row2);
+  const srcSight = 1 + getHexElevation(col1, row1);
+  const tgtSight = 1 + getHexElevation(col2, row2);
+
+  for (const h of hexesOnLine) {
+    const hexId = toHexId(h.col, h.row);
+
+    // LOS線がこのヘクスを本当に通過するか判定
+    // LOS線とヘクス中心の距離を計算
+    const hc = getHexCenter(h.col, h.row);
+    const losDistToCenter = _distPointToLine(hc.x, hc.y, _losX1, _losY1, _losX2, _losY2);
+    const apothem = MAP_CONFIG.hexSize * 0.75; // ヘクス内部判定閾値
+    if (losDistToCenter > apothem) {
+      // LOS線がヘクスの端をかすめるだけ → ブロッカーなら反対側チェック
+      if (isLOSBlocker(hexId)) {
+        // 反対側のヘクスを特定（ヘクス中心からLOS線への垂線の反対方向）
+        const proj = _projectPointToLine(hc.x, hc.y, _losX1, _losY1, _losX2, _losY2);
+        const rx = proj.x * 2 - hc.x;
+        const ry = proj.y * 2 - hc.y;
+        const otherHex = getNearestHex(rx, ry);
+        if (otherHex.col !== h.col || otherHex.row !== h.row) {
+          const otherId = toHexId(otherHex.col, otherHex.row);
+          if (isLOSBlocker(otherId)) return false; // 両側ブロッカー → 遮蔽
+        }
+      }
+      continue; // 片側だけ or 非ブロッカー → 通る
+    }
+
+    // --- 地形障害（森林・林・町・市街地）---
+    if (isLOSBlocker(hexId)) {
+      // 障害物レベル = 地形レベル + 地面の高さ
+      const blockLevel = getTerrainBlockLevel(hexId) + getHexElevation(h.col, h.row);
+      // 始点・終点の両方の視線レベルが障害物レベルより高ければ越えて見える
+      if (srcSight > blockLevel && tgtSight > blockLevel) continue;
+      return false;
+    }
+
+    // --- 高度障害（中間ヘクスが端点より高い場合）---
+    const midElev = getHexElevation(h.col, h.row);
+    if (midElev > 0) {
+      const midSight = 1 + midElev;
+      const lo = Math.min(srcSight, tgtSight);
+      const hi = Math.max(srcSight, tgtSight);
+      // 中間が低い方より高く、かつ高い方以上 → 遮蔽
+      // （高い方が中間より高ければ壁の上から見える）
+      if (midSight > lo && midSight >= hi) return false;
+    }
+  }
+  return true;
+}
+
+// 視認コスト（地形チャートより）
+// hasElevDiff: 観測者と対象に高度差がある場合true
+function getVisionCost(hexId, hasElevDiff) {
+  const t = getHexTerrain(hexId);
+  switch (t) {
+    case 'p': return 1;
+    case 'w': return 2;  // 林
+    case 'f': return 3;  // 森林 — 障害だが、中にいる敵は見えない場合も
+    case 'r': return hasElevDiff ? 1 : 4;  // 荒地（高度差ありなら1、なしなら4）
+    case 't': return 2;  // 町
+    case 'c': return 3;  // 市街地
+    case 'lake': return 1;
+    default: return 1;
+  }
+}
+
+// 視認範囲を計算（直線上の地形コスト合計で判定）
+// visionPoints: シナリオ指定の視認能力ポイント
+function calculateVisionRange(col, row, visionPoints) {
+  const result = {}; // { "col,row": true }
+  const startKey = `${col},${row}`;
+  result[startKey] = true;
+
+  // マップ上の全ヘクスに対して直線判定
+  for (let r = 0; r < MAP_CONFIG.rows; r++) {
+    for (let c = 0; c < MAP_CONFIG.cols; c++) {
+      if (c === col && r === row) continue;
+      // LOS判定（地形障害・高低差）
+      if (!hasLOS(col, row, c, r)) continue;
+      // LOS通過 → 視認コスト計算
+      const hexesOnLine = getHexesOnLine(col, row, c, r);
+      const observerElev = getHexElevation(col, row);
+      const targetElev = getHexElevation(c, r);
+      const hasElevDiff = observerElev !== targetElev;
+      let totalCost = 0;
+      for (const h of hexesOnLine) {
+        const hid = toHexId(h.col, h.row);
+        totalCost += getVisionCost(hid, hasElevDiff);
+      }
+      // 目標ヘクス自体のコストも加算
+      const tgtHexId = toHexId(c, r);
+      totalCost += getVisionCost(tgtHexId, hasElevDiff);
+      // 視認ポイント内なら見える（余りルール: コスト超えても1ヘクス前で余りがあれば見える）
+      if (totalCost <= visionPoints) {
+        result[`${c},${r}`] = true;
+      } else {
+        // 余りルール: 目標の1つ手前まででポイントが残っていれば目標も見える
+        const costBeforeTarget = totalCost - getVisionCost(tgtHexId, hasElevDiff);
+        if (costBeforeTarget < visionPoints) {
+          result[`${c},${r}`] = true;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+// ヘクスの6方向隣接（flat-top: 奇数列が下にずれる）
+function getHexNeighbors(col, row) {
+  const odd = col % 2 === 1;
+  if (odd) {
+    return [
+      { col: col - 1, row: row     }, // 左上
+      { col: col - 1, row: row + 1 }, // 左下
+      { col: col,     row: row - 1 }, // 上
+      { col: col,     row: row + 1 }, // 下
+      { col: col + 1, row: row     }, // 右上
+      { col: col + 1, row: row + 1 }, // 右下
+    ];
+  } else {
+    return [
+      { col: col - 1, row: row - 1 }, // 左上
+      { col: col - 1, row: row     }, // 左下
+      { col: col,     row: row - 1 }, // 上
+      { col: col,     row: row + 1 }, // 下
+      { col: col + 1, row: row - 1 }, // 右上
+      { col: col + 1, row: row     }, // 右下
+    ];
+  }
+}
+
+// 視認モード切り替え
+function toggleLOSMode() {
+  losMode = !losMode;
+  const btn = document.getElementById('btnLOS');
+  const info = document.getElementById('losInfo');
+  if (losMode) {
+    btn.style.background = '#c8a020';
+    btn.style.color = '#000';
+    btn.style.fontWeight = 'bold';
+    info.style.display = 'inline';
+    info.textContent = '← ユニットをクリックして視認範囲を表示';
+    losSourceUnit = null;
+    losVisibleHexes = {};
+  } else {
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.fontWeight = '';
+    info.style.display = 'none';
+    losSourceUnit = null;
+    losVisibleHexes = {};
+  }
+  drawMap();
+}
+
+function toggleStackSplit() {
+  stackSplitMode = !stackSplitMode;
+  const btn = document.getElementById('btnSplit');
+  if (stackSplitMode) {
+    btn.style.background = '#c8a020';
+    btn.style.color = '#000';
+    btn.style.fontWeight = 'bold';
+  } else {
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.fontWeight = '';
+  }
+}
+
+// 視認モードでユニットを選択
+function selectLOSUnit(unit) {
+  losSourceUnit = unit;
+  const visionPoints = G.visionRange; // 天候により変動
+  losVisibleHexes = calculateVisionRange(unit.col, unit.row, visionPoints);
+  const info = document.getElementById('losInfo');
+  info.textContent = `${unit.name || unit.src.split('/').pop()} : 視認ポイント${visionPoints}`;
+  drawMap();
+}
+
+// ===== LOS確認モード =====
+let losCheckMode = false;
+let losCheckStart = null; // { col, row }
+let losCheckEnd = null;   // { col, row }
+let losCheckResult = null; // true/false
+
+function toggleLOSCheckMode() {
+  losCheckMode = !losCheckMode;
+  losCheckStart = null;
+  losCheckEnd = null;
+  losCheckResult = null;
+  const btn = document.getElementById('btnLOSCheck');
+  const info = document.getElementById('losCheckInfo');
+  if (losCheckMode) {
+    // 他のモードを解除
+    if (losMode) toggleLOSMode();
+    btn.style.background = '#c8a020';
+    btn.style.color = '#000';
+    btn.style.fontWeight = 'bold';
+    info.textContent = '← Cmd+クリックで始点選択';
+  } else {
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.style.fontWeight = '';
+    info.textContent = '';
+  }
+  drawMap();
+}
+
+function onLOSCheckClick(col, row) {
+  const info = document.getElementById('losCheckInfo');
+  if (!losCheckStart) {
+    losCheckStart = { col, row };
+    losCheckEnd = null;
+    losCheckResult = null;
+    info.textContent = `始点: ${toHexId(col, row)} → Cmd+クリックで終点選択`;
+    info.style.color = '#aaa';
+    drawMap();
+  } else {
+    losCheckEnd = { col, row, _srcCol: losCheckStart.col, _srcRow: losCheckStart.row };
+    losCheckResult = hasLOS(losCheckStart.col, losCheckStart.row, col, row);
+    const dist = hexDistance(losCheckStart.col, losCheckStart.row, col, row);
+    const startId = toHexId(losCheckStart.col, losCheckStart.row);
+    const endId = toHexId(col, row);
+    const srcElev = getHexElevation(losCheckStart.col, losCheckStart.row);
+    const tgtElev = getHexElevation(col, row);
+    info.textContent = `${startId}(h${srcElev}) → ${endId}(h${tgtElev}) 距離${dist}: ${losCheckResult ? 'LOS通る ✓' : 'LOS遮蔽 ✗'}`;
+    info.style.color = losCheckResult ? '#4f4' : '#f44';
+    // 次のクリックで始点リセット
+    losCheckStart = null;
+    drawMap();
+  }
+}
+
+// ===== スタッキング制限 (ルール8) =====
+const STACK_LIMIT = 4;
+// スタック制限から除外する型（ダミー・指揮官・陣地・I.P.）
+const STACK_EXEMPT_TYPES = ['dummy', 'leader', 'fortification', 'ip'];
+
+// ヘクスごとのスタック数を取得（制限除外ユニットを除く）
+function getStackCount(hexId) {
+  return units.filter(u =>
+    u.hexId === hexId &&
+    u.status !== 'eliminated' &&
+    !STACK_EXEMPT_TYPES.includes(u.type)
+  ).length;
+}
+
+// 超過ヘクス一覧を返す { hexId: [units] }
+function getOverstackedHexes() {
+  const hexUnits = {};
+  units.forEach(u => {
+    if (u.status === 'eliminated' || STACK_EXEMPT_TYPES.includes(u.type)) return;
+    if (!hexUnits[u.hexId]) hexUnits[u.hexId] = [];
+    hexUnits[u.hexId].push(u);
+  });
+  const result = {};
+  for (const [hexId, uList] of Object.entries(hexUnits)) {
+    if (uList.length > STACK_LIMIT) result[hexId] = uList;
+  }
+  return result;
+}
+
+// スタック超過チェック＋確認 → DD強制適用
+function checkAndApplyOverstackPenalty() {
+  const overstacked = getOverstackedHexes();
+  const hexIds = Object.keys(overstacked);
+  if (hexIds.length === 0) return;
+
+  // 確認ダイアログ
+  const msgs = hexIds.map(hid => {
+    const uList = overstacked[hid];
+    const names = uList.map(u => u.name).join(', ');
+    return `ヘクス${hid}: ${uList.length}個 (${names})`;
+  });
+  const ok = confirm(
+    `⚠ スタック超過！（上限${STACK_LIMIT}個）\n\n` +
+    msgs.join('\n') +
+    '\n\n全ユニットがDD状態になります。よろしいですか？'
+  );
+  if (!ok) return;
+
+  // DD適用
+  hexIds.forEach(hid => {
+    overstacked[hid].forEach(u => {
+      if (u.status !== 'dd') {
+        const prev = u.status;
+        u.status = 'dd';
+        addLog('init', `スタック超過: ${u.name} (${hid}) ${prev.toUpperCase()} → DD`);
+      }
+    });
+  });
+  // マップ再描画
+  drawMap();
+}
+
+// ヘクスがスタック超過中か判定
+function isOverstacked(hexId) {
+  return getStackCount(hexId) > STACK_LIMIT;
+}
+
+// ===== 指揮官システム (ルール16) =====
+
+// 指揮官の能力定義
+// Leader A: 3能力 (A.M.R / F.A.R / F.M.R からランダム選択)
+// Leader B: 2能力 (F.R / A.R / M.R からランダム選択)
+// Leader C: 1能力 (F / A / M or R or R からランダム選択)
+const LEADER_ABILITY_POOL = {
+  leader_a: [
+    ['A','M','R'], ['F','A','R'], ['F','M','R']
+  ],
+  leader_b: [
+    ['F','R'], ['A','R'], ['M','R']
+  ],
+  leader_c: [
+    ['F'], ['A'], ['M'], ['R'], ['R']
+  ],
+};
+
+// 指揮官ユニットに能力をランダム割り当て（シナリオ開始時、以後固定）
+function assignLeaderAbilities(unit) {
+  if (unit.type !== 'leader') return;
+  const rank = unit.leaderRank || 'leader_c';
+  const pool = LEADER_ABILITY_POOL[rank];
+  unit.abilities = pool[Math.floor(Math.random() * pool.length)];
+}
+
+// 指揮官が同ヘクスのユニットを指揮できるか判定
+// 国防軍(ge)とSS(ss)は互いに指揮不可
+function canCommandUnit(leader, target) {
+  if (leader.type !== 'leader') return false;
+  if (leader.status === 'eliminated') return false;
+  if (target.type === 'leader' || target.type === 'dummy') return false;
+  // 同じ陣営チェック
+  if (leader.side !== target.side) return false;
+  // 国防軍/SS別軍制限
+  const leaderNation = leader.nation || (leader.ss ? 'ss' : 'ge');
+  const targetNation = target.nation || (target.ss ? 'ss' : 'ge');
+  if (leader.side === 'german' && leaderNation !== targetNation) return false;
+  return true;
+}
+
+// ヘクスにいる指揮官を取得
+function getLeaderInHex(hexId, side) {
+  return units.find(u =>
+    u.hexId === hexId &&
+    u.type === 'leader' &&
+    u.side === side &&
+    u.status !== 'eliminated'
+  );
+}
+
+// 指揮官の能力が有効か判定（同ヘクス、R持ちなら隣接も）
+function getActiveLeaderForUnit(unit, abilityType) {
+  // 同ヘクスの指揮官
+  const leader = getLeaderInHex(unit.hexId, unit.side);
+  if (leader && canCommandUnit(leader, unit)) {
+    if (leader.abilities && leader.abilities.includes(abilityType)) return leader;
+  }
+  // R能力を持つ隣接ヘクスの指揮官（指定能力も持っている場合）
+  const pos = fromHexId(unit.hexId);
+  const neighbors = getHexNeighbors(pos.col, pos.row);
+  for (const n of neighbors) {
+    if (n.col < 0 || n.col >= MAP_CONFIG.cols || n.row < 0 || n.row >= MAP_CONFIG.rows) continue;
+    const nHexId = toHexId(n.col, n.row);
+    const nLeader = getLeaderInHex(nHexId, unit.side);
+    if (nLeader && canCommandUnit(nLeader, unit)) {
+      if (nLeader.abilities && nLeader.abilities.includes('R') && nLeader.abilities.includes(abilityType)) {
+        return nLeader;
+      }
+    }
+  }
+  return null;
+}
+
+// 指揮官負傷チェック — 16-3-(1): スタック内ユニットが損害を受けた時（1回の攻撃につき1回）
+// ダイス0 → 除去
+function checkLeaderCasualty(hexId, side) {
+  const leader = getLeaderInHex(hexId, side);
+  if (!leader) return null;
+  const roll = Math.floor(Math.random() * 10);
+  if (roll === 0) {
+    leader.status = 'eliminated';
+    addLog('init', `⚠ ${leader.name} 負傷！（ダイス: ${roll}）→ 除去`);
+    return { leader, roll, wounded: true };
+  }
+  return { leader, roll, wounded: false };
+}
+
+// 16-3-(3): スタック壊滅時の指揮官チェック
+// ダイス0-4 → 指揮官も除去、5-9 → 最寄り味方へワープ（味方なし→援軍と再登場）
+function checkLeaderOnStackEliminated(hexId, side) {
+  const leader = getLeaderInHex(hexId, side);
+  if (!leader) return null;
+  // 同ヘクスに生存ユニット（指揮官以外）がいるか
+  const aliveUnits = units.filter(u =>
+    u.hexId === hexId && u.side === side &&
+    u.type !== 'leader' && u.type !== 'dummy' &&
+    u.status !== 'eliminated'
+  );
+  if (aliveUnits.length > 0) return null; // まだ壊滅してない
+
+  const roll = Math.floor(Math.random() * 10);
+  if (roll <= 4) {
+    leader.status = 'eliminated';
+    addLog('init', `⚠ ${leader.name}: 部隊壊滅（ダイス: ${roll}）→ 指揮官も除去`);
+    return { leader, roll, eliminated: true };
+  } else {
+    // 最寄りの味方ユニットのヘクスへワープ
+    const nearest = findNearestFriendlyHex(hexId, side);
+    if (nearest) {
+      leader.hexId = nearest;
+      const pos = fromHexId(nearest);
+      leader.col = pos.col;
+      leader.row = pos.row;
+      const center = getHexCenter(pos.col, pos.row);
+      leader.x = center.x;
+      leader.y = center.y;
+      addLog('init', `${leader.name}: 部隊壊滅（ダイス: ${roll}）→ ${nearest}の味方へ合流`);
+    } else {
+      // 味方なし → 援軍待ち（マップから一時退場）
+      leader.hexId = 'reinforcement';
+      addLog('init', `${leader.name}: 部隊壊滅（ダイス: ${roll}）→ 援軍と再登場`);
+    }
+    return { leader, roll, eliminated: false, movedTo: leader.hexId };
+  }
+}
+
+// 最寄りの味方ユニットがいるヘクスを探す
+function findNearestFriendlyHex(srcHexId, side) {
+  const srcPos = fromHexId(srcHexId);
+  const srcCenter = getHexCenter(srcPos.col, srcPos.row);
+  let bestHex = null, bestDist = Infinity;
+  const seen = new Set();
+  units.forEach(u => {
+    if (u.side !== side || u.type === 'leader' || u.type === 'dummy' ||
+        u.status === 'eliminated' || u.hexId === srcHexId || !u.hexId || u.hexId === 'reinforcement') return;
+    if (seen.has(u.hexId)) return;
+    seen.add(u.hexId);
+    const pos = fromHexId(u.hexId);
+    const c = getHexCenter(pos.col, pos.row);
+    const dist = (c.x - srcCenter.x) ** 2 + (c.y - srcCenter.y) ** 2;
+    if (dist < bestDist) { bestDist = dist; bestHex = u.hexId; }
+  });
+  return bestHex;
+}
+
+// 16-3-(4): 指揮官単独で敵射程内にいる場合、敵ユニットごとに負傷チェック
+// ダイス0-4 → 死亡
+function checkLoneLeaderDanger(leader) {
+  if (!leader || leader.type !== 'leader' || leader.status === 'eliminated') return [];
+  if (!leader.hexId || leader.hexId === 'reinforcement') return [];
+  // 同ヘクスに味方ユニットがいるか
+  const friendlies = units.filter(u =>
+    u.hexId === leader.hexId && u.side === leader.side &&
+    u.type !== 'leader' && u.type !== 'dummy' &&
+    u.status !== 'eliminated'
+  );
+  if (friendlies.length > 0) return []; // 単独ではない
+
+  // 射程内の敵ユニットを列挙
+  const results = [];
+  const leaderPos = fromHexId(leader.hexId);
+  units.forEach(enemy => {
+    if (enemy.side === leader.side || enemy.status === 'eliminated') return;
+    if (enemy.type === 'leader' || enemy.type === 'dummy') return;
+    if (!enemy.hexId || enemy.hexId === 'reinforcement') return;
+    const enemyPos = fromHexId(enemy.hexId);
+    // 射程内か（ヘクス距離で判定）
+    const dist = hexDistance(leaderPos.col, leaderPos.row, enemyPos.col, enemyPos.row);
+    if (dist <= (enemy.range || 1)) {
+      const roll = Math.floor(Math.random() * 10);
+      if (roll <= 4) {
+        leader.status = 'eliminated';
+        addLog('init', `⚠ ${leader.name}: 単独で${enemy.name}の射程内（ダイス: ${roll}）→ 死亡`);
+        results.push({ enemy, roll, killed: true });
+        return; // 死んだら終了
+      } else {
+        addLog('init', `${leader.name}: 単独で${enemy.name}の射程内（ダイス: ${roll}）→ 無事`);
+        results.push({ enemy, roll, killed: false });
+      }
+    }
+  });
+  return results;
+}
+
+// ヘクス距離計算（flat-top offset座標）
+function hexDistance(c1, r1, c2, r2) {
+  // offset座標 → cube座標に変換して距離計算
+  function toCube(col, row) {
+    const x = col;
+    const z = row - (col - (col & 1)) / 2;
+    const y = -x - z;
+    return { x, y, z };
+  }
+  const a = toCube(c1, r1);
+  const b = toCube(c2, r2);
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+}
+
+// M能力による回復修正があるか判定
+function hasLeaderMoraleBonus(unit) {
+  const leader = getActiveLeaderForUnit(unit, 'M');
+  return !!leader;
+}
+
+// [分離済み] 行1035-1088 → phase_recovery.js
+
+// ===== フェイズバー（共有） =====
+function updatePhaseBar() {
+  const bar = document.getElementById('phaseBar');
+  bar.innerHTML = PHASES.map((p, i) => {
+    let cls = 'ph';
+    if (i < G.phase) cls += ' done';
+    if (i === G.phase) cls += ' active';
+    return `<div class="${cls}">${p.short}</div>`;
+  }).join('');
+  document.getElementById('turnInfo').textContent = `ターン ${G.turn}`;
+  document.getElementById('phaseTitle').textContent =
+    `${G.phase + 1}. ${PHASES[G.phase].name}フェイズ`;
+  const badge = document.getElementById('initBadge');
+  document.getElementById('playerInfo').textContent = '';
+  if (G.initiative) {
+    const isG = G.initiative === 'german';
+    badge.style.display = 'inline-block';
+    badge.style.background = isG ? '#5a3a2a' : '#2a4a6a';
+    badge.style.color = isG ? '#fa8' : '#8cf';
+    badge.textContent = '';
+    const vd = document.getElementById('visionDisplay');
+    vd.textContent = `主導権: ${isG ? 'ドイツ軍' : '連合軍'} (M${G.markerPos}) 視認距離${G.visionRange}`;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// [分離済み] 行1091-1265 → phase_initiative.js
+
+// [分離済み] 行1267-1365 → 外部JSファイル参照
+
+// [分離済み] 行1367-1800 → 外部JSファイル参照
+
+// ===== AI側のフェイズか判定 =====
+function isAIPhase() {
+  if (G.gameMode !== 'pvai') return false;
+  const aiSide = G.playerSide === 'german' ? 'allied' : 'german';
+  const phase = PHASES[G.phase];
+  // 先攻移動・射撃と突撃は先攻プレイヤーのフェイズ
+  if (phase.id === 'moveFire' || phase.id === 'assault') {
+    return G.initiative === aiSide;
+  }
+  // 後攻移動は後攻プレイヤーのフェイズ
+  if (phase.id === 'defMove') {
+    return G.initiative !== aiSide;
+  }
+  return false;
+}
+
+// ===== 他のフェイズ =====
+
+function renderPhase() {
+  updatePhaseBar();
+  const c = document.getElementById('phaseContent');
+  const phase = PHASES[G.phase];
+
+  // pvaiモードでAI側のフェイズなら自動実行
+  if (isAIPhase()) {
+    addLog('ai', `AI自動実行: ${phase.name}フェイズ`);
+    if (phase.id === 'moveFire') {
+      aiAutoMoveFire();
+      drawMap();
+      setTimeout(() => nextPhase(), 2000);
+      return;
+    }
+    if (phase.id === 'assault') {
+      aiAutoAssault();
+      drawMap();
+      setTimeout(() => nextPhase(), 1500);
+      return;
+    }
+    if (phase.id === 'defMove') {
+      aiAutoDefMove();
+      drawMap();
+      setTimeout(() => nextPhase(), 1500);
+      return;
+    }
+  }
+
+  if (phase.id === 'initiative') {
+    // 第1ターンはシナリオで決まっているのでスキップ
+    if (G.turn === 1 && SCENARIO.initiative.side) {
+      G.initiative = SCENARIO.initiative.side;
+      G.diceRolled = true;
+      addLog('init', `第1ターン: ${G.initiative === 'german' ? 'ドイツ軍' : '連合軍'}がイニシアチブ（シナリオ指定）`);
+      updatePhaseBar();
+      nextPhase();
+      return;
+    }
+    renderInitiativePhase();
+    return;
+  }
+  if (phase.id === 'recovery') {
+    // 回復判定前に敵隣接・射程・遮蔽プロパティを計算
+    testUnits.forEach(u => {
+      if (u.status === 'eliminated' || u.type === 'dummy' || u.type === 'leader') return;
+      const enemySide = u.side === 'german' ? 'allied' : 'german';
+      u.adjacentEnemy = testUnits.some(e =>
+        e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
+        hexDistance(e.col, e.row, u.col, u.row) === 1
+      );
+      u.inEnemyRange = testUnits.some(e =>
+        e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
+        hexDistance(e.col, e.row, u.col, u.row) <= (e.range || 1) &&
+        hasLOS(e.col, e.row, u.col, u.row)
+      );
+      const terrain = getHexTerrain(u.hexId);
+      u.inCover = terrain === 'f' || terrain === 'w' || terrain === 't' || terrain === 'c';
+    });
+
+    // 自動回復: 全D/DDユニットに回復判定を実行
+    const recoverUnits = testUnits.filter(u =>
+      (u.status === 'd' || u.status === 'dd') && u.type !== 'fortification'
+    );
+    recoverUnits.forEach(u => {
+      const check = canAttemptRecovery(u);
+      if (!check.can) {
+        recoveryResults[u.id] = { roll: -1, success: false, effect: check.reason, effectiveMorale: 0 };
+        return;
+      }
+      const result = resolveRecovery(u);
+      recoveryResults[u.id] = result;
+      addLog('recovery', `${u.name} 回復判定: ${result.effect} (ダイス${result.roll}, ML${result.effectiveMorale})`);
+    });
+    drawMap();
+    renderRecoveryPhase(); // 結果表示
+    return;
+  }
+  if (phase.id === 'supportAtk') {
+    renderSupportPhase(G.initiative);
+    return;
+  }
+  if (phase.id === 'supportDef') {
+    const defender = G.initiative === 'german' ? 'allied' : 'german';
+    renderSupportPhase(defender);
+    return;
+  }
+
+  if (phase.id === 'moveFire') {
+    // 移動フェイズ開始時に援軍を配置
+    deployReinforcements(SCENARIO, G.turn);
+    if (SCENARIO.diceReinforcements) {
+      deployDiceReinforcements(SCENARIO, G.turn, G.initiative);
+    }
+    loadUnitImages();
+    // 未配置の援軍がいたら配置フェイズ（先攻側を先に）
+    const atkSide = G.initiative;
+    const defSide = atkSide === 'german' ? 'allied' : 'german';
+    const atkUndeployed = testUnits.filter(u => u.reinforcement && !u.reinforcement.deployed && u.col < 0 && u.side === atkSide);
+    const defUndeployed = testUnits.filter(u => u.reinforcement && !u.reinforcement.deployed && u.col < 0 && u.side === defSide);
+
+    // AI同士なら援軍を自動配置してスキップ
+    // AI同士の援軍配置はaiAutoMoveFireで処理する
+
+    if (atkUndeployed.length > 0 && G.gameMode !== 'aivai') {
+      renderReinforcementPhase(atkUndeployed);
+      return;
+    }
+    if (defUndeployed.length > 0 && G.gameMode !== 'aivai') {
+      renderReinforcementPhase(defUndeployed);
+      return;
+    }
+    if (!directFireState.activeSide) resetDirectFireState();
+    renderMoveFirePhase();
+    return;
+  }
+
+  let html = `<div class="phase-info">`;
+  switch(phase.id) {
+    case 'assault':
+      renderAssaultPhase();
+      return;
+    case 'defMove':
+      html += '後攻プレイヤーは移動のみ可能です。<br>先攻プレイヤーはストップ射撃が可能です。';
+      break;
+    case 'turnEnd':
+      html += `ターン ${G.turn} 終了。<br>`;
+      if (G.turn < G.maxTurn) {
+        // AIvAIモードではAIが自動進行するのでボタン不要（二重呼び出し防止）
+        if (G.gameMode !== 'aivai') {
+          html += '<br><button class="dice-btn" onclick="advanceTurn()">次のターンへ</button>';
+        }
+      } else {
+        html += '<b>ゲーム終了</b>';
+      }
+      break;
+  }
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+// ===== フェイズ進行 =====
+function nextPhase() {
+  if (G.phase === 0 && !G.diceRolled) {
+    // イニシアチブ未決定
+    return;
+  }
+  // ダイス援軍はイニシアチブ確定後にロールするが、配置は移動フェイズ
+  // （ロール結果はdeployDiceReinforcementsで移動フェイズ時に処理）
+  G.phase++;
+  if (G.phase >= PHASES.length) {
+    G.phase = PHASES.length - 1;
+    return;
+  }
+  // フェーズ遷移時に射界・視認表示を初期化
+  if (losMode) {
+    losMode = false;
+    losSourceUnit = null;
+    losVisibleHexes = {};
+    const losPanel = document.getElementById('losPanel');
+    if (losPanel) losPanel.style.display = 'none';
+  }
+  if (typeof fireRangeHexes !== 'undefined') {
+    for (const k in fireRangeHexes) delete fireRangeHexes[k];
+  }
+  if (typeof fireVisionHexes !== 'undefined') {
+    for (const k in fireVisionHexes) delete fireVisionHexes[k];
+  }
+  if (typeof fireArrowData !== 'undefined') fireArrowData = null;
+  updatePhaseBar();
+  renderPhase();
+}
+
+// ===== AI同士の自動進行 =====
+let _aivaiRunning = false;
+function runAIvAILoop() {
+  if (G.gameMode !== 'aivai' || _aivaiRunning) return;
+  _aivaiRunning = true;
+
+  const phase = PHASES[G.phase];
+  addLog('ai', `AI自動進行: ${phase.name}フェイズ`);
+
+  const nextAI = () => { _aivaiRunning = false; nextPhase(); setTimeout(() => runAIvAILoop(), 500); };
+
+  switch (phase.id) {
+    case 'initiative':
+      if (!G.diceRolled) {
+        rollInitiative();
+        // closeDiceOverlay→nextPhase→runAIvAILoopの流れ
+      }
+      _aivaiRunning = false;
+      return;
+
+    case 'recovery':
+      // Q学習の重みを更新（毎ターン）
+      if (typeof pgUpdateWeights === 'function') pgUpdateWeights();
+      aiAutoRecovery();
+      setTimeout(nextAI, 1000);
+      break;
+
+    case 'supportAtk':
+      aiAutoSupportFire(G.initiative);
+      drawMap();
+      setTimeout(nextAI, 1000);
+      break;
+    case 'supportDef':
+      const _defSide = G.initiative === 'german' ? 'allied' : 'german';
+      aiAutoSupportFire(_defSide);
+      drawMap();
+      setTimeout(nextAI, 1000);
+      break;
+
+    case 'moveFire':
+      aiAutoMoveFire().then(() => { drawMap(); _showAIConfirmButton('移動・射撃完了', nextAI); });
+      break;
+
+    case 'assault':
+      aiAutoAssault();
+      drawMap();
+      _showAIConfirmButton('突撃完了', nextAI);
+      break;
+
+    case 'defMove':
+      aiAutoDefMove().then(() => { drawMap(); _showAIConfirmButton('後攻移動完了', nextAI); });
+      break;
+
+    case 'turnEnd':
+      _aivaiRunning = false;
+      if (G.turn <= G.maxTurn) {
+        setTimeout(() => {
+          advanceTurn();
+          setTimeout(() => runAIvAILoop(), 1000);
+        }, 1500);
+      }
+      break;
+
+    default:
+      setTimeout(nextAI, 500);
+  }
+  drawMap();
+}
+
+// AI確認モード（ON=ステップ実行、OFF=全自動）
+let _aiStepMode = true;
+function toggleAIStepMode() {
+  _aiStepMode = !_aiStepMode;
+  const btn = document.getElementById('btnAIStep');
+  if (btn) btn.textContent = _aiStepMode ? '確認:ON' : '確認:OFF';
+}
+
+// AI射撃実行＋結果表示（OKクリックで解決するPromise）
+function _aiFireAndShow(shooters, target, typeLabel) {
+  return new Promise(resolve => {
+    if (target.status === 'eliminated') { resolve(null); return; }
+    const validShooters = shooters.filter(s => s.status !== 'eliminated');
+    if (validShooters.length === 0) { resolve(null); return; }
+    // 射撃矢印を表示
+    const shooterHexId = validShooters[0].hexId || toHexId(validShooters[0].col, validShooters[0].row);
+    const targetHexId = target.hexId || toHexId(target.col, target.row);
+    fireArrowData = { from: shooterHexId, to: targetHexId, side: validShooters[0].side };
+    const result = executeDirectFire(validShooters, target);
+    if (!result) { fireArrowData = null; resolve(null); return; }
+    drawMap();
+    if (!_aiStepMode) { setTimeout(() => { fireArrowData = null; drawMap(); resolve(result); }, 400); return; }
+    const c = document.getElementById('phaseContent');
+    const shooterNames = shooters.length > 2
+      ? shooters[0].name + '他' + (shooters.length - 1)
+      : shooters.map(u => u.name).join('+');
+
+    const dmgText = result.newStatus === 'eliminated' ? '壊滅' :
+                    result.damage === 'dd' ? 'DD' :
+                    result.damage === 'd' ? 'D' : '効果なし';
+    const dmgColor = result.newStatus === 'eliminated' ? '#f00' :
+                     result.damage === 'dd' ? '#f80' :
+                     result.damage === 'd' ? '#ff0' : '#888';
+
+    let html = `<div style="padding:10px;background:#333;border:2px solid #666;border-radius:6px;text-align:center;">`;
+    html += `<div style="color:#aaa;font-size:0.85em;">${typeLabel}</div>`;
+    html += `<div style="color:#8f8;margin:4px 0;">${shooterNames} (fp${result.totalFP})</div>`;
+    html += `<div style="color:#f88;">→ ${target.name} (def${target.def || 0})</div>`;
+    html += `<div style="font-size:2.5em;font-weight:bold;color:#ff0;margin:8px 0;">D10: ${result.roll}</div>`;
+    if (result.totalMod) html += `<div style="font-size:0.85em;color:#aaa;">修正: ${result.totalMod} → ${result.modifiedRoll}</div>`;
+    html += `<div style="font-size:1.5em;font-weight:bold;color:${dmgColor};margin:8px 0;">${dmgText}</div>`;
+    html += `<div style="font-size:0.85em;color:#ccc;">${target.name}: ${(result.prevStatus||'?').toUpperCase()} → ${(result.newStatus||target.status||'?').toUpperCase()}</div>`;
+    html += `<button class="dice-btn" style="padding:8px 30px;margin-top:10px;" onclick="window._aiFireOK()">OK</button>`;
+    html += `</div>`;
+    c.innerHTML = html;
+    drawMap();
+
+    window._aiFireOK = () => { fireArrowData = null; drawMap(); resolve(result); };
+  });
+}
+
+// AI確認ボタン表示（Promiseで待つ）
+function _aiWaitConfirm(label) {
+  return new Promise(resolve => {
+    const c = document.getElementById('phaseContent');
+    if (!c) { resolve(); return; }
+
+    const recentLogs = (window._aiRecentLogs || []).slice(-20);
+    let html = '<div style="max-height:300px;overflow-y:auto;font-size:0.8em;margin-bottom:8px;">';
+    recentLogs.forEach(log => {
+      let color = '#ccc';
+      if (log.includes('壊滅')) color = '#f44';
+      else if (log.includes('DD')) color = '#f88';
+      else if (log.includes(': D ')) color = '#fd8';
+      else if (log.includes('突破')) color = '#4f4';
+      else if (log.includes('移動')) color = '#8af';
+      html += `<div style="color:${color};padding:1px 0;">${log}</div>`;
+    });
+    html += '</div>';
+    html += `<button class="dice-btn" style="font-size:1.1em;padding:10px 30px;width:100%;" onclick="window._aiConfirmOK()">${label} → 次へ</button>`;
+    c.innerHTML = html;
+
+    if (!_aiStepMode) { window._aiRecentLogs = []; setTimeout(resolve, 300); return; }
+
+    window._aiConfirmOK = () => {
+      window._aiRecentLogs = [];
+      resolve();
+    };
+  });
+}
+
+// 旧互換
+function _showAIConfirmButton(label, callback) {
+  _aiWaitConfirm(label).then(callback);
+}
+
+// AI自動回復
+function aiAutoRecovery() {
+  testUnits.forEach(u => {
+    if (u.status === 'd' || u.status === 'dd') {
+      // 敵に隣接していたら回復不可
+      const enemySide = u.side === 'german' ? 'allied' : 'german';
+      const adjacentEnemy = testUnits.some(e =>
+        e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
+        hexDistance(e.col, e.row, u.col, u.row) === 1
+      );
+      if (adjacentEnemy) return;
+
+      // 遮蔽地形でない場合（平地・荒地）、敵のLOS内なら回復不可
+      const terrain = getHexTerrain(u.hexId);
+      const inCover = terrain === 'f' || terrain === 'w' || terrain === 't' || terrain === 'c';
+      if (!inCover) {
+        const inEnemyLOS = testUnits.some(e =>
+          e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
+          hexDistance(e.col, e.row, u.col, u.row) <= (e.range || 1) &&
+          hasLOS(e.col, e.row, u.col, u.row)
+        );
+        if (inEnemyLOS) return;
+      }
+
+      const roll = Math.floor(Math.random() * 10);
+      const morale = u.morale || 5;
+      if (roll <= morale) {
+        const oldStatus = u.status;
+        u.status = u.status === 'dd' ? 'd' : 'ok';
+        addLog('recovery', `${u.name} 回復: ${oldStatus} → ${u.status} (ダイス${roll})`);
+      }
+    }
+  });
+}
+
+// AI自動移動・射撃
+async function aiAutoMoveFire() {
+  const _fireDelay = () => new Promise(r => setTimeout(r, 1200));
+  const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
+  const atkSide = G.initiative;
+  const defSide = atkSide === 'german' ? 'allied' : 'german';
+
+  // 移動軌跡をクリア
+  window._aiMoveTrails = window._aiMoveTrails || [];
+  window._aiMoveTrails = [];
+
+  // ===== ヘルパー: 射撃判定（1ユニット→1目標） =====
+  function aiSingleFire(shooter, target, logType) {
+    const isArmored = target.type === 'T' || target.type === 'AC';
+    const fp = isArmored ? (shooter.fpAT || 0) : (shooter.fpSoft || 0);
+    if (fp <= 0 || target.status === 'eliminated') return;
+    const roll = Math.floor(Math.random() * 10);
+    const fpIdx = getFPColumnIndex(fp);
+    const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
+    const def = target.def || 5;
+    if (dmg !== 'E' && (typeof dmg === 'number' && dmg < def)) return;
+    if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
+      target.status = 'eliminated';
+      addLog(logType, `${shooter.name} → ${target.name}: 壊滅 (fp${fp}, ダイス${roll})`);
+    } else if (typeof dmg === 'number' && dmg >= def + 2) {
+      target.status = target.status === 'd' ? 'eliminated' : 'dd';
+      addLog(logType, `${shooter.name} → ${target.name}: DD (fp${fp}, ダイス${roll})`);
+    } else {
+      target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
+      addLog(logType, `${shooter.name} → ${target.name}: D (fp${fp}, ダイス${roll})`);
+    }
+  }
+
+  // ===== 先攻側をスタック単位でまとめる（4台ずつに分割） =====
+  const hexUnitsMap = {};
+  testUnits.filter(u => u.side === atkSide && u.status !== 'eliminated' && u.type !== 'dummy')
+    .forEach(u => {
+      if (u.type === 'AT' || u.type === 'A') return; // AT砲は移動不可。砲兵(A)は別スタックで移動
+      if (u.col < 0 || u.col >= MAP_CONFIG.cols) return; // マップ外は除外
+      if (!hexUnitsMap[u.hexId]) hexUnitsMap[u.hexId] = [];
+      hexUnitsMap[u.hexId].push(u);
+    });
+  const atkStackList = [];
+  for (const [hexId, units] of Object.entries(hexUnitsMap)) {
+    for (let i = 0; i < units.length; i += 4) {
+      atkStackList.push(units.slice(i, i + 4));
+    }
+  }
+
+  // ===== ドイツ先攻: 先制射撃（各ユニットが別の敵を個別に撃って最大数を混乱させる） =====
+  if (atkSide === 'german') {
+    const preFireUnits = testUnits.filter(u =>
+      u.side === 'german' && u.status === 'ok' && !u.firedThisTurn &&
+      u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'A' && (u.range || 0) >= 1
+    );
+    const preFireFiredAt = new Set(); // 先制射撃済みの敵
+
+    for (const s of preFireUnits) {
+      if (s.firedThisTurn) continue;
+      const sRange = Math.min(s.range || 1, G.visionRange || 12);
+
+      // OK状態の敵で射程内＋LOS通る（未攻撃優先、防御低い順）
+      const candidates = testUnits.filter(t => {
+        if (t.side !== 'allied' || t.status !== 'ok' || t.type === 'dummy' || t.type === 'leader') return false;
+        const dist = hexDistance(s.col, s.row, t.col, t.row);
+        if (dist <= 0 || dist > sRange) return false;
+        return hasLOS(s.col, s.row, t.col, t.row);
+      });
+      if (candidates.length === 0) continue;
+
+      // 未攻撃の敵を優先、次に防御低い順
+      candidates.sort((a, b) => {
+        const aFired = preFireFiredAt.has(a.id || a.name) ? 1 : 0;
+        const bFired = preFireFiredAt.has(b.id || b.name) ? 1 : 0;
+        if (aFired !== bFired) return aFired - bFired;
+        // 西側の敵を優先（突破路上の敵を先に排除）
+        const aWest = 30 - (a.col || 30);
+        const bWest = 30 - (b.col || 30);
+        if (Math.abs(aWest - bWest) >= 3) return bWest - aWest;
+        // 突破路から離れた敵は後回し
+        const aRowDist = Math.abs(a.row - s.row);
+        const bRowDist = Math.abs(b.row - s.row);
+        if (aRowDist > 3 && bRowDist <= 3) return 1;
+        if (bRowDist > 3 && aRowDist <= 3) return -1;
+        // 敵射程外の敵を優先（撃ち返されない）
+        const aDist = hexDistance(s.col, s.row, a.col, a.row);
+        const bDist = hexDistance(s.col, s.row, b.col, b.row);
+        const aSafe = (a.range || 0) < aDist ? 1 : 0;
+        const bSafe = (b.range || 0) < bDist ? 1 : 0;
+        if (aSafe !== bSafe) return bSafe - aSafe;
+        return (a.def || 0) - (b.def || 0);
+      });
+
+      const target = candidates[0];
+      const isArmored = target.type === 'T' || target.type === 'AC';
+      const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
+      if (fp <= 0) continue;
+
+      // ダミー除去（初回のみ）
+      if (!s.moveComplete && !s.firedThisTurn) {
+        onUnitAction(s, [s]);
+      }
+      s.firedThisTurn = true;
+      preFireFiredAt.add(target.id || target.name);
+
+      // 射撃矢印
+      const sHexId = s.hexId || toHexId(s.col, s.row);
+      const tHexId = target.hexId || toHexId(target.col, target.row);
+      fireArrowData = { from: sHexId, to: tHexId, side: 'german' };
+      aiFireAt(s.name, fp, target, false);
+      addLog('fire', `先制射撃: ${s.name} (fp${fp}) → ${target.name}`);
+      drawMap(); await _fireDelay();
+      fireArrowData = null;
+    }
+  }
+
+  // ===== スタック単位で移動（強いスタックから） =====
+  atkStackList.sort((a, b) => {
+    const fpA = a.reduce((s, u) => s + (u.status !== 'eliminated' ? (u.fpAT || 0) + (u.fpSoft || 0) : 0), 0);
+    const fpB = b.reduce((s, u) => s + (u.status !== 'eliminated' ? (u.fpAT || 0) + (u.fpSoft || 0) : 0), 0);
+    return fpB - fpA;
+  });
+  for (const stack of atkStackList) {
+    let aliveStack = stack.filter(u => u.status !== 'eliminated');
+    if (aliveStack.length === 0) continue;
+    // デバッグ: スタック情報をログ
+    addLog('move', `[DEBUG] スタック: ${aliveStack.map(u=>u.name).join(',')} at ${aliveStack[0].hexId} (${aliveStack.length}体, mp${Math.min(...aliveStack.map(u=>u.move||1))})`);
+
+    // === 1ユニットスタック: 偵察以外は味方合流を優先 ===
+    if (atkSide === 'german' && aliveStack.length === 1) {
+      const u0 = aliveStack[0];
+      const isRecon = u0.unitName && u0.unitName.startsWith('Sd Kfz');
+      // 偵察車両は通常移動を許可（単独行動OK）
+      if (!isRecon && u0.status === 'ok') {
+        // BFSで移動範囲内の味方ヘクスを探す
+        const soloMp = u0.move != null ? u0.move : 1;
+        const soloPath = geAI_findBestPath(aliveStack, soloMp);
+        // geAI_evaluateNeighborに味方合流ボーナスがあるので、味方方向に向かう
+        // パスがなければ待機
+        if (!soloPath || soloPath.length === 0) continue;
+        // パスに沿って移動
+        onUnitAction(u0, aliveStack);
+        u0.moveComplete = true;
+        const prevHexId = u0.hexId;
+        let soloMpLeft = soloMp;
+        for (const step of soloPath) {
+          const mc = getMoveCost(u0, u0.col, u0.row, step.col, step.row, 'combat');
+          if (mc.cost === Infinity || mc.cost > soloMpLeft) break;
+          soloMpLeft -= mc.cost;
+          u0.col = step.col; u0.row = step.row;
+          const center = getHexCenter(u0.col, u0.row);
+          u0.x = center.x; u0.y = center.y;
+          u0.hexId = toHexId(step.col, step.row);
+        }
+        if (prevHexId !== u0.hexId) {
+          cleanupOrphanDummies(prevHexId, 'german');
+          checkDummyVisibility(u0);
+          addLog('move', `${u0.name} 味方方向へ移動 → ${u0.hexId}`);
+        }
+        continue;
+      }
+    }
+
+    // スタック全体の最小移動力（移動力0は移動不可）
+    const minMove = Math.min(...aliveStack.map(u => u.move != null ? u.move : 1));
+    if (minMove <= 0) continue;
+    const trail = [{ col: aliveStack[0].col, row: aliveStack[0].row }];
+    // 援軍ユニットはマップ侵入に1MP消費
+    const isReinforcement = aliveStack.some(u => u.reinforcement && u.reinforcement.deployed);
+    let mp = isReinforcement ? Math.max(0, minMove - 1) : minMove;
+    let hasMoved = false; // 実際に移動したかフラグ
+
+    // イギリス先攻時: 新AIで移動
+    if (atkSide === 'allied') {
+      continue; // 下のukAI_moveAllStacksで一括処理
+    }
+
+    // ドイツ: BFSで最適経路を計算
+    const aiPath = geAI_findBestPath(aliveStack, mp);
+    let pathIdx = 0;
+
+    // 移動経路を記録（描画用）
+    const startCenter = getHexCenter(aliveStack[0].col, aliveStack[0].row);
+    _aiMoveTrail = [{ x: startCenter.x, y: startCenter.y }];
+
+    while (mp > 0) {
+      let best = null;
+
+      // パスがあればパスに沿って移動
+      if (aiPath && pathIdx < aiPath.length) {
+        best = aiPath[pathIdx];
+        pathIdx++;
+      }
+      if (!best) break;
+
+      const hexId = toHexId(best.col, best.row);
+      const mc = getMoveCost(aliveStack[0], aliveStack[0].col, aliveStack[0].row, best.col, best.row, 'combat');
+      if (mc.cost === Infinity) break;
+      const cost = mc.cost;
+
+      // スタック制限チェック: 移動先に入れないなら停止
+      const existingAtDest = testUnits.filter(su =>
+        su.hexId === hexId && su.status !== 'eliminated' &&
+        !STACK_EXEMPT_TYPES.includes(su.type) && !aliveStack.includes(su)
+      ).length;
+      const movingCount = aliveStack.filter(u => u.status !== 'eliminated').length;
+      if (existingAtDest + movingCount > 4) break;
+
+      mp -= cost;
+
+      // 最初の移動時のみダミー除去 & 移動済みフラグ
+      if (!hasMoved) {
+        onUnitAction(aliveStack[0], aliveStack);
+        aliveStack.forEach(u => { u.moveComplete = true; });
+        hasMoved = true;
+      }
+
+      // 移動前のヘクスを記録
+      const prevHexId = aliveStack[0].hexId;
+
+      // スタック全体を移動
+      addLog('move', `[DEBUG] ${aliveStack[0].name}他 移動: ${aliveStack[0].hexId} → ${hexId} (残MP${mp-cost})`);
+      aliveStack.forEach(u => {
+        if (u.status === 'eliminated') return;
+        u.col = best.col; u.row = best.row;
+        const center = getHexCenter(u.col, u.row);
+        u.x = center.x; u.y = center.y;
+        u.hexId = hexId;
+      });
+      trail.push({ col: best.col, row: best.row });
+
+      // 経路に追加＋描画更新（1ヘクスずつ表示）
+      const stepCenter = getHexCenter(best.col, best.row);
+      _aiMoveTrail.push({ x: stepCenter.x, y: stepCenter.y });
+      drawMap();
+      await _moveDelay(200);
+
+      // 元ヘクスに味方がいなくなったらダミーを除去
+      if (prevHexId !== hexId) {
+        cleanupOrphanDummies(prevHexId, aliveStack[0].side);
+      }
+      // 移動後: 平地/荒地で敵に視認されたらダミー除去
+      aliveStack.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
+
+      // ===== ストップ射撃 → 反撃 =====
+      const livingStack = aliveStack.filter(u => u.status !== 'eliminated');
+      if (livingStack.length === 0) break;
+
+      // 防御側の射程内＋LOS通るユニット
+      const stopShooters = testUnits.filter(e =>
+        e.side !== atkSide && e.status === 'ok' &&
+        e.type !== 'dummy' && e.type !== 'A' && e.type !== 'leader' &&
+        (e.fpAT > 0 || e.fpSoft > 0)
+      ).filter(e => {
+        const dist = hexDistance(e.col, e.row, best.col, best.row);
+        if (dist <= 0 || dist > (e.range || 1)) return false;
+        return hasLOS(e.col, e.row, best.col, best.row);
+      });
+
+      if (stopShooters.length > 0) {
+        // ストップ射撃実行 → 射撃側ダミー除去
+        const sfHexes = new Set(stopShooters.map(e => e.hexId || toHexId(e.col, e.row)));
+        sfHexes.forEach(h => {
+          const mate = testUnits.find(u => u.hexId === h && u.status !== 'eliminated' && u.type !== 'dummy');
+          if (mate) onUnitAction(mate, testUnits.filter(u => u.hexId === h && u.status !== 'eliminated'));
+        });
+        // ストップ射撃: Q学習のpolicyに基づく
+        const sortedTargets = [...livingStack].sort((a, b) => (a.def || 5) - (b.def || 5));
+        const defSide = stopShooters[0].side;
+        const qw = defSide === 'german' ? _pgWeightsGerman : _pgWeightsAllied;
+        const sfPolicy = (qw && qw.stopFirePolicy) || 'spread';
+
+        if (sfPolicy === 'concentrate') {
+          const target = sortedTargets.find(t => t.status !== 'eliminated');
+          if (target) {
+            const shootersAlive = stopShooters.filter(e => e.status !== 'eliminated');
+            if (shootersAlive.length > 0) await _aiFireAndShow(shootersAlive, target, 'ストップ射撃(集中)');
+          }
+        } else if (sfPolicy === 'split') {
+          const available = stopShooters.filter(e => e.status !== 'eliminated');
+          const half = Math.ceil(available.length / 2);
+          const g1 = available.slice(0, half);
+          const g2 = available.slice(half);
+          const t1 = sortedTargets.find(t => t.status !== 'eliminated');
+          if (t1 && g1.length > 0) await _aiFireAndShow(g1, t1, 'ストップ射撃(分割)');
+          const t2 = sortedTargets.find(t => t.status !== 'eliminated' && t !== t1);
+          if (t2 && g2.length > 0) await _aiFireAndShow(g2, t2, 'ストップ射撃(分割)');
+          else if (t1 && g2.length > 0 && t1.status !== 'eliminated') await _aiFireAndShow(g2, t1, 'ストップ射撃(分割)');
+        } else {
+          const firedThisStep = new Set();
+          for (const e of stopShooters) {
+            if (e.status === 'eliminated') continue;
+            if (firedThisStep.has(e.id || e.name)) continue;
+            const target = sortedTargets.find(t => t.status !== 'eliminated');
+            if (target) {
+              await _aiFireAndShow([e], target, 'ストップ射撃');
+              firedThisStep.add(e.id || e.name);
+            }
+          }
+        }
+
+        // 反撃: スタック合算で射程内の敵に反撃（砲兵・指揮官除外）
+        const counterShooters = livingStack.filter(u =>
+          u.status === 'ok' && u.type !== 'A' && u.type !== 'leader'
+        );
+        if (counterShooters.length > 0) {
+          // 射程内のストップ射撃者を全て集めて合算射撃
+          const counterTargets = [...stopShooters].filter(e => e.status === 'ok')
+            .sort((a, b) => (a.def || 5) - (b.def || 5));
+          if (counterTargets.length > 0) {
+            const target = counterTargets[0]; // 最弱の敵に集中
+            const inRange = counterShooters.filter(u => {
+              const dist = hexDistance(u.col, u.row, target.col, target.row);
+              return dist > 0 && dist <= (u.range || 1) && hasLOS(u.col, u.row, target.col, target.row);
+            });
+            if (inRange.length > 0) {
+              await _aiFireAndShow(inRange, target, '反撃');
+              inRange.forEach(u => { u._counterFired = true; });
+            }
+          }
+        }
+      }
+
+      // D/DDユニットをスタックから離脱 → 残りMPでLOS外/遮蔽地形へ退避
+      const damaged = aliveStack.filter(u => u.status === 'd' || u.status === 'dd');
+      if (damaged.length > 0) {
+        aliveStack = aliveStack.filter(u => u.status === 'ok');
+        damaged.forEach(u => {
+          addLog('move', `${u.name} (${u.status.toUpperCase()}) スタックから離脱`);
+        });
+        // 残りMPで退避移動（1ユニットずつ別の退避先を選ぶ）
+        if (mp > 0) {
+          for (const ru of damaged) {
+            if (ru.status === 'eliminated') continue;
+            const retreatPath = geAI_findBestPath([ru], mp);
+            if (retreatPath && retreatPath.length > 0) {
+              const dest = retreatPath[retreatPath.length - 1];
+              const rHexId = toHexId(dest.col, dest.row);
+              ru.col = dest.col; ru.row = dest.row;
+              const c = getHexCenter(dest.col, dest.row);
+              ru.x = c.x; ru.y = c.y;
+              ru.hexId = rHexId;
+              addLog('move', `${ru.name} 退避移動 → ${rHexId}`);
+            }
+          }
+        }
+      }
+      if (aliveStack.every(u => u.status === 'eliminated') || aliveStack.length === 0) break;
+    }
+
+    // 移動軌跡を保存
+    if (trail.length > 1 && aliveStack.length > 0) {
+      window._aiMoveTrails.push({ side: atkSide, name: aliveStack[0].name + '他', trail });
+    }
+
+    // 突破判定（シナリオ対応）
+    aliveStack.forEach(u => {
+      if (u.side !== 'german' || u.status === 'eliminated') return;
+      const uHex = toHexId(u.col, u.row);
+      let breached = false;
+      if (typeof S3_BREAKTHROUGH_HEXES !== 'undefined') {
+        breached = S3_BREAKTHROUGH_HEXES.includes(uHex);
+      } else {
+        breached = u.col <= 1 && u.row >= 1 && u.row <= 9;
+      }
+      if (breached) {
+        u.status = 'eliminated';
+        G.breakthroughCount++;
+        addLog('breakthrough', `★ ${u.name} 突破!`);
+        document.getElementById('breakthroughScore').textContent = `突破: ${G.breakthroughCount} / ${SCENARIO.victory.breakthroughTarget}`;
+      }
+    });
+
+    // スタック移動完了 → 経路クリア＋表示更新＋ディレイ
+    _aiMoveTrail = null;
+    if (trail.length > 1) {
+      drawMap(); await _moveDelay();
+    }
+  }
+
+  // イギリス先攻時: 新AIで一括移動
+  if (atkSide === 'allied') {
+    await ukAI_moveAllStacks(true);
+  }
+
+  // スタック超過チェック（先攻側のみ）
+  const hexGroups = {};
+  testUnits.forEach(u => {
+    if (u.status === 'eliminated' || STACK_EXEMPT_TYPES.includes(u.type)) return;
+    if (u.side !== atkSide) return; // 先攻側のみチェック
+    if (!hexGroups[u.hexId]) hexGroups[u.hexId] = [];
+    hexGroups[u.hexId].push(u);
+  });
+  for (const [hid, uList] of Object.entries(hexGroups)) {
+    // そのヘクスの全ユニット（両軍）をカウント
+    const totalInHex = testUnits.filter(su =>
+      su.hexId === hid && su.status !== 'eliminated' && !STACK_EXEMPT_TYPES.includes(su.type)
+    ).length;
+    if (totalInHex > 4) {
+      uList.forEach(u => {
+        if (u.status !== 'dd' && u.status !== 'eliminated') {
+          addLog('stack', `スタック超過(${hid}): ${u.name} → DD`);
+          u.status = 'dd';
+        }
+      });
+    }
+  }
+
+  // ===== 射撃処理（火力合算・ダミー除外・サプライズ対応） =====
+  // ヘルパー: 射撃実行（合算火力で1ユニットを攻撃）
+  function aiFireAt(shooterNames, totalFP, target, isSurprise) {
+    if (totalFP <= 0 || target.status === 'eliminated') return;
+    const roll = Math.floor(Math.random() * 10);
+    const fpIdx = getFPColumnIndex(totalFP);
+    const dieKey = String(roll);
+    const dmg = FIRE_COMBAT_TABLE[dieKey] ? FIRE_COMBAT_TABLE[dieKey][fpIdx] : 0;
+    const def = target.def || 5;
+    const prefix = isSurprise ? 'サプライズ: ' : '';
+
+    if (dmg !== 'E' && (typeof dmg === 'number' && dmg < def)) {
+      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: 効果なし (ダイス${roll}, 損害${dmg}, 防御${def})`);
+      return;
+    }
+    if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
+      target.status = 'eliminated';
+      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: 壊滅 (ダイス${roll}, 損害${dmg})`);
+    } else if (typeof dmg === 'number' && dmg >= def + 2) {
+      target.status = target.status === 'd' ? 'eliminated' : 'dd';
+      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: DD (ダイス${roll})`);
+    } else {
+      target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
+      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: D (ダイス${roll})`);
+    }
+  }
+
+  // イギリス先攻時: 新AIの広く浅く射撃
+  if (atkSide === 'allied') {
+    await ukAI_firePhase();
+  }
+
+  // 先攻側の射撃（反撃済みユニットは除外 — 反撃したら先制射撃不可）
+  const atkShooterHexes = {};
+  testUnits.filter(u => u.side === atkSide && u.status === 'ok' && !u.firedThisTurn && !u._counterFired && u.type !== 'dummy' && u.type !== 'A' && u.type !== 'leader')
+    .forEach(u => {
+      if (!atkShooterHexes[u.hexId]) atkShooterHexes[u.hexId] = [];
+      atkShooterHexes[u.hexId].push(u);
+    });
+
+  // 敵ユニット（ダミー除外）
+  const realTargets = testUnits.filter(u => u.side === defSide && u.status !== 'eliminated' && u.type !== 'dummy');
+  // 攻撃済み追跡: まだ攻撃されていない敵を優先
+  const _atkFiredAt = new Set();
+
+  // ヘルパー: 火力fpで防御defの敵にD以上を与える確率(0-1)を計算（地形修正込み）
+  function calcDamageProb(fp, def, terrainMod) {
+    if (fp <= 0) return 0;
+    const colIdx = getFPColumnIndex(fp);
+    const mod = terrainMod || 0;
+    let hits = 0;
+    for (let d = 0; d <= 9; d++) {
+      const modifiedRoll = d + mod;
+      const row = FIRE_COMBAT_TABLE[String(modifiedRoll)];
+      if (!row) continue;
+      const dmg = row[colIdx];
+      if (dmg === 99 || (typeof dmg === 'number' && dmg >= def)) hits++;
+    }
+    return hits / 10;
+  }
+
+  // ===== ドイツ軍: 最適火力配分で射撃 =====
+  if (atkSide === 'german') {
+    // 全射撃可能ユニットを収集（ヘクス問わず）
+    const allShooters = testUnits.filter(u =>
+      u.side === 'german' && u.status !== 'eliminated' && !u.firedThisTurn && !u._counterFired &&
+      u.type !== 'dummy' && u.type !== 'leader' && (u.range || 0) >= 1
+    );
+    // 全ターゲットを収集
+    const allTargets = realTargets.filter(t => t.status !== 'eliminated');
+
+    // 各シューターが各ターゲットに対して撃てるかと火力を計算
+    function canShootAt(s, t) {
+      const dist = hexDistance(s.col, s.row, t.col, t.row);
+      const sRange = Math.min(s.range || 1, G.visionRange || 12);
+      if (dist <= 0 || dist > sRange) return null;
+      if (!hasLOS(s.col, s.row, t.col, t.row)) return null;
+      const isArmored = t.type === 'T' || t.type === 'AC';
+      const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
+      if (fp <= 0) return null;
+      const tMod = getTerrainFireMod(t.hexId);
+      const rangeMod = (dist === (s.range || 1)) ? -1 : 0;
+      return { fp, mod: tMod + rangeMod, dist };
+    }
+
+    // 各ターゲットに対して「確実にD以上（100%）になる最小ユニット数」を計算
+    function findMinUnitsForGuaranteedD(shooterList, target) {
+      const validShooters = shooterList.filter(s => canShootAt(s, target));
+      if (validShooters.length === 0) return { count: Infinity, shooters: [] };
+      let totalFP = 0;
+      const chosen = [];
+      for (const s of validShooters) {
+        const info = canShootAt(s, target);
+        totalFP += info.fp;
+        chosen.push(s);
+        const prob = calcDamageProb(totalFP, target.def || 5, info.mod);
+        if (prob >= 1.0) return { count: chosen.length, shooters: chosen, totalFP };
+      }
+      // 100%に到達しなくても最高確率を返す
+      return { count: chosen.length, shooters: chosen, totalFP, partial: true };
+    }
+
+    // OK状態の敵を優先（反撃できる敵を先に潰す）
+    const okTargets = allTargets.filter(t => t.status === 'ok');
+    const ddTargets = allTargets.filter(t => t.status === 'd' || t.status === 'dd');
+
+    // 最適配分: OK敵に対して確実D以上の最小火力を割り振る
+    const assignments = []; // [{ shooters: [], target, totalFP }]
+    const usedShooters = new Set();
+
+    // Phase1: OK敵に確実D以上の最小火力を割り振る
+    // 優先: 西側の敵（突破路上）→ 少ない台数で倒せる敵
+    const avgGermanRow = allShooters.length > 0
+      ? allShooters.reduce((s, u) => s + u.row, 0) / allShooters.length : 5;
+    const targetsByMinUnits = okTargets.map(t => {
+      const available = allShooters.filter(s => !usedShooters.has(s.id || s.name));
+      const result = findMinUnitsForGuaranteedD(available, t);
+      // 西側の敵ほど優先（colが小さい）、突破路から離れた敵は後回し
+      const rowDist = Math.abs(t.row - avgGermanRow);
+      const westPriority = (30 - (t.col || 30)); // 西ほど高い
+      const pathRelevance = rowDist <= 3 ? 1 : 0; // 突破路から3行以内
+      return { target: t, ...result, westPriority, pathRelevance };
+    }).filter(r => r.count < Infinity).sort((a, b) => {
+      // 突破路上の敵を最優先
+      if (a.pathRelevance !== b.pathRelevance) return b.pathRelevance - a.pathRelevance;
+      // 西側の敵を優先
+      if (a.westPriority !== b.westPriority) return b.westPriority - a.westPriority;
+      // 同じなら少ない台数で倒せる敵から
+      return a.count - b.count;
+    });
+
+    for (const entry of targetsByMinUnits) {
+      const available = allShooters.filter(s => !usedShooters.has(s.id || s.name));
+      const result = findMinUnitsForGuaranteedD(available, entry.target);
+      if (result.count === Infinity) continue;
+      // 割り振り
+      const assigned = result.shooters.slice(0, result.count);
+      assigned.forEach(s => usedShooters.add(s.id || s.name));
+      let fp = 0;
+      assigned.forEach(s => { const info = canShootAt(s, entry.target); if (info) fp += info.fp; });
+      assignments.push({ shooters: assigned, target: entry.target, totalFP: fp });
+    }
+
+    // Phase2: 余りのシューターをD/DD敵や未カバーの敵に割り振る
+    const remaining = allShooters.filter(s => !usedShooters.has(s.id || s.name));
+    for (const s of remaining) {
+      // 撃てるターゲットの中で最もスコアの高いものを選ぶ
+      let bestT = null, bestScore = -Infinity;
+      for (const t of allTargets) {
+        if (t.status === 'eliminated') continue;
+        const info = canShootAt(s, t);
+        if (!info) continue;
+        let score = calcDamageProb(info.fp, t.def || 5, info.mod) * 100;
+        if (t.status === 'ok') score += 50;
+        else if (t.status === 'd' || t.status === 'dd') score -= 20;
+        // 敵射程外なら優先
+        if ((t.range || 0) < info.dist) score += 30;
+        // 西側の敵を優先、突破路から離れた敵は後回し
+        score += (30 - (t.col || 30)) * 2;
+        const rowDist = Math.abs(t.row - s.row);
+        if (rowDist > 3) score -= 30;
+        if (score > bestScore) { bestScore = score; bestT = t; }
+      }
+      if (bestT) {
+        const info = canShootAt(s, bestT);
+        usedShooters.add(s.id || s.name);
+        assignments.push({ shooters: [s], target: bestT, totalFP: info.fp });
+      }
+    }
+
+    // 射撃実行
+    for (const { shooters: firingUnits, target, totalFP } of assignments) {
+      if (target.status === 'eliminated') continue;
+      const validUnits = firingUnits.filter(u => u.status !== 'eliminated' && !u.firedThisTurn);
+      if (validUnits.length === 0) continue;
+
+      // ダミー除去
+      validUnits.forEach(u => {
+        if (!u.moveComplete && !u.firedThisTurn) {
+          onUnitAction(u, [u]);
+        }
+      });
+
+      let fp = 0;
+      const names = [];
+      validUnits.forEach(u => {
+        const info = canShootAt(u, target);
+        if (info) { fp += info.fp; names.push(u.name); u.firedThisTurn = true; }
+      });
+      if (fp <= 0) continue;
+
+      const nameStr = names.length > 2 ? names[0] + '他' + (names.length - 1) : names.join('+');
+      const sHexId = validUnits[0].hexId || toHexId(validUnits[0].col, validUnits[0].row);
+      const tHexId = target.hexId || toHexId(target.col, target.row);
+      fireArrowData = { from: sHexId, to: tHexId, side: 'german' };
+      aiFireAt(nameStr, fp, target, false);
+      addLog('fire', `射撃(${names.length}台,fp${fp}) → ${target.name}`);
+      drawMap(); await _fireDelay();
+      fireArrowData = null;
+    }
+  }
+
+  // ===== 砲兵(type=A)の移動（歩兵とは別スタック、射撃はしない） =====
+  const artilleryUnitsToMove = testUnits.filter(u =>
+    u.side === atkSide && u.type === 'A' && u.status === 'ok' &&
+    !u.moveComplete && u.col >= 0 && u.col < MAP_CONFIG.cols
+  );
+  for (const arty of artilleryUnitsToMove) {
+    const mp = arty.move || 2;
+    const artyPath = geAI_findBestPath([arty], mp);
+    if (artyPath && artyPath.length > 0) {
+      const dest = artyPath[artyPath.length - 1];
+      const dHexId = toHexId(dest.col, dest.row);
+      const prevHex = arty.hexId;
+      arty.col = dest.col; arty.row = dest.row;
+      const c = getHexCenter(dest.col, dest.row);
+      arty.x = c.x; arty.y = c.y;
+      arty.hexId = dHexId;
+      arty.moveComplete = true;
+      if (prevHex !== dHexId) cleanupOrphanDummies(prevHex, atkSide);
+    }
+  }
+
+  // ===== 連合軍（または非ドイツ）: 従来のヘクス単位射撃 =====
+  if (atkSide !== 'german') {
+  for (const [hexId, shooters] of Object.entries(atkShooterHexes)) {
+    if (shooters.length === 0) continue;
+
+    const maxRange = Math.max(...shooters.map(s => s.range || 1));
+    const effectiveRange = Math.min(maxRange, G.visionRange || 12);
+    const inRangeTargets = realTargets.filter(t => {
+      if (t.status === 'eliminated') return false;
+      const dist = hexDistance(shooters[0].col, shooters[0].row, t.col, t.row);
+      if (dist <= 0 || dist > effectiveRange) return false;
+      return hasLOS(shooters[0].col, shooters[0].row, t.col, t.row);
+    });
+    if (inRangeTargets.length === 0) continue;
+
+    onUnitAction(shooters[0], shooters);
+    const allInHex = testUnits.filter(u => u.hexId === hexId && u.status !== 'eliminated');
+    const allHaveDummy = allInHex.every(u => u.type === 'dummy' || u.hasDummy);
+    const isSurprise = allHaveDummy && allInHex.some(u => u.type === 'dummy');
+    const shotCount = isSurprise ? 2 : 1;
+
+    const availableShooters = shooters.filter(s => !s.firedThisTurn);
+    const okTargets = inRangeTargets.filter(t => t.status === 'ok' && !_atkFiredAt.has(t.id || t.name));
+
+    let useIndividualFire = false;
+    if (availableShooters.length >= 2 && okTargets.length >= 2) {
+      let canDCount = 0;
+      for (const s of availableShooters) {
+        const sampleTarget = okTargets[0];
+        const isArmored = sampleTarget.type === 'T' || sampleTarget.type === 'AC';
+        const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
+        const dist = hexDistance(s.col, s.row, sampleTarget.col, sampleTarget.row);
+        const tMod = getTerrainFireMod(sampleTarget.hexId);
+        const rangeMod = (dist === (s.range || 1)) ? -1 : 0;
+        if (dist > 0 && dist <= (s.range || 1) && calcDamageProb(fp, sampleTarget.def || 5, tMod + rangeMod) >= 0.3) {
+          canDCount++;
+        }
+      }
+      if (canDCount >= 2) useIndividualFire = true;
+    }
+
+    if (useIndividualFire) {
+      const targetPool = [...okTargets];
+      for (const s of availableShooters) {
+        if (s.firedThisTurn) continue;
+        if (targetPool.length === 0) break;
+        let bestT = null, bestScore = -Infinity;
+        for (const t of targetPool) {
+          if (t.status === 'eliminated') continue;
+          const dist = hexDistance(s.col, s.row, t.col, t.row);
+          const sEffRange = Math.min(s.range || 1, G.visionRange || 12);
+          if (dist <= 0 || dist > sEffRange) continue;
+          if (!hasLOS(s.col, s.row, t.col, t.row)) continue;
+          const isArmored = t.type === 'T' || t.type === 'AC';
+          const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
+          const prob = calcDamageProb(fp, t.def || 0);
+          let score = prob * 100;
+          if (!_atkFiredAt.has(t.id || t.name)) score += 50;
+          if (t.status === 'ok') score += 30;
+          else if (t.status === 'd' || t.status === 'dd') score -= 40;
+          if (score > bestScore) { bestScore = score; bestT = t; }
+        }
+        if (!bestT) continue;
+        const isArmored = bestT.type === 'T' || bestT.type === 'AC';
+        const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
+        if (fp <= 0) continue;
+        s.firedThisTurn = true;
+        _atkFiredAt.add(bestT.id || bestT.name);
+        const idx = targetPool.indexOf(bestT);
+        if (idx >= 0) targetPool.splice(idx, 1);
+        for (let shot = 0; shot < shotCount; shot++) {
+          if (bestT.status === 'eliminated') break;
+          aiFireAt(s.name, fp, bestT, isSurprise);
+        }
+        drawMap(); await _fireDelay();
+      }
+    } else {
+      let bestTarget = null, bestScore = -Infinity;
+      inRangeTargets.forEach(t => {
+        if (t.status === 'eliminated') return;
+        const dist = hexDistance(shooters[0].col, shooters[0].row, t.col, t.row);
+        const tid = t.id || t.name;
+        let score = 0;
+        if (!_atkFiredAt.has(tid)) score += 100;
+        if (t.status === 'ok') score += 50;
+        else if (t.status === 'd' || t.status === 'dd') score -= 40;
+        score -= (t.def || 0) * 5;
+        score -= dist * 2;
+        if (score > bestScore) { bestScore = score; bestTarget = t; }
+      });
+      if (!bestTarget) continue;
+      _atkFiredAt.add(bestTarget.id || bestTarget.name);
+
+      const isArmored = bestTarget.type === 'T' || bestTarget.type === 'AC';
+      let totalFP = 0;
+      const firingNames = [];
+      shooters.forEach(s => {
+        const dist = hexDistance(s.col, s.row, bestTarget.col, bestTarget.row);
+        if (dist > 0 && dist <= (s.range || 1)) {
+          totalFP += isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
+          firingNames.push(s.name);
+          s.firedThisTurn = true;
+        }
+      });
+      if (totalFP <= 0) continue;
+      const nameStr = firingNames.length > 2 ? firingNames[0] + '他' + (firingNames.length - 1) : firingNames.join('+');
+      for (let shot = 0; shot < shotCount; shot++) {
+        if (bestTarget.status === 'eliminated') break;
+        aiFireAt(nameStr, totalFP, bestTarget, isSurprise);
+      }
+      drawMap(); await _fireDelay();
+    }
+
+    if (isSurprise) {
+      allInHex.forEach(u => { u.hasDummy = false; });
+      const dummies = testUnits.filter(u => u.hexId === hexId && u.type === 'dummy');
+      dummies.forEach(d => { d.status = 'eliminated'; });
+      addLog('fire', `サプライズ後ダミー除去 (${hexId})`);
+    }
+  }
+  } // end if atkSide !== 'german'
+
+  // 後攻側はストップ射撃のみ（移動中に処理済み）— 別途の射撃フェイズなし
+}
+
+// AI自動突撃
+function aiAutoAssault() {
+  // ドイツAI: 高確率で勝てるなら突撃
+  if (G.initiative === 'german') {
+    geAI_autoAssault();
+  }
+  addLog('assault', 'AI: 突撃フェイズ（自動）');
+}
+
+// AI後攻移動
+async function aiAutoDefMove() {
+  const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
+  const defSide = G.initiative === 'german' ? 'allied' : 'german';
+
+  // 後攻側の未配置援軍をデプロイ
+  const undeployedDef = testUnits.filter(u =>
+    u.reinforcement && !u.reinforcement.deployed && u.side === defSide
+  );
+  undeployedDef.forEach(u => {
+    if (u.reinforcement.entryHexes && u.reinforcement.entryHexes.length > 0) {
+      const ehId = u.reinforcement.entryHexes[0];
+      const pos = fromHexId(ehId);
+      u.reinforcement.deployed = true;
+      u.col = pos.col + 1; u.row = pos.row;
+      const center = getHexCenter(u.col, u.row);
+      u.x = center.x; u.y = center.y;
+      u.hexId = toHexId(u.col, u.row);
+      u._entryHexId = ehId;
+    }
+  });
+  // マップ外→入口ヘクスに4台ずつ配置
+  const offMapDef = testUnits.filter(u =>
+    u.side === defSide && u.status !== 'eliminated' && u._entryHexId && u.col >= MAP_CONFIG.cols
+  );
+  const defEntryBatches = {};
+  offMapDef.forEach(u => {
+    if (!defEntryBatches[u._entryHexId]) defEntryBatches[u._entryHexId] = [];
+    defEntryBatches[u._entryHexId].push(u);
+  });
+  for (const [ehId, units] of Object.entries(defEntryBatches)) {
+    const pos = fromHexId(ehId);
+    for (let i = 0; i < units.length; i += 4) {
+      const batch = units.slice(i, i + 4);
+      batch.forEach(u => {
+        u.col = pos.col; u.row = pos.row;
+        const center = getHexCenter(u.col, u.row);
+        u.x = center.x; u.y = center.y;
+        u.hexId = ehId;
+        delete u._entryHexId;
+      });
+    }
+  }
+
+  // ドイツが後攻の場合: 左へ突進（移動のみ、射撃不可）
+  if (defSide === 'german') {
+    const geStacks = {};
+    testUnits.filter(u => u.side === 'german' && u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'AT' && u.type !== 'A')
+      .forEach(u => {
+        if (!geStacks[u.hexId]) geStacks[u.hexId] = [];
+        geStacks[u.hexId].push(u);
+      });
+    const geStackList = [];
+    for (const [hexId, units] of Object.entries(geStacks)) {
+      for (let i = 0; i < units.length; i += 4) {
+        geStackList.push(units.slice(i, i + 4));
+      }
+    }
+    for (const stack of geStackList) {
+      const alive = stack.filter(u => u.status !== 'eliminated');
+      if (alive.length === 0) continue;
+      // 移動開始 → ダミー除去（一括）
+      onUnitAction(alive[0], alive);
+      const minMove = Math.min(...alive.map(u => u.move != null ? u.move : 1));
+      let mp = minMove;
+      // ドイツ: BFSで最適経路を計算
+      const defAiPath = geAI_findBestPath(alive, mp);
+      let defPathIdx = 0;
+      while (mp > 0) {
+        let best = null;
+        if (defAiPath && defPathIdx < defAiPath.length) {
+          best = defAiPath[defPathIdx];
+          defPathIdx++;
+        }
+        if (!best) break;
+        const hexId = toHexId(best.col, best.row);
+        const mc = getMoveCost(alive[0], alive[0].col, alive[0].row, best.col, best.row, 'combat');
+        if (mc.cost === Infinity) break;
+        const cost = mc.cost;
+        mp -= cost;
+        alive.forEach(u => {
+          if (u.status === 'eliminated') return;
+          u.col = best.col; u.row = best.row;
+          const center = getHexCenter(u.col, u.row);
+          u.x = center.x; u.y = center.y;
+          u.hexId = hexId;
+        });
+        // 移動後: 平地/荒地で敵に視認されたらダミー除去
+        alive.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
+        if (alive.every(u => u.status === 'eliminated')) break;
+
+        // ストップ射撃チェック（敵の射程内に入ったか）
+        const defStopThreats = checkStopFireAt(best.col, best.row, alive[0].side);
+        // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
+        const filteredThreats = defStopThreats.filter(e => {
+          if ((e.range || 1) >= 3) {
+            const dist = hexDistance(e.col, e.row, best.col, best.row);
+            if (dist === e.range && mp > 0) {
+              // 移動前の位置からの距離と比較: 近づいてるなら控える、離れてるなら撃つ
+              const prevDist = hexDistance(e.col, e.row, alive[0].col, alive[0].row);
+              if (dist < prevDist) return false; // 向かってくる → 控える
+            }
+          }
+          return true;
+        });
+        if (filteredThreats.length > 0) {
+          // 敵スタック単位でグループ化
+          const defEnemyStacks = {};
+          filteredThreats.forEach(e => {
+            const eHex = e.hexId || toHexId(e.col, e.row);
+            if (!defEnemyStacks[eHex]) defEnemyStacks[eHex] = [];
+            defEnemyStacks[eHex].push(e);
+          });
+          // 各敵スタックが1回ストップ射撃（火力合算）→ 射撃側ダミー除去
+          for (const [eHex, eStack] of Object.entries(defEnemyStacks)) {
+            const aliveE = eStack.filter(e => e.status === 'ok');
+            if (aliveE.length === 0) continue;
+            onUnitAction(aliveE[0], aliveE);
+            const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
+            let sfFP = 0;
+            aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
+            if (sfFP <= 0) continue;
+            const sfTarget = alive.find(u => u.status !== 'eliminated') || alive[0];
+            const sfResult = executeDirectFire(aliveE, sfTarget);
+            const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
+            addLog('stop', `ストップ射撃: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
+          }
+          // 反撃（AI自動: 火力合算で1回）
+          const aliveAfter = alive.filter(u => u.status !== 'eliminated');
+          if (aliveAfter.length > 0) {
+            const counterTarget = defStopThreats.filter(e => e.status !== 'eliminated')
+              .sort((a, b) => (a.def || 5) - (b.def || 5))[0];
+            if (counterTarget) {
+              const dist2 = hexDistance(aliveAfter[0].col, aliveAfter[0].row, counterTarget.col, counterTarget.row);
+              if (dist2 > 0 && dist2 <= Math.max(...aliveAfter.map(u => u.range || 1))) {
+                const isArmoredT = counterTarget.type === 'T' || counterTarget.type === 'AC';
+                let crFP = 0;
+                const crUnits = [];
+                aliveAfter.forEach(u => {
+                  const fp = isArmoredT ? (u.fpAT || 0) : (u.fpSoft || 0);
+                  if (fp > 0 && dist2 <= (u.range || 1)) { crFP += fp; crUnits.push(u); }
+                });
+                if (crFP > 0) {
+                  const crResult = executeDirectFire(crUnits, counterTarget);
+                  const crNames = crUnits.length > 2 ? crUnits[0].name + '他' + (crUnits.length - 1) : crUnits.map(u => u.name).join('+');
+                  addLog('counter', `反撃: ${crNames} (fp${crFP}) → ${counterTarget.name}`);
+                }
+              }
+            }
+          }
+          if (alive.every(u => u.status === 'eliminated')) break;
+          break; // ストップ射撃を受けたら移動停止
+        }
+      }
+      // 突破判定（シナリオ対応）
+      alive.forEach(u => {
+        if (u.side !== 'german' || u.status === 'eliminated') return;
+        const uHex = toHexId(u.col, u.row);
+        let breached = false;
+        if (typeof S3_BREAKTHROUGH_HEXES !== 'undefined') {
+          breached = S3_BREAKTHROUGH_HEXES.includes(uHex);
+        } else {
+          breached = u.col <= 1 && u.row >= 1 && u.row <= 9;
+        }
+        if (breached) {
+          u.status = 'eliminated';
+          G.breakthroughCount++;
+          addLog('breakthrough', `★ ${u.name} 突破!`);
+          document.getElementById('breakthroughScore').textContent = `突破: ${G.breakthroughCount} / ${SCENARIO.victory.breakthroughTarget}`;
+        }
+      });
+      drawMap(); await _moveDelay();
+    }
+  }
+
+  // イギリスが後攻の場合のみ: 状況に応じた行動
+  if (defSide === 'allied') {
+    await _aiAutoDefMoveContinue();
+  }
+}
+
+// ヘルパー: AIスタック移動（1歩ずつ目標方向へ、ストップ射撃付き）
+const _globalMoveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
+
+// BFS最短経路計算（移動コストベース、スタック制限考慮）
+function bfsShortestPath(unit, startCol, startRow, targetCol, targetRow, formation, aliveUnits, checkStacking) {
+    const startKey = `${startCol},${startRow}`;
+    const targetKey = `${targetCol},${targetRow}`;
+    if (startKey === targetKey) return { cost: 0, path: [] };
+
+    const aliveCount = aliveUnits ? aliveUnits.filter(u => u.status !== 'eliminated').length : 4;
+    const dist = {};  // key → 最小コスト
+    const prev = {};  // key → 前のkey
+    dist[startKey] = 0;
+    // 優先度付きキュー（簡易実装）
+    const queue = [{ col: startCol, row: startRow, cost: 0 }];
+
+    while (queue.length > 0) {
+      queue.sort((a, b) => a.cost - b.cost);
+      const cur = queue.shift();
+      const curKey = `${cur.col},${cur.row}`;
+      if (cur.cost > (dist[curKey] || Infinity)) continue;
+      if (curKey === targetKey) break;
+
+      const nbs = getHexNeighbors(cur.col, cur.row);
+      for (const n of nbs) {
+        if (n.col < 0 || n.col >= MAP_CONFIG.cols || n.row < 0 || n.row >= MAP_CONFIG.rows) continue;
+        // 敵占有ヘクスは通過不可
+        const nHid = toHexId(n.col, n.row);
+        const enemySide = unit.side === 'german' ? 'allied' : 'german';
+        const hasEnemyUnit = testUnits.some(eu =>
+          eu.hexId === nHid && eu.side === enemySide &&
+          eu.status !== 'eliminated' && eu.type !== 'dummy'
+        );
+        if (hasEnemyUnit) continue;
+        const mc = getMoveCost(unit, cur.col, cur.row, n.col, n.row, formation);
+        if (mc.cost === Infinity) continue;
+        // スタック制限チェック（通過ヘクスも目的地も考慮）
+        if (checkStacking) {
+          const hid = toHexId(n.col, n.row);
+          const existing = testUnits.filter(su =>
+            su.hexId === hid && su.status !== 'eliminated' &&
+            !STACK_EXEMPT_TYPES.includes(su.type) &&
+            !(aliveUnits && aliveUnits.includes(su))
+          ).length;
+          if (existing + aliveCount > 4) continue; // このヘクスは通過不可
+        }
+        const nKey = `${n.col},${n.row}`;
+        const newCost = cur.cost + mc.cost;
+        if (newCost < (dist[nKey] || Infinity)) {
+          dist[nKey] = newCost;
+          prev[nKey] = curKey;
+          queue.push({ col: n.col, row: n.row, cost: newCost });
+        }
+      }
+    }
+
+    if (dist[targetKey] === undefined) return { cost: Infinity, path: [] };
+
+    // 経路を復元
+    const path = [];
+    let key = targetKey;
+    while (key && key !== startKey) {
+      const [c, r] = key.split(',').map(Number);
+      path.unshift({ col: c, row: r });
+      key = prev[key];
+    }
+    return { cost: dist[targetKey], path };
+}
+
+async function aiMoveToward(units, targetCol, targetRow, isTank) {
+    const alive = units.filter(u => u.status !== 'eliminated');
+    if (alive.length === 0) return;
+    // 増援の配置済みフラグ設定
+    alive.forEach(u => { if (u.reinforcement) u.reinforcement.deployed = true; });
+    const formation = alive[0].marchMode ? 'march' : 'combat';
+    const minMove = Math.min(...alive.map(u => u.move != null ? u.move : 1));
+    let mp = minMove;
+
+    // BFS最短経路を計算（スタック制限なし - 味方は移動中なので考慮不要）
+    const bfs = bfsShortestPath(alive[0], alive[0].col, alive[0].row, targetCol, targetRow, formation, alive, false);
+    const path = bfs.path;
+    let pathIdx = 0;
+    console.log(`[BFS] ${alive[0].name} from=${alive[0].col},${alive[0].row} to=${targetCol},${targetRow} formation=${formation} cost=${bfs.cost} mp=${mp} pathLen=${path.length} path=${path.map(p=>toHexId(p.col,p.row)).join('→')}`);
+
+    // 移動経路を記録
+    const startCenter = getHexCenter(alive[0].col, alive[0].row);
+    _aiMoveTrail = [{ x: startCenter.x, y: startCenter.y }];
+
+    let stoppedByFire = false; // ストップ射撃を受けたか
+    while (mp > 0 && pathIdx < path.length) {
+      const curCol = alive[0].col;
+      const curRow = alive[0].row;
+      if (curCol === targetCol && curRow === targetRow) break;
+
+      const next = path[pathIdx];
+      const mc = getMoveCost(alive[0], curCol, curRow, next.col, next.row, formation);
+      if (mc.cost === Infinity) break;
+      // 最初の1ヘクスはコスト超過でも進入可（ストップ射撃後を除く）
+      const isFirstStep = (pathIdx === 0 && !stoppedByFire);
+      if (!isFirstStep && mp < mc.cost) break;
+
+      // スタック制限チェック
+      const hid = toHexId(next.col, next.row);
+      const existing = testUnits.filter(su =>
+        su.hexId === hid && su.status !== 'eliminated' &&
+        !STACK_EXEMPT_TYPES.includes(su.type) && !alive.includes(su)
+      ).length;
+      if (existing + alive.filter(u => u.status !== 'eliminated').length > 4) break;
+
+      mp -= mc.cost;
+      pathIdx++;
+      alive.forEach(u => {
+        if (u.status === 'eliminated') return;
+        u.col = next.col; u.row = next.row;
+        const center = getHexCenter(u.col, u.row);
+        u.x = center.x; u.y = center.y;
+        u.hexId = hid;
+      });
+      // 経路に追加＋描画更新
+      const stepCenter = getHexCenter(next.col, next.row);
+      _aiMoveTrail.push({ x: stepCenter.x, y: stepCenter.y });
+      drawMap();
+      await _globalMoveDelay(200);
+
+      // 移動後: 平地/荒地で敵に視認されたらダミー除去
+      alive.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
+      if (alive.every(u => u.status === 'eliminated')) break;
+      // ストップ射撃チェック
+      const threats = checkStopFireAt(next.col, next.row, alive[0].side);
+      // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
+      const filteredThreats = threats.filter(e => {
+        if ((e.range || 1) >= 3) {
+          const eDist = hexDistance(e.col, e.row, next.col, next.row);
+          if (eDist === e.range && mp > 0) {
+            const prevDist = hexDistance(e.col, e.row, alive[0].col, alive[0].row);
+            if (eDist < prevDist) return false; // 向かってくる → 控える
+          }
+        }
+        return true;
+      });
+      if (filteredThreats.length > 0) {
+        const enemyStacks = {};
+        filteredThreats.forEach(e => {
+          const eHex = e.hexId || toHexId(e.col, e.row);
+          if (!enemyStacks[eHex]) enemyStacks[eHex] = [];
+          enemyStacks[eHex].push(e);
+        });
+        for (const [eHex, eStack] of Object.entries(enemyStacks)) {
+          const aliveE = eStack.filter(e => e.status === 'ok');
+          if (aliveE.length === 0) continue;
+          onUnitAction(aliveE[0], aliveE); // ストップ射撃 → 射撃側ダミー除去
+          const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
+          let sfFP = 0;
+          aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
+          if (sfFP <= 0) continue;
+          const sfTarget = alive.find(u => u.status !== 'eliminated') || alive[0];
+          executeDirectFire(aliveE, sfTarget);
+          const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
+          addLog('stop', `ストップ射撃: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
+        }
+        // 反撃
+        const aliveAfter = alive.filter(u => u.status !== 'eliminated');
+        if (aliveAfter.length > 0) {
+          const counterTarget = threats.filter(e => e.status !== 'eliminated')
+            .sort((a, b) => (a.def || 5) - (b.def || 5))[0];
+          if (counterTarget) {
+            const dist2 = hexDistance(aliveAfter[0].col, aliveAfter[0].row, counterTarget.col, counterTarget.row);
+            if (dist2 > 0 && dist2 <= Math.max(...aliveAfter.map(u => u.range || 1))) {
+              const isArmoredT = counterTarget.type === 'T' || counterTarget.type === 'AC';
+              let crFP = 0;
+              const crUnits = [];
+              aliveAfter.forEach(u => {
+                const fp = isArmoredT ? (u.fpAT || 0) : (u.fpSoft || 0);
+                if (fp > 0 && dist2 <= (u.range || 1)) { crFP += fp; crUnits.push(u); }
+              });
+              if (crFP > 0) {
+                executeDirectFire(crUnits, counterTarget);
+                const crNames = crUnits.length > 2 ? crUnits[0].name + '他' + (crUnits.length - 1) : crUnits.map(u => u.name).join('+');
+                addLog('counter', `反撃: ${crNames} (fp${crFP}) → ${counterTarget.name}`);
+              }
+            }
+          }
+        }
+        if (alive.every(u => u.status === 'eliminated')) break;
+        stoppedByFire = true;
+        break; // ストップ射撃を受けたら移動停止
+      }
+    }
+    // 移動完了フラグ
+    alive.forEach(u => { if (u.status !== 'eliminated') u.moveComplete = true; });
+    // 移動完了 → 少し待ってから経路クリア
+    drawMap();
+    await _globalMoveDelay(500);
+    _aiMoveTrail = [];
+}
+
+// aiAutoDefMoveの後半（イギリスユニット処理）を再開
+function isUnderEnemyThreat(col, row, side) {
+  const enemySide = side === 'allied' ? 'german' : 'allied';
+  return testUnits.some(e =>
+    e.side === enemySide && e.status !== 'eliminated' &&
+    e.type !== 'dummy' && e.type !== 'leader' &&
+    hexDistance(e.col, e.row, col, row) <= (e.range || 1) &&
+    hasLOS(e.col, e.row, col, row)
+  );
+}
+
+function isCoverTerrain(hexId) {
+  const t = getHexTerrain(hexId);
+  return t === 'f' || t === 'w' || t === 't';
+}
+
+function avgDistFromEnemy(col, row) {
+  const enemies = testUnits.filter(e => e.side === 'german' && e.status !== 'eliminated' && e.type !== 'dummy' && e.type !== 'leader');
+  if (enemies.length === 0) return 99;
+  return enemies.reduce((s, e) => s + hexDistance(e.col, e.row, col, row), 0) / enemies.length;
+}
+
+async function _aiAutoDefMoveContinue() {
+  const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
+  const alliedStacks = {};
+  testUnits.filter(u =>
+    u.side === 'allied' && u.status !== 'eliminated' &&
+    u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip' &&
+    u.col >= 0 && u.col < MAP_CONFIG.cols
+  ).forEach(u => {
+    if (!alliedStacks[u.hexId]) alliedStacks[u.hexId] = [];
+    alliedStacks[u.hexId].push(u);
+  });
+
+  // 全バッチを収集してから目的地までの距離でソート（遠い順 → 近い順に渋滞解消）
+  const allBatches = [];
+  for (const [hexId, stackUnits] of Object.entries(alliedStacks)) {
+    for (let i = 0; i < stackUnits.length; i += 4) {
+      const batch = stackUnits.slice(i, i + 4);
+      const alive = batch.filter(u => u.status !== 'eliminated');
+      if (alive.length === 0) continue;
+      // 目的地までの距離を取得
+      const firstName = alive[0].name || '';
+      let sk = null;
+      if (firstName.match(/^M4-R\d+-[0-3]$/)) sk = 'M4_0';
+      else if (firstName.match(/^M4-R\d+-[4-7]$/)) sk = 'M4_1';
+      else if (firstName.startsWith('A27-R')) sk = 'A27_0';
+      else if (firstName.startsWith('A22-R') || firstName.startsWith('Infantry-R4-0') || firstName.startsWith('Infantry-R4-1')) sk = 'R4_0';
+      else if (firstName.startsWith('Infantry-R4-2') || firstName.startsWith('Infantry-R4-3')) sk = 'R4_1';
+      const tgtHex = sk ? _aiAssignedTargets[sk] : null;
+      let dist = 0;
+      if (tgtHex) {
+        const tp = fromHexId(tgtHex);
+        dist = hexDistance(alive[0].col, alive[0].row, tp.col, tp.row);
+      }
+      allBatches.push({ alive, dist });
+    }
+  }
+  // 遠い順にソート（遠いスタックが先に移動して入口を空ける）
+  allBatches.sort((a, b) => b.dist - a.dist);
+
+  for (const { alive } of allBatches) {
+    {
+
+      // 既に候補ヘクスにいるなら移動隊形に変換しない
+      const alreadyAtCandidate = window._aiAmbushCandidates &&
+        window._aiAmbushCandidates.some(c => c.hexId === alive[0].hexId);
+      // 移動隊形への変換判定: 1ターンで到着できる場合のみ
+      const needsMarch = alive.every(u => !u.marchMode);
+      if (needsMarch && !alreadyAtCandidate && alive.every(u => u.status === 'ok' && !u.noTransport)) {
+        // 割り当て先を取得
+        const firstName = alive[0].name || '';
+        let stackKey = null;
+        if (firstName.match(/^M4-R\d+-[0-3]$/)) stackKey = 'M4_0';
+        else if (firstName.match(/^M4-R\d+-[4-7]$/)) stackKey = 'M4_1';
+        else if (firstName.startsWith('A27-R')) stackKey = 'A27_0';
+        else if (firstName.startsWith('A22-R') || firstName.startsWith('Infantry-R4-0') || firstName.startsWith('Infantry-R4-1')) stackKey = 'R4_0';
+        else if (firstName.startsWith('Infantry-R4-2') || firstName.startsWith('Infantry-R4-3')) stackKey = 'R4_1';
+        const assignedHexId = stackKey ? _aiAssignedTargets[stackKey] : null;
+        if (assignedHexId) {
+          const tgt = fromHexId(assignedHexId);
+          const combatMove = Math.min(...alive.map(u => u.move != null ? u.move : 1));
+          const combatBfs = bfsShortestPath(alive[0], alive[0].col, alive[0].row, tgt.col, tgt.row, 'combat', alive);
+          const combatTurns = combatBfs.cost === Infinity ? Infinity : Math.ceil(combatBfs.cost / combatMove);
+          // 1. 戦闘隊形で2ターン以内 → そのまま
+          // 2. 戦闘隊形で3ターン以上かつ移動隊形で1ターン到着 → 移動隊形
+          if (combatTurns >= 3) {
+            const marchMove = isVehicle(alive[0]) ? (alive[0].move || 1) : 10;
+            const marchBfs = bfsShortestPath(alive[0], alive[0].col, alive[0].row, tgt.col, tgt.row, 'march', alive);
+            if (marchBfs.cost <= marchMove) {
+              alive.forEach(u => {
+                if (!isVehicle(u)) {
+                  u._origCloseAtk = u.closeAtk;
+                  u._origCloseDef = u.closeDef;
+                  u._origMove = u.move;
+                  u.closeAtk = 0;
+                  u.closeDef = 1;
+                  u.move = 10;
+                  u._towed = true;
+                }
+                u.marchMode = true;
+                u._aiAutoMarch = true;
+              });
+              addLog('ai', `${alive.map(u=>u.name).join(',')} → 移動隊形に変換`);
+            }
+          }
+        }
+      }
+      // 移動隊形でも移動力0なら（壊滅経験でnoTransport等）スキップ
+      if (alive.every(u => (u.move || 0) === 0)) continue;
+
+      const hasDamaged = alive.some(u => u.status === 'd' || u.status === 'dd');
+      const isTank = alive.some(u => u.type === 'T' || u.type === 'AC');
+
+      if (hasDamaged) {
+        // === D/DD退避ロジック ===
+        // 目標: 敵LOS外の遮蔽地形、なければとにかく敵から離れる遮蔽地形
+        const curCol = alive[0].col, curRow = alive[0].row;
+        let bestTarget = null, bestScore = -Infinity;
+
+        // BFS的に移動範囲内の候補を探す
+        const minMove = Math.min(...alive.map(u => u.move != null ? u.move : 1));
+        const visited = {};
+        const queue = [{ col: curCol, row: curRow, mp: minMove }];
+        visited[`${curCol},${curRow}`] = true;
+
+        while (queue.length > 0) {
+          const cur = queue.shift();
+          const nbs = getHexNeighbors(cur.col, cur.row);
+          for (const n of nbs) {
+            if (n.col < 0 || n.col >= MAP_CONFIG.cols || n.row < 0 || n.row >= MAP_CONFIG.rows) continue;
+            const key = `${n.col},${n.row}`;
+            if (visited[key]) continue;
+            const hid = toHexId(n.col, n.row);
+            const terrain = getHexTerrain(hid);
+            if (terrain === 'lake' || terrain === 'x') continue;
+            if (isTank && terrain === 'f') continue;
+            // 敵占有ヘクスは通過不可
+            const hasEnemy = testUnits.some(eu =>
+              eu.hexId === hid && eu.side === 'german' &&
+              eu.status !== 'eliminated' && eu.type !== 'dummy'
+            );
+            if (hasEnemy) continue;
+            let cost = 1;
+            if (terrain === 'w' || terrain === 'r') cost = 2;
+            else if (terrain === 'f') cost = 3;
+            if (cur.mp < cost) continue;
+            visited[key] = true;
+
+            // スタック制限
+            const existing = testUnits.filter(su =>
+              su.hexId === hid && su.status !== 'eliminated' &&
+              !STACK_EXEMPT_TYPES.includes(su.type) && !alive.includes(su)
+            ).length;
+            if (existing + alive.filter(u => u.status !== 'eliminated').length > 4) continue;
+
+            // スコアリング
+            const enemyDist = avgDistFromEnemy(n.col, n.row);
+            const safe = !isUnderEnemyThreat(n.col, n.row, 'allied');
+            const cover = isCoverTerrain(hid);
+            let score = enemyDist * 2; // 敵から遠いほど良い
+            if (safe) score += 20;     // 安全なら大きなボーナス
+            if (cover) score += 15;    // 遮蔽地形ボーナス
+            if (safe && cover) score += 10; // 安全+遮蔽は最高
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestTarget = { col: n.col, row: n.row };
+            }
+            queue.push({ col: n.col, row: n.row, mp: cur.mp - cost });
+          }
+        }
+
+        if (bestTarget) {
+          onUnitAction(alive[0], alive); // 移動開始 → ダミー除去（一括）
+          addLog('ai', `${alive.map(u=>u.name).join(',')} D/DD退避 → ${toHexId(bestTarget.col, bestTarget.row)}`);
+          await aiMoveToward(alive, bestTarget.col, bestTarget.row, isTank);
+        }
+
+      } else {
+        // === OK状態: 事前割り当て先への移動 ===
+        if (window._aiAmbushCandidates && window._aiAmbushCandidates.length > 0) {
+          const curCol = alive[0].col, curRow = alive[0].row;
+
+          // スタックキーを決定（ユニット名から）
+          const firstName = alive[0].name || '';
+          let stackKey = null;
+          if (firstName.startsWith('M4-R1-')) {
+            stackKey = parseInt(firstName.split('-')[2]) < 4 ? 'M4_0' : 'M4_1';
+          } else if (firstName.startsWith('A27-R')) {
+            stackKey = 'A27_0';
+          } else if (firstName.startsWith('A22-R') || firstName.startsWith('Infantry-R4-0') || firstName.startsWith('Infantry-R4-1')) {
+            stackKey = 'R4_0';
+          } else if (firstName.startsWith('Infantry-R4-2') || firstName.startsWith('Infantry-R4-3')) {
+            stackKey = 'R4_1';
+          }
+
+          // 4ターン増援（A22, Infantry）は0206/0205のドイツ対い側（西側）へ強制移動
+          if ((stackKey === 'R4_0' || stackKey === 'R4_1') && G.turn >= 4) {
+            // ドイツ軍が0206/0205付近にいるか確認し、その西側へ向かう
+            // 目標: 0106か0105（0206/0205の1ヘクス西）
+            const forceTarget = stackKey === 'R4_0' ? { col: 1, row: 6 } : { col: 1, row: 5 };
+            onUnitAction(alive[0], alive);
+            addLog('ai', `${alive.map(u=>u.name).join(',')} 阻止移動 → ${toHexId(forceTarget.col, forceTarget.row)}`);
+            await aiMoveToward(alive, forceTarget.col, forceTarget.row, isTank);
+            continue;
+          }
+
+          // 事前割り当て先を取得
+          const assignedHexId = stackKey ? _aiAssignedTargets[stackKey] : null;
+          let bestCand = null;
+          let alreadyThere = false;
+
+          if (assignedHexId) {
+            if (alive[0].hexId === assignedHexId) {
+              alreadyThere = true;
+            } else {
+              const cand = window._aiAmbushCandidates.find(c => c.hexId === assignedHexId);
+              if (cand) bestCand = cand;
+            }
+          }
+
+          // 目的地到着 → 移動隊形を戦闘隊形に戻す
+          if (alreadyThere) {
+            alive.forEach(u => {
+              if (u.marchMode && u._aiAutoMarch) {
+                if (u._towed) {
+                  u.closeAtk = u._origCloseAtk;
+                  u.closeDef = u._origCloseDef;
+                  u.move = u._origMove;
+                  u._towed = false;
+                }
+                u.marchMode = false;
+                u._aiAutoMarch = false;
+              }
+            });
+          }
+
+          if (bestCand) {
+            onUnitAction(alive[0], alive); // 移動開始 → ダミー除去（一括）
+            console.log(`[AI移動] ${firstName} stackKey=${stackKey} assigned=${assignedHexId} target=${bestCand.hexId} from=${alive[0].hexId}`);
+            addLog('ai', `${alive.map(u=>u.name).join(',')} 潜伏移動 → ${bestCand.hexId}`);
+            await aiMoveToward(alive, bestCand.col, bestCand.row, isTank);
+            // 到着確認ログ
+            const finalHex = alive[0].hexId;
+            if (finalHex !== bestCand.hexId) {
+              addLog('ai', `  → 途中停止: ${finalHex}（目標: ${bestCand.hexId}）`);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+function advanceTurn() {
+  G.turn++;
+  // 前ターンの移動線をクリア
+  if (typeof _completedMoveTrails !== 'undefined') _completedMoveTrails = [];
+  if (G.turn > G.maxTurn) {
+    // ゲーム終了
+    addLog('turn', `===== ゲーム終了 =====`);
+    addLog('turn', `突破ユニット数: ${G.breakthroughCount}`);
+    let resultText, resultColor;
+    if (G.breakthroughCount >= SCENARIO.victory.breakthroughTarget) {
+      resultText = 'ドイツ軍の勝利！';
+      resultColor = '#e04040';
+    } else if (G.breakthroughCount >= SCENARIO.victory.drawThreshold) {
+      resultText = '引き分け';
+      resultColor = '#cc0';
+    } else {
+      resultText = 'イギリス軍の勝利！';
+      resultColor = '#4488ff';
+    }
+    addLog('turn', resultText);
+    // ゲーム終了オーバーレイ表示
+    const overlay = document.getElementById('gameOverOverlay');
+    if (overlay) {
+      document.getElementById('gameOverTitle').textContent = resultText;
+      document.getElementById('gameOverTitle').style.color = resultColor;
+      document.getElementById('gameOverDetail').textContent = `突破: ${G.breakthroughCount} / ${SCENARIO.victory.breakthroughTarget}`;
+      overlay.style.display = 'flex';
+    }
+    return;
+  }
+  G.phase = 0;
+  G.diceRolled = false;
+  G.initiative = null;
+  // 移動隊形の自動戻しはしない（AI移動フェーズで目的地到着時に判断）
+  // 回復結果リセット
+  Object.keys(recoveryResults).forEach(k => delete recoveryResults[k]);
+  // 支援射撃リセット
+  resetSupportState();
+  // 直接射撃リセット
+  resetDirectFireState();
+  // ダミー再配置: 視認されておらず何もしていないユニットにダミーを補充（4枚まで）
+  const dummyHexChecked = new Set();
+  testUnits.forEach(u => {
+    if (u.status === 'eliminated' || u.type === 'dummy' || u.type === 'leader' ||
+        u.type === 'fortification' || u.type === 'ip') return;
+    if (dummyHexChecked.has(u.hexId + '_' + u.side)) return;
+    dummyHexChecked.add(u.hexId + '_' + u.side);
+
+    // そのヘクスの同じ陣営の実ユニット
+    const hexMates = testUnits.filter(m =>
+      m.hexId === u.hexId && m.side === u.side && m.status !== 'eliminated' &&
+      m.type !== 'dummy' && m.type !== 'leader'
+    );
+    // 全員が混乱状態（D/DD）ならダミーは乗らない
+    if (hexMates.every(m => m.status === 'd' || m.status === 'dd')) return;
+    // 誰かがこのターンに行動していたらダミーは乗らない（回復も含む）
+    if (hexMates.some(m => m.firedThisTurn || m.moveComplete || m.assaultedThisTurn || m._counterFired || recoveryResults[m.id])) return;
+
+    // 敵から視認されていないか判定
+    const enemySide = u.side === 'german' ? 'allied' : 'german';
+    const isVisible = testUnits.some(e =>
+      e.side === enemySide && e.status !== 'eliminated' &&
+      e.type !== 'dummy' && e.type !== 'leader' &&
+      hexDistance(e.col, e.row, u.col, u.row) <= (G.visionRange || 12) &&
+      hasLOS(e.col, e.row, u.col, u.row)
+    );
+    if (isVisible) return;
+
+    // ダミーを4枚まで補充
+    const currentDummies = getDummyCount(u.hexId);
+    if (currentDummies < 4) {
+      placeDummy(u.hexId, u.side, 4 - currentDummies);
+    }
+  });
+
+  // 射撃済み・突撃済みフラグリセット
+  testUnits.forEach(u => { u.firedThisTurn = false; u.outOfAmmo = false; u.assaultedThisTurn = false; u.moveComplete = false; u._counterFiredThisTurn = false; u._counterFired = false; });
+  // 航空支援リセット
+  resetAirSupport();
+  // 援軍は移動フェイズ開始時に配置（ここでは配置しない）
+  addLog('turn', `===== ターン ${G.turn} 開始 =====`);
+  updatePhaseBar();
+  renderPhase();
+}
+
+// [分離済み] 行1897-2075 → 外部JSファイル参照
+
+// [分離済み] 行2077-2576 → 外部JSファイル参照
+
+// ダメージを適用
+function applyDamage(unit, dmgResult) {
+  if (dmgResult === 'none') return;
+  if (dmgResult === 'eliminated' || dmgResult === 'E') {
+    unit.status = 'eliminated';
+  } else if (dmgResult === 'dd') {
+    if (unit.status === 'ok') unit.status = 'dd';
+    else unit.status = 'eliminated'; // D→DD受けたら壊滅, DD→D受けても壊滅
+  } else if (dmgResult === 'd') {
+    if (unit.status === 'ok') unit.status = 'd';
+    else if (unit.status === 'd') unit.status = 'dd';
+    else if (unit.status === 'dd') unit.status = 'eliminated';
+  }
+}
+
+// ヘクスの隣接ヘクスを取得
+function getHexNeighbors(col, row) {
+  const neighbors = [];
+  // フラットトップヘクスの隣接（偶数列/奇数列で異なる）
+  const even = col % 2 === 0;
+  const dirs = even
+    ? [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[0,1]]
+    : [[-1,0],[0,-1],[1,0],[-1,1],[0,1],[1,1]];
+  dirs.forEach(([dc, dr]) => {
+    const nc = col + dc;
+    const nr = row + dr;
+    if (nc >= 0 && nc < MAP_CONFIG.cols && nr >= 0 && nr < MAP_CONFIG.rows) {
+      neighbors.push({ col: nc, row: nr });
+    }
+  });
+  return neighbors;
+}
+
+// ===== ログ =====
+const _allLogs = [];
+function addLog(type, msg) {
+  const fullMsg = `[T${G.turn} P${G.phase}] ${msg}`;
+  _allLogs.push(fullMsg);
+  console.log(fullMsg);
+  // AI確認用ログ
+  if (!window._aiRecentLogs) window._aiRecentLogs = [];
+  window._aiRecentLogs.push(msg);
+  const log = document.getElementById('gameLog');
+  const div = document.createElement('div');
+  div.className = `log-${type}`;
+  div.textContent = fullMsg;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+function copyAllLogs() {
+  const text = _allLogs.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    alert('ログをコピーしました（' + _allLogs.length + '行）');
+  }).catch(() => {
+    // file://ではclipboard APIが使えない場合
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('ログをコピーしました（' + _allLogs.length + '行）');
+  });
+}
+
+// ===== 射撃戦闘結果表 =====
+
+// 火力列のインデックス境界: [1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,24,26,29,32,35,38,41,45,49,999]
+const FP_COLUMNS = [1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,22,24,26,29,32,35,38,41,45,49,999];
+
+// 火力値から列インデックス(0-25)を返す
+function getFPColumnIndex(fp) {
+  if (fp <= 0) return 0;
+  for (let i = 0; i < FP_COLUMNS.length; i++) {
+    if (fp <= FP_COLUMNS[i]) return i;
+  }
+  return FP_COLUMNS.length - 1;
+}
+
+// 射撃戦闘結果表 [ダイス行(-3~12)][火力列(0-25)]
+// 値: 0-15 = 損害レベル, 99 = E(防御レベルに関係なく壊滅)
+const FIRE_COMBAT_TABLE = {
+  '-3': [0,0,0,0,0,0,0,1,2,3,4,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12],
+  '-2': [0,0,0,0,0,0,1,2,3,4,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13],
+  '-1': [0,0,0,0,0,1,2,3,4,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13],
+   '0': [0,0,0,0,1,1,3,4,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,14],
+   '1': [0,0,0,1,1,2,4,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14],
+   '2': [0,0,1,1,2,3,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15],
+   '3': [0,0,1,2,3,4,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15],
+   '4': [0,1,2,3,4,5,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99],
+   '5': [1,2,3,3,5,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99],
+   '6': [2,3,3,4,6,6,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99,99],
+   '7': [3,4,4,5,6,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99,99,99],
+   '8': [4,5,5,6,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99,99,99,99],
+   '9': [4,5,6,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99,99,99,99,99],
+  '10': [5,6,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99,99,99,99,99,99],
+  '11': [6,7,8,8,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99,99,99,99,99,99,99],
+  '12': [7,8,9,9,9,10,10,11,11,12,12,13,13,14,14,15,15,99,99,99,99,99,99,99,99,99],
+};
+
+// 弾薬切れチェック表: AMMO_CHECK[ダイス行][火力列インデックス] = true
+// ダイス-3~-1: 各火力列に1箇所ずつ / ダイス0~9: 各火力列に3箇所ずつ / ダイス10~12: なし
+const AMMO_CHECK = {};
+(function buildAmmoCheck() {
+  // ダイス-3～-1 (各火力列に1箇所)
+  const neg = {
+    '-3': [3,10,18,22],
+    '-2': [0,4,5,6,8,11,14,16,20,24,25],
+    '-1': [1,2,7,9,12,13,15,17,19,21,23],
+  };
+  // ダイス0～9 (各火力列に3箇所)
+  const pos = {
+    '0': [0,4,8,13,17,18,19],
+    '1': [2,6,10,11,12,20,21,22],
+    '2': [3,4,5,9,14,15,23,24],
+    '3': [0,1,15,16,17,18,22,25],
+    '4': [3,6,8,11,12,13,17,19,23,24],
+    '5': [1,7,9,10,15,16,20,25],
+    '6': [3,7,18,21,24],
+    '7': [0,2,5,11,14,22],
+    '8': [1,4,7,9,12,13,16,19,20,23,25],
+    '9': [2,5,6,8,10,14,21],
+  };
+  for (const [d, cols] of Object.entries(neg)) {
+    AMMO_CHECK[d] = {};
+    cols.forEach(c => AMMO_CHECK[d][c] = true);
+  }
+  for (const [d, cols] of Object.entries(pos)) {
+    AMMO_CHECK[d] = {};
+    cols.forEach(c => AMMO_CHECK[d][c] = true);
+  }
+})();
+
+// 射撃戦闘結果を取得
+// fp: 火力, dieRoll: 修正済みダイス目
+// 戻り値: { damageLevel, isElimination, ammoCheck }
+function getFireCombatResult(fp, dieRoll) {
+  const colIdx = getFPColumnIndex(fp);
+  // ダイス範囲クランプ (-3~12)
+  const clampedDie = Math.max(-3, Math.min(12, dieRoll));
+  const row = FIRE_COMBAT_TABLE[String(clampedDie)];
+  if (!row) return { damageLevel: 0, isElimination: false, ammoCheck: false };
+  const val = row[colIdx];
+  const isE = val === 99;
+  const damageLevel = isE ? 99 : val;
+  // 弾薬切れチェック
+  const ammoRow = AMMO_CHECK[String(clampedDie)];
+  const ammoCheck = ammoRow ? !!ammoRow[colIdx] : false;
+  return { damageLevel, isElimination: isE, ammoCheck };
+}
+
+// 損害判定: 損害レベルと防御力の差からD/DD/壊滅を決定
+// damageLevel: 戦闘結果表の値, defenseLevel: ユニットの防御レベル
+// 戻り値: 'none', 'd', 'dd', 'eliminated'
+function resolveDamage(damageLevel, defenseLevel) {
+  if (damageLevel === 99) return 'eliminated'; // E = 防御レベルに関係なく壊滅
+  const diff = damageLevel - defenseLevel;
+  if (diff >= 3) return 'eliminated'; // +3以上 → 壊滅
+  if (diff === 2) return 'dd';        // +2 → DD
+  if (diff >= 0) return 'd';          // +0 or +1 → D
+  return 'none';                       // マイナス → 効果なし
+}
+
+// ===== 地形修正テーブル =====
+// 地形表より: 射撃/突撃/移動/視認の修正値
+const TERRAIN_MODIFIERS = {
+  'p':    { fire: 0,  assault: 0,  move: 1,   vision: 1 },        // 平地
+  'w':    { fire: -2, assault: -1, move: 2,   vision: 'block' },  // 林
+  'f':    { fire: -3, assault: -2, move: 3,   vision: 'block' },  // 森林
+  'r':    { fire: -1, assault: -1, move: 2,   vision: 4 },        // 荒地
+  't':    { fire: -2, assault: -1, move: 1,   vision: 'block' },  // 町
+  'c':    { fire: -3, assault: -2, move: 1,   vision: 'block' },  // 市街地
+  'lake': { fire: 0,  assault: 0,  move: -1,  vision: 1 },        // 湖（移動不可=-1）
+  'river':{ fire: 0,  assault: -1, move: 1,   vision: 1 },        // 川（+1移動コスト）
+  'slope1':{ fire: 0, assault: -1, move: 1,   vision: 'block' },  // 斜面
+  'cliff': { fire: 0, assault: -1, move: -1,  vision: 'block' },  // 崖（移動不可=-1）
+  'road':  { fire: 0, assault: 0,  move: 0.5, vision: 1 },        // 道路
+  'bridge':{ fire: 0, assault: 0,  move: 0.5, vision: 1 },        // 橋
+  'ip':    { fire: -1,assault: -2, move: 0,   vision: 'block' },  // I.P.
+  'fortification': { fire: 0, assault: -2, move: 0, vision: 'block' }, // 陣地
+};
+
+// 地形の射撃修正を取得
+function getTerrainFireMod(hexId) {
+  const t = getHexTerrain(hexId);
+  const mod = TERRAIN_MODIFIERS[t];
+  return mod ? mod.fire : 0;
+}
+
+// [分離済み] 行2745-2936 → 外部JSファイル参照
+
+// ===== マップ =====
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+const mapState = { img: null, x: 0, y: 0, zoom: 1, dragging: false, dragX: 0, dragY: 0 };
+const unitImages = [];
+
+// ドラッグ中ユニット（スタック単位）
+let dragUnit = null;    // ドラッグ中の代表ユニット（描画用）
+let dragStack = [];     // ドラッグ中のスタック全体
+let dragOffX = 0, dragOffY = 0; // つかんだ位置のオフセット
+let dragMapX = 0, dragMapY = 0; // ドラッグ中のマップ座標
+let stackSplitMode = false; // スタック解除モード（個別ドラッグ）
+
+// ヘクス中心座標を計算（flat-top: 辺が上）
+function getHexCenter(col, row) {
+  const size = MAP_CONFIG.hexSize;
+  const ox = MAP_CONFIG.offsetX;
+  const oy = MAP_CONFIG.offsetY;
+  const w = size * 2;
+  const h = Math.sqrt(3) * size;
+  const x = ox + col * w * 0.75 + size;
+  let y = oy + row * h + h / 2;
+  if (col % 2 === 1) y += h / 2;
+  return { x, y };
+}
+
+// マップ座標から最近傍ヘクス(col,row)を返す
+function getNearestHex(mx, my) {
+  const size = MAP_CONFIG.hexSize;
+  const ox = MAP_CONFIG.offsetX;
+  const oy = MAP_CONFIG.offsetY;
+  const w = size * 2;
+  const h = Math.sqrt(3) * size;
+  let bestCol = 0, bestRow = 0, bestDist = Infinity;
+  for (let r = 0; r < MAP_CONFIG.rows; r++) {
+    for (let c = 0; c < MAP_CONFIG.cols; c++) {
+      const hx = ox + c * w * 0.75 + size;
+      let hy = oy + r * h + h / 2;
+      if (c % 2 === 1) hy += h / 2;
+      const dx = mx - hx, dy = my - hy;
+      const dist = dx * dx + dy * dy;
+      if (dist < bestDist) { bestDist = dist; bestCol = c; bestRow = r; }
+    }
+  }
+  return { col: bestCol, row: bestRow, dist: Math.sqrt(bestDist) };
+}
+
+// マップ座標でユニットのヒットテスト（一番上のユニットを返す）
+function hitTestUnit(mx, my) {
+  const hexSize = MAP_CONFIG.hexSize;
+  const unitSize = hexSize * 0.9;
+  const cascadeOffX = unitSize * 0.18;
+  const cascadeOffY = -unitSize * 0.18;
+  const stacks = getStacksByHex();
+  let hit = null;
+  // 後に描画されるもの（上に見える）を優先
+  Object.values(stacks).forEach(stack => {
+    const sn = stack.filter(u => u.status !== 'eliminated').length;
+    const bOffX = -(sn - 1) * cascadeOffX * 0.5;
+    const bOffY = (sn - 1) * Math.abs(cascadeOffY) * 0.5;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const u = stack[i];
+      const ox = i * cascadeOffX;
+      const oy = i * cascadeOffY;
+      const dx = u.x - unitSize/2 + bOffX + ox;
+      const dy = u.y - unitSize/2 + bOffY + oy;
+      if (mx >= dx && mx <= dx + unitSize && my >= dy && my <= dy + unitSize) {
+        hit = u;
+        return;
+      }
+    }
+  });
+  return hit;
+}
+
+// ===== シナリオからユニット生成 =====
+function buildUnitsFromScenario(scenario) {
+  const defs = [];
+  let idx = 0;
+
+  // 初期配置ユニット
+  scenario.initialUnits.forEach(u => {
+    if (u.type === 'D') {
+      // ダミーもユニットとして生成
+      const col = parseInt(u.hexId.substring(0,2)) - 1;
+      const row = parseInt(u.hexId.substring(2,4)) - 1;
+      for (let i = 0; i < u.count; i++) {
+        idx++;
+        defs.push({
+          src: scenario.getUnitImage(u.nation, 'Dummy'),
+          col, row, side: u.side, type: 'dummy', status: 'ok',
+          name: `ダミー-${u.hexId}-${i}`,
+          range: 0, fpAT: 0, fpSoft: 0, def: 0, morale: 0,
+          closeAtk: 0, closeDef: 0, move: 0,
+          nation: u.nation, unitName: 'Dummy',
+        });
+      }
+      return;
+    }
+    for (let i = 0; i < u.count; i++) {
+      idx++;
+      const col = parseInt(u.hexId.substring(0,2)) - 1;
+      const row = parseInt(u.hexId.substring(2,4)) - 1;
+      defs.push({
+        src: scenario.getUnitImage(u.nation, u.unitName),
+        col, row, side: u.side, type: u.type, status: 'ok',
+        name: `${u.unitName}${u.count > 1 ? '-' + i : ''}`,
+        range: u.range || 0, fpAT: u.fpAT || 0, fpSoft: u.fpSoft || 0,
+        def: u.def || 0, morale: u.morale || 5,
+        closeAtk: u.closeAtk || 0, closeDef: u.closeDef || 0, move: u.move || 0,
+        nation: u.nation, unitName: u.unitName,
+      });
+    }
+  });
+
+  // 指揮官ユニットにランダム裏面を割り当て
+  if (scenario.leaderPool) {
+    const leaderUnits = defs.filter(d => d.type === 'leader');
+    leaderUnits.forEach(lu => {
+      // Leader A/B/C からランクを判定
+      let rank = 'C';
+      if (lu.unitName && lu.unitName.includes('Leader A')) rank = 'A';
+      else if (lu.unitName && lu.unitName.includes('Leader B')) rank = 'B';
+      else if (lu.unitName && lu.unitName.includes('Leader C')) rank = 'C';
+
+      const pool = scenario.leaderPool[lu.side];
+      if (!pool || !pool[rank] || pool[rank].length === 0) return;
+
+      const choice = pool[rank][Math.floor(Math.random() * pool[rank].length)];
+      lu.abilities = choice.abilities;
+      lu.srcBack = 'images/' + choice.back;
+      addLog('init', `${lu.name}: 能力 [${choice.abilities.join(',')}] (${rank}ランク)`);
+    });
+  }
+
+  return defs;
+}
+
+// 援軍を投入（スタック制限を考慮して入口ヘクスに分散配置）
+function deployReinforcements(scenario, turn) {
+  const reinforcements = scenario.reinforcements.filter(r => r.turn === turn);
+  reinforcements.forEach(r => {
+    // 全ユニットをフラットに並べる
+    const allNewUnits = [];
+    r.units.forEach(u => {
+      for (let i = 0; i < u.count; i++) {
+        allNewUnits.push({
+          src: scenario.getUnitImage(u.nation || (r.side === 'german' ? 'ドイツ軍' : 'イギリス軍'), u.unitName),
+          side: r.side, type: u.type, status: 'ok',
+          name: `${u.unitName}-R${turn}-${i}`,
+          range: u.range || 0, fpAT: u.fpAT || 0, fpSoft: u.fpSoft || 0,
+          def: u.def || 0, morale: u.morale || 5,
+          closeAtk: u.closeAtk || 0, closeDef: u.closeDef || 0, move: u.move || 0,
+          nation: u.nation, unitName: u.unitName,
+        });
+      }
+    });
+
+    // 4ユニットずつ入口ヘクスに分散配置（目的地に近い入口を優先）
+    const usedEntries = {};  // 入口ヘクスごとの配置済みユニット数
+    for (let i = 0; i < allNewUnits.length; i += 4) {
+      const batch = allNewUnits.slice(i, i + 4);
+      // このバッチの事前割り当て先を調べる
+      let targetDest = null;
+      if (typeof _aiAssignedTargets !== 'undefined') {
+        const firstName = batch[0].name || '';
+        let stackKey = null;
+        if (firstName.match(/^M4-R\d+-[0-3]$/)) stackKey = 'M4_0';
+        else if (firstName.match(/^M4-R\d+-[4-7]$/)) stackKey = 'M4_1';
+        else if (firstName.startsWith('A27-R')) stackKey = 'A27_0';
+        else if (firstName.startsWith('A22-R') || firstName.startsWith('Infantry-R4-0') || firstName.startsWith('Infantry-R4-1')) {
+          stackKey = 'R4_0';
+        } else if (firstName.startsWith('Infantry-R4-2') || firstName.startsWith('Infantry-R4-3')) {
+          stackKey = 'R4_1';
+        }
+        if (stackKey && _aiAssignedTargets[stackKey]) {
+          targetDest = fromHexId(_aiAssignedTargets[stackKey]);
+        }
+      }
+      // 目的地に最も近い空き入口を選択
+      let targetHexId = null;
+      let bestDist = Infinity;
+      for (const ehId of r.entryHexes) {
+        const existing = testUnits.filter(su =>
+          su.hexId === ehId && su.status !== 'eliminated' &&
+          !STACK_EXEMPT_TYPES.includes(su.type)
+        ).length + (usedEntries[ehId] || 0);
+        if (existing + batch.length > 4) continue;
+        if (targetDest) {
+          const ePos = fromHexId(ehId);
+          const dist = hexDistance(ePos.col, ePos.row, targetDest.col, targetDest.row);
+          if (dist < bestDist) { bestDist = dist; targetHexId = ehId; }
+        } else {
+          targetHexId = ehId;
+          break;
+        }
+      }
+      // 全入口が満杯なら最初の入口を使用
+      if (!targetHexId) targetHexId = r.entryHexes[0];
+      usedEntries[targetHexId] = (usedEntries[targetHexId] || 0) + batch.length;
+
+      const pos = fromHexId(targetHexId);
+      const center = getHexCenter(pos.col, pos.row);
+      batch.forEach(u => {
+        u.col = pos.col;
+        u.row = pos.row;
+        u.x = center.x;
+        u.y = center.y;
+        u.hexId = targetHexId;
+        u.reinforcement = { deployed: true, entryHexes: r.entryHexes };
+        u.moveComplete = false;  // 配置ターンに移動可能
+        // 指揮官ならランダム裏面割り当て
+        assignLeaderBack(scenario, u);
+        testUnits.push(u);
+      });
+    }
+    addLog('turn', `援軍到着: ${r.side === 'german' ? 'ドイツ軍' : '連合軍'} (${r.units.map(u => u.unitName + 'x' + u.count).join(', ')})`);
+  });
+}
+
+// 指揮官ユニットにランダム裏面を割り当てるヘルパー
+function assignLeaderBack(scenario, unit) {
+  if (unit.type !== 'leader' || !scenario.leaderPool) return;
+  let rank = 'C';
+  if (unit.unitName && unit.unitName.includes('Leader A')) rank = 'A';
+  else if (unit.unitName && unit.unitName.includes('Leader B')) rank = 'B';
+  const pool = scenario.leaderPool[unit.side];
+  if (!pool || !pool[rank] || pool[rank].length === 0) return;
+  const choice = pool[rank][Math.floor(Math.random() * pool[rank].length)];
+  unit.abilities = choice.abilities;
+  unit.srcBack = 'images/' + choice.back;
+  addLog('init', `${unit.name}: 能力 [${choice.abilities.join(',')}] (${rank}ランク)`);
+}
+
+// ===== ダイス援軍 =====
+// イニシアチブ決定後にダイスを振って援軍を判定
+function deployDiceReinforcements(scenario, turn, initiative) {
+  if (!scenario.diceReinforcements) return;
+  const sideNames = { german: 'ドイツ軍', allied: '連合軍' };
+
+  ['allied', 'german'].forEach(side => {
+    const drt = scenario.diceReinforcements[side];
+    if (!drt || turn < drt.startTurn) return;
+
+    const roll = Math.floor(Math.random() * 10);
+    const bonus = (initiative === side) ? (drt.firstPlayerBonus || 0) : 0;
+    const effectiveRoll = roll + bonus;
+
+    const entry = drt.table.find(e => effectiveRoll >= e.min && effectiveRoll <= e.max);
+    if (!entry) {
+      addLog('turn', `${sideNames[side]} 援軍ダイス: ${roll}${bonus ? '+' + bonus : ''} = ${effectiveRoll} → 範囲外`);
+      return;
+    }
+
+    addLog('turn', `${sideNames[side]} 援軍ダイス: ${roll}${bonus ? '+' + bonus : ''} = ${effectiveRoll} → ${entry.label}`);
+
+    // 航空支援の場合: 個別にd10で火力を決定し盤外砲兵として登録
+    if (entry.airSupport) {
+      for (let i = 0; i < entry.airSupport; i++) {
+        const fpRoll = Math.floor(Math.random() * 10);
+        const ob = {
+          id: 'air_' + G.turn + '_' + side + '_' + i,
+          name: `航空支援${entry.airSupport > 1 ? (i+1) : ''}(T${G.turn})`,
+          side: side,
+          fp: fpRoll,
+          uses: 1,
+          usedCount: 0,
+          combinable: false,
+        };
+        SCENARIO_OFF_BOARD.push(ob);
+        addLog('turn', `${sideNames[side]} 航空支援到着！ 火力ダイス: ${fpRoll} → FP${fpRoll}`);
+      }
+      return;
+    }
+
+    if (!entry.units || entry.units.length === 0) return;
+
+    // ユニットを生成
+    const entryHexes = entry.entryHexes || ['3106'];
+    const nationName = side === 'german' ? 'ドイツ軍' : 'アメリカ軍';
+    const allNewUnits = [];
+    entry.units.forEach(u => {
+      for (let i = 0; i < u.count; i++) {
+        allNewUnits.push({
+          src: scenario.getUnitImage(nationName, u.unitName),
+          side, type: u.type, status: 'ok',
+          name: `${u.unitName}-DR${turn}-${Math.random().toString(36).substr(2,4)}`,
+          range: u.range || 0, fpAT: u.fpAT || 0, fpSoft: u.fpSoft || 0,
+          def: u.def || 0, morale: u.morale || 5,
+          closeAtk: u.closeAtk || 0, closeDef: u.closeDef || 0, move: u.move || 0,
+          nation: nationName, unitName: u.unitName,
+        });
+      }
+    });
+
+    // 入口ヘクスに分散配置
+    const usedEntries = {};
+    for (let i = 0; i < allNewUnits.length; i += 4) {
+      const batch = allNewUnits.slice(i, i + 4);
+      let targetHexId = null;
+      for (const ehId of entryHexes) {
+        const existing = testUnits.filter(su =>
+          su.hexId === ehId && su.status !== 'eliminated' &&
+          !STACK_EXEMPT_TYPES.includes(su.type)
+        ).length + (usedEntries[ehId] || 0);
+        if (existing + batch.length <= 4) {
+          targetHexId = ehId;
+          break;
+        }
+      }
+      if (!targetHexId) targetHexId = entryHexes[0];
+      usedEntries[targetHexId] = (usedEntries[targetHexId] || 0) + batch.length;
+
+      const pos = fromHexId(targetHexId);
+      const center = getHexCenter(pos.col, pos.row);
+      batch.forEach(u => {
+        u.col = pos.col;
+        u.row = pos.row;
+        u.x = center.x;
+        u.y = center.y;
+        u.hexId = targetHexId;
+        u.reinforcement = { deployed: true, entryHexes };
+        u.moveComplete = false;  // 配置ターンに移動可能
+        // 指揮官ならランダム裏面割り当て
+        assignLeaderBack(scenario, u);
+        testUnits.push(u);
+      });
+    }
+  });
+
+  loadUnitImages();
+}
+
+// ユニットが去ったヘクスのダミーを掃除（味方実ユニットがいなければ除去）
+function cleanupOrphanDummies(hexId, side) {
+  if (!hexId) return;
+  const hasFriendly = testUnits.some(u =>
+    u.hexId === hexId && u.side === side && u.status !== 'eliminated' &&
+    u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip'
+  );
+  if (!hasFriendly) {
+    removeAllDummies(hexId);
+  }
+}
+
+const testUnitDefs = buildUnitsFromScenario(SCENARIO);
+
+const testUnits = testUnitDefs.map((d, i) => {
+  const center = getHexCenter(d.col, d.row);
+  const hexId = (d.col >= 0 && d.row >= 0) ? toHexId(d.col, d.row) : 'reinforcement';
+  return { ...d, x: center.x, y: center.y, hexId, id: d.name + '_' + i };
+});
+// units を testUnits に統一
+units = testUnits;
+
+// シナリオ別AI定義は ai_scenario2.js 等の外部ファイルで定義
+
+// ヘクスキーでユニットをグループ化
+function getStacksByHex() {
+  const stacks = {};
+  testUnits.forEach(u => {
+    if (u.status === 'eliminated') return; // 壊滅ユニットは表示しない
+    if (u.col < 0) return; // マップ外
+    // AI側の未配置援軍は非表示（人間側の援軍は表示）
+    if (u.reinforcement && !u.reinforcement.deployed) {
+      const isHumanSide = (G.gameMode === 'pvp') || (G.gameMode === 'pvai' && u.side === G.playerSide);
+      if (!isHumanSide) return;
+    }
+    const key = `${u.col},${u.row}`;
+    if (!stacks[key]) stacks[key] = [];
+    stacks[key].push(u);
+  });
+  return stacks;
+}
+
+function loadUnitImages() {
+  testUnits.forEach(u => {
+    const img = new Image();
+    img.onload = () => { u.img = img; drawMap(); };
+    img.src = u.src;
+  });
+}
+
+// ダミー画像キャッシュ
+const _dummyImgCache = {};
+(function preloadDummyImages() {
+  Object.values(DUMMY_IMAGES).forEach(src => {
+    const img = new Image();
+    img.onload = () => drawMap();
+    img.src = src;
+    _dummyImgCache[src] = img;
+  });
+})();
+
+// AI移動経路を記録（drawMapで描画用）
+let _aiMoveTrail = [];
+
+function drawMap() {
+  if (!mapState.img) return;
+  const area = document.getElementById('mapArea');
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#3a3a2a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(mapState.x, mapState.y);
+  ctx.scale(mapState.zoom, mapState.zoom);
+  ctx.drawImage(mapState.img, 0, 0);
+
+  // マップ周囲余白（1-2ヘクス分）
+  if (mapState.img) {
+    const pad = MAP_CONFIG.hexSize * 4;
+    ctx.fillStyle = '#3a3a2a';
+    ctx.fillRect(mapState.img.width, -pad, pad, mapState.img.height + pad * 2);
+    ctx.fillRect(-pad, -pad, pad, mapState.img.height + pad * 2);
+    ctx.fillRect(-pad, -pad, mapState.img.width + pad * 2, pad);
+    ctx.fillRect(-pad, mapState.img.height, mapState.img.width + pad * 2, pad);
+  }
+
+  // 視認範囲の色分け描画
+  const hexSize = MAP_CONFIG.hexSize;
+  if (losMode && losSourceUnit && Object.keys(losVisibleHexes).length > 0) {
+    for (let r = 0; r < MAP_CONFIG.rows; r++) {
+      for (let c = 0; c < MAP_CONFIG.cols; c++) {
+        const key = `${c},${r}`;
+        const center = getHexCenter(c, r);
+        const visible = losVisibleHexes[key];
+        // ヘクス六角形パスを作成
+        ctx.beginPath();
+        for (let a = 0; a < 6; a++) {
+          const angle = Math.PI / 3 * a;
+          const hx = center.x + hexSize * Math.cos(angle);
+          const hy = center.y + hexSize * Math.sin(angle);
+          if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        if (visible) {
+          ctx.fillStyle = 'rgba(50,200,50,0.2)';   // 見える → 緑
+        } else {
+          ctx.fillStyle = 'rgba(0,0,0,0.45)';       // 見えない → 暗く
+        }
+        ctx.fill();
+      }
+    }
+    // 視認元ユニットのヘクスをハイライト
+    const srcCenter = getHexCenter(losSourceUnit.col, losSourceUnit.row);
+    ctx.beginPath();
+    for (let a = 0; a < 6; a++) {
+      const angle = Math.PI / 3 * a;
+      const hx = srcCenter.x + hexSize * Math.cos(angle);
+      const hy = srcCenter.y + hexSize * Math.sin(angle);
+      if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(200,200,50,0.35)';
+    ctx.fill();
+    ctx.strokeStyle = '#ff0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // 支援射撃: 目標ヘクスのハイライト＋弓形矢印
+  if (supportState.targetHexId) {
+    const tPos = fromHexId(supportState.targetHexId);
+    const tCenter = getHexCenter(tPos.col, tPos.row);
+    // 目標ヘクス赤ハイライト
+    ctx.beginPath();
+    for (let a = 0; a < 6; a++) {
+      const angle = Math.PI / 3 * a;
+      const hx = tCenter.x + hexSize * Math.cos(angle);
+      const hy = tCenter.y + hexSize * Math.sin(angle);
+      if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,50,50,0.25)';
+    ctx.fill();
+    ctx.strokeStyle = '#f44';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // 選択中の砲兵から目標への弓形矢印
+    const artilleryUnits = supportState.selectedArtillery.map(name => testUnits.find(u => u.name === name)).filter(Boolean);
+    artilleryUnits.forEach(au => {
+      const sx = au.x, sy = au.y;
+      const ex = tCenter.x, ey = tCenter.y;
+      // 弓の頂点（中間点を上にずらす）
+      const midX = (sx + ex) / 2;
+      const midY = (sy + ey) / 2;
+      const dx = ex - sx, dy = ey - sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const bulge = dist * 0.3; // 弓の膨らみ
+      // 進行方向に対して左側に膨らませる
+      const nx = -dy / dist, ny = dx / dist;
+      const cpx = midX + nx * bulge;
+      const cpy = midY + ny * bulge;
+
+      // 弓形の線
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo(cpx, cpy, ex, ey);
+      ctx.strokeStyle = 'rgba(255,160,40,0.7)';
+      ctx.lineWidth = 15;
+      ctx.setLineDash([16, 8]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 矢じり
+      const t = 0.92;
+      const tangentX = 2*(1-t)*(cpx-sx) + 2*t*(ex-cpx);
+      const tangentY = 2*(1-t)*(cpy-sy) + 2*t*(ey-cpy);
+      const tAngle = Math.atan2(tangentY, tangentX);
+      const arrowLen = 40;
+      const arrowW = Math.PI / 5;
+      ctx.beginPath();
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - arrowLen * Math.cos(tAngle - arrowW), ey - arrowLen * Math.sin(tAngle - arrowW));
+      ctx.lineTo(ex - arrowLen * 0.5 * Math.cos(tAngle), ey - arrowLen * 0.5 * Math.sin(tAngle));
+      ctx.lineTo(ex - arrowLen * Math.cos(tAngle + arrowW), ey - arrowLen * Math.sin(tAngle + arrowW));
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,160,40,0.9)';
+      ctx.fill();
+
+      // 起点の丸マーカー
+      ctx.beginPath();
+      ctx.arc(sx, sy, 14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,160,40,0.8)';
+      ctx.fill();
+    });
+  }
+
+  // AI移動経路の描画
+  if (_aiMoveTrail && _aiMoveTrail.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(_aiMoveTrail[0].x, _aiMoveTrail[0].y);
+    for (let i = 1; i < _aiMoveTrail.length; i++) {
+      ctx.lineTo(_aiMoveTrail[i].x, _aiMoveTrail[i].y);
+    }
+    ctx.strokeStyle = 'rgba(255,80,80,0.8)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 起点マーカー
+    ctx.beginPath();
+    ctx.arc(_aiMoveTrail[0].x, _aiMoveTrail[0].y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,80,80,0.8)';
+    ctx.fill();
+  }
+
+  // ユニット描画（カスケード方式：右上ずらし、起点を枚数に応じて左下に）
+  const unitSize = hexSize * 0.9;
+  const cascadeOffX = unitSize * 0.18;  // 右方向ずらし量
+  const cascadeOffY = -unitSize * 0.18; // 上方向ずらし量
+  const stacks = getStacksByHex();
+
+  Object.keys(stacks).forEach(key => {
+    const stack = stacks[key];
+    if (stack.length === 0) return;
+    const u0 = stack[0];
+    // スタック枚数に応じて起点を左下にオフセット（ヘクス内に収まるように）
+    const n = stack.filter(u => u.status !== 'eliminated').length;
+    const baseOffX = -(n - 1) * cascadeOffX * 0.5;  // 左にずらす
+    const baseOffY = (n - 1) * Math.abs(cascadeOffY) * 0.5;  // 下にずらす
+    const hexId = toHexId(u0.col, u0.row);
+    const hasDummy = getDummyCount(hexId) > 0;
+    const isEnemy = G.playerSide !== 'both' && G.playerSide !== 'watch' && u0.side !== G.playerSide;
+
+    // 通常描画
+    const drawStack = stack.filter(u => !dragStack.includes(u));
+    const drawN = drawStack.length;
+    drawStack.forEach((u, i) => {
+      if (!u.img) return;
+      const ox = i * cascadeOffX;
+      const oy = i * cascadeOffY;
+      const dx = u.x - unitSize/2 + baseOffX + ox;
+      const dy = u.y - unitSize/2 + baseOffY + oy;
+
+      // 影（スタック時のみ、奥行き感を出す）
+      if (drawN > 1 && i > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(dx + 2, dy + 2, unitSize, unitSize);
+      }
+
+      ctx.drawImage(u.img, dx, dy, unitSize, unitSize);
+
+      // 移動隊形マーカー表示
+      if (u.marchMode) {
+        ctx.fillStyle = 'rgba(0,128,255,0.7)';
+        const mw = unitSize * 0.5, mh = 12;
+        ctx.fillRect(dx + unitSize/2 - mw/2, dy + unitSize - mh, mw, mh);
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${mh * 0.7}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('移動', dx + unitSize/2, dy + unitSize - mh/2);
+      }
+
+      // 支援射撃フェイズ: 選択中の砲兵をハイライト
+      const isSelectedArtillery = supportState.selectedArtillery.includes(u.name);
+      if (isSelectedArtillery) {
+        ctx.strokeStyle = '#ff0';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(dx - 2, dy - 2, unitSize + 4, unitSize + 4);
+        // 「選択中」ラベル
+        ctx.fillStyle = 'rgba(255,255,0,0.85)';
+        const lw = unitSize * 0.7, lh = 14;
+        ctx.fillRect(dx + unitSize/2 - lw/2, dy - lh - 2, lw, lh);
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${lh * 0.75}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('選択中', dx + unitSize/2, dy - lh/2 - 2);
+      } else {
+        ctx.strokeStyle = u.side === 'german' ? '#888' : '#48a';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(dx, dy, unitSize, unitSize);
+      }
+
+      // D/DDマーカー
+      if (u.status === 'd' || u.status === 'dd') {
+        const mw = unitSize * 0.45;
+        const mh = unitSize * 0.28;
+        const mx = dx + unitSize/2 - mw/2;
+        const my = dy + unitSize - mh;
+        ctx.fillStyle = u.status === 'dd' ? 'rgba(200,30,30,0.85)' : 'rgba(200,160,30,0.85)';
+        ctx.fillRect(mx, my, mw, mh);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mx, my, mw, mh);
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.round(mh * 0.7)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(u.status.toUpperCase(), mx + mw/2, my + mh/2);
+      }
+    });
+
+    // 自軍ダミー付き → ダミー枚数バッジ表示
+    if (!isEnemy && hasDummy) {
+      const topU = drawStack[n - 1] || u0;
+      const lastOx = (n > 0 ? (n-1) : 0) * cascadeOffX;
+      const lastOy = (n > 0 ? (n-1) : 0) * cascadeOffY;
+      const dbx = topU.x + unitSize/2 + lastOx + 4;
+      const dby = topU.y + unitSize/2 + lastOy - 4;
+      const dbr = 9;
+      ctx.beginPath();
+      ctx.arc(dbx, dby, dbr, 0, Math.PI * 2);
+      ctx.fillStyle = '#556';
+      ctx.fill();
+      ctx.strokeStyle = '#aaa';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${dbr * 1.2}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('D' + getDummyCount(hexId), dbx, dby);
+    }
+
+    // スタック数バッジ（2個以上、通常表示時のみ）
+    const stackCountForBadge = drawStack.filter(u => !STACK_EXEMPT_TYPES.includes(u.type)).length;
+    if (n >= 2) {
+      const topU = drawStack[n - 1];
+      if (!topU || topU.x == null) return;
+      const bx = topU.x + unitSize/2 + (n-1) * cascadeOffX - 2;
+      const by = topU.y - unitSize/2 + (n-1) * cascadeOffY - 2;
+      const br = 10;
+      const isOver = stackCountForBadge > STACK_LIMIT;
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fillStyle = isOver ? '#e02020' : '#c8a020';
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = isOver ? '#fff' : '#000';
+      ctx.font = `bold ${br * 1.3}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n, bx, by);
+    }
+
+    // スタック超過警告（赤い破線枠）
+    if (stackCountForBadge > STACK_LIMIT) {
+      const u0s = drawStack[0];
+      const topU = drawStack[n - 1];
+      const x0 = u0s.x - unitSize/2;
+      const y0 = topU.y - unitSize/2 + (n-1) * cascadeOffY;
+      const x1 = topU.x + unitSize/2 + (n-1) * cascadeOffX;
+      const y1 = u0s.y + unitSize/2;
+      const pad = 4;
+      ctx.strokeStyle = '#f00';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(x0 - pad, y0 - pad, x1 - x0 + pad*2, y1 - y0 + pad*2);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(200,0,0,0.85)';
+      const lw = 40, lh = 16;
+      const lx = (x0 + x1) / 2 - lw/2;
+      const ly = y1 + pad + 2;
+      ctx.fillRect(lx, ly, lw, lh);
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${lh * 0.75}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('超過!', lx + lw/2, ly + lh/2);
+    }
+  });
+
+  // 援軍配置: 入口ヘクスのハイライト
+  if (typeof reinforcementState !== 'undefined' && reinforcementState.entryHexes && reinforcementState.entryHexes.length > 0) {
+    const undeployed = testUnits.filter(u => u.reinforcement && !u.reinforcement.deployed && u.col < 0);
+    if (undeployed.length > 0) {
+      reinforcementState.entryHexes.forEach(e => {
+        const center = getHexCenter(e.col, e.row);
+        ctx.beginPath();
+        for (let a = 0; a < 6; a++) {
+          const angle = Math.PI / 3 * a;
+          const hx = center.x + hexSize * Math.cos(angle);
+          const hy = center.y + hexSize * Math.sin(angle);
+          if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(200,160,32,0.25)';
+        ctx.fill();
+        ctx.strokeStyle = '#c8a020';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // ラベル
+        ctx.fillStyle = '#c8a020';
+        ctx.font = `bold ${Math.round(hexSize * 0.25)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('入口', center.x, center.y - hexSize * 0.6);
+      });
+    }
+  }
+
+  // 射程・視認距離の反転表示（3段階: 射程内=クリア, 視認内=薄暗, 範囲外=濃暗）
+  const hasFireRange = typeof fireRangeHexes !== 'undefined' && Object.keys(fireRangeHexes).length > 0;
+  const hasFireVision = typeof fireVisionHexes !== 'undefined' && Object.keys(fireVisionHexes).length > 0;
+  if (hasFireRange || hasFireVision) {
+    for (let r = 0; r < MAP_CONFIG.rows; r++) {
+      for (let c = 0; c < MAP_CONFIG.cols; c++) {
+        const key = `${c},${r}`;
+        const inFire = hasFireRange && fireRangeHexes[key];
+        const inVision = hasFireVision && fireVisionHexes[key];
+        if (inFire) continue; // 射程内: クリア
+        const center = getHexCenter(c, r);
+        ctx.beginPath();
+        for (let a = 0; a < 6; a++) {
+          const angle = Math.PI / 3 * a;
+          const hx = center.x + hexSize * Math.cos(angle);
+          const hy = center.y + hexSize * Math.sin(angle);
+          if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        if (inVision) {
+          ctx.fillStyle = 'rgba(0,0,0,0.2)';  // 視認内だけど射程外: 薄暗
+        } else {
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';  // 視認距離外: 濃暗
+        }
+        ctx.fill();
+      }
+    }
+  }
+
+  // 移動可能ヘクスのハイライト
+  if (typeof moveState !== 'undefined' && moveState.movingUnit && Object.keys(moveState.validHexes).length > 0) {
+    Object.keys(moveState.validHexes).forEach(key => {
+      const [c, r] = key.split(',').map(Number);
+      const center = getHexCenter(c, r);
+      ctx.beginPath();
+      for (let a = 0; a < 6; a++) {
+        const angle = Math.PI / 3 * a;
+        const hx = center.x + hexSize * Math.cos(angle);
+        const hy = center.y + hexSize * Math.sin(angle);
+        if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(50,200,50,0.2)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(50,200,50,0.5)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    });
+    // 移動中ユニットのヘクスをハイライト
+    const mu = moveState.movingUnit;
+    const muCenter = getHexCenter(mu.col, mu.row);
+    ctx.beginPath();
+    for (let a = 0; a < 6; a++) {
+      const angle = Math.PI / 3 * a;
+      const hx = muCenter.x + hexSize * Math.cos(angle);
+      const hy = muCenter.y + hexSize * Math.sin(angle);
+      if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(50,255,50,0.3)';
+    ctx.fill();
+    ctx.strokeStyle = '#4f4';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+
+  // 退却先ハイライト
+  if (typeof assaultState !== 'undefined' && assaultState._validRetreats && assaultState._validRetreats.length > 0) {
+    assaultState._validRetreats.forEach(key => {
+      const [c, r] = key.split(',').map(Number);
+      const center = getHexCenter(c, r);
+      ctx.beginPath();
+      for (let a = 0; a < 6; a++) {
+        const angle = Math.PI / 3 * a;
+        const hx = center.x + hexSize * Math.cos(angle);
+        const hy = center.y + hexSize * Math.sin(angle);
+        if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(50,255,50,0.25)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(50,255,50,0.7)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    });
+  }
+
+  // LOS確認: 始点マーカー（終点選択待ち）
+  if (losCheckMode && losCheckStart && !losCheckEnd) {
+    const sc = getHexCenter(losCheckStart.col, losCheckStart.row);
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff0';
+    ctx.fill();
+  }
+  // LOS確認線の描画
+  if (losCheckMode && losCheckEnd && losCheckEnd._srcCol !== undefined) {
+    const sc = getHexCenter(losCheckEnd._srcCol, losCheckEnd._srcRow);
+    const ec = getHexCenter(losCheckEnd.col, losCheckEnd.row);
+    ctx.beginPath();
+    ctx.moveTo(sc.x, sc.y);
+    ctx.lineTo(ec.x, ec.y);
+    ctx.strokeStyle = losCheckResult ? '#4f4' : '#f44';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // 始点マーカー
+    ctx.beginPath();
+    ctx.arc(sc.x, sc.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff0';
+    ctx.fill();
+    // 終点マーカー
+    ctx.beginPath();
+    ctx.arc(ec.x, ec.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = losCheckResult ? '#4f4' : '#f44';
+    ctx.fill();
+  }
+
+  // 移動経路の線と消費移動力表示
+  if (typeof moveState !== 'undefined' && moveState.path && moveState.path.length > 1) {
+    const path = moveState.path;
+    // 経路線
+    ctx.beginPath();
+    const startCenter = getHexCenter(path[0].col, path[0].row);
+    ctx.moveTo(startCenter.x, startCenter.y);
+    for (let i = 1; i < path.length; i++) {
+      const c = getHexCenter(path[i].col, path[i].row);
+      ctx.lineTo(c.x, c.y);
+    }
+    ctx.strokeStyle = '#0af';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([]);
+    ctx.stroke();
+    // 各ヘクスに消費移動力を表示
+    let totalCost = 0;
+    for (let i = 1; i < path.length; i++) {
+      totalCost += (path[i].cost || 1);
+      const c = getHexCenter(path[i].col, path[i].row);
+      // 背景丸
+      ctx.beginPath();
+      ctx.arc(c.x, c.y - hexSize * 0.5, 12, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fill();
+      // コスト数字
+      ctx.fillStyle = '#0af';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(totalCost, c.x, c.y - hexSize * 0.5);
+    }
+    // 始点マーカー
+    ctx.beginPath();
+    ctx.arc(startCenter.x, startCenter.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#0af';
+    ctx.fill();
+  }
+  // 完了済みユニットの移動線（薄く表示）
+  if (typeof _completedMoveTrails !== 'undefined') {
+    _completedMoveTrails.forEach(trail => {
+      if (trail.length < 2) return;
+      ctx.beginPath();
+      const s = getHexCenter(trail[0].col, trail[0].row);
+      ctx.moveTo(s.x, s.y);
+      for (let i = 1; i < trail.length; i++) {
+        const c = getHexCenter(trail[i].col, trail[i].row);
+        ctx.lineTo(c.x, c.y);
+      }
+      ctx.strokeStyle = 'rgba(0,170,255,0.3)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  }
+
+  // 直接射撃: 選択中ヘクスのハイライト
+  if (PHASES[G.phase] && PHASES[G.phase].id === 'moveFire' && typeof directFireState !== 'undefined') {
+    // 選択中スタックのヘクスをハイライト
+    if (directFireState.selectedHexId) {
+      const selPos = fromHexId(directFireState.selectedHexId);
+      const selCenter = getHexCenter(selPos.col, selPos.row);
+      ctx.beginPath();
+      for (let a = 0; a < 6; a++) {
+        const angle = Math.PI / 3 * a;
+        const hx = selCenter.x + hexSize * Math.cos(angle);
+        const hy = selCenter.y + hexSize * Math.sin(angle);
+        if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(200,200,50,0.15)';
+      ctx.fill();
+      ctx.strokeStyle = '#cc0';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+    // 射撃ユニットのヘクスをハイライト
+    if (directFireState.shooters.length > 0) {
+      directFireState.shooters.forEach(u => {
+        if (u.status === 'eliminated') return;
+        const center = getHexCenter(u.col, u.row);
+        ctx.beginPath();
+        for (let a = 0; a < 6; a++) {
+          const angle = Math.PI / 3 * a;
+          const hx = center.x + hexSize * Math.cos(angle);
+          const hy = center.y + hexSize * Math.sin(angle);
+          if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(100,200,255,0.2)';
+        ctx.fill();
+        ctx.strokeStyle = '#4af';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      });
+    }
+    // 射撃矢印（太い直線）
+    if (fireArrowData && fireArrowData.from && fireArrowData.to) {
+      const fPos = fromHexId(fireArrowData.from);
+      const tPos = fromHexId(fireArrowData.to);
+      const fCenter = getHexCenter(fPos.col, fPos.row);
+      const tCenter = getHexCenter(tPos.col, tPos.row);
+      const dx = tCenter.x - fCenter.x;
+      const dy = tCenter.y - fCenter.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
+
+      // 陣営ごとの色
+      const side = fireArrowData.side || 'german';
+      const arrowColor = side === 'german' ? 'rgba(255,160,40,0.85)' : 'rgba(60,160,255,0.85)';
+      const arrowColorSolid = side === 'german' ? 'rgba(255,160,40,0.95)' : 'rgba(60,160,255,0.95)';
+
+      // 太い矢印ライン
+      ctx.beginPath();
+      ctx.moveTo(fCenter.x, fCenter.y);
+      ctx.lineTo(tCenter.x, tCenter.y);
+      ctx.strokeStyle = arrowColor;
+      ctx.lineWidth = 18;
+      ctx.stroke();
+
+      // 矢じり（大きく）
+      const arrowLen = 50;
+      const arrowW = Math.PI / 4.5;
+      ctx.beginPath();
+      ctx.moveTo(tCenter.x, tCenter.y);
+      ctx.lineTo(tCenter.x - arrowLen * Math.cos(angle - arrowW), tCenter.y - arrowLen * Math.sin(angle - arrowW));
+      ctx.lineTo(tCenter.x - arrowLen * 0.35 * Math.cos(angle), tCenter.y - arrowLen * 0.35 * Math.sin(angle));
+      ctx.lineTo(tCenter.x - arrowLen * Math.cos(angle + arrowW), tCenter.y - arrowLen * Math.sin(angle + arrowW));
+      ctx.closePath();
+      ctx.fillStyle = arrowColorSolid;
+      ctx.fill();
+
+      // 起点マーカー（大きく）
+      ctx.beginPath();
+      ctx.arc(fCenter.x, fCenter.y, 20, 0, Math.PI * 2);
+      ctx.fillStyle = arrowColor;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // ドラッグ中スタック（浮いた状態で描画）
+  if (dragUnit && dragStack.length > 0) {
+    // ドロップ先ヘクスのハイライト
+    const nearest = getNearestHex(dragMapX, dragMapY);
+    const snapCenter = getHexCenter(nearest.col, nearest.row);
+    ctx.beginPath();
+    for (let a = 0; a < 6; a++) {
+      const angle = Math.PI / 3 * a;
+      const hx = snapCenter.x + hexSize * Math.cos(angle);
+      const hy = snapCenter.y + hexSize * Math.sin(angle);
+      if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(200,200,50,0.25)';
+    ctx.fill();
+    ctx.strokeStyle = '#ff0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // スタック全体を描画
+    const dSize = unitSize;
+    dragStack.forEach((u, i) => {
+      if (!u.img) return;
+      const ox = i * cascadeOffX;
+      const oy = i * cascadeOffY;
+      const dx = dragMapX - dSize/2 + ox;
+      const dy = dragMapY - dSize/2 + oy;
+      if (i > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(dx + 2, dy + 2, dSize, dSize);
+      }
+      ctx.globalAlpha = 0.8;
+      ctx.drawImage(u.img, dx, dy, dSize, dSize);
+      ctx.globalAlpha = 1.0;
+      ctx.strokeStyle = '#ff0';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(dx, dy, dSize, dSize);
+    });
+  }
+
+  // 移動軌跡を描画
+  if (window._aiMoveTrails && window._aiMoveTrails.length > 0) {
+    window._aiMoveTrails.forEach(t => {
+      if (t.trail.length < 2) return;
+      ctx.beginPath();
+      ctx.strokeStyle = t.side === 'german' ? 'rgba(255,120,50,0.7)' : 'rgba(80,160,255,0.7)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 4]);
+      const start = getHexCenter(t.trail[0].col, t.trail[0].row);
+      ctx.moveTo(start.x, start.y);
+      for (let i = 1; i < t.trail.length; i++) {
+        const p = getHexCenter(t.trail[i].col, t.trail[i].row);
+        ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  }
+
+  ctx.restore();
+}
+
+function initMap() {
+  const area = document.getElementById('mapArea');
+  canvas.width = area.clientWidth;
+  canvas.height = area.clientHeight;
+  ctx.fillStyle = '#3a3a2a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#666';
+  ctx.font = '16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('地図読込中…', canvas.width/2, canvas.height/2);
+
+  const img = new Image();
+  img.onload = () => {
+    mapState.img = img;
+    zoomFit();
+  };
+  img.src = 'map/m' + SCENARIO.map + '.jpg';
+
+  loadUnitImages();
+
+  // ドラッグ移動 + クリック検出
+  let dragStartX = 0, dragStartY = 0, dragMoved = false;
+  // 右クリックメニュー無効化（吹き出し表示に使用）
+  area.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+  area.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - mapState.x) / mapState.zoom;
+    const my = (e.clientY - rect.top - mapState.y) / mapState.zoom;
+
+    // ユニットのヒットテスト
+    const hitU = hitTestUnit(mx, my);
+    if (hitU) {
+      // スタック解除モードなら個別、通常ならスタック単位
+      if (stackSplitMode) {
+        dragUnit = hitU;
+        dragStack = [hitU];
+      } else {
+        dragUnit = hitU;
+        const hexId = hitU.hexId || toHexId(hitU.col, hitU.row);
+        dragStack = testUnits.filter(u =>
+          (u.hexId || toHexId(u.col, u.row)) === hexId && u.status !== 'eliminated'
+        );
+      }
+      dragOffX = mx - hitU.x;
+      dragOffY = my - hitU.y;
+      dragMapX = hitU.x;
+      dragMapY = hitU.y;
+      dragMoved = false;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      canvas.style.cursor = 'move';
+      closeStackPopup();
+      return;
+    }
+
+    // マップドラッグ移動
+    mapState.dragging = true;
+    dragMoved = false;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    mapState.dragX = e.clientX - mapState.x;
+    mapState.dragY = e.clientY - mapState.y;
+    canvas.style.cursor = 'grabbing';
+  });
+  area.addEventListener('mousemove', (e) => {
+    // カーソル位置のヘクスID表示
+    const rectM = canvas.getBoundingClientRect();
+    const hmx = (e.clientX - rectM.left - mapState.x) / mapState.zoom;
+    const hmy = (e.clientY - rectM.top - mapState.y) / mapState.zoom;
+    const hoverHex = getNearestHex(hmx, hmy);
+    const hoverHexId = toHexId(hoverHex.col, hoverHex.row);
+    const terrain = getHexTerrain(hoverHexId);
+    const tNames = {p:'平地',w:'林',f:'森林',r:'荒地',t:'町',c:'市街地',lake:'湖'};
+    document.getElementById('hexCursor').textContent = `${hoverHexId} (${tNames[terrain]||terrain})`;
+
+    // ユニットドラッグ中
+    if (dragUnit) {
+      const rect = canvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left - mapState.x) / mapState.zoom;
+      const my = (e.clientY - rect.top - mapState.y) / mapState.zoom;
+      dragMapX = mx - dragOffX;
+      dragMapY = my - dragOffY;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
+      drawMap();
+      return;
+    }
+    // マップドラッグ移動
+    if (!mapState.dragging) return;
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragMoved = true;
+    mapState.x = e.clientX - mapState.dragX;
+    mapState.y = e.clientY - mapState.dragY;
+    clampMap();
+    drawMap();
+  });
+  area.addEventListener('mouseup', (e) => {
+    // ユニットドロップ
+    if (dragUnit) {
+      if (dragMoved) {
+        // 最近傍ヘクスにスナップ（スタック全体）
+        const nearest = getNearestHex(dragMapX, dragMapY);
+        const center = getHexCenter(nearest.col, nearest.row);
+        const newHexId = toHexId(nearest.col, nearest.row);
+        dragStack.forEach(u => {
+          u.col = nearest.col;
+          u.row = nearest.row;
+          u.x = center.x;
+          u.y = center.y;
+          u.hexId = newHexId;
+        });
+      }
+      dragUnit = null;
+      dragStack = [];
+      canvas.style.cursor = 'grab';
+      drawMap();
+      if (!dragMoved) onMapClick(e);
+      return;
+    }
+    mapState.dragging = false;
+    canvas.style.cursor = 'grab';
+    if (!dragMoved) onMapClick(e);
+  });
+  area.addEventListener('mouseleave', () => {
+    if (dragUnit) { dragUnit = null; drawMap(); }
+    mapState.dragging = false;
+    canvas.style.cursor = 'grab';
+  });
+
+  // ホイール → 無効化（ドラッグのみで移動）
+  area.addEventListener('wheel', (e) => {
+    e.preventDefault();
+  }, { passive: false });
+
+  // ズームスライダー
+  const zoomSlider = document.getElementById('zoomSlider');
+  const zoomLabel = document.getElementById('zoomLabel');
+  zoomSlider.addEventListener('input', () => {
+    const area = document.getElementById('mapArea');
+    const cx = area.clientWidth / 2;
+    const cy = area.clientHeight / 2;
+    const oldZoom = mapState.zoom;
+    mapState.zoom = parseFloat(zoomSlider.value) / 100;
+    mapState.x = cx - (cx - mapState.x) * (mapState.zoom / oldZoom);
+    mapState.y = cy - (cy - mapState.y) * (mapState.zoom / oldZoom);
+    zoomLabel.textContent = zoomSlider.value + '%';
+    drawMap();
+  });
+}
+
+// ===== ヘクスクリック → 吹き出し =====
+function onMapClick(e) {
+  const rect = canvas.getBoundingClientRect();
+  // クリック座標 → マップ座標に変換
+  const mx = (e.clientX - rect.left - mapState.x) / mapState.zoom;
+  const my = (e.clientY - rect.top - mapState.y) / mapState.zoom;
+
+  // 突撃フェイズ中のマップクリック
+  if (PHASES[G.phase] && PHASES[G.phase].id === 'assault') {
+    if (e.altKey || e.button === 2) {
+      // 吹き出し表示へフォールスルー
+    } else {
+      const nearest = getNearestHex(mx, my);
+      if (nearest.col >= 0 && nearest.col < MAP_CONFIG.cols && nearest.row >= 0 && nearest.row < MAP_CONFIG.rows) {
+        onAssaultMapClick(nearest.col, nearest.row);
+      }
+      return;
+    }
+  }
+
+  // 移動・射撃フェイズ中のマップクリック（援軍配置含む）
+  if (PHASES[G.phase] && PHASES[G.phase].id === 'moveFire') {
+    // 右クリックまたはAlt+クリックでスタック吹き出し表示
+    if (e.altKey || e.button === 2) {
+      // 吹き出し表示へ（下のコードにフォールスルー）
+    } else {
+      const nearest = getNearestHex(mx, my);
+      if (nearest.col >= 0 && nearest.col < MAP_CONFIG.cols && nearest.row >= 0 && nearest.row < MAP_CONFIG.rows) {
+        // 援軍配置モード
+        if (typeof reinforcementState !== 'undefined' && reinforcementState.selectedUnit) {
+          placeReinforcement(nearest.col, nearest.row);
+          return;
+        }
+        onMoveFireMapClick(nearest.col, nearest.row);
+      }
+      return;
+    }
+  }
+
+  // 支援射撃フェイズ中のマップクリック
+  if (PHASES[G.phase].id === 'supportAtk' || PHASES[G.phase].id === 'supportDef') {
+    const hitU = hitTestUnit(mx, my);
+    // 味方砲兵ユニットをクリック → 選択/解除（敵砲兵は目標として扱う）
+    const firingSide = supportState._firingSide || G.initiative;
+    if (hitU && hitU.type === 'A' && hitU.side === firingSide && hitU.status !== 'eliminated' && !hitU.firedThisTurn) {
+      toggleArtillerySelect(hitU.name);
+      return;
+    }
+    // 目標選択モード中 → ヘクス選択
+    if (supportState.targetMode) {
+      const nearest = getNearestHex(mx, my);
+      if (nearest.col >= 0 && nearest.col < MAP_CONFIG.cols && nearest.row >= 0 && nearest.row < MAP_CONFIG.rows) {
+        if (onSupportMapClick(nearest.col, nearest.row)) return;
+      }
+    }
+  }
+
+  // LOS確認モード: Command+クリックで始点→終点
+  if (losCheckMode && (e.metaKey || e.ctrlKey)) {
+    const nearest = getNearestHex(mx, my);
+    if (nearest.col >= 0 && nearest.col < MAP_CONFIG.cols && nearest.row >= 0 && nearest.row < MAP_CONFIG.rows) {
+      onLOSCheckClick(nearest.col, nearest.row);
+    }
+    return;
+  }
+
+  // 視認モード: ユニットクリックで視認範囲表示
+  if (losMode) {
+    const hitU = hitTestUnit(mx, my);
+    if (hitU) {
+      selectLOSUnit(hitU);
+      return;
+    }
+    // ユニット外クリック → 視認リセット
+    losSourceUnit = null;
+    losVisibleHexes = {};
+    const info = document.getElementById('losInfo');
+    info.textContent = '← ユニットをクリックして視認範囲を表示';
+    drawMap();
+    return;
+  }
+
+  // 通常モード: スタック吹き出し
+  let bestKey = null, bestDist = Infinity;
+  const stacks = getStacksByHex();
+  for (const key of Object.keys(stacks)) {
+    const u0 = stacks[key][0];
+    const dx = mx - u0.x;
+    const dy = my - u0.y;
+    const dist = dx * dx + dy * dy;
+    if (dist < bestDist) { bestDist = dist; bestKey = key; }
+  }
+
+  const hexSize = MAP_CONFIG.hexSize;
+  if (!bestKey || bestDist > hexSize * hexSize * 2) {
+    closeStackPopup();
+    return;
+  }
+
+  showStackPopup(stacks[bestKey], e.clientX, e.clientY);
+}
+
+function showStackPopup(stack, screenX, screenY) {
+  const popup = document.getElementById('stackPopup');
+  const content = document.getElementById('stackPopupContent');
+  const n = stack.length;
+
+  const u0 = stack[0];
+  const hexId = toHexId(u0.col, u0.row);
+
+  const stackCountReal = stack.filter(u => !STACK_EXEMPT_TYPES.includes(u.type)).length;
+  const isOver = stackCountReal > STACK_LIMIT;
+  let html = `<div class="popup-title" ${isOver ? 'style="color:#f44;border-bottom-color:#f44;"' : ''}>スタック (${n}個)${isOver ? ' ⚠ 超過!' : ''}</div>`;
+  if (isOver) {
+    html += `<div style="color:#f88;font-size:0.75em;padding:2px 0 4px;border-bottom:1px solid #444;margin-bottom:4px;">上限${STACK_LIMIT}個 — 全ユニットDD</div>`;
+  }
+  const ABILITY_LABELS = { F:'射撃', A:'突撃', M:'回復', R:'指揮範囲' };
+  stack.forEach(u => {
+    const statusLabel = u.status === 'ok' ? '正常' : u.status === 'eliminated' ? '除去' : u.status.toUpperCase();
+    const statusCls = u.status;
+    const imgSrc = u.src || '';
+    const name = u.name || u.src.split('/').pop().replace(/\.[^.]+$/, '');
+    html += `<div class="popup-unit">
+      <img src="${imgSrc}" alt="${name}">
+      <div class="pu-info">
+        <div class="pu-name">${name}</div>
+        <span class="pu-status ${statusCls}">${statusLabel}</span>`;
+    // 指揮官の能力表示（固定）
+    if (u.type === 'leader' && u.abilities && u.status !== 'eliminated') {
+      html += `<div style="margin-top:3px;">`;
+      u.abilities.forEach(ab => {
+        html += `<span style="display:inline-block;background:#c8a020;color:#000;font-weight:bold;padding:1px 5px;border-radius:2px;font-size:0.75em;margin:1px;">${ab}(${ABILITY_LABELS[ab]})</span>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  });
+  content.innerHTML = html;
+  popup.style.display = 'block';
+
+  // 位置決め（クリック位置の左側に表示）
+  const pw = popup.offsetWidth;
+  const ph = popup.offsetHeight;
+  let px = screenX - pw - 20;
+  let py = screenY - ph / 2;
+  if (px < 4) { px = screenX + 20; } // 左に収まらなければ右に
+  if (py < 4) py = 4;
+  if (py + ph > window.innerHeight - 4) py = window.innerHeight - ph - 4;
+  popup.style.left = px + 'px';
+  popup.style.top = py + 'px';
+
+  // 矢印非表示（左側表示のため）
+  const arrow = popup.querySelector('.popup-arrow');
+  arrow.style.display = 'none';
+  // 下表示時は矢印を上に
+  if (py > screenY) {
+    arrow.style.bottom = '';
+    arrow.style.top = '-8px';
+    arrow.style.borderTop = 'none';
+    arrow.style.borderBottom = '8px solid #c8a020';
+  } else {
+    arrow.style.top = '';
+    arrow.style.bottom = '-8px';
+    arrow.style.borderBottom = 'none';
+    arrow.style.borderTop = '8px solid #c8a020';
+  }
+}
+
+function closeStackPopup() {
+  document.getElementById('stackPopup').style.display = 'none';
+}
+
+// 吹き出し外クリックで閉じる
+document.addEventListener('mousedown', (e) => {
+  const popup = document.getElementById('stackPopup');
+  if (popup.style.display === 'block' && !popup.contains(e.target)) {
+    closeStackPopup();
+  }
+});
+
+function clampMap() {
+  if (!mapState.img) return;
+  const area = document.getElementById('mapArea');
+  const pad = MAP_CONFIG.hexSize * 4; // 余白分
+  const w = (mapState.img.width + pad * 2) * mapState.zoom;
+  const h = (mapState.img.height + pad * 2) * mapState.zoom;
+  const padZ = pad * mapState.zoom;
+  if (w > area.clientWidth) {
+    mapState.x = Math.min(padZ, Math.max(area.clientWidth - w + padZ, mapState.x));
+  } else {
+    mapState.x = (area.clientWidth - w) / 2 + padZ;
+  }
+  if (h > area.clientHeight) {
+    mapState.y = Math.min(padZ, Math.max(area.clientHeight - h + padZ, mapState.y));
+  } else {
+    mapState.y = (area.clientHeight - h) / 2 + padZ;
+  }
+}
+
+function updateZoomSlider() {
+  const slider = document.getElementById('zoomSlider');
+  const label = document.getElementById('zoomLabel');
+  const pct = Math.round(mapState.zoom * 100);
+  slider.value = Math.max(10, Math.min(300, pct));
+  label.textContent = pct + '%';
+}
+
+function zoomFit() {
+  if (!mapState.img) return;
+  const area = document.getElementById('mapArea');
+  // 高さにフィット
+  mapState.zoom = area.clientHeight / mapState.img.height;
+  mapState.x = 0;
+  mapState.y = 0;
+  canvas.dataset.loaded = '1';
+  updateZoomSlider();
+  drawMap();
+}
+
+function zoomStep(delta) {
+  const area = document.getElementById('mapArea');
+  const cx = area.clientWidth / 2;
+  const cy = area.clientHeight / 2;
+  const oldZoom = mapState.zoom;
+  mapState.zoom = Math.max(0.1, Math.min(3, mapState.zoom + delta / 100));
+  mapState.x = cx - (cx - mapState.x) * (mapState.zoom / oldZoom);
+  mapState.y = cy - (cy - mapState.y) * (mapState.zoom / oldZoom);
+  updateZoomSlider();
+  drawMap();
+}
+
+// ===== ブラウザバック禁止 =====
+history.pushState(null, '', location.href);
+window.addEventListener('popstate', () => {
+  history.pushState(null, '', location.href);
+});
+
+// (メインscript: 共有コード・マップ・ユニット生成はここまで)
+</script>
+
+<!-- フェイズ別JS読み込み -->
+<script src="phase_initiative.js"></script>
+<script src="phase_recovery.js"></script>
+<script src="phase_support.js"></script>
+<script src="phase_movefire.js"></script>
+<script src="phase_air.js"></script>
+<script src="ai_placement.js"></script>
+<script>
+// シナリオに応じてAI定義を動的読み込み
+(function() {
+  var sid = parseInt(new URLSearchParams(window.location.search).get('scenario')) || 2;
+  var aiFile = sid === 3 ? 'ai_scenario3.js' : 'ai_scenario2.js';
+  document.write('<script src="' + aiFile + '"><\/script>');
+})();
+</script>
+<script src="ai_pretrained_pg.js"></script>
+<script>
+// シナリオ3以降はBlackboard+Experts AIを使用、S2は旧AI
+(function() {
+  var sid = parseInt(new URLSearchParams(window.location.search).get('scenario')) || 2;
+  if (sid >= 3) {
+    document.write('<script src="ai_blackboard.js"><\/script>');
+  } else {
+    document.write('<script src="ai_german_s2.js"><\/script>');
+    document.write('<script src="ai_allied_s2.js"><\/script>');
+  }
+})();
+</script>
+
+<script>
+// ===== タイトル画面 =====
+let _titleSelectedMode = null;
+let _titleSelectedSide = null;
+
+function selectTitle() {
+  // シナリオ選択（現在はシナリオ2のみ）
+}
+
+function showTitle() {
+  const tc = document.getElementById('titleContent');
+  tc.innerHTML = `
+    <div style="background:#222;border:2px solid #444;border-radius:8px;padding:16px;margin:12px 0;cursor:pointer;" onclick="selectTitle()">
+      <div style="color:#c8a020;font-size:0.85em;font-weight:bold;">SCENARIO ${SCENARIO.id}</div>
+      <div style="font-size:1.3em;font-weight:bold;color:#eee;margin:2px 0;">${SCENARIO.name}</div>
+      <div style="color:#aaa;font-size:0.85em;">${SCENARIO.date || ''}</div>
+      <div style="color:#888;font-size:0.8em;margin-top:6px;">${SCENARIO.description || ''}</div>
+    </div>
+    <h4 style="color:#aaa;margin:16px 0 8px;">対戦モード</h4>
+    <div style="display:flex;gap:12px;justify-content:center;" id="titleModeSelect">
+      <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('pvai')">
+        <div style="color:#c8a020;font-weight:bold;">人間 vs AI</div>
+      </div>
+      <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('pvp')">
+        <div style="color:#c8a020;font-weight:bold;">人間 vs 人間</div>
+      </div>
+      <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('aivai')">
+        <div style="color:#c8a020;font-weight:bold;">AI vs AI</div>
+      </div>
+    </div>
+    <div id="titleSideSelect" style="margin:16px 0;"></div>
+    <div id="titleVictory" style="margin:12px 0;padding:10px;background:#1a2a1a;border:1px solid #464;border-radius:4px;">
+      <div style="color:#aaa;font-size:0.85em;font-weight:bold;">勝利条件</div>
+      ${SCENARIO.victory.german ? '<div style="color:#8a8;font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.german + '</div>' : ''}
+      ${SCENARIO.victory.allied ? '<div style="color:#8a8;font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.allied + '</div>' : ''}
+      ${SCENARIO.victory.draw ? '<div style="color:#8a8;font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.draw + '</div>' : ''}
+    </div>
+    ${SCENARIO.specialRules && SCENARIO.specialRules.length > 0 ? '<div style="margin:12px 0;padding:10px;background:#1a1a2a;border:1px solid #446;border-radius:4px;"><div style="color:#aaa;font-size:0.85em;font-weight:bold;">特別ルール</div>' + SCENARIO.specialRules.map(r => '<div style="color:#88a;font-size:0.8em;margin-left:16px;">・' + r + '</div>').join('') + '</div>' : ''}
+    <div style="text-align:center;margin:20px 0;">
+      <button id="titleStartBtn" style="background:#c8a020;color:#000;border:none;padding:14px 48px;border-radius:6px;font-size:1.2em;font-weight:bold;cursor:pointer;letter-spacing:0.1em;" disabled onclick="startGameFromTitle()">ゲーム開始</button>
+    </div>
+  `;
+}
+
+function selectTitleMode(mode) {
+  _titleSelectedMode = mode;
+  _titleSelectedSide = null;
+  // ボタンハイライト
+  document.querySelectorAll('#titleModeSelect .top-btn').forEach(b => {
+    b.style.background = '#445';
+    b.style.borderColor = '#667';
+  });
+  event.currentTarget.style.background = '#665522';
+  event.currentTarget.style.borderColor = '#c8a020';
+
+  const sideEl = document.getElementById('titleSideSelect');
+  if (mode === 'pvai') {
+    sideEl.innerHTML = `
+      <h4 style="color:#aaa;margin-bottom:8px;">操作する陣営</h4>
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleSide('german')">
+          <div style="color:#fa8;font-weight:bold;">ドイツ軍</div>
+        </div>
+        <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleSide('allied')">
+          <div style="color:#8cf;font-weight:bold;">連合軍</div>
+        </div>
+      </div>`;
+    document.getElementById('titleStartBtn').disabled = true;
+  } else {
+    sideEl.innerHTML = '';
+    _titleSelectedSide = mode === 'pvp' ? 'both' : 'watch';
+    document.getElementById('titleStartBtn').disabled = false;
+  }
+}
+
+function selectTitleSide(side) {
+  _titleSelectedSide = side;
+  document.querySelectorAll('#titleSideSelect .top-btn').forEach(b => {
+    b.style.background = '#445';
+    b.style.borderColor = '#667';
+  });
+  event.currentTarget.style.background = '#665522';
+  event.currentTarget.style.borderColor = '#c8a020';
+  document.getElementById('titleStartBtn').disabled = false;
+}
+
+// AI配置完了オーバーレイ
+let _aiPlacementCallback = null;
+function showAIPlacementOverlay(text, callback) {
+  document.getElementById('aiPlacementInfo').textContent = text;
+  const overlay = document.getElementById('aiPlacementOverlay');
+  overlay.style.display = 'flex';
+  _aiPlacementCallback = callback;
+}
+function closeAIPlacementOverlay() {
+  document.getElementById('aiPlacementOverlay').style.display = 'none';
+  if (_aiPlacementCallback) { _aiPlacementCallback(); _aiPlacementCallback = null; }
+}
+
+function startGameFromTitle() {
+  if (!_titleSelectedMode || !_titleSelectedSide) return;
+  G.playerSide = _titleSelectedSide;
+  G.gameMode = _titleSelectedMode;
+  document.getElementById('titleOverlay').style.display = 'none';
+  initGame();
+}
+
+// ===== ゲーム初期化 =====
+function initGame() {
+  initOffBoardArtillery();
+  initAirSupport(SCENARIO);
+
+  // 連合軍AI配置（人間vsAIでドイツ操作、またはAI同士）
+  // シナリオ3は初期配置済みなのでスキップ
+  let aiPlacementText = '';
+  if (((G.gameMode === 'pvai' && G.playerSide === 'german') || G.gameMode === 'aivai') && SCENARIO.id !== 3) {
+    addLog('init', '連合軍AI: 配置決定中...');
+    const chosen = runAIPlacement();
+    applyAIPlacement(chosen);
+    aiPlacementText = '連合軍AI配置完了';
+  }
+
+  // ドイツAI（人間vsAIで連合軍操作、またはAI同士）
+  if ((G.gameMode === 'pvai' && G.playerSide === 'allied') || G.gameMode === 'aivai') {
+    if (AI_RUN_SIMULATION.germanRoute) {
+      addLog('init', 'ドイツ軍AI: ルート計算中...');
+      runGermanAI();
+    } else {
+      addLog('init', 'ドイツ軍AI: デフォルトルート使用');
+      window._aiGermanRoute = { targetRow: 5, routeKey: 'r5_default' };
+    }
+  }
+
+  assignAmbushTargets();  // 全スタックの行き先を先に決定
+  // 援軍は移動フェイズ開始時に配置（ここでは配置しない）
+  addLog('turn', `===== ターン ${G.turn} 開始 =====`);
+  addLog('init', `シナリオ${SCENARIO.id}: ${SCENARIO.name} (${SCENARIO.date})`);
+  updatePhaseBar();
+  initMap();
+
+  // マップ読み込み完了後の処理
+  const afterMapLoaded = () => {
+    drawMap();
+    if (aiPlacementText) {
+      showAIPlacementOverlay(aiPlacementText, () => {
+        startGamePhases();
+      });
+    } else {
+      startGamePhases();
+    }
+  };
+
+  const waitMap = setInterval(() => {
+    if (canvas.dataset.loaded) {
+      clearInterval(waitMap);
+      afterMapLoaded();
+    }
+  }, 100);
+}
+
+function startGamePhases() {
+  if (G.gameMode === 'aivai') {
+    addLog('init', 'AI同士の対戦を開始します...');
+    renderPhase();
+    setTimeout(() => runAIvAILoop(), 2000);
+  } else {
+    renderPhase();
+  }
+}
+
+window.onload = function() {
+  showTitle();
+  // マップを裏で先読み
+  const preImg = new Image();
+  preImg.src = 'map/m' + SCENARIO.map + '.jpg';
+};
+window.onresize = () => {
+  if (canvas.dataset.loaded) drawMap();
+};
+</script>
+</body>
+</html>
