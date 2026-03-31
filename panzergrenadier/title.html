@@ -206,18 +206,16 @@ function init() {
     card.onclick = () => { if (sc.available) selectScenario(sc); };
 
     card.innerHTML = `
-      <div class="sc-thumb">
-        ${sc.map > 0 ? `<img src="map/m${sc.map}.jpg" alt="Map ${sc.map}">` : '<div class="no-img">準備中</div>'}
-      </div>
-      <div class="sc-info">
-        <div class="sc-num">SCENARIO ${sc.id}</div>
-        <div class="sc-name">${sc.name}</div>
-        <div class="sc-date">${sc.date || ''}</div>
-        <div class="sc-desc">${sc.desc}</div>
-        <div class="sc-details">
-          ${sc.turns ? `<span>ターン: ${sc.turns}</span>` : ''}
-          ${sc.map ? `<span>マップ: ${sc.map}</span>` : ''}
-          ${sc.sides.german ? `<span>${sc.sides.german.name} vs ${sc.sides.allied.name}</span>` : ''}
+      ${sc.map > 0 ? `<img src="map/m${sc.map}.jpg" alt="Map ${sc.map}" style="display:block;width:50%;border-radius:4px;">` : ''}
+      <div>
+        <div style="color:#c8a020;font-size:0.85em;font-weight:bold;">SCENARIO ${sc.id}</div>
+        <div style="font-size:1.3em;font-weight:bold;color:#eee;margin:2px 0;">${sc.name}</div>
+        <div style="color:#aaa;font-size:0.85em;">${sc.date || ''}</div>
+        <div style="color:#888;font-size:0.8em;margin-top:6px;line-height:1.4;">${sc.desc}</div>
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:0.75em;color:#aaa;">
+          ${sc.turns ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">ターン: ${sc.turns}</span>` : ''}
+          ${sc.map ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">マップ: ${sc.map}</span>` : ''}
+          ${sc.sides.german ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">${sc.sides.german.name} vs ${sc.sides.allied.name}</span>` : ''}
         </div>
       </div>
     `;
