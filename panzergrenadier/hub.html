@@ -1482,6 +1482,7 @@ function renderPhase() {
     const recoverUnits = testUnits.filter(u =>
       (u.status === 'd' || u.status === 'dd') && u.type !== 'fortification'
     );
+    const _recoveryOverlayRows = [];
     recoverUnits.forEach(u => {
       const check = canAttemptRecovery(u);
       if (!check.can) {
@@ -1491,9 +1492,24 @@ function renderPhase() {
       const result = resolveRecovery(u);
       recoveryResults[u.id] = result;
       addLog('recovery', `${u.name} 回復判定: ${result.effect} (ダイス${result.roll}, ML${result.effectiveMorale})`);
+      const rc = result.critical ? 'hit-elim' : result.success ? 'hit-d' : 'hit-none';
+      const sideLabel = u.side === 'german' ? '[独]' : '[連]';
+      _recoveryOverlayRows.push({
+        label: `${sideLabel} ${u.name}`,
+        roll: result.roll,
+        detail: `M${result.effectiveMorale} ${u.status === 'ok' ? '' : u.status.toUpperCase()}`,
+        resultText: result.effect,
+        resultClass: rc,
+      });
     });
     drawMap();
-    renderRecoveryPhase(); // 結果表示
+    if (_recoveryOverlayRows.length > 0) {
+      showDiceOverlay('回復チェック', '両軍自動判定', _recoveryOverlayRows, function() {
+        renderRecoveryPhase();
+      });
+    } else {
+      renderRecoveryPhase();
+    }
     return;
   }
   if (phase.id === 'supportAtk') {
@@ -2659,19 +2675,26 @@ async function aiAutoDefMove() {
             if (!defEnemyStacks[eHex]) defEnemyStacks[eHex] = [];
             defEnemyStacks[eHex].push(e);
           });
-          // 各敵スタックが1回ストップ射撃（火力合算）→ 射撃側ダミー除去
+          // 各敵スタックが1回ストップ射撃（火力合算）→ サプライズ判定→ダミー除去
           for (const [eHex, eStack] of Object.entries(defEnemyStacks)) {
             const aliveE = eStack.filter(e => e.status === 'ok');
             if (aliveE.length === 0) continue;
+            // サプライズ判定（ダミー除去前に行う）
+            const sfSurprise = isSurpriseAttack(eHex, aliveE[0].side);
+            const sfShotCount = sfSurprise ? 2 : 1;
             onUnitAction(aliveE[0], aliveE);
             const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
             let sfFP = 0;
             aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
             if (sfFP <= 0) continue;
-            const sfTarget = alive.find(u => u.status !== 'eliminated') || alive[0];
-            const sfResult = executeDirectFire(aliveE, sfTarget);
-            const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
-            addLog('stop', `ストップ射撃: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
+            for (let sfShot = 0; sfShot < sfShotCount; sfShot++) {
+              const sfTarget = alive.find(u => u.status !== 'eliminated' && u.type !== 'leader') || alive.find(u => u.status !== 'eliminated') || alive[0];
+              if (!sfTarget || sfTarget.status === 'eliminated') break;
+              const sfResult = executeDirectFire(aliveE, sfTarget);
+              const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
+              const sfLabel = sfSurprise ? `サプライズ${sfShot + 1}回目` : 'ストップ射撃';
+              addLog('stop', `${sfLabel}: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
+            }
           }
           // 反撃（AI自動: 火力合算で1回）
           const aliveAfter = alive.filter(u => u.status !== 'eliminated');
@@ -2877,15 +2900,22 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
         for (const [eHex, eStack] of Object.entries(enemyStacks)) {
           const aliveE = eStack.filter(e => e.status === 'ok');
           if (aliveE.length === 0) continue;
+          // サプライズ判定（ダミー除去前に行う）
+          const sfSurprise = isSurpriseAttack(eHex, aliveE[0].side);
+          const sfShotCount = sfSurprise ? 2 : 1;
           onUnitAction(aliveE[0], aliveE); // ストップ射撃 → 射撃側ダミー除去
           const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
           let sfFP = 0;
           aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
           if (sfFP <= 0) continue;
-          const sfTarget = alive.find(u => u.status !== 'eliminated') || alive[0];
-          executeDirectFire(aliveE, sfTarget);
-          const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
-          addLog('stop', `ストップ射撃: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
+          for (let sfShot = 0; sfShot < sfShotCount; sfShot++) {
+            const sfTarget = alive.find(u => u.status !== 'eliminated' && u.type !== 'leader') || alive.find(u => u.status !== 'eliminated') || alive[0];
+            if (!sfTarget || sfTarget.status === 'eliminated') break;
+            executeDirectFire(aliveE, sfTarget);
+            const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
+            const sfLabel = sfSurprise ? `サプライズ${sfShot + 1}回目` : 'ストップ射撃';
+            addLog('stop', `${sfLabel}: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
+          }
         }
         // 反撃
         const aliveAfter = alive.filter(u => u.status !== 'eliminated');
@@ -3590,6 +3620,7 @@ function buildUnitsFromScenario(scenario) {
       const choice = pool[rank][Math.floor(Math.random() * pool[rank].length)];
       lu.abilities = choice.abilities;
       lu.srcBack = 'images/' + choice.back;
+      lu.src = lu.srcBack; // 裏面（能力面）を表示用画像にする
       addLog('init', `${lu.name}: 能力 [${choice.abilities.join(',')}] (${rank}ランク)`);
     });
   }
@@ -3672,6 +3703,8 @@ function deployReinforcements(scenario, turn) {
         u.moveComplete = false;  // 配置ターンに移動可能
         // 指揮官ならランダム裏面割り当て
         assignLeaderBack(scenario, u);
+        // 援軍ユニットはid未設定になりやすいので必ず一意idを付与
+        if (!u.id) u.id = `${u.name || u.unitName || 'unit'}_${turn}_${testUnits.length}`;
         testUnits.push(u);
       });
     }
@@ -3690,6 +3723,7 @@ function assignLeaderBack(scenario, unit) {
   const choice = pool[rank][Math.floor(Math.random() * pool[rank].length)];
   unit.abilities = choice.abilities;
   unit.srcBack = 'images/' + choice.back;
+  unit.src = unit.srcBack; // 裏面（能力面）を表示用画像にする
   addLog('init', `${unit.name}: 能力 [${choice.abilities.join(',')}] (${rank}ランク)`);
 }
 
@@ -3698,6 +3732,7 @@ function assignLeaderBack(scenario, unit) {
 function deployDiceReinforcements(scenario, turn, initiative) {
   if (!scenario.diceReinforcements) return;
   const sideNames = { german: 'ドイツ軍', allied: '連合軍' };
+  const _reinforceOverlayRows = [];
 
   ['allied', 'german'].forEach(side => {
     const drt = scenario.diceReinforcements[side];
@@ -3709,11 +3744,25 @@ function deployDiceReinforcements(scenario, turn, initiative) {
 
     const entry = drt.table.find(e => effectiveRoll >= e.min && effectiveRoll <= e.max);
     if (!entry) {
-      addLog('turn', `${sideNames[side]} 援軍ダイス: ${roll}${bonus ? '+' + bonus : ''} = ${effectiveRoll} → 範囲外`);
+      addLog('turn', `${sideNames[side]} 援軍ダイス: ${roll}${bonus ? '+' + bonus : ''} = ${effectiveRoll} → なし`);
+      _reinforceOverlayRows.push({
+        label: sideNames[side],
+        roll: roll,
+        detail: bonus ? `+${bonus}=${effectiveRoll}` : '',
+        resultText: 'なし',
+        resultClass: 'hit-none',
+      });
       return;
     }
 
     addLog('turn', `${sideNames[side]} 援軍ダイス: ${roll}${bonus ? '+' + bonus : ''} = ${effectiveRoll} → ${entry.label}`);
+    _reinforceOverlayRows.push({
+      label: sideNames[side],
+      roll: roll,
+      detail: bonus ? `+${bonus}=${effectiveRoll}` : '',
+      resultText: entry.label,
+      resultClass: 'hit-d',
+    });
 
     // 航空支援の場合: 個別にd10で火力を決定し盤外砲兵として登録
     if (entry.airSupport) {
@@ -3784,12 +3833,19 @@ function deployDiceReinforcements(scenario, turn, initiative) {
         u.moveComplete = false;  // 配置ターンに移動可能
         // 指揮官ならランダム裏面割り当て
         assignLeaderBack(scenario, u);
+        // 援軍ユニットはid未設定になりやすいので必ず一意idを付与
+        if (!u.id) u.id = `${u.name || u.unitName || 'unit'}_${turn}_${testUnits.length}`;
         testUnits.push(u);
       });
     }
   });
 
   loadUnitImages();
+
+  // 増援ダイス結果をオーバーレイ表示
+  if (_reinforceOverlayRows.length > 0) {
+    showDiceOverlay('増援ダイス', `ターン${turn}`, _reinforceOverlayRows);
+  }
 }
 
 // ユニットが去ったヘクスのダミーを掃除（味方実ユニットがいなければ除去）
@@ -4167,6 +4223,7 @@ function drawMap() {
       ctx.textBaseline = 'middle';
       ctx.fillText('超過!', lx + lw/2, ly + lh/2);
     }
+
   });
 
   // 援軍配置: 入口ヘクスのハイライト
@@ -4689,7 +4746,7 @@ function onMapClick(e) {
     } else {
       const nearest = getNearestHex(mx, my);
       if (nearest.col >= 0 && nearest.col < MAP_CONFIG.cols && nearest.row >= 0 && nearest.row < MAP_CONFIG.rows) {
-        onAssaultMapClick(nearest.col, nearest.row);
+        onAssaultMapClick(nearest.col, nearest.row, e.metaKey || e.ctrlKey);
       }
       return;
     }
@@ -4708,7 +4765,7 @@ function onMapClick(e) {
           placeReinforcement(nearest.col, nearest.row);
           return;
         }
-        onMoveFireMapClick(nearest.col, nearest.row);
+        onMoveFireMapClick(nearest.col, nearest.row, e.metaKey || e.ctrlKey);
       }
       return;
     }
@@ -4720,7 +4777,17 @@ function onMapClick(e) {
     // 味方砲兵ユニットをクリック → 選択/解除（敵砲兵は目標として扱う）
     const firingSide = supportState._firingSide || G.initiative;
     if (hitU && hitU.type === 'A' && hitU.side === firingSide && hitU.status !== 'eliminated' && !hitU.firedThisTurn) {
-      toggleArtillerySelect(hitU.name);
+      // 同ヘクスの全砲兵を選択
+      const hitHexId = hitU.hexId || toHexId(hitU.col, hitU.row);
+      const hexArtillery = testUnits.filter(u =>
+        u.type === 'A' && u.side === firingSide && u.status !== 'eliminated' && !u.firedThisTurn &&
+        (u.hexId || toHexId(u.col, u.row)) === hitHexId
+      );
+      hexArtillery.forEach(u => {
+        if (!supportState.selectedArtillery.includes(u.name)) {
+          toggleArtillerySelect(u.name);
+        }
+      });
       return;
     }
     // 目標選択モード中 → ヘクス選択
@@ -5115,7 +5182,16 @@ function startGamePhases() {
 }
 
 window.onload = function() {
-  showTitle();
+  // URLパラメータにmodeがあればタイトルをスキップして直接開始
+  const _urlMode = _urlParams.get('mode');
+  if (_urlMode) {
+    G.gameMode = _urlMode;
+    G.playerSide = _playerSide;
+    document.getElementById('titleOverlay').style.display = 'none';
+    initGame();
+  } else {
+    showTitle();
+  }
   // マップを裏で先読み
   const preImg = new Image();
   preImg.src = 'map/m' + SCENARIO.map + '.jpg';

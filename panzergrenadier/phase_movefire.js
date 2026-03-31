@@ -246,6 +246,7 @@ function canPreemptiveFire(unit) {
 function canTargetUnit(shooter, target) {
   if (target.side === shooter.side) return { can: false, reason: '味方' };
   if (target.status === 'eliminated') return { can: false, reason: '壊滅済み' };
+  if (target.type === 'leader') return { can: false, reason: '指揮官は攻撃対象外' };
 
   // 視認チェック
   const sPos = fromHexId(shooter.hexId || toHexId(shooter.col, shooter.row));
@@ -289,24 +290,46 @@ function canCoopDirectFire(shooter, mainShooter) {
     if (canCommandUnit(leader, mainShooter)) return true;
   }
 
+  // R能力指揮官で繋がっている→可
+  if (areLinkedByRLeader(sHex, mHex, shooter.side)) return true;
+
+  return false;
+}
+
+// R能力指揮官のヘクスを中心に参加可能ヘクス一覧を返す
+function getRLeaderLinkedHexes(hexId, side) {
+  const result = [hexId];
+  const leader = getLeaderInHex(hexId, side);
+  if (leader && leader.abilities && leader.abilities.includes('R')) {
+    const pos = fromHexId(hexId);
+    const neighbors = getHexNeighbors(pos.col, pos.row);
+    for (const n of neighbors) {
+      if (n.col < 0 || n.col >= MAP_CONFIG.cols || n.row < 0 || n.row >= MAP_CONFIG.rows) continue;
+      result.push(toHexId(n.col, n.row));
+    }
+  }
+  return result;
+}
+
+// 指定ヘクスがR指揮官経由で繋がっているか（shooterとmainShooterが同じR指揮官ネットワーク内か）
+function areLinkedByRLeader(hex1, hex2, side) {
+  if (hex1 === hex2) return true;
+  // hex1のR指揮官チェック
+  const linked1 = getRLeaderLinkedHexes(hex1, side);
+  if (linked1.includes(hex2)) return true;
+  // hex2のR指揮官チェック
+  const linked2 = getRLeaderLinkedHexes(hex2, side);
+  if (linked2.includes(hex1)) return true;
   return false;
 }
 
 // サプライズ・アタック判定 (11-7)
 function isSurpriseAttack(shooterHexId, side) {
-  // ヘクス内の全ユニットがダミー下か
-  // dummyMapとtestUnitsの両方をチェック
-  const dummyCount = getDummyCount(shooterHexId);
-  const dMapCount = (dummyMap[shooterHexId] && dummyMap[shooterHexId].side === side) ? dummyMap[shooterHexId].count : 0;
-  const totalDummy = Math.max(dummyCount, dMapCount);
-  if (totalDummy <= 0) return false;
-
-  const hexUnits = testUnits.filter(u =>
-    (u.hexId || toHexId(u.col, u.row)) === shooterHexId &&
-    u.side === side && u.status !== 'eliminated' && u.type !== 'dummy'
-  );
-  // ダミー数 >= ユニット数（全員隠れてる）
-  return totalDummy >= hexUnits.length;
+  // 射撃側のダミーが1枚でもあればサプライズ成立
+  const dummyCount = testUnits.filter(u =>
+    u.type === 'dummy' && u.hexId === shooterHexId && u.side === side && u.status !== 'eliminated'
+  ).length;
+  return dummyCount > 0;
 }
 
 // ===== 陣地チェック =====
@@ -441,28 +464,41 @@ function showFireFlow(type, shooters, target, callback) {
 function fireFlowExecute() {
   if (!_fireFlowState) return;
   const { type, shooters, target, preview, callback } = _fireFlowState;
+  const typeLabel = {fire:'先制射撃', stop:'ストップ射撃', counter:'反撃', surprise:'サプライズ'}[type] || '射撃';
+  const shooterNames = shooters.length > 3
+    ? shooters[0].name + '他' + (shooters.length - 1)
+    : shooters.map(u => u.name).join('+');
 
-  // ダイス演出
-  const c = document.getElementById('phaseContent');
-  let diceVal = 0;
-  let frame = 0;
-  const maxFrames = 15;
-  const interval = setInterval(() => {
-    diceVal = Math.floor(Math.random() * 10);
-    c.innerHTML = `<div style="text-align:center;padding:20px;">
-      <div style="font-size:3em;font-weight:bold;color:#ff0;text-shadow:0 0 10px #ff0;">${diceVal}</div>
-      <div style="color:#aaa;font-size:0.9em;">ダイスロール中...</div>
-    </div>`;
-    frame++;
-    if (frame >= maxFrames) {
-      clearInterval(interval);
-      // 実際の射撃実行
-      const result = executeDirectFire(shooters, target);
-      _fireFlowState = null;
-      // 結果表示
-      fireFlowShowResult(type, shooters, target, result, callback);
-    }
-  }, 80);
+  // 実際の射撃実行
+  const result = executeDirectFire(shooters, target);
+  _fireFlowState = null;
+
+  const dmgText = result.newStatus === 'eliminated' ? '壊滅' :
+                  result.damage === 'dd' ? 'DD' :
+                  result.damage === 'd' ? 'D' : '効果なし';
+  const rc = result.newStatus === 'eliminated' ? 'hit-elim' : result.damage === 'dd' ? 'hit-dd' : result.damage === 'd' ? 'hit-d' : 'hit-none';
+
+  const overlayRows = [{
+    label: target.name,
+    roll: result.roll,
+    detail: `FP${result.totalFP} 防御${target.def||0}`,
+    resultText: dmgText,
+    resultClass: rc,
+    detailAfter: `${result.prevStatus.toUpperCase()} → ${result.newStatus.toUpperCase()} ダイス${result.roll}${result.totalMod ? ' 修正'+result.modifiedRoll : ''}`
+  }];
+  // 指揮官負傷チェック結果（ダイス0で負傷）
+  if (result.leaderCheck) {
+    overlayRows.push({
+      label: result.leaderCheck.leader.name,
+      roll: result.leaderCheck.roll,
+      detail: '指揮官負傷チェック (0で負傷)',
+      resultText: result.leaderCheck.wounded ? '負傷！除去' : '無事',
+      resultClass: result.leaderCheck.wounded ? 'hit-elim' : 'hit-none',
+    });
+  }
+  showDiceOverlay(typeLabel, `${shooterNames} → ${target.name}`, overlayRows, function() {
+    fireFlowShowResult(type, shooters, target, result, callback);
+  });
 }
 
 function fireFlowShowResult(type, shooters, target, result, callback) {
@@ -699,8 +735,10 @@ function executeDirectFire(shooters, target) {
   if (ammoDeplete) addLog('fire', `弾薬不足発生！`);
 
   // 指揮官負傷チェック
+  result.leaderCheck = null;
   if (damage !== 'none') {
-    checkLeaderCasualty(targetHexId, target.side);
+    const lc = checkLeaderCasualty(targetHexId, target.side);
+    if (lc) result.leaderCheck = lc;
     checkLeaderOnStackEliminated(targetHexId, target.side);
   }
 
@@ -735,14 +773,18 @@ function updateFireRange() {
   const sCol = src.col, sRow = src.row;
   // 視認距離範囲を計算（キーは "col,row" 形式）
   fireVisionHexes = calculateVisionRange(sCol, sRow, G.visionRange);
-  // 射程範囲を計算
-  const minRange = Math.min(...shooters.map(u => u.range || 0));
-  if (minRange <= 0) return;
+  // 射程範囲を計算（射程と視認距離の小さい方）
+  const effectiveRange = Math.min(
+    Math.min(...shooters.map(u => u.range || 0)),
+    G.visionRange || 12
+  );
+  if (effectiveRange <= 0) return;
   for (let r = 0; r < MAP_CONFIG.rows; r++) {
     for (let c = 0; c < MAP_CONFIG.cols; c++) {
+      const key = `${c},${r}`;
       const dist = hexDistance(sCol, sRow, c, r);
-      if (dist >= 1 && dist <= minRange && hasLOS(sCol, sRow, c, r)) {
-        fireRangeHexes[`${c},${r}`] = true;
+      if (dist >= 1 && dist <= effectiveRange && fireVisionHexes[key] && hasLOS(sCol, sRow, c, r)) {
+        fireRangeHexes[key] = true;
       }
     }
   }
@@ -1035,37 +1077,23 @@ function executeCheckedFortFire() {
     return;
   }
 
-  // ダイス演出→結果
-  const c = document.getElementById('phaseContent');
-  let frame = 0;
-  const maxFrames = 15;
-  const interval = setInterval(() => {
-    const diceVal = Math.floor(Math.random() * 10);
-    c.innerHTML = `<div style="text-align:center;padding:20px;">
-      <div style="font-size:3em;font-weight:bold;color:#fa4;text-shadow:0 0 10px #fa4;">${diceVal}</div>
-      <div style="color:#aaa;font-size:0.9em;">陣地攻撃ダイスロール中...</div>
-    </div>`;
-    frame++;
-    if (frame >= maxFrames) {
-      clearInterval(interval);
-      const result = fireFortification(shooters, fort);
-      // 結果表示
-      const isDowngrade = result.damage === 'eliminated' && result.newStatus !== 'eliminated';
-      const dmgText = result.newStatus === 'eliminated' ? '除去' : isDowngrade ? 'レベルダウン' : result.damage === 'dd' ? 'DD' : result.damage === 'd' ? 'D' : '効果なし';
-      const dmgColor = result.newStatus === 'eliminated' ? '#f00' : isDowngrade ? '#f80' : result.damage === 'dd' ? '#f80' : result.damage === 'd' ? '#ff0' : '#888';
-      const statusLine = isDowngrade ? `${result.prevName} → ${result.newName}` : `${result.prevName}: ${result.prevStatus.toUpperCase()} → ${result.newStatus.toUpperCase()}`;
-      c.innerHTML = `<div style="padding:10px;background:#333;border:2px solid #666;border-radius:6px;text-align:center;">
-        <div style="color:#aaa;font-size:0.85em;">陣地攻撃</div>
-        <div style="font-size:2em;font-weight:bold;color:#ff0;margin:6px 0;">D10: ${result.roll}</div>
-        <div style="font-size:1.5em;font-weight:bold;color:${dmgColor};margin:8px 0;">${dmgText}</div>
-        <div style="font-size:0.85em;color:#ccc;">${statusLine}</div>
-        <div style="margin-top:10px;">
-          <button class="dice-btn" style="padding:8px 20px;" onclick="clearSelection()">OK</button>
-        </div>
-      </div>`;
-      drawMap();
-    }
-  }, 80);
+  const result = fireFortification(shooters, fort);
+  const isDowngrade = result.damage === 'eliminated' && result.newStatus !== 'eliminated';
+  const dmgText = result.newStatus === 'eliminated' ? '除去' : isDowngrade ? 'レベルダウン' : result.damage === 'dd' ? 'DD' : result.damage === 'd' ? 'D' : '効果なし';
+  const rc = result.newStatus === 'eliminated' ? 'hit-elim' : result.damage === 'dd' ? 'hit-dd' : result.damage === 'd' ? 'hit-d' : 'hit-none';
+  const statusLine = isDowngrade ? `${result.prevName} → ${result.newName}` : `${result.prevName}: ${result.prevStatus.toUpperCase()} → ${result.newStatus.toUpperCase()}`;
+
+  showDiceOverlay('陣地攻撃', fort.name, [{
+    label: fort.name,
+    roll: result.roll,
+    detail: `FP${result.totalFP}`,
+    resultText: dmgText,
+    resultClass: rc,
+    detailAfter: statusLine
+  }], function() {
+    clearSelection();
+    drawMap();
+  });
 }
 
 function executeCheckedFire() {
@@ -1090,27 +1118,32 @@ function executeCheckedFire() {
   }
 
   const fireType = surprise ? 'surprise' : 'fire';
-  const shotCount = surprise ? 2 : 1;
-  let currentShot = 0;
 
-  function fireNextShot() {
-    if (currentShot >= shotCount || target.status === 'eliminated') {
-      // 射撃完了
-      removeAllDummies(shooterHexId);
-      shooters.forEach(u => checkState.atk.delete(u.id || u.name));
-      checkState.def.clear();
-      updateFireRange();
-      renderMoveFirePhase();
-      drawMap();
-      return;
-    }
-    currentShot++;
-    showFireFlow(fireType, shooters, target, function(result) {
-      fireNextShot();
-    });
+  function finishFire() {
+    removeAllDummies(shooterHexId);
+    shooters.forEach(u => checkState.atk.delete(u.id || u.name));
+    checkState.def.clear();
+    updateFireRange();
+    renderMoveFirePhase();
+    drawMap();
   }
 
-  fireNextShot();
+  showFireFlow(fireType, shooters, target, function(result) {
+    // サプライズなら2回目を連続処理（目標再選択あり）
+    if (surprise) {
+      const defIds = checkState.def;
+      const stillAlive = testUnits.filter(u => defIds.has(u.id || u.name) && u.status !== 'eliminated');
+      if (stillAlive.length > 0) {
+        const nonLeader = stillAlive.filter(u => u.type !== 'leader');
+        const nextTarget = [...(nonLeader.length > 0 ? nonLeader : stillAlive)].sort((a, b) => (a.def || 5) - (b.def || 5))[0];
+        showFireFlow('surprise', shooters, nextTarget, function(result2) {
+          finishFire();
+        });
+        return;
+      }
+    }
+    finishFire();
+  });
 }
 
 // 射撃ユニット選択
@@ -1154,7 +1187,7 @@ function onMoveFireUnitClick(uid) {
 }
 
 // マップクリック（移動射撃フェイズ）
-function onMoveFireMapClick(col, row) {
+function onMoveFireMapClick(col, row, cmdKey) {
   // オーバーラン後の退却先選択中
   if (typeof assaultState !== 'undefined' && assaultState._retreatSide) {
     onRetreatHexClick(col, row);
@@ -1190,17 +1223,32 @@ function onMoveFireMapClick(col, row) {
   if (clickedUnits.length > 0) {
     const side = clickedUnits[0].side;
     if (side === df.activeSide) {
-      df.atkHexId = hexId;
-      df.atkAdjacentHexes = [hexId];
-      // 同ヘクスの味方のみチェック
-      checkState.atk.clear();
-      testUnits.filter(u =>
-        u.hexId === hexId && u.side === df.activeSide && u.status !== 'eliminated' &&
-        u.type !== 'dummy' && u.type !== 'leader' && !u.firedThisTurn
-      ).forEach(u => checkState.atk.add(u.id || u.name));
+      if (cmdKey && df.atkHexId && areLinkedByRLeader(df.atkHexId, hexId, df.activeSide)) {
+        // Cmd+クリック: R指揮官経由で隣接部隊を追加（D/DD除外）
+        if (!df.atkAdjacentHexes.includes(hexId)) df.atkAdjacentHexes.push(hexId);
+        testUnits.filter(u =>
+          u.hexId === hexId && u.side === df.activeSide && u.status === 'ok' &&
+          u.type !== 'dummy' && u.type !== 'leader' && !u.firedThisTurn
+        ).forEach(u => checkState.atk.add(u.id || u.name));
+      } else {
+        // 通常クリック: そのヘクスのみ選択（D/DD除外）
+        df.atkHexId = hexId;
+        df.atkAdjacentHexes = [hexId];
+        checkState.atk.clear();
+        testUnits.filter(u =>
+          u.hexId === hexId && u.side === df.activeSide && u.status === 'ok' &&
+          u.type !== 'dummy' && u.type !== 'leader' && !u.firedThisTurn
+        ).forEach(u => checkState.atk.add(u.id || u.name));
+      }
       updateFireRange();
     } else {
       df.defHexId = hexId;
+      // 敵ユニットを自動選択（D/DD含む、陣地・ダミー・指揮官除外）
+      checkState.def.clear();
+      testUnits.filter(u =>
+        u.hexId === hexId && u.side !== df.activeSide && u.status !== 'eliminated' &&
+        u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification'
+      ).forEach(u => checkState.def.add(u.id || u.name));
     }
     renderMoveFirePhase();
     drawMap();
@@ -1391,7 +1439,8 @@ function resolveStopFire() {
 
   // 敵スタックの火力合算（最も防御の低い移動ユニットを狙う）
   const aliveMoving = movingUnits.filter(u => u.status !== 'eliminated');
-  const targetUnit = [...aliveMoving].sort((a, b) => (a.def || 5) - (b.def || 5))[0];
+  const nonLeaderAlive = aliveMoving.filter(u => u.type !== 'leader');
+  const targetUnit = [...(nonLeaderAlive.length > 0 ? nonLeaderAlive : aliveMoving)].sort((a, b) => (a.def || 5) - (b.def || 5))[0];
   const aliveEnemies = enemyStack.filter(u => u.status !== 'eliminated');
 
   const isArmored = targetUnit.type === 'T' || targetUnit.type === 'AC';
@@ -1427,31 +1476,73 @@ function resolveStopFire() {
   ms._stopFireCurrentShot = 0;
   ms._stopFireSurprise = surprise;
 
-  // 統一フローでストップ射撃を表示
-  const fireType = surprise ? 'surprise' : 'stop';
-  showFireFlow(fireType, firingUnits, targetUnit, function(result) {
-    ms._stopFireCurrentShot++;
-    const nameStr = firingUnits.length > 2 ? firingUnits[0].name + '他' + (firingUnits.length - 1) : firingUnits.map(u => u.name).join('+');
-    const shotLabel = surprise ? `サプライズ${ms._stopFireCurrentShot}回目` : 'ストップ射撃';
-    addLog('stop', `${shotLabel}: ${nameStr} (fp${totalFP}) → ${ms._stopFireTarget.name}`);
+  const nameStr = firingUnits.length > 2 ? firingUnits[0].name + '他' + (firingUnits.length - 1) : firingUnits.map(u => u.name).join('+');
 
-    // サプライズ2回目
-    if (ms._stopFireCurrentShot < shotCount) {
-      // 2回目の目標: 生存で最も弱い
-      const stillAlive = (ms._stackMoving || [ms.movingUnit]).filter(u => u.status !== 'eliminated');
-      if (stillAlive.length > 0) {
-        const nextTarget = [...stillAlive].sort((a, b) => (a.def || 5) - (b.def || 5))[0];
-        ms._stopFireTarget = nextTarget;
-        showFireFlow('surprise', firingUnits, nextTarget, function(result2) {
-          ms._stopFireCurrentShot++;
-          addLog('stop', `サプライズ${ms._stopFireCurrentShot}回目: ${nameStr} (fp${totalFP}) → ${nextTarget.name}`);
-          afterStopFire(shooterHexId, enemyStack);
+  if (surprise) {
+    // サプライズ: 2回分をまとめて実行しオーバーレイで一括表示
+    const result1 = executeDirectFire(firingUnits, targetUnit);
+    addLog('stop', `サプライズ1回目: ${nameStr} (fp${totalFP}) → ${targetUnit.name}`);
+
+    const dmgText1 = result1.newStatus === 'eliminated' ? '壊滅' : result1.damage === 'dd' ? 'DD' : result1.damage === 'd' ? 'D' : '効果なし';
+    const rc1 = result1.newStatus === 'eliminated' ? 'hit-elim' : result1.damage === 'dd' ? 'hit-dd' : result1.damage === 'd' ? 'hit-d' : 'hit-none';
+
+    const overlayRows = [{
+      label: `1回目: ${targetUnit.name}`,
+      roll: result1.roll,
+      detail: `FP${totalFP} 防御${targetUnit.def||0}`,
+      resultText: dmgText1,
+      resultClass: rc1,
+      detailAfter: `${result1.prevStatus.toUpperCase()} → ${result1.newStatus.toUpperCase()}`
+    }];
+    if (result1.leaderCheck) {
+      overlayRows.push({
+        label: result1.leaderCheck.leader.name,
+        roll: result1.leaderCheck.roll,
+        detail: '指揮官負傷チェック (0で負傷)',
+        resultText: result1.leaderCheck.wounded ? '負傷！除去' : '無事',
+        resultClass: result1.leaderCheck.wounded ? 'hit-elim' : 'hit-none',
+      });
+    }
+
+    // 2回目: 生存ユニットから目標再選択
+    const stillAlive = (ms._stackMoving || [ms.movingUnit]).filter(u => u.status !== 'eliminated');
+    if (stillAlive.length > 0) {
+      const stillNonLeader = stillAlive.filter(u => u.type !== 'leader');
+      const nextTarget = [...(stillNonLeader.length > 0 ? stillNonLeader : stillAlive)].sort((a, b) => (a.def || 5) - (b.def || 5))[0];
+      const result2 = executeDirectFire(firingUnits, nextTarget);
+      addLog('stop', `サプライズ2回目: ${nameStr} (fp${totalFP}) → ${nextTarget.name}`);
+
+      const dmgText2 = result2.newStatus === 'eliminated' ? '壊滅' : result2.damage === 'dd' ? 'DD' : result2.damage === 'd' ? 'D' : '効果なし';
+      const rc2 = result2.newStatus === 'eliminated' ? 'hit-elim' : result2.damage === 'dd' ? 'hit-dd' : result2.damage === 'd' ? 'hit-d' : 'hit-none';
+      overlayRows.push({
+        label: `2回目: ${nextTarget.name}`,
+        roll: result2.roll,
+        detail: `FP${totalFP} 防御${nextTarget.def||0}`,
+        resultText: dmgText2,
+        resultClass: rc2,
+        detailAfter: `${result2.prevStatus.toUpperCase()} → ${result2.newStatus.toUpperCase()}`
+      });
+      if (result2.leaderCheck) {
+        overlayRows.push({
+          label: result2.leaderCheck.leader.name,
+          roll: result2.leaderCheck.roll,
+          detail: '指揮官負傷チェック (0で負傷)',
+          resultText: result2.leaderCheck.wounded ? '負傷！除去' : '無事',
+          resultClass: result2.leaderCheck.wounded ? 'hit-elim' : 'hit-none',
         });
-        return;
       }
     }
-    afterStopFire(shooterHexId, enemyStack);
-  });
+
+    showDiceOverlay('サプライズ・アタック', `${nameStr} → ${targetUnit.name}`, overlayRows, function() {
+      afterStopFire(shooterHexId, enemyStack);
+    });
+  } else {
+    // 通常ストップ射撃: 1回
+    showFireFlow('stop', firingUnits, targetUnit, function(result) {
+      addLog('stop', `ストップ射撃: ${nameStr} (fp${totalFP}) → ${targetUnit.name}`);
+      afterStopFire(shooterHexId, enemyStack);
+    });
+  }
 }
 
 function afterStopFire(shooterHexId, enemyStack) {
@@ -1492,11 +1583,26 @@ function renderStopFireResult() {
     html += `<div style="color:#f44;font-size:0.85em;">全滅</div>`;
     html += `<button class="btn-sm" style="width:100%;margin:4px 0;" onclick="finishStopFire()">OK</button>`;
   } else {
-    html += `<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px;">`;
-    html += `<div style="color:#c8a020;font-weight:bold;font-size:0.85em;">反撃しますか？（スタック全体で1回）</div>`;
-    html += `<div style="font-size:0.75em;color:#aaa;">反撃したユニットは先制射撃不可になります</div>`;
-    html += `<button class="dice-btn" style="font-size:0.85em;padding:6px 16px;width:100%;margin:4px 0;" onclick="doCounterAttack()">反撃する</button>`;
-    html += `<button class="btn-sm" style="width:100%;margin:4px 0;" onclick="skipCounterAttack()">反撃しない</button>`;
+    // 射程内に敵がいるかチェック
+    const aliveEnemies = enemyStack.filter(u => u.status !== 'eliminated');
+    const canCounter = aliveEnemies.length > 0 && aliveMoving.some(u => {
+      if (u.status !== 'ok' || u.type === 'leader' || u.type === 'dummy') return false;
+      const dist = hexDistance(u.col, u.row, aliveEnemies[0].col, aliveEnemies[0].row);
+      const isArmored = aliveEnemies[0].type === 'T' || aliveEnemies[0].type === 'AC';
+      const fp = isArmored ? (u.fpAT || 0) : (u.fpSoft || 0);
+      return fp > 0 && dist <= (u.range || 1) && dist > 0;
+    });
+
+    if (canCounter) {
+      html += `<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px;">`;
+      html += `<div style="color:#c8a020;font-weight:bold;font-size:0.85em;">反撃しますか？（スタック全体で1回）</div>`;
+      html += `<div style="font-size:0.75em;color:#aaa;">反撃したユニットは先制射撃不可になります</div>`;
+      html += `<button class="dice-btn" style="font-size:0.85em;padding:6px 16px;width:100%;margin:4px 0;" onclick="doCounterAttack()">反撃する</button>`;
+      html += `<button class="btn-sm" style="width:100%;margin:4px 0;" onclick="skipCounterAttack()">反撃しない</button>`;
+    } else {
+      html += `<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px;">`;
+      html += `<button class="btn-sm" style="width:100%;margin:4px 0;" onclick="skipCounterAttack()">OK</button>`;
+    }
 
     if (ms.stopFireStacks && ms.stopFireStacks.length > 0) {
       html += `<div style="font-size:0.75em;color:#888;margin-top:4px;">残り${ms.stopFireStacks.length}スタックがストップ射撃待ち</div>`;
@@ -1666,7 +1772,7 @@ function executeCounterAttack() {
     validUnits.forEach(u => { u.counterAttacked = true; });
 
     ms._waitingCounterAttack = false;
-    finishStopFire();
+    proceedStopFire();
     drawMap();
   });
 }
@@ -1775,6 +1881,9 @@ function finishStopFire() {
     directFireState.mode = 'selectShooter';
   }
 
+  // ストップ射撃完了後にダミー視認チェック
+  if (ms.movingUnit) checkDummyVisibility(ms.movingUnit);
+
   renderMoveFirePhase();
   drawMap();
 }
@@ -1878,8 +1987,7 @@ function executeOverrun() {
   assaultState._overrunAttackers = okUnits;
   assaultState._overrunOriginHex = toHexId(unit.col, unit.row);
 
-  // 突撃済みフラグ
-  okUnits.forEach(u => { u.assaultedThisTurn = true; });
+  // オーバーランは突撃済み扱いにしない
 
   const result = executeAssault(okUnits, targetHexId);
 
@@ -2160,6 +2268,25 @@ function startStackMove() {
 }
 
 // 選択解除
+// 偵察実行
+function doRecon(uid, targetHexId) {
+  const unit = testUnits.find(u => (u.id || u.name) === uid);
+  if (!unit) return;
+  const result = executeRecon(unit, targetHexId);
+  const rc = result.success ? 'hit-d' : 'hit-none';
+  const resultText = result.success ? `ダミー${result.removed}枚除去` : (result.reason || '失敗');
+  showDiceOverlay('偵察', `${unit.name} → ${targetHexId}`, [{
+    label: unit.name,
+    roll: result.roll != null ? result.roll : '-',
+    detail: `対象: ${targetHexId}`,
+    resultText: resultText,
+    resultClass: rc,
+  }], function() {
+    renderMoveFirePhase();
+    drawMap();
+  });
+}
+
 function clearSelection() {
   checkState.atk.clear();
   checkState.def.clear();
@@ -2238,8 +2365,12 @@ function checkStopFireAt(col, row, side) {
   const threats = [];
   for (const enemy of stopFireEnemies) {
     const dist = hexDistance(enemy.col, enemy.row, col, row);
-    if (dist <= enemy.range && dist > 0) {
-      if (hasLOS(enemy.col, enemy.row, col, row)) {
+    const effectiveRange = Math.min(enemy.range, G.visionRange || 12);
+    if (dist <= effectiveRange && dist > 0) {
+      // 視認コストもチェック
+      const visionHexes = calculateVisionRange(enemy.col, enemy.row, G.visionRange || 12);
+      const targetKey = `${col},${row}`;
+      if (visionHexes[targetKey] && hasLOS(enemy.col, enemy.row, col, row)) {
         threats.push(enemy);
       }
     }
@@ -2328,10 +2459,7 @@ function moveToHex(col, row) {
 
   addLog('move', `${unit.name} → ${hexId} (残MP:${ms.remainingMP})`);
 
-  // ダミー視認チェック
-  checkDummyVisibility(unit);
-
-  // 移動可能ヘクスを再計算
+  // 移動可能ヘクスを再計算（ダミー視認チェックはストップ射撃後に行う）
   ms.validHexes = {};
   if (ms.remainingMP > 0) {
     const tempUnit = { ...unit, move: ms.remainingMP };
@@ -2354,6 +2482,9 @@ function moveToHex(col, row) {
     ms.stopFireStacks = stackList;
     ms.stopFireEnemies = threateningEnemies;
     addLog('move', `ストップ射撃警告: ${stackList.length}スタック(${threateningEnemies.length}ユニット)の射程内に進入`);
+  } else {
+    // ストップ射撃なし → ダミー視認チェック
+    checkDummyVisibility(unit);
   }
 
   renderMoveFirePhase();
@@ -2375,8 +2506,106 @@ function confirmMove() {
   });
 
   const names = movingUnits.filter(u => u.status !== 'eliminated').map(u => u.name).join(', ');
-  addLog('move', `${names} 移動完了 (${toHexId(ms.movingUnit.col, ms.movingUnit.row)})`);
+  const moveHexId = toHexId(ms.movingUnit.col, ms.movingUnit.row);
+  addLog('move', `${names} 移動完了 (${moveHexId})`);
 
+  // 偵察チェック: 隣接にダミーがあり、偵察可能ユニットがいるか
+  const reconUnits = movingUnits.filter(u =>
+    u.status === 'ok' && (u.type === 'I' || u.type === 'AC') && !u.reconDone && !u.firedThisTurn
+  );
+  const uPos = fromHexId(moveHexId);
+  const neighbors = getHexNeighbors(uPos.col, uPos.row);
+  const adjDummyHexes = neighbors.filter(n => {
+    if (n.col < 0 || n.col >= MAP_CONFIG.cols || n.row < 0 || n.row >= MAP_CONFIG.rows) return false;
+    return getDummyCount(toHexId(n.col, n.row)) > 0;
+  });
+
+  if (reconUnits.length > 0 && adjDummyHexes.length > 0) {
+    // 偵察可能 → UIを表示して選択させる
+    _pendingReconState = { reconUnits, adjDummyHexes, moveHexId };
+    renderReconChoice();
+    return;
+  }
+
+  finishConfirmMove();
+}
+
+// 偵察選択UI
+let _pendingReconState = null;
+function renderReconChoice() {
+  const rs = _pendingReconState;
+  if (!rs) return;
+  const c = document.getElementById('phaseContent');
+  const dummyInfo = rs.adjDummyHexes.map(dh => {
+    const dhId = toHexId(dh.col, dh.row);
+    return `${dhId}(D${getDummyCount(dhId)})`;
+  }).join(', ');
+  let html = `<div style="padding:8px;background:#334;border:1px solid #668;border-radius:4px;">`;
+  html += `<div style="color:#8af;font-weight:bold;font-size:1em;">偵察可能</div>`;
+  html += `<div style="font-size:0.85em;color:#eee;margin:4px 0;">隣接ダミー: ${dummyInfo}</div>`;
+  html += `<div style="font-size:0.8em;color:#aaa;margin:4px 0;">偵察可能ユニット: ${rs.reconUnits.filter(u => !u.reconDone && !u.firedThisTurn).map(u => u.name).join(', ')}</div>`;
+  html += `<div style="font-size:0.75em;color:#888;margin:4px 0;">偵察したユニットは射撃不可になります</div>`;
+  html += `<button class="dice-btn" style="font-size:0.85em;padding:6px 16px;width:100%;margin:4px 0;" onclick="executeReconAll()">偵察実行</button>`;
+  html += `<button class="btn-sm" style="width:100%;margin:4px 0;padding:6px;" onclick="skipRecon()">偵察しない</button>`;
+  html += `</div>`;
+  c.innerHTML = html;
+}
+
+// 偵察一括実行: 全偵察可能ユニットで順に偵察、ダミーが0になったら終了
+function executeReconAll() {
+  const rs = _pendingReconState;
+  if (!rs) { finishConfirmMove(); return; }
+
+  const overlayRows = [];
+  const reconUnits = rs.reconUnits.filter(u => u.status === 'ok' && !u.reconDone && !u.firedThisTurn);
+
+  for (const unit of reconUnits) {
+    // 隣接のダミーヘクスで残っているものを探す
+    let targetHexId = null;
+    for (const dh of rs.adjDummyHexes) {
+      const dhId = toHexId(dh.col, dh.row);
+      if (getDummyCount(dhId) > 0) {
+        targetHexId = dhId;
+        break;
+      }
+    }
+    if (!targetHexId) break; // ダミーが全部取れた
+
+    const result = executeRecon(unit, targetHexId);
+    const rc = result.success ? 'hit-d' : 'hit-none';
+    const resultText = result.success ? `ダミー${result.removed}枚除去 (残${result.remaining})` : (result.reason || '失敗');
+    overlayRows.push({
+      label: `${unit.name} → ${targetHexId}`,
+      roll: result.roll != null ? result.roll : '-',
+      detail: `D${getDummyCount(targetHexId) + (result.removed || 0)}→D${getDummyCount(targetHexId)}`,
+      resultText: resultText,
+      resultClass: rc,
+    });
+
+    // ダミーが全部取れたら終了
+    const anyDummyLeft = rs.adjDummyHexes.some(dh => getDummyCount(toHexId(dh.col, dh.row)) > 0);
+    if (!anyDummyLeft) break;
+  }
+
+  _pendingReconState = null;
+
+  if (overlayRows.length > 0) {
+    showDiceOverlay('偵察', rs.moveHexId, overlayRows, function() {
+      finishConfirmMove();
+    });
+  } else {
+    finishConfirmMove();
+  }
+}
+
+// 偵察スキップ
+function skipRecon() {
+  _pendingReconState = null;
+  finishConfirmMove();
+}
+
+// 移動確定の後処理
+function finishConfirmMove() {
   resetMoveState();
   directFireState.mode = 'selectShooter';
   fireArrowData = null;
@@ -2689,6 +2918,7 @@ function executeAssault(attackers, targetHexId) {
   if (aliveAttackers.length === 0) return { error: '攻撃側全滅' };
 
   // 防御側: D状態はモラルチェック (13-3-(2))
+  const _moraleChecks = [];
   defenders.forEach(u => {
     if (u.status === 'd') {
       const roll = Math.floor(Math.random() * 10);
@@ -2696,9 +2926,11 @@ function executeAssault(attackers, targetHexId) {
       if (roll > 0 && roll < ml) {
         u.status = 'ok';
         addLog('assault', `${u.name}: モラルチェック成功(D10:${roll}<M${ml}) → 回復、戦闘参加`);
+        _moraleChecks.push({ name: u.name, roll, morale: ml, success: true });
       } else {
         u.status = 'dd';
         addLog('assault', `${u.name}: モラルチェック失敗(D10:${roll}>=M${ml}) → DD、戦闘不参加`);
+        _moraleChecks.push({ name: u.name, roll, morale: ml, success: false });
       }
     }
   });
@@ -2825,7 +3057,7 @@ function applyAssaultDefDamage(r) {
     checkLeaderOnStackEliminated(targetHexId, defenderSide);
   }
 
-  return { resultStr, result, attackers: aliveAttackers, defenders, activeDef, defDD, atkPower, defPower, ratioIdx, roll, modifiedRoll };
+  return { resultStr, result, attackers: aliveAttackers, defenders, activeDef, defDD, atkPower, defPower, ratioIdx, roll, modifiedRoll, moraleChecks: _moraleChecks };
 }
 
 // ===== 突撃フェイズUI =====
@@ -2853,27 +3085,37 @@ function renderAssaultPhase() {
   // === 攻撃側スタック ===
   html += `<div style="color:#c8a020;font-weight:bold;font-size:0.85em;margin-bottom:2px;">▼ 突撃ユニット</div>`;
   if (assaultState.atkHexId) {
-    const atkUnits = testUnits.filter(u =>
-      u.hexId === assaultState.atkHexId && u.side === activeSide &&
-      u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'leader' && u.col >= 0
-    );
-    const terrain = getHexTerrain(assaultState.atkHexId);
-    html += `<div style="padding:4px;background:#222;border:1px solid #555;border-radius:4px;margin-bottom:4px;">`;
-    html += `<div style="color:#aaa;font-size:0.7em;">${assaultState.atkHexId} (${tNames[terrain]||terrain})</div>`;
-    atkUnits.forEach(u => {
-      const uid = u.id || u.name;
-      const checked = assaultState.atkChecked.has(uid);
-      const canAss = canAssault(u);
-      const statusColor = u.status === 'ok' ? '#8f8' : u.status === 'd' ? '#fd8' : '#f88';
-      html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;${!canAss.can?'opacity:0.4;':''}">`;
-      html += `<input type="checkbox" ${checked?'checked':''} ${!canAss.can?'disabled':''} onchange="assaultToggle('${uid}',this.checked)" style="margin:0;">`;
-      html += `<span style="color:#eee;">${u.name}</span>`;
-      if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
-      html += `<span style="color:#888;font-size:0.75em;">近攻${u.closeAtk} 近防${u.closeDef}</span>`;
-      if (!canAss.can) html += `<span style="color:#f66;font-size:0.7em;">${canAss.reason}</span>`;
+    // atkCheckedに入っているユニットのヘクスを収集して表示
+    const participatingHexes = new Set([assaultState.atkHexId]);
+    assaultState.atkChecked.forEach(uid => {
+      const u = testUnits.find(u2 => (u2.id || u2.name) === uid);
+      if (u) participatingHexes.add(u.hexId);
+    });
+    [...participatingHexes].forEach(hexId => {
+      const atkUnits = testUnits.filter(u =>
+        u.hexId === hexId && u.side === activeSide &&
+        u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'leader' && u.col >= 0
+      );
+      if (atkUnits.length === 0) return;
+      const terrain = getHexTerrain(hexId);
+      const isAdj = hexId !== assaultState.atkHexId;
+      html += `<div style="padding:4px;background:#222;border:1px solid ${isAdj?'#558':'#555'};border-radius:4px;margin-bottom:4px;">`;
+      html += `<div style="color:#aaa;font-size:0.7em;">${hexId} (${tNames[terrain]||terrain})${isAdj?' <span style="color:#8af;">R指揮</span>':''}</div>`;
+      atkUnits.forEach(u => {
+        const uid = u.id || u.name;
+        const checked = assaultState.atkChecked.has(uid);
+        const canAss = canAssault(u);
+        const statusColor = u.status === 'ok' ? '#8f8' : u.status === 'd' ? '#fd8' : '#f88';
+        html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;${!canAss.can?'opacity:0.4;':''}">`;
+        html += `<input type="checkbox" ${checked?'checked':''} ${!canAss.can?'disabled':''} onchange="assaultToggle('${uid}',this.checked)" style="margin:0;">`;
+        html += `<span style="color:#eee;">${u.name}</span>`;
+        if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
+        html += `<span style="color:#888;font-size:0.75em;">近攻${u.closeAtk} 近防${u.closeDef}</span>`;
+        if (!canAss.can) html += `<span style="color:#f66;font-size:0.7em;">${canAss.reason}</span>`;
+        html += `</div>`;
+      });
       html += `</div>`;
     });
-    html += `</div>`;
   } else {
     html += `<div style="color:#666;font-size:0.8em;padding:4px;">味方ヘクスをクリック</div>`;
   }
@@ -2964,7 +3206,7 @@ function assaultToggle(uid, checked) {
   renderAssaultPhase();
 }
 
-function onAssaultMapClick(col, row) {
+function onAssaultMapClick(col, row, cmdKey) {
   // 退却先選択中ならそちらを処理
   if (assaultState._retreatSide) {
     onRetreatHexClick(col, row);
@@ -2980,18 +3222,40 @@ function onAssaultMapClick(col, row) {
 
   const side = clickedUnits[0].side;
   if (side === activeSide) {
-    assaultState.atkHexId = hexId;
-    assaultState.atkChecked.clear();
-    clickedUnits.forEach(u => {
-      if (canAssault(u).can) assaultState.atkChecked.add(u.id || u.name);
-    });
+    if (cmdKey && assaultState.atkHexId && areLinkedByRLeader(assaultState.atkHexId, hexId, activeSide)) {
+      // Cmd+クリック: R指揮官経由で隣接部隊を追加
+      testUnits.filter(u =>
+        u.hexId === hexId && u.side === activeSide &&
+        u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'leader' && u.col >= 0
+      ).forEach(u => {
+        if (canAssault(u).can) assaultState.atkChecked.add(u.id || u.name);
+      });
+    } else {
+      // 通常クリック: そのヘクスのみ選択
+      assaultState.atkHexId = hexId;
+      assaultState.atkChecked.clear();
+      testUnits.filter(u =>
+        u.hexId === hexId && u.side === activeSide &&
+        u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'leader' && u.col >= 0
+      ).forEach(u => {
+        if (canAssault(u).can) assaultState.atkChecked.add(u.id || u.name);
+      });
+    }
   } else {
-    // 隣接チェック (13-1-(2))
+    // 隣接チェック: 攻撃ヘクスに隣接していればOK（Cmd追加分も考慮）
     if (assaultState.atkHexId) {
-      const atkPos = fromHexId(assaultState.atkHexId);
+      // 参加中の全ヘクスを収集
+      const participatingHexes = new Set([assaultState.atkHexId]);
+      assaultState.atkChecked.forEach(uid => {
+        const u = testUnits.find(u2 => (u2.id || u2.name) === uid);
+        if (u) participatingHexes.add(u.hexId);
+      });
       const defPos = fromHexId(hexId);
-      const dist = hexDistance(atkPos.col, atkPos.row, defPos.col, defPos.row);
-      if (dist !== 1) {
+      const isAdj = [...participatingHexes].some(pHex => {
+        const p = fromHexId(pHex);
+        return hexDistance(p.col, p.row, defPos.col, defPos.row) === 1;
+      });
+      if (!isAdj) {
         addLog('assault', '隣接ヘクスの敵のみ突撃可能');
         return;
       }
@@ -3010,36 +3274,44 @@ function doAssault() {
   // 突撃済みフラグ設定 (13-1-(6))
   attackers.forEach(u => { u.assaultedThisTurn = true; });
 
-  // ダイスアニメーション→結果
-  const c = document.getElementById('phaseContent');
-  let frame = 0;
-  const maxFrames = 15;
-  const interval = setInterval(() => {
-    const diceVal = Math.floor(Math.random() * 10);
-    c.innerHTML = `<div style="text-align:center;padding:20px;">
-      <div style="font-size:3em;font-weight:bold;color:#fa4;text-shadow:0 0 10px #fa4;">${diceVal}</div>
-      <div style="color:#aaa;font-size:0.9em;">突撃ダイスロール中...</div>
-    </div>`;
-    frame++;
-    if (frame >= maxFrames) {
-      clearInterval(interval);
-      const result = executeAssault(attackers, assaultState.defHexId);
+  // 突撃実行
+  const result = executeAssault(attackers, assaultState.defHexId);
 
-      // ダミーのみ or 降伏 or エラー → そのまま終了
-      if (result.dummyOnly || result.surrender || result.error) {
-        if (result.surrender) {
-          addLog('assault', '防御側降伏');
-        }
-        assaultReset();
-        return;
-      }
+  // ダミーのみ or 降伏 or エラー → そのまま終了
+  if (result.dummyOnly || result.surrender || result.error) {
+    if (result.surrender) addLog('assault', '防御側降伏');
+    assaultReset();
+    return;
+  }
 
-      // 攻撃側の損害数を確認して退却選択を表示
-      assaultState.pendingResult = result;
-      renderAssaultResult();
-      drawMap();
-    }
-  }, 80);
+  const rc = result.resultStr.includes('DE') ? 'hit-elim' : 'hit-none';
+  const assaultRows = [];
+  // モラルチェック結果を先に表示
+  if (result.moraleChecks && result.moraleChecks.length > 0) {
+    result.moraleChecks.forEach(mc => {
+      assaultRows.push({
+        label: mc.name,
+        roll: mc.roll,
+        detail: `モラルチェック M${mc.morale}`,
+        resultText: mc.success ? '回復' : 'DD',
+        resultClass: mc.success ? 'hit-d' : 'hit-dd',
+      });
+    });
+  }
+  // 突撃結果
+  assaultRows.push({
+    label: `${ASSAULT_RATIOS[result.ratioIdx]}`,
+    roll: result.roll,
+    detail: `攻${result.atkPower} vs 防${result.defPower}`,
+    resultText: result.resultStr,
+    resultClass: rc,
+    detailAfter: `D10:${result.roll} 修正${result.modifiedRoll} → ${result.resultStr}`
+  });
+  showDiceOverlay('突撃', `${assaultState.atkHexId} → ${assaultState.defHexId}`, assaultRows, function() {
+    assaultState.pendingResult = result;
+    renderAssaultResult();
+    drawMap();
+  });
 }
 
 function renderAssaultResult() {
@@ -3160,6 +3432,21 @@ function renderDefenderChoice() {
     return;
   }
 
+  // AI側なら自動判定: 退却可能なら退却、不可なら損害受け入れ
+  const defSide = defRemaining[0].side;
+  const isDefHuman = G.gameMode === 'pvp' || (G.gameMode === 'pvai' && defSide === G.playerSide);
+  if (!isDefHuman) {
+    const defHasImmobile = defRemaining.some(u => (u.move || 0) === 0);
+    if (defHasImmobile) {
+      addLog('assault', 'AI防御側: 損害を受け入れ');
+      defenderAcceptLosses();
+    } else {
+      addLog('assault', 'AI防御側: 退却を選択');
+      defenderRetreat();
+    }
+    return;
+  }
+
   let html = `<div style="padding:8px;background:#333;border-radius:4px;">`;
   html += `<div style="color:#f84;font-weight:bold;font-size:1.1em;">防御側の選択</div>`;
   html += `<div style="font-size:0.9em;color:#eee;margin:4px 0;">結果: ${r.resultStr} — 防御側損害: ${parsed.defLoss}ユニット</div>`;
@@ -3264,6 +3551,29 @@ function renderRetreatChoice(side) {
   c.innerHTML = html;
 
   if (validRetreats.length > 0) {
+    // AI側なら自動で退却先を選択（攻撃側から最も遠いヘクス）
+    const retreatSide = aliveUnits[0].side;
+    const isRetreatHuman = G.gameMode === 'pvp' || (G.gameMode === 'pvai' && retreatSide === G.playerSide);
+    if (!isRetreatHuman) {
+      const atkPos = fromHexId(assaultState.atkHexId);
+      const best = validRetreats.reduce((a, b) =>
+        hexDistance(b.col, b.row, atkPos.col, atkPos.row) > hexDistance(a.col, a.row, atkPos.col, atkPos.row) ? b : a
+      );
+      const center = getHexCenter(best.col, best.row);
+      const retreatHexId = toHexId(best.col, best.row);
+      aliveUnits.forEach(u => {
+        u.col = best.col;
+        u.row = best.row;
+        u.x = center.x;
+        u.y = center.y;
+        u.hexId = retreatHexId;
+      });
+      addLog('assault', `${isAtk ? '攻撃側' : '防御側'}: ${retreatHexId}へ退却`);
+      if (isAtk) { assaultReset(); }
+      else { assaultState.phase = 'advance'; renderAdvanceChoice(); }
+      drawMap();
+      return;
+    }
     assaultState._retreatSide = side;
     assaultState._retreatUnits = aliveUnits;
     assaultState._validRetreats = validRetreats.map(n => `${n.col},${n.row}`);
@@ -3347,7 +3657,22 @@ function renderAdvanceChoice() {
     addLog('assault', `${fort.name} → 防御側排除により陣地破壊`);
   }
 
-  // 防御側ヘクスが空 → 自動前進 (13-2-(7))
+  // 防御側ヘクスが空 → 前進選択
+  // オーバーランは移動の一種なので必ず前進
+  if (assaultState._isOverrun) {
+    assaultAdvance();
+    return;
+  }
+  const atkSide = (directFireState.activeSide || G.initiative);
+  const isAtkHuman = G.gameMode === 'pvp' || (G.gameMode === 'pvai' && atkSide === G.playerSide);
+  if (isAtkHuman) {
+    // 人間: メッセージのみ表示、前進は手動で行う
+    addLog('assault', `防御側排除 — ${defHexId}へ戦闘後前進可能`);
+    showFireOverlay('突撃結果', `${ASSAULT_RATIOS[r.ratioIdx]} → ${r.resultStr} — 前進可能`, []);
+    assaultReset();
+    return;
+  }
+  // AI: 自動前進 (13-2-(7))
   assaultAdvance();
 }
 
@@ -3358,10 +3683,16 @@ function assaultAdvance() {
   const defPos = fromHexId(defHexId);
   const center = getHexCenter(defPos.col, defPos.row);
 
-  // 攻撃側の生存ユニット（スタック制限4まで）
+  // 攻撃側の生存ユニット + 同ヘクスの指揮官も前進
   const aliveAtk = r.attackers.filter(u => u.status !== 'eliminated');
+  const atkHexId = assaultState.atkHexId;
+  const leaders = atkHexId ? testUnits.filter(u =>
+    u.hexId === atkHexId && u.type === 'leader' && u.status !== 'eliminated' &&
+    u.side === aliveAtk[0]?.side
+  ) : [];
+  const advanceUnits = [...aliveAtk, ...leaders];
   let moved = 0;
-  aliveAtk.forEach(u => {
+  advanceUnits.forEach(u => {
     if (moved >= 4) return; // スタック制限
     u.col = defPos.col;
     u.row = defPos.row;
@@ -3376,6 +3707,12 @@ function assaultAdvance() {
   assaultReset();
 }
 
+function assaultSkipAdvance() {
+  const r = assaultState.pendingResult;
+  addLog('assault', '攻撃側: 前進せず');
+  showFireOverlay('突撃結果', `${ASSAULT_RATIOS[r.ratioIdx]} → ${r.resultStr}`, []);
+  assaultReset();
+}
 
 function assaultReset() {
   const wasOverrun = assaultState._isOverrun;

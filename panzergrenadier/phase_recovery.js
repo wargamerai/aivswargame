@@ -124,12 +124,22 @@ function rollSingleRecovery(unitId) {
   const sideStr = unit.side === 'german' ? 'ドイツ' : '連合';
   addLog('init', `[回復] ${sideStr} ${unit.name}: D10=${result.roll} (有効M${result.effectiveMorale}) → ${result.effect}`);
 
-  renderRecoveryPhase();
+  const rc = result.critical ? 'hit-elim' : result.success ? 'hit-d' : 'hit-none';
+  showDiceOverlay('回復チェック', unit.name, [{
+    label: unit.name,
+    roll: result.roll,
+    detail: `M${result.effectiveMorale} ${unit.status === 'ok' ? '' : unit.status.toUpperCase()}`,
+    resultText: result.effect,
+    resultClass: rc,
+  }], function() {
+    renderRecoveryPhase();
+  });
 }
 
 function rollAllRecovery(side) {
   const targetUnits = units.filter(u => u.side === side && (u.status === 'd' || u.status === 'dd') && !recoveryResults[u.id]);
 
+  const overlayRows = [];
   targetUnits.forEach(u => {
     const check = canAttemptRecovery(u);
     if (!check.can) return;
@@ -139,7 +149,22 @@ function rollAllRecovery(side) {
 
     const sideStr = u.side === 'german' ? 'ドイツ' : '連合';
     addLog('init', `[回復] ${sideStr} ${u.name}: D10=${result.roll} (有効M${result.effectiveMorale}) → ${result.effect}`);
+
+    const rc = result.critical ? 'hit-elim' : result.success ? 'hit-d' : 'hit-none';
+    overlayRows.push({
+      label: u.name,
+      roll: result.roll,
+      detail: `M${result.effectiveMorale}`,
+      resultText: result.effect,
+      resultClass: rc,
+    });
   });
 
-  renderRecoveryPhase();
+  if (overlayRows.length > 0) {
+    showDiceOverlay('回復チェック', side === 'german' ? 'ドイツ軍' : '連合軍', overlayRows, function() {
+      renderRecoveryPhase();
+    });
+  } else {
+    renderRecoveryPhase();
+  }
 }
