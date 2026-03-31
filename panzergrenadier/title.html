@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>装甲擲弾兵 — Panzer Grenadier</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#1a1a1a; color:#ddd; font-family:'Segoe UI',sans-serif;
+  min-height:100vh; display:flex; flex-direction:column; align-items:center;
+  background-image: linear-gradient(180deg, #1a1a24 0%, #2a2a1a 50%, #1a1a24 100%);
+}
+
+/* タイトル */
+.title-area {
+  text-align:center; padding:40px 20px 20px;
+}
+.title-area h1 {
+  font-size:2.8em; color:#c8a020; letter-spacing:0.15em;
+  text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+  margin-bottom:4px;
+}
+.title-area h2 {
+  font-size:1.4em; color:#888; font-weight:normal; letter-spacing:0.3em;
+  font-style:italic;
+}
+.title-area .version {
+  font-size:0.8em; color:#555; margin-top:8px;
+}
+
+/* メインコンテナ */
+.main {
+  max-width:900px; width:100%; padding:20px;
+}
+
+/* シナリオカード */
+.scenario-list {
+  display:flex; flex-direction:column; gap:12px; margin:20px 0;
+}
+.scenario-card {
+  background:#222; border:2px solid #444; border-radius:8px;
+  padding:16px; cursor:pointer; transition:all 0.2s;
+  display:flex; gap:16px; align-items:stretch;
+}
+.scenario-card:hover { border-color:#c8a020; background:#2a2a22; }
+.scenario-card.selected { border-color:#c8a020; background:#2a2a22; box-shadow:0 0 12px rgba(200,160,32,0.3); }
+.scenario-card.disabled { opacity:0.4; cursor:default; pointer-events:none; }
+
+.sc-thumb {
+  width:140px; min-height:100px; background:#333; border-radius:4px;
+  display:flex; align-items:center; justify-content:center; overflow:hidden;
+  flex-shrink:0;
+}
+.sc-thumb img { width:100%; height:100%; object-fit:cover; }
+.sc-thumb .no-img { color:#555; font-size:0.8em; }
+
+.sc-info { flex:1; }
+.sc-info .sc-num { color:#c8a020; font-size:0.85em; font-weight:bold; }
+.sc-info .sc-name { font-size:1.3em; font-weight:bold; color:#eee; margin:2px 0; }
+.sc-info .sc-date { color:#aaa; font-size:0.85em; }
+.sc-info .sc-desc { color:#888; font-size:0.8em; margin-top:6px; line-height:1.4; }
+.sc-info .sc-details {
+  display:flex; gap:12px; margin-top:8px; font-size:0.75em; color:#aaa;
+}
+.sc-info .sc-details span {
+  background:#333; padding:2px 8px; border-radius:3px;
+}
+
+/* 対戦設定 */
+.match-setup {
+  background:#222; border:2px solid #555; border-radius:8px;
+  padding:20px; margin:20px 0; display:none;
+}
+.match-setup.show { display:block; }
+.match-setup h3 { color:#c8a020; margin-bottom:12px; }
+
+.side-select {
+  display:flex; gap:12px; justify-content:center; margin:16px 0;
+}
+.side-btn {
+  padding:16px 32px; border:2px solid #555; border-radius:8px;
+  background:#2a2a2a; cursor:pointer; text-align:center; min-width:180px;
+  transition:all 0.2s;
+}
+.side-btn:hover { border-color:#888; }
+.side-btn.selected { border-color:#c8a020; background:#333; box-shadow:0 0 8px rgba(200,160,32,0.3); }
+.side-btn .side-name { font-size:1.2em; font-weight:bold; }
+.side-btn .side-desc { font-size:0.8em; color:#888; margin-top:4px; }
+.side-btn.german .side-name { color:#fa8; }
+.side-btn.allied .side-name { color:#8cf; }
+
+/* 特別ルール */
+.special-rules {
+  margin:12px 0; padding:10px; background:#1a1a2a; border:1px solid #446; border-radius:4px;
+}
+.special-rules h4 { color:#aaa; font-size:0.85em; margin-bottom:4px; }
+.special-rules li { color:#88a; font-size:0.8em; margin-left:16px; }
+
+/* 勝利条件 */
+.victory-cond {
+  margin:12px 0; padding:10px; background:#1a2a1a; border:1px solid #464; border-radius:4px;
+}
+.victory-cond h4 { color:#aaa; font-size:0.85em; margin-bottom:4px; }
+.victory-cond .vc-line { font-size:0.8em; color:#8a8; padding:2px 0; }
+
+/* 開始ボタン */
+.start-area { text-align:center; margin:20px 0; }
+.start-btn {
+  background:#c8a020; color:#000; border:none; padding:14px 48px;
+  border-radius:6px; font-size:1.2em; font-weight:bold; cursor:pointer;
+  letter-spacing:0.1em; transition:all 0.2s;
+}
+.start-btn:hover { background:#dab030; transform:scale(1.02); }
+.start-btn:disabled { background:#555; color:#888; cursor:default; transform:none; }
+
+/* フッター */
+.footer {
+  text-align:center; padding:20px; color:#444; font-size:0.75em;
+  margin-top:auto;
+}
+</style>
+</head>
+<body>
+
+<div class="title-area">
+  <h1>装甲擲弾兵</h1>
+  <h2>PANZER GRENADIER</h2>
+  <div class="version">v0.1</div>
+</div>
+
+<div class="main">
+  <div class="scenario-list" id="scenarioList"></div>
+
+  <div class="match-setup" id="matchSetup">
+    <h3 id="setupTitle">対戦設定</h3>
+
+    <h4 style="color:#aaa;margin-bottom:8px;">対戦モード</h4>
+    <div class="side-select" id="modeSelect"></div>
+
+    <h4 style="color:#aaa;margin:16px 0 8px;" id="sideLabel" style="display:none;">操作する陣営</h4>
+    <div class="side-select" id="sideSelect"></div>
+
+    <div class="victory-cond" id="victoryCond"></div>
+    <div class="special-rules" id="specialRules"></div>
+
+    <div class="start-area">
+      <button class="start-btn" id="startBtn" disabled onclick="startGame()">ゲーム開始</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Panzer Grenadier — Avalon Hill Game Company
+</div>
+
+<script>
+// シナリオ定義（タイトル画面用の概要データ）
+const SCENARIOS = [
+  {
+    id: 2,
+    file: 'scenario2.js',
+    name: 'カーンの逆襲',
+    date: '1944年6月6日',
+    map: 2,
+    turns: 6,
+    sides: {
+      german: { name:'ドイツ軍', desc:'第21装甲師団 — カーンへ撤退' },
+      allied: { name:'イギリス軍', desc:'第6空挺師団 + 第27機甲旅団' },
+    },
+    desc: '連合軍ノルマンディに上陸の急報を受け、ドイツ第21装甲師団は海岸に急いだ。しかしイギリス軍に阻止され、カーンに向かって撤退を始めた。その裏手には既にイギリス第6空挺師団の兵と第27機甲旅団の戦車が待ち構えていた。',
+    victory: {
+      german: 'ドイツ軍: 7ユニット以上が地図南端から突破',
+      allied: 'イギリス軍: ドイツ軍の突破を5ユニット以下に抑える',
+      draw: '6ユニット突破で引き分け',
+    },
+    specialRules: ['移動隊形は使用できない'],
+    available: true,
+  },
+  {
+    id: 1,
+    name: 'シナリオ1',
+    date: '',
+    map: 0,
+    turns: 0,
+    sides: { german:{name:'ドイツ軍',desc:''}, allied:{name:'連合軍',desc:''} },
+    desc: '準備中',
+    victory: {},
+    specialRules: [],
+    available: false,
+  },
+  {
+    id: 3,
+    name: 'サン・メール・エグリーズ',
+    date: '1944年6月6日',
+    map: 3,
+    turns: 8,
+    sides: {
+      german: { name:'ドイツ軍', desc:'第6降下猟兵連隊 第2大隊' },
+      allied: { name:'アメリカ軍', desc:'第101空挺師団' },
+    },
+    desc: 'D-Day早朝、米第101空挺師団がユタ・ビーチ裏手に降下。ドイツ軍第6降下猟兵連隊が反撃を開始する。毎ターン、ダイスで援軍が決定される。',
+    victory: {
+      german: 'D/DD状態でないユニットを5個以上突破。または全ての町・市街地から米軍を排除',
+      allied: 'ドイツ軍の勝利条件を阻止',
+    },
+    specialRules: ['アメリカ軍は移動隊形不可', '援軍はダイス判定', '盤外砲兵(FP8)×4回'],
+    available: true,
+  },
+];
+
+let selectedScenario = null;
+let selectedSide = null;
+let selectedMode = null; // 'pvai', 'pvp', 'aivai'
+
+function init() {
+  const list = document.getElementById('scenarioList');
+  list.innerHTML = '';
+
+  SCENARIOS.forEach(sc => {
+    const card = document.createElement('div');
+    card.className = 'scenario-card' + (sc.available ? '' : ' disabled');
+    card.onclick = () => { if (sc.available) selectScenario(sc); };
+
+    card.innerHTML = `
+      <div class="sc-thumb">
+        ${sc.map > 0 ? `<img src="map/m${sc.map}.jpg" alt="Map ${sc.map}">` : '<div class="no-img">準備中</div>'}
+      </div>
+      <div class="sc-info">
+        <div class="sc-num">SCENARIO ${sc.id}</div>
+        <div class="sc-name">${sc.name}</div>
+        <div class="sc-date">${sc.date || ''}</div>
+        <div class="sc-desc">${sc.desc}</div>
+        <div class="sc-details">
+          ${sc.turns ? `<span>ターン: ${sc.turns}</span>` : ''}
+          ${sc.map ? `<span>マップ: ${sc.map}</span>` : ''}
+          ${sc.sides.german ? `<span>${sc.sides.german.name} vs ${sc.sides.allied.name}</span>` : ''}
+        </div>
+      </div>
+    `;
+    card.id = 'sc_' + sc.id;
+    list.appendChild(card);
+  });
+}
+
+function selectScenario(sc) {
+  selectedScenario = sc;
+  selectedSide = null;
+
+  // カード選択状態
+  document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('sc_' + sc.id).classList.add('selected');
+
+  // 対戦設定表示
+  const setup = document.getElementById('matchSetup');
+  setup.classList.add('show');
+  document.getElementById('setupTitle').textContent = `${sc.name} — 対戦設定`;
+
+  // 対戦モード選択
+  selectedMode = null;
+  const modeEl = document.getElementById('modeSelect');
+  modeEl.innerHTML = `
+    <div class="side-btn" data-mode="pvai" onclick="selectMode('pvai')">
+      <div class="side-name" style="color:#c8a020;">人間 vs AI</div>
+      <div class="side-desc">片方を操作、相手はAI</div>
+    </div>
+    <div class="side-btn" data-mode="pvp" onclick="selectMode('pvp')">
+      <div class="side-name" style="color:#c8a020;">人間 vs 人間</div>
+      <div class="side-desc">2人で交互にプレイ</div>
+    </div>
+    <div class="side-btn" data-mode="aivai" onclick="selectMode('aivai')">
+      <div class="side-name" style="color:#c8a020;">AI vs AI</div>
+      <div class="side-desc">観戦モード</div>
+    </div>
+  `;
+
+  // 陣営選択は非表示
+  document.getElementById('sideLabel').style.display = 'none';
+  document.getElementById('sideSelect').innerHTML = '';
+
+  // 勝利条件
+  const vc = document.getElementById('victoryCond');
+  if (sc.victory && (sc.victory.german || sc.victory.allied)) {
+    vc.innerHTML = '<h4>勝利条件</h4>';
+    if (sc.victory.german) vc.innerHTML += `<div class="vc-line">● ${sc.victory.german}</div>`;
+    if (sc.victory.allied) vc.innerHTML += `<div class="vc-line">● ${sc.victory.allied}</div>`;
+    if (sc.victory.draw) vc.innerHTML += `<div class="vc-line">● ${sc.victory.draw}</div>`;
+    vc.style.display = '';
+  } else {
+    vc.style.display = 'none';
+  }
+
+  // 特別ルール
+  const sr = document.getElementById('specialRules');
+  if (sc.specialRules && sc.specialRules.length > 0) {
+    sr.innerHTML = '<h4>特別ルール</h4><ul>' +
+      sc.specialRules.map(r => `<li>${r}</li>`).join('') + '</ul>';
+    sr.style.display = '';
+  } else {
+    sr.style.display = 'none';
+  }
+
+  document.getElementById('startBtn').disabled = true;
+
+  // スクロール
+  setup.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function selectMode(mode) {
+  selectedMode = mode;
+  selectedSide = null;
+  document.querySelectorAll('#modeSelect .side-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelector(`#modeSelect [data-mode="${mode}"]`).classList.add('selected');
+
+  const sideLabel = document.getElementById('sideLabel');
+  const sideEl = document.getElementById('sideSelect');
+  const sc = selectedScenario;
+
+  if (mode === 'pvai') {
+    // 陣営選択を表示
+    sideLabel.style.display = '';
+    sideEl.innerHTML = `
+      <div class="side-btn german" onclick="selectSide('german')">
+        <div class="side-name">${sc.sides.german.name}</div>
+        <div class="side-desc">${sc.sides.german.desc}</div>
+      </div>
+      <div class="side-btn allied" onclick="selectSide('allied')">
+        <div class="side-name">${sc.sides.allied.name}</div>
+        <div class="side-desc">${sc.sides.allied.desc}</div>
+      </div>
+    `;
+    document.getElementById('startBtn').disabled = true;
+  } else if (mode === 'pvp') {
+    // 人間同士は陣営選択不要
+    sideLabel.style.display = 'none';
+    sideEl.innerHTML = '';
+    selectedSide = 'both';
+    document.getElementById('startBtn').disabled = false;
+  } else if (mode === 'aivai') {
+    // AI同士は陣営選択不要
+    sideLabel.style.display = 'none';
+    sideEl.innerHTML = '';
+    selectedSide = 'watch';
+    document.getElementById('startBtn').disabled = false;
+  }
+}
+
+function selectSide(side) {
+  selectedSide = side;
+  document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
+  const btns = document.querySelectorAll('.side-btn');
+  btns.forEach(b => {
+    if ((side === 'german' && b.classList.contains('german')) ||
+        (side === 'allied' && b.classList.contains('allied'))) {
+      b.classList.add('selected');
+    }
+  });
+  document.getElementById('startBtn').disabled = false;
+}
+
+function startGame() {
+  if (!selectedScenario || !selectedSide || !selectedMode) return;
+  const params = new URLSearchParams({
+    scenario: selectedScenario.id,
+    side: selectedSide,
+    mode: selectedMode,
+  });
+  window.location.href = 'hub.html?' + params.toString();
+}
+
+init();
+</script>
+</body>
+</html>
