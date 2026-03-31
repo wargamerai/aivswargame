@@ -118,11 +118,11 @@ function resolveInitiative(dieRoll) {
   const shiftStr = weatherShift > 0 ? `+${weatherShift}` : weatherShift === 0 ? '±0' : `${weatherShift}`;
   addLog('init', `ダイス: ${dieRoll} → ${G.initiative === 'german' ? 'ドイツ軍' : '連合軍'}がイニシアチブ獲得 (M${G.markerPos}) 視認${prevVision}→${G.visionRange}(${shiftStr})`);
 
-  showDiceOverlay(dieRoll);
+  showInitiativeOverlay(dieRoll);
   updatePhaseBar();
 }
 
-function showDiceOverlay(dieRoll) {
+function showInitiativeOverlay(dieRoll) {
   const overlay = document.getElementById('diceOverlay');
   const die = document.getElementById('overlayDie');
   const result = document.getElementById('overlayResult');

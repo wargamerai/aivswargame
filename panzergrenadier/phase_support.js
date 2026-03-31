@@ -310,6 +310,85 @@ function closeFireOverlay() {
   document.getElementById('fireOverlay').classList.remove('show');
 }
 
+// 汎用ダイスオーバーレイ: 画面中央でダイスを回し、結果を表示してコールバック
+// rows: [{ label, roll, detail, resultText, resultClass('hit-d','hit-dd','hit-elim','hit-none') }]
+// callback: オーバーレイを閉じた後に呼ばれる
+function showDiceOverlay(title, subtitle, rows, callback) {
+  const overlay = document.getElementById('fireOverlay');
+  document.getElementById('fireOverlayTitle').textContent = title;
+  document.getElementById('fireOverlayTarget').textContent = subtitle;
+  const container = document.getElementById('fireOverlayResults');
+  container.innerHTML = '';
+
+  const n = rows.length;
+  const diceDelay = n > 1 ? 300 : 0;
+  const rollDuration = 800;
+  const allDoneTime = n * diceDelay + rollDuration + 200;
+
+  rows.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'fire-row hit-none';
+    row.style.animationDelay = `${i * 0.1}s`;
+    row.innerHTML = `
+      <span class="fire-unit-name">${r.label}</span>
+      <span class="fire-dice" id="fireDice${i}">-</span>
+      <span class="fire-detail" id="fireDetail${i}" style="color:#666;font-size:0.85em;">${r.detail || ''}</span>
+      <span class="fire-damage none" id="fireDmg${i}" style="visibility:hidden;">-</span>
+    `;
+    container.appendChild(row);
+
+    const startTime = i * diceDelay;
+    setTimeout(() => {
+      const diceEl = document.getElementById(`fireDice${i}`);
+      if (!diceEl) return;
+      diceEl.classList.add('rolling');
+      const rollInterval = setInterval(() => {
+        diceEl.textContent = Math.floor(Math.random() * 10);
+      }, 50);
+      setTimeout(() => {
+        clearInterval(rollInterval);
+        diceEl.classList.remove('rolling');
+        diceEl.textContent = r.roll;
+      }, rollDuration);
+    }, startTime);
+  });
+
+  setTimeout(() => {
+    rows.forEach((r, i) => {
+      const rc = r.resultClass || 'hit-none';
+      const rowEl = document.querySelectorAll('#fireOverlayResults .fire-row')[i];
+      if (rowEl) rowEl.className = `fire-row ${rc}`;
+
+      const dmgEl = document.getElementById(`fireDmg${i}`);
+      if (dmgEl) {
+        dmgEl.className = `fire-damage ${rc.replace('hit-','')}`;
+        dmgEl.textContent = r.resultText || '';
+        dmgEl.style.visibility = 'visible';
+        dmgEl.style.transform = 'scale(1.5)';
+        dmgEl.style.transition = 'transform 0.3s';
+        setTimeout(() => { dmgEl.style.transform = 'scale(1)'; }, 200);
+      }
+
+      const detailEl = document.getElementById(`fireDetail${i}`);
+      if (detailEl && r.detailAfter) {
+        detailEl.style.color = '#aaa';
+        detailEl.innerHTML = r.detailAfter;
+      }
+    });
+  }, allDoneTime);
+
+  // コールバック付き閉じる
+  overlay.classList.add('show');
+  const closeEl = overlay.querySelector('.fire-close');
+  if (closeEl) {
+    closeEl.onclick = function() {
+      overlay.classList.remove('show');
+      closeEl.onclick = function() { overlay.classList.remove('show'); };
+      if (callback) callback();
+    };
+  }
+}
+
 function cancelSupportTarget() {
   supportState.selectedArtillery = [];
   supportState.targetHexId = null;
