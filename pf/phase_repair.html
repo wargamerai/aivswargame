@@ -31,7 +31,6 @@ button.repair-btn:hover { background:#b8e8b8; }
   <div id="shipList"></div>
 </div>
 
-<button onclick="repairAll()">全艦修理チェック（一括）</button>
 <button onclick="donePhase()" id="btnDone">ターン終了</button>
 
 <div id="log"></div>
@@ -70,28 +69,48 @@ function renderList() {
   if (active.length===0) { el.innerHTML='<div style="color:#556">艦なし</div>'; return; }
 
   let html = `<table id="shipTable">
-    <tr><th>艦名</th><th>軍</th><th>状態</th><th>G/M</th><th>クリティカル</th><th>修理</th></tr>`;
+    <tr><th>艦名</th><th>軍</th><th>状態</th><th>G/M</th><th>クリティカル</th><th>修理結果</th></tr>`;
 
+  const fog = !!state.fogMode;
+  // PF: プレイヤー=米軍、敵=日本軍
+  const playerSide = 'us';
   for (const s of active) {
-    const sc = statusClass(s.status);
-    const crits = s.crits || [];
-    const critHtml = crits.length===0 ? '<span style="color:#445">なし</span>'
-      : crits.map((c,i)=>`<span class="crit-badge">${c}</span>`).join('');
-    const repBtn = crits.length>0
-      ? `<button class="repair-btn" onclick="repairShip('${s.name}')">修理</button>`
-      : '';
-    const side = s.side==='jp' ? '🎌' : '🦅';
-    html += `<tr>
-      <td>${s.name}</td>
-      <td>${side}</td>
-      <td class="${sc}">${statusLabel(s.status)}</td>
-      <td>${s.dmgG||0}/${s.dmgM||0}</td>
-      <td>${critHtml}</td>
-      <td>${repBtn}</td>
-    </tr>`;
+    const isEnemy = fog && s.side !== playerSide;
+    const isOwnNonLead = fog && s.side === playerSide && !s.isLead;
+    const repHtml = formatRepairResults(s);
+    if (isEnemy) {
+      html += `<tr><td style="color:#999">❓❓❓</td><td>🎌</td><td style="color:#999">❓</td><td>❓</td><td style="color:#999">❓</td><td style="color:#999">❓</td></tr>`;
+    } else if (isOwnNonLead) {
+      const sc = statusClass(s.status);
+      html += `<tr><td>${s.name}</td><td>🦅</td><td class="${sc}">❓</td><td>❓</td><td style="color:#999">❓</td><td>${repHtml}</td></tr>`;
+    } else {
+      const sc = statusClass(s.status);
+      const crits = s.crits || [];
+      const critHtml = crits.length===0 ? '<span style="color:#445">なし</span>'
+        : crits.map((c,i)=>`<span class="crit-badge">${c}</span>`).join('');
+      const side = s.side==='jp' ? '🎌' : '🦅';
+      html += `<tr>
+        <td>${s.name}</td>
+        <td>${side}</td>
+        <td class="${sc}">${statusLabel(s.status)}</td>
+        <td>${s.dmgG||0}/${s.dmgM||0}</td>
+        <td>${critHtml}</td>
+        <td>${repHtml}</td>
+      </tr>`;
+    }
   }
   html += '</table>';
   el.innerHTML = html;
+}
+
+function formatRepairResults(ship) {
+  const results = ship.repairResults || [];
+  if (results.length === 0) return '<span style="color:#999">-</span>';
+  return results.map(r => {
+    if (r.result === 'impossible') return `<span style="color:#888">${r.crit}: 修理不可</span>`;
+    if (r.result === 'success') return `<span style="color:#2a8a2a;font-weight:bold">${r.crit}: ${r.label}(${r.d1},${r.d2})</span>`;
+    return `<span style="color:#c44">${r.crit}: ${r.label}(${r.d1},${r.d2})</span>`;
+  }).join('<br>');
 }
 
 // クリティカル文字列→対応するフラグ解除
@@ -112,26 +131,31 @@ function repairShip(name) {
 
   log(`${name} 修理チェック:`);
   const remaining = [];
+  ship.repairResults = [];
   for (const crit of ship.crits) {
     // 轟沈・大損害は修理不可
     if (crit.startsWith('轟沈') || crit.startsWith('大損害') || crit === '隔壁破壊') {
       remaining.push(crit);
+      ship.repairResults.push({ crit, result: 'impossible' });
       log(`  - ${crit}: 修理不可`);
       continue;
     }
     const d1=Math.ceil(Math.random()*6), d2=Math.ceil(Math.random()*6);
     if (d1===d2) {
-      log(`  OK ${crit}: ${d1}+${d2} ゾロ目 → 修理成功！`);
+      const label = crit === '火災' ? '鎮火' : '修理成功';
+      ship.repairResults.push({ crit, result: 'success', label, d1, d2 });
+      log(`  OK ${crit}: ${d1}+${d2} ゾロ目 → ${label}！`);
       clearCritFlag(ship, crit);
     } else {
-      log(`  NG ${crit}: ${d1}+${d2} 失敗`);
+      const label = crit === '火災' ? '消火失敗' : '修理失敗';
+      ship.repairResults.push({ crit, result: 'fail', label, d1, d2 });
+      log(`  NG ${crit}: ${d1}+${d2} ${label}`);
       remaining.push(crit);
     }
   }
   ship.crits = remaining;
 
   // ★ フラグ再計算: crits配列の実際の内容に基づいてフラグを正しく設定
-  // （火災が2個あって1個だけ修理成功した場合、onFireはtrueのままにする等）
   ship.onFire = remaining.includes('火災');
   ship.cannotFire = remaining.includes('砲撃不能');
   ship.gunHalved = remaining.includes('攻撃力半減');

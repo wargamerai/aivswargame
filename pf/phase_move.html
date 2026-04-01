@@ -177,9 +177,17 @@ function init() {
   } else if (jpMoving) {
     startAutoJPMove();    // PF: 日本軍(AI)自動移動
   } else {
-    if (isUSAutoAI()) {
-      autoUSMove();
+    const isFullAuto = localStorage.getItem('fullAutoAI') === '1';
+    if (isUSAutoAI() && (isFullAuto || (!state.contactMade && !state.usFreeMove))) {
+      autoUSMove();       // 観戦モード or 接触前: AI委任継続
     } else {
+      // 接触後（通常対戦）はAI委任を解除して手動に戻す
+      if (isUSAutoAI() && (state.contactMade || state.usFreeMove)) {
+        localStorage.setItem('usAutoAI', '0');
+        const cb = document.getElementById('usAI');
+        if (cb) cb.checked = false;
+        setInfo('敵発見 — AI委任を解除しました');
+      }
       startFreeMode();      // PF: 米軍(プレイヤー)手動移動
     }
   }
