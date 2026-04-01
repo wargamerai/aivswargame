@@ -528,6 +528,84 @@ const SCENARIOS = [
     terrain: MAP_TERRAIN.C,
     hexsideTerrain: MAP_HEXSIDE_TERRAIN.C
   },
+  // シナリオ6: プロポロフカ
+  {
+    id: 'sc6',
+    name: 'プロポロフカ',
+    front: 'east',
+    map1: 'A', map1orient: 'Vertical',
+    map2: 'B', map2orient: 'Vertical',
+    maxTurns: 99,
+    firstPlayer: 'ge',
+    victory: '先に半数以上破壊した側の勝利（射撃不能は破壊扱い。ドイツ未登場援軍は計算に含めない）',
+    sides: {
+      ge: {
+        setup: 'enterEdgeHexes',
+        enterEdge: 'left',
+        enterHexRows: [1, 16],
+        units: [
+          { name:'Pz III/J', col:0, row:0, dir:0 },
+          { name:'Pz III/J', col:0, row:0, dir:0 },
+          { name:'Pz III/J', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+        ]
+      },
+      su: {
+        setup: 'enterRight',
+        enterEdge: 'right',
+        units: [
+          { name:'KV-1C', col:0, row:0, dir:3 },
+          { name:'KV-1C', col:0, row:0, dir:3 },
+          { name:'KV-1C', col:0, row:0, dir:3 },
+          { name:'KV-1C', col:0, row:0, dir:3 },
+          { name:'KV-1C', col:0, row:0, dir:3 },
+          { name:'KV-1C', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'T34/76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+          { name:'SU-76', col:0, row:0, dir:3 },
+        ]
+      }
+    },
+    reinforcement: {
+      turn: 4,
+      side: 'ge',
+      enterEdge: 'bottom',
+      units: [
+        { name:'Tiger I', col:0, row:0, dir:1 },
+        { name:'Tiger I', col:0, row:0, dir:1 },
+        { name:'StuG III', col:0, row:0, dir:1 },
+      ]
+    },
+    terrain: MAP_TERRAIN.A,
+    hexsideTerrain: MAP_HEXSIDE_TERRAIN.B
+  },
 ];
 
 // --- 視認距離 ---

@@ -168,6 +168,8 @@ function init(stateData) {
     if (u.side !== enemySide) return;
     if (u.status === 'destroyed') return;
     if (u.col < 1) return;
+    // 射撃不能は破壊扱いの勝利条件がある場合、弾切れユニットは目標外
+    if (u.ammoOut && state.victory && state.victory.indexOf('射撃不能') >= 0) return;
     // 隠匿ユニットは視認距離チェックが必要
     if (u.hidden) {
       const spotted = state.units.some(f =>
@@ -307,6 +309,7 @@ function updateShootInfo() {
 
   const ft = FIRE_TABLE[firer.name][di];
   if (!ft) { el.textContent = '射撃データなし'; btn.disabled = true; return; }
+  if (ft[1] <= 2) { el.textContent = '命中不可（基本命中数2以下）'; btn.disabled = true; return; }
 
   const pen = ft[0];
   let hitNum = ft[1];
@@ -559,6 +562,15 @@ function doShoot() {
   if (tDb.small) { mod += 1; details.push('小型+1'); }
   if (target.status === 'immobilized') { mod -= 1; details.push('移動不能-1'); }
   if (isAdvanceFire) { const am = HIT_MODIFIERS.advanceFire[fDb.nation]||2; mod += am; details.push(`前進+${am}`); }
+
+  // 命中数2以下はスキップ（命中不可能）
+  if (hitNum - mod <= 2 && dist > 0) {
+    log(`${firer.name} → ${target.name}: 命中不可（命中数${hitNum}-修正${mod}=${hitNum-mod}）スキップ`);
+    firer.fired = true;
+    parent.postMessage({ type:'STATE_UPDATE', state: state }, '*');
+    if (typeof nextFirer === 'function') nextFirer();
+    return;
+  }
 
   // ダイス
   const d1 = roll(), d2 = roll();
@@ -1276,7 +1288,12 @@ function aiFindBestTarget(firerIdx) {
     if (target.col < 1) continue;
 
     const dist = hexDist(firer.col, firer.row, target.col, target.row);
+    if (dist > 30) continue;
     const tDb = UNIT_DB[target.name];
+
+    // 基本命中数2以下は除外
+    const di_chk = distKey(dist);
+    if (di_chk >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di_chk] && FIRE_TABLE[firer.name][di_chk][1] <= 2) continue;
 
     // LOS チェック（全ユニット共通）
     if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
