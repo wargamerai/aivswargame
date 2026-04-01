@@ -347,29 +347,34 @@ function applyCritical(target, cd) {
 }
 function getDefense(s) { return s.def || 0; }
 
-// 日本軍から米艦が見えるか？（hub.htmlのisSpottedと同等）
-function isVisibleToJP(usShip) {
-  if (usShip.faceUp) return true;
-  // 火災中・発砲済みの敵は視認距離外でも見える（共通ルール）
-  if (usShip.revealed) return true;
-  if (usShip.onFire) return true;
-  const jpFleet = state.jpFleet || [];
-  return jpFleet.some(f => {
-    if (f.status === 'sunk' || f.col < 0) return false;
-    const d = hexDist(usShip.col, usShip.row, f.col, f.row);
-    if (d <= (state.spotRange || 0)) return true;
-    // 日本軍はレーダーなし — 視認範囲のみ
-    return false;
-  });
+// 射撃艦(firer)からその目標(target)が見えるか？（艦ごとの視認判定）
+function canSee(firer, target) {
+  // 発砲済み・火災中の敵は距離に関係なく見える
+  if (target.firedGun1) return true;
+  if (target.onFire) return true;
+  if (target.revealed) return true;
+  if (target.faceUp) return true;
+  const d = hexDist(firer.col, firer.row, target.col, target.row);
+  // 視認距離内なら見える
+  if (d <= (state.spotRange || 0)) return true;
+  // 米軍はレーダーで20hex以内も見える
+  if (firer.radar && d <= 20) return true;
+  return false;
 }
 
-// 米軍から日本艦が見えるか？
+// 味方の誰かから見えるか（目標リスト用のフィルタ）
+function isVisibleToJP(usShip) {
+  // 発砲済み・火災中の艦は視認可能
+  if (usShip.firedGun1 || usShip.onFire) return true;
+  // 視認距離内の艦は視認可能
+  return (state.jpFleet || []).some(f => {
+    if (f.status === 'sunk' || f.col < 0) return false;
+    return hexDist(usShip.col, usShip.row, f.col, f.row) <= (state.spotRange || 0);
+  });
+}
 function isVisibleToUS(jpShip) {
-  // 火災中・発砲済みの敵は視認距離外でも見える（共通ルール）
-  if (jpShip.onFire) return true;
-  if (jpShip.revealed) return true;
-  const usFleet = state.usFleet || [];
-  return usFleet.some(f => {
+  if (jpShip.firedGun1 || jpShip.onFire || jpShip.revealed) return true;
+  return (state.usFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     const d = hexDist(jpShip.col, jpShip.row, f.col, f.row);
     if (d <= (state.spotRange || 0)) return true;
@@ -378,16 +383,16 @@ function isVisibleToUS(jpShip) {
   });
 }
 
-// 射程上限: 米軍=常に16hex、日本軍=spotRange（revealed/onFireなら16hex）
+// 射程上限: 日米とも一律16hex（視認できれば撃てる）
 function getMaxRange(target, firer) {
-  if (firer && firer.side === 'us') return 16;  // 米軍: レーダーで制限なし
-  return (target.revealed || target.onFire) ? 16 : (state.spotRange || 5);
+  return 16;
 }
 
 function isUSAutoAI() { return localStorage.getItem('usAutoAI') === '1'; }
 
 function usShootOrAuto(title) {
-  if (isUSAutoAI()) {
+  const isFullAuto = localStorage.getItem('fullAutoAI') === '1';
+  if (isFullAuto || isUSAutoAI()) {
     autoUSShoot(title + '（自動）');
   } else {
     setupUSShoot(title);
@@ -501,13 +506,16 @@ function renderCards() {
   tEl.innerHTML = targetShips.map((s, i) => {
     const sel = selectedTarget === i ? ' target-sel' : '';
     const def = getDefense(s);
-    // 射程外・射界外判定
+    // 視認・射程外・射界外判定
     let oor = '';
     if (selectedFirer !== null) {
       const firer = firerShips[selectedFirer];
-      const d = hexDist(firer.col, firer.row, s.col, s.row);
-      if (d > getMaxRange(s, firer)) oor = ' disabled';
-      else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
+      if (!canSee(firer, s)) oor = ' disabled';
+      else {
+        const d = hexDist(firer.col, firer.row, s.col, s.row);
+        if (d > 16) oor = ' disabled';
+        else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
+      }
     }
     return `<div class="card jp${sel}${oor}" onclick="selectTarget(${i})">
       <span class="c-name">${s.name}</span>
@@ -533,9 +541,10 @@ function selectFirer(i) {
 }
 
 function selectTarget(i) {
-  // 射程外チェック
+  // 視認・射程外チェック
   if (selectedFirer !== null) {
     const firer = firerShips[selectedFirer];
+    if (!canSee(firer, targetShips[i])) return;
     const d = hexDist(firer.col, firer.row, targetShips[i].col, targetShips[i].row);
     if (d > 16) return;
   }
@@ -673,6 +682,7 @@ function doShoot() {
     }, '*');
 
     // ログ
+    fogSetTarget(target);
     log(`${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, ${arcInfo.arc}, 命中率${hitPct}%)`);
     log(`  ダイス: ${d1}+${d2}=${d1+d2}${mod!==0?` →${diceTotal}`:''}${isDouble1?' [ゾロ目!]':''}`);
     log(`  <span class="hit">命中数: ${hits}発</span>`);
@@ -739,9 +749,7 @@ function doShoot() {
     var origIdx = (state.usFleet||[]).indexOf(firer);
     parent.postMessage({type:'ACTION_DONE', shipIndex: origIdx >= 0 ? origIdx : selectedFirer}, '*');
 
-    if (subPhase === 'gun1a' || subPhase === 'gun1b') {
-      firer.firedGun1 = true;
-    }
+    firer.firedGun1 = true;
 
     localStorage.setItem('hubState', JSON.stringify(state));
     targetShotCount[target.name] = (targetShotCount[target.name] || 0) + 1;
@@ -842,21 +850,27 @@ function autoUSShoot(title) {
   const assignCount = {};
 
   for (const firer of us) {
-    // 雷撃温存: 魚雷搭載艦が第一砲撃で近距離なら砲撃スキップ（雷撃優先）
+    // 雷撃温存: 魚雷搭載艦がgun1で5hex以内かつ舷側に敵がいれば砲撃スキップ（雷撃優先）
     if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
         firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
-      const closestDist = Math.min(...jp.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
-      if (closestDist <= 3) {
-        log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
+      const torpTarget = jp.find(t => {
+        const d = hexDist(firer.col, firer.row, t.col, t.row);
+        if (d > 5) return false;
+        const fa = toAxial(firer.col, firer.row), ta = toAxial(t.col, t.row);
+        return isBroadside(firer.dir, ta.q-fa.q, ta.r-fa.r, -(ta.q-fa.q)-(ta.r-fa.r));
+      });
+      if (torpTarget) {
+        log(`${firer.name}: 雷撃温存（舷側${hexDist(firer.col,firer.row,torpTarget.col,torpTarget.row)}hex）`);
         continue;
       }
     }
 
-    // 目標選択: 最も近い敵、損傷大ほど後回し
+    // 目標選択: 視認可能かつ射程内で最も近い敵
     let bestTarget = null, bestScore = 999, bestDist = 999;
     for (const t of jp) {
+      if (!canSee(firer, t)) continue;
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > getMaxRange(t, firer)) continue;
+      if (d > 16) continue;
       const arcInfo = getArcInfo(firer, t);
       if (arcInfo.mult === 0) continue;
       const arcPenalty = arcInfo.mult < 1 ? 3 : 0;
@@ -869,9 +883,7 @@ function autoUSShoot(title) {
     assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
 
     firer.revealed = true;
-    if (subPhase === 'gun1a' || subPhase === 'gun1b') {
-      firer.firedGun1 = true;
-    }
+    firer.firedGun1 = true;
     bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
     const arcInfo = getArcInfo(firer, bestTarget);
@@ -981,6 +993,7 @@ function autoUSShoot(title) {
     }, '*');
 
     // ログ出力
+    fogSetTarget(r.target);
     const usHitPct = calcHitChance(r.mod, r.dist);
     log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${usHitPct}%)`);
     if (r.hits > 0) {
@@ -1018,6 +1031,13 @@ function autoJPShoot(title) {
   document.getElementById('shootUI').style.display = 'none';
   log(`=== ${title} ===`);
 
+  // 日本軍が敵を未発見なら射撃不可
+  if (!state.jpDetected) {
+    log('敵未発見 — 射撃スキップ');
+    setTimeout(() => doneSubPhase(), 400);
+    return;
+  }
+
   const jp = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
   // 日本軍から見える米艦のみ目標にできる
   const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToJP(s));
@@ -1034,21 +1054,27 @@ function autoJPShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of jp) {
-    // 雷撃温存: 魚雷搭載艦が第一砲撃で近距離なら砲撃スキップ（雷撃優先）
+    // 雷撃温存: 魚雷搭載艦がgun1で5hex以内かつ舷側に敵がいれば砲撃スキップ（雷撃優先）
     if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
         firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
-      const closestDist = Math.min(...us.map(t => hexDist(firer.col, firer.row, t.col, t.row)));
-      if (closestDist <= 3) {
-        log(`${firer.name}: 雷撃温存（敵${closestDist}hex）`);
+      const torpTarget = us.find(t => {
+        const d = hexDist(firer.col, firer.row, t.col, t.row);
+        if (d > 5) return false;
+        const fa = toAxial(firer.col, firer.row), ta = toAxial(t.col, t.row);
+        return isBroadside(firer.dir, ta.q-fa.q, ta.r-fa.r, -(ta.q-fa.q)-(ta.r-fa.r));
+      });
+      if (torpTarget) {
+        log(`${firer.name}: 雷撃温存（舷側${hexDist(firer.col,firer.row,torpTarget.col,torpTarget.row)}hex）`);
         continue;
       }
     }
 
-    // 目標選択: 最も近い敵、損傷大ほど後回し
+    // 目標選択: 視認可能かつ射程内で最も近い敵
     let bestTarget = null, bestScore = 999;
     for (const t of us) {
+      if (!canSee(firer, t)) continue;
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > getMaxRange(t, firer)) continue;
+      if (d > 16) continue;
       const arcInfo = getArcInfo(firer, t);
       if (arcInfo.mult === 0) continue;
       const arcPenalty = arcInfo.mult < 1 ? 3 : 0;
@@ -1061,10 +1087,7 @@ function autoJPShoot(title) {
     assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
 
     firer.revealed = true;
-    // 第一砲撃で射撃した艦をマーク → 雷撃不可
-    if (subPhase === 'gun1a' || subPhase === 'gun1b') {
-      firer.firedGun1 = true;
-    }
+    firer.firedGun1 = true;
     const bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
     // 射界チェック
@@ -1171,6 +1194,7 @@ function autoJPShoot(title) {
     }, '*');
 
     // ログ出力
+    fogSetTarget(r.target);
     const jpHitPct = calcHitChance(r.mod, r.dist);
     log(`${r.firer.name} → ${r.target.name} (距離${r.dist}, ${r.arcInfo.arc}, 命中率${jpHitPct}%)`);
     if (r.hits > 0) {
@@ -1345,11 +1369,33 @@ function doneSubPhase() {
   parent.postMessage({type:'PHASE_DONE'}, '*');
 }
 
+// 霧用: 直前の射撃の対象側を追跡 ('jp'=敵目標, 'us_lead'=味方旗艦, 'us'=味方非旗艦)
+var _fogLastTarget = '';
+function fogSetTarget(target) {
+  if (!state.fogMode) return;
+  if (target.side === 'jp') { _fogLastTarget = 'jp'; return; }
+  _fogLastTarget = target.isLead ? 'us_lead' : 'us';
+}
 function log(msg) {
+  let display = msg;
+  if (state.fogMode) {
+    const plain = msg.replace(/<[^>]*>/g, '');
+    // PF: 敵=日本軍の全艦名を❓に置換
+    (state.jpFleet||[]).forEach(s => {
+      if (display.includes(s.name)) display = display.replace(new RegExp(s.name, 'g'), '❓');
+    });
+    // 敵目標への射撃結果行を隠す
+    if (plain.match(/^\s*(命中|外れ|損害|クリティカル|→ 損害蓄積|ダイス)/)) {
+      if (_fogLastTarget === 'jp' || _fogLastTarget === 'us') {
+        if (plain.includes('火災')) display = '  ❓: 🔥火災発生';
+        else display = '  ❓❓❓';
+      }
+    }
+  }
   const el = document.getElementById('log');
-  el.innerHTML += `<div>${msg}</div>`;
+  el.innerHTML += `<div>${display}</div>`;
   el.scrollTop = el.scrollHeight;
-  parent.postMessage({type:'GAME_LOG', text:msg}, '*');
+  parent.postMessage({type:'GAME_LOG', text:display}, '*');
 }
 
 init();

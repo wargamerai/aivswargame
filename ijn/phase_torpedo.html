@@ -933,6 +933,12 @@ function autoJPTorpedo() {
       log('  外れ');
     }
 
+    // fullAutoAI時は確認スキップ
+    if (localStorage.getItem('fullAutoAI') === '1') {
+      setTimeout(() => showNext(), 600);
+      return;
+    }
+
     showResult(r);
 
     const okBtn = document.getElementById('resultOK');
@@ -1075,6 +1081,12 @@ function autoUSTorpedo() {
       if (r.critText) log(`  <span class="crit">クリティカル! ${r.critText}</span>`);
     } else {
       log('  外れ');
+    }
+
+    // fullAutoAI時は確認スキップ
+    if (localStorage.getItem('fullAutoAI') === '1') {
+      setTimeout(() => showNext(), 600);
+      return;
     }
 
     showResult(r);

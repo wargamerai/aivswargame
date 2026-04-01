@@ -151,10 +151,18 @@ function init() {
   } else if (!jpMoving) {
     startAutoUSMove();
   } else {
-    if (isJPAutoAI()) {
-      autoJPMove();
+    const isFullAuto = localStorage.getItem('fullAutoAI') === '1';
+    if (isJPAutoAI() && (isFullAuto || (!state.contactMade && !state.jpFreeMove))) {
+      autoJPMove();       // 観戦モード or 接触前: AI委任継続
     } else {
-      startFreeMode();
+      // 接触後（通常対戦）はAI委任を解除して手動に戻す
+      if (isJPAutoAI() && (state.contactMade || state.jpFreeMove)) {
+        localStorage.setItem('jpAutoAI', '0');
+        const cb = document.getElementById('jpAI');
+        if (cb) cb.checked = false;
+        setInfo('敵発見 — AI委任を解除しました');
+      }
+      startFreeMode();      // IJN: 日本軍(プレイヤー)手動移動
     }
   }
 }

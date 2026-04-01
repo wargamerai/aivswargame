@@ -137,13 +137,12 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
     <span class="ph" data-ph="repair">⑦修理</span>
   </div>
   <div id="contactInfo" class="no">索敵中</div>
-  <div id="spotInfo">視認<span id="spotRange">-</span></div>
-  <button id="btnFog" onclick="toggleFog()">霧: OFF</button>
-  <button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
-  <button id="btnCampaign" onclick="loadCampaign()">読込</button>
+  <div id="spotInfo">視認<span id="spotRange">-</span>hex</div>
+<button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
   <button id="btnReturn" onclick="if(confirm('戦闘を終了して結果を表示しますか？'))showTurnEndReport()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
-  <span style="margin-left:8px;">
+  <span style="margin-left:8px;display:flex;align-items:center;gap:4px;">
     <button onclick="zoomBtn(-1)" style="font-size:1em;padding:2px 8px;font-weight:bold;">−</button>
+    <input type="range" id="zoomSlider" min="50" max="250" value="100" step="10" style="width:100px;" oninput="zoomSlide(this.value)">
     <button onclick="zoomBtn(1)" style="font-size:1em;padding:2px 8px;font-weight:bold;">＋</button>
   </span>
 </div>
@@ -345,6 +344,18 @@ function zoomBtn(dir) {
   const cx = rect.width / 2, cy = rect.height / 2;
   const oldZoom = zoomLevel;
   zoomLevel = dir > 0 ? Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP) : Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP);
+  const ratio = zoomLevel / oldZoom;
+  panX = cx - ratio * (cx - panX);
+  panY = cy - ratio * (cy - panY);
+  const sl = document.getElementById('zoomSlider');
+  if (sl) sl.value = Math.round(zoomLevel * 100);
+  draw();
+}
+function zoomSlide(val) {
+  const rect = maparea.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const oldZoom = zoomLevel;
+  zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, val / 100));
   const ratio = zoomLevel / oldZoom;
   panX = cx - ratio * (cx - panX);
   panY = cy - ratio * (cy - panY);
@@ -573,6 +584,26 @@ function draw() {
     }
   });
 
+  // 発砲済み艦のヘクス強調
+  [...state.jpFleet, ...state.usFleet].forEach(s => {
+    if (!s.firedGun1 || s.status === 'sunk' || s.col < 0) return;
+    if (s.side === 'us' && !isSpotted(s)) return;
+    const {x,y} = hexPt(s.col, s.row);
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = s.side === 'jp' ? '#ff4400' : '#2255ff';
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 3 * i - Math.PI / 6;
+      const px = x + HS * Math.cos(a);
+      const py = y + HS * Math.sin(a);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  });
+
   // Ships
   [...state.jpFleet, ...state.usFleet].forEach(s => drawShip(s));
 
@@ -647,6 +678,7 @@ function toggleFleetSection(side) {
 function renderFleetList() {
   const el = document.getElementById('fleetList');
   if (!el || !state.jpFleet) return;
+  const fogActive = state.fogMode && state.phase !== 'report';
   function critText(s) {
     var parts = [];
     if (s.cannotFire) parts.push('砲×');
@@ -666,17 +698,30 @@ function renderFleetList() {
   for (var si = 0; si < state.jpFleet.length; si++) {
     var s = state.jpFleet[si];
     var cls = s.status || 'ok';
-    var done = ad.indexOf(si) >= 0 ? '✓' : '';
-    var lead = s.isLead ? '★' : '';
-    var g = s.dmgG || 0, m = s.dmgM || 0;
-    var gStr = g > 0 ? g + '/' + s.capG : '-';
-    var mStr = m > 0 ? m + '/' + s.capM : '-';
-    var ct = s.status === 'sunk' ? '撃沈' : critText(s);
-    html += '<tr class="' + cls + '">';
-    html += '<td class="name-cell" style="color:#cc3311">' + lead + s.name + done + '</td>';
-    html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
-    html += '<td class="status-cell">' + (ct || '-') + '</td>';
-    html += '</tr>';
+    if (fogActive && !s.isLead && s.status !== 'sunk') {
+      // 霧ON: 旗艦以外は曖昧表示
+      var fogStatus = [];
+      if (s.firedGun1) fogStatus.push('発砲');
+      if (s.onFire) fogStatus.push('🔥');
+      var dmgLabel = fogOwnStatus(s);
+      html += '<tr class="' + cls + '">';
+      html += '<td class="name-cell" style="color:#cc3311">' + s.name + '</td>';
+      html += '<td colspan="2">' + (dmgLabel || '❓') + '</td>';
+      html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
+      html += '</tr>';
+    } else {
+      var done = ad.indexOf(si) >= 0 ? '✓' : '';
+      var lead = s.isLead ? '★' : '';
+      var g = s.dmgG || 0, m = s.dmgM || 0;
+      var gStr = g > 0 ? g + '/' + s.capG : '-';
+      var mStr = m > 0 ? m + '/' + s.capM : '-';
+      var ct = s.status === 'sunk' ? '撃沈' : critText(s);
+      html += '<tr class="' + cls + '">';
+      html += '<td class="name-cell" style="color:#cc3311">' + lead + s.name + done + '</td>';
+      html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
+      html += '<td class="status-cell">' + (ct || '-') + '</td>';
+      html += '</tr>';
+    }
   }
   html += '</table></div>';
   // 米軍
@@ -690,6 +735,16 @@ function renderFleetList() {
     var visible = isSpotted(s);
     if (!visible) {
       html += '<tr><td class="name-cell" style="color:#999">???</td><td>-</td><td>-</td><td>-</td></tr>';
+    } else if (fogActive) {
+      // 霧ON: 敵の詳細はすべて隠す、発砲/火災のみ表示
+      var fogStatus = [];
+      if (s.firedGun1) fogStatus.push('発砲');
+      if (s.onFire) fogStatus.push('🔥');
+      html += '<tr class="' + cls + '">';
+      html += '<td class="name-cell" style="color:#999">❓❓❓</td>';
+      html += '<td>❓</td><td>❓</td>';
+      html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
+      html += '</tr>';
     } else {
       var g = s.dmgG || 0, m = s.dmgM || 0;
       var gStr = g > 0 ? g + '/' + s.capG : '-';
@@ -854,11 +909,14 @@ function drawShip(ship) {
 
     ctx.restore();
 
-    // 艦名ラベル
+    // 艦名ラベル（沈没艦）
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#888';
-    ctx.fillText(ship.name.substring(0,3), x, y + 14);
+    const sunkLabel = (state.fogMode && state.phase !== 'report' && ship.side === 'us')
+      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型')
+      : ship.name.substring(0,3);
+    ctx.fillText(sunkLabel, x, y + 14);
     return;
   }
   if (ship.side === 'us' && !isSpotted(ship)) {
@@ -996,7 +1054,11 @@ function drawShip(ship) {
     }
   } else {
     ctx.fillStyle = '#99aaff';
-    ctx.fillText(usShipLabel(ship), x, y + drawSz + 10);
+    // IJN: 米軍=敵、霧ONなら大型/小型表示
+    const usLabel = (state.fogMode && state.phase !== 'report')
+      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型')
+      : usShipLabel(ship);
+    ctx.fillText(usLabel, x, y + drawSz + 10);
   }
 
   // 残り移動力表示（移動フェーズ中のみ）
@@ -1090,6 +1152,11 @@ function loadPhase(phase) {
   if (phase !== 'move1' && phase !== 'move2') {
     [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => { delete s.prevCol; delete s.prevRow; });
   }
+  // gun1a開始時: 前ターンの発砲フラグをリセット（torpedo前にリセットしないよう注意）
+  if (phase === 'gun1a') {
+    (state.jpFleet||[]).forEach(s => { s.firedGun1 = false; });
+    (state.usFleet||[]).forEach(s => { s.firedGun1 = false; });
+  }
   state.phase = phase;
   state.actionDone = [];  // フェーズ遷移で行動済みリストクリア
   saveState();
@@ -1178,20 +1245,39 @@ function showDmgSummary(title, lines) {
   _dmgSummaryPending = true;
   document.getElementById('dmgSummaryTitle').textContent = title;
   const body = document.getElementById('dmgSummaryBody');
-  body.innerHTML = lines.map(l => {
+  // 霧ON: 敵（米軍）の損害詳細を隠す、味方旗艦以外も隠す
+  const fogLines = state.fogMode ? lines.map(l => {
+    const isEnemy = (state.usFleet||[]).some(s => l.includes(s.name));
+    const isOwnLead = (state.jpFleet||[]).some(s => s.isLead && l.includes(s.name));
+    if (isEnemy) {
+      if (l.includes('火災')) return '❓: 🔥火災発生';
+      return '❓❓❓';
+    }
+    if (!isOwnLead && !isEnemy) {
+      const isOwn = (state.jpFleet||[]).some(s => l.includes(s.name));
+      if (isOwn) {
+        if (l.includes('轟沈') || l.includes('沈没')) return l;
+        if (l.includes('火災')) return l;
+        const ship = (state.jpFleet||[]).find(s => l.includes(s.name));
+        return ship ? ship.name + ': ❓❓❓' : '❓❓❓';
+      }
+    }
+    return l;
+  }) : lines;
+  body.innerHTML = fogLines.map(l => {
     if (l.includes('轟沈') || l.includes('沈没')) return `<div style="color:#cc2200;font-weight:bold">${l}</div>`;
     if (l.includes('⚡')) return `<div style="color:#aa00aa;font-weight:bold">${l}</div>`;
     if (l.includes('旗艦に昇格')) return `<div style="color:#8a6a00;font-weight:bold">${l}</div>`;
-    // M損害が多い艦を色分け
+    if (l.includes('❓')) return `<div style="color:#999">${l}</div>`;
     var mMatch = l.match(/M(\d+)/);
     if (mMatch && parseInt(mMatch[1]) > 0) return `<div style="color:#cc6600">${l}</div>`;
     return `<div>${l}</div>`;
   }).join('');
   const ov = document.getElementById('dmgSummaryOverlay');
   ov.style.display = 'flex';
-  // AI委任時は自動確認
-  if (localStorage.getItem('jpAutoAI') === '1') {
-    setTimeout(() => { if (ov.style.display !== 'none') closeDmgSummary(); }, 3000);
+  // fullAutoAI時は自動確認
+  if (localStorage.getItem('fullAutoAI') === '1') {
+    setTimeout(() => closeDmgSummary(), 1500);
   }
 }
 function closeDmgSummary() {
@@ -1303,7 +1389,8 @@ window.addEventListener('message', (e) => {
       break;
 
     case 'DAMAGE_SUMMARY':
-      showDmgSummary(msg.title, msg.lines);
+      // 損害サマリーは表示しない（直接次フェーズへ）
+      onPhaseDone();
       break;
 
     case 'DEPLOY_UNDO':
@@ -1408,10 +1495,7 @@ function nextTurn() {
   }
   document.getElementById('combatTurn').textContent = state.combatTurn;
 
-  // ターン開始時: per-turnフラグをリセット（firedGun1 = 第一砲撃で射撃→雷撃不可）
   // torpedoFiredはリセットしない（ルール上、魚雷は1戦闘につき1回のみ）
-  (state.jpFleet||[]).forEach(s => { s.firedGun1 = false; });
-  (state.usFleet||[]).forEach(s => { s.firedGun1 = false; });
 
   autoInitiative();
   saveState();
@@ -1472,7 +1556,7 @@ function loadCampaign() {
     state.jpDetected = false;
     state.usDetected = false;
     state.contactMade = false;
-    state.fogMode = false;
+    state.fogMode = localStorage.getItem('fogOfWar') === '1';
 
     // 表示リセット
     document.getElementById('combatTurn').textContent = '1';
@@ -1481,10 +1565,6 @@ function loadCampaign() {
     document.getElementById('initInfo').className = '';
     updateContactInfo();
     updatePhaseBar('init');
-    const btn = document.getElementById('btnFog');
-    btn.textContent = '霧: OFF';
-    btn.style.background = '#1a1a2a';
-    btn.style.color = '#778';
 
     // 蓄積損害もクリア
     localStorage.removeItem('gunPendingDmg');
@@ -1833,25 +1913,8 @@ canvas.addEventListener('click', (e) => {
 });
 
 // ========== ZOOM & PAN（Canvas内部描画方式）==========
-maparea.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  const rect = maparea.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-
-  const oldZoom = zoomLevel;
-  if (e.deltaY < 0) {
-    zoomLevel = Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP);
-  } else {
-    zoomLevel = Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP);
-  }
-
-  const ratio = zoomLevel / oldZoom;
-  panX = mx - ratio * (mx - panX);
-  panY = my - ratio * (my - panY);
-
-  draw();
-}, { passive: false });
+// マウスホイールズーム無効化
+maparea.addEventListener('wheel', (e) => { e.preventDefault(); }, { passive: false });
 
 maparea.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
