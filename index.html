@@ -93,35 +93,39 @@
             <span>F-16 Air Combat Simulator</span>
         </a>
 
-        <a href="pfb/index.html" class="theater-btn">
-            PFB Professional Baseball 2026
-            <span>PFB Professional Baseball 2026</span>
-        </a>
-
         <a href="ijn/savo.html" class="theater-btn">
             サボ島沖海戦
             <span>Battle of Savo Island (1942)</span>
         </a>
 
-        <a href="ijn/campaign.html" class="theater-btn">
-            連合艦隊
-            <span>Grand Fleet (IJN)</span>
-        </a>
+        <!-- コナミコマンドで出現 -->
+        <div class="secret-btn" id="secret-ijn">
+            <a href="ijn/campaign.html" class="theater-btn" data-title="連合艦隊" data-sub="Grand Fleet (IJN)">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
+            </a>
+        </div>
 
-        <a href="pf/campaign.html" class="theater-btn">
-            太平洋艦隊
-            <span>Pacific Fleet (USN)</span>
-        </a>
+        <div class="secret-btn" id="secret-pf">
+            <a href="pf/campaign.html" class="theater-btn" data-title="太平洋艦隊" data-sub="Pacific Fleet (USN)">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
+            </a>
+        </div>
 
-        <a href="tanks+/hub.html" class="theater-btn">
-            TANKS+
-            <span>Tactical Armor Combat</span>
-        </a>
+        <div class="secret-btn" id="secret-tanks">
+            <a href="tanks+/hub.html" class="theater-btn" data-title="TANKS+" data-sub="Tactical Armor Combat">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
+            </a>
+        </div>
 
-        <a href="buldge/bulge.html" class="theater-btn">
-            バルジの戦い
-            <span>Panzers in the Snow (1944)</span>
-        </a>
+        <div class="secret-btn" id="secret-bulge">
+            <a href="buldge/bulge.html" class="theater-btn" data-title="バルジの戦い" data-sub="Panzers in the Snow (1944)">
+                ████████
+                <span>CLASSIFIED - ACCESS GRANTED</span>
+            </a>
+        </div>
     </div>
 
     <div class="footer">
@@ -255,6 +259,36 @@
         return div.innerHTML;
     }
 
+    // コナミコマンド: ↑↑↓↓←→←→BA
+    // 墨消しで出現 → 0.8秒後にタイトル解読
+    (function() {
+        const code = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+        let pos = 0;
+        let activated = false;
+        document.addEventListener('keydown', function(e) {
+            if (activated) return;
+            if (e.key === code[pos] || e.key.toLowerCase() === code[pos]) {
+                pos++;
+                if (pos === code.length) {
+                    activated = true;
+                    const secrets = document.querySelectorAll('.secret-btn');
+                    secrets.forEach(el => el.classList.add('revealed'));
+                    setTimeout(() => {
+                        secrets.forEach(el => {
+                            const btn = el.querySelector('.theater-btn');
+                            const title = btn.dataset.title;
+                            const sub = btn.dataset.sub;
+                            btn.childNodes[0].textContent = '\n                ' + title + '\n                ';
+                            btn.querySelector('span').textContent = sub;
+                        });
+                    }, 800);
+                    pos = 0;
+                }
+            } else {
+                pos = 0;
+            }
+        });
+    })();
 </script>
 
 </body>
