@@ -834,7 +834,7 @@ function autoJPTorpedo() {
   for (const firer of jp) {
     let bestTarget = null, bestScore = 999, bestDist = 0;
     for (const t of us) {
-      if (t.status === 'sunk') continue; // 撃沈確定艦をスキップ
+      if (t.status === 'sunk') continue;
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
       if (!checkBroadside(firer, t)) continue;
@@ -845,8 +845,10 @@ function autoJPTorpedo() {
     }
     if (!bestTarget) continue;
 
-    const tp = getTorpPower(firer);
     const {mod, details} = calcModifiers(firer, bestTarget);
+    if (calcTorpHitChance(mod, bestDist) === 0) continue;
+
+    const tp = getTorpPower(firer);
     const d1 = roll(), d2 = roll();
     const diceTotal = d1 + d2 + mod;
     const isDouble1 = (d1 === d2);
@@ -978,7 +980,7 @@ function autoUSTorpedo() {
     let bestTarget = null, bestScore = 999, bestDist = 99;
     const allShips = [...us, ...jp];
     for (const t of jp) {
-      if (t.status === 'sunk') continue; // 撃沈確定艦をスキップ
+      if (t.status === 'sunk') continue;
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
       if (!checkBroadside(firer, t)) continue;
@@ -989,8 +991,10 @@ function autoUSTorpedo() {
     }
     if (!bestTarget) continue;
 
-    const tp = getTorpPower(firer);
     const {mod, details} = calcModifiers(firer, bestTarget);
+    if (calcTorpHitChance(mod, bestDist) === 0) continue;
+
+    const tp = getTorpPower(firer);
     const d1 = roll(), d2 = roll();
     const diceTotal = d1 + d2 + mod;
     const isDouble1 = (d1 === d2);
