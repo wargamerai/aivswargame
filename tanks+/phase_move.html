@@ -368,6 +368,10 @@ function handlePlacement(col, row) {
   if (edge === 'top' && row !== 1) { log('上端のヘクスを選択してください'); return; }
   if (edge === 'bottom' && row !== maxRow) { log('下端のヘクスを選択してください'); return; }
   if (edge === 'topRight' && (row !== 1 || col <= Math.floor(maxCol / 2))) { log('上端右半分のヘクスを選択してください'); return; }
+  // 進入行の範囲制限
+  if (u.enterHexRows && (row < u.enterHexRows[0] || row > u.enterHexRows[1])) {
+    log(`行${u.enterHexRows[0]}〜${u.enterHexRows[1]}の範囲で配置してください`); return;
+  }
 
   // スタッキングチェック
   if (!checkStacking(col, row, u)) {
@@ -711,6 +715,7 @@ function startDefensiveFire(movingUnit, movingIdx) {
     if (di < 0 || !FIRE_TABLE[e.name]) return;
     const ft = FIRE_TABLE[e.name][di];
     if (!ft) return;
+    if (ft[1] <= 2) return; // 基本命中数2以下は防御射撃不可
 
     if (eDb.turret !== 'rotating') {
       if (!isInFixedArc(e, movingUnit)) return;
@@ -733,6 +738,19 @@ function showDfStep1() {
   const e = enemy.unit;
   const eDb = enemy.db;
   const mDb = UNIT_DB[dfMovingUnit.name];
+
+  // AI自動判断: 修正後命中数が低い場合はDF_ARROW表示前に即スキップ
+  const dfShooterIsAI_early = !isAI || autoPlay;
+  if (dfShooterIsAI_early && !enemy.isInfantry && enemy.ft) {
+    const hitNum_e = enemy.ft[1];
+    let mod_e = HIT_MODIFIERS.defensiveFire;
+    const mTerrain_e = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
+    if (mTerrain_e === 'forest') mod_e += 2;
+    if (mTerrain_e === 'building') mod_e += 2;
+    mod_e += countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
+    if (mDb.small) mod_e += 1;
+    if (hitNum_e - mod_e < 6) { nextDfStep(); return; }
+  }
 
   // hub.htmlに矢印表示
   parent.postMessage({ type:'DF_ARROW', arrow: {
@@ -823,11 +841,8 @@ function showDfStep1() {
     const remainMP = dfMovingUnit.remainMove;
     const effHit = hitNum - mod; // 修正後の実質命中数
 
-    // 命中率が低すぎる（修正後4以下）→ スキップ
-    if (effHit <= 4) { nextDfStep(); return; }
-
-    // 残りMPが多い＆遠距離 → 通過するだけかもしれないのでスキップ
-    if (remainMP >= 3 && dist > 2) { nextDfStep(); return; }
+    // 修正後命中数6未満 → スキップ
+    if (effHit < 6) { nextDfStep(); return; }
 
     executeDfShot();
   }, 600);
@@ -2116,7 +2131,7 @@ function aiFollowPath(u, db, path, callback) {
         callback();
         return;
       }
-      setTimeout(nextStep, 300);
+      setTimeout(nextStep, autoPlay ? 50 : 300);
     };
     handleMove(target.col, target.row);
     // handleMoveが拒否した場合（MP不足等）、startDefensiveFireが呼ばれず

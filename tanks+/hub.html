@@ -154,25 +154,10 @@ button.top-btn:hover { background:#556; }
   <button class="top-btn" onclick="toggleDebug()" style="background:#030;color:#0f0">DBG</button>
   <button class="top-btn" id="autoPlayBtn" onclick="toggleAutoPlay()" style="background:#333;color:#888">自動:OFF</button>
   <span style="margin-left:20px;color:#888">|</span>
-  <button class="top-btn" id="teBtn" onclick="toggleTerrainEdit()">地形編集</button>
-  <span id="teBrush" style="display:none; gap:4px; align-items:center;">
-    <button class="top-btn te-b" data-t="forest" onclick="setTeBrush('forest')">森</button>
-    <button class="top-btn te-b" data-t="building" onclick="setTeBrush('building')">建物</button>
-    <button class="top-btn te-b" data-t="slope" onclick="setTeBrush('slope')">丘</button>
-    <button class="top-btn te-b" data-t="bocage" onclick="setTeBrush('bocage')">ボカージュ</button>
-    <button class="top-btn te-b" data-t="hexslope" onclick="setTeBrush('hexslope')">崖</button>
-    <button class="top-btn te-b" data-t="eraser" onclick="setTeBrush('eraser')">消去</button>
-    <button class="top-btn" onclick="exportTerrain()" style="background:#364;color:#8f8">出力</button>
-  </span>
-  <span id="mapAdjust" style="display:none; gap:4px; align-items:center;">
-    <button class="top-btn" onclick="adjustMap('x',-1)">←</button>
-    <button class="top-btn" onclick="adjustMap('x',1)">→</button>
-    <button class="top-btn" onclick="adjustMap('y',-1)">↑</button>
-    <button class="top-btn" onclick="adjustMap('y',1)">↓</button>
-    <button class="top-btn" onclick="adjustMap('r',-0.05)">↺</button>
-    <button class="top-btn" onclick="adjustMap('r',0.05)">↻</button>
-    <span id="mapAdjustInfo" style="color:#aaa;font-size:0.8em"></span>
-    <button class="top-btn" onclick="exportMapOffset()" style="background:#364;color:#8f8">出力</button>
+  <span style="display:inline-flex; align-items:center; gap:2px;">
+    <button class="top-btn" onclick="zoomStep(-1)" style="padding:2px 8px;font-size:16px;font-weight:bold">−</button>
+    <input type="range" id="zoomSlider" min="15" max="200" value="40" style="width:100px;vertical-align:middle;cursor:pointer">
+    <button class="top-btn" onclick="zoomStep(1)" style="padding:2px 8px;font-size:16px;font-weight:bold">+</button>
   </span>
 </div>
 
@@ -605,6 +590,7 @@ function draw() {
           if (selU.enterEdge === 'top' && r === 1) valid = true;
           if (selU.enterEdge === 'bottom' && r === mr) valid = true;
           if (selU.enterEdge === 'topRight' && r === 1 && c > Math.floor(mc / 2)) valid = true;
+          if (valid && selU.enterHexRows && (r < selU.enterHexRows[0] || r > selU.enterHexRows[1])) valid = false;
           if (!valid) continue;
           const h = hexCenter(c, r);
           const corners = hexCorners(h.x, h.y);
@@ -1330,18 +1316,43 @@ canvas.addEventListener('mousemove', (e) => {
 });
 canvas.addEventListener('mouseup', () => { dragging = false; canvas.style.cursor = 'grab'; });
 canvas.addEventListener('wheel', (e) => {
+  if (!e.altKey) return; // Option(Alt)キー押下時のみズーム
   e.preventDefault();
   const oldZoom = zoom;
   zoom *= e.deltaY < 0 ? 1.1 : 0.9;
   zoom = Math.max(0.15, Math.min(2, zoom));
-  // ズーム中心をマウス位置に
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
   camX = mx - (mx - camX) * (zoom / oldZoom);
   camY = my - (my - camY) * (zoom / oldZoom);
+  document.getElementById('zoomSlider').value = Math.round(zoom * 100);
+  draw();
+}, { passive: false });
+
+// ズームスライダー
+document.getElementById('zoomSlider').addEventListener('input', (e) => {
+  const oldZoom = zoom;
+  zoom = parseInt(e.target.value) / 100;
+  zoom = Math.max(0.15, Math.min(2, zoom));
+  const cv = canvas;
+  const cx = cv.width / 2, cy = cv.height / 2;
+  camX = cx - (cx - camX) * (zoom / oldZoom);
+  camY = cy - (cy - camY) * (zoom / oldZoom);
   draw();
 });
+
+function zoomStep(dir) {
+  const oldZoom = zoom;
+  zoom *= dir > 0 ? 1.15 : (1 / 1.15);
+  zoom = Math.max(0.15, Math.min(2, zoom));
+  const cv = canvas;
+  const cx = cv.width / 2, cy = cv.height / 2;
+  camX = cx - (cx - camX) * (zoom / oldZoom);
+  camY = cy - (cy - camY) * (zoom / oldZoom);
+  document.getElementById('zoomSlider').value = Math.round(zoom * 100);
+  draw();
+}
 
 // ヘクスクリック
 canvas.addEventListener('click', (e) => {
@@ -1579,6 +1590,7 @@ function startGame() {
         carrying: null,     // 輸送中の歩兵ID
         showWreck: true,
         enterEdge: (u.deployed || (u.col && u.col > 0)) ? null : (sd.enterEdge || null),
+        enterHexRows: (u.deployed || (u.col && u.col > 0)) ? null : (sd.enterHexRows || null),
       });
     }
   }
@@ -1847,8 +1859,43 @@ function checkReinforcement() {
   if (rf.done) return; // 既に処理済み
   if (state.turn !== rf.turn) return;
 
+  const side = rf.side;
+  const sc = SCENARIOS.find(s => s.id === state.scenarioId);
+  const sd = sc ? sc.sides[side] : null;
+
+  // 固定ユニット配列方式
+  if (rf.units && rf.units.length > 0) {
+    for (const entry of rf.units) {
+      state.units.push({
+        name: entry.name,
+        side: side,
+        col: -1,
+        row: -1,
+        dir: entry.dir || 0,
+        status: 'ok',
+        fired: false,
+        moved: false,
+        ammoOut: false,
+        gunDisabled: false,
+        hidden: false,
+        isDummy: false,
+        carrying: null,
+        showWreck: true,
+        enterEdge: rf.enterEdge || (sd ? sd.enterEdge : null),
+        enterHexRows: rf.enterHexRows || null,
+      });
+    }
+    const names = rf.units.map(u => u.name).join(', ');
+    gameLog(`<b style="color:#2a2">増援到着: ${names}</b>`);
+    rf.done = true;
+    saveState();
+    renderUnitList();
+    draw();
+    return;
+  }
+
+  // ダイステーブル方式
   const rawRoll = Math.floor(Math.random() * 6) + 1;
-  // ドイツ軍に撃破ユニットがあれば-1修正
   const geLoss = state.units.some(u => u.side === rf.side && u.status === 'destroyed') ? -1 : 0;
   const dieRoll = Math.max(1, rawRoll + geLoss);
   const modText = geLoss ? ` (出目${rawRoll}、損害修正${geLoss})` : '';
@@ -1860,12 +1907,6 @@ function checkReinforcement() {
     saveState();
     return;
   }
-
-  // ユニットを追加（侵入待ち状態で配置）
-  const side = rf.side;
-  const sc = SCENARIOS.find(s => s.id === state.scenarioId);
-  const sd = sc ? sc.sides[side] : null;
-  const db = UNIT_DB[entry.name];
 
   state.units.push({
     name: entry.name,
@@ -1883,6 +1924,7 @@ function checkReinforcement() {
     carrying: null,
     showWreck: true,
     enterEdge: rf.enterEdge || (sd ? sd.enterEdge : null),
+    enterHexRows: rf.enterHexRows || null,
   });
 
   gameLog(`🎲 増援ダイス: ${dieRoll}${modText} → <b style="color:#2a2">${entry.name} が増援で到着！</b>`);
