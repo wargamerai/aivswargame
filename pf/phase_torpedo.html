@@ -349,22 +349,16 @@ function init() {
 
   const ini = state.initiative || 'jp';
   if (ini === 'jp') {
-    // 日本軍先攻 → JP自動雷撃 → US手動(or AI)
-    autoJPTorpedo(function() {
-      if (isUSAutoAI()) { autoUSTorpedo(function() { donePhase(); }); } else { startUSManual(); }
-    });
+    // 日本軍先攻 → JP雷撃のみ（後攻の米軍は雷撃不可）
+    log('=== 日本軍雷撃（先攻） ===');
+    autoJPTorpedo(function() { donePhase(); });
   } else {
-    // 米軍先攻 → US手動(or AI) → JP自動雷撃
+    // 米軍先攻 → US雷撃のみ（後攻の日本軍は雷撃不可）
+    log('=== 米軍雷撃（先攻） ===');
     if (isUSAutoAI()) {
-      autoUSTorpedo(function() {
-        autoJPTorpedo(function() { donePhase(); });
-      });
+      autoUSTorpedo(function() { donePhase(); });
     } else {
-      startUSManual(function() {
-        autoJPTorpedo(function() {
-          donePhase();
-        });
-      });
+      startUSManual(function() { donePhase(); });
     }
   }
 }
@@ -875,8 +869,10 @@ function autoJPTorpedo(onDone) {
     if (!bestTarget) continue;
     const bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
-    const tp = getTorpPower(firer);
     const {mod, details} = calcModifiers(firer, bestTarget);
+    if (calcTorpHitChance(mod, bestDist) === 0) continue;
+
+    const tp = getTorpPower(firer);
     const d1 = roll(), d2 = roll();
     const diceTotal = d1 + d2 + mod;
     const isDouble1 = (d1 === d2);
@@ -1025,8 +1021,10 @@ function autoUSTorpedo(onDone) {
     if (!bestTarget) continue;
     const bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
-    const tp = getTorpPower(firer);
     const {mod, details} = calcModifiers(firer, bestTarget);
+    if (calcTorpHitChance(mod, bestDist) === 0) continue;
+
+    const tp = getTorpPower(firer);
     const nRolls = getTorpRolls(firer);
 
     const hitRollsArr = [];

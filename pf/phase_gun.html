@@ -880,10 +880,7 @@ function autoUSShoot(title) {
       if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
     }
     if (!bestTarget) continue;
-    assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
 
-    firer.revealed = true;
-    firer.firedGun1 = true;
     bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
     const arcInfo = getArcInfo(firer, bestTarget);
@@ -901,6 +898,13 @@ function autoUSShoot(title) {
     if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
     const prevShots = usShotCount[bestTarget.name] || 0;
     if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
+
+    // 命中率0%ならスキップ
+    if (calcHitChance(mod, bestDist) === 0) continue;
+
+    assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
+    firer.revealed = true;
+    firer.firedGun1 = true;
 
     const d1 = roll(), d2 = roll();
     const diceTotal = d1 + d2 + mod;
@@ -1084,10 +1088,7 @@ function autoJPShoot(title) {
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
     if (!bestTarget) continue;
-    assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
 
-    firer.revealed = true;
-    firer.firedGun1 = true;
     const bestDist = hexDist(firer.col, firer.row, bestTarget.col, bestTarget.row);
 
     // 射界チェック
@@ -1105,6 +1106,13 @@ function autoJPShoot(title) {
     if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
     const prevShots = jpShotCount[bestTarget.name] || 0;
     if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
+
+    // 命中率0%ならスキップ
+    if (calcHitChance(mod, bestDist) === 0) continue;
+
+    assignCount[bestTarget.name] = (assignCount[bestTarget.name] || 0) + 1;
+    firer.revealed = true;
+    firer.firedGun1 = true;
 
     const d1 = roll(), d2 = roll();
     const diceTotal = d1 + d2 + mod;
