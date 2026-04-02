@@ -15,12 +15,12 @@ body { background:#2a2a2a; color:#ddd; font-family:'Segoe UI',sans-serif; overfl
 }
 #topbar .title { font-weight:bold; font-size:1.1em; color:#e8c840; }
 #topbar .info { color:#aaa; }
-#phaseBar { display:flex; gap:2px; }
-#phaseBar .ph {
-  padding:3px 8px; background:#333; border-radius:3px; font-size:0.85em; color:#888;
+#phaseBarLeft { display:flex; flex-direction:column; gap:3px; }
+#phaseBarLeft .ph {
+  padding:5px 6px; background:#333; border-radius:3px; font-size:1.0em; color:#888; text-align:center;
 }
-#phaseBar .ph.active { background:#c8a020; color:#000; font-weight:bold; }
-#phaseBar .ph.done { background:#555; color:#aaa; }
+#phaseBarLeft .ph.active { background:#c8a020; color:#000; font-weight:bold; }
+#phaseBarLeft .ph.done { background:#555; color:#aaa; }
 button.top-btn {
   background:#445; color:#ccc; border:1px solid #667; padding:4px 12px;
   border-radius:3px; cursor:pointer; font-size:0.85em;
@@ -32,20 +32,9 @@ button.top-btn:hover { background:#556; }
 
 /* --- 左パネル（ユニット一覧） --- */
 #leftPanel {
-  width:110px; background:#1e1e28; border-right:1px solid #444;
-  overflow-y:auto; padding:4px; font-size:0.78em; flex:0 0 110px;
+  width:90px; background:#1e1e28; border-right:1px solid #444;
+  overflow-y:auto; padding:6px; font-size:0.78em; flex:0 0 90px;
 }
-#leftPanel h4 { color:#c8a020; margin:6px 0 4px; font-size:0.95em; }
-.unit-item {
-  padding:3px 5px; margin:1px 0; border-radius:3px; cursor:pointer;
-  display:flex; justify-content:space-between; align-items:center;
-}
-.unit-item:hover { background:#333; }
-.unit-item.selected { background:#445; border:1px solid #88a; }
-.unit-item .u-name { font-weight:bold; }
-.unit-item .u-status { font-size:0.8em; color:#888; }
-.unit-item.destroyed { opacity:0.3; text-decoration:line-through; }
-.unit-item.immobilized { border-left:3px solid #cc0; }
 
 /* --- マップエリア --- */
 #mapArea { flex:1; position:relative; overflow:hidden; background:#3a3a2a; }
@@ -144,9 +133,7 @@ button.top-btn:hover { background:#556; }
 <div id="topbar">
   <span class="title">TANKS+</span>
   <span class="info" id="turnInfo">ターン 1</span>
-  <div id="phaseBar"></div>
   <span class="info" id="playerInfo"></span>
-  <button class="top-btn" onclick="endPhase()">フェーズ終了</button>
   <button class="top-btn" id="arcBtn" onclick="toggleArc()">射界表示</button>
   <button class="top-btn" id="fogBtn" onclick="toggleFog()">視認外非表示</button>
   <button class="top-btn" onclick="zoomFit()">全体</button>
@@ -172,10 +159,71 @@ button.top-btn:hover { background:#556; }
 <!-- メインエリア -->
 <div id="main">
   <div id="leftPanel">
-    <h4 id="side1Label">―</h4>
-    <div id="side1List"></div>
-    <h4 id="side2Label">―</h4>
-    <div id="side2List"></div>
+    <div id="scoreBoard" style="margin-bottom:8px;font-size:1.5em;line-height:1.8;border-bottom:1px solid #444;padding-bottom:6px;"></div>
+    <div id="turnInfoLeft" style="color:#e8c840;font-weight:bold;margin-bottom:8px;font-size:0.95em">ターン 1</div>
+    <div id="playerInfoLeft" style="color:#aaa;margin-bottom:8px;font-size:0.85em"></div>
+    <div id="phaseBarLeft"></div>
+    <div style="margin-top:12px;border-top:1px solid #444;padding-top:8px;font-size:0.75em;">
+      <div id="side1SkipLabel" style="margin-bottom:2px;font-weight:bold;">先攻</div>
+      <div style="color:#aaa;">命中省略</div>
+      <select id="side1HitSkip" style="width:100%;background:#222;color:#0f0;border:1px solid #555;padding:2px;font-size:11px;">
+        <option value="0">なし</option>
+        <option value="12">12以下</option>
+        <option value="11">11以下</option>
+        <option value="10">10以下</option>
+        <option value="9">9以下</option>
+        <option value="8">8以下</option>
+        <option value="7" selected>7以下</option>
+        <option value="6">6以下</option>
+        <option value="5">5以下</option>
+        <option value="4">4以下</option>
+        <option value="3">3以下</option>
+        <option value="2">2以下</option>
+      </select>
+      <div style="color:#aaa;margin-top:4px;">撃破省略</div>
+      <select id="side1DestroySkip" style="width:100%;background:#222;color:#f80;border:1px solid #555;padding:2px;font-size:11px;">
+        <option value="99">なし</option>
+        <option value="3">+3以下</option>
+        <option value="2">+2以下</option>
+        <option value="1">+1以下</option>
+        <option value="0" selected>0以下</option>
+        <option value="-1">-1以下</option>
+        <option value="-2">-2以下</option>
+        <option value="-3">-3以下</option>
+      </select>
+      <div id="side2SkipLabel" style="color:#fa0;margin-top:8px;margin-bottom:2px;font-weight:bold;">後攻</div>
+      <div style="color:#aaa;">命中省略</div>
+      <select id="side2HitSkip" style="width:100%;background:#222;color:#0f0;border:1px solid #555;padding:2px;font-size:11px;">
+        <option value="0">なし</option>
+        <option value="12">12以下</option>
+        <option value="11">11以下</option>
+        <option value="10">10以下</option>
+        <option value="9">9以下</option>
+        <option value="8">8以下</option>
+        <option value="7" selected>7以下</option>
+        <option value="6">6以下</option>
+        <option value="5">5以下</option>
+        <option value="4">4以下</option>
+        <option value="3">3以下</option>
+        <option value="2">2以下</option>
+      </select>
+      <div style="color:#aaa;margin-top:4px;">撃破省略</div>
+      <select id="side2DestroySkip" style="width:100%;background:#222;color:#f80;border:1px solid #555;padding:2px;font-size:11px;">
+        <option value="99">なし</option>
+        <option value="3">+3以下</option>
+        <option value="2">+2以下</option>
+        <option value="1">+1以下</option>
+        <option value="0" selected>0以下</option>
+        <option value="-1">-1以下</option>
+        <option value="-2">-2以下</option>
+        <option value="-3">-3以下</option>
+      </select>
+      <div style="color:#aaa;margin-top:8px;">弾切れを目標に</div>
+      <select id="ammoOutTargets" style="width:100%;background:#222;color:#ccc;border:1px solid #555;padding:2px;font-size:11px;">
+        <option value="exclude">含めない</option>
+        <option value="include" selected>含める</option>
+      </select>
+    </div>
   </div>
   <div id="mapArea">
     <canvas id="mapCanvas"></canvas>
@@ -203,6 +251,83 @@ button.top-btn:hover { background:#556; }
       <input type="checkbox" id="chkAutoPlay" style="width:18px;height:18px;cursor:pointer">
       AI自動再生（射撃結果を自動で閉じる）
     </label>
+    <div style="margin:12px 0 4px;padding:8px;background:#1a1a24;border-radius:4px;font-size:0.85em;">
+      <div style="color:#e8c840;font-weight:bold;margin-bottom:6px;">射撃省略設定</div>
+      <div style="color:#999;font-size:0.85em;line-height:1.5;margin-bottom:8px;">
+        防御射撃・準備射撃・前進射撃の処理を高速化します。<br>
+        <b style="color:#0f0">命中省略</b>: 修正後の命中数がこの値以下ならスキップ。<br>
+        <b style="color:#f80">撃破省略</b>: 貫通差がこの値以下ならスキップ（対戦車榴弾）。
+      </div>
+      <label style="display:block;margin:8px 0 4px;color:#aaa;font-size:0.9em">弾切れを射撃目標に</label>
+      <select id="initAmmoOutTargets" style="width:100%;background:#222;color:#ccc;border:1px solid #555;padding:6px;font-size:12px;margin-bottom:8px;">
+        <option value="exclude">含めない</option>
+        <option value="include" selected>含める</option>
+      </select>
+      <div style="display:flex;gap:16px;margin-bottom:6px;">
+        <div>
+          <div id="initSide1HitLabel" style="font-size:0.85em;color:#8af;margin-bottom:4px;font-weight:bold;">先攻 命中省略</div>
+          <select id="initSide1HitSkip" style="background:#222;color:#0f0;border:1px solid #555;padding:2px 4px;font-size:12px;">
+            <option value="0">なし</option>
+            <option value="12">12以下</option>
+            <option value="11">11以下</option>
+            <option value="10">10以下</option>
+            <option value="9">9以下</option>
+            <option value="8">8以下</option>
+            <option value="7" selected>7以下</option>
+            <option value="6">6以下</option>
+            <option value="5">5以下</option>
+            <option value="4">4以下</option>
+            <option value="3">3以下</option>
+            <option value="2">2以下</option>
+          </select>
+        </div>
+        <div>
+          <div id="initSide1DestroyLabel" style="font-size:0.85em;color:#8af;margin-bottom:4px;font-weight:bold;">先攻 撃破省略</div>
+          <select id="initSide1DestroySkip" style="background:#222;color:#f80;border:1px solid #555;padding:2px 4px;font-size:12px;">
+            <option value="99">なし</option>
+            <option value="3">+3以下</option>
+            <option value="2">+2以下</option>
+            <option value="1">+1以下</option>
+            <option value="0" selected>0以下</option>
+            <option value="-1">-1以下</option>
+            <option value="-2">-2以下</option>
+            <option value="-3">-3以下</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;">
+        <div>
+          <div id="initSide2HitLabel" style="font-size:0.85em;color:#fa0;margin-bottom:4px;font-weight:bold;">後攻 命中省略</div>
+          <select id="initSide2HitSkip" style="background:#222;color:#0f0;border:1px solid #555;padding:2px 4px;font-size:12px;">
+            <option value="0">なし</option>
+            <option value="12">12以下</option>
+            <option value="11">11以下</option>
+            <option value="10">10以下</option>
+            <option value="9">9以下</option>
+            <option value="8">8以下</option>
+            <option value="7" selected>7以下</option>
+            <option value="6">6以下</option>
+            <option value="5">5以下</option>
+            <option value="4">4以下</option>
+            <option value="3">3以下</option>
+            <option value="2">2以下</option>
+          </select>
+        </div>
+        <div>
+          <div id="initSide2DestroyLabel" style="font-size:0.85em;color:#fa0;margin-bottom:4px;font-weight:bold;">後攻 撃破省略</div>
+          <select id="initSide2DestroySkip" style="background:#222;color:#f80;border:1px solid #555;padding:2px 4px;font-size:12px;">
+            <option value="99">なし</option>
+            <option value="3">+3以下</option>
+            <option value="2">+2以下</option>
+            <option value="1">+1以下</option>
+            <option value="0" selected>0以下</option>
+            <option value="-1">-1以下</option>
+            <option value="-2">-2以下</option>
+            <option value="-3">-3以下</option>
+          </select>
+        </div>
+      </div>
+    </div>
     <button onclick="startGame()">ゲーム開始</button>
   </div>
 </div>
@@ -1552,6 +1677,14 @@ function updateSideSelect() {
     `<option value="side2">後攻 ${n2}</option>` +
     `<option value="hotseat">ホットシート（両方手動）</option>` +
     `<option value="watch">AI観戦（両方AI）</option>`;
+  // 省略設定ラベルを陣営名に更新
+  const c1 = NATION_COLORS[s1] ? NATION_COLORS[s1].fill : '#8af';
+  const c2 = NATION_COLORS[s2] ? NATION_COLORS[s2].fill : '#fa0';
+  const setLabel = (id, text, color) => { const el = document.getElementById(id); if (el) { el.textContent = text; el.style.color = color; } };
+  setLabel('initSide1HitLabel', `${n1} 命中省略`, c1);
+  setLabel('initSide1DestroyLabel', `${n1} 撃破省略`, c1);
+  setLabel('initSide2HitLabel', `${n2} 命中省略`, c2);
+  setLabel('initSide2DestroyLabel', `${n2} 撃破省略`, c2);
 }
 
 function startGame() {
@@ -1559,6 +1692,14 @@ function startGame() {
   const sideChoice = document.getElementById('selSide').value;
   autoPlay = document.getElementById('chkAutoPlay').checked;
   updateAutoPlayBtn();
+  // シナリオ選択画面の省略設定を左パネルに反映
+  document.getElementById('side1HitSkip').value = document.getElementById('initSide1HitSkip').value;
+  document.getElementById('side1DestroySkip').value = document.getElementById('initSide1DestroySkip').value;
+  document.getElementById('side2HitSkip').value = document.getElementById('initSide2HitSkip').value;
+  document.getElementById('side2DestroySkip').value = document.getElementById('initSide2DestroySkip').value;
+  if (document.getElementById('ammoOutTargets') && document.getElementById('initAmmoOutTargets')) {
+    document.getElementById('ammoOutTargets').value = document.getElementById('initAmmoOutTargets').value;
+  }
   const sc = SCENARIOS.find(s => s.id === scId);
   if (!sc) return;
 
@@ -1566,6 +1707,13 @@ function startGame() {
   const sides = Object.keys(sc.sides);
   const side1 = sides[0]; // 先攻側
   const side2 = sides[1]; // 後攻側
+
+  // 左パネルの省略設定ラベルを陣営名に更新
+  const nc1 = NATION_COLORS[side1], nc2 = NATION_COLORS[side2];
+  const s1Label = document.getElementById('side1SkipLabel');
+  const s2Label = document.getElementById('side2SkipLabel');
+  if (s1Label) { s1Label.textContent = nc1 ? nc1.label : side1; s1Label.style.color = nc1 ? nc1.fill : '#8af'; }
+  if (s2Label) { s2Label.textContent = nc2 ? nc2.label : side2; s2Label.style.color = nc2 ? nc2.fill : '#fa0'; }
 
   let playerSide = null;
   if (sideChoice === 'side1') playerSide = side1;
@@ -1683,10 +1831,12 @@ function loadMaps() {
 
 // ===== フェーズ管理 =====
 const PHASE_SEQ = ['pf1','mv1','af1','pf2','mv2','af2'];
-const PHASE_LABELS = {
-  pf1:'先攻準備射撃', mv1:'先攻移動', af1:'先攻前進射撃',
-  pf2:'後攻準備射撃', mv2:'後攻移動', af2:'後攻前進射撃'
+const PHASE_LABELS_BASE = {
+  pf1:'準備射撃', mv1:'移動', af1:'前進射撃',
+  pf2:'準備射撃', mv2:'移動', af2:'前進射撃'
 };
+// 互換用
+const PHASE_LABELS = PHASE_LABELS_BASE;
 
 function getActiveSide(phase) {
   if (phase.endsWith('1')) return state.firstPlayer;
@@ -1696,19 +1846,88 @@ function getActiveSide(phase) {
 function updateTopbar() {
   document.getElementById('turnInfo').textContent = `ターン ${state.turn}/${state.maxTurns}`;
 
-  const bar = document.getElementById('phaseBar');
-  bar.innerHTML = '';
-  for (let i = 0; i < PHASE_SEQ.length; i++) {
-    const div = document.createElement('div');
-    div.className = 'ph' + (i === state.phaseIdx ? ' active' : i < state.phaseIdx ? ' done' : '');
-    div.textContent = PHASE_LABELS[PHASE_SEQ[i]];
-    bar.appendChild(div);
+  const bar = document.getElementById('phaseBarLeft');
+  if (bar) {
+    bar.innerHTML = '';
+    const side1 = state.firstPlayer;
+    const side2 = side1 === state.side1 ? state.side2 : state.side1;
+    const nc1 = NATION_COLORS[side1];
+    const nc2 = NATION_COLORS[side2];
+    // 先攻ヘッダー
+    const h1 = document.createElement('div');
+    h1.style.cssText = `color:${nc1?nc1.fill:'#aaa'};font-weight:bold;font-size:1.1em;margin:4px 0 2px;text-align:center`;
+    h1.textContent = nc1 ? nc1.label : side1;
+    bar.appendChild(h1);
+    for (let i = 0; i < 3; i++) {
+      const div = document.createElement('div');
+      div.className = 'ph' + (i === state.phaseIdx ? ' active' : i < state.phaseIdx ? ' done' : '');
+      div.textContent = PHASE_LABELS_BASE[PHASE_SEQ[i]];
+      bar.appendChild(div);
+    }
+    // 後攻ヘッダー
+    const h2 = document.createElement('div');
+    h2.style.cssText = `color:${nc2?nc2.fill:'#aaa'};font-weight:bold;font-size:1.1em;margin:8px 0 2px;text-align:center`;
+    h2.textContent = nc2 ? nc2.label : side2;
+    bar.appendChild(h2);
+    for (let i = 3; i < 6; i++) {
+      const div = document.createElement('div');
+      div.className = 'ph' + (i === state.phaseIdx ? ' active' : i < state.phaseIdx ? ' done' : '');
+      div.textContent = PHASE_LABELS_BASE[PHASE_SEQ[i]];
+      bar.appendChild(div);
+    }
   }
 
   const activeSide = getActiveSide(state.phase);
   const nc = NATION_COLORS[activeSide];
-  document.getElementById('playerInfo').textContent =
-    `${nc ? nc.label : activeSide}${isPlayerPhase() ? '（手動）' : '（AI）'}`;
+  document.getElementById('playerInfo').textContent = '';
+  const piLeft = document.getElementById('playerInfoLeft');
+  if (piLeft) piLeft.textContent = '';
+  const tiLeft = document.getElementById('turnInfoLeft');
+  if (tiLeft) tiLeft.textContent = `ターン ${state.turn}`;
+
+  // 得点表示
+  const sb = document.getElementById('scoreBoard');
+  if (sb && state.units) {
+    if (state.scenarioId === 'sc6') {
+      const s1 = state.side1, s2 = state.side2;
+      const geDead = state.units.filter(u => u.side === 'ge' && (u.status === 'destroyed' || u.ammoOut)).length;
+      const suDead = state.units.filter(u => u.side === 'su' && (u.status === 'destroyed' || u.ammoOut)).length;
+      const geCap = state.turn >= 4 ? 10 : 7;
+      const suTot = state.units.filter(u => u.side === 'su').length;
+      const sideColor = (side) => (side === 'ge' ? '#aabbcc' : side === 'su' ? '#e8a060' : side === 'us' ? '#80c080' : side === 'uk' ? '#e8c840' : '#ccc');
+      let html = '';
+      for (const side of [s1, s2]) {
+        const opp = side === s1 ? s2 : s1;
+        const d = opp === 'ge' ? geDead : suDead;
+        const t = opp === 'ge' ? geCap : suTot;
+        const nc2 = NATION_COLORS[side];
+        const label = nc2 ? nc2.label : side;
+        html += `<div style="color:${sideColor(side)}"><b>${label}</b><br><b>${d}</b> / ${t}</div>`;
+      }
+      sb.innerHTML = html;
+    } else {
+      const scores = {};
+      const totals = {};
+      state.units.forEach(u => {
+        const db = UNIT_DB[u.name];
+        const s = db ? db.score : 0;
+        if (!totals[u.side]) totals[u.side] = 0;
+        if (!scores[u.side]) scores[u.side] = 0;
+        totals[u.side] += s;
+        if (u.status === 'destroyed' || u.status === 'immobilized' || u.ammoOut) scores[u.side] += s;
+      });
+      let html = '';
+      for (const side in totals) {
+        const nc2 = NATION_COLORS[side];
+        const label = nc2 ? nc2.label : side;
+        const lost = scores[side] || 0;
+        const total = totals[side] || 0;
+        const color = side === 'ge' ? '#aabbcc' : side === 'su' ? '#e8a060' : side === 'us' ? '#80c080' : side === 'uk' ? '#e8c840' : '#ccc';
+        html += `<div style="color:${color}"><b>${label}</b><br>${lost}/${total}</div>`;
+      }
+      sb.innerHTML = html;
+    }
+  }
 }
 
 function isPlayerPhase() {
@@ -1729,7 +1948,15 @@ function loadPhase() {
     if (frame.contentWindow) {
       const aiFlag = !isPlayerPhase() || autoPlay;
       dbg(`→iframe INIT_STATE (${state.units.length}units) isAI=${aiFlag} autoPlay=${autoPlay}`);
-      frame.contentWindow.postMessage({ type:'INIT_STATE', state: JSON.parse(JSON.stringify(state)), isAI: aiFlag, autoPlay: autoPlay }, '*');
+      const s1Hit = parseInt(document.getElementById('side1HitSkip').value) || 0;
+      const s1Destroy = parseInt(document.getElementById('side1DestroySkip').value);
+      const s2Hit = parseInt(document.getElementById('side2HitSkip').value) || 0;
+      const s2Destroy = parseInt(document.getElementById('side2DestroySkip').value);
+      const ammoMode = document.getElementById('ammoOutTargets') ? document.getElementById('ammoOutTargets').value : 'include';
+      const skipBySide = {};
+      skipBySide[state.side1] = { hitSkip: s1Hit, destroySkip: isNaN(s1Destroy) ? 99 : s1Destroy };
+      skipBySide[state.side2] = { hitSkip: s2Hit, destroySkip: isNaN(s2Destroy) ? 99 : s2Destroy };
+      frame.contentWindow.postMessage({ type:'INIT_STATE', state: JSON.parse(JSON.stringify(state)), isAI: aiFlag, autoPlay: autoPlay, skipBySide: skipBySide, ammoOutTargetMode: ammoMode }, '*');
     }
   };
   frame.src = `${file}?phase=${phase}&_t=${Date.now()}`;
@@ -2010,13 +2237,18 @@ function renderUnitList() {
   const nc1 = NATION_COLORS[s1];
   const nc2 = NATION_COLORS[s2];
 
-  document.getElementById('side1Label').textContent = nc1 ? nc1.label : s1;
-  document.getElementById('side1Label').style.color = nc1 ? nc1.fill : '#ccc';
-  document.getElementById('side2Label').textContent = nc2 ? nc2.label : s2;
-  document.getElementById('side2Label').style.color = nc2 ? nc2.fill : '#ccc';
-
-  renderSideList('side1List', s1);
-  renderSideList('side2List', s2);
+  const s1Label = document.getElementById('side1Label');
+  if (s1Label) {
+    s1Label.textContent = nc1 ? nc1.label : s1;
+    s1Label.style.color = nc1 ? nc1.fill : '#ccc';
+  }
+  const s2Label = document.getElementById('side2Label');
+  if (s2Label) {
+    s2Label.textContent = nc2 ? nc2.label : s2;
+    s2Label.style.color = nc2 ? nc2.fill : '#ccc';
+  }
+  if (document.getElementById('side1List')) renderSideList('side1List', s1);
+  if (document.getElementById('side2List')) renderSideList('side2List', s2);
 }
 
 function renderSideList(containerId, side) {
