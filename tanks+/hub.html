@@ -277,7 +277,7 @@ let mapLoaded = 0;
 let movePath = null; // 移動経路表示用 [{col,row,mp}, ...]
 let completedPaths = []; // 確定済み移動経路 [{path:[{col,row}], side:'...'}]
 let unitOffsets = {}; // ユニットインデックス→描画オフセット {dx,dy}
-let dfArrow = null; // 防御射撃矢印 {fromCol,fromRow,toCol,toRow} or null
+let dfArrow = null; // 射撃プレビュー矢印 {fromCol,fromRow,toCol,toRow,shooterSide?} or null
 
 // ユニット画像キャッシュ
 const unitImages = {};
@@ -434,6 +434,14 @@ function dirAngle(dir) {
 // 矢印描画用: ヘクスサイド方向（+30°オフセット）
 function dirArrowAngle(dir) {
   return (dir * 60 + 30) * Math.PI / 180;
+}
+function hexToRgba(hex, alpha) {
+  if (!hex || hex[0] !== '#') return `rgba(170,170,170,${alpha})`;
+  const n = hex.slice(1);
+  const r = parseInt(n.slice(0, 2), 16);
+  const g = parseInt(n.slice(2, 4), 16);
+  const b = parseInt(n.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 // ===== 描画 =====
@@ -688,28 +696,27 @@ function draw() {
     }
   }
 
-  // 防御射撃矢印表示
+  // 射撃プレビュー矢印（NATION_COLORS＝陣営色、矢じりはズームアウト時も先端が判別しやすいサイズ）
   if (dfArrow) {
     const from = hexCenter(dfArrow.fromCol, dfArrow.fromRow);
     const to = hexCenter(dfArrow.toCol, dfArrow.toRow);
+    const ss = dfArrow.shooterSide;
+    const nc = (ss && NATION_COLORS[ss]) ? NATION_COLORS[ss] : { fill: '#aab', stroke: '#666', label: '' };
+    const arrowColor = nc.fill;
     // 射撃ユニットのヘクスをハイライト（射撃側の色で表示）
     const fCorners = hexCorners(from.x, from.y);
     ctx.beginPath();
     ctx.moveTo(fCorners[0].x, fCorners[0].y);
     for (let i = 1; i < 6; i++) ctx.lineTo(fCorners[i].x, fCorners[i].y);
     ctx.closePath();
-    const shooterIsFirst = dfArrow.shooterSide === (state ? state.firstPlayer : null);
-    const hlColor = shooterIsFirst ? 'rgba(68,136,255,0.3)' : 'rgba(255,68,68,0.3)';
-    const hlStroke = shooterIsFirst ? '#4488ff' : '#ff4444';
-    ctx.fillStyle = hlColor;
+    ctx.fillStyle = hexToRgba(arrowColor, 0.38);
     ctx.fill();
-    ctx.strokeStyle = hlStroke;
+    ctx.strokeStyle = arrowColor;
     ctx.lineWidth = 6;
     ctx.stroke();
-    // 矢印描画（射撃側の色）
-    const arrowColor = shooterIsFirst ? '#4488ff' : '#ff4444';
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
-    const headLen = HEX_SIZE * 0.5;
+    const headSpread = 0.62;
+    const headLen = Math.max(HEX_SIZE * 0.92, 34 / zoom);
     ctx.strokeStyle = arrowColor;
     ctx.lineWidth = 8;
     ctx.lineCap = 'round';
@@ -717,12 +724,11 @@ function draw() {
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
     ctx.stroke();
-    // 矢じり
     ctx.fillStyle = arrowColor;
     ctx.beginPath();
     ctx.moveTo(to.x, to.y);
-    ctx.lineTo(to.x - headLen * Math.cos(angle - 0.4), to.y - headLen * Math.sin(angle - 0.4));
-    ctx.lineTo(to.x - headLen * Math.cos(angle + 0.4), to.y - headLen * Math.sin(angle + 0.4));
+    ctx.lineTo(to.x - headLen * Math.cos(angle - headSpread), to.y - headLen * Math.sin(angle - headSpread));
+    ctx.lineTo(to.x - headLen * Math.cos(angle + headSpread), to.y - headLen * Math.sin(angle + headSpread));
     ctx.closePath();
     ctx.fill();
   }
@@ -2107,7 +2113,7 @@ window.addEventListener('message', (e) => {
       // 弾丸アニメーション（将来実装）
       break;
     case 'DF_ARROW':
-      dfArrow = e.data.arrow; // {fromCol,fromRow,toCol,toRow} or null
+      dfArrow = e.data.arrow; // {fromCol,fromRow,toCol,toRow,shooterSide?} or null
       draw();
       break;
     case 'GAME_LOG':
