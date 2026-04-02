@@ -709,7 +709,7 @@ function draw() {
   // 進入可能ヘクスのハイライト（未配置ユニット選択時）
   if (state && state.selectedUnit !== null && state.selectedUnit !== undefined) {
     const selU = state.units[state.selectedUnit];
-    if (selU && selU.col < 1 && selU.enterEdge) {
+    if (selU && selU.col < 1 && (selU.enterEdge || selU.enterHexRows)) {
       const mc = state.mapMaxCol || maxCol;
       const mr = state.mapMaxRow || maxRow;
       ctx.fillStyle = 'rgba(0,200,0,0.25)';
@@ -723,6 +723,7 @@ function draw() {
           if (selU.enterEdge === 'top' && r === 1) valid = true;
           if (selU.enterEdge === 'bottom' && r === mr) valid = true;
           if (selU.enterEdge === 'topRight' && r === 1 && c > Math.floor(mc / 2)) valid = true;
+          if (!selU.enterEdge && selU.enterHexRows && r >= selU.enterHexRows[0] && r <= selU.enterHexRows[1]) valid = true;
           if (valid && selU.enterHexRows && (r < selU.enterHexRows[0] || r > selU.enterHexRows[1])) valid = false;
           if (!valid) continue;
           const h = hexCenter(c, r);
