@@ -128,6 +128,8 @@
         .mode-label input  { margin-top: 3px; flex-shrink: 0; accent-color: #00ffcc; }
         .mode-name { font-weight: bold; font-size: 13px; display: block; margin-bottom: 2px; }
         .mode-desc { color: #888; font-size: 12px; line-height: 1.4; }
+        .cfg-row { margin: 6px 0; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .cfg-select { padding: 3px 6px; background: #111; color: #eee; border: 1px solid #555; border-radius: 3px; font-size: 13px; cursor: pointer; }
 
         /* ── スタートボタン ── */
         #start-btn {
@@ -171,8 +173,8 @@
                         <span class="mode-desc">自機で米軍を操作。ソ連軍はAIが行動。</span>
                     </span>
                 </label>
-                <!-- ソ連機体数入力（ソ連プレイの代わり） -->
-                <div class="mode-label" style="cursor:default; align-items:center;">
+                <!-- ソ連機体数入力（朝鮮半島シナリオ用） -->
+                <div id="red-count-box" class="mode-label" style="cursor:default; align-items:center;">
                     <span style="font-size:18px;">🟥</span>
                     <span style="flex:1;">
                         <span class="mode-name" style="margin-bottom:6px; display:block;">ソ連軍（AI）機体数</span>
@@ -238,34 +240,71 @@
             }
         ];
 
+        const AIRCRAFT_LIST = ['F-86','Mig-15','F-4','F-105','Mig-17','Mig-21','F-15','F-14','F16'];
+        const GUN_RANKS = ['A','B','C','E','F','G'];
+        const MISSILE_TYPES = ['米国初期','米国発達','ソ連','フランス'];
+
+        function buildSideConfig(prefix, def) {
+            function sel(id, options, selected) {
+                return '<select id="'+id+'" class="cfg-select">' + options.map(function(o) {
+                    return '<option value="'+o+'"'+(o==selected?' selected':'')+'>'+o+'</option>';
+                }).join('') + '</select>';
+            }
+            function num(id, selected) {
+                let h = '<select id="'+id+'" class="cfg-select">';
+                for (let i = 0; i <= 10; i++) h += '<option value="'+i+'"'+(i==selected?' selected':'')+'>'+i+'</option>';
+                return h + '</select>';
+            }
+            return '<div class="cfg-row">機体: '+sel(prefix+'-aircraft', AIRCRAFT_LIST, def.aircraft)+'</div>'
+                + '<div class="cfg-row">機体数: '+num(prefix+'-count', def.count)+'</div>'
+                + '<div class="cfg-row">機関砲: '+sel(prefix+'-gun-rank', GUN_RANKS, def.gunRank)+' × '+num(prefix+'-gun-ammo', def.gunAmmo)+'発</div>'
+                + '<div class="cfg-row">ミサイル: '+sel(prefix+'-missile-type', MISSILE_TYPES, def.missileType)+'</div>'
+                + '<div class="cfg-row">HS: '+num(prefix+'-hs', def.hs)+'　RH: '+num(prefix+'-rh', def.rh)+'</div>';
+        }
+
         let currentIndex = 0;
 
         function selectTab(index, btn) {
             currentIndex = index;
-
-            // タブの見た目
             document.querySelectorAll('.tab-btn').forEach((b, i) => {
                 b.classList.toggle('active', i === index);
             });
 
-            // 詳細表示
             const sc = scenarios[index];
-            document.getElementById('scenario-info').innerHTML = `
-                <h2>${sc.name}</h2>
-                <p><strong>マップ:</strong> ${sc.map}${sc.fixedMap ? '　<span style="color:#ffaa44;font-size:12px;">⚠ マップ外に出た機体は除去</span>' : ''}</p>
-                <p><strong>制限ターン:</strong> ${sc.turns}ターン　（先行: ${sc.firstMove}）</p>
-                <p><strong>勝利条件:</strong> ${sc.victory}</p>
-                <div class="team-row">
-                    <div class="team-box team-blue"><strong>【米軍 🟦】</strong><br>${sc.blueForce}</div>
-                    <div class="team-box team-red"><strong>【ソ連軍 🟥】</strong><br>${sc.redForce}</div>
-                </div>
-            `;
+            const rcBox = document.getElementById('red-count-box');
 
-            // AI機体数のデフォルト設定
-            document.getElementById('red-count-input').value = String(sc.defaultRedCount);
+            if (index === 1) {
+                // フリーシナリオ：カスタム設定UI
+                rcBox.style.display = 'none';
+                document.getElementById('scenario-info').innerHTML =
+                    '<h2>'+sc.name+'</h2>'
+                    + '<p><strong>マップ:</strong> '+sc.map+'</p>'
+                    + '<p><strong>制限ターン:</strong> '+sc.turns+'ターン　（先行: '+sc.firstMove+'）</p>'
+                    + '<p><strong>勝利条件:</strong> '+sc.victory+'</p>'
+                    + '<div class="team-row">'
+                    + '<div class="team-box team-blue"><strong>【米軍 🟦】</strong>'
+                    + buildSideConfig('blue', {aircraft:'F-4', count:2, gunRank:'A', gunAmmo:3, missileType:'米国初期', hs:4, rh:4})
+                    + '</div>'
+                    + '<div class="team-box team-red"><strong>【ソ連軍 🟥】</strong>'
+                    + buildSideConfig('red', {aircraft:'Mig-21', count:3, gunRank:'B', gunAmmo:5, missileType:'ソ連', hs:2, rh:0})
+                    + '</div></div>';
+            } else {
+                rcBox.style.display = '';
+                document.getElementById('scenario-info').innerHTML = `
+                    <h2>${sc.name}</h2>
+                    <p><strong>マップ:</strong> ${sc.map}${sc.fixedMap ? '　<span style="color:#ffaa44;font-size:12px;">⚠ マップ外に出た機体は除去</span>' : ''}</p>
+                    <p><strong>制限ターン:</strong> ${sc.turns}ターン　（先行: ${sc.firstMove}）</p>
+                    <p><strong>勝利条件:</strong> ${sc.victory}</p>
+                    <div class="team-row">
+                        <div class="team-box team-blue"><strong>【米軍 🟦】</strong><br>${sc.blueForce}</div>
+                        <div class="team-box team-red"><strong>【ソ連軍 🟥】</strong><br>${sc.redForce}</div>
+                    </div>
+                `;
+                document.getElementById('red-count-input').value = String(sc.defaultRedCount);
+            }
         }
 
-        // 機体数変更 → 赤プレビュー更新
+        // 機体数変更 → 赤プレビュー更新（朝鮮半島シナリオ用）
         document.getElementById('red-count-input').addEventListener('change', function() {
             const el = document.getElementById(`red-preview-${currentIndex}`);
             if (el) el.textContent = this.value;
@@ -274,18 +313,43 @@
         function startGame() {
             const sc = scenarios[currentIndex];
             const mode = document.querySelector('input[name="playMode"]:checked').value;
-            let redCount = parseInt(document.getElementById('red-count-input').value) || sc.defaultRedCount;
-            if (redCount < 2) redCount = 2;
-            if (redCount > 5) redCount = 5;
 
-            sessionStorage.setItem('airCombatConfig', JSON.stringify({
+            let config = {
                 scenario: sc.name,
                 mode:     mode,
-                redCount: redCount,
                 mapMaxC:  sc.mapMaxC,
                 mapMaxR:  sc.mapMaxR,
                 fixedMap: sc.fixedMap
-            }));
+            };
+
+            if (currentIndex === 1) {
+                // フリーシナリオ：カスタム設定
+                config.blueConfig = {
+                    aircraft:    document.getElementById('blue-aircraft').value,
+                    count:       parseInt(document.getElementById('blue-count').value),
+                    gunRank:     document.getElementById('blue-gun-rank').value,
+                    gunAmmo:     parseInt(document.getElementById('blue-gun-ammo').value),
+                    missileType: document.getElementById('blue-missile-type').value,
+                    hsCount:     parseInt(document.getElementById('blue-hs').value),
+                    rhCount:     parseInt(document.getElementById('blue-rh').value)
+                };
+                config.redConfig = {
+                    aircraft:    document.getElementById('red-aircraft').value,
+                    count:       parseInt(document.getElementById('red-count').value),
+                    gunRank:     document.getElementById('red-gun-rank').value,
+                    gunAmmo:     parseInt(document.getElementById('red-gun-ammo').value),
+                    missileType: document.getElementById('red-missile-type').value,
+                    hsCount:     parseInt(document.getElementById('red-hs').value),
+                    rhCount:     parseInt(document.getElementById('red-rh').value)
+                };
+            } else {
+                let redCount = parseInt(document.getElementById('red-count-input').value) || sc.defaultRedCount;
+                if (redCount < 2) redCount = 2;
+                if (redCount > 5) redCount = 5;
+                config.redCount = redCount;
+            }
+
+            sessionStorage.setItem('airCombatConfig', JSON.stringify(config));
             window.location.href = 'index.html';
         }
 

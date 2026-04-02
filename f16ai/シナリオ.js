@@ -67,6 +67,26 @@ function setupScenarioUnits(config, createUnit) {
         }
     }
     
+    // フリーシナリオ：カスタム設定があればCSVを無視して直接生成
+    if (scenarioName === 'フリーシナリオ' && config.blueConfig && config.redConfig) {
+        let customUnits = [];
+        let baseX = Math.floor(mapMaxC / 2) - 1 + Math.floor(Math.random() * 4);
+        [{cfg: config.blueConfig, team: 'Blue', dir: 8, alt: 25, y: Math.floor(mapMaxR * 0.80)},
+         {cfg: config.redConfig,  team: 'Red',  dir: 2, alt: 20, y: Math.floor(mapMaxR * 0.18)}
+        ].forEach(function(side) {
+            let c = side.cfg;
+            for (let i = 0; i < c.count; i++) {
+                let u = createUnit(c.aircraft+'-'+(i+1), c.aircraft, side.team,
+                    Math.min(mapMaxC, Math.max(0, baseX + i)), side.y, side.dir, side.alt,
+                    c.gunAmmo, c.hsCount, c.rhCount, false);
+                u.gunType = c.gunRank;
+                u.missileType = c.missileType;
+                customUnits.push(u);
+            }
+        });
+        return customUnits;
+    }
+
     // 1. CSVデータの文字列を解析し、機体・高度・武装のデータを作る
     for (let i = 2; i < lines.length; i++) {
         let cols = lines[i].split(',');
