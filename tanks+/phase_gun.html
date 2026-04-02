@@ -100,8 +100,53 @@ let contFireUnit = -1, contFireTarget = -1; // 連続射撃の強制目標
 let isAI = false;
 let autoPlay = false;
 let shootMode = 'he'; // 'he'=榴弾, 'mg'=機銃
+// 陣営別省略閾値（hub INIT_STATE で上書き）
+window.skipBySide = {};
+window.ammoOutTargetMode = 'exclude';
 
 function roll() { return Math.floor(Math.random() * 6) + 1; }
+
+/** 準備・前進榴弾（戦車砲系）: 命中・撃破省略。射撃側の陣営で閾値を参照 */
+function omitPrepAdvanceForTankHe(firer, target, fDb, tDb, ft, dist) {
+  if (fDb.type === 'infantry') return false;
+  let modO = 0;
+  const tTerrain_o = state.terrain[`${target.col},${target.row}`] || 'plain';
+  if (tTerrain_o === 'forest') modO += HIT_MODIFIERS.forest;
+  if (tTerrain_o === 'building') modO += HIT_MODIFIERS.building;
+  modO += countBocage(firer.col, firer.row, target.col, target.row) * HIT_MODIFIERS.bocage;
+  if (tDb.small) modO += HIT_MODIFIERS.smallTarget;
+  if (target.status === 'immobilized') modO += HIT_MODIFIERS.immobilized;
+  if (isAdvanceFire) modO += HIT_MODIFIERS.advanceFire[fDb.nation] || 2;
+  const effO = ft[1] - modO;
+  const autoHitO = (dist === 0);
+  const vsInfO = (tDb.type === 'infantry' || tDb.type === 'atgun');
+  const ss = window.skipBySide[firer.side] || {};
+  const hitT = ss.hitSkip || 0;
+  const penT = ss.destroySkip !== undefined ? ss.destroySkip : 99;
+  if (hitT > 0 && !autoHitO && effO <= hitT) return true;
+  if (!vsInfO && penT < 99) {
+    const pdO = Math.max(-3, Math.min(3, ft[0] - Math.max(0, tDb.armor || 0)));
+    if (pdO <= penT) return true;
+  }
+  return false;
+}
+
+function omitPrepAdvanceMg(firer, target, fDb, dist) {
+  if (fDb.type === 'infantry') return false;
+  const mgTable = ANTI_INF_TABLE.tankMG;
+  if (!mgTable || mgTable[dist] === undefined) return false;
+  const mgHitNum = mgTable[dist];
+  let mgMod = 0;
+  const tt = state.terrain[`${target.col},${target.row}`] || 'plain';
+  if (tt === 'forest') mgMod += 1;
+  if (tt === 'building') mgMod += 1;
+  if (isAdvanceFire) mgMod += 1;
+  mgMod += countBocage(firer.col, firer.row, target.col, target.row);
+  const effMG = mgHitNum - mgMod;
+  const ss = window.skipBySide[firer.side] || {};
+  const hitT = ss.hitSkip || 0;
+  return hitT > 0 && effMG <= hitT;
+}
 
 function log(text) {
   const el = document.getElementById('log');
@@ -168,8 +213,7 @@ function init(stateData) {
     if (u.side !== enemySide) return;
     if (u.status === 'destroyed') return;
     if (u.col < 1) return;
-    // 射撃不能は破壊扱いの勝利条件がある場合、弾切れユニットは目標外
-    if (u.ammoOut && state.victory && state.victory.indexOf('射撃不能') >= 0) return;
+    if (u.ammoOut && window.ammoOutTargetMode !== 'include') return;
     // 隠匿ユニットは視認距離チェックが必要
     if (u.hidden) {
       const spotted = state.units.some(f =>
@@ -225,6 +269,7 @@ function loadScenarioAI(callback) {
 
 // ===== カード表示 =====
 function renderCards() {
+  if (autoPlay) return;
   const fEl = document.getElementById('firerList');
   fEl.innerHTML = '';
   for (const i of firers) {
@@ -362,9 +407,7 @@ function updateShootInfo() {
     return;
   }
 
-  // 装甲判定（目標の正面か側面か）
-  const frontHit = isHittingFrontArmor(firer, target);
-  const armor = tDb.armor - (frontHit ? 0 : 2);
+  const armor = tDb.armor;
   const penDiff = pen - Math.max(0, armor);
 
   // 対歩兵の場合
@@ -413,6 +456,12 @@ function updateShootInfo() {
       if (dist >= 1 && dist <= 2 && hasMG) {
         html += `<br><button onclick="shootMode='he';updateShootInfo()" style="font-size:0.8em;padding:2px 8px">榴弾に切替</button>`;
       }
+      if (omitPrepAdvanceMg(firer, target, fDb, dist)) {
+        html += `<br><b style="color:#888">省略設定により射撃不可</b>`;
+        el.innerHTML = html;
+        btn.disabled = true;
+        return;
+      }
       el.innerHTML = html;
       btn.disabled = false;
       return;
@@ -428,7 +477,14 @@ function updateShootInfo() {
   if (mod !== 0) html += ` (修正${mod >= 0 ? '+' : ''}${mod} → 有効${effectiveHit})`;
   html += `<br>命中率: <b style="color:${hitChance>=50?'#2a7a2a':'#cc3311'}">${hitChance}%</b>`;
   if (!vsInfantry) {
-    html += ` | 装甲: ${tDb.armor}${frontHit?'':'(側面-2→'+armor+')'} | 貫通差: ${penDiff >= 0 ? '+' : ''}${penDiff}`;
+    const clampedPenDiff = Math.max(-3, Math.min(3, penDiff));
+    html += ` | 装甲: ${tDb.armor} | 貫通差: ${clampedPenDiff >= 0 ? '+' : ''}${clampedPenDiff}`;
+    // 貫通差-3以下は射撃不可
+    if (clampedPenDiff <= -3 && !autoHit) {
+      html += `<br><b style="color:#888">貫通差-3以下 — 射撃不可</b>`;
+      el.innerHTML = html; btn.disabled = true; return;
+    }
+    html += `<br>撃破判定: <b style="color:#c33">${clampedPenDiff >= 0 ? '+' : ''}${clampedPenDiff}</b>`;
   } else {
     html += ` | 対歩兵力: ${fDb.antiInf}`;
   }
@@ -437,6 +493,13 @@ function updateShootInfo() {
   // 機銃切替ボタン（dist 1-2 で機銃可能な場合）
   if (vsInfantry && (fDb.type === 'tank' || fDb.type === 'apc') && !fDb.noMG && dist >= 1 && dist <= 2) {
     html += `<br><button onclick="shootMode='mg';updateShootInfo()" style="font-size:0.8em;padding:2px 8px">機銃に切替</button>`;
+  }
+
+  if (omitPrepAdvanceForTankHe(firer, target, fDb, tDb, ft, dist)) {
+    html += `<br><b style="color:#888">省略設定により射撃不可</b>`;
+    el.innerHTML = html;
+    btn.disabled = true;
+    return;
   }
 
   el.innerHTML = html;
@@ -622,8 +685,7 @@ function doShoot() {
       }
     } else {
       // 対戦車: 撃破判定
-      const frontHit = isHittingFrontArmor(firer, target);
-      const armor = tDb.armor - (frontHit ? 0 : 2);
+      const armor = tDb.armor;
       const penDiff = pen - Math.max(0, armor);
       const dd1 = roll(), dd2 = roll();
       const dmgTotal = dd1 + dd2;
@@ -631,7 +693,7 @@ function doShoot() {
       const effMod = autoHit ? 3 : penDiff;
       const result = getDestructionResult(effMod, dmgTotal);
 
-      resultHtml += `<div class="r-row"><span class="r-label">装甲</span><span class="r-value">${tDb.armor}${frontHit?'':' (側面-2→'+armor+')'}</span></div>`;
+      resultHtml += `<div class="r-row"><span class="r-label">装甲</span><span class="r-value">${tDb.armor}</span></div>`;
       resultHtml += `<div class="r-row"><span class="r-label">貫通差</span><span class="r-value">${effMod >= 0 ? '+' : ''}${effMod}</span></div>`;
       resultHtml += `<div class="r-dice">撃破判定: ${dd1}+${dd2}=${dmgTotal}</div>`;
 
@@ -692,7 +754,7 @@ function doShoot() {
   // 結果表示
   document.getElementById('resultBody').innerHTML = resultHtml;
   document.getElementById('resultOverlay').style.display = 'flex';
-  if (autoPlay) setTimeout(() => closeResult(), 1200);
+  // autoPlayのcloseResultはaiWaitForResultに任せる（二重呼び防止）
 
   pushState();
 }
@@ -991,25 +1053,31 @@ function countBocage(c1, r1, c2, r2) {
   if (!state || !state.hexsideTerrain) return 0;
   const h1 = hexCenter(c1, r1);
   const h2 = hexCenter(c2, r2);
+  const dist = hexDist(c1, r1, c2, r2);
+  if (dist <= 0) return 0;
   const checked = {};
   let count = 0;
-  const dist = hexDist(c1, r1, c2, r2);
-  const steps = Math.max(dist * 4, 8);
-  for (let i = 0; i <= steps; i++) {
+  let prevCol = c1, prevRow = r1;
+  const steps = Math.max(dist * 6, 12);
+  for (let i = 1; i <= steps; i++) {
     const t = i / steps;
     const px = h1.x + (h2.x - h1.x) * t;
     const py = h1.y + (h2.y - h1.y) * t;
     const res = pixelToHexTwo(px, py);
-    const m1 = res.hex1, m2 = res.hex2;
-    if (!m2) continue;
-    // 近接する2ヘクス間の辺をチェック
-    if (hexDist(m1.col, m1.row, m2.col, m2.row) === 1) {
-      const a = `${m1.col},${m1.row}`, b = `${m2.col},${m2.row}`;
-      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
-      if (!checked[key]) {
-        checked[key] = true;
-        if (state.hexsideTerrain[key] === 'bocage') count++;
+    const cur = res.hex1;
+    if (!cur) continue;
+    // 主ヘクスが変わった時だけチェック（実際にヘクスサイドを通過）
+    if (cur.col !== prevCol || cur.row !== prevRow) {
+      if (hexDist(prevCol, prevRow, cur.col, cur.row) === 1) {
+        const a = `${prevCol},${prevRow}`, b = `${cur.col},${cur.row}`;
+        const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+        if (!checked[key]) {
+          checked[key] = true;
+          if (state.hexsideTerrain[key] === 'bocage') count++;
+        }
       }
+      prevCol = cur.col;
+      prevRow = cur.row;
     }
   }
   return count;
@@ -1094,6 +1162,11 @@ function aiCalcPrepFireFlags() {
     const firer = state.units[fi];
     const fDb = UNIT_DB[firer.name];
     if (!fDb || firer.status === 'destroyed') continue;
+
+    if (state.scenarioId === 'sc6') {
+      firer._prepFireRecommended = true;
+      continue;
+    }
 
     const curFt = FIRE_TABLE[firer.name];
 
@@ -1222,7 +1295,11 @@ function aiFirePhase() {
 
     // 最適な目標を選ぶ
     const best = aiFindBestTarget(fi);
-    if (best.idx < 0) { step++; processNext(); return; }
+    if (best.idx < 0) {
+      step++;
+      processNext();
+      return;
+    }
 
     // 射撃実行
     selectedFirer = fi;
@@ -1329,8 +1406,7 @@ function aiFindBestTarget(firerIdx) {
         } else {
           // 戦車: 命中後の撃破率も計算
           const pen_af = FIRE_TABLE[firer.name][di_af][0];
-          const frontHit_af = isHittingFrontArmor(firer, target);
-          const armor_af = tDb.armor - (frontHit_af !== false ? 0 : 2);
+          const armor_af = tDb.armor;
           const penDiff_af = pen_af - Math.max(0, armor_af);
           const dKey = String(Math.max(-3, Math.min(3, penDiff_af)));
           const dt_af = DESTRUCTION_TABLE[dKey];
@@ -1364,7 +1440,7 @@ function aiFindBestTarget(firerIdx) {
       // MG評価（射程2以内、機銃搭載）
       const hasMG = !fDb.noMG;
       const mgTable = ANTI_INF_TABLE.tankMG;
-      if (hasMG && mgTable && mgTable[dist] !== undefined) {
+      if (hasMG && mgTable && mgTable[dist] !== undefined && !omitPrepAdvanceMg(firer, target, fDb, dist)) {
         const mgScore = mgTable[dist] - dist + 5; // 歩兵優先度低め
         if (mgScore > bestScore) { bestScore = mgScore; bestIdx = ti; bestMode = 'mg'; }
       }
@@ -1372,8 +1448,11 @@ function aiFindBestTarget(firerIdx) {
       if (dist > 0) {
         const di = distKey(dist);
         if (di >= 0 && FIRE_TABLE[firer.name] && FIRE_TABLE[firer.name][di]) {
-          const heScore = fDb.antiInf - dist + 3;
-          if (heScore > bestScore) { bestScore = heScore; bestIdx = ti; bestMode = 'he'; }
+          const ftHe = FIRE_TABLE[firer.name][di];
+          if (!omitPrepAdvanceForTankHe(firer, target, fDb, tDb, ftHe, dist)) {
+            const heScore = fDb.antiInf - dist + 3;
+            if (heScore > bestScore) { bestScore = heScore; bestIdx = ti; bestMode = 'he'; }
+          }
         }
       } else if (!hasMG) {
         continue; // dist=0 で機銃なし→撃てない
@@ -1390,9 +1469,14 @@ function aiFindBestTarget(firerIdx) {
     // 射界・LOSチェック
     if (!canFireAt(firer, target)) continue;
 
+    if (omitPrepAdvanceForTankHe(firer, target, fDb, tDb, ft, dist)) continue;
+
+    // 貫通差チェック
+    const frontArmor = tDb.armor || 0;
+    const penDiff_chk = ft[0] - Math.max(0, frontArmor);
+    if (penDiff_chk <= -3) continue;
     // 撃破率を計算
-    const frontHit = isHittingFrontArmor(firer, target);
-    const chance = calcKillChance(firer.name, target.name, dist, frontHit);
+    const chance = calcKillChance(firer.name, target.name, dist, true);
 
     // 前進射撃の弾切れ判定は共通判定（30%閾値）で処理済み
 
@@ -1429,8 +1513,11 @@ function aiFindBestTarget(firerIdx) {
 }
 
 function aiWaitForResult(callback) {
+  let pollCount = 0;
   const check = setInterval(() => {
+    pollCount++;
     const overlay = document.getElementById('resultOverlay');
+    if (pollCount > 50) { console.log('[AI-WARN] aiWaitForResult timeout, forcing callback'); clearInterval(check); callback(); return; }
     if (overlay && overlay.style.display === 'flex') {
       clearInterval(check);
       if (autoPlay) {
@@ -1469,6 +1556,8 @@ window.addEventListener('message', (e) => {
   if (e.data.type === 'INIT_STATE') {
     isAI = e.data.isAI || false;
     autoPlay = e.data.autoPlay || false;
+    window.skipBySide = e.data.skipBySide || {};
+    window.ammoOutTargetMode = e.data.ammoOutTargetMode || 'exclude';
     init(e.data.state);
     return;
   }

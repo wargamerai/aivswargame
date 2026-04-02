@@ -721,8 +721,25 @@ function startDefensiveFire(movingUnit, movingIdx) {
       if (!isInFixedArc(e, movingUnit)) return;
     }
 
-    dfQueue.push({ idx: ei, unit: e, db: eDb, dist, ft });
+    // 修正後命中数を事前計算（ソート用）
+    const mDb = UNIT_DB[movingUnit.name];
+    let dfMod = HIT_MODIFIERS.defensiveFire;
+    const mTerrain = state.terrain[`${movingUnit.col},${movingUnit.row}`] || 'plain';
+    if (mTerrain === 'forest') dfMod += 2;
+    if (mTerrain === 'building') dfMod += 2;
+    dfMod += countBocage(e.col, e.row, movingUnit.col, movingUnit.row);
+    if (mDb && mDb.small) dfMod += 1;
+    const effHit = ft[1] - dfMod;
+    dfQueue.push({ idx: ei, unit: e, db: eDb, dist, ft, effHit });
   });
+
+  // 命中率最高のユニットだけ残す（AI/autoPlay時）
+  const dfShooterIsAI = !isAI || autoPlay;
+  if (dfShooterIsAI && dfQueue.length > 1) {
+    // 歩兵以外で最高effHitを見つけ、それだけ残す
+    dfQueue.sort((a, b) => (b.effHit || 0) - (a.effHit || 0));
+    dfQueue = [dfQueue[0]];
+  }
 
   if (dfQueue.length === 0) {
     afterDefensiveFire('none');
@@ -739,9 +756,8 @@ function showDfStep1() {
   const eDb = enemy.db;
   const mDb = UNIT_DB[dfMovingUnit.name];
 
-  // AI自動判断: 修正後命中数が低い場合はDF_ARROW表示前に即スキップ
-  const dfShooterIsAI_early = !isAI || autoPlay;
-  if (dfShooterIsAI_early && !enemy.isInfantry && enemy.ft) {
+  // 修正後命中数を事前計算
+  if (!enemy.isInfantry && enemy.ft) {
     const hitNum_e = enemy.ft[1];
     let mod_e = HIT_MODIFIERS.defensiveFire;
     const mTerrain_e = state.terrain[`${dfMovingUnit.col},${dfMovingUnit.row}`] || 'plain';
@@ -749,7 +765,19 @@ function showDfStep1() {
     if (mTerrain_e === 'building') mod_e += 2;
     mod_e += countBocage(e.col, e.row, dfMovingUnit.col, dfMovingUnit.row);
     if (mDb.small) mod_e += 1;
-    if (hitNum_e - mod_e < 6) { nextDfStep(); return; }
+    const effHit_e = hitNum_e - mod_e;
+    // 命中省略閾値（射撃側の陣営で参照）
+    const ss = window.skipBySide[e.side] || {};
+    const threshold = ss.hitSkip || 0;
+    if (threshold > 0 && effHit_e <= threshold) { nextDfStep(); return; }
+    // 撃破省略閾値（射撃側の陣営で参照）
+    const destroyThreshold = ss.destroySkip !== undefined ? ss.destroySkip : 99;
+    if (destroyThreshold < 99 && mDb) {
+      const pen_e = enemy.ft[0];
+      const armor_e = mDb.armor || 0;
+      const penDiff_e = Math.max(-3, Math.min(3, pen_e - Math.max(0, armor_e)));
+      if (penDiff_e <= destroyThreshold) { nextDfStep(); return; }
+    }
   }
 
   // hub.htmlに矢印表示
@@ -820,9 +848,19 @@ function showDfStep1() {
   html += `<tr><td style="color:#666">攻撃:</td><td><b>${e.name}</b></td></tr>`;
   html += `<tr><td style="color:#666">目標:</td><td><b>${dfMovingUnit.name}</b></td></tr>`;
   html += `<tr><td style="color:#666">距離:</td><td>${enemy.dist}ヘクス</td></tr>`;
+  const effHitDF = hitNum - mod;
+  let hitChanceDF = 0;
+  for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) { if (a + b <= effHitDF) hitChanceDF++; }
+  hitChanceDF = Math.round(hitChanceDF / 36 * 100);
+  const mArmor = mDb ? mDb.armor : 0;
+  const penDiffDF = pen - Math.max(0, mArmor);
+  const clampedPenDiffDF = Math.max(-3, Math.min(3, penDiffDF));
   html += `<tr><td style="color:#666">貫通力:</td><td>${pen}</td></tr>`;
-  html += `<tr><td style="color:#666">命中数:</td><td>${hitNum}以下</td></tr>`;
-  html += `<tr><td style="color:#666">修正:</td><td>+${mod} (${details.join(', ')})</td></tr>`;
+  html += `<tr><td style="color:#666">装甲:</td><td>${mArmor} | 貫通差: ${clampedPenDiffDF >= 0 ? '+' : ''}${clampedPenDiffDF}</td></tr>`;
+  html += `<tr><td style="color:#666">命中数:</td><td>${hitNum}以下 (修正+${mod} → 有効${effHitDF})</td></tr>`;
+  html += `<tr><td style="color:#666">修正:</td><td>${details.join(' / ')}</td></tr>`;
+  html += `<tr><td style="color:#666">命中率:</td><td><b style="color:${hitChanceDF>=50?'#2a7a2a':'#cc3311'}">${hitChanceDF}%</b></td></tr>`;
+  html += `<tr><td style="color:#666">撃破判定:</td><td><b style="color:#c33">${clampedPenDiffDF >= 0 ? '+' : ''}${clampedPenDiffDF}</b></td></tr>`;
   html += `</table>`;
   html += `<div style="display:flex;gap:8px;margin-top:4px">`;
   html += `<button onclick="executeDfShot()" style="background:#c33;color:#fff;border:none;padding:8px 24px;border-radius:4px;font-size:1em;cursor:pointer">射撃実行</button>`;
@@ -834,18 +872,9 @@ function showDfStep1() {
   document.getElementById('dfOverlay').style.display = 'flex';
 
   // 防御射撃の自動判断: 射撃側がAI、またはautoPlayなら自動
+  // 命中・撃破省略は showDfStep1 冒頭で既に判定済み
   const dfShooterIsAI = !isAI || autoPlay;
-  if (dfShooterIsAI) setTimeout(() => {
-    // 防御射撃をスキップすべきか判断
-    const dist = enemy.dist;
-    const remainMP = dfMovingUnit.remainMove;
-    const effHit = hitNum - mod; // 修正後の実質命中数
-
-    // 修正後命中数6未満 → スキップ
-    if (effHit < 6) { nextDfStep(); return; }
-
-    executeDfShot();
-  }, 600);
+  if (dfShooterIsAI) setTimeout(() => { executeDfShot(); }, 600);
 }
 
 // ステップ2: サイコロ振って結果表示
@@ -2279,8 +2308,47 @@ function aiDoMovement(u, db, callback) {
     // 現在位置が既に最有利以上なら停止
     const curAdv = calcHexAdv(u.col, u.row);
     if (mapGoal && curAdv >= mapGoalAdv && curAdv > -Infinity) {
-      console.log(`[AI] ${u.name} 現在位置が最有利(adv=${curAdv.toFixed(3)}) → 停止`);
-      callback(); return;
+      // sc6: 現在の有効命中数が7以下なら停止せず強制移動
+      let forceMove = false;
+      if (state.scenarioId === 'sc6' && enemy) {
+        const myFtChk = FIRE_TABLE[u.name];
+        if (myFtChk) {
+          const curDist = hexDist(u.col, u.row, enemy.col, enemy.row);
+          const curDk = distKey(curDist);
+          if (curDk >= 0 && myFtChk[curDk]) {
+            let curMod = 0;
+            const eTerr = state.terrain ? (state.terrain[`${enemy.col},${enemy.row}`] || 'plain') : 'plain';
+            if (eTerr === 'forest') curMod += HIT_MODIFIERS.forest;
+            if (eTerr === 'building') curMod += HIT_MODIFIERS.building;
+            curMod += countBocage(u.col, u.row, enemy.col, enemy.row) * (HIT_MODIFIERS.bocage || 1);
+            const eDb2 = UNIT_DB[enemy.name];
+            if (eDb2 && eDb2.small) curMod += HIT_MODIFIERS.smallTarget;
+            const curEffHit = myFtChk[curDk][1] - curMod;
+            if (curEffHit <= 7) {
+              // 7を超えるコラムの距離を探す
+              for (let di = 0; di < DIST_RANGES.length; di++) {
+                if (!myFtChk[di]) continue;
+                const testEffHit = myFtChk[di][1] - curMod;
+                if (testEffHit > 7) {
+                  // その距離コラムの最大距離をmapGoalの距離目標にする
+                  const targetDist = DIST_RANGES[di];
+                  if (curDist > targetDist) {
+                    forceMove = true;
+                    // mapGoalを敵方向のtargetDist付近に再設定
+                    mapGoal = { col: enemy.col, row: enemy.row };
+                    console.log(`[AI] ${u.name} sc6強制移動: effHit=${curEffHit}<=7 → 距離${targetDist}以内へ接近`);
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      if (!forceMove) {
+        console.log(`[AI] ${u.name} 現在位置が最有利(adv=${curAdv.toFixed(3)}) → 停止`);
+        callback(); return;
+      }
     }
 
     // 到達可能ヘクスから目標に近づくベストを選ぶ
@@ -2587,6 +2655,7 @@ window.addEventListener('message', (e) => {
     console.log('[phase_move] INIT_STATE受信');
     isAI = e.data.isAI || false;
     autoPlay = e.data.autoPlay || false;
+    window.skipBySide = e.data.skipBySide || {};
     init(e.data.state);
     return;
   }
