@@ -505,7 +505,7 @@ function handleMove(col, row) {
 // ===== マップ脱出判定（突破シナリオ） =====
 function checkMapExit(u) {
   const scId = state.scenarioId;
-  if (scId !== 'sc2' && scId !== 'sc3' && scId !== 'sc4') return false;
+  if (scId !== 'sc2' && scId !== 'sc3' && scId !== 'sc4' && scId !== 'sc8') return false;
 
   const maxRow = state.mapMaxRow || 16;
   let canExit = false;
@@ -517,6 +517,8 @@ function checkMapExit(u) {
   // sc4: enterLeft → 右端(col=maxCol)から脱出
   const maxCol = state.mapMaxCol || 25;
   if (scId === 'sc4' && u.enterEdge === 'left' && u.col === maxCol) canExit = true;
+  // sc8: enterLeft → 右端(col=maxCol)から脱出（突破）
+  if (scId === 'sc8' && u.enterEdge === 'left' && u.col === maxCol) canExit = true;
 
   if (!canExit) return false;
 
@@ -1632,9 +1634,11 @@ function aiPlaceUnit(u, db, callback) {
   } else if (edge === 'topRight') {
     for (let c = Math.floor(maxCol / 2) + 1; c <= maxCol; c++) candidates.push({ col:c, row:1 });
   } else {
-    // free配置: マップ全体から候補
+    // free配置: マップ全体（またはenterHexRows範囲）から候補
+    const freeMinR = u.enterHexRows ? u.enterHexRows[0] : 1;
+    const freeMaxR = u.enterHexRows ? u.enterHexRows[1] : maxRow;
     for (let c = 1; c <= maxCol; c++)
-      for (let r = 1; r <= maxRow; r++) candidates.push({ col:c, row:r });
+      for (let r = freeMinR; r <= freeMaxR; r++) candidates.push({ col:c, row:r });
   }
 
   // スタック可能かつMP足りるヘクスをフィルタ

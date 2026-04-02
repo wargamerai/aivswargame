@@ -603,8 +603,193 @@ const SCENARIOS = [
         { name:'StuG III', col:0, row:0, dir:1 },
       ]
     },
-    terrain: MAP_TERRAIN.A,
-    hexsideTerrain: MAP_HEXSIDE_TERRAIN.B
+    terrain: (function() {
+      // A(row1-16) + B(row17-32)の結合地形
+      const t = Object.assign({}, MAP_TERRAIN.A);
+      for (const [key, val] of Object.entries(MAP_TERRAIN.B)) {
+        const [c, r] = key.split(',').map(Number);
+        t[c + ',' + (r + 16)] = val;
+      }
+      return t;
+    })(),
+    hexsideTerrain: (function() {
+      // Bのボカージュもrow+16でオフセット
+      const h = {};
+      for (const [key, val] of Object.entries(MAP_HEXSIDE_TERRAIN.B)) {
+        const parts = key.split('-');
+        const [c1, r1] = parts[0].split(',').map(Number);
+        const [c2, r2] = parts[1].split(',').map(Number);
+        h[c1 + ',' + (r1 + 16) + '-' + c2 + ',' + (r2 + 16)] = val;
+      }
+      return h;
+    })(),
+  },
+  // シナリオ7: 白ロシア
+  {
+    id: 'sc7',
+    name: '白ロシア',
+    front: 'east',
+    map1: 'B', map1orient: 'Vertical',
+    map2: 'A', map2orient: 'Vertical',
+    maxTurns: 99,
+    firstPlayer: 'ge',
+    victory: '先に半数以上破壊した側の勝利（射撃不能は破壊扱い）',
+    sides: {
+      ge: {
+        setup: 'free',
+        enterEdge: null,
+        enterHexRows: [1, 16],
+        units: [
+          { name:'Pz V/G', col:0, row:0, dir:0 },
+          { name:'Pz V/G', col:0, row:0, dir:0 },
+          { name:'Pz V/G', col:0, row:0, dir:0 },
+          { name:'Pz V/G', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+          { name:'Hetzer', col:0, row:0, dir:0 },
+          { name:'Hetzer', col:0, row:0, dir:0 },
+          { name:'Hetzer', col:0, row:0, dir:0 },
+          { name:'Hetzer', col:0, row:0, dir:0 },
+        ]
+      },
+      su: {
+        setup: 'enterBottom',
+        enterEdge: 'bottom',
+        units: [
+          { name:'IS-II', col:0, row:0, dir:1 },
+          { name:'IS-II', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'SU-100', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+          { name:'T34/85', col:0, row:0, dir:1 },
+        ]
+      }
+    },
+    terrain: (function() {
+      // B(row1-16) + A(row17-32)の結合地形
+      const t = Object.assign({}, MAP_TERRAIN.B);
+      for (const [key, val] of Object.entries(MAP_TERRAIN.A)) {
+        const [c, r] = key.split(',').map(Number);
+        t[c + ',' + (r + 16)] = val;
+      }
+      return t;
+    })(),
+    hexsideTerrain: MAP_HEXSIDE_TERRAIN.B,
+  },
+  // シナリオ8: 東プロイセン
+  {
+    id: 'sc8',
+    name: '東プロイセン',
+    front: 'east',
+    map1: 'B', map1orient: 'Vertical',
+    map2: 'A', map2orient: 'Vertical',
+    mapJoin: 'horizontal',
+    maxTurns: 99,
+    firstPlayer: 'ge',
+    victory: 'ソ連: 半数以上破壊される前に3ユニットを右端から突破 / ドイツ: 半数以上破壊される前にソ連の突破を阻止（射撃不能は破壊扱い）',
+    specialRules: { breakthrough: true },
+    sides: {
+      ge: {
+        setup: 'free',
+        enterEdge: null,
+        enterHexRows: [1, 16],
+        units: [
+          { name:'Pz V/G', col:0, row:0, dir:0 },
+          { name:'Pz V/G', col:0, row:0, dir:0 },
+          { name:'Pz V/G', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+          { name:'Pz IV/H', col:0, row:0, dir:0 },
+          { name:'J.Panther', col:0, row:0, dir:0 },
+          { name:'J.Panther', col:0, row:0, dir:0 },
+          { name:'JP IV', col:0, row:0, dir:0 },
+        ]
+      },
+      su: {
+        setup: 'enterLeft',
+        enterEdge: 'left',
+        units: [
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'IS-II', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'SU-100', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+          { name:'T34/85', col:0, row:0, dir:0 },
+        ]
+      }
+    },
+    reinforcement: {
+      turn: 7,
+      side: 'ge',
+      enterEdge: 'right',
+      units: [
+        { name:'Tiger II', col:0, row:0, dir:3 },
+        { name:'Tiger II', col:0, row:0, dir:3 },
+        { name:'Tiger II', col:0, row:0, dir:3 },
+        { name:'J.Tiger', col:0, row:0, dir:3 },
+      ]
+    },
+    terrain: {
+      // Map B部分 (cols 1-26)
+      '4,8':'forest', '3,9':'forest', '4,9':'forest', '5,9':'forest',
+      '3,10':'forest', '4,10':'forest', '5,10':'forest', '6,10':'forest',
+      '5,11':'forest', '6,11':'forest', '7,11':'forest',
+      '6,12':'forest', '7,12':'forest',
+      '20,2':'slope', '19,3':'slope', '20,3':'slope', '21,3':'slope', '22,3':'slope', '23,3':'slope',
+      '19,4':'slope', '20,4':'slope', '21,4':'slope', '22,4':'building', '23,4':'slope',
+      '19,5':'slope', '20,5':'slope', '21,5':'building', '22,5':'slope', '23,5':'slope', '24,5':'slope',
+      '19,6':'slope', '20,6':'slope', '21,6':'slope', '22,6':'slope', '23,6':'slope',
+      '21,7':'slope',
+      // Map A部分 (cols 27-51)
+      '28,2':'forest', '29,2':'forest', '30,2':'forest',
+      '29,3':'forest', '30,3':'forest',
+      '46,4':'forest',
+      '46,5':'forest', '47,5':'forest',
+      '46,6':'forest', '47,6':'forest',
+      '46,7':'forest', '47,7':'forest', '48,7':'forest',
+      '47,8':'forest', '48,8':'forest',
+      '32,11':'forest',
+      '31,12':'forest', '32,12':'forest', '33,12':'forest',
+      '31,13':'forest', '32,13':'forest', '33,13':'forest', '34,13':'forest', '35,13':'forest',
+      '33,14':'forest', '34,14':'forest', '35,14':'forest',
+      '42,13':'slope', '42,14':'slope', '43,14':'slope',
+      '43,15':'slope',
+    },
+    hexsideTerrain: MAP_HEXSIDE_TERRAIN.B,
   },
 ];
 
