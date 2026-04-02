@@ -281,7 +281,8 @@ function updateShootInfo() {
   // hub.htmlに射撃ライン表示
   parent.postMessage({ type:'DF_ARROW', arrow: {
     fromCol: firer.col, fromRow: firer.row,
-    toCol: target.col, toRow: target.row
+    toCol: target.col, toRow: target.row,
+    shooterSide: firer.side
   }}, '*');
 
   const dist = hexDist(firer.col, firer.row, target.col, target.row);
