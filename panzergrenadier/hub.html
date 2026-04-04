@@ -347,12 +347,17 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
 // シナリオに応じてマップデータを動的に読み込む
 (function() {
   var sid = parseInt(new URLSearchParams(window.location.search).get('scenario')) || 2;
-  var mapFile = sid === 3 ? 'mapdata3.js' : 'mapdata.js';
+  var mapFile = sid === 3 ? 'mapdata3.js' : sid === 4 ? 'mapdata4.js' : sid === 5 ? 'mapdata5.js' : sid === 7 ? 'mapdata7.js' : sid === 8 ? 'mapdata8.js' : sid === 9 ? 'mapdata9.js' : 'mapdata.js';
   document.write('<script src="' + mapFile + '"><\/script>');
 })();
 </script>
 <script src="scenario2.js"></script>
 <script src="scenario3.js"></script>
+<script src="scenario4.js"></script>
+<script src="scenario5.js"></script>
+<script src="scenario7.js"></script>
+<script src="scenario8.js"></script>
+<script src="scenario9.js"></script>
 <script>
 // ===== ゲーム状態 =====
 // URLパラメータからシナリオと陣営を取得
@@ -361,7 +366,7 @@ const _scenarioId = parseInt(_urlParams.get('scenario')) || 2;
 const _playerSide = _urlParams.get('side') || 'allied';
 
 // シナリオ選択
-const SCENARIO_MAP = { 2: SCENARIO_2, 3: SCENARIO_3 };
+const SCENARIO_MAP = { 2: SCENARIO_2, 3: SCENARIO_3, 4: SCENARIO_4, 5: SCENARIO_5, 7: SCENARIO_7, 8: SCENARIO_8, 9: SCENARIO_9 };
 const SCENARIO = SCENARIO_MAP[_scenarioId] || SCENARIO_2;
 
 const G = {
@@ -696,12 +701,10 @@ function getHexTerrain(hexId) {
 // slope1境界の低い側=0, 高い側=1, slope2の高い側=2
 function getHexElevation(col, row) {
   const hid = toHexId(col, row);
-  // ELEVATION_MAPがあればそれを使用（Lv2=2, Lv3=3）
-  // 未指定のヘクスはLv1（= 高さ0として扱う）
-  if (typeof ELEVATION_MAP !== 'undefined' && ELEVATION_MAP[hid]) {
-    return ELEVATION_MAP[hid] - 1; // Lv2→高さ1, Lv3→高さ2
+  if (typeof ELEVATION_MAP !== 'undefined' && ELEVATION_MAP[hid] != null) {
+    return ELEVATION_MAP[hid];
   }
-  return 0; // Lv1 = 高さ0
+  return 0;
 }
 
 // ===== 視認システム (ルール6) =====
@@ -830,19 +833,31 @@ function checkSlopeCrossing(col1, row1, col2, row2) {
       const nextDist = _distPointToLine(nc.x, nc.y, _sc.x, _sc.y, _tc.x, _tc.y);
       if (curDist > slopeApothem || nextDist > slopeApothem) continue; // 片方がかすめ → 横切りでない
       // 斜面を横切った
-      // 始点/終点が斜面に隣接している場合
       const srcId = toHexId(col1, row1);
       const tgtId = toHexId(col2, row2);
-      // 始点が斜面の高い側にいる → スキップ（下が見渡せる）
-      if ((curId === srcId || nextId === srcId) && getHexElevation(col1, row1) >= slopeLevel) continue;
-      // 終点が斜面の高い側にいる → スキップ（上から見える）
-      if ((curId === tgtId || nextId === tgtId) && getHexElevation(col2, row2) >= slopeLevel) continue;
-      // 視線レベルが斜面を越えられるか
-      // 両方が斜面より高い → 同じ高台同士で見える
+      const srcElev = getHexElevation(col1, row1);
+      const tgtElev = getHexElevation(col2, row2);
+
+      // 上から下を見る場合
+      if (srcElev > tgtElev) {
+        // 途中に始点と同じ高度のヘクスがあれば遮蔽
+        const curElev = getHexElevation(cur.col, cur.row);
+        const nextElev = getHexElevation(next.col, next.row);
+        const midElev = Math.max(curElev, nextElev);
+        if (midElev >= srcElev) {
+          // ただし斜面の隣接なら見える
+          if (curId === srcId || nextId === srcId) continue;
+          if (curId === tgtId || nextId === tgtId) continue;
+          return false;
+        }
+        continue; // 同じ高度でなければ見える
+      }
+      // 下から上を見る場合（従来ロジック）
+      if ((curId === srcId || nextId === srcId) && srcElev >= slopeLevel) continue;
+      if ((curId === tgtId || nextId === tgtId) && tgtElev >= slopeLevel) continue;
       if (srcSight > slopeLevel && tgtSight > slopeLevel) continue;
-      // 片方が斜面+1より高い → 高い場所が突き出て見える（Lv3越しにLv1からLv3が見える等）
       if (srcSight > slopeLevel + 1 || tgtSight > slopeLevel + 1) continue;
-      return false; // 遮蔽
+      return false;
     }
   }
   return true; // 斜面に遮られない
@@ -1106,6 +1121,27 @@ function getStackCount(hexId) {
     u.status !== 'eliminated' &&
     !STACK_EXEMPT_TYPES.includes(u.type)
   ).length;
+}
+
+// 組織間スタック禁止チェック: 移動ユニットがそのヘクスに入れるか
+function canStackWithOrg(movingUnit, hexId) {
+  if (!movingUnit.org) return true;
+  const existing = units.filter(u =>
+    u.hexId === hexId && u.status !== 'eliminated' && u.org && u.id !== movingUnit.id
+  );
+  for (const u of existing) {
+    // SS/国防軍スタック禁止
+    if (SCENARIO.noSSHeerStack) {
+      if ((movingUnit.org === 'ss' && u.org === 'heer') ||
+          (movingUnit.org === 'heer' && u.org === 'ss')) return false;
+    }
+    // 米英スタック禁止
+    if (SCENARIO.noUSUKStack) {
+      if ((movingUnit.org === 'us' && u.org === 'uk') ||
+          (movingUnit.org === 'uk' && u.org === 'us')) return false;
+    }
+  }
+  return true;
 }
 
 // 超過ヘクス一覧を返す { hexId: [units] }
@@ -1513,6 +1549,44 @@ function renderPhase() {
     return;
   }
   if (phase.id === 'supportAtk') {
+    // ダイス航空支援判定（シナリオ4: 5ターン以降）
+    if (SCENARIO.diceAirSupport && G.turn >= SCENARIO.diceAirSupport.startTurn && !G._airSupportRolled) {
+      G._airSupportRolled = true;
+      const das = SCENARIO.diceAirSupport;
+      const roll = Math.floor(Math.random() * 10);
+      const entry = das.table.find(e => roll >= e.min && roll <= e.max);
+      const count = entry ? entry.count : 0;
+      if (count > 0) {
+        for (let i = 0; i < count; i++) {
+          airState.fighterBombers.push({
+            id: 'air_t' + G.turn + '_' + i,
+            name: `空軍支援(T${G.turn})`,
+            side: das.side,
+            fp: 6,
+            fpAT: 6,
+            fpSoft: 6,
+            uses: 1,
+            usedCount: 0,
+            usedThisTurn: false,
+            _tempAir: true,
+          });
+        }
+        addLog('support', `空軍支援判定: ダイス${roll} → 空軍支援${count}回到着！(装甲6/非装甲6)`);
+      } else {
+        addLog('support', `空軍支援判定: ダイス${roll} → 空軍支援なし`);
+      }
+      const resultText = count > 0 ? `空軍支援${count}回到着！(6/6)` : '空軍支援なし';
+      const resultClass = count > 0 ? 'hit-d' : 'hit-none';
+      showDiceOverlay('空軍支援判定', `ターン${G.turn} (8-9で到着)`, [{
+        label: das.side === 'allied' ? '連合軍' : 'ドイツ軍',
+        roll: roll,
+        resultText: resultText,
+        resultClass: resultClass,
+      }], function() {
+        renderSupportPhase(G.initiative);
+      });
+      return;
+    }
     renderSupportPhase(G.initiative);
     return;
   }
@@ -2004,6 +2078,11 @@ async function aiAutoMoveFire() {
       ).length;
       const movingCount = aliveStack.filter(u => u.status !== 'eliminated').length;
       if (existingAtDest + movingCount > 4) break;
+      // SS/国防軍スタック禁止
+      if (SCENARIO.noSSHeerStack && aliveStack[0].org) {
+        const destUnits = testUnits.filter(su => su.hexId === hexId && su.status !== 'eliminated' && su.org && !aliveStack.includes(su));
+        if (destUnits.some(su => (aliveStack[0].org === 'ss' && su.org === 'heer') || (aliveStack[0].org === 'heer' && su.org === 'ss'))) break;
+      }
 
       mp -= cost;
 
@@ -2794,7 +2873,12 @@ function bfsShortestPath(unit, startCol, startRow, targetCol, targetRow, formati
             !STACK_EXEMPT_TYPES.includes(su.type) &&
             !(aliveUnits && aliveUnits.includes(su))
           ).length;
-          if (existing + aliveCount > 4) continue; // このヘクスは通過不可
+          if (existing + aliveCount > 4) continue;
+          // SS/国防軍スタック禁止
+          if (SCENARIO.noSSHeerStack && unit.org) {
+            const destUnits = testUnits.filter(su => su.hexId === hid && su.status !== 'eliminated' && su.org && !(aliveUnits && aliveUnits.includes(su)));
+            if (destUnits.some(su => (unit.org === 'ss' && su.org === 'heer') || (unit.org === 'heer' && su.org === 'ss'))) continue;
+          }
         }
         const nKey = `${n.col},${n.row}`;
         const newCost = cur.cost + mc.cost;
@@ -2858,6 +2942,11 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
         !STACK_EXEMPT_TYPES.includes(su.type) && !alive.includes(su)
       ).length;
       if (existing + alive.filter(u => u.status !== 'eliminated').length > 4) break;
+      // SS/国防軍スタック禁止
+      if (SCENARIO.noSSHeerStack && alive[0] && alive[0].org) {
+        const destUnits = testUnits.filter(su => su.hexId === hid && su.status !== 'eliminated' && su.org && !alive.includes(su));
+        if (destUnits.some(su => (alive[0].org === 'ss' && su.org === 'heer') || (alive[0].org === 'heer' && su.org === 'ss'))) break;
+      }
 
       mp -= mc.cost;
       pathIdx++;
@@ -3210,6 +3299,15 @@ async function _aiAutoDefMoveContinue() {
 
 
 function advanceTurn() {
+  // イニシアチブ特殊シフト（ターン終了時）
+  if (SCENARIO.initiativeShiftEvents) {
+    SCENARIO.initiativeShiftEvents.forEach(ev => {
+      if (G.turn === ev.afterTurn) {
+        G.markerPos = Math.min(10, Math.max(0, G.markerPos + ev.shiftAmount));
+        addLog('turn', `イニシアチブマーカーを右へ${ev.shiftAmount}欄移動 → M${G.markerPos}`);
+      }
+    });
+  }
   G.turn++;
   // 前ターンの移動線をクリア
   if (typeof _completedMoveTrails !== 'undefined') _completedMoveTrails = [];
@@ -3277,17 +3375,54 @@ function advanceTurn() {
     );
     if (isVisible) return;
 
-    // ダミーを4枚まで補充
+    // ダミーを1枚補充（最大4枚まで）
     const currentDummies = getDummyCount(u.hexId);
     if (currentDummies < 4) {
-      placeDummy(u.hexId, u.side, 4 - currentDummies);
+      placeDummy(u.hexId, u.side, 1);
     }
   });
 
   // 射撃済み・突撃済みフラグリセット
-  testUnits.forEach(u => { u.firedThisTurn = false; u.outOfAmmo = false; u.assaultedThisTurn = false; u.moveComplete = false; u._counterFiredThisTurn = false; u._counterFired = false; });
+  testUnits.forEach(u => {
+    u.firedThisTurn = false;
+    u.assaultedThisTurn = false;
+    u.moveComplete = false;
+    u._counterFiredThisTurn = false;
+    u._counterFired = false;
+    // 弾切れ回復: 増援ヘクスにいれば回復、なければターンでリセット
+    if (u.outOfAmmo) {
+      const recoveryHexes = SCENARIO.ammoRecoveryHexes;
+      // ammoRecoveryHexesがないシナリオは従来通りターンリセット
+      if (!SCENARIO.ammoRecoveryHexes) {
+        u.outOfAmmo = false;
+      }
+      // ammoRecoveryHexesがあるシナリオは移動フェーズで補給ヘクス到達時に処理
+    }
+  });
   // 航空支援リセット
   resetAirSupport();
+  G._airSupportRolled = false;
+  // ダイス航空支援のターン限定機体を除去
+  if (airState.fighterBombers) {
+    airState.fighterBombers = airState.fighterBombers.filter(fb => !fb._tempAir);
+  }
+  // 補給完了ユニットの再登場
+  testUnits.forEach(u => {
+    if (u.status === 'resupply' && u._resupplyTurn === G.turn) {
+      const hexId = u._resupplyHex;
+      const pos = fromHexId(hexId);
+      const center = getHexCenter(pos.col, pos.row);
+      u.col = pos.col; u.row = pos.row;
+      u.x = center.x; u.y = center.y;
+      u.hexId = hexId;
+      u.status = 'ok';
+      u.outOfAmmo = false;
+      u.moveComplete = false;
+      delete u._resupplyTurn;
+      delete u._resupplyHex;
+      addLog('turn', `${u.name}: 補給完了、${hexId}に再登場`);
+    }
+  });
   // 援軍は移動フェイズ開始時に配置（ここでは配置しない）
   addLog('turn', `===== ターン ${G.turn} 開始 =====`);
   updatePhaseBar();
@@ -3583,7 +3718,7 @@ function buildUnitsFromScenario(scenario) {
           name: `ダミー-${u.hexId}-${i}`,
           range: 0, fpAT: 0, fpSoft: 0, def: 0, morale: 0,
           closeAtk: 0, closeDef: 0, move: 0,
-          nation: u.nation, unitName: 'Dummy',
+          nation: u.nation, unitName: 'Dummy', org: u.org || '',
         });
       }
       return;
@@ -3599,7 +3734,7 @@ function buildUnitsFromScenario(scenario) {
         range: u.range || 0, fpAT: u.fpAT || 0, fpSoft: u.fpSoft || 0,
         def: u.def || 0, morale: u.morale || 5,
         closeAtk: u.closeAtk || 0, closeDef: u.closeDef || 0, move: u.move || 0,
-        nation: u.nation, unitName: u.unitName,
+        nation: u.nation, unitName: u.unitName, org: u.org || '',
       });
     }
   });
@@ -3614,7 +3749,8 @@ function buildUnitsFromScenario(scenario) {
       else if (lu.unitName && lu.unitName.includes('Leader B')) rank = 'B';
       else if (lu.unitName && lu.unitName.includes('Leader C')) rank = 'C';
 
-      const pool = scenario.leaderPool[lu.side];
+      const poolKey = (lu.side === 'german' && lu.org === 'ss' && scenario.leaderPool.germanSS) ? 'germanSS' : lu.side;
+      const pool = scenario.leaderPool[poolKey];
       if (!pool || !pool[rank] || pool[rank].length === 0) return;
 
       const choice = pool[rank][Math.floor(Math.random() * pool[rank].length)];
@@ -3713,6 +3849,8 @@ function deployReinforcements(scenario, turn) {
 }
 
 // 指揮官ユニットにランダム裏面を割り当てるヘルパー
+// 使用済み追跡: 同じ陣営・ランク内で重複しない
+const _usedLeaderBacks = {};
 function assignLeaderBack(scenario, unit) {
   if (unit.type !== 'leader' || !scenario.leaderPool) return;
   let rank = 'C';
@@ -3720,10 +3858,17 @@ function assignLeaderBack(scenario, unit) {
   else if (unit.unitName && unit.unitName.includes('Leader B')) rank = 'B';
   const pool = scenario.leaderPool[unit.side];
   if (!pool || !pool[rank] || pool[rank].length === 0) return;
-  const choice = pool[rank][Math.floor(Math.random() * pool[rank].length)];
+  const key = unit.side + '_' + rank;
+  if (!_usedLeaderBacks[key]) _usedLeaderBacks[key] = new Set();
+  const available = pool[rank].filter((_, i) => !_usedLeaderBacks[key].has(i));
+  if (available.length === 0) return;
+  const idx = Math.floor(Math.random() * available.length);
+  const choice = available[idx];
+  const origIdx = pool[rank].indexOf(choice);
+  _usedLeaderBacks[key].add(origIdx);
   unit.abilities = choice.abilities;
   unit.srcBack = 'images/' + choice.back;
-  unit.src = unit.srcBack; // 裏面（能力面）を表示用画像にする
+  unit.src = unit.srcBack;
   addLog('init', `${unit.name}: 能力 [${choice.abilities.join(',')}] (${rank}ランク)`);
 }
 
@@ -3892,8 +4037,10 @@ function getStacksByHex() {
 
 function loadUnitImages() {
   testUnits.forEach(u => {
+    if (!u.src) { console.warn('画像srcなし:', u.name, u.type, u.unitName); return; }
     const img = new Image();
     img.onload = () => { u.img = img; drawMap(); };
+    img.onerror = () => { console.error('画像読込失敗:', u.src, u.name); };
     img.src = u.src;
   });
 }
@@ -3923,7 +4070,39 @@ function drawMap() {
   ctx.save();
   ctx.translate(mapState.x, mapState.y);
   ctx.scale(mapState.zoom, mapState.zoom);
-  ctx.drawImage(mapState.img, 0, 0);
+  if (mapState.imgs) {
+    const rot = SCENARIO.mapImageRotate || 0;
+    const offsets = SCENARIO.mapImageOffsets || [];
+    let x = 0, y = 0;
+    mapState.imgs.forEach((im, i) => {
+      const ox = (offsets[i] && offsets[i].x) || 0;
+      const oy = (offsets[i] && offsets[i].y) || 0;
+      ctx.save();
+      if (rot === 90) {
+        // 90度回転 → 横連結（左から右）
+        ctx.translate(x + im.height + ox, oy);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(im, 0, 0);
+        x += im.height + ox;
+      } else if (rot === 270) {
+        ctx.translate(x + ox, im.width + oy);
+        ctx.rotate(-Math.PI / 2);
+        ctx.drawImage(im, 0, 0);
+        x += im.height + ox;
+      } else if (rot === 180) {
+        ctx.translate(im.width + ox, y + im.height + oy);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(im, 0, 0);
+        y += im.height + oy;
+      } else {
+        ctx.drawImage(im, ox, y + oy);
+        y += im.height + oy;
+      }
+      ctx.restore();
+    });
+  } else {
+    ctx.drawImage(mapState.img, 0, 0);
+  }
 
   // マップ周囲余白（1-2ヘクス分）
   if (mapState.img) {
@@ -4591,12 +4770,57 @@ function initMap() {
   ctx.textAlign = 'center';
   ctx.fillText('地図読込中…', canvas.width/2, canvas.height/2);
 
-  const img = new Image();
-  img.onload = () => {
-    mapState.img = img;
-    zoomFit();
-  };
-  img.src = 'map/m' + SCENARIO.map + '.jpg';
+  if (SCENARIO.mapImages && SCENARIO.mapImages.length > 1) {
+    // 複数マップ画像を連結（描画時に順番に描く）
+    const imgs = SCENARIO.mapImages.map(src => {
+      const im = new Image(); im.src = src; return im;
+    });
+    let loaded = 0;
+    imgs.forEach(im => {
+      im.onload = () => {
+        if (++loaded === imgs.length) {
+          const rot = SCENARIO.mapImageRotate || 0;
+          let totalW, totalH;
+          if (rot === 90 || rot === 270) {
+            // 回転後は幅と高さが入れ替わる → 横連結
+            totalW = imgs.reduce((s, i) => s + i.height, 0);
+            totalH = Math.max(...imgs.map(i => i.width));
+          } else if (rot === 180) {
+            // 180度回転 → 縦連結
+            totalH = imgs.reduce((s, i) => s + i.height, 0);
+            totalW = Math.max(...imgs.map(i => i.width));
+          } else {
+            totalH = imgs.reduce((s, i) => s + i.height, 0);
+            totalW = Math.max(...imgs.map(i => i.width));
+          }
+          const offsets = SCENARIO.mapImageOffsets || [];
+          offsets.forEach(o => {
+            if (o.x) totalW += Math.abs(o.x);
+            if (o.y) totalH += Math.abs(o.y);
+          });
+          mapState.imgs = imgs;
+          mapState.img = { width: totalW, height: totalH };
+          zoomFit();
+        }
+      };
+    });
+  } else if (SCENARIO.mapImages && SCENARIO.mapImages.length === 1 && SCENARIO.mapImageRotate) {
+    // 1枚マップ画像 + 回転あり → imgsパスで処理
+    const im = new Image();
+    im.src = SCENARIO.mapImages[0];
+    im.onload = () => {
+      const rot = SCENARIO.mapImageRotate || 0;
+      let totalW = im.width, totalH = im.height;
+      if (rot === 90 || rot === 270) { totalW = im.height; totalH = im.width; }
+      mapState.imgs = [im];
+      mapState.img = { width: totalW, height: totalH };
+      zoomFit();
+    };
+  } else {
+    const img = new Image();
+    img.onload = () => { mapState.img = img; zoomFit(); };
+    img.src = (SCENARIO.mapImages && SCENARIO.mapImages.length === 1) ? SCENARIO.mapImages[0] : 'map/m' + SCENARIO.map + '.jpg';
+  }
 
   loadUnitImages();
 
@@ -5193,8 +5417,12 @@ window.onload = function() {
     showTitle();
   }
   // マップを裏で先読み
-  const preImg = new Image();
-  preImg.src = 'map/m' + SCENARIO.map + '.jpg';
+  if (SCENARIO.mapImages) {
+    SCENARIO.mapImages.forEach(src => { const p = new Image(); p.src = src; });
+  } else {
+    const preImg = new Image();
+    preImg.src = 'map/m' + SCENARIO.map + '.jpg';
+  }
 };
 window.onresize = () => {
   if (canvas.dataset.loaded) drawMap();

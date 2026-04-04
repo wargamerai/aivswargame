@@ -242,15 +242,15 @@ const SCENARIO_3 = {
         { abilities:['M','A','R'], back:'ドイツ裏2cut19000007.jpg' },
       ],
       B: [ // Bランク (能力2つ)
-        { abilities:['M','R'], back:'ドイツ裏2cut14000002.jpg' },
         { abilities:['A','R'], back:'ドイツ裏2cut15000003.jpg' },
         { abilities:['F','R'], back:'ドイツ裏2cut16000004.jpg' },
+        { abilities:['M','R'], back:'ドイツ裏2cut14000002.jpg' },
       ],
       C: [ // Cランク (能力1つ)
         { abilities:['A'], back:'ドイツ裏2cut12000000.jpg' },
         { abilities:['F'], back:'ドイツ裏2cut13000001.jpg' },
-        { abilities:['R'], back:'ドイツ裏2cut28000014.jpg' },
         { abilities:['M'], back:'ドイツ裏2cut29000015.jpg' },
+        { abilities:['R'], back:'ドイツ裏2cut28000014.jpg' },
       ],
     },
     allied: {
@@ -258,12 +258,13 @@ const SCENARIO_3 = {
       B: [ // Bランク (能力2つ)
         { abilities:['A','R'], back:'us裏02cut13000001.jpg' },
         { abilities:['F','R'], back:'us裏02cut14000002.jpg' },
-        { abilities:['M','R'], back:'us裏02cut25000011.jpg' },
+        { abilities:['M','R'], back:'us裏02cut12000000.jpg' },
       ],
       C: [ // Cランク (能力1つ)
         { abilities:['A'], back:'us裏02cut28000014.jpg' },
         { abilities:['F'], back:'us裏02cut29000015.jpg' },
         { abilities:['M'], back:'us裏02cut27000013.jpg' },
+        { abilities:['R'], back:'us裏02cut25000011.jpg' },
       ],
     },
   },
