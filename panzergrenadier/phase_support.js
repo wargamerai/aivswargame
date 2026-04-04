@@ -24,6 +24,8 @@ const SCENARIO_OFF_BOARD = SCENARIO.offBoardArtillery.map((ob, i) => ({
   side: ob.side,
   fp: ob.fp || null,
   fpRandom: ob.fpRandom || null,
+  fpMode: ob.fpMode || null,
+  fpATModifier: ob.fpATModifier || 0,
   uses: ob.uses || 1,
   usedCount: 0,
   combinable: ob.combinable || false,
@@ -533,22 +535,35 @@ function executeSupportFire() {
   if (supportState._offBoard && supportState.selectedOffBoard.length > 0) {
     const obUnits = supportState.selectedOffBoard.map(id => SCENARIO_OFF_BOARD.find(o => o.id === id)).filter(Boolean);
     let fp = 0;
-    obUnits.forEach(ob => { fp += ob.fp || 0; });
+    obUnits.forEach(ob => {
+      if (ob.fpMode === 'dice') {
+        fp += Math.floor(Math.random() * 10);
+      } else {
+        fp += ob.fp || 0;
+      }
+    });
     firerName = obUnits.map(ob => ob.name).join('+');
 
     targetUnits.forEach(target => {
+      const isArmored = target.type === 'T' || target.type === 'AC';
+      let adjFP = fp;
+      if (isArmored) {
+        const atMod = obUnits.reduce((s, ob) => s + (ob.fpATModifier || 0), 0);
+        adjFP = Math.max(0, fp + atMod);
+      }
       const roll = Math.floor(Math.random() * 10);
       const modRoll = roll + terrainMod;
-      const combat = getFireCombatResult(fp, modRoll);
+      const combat = getFireCombatResult(adjFP, modRoll);
       const damage = resolveDamage(combat.damageLevel, target.def || 0);
       const prevStatus = target.status;
       applyDamageToUnit(target, damage);
       const dlLabel = combat.isElimination ? 'E' : combat.damageLevel;
-      const text = `${firerName}→${target.name}: FP${fp} ダイス${roll}${terrainMod?'(地形'+terrainMod+')':''}=${modRoll} 損害Lv${dlLabel} → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`;
+      const fpLabel = isArmored && adjFP !== fp ? `FP${fp}(装甲${adjFP})` : `FP${adjFP}`;
+      const text = `${firerName}→${target.name}: ${fpLabel} ダイス${roll}${terrainMod?'(地形'+terrainMod+')':''}=${modRoll} 損害Lv${dlLabel} → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`;
       supportState.fireResults.push({ text, damage });
       addLog('init', text);
       overlayResults.push({
-        targetName: target.name, roll, modRoll, fp, terrainMod,
+        targetName: target.name, roll, modRoll, fp: adjFP, terrainMod,
         damageLevel: combat.damageLevel, isElimination: combat.isElimination,
         def: target.def || 0, damage, prevStatus, newStatus: target.status
       });

@@ -190,6 +190,101 @@ const SCENARIOS = [
     specialRules: ['アメリカ軍は移動隊形不可', '援軍はダイス判定', '盤外砲兵(FP8)×4回'],
     available: true,
   },
+  {
+    id: 4,
+    name: 'ヴェリエール＝ランジェヴル',
+    date: '1944年6月11日',
+    map: 4,
+    turns: 11,
+    difficulty: 1,
+    sides: {
+      german: { name:'ドイツ軍', desc:'装甲教導師団 第901装甲擲弾兵連隊 + 第130装甲連隊' },
+      allied: { name:'イギリス軍', desc:'第7機甲師団' },
+    },
+    desc: 'ノルマンディに大兵力を揚陸したイギリス軍の最初の攻勢。バイユーからヴィレル・ボカージュへ向かう途中、装甲教導師団と激突。第130装甲連隊の予備戦車は間に合うか？',
+    victory: {
+      allied: 'ゲーム終了時に地図4の町AまたはCの2ヘクスを占領',
+      german: 'イギリス軍の勝利を阻止',
+    },
+    specialRules: ['第5ターン以降:空軍支援判定(ダイス8-9で1回)', '第3ターン終了時:イニシアチブ+3(ドイツ側へ)'],
+    available: true,
+  },
+  {
+    id: 5,
+    name: 'コブラ作戦',
+    date: '1944年7月25日',
+    map: 4,
+    turns: 11,
+    difficulty: 2,
+    sides: {
+      german: { name:'ドイツ軍', desc:'教導装甲師団 + 第5降下猟兵連隊' },
+      allied: { name:'アメリカ軍', desc:'歩兵師団 + 機甲師団' },
+    },
+    desc: '教導装甲師団前面で2000機の絨毯爆撃の後、アメリカ軍がノルマンディ橋頭堡からの突破を開始。果たしてノルマンディの戦闘の決着は？',
+    victory: {
+      allied: 'ゲーム終了時に北端～南端の連続道路をドイツ軍の射程外で確保',
+      german: 'アメリカ軍の勝利を阻止',
+    },
+    specialRules: ['重爆攻撃(開始前6ヘクス指定、直撃FP16/隣接FP8)', 'ダイス援軍(両軍T2-10)'],
+    available: false,
+  },
+  {
+    id: 7,
+    name: '赤い悪魔：アルンエム',
+    date: '1944年9月18日',
+    map: 7,
+    turns: 8,
+    difficulty: 2,
+    sides: {
+      german: { name:'ドイツ軍', desc:'第10SS装甲師団 + 国防軍' },
+      allied: { name:'イギリス軍', desc:'第1空挺師団' },
+    },
+    desc: 'マーケット・ガーデン作戦の最先鋒、イギリス第1空挺師団はアルンエムの橋を守りきれるか。第10SS装甲師団と国防軍が反撃を開始する。',
+    victory: {
+      allied: 'ゲーム終了時にヘクス2248を占領',
+      german: 'ゲーム終了時にヘクス2248を占領',
+    },
+    specialRules: ['ネーベルヴェルファーと迫撃砲は共同射撃不可', 'SSと国防軍はスタック・共同攻撃不可', '大河の南側・橋への進入不可'],
+    available: true,
+  },
+  {
+    id: 8,
+    name: '地獄のハイウェイ：フェーヘル',
+    date: '1944年9月22日',
+    map: 6,
+    turns: 8,
+    difficulty: 2,
+    sides: {
+      german: { name:'ドイツ軍', desc:'第10SS装甲師団 + 国防軍' },
+      allied: { name:'連合軍', desc:'第101空挺師団 + イギリス近衛機甲師団' },
+    },
+    desc: 'マーケット・ガーデン作戦の補給路フェーヘルにドイツ軍が反撃。第101空挺師団とイギリス近衛機甲師団がフェーヘルの鍵を守れるか。',
+    victory: {
+      allied: 'フェーヘル6ヘクスのうち4ヘクス以上を占領',
+      german: 'フェーヘル6ヘクスのうち4ヘクス以上を占領',
+    },
+    specialRules: ['SS+国防軍はスタック・共同攻撃可', '米英はスタック・共同攻撃不可'],
+    available: true,
+  },
+  {
+    id: 9,
+    name: 'ヒュルトゲン森林',
+    date: '1944年11月3日',
+    map: 8,
+    turns: 8,
+    difficulty: 3,
+    sides: {
+      german: { name:'ドイツ軍', desc:'第89歩兵師団 + 第116装甲師団' },
+      allied: { name:'アメリカ軍', desc:'第28歩兵師団' },
+    },
+    desc: 'ヒュルトゲン森林でアメリカ第28歩兵師団が攻勢。見通しの利かない森林地帯での歩兵中心の戦闘。戦略的に重要な高地を巡る激戦。',
+    victory: {
+      allied: 'レベル3高地5ヘクスのうち3ヘクス以上を占領',
+      german: 'アメリカ軍の勝利を阻止',
+    },
+    specialRules: ['盤外砲兵(米FP8×3回/独FP8×2回)'],
+    available: true,
+  },
 ];
 
 let selectedScenario = null;
@@ -212,7 +307,8 @@ function init() {
         <div style="font-size:1.3em;font-weight:bold;color:#eee;margin:2px 0;">${sc.name}</div>
         <div style="color:#aaa;font-size:0.85em;">${sc.date || ''}</div>
         <div style="color:#888;font-size:0.8em;margin-top:6px;line-height:1.4;">${sc.desc}</div>
-        <div style="display:flex;gap:12px;margin-top:8px;font-size:0.75em;color:#aaa;">
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:0.75em;color:#aaa;flex-wrap:wrap;">
+          ${sc.difficulty != null ? `<span style="background:#2a4a2a;border:1px solid #4a4;padding:2px 8px;border-radius:3px;color:#8c8;">難易度 ${'★'.repeat(sc.difficulty)}${'☆'.repeat(3-sc.difficulty)}</span>` : ''}
           ${sc.turns ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">ターン: ${sc.turns}</span>` : ''}
           ${sc.map ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">マップ: ${sc.map}</span>` : ''}
           ${sc.sides.german ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">${sc.sides.german.name} vs ${sc.sides.allied.name}</span>` : ''}

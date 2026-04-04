@@ -277,6 +277,24 @@ function canCoopDirectFire(shooter, mainShooter) {
   if (!base.can) return false;
   if (shooter.side !== mainShooter.side) return false;
 
+  // SS/国防軍の共同射撃禁止
+  if (SCENARIO.noSSHeerStack && shooter.org && mainShooter.org) {
+    if ((shooter.org === 'ss' && mainShooter.org === 'heer') ||
+        (shooter.org === 'heer' && mainShooter.org === 'ss')) return false;
+  }
+  // 米英の共同射撃禁止
+  if (SCENARIO.noUSUKStack && shooter.org && mainShooter.org) {
+    if ((shooter.org === 'us' && mainShooter.org === 'uk') ||
+        (shooter.org === 'uk' && mainShooter.org === 'us')) return false;
+  }
+  // ネーベルヴェルファーと迫撃砲の共同射撃禁止
+  if (SCENARIO.noMortarNebelCombined) {
+    const isNebel = (u) => u.unitName === 'Nebel';
+    const isMortar = (u) => u.type === 'A' && !isNebel(u);
+    if ((isNebel(shooter) && isMortar(mainShooter)) ||
+        (isMortar(shooter) && isNebel(mainShooter))) return false;
+  }
+
   const sHex = shooter.hexId || toHexId(shooter.col, shooter.row);
   const mHex = mainShooter.hexId || toHexId(mainShooter.col, mainShooter.row);
 
@@ -630,13 +648,28 @@ function executeDirectFire(shooters, target) {
   const combat = getFireCombatResult(totalFP, modifiedRoll);
   const damage = resolveDamage(combat.damageLevel, target.def || 0);
 
-  // 弾薬不足チェック (11-8): 戦車・装甲車のみ
+  // 弾薬不足チェック (11-8): 戦車・装甲車のみ、個別ダイス判定
   let ammoDeplete = false;
+  const ammoRolls = [];
   if (G.ammoCheck && combat.ammoCheck) {
+    const depletionRoll = SCENARIO.ammoDepletionRoll || null;
     shooters.forEach(u => {
       if (u.type === 'T' || u.type === 'AC') {
-        u.outOfAmmo = true;
-        ammoDeplete = true;
+        if (depletionRoll) {
+          // シナリオ別閾値で個別判定
+          const threshold = depletionRoll[u.side] != null ? depletionRoll[u.side] : 1;
+          const aRoll = Math.floor(Math.random() * 10);
+          const depleted = aRoll <= threshold;
+          ammoRolls.push({ unit: u, roll: aRoll, threshold, depleted });
+          if (depleted) {
+            u.outOfAmmo = true;
+            ammoDeplete = true;
+          }
+        } else {
+          // 閾値未設定: 従来通り自動弾切れ
+          u.outOfAmmo = true;
+          ammoDeplete = true;
+        }
       }
     });
   }
@@ -732,7 +765,11 @@ function executeDirectFire(shooters, target) {
   } else {
     addLog('fire', `直接射撃: ${shooters.map(u=>u.name).join('+')} → ${target.name} (fp${totalFP}, ダイス${roll}${modLabel}=${modifiedRoll}, 損害Lv${dlLabel}) → 効果なし`);
   }
-  if (ammoDeplete) addLog('fire', `弾薬不足発生！`);
+  if (ammoRolls.length > 0) {
+    ammoRolls.forEach(ar => {
+      addLog('fire', `弾薬判定: ${ar.unit.name} D10=${ar.roll} (0-${ar.threshold}で弾切れ) → ${ar.depleted ? '弾薬不足！' : 'OK'}`);
+    });
+  }
 
   // 指揮官負傷チェック
   result.leaderCheck = null;
@@ -2508,6 +2545,25 @@ function confirmMove() {
   const names = movingUnits.filter(u => u.status !== 'eliminated').map(u => u.name).join(', ');
   const moveHexId = toHexId(ms.movingUnit.col, ms.movingUnit.row);
   addLog('move', `${names} 移動完了 (${moveHexId})`);
+
+  // 弾切れユニットが補給ヘクスに到達 → 除去して2ターン後に再登場
+  if (SCENARIO.ammoRecoveryHexes) {
+    const recoveryHexes = SCENARIO.ammoRecoveryHexes;
+    movingUnits.forEach(u => {
+      if (!u.outOfAmmo || u.status === 'eliminated') return;
+      if (u.type !== 'T' && u.type !== 'AC') return;
+      const myHexes = recoveryHexes[u.side] || [];
+      if (!myHexes.includes(moveHexId)) return;
+      // 除去して補給待ちリストに追加
+      u.col = -1; u.row = -1; u.x = -999; u.y = -999;
+      u.hexId = 'resupply';
+      u.status = 'resupply';
+      u.outOfAmmo = false;
+      u._resupplyTurn = G.turn + 2;
+      u._resupplyHex = moveHexId;
+      addLog('move', `${u.name}: 補給ヘクスへ後退 → ターン${u._resupplyTurn}に再登場`);
+    });
+  }
 
   // 偵察チェック: 隣接にダミーがあり、偵察可能ユニットがいるか
   const reconUnits = movingUnits.filter(u =>
