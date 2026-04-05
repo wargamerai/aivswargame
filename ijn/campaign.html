@@ -69,9 +69,29 @@
     </select>
     <button id="btnSortie" onclick="phaseSortie()">1. 出撃編成＆索敵</button>
     <button id="btnCombat" onclick="openBattle()" disabled style="background-color: #cc6600; color:#fff;">2. 戦闘開始</button>
+    <button id="btnAutoAI" onclick="openBattleAutoAI()" disabled style="background-color: #006699; color:#fff;">AI観戦</button>
     <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
     <button onclick="resetCampaign()" style="background-color: #cc2200; color:#fff; float:right; font-size:0.9em;">キャンペーンリセット</button>
+    <button id="btnFog" onclick="toggleFog()" style="background-color:#1a2a1a; color:#8afa8a; font-size:0.9em;">戦場の霧: ON</button>
 </div>
+<script>
+function toggleFog() {
+  const cur = localStorage.getItem('fogOfWar') === '1';
+  const next = !cur;
+  localStorage.setItem('fogOfWar', next ? '1' : '0');
+  const btn = document.getElementById('btnFog');
+  btn.textContent = next ? '戦場の霧: ON' : '戦場の霧: OFF';
+  btn.style.backgroundColor = next ? '#1a2a1a' : '#ddd';
+  btn.style.color = next ? '#8afa8a' : '#999';
+}
+(function() {
+  const fog = localStorage.getItem('fogOfWar') === '1';
+  const btn = document.getElementById('btnFog');
+  btn.textContent = fog ? '戦場の霧: ON' : '戦場の霧: OFF';
+  btn.style.backgroundColor = fog ? '#1a2a1a' : '#ddd';
+  btn.style.color = fog ? '#8afa8a' : '#999';
+})();
+</script>
 
 <div class="panel" style="margin-top:10px;">
     <h2>日本軍 出撃艦隊</h2>
@@ -130,6 +150,7 @@ const BATTLE_NAMES = {
 };
 const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
 const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
+const NO_TORPEDO_SHIPS = ['BOISE','HELENA','HONOLULU'];
 
 // --- データ定義 ---
 const jpAllShips = [
@@ -362,16 +383,16 @@ function loadCampaignState() {
         // ボタン状態復元
         if (currentPhase === 'combat') {
             document.getElementById('btnSortie').disabled = true;
-            document.getElementById('btnCombat').disabled = false;
+            document.getElementById('btnCombat').disabled = false; document.getElementById('btnAutoAI').disabled = false;
             document.getElementById('btnNext').disabled = true;
             document.getElementById('scoreArea').style.display = 'none';
         } else if (currentPhase === 'next') {
             document.getElementById('btnSortie').disabled = true;
-            document.getElementById('btnCombat').disabled = true;
+            document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
             document.getElementById('btnNext').disabled = false;
         } else {
             document.getElementById('btnSortie').disabled = false;
-            document.getElementById('btnCombat').disabled = true;
+            document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
             document.getElementById('btnNext').disabled = true;
         }
 
@@ -655,7 +676,7 @@ function phaseSortie() {
 
     currentPhase = 'combat';
     document.getElementById('btnSortie').disabled = true;
-    document.getElementById('btnCombat').disabled = false;
+    document.getElementById('btnCombat').disabled = false; document.getElementById('btnAutoAI').disabled = false;
     saveCampaignState();
 }
 
@@ -666,7 +687,7 @@ function renderTables() {
     currentJpFleet.forEach(s => {
         let typeStr = s.type === 'OBB' ? 'BB(旧式)' : s.type;
         const speed = s.spd || 4;
-        const torpedo = TORPEDOES[s.type] || '-';
+        const torpedo = NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type] || '-');
         tbodyJp.innerHTML += `<tr><td>${s.name}</td><td>${typeStr}</td><td>${speed}</td><td>${s.capG}</td><td>${s.capM}</td><td>${torpedo}</td></tr>`;
     });
 }
@@ -684,6 +705,15 @@ function exportJson() {
 
 // --- 戦闘開始 → hub.htmlへ遷移 ---
 function openBattle() {
+    localStorage.removeItem('fullAutoAI');
+    exportJson();
+    saveCampaignState();
+    localStorage.setItem('campaignReady', 'true');
+    window.location.href = 'hub.html';
+}
+
+function openBattleAutoAI() {
+    localStorage.setItem('fullAutoAI', '1');
     exportJson();
     saveCampaignState();
     localStorage.setItem('campaignReady', 'true');
@@ -829,7 +859,7 @@ function applyBattleResultData(importData, endTurn) {
     renderBattleHistory();
 
     currentPhase = 'next';
-    document.getElementById('btnCombat').disabled = true;
+    document.getElementById('btnCombat').disabled = true; document.getElementById('btnAutoAI').disabled = true;
     document.getElementById('btnNext').disabled = true; // サマリー確認後に有効化
     saveCampaignState();
 

@@ -139,7 +139,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 
 <script>
 // ========== HEX GRID SETTINGS ==========
-const COLS = 36;
+const COLS = 46;
 const ROWS = 28;
 const HEX_SIZE = 22; // hex radius
 const HEX_W = HEX_SIZE * 2;
@@ -757,6 +757,7 @@ function buildFleets(data) {
     CLAA:{ speed:5, torpedo:'T' },
     DD:  { speed:6, torpedo:'TT' },
   };
+  const NO_TORPEDO_SHIPS = ['BOISE','HELENA','HONOLULU'];
 
   (data.jpFleet || []).forEach((s, i) => {
     const td = typeData[s.type] || typeData.DD;
@@ -764,7 +765,7 @@ function buildFleets(data) {
       name: s.name, type: s.type, side: 'jp',
       col: -1, row: -1, dir: 4, // facing west
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, speed: td.speed, torpedo: td.torpedo,
+      vp: s.vp, speed: td.speed, torpedo: NO_TORPEDO_SHIPS.includes(s.name) ? '-' : td.torpedo,
       isLead: false, colIndex: 0, followOrder: i,
       path: [], status: 'ok', faceUp: false,
       radar: false,
@@ -778,7 +779,7 @@ function buildFleets(data) {
       name: s.name, type: s.type, side: 'us',
       col: -1, row: -1, dir: 6, // facing east
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, speed: td.speed, torpedo: td.torpedo,
+      vp: s.vp, speed: td.speed, torpedo: NO_TORPEDO_SHIPS.includes(s.name) ? '-' : td.torpedo,
       isLead: false, colIndex: 0, followOrder: i,
       path: [], status: 'ok', faceUp: false,
       radar: radar,
@@ -802,7 +803,7 @@ function autoPlace() {
   // Place JP fleet on east side (col 32-33), facing west
   const jpMid = Math.floor(ROWS / 2);
   gameState.jpFleet.forEach((s, i) => {
-    s.col = 33;
+    s.col = 38;
     s.row = Math.min(ROWS - 1, jpMid - Math.floor(gameState.jpFleet.length/2) + i);
     s.dir = 4; // west
   });
@@ -810,7 +811,7 @@ function autoPlace() {
   // Place US fleet on west side (col 2-3), facing east
   const usMid = Math.floor(ROWS / 2);
   gameState.usFleet.forEach((s, i) => {
-    s.col = 2;
+    s.col = 7;
     s.row = Math.min(ROWS - 1, usMid - Math.floor(gameState.usFleet.length/2) + i);
     s.dir = 6; // east
   });

@@ -137,11 +137,14 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
     <span class="ph" data-ph="repair">⑦修理</span>
   </div>
   <div id="contactInfo" class="no">索敵中</div>
-  <div id="spotInfo" style="display:none">視認<span id="spotRange">-</span></div>
-  <button id="btnFog" onclick="toggleFog()">霧: OFF</button>
-  <button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
-  <button id="btnCampaign" onclick="loadCampaign()">読込</button>
+  <div id="spotInfo">視認<span id="spotRange">-</span>hex</div>
+<button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
   <button id="btnReturn" onclick="if(confirm('戦闘を終了して結果を表示しますか？'))showTurnEndReport()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
+  <span style="margin-left:8px;display:flex;align-items:center;gap:4px;">
+    <button onclick="zoomBtn(-1)" style="font-size:1em;padding:2px 8px;font-weight:bold;">−</button>
+    <input type="range" id="zoomSlider" min="50" max="250" value="100" step="10" style="width:100px;" oninput="zoomSlide(this.value)">
+    <button onclick="zoomBtn(1)" style="font-size:1em;padding:2px 8px;font-weight:bold;">＋</button>
+  </span>
 </div>
 
 <div id="main">
@@ -241,7 +244,7 @@ function showPhaseFlash(text) {
 }
 
 // ========== HEX CONFIG ==========
-const COLS = 36;
+const COLS = 46;
 let ROWS = 28;
 const MAP_SECTION = 28; // 1マップ分の行数
 const HS = 20;
@@ -338,6 +341,28 @@ const maparea = document.getElementById('maparea');
 // ズーム/パン変数（draw()より前に必要）
 let zoomLevel = 1.0;
 const ZOOM_MIN = 0.5, ZOOM_MAX = 2.5, ZOOM_STEP = 0.1;
+function zoomBtn(dir) {
+  const rect = maparea.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const oldZoom = zoomLevel;
+  zoomLevel = dir > 0 ? Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP) : Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP);
+  const ratio = zoomLevel / oldZoom;
+  panX = cx - ratio * (cx - panX);
+  panY = cy - ratio * (cy - panY);
+  const sl = document.getElementById('zoomSlider');
+  if (sl) sl.value = Math.round(zoomLevel * 100);
+  draw();
+}
+function zoomSlide(val) {
+  const rect = maparea.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const oldZoom = zoomLevel;
+  zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, val / 100));
+  const ratio = zoomLevel / oldZoom;
+  panX = cx - ratio * (cx - panX);
+  panY = cy - ratio * (cy - panY);
+  draw();
+}
 let panX = 0, panY = 0;
 let isDragging = false, wasDragged = false, dragStartX = 0, dragStartY = 0, panStartX = 0, panStartY = 0;
 
@@ -360,8 +385,8 @@ function extendMapUp() {
 }
 
 // ========== 接触判定 ==========
-const JP_LINE_COL = 9;       // 日本配置線（青）
-const US_LINE_COL = COLS - 10; // 米軍配置線（赤）= col 26
+const JP_LINE_COL = 14;      // 日本配置線（青）
+const US_LINE_COL = COLS - 15; // 米軍配置線（赤）= col 31
 const DEPLOY_MAX_COL = JP_LINE_COL - 1; // 青線の左側（IJN用）
 const DEPLOY_MIN_COL = US_LINE_COL + 1; // PF: 赤線の右側（米軍配置域）
 const DIR_NAMES = {6:'→東', 3:'↘南東', 1:'↙南西', 4:'←西', 7:'↗北西', 9:'↖北東'};
@@ -577,6 +602,26 @@ function draw() {
     }
   });
 
+  // 発砲済み艦のヘクス強調
+  [...state.jpFleet, ...state.usFleet].forEach(s => {
+    if (!s.firedGun1 || s.status === 'sunk' || s.col < 0) return;
+    if (s.side === 'jp' && !isSpotted(s)) return;
+    const {x,y} = hexPt(s.col, s.row);
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = s.side === 'jp' ? '#ff4400' : '#2255ff';
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 3 * i - Math.PI / 6;
+      const px = x + HS * Math.cos(a);
+      const py = y + HS * Math.sin(a);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  });
+
   // Ships
   [...state.jpFleet, ...state.usFleet].forEach(s => drawShip(s));
 
@@ -651,6 +696,7 @@ function toggleFleetSection(side) {
 function renderFleetList() {
   const el = document.getElementById('fleetList');
   if (!el || !state.jpFleet) return;
+  const fogActive = state.fogMode && state.phase !== 'report';
   function critText(s) {
     var parts = [];
     if (s.cannotFire) parts.push('砲×');
@@ -667,13 +713,23 @@ function renderFleetList() {
   var html = '<div class="fleet-section' + jpCol + '">';
   html += '<h3 onclick="toggleFleetSection(\'jp\')">' + (fleetListCollapsed.jp ? '▶' : '▼') + ' 日本軍</h3>';
   html += '<table><tr><th>艦名</th><th>G</th><th>M</th><th>状態</th></tr>';
-  // PF: 日本軍は未発見なら???表示
+  // PF: 日本軍（敵）表示
   for (var si = 0; si < state.jpFleet.length; si++) {
     var s = state.jpFleet[si];
     var cls = s.status || 'ok';
     var visible = isSpotted(s);
     if (!visible) {
       html += '<tr><td class="name-cell" style="color:#999">???</td><td>-</td><td>-</td><td>-</td></tr>';
+    } else if (fogActive) {
+      // 霧ON: 敵の詳細はすべて隠す、発砲/火災のみ表示
+      var fogStatus = [];
+      if (s.firedGun1) fogStatus.push('発砲');
+      if (s.onFire) fogStatus.push('🔥');
+      html += '<tr class="' + cls + '">';
+      html += '<td class="name-cell" style="color:#999">❓❓❓</td>';
+      html += '<td>❓</td><td>❓</td>';
+      html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
+      html += '</tr>';
     } else {
       var done = ad.indexOf(si) >= 0 ? '✓' : '';
       var lead = s.isLead ? '★' : '';
@@ -697,16 +753,28 @@ function renderFleetList() {
   for (var ui = 0; ui < state.usFleet.length; ui++) {
     var s = state.usFleet[ui];
     var cls = s.status || 'ok';
-    // PF: 米軍(プレイヤー)は常時全表示
-    var g = s.dmgG || 0, m = s.dmgM || 0;
-    var gStr = g > 0 ? g + '/' + s.capG : '-';
-    var mStr = m > 0 ? m + '/' + s.capM : '-';
-    var ct = s.status === 'sunk' ? '撃沈' : critText(s);
-    html += '<tr class="' + cls + '">';
-    html += '<td class="name-cell" style="color:#2255cc">' + s.name + '</td>';
-    html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
-    html += '<td class="status-cell">' + (ct || '-') + '</td>';
-    html += '</tr>';
+    if (fogActive && !s.isLead && s.status !== 'sunk') {
+      // 霧ON: 旗艦以外は曖昧表示
+      var fogStatus = [];
+      if (s.firedGun1) fogStatus.push('発砲');
+      if (s.onFire) fogStatus.push('🔥');
+      var dmgLabel = fogOwnStatus(s);
+      html += '<tr class="' + cls + '">';
+      html += '<td class="name-cell" style="color:#2255cc">' + s.name + '</td>';
+      html += '<td colspan="2">' + (dmgLabel || '❓') + '</td>';
+      html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
+      html += '</tr>';
+    } else {
+      var g = s.dmgG || 0, m = s.dmgM || 0;
+      var gStr = g > 0 ? g + '/' + s.capG : '-';
+      var mStr = m > 0 ? m + '/' + s.capM : '-';
+      var ct = s.status === 'sunk' ? '撃沈' : critText(s);
+      html += '<tr class="' + cls + '">';
+      html += '<td class="name-cell" style="color:#2255cc">' + (s.isLead ? '★' : '') + s.name + '</td>';
+      html += '<td>' + gStr + '</td><td>' + mStr + '</td>';
+      html += '<td class="status-cell">' + (ct || '-') + '</td>';
+      html += '</tr>';
+    }
   }
   html += '</table></div>';
   el.innerHTML = html;
@@ -864,11 +932,14 @@ function drawShip(ship) {
 
     ctx.restore();
 
-    // 艦名ラベル
+    // 艦名ラベル（沈没艦）
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#888';
-    ctx.fillText(ship.name.substring(0,3), x, y + 14);
+    const sunkLabel = (state.fogMode && state.phase !== 'report' && ship.side === 'jp')
+      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型')
+      : ship.name.substring(0,3);
+    ctx.fillText(sunkLabel, x, y + 14);
     return;
   }
   // PF: 日本軍が未発見なら非表示
@@ -983,8 +1054,12 @@ function drawShip(ship) {
   ctx.textAlign = 'center';
   if (ship.side === 'jp') {
     ctx.fillStyle = '#ffcc99';
-    const dmgLabel = state.fogMode ? fogOwnStatus(ship) : '';
-    ctx.fillText(ship.name.substring(0,3) + dmgLabel, x, y + drawSz + 10);
+    // PF: 日本軍=敵、霧ONなら大型/小型表示
+    const jpLabel = (state.fogMode && state.phase !== 'report')
+      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型')
+      : ship.name.substring(0,3);
+    const dmgLabel = (!state.fogMode) ? '' : '';
+    ctx.fillText(jpLabel, x, y + drawSz + 10);
     // 魚雷マーク（保有かつ未発射かつ雷撃可能）— ユニット右上に丸囲みT
     if (ship.torpedo && ship.torpedo !== '-' && !ship.torpedoFired && !ship.cannotTorpedo) {
       const tr = 7;
@@ -1121,6 +1196,11 @@ function loadPhase(phase) {
   if (phase !== 'move1' && phase !== 'move2') {
     [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => { delete s.prevCol; delete s.prevRow; });
   }
+  // gun1a開始時: 前ターンの発砲フラグをリセット（torpedo前にリセットしないよう注意）
+  if (phase === 'gun1a') {
+    (state.jpFleet||[]).forEach(s => { s.firedGun1 = false; });
+    (state.usFleet||[]).forEach(s => { s.firedGun1 = false; });
+  }
   state.phase = phase;
   state.actionDone = [];  // フェーズ遷移で行動済みリストクリア
   saveState();
@@ -1210,11 +1290,32 @@ function showDmgSummary(title, lines) {
   _dmgSummaryPending = true;
   document.getElementById('dmgSummaryTitle').textContent = title;
   const body = document.getElementById('dmgSummaryBody');
-  body.innerHTML = lines.map(l => {
+  // 霧ON: 敵（日本軍）の損害詳細を隠す、味方旗艦以外も隠す
+  const fogLines = state.fogMode ? lines.map(l => {
+    // 日本軍の艦名が含まれるか判定
+    const isEnemy = (state.jpFleet||[]).some(s => l.includes(s.name));
+    const isOwnLead = (state.usFleet||[]).some(s => s.isLead && l.includes(s.name));
+    if (isEnemy) {
+      if (l.includes('火災')) return '❓: 🔥火災発生';
+      return '❓❓❓';
+    }
+    // 味方で旗艦以外
+    if (!isOwnLead && !isEnemy) {
+      const isOwn = (state.usFleet||[]).some(s => l.includes(s.name));
+      if (isOwn) {
+        if (l.includes('轟沈') || l.includes('沈没')) return l;
+        if (l.includes('火災')) return l;
+        const ship = (state.usFleet||[]).find(s => l.includes(s.name));
+        return ship ? ship.name + ': ❓❓❓' : '❓❓❓';
+      }
+    }
+    return l;
+  }) : lines;
+  body.innerHTML = fogLines.map(l => {
     if (l.includes('轟沈') || l.includes('沈没')) return `<div style="color:#cc2200;font-weight:bold">${l}</div>`;
     if (l.includes('⚡')) return `<div style="color:#aa00aa;font-weight:bold">${l}</div>`;
     if (l.includes('旗艦に昇格')) return `<div style="color:#8a6a00;font-weight:bold">${l}</div>`;
-    // M損害が多い艦を色分け
+    if (l.includes('❓')) return `<div style="color:#999">${l}</div>`;
     var mMatch = l.match(/M(\d+)/);
     if (mMatch && parseInt(mMatch[1]) > 0) return `<div style="color:#cc6600">${l}</div>`;
     return `<div>${l}</div>`;
@@ -1349,7 +1450,8 @@ window.addEventListener('message', (e) => {
       break;
 
     case 'DAMAGE_SUMMARY':
-      showDmgSummary(msg.title, msg.lines);
+      // 損害サマリーは表示しない（直接次フェーズへ）
+      onPhaseDone();
       break;
 
     case 'DEPLOY_UNDO':
@@ -1455,11 +1557,6 @@ function nextTurn() {
   document.getElementById('combatTurn').textContent = state.combatTurn;
   gameLog(`<b style="color:#cc8">══ 第${state.combatTurn}ターン ══</b>`);
 
-  // ターン開始時: per-turnフラグをリセット（firedGun1 = 第一砲撃で射撃→雷撃不可）
-  // torpedoFiredはリセットしない（ルール上、魚雷は1戦闘につき1回のみ）
-  (state.jpFleet||[]).forEach(s => { s.firedGun1 = false; });
-  (state.usFleet||[]).forEach(s => { s.firedGun1 = false; });
-
   autoInitiative();
   saveState();
 }
@@ -1513,7 +1610,7 @@ function loadCampaign() {
     state.jpDetected = false;
     state.usDetected = false;
     state.contactMade = false;
-    state.fogMode = false;
+    state.fogMode = localStorage.getItem('fogOfWar') === '1';
 
     // 表示リセット
     document.getElementById('combatTurn').textContent = '1';
@@ -1522,10 +1619,6 @@ function loadCampaign() {
     document.getElementById('initInfo').className = '';
     updateContactInfo();
     updatePhaseBar('init');
-    const btn = document.getElementById('btnFog');
-    btn.textContent = '霧: OFF';
-    btn.style.background = '#1a1a2a';
-    btn.style.color = '#778';
 
     // 蓄積損害もクリア
     localStorage.removeItem('gunPendingDmg');
@@ -1550,6 +1643,7 @@ function loadCampaign() {
 
 const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
 const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
+const NO_TORPEDO_SHIPS = ['BOISE','HELENA','HONOLULU'];
 
 function buildFleets(data) {
   // hexNeighborローカル版
@@ -1605,7 +1699,7 @@ function buildFleets(data) {
           atk: s.atk||0, def: s.def||0,
           capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
           vp: s.vp,
-          torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : (TORPEDOES[s.type]||'-'),
+          torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type]||'-'),
           isLead: si===0, colIndex: gi, followOrder: si,
           status:'ok',
           faceUp: side === 'us',
@@ -1620,8 +1714,8 @@ function buildFleets(data) {
     return built;
   }
 
-  // JP: 左側（col=8）から東向き
-  state.jpFleet = autoDeploy(data.jpFleet || [], 'jp', 6, 8);
+  // JP: 左側（col=13）から東向き
+  state.jpFleet = autoDeploy(data.jpFleet || [], 'jp', 6, 13);
 
   // US: fullAutoAI時は自動配置、それ以外は手動配置
   if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1635,7 +1729,7 @@ function buildFleets(data) {
       dir: 4, speed: s.spd || SPEEDS[s.type] || 4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, torpedo: TORPEDOES[s.type]||'-',
+      vp: s.vp, torpedo: NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type]||'-'),
       isLead: false, colIndex:-1, followOrder:0,
       status:'ok', faceUp:true,
       radar: true,
@@ -1706,7 +1800,7 @@ function startDeploy() {
 }
 
 function shipStats(ship) {
-  return `火力:${ship.capG} 装甲:${ship.capM} 速力:${ship.spd||4} 魚雷:${TORPEDOES[ship.type]||'-'}`;
+  return `火力:${ship.capG} 装甲:${ship.capM} 速力:${ship.spd||4} 魚雷:${NO_TORPEDO_SHIPS.includes(ship.name) ? '-' : (TORPEDOES[ship.type]||'-')}`;
 }
 
 function showDeployPrompt() {
@@ -1753,7 +1847,7 @@ function updateDeployPanel() {
       mark = ' ✓';
     } else if (i === idx) { cls = 'current'; mark = ' ◀'; }
     rows += `<div class="ship ${cls}">${i+1}. ${s.name}（${s.type}）${colTag}${mark}`
-      + `<div class="st">火${s.capG} 甲${s.capM} 速${s.spd||4} 雷${TORPEDOES[s.type]||'-'}</div></div>`;
+      + `<div class="st">火${s.capG} 甲${s.capM} 速${s.spd||4} 雷${NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type]||'-')}</div></div>`;
   });
   const html = `<!DOCTYPE html><html><head><style>
 body{background:#080818;color:#e0e0e0;font-family:monospace;padding:8px;font-size:0.95em;margin:0}
@@ -1911,25 +2005,8 @@ canvas.addEventListener('click', (e) => {
 });
 
 // ========== ZOOM & PAN（Canvas内部描画方式）==========
-maparea.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  const rect = maparea.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-
-  const oldZoom = zoomLevel;
-  if (e.deltaY < 0) {
-    zoomLevel = Math.min(ZOOM_MAX, zoomLevel + ZOOM_STEP);
-  } else {
-    zoomLevel = Math.max(ZOOM_MIN, zoomLevel - ZOOM_STEP);
-  }
-
-  const ratio = zoomLevel / oldZoom;
-  panX = mx - ratio * (mx - panX);
-  panY = my - ratio * (my - panY);
-
-  draw();
-}, { passive: false });
+// マウスホイールズーム無効化
+maparea.addEventListener('wheel', (e) => { e.preventDefault(); }, { passive: false });
 
 maparea.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
