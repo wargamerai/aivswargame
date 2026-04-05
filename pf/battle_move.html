@@ -755,7 +755,7 @@ function buildFleets(data) {
     CLAA:{ speed:5, torpedo:'T' },
     DD:  { speed:6, torpedo:'TT' },
   };
-  function isUSShip(name) { return /^[A-Z]/.test(name); }
+  const NO_TORPEDO_SHIPS = ['MINNEAPOLIS','NEW ORLEANS','SAN FRANCISCO','PORTLAND','NORTHAMPTON','CHESTER','CHICAGO','PENSACOLA','SALT LAKE CITY','BOISE','HONOLULU','HELENA','NORTH CAROLINA','WASHINGTON','SOUTH DAKOTA'];
 
   (data.jpFleet || []).forEach((s, i) => {
     const td = typeData[s.type] || typeData.DD;
@@ -763,7 +763,7 @@ function buildFleets(data) {
       name: s.name, type: s.type, side: 'jp',
       col: -1, row: -1, dir: 4, // facing west
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, speed: td.speed, torpedo: isUSShip(s.name) ? '-' : td.torpedo,
+      vp: s.vp, speed: td.speed, torpedo: NO_TORPEDO_SHIPS.includes(s.name) ? '-' : td.torpedo,
       isLead: false, colIndex: 0, followOrder: i,
       path: [], status: 'ok', faceUp: false,
       radar: false,
@@ -777,7 +777,7 @@ function buildFleets(data) {
       name: s.name, type: s.type, side: 'us',
       col: -1, row: -1, dir: 6, // facing east
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, speed: td.speed, torpedo: isUSShip(s.name) ? '-' : td.torpedo,
+      vp: s.vp, speed: td.speed, torpedo: NO_TORPEDO_SHIPS.includes(s.name) ? '-' : td.torpedo,
       isLead: false, colIndex: 0, followOrder: i,
       path: [], status: 'ok', faceUp: false,
       radar: radar,

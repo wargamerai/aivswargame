@@ -1651,7 +1651,7 @@ function loadCampaign() {
 
 const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
 const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
-function isUSShip(name) { return /^[A-Z]/.test(name); } // 米艦は魚雷なし
+const NO_TORPEDO_SHIPS = ['MINNEAPOLIS','NEW ORLEANS','SAN FRANCISCO','PORTLAND','NORTHAMPTON','CHESTER','CHICAGO','PENSACOLA','SALT LAKE CITY','BOISE','HONOLULU','HELENA','NORTH CAROLINA','WASHINGTON','SOUTH DAKOTA'];
 
 function buildFleets(data) {
   // hexNeighborローカル版
@@ -1707,7 +1707,7 @@ function buildFleets(data) {
           atk: s.atk||0, def: s.def||0,
           capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
           vp: s.vp,
-          torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : isUSShip(s.name) ? '-' : (TORPEDOES[s.type]||'-'),
+          torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type]||'-'),
           isLead: si===0, colIndex: gi, followOrder: si,
           status:'ok',
           faceUp: side === 'us',
@@ -1737,7 +1737,7 @@ function buildFleets(data) {
       dir: 4, speed: s.spd || SPEEDS[s.type] || 4,
       atk: s.atk||0, def: s.def||0,
       capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
-      vp: s.vp, torpedo: isUSShip(s.name) ? '-' : (TORPEDOES[s.type]||'-'),
+      vp: s.vp, torpedo: NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type]||'-'),
       isLead: false, colIndex:-1, followOrder:0,
       status:'ok', faceUp:true,
       radar: true,
@@ -1808,7 +1808,7 @@ function startDeploy() {
 }
 
 function shipStats(ship) {
-  return `火力:${ship.capG} 装甲:${ship.capM} 速力:${ship.spd||4} 魚雷:${isUSShip(ship.name) ? '-' : (TORPEDOES[ship.type]||'-')}`;
+  return `火力:${ship.capG} 装甲:${ship.capM} 速力:${ship.spd||4} 魚雷:${NO_TORPEDO_SHIPS.includes(ship.name) ? '-' : (TORPEDOES[ship.type]||'-')}`;
 }
 
 function showDeployPrompt() {
@@ -1862,7 +1862,7 @@ function updateDeployPanel() {
       mark = ' ✓';
     } else if (i === idx) { cls = 'current'; mark = ' ◀'; }
     rows += `<div class="ship ${cls}">${i+1}. ${s.name}（${s.type}）${colTag}${mark}`
-      + `<div class="st">火${s.capG} 甲${s.capM} 速${s.spd||4} 雷${isUSShip(s.name) ? '-' : (TORPEDOES[s.type]||'-')}</div></div>`;
+      + `<div class="st">火${s.capG} 甲${s.capM} 速${s.spd||4} 雷${NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type]||'-')}</div></div>`;
   });
   const html = `<!DOCTYPE html><html><head><style>
 body{background:#080818;color:#e0e0e0;font-family:monospace;padding:8px;font-size:0.95em;margin:0}
