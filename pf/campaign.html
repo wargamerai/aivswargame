@@ -211,7 +211,7 @@ const BATTLE_NAMES = {
 };
 const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
 const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
-const NO_TORPEDO_SHIPS = ['BOISE','HELENA','HONOLULU'];
+function isUSShip(name) { return /^[A-Z]/.test(name); }
 
 // --- データ定義 ---
 const jpAllShips = [
@@ -639,7 +639,7 @@ function showFleetSelection() {
             if (isUnavailable) cls += ' unavailable';
             else if (isSelected) cls += ' selected';
 
-            const torpedo = NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type] || '-');
+            const torpedo = isUSShip(s.name) ? '-' : (TORPEDOES[s.type] || '-');
             const dmgInfo = (s.dmgG > 0 || s.dmgM > 0) ? ` <span style="color:#cc6600;">[損傷G${s.dmgG}/M${s.dmgM}]</span>` : '';
 
             html += `<div class="${cls}" onclick="toggleShip('${s.name}')" data-ship="${s.name}">`;
@@ -782,7 +782,7 @@ function renderFleetTables() {
     tbodyUs.innerHTML = '';
     currentUsFleet.forEach(s => {
         const speed = s.spd || 4;
-        const torpedo = NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type] || '-');
+        const torpedo = isUSShip(s.name) ? '-' : (TORPEDOES[s.type] || '-');
         tbodyUs.innerHTML += `<tr><td>${s.name}</td><td>${s.type}</td><td>${speed}</td><td>${s.capG}</td><td>${s.capM}</td><td>${torpedo}</td></tr>`;
     });
 }
