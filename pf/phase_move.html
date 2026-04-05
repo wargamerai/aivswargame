@@ -71,9 +71,9 @@ let undoStack = [];
 let shipStates = {};  // 艦名→{col, row, dir, remainMove, undoStack, turnedThisHex} 一時保存
 let phaseStartBackup = null;  // フェーズ開始時の全艦状態バックアップ
 
-const COLS = 36;
-const JP_LINE_COL = 9;
-const US_LINE_COL = COLS - 10; // 26
+const COLS = 46;
+const JP_LINE_COL = 14;
+const US_LINE_COL = COLS - 15; // 31
 
 const DIR_NAMES = {6:'→東', 3:'↘南東', 1:'↙南西', 4:'←西', 7:'↗北西', 9:'↖北東'};
 

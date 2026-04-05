@@ -103,7 +103,26 @@
     <button id="btnAutoAI" onclick="openBattleAutoAI()" disabled style="background-color: #006699; color:#fff;">AI観戦</button>
     <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
     <button onclick="resetCampaign()" style="background-color: #cc2200; color:#fff; float:right; font-size:0.9em;">キャンペーンリセット</button>
+    <button id="btnFog" onclick="toggleFog()" style="background-color:#1a2a1a; color:#8afa8a; font-size:0.9em;">戦場の霧: ON</button>
 </div>
+<script>
+function toggleFog() {
+  const cur = localStorage.getItem('fogOfWar') === '1';
+  const next = !cur;
+  localStorage.setItem('fogOfWar', next ? '1' : '0');
+  const btn = document.getElementById('btnFog');
+  btn.textContent = next ? '戦場の霧: ON' : '戦場の霧: OFF';
+  btn.style.backgroundColor = next ? '#1a2a1a' : '#ddd';
+  btn.style.color = next ? '#8afa8a' : '#999';
+}
+(function() {
+  const fog = localStorage.getItem('fogOfWar') === '1';
+  const btn = document.getElementById('btnFog');
+  btn.textContent = fog ? '戦場の霧: ON' : '戦場の霧: OFF';
+  btn.style.backgroundColor = fog ? '#1a2a1a' : '#ddd';
+  btn.style.color = fog ? '#8afa8a' : '#999';
+})();
+</script>
 
 <!-- 索敵結果パネル -->
 <div id="scoutPanel" class="panel" style="margin-top:10px; display:none;">
@@ -192,6 +211,7 @@ const BATTLE_NAMES = {
 };
 const SPEEDS = { BB:4, OBB:3, CA:5, CL:6, CLAA:5, DD:6 };
 const TORPEDOES = { BB:'-', OBB:'-', CA:'TT', CL:'TT', CLAA:'T', DD:'TT' };
+const NO_TORPEDO_SHIPS = ['BOISE','HELENA','HONOLULU'];
 
 // --- データ定義 ---
 const jpAllShips = [
@@ -619,7 +639,7 @@ function showFleetSelection() {
             if (isUnavailable) cls += ' unavailable';
             else if (isSelected) cls += ' selected';
 
-            const torpedo = TORPEDOES[s.type] || '-';
+            const torpedo = NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type] || '-');
             const dmgInfo = (s.dmgG > 0 || s.dmgM > 0) ? ` <span style="color:#cc6600;">[損傷G${s.dmgG}/M${s.dmgM}]</span>` : '';
 
             html += `<div class="${cls}" onclick="toggleShip('${s.name}')" data-ship="${s.name}">`;
@@ -762,7 +782,7 @@ function renderFleetTables() {
     tbodyUs.innerHTML = '';
     currentUsFleet.forEach(s => {
         const speed = s.spd || 4;
-        const torpedo = TORPEDOES[s.type] || '-';
+        const torpedo = NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type] || '-');
         tbodyUs.innerHTML += `<tr><td>${s.name}</td><td>${s.type}</td><td>${speed}</td><td>${s.capG}</td><td>${s.capM}</td><td>${torpedo}</td></tr>`;
     });
 }
