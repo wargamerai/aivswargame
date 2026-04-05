@@ -391,6 +391,7 @@ const DEPLOY_MAX_COL = JP_LINE_COL - 1; // 青線の左側（IJN用）
 const DEPLOY_MIN_COL = US_LINE_COL + 1; // PF: 赤線の右側（米軍配置域）
 const DIR_NAMES = {6:'→東', 3:'↘南東', 1:'↙南西', 4:'←西', 7:'↗北西', 9:'↖北東'};
 let deployCol = 0; // 現在選択中の艦隊列（0,1,2）
+let deployDir = 4; // 配置方向（デフォルト:西=左）
 const MAX_COLUMNS = 3;
 
 function checkContact() {
@@ -1480,6 +1481,13 @@ window.addEventListener('message', (e) => {
       }
       break;
 
+    case 'DEPLOY_DIR':
+      if (state.deployMode && msg.dir) {
+        deployDir = msg.dir;
+        showDeployPrompt();
+      }
+      break;
+
     case 'COMBAT_STARTED':
       state.battleStarted = true;
       state.combatTurn = msg.turn || 1;
@@ -1835,6 +1843,13 @@ function updateDeployPanel() {
     colBtns += `<button class="col-btn${active}" onclick="parent.postMessage({type:'DEPLOY_COL',col:${ci}},'*')">第${ci+1}艦隊 (${count})</button>`;
   }
 
+  const dirOptions = [{d:4,label:'←左'},{d:1,label:'↙左下'},{d:3,label:'↘右下'},{d:6,label:'→右'},{d:7,label:'↖左上'},{d:9,label:'↗右上'}];
+  let dirBtns = '';
+  dirOptions.forEach(o => {
+    const active = o.d === deployDir ? ' active' : '';
+    dirBtns += `<button class="dir-btn${active}" onclick="parent.postMessage({type:'DEPLOY_DIR',dir:${o.d}},'*')">${o.label}</button>`;
+  });
+
   let rows = '';
   fleet.forEach((s, i) => {
     let cls = 'pending';
@@ -1856,6 +1871,10 @@ h3{color:#66ccff;font-size:1em;margin:0 0 6px}
 .col-btn{background:#1a2a3a;color:#aac;border:1px solid #446;padding:4px 8px;cursor:pointer;border-radius:3px;font-size:0.85em}
 .col-btn:hover{background:#2a3a5a}
 .col-btn.active{background:#2a3a1a;border-color:#4a6a2a;color:#afa;font-weight:bold}
+.dir-bar{margin:4px 0;display:flex;gap:3px;flex-wrap:wrap}
+.dir-btn{background:#1a1a3a;color:#aac;border:1px solid #446;padding:3px 6px;cursor:pointer;border-radius:3px;font-size:0.85em}
+.dir-btn:hover{background:#2a2a5a}
+.dir-btn.active{background:#2a1a3a;border-color:#6a2a6a;color:#faf;font-weight:bold}
 .ship{padding:4px 6px;margin:2px 0;border-radius:3px;border-left:3px solid #333}
 .placed{border-left-color:#4a4;color:#fff;background:#0a1a0a}
 .current{border-left-color:#ff0;color:#ffee44;background:#1a1a00;font-weight:bold}
@@ -1869,6 +1888,7 @@ button.undo:disabled{background:#222;color:#555;cursor:default}
 </style></head><body>
 <h3>米軍 艦隊配置</h3>
 <div class="col-bar">${colBtns}</div>
+<div class="dir-bar">${dirBtns}</div>
 ${rows}
 <button class="undo" onclick="parent.postMessage({type:'DEPLOY_UNDO'},'*')" ${idx <= 0 ? 'disabled' : ''}>◀ 1つ戻す</button>
 </body></html>`;
@@ -1976,16 +1996,11 @@ canvas.addEventListener('click', (e) => {
   );
   if (occupied) return;
 
-  // クリック位置からヘクス中心への角度で向きを決定
-  const center = hexPt(hex.col, hex.row);
-  const angleDeg = Math.atan2(cy - center.y, cx - center.x) * 180 / Math.PI;
-  const dir = angleToDir(angleDeg);
-
-  // PF: 米軍を手動配置
+  // PF: 米軍を手動配置（方向はdeployDirを使用）
   const ship = state.usFleet[state.deployIdx];
   ship.col = hex.col;
   ship.row = hex.row;
-  ship.dir = dir;
+  ship.dir = deployDir;
   ship.colIndex = deployCol;
 
   // この列の既存艦数で旗艦/追従を決定
