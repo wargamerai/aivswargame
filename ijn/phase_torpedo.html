@@ -345,6 +345,13 @@ function init() {
   if (ini === 'us') {
     autoUSTorpedo();
   } else {
+    // 接触後かつ観戦モードでなければAI委任を自動解除
+    const isFullAuto = localStorage.getItem('fullAutoAI') === '1';
+    if (!isFullAuto && isJPAutoAI() && (state.contactMade || state.jpFreeMove)) {
+      localStorage.setItem('jpAutoAI', '0');
+      const cb = document.getElementById('jpAI');
+      if (cb) cb.checked = false;
+    }
     if (isJPAutoAI()) {
       autoJPTorpedo();
     } else {
