@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>聖戦士ダンバイン - キャンペーン</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+h1 { font-size:2em; color:#c8a020; margin-bottom:8px; text-shadow:0 0 10px rgba(200,160,32,0.5); }
+.subtitle { color:#888; font-size:0.9em; margin-bottom:30px; }
+.musou-record { color:#7ab8cc; font-size:0.92em; margin:-18px 0 22px; text-align:center; max-width:90vw; }
+.campaign-list { display:flex; flex-direction:column; gap:16px; width:600px; max-width:90vw; }
+.campaign-card {
+  background:#222; border:2px solid #444; border-radius:8px; padding:20px; cursor:pointer; transition:all 0.2s;
+}
+.campaign-card:hover { border-color:#c8a020; background:#2a2a3e; }
+.campaign-card.selected { border-color:#c8a020; background:#2a2a3e; box-shadow:0 0 12px rgba(200,160,32,0.3); }
+.cp-name { font-size:1.3em; font-weight:bold; color:#eee; }
+.cp-desc { color:#aaa; font-size:0.85em; margin-top:8px; line-height:1.5; }
+.cp-info { display:flex; gap:12px; margin-top:10px; font-size:0.75em; color:#aaa; flex-wrap:wrap; }
+.cp-info span { background:#333; padding:2px 8px; border-radius:3px; }
+
+.setup-panel {
+  display:none; width:600px; max-width:90vw; margin-top:20px; background:#222; border:2px solid #555; border-radius:8px; padding:20px;
+}
+.setup-panel.show { display:block; }
+.setup-title { font-size:1.1em; color:#c8a020; margin-bottom:12px; }
+.musou-options { margin:14px 0; padding:12px; background:#2a2a2a; border-radius:6px; border:1px solid #444; }
+.musou-options label { color:#aaa; font-size:0.9em; }
+.musou-options select { padding:8px; font-size:1em; margin-top:6px; width:100%; max-width:220px; background:#333; color:#eee; border:1px solid #555; border-radius:4px; }
+.force-list { margin:12px 0; }
+.force-title { font-weight:bold; margin-bottom:6px; }
+.force-unit { color:#aaa; font-size:0.85em; padding:2px 0; }
+
+.side-btns { display:flex; gap:10px; margin:16px 0; }
+.side-btn {
+  flex:1; padding:12px; border:2px solid #555; border-radius:6px; background:#2a2a2a; color:#eee;
+  cursor:pointer; text-align:center; font-size:1em; transition:all 0.2s;
+}
+.side-btn:hover { border-color:#888; }
+.side-btn.selected { border-color:#c8a020; background:#3a3a2a; }
+
+.start-btn {
+  width:100%; padding:14px; background:#c8a020; color:#000; border:none; border-radius:6px;
+  font-size:1.1em; font-weight:bold; cursor:pointer; transition:all 0.2s;
+}
+.start-btn:hover { background:#dab030; }
+.start-btn:disabled { background:#555; color:#888; cursor:not-allowed; }
+
+.back-link { margin-top:30px; color:#888; font-size:0.85em; }
+.back-link a { color:#6a8; text-decoration:none; }
+.back-link a:hover { color:#8cb; text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<h1>聖戦士ダンバイン</h1>
+<div class="subtitle">キャンペーンモード</div>
+<div class="musou-record" id="musouRecordLine"></div>
+
+<div class="campaign-list" id="campaignList"></div>
+
+<div class="setup-panel" id="setupPanel">
+  <div class="setup-title" id="setupTitle"></div>
+  <div id="musouOptions" class="musou-options" style="display:none;">
+    <div style="color:#ccc;line-height:1.5;">初戦は敵<strong>1機</strong>。勝つごとに敵が<strong>1機ずつ増え</strong>、最大<strong>100機</strong>まで勝ち進みます（敗北・引き分けでその回終了）。<br>デバッグ用に URL <code>?scenarioId=campaign_musou&amp;musouEnemyCount=20</code> で初期敵数を固定できます。</div>
+  </div>
+  <div id="forceDisplay"></div>
+  <label class="spectator-opt" style="display:flex;align-items:center;gap:8px;margin:12px 0;color:#bbb;font-size:0.85em;cursor:pointer;">
+    <input type="checkbox" id="campaignSpectatorCb" onchange="onCampaignSpectatorToggle()">
+    <span>AI観戦モード（両軍AI・自動進行・ログで処理確認）</span>
+  </label>
+  <div class="side-btns">
+    <div class="side-btn" onclick="selectSide('given')" id="sideGiven">ギブン軍</div>
+    <div class="side-btn" onclick="selectSide('drake')" id="sideDrake">ドレイク軍</div>
+  </div>
+  <button class="start-btn" id="startBtn" disabled onclick="startGame()">開始</button>
+</div>
+
+<div class="back-link">
+  <a href="scenario.html">← 練習シナリオに戻る</a>
+</div>
+
+<script src="data.js"></script>
+<script src="シナリオ.js"></script>
+<script>
+let selectedScenario = null;
+let selectedSide = null;
+
+function refreshMusouRecordBanner() {
+  const el = document.getElementById('musouRecordLine');
+  if (!el) return;
+  const v = parseInt(localStorage.getItem('dunbain_musou_best_streak') || '0', 10) || 0;
+  el.textContent = `ダンバイン無双・最高連続勝ち抜き: ${v}波（1機スタート → 勝ち進み）`;
+}
+
+function init() {
+  refreshMusouRecordBanner();
+
+  const list = document.getElementById('campaignList');
+  const campaigns = Object.values(SCENARIOS).filter(s => s.id.startsWith('campaign'));
+  if (campaigns.length === 0) {
+    list.innerHTML = '<div style="color:#888;text-align:center;padding:40px;">キャンペーンシナリオは準備中です</div>';
+    return;
+  }
+  campaigns.forEach(sc => {
+    const card = document.createElement('div');
+    card.className = 'campaign-card';
+    card.onclick = () => selectScenario(sc);
+    card.id = 'cp_' + sc.id;
+    const vsInfo = sc.musou
+      ? `<span>ギブン軍 ${sc.given.length}機 vs ドレイク軍 1→100機（勝ち進み）</span>`
+      : sc.gauntlet && sc.gauntletBosses
+      ? `<span>1on1 × ${sc.gauntletBosses.length}連戦（勝ち抜き）</span>`
+      : `<span>ギブン軍 ${sc.given.length}機 vs ドレイク軍 ${sc.drake.length}機</span>`;
+    card.innerHTML = `
+      <div class="cp-name">${sc.name}</div>
+      <div class="cp-desc">${sc.description}</div>
+      <div class="cp-info">
+        <span>ターン: ${sc.maxTurn}</span>
+        <span>マップ: ${sc.mapCols}x${sc.mapRows}</span>
+        ${vsInfo}
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function renderForceDisplay() {
+  if (!selectedScenario) return;
+  const sc = selectedScenario;
+  const fd = document.getElementById('forceDisplay');
+  if (sc.gauntlet && sc.gauntletBosses) {
+    fd.innerHTML = `
+      <div class="force-list">
+        <div class="force-title" style="color:#4488cc;">1on1 連戦</div>
+        <div class="force-unit">ギブン選択時：各戦でショウ・ダンバイン A。ドレイク選択時：各戦の宿敵機でショウと対峙。</div>
+        <div class="force-unit">勝てば次戦へ。敗北・引き分けで終了。</div>
+      </div>
+      <div class="force-list">
+        <div class="force-title" style="color:#cc4444;">対戦順</div>
+        ${sc.gauntletBosses.map((b, i) => `<div class="force-unit">${i + 1}. ${b.pilot} — ${b.machine}</div>`).join('')}
+      </div>
+    `;
+    return;
+  }
+  if (sc.musou) {
+    fd.innerHTML = `
+      <div class="force-list">
+        <div class="force-title" style="color:#4488cc;">ギブン軍</div>
+        ${sc.given.map(u => `<div class="force-unit">${u.pilot} — ${u.machine} [${u.weapons.join(', ')}]</div>`).join('')}
+      </div>
+      <div class="force-list">
+        <div class="force-title" style="color:#cc4444;">ドレイク軍</div>
+        <div class="force-unit">「開始」で毎回 <b>1機</b> から。勝つたびに <b>+1機</b>（最大100）。勝ち進みはゲーム内の「次の波」で継続。</div>
+        <div class="force-unit">ドラムロ B・一般兵・オーラ力3／オーラソード＋火焔砲</div>
+      </div>
+    `;
+    return;
+  }
+  fd.innerHTML = `
+    <div class="force-list">
+      <div class="force-title" style="color:#4488cc;">ギブン軍</div>
+      ${sc.given.map(u => `<div class="force-unit">${u.pilot} — ${u.machine} [${u.weapons.join(', ')}]</div>`).join('')}
+    </div>
+    <div class="force-list">
+      <div class="force-title" style="color:#cc4444;">ドレイク軍</div>
+      ${sc.drake.map(u => `<div class="force-unit">${u.pilot} — ${u.machine} [${u.weapons.join(', ')}]</div>`).join('')}
+    </div>
+  `;
+}
+
+function onCampaignSpectatorToggle() {
+  const cb = document.getElementById('campaignSpectatorCb');
+  if (cb.checked && selectedScenario) selectSide('given');
+  else if (!cb.checked) document.getElementById('startBtn').disabled = !selectedSide;
+}
+
+function selectScenario(sc) {
+  selectedScenario = sc;
+  selectedSide = null;
+  document.querySelectorAll('.campaign-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('cp_' + sc.id).classList.add('selected');
+
+  const panel = document.getElementById('setupPanel');
+  panel.classList.add('show');
+  document.getElementById('setupTitle').textContent = sc.name;
+
+  const musouEl = document.getElementById('musouOptions');
+  musouEl.style.display = sc.musou ? 'block' : 'none';
+  refreshMusouRecordBanner();
+
+  renderForceDisplay();
+  document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
+  const spec = document.getElementById('campaignSpectatorCb');
+  if (spec && spec.checked) selectSide('given');
+  else document.getElementById('startBtn').disabled = true;
+}
+
+function selectSide(side) {
+  selectedSide = side;
+  document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById(side === 'given' ? 'sideGiven' : 'sideDrake').classList.add('selected');
+  document.getElementById('startBtn').disabled = false;
+}
+
+function startGame() {
+  if (!selectedScenario || !selectedSide) return;
+  if (selectedScenario.id === 'campaign_gauntlet') {
+    sessionStorage.setItem('campaignGauntletActive', '1');
+    sessionStorage.setItem('campaignGauntletRound', '0');
+  }
+  if (selectedScenario.musou) {
+    sessionStorage.setItem('musouRunWins', '0');
+  }
+  const cfg = {
+    scenarioId: selectedScenario.id,
+    playerSide: selectedSide,
+    spectatorMode: !!(document.getElementById('campaignSpectatorCb') && document.getElementById('campaignSpectatorCb').checked),
+  };
+  sessionStorage.setItem('dunbineConfig', JSON.stringify(cfg));
+  window.location.href = 'index.html';
+}
+
+init();
+</script>
+</body>
+</html>
