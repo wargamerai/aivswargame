@@ -5528,11 +5528,11 @@ function rankRainbowStyle(rank) {
 }
 
 function getAttackDirection(attacker, target) {
-  const dx = target.x - attacker.x;
-  const dy = target.y - attacker.y;
-  // 簡易方向判定
+  // 防御側（target）の向きを基準に、攻撃者がどの方向から攻撃しているかを判定
+  const dx = attacker.x - target.x;
+  const dy = attacker.y - target.y;
   const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-  const relAngle = ((angle - (attacker.dir * 60 - 90)) % 360 + 360) % 360;
+  const relAngle = ((angle - (target.dir * 60 - 90)) % 360 + 360) % 360;
   if (relAngle < 45 || relAngle >= 315) return '正面';
   if (relAngle < 135) return '右側面';
   if (relAngle < 225) return '後面';
