@@ -397,6 +397,12 @@ function isJPAutoAI() { return localStorage.getItem('jpAutoAI') === '1'; }
 
 function jpShootOrAuto(title) {
   const isFullAuto = localStorage.getItem('fullAutoAI') === '1';
+  // 接触後かつ観戦モードでなければAI委任を自動解除
+  if (!isFullAuto && isJPAutoAI() && (state.contactMade || state.jpFreeMove)) {
+    localStorage.setItem('jpAutoAI', '0');
+    const cb = document.getElementById('jpAI');
+    if (cb) cb.checked = false;
+  }
   if (isFullAuto || isJPAutoAI()) {
     autoJPShoot(title + '（自動）');
   } else {
