@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>聖戦士ダンバイン - シナリオ選択</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+h1 { font-size:2em; color:#c8a020; margin-bottom:8px; text-shadow:0 0 10px rgba(200,160,32,0.5); }
+.subtitle { color:#888; font-size:0.9em; margin-bottom:30px; }
+.scenario-list { display:flex; flex-direction:column; gap:16px; width:500px; max-width:90vw; }
+.scenario-card {
+  background:#222; border:2px solid #444; border-radius:8px; padding:16px; cursor:pointer; transition:all 0.2s;
+}
+.scenario-card:hover { border-color:#c8a020; background:#2a2a3e; }
+.scenario-card.selected { border-color:#c8a020; background:#2a2a3e; box-shadow:0 0 12px rgba(200,160,32,0.3); }
+.sc-name { font-size:1.2em; font-weight:bold; color:#eee; }
+.sc-desc { color:#aaa; font-size:0.85em; margin-top:6px; line-height:1.4; }
+.sc-info { display:flex; gap:12px; margin-top:8px; font-size:0.75em; color:#aaa; }
+.sc-info span { background:#333; padding:2px 8px; border-radius:3px; }
+
+.setup-panel {
+  display:none; width:500px; max-width:90vw; margin-top:20px; background:#222; border:2px solid #555; border-radius:8px; padding:20px;
+}
+.setup-panel.show { display:block; }
+.setup-title { font-size:1.1em; color:#c8a020; margin-bottom:12px; }
+
+.side-btns { display:flex; gap:10px; margin-bottom:16px; }
+.side-btn {
+  flex:1; padding:12px; border:2px solid #555; border-radius:6px; background:#2a2a2a; color:#eee;
+  cursor:pointer; text-align:center; font-size:1em; transition:all 0.2s;
+}
+.side-btn:hover { border-color:#888; }
+.side-btn.selected { border-color:#c8a020; background:#3a3a2a; }
+.side-btn .side-name { font-weight:bold; font-size:1.1em; }
+.side-btn .side-units { color:#aaa; font-size:0.8em; margin-top:4px; }
+
+.start-btn {
+  width:100%; padding:14px; background:#c8a020; color:#000; border:none; border-radius:6px;
+  font-size:1.1em; font-weight:bold; cursor:pointer; transition:all 0.2s;
+}
+.start-btn:hover { background:#dab030; }
+.start-btn:disabled { background:#555; color:#888; cursor:not-allowed; }
+
+.campaign-link {
+  margin-top:30px; color:#888; font-size:0.85em;
+}
+.campaign-link a { color:#6a8; text-decoration:none; }
+.campaign-link a:hover { color:#8cb; text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<h1>聖戦士ダンバイン</h1>
+<div class="subtitle">オーラバトラー戦闘シミュレーション</div>
+
+<div class="scenario-list" id="scenarioList"></div>
+
+<div class="setup-panel" id="setupPanel">
+  <div class="setup-title" id="setupTitle">対戦設定</div>
+  <label class="spectator-opt" style="display:flex;align-items:center;gap:8px;margin:10px 0;color:#bbb;font-size:0.9em;cursor:pointer;">
+    <input type="checkbox" id="spectatorModeCb" onchange="onSpectatorToggle()">
+    <span>AI観戦モード（両軍AI・オーラ判定・同時実行まで自動／ログと演出で処理確認）</span>
+  </label>
+  <div class="side-btns" id="sideBtns"></div>
+  <button class="start-btn" id="startBtn" disabled onclick="startGame()">開始</button>
+</div>
+
+<div class="campaign-link">
+  <a href="campaign.html">キャンペーンモードはこちら →</a>
+</div>
+<p style="color:#666;font-size:0.82em;margin-top:14px;max-width:500px;line-height:1.45;text-align:center;">
+  URLで観戦開始: <a href="index.html?spectator=1&amp;scenarioId=practice" style="color:#6a8">練習シナリオ</a>
+  （<code>?spectator=1</code>・<code>scenarioId=…</code>・無双の敵数固定 <code>musouEnemyCount=</code>）
+</p>
+
+<script src="data.js"></script>
+<script src="シナリオ.js"></script>
+<script>
+let selectedScenario = null;
+let selectedSide = null;
+
+function init() {
+  const list = document.getElementById('scenarioList');
+  // 練習シナリオのみ表示（キャンペーンはcampaign.htmlから）
+  const practiceScenarios = Object.values(SCENARIOS).filter(s => !s.id.startsWith('campaign'));
+  practiceScenarios.forEach(sc => {
+    const card = document.createElement('div');
+    card.className = 'scenario-card';
+    card.onclick = () => selectScenario(sc);
+    card.id = 'sc_' + sc.id;
+    const givenCount = sc.given.length;
+    const drakeCount = sc.drake.length;
+    card.innerHTML = `
+      <div class="sc-name">${sc.name}</div>
+      <div class="sc-desc">${sc.description}</div>
+      <div class="sc-info">
+        <span>ターン: ${sc.maxTurn}</span>
+        <span>マップ: ${sc.mapCols}x${sc.mapRows}</span>
+        <span>ギブン軍 ${givenCount} vs ドレイク軍 ${drakeCount}</span>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function onSpectatorToggle() {
+  const cb = document.getElementById('spectatorModeCb');
+  if (cb.checked && selectedScenario) {
+    selectSide('given');
+  } else if (!cb.checked) {
+    document.getElementById('startBtn').disabled = !selectedSide;
+  }
+}
+
+function selectScenario(sc) {
+  selectedScenario = sc;
+  selectedSide = null;
+  document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('sc_' + sc.id).classList.add('selected');
+
+  const panel = document.getElementById('setupPanel');
+  panel.classList.add('show');
+  document.getElementById('setupTitle').textContent = sc.name + ' — 対戦設定';
+
+  const sideBtns = document.getElementById('sideBtns');
+  const givenUnits = sc.given.map(u => u.pilot + '(' + u.machine + ')').join(', ');
+  const drakeUnits = sc.drake.map(u => u.pilot + '(' + u.machine + ')').join(', ');
+  sideBtns.innerHTML = `
+    <div class="side-btn" onclick="selectSide('given')" id="sideGiven">
+      <div class="side-name">ギブン軍</div>
+      <div class="side-units">${givenUnits}</div>
+    </div>
+    <div class="side-btn" onclick="selectSide('drake')" id="sideDrake">
+      <div class="side-name">ドレイク軍</div>
+      <div class="side-units">${drakeUnits}</div>
+    </div>
+  `;
+  const spec = document.getElementById('spectatorModeCb');
+  if (spec && spec.checked) {
+    selectSide('given');
+  } else {
+    document.getElementById('startBtn').disabled = true;
+  }
+}
+
+function selectSide(side) {
+  selectedSide = side;
+  document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById(side === 'given' ? 'sideGiven' : 'sideDrake').classList.add('selected');
+  document.getElementById('startBtn').disabled = false;
+}
+
+function startGame() {
+  if (!selectedScenario || !selectedSide) return;
+  const config = {
+    scenarioId: selectedScenario.id,
+    playerSide: selectedSide,
+    spectatorMode: !!(document.getElementById('spectatorModeCb') && document.getElementById('spectatorModeCb').checked),
+  };
+  sessionStorage.setItem('dunbineConfig', JSON.stringify(config));
+  window.location.href = 'index.html';
+}
+
+init();
+</script>
+</body>
+</html>
