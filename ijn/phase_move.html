@@ -1248,8 +1248,15 @@ function clickShip(i) {
   // 完了済みで保存状態もない → 再選択不可（確定済み）
   if (movedShips.has(i) && !shipStates[s.name]) return;
 
-  // 現在の艦を一時保存（確定せず）
+  // 現在の艦を一時保存（確定せず）— 最低移動力チェック
   if (moving) {
+    const spd = getSpeed(moving);
+    const minSpd = getMinSpeed(moving);
+    const used = spd - remainMove;
+    if (used > 0 && used < minSpd) {
+      alert(`${moving.name}: 最低移動力は${minSpd}です（現在${used}消費）。あと${minSpd - used}移動してください。`);
+      return;
+    }
     const curIdx = jpFleet.indexOf(moving);
     const isDone = remainMove <= 0;
     shipStates[moving.name] = {
@@ -1800,6 +1807,14 @@ function moveFollowers(lead, fleet) {
 }
 
 function finishMove() {
+  // 最低移動力チェック
+  const spd = getSpeed(moving);
+  const minSpd = getMinSpeed(moving);
+  const used = spd - moving.remainMove;
+  if (used > 0 && used < minSpd) {
+    alert(`${moving.name}: 最低移動力は${minSpd}です（現在${used}消費）。あと${minSpd - used}移動してください。`);
+    return;
+  }
   moving.remainMove = 0;
   const idx = jpFleet.indexOf(moving);
   movedShips.add(idx);
