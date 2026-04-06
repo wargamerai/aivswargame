@@ -138,7 +138,9 @@ function startBattle() {
         jpHandicap: 36         // 日本軍ハンディキャップ（得点に加算）
     }));
     // AI観戦モード選択
-    localStorage.setItem('jpAutoAI', document.getElementById('chkAI').checked ? '1' : '0');
+    const aiOn = document.getElementById('chkAI').checked ? '1' : '0';
+    localStorage.setItem('jpAutoAI', aiOn);
+    localStorage.setItem('fullAutoAI', aiOn);
     window.location.href = 'hub.html';
 }
 </script>
