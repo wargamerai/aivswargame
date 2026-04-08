@@ -139,7 +139,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
   <div id="contactInfo" class="no">索敵中</div>
   <div id="spotInfo">視認<span id="spotRange">-</span>hex</div>
 <button id="btnArcs" onclick="toggleArcs()" style="font-size:0.75em;background:#2a1a2a;color:#c8a">射界: OFF</button>
-  <button id="btnReturn" onclick="if(confirm('戦闘を終了して結果を表示しますか？'))showTurnEndReport()" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
+  <button id="btnReturn" onclick="if(confirm('戦闘を終了して結果を表示しますか？')){localStorage.setItem('manualBattleEnd','1');showTurnEndReport();}" style="font-size:0.82em;background:#cc6644;color:#fff;border-color:#aa4422;">帰投</button>
   <span style="margin-left:8px;display:flex;align-items:center;gap:4px;">
     <button onclick="zoomBtn(-1)" style="font-size:1em;padding:2px 8px;font-weight:bold;">−</button>
     <input type="range" id="zoomSlider" min="50" max="250" value="100" step="10" style="width:100px;" oninput="zoomSlide(this.value)">
@@ -1331,6 +1331,11 @@ window.addEventListener('message', (e) => {
       break;
 
     case 'PHASE_DONE': {
+      // 戦闘レポート表示中は遅延到着のPHASE_DONEを無視（帰投後の遅延donePhaseで戦闘が再開しないように）
+      if (state.phase === 'report') {
+        dbg('msg: PHASE_DONE IGNORED (report表示中)');
+        break;
+      }
       // 同じフェーズからの2重発火を防止
       const phaseKey = state.phase + '_' + state.combatTurn;
       if (state._lastPhaseDone === phaseKey) {

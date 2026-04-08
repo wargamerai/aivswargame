@@ -294,25 +294,40 @@ function renderReport() {
   // JP fleet table
   html += `<div class="report">`;
   html += `<h4 class="jp">🎌 日本軍艦隊</h4>`;
-  const fog = !!state.fogMode;
-  html += `<table><tr><th>艦名</th><th>艦種</th><th>G損害</th><th>M損害</th><th>状態</th><th>クリティカル</th></tr>`;
-  for (const s of jp) {
-    const sc = statusClass(s.status);
-    const gd = fog ? '???' : `${s.dmgG||0}/${s.capG}`;
-    const md = fog ? '???' : `${s.dmgM||0}/${s.capM}`;
-    const st = fog ? fuzzyStatus(s) : statusLabel(s.status);
-    const crits = (s.crits && s.crits.length > 0) ? `<span class="crit">${s.crits.join(', ')}</span>` : '-';
-    html += `<tr><td>${s.name}</td><td>${s.type}</td>
-      <td>${gd}</td><td>${md}</td>
-      <td class="${sc}">${st}</td><td>${fog ? '???' : crits}</td></tr>`;
+  const fog = false; // 戦闘レポートではすべてオープン
+  if (fog) {
+    // PF: 日本軍=味方、旗艦以外は曖昧
+    html += `<table><tr><th>艦名</th><th>艦種</th><th>状態</th></tr>`;
+    for (const s of jp) {
+      if (s.isLead) {
+        const sc = statusClass(s.status);
+        const crits = (s.crits && s.crits.length > 0) ? s.crits.join(', ') : '';
+        html += `<tr><td>★${s.name}</td><td>${s.type}</td><td class="${sc}">${statusLabel(s.status)} G:${s.dmgG||0}/${s.capG} M:${s.dmgM||0}/${s.capM} ${crits}</td></tr>`;
+      } else {
+        const fogInfo = [];
+        if (s.status === 'sunk') fogInfo.push('沈没');
+        else if (s.onFire) fogInfo.push('🔥');
+        html += `<tr><td>${s.name}</td><td>${s.type}</td><td style="color:#999">${fogInfo.length ? fogInfo.join(' ') : '❓'}</td></tr>`;
+      }
+    }
+    html += `</table></div>`;
+  } else {
+    html += `<table><tr><th>艦名</th><th>艦種</th><th>G損害</th><th>M損害</th><th>状態</th><th>クリティカル</th></tr>`;
+    for (const s of jp) {
+      const sc = statusClass(s.status);
+      const crits = (s.crits && s.crits.length > 0) ? `<span class="crit">${s.crits.join(', ')}</span>` : '-';
+      html += `<tr><td>${s.name}</td><td>${s.type}</td>
+        <td>${s.dmgG||0}/${s.capG}</td><td>${s.dmgM||0}/${s.capM}</td>
+        <td class="${sc}">${statusLabel(s.status)}</td><td>${crits}</td></tr>`;
+    }
+    html += `</table>`;
+    html += `<div style="margin-top:4px;color:#889;font-size:0.75em">`;
+    if (jpSunk.length)   html += `沈没: ${jpSunk.map(s=>s.name).join(', ')}<br>`;
+    if (jpHeavy.length)  html += `大破: ${jpHeavy.map(s=>s.name).join(', ')}<br>`;
+    if (jpMedium.length) html += `中破: ${jpMedium.map(s=>s.name).join(', ')}<br>`;
+    if (jpLight.length)  html += `小破: ${jpLight.map(s=>s.name).join(', ')}`;
+    html += `</div></div>`;
   }
-  html += `</table>`;
-  html += `<div style="margin-top:4px;color:#889;font-size:0.75em">`;
-  if (jpSunk.length)   html += `沈没: ${jpSunk.map(s=>s.name).join(', ')}<br>`;
-  if (jpHeavy.length)  html += `大破: ${jpHeavy.map(s=>s.name).join(', ')}<br>`;
-  if (jpMedium.length) html += `中破: ${jpMedium.map(s=>s.name).join(', ')}<br>`;
-  if (jpLight.length)  html += `小破: ${jpLight.map(s=>s.name).join(', ')}`;
-  html += `</div></div>`;
 
   // US fleet table
   html += `<div class="report">`;
@@ -320,28 +335,29 @@ function renderReport() {
   if (!state.contactMade) {
     html += `<div style="color:#889;padding:8px">未接触 — 敵艦隊情報なし</div>`;
   } else {
-    html += `<table><tr><th>艦名</th><th>艦種</th><th>状態（推定）</th><th>クリティカル</th></tr>`;
-    for (const s of us) {
-      const sc = statusClass(s.status);
-      if (fog) {
-        const est = s.status==='sunk' ? '<span class="sunk">沈没目撃</span>'
-          : s.onFire ? '<span class="heavy">炎上中</span>'
-          : '不明';
-        const fogCrit = s.onFire ? '<span class="crit">炎上</span>' : '不明';
-        html += `<tr><td>${s.name}</td><td>???</td><td>${est}</td><td>${fogCrit}</td></tr>`;
-      } else {
+    if (fog) {
+      html += `<table><tr><th>敵艦</th><th>状態（推定）</th></tr>`;
+      for (const s of us) {
+        const est = s.onFire ? '🔥' : '';
+        html += `<tr><td style="color:#999">❓❓❓</td><td style="color:#999">${est || '❓'}</td></tr>`;
+      }
+      html += `</table>`;
+    } else {
+      html += `<table><tr><th>艦名</th><th>艦種</th><th>状態</th><th>クリティカル</th></tr>`;
+      for (const s of us) {
+        const sc = statusClass(s.status);
         const crits = (s.crits && s.crits.length > 0) ? `<span class="crit">${s.crits.join(', ')}</span>` : '-';
         html += `<tr><td>${s.name}</td><td>${s.type}</td>
           <td class="${sc}">${statusLabel(s.status)} (G:${s.dmgG||0} M:${s.dmgM||0})</td><td>${crits}</td></tr>`;
       }
+      html += `</table>`;
+      html += `<div style="margin-top:4px;color:#889;font-size:0.75em">`;
+      if (usSunk.length)   html += `沈没: ${usSunk.map(s=>s.name).join(', ')}<br>`;
+      if (usHeavy.length)  html += `大破: ${usHeavy.map(s=>s.name).join(', ')}<br>`;
+      if (usMedium.length) html += `中破: ${usMedium.map(s=>s.name).join(', ')}<br>`;
+      if (usLight.length)  html += `小破: ${usLight.map(s=>s.name).join(', ')}`;
+      html += `</div>`;
     }
-    html += `</table>`;
-    html += `<div style="margin-top:4px;color:#889;font-size:0.75em">`;
-    if (usSunk.length)   html += `沈没: ${usSunk.map(s=>s.name).join(', ')}<br>`;
-    if (usHeavy.length)  html += `大破: ${usHeavy.map(s=>s.name).join(', ')}<br>`;
-    if (usMedium.length) html += `中破: ${usMedium.map(s=>s.name).join(', ')}<br>`;
-    if (usLight.length)  html += `小破: ${usLight.map(s=>s.name).join(', ')}`;
-    html += `</div>`;
   }
   html += `</div>`;
 

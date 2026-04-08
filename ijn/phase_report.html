@@ -103,19 +103,29 @@ function init() {
   if (!raw) { document.getElementById('reportContent').textContent='データなし'; return; }
   state = JSON.parse(raw);
   const isSuddenDeath = renderReport();
-  // 10ターン経過またはサドンデス → 次ターンボタン無効化
+  const isManualEnd = localStorage.getItem('manualBattleEnd') === '1';
+  // 10ターン経過・サドンデス → 次ターンボタン無効化
   if (state.combatTurn >= 10 || isSuddenDeath) {
     const btn = document.getElementById('btnNextTurn');
     const reason = isSuddenDeath ? 'サドンデス' : '10ターン経過';
     if (btn) { btn.disabled = true; btn.textContent = `戦闘終了（${reason}）`; }
+  }
+  // 帰投 → 次ターンボタンを「戦闘終了（帰投）」に変え、押したらキャンペーン/トップへ
+  if (isManualEnd) {
+    const btn = document.getElementById('btnNextTurn');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '戦闘終了（帰投）';
+      btn.onclick = sendToCampaign;
+    }
   }
   // シナリオモードではボタンラベルを変更
   if (localStorage.getItem('scenarioMode')) {
     const sendBtn = document.querySelector('.send');
     if (sendBtn) sendBtn.textContent = 'トップに戻る（戦闘終了）';
   }
-  // fullAutoAI時は自動で次ターンへ（サドンデスでなく10ターン未満のみ）
-  if (localStorage.getItem('fullAutoAI') === '1' && state.combatTurn < 10 && !isSuddenDeath) {
+  // fullAutoAI時は自動で次ターンへ（サドンデス・帰投でなく10ターン未満のみ）
+  if (localStorage.getItem('fullAutoAI') === '1' && state.combatTurn < 10 && !isSuddenDeath && !isManualEnd) {
     setTimeout(() => goNextTurn(), 1500);
   }
 }
@@ -403,6 +413,7 @@ function sendToCampaign() {
   const ships = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status, speed:s.speed}));
   const forCampaign = { endTurn: state.combatTurn || 0, ships: ships };
   localStorage.setItem('battleResultForCampaign', JSON.stringify(forCampaign));
+  localStorage.removeItem('manualBattleEnd');
   // シナリオモードならトップへ、キャンペーンならcampaign.htmlへ
   var scenarioMode = localStorage.getItem('scenarioMode');
   if (scenarioMode) {
@@ -415,6 +426,7 @@ function sendToCampaign() {
 
 function goNextTurn() {
   // hubのnextTurn()を呼んで次ターンへ
+  localStorage.removeItem('manualBattleEnd');
   parent.postMessage({type:'NEXT_TURN'}, '*');
 }
 

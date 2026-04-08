@@ -219,6 +219,7 @@ const G = {
   undoStack: [],
   britishDeployedTurn: 0,  // 英軍投入ターン（0=未投入）
   useMC: true,             // モンテカルロAI（常時有効）
+  reserves: { german: [], allied: [] },  // 増援待機リスト
 };
 
 // ========== マップ描画 ==========
@@ -893,7 +894,9 @@ function handleMapClick(e) {
   }
 
   if (G.phase === 'operation') {
-    if (G.opPhase === 'select' || G.opPhase === 'move') {
+    if (G.opPhase === 'reserve_place') {
+      placeReserveUnit(hid);
+    } else if (G.opPhase === 'select' || G.opPhase === 'move') {
       onMoveClick(hid);
     } else if (G.opPhase === 'attack' || G.opPhase === 'retreat' || G.opPhase === 'advance') {
       onAttackClick(hid);
@@ -1215,6 +1218,15 @@ function onAttackClick(hid) {
         G.combat.advanceEligible.shift();
         unit.hexId = hid;
         addLog('combat', `${unit.name} → ${dispHex(hid)} に前進`);
+        // mechPairも一緒に前進（スタック解除禁止）
+        if (unit.mechPair) {
+          const pair = G.units.find(p => p.id === unit.mechPair && !p.eliminated);
+          if (pair) {
+            pair.hexId = hid;
+            G.combat.advanceEligible = G.combat.advanceEligible.filter(id => id !== pair.id);
+            addLog('combat', `${pair.name} → ${dispHex(hid)} に前進（スタック）`);
+          }
+        }
       }
     }
     if (G.combat.advanceEligible.length === 0) {
@@ -1447,8 +1459,7 @@ function endPhase() {
   G.passCount = 0; // 通常のフェーズ終了ではパスカウントリセット
   if (G.phase === 'reinforce') {
     placeReinforcements();
-    // 人間の手動配置待ちの場合はここで止める
-    if (G.reinforceQueue && G.reinforceQueue.length > 0) return;
+    // 増援はreservesに追加済み（作戦フェーズで呼び出し）→ 即座に回復へ
     G.phase = 'recovery';
     startRecoveryPhase();
     updateUI(); draw();
@@ -1582,69 +1593,17 @@ function placeReinforcements() {
   const reinforcements = REINFORCEMENTS[G.turn];
   if (!reinforcements || reinforcements.length === 0) return;
 
-  // 配置キューを作成
-  G.reinforceQueue = [];
+  // 増援を待機リスト(reserves)に追加（作戦フェーズで呼び出し可能）
   for (const rUnit of reinforcements) {
     if (rUnit.nation === 'uk') continue;
     const u = Object.assign({}, rUnit, {
       acted: false, flipped: false, eliminated: false, exited: false
     });
-    if (!u.entryTag && u.hexId) {
-      // hexId直接指定 → 自動配置
-      G.units.push(u);
-      addLog('turn', `増援: ${u.name} → ${dispHex(u.hexId)}`);
-    } else if (u.entryTag) {
-      G.reinforceQueue.push(u);
-    }
+    G.reserves[u.side].push(u);
+    addLog('turn', `増援待機: ${u.name}（${u.entryTag || dispHex(u.hexId)}）`);
   }
-
-  // AI側は自動配置（敵隣接hexを避ける）
-  const aiUnits = G.reinforceQueue.filter(u => isAISide(u.side));
-  const humanUnits = G.reinforceQueue.filter(u => !isAISide(u.side));
-  for (const u of aiUnits) {
-    let valid = getValidEntryHexes(u);
-    // 敵に隣接しないhexを優先
-    const safe = valid.filter(hid => !getNeighborIds(hid).some(nid =>
-      G.units.some(e => e.hexId === nid && e.side !== u.side && !e.eliminated && !e.exited)
-    ));
-    if (safe.length > 0) {
-      u.hexId = safe[0];
-    } else if (valid.length > 0) {
-      // 全登場hexが敵隣接 → 別の登場エリアを試す
-      const allTags = [...new Set(Object.values(TAG_MAP).filter(t => t.startsWith('reinforce_')))];
-      let altHex = null;
-      for (const tag of allTags) {
-        if (tag === u.entryTag) continue;
-        const altHexes = getEntryHexes(tag).filter(hid => {
-          if (getUnitsAt(hid).some(o => o.side !== u.side)) return false;
-          const fc = getUnitsAt(hid).filter(o => o.side === u.side).length;
-          if (fc === 0) return true;
-          if (u.mechPair && fc < 2) return true;
-          return false;
-        }).filter(hid => !getNeighborIds(hid).some(nid =>
-          G.units.some(e => e.hexId === nid && e.side !== u.side && !e.eliminated && !e.exited)
-        ));
-        if (altHexes.length > 0) { altHex = altHexes[0]; break; }
-      }
-      if (altHex) {
-        u.hexId = altHex;
-        addLog('turn', `増援: ${u.name} 登場地点変更（敵隣接回避）`);
-      } else {
-        u.hexId = valid[0]; // どこも安全でなければ元の候補
-      }
-    } else {
-      addLog('turn', `${u.name}: 登場hex使用不可 → 次ターンに延期`);
-      continue;
-    }
-    G.units.push(u);
-    addLog('turn', `増援: ${u.name} → ${dispHex(u.hexId)}`);
-  }
-
-  // 人間側は手動配置
-  G.reinforceQueue = humanUnits;
-  if (G.reinforceQueue.length > 0) {
-    prepareNextReinforce();
-  }
+  // 配置は作戦フェーズで行う（reinforceQueueは使わない）
+  G.reinforceQueue = [];
 }
 
 function startRecoveryPhase() {
@@ -1831,30 +1790,12 @@ function deployBritish() {
     return;
   }
 
-  // AI側は自動配置
-  const aiUnits = britishUnits.filter(u => isAISide(u.side));
-  const humanUnits = britishUnits.filter(u => !isAISide(u.side));
-
-  for (const u of aiUnits) {
-    const valid = getValidEntryHexes(u);
-    const safe = valid.filter(hid => !getNeighborIds(hid).some(nid =>
-      G.units.some(e => e.hexId === nid && e.side !== u.side && !e.eliminated && !e.exited)
-    ));
-    if (safe.length > 0) u.hexId = safe[0];
-    else if (valid.length > 0) u.hexId = valid[0];
-    else continue;
-    G.units.push(u);
-    addLog('turn', `英軍増援: ${u.name} → ${dispHex(u.hexId)}`);
+  // 全英軍ユニットをreservesに追加（作戦フェーズで呼び出し）
+  for (const u of britishUnits) {
+    G.reserves.allied.push(u);
+    addLog('turn', `英軍増援待機: ${u.name}`);
   }
-
-  // 人間側は手動配置（米軍増援と同じ仕組み）
-  if (humanUnits.length > 0) {
-    G.reinforceQueue = humanUnits;
-    prepareNextReinforce();
-    calcVP(); updateUI(); draw();
-  } else {
-    calcVP(); updateUI(); draw(); scheduleAI(300);
-  }
+  calcVP(); updateUI(); draw(); scheduleAI(300);
 }
 
 function skipBritish() {
@@ -1911,33 +1852,20 @@ function updateRightPanel() {
   if (G.phase === 'reinforce') {
     title.textContent = '増援フェーズ';
     let reinHtml = '';
-    // 手動配置中
-    if (G.reinforceQueue && G.reinforceQueue.length > 0) {
-      const u = G.reinforceQueue[0];
-      desc.textContent = `配置するユニットを選んでください（残り${G.reinforceQueue.length}）`;
-      const imgBase = u.flipped && u.imgBack ? IMG_BACK : IMG_BASE;
-      const imgFile = u.flipped && u.imgBack ? u.imgBack : u.img;
-      const imgTag = imgFile ? `<img src="${imgBase}${imgFile}" style="width:64px;height:64px;object-fit:contain;border-radius:3px;border:1px solid #555;">` : '';
-      reinHtml = `<div class="section">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-          ${imgTag}
-          <div>
-            <div style="color:#79c0ff;font-size:1.1em;"><b>${u.name}</b></div>
-            <div style="color:#aaa;font-size:0.85em;">攻撃:${u.atk} 防御:${u.def} (${u.type})</div>
-          </div>
-        </div>
-        <div style="color:#aaa;font-size:0.85em;">黄色のハイライトhexをクリックして配置</div>
-        <div style="color:#aaa;font-size:0.85em;">登場エリア: ${u.entryTag || '不明'}</div>
-      </div>`;
-    } else {
-      const rein = REINFORCEMENTS[G.turn];
-      if (rein && rein.length > 0) {
-        desc.textContent = `増援配置完了`;
-      } else {
-        desc.textContent = 'このターンの増援はありません';
+    // 待機リストの表示
+    const allReserves = [...G.reserves.german, ...G.reserves.allied];
+    if (allReserves.length > 0) {
+      desc.textContent = `増援 ${allReserves.length}ユニットが待機中（作戦フェーズで呼び出し可能）`;
+      reinHtml = '<div class="section"><h4 style="color:#ffa657;">待機中の増援</h4>';
+      for (const u of allReserves) {
+        const sideLabel = u.side === 'german' ? '独' : '連';
+        reinHtml += `<div style="color:#aaa;font-size:0.85em;padding:2px 0;">[${sideLabel}] ${u.name} (${u.atk}/${u.def})</div>`;
       }
-      reinHtml = '<div class="section"><button class="btn primary" onclick="endPhase()">増援配置 → 回復へ</button></div>';
+      reinHtml += '</div>';
+    } else {
+      desc.textContent = 'このターンの増援はありません';
     }
+    reinHtml += '<div class="section"><button class="btn primary" onclick="endPhase()">回復フェーズへ</button></div>';
     // 英軍投入選択（T3以降、未投入の場合）
     if (G.turn >= 3 && G.britishDeployedTurn === 0) {
       const vpCost = BRITISH_VP_COST[G.turn] || 0;
@@ -2012,9 +1940,9 @@ function updateRightPanel() {
             ${infoHtml}
             <div>位置: ${dispHex(u.hexId)}</div>
           </div>
+          ${stacked ? `<button class="btn" onclick="unstackUnit('${u.id}')" style="margin-left:6px;">スタック解除</button>` : ''}
           <button class="btn" onclick="cancelSelect()">選択解除</button>
           <button class="btn" onclick="stayInPlace()" style="margin-left:6px;">移動しない</button>
-          ${stacked ? `<button class="btn" onclick="unstackUnit('${u.id}')" style="margin-left:6px;">スタック解除</button>` : ''}
           ${canExitNW(u) ? `<button class="btn primary" onclick="exitUnitNW('${u.id}')" style="margin-top:6px;display:block;width:100%;">NW突破 (+1VP)</button>` : ''}
         </div>`;
     } else if (G.opPhase === 'attack') {
@@ -2057,6 +1985,22 @@ function updateRightPanel() {
       desc.textContent = '戦闘後前進';
       panel.innerHTML = `<div class="combat-info">${dispHex(G.combat.defHex)} をクリックで前進</div>
         <button class="btn" onclick="skipAdvance()">前進しない</button>`;
+    } else if (G.opPhase === 'reserve_place') {
+      // 増援配置先選択中
+      const ru = G._reserveUnit;
+      desc.textContent = ru ? `${ru.name} の登場先を選択` : '登場先を選択';
+      let html = '';
+      if (ru) {
+        const imgBase = ru.flipped && ru.imgBack ? IMG_BACK : IMG_BASE;
+        const imgFile = ru.flipped && ru.imgBack ? ru.imgBack : ru.img;
+        const imgTag = imgFile ? `<img src="${imgBase}${imgFile}" style="width:64px;height:64px;object-fit:contain;border-radius:3px;border:1px solid #555;">` : '';
+        html += `<div class="section"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          ${imgTag}<div><div style="color:#79c0ff;font-size:1.1em;"><b>${ru.name}</b></div>
+          <div style="color:#aaa;font-size:0.85em;">攻撃:${ru.atk} 防御:${ru.def} (${ru.type})</div></div></div>
+          <div style="color:#aaa;font-size:0.85em;">黄色のhexをクリックして配置 → 移動へ</div></div>`;
+      }
+      html += `<div class="section"><button class="btn" onclick="cancelReserve()">キャンセル</button></div>`;
+      panel.innerHTML = html;
     } else {
       desc.textContent = 'ユニットをクリックして移動';
       // ユニットリスト
@@ -2070,6 +2014,23 @@ function updateRightPanel() {
         </div>`;
       }
       html += '</div>';
+      // 増援待機リスト
+      const reserves = G.reserves[G.activeSide];
+      if (reserves && reserves.length > 0) {
+        html += '<div class="section" style="border:1px solid #ffa657;border-radius:4px;padding:8px;background:#1a1a2e;"><h4 style="color:#ffa657;">増援待機</h4>';
+        const shown = [];
+        for (const u of reserves) {
+          if (shown.includes(u.id)) continue;
+          shown.push(u.id);
+          if (u.mechPair) shown.push(u.mechPair);
+          const pairName = u.mechPair ? ` + ${reserves.find(p => p.id === u.mechPair)?.name || ''}` : '';
+          html += `<div class="unit-card" onclick="callReserve('${u.id}')" style="border-color:#ffa657;">
+            <span class="name">${u.name}${pairName}</span>
+            <span class="stats">${u.atk}/${u.def}</span>
+          </div>`;
+        }
+        html += '</div>';
+      }
       html += `<div class="section" style="display:flex;gap:8px;">
         <button class="btn" onclick="passPhase()">パス</button>
         <button class="btn" onclick="undoLastMove()" style="background:#555;">移動やり直し</button>
@@ -2210,9 +2171,9 @@ function unstackUnit(id) {
 
 // スタック中かチェック
 function isStacked(unit) {
-  if (!unit.mechPair || unit._unstacked) return false;
+  if (!unit.mechPair) return false;
   const pair = G.units.find(u => u.id === unit.mechPair);
-  if (!pair || pair.eliminated || pair._unstacked) return false;
+  if (!pair || pair.eliminated) return false;
   return unit.hexId === pair.hexId;
 }
 
@@ -2225,6 +2186,63 @@ function selectUnit(id) {
     updateRightPanel();
     draw();
   }
+}
+
+// ========== 増援呼び出し ==========
+function callReserve(unitId) {
+  const side = G.activeSide;
+  const idx = G.reserves[side].findIndex(u => u.id === unitId);
+  if (idx < 0) return;
+  const u = G.reserves[side][idx];
+  // mechPairも一緒に選択
+  G._reserveUnit = u;
+  G._reservePair = u.mechPair ? G.reserves[side].find(p => p.id === u.mechPair) : null;
+  G.reinforceValidHexes = getValidEntryHexes(u);
+  G.opPhase = 'reserve_place';
+  updateRightPanel();
+  draw();
+}
+
+function cancelReserve() {
+  G._reserveUnit = null;
+  G._reservePair = null;
+  G.reinforceValidHexes = null;
+  G.opPhase = 'select';
+  updateRightPanel();
+  draw();
+}
+
+function placeReserveUnit(hid) {
+  if (!G.reinforceValidHexes || !G.reinforceValidHexes.includes(hid)) return;
+  const u = G._reserveUnit;
+  const pair = G._reservePair;
+  if (!u) return;
+  const side = G.activeSide;
+
+  // 待機リストから除去してマップに配置
+  u.hexId = hid;
+  G.reserves[side] = G.reserves[side].filter(r => r.id !== u.id);
+  G.units.push(u);
+  addLog('turn', `増援登場: ${u.name} → ${dispHex(hid)}`);
+
+  if (pair) {
+    pair.hexId = hid;
+    G.reserves[side] = G.reserves[side].filter(r => r.id !== pair.id);
+    G.units.push(pair);
+    addLog('turn', `増援登場: ${pair.name} → ${dispHex(hid)}`);
+  }
+
+  // クリーンアップ
+  G._reserveUnit = null;
+  G._reservePair = null;
+  G.reinforceValidHexes = null;
+
+  // そのまま移動フローへ
+  G.selectedUnit = u;
+  G.reachable = calcReachable(u);
+  G.opPhase = 'move';
+  updateRightPanel();
+  draw();
 }
 
 // ========== ログ ==========
@@ -2528,6 +2546,41 @@ function aiDoRecovery() {
 function aiDoMovement() {
   dbg('aiDoMovement', {side:G.activeSide});
   const side = G.activeSide;
+
+  // === 待機リストから増援呼び出し ===
+  const reserves = G.reserves[side];
+  if (reserves && reserves.length > 0) {
+    // 先頭のユニット（mechPairがあればペアも）を呼び出す
+    const ru = reserves[0];
+    let valid = getValidEntryHexes(ru);
+    // 敵隣接しないhexを優先
+    const safe = valid.filter(hid => !getNeighborIds(hid).some(nid =>
+      G.units.some(e => e.hexId === nid && e.side !== ru.side && !e.eliminated && !e.exited)
+    ));
+    const placeHex = safe.length > 0 ? safe[0] : (valid.length > 0 ? valid[0] : null);
+    if (placeHex) {
+      ru.hexId = placeHex;
+      G.reserves[side] = G.reserves[side].filter(r => r.id !== ru.id);
+      G.units.push(ru);
+      addLog('turn', `[AI] 増援登場: ${ru.name} → ${dispHex(placeHex)}`);
+      // mechPairも配置
+      if (ru.mechPair) {
+        const pair = G.reserves[side].find(p => p.id === ru.mechPair);
+        if (pair) {
+          pair.hexId = placeHex;
+          G.reserves[side] = G.reserves[side].filter(r => r.id !== pair.id);
+          G.units.push(pair);
+          addLog('turn', `[AI] 増援登場: ${pair.name} → ${dispHex(placeHex)}`);
+        }
+      }
+      // 配置後、通常の移動処理へ（このユニットをそのまま移動させる）
+      // acted=falseのままなので、以降のunitsフィルタで拾われる
+    } else {
+      addLog('turn', `[AI] ${ru.name}: 登場hex使用不可 → 次手番に延期`);
+      // 配置できなくても通常の移動処理を続行
+    }
+  }
+
   let units = G.units.filter(u =>
     u.side === side && !u.acted && !u.flipped && !u.eliminated && !u.exited
   );
@@ -2640,7 +2693,7 @@ function aiDoMovement() {
     }
     unit = result.unit;
     bestHex = result.hex;
-    if (result.unstack) unit._unstacked = true;
+    // スタック解除禁止
     dbg('AI-MOVE', `選択: ${unit.name} ${dispHex(unit.hexId)} → ${dispHex(bestHex)}${result.unstack ? ' [スタック解除]' : ''}`);
   } else {
     // 旧ロジック: 最初のユニットを移動
@@ -2679,9 +2732,8 @@ function aiDoMovement() {
     const info = reachable.get(bestHex);
     const fromHex = unit.hexId;
     const stacked = isStacked(unit);
-    // スタック解除: 1ターン目9CC or MCプランによるスタック解除
-    const unstacking = unit._unstacked || (G.turn === 1 && typeof isStVithArmor === 'function' && isStVithArmor(unit));
-    const pair = (stacked && !unstacking) ? G.units.find(u => u.id === unit.mechPair) : null;
+    // スタック解除禁止（常にペアで移動）
+    const pair = stacked ? G.units.find(u => u.id === unit.mechPair) : null;
     if (info) {
       unit.movePath = [fromHex, ...info.path];
     }
