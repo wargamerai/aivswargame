@@ -368,8 +368,8 @@ function canSee(firer, target) {
 
 // 味方の誰かから見えるか（目標リスト用のフィルタ）
 function isVisibleToJP(usShip) {
-  // 発砲済み・火災中の艦は視認可能
-  if (usShip.firedGun1 || usShip.onFire) return true;
+  // 発砲済み・火災中・位置判明済みの艦は視認可能
+  if (usShip.firedGun1 || usShip.onFire || usShip.revealed) return true;
   // 視認距離内の艦は視認可能
   return (state.jpFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;

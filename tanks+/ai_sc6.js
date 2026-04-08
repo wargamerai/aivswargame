@@ -1,5 +1,6 @@
 // ai_sc6.js — シナリオ6「プロポロフカ」軽量AI
-// 最適化: 盤面スキャンは1ターン1回だけ。結果を全ユニットで共有。
+// 移動・侵入配置のみ上書き。射撃は phase_gun.html の本体（命中7・_prepFire準備射撃・前進30%等）をそのまま使う。
+// 盤面スキャンは1ターン1回だけ。結果を全ユニットで共有。
 
 var _sc6_cache = { turn: -1, side: '', goals: null };
 
@@ -53,124 +54,6 @@ function sc6_assignGoal(u) {
 }
 
 // ============================================================
-//  準備射撃: LOS通って命中数3以上の敵がいれば撃つ
-// ============================================================
-function aiCalcPrepFireFlags() {
-  var enemies = state.units.filter(function(e) {
-    return e.side !== activeSide && e.status !== 'destroyed' && e.col >= 1;
-  });
-  for (var fi = 0; fi < firers.length; fi++) {
-    var firer = state.units[firers[fi]];
-    if (!firer || firer.status === 'destroyed') { continue; }
-    firer._prepFireRecommended = false;
-    var curFt = FIRE_TABLE[firer.name];
-    if (!curFt) continue;
-    for (var ei = 0; ei < enemies.length; ei++) {
-      var en = enemies[ei];
-      if (!hasLOS(firer.col, firer.row, en.col, en.row)) continue;
-      var dist = hexDist(firer.col, firer.row, en.col, en.row);
-      var dk = distKey(dist);
-      if (dk < 0 || !curFt[dk]) continue;
-      var enDb = UNIT_DB[en.name];
-      var tMod = 0;
-      var tTerrain = state.terrain ? (state.terrain[en.col+','+en.row] || 'plain') : 'plain';
-      if (tTerrain === 'forest') tMod += 2;
-      if (tTerrain === 'building') tMod += 2;
-      if (enDb && enDb.small) tMod += 1;
-      if (curFt[dk][1] - tMod >= 3) {
-        firer._prepFireRecommended = true;
-        break;
-      }
-    }
-  }
-}
-
-// ============================================================
-//  目標選択: 近くて装甲の低い敵を優先
-// ============================================================
-function aiFindBestTarget(firerIdx) {
-  var firer = state.units[firerIdx];
-  var fDb = UNIT_DB[firer.name];
-  var curFt = FIRE_TABLE[firer.name];
-  var bestScore = -Infinity, bestIdx = -1;
-
-  for (var ti2 = 0; ti2 < targets.length; ti2++) {
-    var ti = targets[ti2];
-    var target = state.units[ti];
-    if (target.status === 'destroyed' || target.col < 1) continue;
-    var dist = hexDist(firer.col, firer.row, target.col, target.row);
-    if (dist > 30) continue;
-    if (!hasLOS(firer.col, firer.row, target.col, target.row)) continue;
-    if (fDb.turret === 'fixed' && typeof canFireAt === 'function') {
-      if (!canFireAt(firer, target)) continue;
-    }
-    var tDb = UNIT_DB[target.name];
-
-    // 歩兵射撃
-    if (fDb.type === 'infantry') {
-      if (tDb.type === 'tank' || tDb.type === 'apc') {
-        var table_i = INF_VS_TANK[fDb.nation];
-        if (!table_i || table_i[dist] === undefined) continue;
-        if (table_i[dist] - dist > bestScore) { bestScore = table_i[dist] - dist; bestIdx = ti; }
-      }
-      continue;
-    }
-
-    // 対歩兵MG
-    if (tDb.type === 'infantry' || tDb.type === 'atgun') {
-      if (!canFireAt(firer, target)) continue;
-      var mgTable = ANTI_INF_TABLE.tankMG;
-      if (!fDb.noMG && mgTable && mgTable[dist] !== undefined) {
-        var mgScore = mgTable[dist] - dist + 5;
-        if (mgScore > bestScore) { bestScore = mgScore; bestIdx = ti; }
-      }
-      continue;
-    }
-
-    // 戦車射撃: 基本命中数2以下は除外
-    var dk = distKey(dist);
-    if (!curFt || dk < 0 || !curFt[dk]) continue;
-    if (curFt[dk][1] <= 2) continue;
-    if (!canFireAt(firer, target)) continue;
-    var pen = curFt[dk][0];
-    var armor = tDb.armor || 0;
-    var frontHit = isHittingFrontArmor(firer, target);
-    if (!frontHit) armor = Math.max(0, armor - 2);
-    var score = (pen - armor) * 3 - dist;
-    if (target.status === 'immobilized') score += 10;
-    if (!frontHit) score += 5;
-    if (score > bestScore) { bestScore = score; bestIdx = ti; }
-  }
-
-  return { idx: bestIdx, mode: 'he' };
-}
-
-// ============================================================
-//  位置比較
-// ============================================================
-function isBetter(a, b) {
-  if (!b) return true;
-  if (!a) return false;
-  return a.score > b.score;
-}
-
-// ============================================================
-//  ヘクス評価（base AIから呼ばれた場合の保険）
-// ============================================================
-function aiEvalPosition(u, db, col, row, enemies, bestDist) {
-  var minD = Infinity;
-  for (var i = 0; i < enemies.length; i++) {
-    var d = hexDist(col, row, enemies[i].col, enemies[i].row);
-    if (d < minD) minD = d;
-  }
-  var terrain = state.terrain ? (state.terrain[col+','+row] || 'plain') : 'plain';
-  var tBonus = 0;
-  if (terrain === 'forest') tBonus = 3;
-  else if (terrain === 'slope' || terrain === 'building') tBonus = 2;
-  return { advantage: -minD, effHit: 0, sc5Score: 0, fixedArcBonus: 0, terrainBonus: tBonus, dist: minD, score: -minD + tBonus };
-}
-
-// ============================================================
 //  移動: キャッシュ済み目標へ向かう。地形少し考慮。
 // ============================================================
 function aiDoMovement(u, db, callback) {
@@ -194,7 +77,22 @@ function aiDoMovement(u, db, callback) {
     if (score > bestScore) { bestScore = score; bestKey = key; }
   }
 
-  if (!bestKey || bestScore <= 0) { callback(); return; }
+  // スコアが伸びない場合でも、ゴールへ距離が縮まるマスがあれば必ずそこへ
+  if (!bestKey || bestScore <= 0) {
+    var bestD = goalDist;
+    var fallbackKey = null;
+    for (var key2 in visited) {
+      if (key2 === startKey) continue;
+      var v2 = visited[key2];
+      var d2 = hexDist(v2.col, v2.row, goal.col, goal.row);
+      if (d2 < bestD) {
+        bestD = d2;
+        fallbackKey = key2;
+      }
+    }
+    if (fallbackKey) bestKey = fallbackKey;
+    else { callback(); return; }
+  }
 
   var path = aiGetPath(visited, bestKey);
   if (path.length === 0) { callback(); return; }
@@ -202,7 +100,8 @@ function aiDoMovement(u, db, callback) {
 }
 
 // ============================================================
-//  配置: enterHexRows範囲内で均等に散開
+//  配置: sc6 独軍は (col1, row enterHexRows) の縦帯からランダム（スタック上限は phase_move と同様）
+//  その他の辺は従来どおり中央寄せ
 // ============================================================
 function aiPlanPlacement(u, db, reservedHexes) {
   var maxCol = state.mapMaxCol || 25;
@@ -216,6 +115,48 @@ function aiPlanPlacement(u, db, reservedHexes) {
     maxR = u.enterHexRows[1];
   }
 
+  // プロポロフカ独軍初期侵入: 列1×行1〜16 の縦帯で一様ランダム
+  if (u.side === 'ge' && edge === 'left' && u.enterHexRows) {
+    var validGe = [];
+    for (var rg = minRow; rg <= maxR; rg++) {
+      var cg = 1;
+      if (typeof checkStacking === 'function' && !checkStacking(cg, rg, u)) continue;
+      var reservedCount = 0;
+      for (var ri = 0; ri < reservedHexes.length; ri++) {
+        if (reservedHexes[ri].col === cg && reservedHexes[ri].row === rg) reservedCount++;
+      }
+      if (db.type === 'tank' || db.type === 'apc') {
+        var existingTanks = 0;
+        for (var ti = 0; ti < state.units.length; ti++) {
+          var tu = state.units[ti];
+          if (tu === u || tu.side !== u.side || tu.status === 'destroyed') continue;
+          if (tu.col !== cg || tu.row !== rg) continue;
+          var tuDb = UNIT_DB[tu.name];
+          if (tuDb && (tuDb.type === 'tank' || tuDb.type === 'apc')) existingTanks++;
+        }
+        if (existingTanks + reservedCount >= 2) continue;
+      }
+      if (db.type === 'infantry') {
+        var existingInf = 0;
+        for (var ii = 0; ii < state.units.length; ii++) {
+          var iu = state.units[ii];
+          if (iu === u || iu.side !== u.side || iu.status === 'destroyed') continue;
+          if (iu.col !== cg || iu.row !== rg) continue;
+          var iuDb = UNIT_DB[iu.name];
+          if (iuDb && iuDb.type === 'infantry') existingInf++;
+        }
+        if (existingInf + reservedCount >= 4) continue;
+      }
+      if (typeof getTerrainCost === 'function') {
+        var costGe = getTerrainCost(cg, rg, undefined, undefined, u.name);
+        if (u.remainMove < costGe) continue;
+      }
+      validGe.push({ col: cg, row: rg });
+    }
+    if (validGe.length === 0) return null;
+    return validGe[Math.floor(Math.random() * validGe.length)];
+  }
+
   var candidates = [];
   for (var r = minRow; r <= maxR; r++) {
     var c;
@@ -227,8 +168,8 @@ function aiPlanPlacement(u, db, reservedHexes) {
 
     if (typeof checkStacking === 'function' && !checkStacking(c, r, u)) continue;
     var reserved = false;
-    for (var ri = 0; ri < reservedHexes.length; ri++) {
-      if (reservedHexes[ri].col === c && reservedHexes[ri].row === r) { reserved = true; break; }
+    for (var rj = 0; rj < reservedHexes.length; rj++) {
+      if (reservedHexes[rj].col === c && reservedHexes[rj].row === r) { reserved = true; break; }
     }
     if (reserved) continue;
 
@@ -242,4 +183,4 @@ function aiPlanPlacement(u, db, reservedHexes) {
   return candidates[0];
 }
 
-console.log('[AI] ai_sc6.js loaded — プロポロフカ軽量AI（共有スキャン方式）');
+console.log('[AI] ai_sc6.js loaded — プロポロフカ（移動・配置のみ。射撃は本体）');

@@ -2033,12 +2033,18 @@ function aiAutoDefMoveSync() {
           for (const [eHex, eStack] of Object.entries(defEnemyStacks)) {
             const aliveE = eStack.filter(e => e.status === 'ok');
             if (aliveE.length === 0) continue;
+            const sfSurprise = isSurpriseAttack(eHex, aliveE[0].side);
+            const sfShotCount = sfSurprise ? 2 : 1;
+            onUnitAction(aliveE[0], aliveE);
             const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
             let sfFP = 0;
             aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
             if (sfFP <= 0) continue;
-            const sfTarget = alive.find(u => u.status !== 'eliminated') || alive[0];
-            executeDirectFire(aliveE, sfTarget);
+            for (let sfShot = 0; sfShot < sfShotCount; sfShot++) {
+              const sfTarget = alive.find(u => u.status !== 'eliminated' && u.type !== 'leader') || alive.find(u => u.status !== 'eliminated') || alive[0];
+              if (!sfTarget || sfTarget.status === 'eliminated') break;
+              executeDirectFire(aliveE, sfTarget);
+            }
           }
           // 反撃
           const aliveAfter = alive.filter(u => u.status !== 'eliminated');
@@ -2148,12 +2154,18 @@ function aiMoveTowardSync(unitsToMove, targetCol, targetRow, isTank) {
       for (const [eHex, eStack] of Object.entries(enemyStacks)) {
         const aliveE = eStack.filter(e => e.status === 'ok');
         if (aliveE.length === 0) continue;
+        const sfSurprise = isSurpriseAttack(eHex, aliveE[0].side);
+        const sfShotCount = sfSurprise ? 2 : 1;
+        onUnitAction(aliveE[0], aliveE);
         const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
         let sfFP = 0;
         aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
         if (sfFP <= 0) continue;
-        const sfTarget = alive.find(u => u.status !== 'eliminated') || alive[0];
-        executeDirectFire(aliveE, sfTarget);
+        for (let sfShot = 0; sfShot < sfShotCount; sfShot++) {
+          const sfTarget = alive.find(u => u.status !== 'eliminated' && u.type !== 'leader') || alive.find(u => u.status !== 'eliminated') || alive[0];
+          if (!sfTarget || sfTarget.status === 'eliminated') break;
+          executeDirectFire(aliveE, sfTarget);
+        }
       }
       // 反撃
       const aliveAfter = alive.filter(u => u.status !== 'eliminated');

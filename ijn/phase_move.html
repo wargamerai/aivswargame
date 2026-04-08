@@ -235,18 +235,19 @@ function autoWithdrawHeavy() {
   const jpMoving = isJPMoving();
   const allShips = jpMoving ? jpFleet : usFleet;
   for (const ship of allShips) {
-    // 大破、航行不能、回頭不能、速力半減 → 離脱
+    if (ship.col < 0 || ship.status === 'sunk') continue;
+    // 既に離脱中の艦は自動離脱条件に関係なく退却移動を続ける
+    if (ship.withdrawing) {
+      if (getSpeed(ship) > 0) withdrawMove(ship);
+      continue;
+    }
+    // 大破、航行不能、回頭不能、速力半減 → 自動離脱開始
     const hasCrit = (ship.crits || []).includes('速力半減');
     const shouldWithdraw = (ship.status === 'heavy') ||
                            (getSpeed(ship) === 0) ||
                            ship.cannotTurn ||
                            hasCrit;
-    if (!shouldWithdraw || ship.col < 0 || ship.status === 'sunk') continue;
-    if (ship.withdrawing) {
-      // 既に離脱中 → 退却移動（航行不能なら移動不可）
-      if (getSpeed(ship) > 0) withdrawMove(ship);
-      continue;
-    }
+    if (!shouldWithdraw) continue;
     // 離脱開始
     ship.withdrawing = true;
     ship.retreatDir = ship.side === 'jp' ? 4 : 6;  // JP=西, US=東
@@ -1741,6 +1742,18 @@ function moveForward() {
   setInfo(`${moving.name} 前進 → (${next.col},${next.row})${restriction}\n147963=方向転換 5=直進`);
   setMoveBar(`残り移動力: ${remainMove}`);
   pushState();
+
+  // 日本軍: 青線(JP_LINE_COL)より西へ移動したら離脱確認
+  if (!moving.withdrawing && moving.col < JP_LINE_COL && isJPMoving() && jpFleet.indexOf(moving) >= 0) {
+    if (confirm(`${moving.name} は青線の西に到達しました。離脱しますか？`)) {
+      moving.withdrawing = true;
+      setInfo(`${moving.name} 離脱開始`);
+      withdrawMove(moving);
+      pushState();
+      finishMove();
+      return;
+    }
+  }
 
   if (remainMove <= 0) {
     softFinishMove();
