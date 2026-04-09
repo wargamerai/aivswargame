@@ -1923,6 +1923,8 @@ const ACTIONS_NEED_TARGET = ['fire','snipe'];
 document.querySelectorAll('.action-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (btn.disabled) return;
+    // 捨て札・終了・確定ボタンは専用リスナーで処理するのでスキップ
+    if (btn.id === 'btn-discard' || btn.id === 'btn-end-turn' || btn.id === 'btn-confirm') return;
     const act = btn.dataset.act;
     if (state.selectedAction === act) {
       state.selectedAction = null;
