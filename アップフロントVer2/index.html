@@ -123,6 +123,141 @@
   #campaign-screen .soldier.killed   { opacity: 0.55; }
   #campaign-screen .soldier.retired  { opacity: 0.65; }
 
+  /* ===== セットアップ(編成)画面 ===== */
+  #setup-screen {
+    position: fixed; inset: 0;
+    background: #1a1a1a;
+    display: none; flex-direction: column;
+    z-index: 850;
+  }
+  #setup-screen.active { display: flex; }
+  #setup-screen .head {
+    flex: 0 0 auto; padding: 12px 18px;
+    border-bottom: 2px solid #555;
+    display: flex; align-items: center; gap: 14px;
+    background: #222;
+  }
+  #setup-screen .head h2 { margin: 0; font-size: 18px; }
+  #setup-screen .head .info {
+    font-size: 12px; color: #ccc; line-height: 1.4;
+  }
+  #setup-screen .head .info b { color: #ffeb3b; }
+  #setup-screen .head .actions { margin-left: auto; display: flex; gap: 8px; }
+  #setup-screen .head .actions button {
+    padding: 8px 16px; font-size: 13px; font-weight: bold; cursor: pointer;
+    border: 1px solid #6c6; border-radius: 4px;
+    background: #3a3; color: #fff;
+  }
+  #setup-screen .head .actions button.cancel { background: #555; border-color: #777; }
+  #setup-screen .head .actions button.crew { background: #c83; border-color: #fa6; }
+  #setup-screen .head .actions button.crew.active { background: #fa6; color: #000; }
+  #setup-screen .head .actions button:disabled { background: #333; color: #666; border-color: #555; cursor: not-allowed; }
+
+  #setup-screen .stage {
+    flex: 1 1 0; min-height: 0;
+    display: flex; flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+    overflow: hidden;
+  }
+  #setup-screen .pool-row {
+    flex: 0 0 auto;
+    background: rgba(255,255,255,0.04);
+    border: 2px dashed #666;
+    border-radius: 6px;
+    padding: 8px;
+    min-height: 130px;
+  }
+  #setup-screen .pool-row .label {
+    font-size: 12px; color: #aaa; margin-bottom: 6px;
+  }
+  #setup-screen .groups-row {
+    flex: 1 1 0; min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  #setup-screen .grp {
+    background: rgba(0,0,0,0.3);
+    border: 2px dashed #666;
+    border-radius: 6px;
+    padding: 8px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  #setup-screen .grp .grp-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px; flex: 0 0 auto;
+  }
+  #setup-screen .grp .grp-head .gname {
+    font-size: 16px; font-weight: bold; color: #ffeb3b;
+  }
+  #setup-screen .grp .grp-head .gcount {
+    font-size: 11px; color: #ccc;
+  }
+  #setup-screen .grp .grp-cards {
+    flex: 1 1 0; min-height: 0;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    align-content: flex-start;
+    overflow-y: auto;
+  }
+  #setup-screen .pool-row .pool-cards {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  #setup-screen .scard {
+    width: 78px;
+    background: #333;
+    border: 2px solid #555;
+    border-radius: 4px;
+    padding: 2px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.12s;
+  }
+  #setup-screen .scard:hover { border-color: #aaa; transform: translateY(-2px); }
+  #setup-screen .scard.selected {
+    border-color: #ffeb3b;
+    background: #443;
+  }
+  #setup-screen .scard.crew-target {
+    border-color: #fa6;
+    background: #432;
+  }
+  #setup-screen .scard img { width: 100%; display: block; border-radius: 2px; }
+  #setup-screen .scard .nm {
+    font-size: 9px; color: #ddd; text-align: center;
+    margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #setup-screen .scard .wp {
+    font-size: 8px; color: #aac; text-align: center;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #setup-screen .scard .leader {
+    position: absolute; top: 1px; left: 1px;
+    background: #c33; color: #fff;
+    font-size: 8px; font-weight: bold;
+    padding: 1px 3px; border-radius: 2px;
+  }
+  #setup-screen .scard .crewIcon {
+    position: absolute; top: 1px; right: 1px;
+    background: #fa6; color: #000;
+    font-size: 9px; font-weight: bold;
+    padding: 1px 3px; border-radius: 2px;
+    border: 1px solid #fff;
+  }
+  #setup-screen .scard .crewIcon.assistant {
+    background: #6af;
+    color: #000;
+  }
+  #setup-screen .scard .crewLink {
+    position: absolute; bottom: 1px; right: 1px;
+    background: #222; color: #fa6;
+    font-size: 8px;
+    padding: 0 3px; border-radius: 2px;
+    border: 1px solid #fa6;
+  }
+
   /* ===== メイン画面 ===== */
   #game { display: none; flex-direction: column; height: 100vh; }
   #game.active { display: flex; }
@@ -510,6 +645,30 @@
   <div class="grid" id="camp-grid"></div>
 </div>
 
+<!-- セットアップ画面 -->
+<div id="setup-screen">
+  <div class="head">
+    <h2 id="setup-title">編成</h2>
+    <div class="info">
+      未配置兵士をクリックして選択 → 配置先グループ <b id="setup-target">A</b> をクリック<br>
+      クルー設定: クルー兵器持ちを選択 → <b>クルー設定</b>ボタン → 同じグループの別の兵士を選んでアシスタント指定
+    </div>
+    <div class="actions">
+      <button class="cancel" id="setup-back">戻る</button>
+      <button class="cancel" id="setup-reset">リセット</button>
+      <button class="crew" id="setup-crew">クルー設定</button>
+      <button id="setup-start" disabled>ゲーム開始</button>
+    </div>
+  </div>
+  <div class="stage">
+    <div class="pool-row">
+      <div class="label">未配置の兵士 (<span id="pool-count">0</span>名)</div>
+      <div class="pool-cards" id="pool-cards"></div>
+    </div>
+    <div class="groups-row" id="setup-groups"></div>
+  </div>
+</div>
+
 <!-- メインゲーム画面 -->
 <div id="game">
   <!-- AI 手札 -->
@@ -768,7 +927,300 @@ const state = {
 
 // ===== 初期化 =====
 document.querySelectorAll('.faction-btn').forEach(btn => {
-  btn.addEventListener('click', () => startGame(btn.dataset.faction));
+  btn.addEventListener('click', () => openSetupScreen(btn.dataset.faction));
+});
+
+// ===== セットアップ画面 =====
+const setupState = {
+  faction: null,            // 'ger'|'us'|'rus'
+  scenario: null,
+  groups: [[], [], [], []], // A,B,C,D : ソルジャー番号配列
+  pool: [],                 // 未配置の番号配列
+  selected: null,           // {from: 'pool'|'A'|'B'|.., num: int}
+  targetGroup: 0,           // 配置先 (0..3)
+  crewMode: false,          // クルー設定モード
+  crewLeader: null,         // {grp: int, num: int} クルー兵器を持つ兵士
+  crewPairs: {},            // { "A:5": "A:7" } 兵士番号→アシスタント番号 (グループ内ペア)
+};
+
+function openSetupScreen(factionKey) {
+  const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
+  const scenario = (window.SCENARIOS || {})[scenarioId];
+  if (!scenario) { alert('シナリオ未読込'); return; }
+  setupState.faction = factionKey;
+  setupState.scenario = scenario;
+  setupState.groups = [[], [], [], []];
+  setupState.crewPairs = {};
+  setupState.crewMode = false;
+  setupState.crewLeader = null;
+  setupState.selected = null;
+  setupState.targetGroup = 0;
+  // プールに使用兵士全員
+  const nums = (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.getSoldierNumbers(scenario, factionKey)) || [];
+  setupState.pool = nums.slice();
+
+  document.getElementById('faction-select').style.display = 'none';
+  document.getElementById('setup-screen').classList.add('active');
+  const fac = FACTIONS[factionKey];
+  document.getElementById('setup-title').textContent =
+    `${fac.flag} ${fac.name} 編成 — シナリオ${scenario.id}「${scenario.name}」 (兵士 ${nums.length}名)`;
+  renderSetup();
+}
+
+function getSoldierDef(factionKey, num) {
+  const list = (SOLDIER_CARDS && SOLDIER_CARDS[factionKey]) || [];
+  return list.find(s => s.num === num) || null;
+}
+
+function isLeaderSoldier(def) {
+  return !!(def && def.leader && def.leader.trim().length > 0);
+}
+
+const CREW_WEAPON_KEYWORDS = ['中機関銃','軽機関銃','バズーカ','パンツァーシュレック','火炎放射器'];
+function isCrewWeaponSoldier(def) {
+  if (!def || !def.weaponCat) return false;
+  return CREW_WEAPON_KEYWORDS.some(k => def.weaponCat.indexOf(k) === 0);
+}
+
+function buildSetupCard(num, location) {
+  // location: 'pool' or 0..3 (group index)
+  const fac = FACTIONS[setupState.faction];
+  const def = getSoldierDef(setupState.faction, num);
+  let prefix = fac.prefix;
+  if (setupState.faction === 'rus') prefix = num <= 30 ? 'russian' : 'Rus';
+  const img = encPath(`${fac.dir}/${prefix} ${num}f.gif`);
+
+  const el = document.createElement('div');
+  el.className = 'scard';
+  if (setupState.selected && setupState.selected.from === location && setupState.selected.num === num) {
+    el.classList.add('selected');
+  }
+  if (setupState.crewMode && setupState.crewLeader && setupState.crewLeader.num !== num
+      && typeof location === 'number' && setupState.crewLeader.grp === location) {
+    el.classList.add('crew-target');
+  }
+
+  const im = document.createElement('img');
+  im.src = img; im.alt = `#${num}`;
+  im.onerror = () => { im.style.display = 'none'; el.style.background='#666'; };
+  el.appendChild(im);
+
+  const nm = document.createElement('div');
+  nm.className = 'nm';
+  nm.textContent = def ? def.name : `#${num}`;
+  el.appendChild(nm);
+
+  const wp = document.createElement('div');
+  wp.className = 'wp';
+  wp.textContent = def ? def.weaponCat : '';
+  el.appendChild(wp);
+
+  if (def && isLeaderSoldier(def)) {
+    const lb = document.createElement('div');
+    lb.className = 'leader'; lb.textContent = '指';
+    el.appendChild(lb);
+  }
+
+  // クルー兵器マーク (主)
+  if (def && isCrewWeaponSoldier(def)) {
+    const ci = document.createElement('div');
+    ci.className = 'crewIcon'; ci.textContent = '主';
+    ci.title = 'クルー操作兵器: アシスタント要';
+    el.appendChild(ci);
+  }
+  // ペア状況: クルー主としてペア有り → "✓"
+  // クルー副 (アシスタント) → 青の "副"
+  if (typeof location === 'number') {
+    const key = `${location}:${num}`;
+    // この兵士がアシスタント?
+    const ownerKey = Object.keys(setupState.crewPairs).find(k => setupState.crewPairs[k] === key);
+    if (ownerKey) {
+      const ai = document.createElement('div');
+      ai.className = 'crewIcon assistant'; ai.textContent = '副';
+      ai.title = 'アシスタントクルー (自身の火力は使用不可)';
+      el.appendChild(ai);
+    }
+    // この兵士がクルー主としてアシスタント割当済?
+    if (setupState.crewPairs[key]) {
+      const lk = document.createElement('div');
+      lk.className = 'crewLink'; lk.textContent = '✓';
+      lk.title = 'アシスタント設定済み';
+      el.appendChild(lk);
+    }
+  }
+
+  el.addEventListener('click', () => onSetupCardClick(num, location));
+  return el;
+}
+
+function onSetupCardClick(num, location) {
+  // クルー設定モード時の動作
+  if (setupState.crewMode) {
+    if (!setupState.crewLeader) {
+      // 最初のクリック: グループ内のクルー兵器持ちを選ぶ
+      if (typeof location !== 'number') { alert('グループ内のクルー兵器持ちを選択してください'); return; }
+      const def = getSoldierDef(setupState.faction, num);
+      if (!isCrewWeaponSoldier(def)) { alert('この兵士はクルー操作兵器を持っていません'); return; }
+      setupState.crewLeader = { grp: location, num };
+      renderSetup();
+      return;
+    }
+    // 2回目: 同じグループの別兵士をアシスタント指定
+    if (location !== setupState.crewLeader.grp) { alert('同じグループ内の兵士を選んでください'); return; }
+    if (num === setupState.crewLeader.num) {
+      // 同じ兵士を再クリック → キャンセル
+      setupState.crewLeader = null; renderSetup(); return;
+    }
+    // 既にアシスタントとして使われている兵士は選べない
+    const targetKey = `${location}:${num}`;
+    if (Object.values(setupState.crewPairs).includes(targetKey)) {
+      alert('この兵士は既に他のクルーのアシスタントです'); return;
+    }
+    // 既に自身がクルー主としてペアを持っているのも選べない
+    if (setupState.crewPairs[targetKey]) {
+      alert('この兵士は既にクルー主です'); return;
+    }
+    const leaderKey = `${setupState.crewLeader.grp}:${setupState.crewLeader.num}`;
+    setupState.crewPairs[leaderKey] = targetKey;
+    setupState.crewLeader = null;
+    setupState.crewMode = false;
+    document.getElementById('setup-crew').classList.remove('active');
+    renderSetup();
+    return;
+  }
+
+  // 通常モード: クリック=選択 → 配置先グループへ
+  if (setupState.selected && setupState.selected.from === location && setupState.selected.num === num) {
+    setupState.selected = null;
+    renderSetup();
+    return;
+  }
+  setupState.selected = { from: location, num };
+  renderSetup();
+}
+
+function moveSelectedTo(targetLoc) {
+  const sel = setupState.selected;
+  if (!sel) return;
+  // 元から削除
+  removeFromAnywhere(sel.num);
+  // 行先へ追加
+  if (targetLoc === 'pool') setupState.pool.push(sel.num);
+  else setupState.groups[targetLoc].push(sel.num);
+  setupState.selected = null;
+  renderSetup();
+}
+
+function removeFromAnywhere(num) {
+  const pi = setupState.pool.indexOf(num);
+  if (pi >= 0) { setupState.pool.splice(pi, 1); return; }
+  for (let g = 0; g < 4; g++) {
+    const gi = setupState.groups[g].indexOf(num);
+    if (gi >= 0) {
+      setupState.groups[g].splice(gi, 1);
+      // この兵士に紐づくクルーペアを解除
+      const myKey = `${g}:${num}`;
+      delete setupState.crewPairs[myKey];
+      Object.keys(setupState.crewPairs).forEach(k => {
+        if (setupState.crewPairs[k] === myKey) delete setupState.crewPairs[k];
+      });
+      // グループ間の番号位置がずれるのでクルーペアキーを再構築
+      rebuildCrewKeysAfterGroupChange();
+      return;
+    }
+  }
+}
+function rebuildCrewKeysAfterGroupChange() {
+  // crewPairs は "groupIndex:soldierNum" 形式なのでグループ内位置変動の影響はない
+  // (実装上の no-op だが将来の拡張用に名前を残す)
+}
+
+function renderSetup() {
+  const poolEl = document.getElementById('pool-cards');
+  poolEl.innerHTML = '';
+  setupState.pool.forEach(num => poolEl.appendChild(buildSetupCard(num, 'pool')));
+  document.getElementById('pool-count').textContent = setupState.pool.length;
+
+  const groupsEl = document.getElementById('setup-groups');
+  groupsEl.innerHTML = '';
+  ['A','B','C','D'].forEach((name, gi) => {
+    const grp = document.createElement('div');
+    grp.className = 'grp';
+    if (setupState.targetGroup === gi) grp.style.borderColor = '#ffeb3b';
+
+    const head = document.createElement('div');
+    head.className = 'grp-head';
+    const lc = countLeadersInGroup(gi);
+    head.innerHTML = `<span class="gname">GROUP ${name}</span>
+                      <span class="gcount">${setupState.groups[gi].length}名${lc>0?` / 指揮官${lc}`:''}</span>`;
+    grp.appendChild(head);
+
+    const cards = document.createElement('div');
+    cards.className = 'grp-cards';
+    setupState.groups[gi].forEach(num => cards.appendChild(buildSetupCard(num, gi)));
+    grp.appendChild(cards);
+
+    grp.addEventListener('click', e => {
+      if (e.target !== grp && e.target !== cards && !e.target.classList.contains('grp-head')) return;
+      // 配置先選択 or 選択中の兵士を配置
+      if (setupState.selected) {
+        moveSelectedTo(gi);
+      } else {
+        setupState.targetGroup = gi;
+        document.getElementById('setup-target').textContent = name;
+        renderSetup();
+      }
+    });
+    groupsEl.appendChild(grp);
+  });
+
+  // プール側ドロップ: プール背景クリックで戻す
+  document.querySelector('#setup-screen .pool-row').onclick = e => {
+    if (e.target.closest('.scard')) return;
+    if (setupState.selected && typeof setupState.selected.from === 'number') {
+      moveSelectedTo('pool');
+    }
+  };
+
+  document.getElementById('setup-target').textContent = ['A','B','C','D'][setupState.targetGroup];
+  // 開始ボタン: プールが空 かつ 各グループ 2~10
+  const allPlaced = setupState.pool.length === 0;
+  const sizesOk = setupState.groups.every(g => g.length === 0 || (g.length >= 2 && g.length <= 10));
+  const nonEmpty = setupState.groups.some(g => g.length > 0);
+  document.getElementById('setup-start').disabled = !(allPlaced && sizesOk && nonEmpty);
+}
+
+function countLeadersInGroup(gi) {
+  return setupState.groups[gi].filter(num => {
+    const def = getSoldierDef(setupState.faction, num);
+    return isLeaderSoldier(def);
+  }).length;
+}
+
+document.getElementById('setup-back').addEventListener('click', () => {
+  document.getElementById('setup-screen').classList.remove('active');
+  document.getElementById('faction-select').style.display = '';
+});
+document.getElementById('setup-reset').addEventListener('click', () => {
+  const allNums = setupState.pool.concat(...setupState.groups);
+  setupState.pool = allNums.slice().sort((a,b)=>a-b);
+  setupState.groups = [[],[],[],[]];
+  setupState.crewPairs = {};
+  setupState.selected = null;
+  setupState.crewLeader = null;
+  setupState.crewMode = false;
+  document.getElementById('setup-crew').classList.remove('active');
+  renderSetup();
+});
+document.getElementById('setup-crew').addEventListener('click', () => {
+  setupState.crewMode = !setupState.crewMode;
+  setupState.crewLeader = null;
+  document.getElementById('setup-crew').classList.toggle('active', setupState.crewMode);
+  renderSetup();
+});
+document.getElementById('setup-start').addEventListener('click', () => {
+  document.getElementById('setup-screen').classList.remove('active');
+  startGameWithSetup();
 });
 
 // ===== キャンペーン編成 =====
@@ -981,6 +1433,81 @@ document.getElementById('camp-flip-front').addEventListener('click', () => {
   renderCampaign();
 });
 
+function startGameWithSetup() {
+  const playerFaction = setupState.faction;
+  const scenario = setupState.scenario;
+  state.player = FACTIONS[playerFaction];
+  const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
+  state.ai = FACTIONS[others[0]];
+  state.scenario = scenario;
+
+  const NAMES = ['A','B','C','D'];
+  state.groups.player = setupState.groups
+    .map((nums, gi) => ({
+      name: NAMES[gi],
+      cards: nums.map(num => makeCardWithMeta(playerFaction, num)),
+      distance: 0,
+      terrain: [],
+      actions: [],
+      _faction: playerFaction,
+      crewPairs: extractGroupCrewPairs(gi),
+    }))
+    .filter(g => g.cards.length > 0);
+
+  // AIは自動配分 (シナリオから)
+  const aiKey = others[0];
+  state.groups.ai = (window.SCENARIO_HELPERS && scenario)
+    ? window.SCENARIO_HELPERS.buildInitialGroups(scenario, aiKey)
+    : [];
+
+  state.playerHand = [];
+  state.aiHandCount = state.ai.handMax;
+  if (TERRAIN_CARDS.length > 0) {
+    for (let i = 0; i < state.player.handMax; i++) {
+      const c = drawTerrainCard();
+      if (c) state.playerHand.push(c);
+    }
+  }
+
+  document.getElementById('faction-select').style.display = 'none';
+  document.getElementById('game').classList.add('active');
+  document.getElementById('player-name').textContent = state.player.flag + ' ' + state.player.name;
+  document.getElementById('ai-name').textContent     = state.ai.flag + ' ' + state.ai.name;
+  document.getElementById('player-hand-max').textContent  = state.player.handMax;
+  document.getElementById('player-hand-draw').textContent = state.player.handDraw;
+  document.getElementById('ai-hand-max').textContent      = state.ai.handMax;
+  document.getElementById('ai-hand-draw').textContent     = state.ai.handDraw;
+  renderField('player');
+  renderField('ai');
+  renderHands();
+}
+
+function makeCardWithMeta(factionKey, num) {
+  const fac = FACTIONS[factionKey];
+  let prefix = fac.prefix;
+  if (factionKey === 'rus') prefix = num <= 30 ? 'russian' : 'Rus';
+  return {
+    id: `${prefix}_${num}`,
+    num,
+    img:     encPath(`${fac.dir}/${prefix} ${num}f.gif`),
+    imgBack: encPath(`${fac.dir}/${prefix} ${num}b.gif`),
+  };
+}
+
+// セットアップのcrewPairs (グループ:番号 形式) からこのグループ分だけ抽出
+function extractGroupCrewPairs(groupIdx) {
+  const out = {}; // ownerNum → assistantNum
+  Object.keys(setupState.crewPairs).forEach(k => {
+    const [g, n] = k.split(':').map(Number);
+    if (g !== groupIdx) return;
+    const v = setupState.crewPairs[k];
+    const [ag, an] = v.split(':').map(Number);
+    if (ag !== groupIdx) return;
+    out[n] = an;
+  });
+  return out;
+}
+
 function startGame(playerFaction) {
   state.player = FACTIONS[playerFaction];
   const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
@@ -1108,6 +1635,9 @@ function makeMainGroup(side, group, idx) {
   // 兵士カードスタック
   const cards = document.createElement('div');
   cards.className = 'cards-area';
+  const crewPairs = group.crewPairs || {};
+  const assistantNums = new Set(Object.values(crewPairs));
+  const ownerNums = new Set(Object.keys(crewPairs).map(Number));
   group.cards.forEach((card, ci) => {
     const c = document.createElement('div');
     c.className = 'card';
@@ -1117,6 +1647,21 @@ function makeMainGroup(side, group, idx) {
     img.alt = card.id;
     img.onerror = () => { c.style.background = '#666'; img.style.display = 'none'; c.textContent = card.id; };
     c.appendChild(img);
+    // クルー主マーカー
+    if (card.num != null && ownerNums.has(card.num)) {
+      const m = document.createElement('div');
+      m.textContent = '主';
+      m.style.cssText = 'position:absolute;top:2px;left:2px;background:#fa6;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;border:1px solid #fff;z-index:5;';
+      m.title = 'クルー主';
+      c.appendChild(m);
+    }
+    if (card.num != null && assistantNums.has(card.num)) {
+      const m = document.createElement('div');
+      m.textContent = '副';
+      m.style.cssText = 'position:absolute;top:2px;left:2px;background:#6af;color:#000;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;border:1px solid #fff;z-index:5;';
+      m.title = 'アシスタントクルー (火力使用不可)';
+      c.appendChild(m);
+    }
     c.addEventListener('click', () => showGroupOverlay(side, group));
     if (side === 'player') {
       c.addEventListener('contextmenu', e => {

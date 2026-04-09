@@ -23,8 +23,8 @@
     description: '斥候同士の遭遇戦。両軍は互いに前進し、相対距離を詰めて勝利点を稼ぐ。',
     factions: {
       ger: { soldierRange: [1, 10] },
-      rus: { soldierRange: [1, 12] },
-      us:  { soldierRange: [1, 15] },
+      rus: { soldierRange: [1, 15] },
+      us:  { soldierRange: [1, 12] },
     },
     // §16.3 制限時間 (山札サイクル数)
     deckCycles: 3,
