@@ -861,6 +861,7 @@
 
 <script src="infantry_rules.js"></script>
 <script src="scenarios.js"></script>
+<script src="discard.js"></script>
 <script>
 // ===== パスエンコードヘルパ =====
 // ローカル(macOS)では NFD, GitHub Pages 等のリモートでは NFC で保存される。
@@ -1925,15 +1926,7 @@ document.querySelectorAll('.action-btn').forEach(btn => {
 document.getElementById('btn-discard').addEventListener('click', () => {
   if (state.phase !== 'play' || state.currentTurn !== 'player') return;
   if (state.selectedHand.size === 0) return;
-  const indices = [...state.selectedHand].sort((a,b) => b-a);
-  indices.forEach(i => state.playerHand.splice(i, 1));
-  state.selectedHand.clear();
-  state.selectedAction = null;
-  state.fireSource = null;
-  state.fireTarget = null;
-  document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
-  renderHands();
-  updateDecideBtn();
+  if (window.DISCARD_RULES) window.DISCARD_RULES.execute();
 });
 
 document.getElementById('btn-end-turn').addEventListener('click', () => {
@@ -1943,6 +1936,7 @@ document.getElementById('btn-end-turn').addEventListener('click', () => {
   state.fireSource = null;
   state.fireTarget = null;
   document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+  if (window.DISCARD_RULES) window.DISCARD_RULES.resetTurn();
   endPlayerTurn();
 });
 
