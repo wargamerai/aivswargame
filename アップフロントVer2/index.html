@@ -753,6 +753,8 @@ const FACTIONS = {
   rus: { name: 'ソ連',   flag: '🇷🇺', dir: 'upfrontimages/ソ連',   prefix: 'russian', count: 30, handMax: 5, handDraw: 3 },
   us:  { name: 'アメリカ', flag: '🇺🇸', dir: 'upfrontimages/ありか', prefix: 'US', count: 44, handMax: 5, handDraw: 3 },
 };
+// scenarios.js などの外部スクリプトから参照できるようにグローバル公開
+window.FACTIONS = FACTIONS;
 
 // A〜D で開始、A〜Z まで動的に追加可能
 const INITIAL_GROUP_NAMES = ['A', 'B', 'C', 'D'];
