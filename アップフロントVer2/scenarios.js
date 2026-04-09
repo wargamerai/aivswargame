@@ -171,12 +171,41 @@
     const N = units.length;
     if (N === 0) return [];
 
-    // グループ数 (N/5 を 2..4)
-    let groupCount = Math.round(N / 5);
-    if (groupCount < 2) groupCount = Math.min(2, Math.max(1, Math.floor(N / 2)));
-    if (groupCount > 4) groupCount = 4;
-    // 各グループは 2 名以上必要
-    while (groupCount > 1 && Math.floor(N / groupCount) < 2) groupCount--;
+    // グループ数とサイズ:
+    //   勝利条件達成のため 最低 1 グループは 4 人以上必要 (シナリオA §16.42)。
+    //   グループ数候補からランダムに選ぶ (常に 1 グループは 4+ になるよう調整)。
+    let groupCount;
+    let groupSizes;
+    {
+      // 候補: 2 / 3 グループ。N から各サイズ案を作る。
+      const candidates = [];
+      // 2 グループ案
+      if (N >= 4) {
+        // 5-5, 4-6, 6-4 等 のうち偏りを抑えた組
+        for (let a = Math.max(2, Math.ceil(N/2)); a <= Math.min(10, N - 2); a++) {
+          const b = N - a;
+          if (b >= 2 && b <= 10) candidates.push([a, b]);
+        }
+      }
+      // 3 グループ案 (どれか 1 つは 4 以上)
+      if (N >= 6) {
+        for (let a = 4; a <= Math.min(10, N - 4); a++) {
+          // 残りを 2 分割 (各 2 以上)
+          const rem = N - a;
+          for (let b = 2; b <= Math.min(10, rem - 2); b++) {
+            const c = rem - b;
+            if (c >= 2 && c <= 10) candidates.push([a, b, c]);
+          }
+        }
+      }
+      // 1 グループ全員 (極小編成)
+      if (N >= 2 && N <= 10) candidates.push([N]);
+      // 4 人以上を含むものに限定
+      const valid = candidates.filter(arr => arr.some(x => x >= 4));
+      const pool = valid.length ? valid : candidates;
+      groupSizes = pool[Math.floor(Math.random() * pool.length)];
+      groupCount = groupSizes.length;
+    }
 
     const NAMES = ['A','B','C','D'];
     const groups = [];
@@ -196,25 +225,45 @@
       return { unit: u, num, def, leader: isLeaderDef(def), crew: isCrewWeaponDef(def) };
     });
 
-    // 1. リーダーを別グループへ
+    // 各グループの目標サイズ (groupSizes) に従って配置する。
+    // 残席が 0 のグループには入れない。
+    function pickAvailable(skip) {
+      // 残席のあるグループ内で最も空きが大きいものを返す
+      let best = -1, bestRoom = -1;
+      for (let i = 0; i < groupCount; i++) {
+        if (skip && skip.has(i)) continue;
+        const room = groupSizes[i] - groups[i].cards.length;
+        if (room > 0 && room > bestRoom) { bestRoom = room; best = i; }
+      }
+      return best;
+    }
+
+    // 1. リーダーを別グループへ (1 つずつ別の空きグループへ)
     const leaders = enriched.filter(e => e.leader);
-    leaders.forEach((e, i) => {
-      const gi = i % groupCount;
+    leaders.forEach((e) => {
+      const used = new Set(groups.map((g, gi) => g.cards.some(c => {
+        const ee = enriched.find(x => x.unit === c);
+        return ee && ee.leader;
+      }) ? gi : -1).filter(x => x >= 0));
+      let gi = pickAvailable(used);
+      if (gi < 0) gi = pickAvailable(); // 全グループにリーダー配置済 → 空き優先
+      if (gi < 0) return;
       addCard(groups[gi], e);
     });
 
-    // 2. クルー兵器持ちを各グループへ均等に配布
+    // 2. クルー兵器持ち (リーダー以外) を 残席優先で配布
     const crews = enriched.filter(e => e.crew && !e.leader);
-    crews.forEach((e, i) => {
-      // 一番人数の少ないグループへ
-      const gi = smallestGroupIdx(groups);
+    crews.forEach((e) => {
+      const gi = pickAvailable();
+      if (gi < 0) return;
       addCard(groups[gi], e);
     });
 
-    // 3. 残り(リーダーでもクルーでもない兵士)を均等配分
+    // 3. 残り
     const rest = enriched.filter(e => !e.leader && !e.crew);
-    rest.forEach(e => {
-      const gi = smallestGroupIdx(groups);
+    rest.forEach((e) => {
+      const gi = pickAvailable();
+      if (gi < 0) return;
       addCard(groups[gi], e);
     });
 
