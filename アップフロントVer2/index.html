@@ -830,6 +830,7 @@
       <button class="action-btn" data-act="transfer" disabled>移送</button>
       <button class="action-btn" data-act="wire-remove" disabled>鉄条網除去</button>
       <button class="action-btn" data-act="mine-remove" disabled>地雷除去</button>
+      <button class="action-btn" id="btn-confirm" disabled>確定</button>
       <button class="action-btn discard" id="btn-discard">捨て札</button>
       <button class="action-btn end" id="btn-end-turn">終了</button>
     </div>
@@ -1953,12 +1954,51 @@ function onGroupClickActionPhase(side, idx) {
   } else if (side === 'ai' && needsTarget) {
     state.fireTarget = { side, idx };
   } else if (side === 'player' && !needsTarget) {
-    // 自軍のみ対象 (回復, 移動, 地形配置 等)
     state.fireSource = { side, idx };
   }
   renderField('player'); renderField('ai');
+  updateConfirmBtn();
   updateDecideBtn();
 }
+
+function updateConfirmBtn() {
+  const btn = document.getElementById('btn-confirm');
+  const act = state.selectedAction;
+  if (!act) { btn.disabled = true; return; }
+  // 移動: カード + 自軍グループ選択で確定可能
+  if (act === 'move') {
+    btn.disabled = !(state.selectedHand.size > 0 && state.fireSource);
+    return;
+  }
+  btn.disabled = true;
+}
+
+document.getElementById('btn-confirm').addEventListener('click', () => {
+  const btn = document.getElementById('btn-confirm');
+  if (btn.disabled) return;
+  const act = state.selectedAction;
+
+  if (act === 'move') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card || !state.fireSource) return;
+    const grp = state.groups.player[state.fireSource.idx];
+    grp.distance += 1;
+    grp.terrain.push(card);
+    state.playerHand.splice(cardIdx, 1);
+  }
+
+  // リセット
+  state.selectedAction = null;
+  state.selectedHand.clear();
+  state.fireSource = null;
+  state.fireTarget = null;
+  document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+  btn.disabled = true;
+  renderField('player'); renderField('ai');
+  renderHands();
+  updateDecideBtn();
+});
 
 function updateDecideBtn() {
   const slot = document.getElementById('judge-slot');
