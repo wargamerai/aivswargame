@@ -321,23 +321,29 @@
     transform: translateY(-6px);
   }
 
-  /* アクションメニュー */
+  /* アクションメニュー (2段グリッド) */
   .action-menu {
     margin-left: auto;
-    display: flex;
-    gap: 4px;
+    display: grid;
+    grid-template-columns: repeat(6, 70px);
+    grid-auto-rows: auto;
+    gap: 3px;
     align-items: center;
     padding-left: 10px;
     border-left: 1px solid #555;
     flex-shrink: 0;
   }
+  .action-menu .decide-btn { grid-column: span 2; grid-row: span 2; }
   .action-btn {
     background: #444; color: #eee;
     border: 1px solid #666; border-radius: 4px;
-    padding: 6px 8px; font-size: 12px;
+    padding: 5px 4px; font-size: 11px;
     cursor: pointer;
-    min-width: 54px;
+    width: 70px;
+    text-align: center;
+    white-space: nowrap;
   }
+  .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .action-btn:hover { background: #555; }
   .action-btn.active { background: #c33; border-color: #fff; }
   .decide-btn {
