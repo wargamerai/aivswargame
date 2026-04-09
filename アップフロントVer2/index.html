@@ -1774,7 +1774,16 @@ function makeMainGroup(side, group, idx) {
       m.title = 'アシスタントクルー (火力使用不可)';
       c.appendChild(m);
     }
-    c.addEventListener('click', () => showGroupOverlay(side, group));
+    c.addEventListener('click', () => {
+      if (state.selectedAction === 'snipe' && side === 'ai') {
+        state.sniperTarget = { side, grpIdx: idx, cardIdx: ci };
+        state.fireTarget = { side, idx };
+        renderField('player'); renderField('ai');
+        updateConfirmBtn();
+        return;
+      }
+      showGroupOverlay(side, group);
+    });
     if (side === 'player') {
       c.addEventListener('contextmenu', e => {
         e.preventDefault();
@@ -1956,6 +1965,8 @@ function onGroupClickActionPhase(side, idx) {
   updateDecideBtn();
 }
 
+state.sniperTarget = null; // {side, grpIdx, cardIdx}
+
 function updateConfirmBtn() {
   const btn = document.getElementById('btn-confirm');
   const act = state.selectedAction;
@@ -1966,6 +1977,10 @@ function updateConfirmBtn() {
   }
   if (act === 'terrain') {
     btn.disabled = !(state.selectedHand.size > 0 && (state.fireSource || state.fireTarget));
+    return;
+  }
+  if (act === 'snipe') {
+    btn.disabled = !(state.selectedHand.size > 0 && state.sniperTarget);
     return;
   }
   btn.disabled = true;
@@ -1996,6 +2011,47 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     grp.terrain.push(card);
     state.playerHand.splice(cardIdx, 1);
   }
+
+  if (act === 'snipe') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card || !state.sniperTarget) return;
+    const tgt = state.sniperTarget;
+    const grp = state.groups[tgt.side][tgt.grpIdx];
+    const soldier = grp.cards[tgt.cardIdx];
+    if (!soldier) return;
+    // 判定: RNCを引く
+    const judge = drawTerrainCard();
+    showJudgeCard(judge);
+    const rnc = parseInt((judge && judge.terrain && judge.terrain.range) || '0', 10) || 0;
+    // 狙撃カードのKIA/PIN範囲をパース
+    const sniperDef = card.terrain;
+    const R = window.INFANTRY_RULES;
+    const enemyKey = getFactionKey(state.ai);
+    const def = R ? R.lookupSoldier(soldier, enemyKey) : null;
+    const wasPinned = R ? R.isPinned(soldier) : false;
+    // 狙撃結果: KIA/PIN/MISS
+    let result = 'MISS';
+    if (sniperDef && sniperDef.modifier) {
+      const m = sniperDef.modifier.match(/KIA[:\s]*([0-9\-]+)/);
+      const p = sniperDef.modifier.match(/PIN[:\s]*([0-9\-]+)/);
+      const kiaRange = m ? m[1].split('-').map(Number) : [];
+      const pinRange = p ? p[1].split('-').map(Number) : [];
+      if (kiaRange.length === 2 && rnc >= kiaRange[0] && rnc <= kiaRange[1]) result = 'KIA';
+      else if (kiaRange.length === 1 && rnc === kiaRange[0]) result = 'KIA';
+      else if (pinRange.length === 2 && rnc >= pinRange[0] && rnc <= pinRange[1]) result = 'PIN';
+      else if (pinRange.length === 1 && rnc === pinRange[0]) result = 'PIN';
+    }
+    if (result === 'KIA') { if (R) R.killSoldier(soldier); }
+    else if (result === 'PIN') {
+      if (wasPinned) { if (R) R.killSoldier(soldier); result = 'PANIC'; }
+      else { if (R) R.pinSoldier(soldier); }
+    }
+    const name = def ? def.name : soldier.id;
+    alert('狙撃 → ' + name + ': ' + result + ' (RNC ' + rnc + ')');
+    state.playerHand.splice(cardIdx, 1);
+  }
+  state.sniperTarget = null;
 
   // リセット
   state.selectedAction = null;
