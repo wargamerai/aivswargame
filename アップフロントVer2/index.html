@@ -1960,9 +1960,12 @@ function updateConfirmBtn() {
   const btn = document.getElementById('btn-confirm');
   const act = state.selectedAction;
   if (!act) { btn.disabled = true; return; }
-  // 移動: カード + 自軍グループ選択で確定可能
   if (act === 'move') {
     btn.disabled = !(state.selectedHand.size > 0 && state.fireSource);
+    return;
+  }
+  if (act === 'terrain') {
+    btn.disabled = !(state.selectedHand.size > 0 && (state.fireSource || state.fireTarget));
     return;
   }
   btn.disabled = true;
@@ -1979,6 +1982,17 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     if (!card || !state.fireSource) return;
     const grp = state.groups.player[state.fireSource.idx];
     grp.distance += 1;
+    grp.terrain.push(card);
+    state.playerHand.splice(cardIdx, 1);
+  }
+
+  if (act === 'terrain') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card) return;
+    const target = state.fireSource || state.fireTarget;
+    if (!target) return;
+    const grp = state.groups[target.side][target.idx];
     grp.terrain.push(card);
     state.playerHand.splice(cardIdx, 1);
   }
