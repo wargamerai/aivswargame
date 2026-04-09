@@ -1943,6 +1943,7 @@ function updateDecideBtn() {
 document.getElementById('judge-slot').addEventListener('click', () => {
   const slot = document.getElementById('judge-slot');
   if (!slot.classList.contains('armed')) return;
+  if (state.phase === 'play' && state.currentTurn !== 'player') return;
   const act = state.selectedAction;
   if (act === 'fire') {
     resolveFireAction();
@@ -1962,6 +1963,8 @@ document.getElementById('judge-slot').addEventListener('click', () => {
   renderField('player'); renderField('ai');
   renderHands();
   updateDecideBtn();
+  // プレイヤーターン終了 → AI ターン
+  if (state.phase === 'play') endPlayerTurn();
 });
 
 function showJudgeCard(card) {
@@ -2311,7 +2314,246 @@ function endTerrainPlacementPhase() {
     const c = drawTerrainCard(); if (!c) break; state.aiHand.push(c);
   }
   state.aiHandCount = state.aiHand.length;
+  // §4.1 先攻陣営からターン開始
+  const firstFac = state.scenario && state.scenario.firstPlayer;
+  const playerKey = getFactionKey(state.player);
+  state.currentTurn = (firstFac === playerKey) ? 'player' : 'ai';
   renderHands();
+  updateTurnBanner();
+  if (state.currentTurn === 'ai') setTimeout(aiTurn, 800);
+}
+
+function updateTurnBanner() {
+  if (state.phase !== 'play') return;
+  const banner = document.getElementById('phase-banner');
+  const msg = document.getElementById('phase-msg');
+  const turnName = state.currentTurn === 'player' ? state.player.name : state.ai.name;
+  msg.innerHTML = `<b>手番: ${turnName}</b>`;
+  banner.classList.add('active');
+  document.getElementById('phase-skip').style.display = (state.currentTurn === 'player') ? '' : 'none';
+}
+
+function endPlayerTurn() {
+  // §4.5 手札補充
+  while (state.playerHand.length < state.player.handMax) {
+    const c = drawTerrainCard(); if (!c) break; state.playerHand.push(c);
+  }
+  state.currentTurn = 'ai';
+  renderHands();
+  updateTurnBanner();
+  setTimeout(aiTurn, 800);
+}
+
+function endAITurn() {
+  // §4.5 AI 手札補充
+  while (state.aiHand.length < state.ai.handMax) {
+    const c = drawTerrainCard(); if (!c) break; state.aiHand.push(c);
+  }
+  state.aiHandCount = state.aiHand.length;
+  state.currentTurn = 'player';
+  renderField('player'); renderField('ai');
+  renderHands();
+  updateTurnBanner();
+}
+
+// ===== 簡易 AI (優先順位ベース) =====
+//   0. (最優先) 移動中の敵がいたら射撃
+//   1. 鉄条網が自グループにあれば除去 (移動カード使用)
+//   2. 地形+移動の両方を手札に持っていたら移動
+//   3. ピン状態の兵士がいたら回復
+//   4. 射撃 (任意の標的)
+//   5. 不利な地形カードを相手に配置
+//   それでも何もできなければ捨て札
+
+function aiTurn() {
+  if (state.phase !== 'play' || state.currentTurn !== 'ai') return;
+  const R = window.INFANTRY_RULES;
+  if (!R) { endAITurn(); return; }
+
+  if (aiTryFireMovingEnemy()) { setTimeout(endAITurn, 500); return; }
+  if (aiTryRemoveWire())      { setTimeout(endAITurn, 500); return; }
+  if (aiTryMoveWithTerrain()) { setTimeout(endAITurn, 500); return; }
+  if (aiTryRally())           { setTimeout(endAITurn, 500); return; }
+  if (aiTryFireAny())         { setTimeout(endAITurn, 500); return; }
+  if (aiTryPlaceBadTerrain()) { setTimeout(endAITurn, 500); return; }
+
+  // 何もできなければ捨て札 1 枚
+  if (state.aiHand.length > 0) {
+    state.aiHand.shift();
+    state.aiHandCount = state.aiHand.length;
+    renderHands();
+  }
+  setTimeout(endAITurn, 300);
+}
+
+function aiIsGroupMoving(g) {
+  if (!g.terrain || g.terrain.length === 0) return false;
+  const last = g.terrain[g.terrain.length - 1];
+  return !!(last && last.terrain && last.terrain.type === 'MOVEMENT');
+}
+
+function aiTryFireMovingEnemy() {
+  const movingIdxs = state.groups.player
+    .map((g, i) => aiIsGroupMoving(g) ? i : -1)
+    .filter(i => i >= 0);
+  if (movingIdxs.length === 0) return false;
+  return aiFireAt(movingIdxs);
+}
+
+function aiTryFireAny() {
+  const all = state.groups.player.map((_, i) => i);
+  return aiFireAt(all);
+}
+
+function aiFireAt(targetIdxList) {
+  const R = window.INFANTRY_RULES;
+  const aiKey = getFactionKey(state.ai);
+  const fireIdxs = state.aiHand
+    .map((c, i) => (c && c.terrain && c.terrain.type === 'FIRE') ? i : -1)
+    .filter(i => i >= 0);
+  if (fireIdxs.length === 0) return false;
+
+  let best = null;
+  state.groups.ai.forEach((src, si) => {
+    targetIdxList.forEach(ti => {
+      const tgt = state.groups.player[ti];
+      if (!tgt) return;
+      if (tgt.cards.every(c => !R.isAlive(c))) return;
+      const dist = R.relativeRange(src.distance, tgt.distance);
+      const crewMap = buildCrewMapFromPairs(src);
+      const fp = R.calcGroupFirepower(src, aiKey, dist, { moving: false, crewMap });
+      if (fp <= 0) return;
+      fireIdxs.forEach(fi => {
+        const card = state.aiHand[fi];
+        const need = parseInt(card.terrain.range, 10) || 0;
+        if (need <= 0 || fp < need) return;
+        const score = (need * 2) + (5 - dist);
+        if (!best || score > best.score) {
+          best = { si, ti, fi, need, fp, dist, card, score };
+        }
+      });
+    });
+  });
+  if (!best) return false;
+  return aiPerformFire(best);
+}
+
+function aiPerformFire(plan) {
+  const R = window.INFANTRY_RULES;
+  const playerKey = getFactionKey(state.player);
+  const src = state.groups.ai[plan.si];
+  const tgt = state.groups.player[plan.ti];
+
+  const atkMod = R.calcTerrainMod(src.terrain, true);
+  const defMod = R.calcTerrainMod(tgt.terrain, false);
+  const m = (plan.card.terrain.sub || '').match(/FP(.)/);
+  const baseStrength = circledToNum((m && m[1]) || '');
+  const finalFP = Math.max(0, baseStrength + atkMod + defMod);
+
+  const results = [];
+  let lastJudge = null;
+  tgt.cards.forEach((card) => {
+    if (!R.isAlive(card)) return;
+    const judge = drawTerrainCard();
+    if (!judge) return;
+    lastJudge = judge;
+    const rnc = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+    const def = R.lookupSoldier(card, playerKey);
+    const wasPinned = R.isPinned(card);
+    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, 0);
+    if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
+    else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
+    else if (r.result === 'PIN') R.pinSoldier(card);
+    results.push({ name: def ? def.name : card.id, result: r.result, rnc });
+  });
+  if (lastJudge) showJudgeCard(lastJudge);
+
+  state.aiHand.splice(plan.fi, 1);
+  state.aiHandCount = state.aiHand.length;
+
+  const summary = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 火力${baseStrength} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod} → 最終${finalFP}\n`
+    + results.map(r => `  ${r.name}: ${r.result} (RNC ${r.rnc})`).join('\n');
+  console.log(summary);
+  alert(summary);
+  renderField('player'); renderField('ai');
+  renderHands();
+  return true;
+}
+
+function aiTryRemoveWire() {
+  const R = window.INFANTRY_RULES;
+  const moveIdx = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT');
+  if (moveIdx < 0) return false;
+  for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    const g = state.groups.ai[gi];
+    const wireIdx = (g.terrain || []).findIndex(c => c.terrain && c.terrain.type === 'WIRE');
+    if (wireIdx < 0) continue;
+    // §13.34 ピン状態がいると除去不可
+    if (g.cards.some(c => R.isPinned(c))) continue;
+    g.terrain.splice(wireIdx, 1);
+    state.aiHand.splice(moveIdx, 1);
+    state.aiHandCount = state.aiHand.length;
+    renderField('ai'); renderHands();
+    return true;
+  }
+  return false;
+}
+
+function aiTryMoveWithTerrain() {
+  const R = window.INFANTRY_RULES;
+  const moveIdx = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT');
+  if (moveIdx < 0) return false;
+  const hasTerrainCard = state.aiHand.some(c => isTerrainHandCard(c));
+  if (!hasTerrainCard) return false;
+
+  // 主力 (一番人数の多い) AI グループを前進
+  let bestIdx = -1, bestSize = -1;
+  state.groups.ai.forEach((g, i) => {
+    if (g.cards.some(c => R.isPinned(c))) return; // §10.12
+    const alive = g.cards.filter(c => R.isAlive(c)).length;
+    if (alive > bestSize) { bestSize = alive; bestIdx = i; }
+  });
+  if (bestIdx < 0) return false;
+  const grp = state.groups.ai[bestIdx];
+  grp.distance += 1;
+  grp.terrain.push(state.aiHand[moveIdx]);
+  state.aiHand.splice(moveIdx, 1);
+  state.aiHandCount = state.aiHand.length;
+  renderField('ai'); renderHands();
+  return true;
+}
+
+function aiTryRally() {
+  const R = window.INFANTRY_RULES;
+  const rallyIdx = state.aiHand.findIndex(c =>
+    c && c.terrain && c.terrain.type && c.terrain.type.indexOf('RALLY') === 0);
+  if (rallyIdx < 0) return false;
+  for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    const g = state.groups.ai[gi];
+    if (!g.cards.some(c => R.isPinned(c))) continue;
+    // 簡易: 全員ピン解除
+    g.cards.forEach(c => { if (R.isPinned(c)) R.unpinSoldier(c); });
+    state.aiHand.splice(rallyIdx, 1);
+    state.aiHandCount = state.aiHand.length;
+    renderField('ai'); renderHands();
+    return true;
+  }
+  return false;
+}
+
+function aiTryPlaceBadTerrain() {
+  // 相手の前進・射撃を妨げる地形 (鉄条網/河川/湿地/地雷原) を相手に置く
+  const bad = ['WIRE','STREAM','MARSH','MINEFIELD'];
+  const idx = state.aiHand.findIndex(c => c && c.terrain && bad.indexOf(c.terrain.type) >= 0);
+  if (idx < 0) return false;
+  const groups = state.groups.player;
+  if (groups.length === 0) return false;
+  const gi = Math.floor(Math.random() * groups.length);
+  groups[gi].terrain.push(state.aiHand[idx]);
+  state.aiHand.splice(idx, 1);
+  state.aiHandCount = state.aiHand.length;
+  renderField('player'); renderHands();
+  return true;
 }
 
 function tryAdvanceTerrainPhase() {
