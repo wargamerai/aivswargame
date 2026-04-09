@@ -26,6 +26,8 @@
       rus: { soldierRange: [1, 15] },
       us:  { soldierRange: [1, 12] },
     },
+    // §3.6 / §4.1 先攻陣営
+    firstPlayer: 'ger',
     // §16.3 制限時間 (山札サイクル数)
     deckCycles: 3,
     // §3.5 国籍別手札枚数 (シナリオによる例外なし)
