@@ -946,8 +946,8 @@ Promise.all([
 // ===== 陣営データ =====
 const FACTIONS = {
   ger: { name: 'ドイツ', flag: '🇩🇪', dir: 'upfrontimages/ドイツ', prefix: 'Ger', count: 46, handMax: 5, handDraw: 3 },
-  rus: { name: 'ソ連',   flag: '🇷🇺', dir: 'upfrontimages/ソ連',   prefix: 'russian', count: 30, handMax: 5, handDraw: 3 },
-  us:  { name: 'アメリカ', flag: '🇺🇸', dir: 'upfrontimages/ありか', prefix: 'US', count: 44, handMax: 5, handDraw: 3 },
+  rus: { name: 'ソ連',   flag: '🇷🇺', dir: 'upfrontimages/ソ連',   prefix: 'russian', count: 30, handMax: 4, handDraw: 3 },
+  us:  { name: 'アメリカ', flag: '🇺🇸', dir: 'upfrontimages/ありか', prefix: 'US', count: 44, handMax: 6, handDraw: 3 },
 };
 // scenarios.js などの外部スクリプトから参照できるようにグローバル公開
 window.FACTIONS = FACTIONS;
@@ -1802,14 +1802,25 @@ function renderHands() {
     ph.appendChild(c);
   });
   const backSrc = encPath('upfrontimages/地形カード/AD Back.gif');
+  // 配置フェーズ中はAI手札を「配置可能な地形カード」と「その他」で色分け
+  const aiInPlace = (state.phase === 'terrainPlacement');
+  const aiCards = state.aiHand || [];
   for (let i = 0; i < state.aiHandCount; i++) {
     const c = document.createElement('div'); c.className = 'hand-card';
+    if (aiInPlace && aiCards[i] && isTerrainHandCard(aiCards[i])) {
+      c.classList.add('terrain-pickable');
+    }
     const img = document.createElement('img');
     img.src = backSrc;
     img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'contain'; img.style.borderRadius = '4px';
     img.onerror = () => { c.textContent = '裏'; img.remove(); };
     c.appendChild(img);
     ah.appendChild(c);
+  }
+  // 残数バッジ
+  const aiName = document.getElementById('ai-name');
+  if (aiName && state.ai) {
+    aiName.textContent = `${state.ai.flag} ${state.ai.name}  [手札 ${state.aiHandCount}]`;
   }
 }
 
@@ -2064,12 +2075,21 @@ function isTerrainHandCard(card) {
 
 function startTerrainPlacementPhase() {
   state.phase = 'terrainPlacement';
-  state.terrainTurn = 'player'; // §3.6 先攻プレイヤー (シナリオAは規定なしのためプレイヤー先攻とする)
+  // §3.6 先攻陣営 (シナリオから取得)
+  const firstFac = state.scenario && state.scenario.firstPlayer;
+  // 自陣営が先攻なら 'player', そうでなければ 'ai'
+  let firstSide = 'player';
+  if (firstFac) {
+    const playerKey = Object.keys(FACTIONS).find(k => FACTIONS[k] === state.player);
+    firstSide = (playerKey === firstFac) ? 'player' : 'ai';
+  }
+  state.terrainTurn = firstSide;
   state.terrainSelected = null;
   state.terrainDone = { player: false, ai: false };
   document.getElementById('phase-banner').classList.add('active');
   updatePhaseBanner();
   renderHands();
+  if (state.terrainTurn === 'ai') setTimeout(aiPlaceTerrain, 600);
 }
 
 function updatePhaseBanner() {
