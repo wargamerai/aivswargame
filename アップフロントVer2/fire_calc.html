@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UP FRONT 射撃フェーズ</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Helvetica Neue', 'Hiragino Sans', sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+.container { max-width: 600px; margin: 0 auto; padding: 16px; }
+h1 { text-align: center; font-size: 1.4rem; padding: 12px 0; color: #e94560; border-bottom: 2px solid #e94560; margin-bottom: 16px; }
+.step { display: none; }
+.step.active { display: block; }
+.step-header { font-size: 1.1rem; font-weight: bold; color: #0f3460; background: #e94560; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+.step-num { font-size: 0.8rem; opacity: 0.8; }
+
+label { display: block; font-size: 0.85rem; margin: 8px 0 4px; color: #aaa; }
+input, select { width: 100%; padding: 8px; border: 1px solid #333; border-radius: 4px; background: #16213e; color: #eee; font-size: 1rem; }
+input:focus, select:focus { outline: none; border-color: #e94560; }
+input[type="number"] { -moz-appearance: textfield; }
+
+.btn { display: inline-block; padding: 10px 20px; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; margin: 4px; }
+.btn-primary { background: #e94560; color: #fff; }
+.btn-secondary { background: #0f3460; color: #fff; }
+.btn-danger { background: #c0392b; color: #fff; font-size: 0.8rem; padding: 4px 8px; }
+.btn-small { font-size: 0.8rem; padding: 6px 12px; }
+.btn:hover { opacity: 0.85; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.nav-buttons { display: flex; justify-content: space-between; margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; }
+
+.soldier-card { background: #16213e; border: 1px solid #333; border-radius: 6px; padding: 10px; margin: 8px 0; position: relative; }
+.soldier-card .remove { position: absolute; top: 6px; right: 6px; }
+.soldier-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.soldier-row > div { flex: 1; min-width: 60px; }
+
+.group-select { display: flex; gap: 8px; margin-bottom: 12px; }
+.group-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #333; border-radius: 6px; background: #16213e; color: #eee; cursor: pointer; font-size: 1rem; font-weight: bold; }
+.group-btn.selected { border-color: #e94560; background: #e94560; color: #fff; }
+
+.modifier-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.modifier-row label { margin: 0; flex: 1; }
+.modifier-row input, .modifier-row select { width: 80px; flex: none; }
+
+.firepower-display { background: #0f3460; padding: 12px; border-radius: 6px; text-align: center; margin: 12px 0; }
+.firepower-display .value { font-size: 2rem; font-weight: bold; color: #e94560; }
+.firepower-display .label { font-size: 0.85rem; color: #aaa; }
+
+.rnc-card { display: flex; align-items: center; gap: 8px; background: #16213e; border: 1px solid #333; border-radius: 6px; padding: 10px; margin: 8px 0; }
+.rnc-card .name { font-weight: bold; min-width: 80px; }
+.color-btn { width: 40px; height: 40px; border-radius: 50%; border: 3px solid #555; cursor: pointer; }
+.color-btn.black { background: #111; }
+.color-btn.red { background: #c0392b; }
+.color-btn.selected { border-color: #fff; box-shadow: 0 0 8px rgba(255,255,255,0.5); }
+
+.result-card { border-radius: 8px; padding: 12px; margin: 8px 0; border-left: 4px solid; }
+.result-kia { background: #3d0a0a; border-color: #e74c3c; }
+.result-pin { background: #3d2a0a; border-color: #f39c12; }
+.result-rout { background: #2a0a3d; border-color: #9b59b6; }
+.result-safe { background: #0a3d1a; border-color: #2ecc71; }
+.result-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; margin-left: 8px; }
+.tag-kia { background: #e74c3c; }
+.tag-pin { background: #f39c12; color: #000; }
+.tag-rout { background: #9b59b6; }
+.tag-safe { background: #2ecc71; color: #000; }
+
+.summary-box { background: #16213e; border-radius: 8px; padding: 16px; margin: 12px 0; }
+.summary-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #222; }
+.summary-row:last-child { border: none; }
+
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.checkbox-row input { width: auto; }
+
+.info { font-size: 0.8rem; color: #888; margin: 4px 0; }
+
+.progress { display: flex; gap: 4px; margin-bottom: 16px; }
+.progress-dot { flex: 1; height: 4px; border-radius: 2px; background: #333; }
+.progress-dot.done { background: #e94560; }
+.progress-dot.current { background: #e94560; opacity: 0.6; }
+
+.concealment-options { display: flex; gap: 8px; margin: 8px 0; }
+.concealment-btn { flex: 1; padding: 12px; text-align: center; border: 2px solid #333; border-radius: 6px; background: #16213e; color: #eee; cursor: pointer; font-size: 1.2rem; font-weight: bold; }
+.concealment-btn.selected { border-color: #e94560; background: #e94560; }
+
+.malfunction-section { margin: 12px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>UP FRONT 射撃フェーズ</h1>
+
+<div class="progress" id="progress"></div>
+
+<!-- Step 1: 味方グループ -->
+<div class="step active" id="step1">
+  <div class="step-header"><span class="step-num">STEP 1/7</span> 味方グループ（射撃側）</div>
+
+  <label>グループ名</label>
+  <div class="group-select" id="friendlyGroup">
+    <div class="group-btn" data-val="A" onclick="selectGroup('friendly','A')">A</div>
+    <div class="group-btn" data-val="B" onclick="selectGroup('friendly','B')">B</div>
+    <div class="group-btn" data-val="C" onclick="selectGroup('friendly','C')">C</div>
+    <div class="group-btn" data-val="D" onclick="selectGroup('friendly','D')">D</div>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin: 12px 0 4px;">
+    <span style="font-weight:bold;">兵士一覧</span>
+    <button class="btn btn-primary btn-small" onclick="addFriendly()">+ 兵士追加</button>
+  </div>
+  <div id="friendlySoldiers"></div>
+
+  <div class="firepower-display">
+    <div class="label">合計火力（選択距離）</div>
+    <div class="value" id="totalFirepower">0</div>
+  </div>
+
+  <div class="nav-buttons">
+    <div></div>
+    <button class="btn btn-primary" onclick="goStep(2)">次へ &rarr;</button>
+  </div>
+</div>
+
+<!-- Step 2: 敵グループ -->
+<div class="step" id="step2">
+  <div class="step-header"><span class="step-num">STEP 2/7</span> 敵グループ（目標）</div>
+
+  <label>グループ名</label>
+  <div class="group-select" id="enemyGroup">
+    <div class="group-btn" data-val="A" onclick="selectGroup('enemy','A')">A</div>
+    <div class="group-btn" data-val="B" onclick="selectGroup('enemy','B')">B</div>
+    <div class="group-btn" data-val="C" onclick="selectGroup('enemy','C')">C</div>
+    <div class="group-btn" data-val="D" onclick="selectGroup('enemy','D')">D</div>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin: 12px 0 4px;">
+    <span style="font-weight:bold;">兵士一覧</span>
+    <button class="btn btn-primary btn-small" onclick="addEnemy()">+ 兵士追加</button>
+  </div>
+  <div id="enemySoldiers"></div>
+
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" onclick="goStep(1)">&larr; 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(3)">次へ &rarr;</button>
+  </div>
+</div>
+
+<!-- Step 3: 距離・地形・射撃カード -->
+<div class="step" id="step3">
+  <div class="step-header"><span class="step-num">STEP 3/7</span> 射撃力の決定</div>
+
+  <label>相対距離</label>
+  <select id="distance" onchange="calcFirepower()">
+    <option value="0">0</option>
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+  </select>
+
+  <label>射撃カード射撃力合計</label>
+  <input type="number" id="cardPower" value="2" min="0" onchange="calcFirepower()">
+
+  <div class="checkbox-row" style="margin-top:12px;">
+    <input type="checkbox" id="attackerMoving" onchange="calcFirepower()">
+    <label style="margin:0">攻撃側が移動中（射撃力半減）</label>
+  </div>
+
+  <label style="margin-top: 12px; font-weight: bold;">地形修正</label>
+
+  <div class="modifier-row">
+    <label>攻撃側地形修正</label>
+    <input type="number" id="attackerTerrainMod" value="0" onchange="calcFirepower()">
+  </div>
+  <p class="info">丘: +1, 湿地: -1, 河川: -1, 煙幕: -1</p>
+
+  <div class="modifier-row">
+    <label>防御側地形修正</label>
+    <input type="number" id="defenderTerrainMod" value="0" onchange="calcFirepower()">
+  </div>
+  <p class="info">森林: -2, 建物: -2/-3, 繁み: -1, 丘: -1, 湿地: -1, 涸れ谷: -2</p>
+
+  <div class="checkbox-row">
+    <input type="checkbox" id="defenderMoving" onchange="calcFirepower()">
+    <label style="margin:0">防御側が移動中（+1）</label>
+  </div>
+
+  <div class="modifier-row">
+    <label>その他の修正</label>
+    <input type="number" id="otherMod" value="0" onchange="calcFirepower()">
+  </div>
+
+  <div class="firepower-display">
+    <div class="label">修正後射撃力（隠蔽前）</div>
+    <div class="value" id="modifiedPower">0</div>
+  </div>
+
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" onclick="goStep(2)">&larr; 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(4)">次へ &rarr;</button>
+  </div>
+</div>
+
+<!-- Step 4: 隠蔽カード -->
+<div class="step" id="step4">
+  <div class="step-header"><span class="step-num">STEP 4/7</span> 敵隠蔽カード</div>
+
+  <p style="margin-bottom:12px;">防御側は隠蔽カードで射撃力を減少できます。</p>
+
+  <div class="firepower-display">
+    <div class="label">現在の射撃力</div>
+    <div class="value" id="preConcealPower">0</div>
+  </div>
+
+  <label>隠蔽カードの値</label>
+  <div class="concealment-options" id="concealmentOptions">
+    <div class="concealment-btn" data-val="0" onclick="selectConcealment(0)">なし</div>
+    <div class="concealment-btn" data-val="1" onclick="selectConcealment(1)">-1</div>
+    <div class="concealment-btn" data-val="2" onclick="selectConcealment(2)">-2</div>
+    <div class="concealment-btn" data-val="3" onclick="selectConcealment(3)">-3</div>
+  </div>
+
+  <div class="firepower-display" style="margin-top: 16px;">
+    <div class="label">最終射撃力</div>
+    <div class="value" id="finalPower" style="font-size: 2.5rem;">0</div>
+  </div>
+
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" onclick="goStep(3)">&larr; 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(5)">次へ &rarr;</button>
+  </div>
+</div>
+
+<!-- Step 5: 判定カードドロー -->
+<div class="step" id="step5">
+  <div class="step-header"><span class="step-num">STEP 5/7</span> 判定カードドロー</div>
+
+  <div class="firepower-display">
+    <div class="label">最終射撃力</div>
+    <div class="value" id="finalPowerDisplay">0</div>
+  </div>
+
+  <p class="info">各敵兵士に対してRNC（ランダムナンバーカード）を引きます。黒ならプラス、赤ならマイナス。</p>
+
+  <div id="rncCards"></div>
+
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" onclick="goStep(4)">&larr; 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(6)">次へ &rarr;</button>
+  </div>
+</div>
+
+<!-- Step 6: 故障チェック -->
+<div class="step" id="step6">
+  <div class="step-header"><span class="step-num">STEP 6/7</span> 故障チェック</div>
+
+  <p style="margin-bottom: 8px;">引いたRNCカードの故障#が兵器の故障#以上なら故障します。</p>
+  <p class="info" style="margin-bottom: 12px;">故障# = カードの故障ナンバー。各RNCカードの中で最大の故障#と比較します。</p>
+
+  <div class="firepower-display">
+    <div class="label">引いたカードの最大故障#</div>
+    <div class="value" id="maxCardBreakdown">0</div>
+  </div>
+
+  <div class="malfunction-section" id="malfunctionList"></div>
+
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" onclick="goStep(5)">&larr; 戻る</button>
+    <button class="btn btn-primary" onclick="goStep(7)">結果を見る &rarr;</button>
+  </div>
+</div>
+
+<!-- Step 7: 結果 -->
+<div class="step" id="step7">
+  <div class="step-header"><span class="step-num">STEP 7/7</span> ダメージ判定結果</div>
+
+  <div class="summary-box">
+    <div class="summary-row">
+      <span>射撃グループ</span>
+      <span id="resultAttacker">-</span>
+    </div>
+    <div class="summary-row">
+      <span>目標グループ</span>
+      <span id="resultDefender">-</span>
+    </div>
+    <div class="summary-row">
+      <span>最終射撃力</span>
+      <span id="resultFinalPower">-</span>
+    </div>
+  </div>
+
+  <div id="resultCards"></div>
+
+  <div style="margin-top: 16px;">
+    <div id="resultSummary"></div>
+  </div>
+
+  <div class="nav-buttons">
+    <button class="btn btn-secondary" onclick="goStep(6)">&larr; 戻る</button>
+    <button class="btn btn-primary" onclick="resetAll()">新しい射撃</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+const state = {
+  friendlyGroup: '',
+  friendlySoldiers: [],
+  enemyGroup: '',
+  enemySoldiers: [],
+  distance: 0,
+  cardPower: 2,
+  concealment: 0,
+  modifiedPower: 0,
+  finalPower: 0,
+  rncResults: [],
+  malfunctions: [],
+  currentStep: 1,
+};
+
+let friendlyIdCounter = 0;
+let enemyIdCounter = 0;
+
+// --- Navigation ---
+function goStep(n) {
+  if (n === 5) buildRNCCards();
+  if (n === 6) buildMalfunctionList();
+  if (n === 7) computeResults();
+
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step' + n).classList.add('active');
+  state.currentStep = n;
+  updateProgress();
+  window.scrollTo(0, 0);
+}
+
+function updateProgress() {
+  const el = document.getElementById('progress');
+  let html = '';
+  for (let i = 1; i <= 7; i++) {
+    const cls = i < state.currentStep ? 'done' : i === state.currentStep ? 'current' : '';
+    html += `<div class="progress-dot ${cls}"></div>`;
+  }
+  el.innerHTML = html;
+}
+
+// --- Group Selection ---
+function selectGroup(type, val) {
+  const containerId = type === 'friendly' ? 'friendlyGroup' : 'enemyGroup';
+  document.querySelectorAll(`#${containerId} .group-btn`).forEach(b => b.classList.remove('selected'));
+  document.querySelector(`#${containerId} .group-btn[data-val="${val}"]`).classList.add('selected');
+  if (type === 'friendly') state.friendlyGroup = val;
+  else state.enemyGroup = val;
+}
+
+// --- Friendly Soldiers ---
+function addFriendly() {
+  const id = ++friendlyIdCounter;
+  state.friendlySoldiers.push({
+    id,
+    name: `兵士${id}`,
+    weapon: '',
+    pinned: false,
+    heroCount: 0,  // ヒーローカード枚数（0/1/2: 1枚でx2, 2枚でx3）
+    firepower: [0,0,0,0,0,0],
+    breakdownNum: 12,  // 兵器の故障ナンバー（デフォルト12=故障なし）
+  });
+  renderFriendlySoldiers();
+}
+
+function removeFriendly(id) {
+  state.friendlySoldiers = state.friendlySoldiers.filter(s => s.id !== id);
+  renderFriendlySoldiers();
+}
+
+function renderFriendlySoldiers() {
+  const el = document.getElementById('friendlySoldiers');
+  if (state.friendlySoldiers.length === 0) {
+    el.innerHTML = '<p class="info">兵士を追加してください</p>';
+    return;
+  }
+  el.innerHTML = state.friendlySoldiers.map(s => `
+    <div class="soldier-card">
+      <button class="btn btn-danger remove" onclick="removeFriendly(${s.id})">X</button>
+      <div class="soldier-row">
+        <div style="flex:2">
+          <label>名前</label>
+          <input value="${s.name}" onchange="updateFriendly(${s.id},'name',this.value)">
+        </div>
+        <div>
+          <label>兵器</label>
+          <input value="${s.weapon}" onchange="updateFriendly(${s.id},'weapon',this.value)" placeholder="ライフル等">
+        </div>
+        <div style="min-width:50px; max-width:70px;">
+          <label>故障#</label>
+          <input type="number" min="0" max="12" value="${s.breakdownNum}" style="text-align:center;"
+            onchange="updateFriendly(${s.id},'breakdownNum',parseInt(this.value))">
+        </div>
+      </div>
+      <div style="display:flex; gap:12px; margin: 6px 0; flex-wrap:wrap;">
+        <div class="checkbox-row">
+          <input type="checkbox" ${s.pinned ? 'checked' : ''} onchange="updateFriendly(${s.id},'pinned',this.checked)">
+          <label style="margin:0; color: ${s.pinned ? '#f39c12' : '#aaa'}">ピン状態${s.pinned ? '（火力加算なし）' : ''}</label>
+        </div>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <label style="margin:0; color: ${s.heroCount > 0 && !s.pinned ? '#e94560' : '#aaa'}">ヒーロー</label>
+          <select onchange="setHeroCount(${s.id},parseInt(this.value))" ${s.pinned ? 'disabled' : ''}
+            style="width:auto; padding:2px 4px; font-size:0.85rem; ${s.heroCount > 0 ? 'border-color:#e94560;color:#e94560;' : ''}">
+            <option value="0" ${s.heroCount===0?'selected':''}>なし</option>
+            <option value="1" ${s.heroCount===1?'selected':''}>1枚(x2)</option>
+            <option value="2" ${s.heroCount===2?'selected':''}>2枚(x3)</option>
+          </select>
+        </div>
+      </div>
+      <label>火力（距離 0-5）</label>
+      <div style="display:flex; gap:4px;">
+        ${[0,1,2,3,4,5].map(d => `
+          <div style="flex:1; text-align:center;">
+            <div style="font-size:0.7rem; color:#888;">d${d}</div>
+            <input type="number" min="0" value="${s.firepower[d]}" style="text-align:center; padding:4px;"
+              onchange="updateFriendlyFP(${s.id},${d},this.value)">
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+  calcFirepower();
+}
+
+function setHeroCount(id, count) {
+  const s = state.friendlySoldiers.find(x => x.id === id);
+  if (s) s.heroCount = count;
+  renderFriendlySoldiers();
+}
+
+function updateFriendly(id, field, val) {
+  const s = state.friendlySoldiers.find(x => x.id === id);
+  if (s) {
+    s[field] = val;
+    if (field === 'pinned' && val) s.heroCount = 0;
+  }
+  if (field === 'pinned') renderFriendlySoldiers();
+  calcFirepower();
+}
+
+function updateFriendlyFP(id, dist, val) {
+  const s = state.friendlySoldiers.find(x => x.id === id);
+  if (s) s.firepower[dist] = parseInt(val) || 0;
+  calcFirepower();
+}
+
+// --- Enemy Soldiers ---
+function addEnemy() {
+  const id = ++enemyIdCounter;
+  state.enemySoldiers.push({
+    id,
+    name: `敵兵${id}`,
+    pinned: false,
+    morale: 4,
+    kia: 8,
+    panic: 7,
+    kia_pinned: 10,
+  });
+  renderEnemySoldiers();
+}
+
+function removeEnemy(id) {
+  state.enemySoldiers = state.enemySoldiers.filter(s => s.id !== id);
+  renderEnemySoldiers();
+}
+
+function renderEnemySoldiers() {
+  const el = document.getElementById('enemySoldiers');
+  if (state.enemySoldiers.length === 0) {
+    el.innerHTML = '<p class="info">敵兵士を追加してください</p>';
+    return;
+  }
+  el.innerHTML = state.enemySoldiers.map(s => `
+    <div class="soldier-card">
+      <button class="btn btn-danger remove" onclick="removeEnemy(${s.id})">X</button>
+      <div class="soldier-row">
+        <div style="flex:2">
+          <label>名前</label>
+          <input value="${s.name}" onchange="updateEnemy(${s.id},'name',this.value)">
+        </div>
+      </div>
+      <div class="checkbox-row" style="margin: 6px 0;">
+        <input type="checkbox" ${s.pinned ? 'checked' : ''} onchange="updateEnemy(${s.id},'pinned',this.checked)">
+        <label style="margin:0; color: ${s.pinned ? '#f39c12' : '#aaa'}">ピン状態</label>
+      </div>
+      ${s.pinned ? `
+        <div class="soldier-row">
+          <div>
+            <label>パニック値</label>
+            <input type="number" value="${s.panic}" onchange="updateEnemy(${s.id},'panic',parseInt(this.value))">
+          </div>
+          <div>
+            <label>KIA値（ピン時）</label>
+            <input type="number" value="${s.kia_pinned}" onchange="updateEnemy(${s.id},'kia_pinned',parseInt(this.value))">
+          </div>
+        </div>
+      ` : `
+        <div class="soldier-row">
+          <div>
+            <label>モラル値</label>
+            <input type="number" value="${s.morale}" onchange="updateEnemy(${s.id},'morale',parseInt(this.value))">
+          </div>
+          <div>
+            <label>KIA値</label>
+            <input type="number" value="${s.kia}" onchange="updateEnemy(${s.id},'kia',parseInt(this.value))">
+          </div>
+        </div>
+      `}
+    </div>
+  `).join('');
+}
+
+function updateEnemy(id, field, val) {
+  const s = state.enemySoldiers.find(x => x.id === id);
+  if (s) s[field] = val;
+  if (field === 'pinned') renderEnemySoldiers();
+}
+
+// --- Firepower Calculation ---
+function calcFirepower() {
+  const dist = parseInt(document.getElementById('distance')?.value || '0');
+  state.distance = dist;
+
+  // Total friendly firepower at current distance
+  let total = 0;
+  state.friendlySoldiers.forEach(s => {
+    if (!s.pinned) {
+      let fp = s.firepower[dist] || 0;
+      if (s.heroCount === 1) fp *= 2;
+      else if (s.heroCount === 2) fp *= 3;
+      total += fp;
+    }
+  });
+  document.getElementById('totalFirepower').textContent = total;
+
+  // Modified shooting power
+  const cardPower = parseInt(document.getElementById('cardPower')?.value || '0');
+  const attackerMoving = document.getElementById('attackerMoving')?.checked || false;
+  const attackerTerrain = parseInt(document.getElementById('attackerTerrainMod')?.value || '0');
+  const defenderTerrain = parseInt(document.getElementById('defenderTerrainMod')?.value || '0');
+  const defenderMoving = document.getElementById('defenderMoving')?.checked || false;
+  const otherMod = parseInt(document.getElementById('otherMod')?.value || '0');
+
+  let power = cardPower;
+  if (attackerMoving) power = Math.floor(power / 2);
+  power += attackerTerrain + defenderTerrain + otherMod;
+  if (defenderMoving) power += 1;
+
+  state.modifiedPower = power;
+  state.cardPower = cardPower;
+
+  const modEl = document.getElementById('modifiedPower');
+  if (modEl) modEl.textContent = power;
+
+  updateFinalPower();
+}
+
+function selectConcealment(val) {
+  state.concealment = val;
+  document.querySelectorAll('#concealmentOptions .concealment-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelector(`#concealmentOptions .concealment-btn[data-val="${val}"]`).classList.add('selected');
+  updateFinalPower();
+}
+
+function updateFinalPower() {
+  state.finalPower = state.modifiedPower - state.concealment;
+
+  const preEl = document.getElementById('preConcealPower');
+  if (preEl) preEl.textContent = state.modifiedPower;
+
+  const finalEl = document.getElementById('finalPower');
+  if (finalEl) finalEl.textContent = state.finalPower;
+
+  const dispEl = document.getElementById('finalPowerDisplay');
+  if (dispEl) dispEl.textContent = state.finalPower;
+}
+
+// --- RNC Cards ---
+function buildRNCCards() {
+  updateFinalPower();
+  const el = document.getElementById('rncCards');
+
+  // Initialize RNC results (preserve existing if re-entering step)
+  if (state.rncResults.length !== state.enemySoldiers.length) {
+    state.rncResults = state.enemySoldiers.map(s => ({
+      soldierId: s.id,
+      name: s.name,
+      color: null,  // 'black' or 'red'
+      value: 0,
+      rpc: [0,0,0,0,0,0,0,0,0,0],  // RPC columns 1-10(0r)
+      breakdownNum: 0,  // このカードの故障ナンバー
+      combatValue: null,
+    }));
+  }
+
+  const rpcLabels = ['1','2','3','4','5','6','7','8','9','0r'];
+
+  el.innerHTML = state.rncResults.map((r, i) => `
+    <div class="rnc-card">
+      <div class="name">${r.name}</div>
+      <div style="display:flex; gap:6px; align-items:center;">
+        <div class="color-btn black ${r.color === 'black' ? 'selected' : ''}"
+          onclick="setRNCColor(${i},'black')"></div>
+        <div class="color-btn red ${r.color === 'red' ? 'selected' : ''}"
+          onclick="setRNCColor(${i},'red')"></div>
+      </div>
+      <div style="flex:1;">
+        <input type="number" min="0" max="6" value="${r.value}" placeholder="RNC値"
+          onchange="setRNCValue(${i},this.value)" style="width:60px;">
+      </div>
+      <div style="min-width:60px; text-align:right; font-weight:bold; font-size:1.1rem;" id="combat-${i}">
+        ${r.combatValue !== null ? r.combatValue : '-'}
+      </div>
+    </div>
+    <div style="margin: -4px 0 4px 0; padding: 2px 10px;">
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:4px;">
+        <div style="font-size: 0.8rem; color: #aaa; display:flex; align-items:center; gap:4px;">
+          故障#: <input type="number" min="0" max="12" value="${r.breakdownNum}"
+            onchange="setRNCBreakdown(${i},this.value)" style="width:50px; display:inline; padding:2px 4px; font-size:0.8rem;">
+        </div>
+      </div>
+      <div style="margin-top:4px;">
+        <div style="font-size:0.75rem; color:#888; margin-bottom:2px;">RPC（青数字）</div>
+        <div style="display:flex; gap:2px;">
+          ${rpcLabels.map((lbl, c) => `
+            <div style="text-align:center; flex:1; min-width:0;">
+              <div style="font-size:0.6rem; color:#4a9eff;">${lbl}</div>
+              <input type="number" min="0" max="10" value="${r.rpc[c]}"
+                onchange="setRPC(${i},${c},this.value)"
+                style="width:100%; text-align:center; padding:2px; font-size:0.75rem; background:#0f2040; border-color:#2a4a7f; color:#4a9eff;">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function setRNCColor(idx, color) {
+  state.rncResults[idx].color = color;
+  updateRNCDisplay(idx);
+  // Re-render to update button styles
+  const card = document.querySelectorAll('.rnc-card')[idx];
+  if (card) {
+    card.querySelectorAll('.color-btn').forEach(b => b.classList.remove('selected'));
+    card.querySelector(`.color-btn.${color}`).classList.add('selected');
+  }
+}
+
+function setRNCValue(idx, val) {
+  state.rncResults[idx].value = parseInt(val) || 0;
+  updateRNCDisplay(idx);
+}
+
+function setRPC(idx, col, val) {
+  state.rncResults[idx].rpc[col] = parseInt(val) || 0;
+}
+
+function setRNCBreakdown(idx, val) {
+  state.rncResults[idx].breakdownNum = parseInt(val) || 0;
+}
+
+function updateRNCDisplay(idx) {
+  const r = state.rncResults[idx];
+  const el = document.getElementById(`combat-${idx}`);
+  if (!el || !r.color) return;
+
+  let combat;
+  if (r.color === 'black') {
+    combat = state.finalPower + r.value;
+  } else {
+    combat = state.finalPower - r.value;
+  }
+  r.combatValue = combat;
+  el.textContent = combat;
+  el.style.color = combat >= 0 ? '#2ecc71' : '#e74c3c';
+}
+
+// --- Malfunction ---
+function buildMalfunctionList() {
+  const el = document.getElementById('malfunctionList');
+  const activeSoldiers = state.friendlySoldiers.filter(s => !s.pinned && s.weapon);
+
+  // 引いたRNCカードの中で最大の故障ナンバーを取得
+  const maxCardBD = state.rncResults.reduce((max, r) => Math.max(max, r.breakdownNum || 0), 0);
+  document.getElementById('maxCardBreakdown').textContent = maxCardBD;
+
+  // 各兵器の故障#と比較して自動判定
+  state.malfunctions = activeSoldiers.map(s => {
+    const weaponBD = s.breakdownNum || 12;
+    const malfunctioned = maxCardBD >= weaponBD;
+    return {
+      soldierId: s.id,
+      name: s.name,
+      weapon: s.weapon,
+      breakdownNum: weaponBD,
+      maxCardBD: maxCardBD,
+      malfunctioned: malfunctioned,
+    };
+  });
+
+  if (state.malfunctions.length === 0) {
+    el.innerHTML = '<p class="info">射撃した兵器がありません（兵器名を入力した兵士のみ表示）</p>';
+    return;
+  }
+
+  el.innerHTML = state.malfunctions.map((m, i) => {
+    const statusColor = m.malfunctioned ? '#e74c3c' : '#2ecc71';
+    const statusText = m.malfunctioned ? '故障!' : '正常';
+    const comparison = `カード故障# ${m.maxCardBD} ${m.malfunctioned ? '>=' : '<'} 兵器故障# ${m.breakdownNum}`;
+    return `
+      <div class="soldier-card" style="border-left: 3px solid ${statusColor};">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong>${m.name}</strong>（${m.weapon}）
+            <div class="info">故障# ${m.breakdownNum} ／ ${comparison}</div>
+          </div>
+          <span style="font-weight:bold; font-size:1.1rem; color:${statusColor};">${statusText}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// --- Results ---
+function computeResults() {
+  document.getElementById('resultAttacker').textContent = `グループ ${state.friendlyGroup || '-'}`;
+  document.getElementById('resultDefender').textContent = `グループ ${state.enemyGroup || '-'}`;
+  document.getElementById('resultFinalPower').textContent = state.finalPower;
+
+  const results = [];
+
+  state.enemySoldiers.forEach((soldier, idx) => {
+    const rnc = state.rncResults[idx];
+    if (!rnc || rnc.combatValue === null) {
+      results.push({ name: soldier.name, result: 'unknown', detail: 'RNC未入力' });
+      return;
+    }
+
+    const combat = rnc.combatValue;
+
+    if (soldier.pinned) {
+      // Pinned soldier: check KIA (pinned), then Panic
+      if (combat >= soldier.kia_pinned) {
+        results.push({ name: soldier.name, result: 'kia', detail: `戦闘値${combat} >= KIA値${soldier.kia_pinned}` });
+      } else if (combat >= soldier.panic) {
+        // Panic - check rout vs KIA using RPC 0r column (index 9)
+        const rp0r = rnc.rpc[9] || 0;
+        if (rp0r <= soldier.panic) {
+          results.push({ name: soldier.name, result: 'kia', detail: `パニック（戦闘値${combat} >= パニック値${soldier.panic}）、RPC 0r=${rp0r} <= ${soldier.panic} → KIA扱い` });
+        } else {
+          results.push({ name: soldier.name, result: 'rout', detail: `パニック（戦闘値${combat} >= パニック値${soldier.panic}）、RPC 0r=${rp0r} > ${soldier.panic} → 潰走` });
+        }
+      } else {
+        results.push({ name: soldier.name, result: 'safe', detail: `戦闘値${combat} < パニック値${soldier.panic}` });
+      }
+    } else {
+      // Normal soldier: check KIA, then Morale (PIN)
+      if (combat >= soldier.kia) {
+        results.push({ name: soldier.name, result: 'kia', detail: `戦闘値${combat} >= KIA値${soldier.kia}` });
+      } else if (combat >= soldier.morale) {
+        results.push({ name: soldier.name, result: 'pin', detail: `戦闘値${combat} >= モラル値${soldier.morale}` });
+      } else {
+        results.push({ name: soldier.name, result: 'safe', detail: `戦闘値${combat} < モラル値${soldier.morale}` });
+      }
+    }
+  });
+
+  // Render result cards
+  const resultEl = document.getElementById('resultCards');
+  resultEl.innerHTML = results.map(r => {
+    const cls = r.result === 'kia' ? 'result-kia' : r.result === 'pin' ? 'result-pin' : r.result === 'rout' ? 'result-rout' : 'result-safe';
+    const tagCls = r.result === 'kia' ? 'tag-kia' : r.result === 'pin' ? 'tag-pin' : r.result === 'rout' ? 'tag-rout' : 'tag-safe';
+    const tagText = r.result === 'kia' ? 'KIA' : r.result === 'pin' ? 'PIN' : r.result === 'rout' ? '潰走' : r.result === 'unknown' ? '?' : '無傷';
+    return `
+      <div class="result-card ${cls}">
+        <strong>${r.name}</strong>
+        <span class="result-tag ${tagCls}">${tagText}</span>
+        <div style="font-size: 0.8rem; margin-top: 4px; opacity: 0.8;">${r.detail}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Summary
+  const counts = { kia: 0, pin: 0, rout: 0, safe: 0 };
+  results.forEach(r => { if (counts[r.result] !== undefined) counts[r.result]++; });
+
+  // Malfunction summary
+  const malfText = state.malfunctions.filter(m => m.malfunctioned).map(m => `${m.name}(${m.weapon})`).join(', ');
+
+  document.getElementById('resultSummary').innerHTML = `
+    <div class="summary-box">
+      <div class="summary-row"><span style="color:#e74c3c;">KIA</span><span>${counts.kia}名</span></div>
+      <div class="summary-row"><span style="color:#f39c12;">PIN</span><span>${counts.pin}名</span></div>
+      <div class="summary-row"><span style="color:#9b59b6;">潰走</span><span>${counts.rout}名</span></div>
+      <div class="summary-row"><span style="color:#2ecc71;">無傷</span><span>${counts.safe}名</span></div>
+      ${malfText ? `<div class="summary-row"><span style="color:#e74c3c;">故障</span><span>${malfText}</span></div>` : ''}
+    </div>
+  `;
+}
+
+function resetAll() {
+  state.friendlyGroup = '';
+  state.friendlySoldiers = [];
+  state.enemyGroup = '';
+  state.enemySoldiers = [];
+  state.concealment = 0;
+  state.rncResults = [];
+  state.malfunctions = [];
+  friendlyIdCounter = 0;
+  enemyIdCounter = 0;
+
+  document.querySelectorAll('.group-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.concealment-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('friendlySoldiers').innerHTML = '<p class="info">兵士を追加してください</p>';
+  document.getElementById('enemySoldiers').innerHTML = '<p class="info">敵兵士を追加してください</p>';
+  document.getElementById('cardPower').value = 2;
+  document.getElementById('distance').value = 0;
+  document.getElementById('attackerMoving').checked = false;
+  document.getElementById('defenderMoving').checked = false;
+  document.getElementById('attackerTerrainMod').value = 0;
+  document.getElementById('defenderTerrainMod').value = 0;
+  document.getElementById('otherMod').value = 0;
+
+  goStep(1);
+}
+
+// Init
+updateProgress();
+selectConcealment(0);
+calcFirepower();
+</script>
+</body>
+</html>
