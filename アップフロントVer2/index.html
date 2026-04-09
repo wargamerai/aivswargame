@@ -2370,7 +2370,9 @@ function updateTurnBanner() {
   const turnName = state.currentTurn === 'player' ? state.player.name : state.ai.name;
   msg.innerHTML = `<b>手番: ${turnName}</b>`;
   banner.classList.add('active');
-  document.getElementById('phase-skip').style.display = (state.currentTurn === 'player') ? '' : 'none';
+  document.getElementById('phase-skip').style.display = 'none';
+  // 2秒後に自動で消す
+  setTimeout(() => { banner.classList.remove('active'); }, 2000);
 }
 
 function endPlayerTurn() {
