@@ -396,7 +396,7 @@
     letter-spacing: 4px;
   }
 
-  /* メイングループ */
+  /* メイングループ (ボタン化: クリックで対象選択) */
   .main-group {
     flex: 0 0 320px;
     background: rgba(0,0,0,0.25);
@@ -408,7 +408,12 @@
     grid-template-rows: auto 1fr;
     gap: 4px;
     min-height: 0;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
   }
+  .main-group:hover { border-color: #aaa; }
+  .main-group.target-source { border-color: #6c6; background: rgba(60,140,60,0.18); border-style: solid; }
+  .main-group.target-enemy  { border-color: #c33; background: rgba(160,40,40,0.18); border-style: solid; }
   .main-group .group-header { grid-column: 1 / 3; }
   .main-group .cards-area   { grid-column: 1; grid-row: 2; }
   .main-group .work-row     { grid-column: 2; grid-row: 2; flex-direction: column; width: 90px; }
@@ -1656,11 +1661,21 @@ function renderField(side) {
 function makeMainGroup(side, group, idx) {
   const slot = document.createElement('div');
   slot.className = 'main-group';
+  // 選択中のソース/ターゲットをハイライト
+  if (state.fireSource && state.fireSource.side === side && state.fireSource.idx === idx) {
+    slot.classList.add('target-source');
+  }
+  if (state.fireTarget && state.fireTarget.side === side && state.fireTarget.idx === idx) {
+    slot.classList.add('target-enemy');
+  }
   slot.addEventListener('click', e => {
-    if (state.phase !== 'terrainPlacement') return;
-    if (state.terrainTurn !== 'player') return;
-    if (state.terrainSelected == null) return;
-    onGroupClickTerrainPhase(side, idx);
+    if (state.phase === 'terrainPlacement') {
+      if (state.terrainTurn !== 'player') return;
+      if (state.terrainSelected == null) return;
+      onGroupClickTerrainPhase(side, idx);
+      return;
+    }
+    onGroupClickActionPhase(side, idx);
   });
 
   // ヘッダー (グループ名 + 距離)
@@ -1837,8 +1852,15 @@ function renderHands() {
 }
 
 // ===== アクションメニュー =====
+state.fireSource = null; // {side:'player'|'ai', idx:int}
+state.fireTarget = null;
+
+const ACTIONS_NEED_SOURCE = ['fire','move','recover','snipe','terrain'];
+const ACTIONS_NEED_TARGET = ['fire','snipe'];
+
 document.querySelectorAll('.action-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    if (btn.disabled) return;
     const act = btn.dataset.act;
     if (state.selectedAction === act) {
       state.selectedAction = null;
@@ -1846,41 +1868,171 @@ document.querySelectorAll('.action-btn').forEach(btn => {
       state.selectedAction = act;
     }
     state.selectedHand.clear();
+    state.fireSource = null;
+    state.fireTarget = null;
     document.querySelectorAll('.action-btn').forEach(b => b.classList.toggle('active', b.dataset.act === state.selectedAction));
+    renderField('player'); renderField('ai');
     renderHands();
     updateDecideBtn();
   });
 });
 
+function onGroupClickActionPhase(side, idx) {
+  if (!state.selectedAction) return;
+  const needsSource = ACTIONS_NEED_SOURCE.indexOf(state.selectedAction) >= 0;
+  const needsTarget = ACTIONS_NEED_TARGET.indexOf(state.selectedAction) >= 0;
+  if (side === 'player' && needsSource) {
+    state.fireSource = { side, idx };
+  } else if (side === 'ai' && needsTarget) {
+    state.fireTarget = { side, idx };
+  } else if (side === 'player' && !needsTarget) {
+    // 自軍のみ対象 (回復, 移動, 地形配置 等)
+    state.fireSource = { side, idx };
+  }
+  renderField('player'); renderField('ai');
+  updateDecideBtn();
+}
+
 function updateDecideBtn() {
   const btn = document.getElementById('decide-btn');
-  btn.disabled = !(state.selectedAction && state.selectedHand.size > 0);
+  const act = state.selectedAction;
+  if (!act) { btn.disabled = true; return; }
+  const needSrc = ACTIONS_NEED_SOURCE.indexOf(act) >= 0;
+  const needTgt = ACTIONS_NEED_TARGET.indexOf(act) >= 0;
+  const hasHand = state.selectedHand.size > 0;
+  const hasSrc  = !!state.fireSource;
+  const hasTgt  = !!state.fireTarget;
+  let ok = hasHand;
+  if (needSrc) ok = ok && hasSrc;
+  if (needTgt) ok = ok && hasTgt;
+  btn.disabled = !ok;
 }
 
 document.getElementById('decide-btn').addEventListener('click', () => {
-  if (!state.selectedAction || state.selectedHand.size === 0) return;
-  // 使用した手札を除去
-  const indices = [...state.selectedHand].sort((a,b) => b-a);
-  indices.forEach(i => state.playerHand.splice(i, 1));
-  // 判定カード (山札=地形デッキから1枚)
-  const judgeCard = drawTerrainCard();
-  const slot = document.getElementById('judge-slot');
-  slot.innerHTML = '';
-  if (judgeCard) {
-    const img = document.createElement('img');
-    img.src = judgeCard.img;
-    img.onerror = () => { slot.textContent = judgeCard.id; };
-    slot.appendChild(img);
+  if (document.getElementById('decide-btn').disabled) return;
+  const act = state.selectedAction;
+  if (act === 'fire') {
+    resolveFireAction();
   } else {
-    slot.textContent = '判定不可';
+    // 他のアクションは判定カードのみ表示 (中身は順次実装)
+    const indices = [...state.selectedHand].sort((a,b) => b-a);
+    indices.forEach(i => state.playerHand.splice(i, 1));
+    const judgeCard = drawTerrainCard();
+    showJudgeCard(judgeCard);
   }
   // リセット
   state.selectedAction = null;
   state.selectedHand.clear();
+  state.fireSource = null;
+  state.fireTarget = null;
   document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+  renderField('player'); renderField('ai');
   renderHands();
   updateDecideBtn();
 });
+
+function showJudgeCard(card) {
+  const slot = document.getElementById('judge-slot');
+  slot.innerHTML = '';
+  if (!card) { slot.textContent = '判定不可'; return; }
+  const img = document.createElement('img');
+  img.src = card.img;
+  img.style.maxWidth = '100%'; img.style.maxHeight = '100%'; img.style.objectFit = 'contain';
+  img.onerror = () => { slot.textContent = card.id; };
+  slot.appendChild(img);
+}
+
+function getFactionKey(facObj) {
+  return Object.keys(FACTIONS).find(k => FACTIONS[k] === facObj);
+}
+
+function resolveFireAction() {
+  const R = window.INFANTRY_RULES;
+  if (!R) { alert('ルールエンジン未読込'); return; }
+  const src = state.fireSource;
+  const tgt = state.fireTarget;
+  if (!src || !tgt) return;
+  const srcGroup = state.groups[src.side][src.idx];
+  const tgtGroup = state.groups[tgt.side][tgt.idx];
+  const playerKey = getFactionKey(state.player);
+  const enemyKey  = getFactionKey(state.ai);
+  const srcFacKey = src.side === 'player' ? playerKey : enemyKey;
+  const tgtFacKey = tgt.side === 'player' ? playerKey : enemyKey;
+
+  // 相対距離
+  const distance = R.relativeRange(srcGroup.distance, tgtGroup.distance);
+
+  // §6.2 火力 (移動状態は工学上 src グループの terrain 末尾が MOVEMENT のみ等で判定可能だが,
+  //          現状 UI は移動状態を保持していないため moving=false で計算)
+  const moving = false;
+  const crewMap = srcGroup.crewPairs ? buildCrewMapFromPairs(srcGroup) : {};
+  const fp = R.calcGroupFirepower(srcGroup, srcFacKey, distance, { moving, crewMap });
+
+  // 使用した「射撃」カードの最少火力合計と射撃力合計を求める
+  const fireCards = [...state.selectedHand].map(i => state.playerHand[i]);
+  let needed = 0, baseStrength = 0;
+  fireCards.forEach(c => {
+    const t = c.terrain;
+    if (!t || t.type !== 'FIRE') return;
+    needed += parseInt(t.range, 10) || 0;
+    const m = (t.sub || '').match(/FP(.)/);
+    baseStrength += R.rangeIndex ? circledToNum((m && m[1]) || '') : 0;
+  });
+  if (needed === 0) { alert('「射撃」カードを選択してください'); return; }
+  if (fp < needed) {
+    alert(`火力不足: 必要 ${needed} / 利用可能 ${fp}`);
+    return;
+  }
+
+  // 地形修正 (攻撃側 + 防御側) §7
+  const atkMod = R.calcTerrainMod(srcGroup.terrain, true);
+  const defMod = R.calcTerrainMod(tgtGroup.terrain, false);
+  const moveHalf = moving ? Math.floor(baseStrength / 2) : baseStrength;
+  const finalFP = Math.max(0, moveHalf + atkMod + defMod);
+
+  // 各防御兵士に対し判定カードを引いて結果を出す
+  const results = [];
+  tgtGroup.cards.forEach((card, i) => {
+    if (!R.isAlive(card)) { results.push({i, name: '-', result: 'NONE'}); return; }
+    const judge = drawTerrainCard();
+    if (!judge) { results.push({i, name: card.id, result: 'NO_DRAW'}); return; }
+    // RNC 数値: judge.terrain.dice の '1' 列の値 / 色 — 簡易: terrain.range を黒/赤 RNC として読む
+    // 実際は AD カードの 1..0r 行から RNC を引く必要があるが現状 1 列分のデータしか保持していない
+    // ここでは judge.terrain.range の数値を黒RNCとして使う (色情報は次段で拡張)
+    const rnc = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+    const def = R.lookupSoldier(card, tgtFacKey);
+    const wasPinned = R.isPinned(card);
+    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, 0);
+    if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
+    else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
+    else if (r.result === 'PIN') R.pinSoldier(card);
+    results.push({ i, name: def ? def.name : card.id, rnc, result: r.result, judgeId: judge.id });
+    // 最後の判定カードを表示
+    if (i === tgtGroup.cards.length - 1) showJudgeCard(judge);
+  });
+
+  // 使用した射撃カードを手札から除去
+  const indices = [...state.selectedHand].sort((a,b) => b-a);
+  indices.forEach(i => state.playerHand.splice(i, 1));
+
+  // 結果をログ表示 (簡易)
+  const summary = `射撃判定 距離${distance} 火力${baseStrength} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod} → 最終${finalFP}\n`
+    + results.map(r => `  ${r.name}: ${r.result}${r.rnc!=null?` (RNC ${r.rnc})`:''}`).join('\n');
+  console.log(summary);
+  alert(summary);
+}
+
+function buildCrewMapFromPairs(group) {
+  // group.crewPairs (主num→副num) を card index ベースの crewMap に変換
+  const out = {};
+  if (!group.crewPairs) return out;
+  Object.keys(group.crewPairs).forEach(ownerNum => {
+    const ownerIdx = group.cards.findIndex(c => c.num === parseInt(ownerNum, 10));
+    const assistIdx = group.cards.findIndex(c => c.num === group.crewPairs[ownerNum]);
+    if (ownerIdx >= 0 && assistIdx >= 0) out[ownerIdx] = assistIdx;
+  });
+  return out;
+}
 
 // ===== 右クリックメニュー =====
 const ctxMenu = document.getElementById('ctx-menu');
