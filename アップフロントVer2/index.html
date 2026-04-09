@@ -2166,49 +2166,46 @@ function resolveFireAction() {
   const crewMap = srcGroup.crewPairs ? buildCrewMapFromPairs(srcGroup) : {};
   const fp = R.calcGroupFirepower(srcGroup, srcFacKey, distance, { moving, crewMap });
 
-  // 使用した「射撃」カードの最少火力合計と射撃力合計を求める
-  const fireCards = [...state.selectedHand].map(i => state.playerHand[i]);
-  let needed = 0, baseStrength = 0;
+  // 射撃カードを抽出し、必要火力チェック
+  const fireCards = [...state.selectedHand].map(i => state.playerHand[i]).filter(c => c.terrain && c.terrain.type && c.terrain.type.indexOf('FIRE') === 0);
+  if (fireCards.length === 0) { alert('「射撃」カードを選択してください'); return; }
+  let needed = 0;
   fireCards.forEach(c => {
-    const t = c.terrain;
-    if (!t || t.type.indexOf('FIRE') !== 0) return;
-    needed += parseInt(t.range, 10) || 0;
-    const m = (t.sub || '').match(/FP(.)/);
-    baseStrength += R.rangeIndex ? circledToNum((m && m[1]) || '') : 0;
+    const m = (c.terrain.sub || '').match(/FP(.)/);
+    needed += circledToNum((m && m[1]) || '');
   });
-  if (needed === 0) { alert('「射撃」カードを選択してください'); return; }
   if (fp < needed) {
     alert(`火力不足: 必要 ${needed} / 利用可能 ${fp}`);
     return;
   }
 
-  // 地形修正 (攻撃側 + 防御側) §7
+  // 地形修正 (攻撃側 + 防御側)
   const atkMod = R.calcTerrainMod(srcGroup.terrain, true);
   const defMod = R.calcTerrainMod(tgtGroup.terrain, false);
-  const moveHalf = moving ? Math.floor(baseStrength / 2) : baseStrength;
-  const finalFP = Math.max(0, moveHalf + atkMod + defMod);
 
-  // 各防御兵士に対し判定カードを引いて結果を出す
+  // 射撃カードごとに判定（カード枚数分の判定回数）
   const results = [];
-  tgtGroup.cards.forEach((card, i) => {
-    if (!R.isAlive(card)) { results.push({i, name: '-', result: 'NONE'}); return; }
-    const judge = drawTerrainCard();
-    if (!judge) { results.push({i, name: card.id, result: 'NO_DRAW'}); return; }
-    // RNC: 射程列の値、色は rncColor ('赤' なら減算、それ以外は加算)
-    const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
-    const isRed = judge.terrain && judge.terrain.rncColor === '赤';
-    const rnc = isRed ? -rncAbs : rncAbs;
-    // RPC 0rコラム (パニック→潰走/KIA判定用)
-    const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
-    const def = R.lookupSoldier(card, tgtFacKey);
-    const wasPinned = R.isPinned(card);
-    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r);
-    if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
-    else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
-    else if (r.result === 'PIN') R.pinSoldier(card);
-    results.push({ i, name: def ? def.name : card.id, rnc, rncColor: isRed ? '赤' : '黒', result: r.result, judgeId: judge.id });
-    // 最後の判定カードを表示
-    if (i === tgtGroup.cards.length - 1) showJudgeCard(judge);
+  fireCards.forEach(fc => {
+    const strength = parseInt(fc.terrain.type.replace('FIRE ', ''), 10) || 0;
+    const finalFP = Math.max(0, (moving ? Math.floor(strength / 2) : strength) + atkMod + defMod);
+
+    tgtGroup.cards.forEach((card, i) => {
+      if (!R.isAlive(card)) return;
+      const judge = drawTerrainCard();
+      if (!judge) return;
+      const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+      const isRed = judge.terrain && judge.terrain.rncColor === '赤';
+      const rnc = isRed ? -rncAbs : rncAbs;
+      const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
+      const def = R.lookupSoldier(card, tgtFacKey);
+      const wasPinned = R.isPinned(card);
+      const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r);
+      if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
+      else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
+      else if (r.result === 'PIN') R.pinSoldier(card);
+      results.push({ i, name: def ? def.name : card.id, rnc, rncColor: isRed ? '赤' : '黒', result: r.result, finalFP });
+      showJudgeCard(judge);
+    });
   });
 
   // 使用した射撃カードを手札から除去
@@ -2216,8 +2213,8 @@ function resolveFireAction() {
   indices.forEach(i => state.playerHand.splice(i, 1));
 
   // 結果をログ表示 (簡易)
-  const summary = `射撃判定 距離${distance} 火力${baseStrength} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod} → 最終${finalFP}\n`
-    + results.map(r => `  ${r.name}: ${r.result === 'NONE' ? '無傷' : r.result}${r.rnc!=null?` (RNC ${r.rncColor}${Math.abs(r.rnc)} → 合計${finalFP + r.rnc})`:''}`).join('\n');
+  const summary = `射撃判定 距離${distance} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod}\n`
+    + results.map(r => `  ${r.name}: ${r.result === 'NONE' ? '無傷' : r.result} (射撃力${r.finalFP} RNC ${r.rncColor}${Math.abs(r.rnc)} → 合計${r.finalFP + r.rnc})`).join('\n');
   console.log(summary);
   alert(summary);
 }
