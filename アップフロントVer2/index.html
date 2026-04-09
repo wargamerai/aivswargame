@@ -1742,8 +1742,15 @@ function renderHands() {
     });
     ph.appendChild(c);
   });
+  const backSrc = encPath('upfrontimages/地形カード/AD Back.gif');
   for (let i = 0; i < state.aiHandCount; i++) {
-    const c = document.createElement('div'); c.className = 'hand-card'; c.textContent = '裏'; ah.appendChild(c);
+    const c = document.createElement('div'); c.className = 'hand-card';
+    const img = document.createElement('img');
+    img.src = backSrc;
+    img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'contain'; img.style.borderRadius = '4px';
+    img.onerror = () => { c.textContent = '裏'; img.remove(); };
+    c.appendChild(img);
+    ah.appendChild(c);
   }
 }
 
