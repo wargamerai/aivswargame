@@ -357,17 +357,25 @@
   .decide-btn:disabled { background: #333; color: #666; border-color: #444; cursor: not-allowed; }
 
   .judge-slot {
-    flex: 0 0 70px;
+    flex: 0 0 80px;
     height: 96px;
-    margin-left: 6px;
     background: #222;
     border: 2px dashed #666;
     border-radius: 4px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 10px; color: #888;
+    font-size: 13px; font-weight: bold; color: #888;
     overflow: hidden;
+    cursor: not-allowed;
+    transition: background 0.15s, border-color 0.15s;
   }
   .judge-slot img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .judge-slot.armed {
+    background: #2a3;
+    border: 2px solid #6c6;
+    color: #fff;
+    cursor: pointer;
+  }
+  .judge-slot.armed:hover { background: #4c4; }
 
   /* 場 */
   .battlefield {
@@ -396,9 +404,33 @@
     letter-spacing: 4px;
   }
 
+  /* AI 手札バーの右端 (山札・判定エリア) */
+  .ai-deck-area {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 10px;
+    border-left: 1px solid #555;
+    flex-shrink: 0;
+  }
+  .ai-deck-area .cycle-box {
+    flex: 0 0 70px;
+    background: #333;
+    border: 1px solid #666;
+    border-radius: 4px;
+    padding: 4px;
+    text-align: center;
+    height: 96px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .ai-deck-area .cycle-box .label { font-size: 9px; color: #aaa; }
+  .ai-deck-area .cycle-box .value { font-size: 22px; font-weight: bold; color: #ffeb3b; }
+  .ai-deck-area .cycle-box .max { font-size: 11px; color: #aaa; }
+
   /* メイングループ (ボタン化: クリックで対象選択) */
   .main-group {
-    flex: 0 0 320px;
+    flex: 0 0 240px;
     background: rgba(0,0,0,0.25);
     border: 2px dashed #666;
     border-radius: 6px;
@@ -735,33 +767,31 @@
       <div>手札: <span id="ai-hand-max">-</span> 枚 / 補充 <span id="ai-hand-draw">-</span></div>
     </div>
     <div class="hand-cards" id="ai-hand"></div>
+    <div class="ai-deck-area">
+      <div class="cycle-box">
+        <div class="label">サイクル</div>
+        <div><span class="value" id="cycle-cur">1</span><span class="max"> / 3</span></div>
+      </div>
+      <div class="pile" id="deck-draw">
+        <img class="pile-img" alt="">
+        <div class="pile-label">山札</div>
+        <div class="count">-</div>
+      </div>
+      <div class="pile" id="deck-discard">
+        <div class="pile-label">捨て札</div>
+        <div class="count">0</div>
+      </div>
+      <div class="pile" id="deck-removed">
+        <div class="pile-label">除去</div>
+        <div class="count">0</div>
+      </div>
+      <div class="judge-slot" id="judge-slot" title="判定 (有効化されたら押す)">判定</div>
+    </div>
   </div>
 
   <!-- AI 場 -->
   <div class="battlefield ai" id="ai-field"></div>
 
-  <!-- 中央デッキエリア -->
-  <div class="center-zone">
-    <div class="cycle-box">
-      <div class="label">山札サイクル</div>
-      <div><span class="value" id="cycle-cur">1</span><span class="max"> / 3</span></div>
-    </div>
-    <div class="pile" id="deck-draw">
-      <img class="pile-img" alt="">
-      <div class="pile-label">山札</div>
-      <div class="count">-</div>
-    </div>
-    <div class="pile" id="deck-discard">
-      <div class="pile-label">捨て札</div>
-      <div class="count">0</div>
-    </div>
-    <div class="pile" id="deck-removed">
-      <div class="pile-label">除去</div>
-      <div class="count">0</div>
-    </div>
-    <div class="judge-slot" id="judge-slot">判定</div>
-    <div class="center-spacer"></div>
-  </div>
 
   <!-- プレイヤー 場 -->
   <div class="battlefield player" id="player-field"></div>
@@ -785,7 +815,6 @@
       <button class="action-btn" data-act="transfer" disabled>移送</button>
       <button class="action-btn" data-act="wire-remove" disabled>鉄条網除去</button>
       <button class="action-btn" data-act="mine-remove" disabled>地雷除去</button>
-      <button class="decide-btn" id="decide-btn" disabled>決定</button>
     </div>
   </div>
 </div>
@@ -1894,22 +1923,26 @@ function onGroupClickActionPhase(side, idx) {
 }
 
 function updateDecideBtn() {
-  const btn = document.getElementById('decide-btn');
+  const slot = document.getElementById('judge-slot');
+  if (!slot) return;
   const act = state.selectedAction;
-  if (!act) { btn.disabled = true; return; }
-  const needSrc = ACTIONS_NEED_SOURCE.indexOf(act) >= 0;
-  const needTgt = ACTIONS_NEED_TARGET.indexOf(act) >= 0;
-  const hasHand = state.selectedHand.size > 0;
-  const hasSrc  = !!state.fireSource;
-  const hasTgt  = !!state.fireTarget;
-  let ok = hasHand;
-  if (needSrc) ok = ok && hasSrc;
-  if (needTgt) ok = ok && hasTgt;
-  btn.disabled = !ok;
+  let ok = false;
+  if (act) {
+    const needSrc = ACTIONS_NEED_SOURCE.indexOf(act) >= 0;
+    const needTgt = ACTIONS_NEED_TARGET.indexOf(act) >= 0;
+    const hasHand = state.selectedHand.size > 0;
+    const hasSrc  = !!state.fireSource;
+    const hasTgt  = !!state.fireTarget;
+    ok = hasHand;
+    if (needSrc) ok = ok && hasSrc;
+    if (needTgt) ok = ok && hasTgt;
+  }
+  slot.classList.toggle('armed', ok);
 }
 
-document.getElementById('decide-btn').addEventListener('click', () => {
-  if (document.getElementById('decide-btn').disabled) return;
+document.getElementById('judge-slot').addEventListener('click', () => {
+  const slot = document.getElementById('judge-slot');
+  if (!slot.classList.contains('armed')) return;
   const act = state.selectedAction;
   if (act === 'fire') {
     resolveFireAction();
