@@ -123,6 +123,33 @@
   #campaign-screen .soldier.killed   { opacity: 0.55; }
   #campaign-screen .soldier.retired  { opacity: 0.65; }
 
+  /* ===== 地形配置フェーズ バナー ===== */
+  #phase-banner {
+    position: fixed;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20,20,20,0.95);
+    border: 2px solid #fa6;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    color: #fff;
+    z-index: 1500;
+    display: none;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+  }
+  #phase-banner.active { display: flex; align-items: center; gap: 14px; }
+  #phase-banner b { color: #ffeb3b; }
+  #phase-banner button {
+    background: #555; color: #fff;
+    border: 1px solid #888; border-radius: 4px;
+    padding: 5px 12px; font-size: 12px; cursor: pointer;
+  }
+  #phase-banner button:hover { background: #777; }
+  .group-target-hint { box-shadow: inset 0 0 0 3px #fa6; }
+  .hand-card.terrain-pickable { box-shadow: 0 0 0 2px #fa6; }
+  .hand-card.terrain-disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* ===== セットアップ(編成)画面 ===== */
   #setup-screen {
     position: fixed; inset: 0;
@@ -497,9 +524,24 @@
     font-size: 9px; cursor: pointer;
     text-align: center; padding: 3px;
     line-height: 1.2;
+    position: relative;
+    overflow: hidden;
   }
   .pile:hover { background: #555; }
-  .pile .count { font-size: 14px; font-weight: bold; margin-top: 3px; }
+  .pile .count {
+    font-size: 14px; font-weight: bold;
+    position: absolute; bottom: 2px; right: 4px;
+    color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000;
+  }
+  .pile .pile-label {
+    font-size: 10px;
+    position: absolute; top: 2px; left: 4px;
+    color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000;
+  }
+  .pile .pile-img {
+    max-width: 100%; max-height: 100%;
+    object-fit: contain;
+  }
 
   .mini-counters {
     flex: 0 0 60px;
@@ -694,31 +736,16 @@
       <div><span class="value" id="cycle-cur">1</span><span class="max"> / 3</span></div>
     </div>
     <div class="pile" id="deck-draw">
-      <div>Draw Pile</div>
+      <img class="pile-img" alt="">
+      <div class="pile-label">山札</div>
       <div class="count">-</div>
     </div>
     <div class="pile" id="deck-discard">
-      <div>Discard Pile</div>
+      <div class="pile-label">捨て札</div>
       <div class="count">0</div>
     </div>
-    <div class="mini-counters">
-      <div class="mc">MISC</div>
-      <div class="mc">VP</div>
-      <div class="mc">MISC</div>
-      <div class="mc">DECK#</div>
-      <div class="mc">MISC</div>
-      <div class="mc">VP</div>
-    </div>
-    <div class="pile" id="deck-rpc">
-      <div>RPC Draw</div>
-      <div class="count">-</div>
-    </div>
-    <div class="pile" id="deck-terrain">
-      <div>Terrain Deck</div>
-      <div class="count">165</div>
-    </div>
     <div class="pile" id="deck-removed">
-      <div>Removed</div>
+      <div class="pile-label">除去</div>
       <div class="count">0</div>
     </div>
     <div class="judge-slot" id="judge-slot">判定</div>
@@ -744,6 +771,12 @@
       <button class="decide-btn" id="decide-btn" disabled>決定</button>
     </div>
   </div>
+</div>
+
+<!-- フェーズバナー (地形配置等) -->
+<div id="phase-banner">
+  <span id="phase-msg"></span>
+  <button id="phase-skip">配置を終える</button>
 </div>
 
 <!-- 右クリックメニュー -->
@@ -822,9 +855,9 @@ fetch(encPath('upfrontimages/地形カード/terrain_cards.csv'))
 
 function updateDeckCounts() {
   const draw = document.querySelector('#deck-draw .count');
-  const terr = document.querySelector('#deck-terrain .count');
   if (draw) draw.textContent = TERRAIN_CARDS.length;
-  if (terr) terr.textContent = TERRAIN_CARDS.length;
+  const drawImg = document.querySelector('#deck-draw .pile-img');
+  if (drawImg) drawImg.src = encPath('upfrontimages/地形カード/AD Back.gif');
 }
 
 // ===== 兵士カードデータ =====
@@ -1465,11 +1498,16 @@ function startGameWithSetup() {
     : [];
 
   state.playerHand = [];
+  state.aiHand = [];
   state.aiHandCount = state.ai.handMax;
   if (TERRAIN_CARDS.length > 0) {
     for (let i = 0; i < state.player.handMax; i++) {
       const c = drawTerrainCard();
       if (c) state.playerHand.push(c);
+    }
+    for (let i = 0; i < state.ai.handMax; i++) {
+      const c = drawTerrainCard();
+      if (c) state.aiHand.push(c);
     }
   }
 
@@ -1484,6 +1522,9 @@ function startGameWithSetup() {
   renderField('player');
   renderField('ai');
   renderHands();
+
+  // §3.6 開始時の地形交互配置フェーズ
+  startTerrainPlacementPhase();
 }
 
 function makeCardWithMeta(factionKey, num) {
@@ -1603,6 +1644,12 @@ function renderField(side) {
 function makeMainGroup(side, group, idx) {
   const slot = document.createElement('div');
   slot.className = 'main-group';
+  slot.addEventListener('click', e => {
+    if (state.phase !== 'terrainPlacement') return;
+    if (state.terrainTurn !== 'player') return;
+    if (state.terrainSelected == null) return;
+    onGroupClickTerrainPhase(side, idx);
+  });
 
   // ヘッダー (グループ名 + 距離)
   const header = document.createElement('div');
@@ -1725,12 +1772,24 @@ function renderHands() {
   state.playerHand.forEach((card, idx) => {
     const c = document.createElement('div'); c.className = 'hand-card';
     if (state.selectedHand.has(idx)) c.classList.add('selected');
+    if (state.phase === 'terrainPlacement' && state.terrainTurn === 'player') {
+      if (isTerrainHandCard(card)) {
+        c.classList.add('terrain-pickable');
+        if (state.terrainSelected === idx) c.classList.add('selected');
+      } else {
+        c.classList.add('terrain-disabled');
+      }
+    }
     const img = document.createElement('img');
     img.src = card.img; img.alt = card.id;
     img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'contain'; img.style.borderRadius = '4px';
     img.onerror = () => { c.textContent = card.id; img.remove(); };
     c.appendChild(img);
     c.addEventListener('click', () => {
+      if (state.phase === 'terrainPlacement') {
+        if (state.terrainTurn === 'player') onPlayerHandClickTerrainPhase(idx);
+        return;
+      }
       if (state.selectedAction) {
         if (state.selectedHand.has(idx)) state.selectedHand.delete(idx);
         else state.selectedHand.add(idx);
@@ -1981,6 +2040,139 @@ function showCardGridOverlay(title, cards) {
 }
 overlay.addEventListener('click', e => {
   if (e.target === overlay || e.target === overlayImg) overlay.classList.remove('active');
+});
+
+// ===== §3.6 開始時の地形交互配置フェーズ =====
+state.phase = 'play'; // 'play' | 'terrainPlacement'
+state.terrainTurn = null; // 'player' | 'ai'
+state.terrainSelected = null; // 選択中の手札index
+state.terrainDone = { player: false, ai: false };
+
+function isTerrainHandCard(card) {
+  if (!card || !card.terrain) return false;
+  const t = card.terrain.type;
+  // §3.6 配置可能なのは地形カード(平地以外); 移動カード等は不可
+  // 平地相当として除外: MOVEMENT, FIRE, RALLY, HERO, SNIPER, CONCEALED
+  // 配置可能: WOODS, BUILDINGS, HILL, GULLY, WALL, BRUSH, STREAM, MARSH, SMOKE, WIRE, MINEFIELD, PILLBOX
+  const placeable = ['WOODS','BUILDINGS','HILL','GULLY','WALL','BRUSH','STREAM','MARSH','SMOKE','WIRE','MINEFIELD','PILLBOX'];
+  if (placeable.indexOf(t) < 0) return false;
+  // シナリオで除外指定があれば除く (treatAsPlain)
+  const tap = state.scenario && state.scenario.treatAsPlain;
+  if (tap && tap.indexOf(t) >= 0) return false;
+  return true;
+}
+
+function startTerrainPlacementPhase() {
+  state.phase = 'terrainPlacement';
+  state.terrainTurn = 'player'; // §3.6 先攻プレイヤー (シナリオAは規定なしのためプレイヤー先攻とする)
+  state.terrainSelected = null;
+  state.terrainDone = { player: false, ai: false };
+  document.getElementById('phase-banner').classList.add('active');
+  updatePhaseBanner();
+  renderHands();
+}
+
+function updatePhaseBanner() {
+  const msg = document.getElementById('phase-msg');
+  if (state.phase !== 'terrainPlacement') return;
+  const turnName = state.terrainTurn === 'player' ? state.player.name : state.ai.name;
+  const placeable = state.terrainTurn === 'player'
+    ? state.playerHand.filter(isTerrainHandCard).length
+    : state.aiHand.filter(isTerrainHandCard).length;
+  msg.innerHTML = `<b>地形配置フェーズ §3.6</b> ／ 手番: <b>${turnName}</b> ／ 配置可能な地形カード: <b>${placeable}枚</b>`;
+}
+
+function endTerrainPlacementPhase() {
+  state.phase = 'play';
+  state.terrainSelected = null;
+  document.getElementById('phase-banner').classList.remove('active');
+  // §3.6 末尾: 手札を補充
+  while (state.playerHand.length < state.player.handMax) {
+    const c = drawTerrainCard(); if (!c) break; state.playerHand.push(c);
+  }
+  while (state.aiHand.length < state.ai.handMax) {
+    const c = drawTerrainCard(); if (!c) break; state.aiHand.push(c);
+  }
+  state.aiHandCount = state.aiHand.length;
+  renderHands();
+}
+
+function tryAdvanceTerrainPhase() {
+  // 両者が完了/配置不可なら終了
+  const pHas = state.playerHand.some(isTerrainHandCard) && !state.terrainDone.player;
+  const aHas = state.aiHand.some(isTerrainHandCard) && !state.terrainDone.ai;
+  if (!pHas && !aHas) { endTerrainPlacementPhase(); return; }
+  // 手番交代 (相手にまだ置く余地があれば)
+  if (state.terrainTurn === 'player') {
+    state.terrainTurn = aHas ? 'ai' : 'player';
+  } else {
+    state.terrainTurn = pHas ? 'player' : 'ai';
+  }
+  state.terrainSelected = null;
+  updatePhaseBanner();
+  renderHands();
+  if (state.terrainTurn === 'ai') setTimeout(aiPlaceTerrain, 600);
+}
+
+function placeTerrainOnGroup(side, groupIdx, card, fromHand /* 'player'|'ai' */) {
+  const group = state.groups[side][groupIdx];
+  if (!group) return false;
+  group.terrain.push(card);
+  // 手札から取り除く
+  const hand = fromHand === 'player' ? state.playerHand : state.aiHand;
+  const idx = hand.indexOf(card);
+  if (idx >= 0) hand.splice(idx, 1);
+  state.aiHandCount = state.aiHand.length;
+  renderField(side);
+  renderHands();
+  return true;
+}
+
+function aiPlaceTerrain() {
+  if (state.phase !== 'terrainPlacement' || state.terrainTurn !== 'ai') return;
+  const card = state.aiHand.find(isTerrainHandCard);
+  if (!card) { state.terrainDone.ai = true; tryAdvanceTerrainPhase(); return; }
+  // 配置先: ランダムに自軍 or 相手のグループへ
+  const targetSide = Math.random() < 0.5 ? 'ai' : 'player';
+  const groups = state.groups[targetSide];
+  if (!groups || groups.length === 0) { state.terrainDone.ai = true; tryAdvanceTerrainPhase(); return; }
+  const gIdx = Math.floor(Math.random() * groups.length);
+  placeTerrainOnGroup(targetSide, gIdx, card, 'ai');
+  tryAdvanceTerrainPhase();
+}
+
+function onPlayerHandClickTerrainPhase(idx) {
+  const card = state.playerHand[idx];
+  if (!isTerrainHandCard(card)) return;
+  state.terrainSelected = (state.terrainSelected === idx) ? null : idx;
+  renderHands();
+  highlightTerrainTargets(state.terrainSelected != null);
+}
+
+function highlightTerrainTargets(on) {
+  document.querySelectorAll('.main-group').forEach(g => g.classList.toggle('group-target-hint', !!on));
+}
+
+function onGroupClickTerrainPhase(side, groupIdx) {
+  if (state.phase !== 'terrainPlacement' || state.terrainTurn !== 'player') return;
+  if (state.terrainSelected == null) return;
+  const card = state.playerHand[state.terrainSelected];
+  if (!isTerrainHandCard(card)) return;
+  placeTerrainOnGroup(side, groupIdx, card, 'player');
+  highlightTerrainTargets(false);
+  tryAdvanceTerrainPhase();
+}
+
+document.getElementById('phase-skip').addEventListener('click', () => {
+  if (state.phase !== 'terrainPlacement') return;
+  if (state.terrainTurn === 'player') {
+    state.terrainDone.player = true;
+  } else {
+    state.terrainDone.ai = true;
+  }
+  state.terrainSelected = null;
+  highlightTerrainTargets(false);
+  tryAdvanceTerrainPhase();
 });
 
 // ===== 山札クリックで手札補充 =====
