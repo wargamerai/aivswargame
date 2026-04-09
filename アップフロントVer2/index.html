@@ -307,13 +307,13 @@
     padding-right: 8px;
   }
   .hand-info .name { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
-  .hand-cards { display: flex; gap: 4px; }
+  .hand-cards { display: flex; gap: 3px; }
   .hand-card {
-    width: 64px; height: 96px;
+    width: 52px; height: 78px;
     background: #555; border: 1px solid #888;
-    border-radius: 4px; cursor: pointer;
+    border-radius: 3px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    font-size: 10px; color: #ccc;
+    font-size: 9px; color: #ccc;
     position: relative;
   }
   .hand-card.selected {
@@ -325,25 +325,29 @@
   .action-menu {
     margin-left: auto;
     display: grid;
-    grid-template-columns: repeat(6, 70px);
+    grid-template-columns: repeat(7, 58px);
     grid-auto-rows: auto;
-    gap: 3px;
+    gap: 2px;
     align-items: center;
-    padding-left: 10px;
+    padding-left: 8px;
     border-left: 1px solid #555;
     flex-shrink: 0;
   }
-  .action-menu .decide-btn { grid-column: span 2; grid-row: span 2; }
   .action-btn {
     background: #444; color: #eee;
-    border: 1px solid #666; border-radius: 4px;
-    padding: 5px 4px; font-size: 11px;
+    border: 1px solid #666; border-radius: 3px;
+    padding: 3px 2px; font-size: 10px;
     cursor: pointer;
-    width: 70px;
+    width: 58px;
+    height: 30px;
     text-align: center;
     white-space: nowrap;
   }
   .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .action-btn.end { background: #553; border-color: #886; }
+  .action-btn.end:hover { background: #775; }
+  .action-btn.discard { background: #533; border-color: #866; }
+  .action-btn.discard:hover { background: #755; }
   .action-btn:hover { background: #555; }
   .action-btn.active { background: #c33; border-color: #fff; }
   .decide-btn {
@@ -815,6 +819,8 @@
       <button class="action-btn" data-act="transfer" disabled>移送</button>
       <button class="action-btn" data-act="wire-remove" disabled>鉄条網除去</button>
       <button class="action-btn" data-act="mine-remove" disabled>地雷除去</button>
+      <button class="action-btn discard" id="btn-discard">捨て札</button>
+      <button class="action-btn end" id="btn-end-turn">終了</button>
     </div>
   </div>
 </div>
@@ -1904,6 +1910,30 @@ document.querySelectorAll('.action-btn').forEach(btn => {
     renderHands();
     updateDecideBtn();
   });
+});
+
+document.getElementById('btn-discard').addEventListener('click', () => {
+  if (state.phase !== 'play' || state.currentTurn !== 'player') return;
+  if (state.selectedHand.size === 0) return;
+  const indices = [...state.selectedHand].sort((a,b) => b-a);
+  indices.forEach(i => state.playerHand.splice(i, 1));
+  state.selectedHand.clear();
+  state.selectedAction = null;
+  state.fireSource = null;
+  state.fireTarget = null;
+  document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+  renderHands();
+  updateDecideBtn();
+});
+
+document.getElementById('btn-end-turn').addEventListener('click', () => {
+  if (state.phase !== 'play' || state.currentTurn !== 'player') return;
+  state.selectedAction = null;
+  state.selectedHand.clear();
+  state.fireSource = null;
+  state.fireTarget = null;
+  document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+  endPlayerTurn();
 });
 
 function onGroupClickActionPhase(side, idx) {
