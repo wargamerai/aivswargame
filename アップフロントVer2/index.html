@@ -365,15 +365,21 @@
 
   /* メイングループ */
   .main-group {
-    flex: 0 0 210px;
+    flex: 0 0 320px;
     background: rgba(0,0,0,0.25);
     border: 2px dashed #666;
     border-radius: 6px;
     padding: 6px;
-    display: flex; flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+    gap: 4px;
     min-height: 0;
   }
-  .battlefield.player .main-group { flex-direction: column-reverse; }
+  .main-group .group-header { grid-column: 1 / 3; }
+  .main-group .cards-area   { grid-column: 1; grid-row: 2; }
+  .main-group .work-row     { grid-column: 2; grid-row: 2; flex-direction: column; width: 90px; }
+  .battlefield.player .main-group { /* グリッドのまま; column-reverse は不要 */ }
 
   .group-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -416,19 +422,17 @@
   .cards-area .card:hover { transform: translateX(-50%) translateY(-4px) scale(1.05); z-index: 100; }
   .cards-area .card img { width: 100%; display: block; border-radius: 4px; }
 
-  /* ワークロウ: Terrain / counters / Action */
+  /* ワークロウ: Terrain / counters / Action (グループ右側に縦並び) */
   .work-row {
-    flex: 0 0 auto;
     display: flex;
+    flex-direction: column;
     gap: 3px;
-    margin-top: 4px;
   }
-  .battlefield.player .main-group .work-row { margin-top: 0; margin-bottom: 4px; }
 
   .terrain-box, .action-box {
-    flex: 1 1 0;
-    min-width: 0;
-    height: 70px;
+    flex: 0 0 auto;
+    width: 90px;
+    height: 100px;
     background: rgba(255,255,255,0.05);
     border: 1px solid #555;
     border-radius: 3px;
@@ -717,6 +721,7 @@
       <div>Removed</div>
       <div class="count">0</div>
     </div>
+    <div class="judge-slot" id="judge-slot">判定</div>
     <div class="center-spacer"></div>
   </div>
 
@@ -737,7 +742,6 @@
       <button class="action-btn" data-act="snipe">狙撃</button>
       <button class="action-btn" data-act="terrain">地形配置</button>
       <button class="decide-btn" id="decide-btn" disabled>決定</button>
-      <div class="judge-slot" id="judge-slot">判定</div>
     </div>
   </div>
 </div>
