@@ -2000,12 +2000,15 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
   updateDecideBtn();
 });
 
+// 判定ボタンは射撃/狙撃のみ有効化
+const ACTIONS_NEED_JUDGE = ['fire','snipe'];
+
 function updateDecideBtn() {
   const slot = document.getElementById('judge-slot');
   if (!slot) return;
   const act = state.selectedAction;
   let ok = false;
-  if (act) {
+  if (act && ACTIONS_NEED_JUDGE.indexOf(act) >= 0) {
     const needSrc = ACTIONS_NEED_SOURCE.indexOf(act) >= 0;
     const needTgt = ACTIONS_NEED_TARGET.indexOf(act) >= 0;
     const hasHand = state.selectedHand.size > 0;
