@@ -1924,7 +1924,7 @@ document.querySelectorAll('.action-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     if (btn.disabled) return;
     // 捨て札・終了・確定ボタンは専用リスナーで処理するのでスキップ
-    if (btn.id === 'btn-discard' || btn.id === 'btn-end-turn' || btn.id === 'btn-confirm') return;
+    if (!btn.dataset.act) return;
     const act = btn.dataset.act;
     if (state.selectedAction === act) {
       state.selectedAction = null;
@@ -2163,7 +2163,7 @@ function resolveFireAction() {
   let needed = 0, baseStrength = 0;
   fireCards.forEach(c => {
     const t = c.terrain;
-    if (!t || t.type !== 'FIRE') return;
+    if (!t || t.type.indexOf('FIRE') !== 0) return;
     needed += parseInt(t.range, 10) || 0;
     const m = (t.sub || '').match(/FP(.)/);
     baseStrength += R.rangeIndex ? circledToNum((m && m[1]) || '') : 0;
@@ -2567,7 +2567,7 @@ function aiFireAt(targetIdxList) {
   const R = window.INFANTRY_RULES;
   const aiKey = getFactionKey(state.ai);
   const fireIdxs = state.aiHand
-    .map((c, i) => (c && c.terrain && c.terrain.type === 'FIRE') ? i : -1)
+    .map((c, i) => (c && c.terrain && c.terrain.type && c.terrain.type.indexOf('FIRE') === 0) ? i : -1)
     .filter(i => i >= 0);
   if (fireIdxs.length === 0) return false;
 
