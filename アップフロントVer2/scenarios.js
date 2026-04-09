@@ -141,12 +141,136 @@
     return groups;
   }
 
+  // ===== AI 用の賢い編成 ============================================
+
+  const CREW_WEAPON_PREFIXES = ['中機関銃','軽機関銃','バズーカ','パンツァーシュレック','火炎放射器'];
+  function isCrewWeaponDef(def) {
+    if (!def || !def.weaponCat) return false;
+    return CREW_WEAPON_PREFIXES.some(p => def.weaponCat.indexOf(p) === 0);
+  }
+  function isLeaderDef(def) {
+    return !!(def && def.leader && def.leader.trim().length > 0);
+  }
+
+  function getSoldierDefByNum(factionKey, num) {
+    const list = (global.SOLDIER_CARDS && global.SOLDIER_CARDS[factionKey]) || [];
+    return list.find(s => s.num === num) || null;
+  }
+
+  /**
+   * 賢い AI 編成:
+   *   - グループ数 = round(N / 5) を 2..4 に丸め (デフォルト 2 グループ以上)
+   *   - リーダー(分隊長/副分隊長/コミッサール等)を別グループへ分散
+   *   - 各クルー操作兵器に同グループのアシスタントを割当
+   *   - 残りはサイズが揃うように分配
+   * 戻り値: state.groups.{player|ai} に直接代入できる配列
+   *         各グループは crewPairs (主番号→副番号) を含む
+   */
+  function buildAIGroupsSmart(scenario, factionKey) {
+    const units = buildUnitCards(scenario, factionKey);
+    const N = units.length;
+    if (N === 0) return [];
+
+    // グループ数 (N/5 を 2..4)
+    let groupCount = Math.round(N / 5);
+    if (groupCount < 2) groupCount = Math.min(2, Math.max(1, Math.floor(N / 2)));
+    if (groupCount > 4) groupCount = 4;
+    // 各グループは 2 名以上必要
+    while (groupCount > 1 && Math.floor(N / groupCount) < 2) groupCount--;
+
+    const NAMES = ['A','B','C','D'];
+    const groups = [];
+    for (let g = 0; g < groupCount; g++) {
+      groups.push({
+        name: NAMES[g], cards: [], distance: 0,
+        terrain: [], actions: [], _faction: factionKey,
+        crewPairs: {},
+      });
+    }
+
+    // unit に def を取り出し
+    const enriched = units.map(u => {
+      const m = String(u.id).match(/(\d+)\s*$/);
+      const num = m ? parseInt(m[1], 10) : null;
+      const def = getSoldierDefByNum(factionKey, num);
+      return { unit: u, num, def, leader: isLeaderDef(def), crew: isCrewWeaponDef(def) };
+    });
+
+    // 1. リーダーを別グループへ
+    const leaders = enriched.filter(e => e.leader);
+    leaders.forEach((e, i) => {
+      const gi = i % groupCount;
+      addCard(groups[gi], e);
+    });
+
+    // 2. クルー兵器持ちを各グループへ均等に配布
+    const crews = enriched.filter(e => e.crew && !e.leader);
+    crews.forEach((e, i) => {
+      // 一番人数の少ないグループへ
+      const gi = smallestGroupIdx(groups);
+      addCard(groups[gi], e);
+    });
+
+    // 3. 残り(リーダーでもクルーでもない兵士)を均等配分
+    const rest = enriched.filter(e => !e.leader && !e.crew);
+    rest.forEach(e => {
+      const gi = smallestGroupIdx(groups);
+      addCard(groups[gi], e);
+    });
+
+    // 4. 各クルー兵器に同グループ内のアシスタント(非リーダー/非クルー)を割当
+    groups.forEach((g, gi) => {
+      // ピック済アシスタント番号セット
+      const used = new Set();
+      g.cards.forEach((card, ci) => {
+        const e = enriched.find(x => x.unit === card);
+        if (!e || !e.crew) return;
+        // 同グループから assistant 候補を探す
+        const candidate = g.cards.find((c2, ci2) => {
+          if (ci2 === ci) return false;
+          if (used.has(c2.num != null ? c2.num : extractNum(c2))) return false;
+          const e2 = enriched.find(x => x.unit === c2);
+          if (!e2) return false;
+          // 別のクルー兵器でないこと, リーダーは可とする
+          if (e2.crew) return false;
+          return true;
+        });
+        if (candidate) {
+          const ownerNum = e.num;
+          const assistNum = candidate.num != null ? candidate.num : extractNum(candidate);
+          g.crewPairs[ownerNum] = assistNum;
+          used.add(assistNum);
+        }
+      });
+    });
+
+    return groups;
+  }
+
+  function addCard(group, e) {
+    // unit に num を持たせて場の描画でも使えるように
+    const u = Object.assign({}, e.unit, { num: e.num });
+    group.cards.push(u);
+  }
+  function smallestGroupIdx(groups) {
+    let best = 0, bestN = Infinity;
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i].cards.length < bestN) { bestN = groups[i].cards.length; best = i; }
+    }
+    return best;
+  }
+  function extractNum(card) {
+    const m = String(card.id).match(/(\d+)\s*$/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
   global.SCENARIOS = SCENARIOS;
   global.SCENARIO_HELPERS = {
     getSoldierNumbers,
     buildUnitCards,
     distributeIntoGroups,
     buildInitialGroups,
+    buildAIGroupsSmart,
   };
 
 })(typeof window !== 'undefined' ? window : this);
