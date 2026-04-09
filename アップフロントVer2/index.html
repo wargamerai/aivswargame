@@ -882,18 +882,25 @@ function parseTerrainCSV(text) {
     const c = line.split(',');
     const num = parseInt(c[0], 10);
     if (!num) return;
+    // RPC列: 値と色が交互 (c[11],c[12]), (c[13],c[14]), ...
+    const diceKeys = ['1','2b','3','4c','5o','6','7w','8','9','0r'];
+    const dice = {};
+    const diceColor = {};
+    diceKeys.forEach((key, i) => {
+      dice[key]      = c[11 + i * 2] || '';
+      diceColor[key] = c[12 + i * 2] || '';  // '赤' or ''(=黒)
+    });
     out.push({
       num,
       restrictions: [c[1], c[2], c[4], c[5], c[6]].filter(x => x && x.trim()),
       type:     c[3] || '',
       modifier: c[7] || '',
       range:    c[8] || '',
-      sub:      c[9] || '',
-      dice: {
-        '1': c[10], '2b': c[11], '3': c[12], '4c': c[13], '5o': c[14],
-        '6': c[15], '7w': c[16], '8': c[17], '9': c[18], '0r': c[19],
-      },
-      note: (c.slice(20).join(',') || '').trim(),
+      rncColor: (c[9] || '').trim(),   // '黒' or '赤'
+      sub:      c[10] || '',
+      dice,
+      diceColor,
+      note: (c[31] || '').trim(),
       img:     encPath(`upfrontimages/地形カード/AD ${num}.gif`),
       imgBack: encPath(`upfrontimages/地形カード/AD Back.gif`),
     });
@@ -2177,17 +2184,19 @@ function resolveFireAction() {
     if (!R.isAlive(card)) { results.push({i, name: '-', result: 'NONE'}); return; }
     const judge = drawTerrainCard();
     if (!judge) { results.push({i, name: card.id, result: 'NO_DRAW'}); return; }
-    // RNC 数値: judge.terrain.dice の '1' 列の値 / 色 — 簡易: terrain.range を黒/赤 RNC として読む
-    // 実際は AD カードの 1..0r 行から RNC を引く必要があるが現状 1 列分のデータしか保持していない
-    // ここでは judge.terrain.range の数値を黒RNCとして使う (色情報は次段で拡張)
-    const rnc = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+    // RNC: 射程列の値、色は rncColor ('赤' なら減算、それ以外は加算)
+    const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+    const isRed = judge.terrain && judge.terrain.rncColor === '赤';
+    const rnc = isRed ? -rncAbs : rncAbs;
+    // RPC 0rコラム (パニック→潰走/KIA判定用)
+    const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
     const def = R.lookupSoldier(card, tgtFacKey);
     const wasPinned = R.isPinned(card);
-    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, 0);
+    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r);
     if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
     else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
     else if (r.result === 'PIN') R.pinSoldier(card);
-    results.push({ i, name: def ? def.name : card.id, rnc, result: r.result, judgeId: judge.id });
+    results.push({ i, name: def ? def.name : card.id, rnc, rncColor: isRed ? '赤' : '黒', result: r.result, judgeId: judge.id });
     // 最後の判定カードを表示
     if (i === tgtGroup.cards.length - 1) showJudgeCard(judge);
   });
@@ -2198,7 +2207,7 @@ function resolveFireAction() {
 
   // 結果をログ表示 (簡易)
   const summary = `射撃判定 距離${distance} 火力${baseStrength} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod} → 最終${finalFP}\n`
-    + results.map(r => `  ${r.name}: ${r.result}${r.rnc!=null?` (RNC ${r.rnc})`:''}`).join('\n');
+    + results.map(r => `  ${r.name}: ${r.result === 'NONE' ? '無傷' : r.result}${r.rnc!=null?` (RNC ${r.rncColor}${Math.abs(r.rnc)} → 合計${finalFP + r.rnc})`:''}`).join('\n');
   console.log(summary);
   alert(summary);
 }
@@ -2604,14 +2613,17 @@ function aiPerformFire(plan) {
     const judge = drawTerrainCard();
     if (!judge) return;
     lastJudge = judge;
-    const rnc = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+    const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+    const isRed = judge.terrain && judge.terrain.rncColor === '赤';
+    const rnc = isRed ? -rncAbs : rncAbs;
+    const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
     const def = R.lookupSoldier(card, playerKey);
     const wasPinned = R.isPinned(card);
-    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, 0);
+    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r);
     if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
     else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
     else if (r.result === 'PIN') R.pinSoldier(card);
-    results.push({ name: def ? def.name : card.id, result: r.result, rnc });
+    results.push({ name: def ? def.name : card.id, result: r.result, rnc, rncColor: isRed ? '赤' : '黒' });
   });
   if (lastJudge) showJudgeCard(lastJudge);
 
@@ -2619,7 +2631,7 @@ function aiPerformFire(plan) {
   state.aiHandCount = state.aiHand.length;
 
   const summary = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 火力${baseStrength} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod} → 最終${finalFP}\n`
-    + results.map(r => `  ${r.name}: ${r.result} (RNC ${r.rnc})`).join('\n');
+    + results.map(r => `  ${r.name}: ${r.result === 'NONE' ? '無傷' : r.result} (RNC ${r.rncColor}${Math.abs(r.rnc)} → 合計${finalFP + r.rnc})`).join('\n');
   console.log(summary);
   alert(summary);
   renderField('player'); renderField('ai');
