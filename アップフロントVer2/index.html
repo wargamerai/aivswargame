@@ -1867,6 +1867,7 @@ function renderHands() {
       if (state.selectedHand.has(idx)) state.selectedHand.delete(idx);
       else state.selectedHand.add(idx);
       renderHands();
+      updateConfirmBtn();
       updateDecideBtn();
     });
     c.addEventListener('dblclick', () => { showOverlay(card.img); });
