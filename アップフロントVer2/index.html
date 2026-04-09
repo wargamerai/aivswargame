@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Up Front</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #2b2b2b; color: #eee;
+    font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+    user-select: none;
+  }
+  body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  /* ===== 陣営選択画面 ===== */
+  #faction-select {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  #faction-select h1 { margin: 0 0 30px; font-size: 36px; letter-spacing: 4px; }
+  #faction-select .factions { display: flex; gap: 30px; }
+  .faction-btn {
+    width: 180px; height: 240px;
+    background: #444; border: 3px solid #888;
+    border-radius: 8px; cursor: pointer;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-size: 24px; transition: all 0.2s;
+  }
+  .faction-btn:hover { background: #666; border-color: #fff; transform: translateY(-4px); }
+  .faction-btn .flag { font-size: 80px; margin-bottom: 10px; }
+  .mode-row { margin-top: 30px; display: flex; gap: 16px; }
+  .mode-btn {
+    background: #555; color: #fff;
+    border: 2px solid #888; border-radius: 6px;
+    padding: 12px 24px; font-size: 16px;
+    cursor: pointer;
+  }
+  .mode-btn:hover { background: #777; }
+
+  /* ===== キャンペーン編成画面 ===== */
+  #campaign-screen {
+    position: fixed; inset: 0;
+    background: #1a1a1a;
+    display: none; flex-direction: column;
+    z-index: 900;
+  }
+  #campaign-screen.active { display: flex; }
+  #campaign-screen .head {
+    flex: 0 0 auto;
+    padding: 14px 20px;
+    border-bottom: 2px solid #555;
+    display: flex; align-items: center; gap: 16px;
+    background: #222;
+  }
+  #campaign-screen .head h2 { margin: 0; font-size: 20px; }
+  #campaign-screen .head .fac-pick { display: flex; gap: 6px; }
+  #campaign-screen .head .fac-pick button {
+    background: #444; color: #eee;
+    border: 1px solid #777; border-radius: 4px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  #campaign-screen .head .fac-pick button.active { background: #c33; border-color: #fff; }
+  #campaign-screen .head .info { margin-left: auto; font-size: 14px; }
+  #campaign-screen .head .info .count { color: #ffeb3b; font-weight: bold; }
+  #campaign-screen .head .actions { display: flex; gap: 8px; }
+  #campaign-screen .head .actions button {
+    background: #3a3; color: #fff;
+    border: 1px solid #6c6; border-radius: 4px;
+    padding: 8px 16px; font-size: 13px; font-weight: bold; cursor: pointer;
+  }
+  #campaign-screen .head .actions button.cancel { background: #555; border-color: #777; }
+  #campaign-screen .grid {
+    flex: 1; overflow-y: auto;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    align-content: start;
+  }
+  #campaign-screen .soldier {
+    background: #333; border: 2px solid #555;
+    border-radius: 6px; padding: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  #campaign-screen .soldier:hover { border-color: #aaa; }
+  #campaign-screen .soldier.selected {
+    border-color: #ffeb3b;
+    background: #443;
+    transform: translateY(-3px);
+  }
+  #campaign-screen .soldier img { width: 100%; display: block; border-radius: 3px; }
+  #campaign-screen .soldier .id {
+    text-align: center; font-size: 10px; color: #aaa;
+    margin-top: 2px;
+  }
+  #campaign-screen .soldier .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 4px;
+    font-size: 9px;
+    color: #ccc;
+    margin-top: 3px;
+    padding: 2px 4px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 3px;
+  }
+  #campaign-screen .soldier .stats span b { color: #ffeb3b; }
+  #campaign-screen .soldier .status {
+    text-align: center; font-size: 10px;
+    margin-top: 2px; padding: 1px;
+    border-radius: 3px; font-weight: bold;
+  }
+  #campaign-screen .soldier .status.active   { background: #263; color: #cfc; }
+  #campaign-screen .soldier .status.wounded  { background: #762; color: #fda; }
+  #campaign-screen .soldier .status.killed   { background: #622; color: #fcc; }
+  #campaign-screen .soldier .status.retired  { background: #555; color: #ddd; }
+  #campaign-screen .soldier.killed   { opacity: 0.55; }
+  #campaign-screen .soldier.retired  { opacity: 0.65; }
+
+  /* ===== メイン画面 ===== */
+  #game { display: none; flex-direction: column; height: 100vh; }
+  #game.active { display: flex; }
+
+  /* 手札バー */
+  .hand-bar {
+    flex: 0 0 110px;
+    background: #1c1c1c;
+    border-top: 2px solid #555;
+    border-bottom: 2px solid #555;
+    display: flex; align-items: center;
+    padding: 6px 10px; gap: 8px;
+    overflow-x: auto;
+  }
+  .hand-bar.ai { border-top: none; }
+  .hand-info {
+    flex: 0 0 130px;
+    font-size: 12px; line-height: 1.5;
+    border-right: 1px solid #555;
+    padding-right: 8px;
+  }
+  .hand-info .name { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+  .hand-cards { display: flex; gap: 4px; }
+  .hand-card {
+    width: 64px; height: 96px;
+    background: #555; border: 1px solid #888;
+    border-radius: 4px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #ccc;
+    position: relative;
+  }
+  .hand-card.selected {
+    border: 3px solid #ffeb3b;
+    transform: translateY(-6px);
+  }
+
+  /* アクションメニュー */
+  .action-menu {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding-left: 10px;
+    border-left: 1px solid #555;
+    flex-shrink: 0;
+  }
+  .action-btn {
+    background: #444; color: #eee;
+    border: 1px solid #666; border-radius: 4px;
+    padding: 6px 8px; font-size: 12px;
+    cursor: pointer;
+    min-width: 54px;
+  }
+  .action-btn:hover { background: #555; }
+  .action-btn.active { background: #c33; border-color: #fff; }
+  .decide-btn {
+    background: #3a3; color: #fff;
+    border: 1px solid #6c6; border-radius: 4px;
+    padding: 8px 12px; font-size: 13px;
+    font-weight: bold; cursor: pointer;
+    margin-left: 6px;
+  }
+  .decide-btn:hover { background: #4c4; }
+  .decide-btn:disabled { background: #333; color: #666; border-color: #444; cursor: not-allowed; }
+
+  .judge-slot {
+    flex: 0 0 70px;
+    height: 96px;
+    margin-left: 6px;
+    background: #222;
+    border: 2px dashed #666;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #888;
+    overflow: hidden;
+  }
+  .judge-slot img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+  /* 場 */
+  .battlefield {
+    flex: 1 1 0;
+    display: flex;
+    padding: 8px;
+    gap: 6px;
+    overflow-x: auto;
+    min-height: 0;
+  }
+  .battlefield.ai     { background: #3a2a2a; }
+  .battlefield.player { background: #2a3a2a; }
+
+  /* Transfer group (両端) */
+  .transfer-group {
+    flex: 0 0 70px;
+    background: rgba(0,0,0,0.3);
+    border: 2px dashed #666;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .transfer-group .label {
+    writing-mode: vertical-rl;
+    font-size: 11px; color: #aaa;
+    letter-spacing: 4px;
+  }
+
+  /* メイングループ */
+  .main-group {
+    flex: 0 0 210px;
+    background: rgba(0,0,0,0.25);
+    border: 2px dashed #666;
+    border-radius: 6px;
+    padding: 6px;
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .battlefield.player .main-group { flex-direction: column-reverse; }
+
+  .group-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: #ccc;
+    padding: 0 2px 4px;
+  }
+  .battlefield.player .main-group .group-header { padding: 4px 2px 0; }
+  .group-header .gname { font-weight: bold; font-size: 13px; }
+
+  .distance-ctrl {
+    display: flex; align-items: center; gap: 2px;
+    background: #000; border-radius: 3px; padding: 1px 3px;
+  }
+  .distance-ctrl button {
+    width: 16px; height: 16px; padding: 0;
+    background: #555; color: #fff;
+    border: none; border-radius: 2px; cursor: pointer;
+    font-size: 11px; line-height: 1;
+  }
+  .distance-ctrl button:hover { background: #777; }
+  .distance-ctrl .dist { min-width: 14px; text-align: center; font-weight: bold; font-size: 12px; }
+  .distance-ctrl .dist.win { color: #ffeb3b; }
+
+  /* 兵士カードスタックエリア */
+  .cards-area {
+    flex: 1 1 0;
+    position: relative;
+    min-height: 150px;
+    overflow: hidden;
+  }
+  .cards-area .card {
+    position: absolute; left: 50%;
+    width: 110px;
+    transform: translateX(-50%);
+    cursor: pointer;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.6);
+    transition: transform 0.15s;
+  }
+  .cards-area .card:hover { transform: translateX(-50%) translateY(-4px) scale(1.05); z-index: 100; }
+  .cards-area .card img { width: 100%; display: block; border-radius: 4px; }
+
+  /* ワークロウ: Terrain / counters / Action */
+  .work-row {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 3px;
+    margin-top: 4px;
+  }
+  .battlefield.player .main-group .work-row { margin-top: 0; margin-bottom: 4px; }
+
+  .terrain-box, .action-box {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 70px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid #555;
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: #888;
+    overflow: hidden;
+    position: relative;
+  }
+  .terrain-box img,
+  .action-box img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto; height: auto;
+    object-fit: contain;
+    display: block;
+  }
+
+  .counter-col {
+    flex: 0 0 28px;
+    display: flex; flex-direction: column;
+    gap: 2px;
+  }
+  .counter-col .ctr {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid #555;
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; color: #888;
+  }
+
+  /* 中央 デッキエリア */
+  .center-zone {
+    flex: 0 0 120px;
+    background: #111;
+    border-top: 2px solid #555;
+    border-bottom: 2px solid #555;
+    display: flex; align-items: center;
+    padding: 6px 10px; gap: 8px;
+    overflow-x: auto;
+  }
+  .cycle-box {
+    flex: 0 0 90px;
+    background: #333; border: 1px solid #666;
+    border-radius: 4px; padding: 6px;
+    text-align: center;
+    height: 90px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .cycle-box .label { font-size: 10px; color: #aaa; }
+  .cycle-box .value { font-size: 26px; font-weight: bold; color: #ffeb3b; }
+  .cycle-box .max { font-size: 12px; color: #aaa; }
+
+  .pile {
+    flex: 0 0 70px;
+    height: 100px;
+    background: #444;
+    border: 2px solid #777;
+    border-radius: 4px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-size: 9px; cursor: pointer;
+    text-align: center; padding: 3px;
+    line-height: 1.2;
+  }
+  .pile:hover { background: #555; }
+  .pile .count { font-size: 14px; font-weight: bold; margin-top: 3px; }
+
+  .mini-counters {
+    flex: 0 0 60px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    height: 100px;
+  }
+  .mini-counters .mc {
+    background: #333; border: 1px solid #666;
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; color: #aaa;
+  }
+
+  .center-spacer { flex: 1; }
+
+  /* 右クリックメニュー */
+  #ctx-menu {
+    position: fixed;
+    background: #222;
+    border: 1px solid #777;
+    border-radius: 4px;
+    padding: 4px 0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    display: none;
+    z-index: 3000;
+    min-width: 160px;
+  }
+  #ctx-menu.active { display: block; }
+  #ctx-menu .ctx-title {
+    padding: 4px 12px;
+    font-size: 11px; color: #999;
+    border-bottom: 1px solid #444;
+    margin-bottom: 4px;
+  }
+  #ctx-menu .ctx-item {
+    padding: 6px 14px;
+    font-size: 13px; color: #eee;
+    cursor: pointer;
+  }
+  #ctx-menu .ctx-item:hover { background: #555; }
+  #ctx-menu .ctx-item.disabled { color: #666; cursor: default; }
+  #ctx-menu .ctx-item.disabled:hover { background: transparent; }
+  #ctx-menu .ctx-sep {
+    height: 1px; background: #444; margin: 4px 0;
+  }
+  #ctx-menu .ctx-item.new { color: #ffeb3b; }
+
+  /* オーバーレイ拡大 */
+  #card-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 2000; cursor: pointer;
+  }
+  #card-overlay.active { display: flex; }
+  #card-overlay img.single {
+    max-width: 80vw; max-height: 90vh;
+    box-shadow: 0 0 30px #000;
+    border-radius: 8px;
+  }
+  #card-overlay .group-view {
+    background: #222; border-radius: 8px;
+    padding: 20px; max-width: 92vw; max-height: 92vh;
+    overflow-y: auto; cursor: default;
+  }
+  #card-overlay .group-view h2 {
+    margin: 0 0 12px; font-size: 20px; color: #eee;
+    text-align: center; letter-spacing: 2px;
+  }
+  #card-overlay .group-view .toolbar {
+    display: flex; gap: 8px; justify-content: center;
+    margin-bottom: 14px;
+  }
+  #card-overlay .group-view .toolbar button {
+    background: #444; color: #eee;
+    border: 1px solid #777; border-radius: 4px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  #card-overlay .group-view .toolbar button:hover { background: #666; }
+  #card-overlay .group-view .grid {
+    display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+  }
+  #card-overlay .group-view .grid img {
+    height: 260px; border-radius: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.7);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  #card-overlay .group-view .grid img:hover { transform: scale(1.05); }
+</style>
+</head>
+<body>
+
+<!-- 陣営選択 -->
+<div id="faction-select">
+  <h1>Up Front</h1>
+  <div class="scenario-row" style="margin-bottom:24px; display:flex; align-items:center; gap:12px;">
+    <label style="font-size:16px;">シナリオ:</label>
+    <select id="scenario-pick" style="background:#444; color:#eee; border:1px solid #888; padding:8px 14px; font-size:15px; border-radius:4px;">
+      <option value="A">A: パトロール</option>
+    </select>
+    <span id="scenario-info" style="font-size:12px; color:#aaa;"></span>
+  </div>
+  <div class="factions">
+    <div class="faction-btn" data-faction="ger">
+      <div class="flag">🇩🇪</div>
+      <div>ドイツ</div>
+    </div>
+    <div class="faction-btn" data-faction="rus">
+      <div class="flag">🇷🇺</div>
+      <div>ソ連</div>
+    </div>
+    <div class="faction-btn" data-faction="us">
+      <div class="flag">🇺🇸</div>
+      <div>アメリカ</div>
+    </div>
+  </div>
+  <div class="mode-row">
+    <button class="mode-btn" id="open-campaign">キャンペーン編成</button>
+  </div>
+</div>
+
+<!-- キャンペーン編成画面 -->
+<div id="campaign-screen">
+  <div class="head">
+    <h2>キャンペーン編成</h2>
+    <div class="fac-pick" id="camp-fac-pick">
+      <button data-faction="ger">🇩🇪 ドイツ</button>
+      <button data-faction="rus">🇷🇺 ソ連</button>
+      <button data-faction="us">🇺🇸 アメリカ</button>
+    </div>
+    <div class="info">選択中: <span class="count" id="camp-count">0</span> 人</div>
+    <div class="actions">
+      <button class="cancel" id="camp-flip-back">全部裏</button>
+      <button class="cancel" id="camp-flip-front">全部表</button>
+      <button class="cancel" id="camp-export">エクスポート</button>
+      <button class="cancel" id="camp-import">インポート</button>
+      <button class="cancel" id="camp-reset">リセット</button>
+      <button class="cancel" id="camp-back">戻る</button>
+      <button id="camp-confirm">確定</button>
+    </div>
+    <input type="file" id="camp-import-file" style="display:none" accept="application/json">
+  </div>
+  <div class="grid" id="camp-grid"></div>
+</div>
+
+<!-- メインゲーム画面 -->
+<div id="game">
+  <!-- AI 手札 -->
+  <div class="hand-bar ai">
+    <div class="hand-info">
+      <div class="name" id="ai-name">敵</div>
+      <div>手札: <span id="ai-hand-max">-</span> 枚 / 補充 <span id="ai-hand-draw">-</span></div>
+    </div>
+    <div class="hand-cards" id="ai-hand"></div>
+  </div>
+
+  <!-- AI 場 -->
+  <div class="battlefield ai" id="ai-field"></div>
+
+  <!-- 中央デッキエリア -->
+  <div class="center-zone">
+    <div class="cycle-box">
+      <div class="label">山札サイクル</div>
+      <div><span class="value" id="cycle-cur">1</span><span class="max"> / 3</span></div>
+    </div>
+    <div class="pile" id="deck-draw">
+      <div>Draw Pile</div>
+      <div class="count">-</div>
+    </div>
+    <div class="pile" id="deck-discard">
+      <div>Discard Pile</div>
+      <div class="count">0</div>
+    </div>
+    <div class="mini-counters">
+      <div class="mc">MISC</div>
+      <div class="mc">VP</div>
+      <div class="mc">MISC</div>
+      <div class="mc">DECK#</div>
+      <div class="mc">MISC</div>
+      <div class="mc">VP</div>
+    </div>
+    <div class="pile" id="deck-rpc">
+      <div>RPC Draw</div>
+      <div class="count">-</div>
+    </div>
+    <div class="pile" id="deck-terrain">
+      <div>Terrain Deck</div>
+      <div class="count">165</div>
+    </div>
+    <div class="pile" id="deck-removed">
+      <div>Removed</div>
+      <div class="count">0</div>
+    </div>
+    <div class="center-spacer"></div>
+  </div>
+
+  <!-- プレイヤー 場 -->
+  <div class="battlefield player" id="player-field"></div>
+
+  <!-- プレイヤー 手札 -->
+  <div class="hand-bar">
+    <div class="hand-info">
+      <div class="name" id="player-name">自軍</div>
+      <div>手札: <span id="player-hand-max">-</span> 枚 / 補充 <span id="player-hand-draw">-</span></div>
+    </div>
+    <div class="hand-cards" id="player-hand"></div>
+    <div class="action-menu">
+      <button class="action-btn" data-act="fire">射撃</button>
+      <button class="action-btn" data-act="move">移動</button>
+      <button class="action-btn" data-act="recover">回復</button>
+      <button class="action-btn" data-act="snipe">狙撃</button>
+      <button class="action-btn" data-act="terrain">地形配置</button>
+      <button class="decide-btn" id="decide-btn" disabled>決定</button>
+      <div class="judge-slot" id="judge-slot">判定</div>
+    </div>
+  </div>
+</div>
+
+<!-- 右クリックメニュー -->
+<div id="ctx-menu"></div>
+
+<!-- カード拡大オーバーレイ -->
+<div id="card-overlay">
+  <img id="card-overlay-img" class="single" src="" alt="">
+  <div id="card-overlay-group" class="group-view" style="display:none;">
+    <h2 id="group-view-title"></h2>
+    <div class="toolbar">
+      <button id="flip-all-front">全部表</button>
+      <button id="flip-all-back">全部裏</button>
+    </div>
+    <div class="grid" id="group-view-grid"></div>
+  </div>
+</div>
+
+<script src="infantry_rules.js"></script>
+<script src="scenarios.js"></script>
+<script>
+// ===== パスエンコードヘルパ =====
+// macOS のファイルシステム(HFS+/APFS)は日本語ファイル名を NFD で保持するため
+// NFD に正規化してからエンコードする必要がある
+function encPath(p) {
+  return p.normalize('NFD').split('/').map(s => encodeURIComponent(s)).join('/');
+}
+
+// ===== 地形カードデータ =====
+let TERRAIN_CARDS = []; // { num, type, modifier, range, sub, dice:{1,2,3,4,5,6,7,8,9,0}, note, img, restrictions }
+
+function parseTerrainCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  const rows = lines.slice(1); // skip header
+  const out = [];
+  rows.forEach(line => {
+    const c = line.split(',');
+    const num = parseInt(c[0], 10);
+    if (!num) return;
+    out.push({
+      num,
+      restrictions: [c[1], c[2], c[4], c[5], c[6]].filter(x => x && x.trim()),
+      type:     c[3] || '',
+      modifier: c[7] || '',
+      range:    c[8] || '',
+      sub:      c[9] || '',
+      dice: {
+        '1': c[10], '2b': c[11], '3': c[12], '4c': c[13], '5o': c[14],
+        '6': c[15], '7w': c[16], '8': c[17], '9': c[18], '0r': c[19],
+      },
+      note: (c.slice(20).join(',') || '').trim(),
+      img:     encPath(`upfrontimages/地形カード/AD ${num}.gif`),
+      imgBack: encPath(`upfrontimages/地形カード/AD Back.gif`),
+    });
+  });
+  return out;
+}
+
+fetch(encPath('upfrontimages/地形カード/terrain_cards.csv'))
+  .then(r => r.text())
+  .then(text => {
+    TERRAIN_CARDS = parseTerrainCSV(text);
+    updateDeckCounts();
+    console.log(`地形カード読込: ${TERRAIN_CARDS.length} 枚`);
+    // ゲーム既開始で手札空なら補充
+    if (state && state.player && state.playerHand && state.playerHand.length === 0) {
+      for (let i = 0; i < state.player.handMax; i++) {
+        const c = drawTerrainCard();
+        if (c) state.playerHand.push(c);
+      }
+      renderHands();
+    }
+  })
+  .catch(err => console.warn('地形CSV読込失敗:', err));
+
+function updateDeckCounts() {
+  const draw = document.querySelector('#deck-draw .count');
+  const terr = document.querySelector('#deck-terrain .count');
+  if (draw) draw.textContent = TERRAIN_CARDS.length;
+  if (terr) terr.textContent = TERRAIN_CARDS.length;
+}
+
+// ===== 兵士カードデータ =====
+const SOLDIER_CARDS = { us: [], ger: [], rus: [] };
+
+function splitCSVLine(line) {
+  // クォート対応CSV行分割
+  const out = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i+1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === ',') { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function soldierImgPath(faction, num) {
+  if (faction === 'us')  return { dir: 'upfrontimages/ありか', prefix: 'US' };
+  if (faction === 'ger') return { dir: 'upfrontimages/ドイツ', prefix: 'Ger' };
+  if (faction === 'rus') {
+    // 1-30: "russian", 31+: "Rus"
+    return { dir: 'upfrontimages/ソ連', prefix: num <= 30 ? 'russian' : 'Rus' };
+  }
+  return { dir: '', prefix: '' };
+}
+
+function parseSoldierCSV(text, faction) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  const rows = lines.slice(1);
+  const out = [];
+  const hasBerserk = (faction === 'ger' || faction === 'rus');
+  rows.forEach(line => {
+    const c = splitCSVLine(line);
+    const num = parseInt(c[0], 10);
+    if (!num) return;
+    const { dir, prefix } = soldierImgPath(faction, num);
+    const card = {
+      num,
+      rank:       c[1] || '',
+      name:       c[2] || '',
+      ccvFront:   c[3] || '',
+      leader:     c[4] || '',
+      weaponCat:  c[5] || '',
+      xVal:       c[6] || '',
+      weaponName: c[7] || '',
+      range: [c[8], c[9], c[10], c[11], c[12], c[13]],
+      morale:    c[14] || '',
+      pt:        c[15] || '',
+      kiaFront:  c[16] || '',
+      panic:     c[17] || '',
+      ccvBack:   c[18] || '',
+      kiaBack:   c[19] || '',
+      rncRoute:  c[20] || '',
+      imgFront: encPath(`${dir}/${prefix} ${num}f.gif`),
+      imgBack:  encPath(`${dir}/${prefix} ${num}b.gif`),
+    };
+    if (hasBerserk) {
+      card.berserk  = c[21] || '';
+      card.noteBack = c[22] || '';
+    } else {
+      card.noteBack = c[21] || '';
+    }
+    out.push(card);
+  });
+  return out;
+}
+
+Promise.all([
+  fetch(encPath('upfrontimages/ありか/US_card_list.csv')).then(r => r.text()).then(t => SOLDIER_CARDS.us  = parseSoldierCSV(t, 'us')).catch(e => console.warn('US CSV:', e)),
+  fetch(encPath('upfrontimages/ドイツ/Germany_card_list.csv')).then(r => r.text()).then(t => SOLDIER_CARDS.ger = parseSoldierCSV(t, 'ger')).catch(e => console.warn('Ger CSV:', e)),
+  fetch(encPath('upfrontimages/ソ連/USSR_card_list.csv')).then(r => r.text()).then(t => SOLDIER_CARDS.rus = parseSoldierCSV(t, 'rus')).catch(e => console.warn('USSR CSV:', e)),
+]).then(() => {
+  console.log(`兵士カード読込: US=${SOLDIER_CARDS.us.length}, Ger=${SOLDIER_CARDS.ger.length}, Rus=${SOLDIER_CARDS.rus.length}`);
+});
+
+// ===== 陣営データ =====
+const FACTIONS = {
+  ger: { name: 'ドイツ', flag: '🇩🇪', dir: 'upfrontimages/ドイツ', prefix: 'Ger', count: 46, handMax: 5, handDraw: 3 },
+  rus: { name: 'ソ連',   flag: '🇷🇺', dir: 'upfrontimages/ソ連',   prefix: 'russian', count: 30, handMax: 5, handDraw: 3 },
+  us:  { name: 'アメリカ', flag: '🇺🇸', dir: 'upfrontimages/ありか', prefix: 'US', count: 44, handMax: 5, handDraw: 3 },
+};
+
+// A〜D で開始、A〜Z まで動的に追加可能
+const INITIAL_GROUP_NAMES = ['A', 'B', 'C', 'D'];
+const ALL_GROUP_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+// ===== ゲーム状態 =====
+const state = {
+  player: null, ai: null,
+  groups: { player: [], ai: [] },
+};
+
+// ===== 初期化 =====
+document.querySelectorAll('.faction-btn').forEach(btn => {
+  btn.addEventListener('click', () => startGame(btn.dataset.faction));
+});
+
+// ===== キャンペーン編成 =====
+function getAllSoldiers(facKey) {
+  if (facKey === 'ger') {
+    return Array.from({length: 46}, (_, i) => ({
+      id: `Ger ${i+1}`,
+      img:     encPath(`upfrontimages/ドイツ/Ger ${i+1}f.gif`),
+      imgBack: encPath(`upfrontimages/ドイツ/Ger ${i+1}b.gif`),
+    }));
+  }
+  if (facKey === 'us') {
+    return Array.from({length: 44}, (_, i) => ({
+      id: `US ${i+1}`,
+      img:     encPath(`upfrontimages/ありか/US ${i+1}f.gif`),
+      imgBack: encPath(`upfrontimages/ありか/US ${i+1}b.gif`),
+    }));
+  }
+  if (facKey === 'rus') {
+    const arr = [];
+    for (let i = 1; i <= 30; i++) arr.push({
+      id: `russian ${i}`,
+      img:     encPath(`upfrontimages/ソ連/russian ${i}f.gif`),
+      imgBack: encPath(`upfrontimages/ソ連/russian ${i}b.gif`),
+    });
+    for (let i = 31; i <= 41; i++) arr.push({
+      id: `Rus ${i}`,
+      img:     encPath(`upfrontimages/ソ連/Rus ${i}f.gif`),
+      imgBack: encPath(`upfrontimages/ソ連/Rus ${i}b.gif`),
+    });
+    return arr;
+  }
+  return [];
+}
+
+const campState = { faction: 'ger', selected: new Set(), showBack: true, individual: {} };
+
+// ===== 戦歴レコード =====
+const SAVE_KEY = 'upfront_campaign_v1';
+let campaignRecords = loadRecords();
+
+function emptyRecord() {
+  return { battles: 0, wins: 0, kills: 0, wounds: 0, status: 'active' };
+}
+
+function loadRecords() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  // 初期化: 全兵士を active で登録 + 仮データ
+  const rec = { ger: {}, rus: {}, us: {} };
+  ['ger','rus','us'].forEach(f => {
+    getAllSoldiers(f).forEach(s => rec[f][s.id] = emptyRecord());
+  });
+  // 仮データ(デモ用)
+  const demo = [
+    ['ger', 'Ger 1',  { battles: 8, wins: 6, kills: 4, wounds: 1, status: 'active' }],
+    ['ger', 'Ger 2',  { battles: 5, wins: 3, kills: 2, wounds: 2, status: 'wounded' }],
+    ['ger', 'Ger 3',  { battles: 12, wins: 9, kills: 11, wounds: 3, status: 'active' }],
+    ['ger', 'Ger 4',  { battles: 2, wins: 0, kills: 0, wounds: 1, status: 'killed' }],
+    ['ger', 'Ger 5',  { battles: 15, wins: 11, kills: 8, wounds: 2, status: 'retired' }],
+    ['rus', 'russian 1', { battles: 7, wins: 4, kills: 5, wounds: 2, status: 'active' }],
+    ['rus', 'russian 2', { battles: 3, wins: 1, kills: 1, wounds: 0, status: 'killed' }],
+    ['us',  'US 1',    { battles: 6, wins: 5, kills: 3, wounds: 1, status: 'active' }],
+  ];
+  demo.forEach(([f, id, r]) => { if (rec[f][id]) rec[f][id] = r; });
+  return rec;
+}
+
+function saveRecords() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(campaignRecords)); } catch (e) {}
+}
+
+function getRecord(fac, id) {
+  if (!campaignRecords[fac]) campaignRecords[fac] = {};
+  if (!campaignRecords[fac][id]) campaignRecords[fac][id] = emptyRecord();
+  return campaignRecords[fac][id];
+}
+
+document.getElementById('open-campaign').addEventListener('click', () => {
+  document.getElementById('faction-select').style.display = 'none';
+  document.getElementById('campaign-screen').classList.add('active');
+  renderCampaign();
+});
+
+document.getElementById('camp-back').addEventListener('click', () => {
+  document.getElementById('campaign-screen').classList.remove('active');
+  document.getElementById('faction-select').style.display = '';
+});
+
+document.getElementById('camp-confirm').addEventListener('click', () => {
+  alert(`${campState.faction.toUpperCase()} で ${campState.selected.size} 人を編成しました(まだ戦闘へ反映しません)`);
+});
+
+document.querySelectorAll('#camp-fac-pick button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    campState.faction = btn.dataset.faction;
+    campState.selected.clear();
+    renderCampaign();
+  });
+});
+
+const STATUS_LABEL = { active: '稼働', wounded: '負傷', killed: '戦死', retired: '離脱' };
+
+function renderCampaign() {
+  // 陣営ボタン active 表示
+  document.querySelectorAll('#camp-fac-pick button').forEach(b => {
+    b.classList.toggle('active', b.dataset.faction === campState.faction);
+  });
+  // 兵士グリッド
+  const grid = document.getElementById('camp-grid');
+  grid.innerHTML = '';
+  const list = getAllSoldiers(campState.faction);
+  list.forEach(card => {
+    const rec = getRecord(campState.faction, card.id);
+    const el = document.createElement('div');
+    el.className = 'soldier ' + rec.status;
+    if (campState.selected.has(card.id)) el.classList.add('selected');
+
+    const img = document.createElement('img');
+    const indiv = campState.individual[card.id];
+    const showBack = (indiv === undefined) ? campState.showBack : indiv;
+    img.src = showBack ? (card.imgBack || card.img) : card.img;
+    img.alt = card.id;
+    img.onerror = () => { img.style.background = '#666'; };
+    img.addEventListener('click', e => {
+      e.stopPropagation();
+      const cur = (campState.individual[card.id] === undefined) ? campState.showBack : campState.individual[card.id];
+      campState.individual[card.id] = !cur;
+      img.src = !cur ? (card.imgBack || card.img) : card.img;
+    });
+    el.appendChild(img);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'id'; lbl.textContent = card.id;
+    el.appendChild(lbl);
+
+    const stats = document.createElement('div');
+    stats.className = 'stats';
+    stats.innerHTML = `
+      <span>戦: <b>${rec.battles}</b></span>
+      <span>勝: <b>${rec.wins}</b></span>
+      <span>撃: <b>${rec.kills}</b></span>
+      <span>傷: <b>${rec.wounds}</b></span>
+    `;
+    el.appendChild(stats);
+
+    const st = document.createElement('div');
+    st.className = 'status ' + rec.status;
+    st.textContent = STATUS_LABEL[rec.status] || rec.status;
+    el.appendChild(st);
+
+    el.addEventListener('click', () => {
+      // 戦死/離脱は選択不可
+      if (rec.status === 'killed' || rec.status === 'retired') return;
+      if (campState.selected.has(card.id)) campState.selected.delete(card.id);
+      else campState.selected.add(card.id);
+      renderCampaign();
+    });
+    grid.appendChild(el);
+  });
+  document.getElementById('camp-count').textContent = campState.selected.size;
+}
+
+// 保存/読み込みボタン
+document.getElementById('camp-export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(campaignRecords, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'upfront_campaign.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+document.getElementById('camp-import').addEventListener('click', () => {
+  document.getElementById('camp-import-file').click();
+});
+document.getElementById('camp-import-file').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      campaignRecords = data;
+      saveRecords();
+      renderCampaign();
+      alert('読み込みました');
+    } catch (err) {
+      alert('読み込み失敗: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+document.getElementById('camp-reset').addEventListener('click', () => {
+  if (!confirm('全戦歴をリセットします。よろしいですか?')) return;
+  localStorage.removeItem(SAVE_KEY);
+  campaignRecords = loadRecords();
+  renderCampaign();
+});
+document.getElementById('camp-flip-back').addEventListener('click', () => {
+  campState.showBack = true;
+  campState.individual = {};
+  renderCampaign();
+});
+document.getElementById('camp-flip-front').addEventListener('click', () => {
+  campState.showBack = false;
+  campState.individual = {};
+  renderCampaign();
+});
+
+function startGame(playerFaction) {
+  state.player = FACTIONS[playerFaction];
+  const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
+  state.ai = FACTIONS[others[0]];
+
+  // 選択中のシナリオから初期グループを生成
+  const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
+  const scenario = (window.SCENARIOS || {})[scenarioId];
+  state.scenario = scenario || null;
+
+  if (scenario && window.SCENARIO_HELPERS) {
+    state.groups.player = window.SCENARIO_HELPERS.buildInitialGroups(scenario, playerFaction);
+    state.groups.ai     = window.SCENARIO_HELPERS.buildInitialGroups(scenario, others[0]);
+  } else {
+    state.groups.player = INITIAL_GROUP_NAMES.map(n => ({ name: n, cards: [], distance: 0, terrain: [], actions: [], _faction: playerFaction }));
+    state.groups.ai     = INITIAL_GROUP_NAMES.map(n => ({ name: n, cards: [], distance: 0, terrain: [], actions: [], _faction: others[0] }));
+  }
+
+  // 手札 (地形/アクションデッキから)
+  state.playerHand = [];
+  state.aiHandCount = state.ai.handMax;
+  // CSV読込待ちの場合もあるので、可能ならいくつか引いておく
+  if (TERRAIN_CARDS.length > 0) {
+    for (let i = 0; i < state.player.handMax; i++) {
+      state.playerHand.push(drawTerrainCard());
+    }
+  }
+
+  document.getElementById('faction-select').style.display = 'none';
+  document.getElementById('game').classList.add('active');
+
+  document.getElementById('player-name').textContent = state.player.flag + ' ' + state.player.name;
+  document.getElementById('ai-name').textContent     = state.ai.flag + ' ' + state.ai.name;
+  document.getElementById('player-hand-max').textContent  = state.player.handMax;
+  document.getElementById('player-hand-draw').textContent = state.player.handDraw;
+  document.getElementById('ai-hand-max').textContent      = state.ai.handMax;
+  document.getElementById('ai-hand-draw').textContent     = state.ai.handDraw;
+
+  renderField('player');
+  renderField('ai');
+  renderHands();
+}
+
+// 丸数字 → 数値 (①〜⑳)
+function circledToNum(ch) {
+  if (!ch) return 0;
+  const code = ch.charCodeAt(0);
+  if (code >= 0x2460 && code <= 0x2473) return code - 0x2460 + 1;
+  const n = parseInt(ch, 10);
+  return isNaN(n) ? 0 : n;
+}
+// "FP①" などから FP 値を抽出
+function extractFP(sub) {
+  if (!sub) return 0;
+  const m = sub.match(/FP(.)/);
+  return m ? circledToNum(m[1]) : 0;
+}
+
+function drawTerrainCard() {
+  if (TERRAIN_CARDS.length === 0) return null;
+  const t = TERRAIN_CARDS[Math.floor(Math.random() * TERRAIN_CARDS.length)];
+  return {
+    id: `AD ${t.num}`,
+    img: t.img,
+    imgBack: t.imgBack,
+    terrain: t,
+    fp: extractFP(t.sub),
+  };
+}
+
+function makeCard(faction, num) {
+  return {
+    id: `${faction.prefix}_${num}`,
+    img:     encPath(`${faction.dir}/${faction.prefix} ${num}f.gif`),
+    imgBack: encPath(`${faction.dir}/${faction.prefix} ${num}b.gif`),
+  };
+}
+
+// ===== 場の描画 =====
+function renderField(side) {
+  const container = document.getElementById(side === 'player' ? 'player-field' : 'ai-field');
+  container.innerHTML = '';
+
+  // 左: Transfer Group Z
+  container.appendChild(makeTransferGroup('Z'));
+
+  // メイングループ A, B, C, D
+  state.groups[side].forEach((group, idx) => {
+    container.appendChild(makeMainGroup(side, group, idx));
+  });
+
+  // 右: Transfer Group E
+  container.appendChild(makeTransferGroup('E'));
+}
+
+function makeTransferGroup(label) {
+  const el = document.createElement('div');
+  el.className = 'transfer-group';
+  el.innerHTML = `<div class="label">TRANSFER GRP ${label}</div>`;
+  return el;
+}
+
+function makeMainGroup(side, group, idx) {
+  const slot = document.createElement('div');
+  slot.className = 'main-group';
+
+  // ヘッダー (グループ名 + 距離)
+  const header = document.createElement('div');
+  header.className = 'group-header';
+  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>`;
+
+  const dctrl = document.createElement('div');
+  dctrl.className = 'distance-ctrl';
+  const minus = document.createElement('button'); minus.textContent = '−';
+  const plus  = document.createElement('button'); plus.textContent  = '+';
+  const dist  = document.createElement('span'); dist.className = 'dist';
+  dist.textContent = group.distance;
+  if (group.distance >= 5) dist.classList.add('win');
+  minus.addEventListener('click', e => { e.stopPropagation(); if(group.distance>0){group.distance--; renderField(side);} });
+  plus.addEventListener('click',  e => { e.stopPropagation(); group.distance++; renderField(side); });
+  dctrl.appendChild(minus); dctrl.appendChild(dist); dctrl.appendChild(plus);
+  header.appendChild(dctrl);
+  slot.appendChild(header);
+
+  // 兵士カードスタック
+  const cards = document.createElement('div');
+  cards.className = 'cards-area';
+  group.cards.forEach((card, ci) => {
+    const c = document.createElement('div');
+    c.className = 'card';
+    c.style.top = (ci * 28) + 'px';
+    const img = document.createElement('img');
+    img.src = card.img;
+    img.alt = card.id;
+    img.onerror = () => { c.style.background = '#666'; img.style.display = 'none'; c.textContent = card.id; };
+    c.appendChild(img);
+    c.addEventListener('click', () => showGroupOverlay(side, group));
+    if (side === 'player') {
+      c.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        showCardContextMenu(e.clientX, e.clientY, group, ci);
+      });
+    }
+    cards.appendChild(c);
+  });
+  slot.appendChild(cards);
+
+  // ワークロウ: Terrain + 小カウンター3 + Action
+  const work = document.createElement('div');
+  work.className = 'work-row';
+
+  const terrain = buildCardBox('terrain-box', group.terrain, 'Terrain and Movement', () => {
+    if (group.terrain.length > 0) showCardGridOverlay(`GROUP ${group.name} — 地形`, group.terrain);
+  });
+
+  const ctrs = document.createElement('div');
+  ctrs.className = 'counter-col';
+  ['GRP', 'RR', 'UTIL'].forEach(t => {
+    const c = document.createElement('div'); c.className = 'ctr'; c.textContent = t; ctrs.appendChild(c);
+  });
+
+  const fpSum = group.actions.reduce((s, c) => s + (c.fp || 0), 0);
+  const action = buildCardBox('action-box', group.actions, 'Action in Play', () => {
+    if (group.actions.length > 0) showCardGridOverlay(`GROUP ${group.name} — アクション/射撃 (FP合計 ${fpSum})`, group.actions);
+  });
+  if (fpSum > 0) {
+    const fpBadge = document.createElement('div');
+    fpBadge.textContent = `FP ${fpSum}`;
+    fpBadge.style.cssText = 'position:absolute;bottom:2px;left:3px;background:#fa0;color:#000;font-size:11px;padding:1px 5px;border-radius:3px;font-weight:bold;';
+    action.appendChild(fpBadge);
+  }
+
+  work.appendChild(terrain);
+  work.appendChild(ctrs);
+  work.appendChild(action);
+  slot.appendChild(work);
+
+  return slot;
+}
+
+function buildCardBox(cls, cardList, placeholder, onClick) {
+  const box = document.createElement('div');
+  box.className = cls;
+  if (cardList && cardList.length > 0) {
+    // スタックの先頭カードを表示 + 枚数バッジ
+    const top = cardList[cardList.length - 1];
+    const img = document.createElement('img');
+    img.src = top.img;
+    img.onerror = () => { img.style.display = 'none'; box.textContent = top.id; };
+    box.appendChild(img);
+    if (cardList.length > 1) {
+      const badge = document.createElement('div');
+      badge.textContent = cardList.length;
+      badge.style.cssText = 'position:absolute;top:2px;right:3px;background:#c33;color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;font-weight:bold;';
+      box.style.position = 'relative';
+      box.appendChild(badge);
+    }
+    box.style.cursor = 'pointer';
+    box.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+  } else {
+    box.textContent = placeholder;
+  }
+  return box;
+}
+
+// ===== 手札 =====
+state.selectedAction = null;
+state.selectedHand = new Set();
+
+function renderHands() {
+  const ph = document.getElementById('player-hand');
+  const ah = document.getElementById('ai-hand');
+  ph.innerHTML = ''; ah.innerHTML = '';
+  state.playerHand.forEach((card, idx) => {
+    const c = document.createElement('div'); c.className = 'hand-card';
+    if (state.selectedHand.has(idx)) c.classList.add('selected');
+    const img = document.createElement('img');
+    img.src = card.img; img.alt = card.id;
+    img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'contain'; img.style.borderRadius = '4px';
+    img.onerror = () => { c.textContent = card.id; img.remove(); };
+    c.appendChild(img);
+    c.addEventListener('click', () => {
+      if (state.selectedAction) {
+        if (state.selectedHand.has(idx)) state.selectedHand.delete(idx);
+        else state.selectedHand.add(idx);
+        renderHands();
+        updateDecideBtn();
+      } else {
+        showOverlay(card.img);
+      }
+    });
+    ph.appendChild(c);
+  });
+  for (let i = 0; i < state.aiHandCount; i++) {
+    const c = document.createElement('div'); c.className = 'hand-card'; c.textContent = '裏'; ah.appendChild(c);
+  }
+}
+
+// ===== アクションメニュー =====
+document.querySelectorAll('.action-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const act = btn.dataset.act;
+    if (state.selectedAction === act) {
+      state.selectedAction = null;
+    } else {
+      state.selectedAction = act;
+    }
+    state.selectedHand.clear();
+    document.querySelectorAll('.action-btn').forEach(b => b.classList.toggle('active', b.dataset.act === state.selectedAction));
+    renderHands();
+    updateDecideBtn();
+  });
+});
+
+function updateDecideBtn() {
+  const btn = document.getElementById('decide-btn');
+  btn.disabled = !(state.selectedAction && state.selectedHand.size > 0);
+}
+
+document.getElementById('decide-btn').addEventListener('click', () => {
+  if (!state.selectedAction || state.selectedHand.size === 0) return;
+  // 使用した手札を除去
+  const indices = [...state.selectedHand].sort((a,b) => b-a);
+  indices.forEach(i => state.playerHand.splice(i, 1));
+  // 判定カード (山札=地形デッキから1枚)
+  const judgeCard = drawTerrainCard();
+  const slot = document.getElementById('judge-slot');
+  slot.innerHTML = '';
+  if (judgeCard) {
+    const img = document.createElement('img');
+    img.src = judgeCard.img;
+    img.onerror = () => { slot.textContent = judgeCard.id; };
+    slot.appendChild(img);
+  } else {
+    slot.textContent = '判定不可';
+  }
+  // リセット
+  state.selectedAction = null;
+  state.selectedHand.clear();
+  document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
+  renderHands();
+  updateDecideBtn();
+});
+
+// ===== 右クリックメニュー =====
+const ctxMenu = document.getElementById('ctx-menu');
+
+function nextGroupLetter() {
+  const used = new Set(state.groups.player.map(g => g.name));
+  for (const l of ALL_GROUP_LETTERS) if (!used.has(l)) return l;
+  return null;
+}
+
+function showCardContextMenu(x, y, fromGroup, cardIdx) {
+  const card = fromGroup.cards[cardIdx];
+  if (!card) return;
+  ctxMenu.innerHTML = '';
+
+  const title = document.createElement('div');
+  title.className = 'ctx-title';
+  title.textContent = `${card.id}${card.name ? ' (' + card.name + ')' : ''} を移動`;
+  ctxMenu.appendChild(title);
+
+  state.groups.player.forEach(g => {
+    if (g === fromGroup) return;
+    const it = document.createElement('div');
+    it.className = 'ctx-item';
+    it.textContent = `GROUP ${g.name} へ (${g.cards.length}人)`;
+    it.addEventListener('click', () => {
+      moveCard(fromGroup, cardIdx, g);
+      hideContextMenu();
+    });
+    ctxMenu.appendChild(it);
+  });
+
+  const sep = document.createElement('div'); sep.className = 'ctx-sep'; ctxMenu.appendChild(sep);
+
+  const newItem = document.createElement('div');
+  newItem.className = 'ctx-item new';
+  const nextL = nextGroupLetter();
+  if (nextL) {
+    newItem.textContent = `＋ 新グループ ${nextL} を作成して移動`;
+    newItem.addEventListener('click', () => {
+      const newGroup = { name: nextL, cards: [], distance: 0, terrain: [], actions: [] };
+      state.groups.player.push(newGroup);
+      moveCard(fromGroup, cardIdx, newGroup);
+      hideContextMenu();
+    });
+  } else {
+    newItem.className = 'ctx-item disabled';
+    newItem.textContent = '＋ 新グループ作成 (上限A〜Z)';
+  }
+  ctxMenu.appendChild(newItem);
+
+  const cancel = document.createElement('div');
+  cancel.className = 'ctx-item';
+  cancel.style.color = '#aaa';
+  cancel.textContent = 'キャンセル';
+  cancel.addEventListener('click', hideContextMenu);
+  ctxMenu.appendChild(cancel);
+
+  // 位置調整 (画面外にはみ出ないように)
+  ctxMenu.style.left = '0px'; ctxMenu.style.top = '0px';
+  ctxMenu.classList.add('active');
+  const rect = ctxMenu.getBoundingClientRect();
+  let px = x, py = y;
+  if (px + rect.width  > window.innerWidth)  px = window.innerWidth  - rect.width  - 6;
+  if (py + rect.height > window.innerHeight) py = window.innerHeight - rect.height - 6;
+  ctxMenu.style.left = px + 'px';
+  ctxMenu.style.top  = py + 'px';
+}
+
+function hideContextMenu() { ctxMenu.classList.remove('active'); }
+
+function moveCard(fromGroup, idx, toGroup) {
+  const [card] = fromGroup.cards.splice(idx, 1);
+  toGroup.cards.push(card);
+  renderField('player');
+  // オーバーレイ表示中なら再描画
+  if (overlay.classList.contains('active') && currentOverlayGroup === fromGroup && currentOverlaySide === 'player') {
+    if (fromGroup.cards.length > 0) {
+      showGroupOverlay('player', fromGroup);
+    } else {
+      overlay.classList.remove('active');
+    }
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!ctxMenu.contains(e.target)) hideContextMenu();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') hideContextMenu();
+});
+
+// ===== オーバーレイ =====
+const overlay = document.getElementById('card-overlay');
+const overlayImg = document.getElementById('card-overlay-img');
+const overlayGroup = document.getElementById('card-overlay-group');
+const groupTitle = document.getElementById('group-view-title');
+const groupGrid = document.getElementById('group-view-grid');
+
+function showOverlay(src) {
+  overlayImg.src = src;
+  overlayImg.style.display = '';
+  overlayGroup.style.display = 'none';
+  overlay.classList.add('active');
+}
+let groupOverlayImgs = []; // {img, card, showBack}
+
+let currentOverlayGroup = null;
+let currentOverlaySide = null;
+
+function showGroupOverlay(side, group) {
+  currentOverlayGroup = group;
+  currentOverlaySide = side;
+  overlayImg.style.display = 'none';
+  overlayGroup.style.display = '';
+  const faction = side === 'player' ? state.player : state.ai;
+  const hint = side === 'player' ? '※ 左クリック=裏/表, 右クリック=移動' : '※ クリックで裏/表';
+  groupTitle.textContent = `${faction.flag} ${faction.name} — GROUP ${group.name}  (距離 ${group.distance} / 兵士 ${group.cards.length}人)  ${hint}`;
+  groupGrid.innerHTML = '';
+  groupOverlayImgs = [];
+  group.cards.forEach((card, idx) => {
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column'; wrap.style.alignItems = 'center';
+    const img = document.createElement('img');
+    const entry = { img, card, showBack: false };
+    img.src = card.img; img.alt = card.id;
+    img.onerror = () => { img.style.background = '#666'; img.alt = card.id; };
+    img.addEventListener('click', e => {
+      e.stopPropagation();
+      entry.showBack = !entry.showBack;
+      img.src = entry.showBack ? (card.imgBack || card.img) : card.img;
+    });
+    if (side === 'player') {
+      img.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        showCardContextMenu(e.clientX, e.clientY, group, idx, true);
+      });
+    }
+    wrap.appendChild(img);
+    groupGrid.appendChild(wrap);
+    groupOverlayImgs.push(entry);
+  });
+  overlay.classList.add('active');
+}
+
+document.getElementById('flip-all-front').addEventListener('click', e => {
+  e.stopPropagation();
+  groupOverlayImgs.forEach(en => { en.showBack = false; en.img.src = en.card.img; });
+});
+document.getElementById('flip-all-back').addEventListener('click', e => {
+  e.stopPropagation();
+  groupOverlayImgs.forEach(en => { en.showBack = true; en.img.src = en.card.imgBack || en.card.img; });
+});
+
+// 汎用グリッドオーバーレイ (地形/アクションカード用)
+function showCardGridOverlay(title, cards) {
+  overlayImg.style.display = 'none';
+  overlayGroup.style.display = '';
+  groupTitle.textContent = `${title}  (${cards.length}枚)  ※ クリックで裏/表`;
+  groupGrid.innerHTML = '';
+  groupOverlayImgs = [];
+  cards.forEach(card => {
+    const wrap = document.createElement('div');
+    wrap.style.display = 'flex'; wrap.style.flexDirection = 'column'; wrap.style.alignItems = 'center';
+    const img = document.createElement('img');
+    const entry = { img, card, showBack: false };
+    img.src = card.img; img.alt = card.id;
+    img.onerror = () => { img.style.background = '#666'; img.alt = card.id; };
+    img.addEventListener('click', e => {
+      e.stopPropagation();
+      entry.showBack = !entry.showBack;
+      img.src = entry.showBack ? (card.imgBack || card.img) : card.img;
+    });
+    wrap.appendChild(img);
+    groupGrid.appendChild(wrap);
+    groupOverlayImgs.push(entry);
+  });
+  overlay.classList.add('active');
+}
+overlay.addEventListener('click', e => {
+  if (e.target === overlay || e.target === overlayImg) overlay.classList.remove('active');
+});
+
+// ===== 山札クリックで手札補充 =====
+document.getElementById('deck-draw').addEventListener('click', () => {
+  if (TERRAIN_CARDS.length === 0) { alert('地形デッキ未読込'); return; }
+  const need = state.player.handMax - state.playerHand.length;
+  if (need <= 0) return;
+  for (let i = 0; i < need; i++) {
+    const c = drawTerrainCard();
+    if (c) state.playerHand.push(c);
+  }
+  renderHands();
+});
+</script>
+</body>
+</html>
