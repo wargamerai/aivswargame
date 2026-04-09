@@ -1594,24 +1594,10 @@ function makeCard(faction, num) {
 function renderField(side) {
   const container = document.getElementById(side === 'player' ? 'player-field' : 'ai-field');
   container.innerHTML = '';
-
-  // 左: Transfer Group Z
-  container.appendChild(makeTransferGroup('Z'));
-
   // メイングループ A, B, C, D
   state.groups[side].forEach((group, idx) => {
     container.appendChild(makeMainGroup(side, group, idx));
   });
-
-  // 右: Transfer Group E
-  container.appendChild(makeTransferGroup('E'));
-}
-
-function makeTransferGroup(label) {
-  const el = document.createElement('div');
-  el.className = 'transfer-group';
-  el.innerHTML = `<div class="label">TRANSFER GRP ${label}</div>`;
-  return el;
 }
 
 function makeMainGroup(side, group, idx) {
@@ -1685,12 +1671,6 @@ function makeMainGroup(side, group, idx) {
     if (group.terrain.length > 0) showCardGridOverlay(`GROUP ${group.name} — 地形`, group.terrain);
   });
 
-  const ctrs = document.createElement('div');
-  ctrs.className = 'counter-col';
-  ['GRP', 'RR', 'UTIL'].forEach(t => {
-    const c = document.createElement('div'); c.className = 'ctr'; c.textContent = t; ctrs.appendChild(c);
-  });
-
   const fpSum = group.actions.reduce((s, c) => s + (c.fp || 0), 0);
   const action = buildCardBox('action-box', group.actions, 'Action in Play', () => {
     if (group.actions.length > 0) showCardGridOverlay(`GROUP ${group.name} — アクション/射撃 (FP合計 ${fpSum})`, group.actions);
@@ -1703,7 +1683,6 @@ function makeMainGroup(side, group, idx) {
   }
 
   work.appendChild(terrain);
-  work.appendChild(ctrs);
   work.appendChild(action);
   slot.appendChild(work);
 
