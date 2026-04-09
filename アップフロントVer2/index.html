@@ -1863,15 +1863,12 @@ function renderHands() {
         if (state.terrainTurn === 'player') onPlayerHandClickTerrainPhase(idx);
         return;
       }
-      if (state.selectedAction) {
-        if (state.selectedHand.has(idx)) state.selectedHand.delete(idx);
-        else state.selectedHand.add(idx);
-        renderHands();
-        updateDecideBtn();
-      } else {
-        showOverlay(card.img);
-      }
+      if (state.selectedHand.has(idx)) state.selectedHand.delete(idx);
+      else state.selectedHand.add(idx);
+      renderHands();
+      updateDecideBtn();
     });
+    c.addEventListener('dblclick', () => { showOverlay(card.img); });
     ph.appendChild(c);
   });
   const backSrc = encPath('upfrontimages/地形カード/AD Back.gif');
