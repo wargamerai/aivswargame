@@ -603,10 +603,11 @@
 <script src="scenarios.js"></script>
 <script>
 // ===== パスエンコードヘルパ =====
-// macOS のファイルシステム(HFS+/APFS)は日本語ファイル名を NFD で保持するため
-// NFD に正規化してからエンコードする必要がある
+// ローカル(macOS)では NFD, GitHub Pages 等のリモートでは NFC で保存される。
+// location.protocol で切替: file:// → NFD, http(s):// → NFC
 function encPath(p) {
-  return p.normalize('NFD').split('/').map(s => encodeURIComponent(s)).join('/');
+  const form = (location.protocol === 'file:') ? 'NFD' : 'NFC';
+  return p.normalize(form).split('/').map(s => encodeURIComponent(s)).join('/');
 }
 
 // ===== 地形カードデータ =====
