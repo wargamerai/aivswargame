@@ -1454,10 +1454,10 @@ function startGameWithSetup() {
     }))
     .filter(g => g.cards.length > 0);
 
-  // AIは自動配分 (シナリオから)
+  // AI は賢い編成 (リーダー分散 + クルー指定)
   const aiKey = others[0];
   state.groups.ai = (window.SCENARIO_HELPERS && scenario)
-    ? window.SCENARIO_HELPERS.buildInitialGroups(scenario, aiKey)
+    ? window.SCENARIO_HELPERS.buildAIGroupsSmart(scenario, aiKey)
     : [];
 
   state.playerHand = [];
