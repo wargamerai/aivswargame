@@ -831,7 +831,7 @@
       <button class="action-btn" data-act="wire-remove" disabled>鉄条網除去</button>
       <button class="action-btn" data-act="mine-remove" disabled>地雷除去</button>
       <button class="action-btn" id="btn-confirm" disabled>確定</button>
-      <button class="action-btn discard" id="btn-discard">捨て札</button>
+      <button class="action-btn discard" id="btn-discard" data-act="discard">捨て札</button>
       <button class="action-btn end" id="btn-end-turn">終了</button>
     </div>
   </div>
@@ -1992,6 +1992,10 @@ function updateConfirmBtn() {
     btn.disabled = !(state.selectedHand.size > 0 && state.sniperTarget);
     return;
   }
+  if (act === 'discard') {
+    btn.disabled = !(state.selectedHand.size > 0);
+    return;
+  }
   btn.disabled = true;
 }
 
@@ -2019,6 +2023,10 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     const grp = state.groups[target.side][target.idx];
     grp.terrain.push(card);
     state.playerHand.splice(cardIdx, 1);
+  }
+
+  if (act === 'discard') {
+    if (window.DISCARD_RULES) window.DISCARD_RULES.execute();
   }
 
   if (act === 'snipe') {
