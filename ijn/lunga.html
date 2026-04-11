@@ -148,7 +148,7 @@ function startBattle() {
     localStorage.setItem('scenarioRules', JSON.stringify({
         radarRange: 16,        // レーダー探知距離（通常20）
         radarTypes: ['CL'],    // レーダー搭載艦種（通常BB/CA/CL/CLAA）
-        jpHandicap: 140        // 日本軍ハンディキャップ（得点に加算）
+        jpHandicap: 40         // 日本軍ハンディキャップ（得点に加算）
     }));
     // AI観戦モード選択
     const aiOn = document.getElementById('chkAI').checked ? '1' : '0';
