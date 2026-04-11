@@ -357,6 +357,14 @@ function withdrawMove(ship) {
     const next = hexNeighbor(ship.col, ship.row, ship.dir);
     if (!next) { ship.col = -1; break; }
     if (next.col < 0 || next.col >= COLS || next.row < 0) { ship.col = -1; break; }
+    // 離脱ゾーンチェック
+    const jpZone = ship.side === 'jp' && ship.col > JP_WITHDRAW_COL && next.col <= JP_WITHDRAW_COL;
+    const usZone = ship.side === 'us' && ship.col < US_WITHDRAW_COL && next.col >= US_WITHDRAW_COL;
+    if (jpZone || usZone) {
+      ship.col = -1;
+      pdbg(`${ship.name} 自動離脱で離脱ゾーン到達 → 退場`);
+      break;
+    }
     if (occupied(next.col, next.row, ship)) {
       // 船は停止できない → 強制進入+衝突チェック
       var occ = getOccupant(next.col, next.row, ship);
@@ -373,6 +381,7 @@ function withdrawMove(ship) {
     remain--;
   }
   if (ship.col < 0) {
+    ship.status = 'exited';
     setInfo(`${ship.name} マップから離脱`);
   }
 }
