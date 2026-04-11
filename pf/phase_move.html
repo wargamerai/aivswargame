@@ -1793,6 +1793,7 @@ function moveForward() {
   }
   saveUndo();
 
+  const prevCol = moving.col;
   moving.col = next.col;
   moving.row = next.row;
   turnedThisHex = false;
@@ -1816,8 +1817,8 @@ function moveForward() {
   setMoveBar(`残り移動力: ${remainMove}`);
   pushState();
 
-  // 米軍: 離脱ゾーン(col >= US_WITHDRAW_COL)に入ったら離脱確認
-  if (!moving.withdrawing && moving.col >= US_WITHDRAW_COL && !isJPMoving() && usFleet.indexOf(moving) >= 0) {
+  // 米軍: ゾーン外→離脱ゾーン(col >= US_WITHDRAW_COL)に入った時だけ離脱確認
+  if (!moving.withdrawing && prevCol < US_WITHDRAW_COL && moving.col >= US_WITHDRAW_COL && !isJPMoving() && usFleet.indexOf(moving) >= 0) {
     if (confirm(`${moving.name} は離脱ゾーンに到達しました。離脱しますか？`)) {
       withdrawShipNow(moving);
       return;
