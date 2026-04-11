@@ -127,6 +127,16 @@ function init() {
   jpFleet = state.jpFleet || [];
   usFleet = state.usFleet || [];
 
+  // シナリオ特別ルール: 敵発見後に速力制限解放（baseSpd→speed）
+  if (state.jpFreeMove) {
+    jpFleet.forEach(s => {
+      if (s.baseSpd && s.speed < s.baseSpd) {
+        pdbg(`速力解放: ${s.name} ${s.speed}→${s.baseSpd}`);
+        s.speed = s.baseSpd;
+      }
+    });
+  }
+
   // 移動パスをリセット＋回頭カウントリセット＋残り移動力初期化
   [...jpFleet, ...usFleet].forEach(s => {
     s.path = []; s.turnCount = 0;
