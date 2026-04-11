@@ -1168,6 +1168,15 @@ function allStraight() {
       var next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next || next.col < 0 || next.col >= COLS || next.row < 0) { usStopped[ship.name] = true; continue; }
       if (getSunkShip(next.col, next.row, ship)) { usStopped[ship.name] = true; continue; }
+      // 離脱ゾーンチェック: ゾーン外→内に入ったら即離脱
+      if (ship.col < US_WITHDRAW_COL && next.col >= US_WITHDRAW_COL) {
+        ship.col = -1;
+        ship.status = 'exited';
+        ship.withdrawing = true;
+        pdbg(`${ship.name} 全艦直進で離脱ゾーン到達 → 退場`);
+        usStopped[ship.name] = true;
+        continue;
+      }
       ship.col = next.col;
       ship.row = next.row;
       var occupant = getOccupant(next.col, next.row, ship);

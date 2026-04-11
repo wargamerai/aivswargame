@@ -1212,10 +1212,20 @@ function allStraight() {
     var moveCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
     var minSpd = getMinSpeed(ship);
     var minCount = ship.dmgM >= ship.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
+    var exited = false;
     for (var step = 0; step < moveCount; step++) {
       var next = hexNeighbor(ship.col, ship.row, ship.dir);
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
+      // 離脱ゾーンチェック: ゾーン外→内に入ったら即離脱
+      if (ship.col > JP_WITHDRAW_COL && next.col <= JP_WITHDRAW_COL) {
+        ship.col = -1;
+        ship.status = 'exited';
+        ship.withdrawing = true;
+        pdbg(`${ship.name} 全艦直進で離脱ゾーン到達 → 退場`);
+        exited = true;
+        break;
+      }
       // 衝突回避: 最低速度以上なら前方占有時に停止
       if (step >= minCount && (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship))) break;
       ship.col = next.col;
