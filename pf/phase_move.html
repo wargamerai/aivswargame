@@ -1921,19 +1921,32 @@ function moveFollowers(lead, fleet) {
     fol.path = fol.path || [];
     fol.path.push({col: fol.col, row: fol.row, dir: fol.dir});
 
+    let newCol, newRow;
     if (dist <= 1) {
-      // 隣接 → そのまま追従
-      fol.col = target.col;
-      fol.row = target.row;
+      newCol = target.col;
+      newRow = target.row;
       if (!fol.cannotTurn) fol.dir = target.dir;
     } else {
-      // 遠い → 旗艦方向へ1ヘクス直進（追いかける）
       const chaseDir = bestDirToward(fol.col, fol.row, target.col, target.row);
       const next = hexNeighbor(fol.col, fol.row, chaseDir);
       if (next && next.col >= 0 && next.col < COLS && next.row >= 0) {
-        fol.col = next.col;
-        fol.row = next.row;
+        newCol = next.col;
+        newRow = next.row;
         if (!fol.cannotTurn) fol.dir = chaseDir;
+      }
+    }
+    if (newCol !== undefined) {
+      fol.col = newCol;
+      fol.row = newRow;
+      var occ = getOccupant(newCol, newRow, fol);
+      if (occ) {
+        pdbg(`随伴艦衝突: ${fol.name} → ${occ.name} at (${newCol},${newRow})`);
+        collisionCheck(fol, occ);
+      }
+      var sunk = getSunkShip(newCol, newRow, fol);
+      if (sunk) {
+        pdbg(`随伴艦衝突(沈没船): ${fol.name} → ${sunk.name} at (${newCol},${newRow})`);
+        collisionCheck(fol, sunk);
       }
     }
     ahead.path.shift();
