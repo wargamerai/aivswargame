@@ -74,6 +74,8 @@ let phaseStartBackup = null;  // フェーズ開始時の全艦状態バック�
 const COLS = 46;
 const JP_LINE_COL = 14;
 const US_LINE_COL = COLS - 15; // 31
+const JP_WITHDRAW_COL = 6;           // JP離脱ゾーン: col 0-6
+const US_WITHDRAW_COL = COLS - 7;    // US離脱ゾーン: col 39-45
 
 const DIR_NAMES = {6:'→東', 3:'↘南東', 1:'↙南西', 4:'←西', 7:'↗北西', 9:'↖北東'};
 
@@ -130,6 +132,12 @@ function canShipMove(s) {
   if (s.withdrawing) return false;
   if (getSpeed(s) === 0) return false;  // 航行不能
   return true;
+}
+
+// hubデバッグパネルへログ送信
+function pdbg(text) {
+  parent.postMessage({type:'DBG_LOG', text}, '*');
+  console.log('[MOVE-DBG]', text);
 }
 
 // Load state
@@ -673,6 +681,22 @@ function aiMoveOneLead(lead, jpc, jpDir, sr) {
       break;
     }
 
+    // US離脱ゾーン(col >= US_WITHDRAW_COL)に入ったら即離脱
+    if (next.col >= US_WITHDRAW_COL) {
+      lead.col = -1;
+      lead.status = 'exited';
+      lead.withdrawing = true;
+      pdbg(`${lead.name} US離脱ゾーン到達(col=${next.col}) → 退場`);
+      const ci = lead.colIndex;
+      usFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0).forEach(f => {
+        f.col = -1;
+        f.status = 'exited';
+        f.withdrawing = true;
+        pdbg(`${f.name} (随伴) → 退場`);
+      });
+      break;
+    }
+
     const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
     if (blocked) {
       if (!lead.cannotTurn) {
@@ -962,6 +986,22 @@ function aiMoveOneJPLead(lead, usc, sr) {
         f.status = 'exited';
         f.withdrawing = true;
       }
+      break;
+    }
+
+    // JP離脱ゾーン(col <= JP_WITHDRAW_COL)に入ったら即離脱
+    if (next.col <= JP_WITHDRAW_COL) {
+      lead.col = -1;
+      lead.status = 'exited';
+      lead.withdrawing = true;
+      pdbg(`${lead.name} JP離脱ゾーン到達(col=${next.col}) → 退場`);
+      const ci = lead.colIndex;
+      jpFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0).forEach(f => {
+        f.col = -1;
+        f.status = 'exited';
+        f.withdrawing = true;
+        pdbg(`${f.name} (随伴) → 退場`);
+      });
       break;
     }
 
@@ -1776,9 +1816,48 @@ function moveForward() {
   setMoveBar(`残り移動力: ${remainMove}`);
   pushState();
 
+  // 米軍: 離脱ゾーン(col >= US_WITHDRAW_COL)に入ったら離脱確認
+  if (!moving.withdrawing && moving.col >= US_WITHDRAW_COL && !isJPMoving() && usFleet.indexOf(moving) >= 0) {
+    if (confirm(`${moving.name} は離脱ゾーンに到達しました。離脱しますか？`)) {
+      withdrawShipNow(moving);
+      return;
+    }
+  }
+
   if (remainMove <= 0) {
     softFinishMove();
   }
+}
+
+// ========== 即時離脱（その場でゲームから除外）==========
+function withdrawShipNow(ship) {
+  ship.status = 'exited';
+  ship.withdrawing = true;
+  ship.col = -1;
+  ship.remainMove = 0;
+  const idx = usFleet.indexOf(ship);
+  movedShips.add(idx);
+  parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
+  pdbg(`${ship.name} 即時離脱 (exited)`);
+  setInfo(`${ship.name} 離脱`);
+  setMoveBar('');
+  moving = null;
+  undoStack = [];
+  document.getElementById('btnUndo').disabled = true;
+  pushState();
+  renderList();
+
+  // 全米艦が離脱/沈没 → 戦闘終了
+  const usActive = usFleet.filter(s => s.status !== 'sunk' && s.status !== 'exited' && s.col >= 0);
+  if (usActive.length === 0) {
+    setInfo('米艦隊 全艦離脱 — 戦闘終了');
+    pdbg('全米艦離脱 → PHASE_DONE(turn_end)');
+    setTimeout(() => {
+      parent.postMessage({type:'PHASE_DONE', nextPhase:'turn_end'}, '*');
+    }, 1000);
+    return;
+  }
+  checkAllMoved();
 }
 
 // ========== 移動力消費完了（undo可能な完了）==========

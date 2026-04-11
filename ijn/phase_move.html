@@ -74,6 +74,8 @@ let shipStates = {};  // 艦名→{col, row, dir, remainMove, undoStack, turnedT
 const COLS = 46;
 const JP_LINE_COL = 14;
 const US_LINE_COL = COLS - 15; // 31
+const JP_WITHDRAW_COL = 6;           // JP離脱ゾーン: col 0-6
+const US_WITHDRAW_COL = COLS - 7;    // US離脱ゾーン: col 39-45
 
 const DIR_NAMES = {6:'→東', 3:'↘南東', 1:'↙南西', 4:'←西', 7:'↗北西', 9:'↖北東'};
 
@@ -111,6 +113,12 @@ function canShipMove(s) {
   return true;
 }
 
+// hubデバッグパネルへログ送信
+function pdbg(text) {
+  parent.postMessage({type:'DBG_LOG', text}, '*');
+  console.log('[MOVE-DBG]', text);
+}
+
 // Load state
 function init() {
   const raw = localStorage.getItem('hubState');
@@ -135,6 +143,23 @@ function init() {
   dumpFleet('US移動前', usFleet);
   console.log(`[IJN-MOVE] phase=${state.phase} jpMoving=${isJPMoving()} jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove} jpDetected=${state.jpDetected} usDetected=${state.usDetected} contactMade=${state.contactMade}`);
 
+  // デバッグ: 移動フェーズ開始時の状態をhubに送信
+  pdbg(`=== 移動フェーズ開始 turn=${state.combatTurn} phase=${state.phase} ===`);
+  pdbg(`jpMoving=${isJPMoving()} initiative=${state.initiative}`);
+  pdbg(`contactMade=${state.contactMade} jpDetected=${state.jpDetected} usDetected=${state.usDetected}`);
+  pdbg(`jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove}`);
+  pdbg(`jpAutoAI=${localStorage.getItem('jpAutoAI')} fullAutoAI=${localStorage.getItem('fullAutoAI')}`);
+  jpFleet.forEach(s => {
+    const spd = getSpeed(s);
+    const crits = (s.crits||[]).join(',') || 'なし';
+    const flags = [];
+    if (s.isLead) flags.push('旗艦');
+    if (s.cannotTurn) flags.push('回頭不能');
+    if (s.withdrawing) flags.push('離脱中');
+    if (spd === 0) flags.push('航行不能');
+    pdbg(`  JP ${s.name}(${s.type}) status=${s.status} spd=${spd} canMove=${canShipMove(s)} crits=[${crits}] flags=[${flags.join(',')}]`);
+  });
+
   // 大破艦等 自動離脱
   autoWithdrawHeavy();
 
@@ -143,16 +168,21 @@ function init() {
   if (cb) cb.checked = isJPAutoAI();
 
   const jpMoving = isJPMoving();
+  let modeChosen = '';
 
   if (jpMoving && !state.jpFreeMove) {
+    modeChosen = 'JP直進モード(jpFreeMove=false)';
     startStraightMode();
   } else if (!jpMoving && !state.usFreeMove) {
+    modeChosen = 'US直進モード(usFreeMove=false)';
     startStraightMode();
   } else if (!jpMoving) {
+    modeChosen = 'US自動移動';
     startAutoUSMove();
   } else {
     const isFullAuto = localStorage.getItem('fullAutoAI') === '1';
     if (isJPAutoAI() && (isFullAuto || (!state.contactMade && !state.jpFreeMove))) {
+      modeChosen = `JP AI自動(jpAutoAI=1, fullAutoAI=${isFullAuto})`;
       autoJPMove();       // 観戦モード or 接触前: AI委任継続
     } else {
       // 接触後（通常対戦）はAI委任を解除して手動に戻す
@@ -161,10 +191,14 @@ function init() {
         const cb = document.getElementById('jpAI');
         if (cb) cb.checked = false;
         setInfo('敵発見 — AI委任を解除しました');
+        modeChosen = 'JP手動(AI委任自動解除)';
+      } else {
+        modeChosen = 'JP手動(自由移動)';
       }
       startFreeMode();      // IJN: 日本軍(プレイヤー)手動移動
     }
   }
+  pdbg(`→ 選択モード: ${modeChosen}`);
 }
 
 function isJPAutoAI() { return localStorage.getItem('jpAutoAI') === '1'; }
@@ -691,6 +725,22 @@ function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
       break;
     }
 
+    // US離脱ゾーン(col >= US_WITHDRAW_COL)に入ったら即離脱
+    if (next.col >= US_WITHDRAW_COL) {
+      lead.col = -1;
+      lead.status = 'exited';
+      lead.withdrawing = true;
+      pdbg(`${lead.name} US離脱ゾーン到達(col=${next.col}) → 退場`);
+      const ci = lead.colIndex;
+      usFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0).forEach(f => {
+        f.col = -1;
+        f.status = 'exited';
+        f.withdrawing = true;
+        pdbg(`${f.name} (随伴) → 退場`);
+      });
+      break;
+    }
+
     const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
     if (blocked) {
       // 回頭可能 → 隣接ヘックスで回避を試みる
@@ -1007,6 +1057,22 @@ function aiJPMoveOneLead(lead, usc, usDir, sr) {
         f.withdrawing = true;
         console.log(`${f.name} (随伴) → 退場`);
       }
+      break;
+    }
+
+    // JP離脱ゾーン(col <= JP_WITHDRAW_COL)に入ったら即離脱
+    if (next.col <= JP_WITHDRAW_COL) {
+      lead.col = -1;
+      lead.status = 'exited';
+      lead.withdrawing = true;
+      pdbg(`${lead.name} JP離脱ゾーン到達(col=${next.col}) → 退場`);
+      const ci = lead.colIndex;
+      jpFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0).forEach(f => {
+        f.col = -1;
+        f.status = 'exited';
+        f.withdrawing = true;
+        pdbg(`${f.name} (随伴) → 退場`);
+      });
       break;
     }
 
@@ -1743,14 +1809,10 @@ function moveForward() {
   setMoveBar(`残り移動力: ${remainMove}`);
   pushState();
 
-  // 日本軍: 青線(JP_LINE_COL)より西へ移動したら離脱確認
-  if (!moving.withdrawing && moving.col < JP_LINE_COL && isJPMoving() && jpFleet.indexOf(moving) >= 0) {
+  // 日本軍: 離脱ゾーン(col 0-6)に入ったら離脱確認
+  if (!moving.withdrawing && moving.col <= JP_WITHDRAW_COL && isJPMoving() && jpFleet.indexOf(moving) >= 0) {
     if (confirm(`${moving.name} は青線の西に到達しました。離脱しますか？`)) {
-      moving.withdrawing = true;
-      setInfo(`${moving.name} 離脱開始`);
-      withdrawMove(moving);
-      pushState();
-      finishMove();
+      withdrawShipNow(moving);
       return;
     }
   }
@@ -1758,6 +1820,37 @@ function moveForward() {
   if (remainMove <= 0) {
     softFinishMove();
   }
+}
+
+// ========== 即時離脱（その場でゲームから除外）==========
+function withdrawShipNow(ship) {
+  ship.status = 'exited';
+  ship.withdrawing = true;
+  ship.col = -1;
+  ship.remainMove = 0;
+  const idx = jpFleet.indexOf(ship);
+  movedShips.add(idx);
+  parent.postMessage({type:'ACTION_DONE', shipIndex:idx}, '*');
+  pdbg(`${ship.name} 即時離脱 (exited)`);
+  setInfo(`${ship.name} 離脱`);
+  setMoveBar('');
+  moving = null;
+  undoStack = [];
+  document.getElementById('btnUndo').disabled = true;
+  pushState();
+  renderList();
+
+  // 全日本艦が離脱/沈没 → 戦闘終了
+  const jpActive = jpFleet.filter(s => s.status !== 'sunk' && s.status !== 'exited' && s.col >= 0);
+  if (jpActive.length === 0) {
+    setInfo('日本艦隊 全艦離脱 — 戦闘終了');
+    pdbg('全日本艦離脱 → PHASE_DONE(turn_end)');
+    setTimeout(() => {
+      parent.postMessage({type:'PHASE_DONE', nextPhase:'turn_end'}, '*');
+    }, 1000);
+    return;
+  }
+  checkAllMoved();
 }
 
 // ========== 移動力消費完了（undo可能な完了）==========
