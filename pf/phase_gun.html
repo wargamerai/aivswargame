@@ -232,6 +232,8 @@ function getArcInfo(firer, target) {
 let state = null;
 let subPhase = '';
 const PENDING_KEY = 'gunPendingDmg';
+var _sr = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
+var RADAR_RANGE = (_sr && _sr.radarRange) || 20;
 
 let firerShips = [];  // 射撃可能な射撃艦（プレイヤー=米軍）
 let targetShips = [];  // 射撃可能な目標艦（AI=日本軍）
