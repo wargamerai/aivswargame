@@ -574,8 +574,8 @@ function calcModifiers(firer, target, dist) {
     mod -= 1; details.push('半速-1');
   }
 
-  // レーダー射撃 +1（レーダー搭載艦が視認距離外から射撃時のみ）
-  if (firer.radar && dist > (state.spotRange || 5)) { mod += 1; details.push('レーダー+1'); }
+  // レーダー射撃 +1（視認距離外かつ火災・発砲で見えていない場合のみ）
+  if (firer.radar && dist > (state.spotRange || 5) && !target.onFire && !target.firedGun1) { mod += 1; details.push('レーダー+1'); }
 
   // DD目標 +1
   if (target.type === 'DD') { mod += 1; details.push('DD+1'); }
