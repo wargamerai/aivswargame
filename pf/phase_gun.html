@@ -347,38 +347,32 @@ function applyCritical(target, cd) {
 }
 function getDefense(s) { return s.def || 0; }
 
-// 射撃艦(firer)からその目標(target)が見えるか？（艦ごとの視認判定）
+// 射撃艦(firer)からその目標(target)が見えるか？（射撃のたびに判定）
+// 視認条件: ①視認距離内 ②火災中 ③発砲艦 ④レーダー範囲内（レーダー搭載艦のみ）
 function canSee(firer, target) {
-  // 発砲済み・火災中の敵は距離に関係なく見える
-  if (target.firedGun1) return true;
   if (target.onFire) return true;
-  if (target.revealed) return true;
-  if (target.faceUp) return true;
+  if (target.firedGun1) return true;
   const d = hexDist(firer.col, firer.row, target.col, target.row);
-  // 視認距離内なら見える
   if (d <= (state.spotRange || 0)) return true;
-  // 米軍はレーダーで20hex以内も見える
-  if (firer.radar && d <= 20) return true;
+  if (firer.radar && d <= RADAR_RANGE) return true;
   return false;
 }
 
 // 味方の誰かから見えるか（目標リスト用のフィルタ）
 function isVisibleToJP(usShip) {
-  // 発砲済み・火災中の艦は視認可能
-  if (usShip.firedGun1 || usShip.onFire) return true;
-  // 視認距離内の艦は視認可能
+  if (usShip.onFire || usShip.firedGun1) return true;
   return (state.jpFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     return hexDist(usShip.col, usShip.row, f.col, f.row) <= (state.spotRange || 0);
   });
 }
 function isVisibleToUS(jpShip) {
-  if (jpShip.firedGun1 || jpShip.onFire || jpShip.revealed) return true;
+  if (jpShip.onFire || jpShip.firedGun1) return true;
   return (state.usFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     const d = hexDist(jpShip.col, jpShip.row, f.col, f.row);
     if (d <= (state.spotRange || 0)) return true;
-    if (f.radar && d <= 20) return true;
+    if (f.radar && d <= RADAR_RANGE) return true;
     return false;
   });
 }
@@ -572,7 +566,8 @@ function calcModifiers(firer, target, dist) {
   }
 
   // レーダー射撃 +1（視認距離外かつ目標が未視認の場合のみ）
-  if (firer.radar && dist > (state.spotRange || 5) && !target.revealed) { mod += 1; details.push('レーダー+1'); }
+  // 視認距離外射撃 +1（射撃のたびに距離で判定）
+  if (dist > (state.spotRange || 5)) { mod += 1; details.push('レーダー+1'); }
 
   // DD目標 +1
   if (target.type === 'DD') { mod += 1; details.push('DD+1'); }
@@ -890,7 +885,7 @@ function autoUSShoot(title) {
     let mod = 0;
     const details = [];
     // レーダー射撃修正（米軍）
-    if (firer.radar && bestDist > (state.spotRange || 5) && !bestTarget.revealed) { mod += 1; details.push('レーダー+1'); }
+    if (bestDist > (state.spotRange || 5)) { mod += 1; details.push('レーダー+1'); }
     if (bestTarget.onFire) { mod -= 2; details.push('火災-2'); }
     const tc = firer.turnCount || 0;
     if (tc > 0) { mod += tc; details.push(`転舵+${tc}`); }
