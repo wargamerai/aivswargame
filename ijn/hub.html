@@ -176,6 +176,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 <div id="debugPanel">
   <div id="debugBar">
     <span style="color:#888;font-size:0.75em">Debug Log</span>
+    <button onclick="dumpState()">状態ダンプ</button>
     <button onclick="copyDebugLog()">Copy</button>
     <button onclick="clearDebugLog()">Clear</button>
     <button onclick="toggleDebug()">Close</button>
@@ -224,6 +225,40 @@ function copyDebugLog() {
 function clearDebugLog() {
   _dbgLines.length = 0;
   document.getElementById('debugLog').innerHTML = '';
+}
+
+function dumpState() {
+  if (!state) { dbg('state=null'); return; }
+  dbg('===== 状態ダンプ =====');
+  dbg(`phase=${state.phase} turn=${state.combatTurn} initiative=${state.initiative}`);
+  dbg(`contactMade=${state.contactMade} jpDetected=${state.jpDetected} usDetected=${state.usDetected}`);
+  dbg(`jpFreeMove=${state.jpFreeMove} usFreeMove=${state.usFreeMove} fogMode=${state.fogMode}`);
+  dbg(`jpAutoAI=${localStorage.getItem('jpAutoAI')} fullAutoAI=${localStorage.getItem('fullAutoAI')}`);
+  dbg(`spotRange=${state.spotRange}`);
+  dbg('--- 日本軍 ---');
+  (state.jpFleet||[]).forEach(s => {
+    const crits = (s.crits||[]).join(',') || 'なし';
+    const flags = [];
+    if (s.isLead) flags.push('旗艦');
+    if (s.onFire) flags.push('火災');
+    if (s.cannotTurn) flags.push('回頭不能');
+    if (s.cannotFire) flags.push('砲撃不能');
+    if (s.gunHalved) flags.push('攻撃力半減');
+    if (s.cannotTorpedo) flags.push('雷撃不能');
+    if (s.withdrawing) flags.push('離脱中');
+    const spd = s.speed !== undefined ? s.speed : '(default)';
+    dbg(`  ${s.name}(${s.type}) status=${s.status} spd=${spd} col=${s.colIndex} G=${s.dmgG}/${s.capG} M=${s.dmgM}/${s.capM} crits=[${crits}] flags=[${flags.join(',')}] pos=(${s.col},${s.row}) dir=${s.dir}`);
+  });
+  dbg('--- 米軍 ---');
+  (state.usFleet||[]).forEach(s => {
+    const crits = (s.crits||[]).join(',') || 'なし';
+    const flags = [];
+    if (s.isLead) flags.push('旗艦');
+    if (s.withdrawing) flags.push('離脱中');
+    const spd = s.speed !== undefined ? s.speed : '(default)';
+    dbg(`  ${s.name}(${s.type}) status=${s.status} spd=${spd} col=${s.colIndex} G=${s.dmgG}/${s.capG} M=${s.dmgM}/${s.capM} crits=[${crits}] flags=[${flags.join(',')}] pos=(${s.col},${s.row}) dir=${s.dir}`);
+  });
+  dbg('===== ダンプ終了 =====');
 }
 
 // ========== PHASE FLASH ==========
@@ -1397,6 +1432,10 @@ window.addEventListener('message', (e) => {
     case 'DAMAGE_SUMMARY':
       // 損害サマリーは表示しない（直接次フェーズへ）
       onPhaseDone();
+      break;
+
+    case 'DBG_LOG':
+      if (msg.text) dbg(`[iframe] ${msg.text}`);
       break;
 
     case 'DEPLOY_UNDO':
