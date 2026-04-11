@@ -347,27 +347,31 @@ function applyCritical(target, cd) {
 }
 function getDefense(s) { return s.def || 0; }
 
-// 射撃艦(firer)からその目標(target)が見えるか？（射撃のたびに判定）
-// 視認条件: ①視認距離内 ②火災中 ③発砲艦 ④レーダー範囲内（レーダー搭載艦のみ）
+// 射撃艦(firer)からその目標(target)が見えるか？（艦ごとの視認判定）
 function canSee(firer, target) {
-  if (target.onFire) return true;
+  // 発砲済み・火災中の敵は距離に関係なく見える
   if (target.firedGun1) return true;
+  if (target.onFire) return true;
+  if (target.revealed) return true;
+  if (target.faceUp) return true;
   const d = hexDist(firer.col, firer.row, target.col, target.row);
+  // 視認距離内なら見える
   if (d <= (state.spotRange || 0)) return true;
+  // レーダー搭載艦はレーダー範囲内も見える
   if (firer.radar && d <= RADAR_RANGE) return true;
   return false;
 }
 
 // 味方の誰かから見えるか（目標リスト用のフィルタ）
 function isVisibleToJP(usShip) {
-  if (usShip.onFire || usShip.firedGun1) return true;
+  if (usShip.firedGun1 || usShip.onFire || usShip.revealed) return true;
   return (state.jpFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     return hexDist(usShip.col, usShip.row, f.col, f.row) <= (state.spotRange || 0);
   });
 }
 function isVisibleToUS(jpShip) {
-  if (jpShip.onFire || jpShip.firedGun1) return true;
+  if (jpShip.firedGun1 || jpShip.onFire || jpShip.revealed) return true;
   return (state.usFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     const d = hexDist(jpShip.col, jpShip.row, f.col, f.row);
