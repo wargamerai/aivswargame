@@ -1356,7 +1356,17 @@ window.addEventListener('message', (e) => {
       // 検出フラグ同期（true方向のみ — 一度発見したら戻さない）
       if (msg.jpDetected)  { state.jpDetected  = true; dbg('STATE_UPDATE: jpDetected=true (from iframe)'); }
       if (msg.usDetected)  { state.usDetected  = true; }
-      if (msg.jpFreeMove)  { state.jpFreeMove  = true; dbg('STATE_UPDATE: jpFreeMove=true (from iframe)'); }
+      if (msg.jpFreeMove && !state.jpFreeMove) {
+        state.jpFreeMove = true;
+        dbg('STATE_UPDATE: jpFreeMove=true (from iframe)');
+        // シナリオ特別ルール: 速力制限解放（baseSpd→speed）
+        let restored = 0;
+        (state.jpFleet||[]).forEach(s => {
+          if (s.baseSpd && s.speed < s.baseSpd) { s.speed = s.baseSpd; restored++; }
+        });
+        if (restored > 0) dbg(`速力解放: ${restored}隻の速力を復元`);
+      }
+      if (msg.jpFreeMove) state.jpFreeMove = true;
       if (msg.usFreeMove)  { state.usFreeMove  = true; }
       if (msg.contactMade) { state.contactMade = true; }
       saveState();
@@ -1649,6 +1659,7 @@ function buildFleets(data) {
     name: s.name, type: s.type, side: 'jp',
     col: -1, row: -1,
     dir: 6, speed: s.spd||4,
+    baseSpd: s.baseSpd || s.spd || 4,
     atk: s.atk||0, def: s.def||0,
     capG: s.capG, capM: s.capM, dmgG: s.dmgG||0, dmgM: s.dmgM||0,
     vp: s.vp, torpedo: (s.name==='北上'||s.name==='大井') ? 'TT3' : NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type]||'-'),
