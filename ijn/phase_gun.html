@@ -364,14 +364,14 @@ function canSee(firer, target) {
 
 // 味方の誰かから見えるか（目標リスト用のフィルタ）
 function isVisibleToJP(usShip) {
-  if (usShip.onFire || usShip.firedGun1) return true;
+  if (usShip.onFire || usShip.firedGun1 || usShip.revealed) return true;
   return (state.jpFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     return hexDist(usShip.col, usShip.row, f.col, f.row) <= (state.spotRange || 0);
   });
 }
 function isVisibleToUS(jpShip) {
-  if (jpShip.onFire || jpShip.firedGun1) return true;
+  if (jpShip.onFire || jpShip.firedGun1 || jpShip.revealed) return true;
   return (state.usFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     const d = hexDist(jpShip.col, jpShip.row, f.col, f.row);
@@ -383,7 +383,7 @@ function isVisibleToUS(jpShip) {
 
 // 射程上限: 日米とも一律16hex（視認できれば撃てる）
 function getMaxRange(target, firer) {
-  return 16;
+  return 15;
 }
 
 // ===== 初期化 =====
@@ -516,7 +516,7 @@ function renderCards() {
       if (!canSee(firer, s)) oor = ' disabled';
       else {
         const d = hexDist(firer.col, firer.row, s.col, s.row);
-        if (d > 16) oor = ' disabled';
+        if (d > 15) oor = ' disabled';
         else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
       }
     }
@@ -549,7 +549,7 @@ function selectTarget(i) {
     const firer = jpShips[selectedFirer];
     if (!canSee(firer, usShips[i])) return;
     const d = hexDist(firer.col, firer.row, usShips[i].col, usShips[i].row);
-    if (d > 16) return;
+    if (d > 15) return;
   }
   selectedTarget = i;
   renderCards();
@@ -870,7 +870,7 @@ function autoJPShoot(title) {
     for (const t of us) {
       if (!canSee(firer, t)) continue;
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > 16) continue;
+      if (d > 15) continue;
       const arcInfo = getArcInfo(firer, t);
       if (arcInfo.mult === 0) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
@@ -1121,7 +1121,7 @@ function autoUSShoot(title) {
     for (const t of jp) {
       if (!canSee(firer, t)) continue;
       const d = hexDist(firer.col, firer.row, t.col, t.row);
-      if (d > 16) continue;
+      if (d > 15) continue;
       // 数的不利ならレーダー射撃を控える
       if (suppressRadar && d > (state.spotRange || 0) && !t.onFire && !t.revealed && !t.firedGun1) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
