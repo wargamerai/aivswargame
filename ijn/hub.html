@@ -1371,6 +1371,17 @@ window.addEventListener('message', (e) => {
         dbg('msg: PHASE_DONE IGNORED (report表示中)');
         break;
       }
+      // moveフェーズ中にturn_endが来たら不正メッセージとして無視
+      // （repair等からの遅延到着を防止。正当なturn_endはrepairフェーズからのみ）
+      if (msg.nextPhase === 'turn_end' && state.phase !== 'repair') {
+        // ただし全艦離脱/沈没なら正当（withdrawShipNowからの送信）
+        const jpAlive = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.status !== 'exited' && s.col >= 0).length;
+        const usAlive = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.status !== 'exited' && s.col >= 0).length;
+        if (jpAlive > 0 && usAlive > 0) {
+          dbg(`msg: PHASE_DONE BLOCKED (turn_end during ${state.phase}, jp=${jpAlive} us=${usAlive} — 不正メッセージ)`);
+          break;
+        }
+      }
       // 同じフェーズからの2重発火を防止
       const phaseKey = state.phase + '_' + state.combatTurn;
       if (state._lastPhaseDone === phaseKey) {
