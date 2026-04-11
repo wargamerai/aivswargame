@@ -1663,21 +1663,20 @@ function canForceEntry(ship) {
 function collisionCheck(invader, occupant) {
   var isSunk = (occupant.status === 'sunk');
   var d1 = roll(), d2 = roll();
-  var logLines = [];
-  logLines.push('⚓ 衝突チェック: ' + invader.name + ' → ' + occupant.name + (isSunk ? '(沈没船)' : '') + ' [' + d1 + '+' + d2 + '=' + (d1+d2) + ']');
+  var msg = '--- 衝突チェック ---\n';
+  msg += invader.name + ' → ' + occupant.name + (isSunk ? '(沈没船)' : '') + '\n';
+  msg += '判定ダイス: ' + d1 + ' + ' + d2 + ' = ' + (d1+d2) + '（7で衝突）\n';
 
-  // 衝突関係の艦をハイライト表示
   parent.postMessage({type:'HIGHLIGHT', firer:invader.name, target:occupant.name}, '*');
 
   if (d1 + d2 !== 7) {
-    logLines.push('  → 衝突回避');
-    setInfo(logLines.join('\n'));
-    // 回避でも少し表示してからクリア
-    setTimeout(function(){ parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*'); }, 1500);
-    return logLines;
+    msg += '\n→ 回避成功';
+    alert(msg);
+    parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
+    return [msg];
   }
 
-  logLines.push('  💥 衝突発生!');
+  msg += '\n★ 衝突発生!\n';
 
   // 侵入側: 1:2 (rc=0)
   var dInv1 = roll(), dInv2 = roll();
@@ -1685,16 +1684,17 @@ function collisionCheck(invader, occupant) {
   var invDmgStr = (COLLISION_DMG_CHART[invRow] && COLLISION_DMG_CHART[invRow][0]) || '-';
   var invDmg = collisionParseDmg(invDmgStr);
   var invResult = collisionApplyDamage(invader, invDmg, dInv1 === dInv2);
-  logLines.push('  ' + invader.name + '(侵入側 1:2): [' + dInv1 + '+' + dInv2 + '] → ' + invDmgStr);
-  if (invResult.critText) logLines.push('    クリティカル! ' + invResult.critText);
-  if (invResult.sunk) logLines.push('    → 沈没!');
+  msg += '\n【' + invader.name + '（侵入側 1:2）】\n';
+  msg += '  ダイス: ' + dInv1 + ' + ' + dInv2 + ' = ' + (dInv1+dInv2) + '\n';
+  msg += '  損害: ' + invDmgStr + '\n';
+  if (invResult.critText) msg += '  クリティカル: ' + invResult.critText + '\n';
+  if (invResult.sunk) msg += '  → 沈没!\n';
 
-  // 沈没船との衝突: 被衝突側（沈没船）にはダメージなし
   if (isSunk) {
-    logLines.push('  ' + occupant.name + '(沈没船): 追加損害なし');
-    setInfo(logLines.join('\n'));
-    setTimeout(function(){ parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*'); }, 3000);
-    return logLines;
+    msg += '\n【' + occupant.name + '（沈没船）】\n  追加損害なし';
+    alert(msg);
+    parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
+    return [msg];
   }
 
   // 被衝突側: レーティング比率
@@ -1702,20 +1702,22 @@ function collisionCheck(invader, occupant) {
   var occRating = getCollisionRating(occupant);
   var ratio = invRating / occRating;
   var rc = ratio < 1 ? 0 : Math.min(10, Math.floor(ratio));
-  if (rc < 1) rc = 1;  // 最低1:1
+  if (rc < 1) rc = 1;
   var ratioLabels = ['1:2','1:1','2:1','3:1','4:1','5:1','6:1','7:1','8:1','9:1','10:1'];
   var dOcc1 = roll(), dOcc2 = roll();
   var occRow = Math.max(0, Math.min(10, dOcc1 + dOcc2 - 2));
   var occDmgStr = (COLLISION_DMG_CHART[occRow] && COLLISION_DMG_CHART[occRow][rc]) || '-';
   var occDmg = collisionParseDmg(occDmgStr);
   var occResult = collisionApplyDamage(occupant, occDmg, dOcc1 === dOcc2);
-  logLines.push('  ' + occupant.name + '(被衝突 ' + (ratioLabels[rc]||'?') + '): [' + dOcc1 + '+' + dOcc2 + '] → ' + occDmgStr);
-  if (occResult.critText) logLines.push('    クリティカル! ' + occResult.critText);
-  if (occResult.sunk) logLines.push('    → 沈没!');
+  msg += '\n【' + occupant.name + '（被衝突 ' + (ratioLabels[rc]||'?') + '）】\n';
+  msg += '  ダイス: ' + dOcc1 + ' + ' + dOcc2 + ' = ' + (dOcc1+dOcc2) + '\n';
+  msg += '  損害: ' + occDmgStr + '\n';
+  if (occResult.critText) msg += '  クリティカル: ' + occResult.critText + '\n';
+  if (occResult.sunk) msg += '  → 沈没!\n';
 
-  setInfo(logLines.join('\n'));
-  setTimeout(function(){ parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*'); }, 3000);
-  return logLines;
+  alert(msg);
+  parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
+  return [msg];
 }
 
 // 同一ヘクス残留チェック（移動終了時に呼ぶ）
