@@ -1409,11 +1409,17 @@ function startMove(ship) {
   moving = ship;
   turnedThisHex = false;
   undoStack = [];
-  document.getElementById('btnUndo').disabled = true;
   let spd = getSpeed(ship);
   if (ship.dmgM >= ship.capM / 2) spd = Math.max(1, Math.ceil(spd/2));
   remainMove = spd;
   ship.remainMove = remainMove;
+
+  // 初期位置をundoスタックに保存（移動0の状態に戻せるように）
+  undoStack.push({
+    col: ship.col, row: ship.row, dir: ship.dir,
+    remainMove, turnedThisHex
+  });
+  document.getElementById('btnUndo').disabled = false;
 
   let restriction = '';
   if (ship.cannotTurn) restriction = '\n⚠ 回頭不能 — 直進(5)のみ';
