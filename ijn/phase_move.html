@@ -206,7 +206,9 @@ function isJPAutoAI() { return localStorage.getItem('jpAutoAI') === '1'; }
 function toggleJPAI() {
   const checked = document.getElementById('jpAI').checked;
   localStorage.setItem('jpAutoAI', checked ? '1' : '0');
+  pdbg(`toggleJPAI: checked=${checked} btnDone.display=${document.getElementById('btnDone').style.display}`);
   if (checked && document.getElementById('btnDone').style.display !== 'none') {
+    pdbg('→ AI委任ON → autoJPMove() 呼び出し');
     autoJPMove();
   }
 }
@@ -1973,6 +1975,7 @@ window.addEventListener('message', function(e) {
 });
 
 function donePhase(fromStraight) {
+  pdbg(`donePhase呼び出し: fromStraight=${fromStraight} phase=${state.phase} movedShips=${movedShips.size}/${jpFleet.length}`);
   // 未移動艦チェック（日本軍手動移動モード時のみ、直進モードからは除外）
   if (!fromStraight && state.jpFreeMove && isJPMoving()) {
     // 現在操作中の艦を確定
