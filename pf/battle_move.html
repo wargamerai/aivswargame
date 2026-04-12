@@ -700,13 +700,15 @@ function renderFleetList() {
   for (const ship of gameState.jpFleet) {
     const cls = `ship-item jp ${ship.isLead?'lead':''} ${gameState.selectedShip===ship?'selected':''}`;
     const status = ship.status !== 'ok' ? ` [${ship.status}]` : '';
-    html += `<div class="${cls}" onclick="onShipClick('${ship.name}','jp')">${ship.isLead?'★':' '} ${ship.name} (${ship.type})${status}</div>`;
+    const crit = ship.cannotTurn ? ' 舵×' : '';
+    html += `<div class="${cls}" onclick="onShipClick('${ship.name}','jp')">${ship.isLead?'★':' '} ${ship.name} (${ship.type})${status}${crit}</div>`;
   }
 
   html += '<div style="color:#8888ff;font-weight:bold;margin:6px 0 4px">🦅 米軍</div>';
   for (const ship of gameState.usFleet) {
     const cls = `ship-item us ${ship.isLead?'lead':''}`;
-    html += `<div class="${cls}">${ship.isLead?'★':' '} ${ship.name} (${ship.type})</div>`;
+    const crit = ship.cannotTurn ? ' 舵×' : '';
+    html += `<div class="${cls}">${ship.isLead?'★':' '} ${ship.name} (${ship.type})${crit}</div>`;
   }
 
   el.innerHTML = html;
