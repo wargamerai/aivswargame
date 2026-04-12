@@ -270,11 +270,10 @@ function autoWithdrawHeavy() {
   const jpMoving = isJPMoving();
   const allShips = jpMoving ? jpFleet : usFleet;
   for (const ship of allShips) {
-    // 大破、航行不能、回頭不能、速力半減 → 離脱
+    // 大破、航行不能、速力半減 → 離脱
     const hasCrit = (ship.crits || []).includes('速力半減');
     const shouldWithdraw = (ship.status === 'heavy') ||
                            (getSpeed(ship) === 0) ||
-                           ship.cannotTurn ||
                            hasCrit;
     if (!shouldWithdraw || ship.col < 0 || ship.status === 'sunk') continue;
     if (ship.withdrawing) {
@@ -1900,9 +1899,9 @@ function softFinishMove() {
 }
 
 function isShipCrippled(s) {
-  // 速力0、大破、回頭不能、砲撃不能、速力半減 → 追従不能・旗艦不適格
+  // 速力0、大破、砲撃不能、速力半減 → 追従不能・旗艦不適格
   var hasCrit = (s.crits || []).includes('速力半減');
-  return s.speed === 0 || s.status === 'heavy' || s.cannotTurn || s.cannotShoot || hasCrit;
+  return s.speed === 0 || s.status === 'heavy' || s.cannotShoot || hasCrit;
 }
 
 // 随伴艦追従（ワープ禁止: 隣接hex移動のみ）

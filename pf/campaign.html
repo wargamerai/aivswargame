@@ -866,16 +866,6 @@ function applyBattleResultData(importData, endTurn) {
         }
     });
 
-    // 航行不能の艦 → 自沈
-    importData.forEach(data => {
-        if (data.speed !== 0) return;
-        let ship = currentJpFleet.find(s => s.name === data.name) || currentUsFleet.find(s => s.name === data.name);
-        if (ship && ship.status !== 'sunk') {
-            let isUs = currentUsFleet.includes(ship);
-            logMsg(`${ship.name} 航行不能 → 自沈処理`);
-            applyDamageToShip(ship, 999, 0, isUs);
-        }
-    });
 
     // --- 日本軍ボーナス得点 ---
     let jpBonus = 0;
@@ -1124,11 +1114,12 @@ function applyDamageToShip(ship, addG, addM, isUs) {
 
 // --- 海戦結果サマリー表示 ---
 function showBattleSummary(b) {
-    const jpDmg = b.jpScoreGain || 0;
-    const usDmg = b.usScoreGain || 0;
+    const usDmg = calcVPDetail(b.jpShips).total;
+    const jpDmg = calcVPDetail(b.usShips).total;
     const jpHandi = b.jpHandicap || 0;
     const usHandi = b.usHandicap || 0;
-    const jpGain = jpDmg + jpHandi;
+    const jpBonus = b.jpBonus || 0;
+    const jpGain = jpDmg + jpHandi + jpBonus;
     const usGain = usDmg + usHandi;
     const diff = usGain - jpGain; // PF版: 米軍視点
 
@@ -1240,8 +1231,8 @@ function showCampaignSummary() {
         const bJpHandi = b.jpHandicap || 0;
         const bUsHandi = b.usHandicap || 0;
         const bJpBonus = b.jpBonus || 0;
-        const dmgUs = b.usScoreGain;
-        const dmgJp = b.jpScoreGain;
+        const dmgUs = calcVPDetail(b.jpShips).total;
+        const dmgJp = calcVPDetail(b.usShips).total;
         const totalUs = dmgUs + bUsHandi;
         const totalJp = dmgJp + bJpHandi + bJpBonus;
         battlesHtml += `<tr><td style="color:#aaa; padding:3px 8px;">損害得点</td><td style="color:#88aaff; padding:3px 8px; text-align:right;">米軍 +${dmgUs}</td><td style="color:#ff8888; padding:3px 8px; text-align:right;">日本軍 +${dmgJp}</td></tr>`;
