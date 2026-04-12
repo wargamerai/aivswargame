@@ -350,7 +350,9 @@ let scoutResults = []; // 索敵結果を保存
 // --- ユーティリティ ---
 function logMsg(msg) {
     const logDiv = document.getElementById('log');
-    logDiv.innerHTML += `<div>${msg}</div>`;
+    const div = document.createElement('div');
+    div.textContent = msg;
+    logDiv.appendChild(div);
     logDiv.scrollTop = logDiv.scrollHeight;
 }
 function rollDice(sides = 6) { return Math.floor(Math.random() * sides) + 1; }
@@ -642,7 +644,7 @@ function showFleetSelection() {
             const torpedo = NO_TORPEDO_SHIPS.includes(s.name) ? '-' : (TORPEDOES[s.type] || '-');
             const dmgInfo = (s.dmgG > 0 || s.dmgM > 0) ? ` <span style="color:#cc6600;">[損傷G${s.dmgG}/M${s.dmgM}]</span>` : '';
 
-            html += `<div class="${cls}" onclick="toggleShip('${s.name}')" data-ship="${s.name}">`;
+            html += `<div class="${cls}" onclick="toggleShip('${s.name.replace(/'/g, "\\'")}')" data-ship="${s.name}">`;
             html += `<span class="c-type">${s.type}</span>`;
             html += `<span class="c-name">${s.name}</span>`;
             html += `<span class="c-info">火${s.atk} 装${s.def} 速${s.spd} 魚${torpedo}${dmgInfo}</span>`;
