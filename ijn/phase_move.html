@@ -451,13 +451,8 @@ function autoAdvanceColumn(fleet) {
   const preMove = fleet.map(s => ({ name: s.name, colIndex: s.colIndex, col: s.col, row: s.row }));
   const leads = fleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
 
-  leads.sort((a, b) => {
-    const aEast = [6,3,9].includes(a.dir);
-    const bEast = [6,3,9].includes(b.dir);
-    if (aEast && bEast) return b.col - a.col;
-    if (!aEast && !bEast) return a.col - b.col;
-    return 0;
-  });
+  // 敵(JP)に近い艦(col小=左)から移動
+  leads.sort((a, b) => a.col - b.col);
 
   // 直進モード統一速力: OBBがいたら3、なければ4
   const activeShips = fleet.filter(s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
@@ -579,14 +574,8 @@ function aiUSMoveAnimated() {
   }
   const leads = usFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
 
-  // 前方の艦からソート
-  leads.sort((a, b) => {
-    const aEast = [6,3,9].includes(a.dir);
-    const bEast = [6,3,9].includes(b.dir);
-    if (aEast && bEast) return b.col - a.col;
-    if (!aEast && !bEast) return a.col - b.col;
-    return 0;
-  });
+  // 敵(JP)に近い艦(col小=左)から移動
+  leads.sort((a, b) => a.col - b.col);
 
   // 各リード艦を順番に移動し、間にpushStateで画面更新
   let idx = 0;
