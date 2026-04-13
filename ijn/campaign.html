@@ -328,7 +328,7 @@ function updateScoreUI() {
 // --- キャンペーン状態永続化 ---
 function saveCampaignState() {
     const state = {
-        currentTurn, jpScore, usScore, usedRolls, maxUsHandicap, currentPhase, jpMission,
+        currentTurn, jpScore, usScore, usedRolls, maxUsHandicap, currentPhase, jpMission, lastJpHandicap, lastUsHandicap,
         difficulty: document.getElementById('difficultySelect').value,
         jpAllShipsState: jpAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, rest: s.rest })),
         usAllShipsState: usAllShips.map(s => ({ name: s.name, dmgG: s.dmgG, dmgM: s.dmgM, status: s.status, used: s.used })),
@@ -352,6 +352,8 @@ function loadCampaignState() {
         maxUsHandicap = state.maxUsHandicap || 0;
         currentPhase = state.currentPhase || 'sortie';
         jpMission = state.jpMission || '';
+        lastJpHandicap = state.lastJpHandicap || 0;
+        lastUsHandicap = state.lastUsHandicap || 0;
         battleHistory = state.battleHistory || [];
 
         if (state.jpAllShipsState) {
@@ -735,16 +737,24 @@ function loadBattleResult() {
             importData = parsed.ships || [];
             endTurn = parsed.endTurn || 10;
         }
-        applyBattleResultData(importData, endTurn);
+        const reportHandicap = parsed.jpHandicap || 0;
+        applyBattleResultData(importData, endTurn, reportHandicap);
         localStorage.removeItem('battleResultForCampaign');
     } catch(e) {
         logMsg('戦闘結果の読み込みエラー: ' + e.message);
     }
 }
 
-function applyBattleResultData(importData, endTurn) {
+function applyBattleResultData(importData, endTurn, reportHandicap) {
     if (!Array.isArray(importData)) { logMsg('データ形式エラー'); return; }
     endTurn = endTurn || 10;
+    reportHandicap = reportHandicap || 0;
+
+    // 戦闘レポートのハンディキャップで補正（phaseSortieで加算済みの値を置き換え）
+    if (reportHandicap !== lastJpHandicap) {
+        jpScore = jpScore - lastJpHandicap + reportHandicap;
+        lastJpHandicap = reportHandicap;
+    }
 
     logMsg(`\n--- ${BATTLE_NAMES[currentTurn]} 戦闘結果 ---`);
 
@@ -930,6 +940,9 @@ function renderBattleHistory() {
         } else {
             html += `<div style="color:#889;font-size:0.85em">戦闘損害なし</div>`;
         }
+        if (jpHandi > 0) {
+            html += `<div style="margin-top:3px;padding:3px;background:#fff0f0;border:1px solid #c88;border-radius:2px;font-size:0.85em">⚖ ハンディキャップ <strong>+${jpHandi}</strong></div>`;
+        }
         if (jpBonus > 0) {
             const mLabel = b.jpBonusMission === 'bombard' ? '艦砲射撃' : '輸送';
             html += `<div style="margin-top:3px;padding:3px;background:#fffff0;border:1px solid #cc8;border-radius:2px;font-size:0.85em">🏆 ${mLabel}ボーナス <strong>+${jpBonus}</strong></div>`;
@@ -947,6 +960,9 @@ function renderBattleHistory() {
             }
         } else {
             html += `<div style="color:#889;font-size:0.85em">戦闘損害なし</div>`;
+        }
+        if (usHandi > 0) {
+            html += `<div style="margin-top:3px;padding:3px;background:#f0f4ff;border:1px solid #8ac;border-radius:2px;font-size:0.85em">⚖ ハンディキャップ <strong>+${usHandi}</strong></div>`;
         }
         html += `<div class="rp-total rp-total-us"><span>🦅 合計</span><span>${usEarned} pt</span></div>`;
         html += `</div>`;
@@ -1034,8 +1050,8 @@ function applyDamageToShip(ship, addG, addM, isUs) {
 // --- 各海戦結果サマリー表示 ---
 function showBattleSummary(b) {
     // 今回の海戦の得点差で勝敗判定
-    const jpGain = b.jpScoreGain || 0;
-    const usGain = b.usScoreGain || 0;
+    const jpGain = (b.jpScoreGain || 0) + (b.jpHandicap || 0);
+    const usGain = (b.usScoreGain || 0) + (b.usHandicap || 0);
     const diff = jpGain - usGain;
 
     let verdict, verdictColor;
