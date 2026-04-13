@@ -788,9 +788,11 @@ function showJPPreview(r) {
   const body = document.getElementById('resultBody');
   const hitPct = calcHitChance(r.mod, r.dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
+  const prevFN = (state.fogMode && r.firer.side === 'jp') ? '❓❓❓' : `${r.firer.name}(${r.firer.type})`;
+  const prevTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
   let html = `
-    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
+    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${prevFN}</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${prevTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
     <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${r.arcInfo.mult<1?'#fa6':'#6a6'}">${r.arcInfo.arc}${r.arcInfo.mult<1?' (火力½)':''}</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>`;
@@ -804,9 +806,11 @@ function showJPPreview(r) {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
+  const resFN = (state.fogMode && r.firer.side === 'jp') ? '❓❓❓' : `${r.firer.name}(${r.firer.type})`;
+  const resTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
   let html = `
-    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
+    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${resFN}</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${resTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
     <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${r.arcInfo.mult<1?'#fa6':'#6a6'}">${r.arcInfo.arc}${r.arcInfo.mult<1?' (火力½)':''}</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>`;
