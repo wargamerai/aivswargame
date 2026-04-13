@@ -1304,11 +1304,14 @@ function renderList() {
 
   // PF: 日本軍(AI)は操作不可
   html += '</div><div class="phase-label" style="margin-top:4px">▼ 日本軍</div><div class="ship-cards">';
+  const fogActive = !!state.fogMode;
   html += jpFleet.map(s => {
     const statusText = getShipStatusText(s);
+    const fogN = fogActive ? '❓❓❓' : s.name;
+    const fogT = fogActive ? '?' : s.type + statusText;
     return `<div class="card jp disabled">
-      <span class="c-name">${s.name}</span>
-      <span class="c-info">${s.type}${statusText}</span>
+      <span class="c-name">${fogN}</span>
+      <span class="c-info">${fogT}</span>
     </div>`;
   }).join('');
   html += '</div>';
