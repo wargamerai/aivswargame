@@ -1096,7 +1096,308 @@
   }
 
   // ===========================================================
-  // 9. エクスポート
+  // 9. §20.51 侵入兵の火力2倍
+  // ===========================================================
+
+  /**
+   * 侵入兵の追加火力を計算（既にcalcGroupFirepowerに含まれる分と同額 → 結果2倍）
+   * @returns {number} 追加FP
+   */
+  function calcInfiltrationFPBonus(srcGroup, tgtSide, tgtIdx, srcFacKey, distance) {
+    let bonus = 0;
+    const idx = R().rangeIndex(distance);
+    for (const card of (srcGroup.cards || [])) {
+      if (!R().isAlive(card) || R().isPinned(card)) continue;
+      if (card.malfunctioned || card.destroyed) continue;
+      if (!card.infiltrating) continue;
+      if (card.infiltratedGroupSide !== tgtSide || card.infiltratedGroupIdx !== tgtIdx) continue;
+      const def = R().lookupSoldier(card, srcFacKey);
+      if (!def) continue;
+      // §20.51 例外: 火炎放射器は2倍にしない
+      if (def.weaponCat && def.weaponCat.includes('火炎放射器')) continue;
+      const fp = parseInt(def.range[idx], 10) || 0;
+      bonus += fp;
+    }
+    return bonus;
+  }
+
+  /**
+   * srcGroupにtgtGroup(tgtSide/tgtIdx)を侵入先とする兵士がいるか
+   */
+  function hasInfiltratorsTargeting(srcGroup, tgtSide, tgtIdx) {
+    return (srcGroup.cards || []).some(c =>
+      c.infiltrating && c.infiltratedGroupSide === tgtSide && c.infiltratedGroupIdx === tgtIdx && R().isAlive(c)
+    );
+  }
+
+  // ===========================================================
+  // 10. §20.9 狂暴兵（ソ連軍専用）
+  // ===========================================================
+
+  /**
+   * 狂暴兵チェック: PANIC_KIA時にソ連兵が狂暴兵になれるか
+   * @param {object} card - ユニットカード
+   * @param {object} soldierDef - 兵士定義（berserkフィールドあり）
+   * @param {number} rpc0r - RPCの0rコラム値
+   * @param {string} factionKey - 'rus'のみ対象
+   * @param {number} relativeDistance - 敵との相対距離
+   * @returns {boolean} trueなら狂暴兵化
+   */
+  function checkBerserkEligibility(card, soldierDef, rpc0r, factionKey, relativeDistance) {
+    if (factionKey !== 'rus') return false;
+    if (relativeDistance !== 5) return false;
+    if (!R().isPinned(card)) return false;
+    // パニック値以下なら狂暴兵化
+    const panic = parseInt(soldierDef.panic, 10) || 0;
+    return rpc0r <= panic;
+  }
+
+  /**
+   * 狂暴兵のCC自動実行（ターン開始時）
+   * @returns {Promise<{battles:Array}>}
+   */
+  async function executeBerserkCC(berserkCard, srcGroup, srcGroupIdx, tgtGroup, tgtSide, tgtIdx, drawFn, srcFacKey) {
+    const tgtFacKey = tgtGroup._faction || 'ger';
+    const def = R().lookupSoldier(berserkCard, srcFacKey);
+    if (!def) return { battles: [] };
+
+    // §20.91 RPCで防御側決定
+    const rpcCard = drawFn();
+    if (!rpcCard) return { battles: [] };
+    const target = determineCCTarget(rpcCard, tgtGroup);
+    if (!target) return { battles: [] };
+
+    const defCard = target.card;
+    const defDef = R().lookupSoldier(defCard, tgtFacKey);
+    if (!defDef) return { battles: [] };
+
+    // §20.91 ピン状態のCCVを使用
+    const atkCCV = getCCV(berserkCard, def, {});
+    const defCCV = getCCV(defCard, defDef, {});
+
+    const atkRncCard = drawFn();
+    const defRncCard = drawFn();
+    if (!atkRncCard || !defRncCard) return { battles: [] };
+
+    const combat = resolveCCCombat(atkCCV, defCCV, atkRncCard, defRncCard);
+
+    const battle = {
+      atkName: `#${berserkCard.num} ${def.name} [狂暴]`,
+      defName: `#${defCard.num} ${defDef.name}`,
+      atkCCV, defCCV,
+      atkRnc: combat.atkRnc, defRnc: combat.defRnc,
+      atkRncColor: combat.atkRncColor, defRncColor: combat.defRncColor,
+      atkTotal: combat.atkTotal, defTotal: combat.defTotal,
+      atkBonus: 0, defBonus: 0, concealMod: 0,
+      result: combat.result,
+    };
+
+    // 結果適用
+    if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') {
+      R().killSoldier(defCard);
+    }
+    if (combat.result === 'ATK_KIA' || combat.result === 'BOTH_KIA') {
+      R().killSoldier(berserkCard);
+      berserkCard.berserk = false;
+    }
+    // §20.91 勝利で回復
+    if (combat.result === 'DEF_KIA') {
+      R().unpinSoldier(berserkCard);
+      berserkCard.berserk = false;
+    }
+
+    await showCCResultOverlay(`狂暴兵CC — ${srcGroup.name}`, [battle]);
+    return { battles: [battle] };
+  }
+
+  // ===========================================================
+  // 11. AI侵入/CC
+  // ===========================================================
+
+  /**
+   * AI自動侵入（モーダルなし）
+   */
+  function aiExecuteInfiltration(srcGroup, srcIdx, tgtGroup, tgtSide, tgtIdx, drawFn, aiFacKey) {
+    const eligible = unpinnedAlive(srcGroup);
+    if (eligible.length === 0) return { ok: false, actionUsed: false };
+
+    // AI: 移動カードがあれば使う、なければモラルチェック
+    const st = global.state;
+    const aiHand = st.aiHand || [];
+    const moveCards = aiHand.filter(c => c.terrain && c.terrain.type === 'MOVEMENT');
+    let moveUsed = 0;
+    const results = [];
+
+    for (const card of eligible) {
+      const def = R().lookupSoldier(card, aiFacKey);
+      if (!def) continue;
+      const morale = parseInt(def.morale, 10) || 0;
+      let moralePass = false;
+
+      // 移動カードがあれば優先使用
+      if (moveUsed < moveCards.length) {
+        moralePass = true;
+        const mc = moveCards[moveUsed];
+        const idx = aiHand.indexOf(mc);
+        if (idx >= 0) {
+          aiHand.splice(idx, 1);
+          if (mc.terrainIndex != null && st.terrainDeck) st.terrainDeck.discard.push(mc.terrainIndex);
+        }
+        moveUsed++;
+      } else {
+        // モラルチェック
+        const rncCard = drawFn();
+        if (!rncCard) continue;
+        const rnc = parseInt(rncCard.terrain.range, 10) || 0;
+        moralePass = rnc < morale;
+        if (!moralePass) {
+          R().pinSoldier(card);
+          continue;
+        }
+      }
+
+      // 侵入RPC判定
+      const column = calcInfiltrationColumn(tgtGroup, srcGroup, {});
+      const rpcCard = drawFn();
+      if (!rpcCard) continue;
+      const rpcResult = resolveInfiltrationRPC(rpcCard, column);
+      if (rpcResult.success) {
+        card.infiltrating = true;
+        card.infiltratedGroupSide = tgtSide;
+        card.infiltratedGroupIdx = tgtIdx;
+      }
+      results.push({ name: `#${card.num} ${def.name}`, infiltrated: rpcResult.success });
+    }
+
+    return { ok: true, actionUsed: true, results };
+  }
+
+  /**
+   * AI自動CC（モーダルなし）
+   */
+  async function aiExecuteCC(srcGroup, srcGroupIdx, drawFn, aiFacKey) {
+    const st = global.state;
+    const infiltrators = getInfiltratingFromGroup(srcGroup);
+    if (infiltrators.length === 0) return { ok: false, actionUsed: false };
+
+    const firstInf = infiltrators[0];
+    const tgtSide = firstInf.infiltratedGroupSide;
+    const tgtIdx = firstInf.infiltratedGroupIdx;
+    const tgtGroup = st.groups[tgtSide][tgtIdx];
+    if (!tgtGroup) return { ok: false, actionUsed: false };
+    const tgtFacKey = tgtGroup._faction || 'us';
+
+    // 全侵入兵が参加（モラルチェックまたは移動カード）
+    const aiHand = st.aiHand || [];
+    const moveCards = aiHand.filter(c => c.terrain && c.terrain.type === 'MOVEMENT');
+    let moveUsed = 0;
+    const participants = [];
+
+    for (const card of infiltrators) {
+      const def = R().lookupSoldier(card, aiFacKey);
+      if (!def) continue;
+      if (moveUsed < moveCards.length) {
+        const mc = moveCards[moveUsed];
+        const idx = aiHand.indexOf(mc);
+        if (idx >= 0) {
+          aiHand.splice(idx, 1);
+          if (mc.terrainIndex != null && st.terrainDeck) st.terrainDeck.discard.push(mc.terrainIndex);
+        }
+        moveUsed++;
+        participants.push(card);
+      } else {
+        const rncCard = drawFn();
+        if (!rncCard) continue;
+        const rnc = parseInt(rncCard.terrain.range, 10) || 0;
+        const morale = parseInt(def.morale, 10) || 0;
+        if (rnc < morale) {
+          participants.push(card);
+        } else {
+          R().pinSoldier(card);
+          card.infiltrating = false;
+          delete card.infiltratedGroupSide;
+          delete card.infiltratedGroupIdx;
+        }
+      }
+    }
+
+    if (participants.length === 0) return { ok: true, actionUsed: true, battles: [] };
+
+    // RPCで防御側決定 & CC解決
+    const battles = [];
+    const assignments = [];
+    for (const card of participants) {
+      const rpcCard = drawFn();
+      if (!rpcCard) continue;
+      const target = determineCCTarget(rpcCard, tgtGroup);
+      if (!target) continue;
+      assignments.push({ card, defCard: target.card, defCardIdx: target.cardIdx });
+    }
+
+    const defMap = new Map();
+    for (const a of assignments) {
+      if (!defMap.has(a.defCardIdx)) defMap.set(a.defCardIdx, []);
+      defMap.get(a.defCardIdx).push(a);
+    }
+
+    for (const [defCardIdx, attackers] of defMap) {
+      const defCard = tgtGroup.cards[defCardIdx];
+      if (!defCard || !R().isAlive(defCard)) continue;
+      const defDef = R().lookupSoldier(defCard, tgtFacKey);
+      if (!defDef) continue;
+      let defCCV = getCCV(defCard, defDef, {});
+
+      let attackerIdx = 0;
+      while (attackerIdx < attackers.length && R().isAlive(defCard)) {
+        const atk = attackers[attackerIdx];
+        const atkDef = R().lookupSoldier(atk.card, aiFacKey);
+        if (!atkDef) { attackerIdx++; continue; }
+        let atkCCV = getCCV(atk.card, atkDef, {});
+        const currentBonus = Math.max(0, (attackers.length - 1 - attackerIdx)) * 3;
+        atkCCV += currentBonus;
+
+        const atkRncCard = drawFn();
+        const defRncCard = drawFn();
+        if (!atkRncCard || !defRncCard) break;
+        const combat = resolveCCCombat(atkCCV, defCCV, atkRncCard, defRncCard);
+
+        battles.push({
+          atkName: `#${atk.card.num} ${atkDef.name}`,
+          defName: `#${defCard.num} ${defDef.name}`,
+          atkCCV, defCCV,
+          atkRnc: combat.atkRnc, defRnc: combat.defRnc,
+          atkRncColor: combat.atkRncColor, defRncColor: combat.defRncColor,
+          atkTotal: combat.atkTotal, defTotal: combat.defTotal,
+          atkBonus: currentBonus, defBonus: 0, concealMod: 0,
+          result: combat.result,
+        });
+
+        if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') R().killSoldier(defCard);
+        if (combat.result === 'ATK_KIA' || combat.result === 'BOTH_KIA') {
+          R().killSoldier(atk.card);
+          atk.card.infiltrating = false;
+        }
+        if (combat.result === 'DEF_KIA') {
+          atk.card.infiltrating = false;
+          if (combat.diff >= 3) {
+            atk.card.infiltrating = true;
+            atk.card.infiltratedGroupSide = tgtSide;
+            atk.card.infiltratedGroupIdx = tgtIdx;
+          }
+        }
+        if (combat.result === 'ATK_KIA') attackerIdx++;
+        else break;
+      }
+    }
+
+    if (battles.length > 0) {
+      await showCCResultOverlay(`AI白兵戦 — ${srcGroup.name} → ${tgtGroup.name}`, battles);
+    }
+    return { ok: true, actionUsed: true, battles };
+  }
+
+  // ===========================================================
+  // 12. エクスポート
   // ===========================================================
 
   global.CC_ACTION = {
@@ -1115,6 +1416,15 @@
     getCCV,
     parseCCV,
     getWeaponValue,
+    // §20.51 火力2倍
+    calcInfiltrationFPBonus,
+    hasInfiltratorsTargeting,
+    // §20.9 狂暴兵
+    checkBerserkEligibility,
+    executeBerserkCC,
+    // AI侵入/CC
+    aiExecuteInfiltration,
+    aiExecuteCC,
     // 内部（テスト用）
     calcInfiltrationColumn,
     resolveInfiltrationRPC,
