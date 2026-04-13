@@ -656,9 +656,11 @@ function doShoot() {
   const hitPct = calcHitChance(mod, dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
   const body = document.getElementById('resultBody');
+  const shootFN = `${firer.name}(${firer.type})`;
+  const shootTN = state.fogMode ? '❓❓❓' : `${target.name}(${target.type})`;
   let html = `
-    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${firer.name}(${firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${target.name}(${target.type})</span></div>
+    <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${shootFN}</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${shootTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${dist}hex</span></div>
     <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${arcInfo.mult<1?'#fa6':'#6a6'}">${arcInfo.arc}${arcInfo.mult<1?' (火力½)':''}</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${mod >= 0 ? '+' : ''}${mod}</span></div>`;
