@@ -1314,11 +1314,14 @@ function renderList() {
   });
 
   html += '</div><div class="phase-label" style="margin-top:4px">▼ 米軍</div><div class="ship-cards">';
+  const fogActive = !!state.fogMode;
   html += usFleet.map(s => {
     const statusText = getShipStatusText(s);
+    const fogN = fogActive ? '❓❓❓' : s.name;
+    const fogT = fogActive ? '?' : s.type + statusText;
     return `<div class="card us disabled">
-      <span class="c-name">${s.name}</span>
-      <span class="c-info">${s.type}${statusText}</span>
+      <span class="c-name">${fogN}</span>
+      <span class="c-info">${fogT}</span>
     </div>`;
   }).join('');
   html += '</div>';
