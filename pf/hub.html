@@ -739,7 +739,7 @@ function renderFleetList() {
       // ±1のランダム誤差（0以下にしない）
       var fuzzy = realHits;
       if (realHits > 0) { fuzzy = Math.max(1, realHits + Math.floor(Math.random() * 3) - 1); }
-      var hitLabel = fuzzy > 0 ? fuzzy + '発命中?' : '-';
+      var hitLabel = fuzzy > 0 ? fuzzy + '発命中?' : '未観測';
       html += '<tr class="' + cls + '">';
       html += '<td class="name-cell" style="color:#999">❓❓❓</td>';
       html += '<td colspan="2" style="text-align:center;color:#fc6">' + hitLabel + '</td>';

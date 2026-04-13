@@ -496,7 +496,8 @@ function updateShootInfo() {
 
   const {mod, details} = calcModifiers(firer, target);
   const hitPct = calcTorpHitChance(mod, dist);
-  el.innerHTML = `${firer.name} → ${target.name} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
+  const infoTN = (state.fogMode && target.side === 'jp') ? '❓❓❓' : target.name;
+  el.innerHTML = `${firer.name} → ${infoTN} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
   if (details.length > 0) {
     el.innerHTML += `<div class="mod-detail">${details.join(' / ')}</div>`;
   }
@@ -794,9 +795,11 @@ function applyDamage(ship, g, m) {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
+  const fogFN = (state.fogMode && r.firer.side === 'jp') ? '❓❓❓' : `${r.firer.name}(${r.firer.type})`;
+  const fogTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
   let html = `
-    <div class="r-row"><span class="r-label">雷撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
+    <div class="r-row"><span class="r-label">雷撃艦</span> <span class="r-value">${fogFN}</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${fogTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>
     <div class="r-row"><span class="r-label">命中率</span> <span class="r-value">${calcTorpHitChance(r.mod, r.dist)}%</span></div>`;
