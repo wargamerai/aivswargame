@@ -202,6 +202,12 @@ var _sr = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
 var RADAR_RANGE = (_sr && _sr.radarRange) || 20;
 let firedShips = new Set();
 
+function logAttack(entry) {
+  const log = JSON.parse(localStorage.getItem('ijnAttackLog') || '[]');
+  log.push(entry);
+  localStorage.setItem('ijnAttackLog', JSON.stringify(log));
+}
+
 function toAxial(c,r){return{q:c-(r-(r&1))/2, r:r};}
 function hexDist(c1,r1,c2,r2){
   const a=toAxial(c1,r1),b=toAxial(c2,r2);
@@ -426,9 +432,11 @@ function renderCards() {
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
     const side = ini === 'jp' ? 'us' : 'jp';
+    const fogN = state.fogMode ? '❓❓❓' : s.name;
+    const fogT = state.fogMode ? '?' : s.type;
     tHtml += `<div class="card ${side}${sel}${dis}" onclick="clickTarget(${i})">
-      <span class="c-name">${s.name}</span>
-      <span class="c-info">${s.type}</span>
+      <span class="c-name">${fogN}</span>
+      <span class="c-info">${fogT}</span>
     </div>`;
   });
   document.getElementById('targetCards').innerHTML = tHtml;
@@ -483,7 +491,8 @@ function updateShootInfo() {
 
   const {mod, details} = calcModifiers(firer, target);
   const hitPct = calcTorpHitChance(mod, dist);
-  el.innerHTML = `${firer.name} → ${target.name} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
+  const infoTN = (state.fogMode && target.side === 'us') ? '❓❓❓' : target.name;
+  el.innerHTML = `${firer.name} → ${infoTN} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
   if (details.length > 0) {
     el.innerHTML += `<div class="mod-detail">${details.join(' / ')}</div>`;
   }
@@ -667,6 +676,7 @@ function doTorpedo() {
     to: {col: target.col, row: target.row}
   }, '*');
 
+  fogSetTarget(target);
   const hitChance = calcTorpHitChance(mod, dist);
   log(`🐟 ${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, 命中率${hitChance}%${nRolls>1?' ×'+nRolls+'回':''})`);
   for (const hr of hitRolls) {
@@ -751,6 +761,12 @@ function doTorpedo() {
     log('日本軍: 雷撃被弾 → 敵発見、自由移動可能');
   }
 
+  // 攻撃ログ記録(手動雷撃)
+  logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
+    firerName:firer.name, firerType:firer.type, firerSide:firer.side,
+    targetName:target.name, targetType:target.type, targetSide:target.side,
+    hits:totalHits, dmgG:dmgG, dmgM:dmgM, shotsFired:nRolls });
+
   // 結果オーバーレイ表示
   showResult({
     firer, target, dist, mod, details,
@@ -775,9 +791,10 @@ function applyDamage(ship, g, m) {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
+  const resTN = (state.fogMode && r.target.side === 'us') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">雷撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${resTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>
     <div class="r-row"><span class="r-label">命中率</span> <span class="r-value">${calcTorpHitChance(r.mod, r.dist)}%</span></div>`;
@@ -933,6 +950,7 @@ function autoJPTorpedo() {
       to: {col: r.target.col, row: r.target.row}
     }, '*');
 
+    fogSetTarget(r.target);
     const jpHitChance = calcTorpHitChance(r.mod, r.dist);
     log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist}, 命中率${jpHitChance}%)`);
     if (r.hits > 0) {
@@ -941,6 +959,11 @@ function autoJPTorpedo() {
     } else {
       log('  外れ');
     }
+    // 攻撃ログ記録(自動JP雷撃)
+    logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
+      firerName:r.firer.name, firerType:r.firer.type, firerSide:'jp',
+      targetName:r.target.name, targetType:r.target.type, targetSide:'us',
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1085,6 +1108,7 @@ function autoUSTorpedo() {
       to: {col: r.target.col, row: r.target.row}
     }, '*');
 
+    fogSetTarget(r.target);
     const usHitChance = calcTorpHitChance(r.mod, r.dist);
     log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist}, 命中率${usHitChance}%)`);
     if (r.hits > 0) {
@@ -1093,6 +1117,11 @@ function autoUSTorpedo() {
     } else {
       log('  外れ');
     }
+    // 攻撃ログ記録(自動US雷撃)
+    logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
+      firerName:r.firer.name, firerType:r.firer.type, firerSide:'us',
+      targetName:r.target.name, targetType:r.target.type, targetSide:'jp',
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1145,9 +1174,31 @@ function donePhase() {
   parent.postMessage({type:'PHASE_DONE'}, '*');
 }
 
+var _fogLastTarget = '';
+function fogSetTarget(target) {
+  if (!state || !state.fogMode) return;
+  if (target.side === 'us') { _fogLastTarget = 'us'; return; }
+  _fogLastTarget = target.isLead ? 'jp_lead' : 'jp';
+}
+
 function log(msg) {
+  let display = msg;
+  if (state && state.fogMode) {
+    const plain = msg.replace(/<[^>]*>/g, '');
+    // IJN: 敵=米軍の全艦名を❓に置換
+    (state.usFleet||[]).forEach(s => {
+      if (display.includes(s.name)) display = display.replace(new RegExp(s.name, 'g'), '❓');
+    });
+    // 敵目標への雷撃結果行を隠す
+    if (plain.match(/^\s*(命中|外れ|損害|クリティカル|→ 損害適用|ダイス|戦力比|合計命中)/)) {
+      if (_fogLastTarget === 'us') {
+        if (plain.includes('火災')) display = '  ❓: 🔥火災発生';
+        else display = '  ❓❓❓';
+      }
+    }
+  }
   const el = document.getElementById('log');
-  el.innerHTML += `<div>${msg}</div>`;
+  el.innerHTML += `<div>${display}</div>`;
   el.scrollTop = el.scrollHeight;
 }
 
