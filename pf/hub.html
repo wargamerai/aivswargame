@@ -200,7 +200,9 @@ function dbg(msg) {
   if (_dbgLines.length > 500) _dbgLines.shift();
   const el = document.getElementById('debugLog');
   if (el) {
-    el.innerHTML += `<div>${line}</div>`;
+    const div = document.createElement('div');
+    div.textContent = line;
+    el.appendChild(div);
     el.scrollTop = el.scrollHeight;
   }
   console.log('[DBG]', msg);
@@ -722,13 +724,25 @@ function renderFleetList() {
     if (!visible) {
       html += '<tr><td class="name-cell" style="color:#999">???</td><td>-</td><td>-</td><td>-</td></tr>';
     } else if (fogActive) {
-      // 霧ON: 敵の詳細はすべて隠す、発砲/火災のみ表示
+      // 霧ON: 火災のみ表示、ダメージの代わりに不正確ヒット数
       var fogStatus = [];
       if (s.firedGun1) fogStatus.push('発砲');
       if (s.onFire) fogStatus.push('🔥');
+      // pfAttackLogから自軍(US)がこの船に当てたヒット数を集計
+      var atkLog = JSON.parse(localStorage.getItem('pfAttackLog') || '[]');
+      var realHits = 0;
+      for (var li = 0; li < atkLog.length; li++) {
+        if (atkLog[li].firerSide === 'us' && atkLog[li].targetName === s.name && atkLog[li].hits > 0) {
+          realHits += atkLog[li].hits;
+        }
+      }
+      // ±1のランダム誤差（0以下にしない）
+      var fuzzy = realHits;
+      if (realHits > 0) { fuzzy = Math.max(1, realHits + Math.floor(Math.random() * 3) - 1); }
+      var hitLabel = fuzzy > 0 ? fuzzy + '発命中?' : '-';
       html += '<tr class="' + cls + '">';
       html += '<td class="name-cell" style="color:#999">❓❓❓</td>';
-      html += '<td>❓</td><td>❓</td>';
+      html += '<td colspan="2" style="text-align:center;color:#fc6">' + hitLabel + '</td>';
       html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
       html += '</tr>';
     } else {
@@ -1637,8 +1651,9 @@ function loadCampaign() {
     updateContactInfo();
     updatePhaseBar('init');
 
-    // 蓄積損害もクリア
+    // 蓄積損害・攻撃ログもクリア
     localStorage.removeItem('gunPendingDmg');
+    localStorage.removeItem('pfAttackLog');
 
     buildFleets(data);
     saveState();
