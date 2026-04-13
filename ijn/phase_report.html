@@ -460,7 +460,7 @@ function sendToCampaign() {
   if (!raw) { alert('データなし'); return; }
   const data = JSON.parse(raw);
   const ships = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status, speed:s.speed}));
-  const forCampaign = { endTurn: state.combatTurn || 0, ships: ships };
+  const forCampaign = { endTurn: state.combatTurn || 0, ships: ships, jpHandicap: JP_HANDICAP };
   localStorage.setItem('battleResultForCampaign', JSON.stringify(forCampaign));
   localStorage.removeItem('manualBattleEnd');
   // シナリオモードならトップへ、キャンペーンならcampaign.htmlへ
