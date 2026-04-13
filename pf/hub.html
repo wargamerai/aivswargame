@@ -743,9 +743,9 @@ function renderFleetList() {
       var fuzzy = realHits;
       if (realHits > 0) { fuzzy = Math.max(1, realHits + Math.floor(Math.random() * 3) - 1); }
       var hitLabel = fuzzy > 0 ? fuzzy + '発命中?' : '未観測';
-      html += '<tr class="' + cls + '">';
+      html += '<tr>';
       html += '<td class="name-cell" style="color:#999">❓❓❓</td>';
-      html += '<td colspan="2" style="text-align:center;color:#fc6">' + hitLabel + '</td>';
+      html += '<td colspan="2" style="text-align:center;color:#000">' + hitLabel + '</td>';
       html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
       html += '</tr>';
     } else {
@@ -832,9 +832,11 @@ function toggleFog() {
   localStorage.setItem('fogOfWar', state.fogMode ? '1' : '0');
   saveState();
   const btn = document.getElementById('btnFog');
-  btn.textContent = state.fogMode ? '霧: ON' : '霧: OFF';
-  btn.style.background = state.fogMode ? '#1a2a1a' : '#1a1a2a';
-  btn.style.color = state.fogMode ? '#8afa8a' : '#778';
+  if (btn) {
+    btn.textContent = state.fogMode ? '霧: ON' : '霧: OFF';
+    btn.style.background = state.fogMode ? '#1a2a1a' : '#1a1a2a';
+    btn.style.color = state.fogMode ? '#8afa8a' : '#778';
+  }
   draw();
 }
 
@@ -1123,7 +1125,7 @@ function drawShip(ship) {
   }
 
   // 残り移動力表示（移動フェーズ中のみ）
-  if (state.phase === 'move' && ship.remainMove !== undefined && ship.remainMove > 0) {
+  if (state.phase && state.phase.match(/^move/) && ship.remainMove !== undefined && ship.remainMove > 0) {
     ctx.font = 'bold 11px sans-serif';
     ctx.fillStyle = '#ffff00';
     ctx.strokeStyle = '#000';

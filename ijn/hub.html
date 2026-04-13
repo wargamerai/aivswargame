@@ -776,7 +776,7 @@ function renderFleetList() {
       var fogStatus = [];
       if (s.firedGun1) fogStatus.push('発砲');
       if (s.onFire) fogStatus.push('🔥');
-      html += '<tr class="' + cls + '">';
+      html += '<tr>';
       html += '<td class="name-cell" style="color:#999">❓❓❓</td>';
       html += '<td>❓</td><td>❓</td>';
       html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
