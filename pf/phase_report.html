@@ -100,6 +100,8 @@ function init() {
   const raw = localStorage.getItem('hubState');
   if (!raw) { document.getElementById('reportContent').textContent='データなし'; return; }
   state = JSON.parse(raw);
+  // fogMode確実同期
+  if (localStorage.getItem('fogOfWar') === '1') state.fogMode = true;
   renderReport();
   // 10ターン経過 → 次ターンボタン無効化
   if (state.combatTurn >= 10) {
