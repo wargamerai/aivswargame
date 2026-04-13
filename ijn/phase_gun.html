@@ -237,6 +237,12 @@ const PENDING_KEY = 'gunPendingDmg';
 var _sr = JSON.parse(localStorage.getItem('scenarioRules') || 'null');
 var RADAR_RANGE = (_sr && _sr.radarRange) || 20;
 
+function logAttack(entry) {
+  const log = JSON.parse(localStorage.getItem('ijnAttackLog') || '[]');
+  log.push(entry);
+  localStorage.setItem('ijnAttackLog', JSON.stringify(log));
+}
+
 let jpShips = [];  // 射撃可能な日本艦
 let usShips = [];  // 射撃可能な米艦
 let selectedFirer = null;
@@ -520,9 +526,11 @@ function renderCards() {
         else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
       }
     }
+    const fogN = state.fogMode ? '❓❓❓' : s.name;
+    const fogI = state.fogMode ? '?' : `${s.type} 防:${def}`;
     return `<div class="card us${sel}${oor}" onclick="selectTarget(${i})">
-      <span class="c-name">${s.name}</span>
-      <span class="c-info">${s.type} 防:${def}</span>
+      <span class="c-name">${fogN}</span>
+      <span class="c-info">${fogI}</span>
     </div>`;
   }).join('');
 
@@ -653,9 +661,10 @@ function doShoot() {
   const hitPct = calcHitChance(mod, dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
   const body = document.getElementById('resultBody');
+  const prevTN = (state.fogMode && target.side === 'us') ? '❓❓❓' : `${target.name}(${target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${firer.name}(${firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${target.name}(${target.type})</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${prevTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${dist}hex</span></div>
     <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${arcInfo.mult<1?'#fa6':'#6a6'}">${arcInfo.arc}${arcInfo.mult<1?' (火力½)':''}</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${mod >= 0 ? '+' : ''}${mod}</span></div>`;
@@ -745,6 +754,12 @@ function doShoot() {
       log('  → 外れ');
     }
 
+    // 攻撃ログ記録(手動JP射撃)
+    logAttack({ turn: state.combatTurn||1, phase: subPhase, type:'gun',
+      firerName:firer.name, firerType:firer.type, firerSide:'jp',
+      targetName:target.name, targetType:target.type, targetSide:'us',
+      hits:hits, dmgG:dmgG, dmgM:dmgM, shotsFired:1 });
+
     // 射撃済みマーク
     firedShips.add(selectedFirer);
     firer.revealed = true;
@@ -773,9 +788,10 @@ function doShoot() {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
+  const resTN = (state.fogMode && r.target.side === 'us') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${resTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
     <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${r.arcInfo.mult<1?'#fa6':'#6a6'}">${r.arcInfo.arc}${r.arcInfo.mult<1?' (火力½)':''}</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>`;
@@ -994,6 +1010,11 @@ function autoJPShoot(title) {
       } else {
         log('  外れ');
       }
+      // 攻撃ログ記録(自動JP射撃)
+      logAttack({ turn: state.combatTurn||1, phase: subPhase, type:'gun',
+        firerName:r.firer.name, firerType:r.firer.type, firerSide:'jp',
+        targetName:r.target.name, targetType:r.target.type, targetSide:'us',
+        hits:r.hits, dmgG:r.dmgG, dmgM:r.dmgM, shotsFired:1 });
 
       // fullAutoAI時は確認スキップ
       if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1020,9 +1041,10 @@ function showUSPreview(r) {
   const body = document.getElementById('resultBody');
   const hitPct = calcHitChance(r.mod, r.dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
+  const usPrevTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
-    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${r.target.name}(${r.target.type})</span></div>
+    <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${usPrevTN}</span></div>
     <div class="r-row"><span class="r-label">距離</span> <span class="r-value">${r.dist}hex</span></div>
     <div class="r-row"><span class="r-label">射界</span> <span class="r-value" style="color:${r.arcInfo.mult<1?'#fa6':'#6a6'}">${r.arcInfo.arc}${r.arcInfo.mult<1?' (火力½)':''}</span></div>
     <div class="r-row"><span class="r-label">修正</span> <span class="r-value">${r.mod >= 0 ? '+' : ''}${r.mod}</span></div>`;
@@ -1265,6 +1287,11 @@ function autoUSShoot(title) {
       } else {
         log('  外れ');
       }
+      // 攻撃ログ記録(自動US射撃)
+      logAttack({ turn: state.combatTurn||1, phase: subPhase, type:'gun',
+        firerName:r.firer.name, firerType:r.firer.type, firerSide:'us',
+        targetName:r.target.name, targetType:r.target.type, targetSide:'jp',
+        hits:r.hits, dmgG:r.dmgG, dmgM:r.dmgM, shotsFired:1 });
 
       // fullAutoAI時は確認スキップ
       if (localStorage.getItem('fullAutoAI') === '1') {
