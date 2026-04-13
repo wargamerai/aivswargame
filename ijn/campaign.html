@@ -910,8 +910,10 @@ function renderBattleHistory() {
         const jpVP = calcVPDetail(us); // 米艦への損害 = 日本軍得点
         const usVP = calcVPDetail(jp); // 日本艦への損害 = 米軍得点
         const jpBonus = b.jpBonus || 0;
-        const jpEarned = jpVP.total + jpBonus;
-        const usEarned = usVP.total;
+        const jpHandi = b.jpHandicap || 0;
+        const usHandi = b.usHandicap || 0;
+        const jpEarned = jpVP.total + jpBonus + jpHandi;
+        const usEarned = usVP.total + usHandi;
 
         html += `<div class="report-col">`;
         html += `<h3>${b.battleName}</h3>`;
