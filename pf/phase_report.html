@@ -361,6 +361,58 @@ function renderReport() {
   }
   html += `</div>`;
 
+  // ===== 攻撃統計 =====
+  const atkLog = JSON.parse(localStorage.getItem('pfAttackLog') || '[]');
+  if (atkLog.length > 0) {
+    function aggregateByFirer(entries) {
+      const byShip = {};
+      for (const e of entries) {
+        const k = e.firerName;
+        if (!byShip[k]) byShip[k] = { name:k, type:e.firerType, side:e.firerSide, attacks:0, hits:0, dmgG:0, dmgM:0, shots:0 };
+        byShip[k].attacks++;
+        byShip[k].hits += (e.hits||0);
+        byShip[k].dmgG += (e.dmgG||0);
+        byShip[k].dmgM += (e.dmgM||0);
+        byShip[k].shots += (e.shotsFired||1);
+      }
+      return Object.values(byShip);
+    }
+    function statsTable(title, entries, sideName) {
+      const data = aggregateByFirer(entries);
+      if (data.length === 0) return '';
+      let t = `<h4 style="margin:8px 0 4px">${sideName}</h4>`;
+      t += `<table><tr><th>艦名</th><th>艦種</th><th>射撃回数</th><th>命中数</th><th>命中率</th><th>G損害</th><th>M損害</th></tr>`;
+      let tAtk=0, tHit=0, tG=0, tM=0;
+      for (const s of data) {
+        const rate = s.attacks > 0 ? Math.round(s.hits / s.attacks * 100) : 0;
+        t += `<tr><td>${s.name}</td><td>${s.type}</td><td>${s.attacks}</td><td>${s.hits}</td><td>${rate}%</td><td>${s.dmgG}</td><td>${s.dmgM}</td></tr>`;
+        tAtk += s.attacks; tHit += s.hits; tG += s.dmgG; tM += s.dmgM;
+      }
+      const tRate = tAtk > 0 ? Math.round(tHit / tAtk * 100) : 0;
+      t += `<tr style="font-weight:bold;border-top:2px solid #999"><td>合計</td><td></td><td>${tAtk}</td><td>${tHit}</td><td>${tRate}%</td><td>${tG}</td><td>${tM}</td></tr>`;
+      t += `</table>`;
+      return t;
+    }
+
+    // 砲撃統計
+    const gunLog = atkLog.filter(e => e.type === 'gun');
+    if (gunLog.length > 0) {
+      html += `<div class="report"><h3>砲撃統計</h3>`;
+      html += statsTable('砲撃', gunLog.filter(e => e.firerSide === 'us'), '🇺🇸 米軍');
+      html += statsTable('砲撃', gunLog.filter(e => e.firerSide === 'jp'), '🇯🇵 日本軍');
+      html += `</div>`;
+    }
+
+    // 雷撃統計
+    const torpLog = atkLog.filter(e => e.type === 'torpedo');
+    if (torpLog.length > 0) {
+      html += `<div class="report"><h3>雷撃統計</h3>`;
+      html += statsTable('雷撃', torpLog.filter(e => e.firerSide === 'us'), '🇺🇸 米軍');
+      html += statsTable('雷撃', torpLog.filter(e => e.firerSide === 'jp'), '🇯🇵 日本軍');
+      html += `</div>`;
+    }
+  }
+
   document.getElementById('reportContent').innerHTML = html;
 
   // Save result for campaign

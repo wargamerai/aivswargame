@@ -194,6 +194,14 @@ function roll() { return Math.ceil(Math.random()*6); }
 
 // ===== STATE =====
 let state = null;
+
+// ===== 攻撃ログ =====
+function logAttack(entry) {
+  const log = JSON.parse(localStorage.getItem('pfAttackLog') || '[]');
+  log.push(entry);
+  localStorage.setItem('pfAttackLog', JSON.stringify(log));
+}
+
 let selectedFirer = null;
 let selectedTarget = null;
 let firedShips = new Set();
@@ -429,9 +437,11 @@ function renderCards() {
     }
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
+    const fogN = state.fogMode ? '❓❓❓' : s.name;
+    const fogT = state.fogMode ? '?' : s.type;
     tHtml += `<div class="card jp${sel}${dis}" onclick="clickTarget(${i})">
-      <span class="c-name">${s.name}</span>
-      <span class="c-info">${s.type}</span>
+      <span class="c-name">${fogN}</span>
+      <span class="c-info">${fogT}</span>
     </div>`;
   });
   document.getElementById('targetCards').innerHTML = tHtml;
@@ -761,6 +771,12 @@ function doTorpedo() {
     ratioLabel, dmgDice, sunk
   });
 
+  // 攻撃ログ記録(手動雷撃)
+  logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
+    firerName:firer.name, firerType:firer.type, firerSide:firer.side,
+    targetName:target.name, targetType:target.type, targetSide:target.side,
+    hits:totalHits, dmgG:dmgG, dmgM:dmgM, shotsFired:nRolls });
+
   saveAndNotify();
 }
 
@@ -928,7 +944,7 @@ function autoJPTorpedo(onDone) {
 
     results.push({
       firer, target: bestTarget, dist: bestDist, mod, details,
-      d1, d2, hits, dmgText, critText, ratioLabel, dmgDice, sunk
+      d1, d2, hits, dmgText, dmgG, dmgM, critText, ratioLabel, dmgDice, sunk
     });
   }
 
@@ -964,6 +980,11 @@ function autoJPTorpedo(onDone) {
     } else {
       log('  外れ');
     }
+    // 攻撃ログ記録(自動JP雷撃)
+    logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
+      firerName:r.firer.name, firerType:r.firer.type, firerSide:r.firer.side||'jp',
+      targetName:r.target.name, targetType:r.target.type, targetSide:r.target.side||'us',
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1095,7 +1116,7 @@ function autoUSTorpedo(onDone) {
 
     results.push({
       firer, target: bestTarget, dist: bestDist, mod, details,
-      hitRolls: hitRollsArr, hits: totalHits, nRolls, dmgText, critText,
+      hitRolls: hitRollsArr, hits: totalHits, nRolls, dmgText, dmgG, dmgM, critText,
       ratioLabel, dmgDice, sunk
     });
   }
@@ -1133,6 +1154,11 @@ function autoUSTorpedo(onDone) {
     } else {
       log('  外れ');
     }
+    // 攻撃ログ記録(自動US雷撃)
+    logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
+      firerName:r.firer.name, firerType:r.firer.type, firerSide:r.firer.side||'us',
+      targetName:r.target.name, targetType:r.target.type, targetSide:r.target.side||'jp',
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:r.nRolls||1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1184,7 +1210,9 @@ function donePhase() {
 
 function log(msg) {
   const el = document.getElementById('log');
-  el.innerHTML += `<div>${msg}</div>`;
+  const div = document.createElement('div');
+  div.innerHTML = msg;
+  el.appendChild(div);
   el.scrollTop = el.scrollHeight;
   parent.postMessage({type:'GAME_LOG', text:msg}, '*');
 }
