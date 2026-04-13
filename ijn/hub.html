@@ -771,6 +771,13 @@ function renderFleetList() {
     var visible = isSpotted(s);
     if (!visible) {
       html += '<tr><td class="name-cell" style="color:#999">???</td><td>-</td><td>-</td><td>-</td></tr>';
+    } else if (s.status === 'sunk' && fogActive) {
+      // 撃沈は事実として表示
+      html += '<tr class="sunk">';
+      html += '<td class="name-cell" style="color:#2255cc">' + s.name + '</td>';
+      html += '<td colspan="2" style="text-align:center">撃沈</td>';
+      html += '<td class="status-cell">撃沈</td>';
+      html += '</tr>';
     } else if (fogActive) {
       // 霧ON: 発砲/火災のみ表示、ダメージの代わりに不正確ヒット数
       var fogStatus = [];
@@ -786,8 +793,10 @@ function renderFleetList() {
       var fuzzy = realHits;
       if (realHits > 0) { fuzzy = Math.max(1, realHits + Math.floor(Math.random() * 3) - 1); }
       var hitLabel = fuzzy > 0 ? fuzzy + '発命中?' : '未観測';
+      var shipClass = ['BB','OBB','CA'].includes(s.type) ? '大型' : '小型';
+      var shipNum = ui + 1;
       html += '<tr>';
-      html += '<td class="name-cell" style="color:#999">❓❓❓</td>';
+      html += '<td class="name-cell" style="color:#999">❓❓❓ <span style="color:#aaa;font-size:0.8em">' + shipClass + shipNum + '</span></td>';
       html += '<td colspan="2" style="text-align:center;color:#000">' + hitLabel + '</td>';
       html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
       html += '</tr>';
