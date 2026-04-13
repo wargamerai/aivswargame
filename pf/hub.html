@@ -2,6 +2,9 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>決戦連合艦隊 ハブ</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -826,6 +829,7 @@ function getBearing(fc, fr, tc, tr) {
 // ========== FOG OF WAR ==========
 function toggleFog() {
   state.fogMode = !state.fogMode;
+  localStorage.setItem('fogOfWar', state.fogMode ? '1' : '0');
   saveState();
   const btn = document.getElementById('btnFog');
   btn.textContent = state.fogMode ? '霧: ON' : '霧: OFF';

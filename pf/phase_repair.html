@@ -45,6 +45,8 @@ function init() {
   const raw = localStorage.getItem('hubState');
   if (!raw) { log('hubStateなし'); return; }
   state = JSON.parse(raw);
+  // fogMode確実同期
+  if (localStorage.getItem('fogOfWar') === '1') state.fogMode = true;
   // 自動修理→プレイヤーが「ターン終了」ボタンを押して進行
   repairAll();
   renderList();

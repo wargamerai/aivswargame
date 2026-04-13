@@ -416,6 +416,8 @@ function init() {
   const raw = localStorage.getItem('hubState');
   if (!raw) { log('hubStateなし'); return; }
   state = JSON.parse(raw);
+  // fogMode確実同期
+  if (localStorage.getItem('fogOfWar') === '1') state.fogMode = true;
   const cb = document.getElementById('usAI');
   if (cb) cb.checked = isUSAutoAI();
   subPhase = state.phase || '';
