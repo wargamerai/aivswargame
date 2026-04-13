@@ -1631,6 +1631,7 @@ async function resolveMutualMelee(unitA, unitB) {
     // 受けを選んだ → 攻撃しない
     addLog(second.team, `${second.pilot}: 受けを選んだため攻撃なし`);
     second.hasActed = true;
+    second._mutualMeleeResolved = true;
     first.hasActed = true;
     if (checkVictory()) return;
     resolutionIndex++;
@@ -1650,6 +1651,7 @@ async function resolveMutualMelee(unitA, unitB) {
       await aiExecuteMeleeAttack(second, first, false);
     }
     second.hasActed = true;
+    second._mutualMeleeResolved = true;
     first.hasActed = true;
     if (checkVictory()) return;
     resolutionIndex++;
@@ -1821,7 +1823,8 @@ function runNextResolution() {
     return;
   }
   // 相互格闘で既に処理済み（受けを選んだ等）のユニットはスキップ
-  if (u.hasActed) {
+  if (u._mutualMeleeResolved) {
+    delete u._mutualMeleeResolved;
     resolutionIndex++;
     runNextResolution();
     return;
