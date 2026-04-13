@@ -2115,6 +2115,14 @@ function makeMainGroup(side, group, idx) {
       m.title = '侵入中';
       c.appendChild(m);
     }
+    // 狂暴兵マーカー (§20.9)
+    if (card.berserk) {
+      const m = document.createElement('div');
+      m.textContent = '狂';
+      m.style.cssText = 'position:absolute;bottom:2px;left:2px;background:#f0f;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;border:1px solid #fff;z-index:5;';
+      m.title = '狂暴兵';
+      c.appendChild(m);
+    }
     c.addEventListener('click', () => {
       if (state.selectedAction === 'snipe' && side === 'ai') {
         state.sniperTarget = { side, grpIdx: idx, cardIdx: ci };
@@ -2903,12 +2911,14 @@ function resultLabel(r) {
   if (r === 'NONE') return '無傷';
   if (r === 'PANIC_KIA') return 'KIA(パニック)';
   if (r === 'PANIC_ROUT') return '潰走';
+  if (r === 'BERSERK') return '狂暴兵';
   return r;
 }
 function resultColor(r) {
   if (r === 'KIA' || r === 'PANIC_KIA') return '#f44';
   if (r === 'PIN') return '#fd0';
   if (r === '潰走' || r === 'PANIC_ROUT') return '#f80';
+  if (r === 'BERSERK') return '#f0f';
   return '#8f8';
 }
 
@@ -3467,7 +3477,11 @@ function resolveFireAction() {
   const lastTerrain = srcGroup.terrain.length > 0 ? srcGroup.terrain[srcGroup.terrain.length - 1] : null;
   const moving = !!(lastTerrain && lastTerrain.terrain && lastTerrain.terrain.type === 'MOVEMENT');
   const crewMap = srcGroup.crewPairs ? buildCrewMapFromPairs(srcGroup) : {};
-  const fp = R.calcGroupFirepower(srcGroup, srcFacKey, distance, { moving, crewMap });
+  let fp = R.calcGroupFirepower(srcGroup, srcFacKey, distance, { moving, crewMap });
+  // §20.51 侵入兵の火力2倍（侵入先グループへの射撃時）
+  const CC = window.CC_ACTION;
+  const infBonus = CC ? CC.calcInfiltrationFPBonus(srcGroup, tgt.side, tgt.idx, srcFacKey, distance) : 0;
+  fp += infBonus;
 
   // 射撃カードを抽出し、必要火力チェック
   const fireCards = [...state.selectedHand].map(i => state.playerHand[i]).filter(c => c.terrain && c.terrain.type && c.terrain.type.indexOf('FIRE') === 0);
@@ -3478,7 +3492,7 @@ function resolveFireAction() {
     needed += circledToNum((m && m[1]) || '');
   });
   if (fp < needed) {
-    alert(`火力不足: 必要 ${needed} / 利用可能 ${fp}`);
+    alert(`火力不足: 必要 ${needed} / 利用可能 ${fp}${infBonus ? ' (侵入+' + infBonus + ')' : ''}`);
     return;
   }
 
@@ -3495,7 +3509,9 @@ function resolveFireAction() {
 
   // 射撃力 = FIREカードの数字（合算しない、1枚目を使用）
   const strength = parseInt(fireCards[0].terrain.type.replace('FIRE ', ''), 10) || 0;
-  let baseFP = Math.max(0, (moving ? Math.floor(strength / 2) : strength) + atkMod + defMod + concealMod + gullyMod + marshDefMod);
+  // §20.51 侵入兵がいる場合、右2コラムシフト（+2）
+  const infShift = (CC && CC.hasInfiltratorsTargeting(srcGroup, tgt.side, tgt.idx)) ? 2 : 0;
+  let baseFP = Math.max(0, (moving ? Math.floor(strength / 2) : strength) + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift);
   let malfuncMod = 0;
 
   // 各防御兵士に判定（1回の射撃で全員に判定）
@@ -3515,19 +3531,34 @@ function resolveFireAction() {
     const commissarMod = hasCommissar(tgtGroup) ? 1 : 0;
     const malfMoraleMod = (card.malfunctioned || card.destroyed) ? -1 : 0;
     const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod);
-    if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
-    else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
-    else if (r.result === 'PIN') R.pinSoldier(card);
+    // §20.9 狂暴兵チェック（ソ連軍ピン状態兵がPANIC_KIAのとき）
+    let actualResult = r.result;
+    if (r.result === 'PANIC_KIA' && def && window.CC_ACTION) {
+      const enemySide = tgt.side === 'ai' ? 'player' : 'ai';
+      const enemyGroups = state.groups[enemySide] || [];
+      const atDist5 = enemyGroups.some(eg => R.relativeRange(tgtGroup.distance, eg.distance) === 5);
+      if (window.CC_ACTION.checkBerserkEligibility(card, def, rpc0r, tgtFacKey, atDist5 ? 5 : 0)) {
+        card.berserk = true;
+        actualResult = 'BERSERK';
+      }
+    }
+    // §20.9 既に狂暴兵が再パニック → KIA
+    if (r.result === 'PANIC_KIA' && card.berserk && actualResult !== 'BERSERK') {
+      actualResult = 'PANIC_KIA';
+    }
+    if (actualResult === 'KIA' || actualResult === 'PANIC_KIA') R.killSoldier(card);
+    else if (actualResult === 'PANIC_ROUT') R.routSoldier(card);
+    else if (actualResult === 'PIN') R.pinSoldier(card);
     // §20.53 ピン/KIA/潰走 → 侵入状態解除
-    if (r.result !== 'NONE' && card.infiltrating && window.CC_ACTION) {
+    if (actualResult !== 'NONE' && actualResult !== 'BERSERK' && card.infiltrating && window.CC_ACTION) {
       window.CC_ACTION.clearSoldierInfiltration(card);
     }
-    if (r.result !== 'NONE' && def && def.leader && def.leader === '分隊長') {
+    if (actualResult !== 'NONE' && actualResult !== 'BERSERK' && def && def.leader && def.leader === '分隊長') {
       applySLDamagePenalty(tgt.side);
     }
     const morale = def ? (wasPinned ? parseInt(def.panic,10)||0 : parseInt(def.morale,10)||0 + commissarMod) : 0;
     const kia = def ? (wasPinned ? parseInt(def.kiaBack,10)||0 : parseInt(def.kiaFront,10)||0) : 0;
-    results.push({ i, name: def ? def.name : card.id, rnc, rncColor: isRed ? '赤' : '黒', result: r.result, finalFP, sum: finalFP + rnc, morale, kia, wasPinned });
+    results.push({ i, name: def ? def.name : card.id, rnc, rncColor: isRed ? '赤' : '黒', result: actualResult, finalFP, sum: finalFP + rnc, morale, kia, wasPinned });
     showJudgeCard(judge);
     malfuncMod += checkMalfunction(judge, srcGroup, srcFacKey);
     checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge);
@@ -4001,6 +4032,35 @@ function endAITurn() {
   renderField('player'); renderField('ai');
   renderHands();
   updateTurnBanner();
+
+  // §20.91 狂暴兵の自動CC（プレイヤーターン開始時）
+  if (window.CC_ACTION) {
+    const R_b = window.INFANTRY_RULES;
+    const playerFacKey = getFactionKey(state.player);
+    (async () => {
+      for (let gi = 0; gi < state.groups.player.length; gi++) {
+        const grp = state.groups.player[gi];
+        for (const card of grp.cards) {
+          if (!card.berserk || !R_b.isAlive(card)) continue;
+          // 距離5の敵グループを探す
+          let tgtGrp = null, tgtIdx = -1;
+          for (let ei = 0; ei < state.groups.ai.length; ei++) {
+            const eg = state.groups.ai[ei];
+            if (eg.cards.some(c => R_b.isAlive(c)) && R_b.relativeRange(grp.distance, eg.distance) === 5) {
+              tgtGrp = eg; tgtIdx = ei; break;
+            }
+          }
+          if (!tgtGrp) {
+            // §20.92 距離5の敵がいない → 回復
+            R_b.unpinSoldier(card); card.berserk = false; continue;
+          }
+          await window.CC_ACTION.executeBerserkCC(card, grp, gi, tgtGrp, 'ai', tgtIdx, drawTerrainCard, playerFacKey);
+          cleanupEliminatedGroups();
+          renderField('player'); renderField('ai');
+        }
+      }
+    })();
+  }
 }
 
 // ===== 簡易 AI (優先順位ベース) =====
@@ -4029,6 +4089,57 @@ function showAIAction(text) {
   ov._timer = setTimeout(() => { ov.style.opacity = '0'; }, 2500);
 }
 
+// §20 AI白兵戦: 侵入済みの兵士がいればCC実行
+function aiTryCC() {
+  const CC = window.CC_ACTION;
+  const R = window.INFANTRY_RULES;
+  if (!CC || !R) return false;
+  const aiKey = getFactionKey(state.ai);
+  for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    const grp = state.groups.ai[gi];
+    const inf = CC.getInfiltratingFromGroup(grp);
+    if (inf.length === 0) continue;
+    showAIAction('AI: 白兵戦');
+    (async () => {
+      await CC.aiExecuteCC(grp, gi, drawTerrainCard, aiKey);
+      cleanupEliminatedGroups();
+      renderField('player'); renderField('ai');
+      renderHands();
+      updateDeckCounts();
+      setTimeout(endAITurn, 2000);
+    })();
+    return true;
+  }
+  return false;
+}
+
+// §20 AI侵入: 距離5の敵グループに対し侵入試行
+function aiTryInfiltrate() {
+  const CC = window.CC_ACTION;
+  const R = window.INFANTRY_RULES;
+  if (!CC || !R) return false;
+  const aiKey = getFactionKey(state.ai);
+  for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    const src = state.groups.ai[gi];
+    // ピン状態でない生存兵士が必要
+    if (!src.cards.some(c => R.isAlive(c) && !R.isPinned(c))) continue;
+    for (let ti = 0; ti < state.groups.player.length; ti++) {
+      const tgt = state.groups.player[ti];
+      if (!tgt.cards.some(c => R.isAlive(c))) continue;
+      const chk = CC.canAttemptInfiltration(src, tgt, 'ai');
+      if (!chk.ok) continue;
+      showAIAction('AI: 侵入');
+      const res = CC.aiExecuteInfiltration(src, gi, tgt, 'player', ti, drawTerrainCard, aiKey);
+      state.aiHandCount = (state.aiHand || []).length;
+      renderField('player'); renderField('ai');
+      renderHands();
+      updateDeckCounts();
+      return true;
+    }
+  }
+  return false;
+}
+
 function aiTurn() {
   if (state.phase !== 'play' || state.currentTurn !== 'ai') return;
   const R = window.INFANTRY_RULES;
@@ -4036,12 +4147,16 @@ function aiTurn() {
 
   // 射撃はaiPerformFireDone()で非同期にendAITurnを呼ぶ
   if (aiTryFireMovingEnemy()) { return; }
+  // §20 AI白兵戦（侵入済み兵士がいればCC優先）
+  if (aiTryCC())              { return; }
   if (aiTryCrossStream())     { setTimeout(endAITurn, 3000); return; }
   if (aiTryPlaceOwnTerrain()) { showAIAction('AI: 地形配置'); setTimeout(endAITurn, 3000); return; }
   if (aiTryMove())            { showAIAction('AI: 移動'); setTimeout(endAITurn, 3000); return; }
   if (aiTryRemoveWire())      { showAIAction('AI: 鉄条網除去'); setTimeout(endAITurn, 3000); return; }
   if (aiTryRally())           { showAIAction('AI: 回復'); setTimeout(endAITurn, 3000); return; }
   if (aiTryFireAny())         { return; }
+  // §20 AI侵入（距離5の敵グループがあれば試行）
+  if (aiTryInfiltrate())      { setTimeout(endAITurn, 3000); return; }
   if (aiTryPlaceBadTerrain()) { return; }
 
   // 何もできなければ捨て札（国籍ルールに従う）
@@ -4101,7 +4216,9 @@ function aiFireAt(targetIdxList) {
       const dist = adjacent ? baseDist : Math.max(0, baseDist - 1);
       if (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {})) return;
       const crewMap = buildCrewMapFromPairs(src);
-      const fp = R.calcGroupFirepower(src, aiKey, dist, { moving: false, crewMap });
+      let fp = R.calcGroupFirepower(src, aiKey, dist, { moving: false, crewMap });
+      // §20.51 AI侵入兵の火力2倍
+      if (window.CC_ACTION) fp += window.CC_ACTION.calcInfiltrationFPBonus(src, 'player', ti, aiKey, dist);
       if (fp <= 0) return;
       fireIdxs.forEach(fi => {
         const card = state.aiHand[fi];
@@ -4134,7 +4251,9 @@ function aiPerformFire(plan) {
     const concealMod = getConcealMod(concealCards);
     const gullyMod = R.isInGully(tgt) ? -2 : 0;
     const marshDefMod = R.isInMarsh(tgt) ? -1 : 0;
-    let baseFP = Math.max(0, baseStrength + atkMod + defMod + concealMod + gullyMod + marshDefMod);
+    // §20.51 AI侵入兵の右2コラムシフト
+    const aiInfShift = (window.CC_ACTION && window.CC_ACTION.hasInfiltratorsTargeting(src, 'player', plan.ti)) ? 2 : 0;
+    let baseFP = Math.max(0, baseStrength + atkMod + defMod + concealMod + gullyMod + marshDefMod + aiInfShift);
     let malfuncMod = 0;
 
     const results = [];
@@ -4155,14 +4274,28 @@ function aiPerformFire(plan) {
       const commissarMod = hasCommissar(tgt) ? 1 : 0;
       const malfMoraleMod = (card.malfunctioned || card.destroyed) ? -1 : 0;
       const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod);
-      if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(card);
-      else if (r.result === 'PANIC_ROUT') R.routSoldier(card);
-      else if (r.result === 'PIN') R.pinSoldier(card);
+      // §20.9 狂暴兵チェック（プレイヤー側ソ連兵がPANIC_KIA）
+      let actualResult2 = r.result;
+      if (r.result === 'PANIC_KIA' && def && window.CC_ACTION) {
+        const playerFacKey = getFactionKey(state.player);
+        const enemyGroups = state.groups.ai || [];
+        const atDist5 = enemyGroups.some(eg => R.relativeRange(tgt.distance, eg.distance) === 5);
+        if (window.CC_ACTION.checkBerserkEligibility(card, def, rpc0r, playerFacKey, atDist5 ? 5 : 0)) {
+          card.berserk = true;
+          actualResult2 = 'BERSERK';
+        }
+      }
+      if (r.result === 'PANIC_KIA' && card.berserk && actualResult2 !== 'BERSERK') {
+        actualResult2 = 'PANIC_KIA';
+      }
+      if (actualResult2 === 'KIA' || actualResult2 === 'PANIC_KIA') R.killSoldier(card);
+      else if (actualResult2 === 'PANIC_ROUT') R.routSoldier(card);
+      else if (actualResult2 === 'PIN') R.pinSoldier(card);
       // §20.53 ピン/KIA/潰走 → 侵入状態解除
-      if (r.result !== 'NONE' && card.infiltrating && window.CC_ACTION) {
+      if (actualResult2 !== 'NONE' && actualResult2 !== 'BERSERK' && card.infiltrating && window.CC_ACTION) {
         window.CC_ACTION.clearSoldierInfiltration(card);
       }
-      if (r.result !== 'NONE' && def && def.leader && def.leader === '分隊長') {
+      if (actualResult2 !== 'NONE' && actualResult2 !== 'BERSERK' && def && def.leader && def.leader === '分隊長') {
         applySLDamagePenalty('player');
       }
       const morale = def ? (wasPinned ? parseInt(def.panic,10)||0 : parseInt(def.morale,10)||0) : 0;
