@@ -515,7 +515,7 @@ function draw() {
   var weaponRange = 0;
   if ((isGunPhase || isTorpPhase) && state.highlightFirer) {
     highlightShip = [...(state.jpFleet||[]), ...(state.usFleet||[])].find(s => s.name === state.highlightFirer && s.status !== 'sunk');
-    weaponRange = isTorpPhase ? 13 : 16;
+    weaponRange = isTorpPhase ? 13 : 15;
   }
 
   // パス1: 塗り潰しのみ
@@ -1207,10 +1207,10 @@ function loadPhase(phase) {
   if (phase !== 'move1' && phase !== 'move2') {
     [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => { delete s.prevCol; delete s.prevRow; });
   }
-  // gun1a開始時: 前ターンの発砲フラグをリセット（torpedo前にリセットしないよう注意）
-  if (phase === 'gun1a') {
-    (state.jpFleet||[]).forEach(s => { s.firedGun1 = false; });
-    (state.usFleet||[]).forEach(s => { s.firedGun1 = false; });
+  // 砲撃フェーズ末尾: 撃たなかった艦の発砲フラグをクリア
+  if (phase === 'gun1r' || phase === 'gun2r') {
+    (state.jpFleet||[]).forEach(s => { if (!s.firedGun1) s.firedGun1 = false; });
+    (state.usFleet||[]).forEach(s => { if (!s.firedGun1) s.firedGun1 = false; });
   }
   state.phase = phase;
   state.actionDone = [];  // フェーズ遷移で行動済みリストクリア
