@@ -526,7 +526,7 @@ function renderCards() {
         else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
       }
     }
-    const fogN = state.fogMode ? '❓❓❓' : s.name;
+    const fogN = state.fogMode ? (['BB','OBB','CA'].includes(s.type)?'大型':'小型')+((state.usFleet||[]).indexOf(s)+1) : s.name;
     const fogI = state.fogMode ? '?' : `${s.type} 防:${def}`;
     return `<div class="card us${sel}${oor}" onclick="selectTarget(${i})">
       <span class="c-name">${fogN}</span>
@@ -661,7 +661,7 @@ function doShoot() {
   const hitPct = calcHitChance(mod, dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
   const body = document.getElementById('resultBody');
-  const prevTN = (state.fogMode && target.side === 'us') ? '❓❓❓' : `${target.name}(${target.type})`;
+  const prevTN = (state.fogMode && target.side === 'us') ? (['BB','OBB','CA'].includes(target.type)?'大型':'小型')+((state.usFleet||[]).indexOf(target)+1) : `${target.name}(${target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${firer.name}(${firer.type})</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${prevTN}</span></div>
@@ -788,7 +788,7 @@ function doShoot() {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
-  const resTN = (state.fogMode && r.target.side === 'us') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
+  const resTN = (state.fogMode && r.target.side === 'us') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.usFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${resTN}</span></div>
@@ -1041,7 +1041,7 @@ function showUSPreview(r) {
   const body = document.getElementById('resultBody');
   const hitPct = calcHitChance(r.mod, r.dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
-  const usPrevTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
+  const usPrevTN = (state.fogMode && r.target.side === 'jp') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${usPrevTN}</span></div>

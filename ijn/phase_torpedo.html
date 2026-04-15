@@ -432,7 +432,7 @@ function renderCards() {
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
     const side = ini === 'jp' ? 'us' : 'jp';
-    const fogN = state.fogMode ? '❓❓❓' : s.name;
+    const fogN = state.fogMode ? (['BB','OBB','CA'].includes(s.type)?'大型':'小型')+((s.side==='us'?state.usFleet:state.jpFleet).indexOf(s)+1) : s.name;
     const fogT = state.fogMode ? '?' : s.type;
     tHtml += `<div class="card ${side}${sel}${dis}" onclick="clickTarget(${i})">
       <span class="c-name">${fogN}</span>
@@ -491,7 +491,7 @@ function updateShootInfo() {
 
   const {mod, details} = calcModifiers(firer, target);
   const hitPct = calcTorpHitChance(mod, dist);
-  const infoTN = (state.fogMode && target.side === 'us') ? '❓❓❓' : target.name;
+  const infoTN = (state.fogMode && target.side === 'us') ? (['BB','OBB','CA'].includes(target.type)?'大型':'小型')+((state.usFleet||[]).indexOf(target)+1) : target.name;
   el.innerHTML = `${firer.name} → ${infoTN} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
   if (details.length > 0) {
     el.innerHTML += `<div class="mod-detail">${details.join(' / ')}</div>`;
@@ -791,7 +791,7 @@ function applyDamage(ship, g, m) {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
-  const resTN = (state.fogMode && r.target.side === 'us') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
+  const resTN = (state.fogMode && r.target.side === 'us') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.usFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">雷撃艦</span> <span class="r-value">${r.firer.name}(${r.firer.type})</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${resTN}</span></div>

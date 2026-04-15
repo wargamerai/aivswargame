@@ -770,7 +770,7 @@ function renderFleetList() {
     var cls = s.status || 'ok';
     var visible = isSpotted(s);
     if (!visible) {
-      html += '<tr><td class="name-cell" style="color:#999">???</td><td>-</td><td>-</td><td>-</td></tr>';
+      html += '<tr><td class="name-cell" style="color:#999">❓</td><td>-</td><td>-</td><td>-</td></tr>';
     } else if (s.status === 'sunk' && fogActive) {
       // 撃沈は事実として表示
       html += '<tr class="sunk">';
@@ -796,7 +796,7 @@ function renderFleetList() {
       var shipClass = ['BB','OBB','CA'].includes(s.type) ? '大型' : '小型';
       var shipNum = ui + 1;
       html += '<tr>';
-      html += '<td class="name-cell" style="color:#999">❓❓❓ <span style="color:#aaa;font-size:0.8em">' + shipClass + shipNum + '</span></td>';
+      html += '<td class="name-cell" style="color:#999">' + shipClass + shipNum + '</td>';
       html += '<td colspan="2" style="text-align:center;color:#000">' + hitLabel + '</td>';
       html += '<td class="status-cell">' + (fogStatus.length ? fogStatus.join(' ') : '❓') + '</td>';
       html += '</tr>';
@@ -969,7 +969,7 @@ function drawShip(ship) {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#888';
     const sunkLabel = (state.fogMode && state.phase !== 'report' && ship.side === 'us')
-      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型')
+      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型') + (state.usFleet.indexOf(ship) + 1)
       : ship.name.substring(0,3);
     ctx.fillText(sunkLabel, x, y + 14);
     return;
@@ -1111,7 +1111,7 @@ function drawShip(ship) {
     ctx.fillStyle = '#99aaff';
     // IJN: 米軍=敵、霧ONなら大型/小型表示
     const usLabel = (state.fogMode && state.phase !== 'report')
-      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型')
+      ? (['BB','OBB','CA'].includes(ship.type) ? '大型' : '小型') + (state.usFleet.indexOf(ship) + 1)
       : usShipLabel(ship);
     ctx.fillText(usLabel, x, y + drawSz + 10);
   }
