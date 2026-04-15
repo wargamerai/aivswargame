@@ -166,6 +166,19 @@ function repairShip(name) {
   if (!remaining.includes('射撃指揮所')) ship.critHitMod = 0;
   if (!remaining.includes('速力半減') && !remaining.includes('航行不能')) delete ship.speed;
 
+  // 離脱中の艦が修理で離脱条件を満たさなくなったら離脱解除
+  if (ship.withdrawing) {
+    const stillNeed = (ship.status === 'heavy') ||
+                      remaining.includes('航行不能') ||
+                      remaining.includes('回頭不能') ||
+                      remaining.includes('速力半減');
+    if (!stillNeed) {
+      ship.withdrawing = false;
+      delete ship.retreatDir;
+      log(`  → ${name} 離脱解除 — 操作可能`);
+    }
+  }
+
   saveAndNotify();
   renderList();
 }

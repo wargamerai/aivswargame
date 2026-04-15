@@ -656,7 +656,7 @@ function phaseSortie() {
     // ハンディキャップ計算
     let jpFee = fleetFee(currentJpFleet);
     let usFee = fleetFee(currentUsFleet);
-    let jpHandicapAdd = Math.max(0, usFee - jpFee);
+    let jpHandicapAdd = 0;  // キャンペーンでは日本軍ハンディなし（輸送/砲撃ボーナスで稼ぐ）
     let usHandicapAdd = Math.max(0, jpFee - usFee);
 
     if (usHandicapAdd > maxUsHandicap) {
