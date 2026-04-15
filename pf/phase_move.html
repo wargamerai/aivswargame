@@ -246,12 +246,12 @@ function startStraightMode() {
   } else if (radar) {
     if (!state.usDetected) {
       state.usDetected = true;
-      // レーダー探知: 砲撃は可能だが自由移動は次の移動フェーズから
       state.contactMade = true;
+      state.usFreeMove = true;
       pushState();
     }
-    setInfo('レーダー探知！ 直進継続（自由移動は次の移動フェーズから）');
-    console.log('[PF-MOVE] レーダー探知のみ → usFreeMove変更なし（次フェーズから）');
+    setInfo('レーダー探知！ 自由移動は次の移動フェーズから');
+    console.log('[PF-MOVE] レーダー探知 → usFreeMove設定');
   } else if (!visual && !radar) {
     checkLineReach();
     setInfo(`${side}直進完了 — 敵未発見`);
