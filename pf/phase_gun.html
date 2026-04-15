@@ -522,7 +522,7 @@ function renderCards() {
         else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
       }
     }
-    const fogN = state.fogMode ? '❓❓❓' : s.name;
+    const fogN = state.fogMode ? (['BB','OBB','CA'].includes(s.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(s)+1) : s.name;
     const fogI = state.fogMode ? '?' : `${s.type} 防:${def}`;
     return `<div class="card jp${sel}${oor}" onclick="selectTarget(${i})">
       <span class="c-name">${fogN}</span>
@@ -659,7 +659,7 @@ function doShoot() {
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
   const body = document.getElementById('resultBody');
   const shootFN = `${firer.name}(${firer.type})`;
-  const shootTN = state.fogMode ? '❓❓❓' : `${target.name}(${target.type})`;
+  const shootTN = state.fogMode ? (['BB','OBB','CA'].includes(target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(target)+1) : `${target.name}(${target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${shootFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${shootTN}</span></div>
@@ -756,7 +756,7 @@ function doShoot() {
     logAttack({ turn: state.combatTurn||1, phase: subPhase, type:'gun',
       firerName:firer.name, firerType:firer.type, firerSide:'us',
       targetName:target.name, targetType:target.type, targetSide:'jp',
-      hits:hits, dmgG:dmgG, dmgM:dmgM, shotsFired:1 });
+      hits:hits, dmgG:dmgG, dmgM:dmgM, sunk:critSunk?1:0, shotsFired:1 });
 
     // 射撃済みマーク
     firedShips.add(selectedFirer);
@@ -792,8 +792,8 @@ function showJPPreview(r) {
   const body = document.getElementById('resultBody');
   const hitPct = calcHitChance(r.mod, r.dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
-  const prevFN = (state.fogMode && r.firer.side === 'jp') ? '❓❓❓' : `${r.firer.name}(${r.firer.type})`;
-  const prevTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
+  const prevFN = (state.fogMode && r.firer.side === 'jp') ? (['BB','OBB','CA'].includes(r.firer.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.firer)+1) : `${r.firer.name}(${r.firer.type})`;
+  const prevTN = (state.fogMode && r.target.side === 'jp') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${prevFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${prevTN}</span></div>
@@ -810,8 +810,8 @@ function showJPPreview(r) {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
-  const resFN = (state.fogMode && r.firer.side === 'jp') ? '❓❓❓' : `${r.firer.name}(${r.firer.type})`;
-  const resTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
+  const resFN = (state.fogMode && r.firer.side === 'jp') ? (['BB','OBB','CA'].includes(r.firer.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.firer)+1) : `${r.firer.name}(${r.firer.type})`;
+  const resTN = (state.fogMode && r.target.side === 'jp') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${resFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${resTN}</span></div>
@@ -827,15 +827,23 @@ function showResult(r) {
   html += `<div class="r-dice">🎲 ${r.d1} + ${r.d2} = ${r.d1+r.d2} → ${r.d1+r.d2+r.mod}</div>`;
   html += `<div class="r-hits ${r.hits>0?'hit':'miss'}">${r.hits > 0 ? `命中 ${r.hits}発！` : '外れ！'}</div>`;
   if (r.hits > 0) {
-    html += `<div class="r-ratio">${r.ratioLabel}</div>`;
-    html += `<div style="color:#aaa;font-size:0.85em;text-align:center">損害ダイス: ${r.dmgDice}</div>`;
-    html += `<div class="r-dmg">損害: ${r.dmgText}</div>`;
+    if (state.fogMode && r.target.side === 'jp') {
+      html += `<div class="r-dmg">損害: ❓</div>`;
+    } else {
+      html += `<div class="r-ratio">${r.ratioLabel}</div>`;
+      html += `<div style="color:#aaa;font-size:0.85em;text-align:center">損害ダイス: ${r.dmgDice}</div>`;
+      html += `<div class="r-dmg">損害: ${r.dmgText}</div>`;
+    }
   }
   if (r.critText) {
-    html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
-    if (r.critSunk) {
-      html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 轟沈！</div>`;
+    if (state.fogMode && r.target.side === 'jp') {
+      html += `<div class="r-crit">❓</div>`;
+    } else {
+      html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
     }
+  }
+  if (r.critSunk) {
+    html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 轟沈！</div>`;
   }
   body.innerHTML = html;
   document.getElementById('resultOverlay').style.display = 'flex';
@@ -1034,7 +1042,7 @@ function autoUSShoot(title) {
     logAttack({ turn: state.combatTurn||1, phase: subPhase, type:'gun',
       firerName:r.firer.name, firerType:r.firer.type, firerSide:'us',
       targetName:r.target.name, targetType:r.target.type, targetSide:'jp',
-      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, sunk:r.critSunk?1:0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1244,7 +1252,7 @@ function autoJPShoot(title) {
     logAttack({ turn: state.combatTurn||1, phase: subPhase, type:'gun',
       firerName:r.firer.name, firerType:r.firer.type, firerSide:'jp',
       targetName:r.target.name, targetType:r.target.type, targetSide:'us',
-      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, sunk:r.critSunk?1:0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
