@@ -439,7 +439,7 @@ function renderCards() {
     }
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
-    const fogN = state.fogMode ? '❓❓❓' : s.name;
+    const fogN = state.fogMode ? (['BB','OBB','CA'].includes(s.type)?'大型':'小型')+((s.side==='jp'?state.jpFleet:state.usFleet).indexOf(s)+1) : s.name;
     const fogT = state.fogMode ? '?' : s.type;
     tHtml += `<div class="card jp${sel}${dis}" onclick="clickTarget(${i})">
       <span class="c-name">${fogN}</span>
@@ -498,7 +498,7 @@ function updateShootInfo() {
 
   const {mod, details} = calcModifiers(firer, target);
   const hitPct = calcTorpHitChance(mod, dist);
-  const infoTN = (state.fogMode && target.side === 'jp') ? '❓❓❓' : target.name;
+  const infoTN = (state.fogMode && target.side === 'jp') ? (['BB','OBB','CA'].includes(target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(target)+1) : target.name;
   el.innerHTML = `${firer.name} → ${infoTN} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
   if (details.length > 0) {
     el.innerHTML += `<div class="mod-detail">${details.join(' / ')}</div>`;
@@ -778,7 +778,7 @@ function doTorpedo() {
   logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
     firerName:firer.name, firerType:firer.type, firerSide:firer.side,
     targetName:target.name, targetType:target.type, targetSide:target.side,
-    hits:totalHits, dmgG:dmgG, dmgM:dmgM, shotsFired:nRolls });
+    hits:totalHits, dmgG:dmgG, dmgM:dmgM, sunk:sunk?1:0, shotsFired:nRolls });
 
   saveAndNotify();
 }
@@ -797,8 +797,8 @@ function applyDamage(ship, g, m) {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
-  const fogFN = (state.fogMode && r.firer.side === 'jp') ? '❓❓❓' : `${r.firer.name}(${r.firer.type})`;
-  const fogTN = (state.fogMode && r.target.side === 'jp') ? '❓❓❓' : `${r.target.name}(${r.target.type})`;
+  const fogFN = (state.fogMode && r.firer.side === 'jp') ? (['BB','OBB','CA'].includes(r.firer.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.firer)+1) : `${r.firer.name}(${r.firer.type})`;
+  const fogTN = (state.fogMode && r.target.side === 'jp') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
   let html = `
     <div class="r-row"><span class="r-label">雷撃艦</span> <span class="r-value">${fogFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${fogTN}</span></div>
@@ -818,12 +818,20 @@ function showResult(r) {
     html += `<div class="r-hits ${r.hits>0?'hit':'miss'}">${r.hits > 0 ? `命中 ${r.hits}発！` : '外れ！'}</div>`;
   }
   if (r.hits > 0) {
-    html += `<div class="r-ratio">${r.ratioLabel}</div>`;
-    html += `<div style="color:#aaa;font-size:0.85em;text-align:center">損害ダイス: ${r.dmgDice}</div>`;
-    html += `<div class="r-dmg">損害: ${r.dmgText}</div>`;
+    if (state.fogMode && r.target.side === 'jp') {
+      html += `<div class="r-dmg">損害: ❓</div>`;
+    } else {
+      html += `<div class="r-ratio">${r.ratioLabel}</div>`;
+      html += `<div style="color:#aaa;font-size:0.85em;text-align:center">損害ダイス: ${r.dmgDice}</div>`;
+      html += `<div class="r-dmg">損害: ${r.dmgText}</div>`;
+    }
   }
   if (r.critText) {
-    html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
+    if (state.fogMode && r.target.side === 'jp') {
+      html += `<div class="r-crit">❓</div>`;
+    } else {
+      html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
+    }
   }
   if (r.sunk || r.target.status === 'sunk') {
     html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 撃沈！</div>`;
@@ -989,7 +997,7 @@ function autoJPTorpedo(onDone) {
     logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
       firerName:r.firer.name, firerType:r.firer.type, firerSide:r.firer.side||'jp',
       targetName:r.target.name, targetType:r.target.type, targetSide:r.target.side||'us',
-      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, sunk:r.sunk?1:0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1163,7 +1171,7 @@ function autoUSTorpedo(onDone) {
     logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
       firerName:r.firer.name, firerType:r.firer.type, firerSide:r.firer.side||'us',
       targetName:r.target.name, targetType:r.target.type, targetSide:r.target.side||'jp',
-      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:r.nRolls||1 });
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, sunk:r.sunk?1:0, shotsFired:r.nRolls||1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {

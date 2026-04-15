@@ -765,7 +765,7 @@ function doTorpedo() {
   logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
     firerName:firer.name, firerType:firer.type, firerSide:firer.side,
     targetName:target.name, targetType:target.type, targetSide:target.side,
-    hits:totalHits, dmgG:dmgG, dmgM:dmgM, shotsFired:nRolls });
+    hits:totalHits, dmgG:dmgG, dmgM:dmgM, sunk:sunk?1:0, shotsFired:nRolls });
 
   // 結果オーバーレイ表示
   showResult({
@@ -811,12 +811,20 @@ function showResult(r) {
     html += `<div class="r-hits ${r.hits>0?'hit':'miss'}">${r.hits > 0 ? `命中 ${r.hits}発！` : '外れ！'}</div>`;
   }
   if (r.hits > 0) {
-    html += `<div class="r-ratio">${r.ratioLabel}</div>`;
-    html += `<div style="color:#aaa;font-size:0.85em;text-align:center">損害ダイス: ${r.dmgDice}</div>`;
-    html += `<div class="r-dmg">損害: ${r.dmgText}</div>`;
+    if (state.fogMode && r.target.side === 'us') {
+      html += `<div class="r-dmg">損害: ❓</div>`;
+    } else {
+      html += `<div class="r-ratio">${r.ratioLabel}</div>`;
+      html += `<div style="color:#aaa;font-size:0.85em;text-align:center">損害ダイス: ${r.dmgDice}</div>`;
+      html += `<div class="r-dmg">損害: ${r.dmgText}</div>`;
+    }
   }
   if (r.critText) {
-    html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
+    if (state.fogMode && r.target.side === 'us') {
+      html += `<div class="r-crit">❓</div>`;
+    } else {
+      html += `<div class="r-crit">⚡ クリティカル！ ${r.critText}</div>`;
+    }
   }
   if (r.sunk) {
     html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 撃沈！</div>`;
@@ -963,7 +971,7 @@ function autoJPTorpedo() {
     logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
       firerName:r.firer.name, firerType:r.firer.type, firerSide:'jp',
       targetName:r.target.name, targetType:r.target.type, targetSide:'us',
-      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, sunk:r.sunk?1:0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
@@ -1121,7 +1129,7 @@ function autoUSTorpedo() {
     logAttack({ turn: state.combatTurn||1, phase:'torpedo', type:'torpedo',
       firerName:r.firer.name, firerType:r.firer.type, firerSide:'us',
       targetName:r.target.name, targetType:r.target.type, targetSide:'jp',
-      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, shotsFired:1 });
+      hits:r.hits, dmgG:r.dmgG||0, dmgM:r.dmgM||0, sunk:r.sunk?1:0, shotsFired:1 });
 
     // fullAutoAI時は確認スキップ
     if (localStorage.getItem('fullAutoAI') === '1') {
