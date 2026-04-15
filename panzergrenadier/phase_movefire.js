@@ -733,8 +733,6 @@ function executeDirectFire(shooters, target) {
     const uid = u.id || u.name;
     directFireState.firedUnits.add(uid);
     u.firedThisTurn = true;
-    // 先制射撃したら移動不可 (11-2-(2))
-    directFireState.movedUnits.add(uid);
   });
 
   // ダミー除去 — 射撃したらダミーが剥がれる
@@ -973,7 +971,7 @@ function renderMoveFirePhase() {
       atkUnits.forEach(u => {
         const uid = u.id || u.name;
         const checked = checkState.atk.has(uid);
-        const disabled = u.firedThisTurn;
+        const disabled = u.moveComplete && u.firedThisTurn;
         const statusColor = u.status === 'ok' ? '#8f8' : u.status === 'd' ? '#fd8' : u.status === 'dd' ? '#f88' : '#888';
         html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;${disabled?'opacity:0.4;':''}">`;
         html += `<input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} onchange="toggleUnitCheck('atk','${uid}',this.checked)" style="margin:0;">`;
@@ -981,7 +979,7 @@ function renderMoveFirePhase() {
         if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
         html += `<span style="color:#888;font-size:0.75em;">fp${u.fpAT}/${u.fpSoft} R${u.range}</span>`;
         if (disabled) html += `<span style="color:#f66;font-size:0.7em;">行動済</span>`;
-        if (!u.moveComplete && !u.firedThisTurn) {
+        if (!u.moveComplete) {
           html += `<span class="btn-sm" style="padding:0 6px;font-size:0.7em;margin-left:auto;" onclick="startMove(testUnits.find(u=>(u.id||u.name)==='${uid}'))">移動</span>`;
         }
         if ((u.type === 'T' || u.type === 'AC') && !disabled) {
@@ -2346,8 +2344,8 @@ function startMove(unit) {
   if (unit.status === 'eliminated' || unit.status === 'dd') return;
   if (unit.side !== directFireState.activeSide) return;
   const uid = unit.id || unit.name;
-  if (directFireState.firedUnits.has(uid)) {
-    addLog('move', `${unit.name}: 先制射撃済みのため移動不可 (11-2-(2))`);
+  if (directFireState.counterFiredUnits.has(uid)) {
+    addLog('move', `${unit.name}: 反撃済みのため移動不可`);
     return;
   }
   if (directFireState.movedUnits.has(uid) && unit.moveComplete) {

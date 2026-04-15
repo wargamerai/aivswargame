@@ -1631,8 +1631,12 @@ function renderPhase() {
       renderAssaultPhase();
       return;
     case 'defMove':
-      html += '後攻プレイヤーは移動のみ可能です。<br>先攻プレイヤーはストップ射撃が可能です。';
-      break;
+      // 後攻移動: activeSideを後攻側に設定してmoveFireのUIを再利用
+      directFireState.activeSide = G.initiative === 'german' ? 'allied' : 'german';
+      directFireState.defenderSide = G.initiative;
+      directFireState.mode = 'selectShooter';
+      renderMoveFirePhase();
+      return;
     case 'turnEnd':
       html += `ターン ${G.turn} 終了。<br>`;
       if (G.turn < G.maxTurn) {
