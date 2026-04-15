@@ -351,13 +351,14 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
   document.write('<script src="' + mapFile + '"><\/script>');
 })();
 </script>
-<script src="scenario2.js"></script>
-<script src="scenario3.js"></script>
-<script src="scenario4.js"></script>
-<script src="scenario5.js"></script>
-<script src="scenario7.js"></script>
-<script src="scenario8.js"></script>
-<script src="scenario9.js"></script>
+<script>
+// シナリオに応じてシナリオデータを動的に読み込む
+(function() {
+  var sid = parseInt(new URLSearchParams(window.location.search).get('scenario')) || 2;
+  var scenarioFile = 'scenario' + sid + '.js';
+  document.write('<script src="' + scenarioFile + '"><\/script>');
+})();
+</script>
 <script>
 // ===== ゲーム状態 =====
 // URLパラメータからシナリオと陣営を取得
@@ -366,8 +367,7 @@ const _scenarioId = parseInt(_urlParams.get('scenario')) || 2;
 const _playerSide = _urlParams.get('side') || 'allied';
 
 // シナリオ選択
-const SCENARIO_MAP = { 2: SCENARIO_2, 3: SCENARIO_3, 4: SCENARIO_4, 5: SCENARIO_5, 7: SCENARIO_7, 8: SCENARIO_8, 9: SCENARIO_9 };
-const SCENARIO = SCENARIO_MAP[_scenarioId] || SCENARIO_2;
+const SCENARIO = window['SCENARIO_' + _scenarioId] || SCENARIO_2;
 
 const G = {
   turn: 1,
