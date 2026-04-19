@@ -49,26 +49,33 @@
   // §17.82 個人移送によりグループ人数の上限
   const TRANSFER_MAX = 11;
 
-  // 砲兵類/AFV/IG など歩兵ルールでは扱わない武器カテゴリ (前方一致)
+  // AFV/IG など歩兵ルールでは扱わない武器カテゴリ (前方一致)
+  // 迫撃砲 は搭載のため NON_INFANTRY から除外（砲兵類だが歩兵ルール内で処理）
   const NON_INFANTRY_WEAPON_PREFIXES = [
-    '60mm迫撃砲', '50mm迫撃砲', '迫撃砲',
+    // '60mm迫撃砲', '50mm迫撃砲', '迫撃砲',
   ];
 
   // クルー操作兵器のカテゴリ (歩兵範囲)
-  // 中機関銃 / 軽機関銃 / バズーカ / パンツァーシュレック / 火炎放射器
+  // 中機関銃 / 軽機関銃 / バズーカ / パンツァーシュレック / 火炎放射器 / 迫撃砲
   const CREW_WEAPON_PREFIXES = [
     '中機関銃', '軽機関銃',
-    'バズーカ', 'パンツァーシュレック',
+    // 'バズーカ', 'パンツァーシュレック',  // 搭載しないため処理からはずす
     '火炎放射器',
+    '迫撃砲', '60mm迫撃砲', '50mm迫撃砲',
+  ];
+
+  // 砲兵類 (§19.12 赤5/6で自動故障)
+  const ARTILLERY_PREFIXES = [
+    '迫撃砲', '60mm迫撃砲', '50mm迫撃砲',
   ];
 
   // ボルトアクションライフル (移動射撃で半減 §12.11)
   const BOLT_ACTION_PREFIXES = ['ボルトアクション'];
 
   // §8.41 「湿地」内から射撃不可となる武器
-  const NO_FIRE_FROM_MARSH = ['中機関銃'];
+  const NO_FIRE_FROM_MARSH = ['中機関銃', '迫撃砲', '60mm迫撃砲', '50mm迫撃砲'];
   // §8.52 「河川」内から射撃不可となる武器
-  const NO_FIRE_FROM_STREAM = ['中機関銃'];
+  const NO_FIRE_FROM_STREAM = ['中機関銃', '迫撃砲', '60mm迫撃砲', '50mm迫撃砲'];
 
   // §10.12 ピン状態の兵士がいるグループは「移動」カードを置けない
   // §10.11 ピン兵士の火力は加算しない
@@ -86,6 +93,10 @@
 
   function isCrewWeapon(weaponCat) {
     return startsWithAny(weaponCat, CREW_WEAPON_PREFIXES);
+  }
+
+  function isArtillery(weaponCat) {
+    return startsWithAny(weaponCat, ARTILLERY_PREFIXES);
   }
 
   function isBoltAction(weaponCat) {
@@ -106,7 +117,7 @@
   }
 
   // ユニットの ピン状態フラグ (UI が card.pinned を持つ前提)
-  function isPinned(card)   { return !!(card && card.pinned); }
+  function isPinned(card)   { return !!(card && card.pinned && !card.killed && !card.routed); }
   function isWounded(card)  { return !!(card && card.wounded); }
   function isKilled(card)   { return !!(card && card.killed); }
   function isPanicked(card) { return !!(card && card.panicked); }
@@ -185,41 +196,88 @@
   function calcGroupFirepower(group, factionKey, distance, ctx) {
     const opts = ctx || {};
     const idx = rangeIndex(distance);
+    const inMarsh = isInMarsh(group);
+    const inStream = isInStream(group);
     let total = 0;
     group.cards.forEach((card, i) => {
       // §10.11 ピン状態の兵士の火力は加算しない
       if (isPinned(card) || !isAlive(card)) return;
+      // 故障・破壊した武器は射撃不可
+      if (card.malfunctioned || card.destroyed) return;
       const def = lookupSoldier(card, factionKey);
       if (!def) return;
 
       // 砲兵類/迫撃砲などは歩兵ルール対象外
       if (!isInfantryWeapon(def.weaponCat)) return;
 
-      let fp = num(def.range[idx]);
-      const crewed = isCrewWeapon(def.weaponCat);
+      // §8.41 湿地からの射撃制限
+      if (inMarsh) {
+        if (def.weaponCat.indexOf('中機関銃') === 0) return;
+        if (def.weaponCat.indexOf('迫撃砲') >= 0) return;
+        // クルー必要武器（括弧データあり）: クルー完備＋非移動でなければ射撃不可
+        if (def.needsCrew) {
+          const hasAssist = !!(opts.crewMap && opts.crewMap[i] != null);
+          if (!hasAssist || opts.moving) return;
+        }
+      }
 
-      // クルー操作兵器: アシスタント完備でなければ () 内の半減火力を使う
-      // CSV では range が括弧無しの値だが, クルー有無のフラグを XValで持つ。
-      // ここではアシスタント割当 (opts.crewMap[i]) があるかで判定。
+      // §8.52 河川からの射撃制限
+      if (inStream) {
+        if (def.weaponCat.indexOf('中機関銃') === 0) return;
+        if (def.weaponCat.indexOf('迫撃砲') >= 0) return;
+        // クルー必要武器: クルー完備＋非移動で () 内火力のみ
+        if (def.needsCrew) {
+          const hasAssist = !!(opts.crewMap && opts.crewMap[i] != null);
+          if (!hasAssist || opts.moving) return;
+        }
+      }
+
+      // データ駆動: rangeData[idx] から FP を決定
+      const rd = (def.rangeData && def.rangeData[idx]) || null;
       const hasAssistant = !!(opts.crewMap && opts.crewMap[i] != null);
-      if (crewed && !hasAssistant) {
-        // §11.1 クルー無しは括弧火力 = 半減 (端数切り捨て)
-        fp = Math.floor(fp / 2);
+      // データ駆動のクルー判定: 括弧あり = クルー必要兵器
+      const needsCrew = !!def.needsCrew;
+      let fp;
+      if (rd && rd.na) {
+        fp = 0;
+      } else if (rd && rd.noCrew != null && needsCrew && !hasAssistant) {
+        // §11.1 クルー無し → 括弧内の値を使用
+        fp = rd.noCrew;
+      } else if (rd) {
+        fp = rd.main;
+      } else {
+        fp = num(def.range[idx]);
+      }
+      // §45.5 日本軍 SL/精鋭は非武装時 RR5 で 1 FP
+      if (factionKey === 'jpn' && def.leader === '分隊長' && (!def.weaponCat || def.weaponCat === '非武装') && idx === 5) {
+        fp = Math.max(fp, 1);
+      }
+
+      // §8.41 湿地内のクルー兵器は () 内火力を使用 (括弧があれば noCrew を使う)
+      if (inMarsh && needsCrew && rd && rd.noCrew != null) {
+        fp = rd.noCrew;
+      }
+      // §8.52 河川内のクルー兵器は () 内火力を使用
+      if (inStream && needsCrew && rd && rd.noCrew != null) {
+        fp = rd.noCrew;
       }
 
       // §12.1 移動射撃: 火力半減
       if (opts.moving) {
-        // 砲兵類/火炎放射器の例外があるが, 火炎放射器は半減しない
         if (def.weaponCat.indexOf('火炎放射器') !== 0) {
-          // §12.11 ボルトアクションも 1/2 (端数切捨て)
           fp = Math.floor(fp / 2);
         }
-        // §12.12 移動中は中機関銃/軽機関銃のクルー無しは射撃不可等
         if (def.weaponCat.indexOf('中機関銃') === 0) fp = 0;
         if (def.weaponCat.indexOf('軽機関銃') === 0 && !hasAssistant) fp = 0;
+        // §12.12 迫撃砲は移動中射撃不可
+        if (def.weaponCat.indexOf('迫撃砲') >= 0) fp = 0;
       }
       total += fp;
     });
+    // §8.41 湿地内から射撃: 全射撃力から-1
+    if (inMarsh && total > 0) total = Math.max(0, total - 1);
+    // §8.52 河川内から射撃: 全射撃力から-1
+    if (inStream && total > 0) total = Math.max(0, total - 1);
     return total;
   }
 
@@ -238,16 +296,10 @@
    */
   function calcTerrainMod(terrainStack, asAttacker) {
     if (!terrainStack || terrainStack.length === 0) return 0;
-    let mod = 0;
 
-    // §7.1 「+」「-」記号が ◯ で囲まれていれば射撃する側 (attacker) への修正
-    //      無ければ防御側への修正
-    // CSV の "modifier" 列は文字列。 "⊙-1/-1" のような複合表記もある。
-    // 簡易解析: 値が "X/Y" 形式なら 攻撃側=X, 防御側=Y とみなす。
     const parseMod = (rawMod) => {
       if (!rawMod) return { atk: 0, def: 0 };
       const s = String(rawMod);
-      // ⊙ や * を取り除いた数値部分を拾う
       const clean = s.replace(/[*⊙]/g, '');
       if (clean.indexOf('/') >= 0) {
         const parts = clean.split('/');
@@ -257,44 +309,18 @@
         };
       }
       const v = num(clean.replace(/[^\-+0-9]/g, ''));
-      // ⊙ 付き → 攻撃側 / 無し → 防御側
       if (s.indexOf('⊙') >= 0) return { atk: v, def: 0 };
       return { atk: 0, def: v };
     };
 
-    // 最後のカードが移動か地形か
-    const last = terrainStack[terrainStack.length - 1];
-    const lastType = last && last.terrain && last.terrain.type;
-    const isLastMovement = lastType === 'MOVEMENT';
-
-    if (isLastMovement) {
-      // §7.2 最後が移動 → 直前の地形カード修正 + 移動の修正 + 煙幕/鉄条網 を合算
-      for (let i = 0; i < terrainStack.length; i++) {
-        const t = terrainStack[i].terrain;
-        if (!t) continue;
-        const m = parseMod(t.modifier);
-        mod += asAttacker ? m.atk : m.def;
-      }
-    } else {
-      // 通常: 最後の地形のみを採用 (ただし煙幕/鉄条網が更に積まれていれば加算)
-      // §13.25/§13.6 効果は累積
-      let baseAdded = false;
-      for (let i = terrainStack.length - 1; i >= 0; i--) {
-        const t = terrainStack[i].terrain;
-        if (!t) continue;
-        const isArtificial = (t.type === 'SMOKE' || t.type === 'WIRE');
-        const m = parseMod(t.modifier);
-        if (isArtificial) {
-          mod += asAttacker ? m.atk : m.def;
-          continue;
-        }
-        if (!baseAdded) {
-          mod += asAttacker ? m.atk : m.def;
-          baseAdded = true;
-          break;
-        }
-      }
-    }
+    // スタック内全カード (地形・移動・煙幕・鉄条網) の modifier を合計
+    let mod = 0;
+    terrainStack.forEach(card => {
+      const t = card && card.terrain;
+      if (!t) return;
+      const m = parseMod(t.modifier);
+      mod += asAttacker ? m.atk : m.def;
+    });
     return mod;
   }
 
@@ -310,12 +336,14 @@
    *   rncRPC  : 同カードの RPC (パニック→潰走判定用, 0..9)
    * 戻り値: { result: 'NONE'|'PIN'|'PANIC_KIA'|'PANIC_ROUT'|'KIA' }
    */
-  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC) {
+  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod) {
     const sum = (finalFP | 0) + (rnc | 0);
     if (!soldier) return { result: 'NONE' };
+    const mMod = moraleMod || 0;
+    const pMod = panicMod || 0;
 
     if (!wasPinned) {
-      const morale = num(soldier.morale);
+      const morale = num(soldier.morale) + mMod;
       const kia    = num(soldier.kiaFront);
       // KIA 値以上 → 戦死
       if (kia > 0 && sum >= kia) return { result: 'KIA' };
@@ -326,7 +354,7 @@
 
     // 既にピン状態 → KIA(裏)/パニック値で判定
     const kiaBack = num(soldier.kiaBack);
-    const panic   = num(soldier.panic);
+    const panic   = num(soldier.panic) + pMod;
     if (kiaBack > 0 && sum >= kiaBack) return { result: 'KIA' };
     if (panic > 0 && sum >= panic) {
       // §6.531 潰走チェック: rncRPC > パニック値 なら戦死せず潰走
@@ -350,6 +378,145 @@
       return resolveFireOnSoldier(finalFP, draw.rnc, def, isPinned(card), draw.rpc);
     });
   }
+
+  // ===== §8.2 涸れ谷 (GULLY) ========================================
+
+  /**
+   * グループが GULLY 内にいるか判定する。
+   * §8.22: GULLY の上に移動1枚だけならまだ GULLY 内。
+   *        移動2枚以上 or 別の地形カードで脱出。
+   */
+  function isInGully(group) {
+    if (!group.terrain || group.terrain.length === 0) return false;
+    // スタックを後ろから走査し、GULLYの位置と以後のカードを調べる
+    let gullyPos = -1;
+    for (let i = group.terrain.length - 1; i >= 0; i--) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === 'GULLY') { gullyPos = i; break; }
+      // GULLY より後に地形カード（MOVEMENT以外）があれば脱出済み
+      if (t.type !== 'MOVEMENT') return false;
+    }
+    if (gullyPos < 0) return false;
+    // GULLY 以降のMOVEMENTカード数を数える
+    let moveCount = 0;
+    for (let i = gullyPos + 1; i < group.terrain.length; i++) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (t && t.type === 'MOVEMENT') moveCount++;
+      else return false; // 地形カードがあれば脱出済み
+    }
+    // 移動1枚ではまだGULLY内、2枚以上で脱出
+    return moveCount < 2;
+  }
+
+  /** §8.2 GULLY内グループへの射撃が可能か (例外判定) */
+  function canFireAtGully(srcGroup, distance, opts) {
+    // 例外: 狙撃、迫撃砲、丘上、CC、相対距離5
+    if (opts && opts.isSniper) return true;
+    if (opts && opts.isMortar) return true;
+    if (opts && opts.isCC) return true;
+    if (distance >= 5) return true;
+    // 攻撃側が丘にいるか
+    if (srcGroup && srcGroup.terrain) {
+      for (let i = srcGroup.terrain.length - 1; i >= 0; i--) {
+        const t = srcGroup.terrain[i] && srcGroup.terrain[i].terrain;
+        if (!t) continue;
+        if (t.type === 'HILL') return true;
+        if (t.type !== 'MOVEMENT') break;
+      }
+    }
+    return false;
+  }
+
+  // ===== §8.4 湿地 (MARSH) ==========================================
+
+  /**
+   * GULLYと同様の判定: 地形スタックでMARSH内にいるか。
+   * MARSHの上に移動2枚＋地形で脱出。
+   */
+  function isInMarsh(group) {
+    if (!group.terrain || group.terrain.length === 0) return false;
+    for (let i = group.terrain.length - 1; i >= 0; i--) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === 'MARSH') return true;
+      if (t.type !== 'MOVEMENT') return false;
+    }
+    return false;
+  }
+
+  /**
+   * §8.42 湿地上の移動カード枚数を返す
+   */
+  function marshMoveCount(group) {
+    if (!group.terrain || group.terrain.length === 0) return 0;
+    let count = 0;
+    for (let i = group.terrain.length - 1; i >= 0; i--) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === 'MOVEMENT') count++;
+      else break;
+    }
+    return count;
+  }
+
+  /**
+   * §8.42 湿地上に地形カードを置けるか（移動2枚必要）
+   */
+  function canPlaceTerrainOnMarsh(group) {
+    if (!isInMarsh(group)) return true;
+    return marshMoveCount(group) >= 2;
+  }
+
+  // ===== §8.5 河川 (STREAM) ==========================================
+
+  /** グループがSTREAM内にいるか */
+  function isInStream(group) {
+    if (!group.terrain || group.terrain.length === 0) return false;
+    for (let i = group.terrain.length - 1; i >= 0; i--) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === 'STREAM') return true;
+      if (t.type !== 'MOVEMENT') return false;
+    }
+    return false;
+  }
+
+  /** 渡河済みか（STREAM上に移動カードが1枚以上ある） */
+  function hasCrossedStream(group) {
+    if (!isInStream(group)) return false;
+    let foundStream = false;
+    for (let i = 0; i < group.terrain.length; i++) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === 'STREAM') { foundStream = true; continue; }
+      if (foundStream && t.type === 'MOVEMENT') return true;
+    }
+    return false;
+  }
+
+  /** 移動カードが渡河カード(sub=渡河)か */
+  function isFordCard(card) {
+    return !!(card && card.terrain && card.terrain.sub && card.terrain.sub.indexOf('渡河') >= 0);
+  }
+
+  // ===== §8.6-8.8 建物・森林・繁み ===================================
+
+  /** グループが指定typeの地形内にいるか（移動1枚ではまだ影響下 §7.4） */
+  function isInTerrainType(group, type) {
+    if (!group.terrain || group.terrain.length === 0) return false;
+    for (let i = group.terrain.length - 1; i >= 0; i--) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === type) return true;
+      if (t.type !== 'MOVEMENT') return false;
+    }
+    return false;
+  }
+
+  function isInBuildings(group) { return isInTerrainType(group, 'BUILDINGS'); }
+  function isInWoods(group) { return isInTerrainType(group, 'WOODS'); }
+  function isInBrush(group) { return isInTerrainType(group, 'BRUSH'); }
 
   // ===== §9 隠ぺい =================================================
 
@@ -733,7 +900,7 @@
     GROUP_MIN, GROUP_MAX, MAX_GROUPS_INITIAL, TRANSFER_MAX,
 
     // helpers
-    lookupSoldier, isInfantryWeapon, isCrewWeapon, isBoltAction,
+    lookupSoldier, isInfantryWeapon, isCrewWeapon, isArtillery, isBoltAction,
     isPinned, isWounded, isKilled, isPanicked, isAlive,
     rangeIndex,
 
@@ -742,6 +909,18 @@
 
     // firepower
     calcGroupFirepower, calcTerrainMod,
+
+    // gully
+    isInGully, canFireAtGully,
+
+    // marsh
+    isInMarsh, marshMoveCount, canPlaceTerrainOnMarsh,
+
+    // stream
+    isInStream, hasCrossedStream, isFordCard,
+
+    // terrain type checks
+    isInTerrainType, isInBuildings, isInWoods, isInBrush,
 
     // fire resolution
     resolveFireOnSoldier, resolveFireOnGroup,

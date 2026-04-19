@@ -25,6 +25,8 @@
       ger: { soldierRange: [1, 10] },
       rus: { soldierRange: [1, 15] },
       us:  { soldierRange: [1, 12] },
+      jpn: { soldierRange: [1, 13] },
+      uk:  { soldierRange: [1, 10] },
     },
     // §3.6 / §4.1 先攻陣営
     firstPlayer: 'ger',
@@ -57,31 +59,163 @@
     ],
   };
 
+  /**
+   * シナリオB「市街戦」
+   *   建物占拠がVPの鍵。森林4枚除去、特殊地形はCower扱い。
+   */
+  const SCENARIO_B_CITY = {
+    id: 'B',
+    name: '市街戦',
+    description: '市街での戦闘。建物の占拠がVPの鍵。',
+    factions: {
+      ger: { soldierList: [1,2,3,4,6,9,10,17,18,22], dc: true },
+      rus: { soldierList: [2,3,4,5,6,7,8,9,11,12,15,22,23,24,26], dc: true },
+      us:  { soldierList: [1,2,3,4,5,6,7,8,9,11,21,22], dc: true },
+      jpn: { soldierList: [1,2,3,4,5,6,7,8,9,10,18,19,20], dc: true },
+      uk:  { soldierList: [1,2,3,4,5,6,7,16,17,18], dc: true },
+    },
+    firstPlayer: 'ger',
+    deckCycles: 3,
+    handLimits: { ger: 5, us: 6, rus: 4, jpn: 4, uk: 5 },
+    initialTerrain: null,
+    // 建物占拠兵のみ領土VP。時間切れ時VP多い側勝利。
+    victory: {
+      type: 'vpCount',
+      requireBuildingsForTerritorial: true,
+    },
+    // 特殊地形はCower(非機能)扱い
+    treatAsPlain: ['PILLBOX','MINEFIELD','MARSH'],
+    // 森林4枚除去
+    deckRemovals: [
+      { type: 'WOODS', count: 4, trigger: 'firstDiscard' },
+    ],
+  };
+
+  /**
+   * シナリオC「要塞強襲」
+   *   攻撃側が防御側トーチカを破壊する非対称シナリオ。
+   */
+  const SCENARIO_C_ASSAULT = {
+    id: 'C',
+    name: '要塞強襲',
+    description: '攻撃側が防御側のトーチカを破壊せよ。',
+    asymmetric: true,
+    attackerRole: 'player',
+    factions: {
+      ger: { soldierList: [1,3,4,5,6,9,10,14,17,24], dc: true },
+      rus: { soldierList: [3,5,6,9,11,14,16,17,19,20,22,23,24,25,26], dc: true },
+      us:  { soldierList: [1,2,3,4,5,6,7,8,9,12,16,25], dc: true },
+      jpn: { soldierList: [1,2,4,5,6,7,8,9,10,12,16,17,18], dc: true },
+      uk:  { soldierList: [1,3,4,5,6,9,10,14,17,22], dc: true },
+    },
+    defenderFactions: {
+      ger: { soldierList: [3,4,5,8,9,10,23,24] },
+      rus: { soldierList: [1,2,4,5,6,7,9,10,11,14,15,24,25] },
+      us:  { soldierList: [1,2,3,4,5,6,7,8,10,12] },
+      jpn: { soldierList: [4,5,6,7,8,11,12,13,21,25,27] },
+      uk:  { soldierList: [1,4,5,6,7,9,12,22] },
+    },
+    firstPlayer: 'attacker',
+    deckCycles: 3,
+    handLimits: { ger: 5, us: 6, rus: 4, jpn: 4, uk: 5 },
+    // C.1 防御側はシナリオ開始前にトーチカをグループBに配置
+    initialTerrain: {
+      defender: [{ groupName: 'B', type: 'PILLBOX' }],
+    },
+    victory: {
+      type: 'pillboxClear',
+      description: '攻撃側はトーチカ内の人格カード全滅または放棄で勝利',
+    },
+    // C.2 攻撃側保有時の地雷原/狙撃兵はCower扱い、湿地は全てCower扱い
+    treatAsPlainAttacker: ['MINEFIELD','SNIPER'],
+    treatAsPlain: ['MARSH'],
+    deckRemovals: [
+      { type: 'STREAM', count: 1, trigger: 'firstDiscard' },
+      { type: 'BUILDINGS', count: 4, trigger: 'firstDiscard' },
+    ],
+  };
+
+  /**
+   * シナリオD「後衛戦」
+   *   攻撃側が防御側を圧迫する非対称シナリオ。
+   */
+  const SCENARIO_D_REARGUARD = {
+    id: 'D',
+    name: '後衛戦',
+    description: '攻撃側が防御側の後衛部隊を突破する。',
+    asymmetric: true,
+    attackerRole: 'player',
+    factions: {
+      ger: { soldierList: [2,3,4,5,6,7,8,9,10,18,22,23,25], dc: true },
+      rus: { soldierList: [3,4,5,6,7,8,9,10,11,12,19,20,23,24,25,26,27,28], dc: true },
+      us:  { soldierList: [1,2,4,5,6,7,8,9,10,11,12,17,19,24,28], dc: true },
+      jpn: { soldierList: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,23], dc: true },
+      uk:  { soldierList: [1,3,4,5,6,7,9,10,15,19,22,23,25], dc: true },
+    },
+    defenderFactions: {
+      ger: { soldierList: [2,4,6,8,9,10,12,23] },
+      rus: { soldierList: [2,3,4,5,6,7,12,13,14,23,24,25,26] },
+      us:  { soldierList: [3,4,6,7,8,9,17,18,20,27] },
+      jpn: { soldierList: [1,2,3,4,5,6,7,8,10,18,20] },
+      uk:  { soldierList: [3,4,5,9,15,17,21,22] },
+    },
+    firstPlayer: 'attacker',
+    deckCycles: 3,
+    handLimits: { ger: 5, us: 6, rus: 4, jpn: 4, uk: 5 },
+    initialTerrain: null,
+    victory: {
+      type: 'reducedDefender',
+      attackerMinSoldiers: 5,
+      attackerRange: 5,
+      requireProtectiveTerrain: true,
+    },
+    // D.1 攻撃側保有時の狙撃兵はCower扱い、D.2 トーチカ・地雷原はCower扱い
+    treatAsPlainAttacker: ['SNIPER'],
+    treatAsPlain: ['PILLBOX','MINEFIELD'],
+    deckRemovals: [
+      { type: 'BUILDINGS', count: 4, trigger: 'firstDiscard' },
+    ],
+  };
+
   const SCENARIOS = {
     A: SCENARIO_A_PATROL,
+    B: SCENARIO_B_CITY,
+    C: SCENARIO_C_ASSAULT,
+    D: SCENARIO_D_REARGUARD,
   };
 
   /**
    * シナリオから 1 陣営の兵士カード番号配列を取り出す。
+   * role='attacker'|'defender' を指定すれば非対称シナリオの defenderFactions を参照
    */
-  function getSoldierNumbers(scenario, factionKey) {
-    const f = scenario && scenario.factions && scenario.factions[factionKey];
+  function getSoldierNumbers(scenario, factionKey, role) {
+    if (!scenario) return [];
+    let f;
+    if (role === 'defender' && scenario.defenderFactions && scenario.defenderFactions[factionKey]) {
+      f = scenario.defenderFactions[factionKey];
+    } else {
+      f = scenario.factions && scenario.factions[factionKey];
+    }
     if (!f) return [];
-    const [lo, hi] = f.soldierRange;
-    const out = [];
-    for (let i = lo; i <= hi; i++) out.push(i);
-    return out;
+    if (f.soldierList) return f.soldierList.slice();
+    if (f.soldierRange) {
+      const [lo, hi] = f.soldierRange;
+      const out = [];
+      for (let i = lo; i <= hi; i++) out.push(i);
+      return out;
+    }
+    return [];
   }
 
   /**
    * シナリオから 1 陣営のユニットカード(state.groups[].cards 用)を生成する。
    * UI 側の makeCard と同じ形式 (id, img, imgBack)。
    */
-  function buildUnitCards(scenario, factionKey) {
+  function buildUnitCards(scenario, factionKey, role) {
     const fac = (global.FACTIONS || {})[factionKey];
     if (!fac) return [];
     const enc = global.encPath || (s => s);
-    const nums = getSoldierNumbers(scenario, factionKey);
+    const nums = getSoldierNumbers(scenario, factionKey, role);
     return nums.map(num => {
       // ソ連は番号により prefix が異なる (russian/Rus)
       let prefix = fac.prefix;
@@ -136,8 +270,8 @@
    * シナリオ + 陣営キーから 完全な初期グループ配列を作る。
    * state.groups.player / state.groups.ai に直接代入できる形式。
    */
-  function buildInitialGroups(scenario, factionKey) {
-    const units = buildUnitCards(scenario, factionKey);
+  function buildInitialGroups(scenario, factionKey, role) {
+    const units = buildUnitCards(scenario, factionKey, role);
     const groups = distributeIntoGroups(units);
     groups.forEach(g => { g._faction = factionKey; });
     return groups;
@@ -168,9 +302,52 @@
    * 戻り値: state.groups.{player|ai} に直接代入できる配列
    *         各グループは crewPairs (主番号→副番号) を含む
    */
-  function buildAIGroupsSmart(scenario, factionKey) {
-    const units = buildUnitCards(scenario, factionKey);
+  function buildAIGroupsSmart(scenario, factionKey, role) {
+    const units = buildUnitCards(scenario, factionKey, role);
     const N = units.length;
+    // シナリオA: モラル4以上を勝利目標グループに、残りを火力支援グループに
+    if (scenario && scenario.id === 'A' && N >= 6) {
+      const enriched = units.map(u => {
+        const m = String(u.id).match(/(\d+)\s*$/);
+        const num = m ? parseInt(m[1], 10) : null;
+        const def = getSoldierDefByNum(factionKey, num);
+        return { unit: u, num, def, morale: def ? (parseInt(def.morale, 10) || 0) : 0, leader: isLeaderDef(def), crew: isCrewWeaponDef(def) };
+      });
+      // 勝利グループA: モラル降順で最大5名（リーダー優先）
+      enriched.sort((a, b) => {
+        if (a.leader !== b.leader) return a.leader ? -1 : 1;
+        return b.morale - a.morale;
+      });
+      const victorySize = Math.min(5, Math.max(4, Math.floor(N / 2)));
+      const victory = enriched.slice(0, victorySize);
+      const support = enriched.slice(victorySize);
+      const NAMES2 = ['A', 'B'];
+      const groups2 = NAMES2.map((nm, gi) => ({
+        name: nm, cards: [], distance: 0, terrain: [], actions: [], _faction: factionKey, crewPairs: {},
+      }));
+      victory.forEach(e => addCard(groups2[0], e));
+      support.forEach(e => addCard(groups2[1], e));
+      // 各グループ内のクルー兵器にアシスタントを割当
+      groups2.forEach(g => {
+        g.cards.forEach((card, ci) => {
+          const e = enriched.find(x => x.unit === card);
+          if (!e || !e.crew) return;
+          const candidate = g.cards.find((c2, ci2) => {
+            if (ci2 === ci) return false;
+            const e2 = enriched.find(x => x.unit === c2);
+            if (!e2) return false;
+            if (e2.crew) return false;
+            return true;
+          });
+          if (candidate) {
+            const ownerNum = e.num;
+            const assistNum = candidate.num != null ? candidate.num : extractNum(candidate);
+            g.crewPairs[ownerNum] = assistNum;
+          }
+        });
+      });
+      return groups2;
+    }
     if (N === 0) return [];
 
     // グループ数とサイズ:
@@ -315,6 +492,43 @@
     return m ? parseInt(m[1], 10) : null;
   }
 
+  // ===== デッキ除去ルール ============================================
+
+  /** このシナリオで地形カードとして使用不可か判定する */
+  function isCardDisabledAsTerrain(scenario, card) {
+    if (!scenario || !scenario.treatAsPlain || !card || !card.terrain) return false;
+    return scenario.treatAsPlain.indexOf(card.terrain.type) >= 0;
+  }
+
+  /** カードが捨て札になる前に除去対象か判定する。
+   *  除去対象なら true を返す（呼び出し側は捨て札山に入れない）。 */
+  function shouldRemoveFromGame(scenario, card, deckRemoved) {
+    if (!scenario || !scenario.deckRemovals || !card || !card.terrain) return false;
+    for (let i = 0; i < scenario.deckRemovals.length; i++) {
+      const rule = scenario.deckRemovals[i];
+      if (card.terrain.type !== rule.type) continue;
+      const key = rule.type;
+      if (!deckRemoved[key]) deckRemoved[key] = 0;
+      if (deckRemoved[key] < rule.count) {
+        deckRemoved[key]++;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ===== キャンペーン: 昇進テーブル ===================================
+  const PROMOTION_TABLE = {
+    us:  { ranks: ['兵卒','上等兵','伍長','軍曹','曹長'], thresholds: [0, 20, 50, 100, 200] },
+    ger: { ranks: ['兵卒','上等兵','伍長','軍曹','曹長'], thresholds: [0, 20, 50, 100, 200] },
+    rus: { ranks: ['兵卒','上等兵','伍長','軍曹'],        thresholds: [0, 20, 50, 100] },
+  };
+
+  function getPromotionTable(factionKey) {
+    return PROMOTION_TABLE[factionKey] || PROMOTION_TABLE.us;
+  }
+
+  global.PROMOTION_TABLE = PROMOTION_TABLE;
   global.SCENARIOS = SCENARIOS;
   global.SCENARIO_HELPERS = {
     getSoldierNumbers,
@@ -322,6 +536,9 @@
     distributeIntoGroups,
     buildInitialGroups,
     buildAIGroupsSmart,
+    shouldRemoveFromGame,
+    isCardDisabledAsTerrain,
+    getPromotionTable,
   };
 
 })(typeof window !== 'undefined' ? window : this);

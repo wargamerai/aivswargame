@@ -701,7 +701,10 @@
   <div class="scenario-row" style="margin-bottom:24px; display:flex; align-items:center; gap:12px;">
     <label style="font-size:16px;">シナリオ:</label>
     <select id="scenario-pick" style="background:#444; color:#eee; border:1px solid #888; padding:8px 14px; font-size:15px; border-radius:4px;">
-      <option value="A">A: パトロール</option>
+      <option value="A">A: パトロール（遭遇戦）</option>
+      <option value="B">B: 市街戦</option>
+      <option value="C">C: 要塞強襲（非対称）</option>
+      <option value="D">D: 後衛戦（非対称）</option>
     </select>
     <span id="scenario-info" style="font-size:12px; color:#aaa;"></span>
   </div>
@@ -717,6 +720,14 @@
     <div class="faction-btn" data-faction="us">
       <div class="flag">🇺🇸</div>
       <div>アメリカ</div>
+    </div>
+    <div class="faction-btn" data-faction="jpn">
+      <div class="flag">🇯🇵</div>
+      <div>日本</div>
+    </div>
+    <div class="faction-btn" data-faction="uk">
+      <div class="flag">🇬🇧</div>
+      <div>イギリス</div>
     </div>
   </div>
   <div class="mode-row">
@@ -753,12 +764,13 @@
   <div class="head">
     <h2 id="setup-title">編成</h2>
     <div class="info">
-      未配置兵士をクリックして選択 → 配置先グループ <b id="setup-target">A</b> をクリック<br>
-      クルー設定: クルー兵器持ちを選択 → <b>クルー設定</b>ボタン → 同じグループの別の兵士を選んでアシスタント指定
+      配置先グループ <b id="setup-target">A</b> を選択 → 未配置兵士をクリックで連続配置<br>
+      グループ内兵士をクリック→選択 → 別グループクリックで移動 ／ クルー設定: クルー兵器持ちを選択 → <b>クルー設定</b>ボタン → 同じグループの別兵士をアシスタント指定
     </div>
     <div class="actions">
       <button class="cancel" id="setup-back">戻る</button>
       <button class="cancel" id="setup-reset">リセット</button>
+      <button class="cancel" id="setup-sort">モラル順 ↓</button>
       <button class="crew" id="setup-crew">クルー設定</button>
       <button id="setup-start" disabled>ゲーム開始</button>
     </div>
@@ -1181,7 +1193,7 @@ function updateDeckCounts() {
 }
 
 // ===== 兵士カードデータ =====
-var SOLDIER_CARDS = { us: [], ger: [], rus: [] };
+var SOLDIER_CARDS = { us: [], ger: [], rus: [], jpn: [], uk: [] };
 
 function splitCSVLine(line) {
   // クォート対応CSV行分割
@@ -1214,6 +1226,18 @@ function soldierImgPath(faction, num) {
   return { dir: '', prefix: '' };
 }
 
+/** "5" → {main:5}, "5[2]" → {main:5, noCrew:2}, "NA" → {na:true} */
+function parseRangeValue(s) {
+  if (!s) return { main: 0 };
+  const t = String(s).trim();
+  if (t === 'NA' || t.indexOf('NA') === 0) return { na: true };
+  const m = t.match(/^([0-9\-]+)\s*\[\s*([0-9\-]+)\s*\]/);
+  if (m) {
+    return { main: parseInt(m[1], 10) || 0, noCrew: parseInt(m[2], 10) || 0 };
+  }
+  return { main: parseInt(t, 10) || 0 };
+}
+
 function parseSoldierCSV(text, faction) {
   const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
   const rows = lines.slice(1);
@@ -1224,6 +1248,9 @@ function parseSoldierCSV(text, faction) {
     const num = parseInt(c[0], 10);
     if (!num) return;
     const { dir, prefix } = soldierImgPath(faction, num);
+    const rangeArr = [c[8], c[9], c[10], c[11], c[12], c[13]];
+    const rangeData = rangeArr.map(parseRangeValue);
+    const needsCrew = rangeData.some(rd => rd.noCrew != null);
     const card = {
       num,
       rank:       c[1] || '',
@@ -1233,7 +1260,9 @@ function parseSoldierCSV(text, faction) {
       weaponCat:  c[5] || '',
       xVal:       c[6] || '',
       weaponName: c[7] || '',
-      range: [c[8], c[9], c[10], c[11], c[12], c[13]],
+      range: rangeArr,
+      rangeData,
+      needsCrew,
       morale:    c[14] || '',
       pt:        c[15] || '',
       kiaFront:  c[16] || '',
@@ -1256,7 +1285,7 @@ function parseSoldierCSV(text, faction) {
 }
 
 function logSoldierCardsLoaded() {
-  console.log(`兵士カード読込: US=${SOLDIER_CARDS.us.length}, Ger=${SOLDIER_CARDS.ger.length}, Rus=${SOLDIER_CARDS.rus.length}`);
+  console.log(`兵士カード読込: US=${SOLDIER_CARDS.us.length}, Ger=${SOLDIER_CARDS.ger.length}, Rus=${SOLDIER_CARDS.rus.length}, Jpn=${SOLDIER_CARDS.jpn.length}, UK=${SOLDIER_CARDS.uk.length}`);
 }
 
 const _embedSoldiers = (typeof __EMBED_CSV__ !== 'undefined' && __EMBED_CSV__ && __EMBED_CSV__.us && __EMBED_CSV__.ger && __EMBED_CSV__.rus);
@@ -1265,7 +1294,15 @@ if (_embedSoldiers) {
     SOLDIER_CARDS.us  = parseSoldierCSV(__EMBED_CSV__.us,  'us');
     SOLDIER_CARDS.ger = parseSoldierCSV(__EMBED_CSV__.ger, 'ger');
     SOLDIER_CARDS.rus = parseSoldierCSV(__EMBED_CSV__.rus, 'rus');
-    logSoldierCardsLoaded();
+    // JPN/UK は埋め込みに無ければ fetch
+    Promise.all([
+      __EMBED_CSV__.jpn
+        ? Promise.resolve().then(() => { SOLDIER_CARDS.jpn = parseSoldierCSV(__EMBED_CSV__.jpn, 'jpn'); })
+        : fetch(encPath('upfrontimages/日本/Japan_card_list.csv')).then(r => r.text()).then(t => { SOLDIER_CARDS.jpn = parseSoldierCSV(t, 'jpn'); }).catch(e => console.warn('JPN CSV:', e)),
+      __EMBED_CSV__.uk
+        ? Promise.resolve().then(() => { SOLDIER_CARDS.uk = parseSoldierCSV(__EMBED_CSV__.uk, 'uk'); })
+        : fetch(encPath('upfrontimages/イギリス/Britain_card_list.csv')).then(r => r.text()).then(t => { SOLDIER_CARDS.uk = parseSoldierCSV(t, 'uk'); }).catch(e => console.warn('UK CSV:', e)),
+    ]).then(logSoldierCardsLoaded);
   } catch (e) {
     console.warn('埋め込み兵士CSV:', e);
   }
@@ -1274,14 +1311,18 @@ if (_embedSoldiers) {
     fetch(encPath('upfrontimages/ありか/US_card_list.csv')).then(r => r.text()).then(t => { SOLDIER_CARDS.us  = parseSoldierCSV(t, 'us'); }).catch(e => console.warn('US CSV:', e)),
     fetch(encPath('upfrontimages/ドイツ/Germany_card_list.csv')).then(r => r.text()).then(t => { SOLDIER_CARDS.ger = parseSoldierCSV(t, 'ger'); }).catch(e => console.warn('Ger CSV:', e)),
     fetch(encPath('upfrontimages/ソ連/USSR_card_list.csv')).then(r => r.text()).then(t => { SOLDIER_CARDS.rus = parseSoldierCSV(t, 'rus'); }).catch(e => console.warn('USSR CSV:', e)),
+    fetch(encPath('upfrontimages/日本/Japan_card_list.csv')).then(r => r.text()).then(t => { SOLDIER_CARDS.jpn = parseSoldierCSV(t, 'jpn'); }).catch(e => console.warn('JPN CSV:', e)),
+    fetch(encPath('upfrontimages/イギリス/Britain_card_list.csv')).then(r => r.text()).then(t => { SOLDIER_CARDS.uk = parseSoldierCSV(t, 'uk'); }).catch(e => console.warn('UK CSV:', e)),
   ]).then(logSoldierCardsLoaded);
 }
 
 // ===== 陣営データ =====
 const FACTIONS = {
-  ger: { name: 'ドイツ', flag: '🇩🇪', dir: 'upfrontimages/ドイツ', prefix: 'Ger', count: 46, handMax: 5, handDraw: 1 },
-  rus: { name: 'ソ連',   flag: '🇷🇺', dir: 'upfrontimages/ソ連',   prefix: 'russian', count: 30, handMax: 4, handDraw: 4 },
-  us:  { name: 'アメリカ', flag: '🇺🇸', dir: 'upfrontimages/ありか', prefix: 'US', count: 44, handMax: 6, handDraw: 2 },
+  ger: { name: 'ドイツ', flag: '🇩🇪', dir: 'upfrontimages/ドイツ', prefix: 'Ger', count: 46, handMax: 5, handDraw: 1, breakLvl: 0.51 },
+  rus: { name: 'ソ連',   flag: '🇷🇺', dir: 'upfrontimages/ソ連',   prefix: 'russian', count: 30, handMax: 4, handDraw: 4, breakLvl: 0.51 },
+  us:  { name: 'アメリカ', flag: '🇺🇸', dir: 'upfrontimages/ありか', prefix: 'US', count: 44, handMax: 6, handDraw: 2, breakLvl: 0.51 },
+  jpn: { name: '日本',   flag: '🇯🇵', dir: 'upfrontimages/日本',   prefix: 'Jap', count: 38, handMax: 4, handDraw: 2, breakLvl: 0.75 },
+  uk:  { name: 'イギリス', flag: '🇬🇧', dir: 'upfrontimages/イギリス', prefix: 'Brit', count: 40, handMax: 5, handDraw: 2, breakLvl: 0.51 },
 };
 // scenarios.js などの外部スクリプトから参照できるようにグローバル公開
 window.FACTIONS = FACTIONS;
@@ -1474,7 +1515,14 @@ function onSetupCardClick(num, location) {
     return;
   }
 
-  // 通常モード: クリック=選択 → 配置先グループへ
+  // 通常モード:
+  // - プールから兵士クリック かつ targetGroup が決まっていれば即配置 (連続)
+  // - グループ内兵士クリックは選択 → 別グループクリックで移動
+  if (location === 'pool' && setupState.targetGroup != null) {
+    setupState.selected = { from: location, num };
+    moveSelectedTo(setupState.targetGroup);
+    return;
+  }
   if (setupState.selected && setupState.selected.from === location && setupState.selected.num === num) {
     setupState.selected = null;
     renderSetup();
@@ -1601,6 +1649,17 @@ document.getElementById('setup-crew').addEventListener('click', () => {
   setupState.crewMode = !setupState.crewMode;
   setupState.crewLeader = null;
   document.getElementById('setup-crew').classList.toggle('active', setupState.crewMode);
+  renderSetup();
+});
+document.getElementById('setup-sort').addEventListener('click', () => {
+  // pool 内兵士をモラル降順で並び替え
+  setupState.pool.sort((a, b) => {
+    const da = getSoldierDef(setupState.faction, a);
+    const db = getSoldierDef(setupState.faction, b);
+    const ma = da ? (parseInt(da.morale, 10) || 0) : 0;
+    const mb = db ? (parseInt(db.morale, 10) || 0) : 0;
+    return mb - ma; // 降順
+  });
   renderSetup();
 });
 document.getElementById('setup-start').addEventListener('click', () => {
@@ -2758,7 +2817,6 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
   state.fireTarget = null;
   document.querySelectorAll('.action-btn').forEach(b => b.classList.remove('active'));
   btn.disabled = true;
-  }
   renderField('player'); renderField('ai');
   renderHands();
   updateDecideBtn();
@@ -4258,10 +4316,11 @@ function aiPerformFire(plan) {
 
     const results = [];
     let lastJudge = null;
+    let finalFP = 0;
     for (let ci = 0; ci < tgt.cards.length; ci++) {
       const card = tgt.cards[ci];
       if (!R.isAlive(card)) continue;
-      const finalFP = Math.max(0, baseFP + malfuncMod);
+      finalFP = Math.max(0, baseFP + malfuncMod);
       const judge = drawTerrainCard();
       if (!judge) continue;
       lastJudge = judge;

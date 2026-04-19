@@ -164,6 +164,21 @@
   function canAttemptInfiltration(srcGroup, tgtGroup, srcSide) {
     const dist = R().relativeRange(srcGroup.distance, tgtGroup.distance);
     if (dist !== 5) return { ok: false, error: `相対距離が${dist}です（5が必要）` };
+    // §20.2 真正面または隣接グループのみ
+    const st = global.state;
+    if (st && st.groups) {
+      const srcArr = st.groups[srcSide];
+      const tgtSide = srcSide === 'player' ? 'ai' : 'player';
+      const tgtArr = st.groups[tgtSide];
+      const srcIdx = srcArr ? srcArr.indexOf(srcGroup) : -1;
+      const tgtIdx = tgtArr ? tgtArr.indexOf(tgtGroup) : -1;
+      if (srcIdx >= 0 && tgtIdx >= 0 && Math.abs(srcIdx - tgtIdx) > 1) {
+        return { ok: false, error: '真正面または隣接グループにのみ侵入可能 (§20.2)' };
+      }
+    }
+    // §8.5 河川内からは侵入不可
+    if (R().isInStream && R().isInStream(srcGroup))
+      return { ok: false, error: '河川内からは侵入できません' };
     // §20.24 地雷原・鉄条網にいるグループからは侵入不可
     if (R().hasTerrainType(srcGroup, 'MINEFIELD') || R().hasTerrainType(srcGroup, 'WIRE'))
       return { ok: false, error: '地雷原または鉄条網内からは侵入できません' };
@@ -196,6 +211,8 @@
     if (isMoving(tgtGroup)) col += 2;
     // §20.39 攻撃側が既に侵入されている → 右2
     if (opts.srcAlreadyInfiltrated) col += 2;
+    // §45 日本軍は侵入判定で +1 コラム
+    if (opts.srcFacKey === 'jpn') col += 1;
     // §20.32 煙幕 → 左2×枚数（両方の煙幕）
     col -= smokeCount(srcGroup) * 2;
     col -= smokeCount(tgtGroup) * 2;
@@ -349,7 +366,7 @@
 
       // コラム情報
       const baseCol = aliveCards(tgtGroup).length;
-      const col = calcInfiltrationColumn(tgtGroup, srcGroup, {});
+      const col = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey });
       const info = el('div', { color:'#ccc', fontSize:'13px', marginBottom:'12px' },
         `防御兵数: ${baseCol} | 最終コラム: ${col}`);
       frag.appendChild(info);
@@ -817,7 +834,7 @@
       }
 
       // §20.3 侵入判定RPC
-      const column = calcInfiltrationColumn(tgtGroup, srcGroup, {});
+      const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey });
       entry.column = column;
 
       const rpcCard = drawFn();
@@ -832,6 +849,7 @@
         sel.card.infiltrating = true;
         sel.card.infiltratedGroupSide = tgtSide;
         sel.card.infiltratedGroupIdx = tgtIdx;
+        sel.card.infiltratedThisTurn = true; // §21.2 爆薬使用可能期間
       }
 
       results.push(entry);
@@ -875,6 +893,16 @@
     }
 
     const tgtFacKey = tgtGroup._faction || 'ger';
+
+    // §21.2 爆薬使用可能兵士がいれば先に選択肢を出す
+    const demoEligible = infiltrators.find(p => p.card.demoCharge && p.card.infiltratedThisTurn);
+    if (demoEligible) {
+      const name = (R().lookupSoldier(demoEligible.card, srcFacKey) || {}).name || demoEligible.card.id;
+      const useDemo = confirm(`${name} が爆薬を保有しています。爆薬攻撃(FP8)を使用しますか？\n(使用すると以降このグループの攻撃は不可)`);
+      if (useDemo) {
+        return await executeDemoCharge(demoEligible.card, srcGroup, srcSide, tgtGroup, tgtSide, tgtIdx, drawFn, srcFacKey, tgtFacKey);
+      }
+    }
 
     // CCセットアップモーダル
     const setup = await showCCSetupModal(srcGroup, tgtGroup, infiltrators, playerHand, srcFacKey);
@@ -1061,6 +1089,64 @@
   }
 
   /**
+   * §21 爆薬攻撃: 侵入したターンのみ1度だけ、射撃力8で目標グループを攻撃
+   * 1枚目RNCが赤6なら爆薬故障(失われる)、攻撃はそこで中止
+   */
+  async function executeDemoCharge(attackerCard, srcGroup, srcSide, tgtGroup, tgtSide, tgtIdx, drawFn, atkFacKey, tgtFacKey) {
+    if (!attackerCard.demoCharge || !attackerCard.infiltratedThisTurn) {
+      return { ok: false, reason: 'no-demo-or-not-just-infiltrated' };
+    }
+    const results = [];
+    let malfunctioned = false;
+    // 防御側の地形修正 / 隠蔽 / GULLY等（§21.3: 攻撃側の地形修正は適用されない）
+    const defMod = R().calcTerrainMod(tgtGroup.terrain, false);
+    const gullyMod = R().isInGully(tgtGroup) ? -2 : 0;
+    const marshDefMod = R().isInMarsh(tgtGroup) ? -1 : 0;
+    const baseFP = Math.max(0, 8 + defMod + gullyMod + marshDefMod);
+
+    let first = true;
+    for (let i = 0; i < tgtGroup.cards.length; i++) {
+      const card = tgtGroup.cards[i];
+      if (!R().isAlive(card)) continue;
+      const judge = drawFn();
+      if (!judge) continue;
+      const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
+      const isRed = judge.terrain && judge.terrain.rncColor === '赤';
+      const rnc = isRed ? -rncAbs : rncAbs;
+      // §21.4 1枚目RNCが赤6 → 爆薬故障、以降の解決なし
+      if (first && isRed && rncAbs === 6) {
+        malfunctioned = true;
+        attackerCard.demoCharge = false;
+        first = false;
+        break;
+      }
+      first = false;
+      const def = R().lookupSoldier(card, tgtFacKey);
+      const wasPinned = R().isPinned(card);
+      const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
+      const r = R().resolveFireOnSoldier(baseFP, rnc, def, wasPinned, rpc0r, 0, 0);
+      if (r.result === 'KIA' || r.result === 'PANIC_KIA') R().killSoldier(card);
+      else if (r.result === 'PANIC_ROUT') R().routSoldier(card);
+      else if (r.result === 'PIN') R().pinSoldier(card);
+      const morale = def ? (wasPinned ? parseInt(def.panic,10)||0 : parseInt(def.morale,10)||0) : 0;
+      const kia = def ? (wasPinned ? parseInt(def.kiaBack,10)||0 : parseInt(def.kiaFront,10)||0) : 0;
+      results.push({ name: def ? def.name : card.id, result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP: baseFP, sum: baseFP + rnc, morale, kia, wasPinned });
+    }
+    // 爆薬は使用済み
+    attackerCard.demoCharge = false;
+
+    const title = malfunctioned
+      ? `爆薬故障 (赤6) — 攻撃失敗 / 爆薬喪失`
+      : `爆薬攻撃 — ${srcGroup.name} → ${tgtSide === 'player' ? '自' : '敵'}${tgtGroup.name} (FP ${baseFP})`;
+    // 結果表示: fire overlay の流用は難しいので alert + 簡易一覧
+    let msg = title + '\n';
+    results.forEach(r => { msg += `${r.name}: ${r.result} (RNC ${r.rncColor}${Math.abs(r.rnc)})\n`; });
+    alert(msg);
+
+    return { ok: true, malfunctioned, results, actionUsed: true };
+  }
+
+  /**
    * 侵入状態をクリア（§20.53 条件に応じて呼ばれる）
    * @param {object} group - 対象グループ
    * @param {string} reason - 'move'|'fire'|'pin'
@@ -1090,8 +1176,26 @@
    * CC可能かチェック
    */
   function canAttemptCC(srcGroup) {
+    // §45 万歳突撃: 防御側は侵入なしでCC可能（攻撃中Banzaiグループに対し）
+    const st = global.state;
+    if (st && st.groups) {
+      const allEnemy = (srcGroup._faction && st.groups.player.indexOf(srcGroup) >= 0) ? st.groups.ai : st.groups.player;
+      const banzaiAttacker = allEnemy.find(g => g.banzai && g.banzai.targetSide && st.groups[g.banzai.targetSide] && st.groups[g.banzai.targetSide].indexOf(srcGroup) >= 0);
+      if (banzaiAttacker) {
+        const aliveSrc = srcGroup.cards.some(c => R().isAlive(c));
+        if (aliveSrc) return { ok: true, defenderVsBanzai: true, banzaiAttacker };
+      }
+    }
     const infiltrators = getInfiltratingFromGroup(srcGroup);
     if (infiltrators.length === 0) return { ok: false, error: '侵入中の兵士がいません' };
+    // §23.5 トーチカ内のグループはCC対象とならない
+    const first = infiltrators[0];
+    const side = first.infiltratedGroupSide;
+    const idx = first.infiltratedGroupIdx;
+    const tgtGroup = st.groups && st.groups[side] && st.groups[side][idx];
+    if (tgtGroup && R().hasTerrainType && R().hasTerrainType(tgtGroup, 'PILLBOX')) {
+      return { ok: false, error: 'トーチカ内のグループはCC不可（火力2倍や爆薬のみ有効）' };
+    }
     return { ok: true };
   }
 
@@ -1217,7 +1321,7 @@
   /**
    * AI自動侵入（モーダルなし）
    */
-  function aiExecuteInfiltration(srcGroup, srcIdx, tgtGroup, tgtSide, tgtIdx, drawFn, aiFacKey) {
+  async function aiExecuteInfiltration(srcGroup, srcIdx, tgtGroup, tgtSide, tgtIdx, drawFn, aiFacKey) {
     const eligible = unpinnedAlive(srcGroup);
     if (eligible.length === 0) return { ok: false, actionUsed: false };
 
@@ -1232,11 +1336,12 @@
       const def = R().lookupSoldier(card, aiFacKey);
       if (!def) continue;
       const morale = parseInt(def.morale, 10) || 0;
-      let moralePass = false;
+      const entry = { name: `#${card.num} ${def.name}`, morale };
 
       // 移動カードがあれば優先使用
       if (moveUsed < moveCards.length) {
-        moralePass = true;
+        entry.method = '移動';
+        entry.moraleResult = true;
         const mc = moveCards[moveUsed];
         const idx = aiHand.indexOf(mc);
         if (idx >= 0) {
@@ -1246,29 +1351,44 @@
         moveUsed++;
       } else {
         // モラルチェック
+        entry.method = 'モラル';
         const rncCard = drawFn();
-        if (!rncCard) continue;
-        const rnc = parseInt(rncCard.terrain.range, 10) || 0;
-        moralePass = rnc < morale;
-        if (!moralePass) {
+        if (!rncCard) { entry.moraleResult = false; entry.infiltrated = false; results.push(entry); continue; }
+        const check = checkInfiltrationMorale(def, rncCard);
+        entry.rnc = check.rnc;
+        entry.rncColor = check.rncColor;
+        entry.morale = check.morale;
+        entry.moraleResult = check.pass;
+        if (!check.pass) {
           R().pinSoldier(card);
+          entry.pinned = true;
+          entry.infiltrated = false;
+          results.push(entry);
           continue;
         }
       }
 
       // 侵入RPC判定
-      const column = calcInfiltrationColumn(tgtGroup, srcGroup, {});
+      const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey: aiFacKey });
+      entry.column = column;
       const rpcCard = drawFn();
-      if (!rpcCard) continue;
+      if (!rpcCard) { entry.infiltrated = false; results.push(entry); continue; }
       const rpcResult = resolveInfiltrationRPC(rpcCard, column);
+      entry.rpcColor = rpcResult.color;
+      entry.rpcValue = rpcResult.posValue;
+      entry.infiltrated = rpcResult.success;
       if (rpcResult.success) {
         card.infiltrating = true;
         card.infiltratedGroupSide = tgtSide;
         card.infiltratedGroupIdx = tgtIdx;
+        card.infiltratedThisTurn = true; // §21.2 爆薬使用可能期間
       }
-      results.push({ name: `#${card.num} ${def.name}`, infiltrated: rpcResult.success });
+      results.push(entry);
     }
 
+    if (results.length > 0) {
+      await showInfiltrationResultOverlay(`AI侵入 — ${srcGroup.name} → プレイヤー${tgtGroup.name}`, results);
+    }
     return { ok: true, actionUsed: true, results };
   }
 
@@ -1286,6 +1406,13 @@
     const tgtGroup = st.groups[tgtSide][tgtIdx];
     if (!tgtGroup) return { ok: false, actionUsed: false };
     const tgtFacKey = tgtGroup._faction || 'us';
+
+    // §21.2 爆薬使用可能兵士がいれば自動使用（AI判定: 敵数が2名以上のとき）
+    const demoCard = infiltrators.find(c => c.demoCharge && c.infiltratedThisTurn);
+    const aliveDefCount = tgtGroup.cards.filter(c => R().isAlive(c)).length;
+    if (demoCard && aliveDefCount >= 2) {
+      return await executeDemoCharge(demoCard, srcGroup, 'ai', tgtGroup, tgtSide, tgtIdx, drawFn, aiFacKey, tgtFacKey);
+    }
 
     // 全侵入兵が参加（モラルチェックまたは移動カード）
     const aiHand = st.aiHand || [];
@@ -1425,6 +1552,8 @@
     // AI侵入/CC
     aiExecuteInfiltration,
     aiExecuteCC,
+    // §21 爆薬
+    executeDemoCharge,
     // 内部（テスト用）
     calcInfiltrationColumn,
     resolveInfiltrationRPC,
