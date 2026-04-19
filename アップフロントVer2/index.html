@@ -1127,7 +1127,7 @@ function checkBreezeRemoveSmoke(judgeCard) {
     });
   });
   if (removed > 0) {
-    showAIAction('風: 煙幕 ' + removed + '枚除去');
+    showAIAction('風: 煙幕 ' + removed + '枚除去', judgeCard);
     renderField('player'); renderField('ai');
   }
 }
@@ -3423,7 +3423,9 @@ function showMoveDirectionModal(grp, card, cardIdx) {
 
   function finish() {
     modal.style.display = 'none';
-    if (window.DISCARD_RULES) window.DISCARD_RULES.markActed();
+    // §45 日本軍: 移動はアクションとしてカウントしない（捨て札制限に影響しない）
+    const facKey = getFactionKey(state.player);
+    if (facKey !== 'jpn' && window.DISCARD_RULES) window.DISCARD_RULES.markActed();
     if (!state.actedGroups) state.actedGroups = new Set();
     if (state.fireSource) state.actedGroups.add(state.fireSource.idx);
     // §20.53 移動カード使用 → 侵入状態解除
@@ -4067,6 +4069,7 @@ function endPlayerTurn() {
   // 次ターンでSLペナルティリセット
   resetSLDamagePenalty();
   state.currentTurn = 'ai';
+  state.actedGroups = new Set();
   renderHands();
   updateTurnBanner();
   setTimeout(aiTurn, 3000);
@@ -4085,6 +4088,7 @@ function endAITurn() {
   state.aiHandCount = state.aiHand.length;
   state.currentTurn = 'player';
   state.actionDone = false;
+  state.actedGroups = new Set();
   if (window.DISCARD_RULES) window.DISCARD_RULES.resetTurn();
   document.querySelectorAll('.action-btn').forEach(b => { b.disabled = false; });
   renderField('player'); renderField('ai');
@@ -4130,7 +4134,7 @@ function endAITurn() {
 //   5. 不利な地形カードを相手に配置
 //   それでも何もできなければ捨て札
 
-function showAIAction(text) {
+function showAIAction(text, cards) {
   // 手番オーバーレイが消えてから表示
   const turnOv = document.getElementById('turn-overlay');
   if (turnOv) turnOv.style.opacity = '0';
@@ -4138,13 +4142,30 @@ function showAIAction(text) {
   if (!ov) {
     ov = document.createElement('div');
     ov.id = 'ai-action-overlay';
-    ov.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3000;background:rgba(180,30,30,0.85);color:#fff;font-size:28px;font-weight:bold;padding:16px 40px;border-radius:8px;border:2px solid #f66;pointer-events:none;transition:opacity 0.4s;';
     document.body.appendChild(ov);
   }
-  ov.textContent = text;
+  ov.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3500;background:rgba(180,30,30,0.92);color:#fff;padding:16px 28px;border-radius:8px;border:2px solid #f66;pointer-events:none;transition:opacity 0.4s;display:flex;flex-direction:column;align-items:center;';
+  ov.innerHTML = '';
+  const label = document.createElement('div');
+  label.textContent = '▶ ' + text;
+  label.style.cssText = 'font-size:30px;font-weight:bold;margin-bottom:12px;text-shadow:0 2px 4px rgba(0,0,0,0.7);';
+  ov.appendChild(label);
+  const cardList = Array.isArray(cards) ? cards : (cards ? [cards] : []);
+  const valid = cardList.filter(c => c && c.img);
+  if (valid.length > 0) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;justify-content:center;flex-wrap:wrap;max-width:90vw;';
+    valid.forEach(c => {
+      const img = document.createElement('img');
+      img.src = c.img;
+      img.style.cssText = 'height:260px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.5);';
+      row.appendChild(img);
+    });
+    ov.appendChild(row);
+  }
   ov.style.opacity = '1';
   clearTimeout(ov._timer);
-  ov._timer = setTimeout(() => { ov.style.opacity = '0'; }, 2500);
+  ov._timer = setTimeout(() => { ov.style.opacity = '0'; }, 3000);
 }
 
 // §20 AI白兵戦: 侵入済みの兵士がいればCC実行
@@ -4208,10 +4229,10 @@ function aiTurn() {
   // §20 AI白兵戦（侵入済み兵士がいればCC優先）
   if (aiTryCC())              { return; }
   if (aiTryCrossStream())     { setTimeout(endAITurn, 3000); return; }
-  if (aiTryPlaceOwnTerrain()) { showAIAction('AI: 地形配置'); setTimeout(endAITurn, 3000); return; }
-  if (aiTryMove())            { showAIAction('AI: 移動'); setTimeout(endAITurn, 3000); return; }
-  if (aiTryRemoveWire())      { showAIAction('AI: 鉄条網除去'); setTimeout(endAITurn, 3000); return; }
-  if (aiTryRally())           { showAIAction('AI: 回復'); setTimeout(endAITurn, 3000); return; }
+  if (aiTryPlaceOwnTerrain()) { setTimeout(endAITurn, 3000); return; }
+  if (aiTryMove())            { setTimeout(endAITurn, 3000); return; }
+  if (aiTryRemoveWire())      { setTimeout(endAITurn, 3000); return; }
+  if (aiTryRally())           { setTimeout(endAITurn, 3000); return; }
   if (aiTryFireAny())         { return; }
   // §20 AI侵入（距離5の敵グループがあれば試行）
   if (aiTryInfiltrate())      { setTimeout(endAITurn, 3000); return; }
@@ -4223,13 +4244,14 @@ function aiTurn() {
     const limits = { ger: 1, us: 2, rus: 4 };
     const max = limits[aiKey] || 1;
     const count = Math.min(state.aiHand.length, max === Infinity ? state.aiHand.length : max);
+    const dumpedCards = [];
     for (let i = 0; i < count; i++) {
       const dumped = state.aiHand.shift();
-      if (dumped) pushTerrainToDiscard(dumped);
+      if (dumped) { pushTerrainToDiscard(dumped); dumpedCards.push(dumped); }
     }
     state.aiHandCount = state.aiHand.length;
     renderHands();
-    showAIAction('AI: 捨て札 ' + count + '枚');
+    showAIAction('AI: 捨て札 ' + count + '枚', dumpedCards);
   }
   setTimeout(endAITurn, 3000);
 }
@@ -4373,7 +4395,7 @@ function aiPerformFire(plan) {
 
     const concealNote = concealCards.length > 0 ? ` 隠蔽${concealMod}` : '';
     const title = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod}${concealNote} → 最終${finalFP}`;
-    showAIAction(`AI: 射撃 ${src.name}→${tgt.name}`);
+    showAIAction(`AI: 射撃 ${src.name}→${tgt.name}`, fireCard);
     showFireResultOverlay(title, results).then(() => {
       cleanupEliminatedGroups();
       renderField('player'); renderField('ai');
@@ -4405,6 +4427,7 @@ function aiTryRemoveWire() {
     if (moveCard) pushTerrainToDiscard(moveCard);
     state.aiHandCount = state.aiHand.length;
     renderField('ai'); renderHands();
+    showAIAction('AI: 鉄条網除去', moveCard);
     return true;
   }
   return false;
@@ -4426,7 +4449,7 @@ function aiTryCrossStream() {
     if (R.isFordCard(card)) {
       card._moveMode = 'lateral';
       g.terrain.push(card);
-      showAIAction('AI: 渡河成功（渡河カード）');
+      showAIAction('AI: 渡河成功（渡河カード）', card);
     } else {
       const judge = drawTerrainCard();
       if (judge) { checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge); }
@@ -4434,10 +4457,10 @@ function aiTryCrossStream() {
       if (isBlack) {
         card._moveMode = 'lateral';
         g.terrain.push(card);
-        showAIAction('AI: 渡河成功（RNC 黒）');
+        showAIAction('AI: 渡河成功（RNC 黒）', [card, judge]);
       } else {
         pushTerrainToDiscard(card);
-        showAIAction('AI: 渡河失敗（RNC 赤）');
+        showAIAction('AI: 渡河失敗（RNC 赤）', [card, judge]);
       }
     }
     state.aiHandCount = state.aiHand.length;
@@ -4469,6 +4492,7 @@ function aiTryMove() {
   state.aiHand.splice(moveIdx, 1);
   state.aiHandCount = state.aiHand.length;
   renderField('ai'); renderHands();
+  showAIAction('AI: 移動', moveCard);
   return true;
 }
 
@@ -4503,10 +4527,12 @@ function aiTryPlaceOwnTerrain() {
   while (grp.terrain.length > 0) {
     pushTerrainToDiscard(grp.terrain.pop());
   }
-  grp.terrain.push(state.aiHand[tIdx]);
+  const placedCard = state.aiHand[tIdx];
+  grp.terrain.push(placedCard);
   state.aiHand.splice(tIdx, 1);
   state.aiHandCount = state.aiHand.length;
   renderField('ai'); renderHands();
+  showAIAction('AI: 地形配置', placedCard);
   return true;
 }
 
@@ -4537,6 +4563,7 @@ function aiTryRally() {
     if (rallyCard) pushTerrainToDiscard(rallyCard);
     state.aiHandCount = state.aiHand.length;
     renderField('ai'); renderHands();
+    showAIAction('AI: 回復', rallyCard);
     return true;
   }
   return false;
@@ -4563,7 +4590,7 @@ function aiTryPlaceBadTerrain() {
   const terrainCard = state.aiHand[idx];
   state.aiHand.splice(idx, 1);
   state.aiHandCount = state.aiHand.length;
-  showAIAction('AI: 地形配置 → GROUP ' + groups[gi].name);
+  showAIAction('AI: 地形配置 → GROUP ' + groups[gi].name, terrainCard);
   // §7.32 プレイヤーに拒否の選択肢を出す
   askTerrainRefusal(groups[gi], terrainCard).then(result => {
     renderField('player'); renderField('ai');
