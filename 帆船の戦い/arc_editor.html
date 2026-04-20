@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>射界エディタ</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+#topbar {
+  display:flex; align-items:center; gap:10px; padding:8px 12px;
+  background:#13243a; border-bottom:2px solid #234; flex-shrink:0;
+}
+#topbar h1 { font-size:1em; color:#88ccff; }
+.field-btn {
+  padding:6px 14px; border:none; cursor:pointer; font-weight:bold;
+  border-radius:3px; color:#000; font-size:0.95em;
+}
+.field-btn.active { outline:3px solid #fff; }
+#main { flex:1; display:flex; min-height:0; }
+#left { width:240px; background:#13243a; border-right:1px solid #234; padding:10px; font-size:0.85em; overflow-y:auto; flex-shrink:0; }
+#left h3 { color:#88ccff; margin-bottom:6px; }
+#left p { color:#ccd; line-height:1.5; margin-bottom:8px; }
+#left ul { padding-left:18px; line-height:1.6; }
+#mapArea { flex:1; overflow:auto; background:#051020; }
+#mapCanvas { display:block; cursor:pointer; }
+#bottombar {
+  padding:8px 12px; background:#13243a; border-top:1px solid #234;
+  display:flex; gap:8px; flex-shrink:0;
+}
+button.act {
+  background:#2266cc; color:#fff; border:none; padding:6px 14px;
+  border-radius:3px; cursor:pointer; font-weight:bold;
+}
+button.act:hover { background:#3377dd; }
+#info { color:#ffcc88; align-self:center; flex:1; }
+#exportArea {
+  position:fixed; bottom:50px; left:50%; transform:translateX(-50%);
+  width:80%; max-width:800px; max-height:60vh; overflow:auto;
+  background:#000; color:#0f8; padding:12px; border:2px solid #088;
+  font-family:monospace; font-size:0.85em; white-space:pre-wrap;
+  display:none; z-index:1000;
+}
+#exportArea.show { display:block; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>⚓ 射界テンプレート編集</h1>
+  <span style="color:#aac;">フィールド:</span>
+  <button class="field-btn active" data-f="1" style="background:#ff8080;">1 (bow)</button>
+  <button class="field-btn" data-f="2" style="background:#ffc060;">2 (port fwd)</button>
+  <button class="field-btn" data-f="3" style="background:#fff080;">3 (stbd fwd)</button>
+  <button class="field-btn" data-f="4" style="background:#80b8ff;">4 (port aft)</button>
+  <button class="field-btn" data-f="5" style="background:#c080ff;">5 (stbd aft)</button>
+  <button class="field-btn" data-f="0" style="background:#666;color:#fff;">消去</button>
+  <span style="flex:1;"></span>
+  <label style="font-size:0.85em;">ズーム:
+    <input type="range" id="zoom" min="20" max="100" value="50" step="5">
+    <span id="zoomLbl">50%</span>
+  </label>
+  <a href="wsm_hub.html"><button class="act" style="background:#555;">← 戻る</button></a>
+</div>
+
+<div id="main">
+  <div id="left">
+    <h3>使い方</h3>
+    <p>船は中央のヘクス（艦首=真上 N 方向）。</p>
+    <p>上のボタンでフィールド番号を選び、ヘクスをクリックして塗ります。</p>
+    <ul>
+      <li>1: 艦首正面 (bow chase)</li>
+      <li>2: 左舷前方 (port fwd)</li>
+      <li>3: 右舷前方 (stbd fwd)</li>
+      <li>4: 左舷 (port broadside)</li>
+      <li>5: 右舷 (stbd broadside)</li>
+      <li>消去: 割当をクリア</li>
+    </ul>
+    <h3>保存</h3>
+    <p>「保存」で localStorage に保存。</p>
+    <p>「Export」でJS定数として表示（コピペで wsm_hub.html に組み込み可）。</p>
+  </div>
+  <div id="mapArea">
+    <canvas id="mapCanvas"></canvas>
+  </div>
+</div>
+
+<div id="bottombar">
+  <span id="info">クリックしてフィールド設定</span>
+  <button class="act" onclick="loadTemplate()">読込</button>
+  <button class="act" onclick="saveTemplate()" style="background:#22aa66;">保存</button>
+  <button class="act" onclick="exportTemplate()" style="background:#aa6622;">Export</button>
+  <button class="act" onclick="clearAll()" style="background:#aa4444;">全消去</button>
+</div>
+
+<div id="exportArea" onclick="this.classList.remove('show')"></div>
+
+<script src="mapdata.js"></script>
+<script>
+const COLS = 21, ROWS = 21;     // 編集用テンプレート（21x21）
+const SHIP_COL = 10, SHIP_ROW = 10;  // 中央
+const SHIP_STERN_ROW = 11;  // 艦首N方向なので stern は南 (row+1)
+
+const HEX_SIZE = 30;
+const PAD = 40;
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+let zoomLevel = 0.5;
+let currentField = 1;
+const template = {};  // "col,row" → field number
+
+// flat-top hex
+function hexPt(col, row) {
+  const w = HEX_SIZE * 2;
+  const h = Math.sqrt(3) * HEX_SIZE;
+  let x = PAD + col * w * 0.75 + HEX_SIZE;
+  let y = PAD + row * h + h / 2;
+  if (col % 2 === 1) y += h / 2;
+  return { x, y };
+}
+function hexCorners(cx, cy) {
+  return Array.from({length:6}, (_,i) => {
+    const a = Math.PI/3 * i;
+    return { x: cx + HEX_SIZE * Math.cos(a), y: cy + HEX_SIZE * Math.sin(a) };
+  });
+}
+function drawHexPath(cx, cy) {
+  const c = hexCorners(cx, cy);
+  ctx.beginPath();
+  ctx.moveTo(c[0].x, c[0].y);
+  for (let i=1; i<6; i++) ctx.lineTo(c[i].x, c[i].y);
+  ctx.closePath();
+}
+
+const FIELD_COLORS = {
+  1: 'rgba(255,80,80,0.55)',
+  2: 'rgba(255,180,60,0.55)',
+  3: 'rgba(255,240,80,0.55)',
+  4: 'rgba(80,180,255,0.55)',
+  5: 'rgba(180,80,255,0.55)',
+};
+
+function initCanvas() {
+  const w = (PAD * 2 + COLS * HEX_SIZE * 1.5 + HEX_SIZE) * zoomLevel;
+  const h = (PAD * 2 + ROWS * Math.sqrt(3) * HEX_SIZE + HEX_SIZE) * zoomLevel;
+  canvas.width = w; canvas.height = h;
+}
+
+function draw() {
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  ctx.scale(zoomLevel, zoomLevel);
+  // hex grid
+  for (let c=0; c<COLS; c++) {
+    for (let r=0; r<ROWS; r++) {
+      const {x,y} = hexPt(c,r);
+      drawHexPath(x,y);
+      // 自船のヘクス
+      const isShip = (c === SHIP_COL && r === SHIP_ROW) || (c === SHIP_COL && r === SHIP_STERN_ROW);
+      if (isShip) {
+        ctx.fillStyle = c === SHIP_COL && r === SHIP_ROW ? 'rgba(80,255,80,0.6)' : 'rgba(80,180,80,0.4)';
+        ctx.fill();
+      } else {
+        const key = c + ',' + r;
+        const f = template[key];
+        if (f) {
+          ctx.fillStyle = FIELD_COLORS[f];
+          ctx.fill();
+        }
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // ラベル
+      if (isShip) {
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${HEX_SIZE * 0.5}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(c === SHIP_COL && r === SHIP_ROW ? '艦首' : '艦尾', x, y);
+      } else {
+        const key = c + ',' + r;
+        const f = template[key];
+        if (f) {
+          ctx.fillStyle = '#000';
+          ctx.font = `bold ${HEX_SIZE * 0.6}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(f), x, y);
+        }
+      }
+    }
+  }
+  // 船向き矢印（北）
+  const sp = hexPt(SHIP_COL, SHIP_ROW);
+  ctx.strokeStyle = '#0f0';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(sp.x, sp.y);
+  ctx.lineTo(sp.x, sp.y - HEX_SIZE * 0.7);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(sp.x, sp.y - HEX_SIZE * 0.7);
+  ctx.lineTo(sp.x - HEX_SIZE * 0.2, sp.y - HEX_SIZE * 0.5);
+  ctx.lineTo(sp.x + HEX_SIZE * 0.2, sp.y - HEX_SIZE * 0.5);
+  ctx.closePath();
+  ctx.fillStyle = '#0f0';
+  ctx.fill();
+}
+
+document.querySelectorAll('.field-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.field-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentField = parseInt(btn.dataset.f);
+  });
+});
+
+document.getElementById('zoom').addEventListener('input', e => {
+  zoomLevel = parseInt(e.target.value)/100;
+  document.getElementById('zoomLbl').textContent = e.target.value + '%';
+  initCanvas();
+  draw();
+});
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / zoomLevel;
+  const py = (e.clientY - rect.top) / zoomLevel;
+  let closest=null, minD=Infinity;
+  for (let c=0; c<COLS; c++) for (let r=0; r<ROWS; r++) {
+    const p = hexPt(c,r);
+    const d = (px-p.x)**2 + (py-p.y)**2;
+    if (d < minD) { minD = d; closest = {col:c,row:r}; }
+  }
+  if (!closest || minD > HEX_SIZE*HEX_SIZE*1.5) return;
+  const {col, row} = closest;
+  if (col === SHIP_COL && (row === SHIP_ROW || row === SHIP_STERN_ROW)) return; // 自船には塗らない
+  const key = col + ',' + row;
+  if (currentField === 0) delete template[key];
+  else template[key] = currentField;
+  draw();
+  document.getElementById('info').textContent = `(${col},${row}) → field ${currentField || 'erase'}`;
+});
+
+function clearAll() {
+  if (!confirm('全消去しますか？')) return;
+  for (const k in template) delete template[k];
+  draw();
+}
+
+function saveTemplate() {
+  // テンプレートを「中央船からの相対 col/row オフセット」に変換して保存
+  const rel = {};
+  for (const k in template) {
+    const [c, r] = k.split(',').map(Number);
+    const dc = c - SHIP_COL;
+    const dr = r - SHIP_ROW;
+    rel[`${dc},${dr}`] = template[k];
+  }
+  localStorage.setItem('arcTemplate', JSON.stringify(rel));
+  document.getElementById('info').textContent = '保存しました (localStorage: arcTemplate)';
+}
+
+function loadTemplate() {
+  const s = localStorage.getItem('arcTemplate');
+  if (!s) { alert('保存されたテンプレートがありません'); return; }
+  const rel = JSON.parse(s);
+  for (const k in template) delete template[k];
+  for (const k in rel) {
+    const [dc, dr] = k.split(',').map(Number);
+    const key = (SHIP_COL + dc) + ',' + (SHIP_ROW + dr);
+    template[key] = rel[k];
+  }
+  draw();
+  document.getElementById('info').textContent = '読込みました';
+}
+
+function exportTemplate() {
+  const rel = {};
+  for (const k in template) {
+    const [c, r] = k.split(',').map(Number);
+    const dc = c - SHIP_COL;
+    const dr = r - SHIP_ROW;
+    rel[`${dc},${dr}`] = template[k];
+  }
+  const js = '// 射界テンプレート（艦首=N向き、相対 col/row オフセット）\nconst ARC_TEMPLATE = '
+           + JSON.stringify(rel, null, 2) + ';\n';
+  const ea = document.getElementById('exportArea');
+  ea.textContent = js;
+  ea.classList.add('show');
+  // クリップボードにコピー
+  navigator.clipboard?.writeText(js).then(()=>{
+    document.getElementById('info').textContent = 'クリップボードにコピーしました';
+  });
+}
+
+initCanvas();
+loadTemplate();
+draw();
+</script>
+</body>
+</html>

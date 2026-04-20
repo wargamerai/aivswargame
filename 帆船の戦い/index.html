@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Panzers in the Snow - Map Editor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #333; overflow: hidden; display: flex; }
+
+#controls {
+  width: 260px; min-width: 260px; height: 100vh; overflow-y: auto;
+  background: rgba(0,0,0,0.92); color: #fff; padding: 12px;
+  font-size: 13px; font-family: monospace;
+  display: flex; flex-direction: column; gap: 6px;
+  flex-shrink: 0;
+}
+#controls label { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#controls input[type="number"] {
+  width: 70px; background: #222; color: #0f0; border: 1px solid #555;
+  padding: 2px 4px; font-family: monospace; font-size: 13px; text-align: right;
+}
+#controls .title { font-size: 14px; font-weight: bold; color: #ff0; margin-bottom: 4px; }
+#controls button {
+  background: #555; color: #fff; border: none; padding: 6px 8px;
+  cursor: pointer; border-radius: 4px; font-size: 12px;
+}
+#controls button:hover { background: #777; }
+#controls button.active-mode { background: #c80; color: #000; font-weight: bold; }
+
+#legend { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.legend-item {
+  display: flex; align-items: center; gap: 3px; font-size: 11px;
+  padding: 2px 6px; border-radius: 3px; cursor: pointer; border: 2px solid transparent;
+}
+.legend-item.active { border-color: #ff0; }
+.legend-swatch { width: 14px; height: 14px; border: 1px solid #888; border-radius: 2px; }
+
+#hexInfo {
+  position: fixed; bottom: 0; left: 260px; right: 0; z-index: 100;
+  background: rgba(0,0,0,0.85); color: #fff; padding: 6px 12px;
+  font-size: 13px; font-family: monospace;
+}
+
+#mapContainer { position: relative; display: inline-block; padding: 80px; }
+#mapImages { display: flex; flex-direction: row; }
+#mapImages.vertical { flex-direction: column; }
+#mapImages .imgWrap { flex-shrink: 0; overflow: hidden; position: relative; }
+#mapImages .imgWrap.selected { outline: 3px solid #ff0; outline-offset: -3px; }
+#mapImages .imgWrap.hidden img { opacity: 0; }
+#mapImages img { display: block; user-select: none; -webkit-user-drag: none; transform-origin: center center; }
+#hexCanvas { position: absolute; top: 0; left: 0; z-index: 1; }
+#scrollWrapper { flex: 1; height: 100vh; overflow: auto; }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <div class="title">Map Editor</div>
+  <label>Hex Size: <input type="number" id="hexSize" value="62" step="0.5"></label>
+  <label>Offset X: <input type="number" id="offsetX" value="110" step="1"></label>
+  <label>Offset Y: <input type="number" id="offsetY" value="173" step="1"></label>
+  <label>Cols: <input type="number" id="cols" value="21" step="1"></label>
+  <label>Rows: <input type="number" id="rows" value="17" step="1"></label>
+  <label>Show Numbers: <input type="checkbox" id="showNumbers" checked></label>
+  <label>ヘクス90°回転: <input type="checkbox" id="hexRotate"></label>
+  <label>線の太さ: <input type="number" id="hexLineWidth" value="1" step="0.5" min="0.5" max="5" style="width:50px"></label>
+  <label>線の色: <input type="color" id="hexLineColor" value="#ffffff" style="width:40px;height:20px;padding:0;border:none;"></label>
+  <label>線の透明度: <input type="number" id="hexLineAlpha" value="0.4" step="0.1" min="0" max="1" style="width:50px"></label>
+  <hr style="border-color:#555;">
+  <div style="display:flex;gap:4px;">
+    <button id="btnModeTerrain" class="active-mode">地形</button>
+    <button id="btnModeFacility">施設</button>
+    <button id="btnModeTag">タグ</button>
+    <button id="btnModeRoad">道路</button>
+    <button id="btnModeRiver">川</button>
+    <button id="btnModeElev">高度</button>
+    <button id="btnModeDepth">水深</button>
+  </div>
+  <div id="legend"></div>
+  <hr style="border-color:#555;">
+  <div style="margin-bottom:4px;">
+    <label style="color:#aaa;font-size:11px;">マップ選択:</label>
+    <select id="mapSelect" style="background:#222;color:#0f0;border:1px solid #555;padding:2px 4px;font-size:12px;">
+      <option value="index.html" selected>Map 2</option>
+      <option value="index3.html">Map 3</option>
+      <option value="index4.html">Map 4+5</option>
+    </select>
+  </div>
+  <button id="btnExport">Export mapdata.js</button>
+  <div id="exportMsg" style="color:#0f0;font-size:11px;display:none;">コンソールに出力しました</div>
+  <hr style="border-color:#555;">
+  <label style="cursor:pointer;background:#446;padding:4px 8px;border-radius:4px;text-align:center;">
+    地図画像を変更
+    <input type="file" id="mapFileInput" accept="image/*" style="display:none;">
+  </label>
+  <label style="cursor:pointer;background:#464;padding:4px 8px;border-radius:4px;text-align:center;">
+    地図を追加
+    <input type="file" id="mapAddInput" accept="image/*" style="display:none;">
+  </label>
+  <div style="display:flex;gap:4px;">
+    <button id="btnLayoutH" class="active-mode">左右</button>
+    <button id="btnLayoutV">上下</button>
+    <button id="btnRemoveLast" style="background:#833;">末尾削除</button>
+  </div>
+  <div style="display:flex;gap:4px;">
+    <button id="btnRotCW">回転90°→</button>
+    <button id="btnRot180">回転180°</button>
+    <button id="btnRotCCW">←回転90°</button>
+  </div>
+  <div id="imgAdjust" style="display:flex;flex-direction:column;gap:4px;margin-top:4px;">
+    <div style="font-size:11px;color:#aaa;">選択画像の微調整</div>
+    <label>X位置: <input type="number" id="imgOffX" value="0" step="1"></label>
+    <label>Y位置: <input type="number" id="imgOffY" value="0" step="1"></label>
+    <label>傾き(°): <input type="number" id="imgSkew" value="0" step="0.1"></label>
+    <label>表示: <input type="checkbox" id="imgVisible" checked></label>
+  </div>
+</div>
+
+<div id="hexInfo">--</div>
+
+<div id="scrollWrapper">
+  <div id="mapContainer">
+    <div id="mapImages">
+      <div class="imgWrap selected"><img src="images/WSIMOceanA4.png" alt="Map" data-rotate="0"></div>
+    </div>
+    <canvas id="hexCanvas"></canvas>
+  </div>
+</div>
+
+<script src="mapdata.js" id="mapdataScript"></script>
+<script>
+const mapImagesDiv = document.getElementById('mapImages');
+const canvas = document.getElementById('hexCanvas');
+const ctx = canvas.getContext('2d');
+const hexInfoEl = document.getElementById('hexInfo');
+// 互換用: 最初の画像をimgとして参照
+let img = mapImagesDiv.querySelector('img');
+
+// マップ選択: ページ遷移
+const mapSelect = document.getElementById('mapSelect');
+if (mapSelect) {
+  mapSelect.addEventListener('change', () => {
+    location.href = mapSelect.value;
+  });
+}
+
+// 画像の回転後サイズを取得
+function getRotatedSize(im) {
+  const rot = parseInt(im.dataset.rotate || '0');
+  const w = im.naturalWidth || im.width;
+  const h = im.naturalHeight || im.height;
+  return (rot === 90 || rot === 270) ? { w: h, h: w } : { w, h };
+}
+
+// wrapperサイズを回転・位置・傾きに合わせて更新
+function updateWrapSize(wrap) {
+  const im = wrap.querySelector('img');
+  const { w, h } = getRotatedSize(im);
+  wrap.style.width = w + 'px';
+  wrap.style.height = h + 'px';
+  const rot = parseInt(im.dataset.rotate || '0');
+  const offX = parseFloat(im.dataset.offx || '0');
+  const offY = parseFloat(im.dataset.offy || '0');
+  const skew = parseFloat(im.dataset.skew || '0');
+  // wrapperの位置オフセット
+  wrap.style.marginLeft = offX + 'px';
+  wrap.style.marginTop = offY + 'px';
+  // 回転+傾きのtransform構築
+  let tf = '';
+  if (rot === 90) {
+    tf = 'rotate(90deg) translateY(-100%)';
+    im.style.transformOrigin = 'top left';
+  } else if (rot === 270) {
+    tf = 'rotate(270deg) translateX(-100%)';
+    im.style.transformOrigin = 'top left';
+  } else if (rot === 180) {
+    tf = 'rotate(180deg)';
+    im.style.transformOrigin = 'center center';
+  } else {
+    tf = '';
+    im.style.transformOrigin = 'center center';
+  }
+  // 傾き追加
+  if (skew !== 0) {
+    tf = (tf ? tf + ' ' : '') + 'rotate(' + skew + 'deg)';
+  }
+  im.style.transform = tf || '';
+}
+
+// 画像選択 → 入力欄を同期
+function syncAdjustInputs() {
+  const sel = mapImagesDiv.querySelector('.imgWrap.selected img');
+  if (!sel) return;
+  document.getElementById('imgOffX').value = sel.dataset.offx || '0';
+  document.getElementById('imgOffY').value = sel.dataset.offy || '0';
+  document.getElementById('imgSkew').value = sel.dataset.skew || '0';
+  document.getElementById('imgVisible').checked = !sel.closest('.imgWrap').classList.contains('hidden');
+}
+mapImagesDiv.addEventListener('click', function(e) {
+  const wrap = e.target.closest('.imgWrap');
+  if (!wrap) return;
+  mapImagesDiv.querySelectorAll('.imgWrap').forEach(w => w.classList.remove('selected'));
+  wrap.classList.add('selected');
+  syncAdjustInputs();
+});
+
+// 表示/非表示切替
+document.getElementById('imgVisible').addEventListener('change', function() {
+  const wrap = mapImagesDiv.querySelector('.imgWrap.selected');
+  if (!wrap) return;
+  wrap.classList.toggle('hidden', !this.checked);
+});
+
+// 微調整入力 → 選択画像に反映
+['imgOffX', 'imgOffY', 'imgSkew'].forEach(id => {
+  const el = document.getElementById(id);
+  const key = id === 'imgOffX' ? 'offx' : id === 'imgOffY' ? 'offy' : 'skew';
+  el.addEventListener('input', function() {
+    const sel = mapImagesDiv.querySelector('.imgWrap.selected img');
+    if (!sel) return;
+    sel.dataset[key] = this.value;
+    updateWrapSize(sel.closest('.imgWrap'));
+    drawHexGrid();
+  });
+});
+
+// 編集用データ
+const terrainData = { ...TERRAIN_MAP };
+const facilityData = { ...FACILITY_MAP };
+const tagData = { ...TAG_MAP };
+// 道路データ: hexId → [route numbers]
+const roadData = {};
+for (const [id, routes] of Object.entries(ROAD_MAP)) {
+  roadData[id] = Array.isArray(routes) ? [...routes] : [routes];
+}
+// 川データ: Map of "hexId1-hexId2" → type ('river','major_river','bridge','cliff')
+const riverData = new Map();
+for (const pair of RIVER_MAP) {
+  const key = [...pair].sort().join('-');
+  riverData.set(key, pair[2] || 'river');
+}
+// 高度データ: hexId → level (2 or 3)
+const elevationData = {};
+if (typeof ELEVATION_MAP !== 'undefined') {
+  for (const [id, lv] of Object.entries(ELEVATION_MAP)) {
+    elevationData[id] = lv;
+  }
+}
+// 水深データ: hexId → level (1-4)
+const depthData = {};
+if (typeof DEPTH_MAP !== 'undefined') {
+  for (const [id, lv] of Object.entries(DEPTH_MAP)) {
+    depthData[id] = lv;
+  }
+}
+let riverFirstHex = null; // 川モード: 1つ目のヘクス選択状態
+let currentBrush = 'p';
+let editMode = 'terrain'; // 'terrain', 'facility', 'tag', 'road', 'river', 'elev', or 'depth'
+
+const inputs = {
+  hexSize: document.getElementById('hexSize'),
+  offsetX: document.getElementById('offsetX'),
+  offsetY: document.getElementById('offsetY'),
+  cols: document.getElementById('cols'),
+  rows: document.getElementById('rows'),
+  showNumbers: document.getElementById('showNumbers'),
+};
+
+function getParams() {
+  return {
+    hexSize: parseFloat(inputs.hexSize.value),
+    offsetX: parseFloat(inputs.offsetX.value),
+    offsetY: parseFloat(inputs.offsetY.value),
+    cols: parseInt(inputs.cols.value),
+    rows: parseInt(inputs.rows.value),
+    showNumbers: inputs.showNumbers.checked,
+  };
+}
+
+// --- Hex geometry ---
+function isFlat() { return document.getElementById('hexRotate').checked; }
+
+function hexCorner(cx, cy, size, i) {
+  const offset = isFlat() ? 0 : 30;
+  const angle = Math.PI / 180 * (60 * i + offset);
+  return { x: cx + size * Math.cos(angle), y: cy + size * Math.sin(angle) };
+}
+
+function hexCenter(col, row, size, ox, oy) {
+  if (isFlat()) {
+    const w = size * 2;
+    const h = Math.sqrt(3) * size;
+    let x = ox + col * w * 0.75 + size;
+    let y = oy + row * h + h / 2;
+    if (col % 2 === 1) y += h / 2;
+    return { x, y };
+  } else {
+    const w = Math.sqrt(3) * size;
+    const h = size * 2;
+    let x = ox + col * w + w / 2;
+    const y = oy + row * h * 0.75 + size;
+    if (row % 2 === 1) x += w / 2;
+    return { x, y };
+  }
+}
+
+function hexId(col, row) {
+  return String(col + 1).padStart(2, '0') + String(row + 1).padStart(2, '0');
+}
+
+function drawHexPath(cx, cy, size) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const c = hexCorner(cx, cy, size, i);
+    if (i === 0) ctx.moveTo(c.x, c.y); else ctx.lineTo(c.x, c.y);
+  }
+  ctx.closePath();
+}
+
+// --- 隣接ヘクス計算 ---
+function getNeighbors(col, row) {
+  if (isFlat()) {
+    // flat-top, even-q offset
+    const even = col % 2 === 0;
+    if (even) {
+      return [
+        [col, row-1], [col+1, row-1], [col+1, row],
+        [col, row+1], [col-1, row], [col-1, row-1],
+      ];
+    } else {
+      return [
+        [col, row-1], [col+1, row], [col+1, row+1],
+        [col, row+1], [col-1, row+1], [col-1, row],
+      ];
+    }
+  } else {
+    // pointy-top, even-r offset
+    const even = row % 2 === 0;
+    if (even) {
+      return [
+        [col, row-1], [col+1, row], [col, row+1],
+        [col-1, row+1], [col-1, row], [col-1, row-1],
+      ];
+    } else {
+      return [
+        [col+1, row-1], [col+1, row], [col+1, row+1],
+        [col, row+1], [col-1, row], [col, row-1],
+      ];
+    }
+  }
+}
+
+// --- 描画 ---
+const PAD = 80; // 端ヘクス用の余白
+
+function drawRoadLines(p) {
+  // 路線ごとに隣接ヘクス間に線を引く
+  for (let route = 1; route <= 5; route++) {
+    // この路線を持つヘクスを収集
+    const hexes = new Set();
+    for (const [id, routes] of Object.entries(roadData)) {
+      if (routes.includes(route)) hexes.add(id);
+    }
+    if (hexes.size === 0) continue;
+
+    ctx.strokeStyle = ROAD_COLORS[route].replace(/[\d.]+\)$/, '0.9)');
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+
+    // 描画済みペアを記録（重複防止）
+    const drawn = new Set();
+    for (const id of hexes) {
+      const col = parseInt(id.substring(0, 2)) - 1;
+      const row = parseInt(id.substring(2, 4)) - 1;
+      const center1 = hexCenter(col, row, p.hexSize, p.offsetX, p.offsetY);
+      const neighbors = getNeighbors(col, row);
+      for (const [nc, nr] of neighbors) {
+        if (nc < 0 || nc >= p.cols || nr < 0 || nr >= p.rows) continue;
+        const nid = hexId(nc, nr);
+        if (!hexes.has(nid)) continue;
+        const pairKey = [id, nid].sort().join('-');
+        if (drawn.has(pairKey)) continue;
+        drawn.add(pairKey);
+        const center2 = hexCenter(nc, nr, p.hexSize, p.offsetX, p.offsetY);
+        ctx.beginPath();
+        ctx.moveTo(center1.x, center1.y);
+        ctx.lineTo(center2.x, center2.y);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+const RIVER_STYLES = {
+  river:       { color: 'rgba(30,120,255,0.95)', width: 6 },
+  major_river: { color: 'rgba(0,40,180,0.95)',   width: 10 },
+  bridge:      { color: 'rgba(180,140,60,0.95)', width: 7, dash: [8,5] },
+  slope1:      { color: 'rgba(200,180,100,0.95)', width: 5, hash: 1 },
+  slope2:      { color: 'rgba(180,140,60,0.95)',  width: 6, hash: 2 },
+  slope3:      { color: 'rgba(140,100,40,0.95)',  width: 7, hash: 3 },
+  cliff:       { color: 'rgba(160,80,30,0.95)',  width: 8, triangle: true },
+};
+
+function drawRiverLines(p) {
+  ctx.lineCap = 'round';
+  for (const [pairKey, type] of riverData) {
+    const style = RIVER_STYLES[type] || RIVER_STYLES.river;
+    const [id1, id2] = pairKey.split('-');
+    const c1 = parseInt(id1.substring(0,2)) - 1, r1 = parseInt(id1.substring(2,4)) - 1;
+    const c2 = parseInt(id2.substring(0,2)) - 1, r2 = parseInt(id2.substring(2,4)) - 1;
+    const center1 = hexCenter(c1, r1, p.hexSize, p.offsetX, p.offsetY);
+    const center2 = hexCenter(c2, r2, p.hexSize, p.offsetX, p.offsetY);
+    const mx = (center1.x + center2.x) / 2;
+    const my = (center1.y + center2.y) / 2;
+    const dx = center2.x - center1.x;
+    const dy = center2.y - center1.y;
+    const len = p.hexSize * 0.45;
+    const nx = -dy, ny = dx;
+    const nl = Math.sqrt(nx*nx + ny*ny);
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = style.width;
+    ctx.setLineDash(style.dash || []);
+    ctx.beginPath();
+    ctx.moveTo(mx - nx/nl*len, my - ny/nl*len);
+    ctx.lineTo(mx + nx/nl*len, my + ny/nl*len);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 崖: 三角マーク
+    if (style.triangle) {
+      const ts = p.hexSize * 0.22;
+      ctx.fillStyle = style.color;
+      ctx.beginPath();
+      ctx.moveTo(mx, my - ts);
+      ctx.lineTo(mx - ts, my + ts);
+      ctx.lineTo(mx + ts, my + ts);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    // 斜面: レベルに応じたハッシュマーク
+    if (style.hash) {
+      const perp_x = nx/nl, perp_y = ny/nl;
+      const dir_x = dx/nl, dir_y = dy/nl;
+      const tickLen = p.hexSize * 0.2;
+      for (let h = 0; h < style.hash; h++) {
+        const offset = (h - (style.hash-1)/2) * tickLen * 1.8;
+        const tx = mx + dir_x * offset;
+        const ty = my + dir_y * offset;
+        ctx.strokeStyle = style.color;
+        ctx.lineWidth = 4;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(tx - perp_x * tickLen, ty - perp_y * tickLen);
+        ctx.lineTo(tx + perp_x * tickLen, ty + perp_y * tickLen);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function drawHexGrid() {
+  const p = getParams();
+  // 複数画像の合計サイズ（回転考慮）
+  const wraps = mapImagesDiv.querySelectorAll('.imgWrap');
+  const isVertical = mapImagesDiv.classList.contains('vertical');
+  let imgW = 0, imgH = 0;
+  wraps.forEach(wrap => {
+    const im = wrap.querySelector('img');
+    updateWrapSize(wrap);
+    const { w, h } = getRotatedSize(im);
+    if (isVertical) {
+      imgW = Math.max(imgW, w);
+      imgH += h;
+    } else {
+      imgW += w;
+      imgH = Math.max(imgH, h);
+    }
+  });
+  canvas.width = imgW + PAD * 2;
+  canvas.height = imgH + PAD * 2;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // 描画座標にPADを加算（画像がPAD,PADから始まるため）
+  p.offsetX += PAD;
+  p.offsetY += PAD;
+
+  for (let c = 0; c < p.cols; c++) {
+    for (let r = 0; r < p.rows; r++) {
+      const center = hexCenter(c, r, p.hexSize, p.offsetX, p.offsetY);
+      const id = hexId(c, r);
+      const terrain = terrainData[id] || 'p';
+      const facility = facilityData[id] || '';
+      const hideOverlay = editMode === 'road' || editMode === 'river';
+
+      // 地形色で塗り（道路/川モード時は非表示）
+      if (!hideOverlay) {
+        drawHexPath(center.x, center.y, p.hexSize);
+        ctx.fillStyle = TERRAIN_COLORS[terrain] || 'rgba(0,0,0,0)';
+        ctx.fill();
+      }
+
+      // 水深の上塗り（道路/川モード時は非表示）
+      const depth = depthData[id] || 0;
+      if (!hideOverlay && depth >= 1 && DEPTH_COLORS[depth]) {
+        drawHexPath(center.x, center.y, p.hexSize);
+        ctx.fillStyle = DEPTH_COLORS[depth];
+        ctx.fill();
+      }
+
+      // 施設の上塗り（道路モード時は非表示）
+      if (!hideOverlay && facility && FACILITY_COLORS[facility]) {
+        drawHexPath(center.x, center.y, p.hexSize * 0.55);
+        ctx.fillStyle = FACILITY_COLORS[facility];
+        ctx.fill();
+      }
+
+      // タグマーカー（道路モード時は非表示）
+      const tag = tagData[id] || '';
+      if (!hideOverlay && tag && TAG_COLORS[tag]) {
+        const tx = center.x + p.hexSize * 0.3;
+        const ty = center.y + p.hexSize * 0.3;
+        const tr = p.hexSize * 0.18;
+        ctx.beginPath();
+        ctx.arc(tx, ty, tr, 0, Math.PI * 2);
+        ctx.fillStyle = TAG_COLORS[tag];
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        const label = tag === 'fuel' ? 'F' : tag.replace('reinforce_','').toUpperCase();
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${Math.round(tr * 1.1)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, tx, ty);
+      }
+
+      // 高度マーカー
+      const elev = elevationData[id] || 0;
+      if (elev >= 2) {
+        const ex = center.x - p.hexSize * 0.3;
+        const ey = center.y + p.hexSize * 0.3;
+        const er = p.hexSize * 0.18;
+        ctx.beginPath();
+        ctx.arc(ex, ey, er, 0, Math.PI * 2);
+        ctx.fillStyle = elev === 3 ? 'rgba(180,120,50,0.85)' : 'rgba(200,160,80,0.85)';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = '#000';
+        ctx.font = `bold ${Math.round(er * 1.2)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(elev), ex, ey);
+      }
+
+      // 道路マーカー（路線ごとに色付き丸を並べる）
+      const routes = roadData[id] || [];
+      if (routes.length > 0) {
+        const dotR = p.hexSize * 0.13;
+        const positions = [
+          { x: 0, y: 0 },                           // 1本: 中央
+          { x: -dotR * 1.3, y: 0 }, { x: dotR * 1.3, y: 0 },  // 2本
+          { x: -dotR * 2.2, y: 0 }, { x: 0, y: 0 }, { x: dotR * 2.2, y: 0 },  // 3本
+          // 4-5本: 2行に分散
+        ];
+        const sorted = [...routes].sort();
+        sorted.forEach((route, i) => {
+          let ox, oy;
+          if (sorted.length <= 3) {
+            // 横一列
+            const totalW = (sorted.length - 1) * dotR * 2.6;
+            ox = -totalW / 2 + i * dotR * 2.6;
+            oy = p.hexSize * 0.25;
+          } else {
+            // 2行
+            if (i < 3) {
+              const totalW = 2 * dotR * 2.6;
+              ox = -totalW / 2 + i * dotR * 2.6;
+              oy = p.hexSize * 0.15;
+            } else {
+              const row2 = sorted.length - 3;
+              const totalW = (row2 - 1) * dotR * 2.6;
+              ox = -totalW / 2 + (i - 3) * dotR * 2.6;
+              oy = p.hexSize * 0.35;
+            }
+          }
+          ctx.beginPath();
+          ctx.arc(center.x + ox, center.y + oy, dotR, 0, Math.PI * 2);
+          ctx.fillStyle = ROAD_COLORS[route] || '#fff';
+          ctx.fill();
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          // 路線番号
+          ctx.fillStyle = '#000';
+          ctx.font = `bold ${Math.round(dotR * 1.4)}px monospace`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(route), center.x + ox, center.y + oy);
+        });
+      }
+
+      // 枠線
+      drawHexPath(center.x, center.y, p.hexSize);
+      const lw = parseFloat(document.getElementById('hexLineWidth').value) || 1;
+      const lc = document.getElementById('hexLineColor').value;
+      const la = parseFloat(document.getElementById('hexLineAlpha').value);
+      const cr = parseInt(lc.slice(1,3),16), cg = parseInt(lc.slice(3,5),16), cb = parseInt(lc.slice(5,7),16);
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},${la})`;
+      ctx.lineWidth = lw;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // ヘクス番号
+      if (p.showNumbers) {
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.font = `bold ${Math.max(9, p.hexSize * 0.22)}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(id, center.x, center.y - p.hexSize * 0.15);
+
+        // 地名表示
+        const place = PLACE_NAMES[id];
+        if (place) {
+          ctx.fillStyle = '#ff0';
+          ctx.font = `bold ${Math.max(8, p.hexSize * 0.18)}px sans-serif`;
+          ctx.fillText(place, center.x, center.y + p.hexSize * 0.15);
+        }
+      }
+    }
+  }
+
+  // 道路の線を描画
+  drawRoadLines(p);
+
+  // 川の線を描画
+  drawRiverLines(p);
+
+  // 川モード: 1つ目のヘクスをハイライト
+  if (editMode === 'river' && riverFirstHex) {
+    const fc = parseInt(riverFirstHex.substring(0,2)) - 1;
+    const fr = parseInt(riverFirstHex.substring(2,4)) - 1;
+    const fCenter = hexCenter(fc, fr, p.hexSize, p.offsetX, p.offsetY);
+    drawHexPath(fCenter.x, fCenter.y, p.hexSize);
+    ctx.strokeStyle = 'rgba(255,30,30,1)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+}
+
+// --- ヘクス判定 ---
+function pixelToHex(px, py) {
+  const p = getParams();
+  p.offsetX += PAD;
+  p.offsetY += PAD;
+  let closest = null, minDist = Infinity;
+  for (let c = 0; c < p.cols; c++) {
+    for (let r = 0; r < p.rows; r++) {
+      const center = hexCenter(c, r, p.hexSize, p.offsetX, p.offsetY);
+      const dx = px - center.x, dy = py - center.y;
+      const dist = dx * dx + dy * dy;
+      if (dist < minDist) { minDist = dist; closest = { col: c, row: r }; }
+    }
+  }
+  if (closest && minDist < (p.hexSize * 1.5) * (p.hexSize * 1.5)) return closest;
+  return null;
+}
+
+// --- クリックで変更 ---
+canvas.style.pointerEvents = 'auto';
+canvas.style.cursor = 'pointer';
+
+let isPainting = false;
+let isDragging = false;
+
+canvas.addEventListener('mousedown', (e) => {
+  isPainting = true;
+  isDragging = false;
+  paintHex(e);
+});
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX;
+  const py = (e.clientY - rect.top) * scaleY;
+  const hex = pixelToHex(px, py);
+  if (hex) {
+    const id = hexId(hex.col, hex.row);
+    const t = terrainData[id] || 'p';
+    const f = facilityData[id] || '';
+    const tg = tagData[id] || '';
+    const place = PLACE_NAMES[id] ? ` (${PLACE_NAMES[id]})` : '';
+    const facilityStr = f ? ` + ${FACILITY_NAMES[f]}` : '';
+    const tagStr = tg ? ` [${TAG_NAMES[tg]}]` : '';
+    const rd = roadData[id] || [];
+    const roadStr = rd.length > 0 ? ` 道路[${rd.join(',')}]` : '';
+    let brushName;
+    if (editMode === 'terrain') brushName = TERRAIN_NAMES[currentBrush] || currentBrush;
+    else if (editMode === 'facility') brushName = currentBrush === '' ? 'なし' : FACILITY_NAMES[currentBrush] || currentBrush;
+    else if (editMode === 'tag') brushName = currentBrush === '' ? 'なし' : TAG_NAMES[currentBrush] || currentBrush;
+    else if (editMode === 'river') brushName = {river:'川',major_river:'大河',bridge:'橋',slope1:'斜面Lv1',slope2:'斜面Lv2',slope3:'斜面Lv3',cliff:'崖',erase:'消去'}[currentBrush] || currentBrush;
+    else if (editMode === 'elev') brushName = currentBrush === 0 ? 'なし(Lv1)' : `Lv${currentBrush}`;
+    else if (editMode === 'depth') brushName = currentBrush === 0 ? 'なし' : `${DEPTH_NAMES[currentBrush]}(Lv${currentBrush})`;
+    else brushName = currentBrush === 0 ? '消去' : ROAD_NAMES[currentBrush] || currentBrush;
+    const ev = elevationData[id] || 1;
+    const elevStr = ev >= 2 ? ` 高度Lv${ev}` : '';
+    const dp = depthData[id] || 0;
+    const depthStr = dp >= 1 ? ` 水深${DEPTH_NAMES[dp]}` : '';
+    const modeLabel = {terrain:'地形', facility:'施設', tag:'タグ', road:'道路', river:'川', elev:'高度', depth:'水深'}[editMode];
+    const riverInfo = editMode === 'river' && riverFirstHex ? ` | 始点: ${riverFirstHex}` : '';
+    hexInfoEl.textContent = `${id}${place} : ${TERRAIN_NAMES[t]}${facilityStr}${tagStr}${roadStr}${elevStr}${depthStr} | [${modeLabel}] ブラシ: ${brushName}${riverInfo}`;
+  }
+  if (isPainting && editMode !== 'river') { isDragging = true; paintHex(e); }
+});
+canvas.addEventListener('mouseup', () => { isPainting = false; isDragging = false; });
+canvas.addEventListener('mouseleave', () => { isPainting = false; isDragging = false; });
+
+function paintHex(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX;
+  const py = (e.clientY - rect.top) * scaleY;
+  const hex = pixelToHex(px, py);
+  if (hex) {
+    const id = hexId(hex.col, hex.row);
+    if (editMode === 'terrain') {
+      terrainData[id] = currentBrush;
+    } else if (editMode === 'facility') {
+      if (currentBrush === '') { delete facilityData[id]; }
+      else { facilityData[id] = currentBrush; }
+    } else if (editMode === 'tag') {
+      if (currentBrush === '') { delete tagData[id]; }
+      else { tagData[id] = currentBrush; }
+    } else if (editMode === 'elev') {
+      if (currentBrush === 0) { delete elevationData[id]; }
+      else { elevationData[id] = currentBrush; }
+    } else if (editMode === 'depth') {
+      if (currentBrush === 0) { delete depthData[id]; }
+      else { depthData[id] = currentBrush; }
+    } else if (editMode === 'river') {
+      if (currentBrush === 'erase') {
+        // 消しゴム: このヘクスに接する全ての川/大河/橋/崖を削除
+        const toDelete = [];
+        for (const pk of riverData.keys()) {
+          if (pk.startsWith(id + '-') || pk.endsWith('-' + id)) toDelete.push(pk);
+        }
+        toDelete.forEach(pk => riverData.delete(pk));
+        riverFirstHex = null;
+      } else if (!riverFirstHex) {
+        riverFirstHex = id;
+      } else if (riverFirstHex === id) {
+        riverFirstHex = null;
+      } else {
+        const fc = parseInt(riverFirstHex.substring(0,2)) - 1;
+        const fr = parseInt(riverFirstHex.substring(2,4)) - 1;
+        const neighbors = getNeighbors(fc, fr);
+        const isAdj = neighbors.some(([nc,nr]) => nc === hex.col && nr === hex.row);
+        if (isAdj) {
+          const pairKey = [riverFirstHex, id].sort().join('-');
+          if (riverData.has(pairKey) && riverData.get(pairKey) === currentBrush) {
+            riverData.delete(pairKey);
+          } else {
+            riverData.set(pairKey, currentBrush);
+          }
+        }
+        riverFirstHex = null;
+      }
+    } else if (editMode === 'road') {
+      if (currentBrush === 0) {
+        // 消しゴム: 全路線削除
+        delete roadData[id];
+      } else {
+        if (!roadData[id]) roadData[id] = [];
+        const idx = roadData[id].indexOf(currentBrush);
+        if (idx >= 0) {
+          // 既にある路線を削除（トグル）— ただしドラッグ中は追加のみ
+          if (!isDragging) roadData[id].splice(idx, 1);
+          if (roadData[id].length === 0) delete roadData[id];
+        } else {
+          roadData[id].push(currentBrush);
+        }
+      }
+    }
+    drawHexGrid();
+  }
+}
+
+// --- モード切替 ---
+const btnTerrain = document.getElementById('btnModeTerrain');
+const btnFacility = document.getElementById('btnModeFacility');
+const btnTag = document.getElementById('btnModeTag');
+const btnRoad = document.getElementById('btnModeRoad');
+const btnRiver = document.getElementById('btnModeRiver');
+const btnElev = document.getElementById('btnModeElev');
+const btnDepth = document.getElementById('btnModeDepth');
+const modes = ['terrain', 'facility', 'tag', 'road', 'river', 'elev', 'depth'];
+
+function switchMode(mode) {
+  editMode = mode;
+  riverFirstHex = null;
+  btnTerrain.classList.toggle('active-mode', mode === 'terrain');
+  btnFacility.classList.toggle('active-mode', mode === 'facility');
+  btnTag.classList.toggle('active-mode', mode === 'tag');
+  btnRoad.classList.toggle('active-mode', mode === 'road');
+  btnRiver.classList.toggle('active-mode', mode === 'river');
+  btnElev.classList.toggle('active-mode', mode === 'elev');
+  btnDepth.classList.toggle('active-mode', mode === 'depth');
+  buildLegend();
+  drawHexGrid();
+}
+
+btnTerrain.addEventListener('click', () => switchMode('terrain'));
+btnFacility.addEventListener('click', () => switchMode('facility'));
+btnTag.addEventListener('click', () => switchMode('tag'));
+btnRoad.addEventListener('click', () => switchMode('road'));
+btnRiver.addEventListener('click', () => switchMode('river'));
+btnElev.addEventListener('click', () => switchMode('elev'));
+btnDepth.addEventListener('click', () => switchMode('depth'));
+
+// --- 凡例（ブラシ選択）---
+function buildLegend() {
+  const legendEl = document.getElementById('legend');
+  legendEl.innerHTML = '';
+
+  if (editMode === 'terrain') {
+    currentBrush = 'p';
+    TERRAIN_CYCLE.forEach((t, i) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (t === currentBrush ? ' active' : '');
+      item.dataset.brush = t;
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = TERRAIN_COLORS[t].replace(/[\d.]+\)$/, '0.8)');
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(`${i+1}:${TERRAIN_NAMES[t]}`));
+      item.addEventListener('click', () => selectBrush(t));
+      legendEl.appendChild(item);
+    });
+  } else if (editMode === 'facility') {
+    currentBrush = '';
+    FACILITY_CYCLE.forEach((f, i) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (f === currentBrush ? ' active' : '');
+      item.dataset.brush = f;
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = f === '' ? '#444' : FACILITY_COLORS[f].replace(/[\d.]+\)$/, '0.8)');
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(`${i+1}:${f === '' ? 'なし' : FACILITY_NAMES[f]}`));
+      item.addEventListener('click', () => selectBrush(f));
+      legendEl.appendChild(item);
+    });
+  } else if (editMode === 'tag') {
+    currentBrush = '';
+    TAG_CYCLE.forEach((tg, i) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (tg === currentBrush ? ' active' : '');
+      item.dataset.brush = tg;
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = tg === '' ? '#444' : TAG_COLORS[tg].replace(/[\d.]+\)$/, '0.8)');
+      swatch.style.borderRadius = '50%';
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(`${i+1}:${tg === '' ? 'なし' : TAG_NAMES[tg]}`));
+      item.addEventListener('click', () => selectBrush(tg));
+      legendEl.appendChild(item);
+    });
+  } else if (editMode === 'road') {
+    currentBrush = 1;
+    ROAD_CYCLE.forEach((rt, i) => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (rt === currentBrush ? ' active' : '');
+      item.dataset.brush = String(rt);
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = rt === 0 ? '#444' : ROAD_COLORS[rt].replace(/[\d.]+\)$/, '0.8)');
+      swatch.style.borderRadius = '50%';
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(`${i+1}:${rt === 0 ? '消去' : ROAD_NAMES[rt]}`));
+      item.addEventListener('click', () => selectBrush(rt));
+      legendEl.appendChild(item);
+    });
+  } else if (editMode === 'river') {
+    currentBrush = 'river';
+    const riverOpts = [
+      { brush: 'river', color: 'rgba(30,120,255,0.8)', label: '1:川' },
+      { brush: 'major_river', color: 'rgba(0,60,200,0.9)', label: '2:大河' },
+      { brush: 'bridge', color: 'rgba(180,140,60,0.8)', label: '3:橋' },
+      { brush: 'slope1', color: 'rgba(200,180,100,0.8)', label: '4:斜面Lv1' },
+      { brush: 'slope2', color: 'rgba(180,140,60,0.8)', label: '5:斜面Lv2' },
+      { brush: 'slope3', color: 'rgba(140,100,40,0.9)', label: '6:斜面Lv3' },
+      { brush: 'cliff', color: 'rgba(160,80,30,0.9)', label: '7:崖' },
+      { brush: 'erase', color: '#444', label: '8:消去' },
+    ];
+    riverOpts.forEach(opt => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (opt.brush === currentBrush ? ' active' : '');
+      item.dataset.brush = opt.brush;
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = opt.color;
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(opt.label));
+      item.addEventListener('click', () => selectBrush(opt.brush));
+      legendEl.appendChild(item);
+    });
+    // 操作説明
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:10px;color:#aaa;margin-top:2px;';
+    info.textContent = '2つのヘクスを順にクリック';
+    legendEl.appendChild(info);
+  } else if (editMode === 'elev') {
+    currentBrush = 2;
+    const ELEV_OPTS = [
+      { brush: 0, color: '#444', label: '1:なし(Lv1)' },
+      { brush: 2, color: 'rgba(200,160,80,0.7)', label: '2:Lv2' },
+      { brush: 3, color: 'rgba(180,120,50,0.8)', label: '3:Lv3' },
+    ];
+    ELEV_OPTS.forEach(opt => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (opt.brush === currentBrush ? ' active' : '');
+      item.dataset.brush = String(opt.brush);
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = opt.color;
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(opt.label));
+      item.addEventListener('click', () => selectBrush(opt.brush));
+      legendEl.appendChild(item);
+    });
+  } else if (editMode === 'depth') {
+    currentBrush = 1;
+    const DEPTH_OPTS = [
+      { brush: 0, color: '#444', label: '1:なし' },
+      { brush: 1, color: DEPTH_COLORS[1], label: '2:浅瀬(Lv1)' },
+      { brush: 2, color: DEPTH_COLORS[2], label: '3:浅(Lv2)' },
+      { brush: 3, color: DEPTH_COLORS[3], label: '4:深(Lv3)' },
+      { brush: 4, color: DEPTH_COLORS[4], label: '5:深海(Lv4)' },
+    ];
+    DEPTH_OPTS.forEach(opt => {
+      const item = document.createElement('div');
+      item.className = 'legend-item' + (opt.brush === currentBrush ? ' active' : '');
+      item.dataset.brush = String(opt.brush);
+      const swatch = document.createElement('div');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = opt.color;
+      item.appendChild(swatch);
+      item.appendChild(document.createTextNode(opt.label));
+      item.addEventListener('click', () => selectBrush(opt.brush));
+      legendEl.appendChild(item);
+    });
+  }
+}
+
+function selectBrush(b) {
+  currentBrush = b;
+  document.querySelectorAll('.legend-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.brush === String(b));
+  });
+}
+
+// キーボードショートカット
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+  // Tab でモード切替
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const idx = modes.indexOf(editMode);
+    switchMode(modes[(idx + 1) % modes.length]);
+    return;
+  }
+
+  // 数字キーでブラシ切替
+  const num = parseInt(e.key);
+  const riverCycle = ['river', 'major_river', 'bridge', 'slope1', 'slope2', 'slope3', 'cliff', 'erase'];
+  const elevCycle = [0, 2, 3];
+  const depthCycle = [0, 1, 2, 3, 4];
+  const cycle = editMode === 'terrain' ? TERRAIN_CYCLE : editMode === 'facility' ? FACILITY_CYCLE : editMode === 'tag' ? TAG_CYCLE : editMode === 'road' ? ROAD_CYCLE : editMode === 'elev' ? elevCycle : editMode === 'depth' ? depthCycle : riverCycle;
+  if (num >= 1 && num <= cycle.length) {
+    selectBrush(cycle[num - 1]);
+    e.preventDefault();
+    return;
+  }
+
+  // 矢印キーでオフセット移動
+  const step = e.shiftKey ? 10 : 1;
+  switch (e.key) {
+    case 'ArrowLeft':
+      inputs.offsetX.value = parseFloat(inputs.offsetX.value) - step;
+      e.preventDefault(); break;
+    case 'ArrowRight':
+      inputs.offsetX.value = parseFloat(inputs.offsetX.value) + step;
+      e.preventDefault(); break;
+    case 'ArrowUp':
+      inputs.offsetY.value = parseFloat(inputs.offsetY.value) - step;
+      e.preventDefault(); break;
+    case 'ArrowDown':
+      inputs.offsetY.value = parseFloat(inputs.offsetY.value) + step;
+      e.preventDefault(); break;
+    default: return;
+  }
+  drawHexGrid();
+});
+
+// --- Export ---
+document.getElementById('btnExport').addEventListener('click', () => {
+  const p = getParams();
+
+  // 地形データ
+  let out = 'const TERRAIN_MAP = {\n';
+  for (let r = 0; r < p.rows; r++) {
+    out += `  // Row ${r + 1}\n  `;
+    const entries = [];
+    for (let c = 0; c < p.cols; c++) {
+      const id = hexId(c, r);
+      const t = terrainData[id] || 'p';
+      entries.push(`"${id}":"${t}"`);
+    }
+    out += entries.join(',') + ',\n';
+  }
+  out += '};\n\n';
+
+  // 施設データ
+  out += 'const FACILITY_MAP = {\n';
+  const fEntries = [];
+  for (const [id, f] of Object.entries(facilityData)) {
+    if (f) {
+      const name = PLACE_NAMES[id] || '';
+      fEntries.push(`  "${id}": "${f}"${name ? ',  // ' + name : ''}`);
+    }
+  }
+  out += fEntries.join('\n') + '\n};\n\n';
+
+  // タグデータ
+  out += 'const TAG_MAP = {\n';
+  const tEntries = [];
+  for (const [id, tg] of Object.entries(tagData)) {
+    if (tg) {
+      tEntries.push(`  "${id}": "${tg}"`);
+    }
+  }
+  out += tEntries.join(',\n') + '\n};\n\n';
+
+  // 道路データ
+  out += 'const ROAD_MAP = {\n';
+  const rEntries = [];
+  for (const [id, routes] of Object.entries(roadData)) {
+    if (routes && routes.length > 0) {
+      rEntries.push(`  "${id}": [${routes.sort().join(',')}]`);
+    }
+  }
+  out += rEntries.join(',\n') + '\n};\n\n';
+
+  // 高度データ
+  out += 'const ELEVATION_MAP = {\n';
+  const eEntries = [];
+  for (const [id, lv] of Object.entries(elevationData)) {
+    if (lv >= 2) {
+      eEntries.push(`  "${id}": ${lv}`);
+    }
+  }
+  out += eEntries.sort().join(',\n') + '\n};\n\n';
+
+  // 水深データ
+  out += 'const DEPTH_MAP = {\n';
+  const dEntries = [];
+  for (const [id, lv] of Object.entries(depthData)) {
+    if (lv >= 1) {
+      dEntries.push(`  "${id}": ${lv}`);
+    }
+  }
+  out += dEntries.sort().join(',\n') + '\n};\n\n';
+
+  // 川データ（種類付き）
+  out += 'const RIVER_MAP = [\n';
+  const riverEntries = [...riverData.entries()].sort((a,b) => a[0].localeCompare(b[0])).map(([pk, type]) => {
+    const [a, b] = pk.split('-');
+    return `  ["${a}","${b}","${type}"]`;
+  });
+  out += riverEntries.join(',\n') + '\n];\n';
+
+  console.log(out);
+  const msg = document.getElementById('exportMsg');
+  msg.style.display = 'block';
+  setTimeout(() => { msg.style.display = 'none'; }, 2000);
+});
+
+// --- 初期化 ---
+buildLegend();
+
+Object.values(inputs).forEach(el => {
+  el.addEventListener('input', drawHexGrid);
+  el.addEventListener('change', drawHexGrid);
+});
+['hexRotate','hexLineWidth','hexLineColor','hexLineAlpha'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', drawHexGrid);
+  el.addEventListener('change', drawHexGrid);
+});
+
+img.addEventListener('load', drawHexGrid);
+if (img.complete && img.naturalWidth > 0) drawHexGrid();
+
+// 地図画像を変更（最初の画像を差し替え）
+document.getElementById('mapFileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// 地図を追加
+document.getElementById('mapAddInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const wrap = document.createElement('div');
+    wrap.className = 'imgWrap';
+    const newImg = document.createElement('img');
+    newImg.src = ev.target.result;
+    newImg.dataset.rotate = '0';
+    newImg.addEventListener('load', drawHexGrid);
+    wrap.appendChild(newImg);
+    mapImagesDiv.appendChild(wrap);
+    // 新しい画像を選択状態にする
+    mapImagesDiv.querySelectorAll('.imgWrap').forEach(w => w.classList.remove('selected'));
+    wrap.classList.add('selected');
+  };
+  reader.readAsDataURL(file);
+});
+
+// レイアウト切替
+document.getElementById('btnLayoutH').addEventListener('click', function() {
+  mapImagesDiv.classList.remove('vertical');
+  this.classList.add('active-mode');
+  document.getElementById('btnLayoutV').classList.remove('active-mode');
+  drawHexGrid();
+});
+document.getElementById('btnLayoutV').addEventListener('click', function() {
+  mapImagesDiv.classList.add('vertical');
+  this.classList.add('active-mode');
+  document.getElementById('btnLayoutH').classList.remove('active-mode');
+  drawHexGrid();
+});
+
+// 末尾画像を削除
+document.getElementById('btnRemoveLast').addEventListener('click', function() {
+  const wraps = mapImagesDiv.querySelectorAll('.imgWrap');
+  if (wraps.length <= 1) return;
+  wraps[wraps.length - 1].remove();
+  // 選択が消えたら最後の画像を選択
+  if (!mapImagesDiv.querySelector('.imgWrap.selected')) {
+    const last = mapImagesDiv.querySelector('.imgWrap:last-child');
+    if (last) last.classList.add('selected');
+  }
+  drawHexGrid();
+});
+
+// 回転（選択中の画像に適用）
+function rotateSelected(delta) {
+  const sel = mapImagesDiv.querySelector('.imgWrap.selected img');
+  if (!sel) return;
+  let rot = (parseInt(sel.dataset.rotate || '0') + delta + 360) % 360;
+  sel.dataset.rotate = rot;
+  updateWrapSize(sel.closest('.imgWrap'));
+  drawHexGrid();
+}
+document.getElementById('btnRotCW').addEventListener('click', () => rotateSelected(90));
+document.getElementById('btnRot180').addEventListener('click', () => rotateSelected(180));
+document.getElementById('btnRotCCW').addEventListener('click', () => rotateSelected(-90));
+
+// 初期wrapperサイズ設定
+img.addEventListener('load', () => updateWrapSize(img.closest('.imgWrap')));
+if (img.complete) updateWrapSize(img.closest('.imgWrap'));
+</script>
+</body>
+</html>
