@@ -1,0 +1,923 @@
+INTRODUCTION TO RULES
+
+1.0  INTRODUCTION
+Wooden Ships & Iron Men is a tactical simulation of naval warfare during the great age of sail.  The game covers the period from 1776 to 1814 when the great square sail ships-of-the-line dominated the oceans and the speedy and durable American frigates gave world recognition to their young parent navy.  The game is played by two or more players each commanding a ship, squadron, or whole fleet!  Scenarios depict the famous naval engagements of the American and French Revolutions and the Napoleonic Wars.  The game is also a kit from which other scenarios or any fictitious engagement may be designed.
+Each counter represents a single ship and covers two hexes of the mapboard.  Orders for movement are written for each ship on a “log”.  Ships are then moved simultaneously over the mapboard.  Any which foul or grapple may attempt to form boarding parties to possession of the enemy’s craft by force.  Ships may also fire at the opposing vessels hoping to reduce them to a state of surrender.  Careful maneuvering and good fleet organization are essential to defeat the enemy and gain victory.
+
+
+COMPONENTS
+2.1 Game Equipment:
+Mapboard consisting of two sections which can be joined together in a variety of ways to allow more freedom of movement.
+Set of die-cut counters.
+Advanced Tables Card.
+Rules of play and scenario manual.
+A “log” pad.
+One die.
+
+Mapboard:
+The 22” by 28” mapboard is the playing surface upon which the ships are maneuvered.  The hexagonal grid printed on the mapboard is used to determine movement, firing ranges, and the positions of ships.  Each hex (hexagon) has an identification code, this being used to determine the initial placement of ships for various scenarios.  This code is also valuable in checking a ship’s movement.  Portions of the board are sometimes used as juttings of land in certain scenarios, and will be defined as such in the applicable scenarios.  A wind change hexagon is found in the lower left-hand corner.  Each edge of the board is labeled by the wind direction numbers pointing to it.  The four edges are labeled in clockwise order, 1, 2-3, 4, 5-6.
+
+2.3 Unit Counters:
+Included in the game is a sheet of die-cut counters which represent ships and markers of various types.  These are the playing pieces used in the game.  Each ship counter has a colored spot amidships to identify it and act as the ship’s colors.  Red spots identify British ships; white spots identify French ships; gold spots identify Spanish and Venetian ships; and light blue spots identify the American vessels.  Printed on each counter is information needed to play the game.  Examine the examples below:
+
+Wind Direction
+
+
+                                             Full Sail
+
+
+Strike
+
+
+                                         Explosion
+
+
+Sinking
+
+
+2.31 Ship Classes: Each ship overview on the counter represents a class of ship.  Classes denote different sizes and types of ships.  NOTE: Care must be used to match the proper class counter for each ship being played.  The size of the ship is indicated by the size of the class overview. *Ship classes range from the highest class of 1 down to 7.
+
+
+
+
+Nr. 1 Ship-of-the-line (S.O.L.)
+
+
+
+
+Nr. 2 Ship-of-the-line (S.O.L.)
+
+
+
+
+Nr. 3 Frigate (F)
+
+
+
+
+Nr. 4 Frigate (F) or Corvette (C) 
+
+
+
+
+Nr. 5 Brig (B), Sloop (S), or Schooner (SC)
+
+
+
+
+Nr. 6 Gondola (GO), Galley (G), or Radeau (R)
+
+
+
+
+Nr. 7 Gunboat (GB)
+
+
+
+
+
+
+
+
+
+Privateer (P) Class varies
+
+
+
+
+Merchantmen (M) Class varies
+
+
+
+
+Fireship (FI) Class varies
+
+
+
+
+Bomb Ketch (B) (no provision for use in rules)
+
+
+2.31.1  Turning Ability: The maximum number of 60 degree turns which that ship can make during the course of the Movement Execution Phase.
+2.31.2   Battle Sail Speed: The maximum speed that a ship has under battle sails.  (There are two speeds; 3 and 4.)
+2.31.3  Full Sail Speed: The lower right-hand number represents a ship’s movement ability under an increased spread of sail.  This speed is used in the Advanced Game only.
+2.31.4  Stern: The stern of a ship is its rear section.  This is the blunt end of the ship diagram on the counter.
+2.31.5  Stern Hex: The hex that the stern and rear halve of the ship occupies.
+2.31.6  Identification Number: Each counter has a four digit number which is used to identify it with the ship it represents.  The first digit refers to the nationality of the vessel.  The second number refers to the class of the ship (see below).  The last two digits serve to identify the counter as separate from any other.
+                            5 (Light Orange) = Batavians (Dutch)
+                        6 (Violet) = Danish
+                       7 (Gray) = Ottoman Empire
+                       8 (Green) = Russians
+                       9 (Yellow) = Swedes
+	       0 (Pink) = Portuguese
+
+2.31.7  Bow: The bow of a ship is its front.  This is the pointed end of the ship diagram on the counter.  The bow always points in the direction in which the ship is sailing.
+2.31.8 Bow Hex: The hex that the bow and the forward halve of the ship occupies.
+
+2.4  Basic Game And Advanced/Optional Tables:
+2.4.1 The back of this manual contains the Basic Game Tables necessary for the play of the game.  Each table is identified and its use will be explained in the appropriate section of rules.  Hereafter all Tables will be referred to in abbreviated form.
+2.4.2 The Advanced/Optional Tables differ from the Basic Game Tables and are located on a separate card.
+
+2.5  Log Sheet Pad:
+All the essential information needed for moving and firing ships is placed here.
+
+PREPARE TO PLAY
+3.1 Mapboard Set Up:
+3.1.1 A Scenario is selected from the Scenario section of this manual.  All information necessary for the set-up is found in the scenario.  It is better to start with the single ship encounters and move on from there as experience is gained.
+3.1.2 Remove from the counter sheet a counter of the proper nationality and class for each ship played.
+3.1.3 Lay the mapboard out and place each ship’s bow in the assigned bow hex and pointing in the number direction corresponding to the wind direction hex on the board.
+3.1.4 The wind arrow counter is placed in the wind direction hex pointing to proper numbered direction.
+3.1.5 If the scenario has any land features involved, the hexes to be noted as land will be listed.
+
+3.2 Log Sheet:
+     A very important step must now be completed; filling out the log sheet.  A player must fill out a “log” for each ship that he controls.  All information for that ship necessary to play the game will be placed here.  This information is found on the ship counter or in the ship’s Order of Battle, found in the scenarios.  A diagram is given as an example of this procedure (see next page).
+
+
+
+
+
+
+
+The ship counter and log below represent the starting Basic Game strength  of the Constellation.  Check her specifications on the Master Scenario Chart on page 27 to ascertain how to correctly fill out a ship’s log.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3.2.1 The name of the ship and number of guns is carried on line 1.
+3.2.2  The identification number of the counter to be used for the ship is put on line 2.
+3.2.3  The Class of ship is placed on line 3.  Certain ships may be given a specific counter to use in the scenario.  This will indicated by giving the I.D. number in this section.
+3.2.4 On lines 4, 5, 6 and 7 place movement allowance for each attitude to the wind.  This information can be found in the Movement section of the Basic Game (7.0).  Ignore the parenthesis for the Basic Game as these spaces are intended for full-sail movement in the Advanced Game.
+3.2.5  The quality of crew manning the ship – either elite, crack, average, green or poor is placed on line 8.
+3.2.6 The number of hull squares allotted for each ship is placed in section 9.  All squares over this are marked out.
+3.2.7  The number of crew squares allotted to each ship is placed in section 10.  All crew squares are divided into sections.  In the Order of Battle, the number of sections and number of crew squares per section will be given.  Each crew section has a corresponding numbered row in the “log”.  Squares not being used should be marked out.
+3.2.8  The number of gun squares allotted for each ship is placed in section 11.  This section divides the guns into left and right broadsides (labeled L and R).  Mark out the gun squares not being used.
+3.2.9  Section 12 is the Carronades section.  This section is completed exactly like section 11.  Carronades are special guns of limited range, hence the reason for the separation from section 11.
+3.2.10  Section 13 is the Rigging section.  Each line of squares represent one battle sail speed factor.  The number of rigging squares per battle sail speed factor is given in the Order of Battle.  Squares not used are marked out.
+3.2.11  On the movement column (14) of the ship’s log, there is a load section.  It is composed of two spaces, one marked L for left broadside; the other marked R for right broadside.  In these spaces the type of shot for each broadside is marked.  There are four types of shot to be used; roundshot, chainshot, grapeshot and doubleshot.  Each has advantages and disadvantages to be discussed later.  You can load each broadside with one type of shot although both broadsides need not have the same type.  The spaces in the load column are marked; R for roundshot, C for chainshot, G for grapeshot and D for doubleshot.  For the Basic Game only roundshot is used.
+3.2.12  Section 15 denotes the move column.  All movement for the ship will be placed here.  No information is placed here at this time.
+3.2.13  The notes section (16) is the part of the moves column where special orders and notations are written.  These notations will be explained in appropriate sections of the rules.  No information is placed here at this time
+
+
+
+
+BASIC GAME RULES
+
+
+4.0 INTRODUCTION     The Basic Game gives all the information needed to play a scenario in Wooden Ships & Iron Men.  Once this section of the rules is completed, play of the game can begin.  Later rules sections include the Advanced Game and an Optional Rules section which provide more realism and corresponding complexity.  There is even an additional section of rules which allows players to design their own scenarios.
+     The rules outline for the Basic Game follows the sequence of play for each turn.
+
+5.0 SEQUENCE OF PLAY
+     Once the game has been set-up, play begins.  The game is played in turns (representing approximately three minutes).  Most scenarios have no limit to the number of turns contained therein.  Each turn is divided into eight phases.  The sequence of play for each turn is as follows:
+A. Unfouling Phase: Make attempts to unfoul ships which were fouled on previous turns.
+B. Movement Notation Phase: Players secretly write in the proposed movements for each ship on their log sheets.
+C. Movement Execution Phase: When both players have completed their log notations, all simultaneously move exactly as their movement was written in the log.  Retrace any possible collisions one hex at a time.  If any collisions occur, check for fouling.
+D.  Grappling and Ungrappling Phase: Make all attempts to grapple, avoid grappling and ungrapple.
+E.  Boarding Preparation Phase: Write any boarding parties in the logs of the involved ships.
+F.  Combat Phase: Resolve all gunfire and mark all hits on the hit boxes of the log sheet.
+G.  Melee Phase: Resolve all boarding actions and mark all lost crew hits on the log sheet.
+Load Phase: Load broadsides. 
+
+6.0  UNFOULING PHASE
+Ships which have fouled their rigging (i.e. have entangled their rigging with that of other ships) on previous moves and have not been able to unfoul, may attempt to unfoul.  Ships attempting to unfoul use the Unfouling Table.  Players need not attempt to unfoul if they do not wish to; however, they may roll one die for each of their ships that is fouled.  If unfouling is successful, both ships that have unfouled may move normally on that turn.  If a ship is fouled with more than one ship, a player may roll once for each fouled condition.
+     If after the completion of all unfouling attempts, any ship still remains fouled to one or more enemy ships; it must wait until next turn to attempt to unfoul.  
+     Successful Unfouling is noted by writing a circled letter F in the notes section of the log.
+*6.1  Players may add one to the Unfouling dice roll by marking off one rigging square for the rolling ship.  Only one rigging square may be marked off per attempt in this fashion.
+
+7.0 MOVEMENT NOTATION PHASE
+All ships are moved simultaneously.  The move of each ship must be written secretly in the log before any ship can actually be moved on the mapboard.
+7.1 Movement and Turning Allowance:
+7.1.1 Before writing orders, the movement allowance for each ship must be determined.  This movement allowance is a combination of a ship’s battle sail speed and its attitude to the wind direction.
+7.1.2  The battle sail speed of each ship is printed on the counter adjacent to the stern of the ship diagram (see 2.31.2).  All ships have a battle sail speed of either 3 or 4.
+7.1.3  Along with the battle sail speed, the attitude of the ship to the wind must be determined.  There are four attitudes to the wind for each ship, labeled A, B, C and D.  Each letter represents a different position of the ship in relation to the direction that the wind is blowing.  See diagram:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Diagram No. 1 compares the different ship positions to wind.
+Diagram No. 2 compares the different wind directions to the ship position.
+
+7.1.4  The movement allowance is now checked on one of these two charts:
+
+
+Examples:
+a.  A ship with a battle sail speed of 3 starts the Movement Notation Phase in attitude C in relation to the wind direction.  Its movement allowance is determined to be 1.
+b.  A ship with a battle sail speed of 4 starts the Movement Notation Phase in attitude A in relation to the wind direction.  Its movement allowance is determined to be 4.
+7.1.5  The movement allowance is the maximum number of hexes a ship may move in a movement phase.  A ship may only move into a hex toward which its bow is pointing; i.e., a ship can not move sideways or backwards.  (Exception: Drifting, 8.2)  Each hex a ship’s bow enters costs one movement factor of its allowance.  Once a ship has used all of its factors, it must stop.
+7.1.6  Movement factors may not be accumulated from one turn to another nor may be transferred between ships.
+7.1.7  A ship may use none, some or all its movement factors available.  The number of hexes a ship may move is up to the player within the limits of its movement allowance.
+7.1.8  A ship may make only one 60 degree turn per hex in a movement execution phase.  A 60 degree turn is equivalent to turning the bow to face an adjacent hexside.  Since each ship counter occupies 2 hexes, as a ship’s bow is pivoted 60 degrees to point to a new hexside, the stern halve will swing into a new hex.
+7.1.9  The turning ability number on the ship counter represents the maximum number of turns that a ship may make in a movement execution phase.  Remember all ships are limited to just one turn per hex, so each turn must be made from a different hex.  Although it may seem impossible for some ships to ever exceed its turning ability maximum, it does become relevant in the Advanced Game.
+7.1.10 Each individual turn costs one movement factor of its allowance.  (Exception: 7.1.15)
+7.1.11  A ship may never make a turn if the cost would cost that ship to exceed its movement allowance.  (Exception: 7.1.15)
+*7.1.12  The movement allowance for each attitude of the wind also limits the number of hexes a ship may move while in that particular attitude.  Example: A ship with a battle sail speed of 4 starting in Attitude A, has a movement allowance of 4.  If it turns into Attitude C, it may only move one hex in that direction as the movement allowance for this attitude is 1.  It may turn back to Attitude A after moving one hex in C and finish its move in Attitude A.
+7.1.13  Rule 7.1.12 does not work both ways.  A ship with battle sail speed of 3 starting her movement in Attitude B has a maximum movement allowance of 2, even if it moves to Attitude A later in the movement phase.
+7.1.14  Rule 7.1.12 does not limit the number of turns in attitude (other than the limit of 1 hex per hex transversed), just the number of hexes which the ship may move. 
+7.1.15  A ship which has a movement allowance of 0 may always turn in place 60 degrees.  This is free.
+7.1.16  A ship which turns into Attitude D must immediately stop and may not move or turn for the remainder of the movement phase, even if it has movement factors remaining.
+7.1.17  A ship’s movement allowance may never be reduced below 0.
+7.2 Log Notations:
+7.2.1  All notations of movement are written in the move column of the ship’s “log”.  The column is divided into numbered section corresponding to the turns.  All notations are written in the appropriate turn section.
+7.2.2  The number of hexes a ship is to move is written as a number.
+7.2.3  Any turns made by the ship are written as an “R” for a right-hand turn of 60 degrees or an “L” for a left-hand turn of 60 degrees.
+Example:  The ship is at Attitude A to the wind and has a battle sail speed of 4…its movement allowance is determined to be 4.  The move notation in the “log” reads left turn 60 degrees, forward 1 hex, right turn 60 degrees, forward 1 hex.  This has completed the ship’s full allowance.  It would read in the log as “L1R1”.  After its first turn into Attitude C, the maximum distance the ship could move in that direction was one hex.  If it wished to remain in Attitude C, it would have ended its move at that point, “L1”.
+7.2.4  Notation must be specific and in the same order in which the ship will be moved.
+7.2.5  After completion of all orders, logs must be opened for inspection by the other players.  Exception:  The load column of the log may never be inspected.
+7.2.6  Orders must be written for each ship.  If a player does not wish a ship to move, an “0” will be used as notation.
+7.2.7  If a log sheet is incorrectly filled out and/or indicates an illegal move for a ship, end that ship’s movement at the point of the infraction.
+7.2.8  Ships which are to enter the game on this turn have their movement noted in their log’s movement column.  The first hex entered counts against their movement allowance.
+
+8.0  MOVEMENT EXECUTION PHASE
+8.1  Movement:
+8.1.1  All players move their ships simultaneously on the board.
+8.1.2  Ships which are scheduled to enter, enter and move this turn.
+8.2  Drifting:
+This is a special type of movement.  It may be voluntary or involuntary.
+8.2.1  Whenever the bow hex of a ship does not change or is not plotted to change for two consecutive Movement Execution Phases, during the second phase the ship will drift one hex in the direction the wind is blowing.  Both the bow and stern halves must be moved in this direction.  This applies also to ships which are fouled or grappled together, if both or all are on at least their second consecutive Movement Execution Phase without moving into another hex.  Ships may turn in place and still fulfill drifting obligations (see 7.1.15).
+8.2.2  Ship-of-the-line class vessels (Classes 1-2) will drift one hex every other turn while drifting.  Frigate and smaller class ships (Classes 3-7) will drift one hex per turn while drifting.  They will continue at these rates until they voluntarily move at least one hex. 
+8.2.3  Ships which are fouled or grappled together cannot move or turn in place, they can only drift.
+8.2.3.1  Where ships of different classes are fouled or grappled together, they drift at the speed of the highest class ship (8.2.2).
+8.2.4  For each turn a ship is to drift, a “D” is written in the move column.
+8.2.5  Ships which have lost all rigging squares (become dismasted) drift with a special turning allowance.
+8.2.5.1  Dismasted ships with a turning ability of one, must wait at least three consecutive turns while drifting before being able to make a single 60 degree turn.
+8.2.5.2  Dismasted ships with a turning ability of two, must wait at least two consecutive turns while drifting before being able to make a single 60 degree turn.
+8.2.5.3  Dismasted ships with a turning ability of three, must wait at least one consecutive turn while drifting before being able to make a single 60 degree turn.
+8.2.5.4  If a dismasted ship makes a 60 degree turn while drifting, it must again wait the same period before making another turn.
+8.3  Collision:
+Ships that cross the course or position of other ships (enemy or friendly) during the movement phase may collide with the other ship.
+8.3.1  To see if ships have collided, the players must retrace the courses of those ships involved one hex at a time.  Remember, that a 60 degree turn counts the same as a hex moved into.  If two or more ships are found to be in the same hex at the same time in their move, a collision takes place.
+8.3.2  Only one ship can actually remain in the collision hex.  If the bow or stern of one ship is in the hex at the same point in movement when one or more other ships attempt to enter the hex, the ship occupying the hex remains.  The other ship(s) move back to the hex(es) they occupied just prior to the collision.  If the stern of a ship enters a hex in a turning maneuver at the same in the movement phase as the bow of another ship, the bow enters the hex.  The turning ship moves back to its previous position.  In all other cases that might occur, roll a die for each ship involved, and let high man decide which ship must occupy the contested hex.
+8.3.3  Ships will drift into a new hex on the last move of the phase.
+8.3.4  Once a collision has occurred and the position of the collided ships have been determined, all movement ends for the ships involved, even if their logs have been plotted for further movement.  Log notations must be changed to correspond with the actual move.
+8.3.5  When a collision occurs, the rigging of the involved ships may entangle and be fouled, locking the ships together.  For each collision, one of the involved players must roll two dice.  The result is found on the Fouling Table, and is implemented immediately.  If the result is “ships are not fouled”, they may continue to move normally the next movement phase.  The Fouling Table can be modified as follows:
+-1 For each ship with a crack crew.
+-2 For each ship with an elite crew.
++1 For each ship with a green crew.
++2 For each ship with a poor crew.
+–1 If both ships are friendly.
+8.3.5.6 -4 If one of the colliding ships was motionless or drifting.
+8.3.5.7  +1 If either ship was noted to move 3 or more movement points.
+8.3.5.8  +1  per ship at full sails.
+8.3.5.9  Unmodified rolls of twelve always foul.
+8.3.6  Fouled ships cannot move or turn in place.  On the second movement phase after fouling they must drift.
+8.3.7  Ships that are fouled may perform boarding maneuvers and melee that turn and/or any or all subsequent turns that they remain fouled.
+8.3.8  The fact that a ship is fouled is indicated in the Notes section of the ship’s log by writing an “F”.
+
+9.0  GRAPPLING AND UNGRAPPLING PHASE
+At the end of the Movement Execution Phase, any ship that occupies a hex adjacent to a hex occupied by another ship (friendly or enemy), fouled or unfouled, may attempt to grapple.
+9.1  Grappling:
+9.1.1  One or both ships may attempt to grapple.
+9.1.2  A ship may attempt to grapple, once per turn, each ship to which it is adjacent.
+9.1.3  If the involved ships are friendly, grappling must be rolled for, consulting the Grappling Table and applying the proper modifiers and ungrappling is performed automatically without rolling the dice.
+9.1.4  If the adjacent ship is unfriendly, an attempt to grapple is made by rolling two dice and consulting the Grappling Table and applying the proper modifiers.
+9.1.4.1  +/- 1 Per crew quality differential (applies only to unfriendly grapples, otherwise use +1 if crack and +2 if elite crew).
+9.1.4.2  +4  If both ships grappling are friendly.
+9.1.4.3  +1 If one of the ships was motionless during the movement phase. Note: Motionless is defined as not have plotted the bow to enter a new hex (drifting is considered as motionless).
+9.1.4.4  +2  If both ships were motionless during the movement phase.  Note: Motionless is defined as not have plotted the bow to enter a new hex (drifting is considered as motionless).
+9.1.4.5  -1 For each movement point noted for the target ship above 1.
+9.1.4.6  Rolls of twelve (unmodified) always grapple regardless of modifiers.
+9.1.5  Grappling attempts on the same ship can be made each turn even if previously grappled.
+9.1.5.1  There is no limit to the number of grapples that can be applied to a ship.  This can be by done by a single ship or by different ships.
+9.1.6  As with fouled ships, grappled ships cannot move or turn in place.  They can only drift.
+9.1.7  Boarding parties can be formed and boarding actions fought between grappled ships.
+9.1.8  The fact that a ship is grappled is indicated by writing a “G” in the notes section of the ship’s log for each successful grapple (this is noted for both of the ships involved).
+9.1.9  Ships that are grappled may fire during the Combat Phase.
+9.1.10  Ships making grapple attempts must have a crew section available (i.e., not involved in a melee, assigned to water line damage, etc.  If no crew is available, an attempt cannot be made. 
+9.2 Ungrappling:
+9.2.1 After all attempts at grappling have been made in this phase, any ship which has been successfully grappled may attempt to ungrapple by rolling two dice and consulting the Ungrappling Table and applying the proper modifiers.  Note: friendly ships may automatically ungrapple.
++1 If crew quality is crack
++2 If crew quality is elite.
++1 If there is no melee in progress.
+ -6 If melee is in progress.
+9.2.1.5  A roll of twelve (unmodified) always succeeds regardless of modifiers.
+9.2.2  A successful ungrapple negates all effects of the grappling.  Each ungrappled ship may move normally the next turn.
+9.2.3  On each turn that a ship is in a grappled state, it may attempt to ungrapple.  If a ship is grappled more than once, it must ungrapple every successful grapple before it is free. 
+9.2.4  A ship may attempt to ungrapple once per turn each successful grapple.
+9.2.5  If after completion of all ungrappling attempts, any ship still remains grappled to one or more enemy ships, it must wait until next turn to attempt to ungrapple.
+9.2.6  Ungrappling is indicated by writing a circled letter “G” in the notes section of the ship’s log.
+
+10.0  BOARDING PREPARATION PHASE
+Ships which have been fouled or successfully grappled may form boarding parties if desired.  These parties may attempt to take over an enemy ship or defend against a take-over in the Melee Phase.
+10.1 Boarding Party Formation:
+10.1.1  All boarding parties are formed by crew sections.  All available crew squares in a crew section must be used.
+10.1.2  From one to all sections may be delegated as a boarding party or parties as long as the following procedure is maintained.
+10.1.2.1  The lowest numbered crew section with at least one undestroyed crew square (not otherwise assigned, ie. men in rigging) must be used first.
+10.1.2.2  Any remaining crew sections desired as boarding parties must be chosen in order.  A player may never skip a lower numbered crew section as a boarding party to choose a higher numbered crew section as a boarding party unless all lower numbered sections have already been chosen as such.
+10.2  Boarding Preparation Procedure:
+10.2.1  Players secretly write down which crew sections are to be used for boarding in the notes section for all ships fouled and/or grappled.  If the player does not desire to form any boarding parties, “NBP” is written.
+10.2.2  There are three types of boarding parties which may be formed: An offensive boarding party written as “OBP”, a defensive boarding party written as “DBP”, and a transfer boarding party written as “TBP”.  (these abbreviations will be used to denote the boarding party types hereafter in the rules).  An “OBP” must melee in the Melee Phase.  A “DBP” will melee only if attacked by an opposing “OBP”.  A “TBP” is used only for transfer of crews between friendly ships.
+Please Note: The selection of an “OBP” commits you to that action for the length of the melee, not just this turn’s three rounds.  If the melee this turn cannot be resolved in three rounds, the ships are considered locked in battle.  If in the subsequent turn the ships remain adjacent (and grappled or fouled), the melee continues and all ships previously having “OBP’s” must continue their previously formed “OBP’s”.  “OBPs” are dual-edged sword, you may capture the opposing ship, but if the battle begins to go against you, you cannot reform as a "DBP“ or discontinue the melee (unless you successfully ungrapple/unfoul or by mutual consent) in later turns (you are forewarned).  
+10.2.3  To form a boarding party, the abbreviation for the type boarding party desired is written in the notes section plus each crew section number involved.  More than one type of boarding party may be formed per ship.
+10.2.4  If there are several ships to which a boarding party could board at the same time, the log notation should also indicate the ship(s) to be boarded.
+10.2.5  If all crew sections of a ship are used for boarding parties, that ship may not fire at all in the Combat Phase, or move in the next Movement Phase. 
+10.2.6  Transfer of crews is allowed to any friendly adjacent ship, not necessarily one fouled or grappled.
+10.2.7  Transferred crew may not be used for melee or other purposes until the turn following the transfer.  This applies even when the ship they are transferred to is engaged in melee during the turn of transfer.
+10.2.8  “TBP’s” may be formed to board ships which one thinks will surrender.  If, for any reason the ship does not surrender, no transfer is made and the crew section(s) involved may not be used in any other function for that turn.
+
+11.0  COMBAT PHASE
+In this phase, ships may fire at enemy ships in their field of fire and within range.  Firing is considered simultaneous and all firing is considered completed before results of combat are marked on the log sheets.  Firing is done by broadsides of cannon.
+
+*(It is suggested that players mark the square with a “/” for damage that occurs during this turn as it 
+happens.  Then upon completion of all firing mark all squares with a “/” with a “\” to form an “X” in the square indicating damage that affects next turn’s combat firing.)
+
+
+11.1 Fire Determination:
+11.1.1  Each ship has a right and left (in Naval terminology, starboard and port) broadside.  These broadsides are effective on their side of the ship.  Each broadside has a “play” or area over which its broadside firepower is effective.  The play of each broadside is shown on the following diagram:
+
+11.1.2  Each ship also has two fields of fire; one for each broadside.  Any blocking of one field has no effect, whatsoever, on the other field of fire.
+11.1.3  The field of fire of each broadside is the area covered by the play of the broadside up to the limit of the ten hex firing range.
+11.1.4  A ship may fire at a single enemy ship in a broadside’s field of fire subject to two conditions:
+11.1.4.1 The ship being fired upon must be the closest in number of hexes to the firing ship of all ships in the field of fire;
+11.1.4.2  If the “closest ship” happens to be a land hex, friendly ship, surrendered or captured ship, or a hulk, the field of fire is blocked and the ship may not fire that broadside in that turn.
+11.1.5  If there is more than one ship or obstacle which qualifies as “closest ship”, the attacker may choose which is the closest and fire at that ship.
+11.1.6  Firing is noted on the log by drawing a slant line “/” through the last loading notation on the broadside fired.
+11.1.7  As firing is considered simultaneous, it may be carried out in any order.  Hits will not be marked until all firing is completed.
+11.1.8  A ship may fire both broadsides during the same Combat Phase, if both broadsides are loaded.
+11.1.9  Carronades are a special type of gun.  They can only fired at ships within a two hex range.  Carronade gun squares are added to the regular broadside capability when used.
+11.2  Fire Procedure:
+11.2.1  Count the number of hexes to the target by the shortest possible route.  It may be to either the bow or stern hex, whichever is the closest.  This is the range.
+11.2.2  In the gun section of the firing ship’s log, count the number of gun squares on the broadside firing.  Do not include damaged gun squares in this count.  Also do not include Carronades unless the range is two hexes or less.
+11.2.3  Consult the range tables of the Hit Determination Table (HDT), cross gridding the number of gun squares firing with the range in hexes.  The number found in this table is the number of the Hit Table to be used.
+11.2.4  Check the HDT modifiers (ignore the advanced modifiers).  These are variables that will increase or decrease the Hit Table.  All modifiers are cumulative.  If after using all modifiers that apply, Table Zero or above has not been reached, the result is an automatic “miss”.  If a table number higher than eight is reached, use Table Eight as this is the highest allowed.
+11.2.5  The player firing now decides if the fire is to be aimed at the hull, or at the rigging.  If the range is six hexes or more, the fire must be aimed at the rigging.
+11.2.6  Consult the correct Hit Table, as determined in 11.23 and 11,24, in either the Hull or Rigging Effects Section, depending on the decision made in 11.25, then roll one die.  Crossgrid the number rolled with the proper Hit Table.  The result gives the number and types of hits scored on the target. 
+11.2.7  There are four types of hits: H (Hull), G (Gun), C (Crew), and R (Rigging).  At the end of the Combat Phase, the number and type of hits are marked off the appropriate sections of the target ship’s log.  Players may wish to keep track of these hits on a side sheet of paper until the end of the phase.
+11.2.8  Grappled and/or fouled ships may not fire at each other’s rigging.
+11.3  Hit Table Modifiers:
+11.3.1  Crew Quality: Crew quality will increase or decrease the BHT as shown in the HDT depending on the number of gun squares being fired.
+*11.3.2  Raking: Raking (i.e. when one ship is in position to fire down the length of another one), will increase the BHT as shown on the HDT, depending on the number of gun squares firing.  A ship is in a raking position anytime an opposing ship lies within the play of its broadside but lies outside the play of the opposing broadside.  *Exception: When at a one hex range the opposing ship has only its bow or stern section pointing to the adjacent firing ship, the firing ship has a rake even though the opposing ship can return fire.
+11.3.3  Crew Losses: For each complete crew section wiped out or used for boarding, the Hit Table is decreased by one.  If no crew sections are available for firing, the guns may not be fired.
+*Exception: Captured Ships, see 11.35.
+11.3.4  Initial Broadside: The first time a ship fires a broadside, that broadside will be the most carefully loaded and aimed that it will fire.  Each ship has two initial broadsides, one for each side of the ship.  The initial broadside will increase the Hit Table as shown on the HDT, depending on the number of gun squares being fired in the broadside.
+11.3.5  Captured Ship: When using the guns of a captured ship, the Hit Table is decreased by two tables.  Ignore the crew loss modifier when firing from a captured ship.
+11.4  Marking Hits and the Effects of Damage:
+Hits are marked on the log of the target ship with an “X”.  The log has four major parts, each part corresponding with a type of hit on the Hit Table.
+11.4.1 Hull Hits (“H”):
+11.4.1.1  Mark off one hull square per hull hit called for on the Hit Tables.
+11.4.1.2  When all of a ship’s hull squares have been marked off, that ship will “surrender by striking her colors”.  The ship is considered to be in such danger of sinking that it cannot be sailed or guns worked for the remainder of the game (even by a prize crew).  None of the original crew can be removed from the ship (all are required to keep the ship afloat).  Neither side is allowed to fire on a “struck” ship, although it can be boarded.  Excess hull hits are treated as “misses”.  The crew of a “surrender by striking” ship cannot participate in melees even if boarding parties have been formed.  Place a strike marker on a ship which has “struck”.
+11.4.2  Crew Hits (“C”):
+11.4.2.1  Mark off one crew square per crew hit called for on the Hit Tables.  All crew hits must be taken out of the first section until all of its crew squares are gone, then from the second section and finally from the third section.
+11.4.2.2  When all of the crew squares on a ship are marked off, the ship cannot be moved or be used in combat until more crew squares are put on board.  Excess crew hits are treated as “misses”.
+11.4.3  Gun Hits (“G”):
+11.4.3.1  Mark off one gun square per gun hit called for on the Hit Tables.  When a gun hit is called for, and the ship has carronade squares available, the commander of the hit ship can mark off whichever type he chooses.  Hits must be marked off the side closest to the firing ship, although if gun squares on the closer side are all marked off, gun squares on the opposite side are marked off.  If, as in a rake, both sides on the target ship are equidistant to the firing ship, the target ship chooses which gun squares to mark off.
+11.4.3.2  If all the gun squares are marked off, and no friendly ship of the same or larger class as the firing ship is within ten hexes distance, the ship will surrender to the first enemy ship that can move into an adjacent hex and fire a broadside into it.  The ten hex range is determined at the moment the broadside is fired.  This is known as “surrender by fire-power”.  Excess gun hits are treated as hull hits.
+11.4.4  Rigging Hits (“R”):
+11.4.4.1 Mark off one rigging square for each rigging hit called for on the Hit Tables.  The rigging squares are divided into either three sections (for ships with a battle sail speed of 3) or four sections (for ships with a battle sail speed of 4).  All rigging hits are taken out of the first section until all the rigging squares are gone there, then out of the second section, etc.  Each complete rigging section marked off drops the ship’s movement allowance by one hex in all attitudes to the wind.  When all rigging sections are gone, the ship cannot move.
+11.4.4.2  If all rigging squares are marked off, and no friendly ship of the same or larger class as the firing ship is within ten hexes distance, the ship will surrender to the first enemy ship which can rake its hull.  This is known as “surrender by immobility”.  Excess rigging hits are treated as “misses”.
+11.4.5  If at any time a ship which has surrendered other by striking is within five hexes (inclusive) of a friendly ship at the beginning of the turn, it ceases to be surrendered and may begin normal functions the next turn.  It does not lose any of its damage though.  It is still subject to surrender if the necessary conditions occur again.
+
+12.0 MELEE PHASE
+All ships which have not “surrendered” and have crew squares remaining in their boarding parties may now attempt to capture opposing ships, to defend themselves and/or to transfer to friendly ships.  To determine the success of the boarding, melee must occur with the enemy’s “OBP” or “DBP”.  Melee is fought simultaneously once per turn for a period of three rounds.
+
+12.1 Transfer Procedure:
+12.1.1  Crew sections designated as “TBP” during the Boarding Preparation Phase may now transfer as ordered to any friendly adjacent ship.
+12.1.2  Cross off the transferred crew sections on the log as if they were casualties, and make a note on a separate sheet of paper of the strengths of the transferred crew sections and their present locations.  Friendly crews ordered to transfer to ships which have “surrendered” in the Combat Phase may not transfer.
+12.1.3  If crew sections are transferring to ships which have lost crew squares, they may permanently transfer by erasing one crew square for each square being transferred.  Start with the most recent crew square casualty and work back.
+*12.1.4   Crew sections transferred to a ship  immediately assume the worst crew quality of the two ships involved.  If a crew section is being transferred to a ship involved in melee, the crew may not participate in the melee nor return to the original ship, and surrender with the rest of the non-meleeing crew if the ship surrenders in that turn.
+12.2  Boarding Procedure:
+12.2.1  Ships which have formed “OBP’s” during the Boarding Preparation Phase must now attempt to have their “OBP’s” board and capture by melee the opposing enemy ships to which they have been ordered.  Only “OBP’s” initiate melee.  
+12.2.2  If two opposing ships are simultaneously sending “OBP’s” to capture each other, both parties must melee.
+12.2.3  If one of the opposing ships has ordered a “DBP”, melee occurs if she is attacked by an “OBP”.  If both ships have a “DBP”, “TBP”, or “NBP”, then no melee occurs.
+12.2.4  If an “OBP” (not “DBP”) boards a ship which has ordered a “NBP” or “TBP” only, that “OBP” automatically captures the ship without melee.  The “TBP” would effect its transfer simultaneously.
+12.2.5  If several “OBP’s” are boarding the same ship, their total melee strengths are added together.
+12.2.6  If an “OBP” is ordered to board a ship which has ordered both an “OBP” and a “DBP”, the two “OBP’s” must melee first (Only if the OBP’s are against each other.  If it was against another enemy ship, the “OBP would attack the “DBP” with the attack by the remaining “OBP” against the other enemy ship being resolved separately.).  If victorious, the “OBP” must continue the melee with the “DBP”.
+12.2.7  If an enemy ship “surrenders” during the Combat Phase, an “OBP” intended for that ship may go aboard to act as a prize crew.
+*12.3  Melee Procedure:
+*12.3.1  Each crew square involved in a melee is worth a certain number of melee factors dependent on the ship’s quality and type of boarding party.  The number of melee factors each crew square is worth is given on the Crew Melee Strength Table.    Each side multiples the number of crew squares in the melee times the number of melee factors per crew square to find the Total Melee Strength (TMS) in the melee.
+12.3.2   Melee is conducted simultaneously, each player rolling one die and consulting the Melee Resolution Table.  The number rolled on the die is cross-gridded with the player’s TMS.  The result is the number of enemy crew squares to be marked off on the lowest crew section of the boarding party.
+12.3.3  Melee once initiated must continue until one ship surrenders, ships become ungrappled or unfouled, or both sides disengage by mutual consent.  If after three rounds no conclusion is reached, the melee must continue the next turn.
+12.3.4  Crew sections already engaged in melee may not quit until one of the conditions in 12.3.3 has been met.  New crew sections may be added to the melee each turn, if available.
+12.3.5  A victorious “DBP” has the option of boarding the opposing ship.  When the “DBP” boards it automatically changes its status to “OBP” and must continue melee for the remaining rounds if necessary.  Note: When the “DBP” changes to a “OBP” it will lose the modifier it enjoyed as a “DBP” and its TMS must be recalculated. 
+12.3.6  If 2 different crews are combined in melee,  losses are to be taken as evenly as possible between the crews involved..
+Capturing Procedure:
+12.4.1  Any ship which surrenders in any of the four ways, either by “striking”, “firepower”, “melee” or “immobility” may be captured.
+12.4.2  A ship which surrenders by melee is automatically captured by the victorious boarding party which is considered to be on the deck of the ship the enemy boarding party came from.  It now becomes the prize crew.
+12.4.3  A ship which surrenders by any other means is captured when either a “TBP” or “OBP” is placed aboard.  The boarding party becomes the prize crew (See 10.28)
+12.4.4  Surrendered ships may not fire their guns, melee, or move as long as they are surrendered.  (If surrendered by “striking”, “firepower”, or “immobility”.)
+12.4.5  A prize crew runs captured ships normally while on board.  They can sail the ship, engage in melees and fire and load the guns (but at two tables less than normal).
+12.4.6  Once a ship is captured, the victorious player opens a new column on his log sheet for the captured ship, copying all information (including damage) from the old enemy log.
+12.4.7  The original crew is still marked on the ship’s crew section of the log.  The prize crew is kept on a separate piece of paper.
+12.4.8  If for any reason a prize crew leaves, or is eliminated, the ship returns to the control of the original owner.  
+12.4.9  At least one crew square of the prize crew is required for every six prisoner crew squares on a ship.  If the numbers fall below this ratio, the prisoners immediately take over the ship, and the prize crew becomes prisoners.
+12.4.10  The captured ship assumes the quality of the prize crew.
+*12.4.11  If a ship with a prize crew on board is fired upon, take all “odd” crew square losses (i.e. the first, third, fifth, etc. losses) that occurs in a Combat Phase from the prize crew and all “even” losses from the prisoners.  Remember that ships with all their hull squares marked out can not be fired upon.
+13.0  RELOAD PHASE
+Ships must have their broadsides loaded in the beginning of the scenario (Exception, see 13.5).  Reloading of fired broadsides takes place in the last phase of the turn.
+13.1  A ship can load one complete broadside per turn.  Only one side can be loaded, not both.
+13.2  A broadside can be loaded in the same turn that it is fired, and fired again during the following turn or any later turn.  Thus it is possible for the same broadside to fired every turn.
+13.3  In the Basic Game, only roundshot may be fired.  Reloading is indicated in the log by writing the letter of the load under the “R” or “L” column of the load section at the appropriate turn number.
+13.4  A broadside may be fired even if there are no targets, but the advantage of initial broadside is lost.
+13.5  In Design Your Own (DYO) scenarios where the ships enter from the corners (or where noted by scenario instructions), players may defer loading their guns until the Reload Phase of turn 1 without effect to their initial broadsides.
+
+14.0  VICTORY CONDITIONS
+Victory conditions depend upon the scenario.  Any special conditions will be written in the appropriate scenario.  General victory conditions will be split into two categories – those for single ship scenarios and those for multi-ship scenarios.
+14.1  Single Ship Victory Conditions:
+Single ship scenarios end when one ship “surrenders”.  The other player is the victor.  There is no time limit for this.  Other situations that qualify are printed below:
+14.1.1  If a player refuses to have combat and continually moves his ship out of the enemy’s ship’s range.  He is considered the loser.  This is not an explicit rule so some intelligence must be used to implement it.  Its function is to keep partially damaged ships from attempting to draw by avoiding victory conditions.
+14.1.2  If both ships “surrender” simultaneously, it is a draw.
+14.1.3  Loss of all crew squares will automatically end the game with victory for the other side, even if that side “strikes”.
+14.1.4  As soon as the victory conditions are met, the game ends at that point; and the turn is not completed.
+14.2  Multi-Ship Victory Conditions:
+In Multi-ship scenarios, special victory conditions are printed with the scenario.  Some general rules follow:
+14.2.1  Each ship has a point value written in the order of battle.
+14.2.2  Ships which strike, give the opposing player that ship’s point value.
+14.2.3  Ships which have been captured count its value to the opposing player.
+14.2.4  At the end of the scenario, all points are counted and the player with the highest amount is declared the winner.
+
+15.0  MISCELLANEOUS
+Except for scenarios where land hexes are present, or where land is defined as being just off a certain board edge, it should be possible for players to keep from sailing off the mapboard by the expedient of moving all the counters a certain number of hexes in the same direction.  This method maintains the ship’s relative position to one another.
+
+At other times when all ships have moved to one side of the board, it will be advantageous to merely lift the now unused side of the mapboard and place on the other side of the portion of the board now containing all the vessels.
+ADVANCED GAME RULES
+
+16.0  INTRODUCTION
+Upon mastering the Basic Game rules, players may wish to advance to a more realistic and complex version.  The Advanced Game offers just that with a set of rules which can easily be incorporated in to the Basic Game.
+
+All Basic Game rules apply to the Advanced Game unless otherwise stated.
+
+16.1  Advanced Game Tables:
+The Advance Tables card contains the set of tables used in the Advanced Game.  Several of the Basic Game tables have been modified for the Advanced Game and adjustments in play must be made for this.  New tables have been added and their functions will be explained in the appropriate section of rules.
+16.1.1  HDT Modifications:
+16.1.1.1  Rake: If a ship is raking, cross-index the range of the target with the number of guns firing on the range table.  The number in the parenthesis determines which Hit Table is to be used.
+16.1.1.2  Stern Rake: A bonus of +1 is added to a rake any time it is fired at a ship’s stern.
+16.1.2  Hit Tables:
+16.1.2.1  The number of Hit Tables has been increased by two to Hit Table 10 in both hull and rigging sections.  If a firing ship’s Hit Table has been modified to a value greater than ten, resolve the attack as separate die rolls.  Each die roll must be made on the highest possible table.  (Example: The greatest modification for a firing ship is 20.  This would allow the ship to fire twice on Hit Table 10 only and not in other combination.  Thus modified 11’s would be a Table 10 plus a Table 1; 12’s a Table 10 plus a Table 2 and so forth.)
+16.1.2.2  In each Hit Table, the 6 results are marked with an asterisk.  These indicate a possible critical hit.
+16.1.2.2.1  If a 6 is rolled on any Hit Table, roll two dice and index this value with the aspect (either hull or rigging), on the Critical Hit Table.
+*16.1.2.2.2  Any Critical Hit damage acquired is applied after all other damage has been recorded at the end of the Combat Phase.
+16.1.2.2.3  All critical hit damage is cumulative.
+16.1.2.2.4  Some of the results are a function of one or more of the Optional rules.  Those players not using the appropriate Optional Rule must ignore the result, taking a “no effect” instead.
+16.1.2.3  Low Powder:  Ships having used all of their available loads (See Reload Phase, 26.0) are considered to under a condition called Low Powder.
+16.1.2.3.1  Ships firing while at low powder suffer a die roll modification found on the HDT under the column marked Low Powder.
+*16.1.2.3.2  Also when firing under Low Powder conditions, anytime the combat die roll is a one, there is the possibility of a fire breaking out.  To determine whether a fire does in fact break out; roll two dice, on a roll of twelve, a fire breaks out and the player resolves the 2H Critical Hit as found on the Critical Hit Table.
+
+16.2  Log Modifications:
+16.2.1  The number of hull squares is increased to one and a half times the Basic Game value (rounded up).  Gun, carronade, and crew values are twice as large as the Basic Game values.  These changes are made while completing the log.  Note the Ship Specification Sheets in the Addendum-Part 2 are already modified.  This will still need to be done for any historical scenarios from the 2nd Edition Rules or any of the General Articles in the Appendices.
+16.2.2  Each broadside and carronade section is sub-divided equally in to a bow and stern section.
+
+17.0  SEQUENCE OF PLAY
+The expanded sequence of play is presented and must be followed in exact order.  Each turn is composed of ten phases of play.
+
+
+A.  Wind Phase:
+Roll two dice to determine wind change, and if so, how it will change.  This is done every turn.
+B.  Unfouling Phase:
+Make attempts to unfoul ships which were fouled on previous moves.  Roll for sinking or exploding ships.
+C.  Movement Notation Phase:
+Movement and/or Repair is plotted secretly by all players on their ships logs (move column).  Anchoring, up-anchoring, cutting anchors and sail status orders are written in the Notes section of the log.   
+D.  Movement Execution Phase:
+Each ship is moved exactly as ordered in the log.  Retrace any possible collisions one hex at a time.  Check for fouling.
+E.  Grappling and Ungrappling Phase:
+Attempt to grapple, avoid grappling, or ungrapple.
+F.  Boarding Preparation Phase:
+Write any boarding parties in the logs of the involved ships.
+G.  Combat Phase:
+Resolve all firing, and mark all hits in the logs.  Determine if certain ships are to sink or explode.
+
+H.  Melee Phase:
+Resolve melees.
+I.  Reload Phase:
+Reload broadsides – a variety of ammunition may now be used.  Erase any applicable squares if repairs are completed.
+J.  Full Sail Phase:
+Place or remove full sail counters on ships as indicated by the notations made.
+
+18.0  WIND PHASE
+Wind is no longer a constant factor in the game.  Changes may occur in both direction and velocity.
+18.1  Wind Numbers:
+Each scenario lists an initial wind direction number that indicates the direction in which the wind is blowing at the start of the game, a wind velocity number that represents the strength at which the wind is blowing, and a wind change number that determines any possible shift in wind direction and/or velocity.
+18.1.1  The initial wind direction is recorded by moving the wind marker to the stated direction number on the wind direction hex.
+18.1.2  The wind velocity is determined by checking the wind velocity number and indexing it with the proper velocity.  There are eight types of wind velocity; each with a corresponding wind velocity number: (0) becalmed, (1) light breeze, (2) moderate breeze, (3) normal breeze, (4) heavy breeze, (5) gale, (6) storm, and (7) hurricane.
+18.1.3  Wind change is determined in the Wind Phase of each turn by rolling two dice.  If the result equals the wind change number, the wind changes as follows:
+18.1.3.1  A die is rolled and the Wind Direction Changes Table is consulted.  The wind arrow is then shifted as directed by this table.
+18.1.3.2  A die is rolled and Wind Velocity Changes Table is consulted.  The velocity is then shifted as directed by this table.
+
+Note: For any of the historical scenarios which are printed with the original wind change numbers, consult the Wind Change Conversion Table for use with these rules.
+
+18.2  Wind Effects:
+18.2.1  Wind Direction: Same effect as in the Basic Game.
+18.2.2  Wind Velocity: Effects are as follows: (Please note for the full range of Wind Velocity using the Wind Effects Table, consult Optional Rules)
+18.2.2.1  If the wind velocity should increase a step from gale to storm, all ships may no longer use full sails.  Ships at full sail at the time of the wind change suffer rigging damage and must mark out rigging squares equal to half (rounded up) of the roll of one die.
+18.2.2.2  If the velocity should increase a step from storm force to hurricane force, the game ends immediately.  The player ahead on points is declared the winner, otherwise it is a draw.
+18.2.2.3  If the wind velocity drops a step from light breeze to becalmed, no movement other than turning is allowed until the wind velocity increases.  Velocity cannot be reduced to less than (0).
+18.2.2.4  At wind velocity 5 (gale), ship classes 1, 5 and 6 subtract one form the Hit Table.
+18.2.2.5  At wind velocity 6 (storm), ship classes 1 and 4 subtract 2 from the Hit Table.  Ship classes 2 and 3 subtract one from the Hit Table.
+
+
+19.0  UNFOULING
+This phase remains the same as in the Basic Game with the following modifiers now available.  
+19.1  -1 For each ship which is at full sails.
+
+20.0  MOVEMENT NOTATION PHASE
+There are several additions and changes to this phase.
+
+20.1  Full Sails:
+Full sails allow ships to increase their movement allowance by setting more sails than normally used in battle.
+20.1.1  Like battle sail speed, each ship has a full sail speed that is given on each ship’s counter.  There are three full sail speeds: 5, 6, and 7.  The following diagrams give a ship’s movement allowance at full sail in relation to wind attitude:
+
+
+
+
+
+
+
+
+
+
+
+20.1.2  Note in each ship’s log each full sail movement allowance per attitude.
+20.1.3  All shots directed at the rigging on full sail ships add the results in parentheses on the Hit Table to the normal result.  Example:  A Hit Table number 4 shot at the rigging of an enemy ship with full sails; upon a die roll of 3 would result in 2R-C-G (taken from the normal result) of damage and have an additional R being taken for being at full sails for a total of 3R-C-G.
+20.1.4  Any ship which loses its entire first section of rigging, immediately removes his ship from full sail status.  It may not use full sails for the remainder of the game unless it repairs its rigging so as regain  at least one rigging square in the first section (see 20.5, Repairs).
+20.1.5  A ship sets sail to full sail speed by placing a full sail marker on his ship.  The procedure for placing and removing full sail counters is as follows:
+20.1.5.1  Players may freely determine their full sail status at the beginning of the game.
+20.1.5.2  Once the initial sail status has been selected and the game is underway, any changes that a player wishes to make to a ship’s sail status (i.e. move from full sail to battle sail; or battle sail to full sail) must be plotted as part of the Movement Notation Phase.  The actual change will occur as plotted during the Full Sail Phase.  The notation is made in the Notes section as “FS”, full sails and “BS”, battle sails.  If no notation is made, sail status does not change from its current status.
+20.1.5.3 To effect a change in sail status requires the assigning of a crew section to the task ie. Men in the Rigging.  This is always the lowest numbered crew section with at least one undestroyed crew square.  Having Men in the Rigging affects Combat and Boarding Parties.  See 24.5, Combat Phase and  23.0 Boarding Preparation Phase 
+
+20.2  Backing Sails
+Ships that wish to stay in place for part of the Movement Execution Phase, may use the notation “B” (for “backing sails”) in the moves column of the log.  The use of backing sails is important when trying to avoid collisions.  Backing sails may be used in part of the movement plot.  For each movement factor of the movement allowance that a ship expends staying in place, a “B” must be written.  Example:  Ships A and B have both been noted to move into the same hex: 
+
+
+A collision would occur in hex J20.  If ship B had used the backing sails rule it could amend its movement plot to “BBB1”.  Thus it would enter hex J20 on the last move of the phase thereby avoiding ship A which by that time has already passed through the hex.  Note that each B written is equivalent to one movement factor expended.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+20.3  Anchors:
+During the Movement Notation Phase, players may decide to anchor their ships by making the appropriate notation in the notes column of the ship’s log.  The advantage to anchoring is that it improves the firing accuracy as a result of the steadier fire maintained from a more stable position.  This rule may only be used in certain scenarios which are so designated.
+20.3.1  There are three types of anchoring: Ordinary anchoring, written as “A”; anchored by bow, written as “AB” and anchored by stern (written as “AS”.  A ship may not be simultaneously anchored by more than one type of anchoring.
+20.3.2  Anchoring does not go into effect the turn of noting it on the log, but the following turn.  Ships may write their movement plot and continue operating normally the turn they decide to anchor.  The following turn though, the ship must stop at anchor.  
+20.3.3  Ordinary anchored ships may not move or turn in place.
+20.3.4  Ships may also be anchored by “springs”.  This was a system of cables attached to the anchors which enabled a ship to be turned while at anchor.  A ship can anchor on “springs” by notations of either “AS” (anchored by the stern) or “AB” (anchored by the bow).  A ship anchored by the stern will pivot on its stern hex when turning.  While a ship anchored by its bow will pivot on its bow hex when turning.
+20.3.4.1  Ships on springs can be turned up to 120 degrees left or right during the Movement Execution Phase.  The turn and degree amount (60 or 120) must be noted in the moves column during the Movement Notation Phase.
+20.3.4.2  Ships being turned on springs cannot reload, or fire during that turn, although repairs can be made and melees fought.
+20.3.5  The effect of anchoring on firing is found in the Advanced modifiers of the HDT.
+20.3.6  A ship can up-anchor by writing the circled letter “A” in the notes column of the log for two consecutive turns.  On the turn following the completion of this, the ship resume normal maneuvering.  
+20.3.6.1  During the two turns that a ship is up-anchoring, she cannot load or fire her guns, make repairs or engage in melees.  
+20.3.6.2  A ship is not considered anchored while up-anchoring.
+20.3.7  A ship can cut anchors by writing “a” in the notes column of the log.  The turn following this notation, the ship can resume normal maneuvering.
+20.3.7.1  Once a ship has cut its anchors, it cannot be anchored again.  Note: If using the Revised Ship’s Log Sheet, both anchors boxes must be checked.
+*20.3.8  Ships are considered to have two anchors.  If a ship suffers the loss of one anchor due to a critical hit, the following results:
+20.3.8.1  The ship loses the anchored modification on the HDT.
+20.3.8.2  If the ship was anchored by springs, it may no longer turn.
+20.3.8.3  Once it has suffered this result twice, it may no longer anchor during the scenario.
+Note: The ship is still considered to be anchored for the purposes of moving/drifting, it simply loses the benefits while anchored by only one anchor.  The Revised Ship’s Log Sheet has two boxes to reflect both anchors.   Ships not at anchor with only one remaining anchor square, may still anchor.  
+
+
+
+20.4  Turning:
+20.4.1  Ships which do not move from their bow hex during the previous Movement Execution Phase are limited in their movement by the following restrictions:
+20.4.1.1 They must move at least one hex straight ahead before they may turn; or they can turn in place 60 degrees but cannot make no other movement.
+20.4.1.2  They lose one turning factor of their turning allowance for the phase.
+20.4.1.3  They may increase sail from battle sail to full sails only if they move at least one hex in a straight line in the Movement Execution Phase.  No turning is allowed at any time during the move.  (There is no effect for going from full sails to battle sails).
+*20.4.2  Ships which end a previous Movement Execution Phase with a turn, cannot begin notation with a turn for this turn unless the turn is the only move for the phase.  Ships must move ahead one hex before making another turn.  
+Example:  On turn 5, a ship plots a move of “L1R”.  On turn 6, if the player wishes to plot any forward movement for the turn, it must first move forward one hex for ending turn 5 in a turn, thus it could plot “1L1”.  Plotting another “L1R” maneuver is illegal.    
+20.4.2.1  In the event an illegal move is plotted, only the portion of the move which is legal is taken.  In the case ending one movement phase with a turn and beginning a following phase with a turn without first moving ahead one hex, only the turn portion of the second turn is accepted with the rest of the notation voided.
+Example:  If on turn 5 a movement plot of “L1R” is noted and then on turn 6 another “L1R” is plotted, illegal for not noting a movement ahead one hex, only the turn “L” is allowed and the rest of the movement, in this case the “1R” is voided. 
+20.5  Repairs:
+20.5.1  Ships desiring to make repairs during this turn, must make a notation along with their move in the moves column.
+20.5.2  Next to the ship’s move, the player indicates the type of repair to be underway by writing “RH” for hull repairs; “RG” for gun repairs; and “RR” for rigging repairs.
+20.5.3  Making the notation commits the ship to making the type repair indicated.  A ship indicating that it is attempting repairs may not fire during the Combat Phase.
+20.5.4  Ships attempting repairs may not expend any of its movement allowance to making a turn during its movement.  Ships illegally noting a turn and the attempt to repair have the repair voided and still are not allowed to fire during the Combat Phase.  The turn is taken as written.
+20.5.5  Ships attempting repairs may not note a change of sail status nor may attempt to anchor or up-anchor.  Ships illegally noting a sail status change, anchoring, or up-anchoring have the repair voided as well as the attempt to change sail status, anchor or up-anchor voided.  Ships are still not allowed to fire during the Combat Phase.
+20.5.6  Ships with repairs underway may not form “OBPs” but may form “DBPs” in defense of their ship.  If a “DBP” is formed this voids the repair underway.
+20.5.7  Ships may only make repairs to areas of the ship to which it has suffered damage.  Only one type of repairs may be made per turn.
+
+21.0  MOVEMENT EXECUTION PHASE
+This phase is identical to that of the Basic Game.
+
+22.0  GRAPPLING AND UNGRAPPLING PHASE
+This phase is identical to that of the Basic Game except for the additional modifiers:
+22.1  Grappling:
+22.1.1  +1 If the wind velocity number is 1.
+22.1.2  -1 If the wind velocity number is 5.
+22.1.3  -2 If the wind velocity number is 6.
+Ungrappling:
+22.2.1  +1 If wind velocity number is 6.
+
+
+
+23.0  BOARDING PREPARATION PHASE
+This phase is identical to that of the Basic Game except as follows:.
+Note: Having men in the rigging (having plotted a change in sail status) limits the lowest numbered crew section’s (having one undestroyed crew square)  availability for boarding parties.  The section in the rigging is not available for either “OBPs” or “TBPs”.  It is available for a “DBP”  which if assigned negates the plotted change in sail status. 
+See also 20.5.6, Repairs
+
+24.0  COMBAT PHASE
+This phase is conducted in the same manner as the Combat Phase in the Basic Game.  However, each broadside must fire a reduced field-of-fire, but may use additional types of ammunition.
+
+
+*24.1  Reduced Field-of-Fire:
+The ship’s field of fire in the Basic Game was simplified for the sake of playability.  Ships actually had a more limited field at which a full broadside could be trained at a target, although certain sections could fire at targets outside of this field.
+24.1.1  The play of guns is divided into five fields, numbered 1 through 5:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+24.1.2  Fields 1, 2, and 3 cover hexes that can be hit by the entire broadside.  Field 4 can be fired at only by the guns in the stern section. Field 5 can be fired at only by the guns in the bow section.  (see 16.2.2, Log Modifications)
+24.1.3  A ship may never fire at more than one target with a broadside, even if just a section of the broadside is fired.
+24.1.4  If only one section fires an initial broadside, it is treated as if the entire initial broadside has been fired and the other section loses the advantage.
+24.1.5 Blocked Fields of Fire:
+24.1.5.1  If a ship fires at a target that lies within the field of the entire broadside (Fields 1, 2, or 3), the ship must fire at the closest target as explained in the basic game.
+24.1.5.2  Ships cannot fire the stern section at a target in field 4 if there are closer targets in fields 2 or 4.  Ships may fire at a target in field 4 if there are targets closer in fields 1, 3 or 5.
+24.1.5.3 Ships cannot fire the bow section at a target in field 5 if there are closer targets in fields 3 or 5.  Ships may fire at a target in field 5 if there are targets closer in fields 1, 2 or 4.
+24.1.5.4  Note: In many cases a ship will straddle two fields.  For the purpose of determining fire, that ship occupies the lowest number field.  For the purposes of determining line of sight, that ship occupies both fields.  There are two exceptions to this rule:
+24.1.5.4.1  Ships firing at a target straddling fields 2 and 4 may not fire the stern section if there is a closer target occupying field 4.  It may fire its bow section.
+24.1.5.4.2 Ships firing at a target straddling fields 3 and 5 may not fire the bow section if there is a closer target occupying field 5.  It may fire its stern section.
+ Determination of the field-of-fire is made independently of the determination of the range between two opposing ships.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Example: Ships A and B are firing at each other.  Determination of fields of fire indicates that a full broadside may be fired by both ships as they mutually occupy each other’s field 3.  Range determination indicates, though, that the closest range is two hexes counted through field 4.  As both field of fire and range must be determined independently, each ship may fire at each other with a full broadside at a range of two.
+24.1.7  Gun hits are marked off the section closest to the firing guns.  If both sections are equidistant, then the defender chooses which gun squares are lost.  If there are no guns left in that broadside, hits are marked off on any unmarked gun squares of the defender’s choice.  This includes carronades.
+
+Please Note: This section of rules causes the largest number of problems in properly interpreting the rules and the original rules are bereft of any examples that might guide correct play.  Attached is an addendum in which are a large number of examples and written clarifications rather than include it here.
+
+Types of Ammunition:
+Roundshot was not the only type of ammunition used on ship.  Others were developed to cause different types of damage.  Each has certain advantages and disadvantages.  This rule covers several other types of ammunition and their capabilities as regards range, effectiveness, and loading times.
+24.2.1  Roundshot: As roundshot is the only type of ammunition used in the Basic Game, there is no change in its used in the Advanced Game.
+24.2.1.1  The range of roundshot is still ten hexes.
+24.2.1.2  Roundshot does not modify the Hit Table.
+24.2.1.3  One broadside may be loaded with roundshot in one turn.
+24.2.2  Chainshot: This type of ammunition was used to destroy rigging in order to immobilize  enemy vessels.
+24.2.2.1  Chainshot has a maximum range of four hexes.
+24.2.2.2  Chainshot increases the Basic Hit Table by the amount found in the chainshot section under Optional modifiers of the HDT.  Chainshot lacks the penetrating ability of shot, thus “H” and “G” hits count as misses when it is used.
+24.2.2.3  Chainshot is loaded in one turn.
+*24.2.2.4  The British may never fire chainshot.
+24.2.3  Doubleshot: A highly effective type of ammunition when fired at close range, doubleshot was generally a double load of roundshot.
+24.2.3.1  Doubleshot has a maximum range of just one hex.
+24.2.3.2  Doubleshot increases the Hit Table number by the amount found in the Optional modifier section of the HDT.
+24.2.3.3  Ships with three available crew sections (sections need not be full sections) may load doubleshot in one turn.  If there is less than three crew sections available doubleshot takes two turns to load.  “D” is marked in the load section of the ship’s log for two consecutive turns.  On the turn following this, the doubleshot may be fired.  The other broadside may not be loaded during either of the two turns.  Once doubleshot has begun being loaded, the ship is committed to firing it.
+*24.2.3.4  To reflect the loading of the second ball as late as possible, those loading with doubleshot, may fire the broadside as roundshot for ranges beyond one hex.  Remember however that it still cost you the two reload squares.  This may not be done if at low powder.
+24.2.4  Grapeshot:  Grapeshot is used exclusively against the enemy crew.  Grape was composed of canister or langridge.  It was ineffective against the ship itself but devastating against exposed crewmen.
+24.2.4.1  Grapeshot has a maximum range of one hex.
+24.2.4.2  The Hit Tables are not used with grapeshot.  Instead, the modified Hit Table number represents the number of crew squares destroyed.
+24.2.4.3  Only one turn is needed to load a broadside with grapeshot.
+24.2.4.4  Grapeshot cannot be fired against an opposing ship whose crew is in the second or later turn of melee with the firing ship.
+*24.2.4.5  Prior to firing a broadside loaded with roundshot, a player may choose to have the broadside fired as grapeshot instead of the roundshot.
+24.2.5  Loaded ammunition cannot be changed without firing out the first type of shot.
+Exception: See 24.2.4.5 above.
+24.2.6  Carronades always carry the same type of shot as the regular broadside even if the broadside has changed the type shot before the carronades have fired.
+24.2.7  If the target ship has a boarding party, it receives an additional crew square loss over and above the normal crew loss.
+
+24.3  Sink and Explode:
+24.3.1  If any ship “surrenders by striking” in the Combat Phase, the possibility that it may sink or explode must be determined.
+24.3.2  When all of a ship’s hull squares have been marked off, the enemy player rolls a die, and the Destroyed Hull Table is checked.
+24.3.2.1  If the result indicates the ship “surrendered by striking”, handle as in the Basic Game.
+24.3.2.2  If the result indicates that the “surrendered” ship will sink, the ship does not sink immediately.  Continue to roll the die once for that ship on each succeeding turn during the Unfouling Phase until a six is rolled.  At that time the ship sinks and is removed from the mapboard.  Place a sink marker on a ship about to sink.
+24.3.2.3  If the result indicates that the “surrendered” ship will explode, it does not do so immediately.  Continue to roll the die once for that ship on each succeeding turn during the Unfouling Phase until a six is rolled.  At that time the ships explodes, and is removed from the mapboard.  *24.3.2.3.1  As damage caused by exploding ships was a function of the ship’s size, a variable damage effect is herein incorporated.  A ship exploding will cause damage to any adjacent ship on the rigging effects section of the Hit Table number double to her one hex rake bonus, but in no case to exceed Table 10.  In addition  Number 2H of the Critical Hits Table must be checked for fire damage.  Ships at full sails take damage based on being at full sail. Roll for each ship separately.  Mark this damage on each adjacent ship or ships.  Place a explode marker on ships about to explode.
+For Example: An exploding British Large Class 74 would use Hit Table #10; 74’s have 18 guns plus 4 carronades for a total of 22 guns in a broadside; 22 guns have a one hex rake bonus of eight, doubled is sixteen, but because the maximum allowed is a Table Ten die roll, all adjacent ships would undergo a Table Ten shot at their rigging. 
+Note: In determining the table used, the exploding ship’s initial guns are used and losses do not reduce the table used.  Thus even if the above British Large Class 74 had suffered 4 gun hits to the port broadside and 5 gun hits to the starboard broadside, its full broadside 22 guns is used.
+Note: Any ships which roll a six, suffer a critical hit, same as if she had been fired upon. 
+24.3.3  Ships which will explode or sink remain on the mapboard until they do so, but can take no further part in the battle.  The crew cannot be taken off, repairs cannot be made, and the crew cannot melee or fire the guns.  The ship cannot be sailed, although it will drift normally.  It may not be captured. 
+24.3.4  Ships which will explode or sink cannot be “scuttled” so as to sink sooner than indicated on the die.
+24.4  Rakes:
+24.4.1  Ships qualify for raking only when they occupy a hex toward which the bow or stern of the target ship is pointing.
+24.4.2  A ship which occupies the hex directly in front of the target ship’s bow or directly behind the target ship’s stern and which may bring all its guns to bear, may fire a rake even if return fire is possible (Note: This means it is at a one hex range only.)
+24.4.3  A bonus of +1 is added to any rake which is fired into the target ship’s stern.
+*24.4.4  Ships can only be raked within a five hex range.
+*24.5  Men in the Rigging:
+24.5.1  If in the same turn a ship makes a notation for a sail status change (from full to battle or from battle to full) and fires her guns; she has men in the rigging.  As such she is considered to be a crew section down when using the Hit Determination Table.  For Example:, a French Crack 80 firing her full broadside of 22 guns at a range of three would result in a Hit Table #3 shot (range in hexes gets a table 3 increased to table 5 for having a crack crew (+2), reduced to 3 for being one crew section down(-2))
+
+ MELEE PHASE
+This phase is identical to that of the Basic Game.
+
+26.0  RELOAD PHASE
+*26.1 Loads: One broadside per side may be reloaded with “R” (roundshot), “D” (doubleshot), “C” (chainshot) or “G” (grapeshot).
+26.1.1  Each ship has 30 reloads.  Mark off one square each time you reload a broadside with roundshot, chainshot or grapeshot and two squares if loading doubleshot.
+26.1.2  When all reload squares are marked off, the ships may continue to fire; however at a condition of low powder.  Ships firing at low powder use the modifier as shown on the HDT under the column, low powder.  
+26.2  Repairs:  Ships which did not load or fire guns, engage in melee, become involved in a collision, up-anchor, change their sail status, or expend any factors of its movement allowance to turn and made a repair notation (20.5) during the Movement Notation Phase; may make repairs provided that there at least two crew sections available.  (The second section need not be complete).  
+26.2.1  If a ship meets the above conditions, the player may make a notation of the repairs underway as noted during the Movement Notation Phase in the Notes Column .
+26.2.2  All repairs take three turns to complete (not necessarily in sequence).
+26.2.3  After completion of the third set of repairs of the same type, a player may erase two squares of damage of the same type as the repairs.  
+
+27.0  FULL SAIL PHASE
+Place or remove full sail counters on ships as indicated by the notations made during the Movement Notation Phase as shown in the Notes Section. If a ship was plotted to change from battle sail to full sail and due to losses incurred during the Combat Phase, no longer have the rigging necessary for full sail capability, it remains at battle sails.
+
+ Note: Crew sections which due to combat results during the turn lose their last remaining square(s), are still considered to have completed their assigned task.  Thus a two square crew section assigned to change Full Sails, does so, even if during combat a “2C” result is suffered eliminating the two squares left in its section.
+
+OPTIONAL RULES
+
+This section offers a set of optional rules that may be added in any combination to suit the player’s taste.  Each optional rule adds greater scope and realism as well as complexity to play the game.
+
+30.0 TIMED MOVES
+To make the game flow more quickly, use a timer to limit the writing of movement.  Allow one minute to write for single ship actions, two minutes for up to three ships per side, and an additional three minutes for each additional six ships per side.  Ships whose orders do not get written, move on a straight course their full movement allowance.
+
+MULTI-PLAYER COMMUNICATION	
+During the age of sail, flags were used to communicate tactics to the ships of a fleet.  This system was inefficient for three major reasons:
+It took time to set up the coded message to be sent, delaying implementation of important tactics.
+In the smoky haze of battle, it was often difficult, if not impossible for ships to discern the flags.
+This system limited the number and variety of messages which could be sent.
+To reflect this in multi-player games, the following rules may be used:
+31.1  Messages between ships of the same fleet may be sent in writing only.  This is done during the Movement Notation Phase.
+31.2  Only one message per ship may be sent to the other ships of the fleet in that phase.
+31.3  This option should be used with the “timed moves” option.
+31.4  Players may also wish to forbid any communications between players commanding different squadrons of different nationalities, to simulate their difficulties in reading each other’s flag signaling system.
+
+
+COMMAND LAG
+The number of ships any flag officer of the period could actually control effectively was a squadron of six ships (often less).  There would be a considerable “time-lag” between the time an admiral signaled a squadron not under his immediate control, and the time that squadron actually carried out his orders.
+To simulate this loss of time in games where a single player is commanding more than one squadron, use the following rules:
+32.1  A player must select a ship as his flag ship and divide the fleet into squadrons of six or less ships.
+32.2  The player writes the moves for the ships in his immediate squadron from turn to turn in the normal manner.
+32.3  The player writes the moves for the ships in other squadrons three turns in advance.  Thus, at the start of the game, the player would write movement orders for these ships for turns one, two and three.  After turn one was completed, he would write the movement orders for these ships for turn four, etc.
+32.4  Alternatively, all ships completely or partly within ten hexes of the flag ship can have their movement written from turn to turn.  All other ships must have their movement written for three turns in advance.
+32.4.1  Ships, which had their movement written for three turns in advance, but end their turn within ten hexes of the flag ship, can have excess movement orders erased, and can be marked from turn to turn.
+32.4.2  Ships which find themselves over ten hexes from the flag ship, and which have had their previous movement marked from turn to turn, must have their marked three turns in advance, the next Movement Notation Phase.
+32.5  If the flag ship surrenders, all movement for ships of that squadron must be marked for the next five turns.  After these five turns have been completed, the player can designate a new flag ship and begin moving normally again.
+32.6  In multi-player games, each player chooses a flag ship for the squadron that he controls.
+
+CHANGING WIND NUMBER
+When changing wind direction and wind velocity, a player may roll the die a fourth time and consult the Changing Wind Number Chart.  This new number represents the new wind change number.  It may not be rolled if the wind does not change in velocity or direction.
+
+34.0  VARIABLE WIND DIRECTION AND VELOCITY
+At the start of any scenario, a player may, instead of accepting the historical wind factors, roll a die 3 times for a new wind direction, wind velocity and wind change number.  The new direction will correspond to the die roll compared to the wind direction hex on the mapboard.  The wind velocity would be the match of the second die roll with the die roll column of the Wind Velocity Table (Wind Effects Table).  The wind change number would be the match of the third die roll with die roll column of the Changing Wind Number Chart.
+
+35.0  TOWING
+35.1  A ship may tow another friendly ship.
+35.2  Ships towing a ship of equal or inferior gun rating, lose one hex of speed in all wind attitudes.  Ships towing a ship of superior gun rating lose two hexes of speed in all wind attitudes.
+35.3  A ship towing another ship in zero movement allowance attitude may still turn in place as in the basic game.
+35.4  Towing Procedure
+35.4.1  Maneuver the towing ship so that its stern is in the hex to which the bow of the ship to be towed is pointing.  Indicate in the “log”, that the ships are to be grappled.
+35.4.2  The two ships can be maneuvered together on succeeding turns, the ship being towed moving directly in the wake of the other ship.  Only one movement plot need be written.
+35.4.3  Ungrappling notations in the “log” will end the tow.
+35.4.3.1  A ship may become involuntarily ungrappled if either ship suffers a 5H critical hit, anchor cable severed.  Roll one die, on even numbers the ship suffers the cutting of the anchor cable; however on odd numbers, the ship has its grapple cut instead.
+35.4.4  Towing can only be done or maintained under wind conditions (2) Moderate Breeze, (3) Normal Breeze and (4) Heavy Breeze.  Ships which began towing under the above wind conditions but have a wind change to an unsatisfactory wind condition, lose the grapple.
+
+LOSS OF RIGGING
+Although the rigging sections do not correspond exactly on a one-to-one basis with the masts of a ship, there is a positive correlation between the fact that a rigging section is lost and the actual material loss of a mast or part of same.  Loss of masts upset the trim of a ship and caused a less stable firing platform.  If a mast fell but did not break cleanly, the ship would be heeled to an extent that both broadsides were useless.  The following rules allow for masts to effect the play of the game:
+36.1  A ship with all rigging sections destroyed is 
+–1HT when firing for ships having up to 6 gun squares and –2HT when firing for ships with 7 or more gun squares.
+In a phase in which a ship loses one or more entire rigging sections (when a numbered section’s squares are all marked off and the last one in the section is marked off), a die is immediately rolled for each section lost and the following table is consulted:
+
+DIE NUMBER    RESULTS
+              1              Mast hangs over the side* 
+            2-6            Mast falls free 
+
+*Additional Die Roll is made to see which side it falls:  1, 3, 5 – left broadside
+          2, 4, 6 – right broadside
+36.2.1  If the mast falls free, the results of the mast loss are the same as the loss of a rigging section.
+36.2.2  If the mast hangs over the side, the ship cannot fire until it has been cut loose.  The Unfouling Table is used, and one die roll per Unfouling Phase is allowed for attempts to cut the mast loose.  The ship’s speed is reduced by one (this is in addition to any loss of speed from the loss of rigging section(s)) and may not turn until it is cut loose.  Any adjacent ship within the play of the broadside over which the mast hangs must roll for fouling.  Note: Should an adjacent ship become fouled, any resulting unfouling does not help cut the mast loose, it merely frees the adjacent ship.  The ship with the mast over its side must still roll to cut the mast free.  As with normal unfouling, both ships are entitled to make unfouling rolls, thus the ship with the mast over its side could make two unfouling rolls, one to unfoul with the adjacent ship and one to cut the mast loose.
+
+37.0  BLOCKED WIND
+When one ship is adjacent to another and lays directly between its bow and stern hex and the wind, the sails would tend to “blanket” or block off the wind to the second ship, thereby slowing it down.
+37.1  If the ship blocking the wind is under full sails, the movement allowance of the ship blocked is cut by two hexes, for that turn.  If the ship blocking the wind is under battle sails and has at least half of its rigging squares left, the movement allowance of the ship blocked is cut by one hex for that turn.
+37.2  A smaller ship could not block the wind of a larger ship as effectively as one of the same size.
+37.2.1  If a ship blocks the wind to a ship mounting 30 plus guns less than the blocking ship, the loss of speed, as described in 37.1 is increased by one, for that turn (FS loss would be 3 and BS loss 2).
+37.2.2  If a ship blocks the wind to a ship mounting 30 plus guns more than the blocking ship, the loss of speed, as described in 37.1 is reduced by one, for that turn (FS loss would be  1 and the BS loss 0). 
+37.2.3  If a ship blocks the wind to a ship mounting 60 plus guns less than the blocking ship, the loss of speed, as described in 37.1 is increased by two, for that turn (FS loss would be 4 and BS loss 3.
+37.2.4  If a ship blocks the wind to a ship mounting 60 plus guns more than the blocking ship, the loss of speed, as described in 37.1 is reduced by two, for that turn (It would have no effect for either FS or BS). 
+
+38.0  RUNNING AGROUND
+Each ship has a depth value.  This value indicates the maximum depth of water in which that ship will run aground.  If a ship enters a hex in which the water depth is equal or less than its depth value, it has run aground.  The depths of shallow water hexes is given in the appropriate scenarios.
+38.1  When a ship runs aground, it stops all movement and may proceed no further that turn.  Readjust the movement plot of the ship’s log to reflect the actual move.
+38.2  Immediately roll one die.  The resulting number indicates the relative difficulty of refloating the ship.  
+38.2.1  On each succeeding turn during the Reload Phase, the die is rolled to see if the ship can be refloated.  The die roll must exceed the number initially rolled or the ship remains aground for another turn.  
+38.2.2  If a six had been rolled initially, this would indicate that the ship cannot be refloated by ordinary means. 
+38.2.2.1  Ship captains willing to throw guns overboard to lighten the load can do so to gain a modifier to their refloat roll.  Scratching out two gun squares (one from each broadside) will gain a player +1 to his refloat roll (to a maximum of +1).  Gun squares for this purpose can only scratched out one per turn, note the loss in the ship’s log.
+
+Please Note:  Guns lost in this fashion are permanently destroyed and cannot be later repaired.
+38.3  Ships that enter land hexes are considered to be destroyed.
+38.4  While aground, ships can not conduct repairs, nor change their sail status.
+38.5  Ships cannot fire their guns while aground.
+38.6  Ships that are successfully refloated are moved back into the hex they occupied prior to running aground.  They may move normally next turn.
+
+39.0  CASTING THE LEAD
+Ships often needed to measure depth of uncharted waters through which they intended to travel.  Casting the lead was a method used to determine this.
+39.1  Players can be assumed to be “casting the lead” for any ships which have moved a maximum of one hex in that movement phase.  On request, the enemy player must tell the depth of water in all the hexes adjacent to their ship.
+39.2  Ships at anchor which turn 120 degrees have moved either stern or bow two hexes and cannot be considered to “casting the lead”.
+
+FORE AND AFT RIGGING
+Allow ships which have fore and aft rigging (ships which are rigged with the type sails used by modern sailboats as opposed to the square sails in general use by warships in this period) to move one hex every second turn in wind attitude “D”.  This rule takes into account the improved weatherliness of fore-and-aft sails.  Ships which carry this special type of rigging will be stated as such in the scenario instructions.  The Full Sail Hit Tables are not used in determining rigging hits against a fore-and-aft rigged ship at full sails.
+
+SPECIAL RULES
+41.1  COPPER BOTTOM
+Some ships, especially during the Revolutionary War period, did not have copper bottoming.  This allowed marine invertebrates to attack the hull and reduce the vessel’s speed.  For those who wish to include this, the following rule is presented:
+41.1.1  All ships designated as being at sea for at least three months and having no coppering will lose one movement factor of its allowance in all attitudes under full sails.
+
+41.2  SCURVY
+During the Revolutionary War period, Navies had not learned how to combat the disease scurvy.  They avoided the effect of crew loss due to this and other diseases on ship’s performance by increasing the size of the crew.
+41.2.1 Ships designated as newly arrived on a foreign station or to a fleet will have one or two extra crew squares per section for the SOL class ships and one extra crew square per section for frigate class ships.
+
+42.0 BOMB KETCHES
+As already noted, one of the counters included with the game is an overview of a bomb-ketch.  As these vessels were used to reduce forts and other land structures, they must be used in conjunction with amphibious operations.
+
+Bomb-ketches as a general definition were ships which carried mortars, ie. guns which fired explosive shells on a high trajectory in order to hit objects behind breastworks or walls.  Bomb-ketches were not very effective nor they ever designed to do battle with other warships.  Their main function was to reduce the defensive capability of forts and/or entrenchments so that amphibious units could land and capture the position.
+
+There are three types of bomb-ketches (more accurately termed bombs) which are available in the game.
+	Single Mortar
+	Two Mortars
+	Mortar Vessels
+Note the Two Mortar bombs were superior to the other two vessels in every respect.  This should not limit the players to using this model exclusively.  Mortar vessels were used during the French Revolutionary Wars and were not popular which led to their abandonment.
+
+These ships also carried regular cannon as well as mortar(s).
+42.1  Bombs may only fire their mortars while anchored.
+42.2  The line of fire for the mortars may never be blocked.  They fired over, not through, obstacles.
+42.3  Fire with broadside guns is normal.
+42.3.1  Broadside guns may not load or fire in the same turn  the mortars load or fire.
+42.4  For the single mortar bombs , a mortar’s field of fire is 270 degrees (bow field) which encompasses both left and right broadside fields and the field between the two toward the bow.  In other words you may not fire through the stern.
+42.4.1  For two mortar bombs, the second mortar may fire in either the left or right broadside but may not fire across the bow or stern.
+42.5  It takes four turns to load mortar(s) (not necessarily in sequence).  This noted in the load section by marking M in the R section for the bow mortar or in the L section for the second mortar of the two mortar bombs.
+42.6  Players filling out the log sheet should mark the mortar(s) hit boxes in the carronade section.
+42.7  Mortars may only be fired at fixed targets on shore or at motionless ships (ie. ships at anchor or aground), not at ships drifting, no matter how slowly.
+42.8  Mortars have a maximum range of 10 hexes and a minimum range of three hexes.
+42.8.1  Mortars may not fire at targets less than three hexes away.
+42.9  Mortars have a base of Hit Table 2 for ranges 3-10.
+42.9.1  The base Hit Table can be modified only by crew quality, crew section lost, and captured ship.
+42.9.2  Mortars may only fire at hull and can due so for entire range, 3-10.
+42.9.3  All hits scored by mortars are tripled.
+
+
+WOODEN SHIPS & IRON MEN
+THE AVALON HILL GAME COMPANY’S TRADEMARK FOR ITS FIGHTING SAIL GAME
+TOURNAMENT EDITION RULES  1.2b
+
+
+Page  PAGE 13of  NUMPAGES 31
+
+
+

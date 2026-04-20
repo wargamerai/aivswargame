@@ -1,0 +1,62 @@
+
+WHAT’S NEW?
+
+For the purposes of Tournament Play, we have revised the WS&IM, 2nd Edition Rules.  All changes are in italics and underlined.  Some changes involve no actual revision but simply move the rule from the Optional Rules to the Advanced Game Rules or provide further clarification or comments.  The rules are set out in a progressive numbering system for easier reference.  Any rule preceded by a *, for example *24.3.2.3.1, has additional information located in the Addendum.  This information may be in the form of explanations, clarifications, or examples.  Here are the areas that have changes made in version 1.2:
+
+Basic Game:
++ Fouling/Unfouling: (see Advanced Game Tables, see also 6.0 Unfouling Phase, see also 8.3 Collisions), Changed to a two dice system with more modifiers. 
++  Grappling/Ungrappling: (see Advanced Game Tables, see also 9.0 Grappling/Ungrappling Phase), Changed to a two dice system with more modifiers, restrictions.
++  Boarding Parties:  (see 12.1.4) Crews transferred to another ship assume the worst crew quality of the two ships.
++  Melee: (see Crew Melee Strength Table)  Changed DBP’s point values for crew squares, now have a bonus, clarified OBPs.
+	
+Advanced Game:
+	+  Wind Change: (see 17.0 Sequence of Play; A - Wind Phase) Is now rolled every turn using two dice.
+	+  Wind Numbers: (see Changing Wind Number Chart) Changed to reflect a two dice system
++  Wind Effects: (see 18.2 Wind Effects) Changed to reflect limited use of modifiers/effects instead of entire Table
+	+  Full Sails: underwent a number of changes
+		+  Full Sail changes must now be noted during Movement Notation (see 20.1.5.2).
+		+  Damage taken against rigging at FS has been reduced (see 20.1.3).
++  Changes in sail status now require commitment of a crew section to Men in the Rigging (see 20.1.5.3).
+		+  Ships at Full Sails suffer a negative HDT modifier (see Advanced Game HDT).
++  Movement: (see 20.4.2) Ships may no longer begin with a turn if ending the previous Movement Phase with a turn.
++  Repairs: (see 20.5 – Repairs) Required to be plotted during Movement Notation, once committed to, cannot be changed 
++  Fouling/Unfouling, Grappling/Ungrappling:   addition of several modifiers reflecting Wind Effects over the Basic Game changes.
+	+  Chainshot: (see 24.2.2.1)  It now has range of four.
+	+  Doubleshot: (see 24.2.3.3) Can be loaded in one turn if ship has three sections available for the task.
++  Men in the Rigging: (see 20.1.5.3 and 24.5 Men in the Rigging)  Addition to sail status changes; use of crew section affects combat, etc. 
++  Rakes: (see 24.4 Rakes)  The optional rake determination rule from the 2nd edition Optional Rules is now the rake rule for the Advanced Game.  The maximum range for a rake is now five hexes.
++  Exploding Ships: (see 24.3 Sink and Explode)  It has been moved from the 2nd edition Optional Rules to Advanced Game Rules 
++  Critical Hits Table:  It is now a two dice system (see Critical Hit Table, see Addendum, A – Critical Hit Table).  Some changes to “what is” and “is not” a result from the original.
+	+  Anchors: (see 20.3.8)  Ships now have two anchor cables	
++  Reload Phase: (see 26.1.1) Crew fatigue and powder usage now have an affect.
+
+(Continued on Reverse Side)
+
+Addendum:  An addendum has been added. The Addendum contains explanations, clarifications and examples pertaining to various sections of rules.  The Addendum follows the same numbering scheme as the rules preceded by the letter A, for example 24.3.2.3.1 dealing with exploding ships is in the addendum as A-24.3.2.3.1. 
+
+Addendum – Part 2: Has the Master Ship Specification Sheets for all known ship types for the various nations.  The sheets have been adjusted to reflect the Advanced Game, ie. the hull, crew and guns have been increased from the Basic Game numbers.  New to the list from past tournaments are the Portuguese.  Also new  are several 74 gun SOLs the Americans could/should (you as the leader of the Americans would certainly have had them completed) have had done during the War of 1812.  Take a look, they’re awesome.  Also, a revised Ship’s Log sheet is provided.  Players may opt to use it in place of the one provided with the game.
+
+Appendices:  The Appendices contains a wealth of information.  First, they contains copies of every known article from the General (Avalon Hill’s Magazine).  Second, they contain copies of the section of the 2nd edition rules not covered by the revision, ie. the historic scenarios.
+
+Charts and Tables: There are two Advanced Game Charts containing all charts and tables needed to play the game (revised or not).  As noted in the section above, several of the charts contain revisions to reflect new changes in the rules.    
+
+Changes from version 1.2 to 1.2a:  There were no actual rule changes made in the 1.2a version of the rules.  The 1.2a version of the rules corrected a number of typos, misprints and spellings.
+
+Changes from version 1.2a to 1.2b:
++ Fouling/Unfouling: (see Advanced Game Tables, see also 6.0 Unfouling Phase, see also 8.3 Collisions), Changed modifier for ship’s crew to be cumulative instead of for just either ship. 
++ Grapeshot: Changed to allow the firing of a roundshot load as grapeshot if stated prior to firing.
++  38.2.2.1:  Added amplifying note to reflect the permanent nature of gun losses taken attempting to refloat when running aground.
+Addendum Changes:
+	+ A-12.1.4: Added amplifying note pertaining to prize crews.
++ A-24.1 Reduced Fields of Fire: Added amplifying remark pertaining to blocked ships and requests for allowing them stern or bow shots.
++ A-24.2.4.5 Grapeshot: This is a new addition, remarks pertaining to the change made allowing a roundshot load to be fired as grapeshot.
+Ship’s Log:
+	+ Only change made was the addition of a box for reporting the depth for use in games where shoals are present.  Change was made to the Ship’s Log and to the corresponding diagram and schematic description found in the Addendum, Part 2. 
+
+
+WOODEN SHIPS & IRON MEN
+THE AVALON HILL GAME COMPANY’S TRADEMARK FOR ITS FIGHTING SAIL GAME
+TOURNAMENT EDITION RULES  1.2b
+
+
+

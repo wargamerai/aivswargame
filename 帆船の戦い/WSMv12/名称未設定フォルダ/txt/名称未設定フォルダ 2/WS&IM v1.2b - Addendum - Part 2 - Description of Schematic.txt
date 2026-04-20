@@ -1,0 +1,79 @@
+SCHEMATIC OF REVISED SHIP’S LOG
+
+The revised Ship’s Log Sheet is organized differently but is otherwise little changed from the original.  There are a few new features designed to provide more information as well as be visually more appealing.  On the schematic, each section of the log sheet is numbered and detailed below.
+
+1.  Place the Ship’s Name in this box.  Now there’s plenty of room for those well-crafted names you could never fit into the original.
+
+2.  Place the Ship’s Identification Number in this box.  This is the number shown on the counter  representing this ship.  This is always a four digit number.
+
+3.  Place the ship’s crew quality in this box as provided by the scenario or the Ship Specification Sheets in the case of Design-Your-Own.  There’s plenty of room so you might want to place the victory points for the ship here too for easy reference later.  For example; “Crack  - 29pts.”
+
+4.  Place the ship’s class rating in this box as provided by the scenario or the ship Specification Sheets.  Again there’s plenty of room for the ship’s gun rating too.  For example; “ SOL 1 – 120 guns”.
+
+5.  On the line place the ship’s battle sail movement capability in wind attitude A.  In the parenthesis place the ship’s full sail movement capability in wind attitude A.  These numbers can be found in the rules at 7.1.4 and 20.1.1.
+
+6.  On the line place the ship’s battle sail movement capability in wind attitude B.  In the parenthesis place the ship’s full sail movement capability in wind attitude B.  These numbers can be found in the rules at 7.1.4 and 20.1.1.
+
+7.  On the line place the ship’s battle sail movement capability in wind attitude C.  In the parenthesis place the ship’s full sail movement capability in wind attitude C.  These numbers can be found in the rules at 7.1.4 and 20.1.1.
+
+8.  On the line place the ship’s battle sail movement capability in wind attitude D.  In the parenthesis place the ship’s full sail movement capability in wind attitude D.  These numbers can be found in the rules at 7.1.4 and 20.1.1.
+
+9.  Put the current Wind Change Number in this box.  This provides an easy reference and can be changed if the Wind Change Number changes.
+
+10.  Put the current wind direction in this box.  This can provide an easy reference when you’re writing your move.
+
+11.  These squares represent section one of the ship’s rigging.  Each square has the number 1 inside as a reference.  Rigging losses are always taken from the highest numbered section first.  The actual number of squares the ship has for this rigging section is provided by the scenario or Ship Specification Sheets.  Mark out all squares not used.
+Example: There are 10 squares to the rigging section.  A British 74, Large Class, has 7 squares to each of its rigging sections.  You would mark out three squares so only the seven it starts with are unmarked.
+
+12.  These squares represent section two of the ship’s rigging.  Each square has the number 2 inside as a reference.  This section is completed in the same fashion as in number 11 above.
+
+13.  These squares represent section three of the ship’s rigging.  Each square has the number 3 inside as a reference.  This section is completed in the same fashion as in number 11 above.
+
+14.  These squares represent section four of the ship’s rigging.  Each square has the number 4 inside as a reference.  This section is completed in the same fashion as in number 11 above.  Note only ship classes numbered 3-5 have a fourth section of rigging.
+
+15.  These squares represent the first crew section.  Each square has the number 1 inside as a reference.  Crew losses are always taken from the lowest numbered crew section first.  The actual number of squares in this crew section are supplied by the scenario or Ship Specification Sheets with all squares not used being marked out.
+Example: A British 74, Large Class, has ten crew squares in the first section.  As the section is provided with 16 squares, six are not needed and are marked out.
+
+16.  These squares represent the second crew section.  Each square has the number 2 inside as a reference.  This section is completed in the same fashion as in number 15 above.
+
+17.  These squares represent the third crew section.  Each square has the number 3 inside as a reference.  This section is completed in the same fashion as in number 15 above.
+
+18.  These squares represent the stern section of carronades for the starboard (right) broadside.  Note the squares are made of dotted lines to distinguish them from regular guns having solid lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.  The number of carronades are shown in the scenario or Ship Specification Sheets.
+Example: The British 74, Large Class has four carronades per broadside, two in the stern and two in the bow.  You would mark out the squares numbered 3-6.
+
+19.  These squares represent the stern section of guns for the starboard (right) broadside.  Note the squares are made of solid lines to distinguish them from carronades having dotted lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.  The number of guns are shown in the scenario or Ship Specification Sheets.
+Example: The British 74, Large Class has 18 guns  per broadside, 9 in the stern and 9 in the bow.  You would mark out the squares numbered 10-14.
+
+20.  These squares represent the bow section of guns for the starboard (right) broadside.  Note the squares are made of solid lines to distinguish them from carronades having dotted lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.  This section is completed in the same fashion as number 19 above.
+
+21.  These squares represent the bow section of carronades for the starboard (right) broadside.  Note the squares are made of dotted lines to distinguish them from regular guns having solid lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.
+This section is completed in the same fashion as number 18 above.
+
+22.  These squares represent the turning ability for the ship.  The starting turning ability of the ship is shown on the counter.  Mark out any extra turns.  During the course of the battle, if the ship takes critical hits to its turning ability, the loss can be reflected here.
+
+23.  These squares represent the hull of the ship.  The squares are numbered sequentially for easy reference.  The number of hull squares is shown in the scenario or Ship Specification Sheets.  Mark out the numbered squares not used.
+Example: The British 74, Large Class, has 21 hull squares.  You would mark out the squares numbered 21-30.
+
+24.  This circle (and the letter W) represents waterline damage.  Placing an “X” in the circle indicates the ship has suffered waterline damage.
+
+25.  These squares are the anchor cables for the ship.  Mark out one square for each anchor cut.
+
+26.  These squares represent the stern section of carronades for the port (left) broadside.  Note the squares are made of dotted lines to distinguish them from regular guns having solid lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.  This section is completed in the same fashion as number 18 above.
+
+27.  These squares represent the stern section of guns for the port (left) broadside.  Note the squares are made of solid lines to distinguish them from carronades having dotted lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.  This section is completed in the same fashion as number 19 above.
+
+28.  These squares represent the bow section of guns for the port (left) broadside.  Note the squares are made of solid lines to distinguish them from carronades having dotted lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.  This section is completed in the same fashion as number 19 above.
+
+29.  These squares represent the bow section of carronades for the port (left) broadside.  Note the squares are made of dotted lines to distinguish them from regular guns having solid lines.  The squares are numbered sequentially for easy reference when counting up guns during combat.  This section is completed in the same fashion as number 18 above.
+
+30.  These squares represent the number of reloads that a ship has remaining.  All ships start out with 30 reloads. The squares are numbered sequentially.  As a broadside is reloaded after firing, its reloading is reflected by marking off the highest remaining numbered square.  Once all squares are marked off, the ship fires under low powder conditions.
+
+31.  Place the displacement (depth rating) of the ship as indicated by the scenario under Depth (ft.) in this box.   This is important for scenarios having shoals or other areas of shallow water where running aground is possible (rule section 38.0).
+
+WOODEN SHIPS & IRON MEN
+THE AVALON HILL GAME COMPANY’S TRADEMARK FOR ITS FIGHTING SAIL GAME
+TOURNAMENT EDITION RULES – ADDENDUM, PART 2  v1.2b
+
+
+
+

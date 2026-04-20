@@ -1,0 +1,102 @@
+ADVANCED GAME TABLES
+
+
+WOODEN SHIPS & IRON MEN
+THE AVALON HILL GAME COMPANY’S TRADEMARK FOR ITS FIGHTING SAIL GAME
+TOURNAMENT EDITION RULES  1.2b
+
+
+CRITICAL HIT TABLE
+
+Roll one die.  If equal of less than Hit Table of firing ship, mast falls, mark out rest of rigging section.
+
+2R
+
+2H
+
+3R
+
+3H
+
+8R
+
+7R
+
+6R
+
+5R
+
+No Effect
+
+No Effect
+
+No Effect
+
+No Effect
+
+9R
+
+8H
+
+4H
+
+12H
+
+11H
+
+10H
+
+9H
+
+12R
+
+11R
+
+10R
+
+Roll one die.  If equal or less than Hit Table of firing ship, magazine may explode.  Roll one die and add range in hexes.  If the result is four or less, ship explodes, otherwise, ship is on fire as in 2H.
+
+Roll one die.  If equal or less than Hit Table of firing ship, mast falls, mark out rest of rigging section.
+
+Roll one die.  If equal of less than Hit Table of firing ship, fire breaks out.  If fire breaks out, roll one die, if a six, fire is out of control, place an Exploding Ship Marker on the ship.  If a five or less, crew sections may be assigned immediately or during the Boarding Party Preparation Phase to fight the fire.  Roll one die during each Unfouling Phase.  The fire is extinguished on rolls equal or less to number of crew sections assigned to fight it.  Any other roll results in the fire continuing and one hull and one rigging square being marked off.
+
+Crew is demoralized.  Roll one die, add crew quality strength points, subtract the number of lost crew sections.  If the result is six or less, crew drops one rate in quality.
+
+4R
+
+Crew is demoralized.  Roll one die, add crew quality strength pts., subtract the # of lost crew sections.  If the result is six or less, crew drops one rate in quality
+
+No Effect
+
+Results of Critical Hit Table are determined at the end of the Combat Phase after all regular damage has been recorded.  All results are cumulative.
+
+7H
+
+6H
+
+5H
+
+Helm destroyed.  Ship cannot turn in the next Movement Phase.
+
+Fallen rigging obscures a gunnery section in the left broadside.  Mark out two rigging squares.  Reduce Hit Table by one in left broadside for the next three turns.
+
+Fallen rigging obscures a gunnery section in the right broadside.  Mark out two rigging squares.  Reduce Hit Table by one in right broadside for the next three turns.
+
+Take one crew hit if ship is plotted to change sail status or repair rigging this turn.
+
+Anchor cable severed.  Mark off one anchor cable square.
+
+Towing grapple is shot away.  New grapple required for towing to resume.
+
+Rudder destroyed (No Effect if firing broadside was a bow rake).  Ship cannot turn in next Movement Phase.  Turning ability is permanently reduced by one.  
+
+Rake causes double rigging hits.
+
+Roll one die.  If equal or less than Hit Table of firing ship, waterline damage occurs.  Assign one crew section to keep ship afloat for remainder of game.
+
+If target is at full sails, double rigging hits.
+
+Crew is demoralized.  Roll one die, add crew quality strength points, subtract the number of lost crew sections.  If the result is six or less, crew drops one rate in quality.
+
+
+

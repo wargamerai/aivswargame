@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>帆船デザインサンプル</title>
+<style>
+  body { background:#88aacc; font-family:sans-serif; padding:20px; color:#fff; }
+  h2 { margin-top:20px; }
+  .row { display:flex; gap:30px; flex-wrap:wrap; align-items:center; margin-bottom:20px; }
+  .ship-box { background:#3366aa; padding:10px; border-radius:8px; text-align:center; }
+  .ship-box .lbl { font-size:0.9em; margin-top:4px; }
+</style>
+</head>
+<body>
+<h1>帆船描画サンプル（Canvas 2D）</h1>
+
+<h2>3層帆装SOL（戦列艦）</h2>
+<div class="row">
+  <div class="ship-box">
+    <canvas id="ship1" width="300" height="200"></canvas>
+    <div class="lbl">N向き / 全帆展開</div>
+  </div>
+  <div class="ship-box">
+    <canvas id="ship2" width="300" height="200"></canvas>
+    <div class="lbl">N向き / 戦闘帆</div>
+  </div>
+  <div class="ship-box">
+    <canvas id="ship3" width="300" height="200"></canvas>
+    <div class="lbl">NE向き / 全帆</div>
+  </div>
+</div>
+
+<h2>2層帆装フリゲート</h2>
+<div class="row">
+  <div class="ship-box">
+    <canvas id="ship4" width="240" height="160"></canvas>
+    <div class="lbl">N向き / 戦闘帆</div>
+  </div>
+  <div class="ship-box">
+    <canvas id="ship5" width="240" height="160"></canvas>
+    <div class="lbl">E向き</div>
+  </div>
+</div>
+
+<h2>45°視点（高さ強調）</h2>
+<div class="row">
+  <div class="ship-box">
+    <canvas id="ship3d1" width="380" height="320"></canvas>
+    <div class="lbl">SOL 全帆 (45°)</div>
+  </div>
+  <div class="ship-box">
+    <canvas id="ship3d2" width="380" height="320"></canvas>
+    <div class="lbl">SOL 戦闘帆 (45°)</div>
+  </div>
+</div>
+
+<script>
+function drawShip(canvasId, opts) {
+  const c = document.getElementById(canvasId);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(80,140,200,0.4)';
+  ctx.fillRect(0, 0, c.width, c.height);
+  const cx = c.width / 2, cy = c.height / 2;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(opts.angle || 0);
+  const s = opts.scale || 1;
+  ctx.scale(s, s);
+
+  // 影
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(2, 8, 80, 18, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // === 船体（曲線、艦首尖り、艦尾もやや尖り）===
+  const hullDark = opts.hullDark || '#3a2818';
+  const hullLight = opts.hullLight || '#8a6840';
+  // 喫水下の暗い船体
+  ctx.fillStyle = hullDark;
+  ctx.beginPath();
+  ctx.moveTo(80, 0);             // 艦首先端
+  ctx.bezierCurveTo(70, -15, 30, -22, -50, -18);  // 艦首→船腹（上）
+  ctx.bezierCurveTo(-65, -15, -75, -8, -78, 0);   // 艦尾上
+  ctx.bezierCurveTo(-75, 8, -65, 15, -50, 18);    // 艦尾下
+  ctx.bezierCurveTo(30, 22, 70, 15, 80, 0);       // 船腹（下）→艦首
+  ctx.closePath();
+  ctx.fill();
+  // 喫水線
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 75, 18, 0, 0, Math.PI*2);
+  ctx.stroke();
+
+  // 上甲板（明色、少し細い）
+  ctx.fillStyle = hullLight;
+  ctx.beginPath();
+  ctx.moveTo(75, 0);
+  ctx.bezierCurveTo(65, -10, 30, -16, -50, -13);
+  ctx.bezierCurveTo(-65, -10, -72, -5, -75, 0);
+  ctx.bezierCurveTo(-72, 5, -65, 10, -50, 13);
+  ctx.bezierCurveTo(30, 16, 65, 10, 75, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // === 砲門（3段、横腹に並ぶ点列）===
+  ctx.fillStyle = '#000';
+  const gunRows = opts.gunDecks || 3;  // 3段甲板=3列
+  const gunRowYs = gunRows === 3 ? [-13, -10, -7]   // 上甲板/中/下
+                 : gunRows === 2 ? [-12, -9]
+                 : [-10];
+  const gunRowYsBottom = gunRows === 3 ? [13, 10, 7]
+                       : gunRows === 2 ? [12, 9]
+                       : [10];
+  // 黄色の縞（甲板を区別）
+  ctx.strokeStyle = 'rgba(220,180,80,0.6)';
+  ctx.lineWidth = 1;
+  gunRowYs.forEach(y => {
+    ctx.beginPath();
+    ctx.moveTo(-55, y); ctx.lineTo(55, y);
+    ctx.stroke();
+  });
+  gunRowYsBottom.forEach(y => {
+    ctx.beginPath();
+    ctx.moveTo(-55, y); ctx.lineTo(55, y);
+    ctx.stroke();
+  });
+  // 砲門ドット
+  ctx.fillStyle = '#000';
+  for (let i = -45; i <= 50; i += 10) {
+    gunRowYs.forEach(y => {
+      ctx.beginPath();
+      ctx.rect(i - 1.2, y - 1.5, 2.4, 2);
+      ctx.fill();
+    });
+    gunRowYsBottom.forEach(y => {
+      ctx.beginPath();
+      ctx.rect(i - 1.2, y - 0.5, 2.4, 2);
+      ctx.fill();
+    });
+  }
+
+  // === 艦首バウスプリット（前方へ突き出る斜檣）===
+  ctx.strokeStyle = '#664422';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(75, 0);
+  ctx.lineTo(105, -3);
+  ctx.stroke();
+  // バウスプリットの帆（三角）
+  if (opts.sailMode !== 'furled') {
+    ctx.fillStyle = 'rgba(245,235,215,0.95)';
+    ctx.beginPath();
+    ctx.moveTo(105, -3);
+    ctx.lineTo(75, 0);
+    ctx.lineTo(85, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#aaa';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  }
+
+  // === 艦尾楼（高い構造物）===
+  ctx.fillStyle = '#5a4028';
+  ctx.beginPath();
+  ctx.moveTo(-78, 0);
+  ctx.lineTo(-72, -16);
+  ctx.lineTo(-55, -14);
+  ctx.lineTo(-58, 14);
+  ctx.lineTo(-72, 16);
+  ctx.closePath();
+  ctx.fill();
+  // 艦尾窓
+  ctx.fillStyle = '#fff8aa';
+  ctx.fillRect(-72, -10, 4, 4);
+  ctx.fillRect(-72, -3, 4, 4);
+  ctx.fillRect(-72, 4, 4, 4);
+  ctx.fillRect(-66, -10, 4, 4);
+  ctx.fillRect(-66, -3, 4, 4);
+  ctx.fillRect(-66, 4, 4, 4);
+
+  // === マスト（クラスにより本数）===
+  const masts = opts.masts || 3;
+  const mastX = masts === 3 ? [40, 5, -30] : [25, -25];
+  const sailMode = opts.sailMode || 'battle';
+  mastX.forEach((mx, i) => {
+    // マスト棒
+    ctx.strokeStyle = '#3a2818';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(mx, -2);
+    ctx.lineTo(mx, 2);
+    ctx.stroke();
+    // 帆（複数段、台形）
+    if (sailMode === 'furled') {
+      // 畳まれた帆（横棒だけ）
+      ctx.strokeStyle = '#876';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(mx - 8, 0);
+      ctx.lineTo(mx + 8, 0);
+      ctx.stroke();
+    } else {
+      const segs = sailMode === 'full' ? 3 : 2;  // 段数
+      const sailW = sailMode === 'full' ? 26 : 20;
+      const sailH = 12;
+      for (let seg = 0; seg < segs; seg++) {
+        const yardY = -seg * 2 - 2;
+        // 帆面（ふくらみ）
+        const grad = ctx.createLinearGradient(mx - sailW, 0, mx + sailW, 0);
+        grad.addColorStop(0, '#a89878');
+        grad.addColorStop(0.5, '#f5ebd0');
+        grad.addColorStop(1, '#c9b88a');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(mx - sailW, yardY - 3);
+        ctx.lineTo(mx + sailW, yardY - 3);
+        ctx.bezierCurveTo(
+          mx + sailW + 2, yardY + sailH/2,
+          mx - sailW - 2, yardY + sailH/2,
+          mx - sailW, yardY - 3
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#665544';
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+        // ヤード（横棒）
+        ctx.strokeStyle = '#3a2818';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(mx - sailW - 1, yardY - 3);
+        ctx.lineTo(mx + sailW + 1, yardY - 3);
+        ctx.stroke();
+      }
+    }
+    // マスト基部
+    ctx.fillStyle = '#221100';
+    ctx.beginPath();
+    ctx.arc(mx, 0, 2, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // === 旗（艦尾の上）===
+  if (opts.flag) {
+    ctx.fillStyle = opts.flag;
+    ctx.beginPath();
+    ctx.moveTo(-65, -16);
+    ctx.lineTo(-50, -22);
+    ctx.lineTo(-50, -12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+drawShip('ship1', { angle: -Math.PI/2, sailMode: 'full', masts: 3, flag: '#cc2222' });
+drawShip('ship2', { angle: -Math.PI/2, sailMode: 'battle', masts: 3, flag: '#cc2222' });
+drawShip('ship3', { angle: -Math.PI/2 + Math.PI/3, sailMode: 'full', masts: 3, flag: '#2244cc' });
+drawShip('ship4', { angle: -Math.PI/2, sailMode: 'battle', masts: 3, flag: '#cc2222', scale: 0.85, gunDecks: 2 });
+drawShip('ship5', { angle: 0, sailMode: 'full', masts: 3, flag: '#2244cc', scale: 0.85, gunDecks: 2 });
+
+// === 45°視点 帆船描画 ===
+function drawShip3D(canvasId, opts) {
+  const c = document.getElementById(canvasId);
+  const ctx = c.getContext('2d');
+  // 海背景
+  const seaGrad = ctx.createLinearGradient(0, 0, 0, c.height);
+  seaGrad.addColorStop(0, '#88aacc');
+  seaGrad.addColorStop(1, '#3366aa');
+  ctx.fillStyle = seaGrad;
+  ctx.fillRect(0, 0, c.width, c.height);
+
+  const cx = c.width / 2;
+  const cy = c.height * 0.7;  // 船体の中央が下寄り
+  const s = opts.scale || 1.4;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+
+  const sailMode = opts.sailMode || 'battle';
+
+  // === 海面の影 ===
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(5, 12, 75, 10, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // === 船体（側面、3段甲板）===
+  // 下層（喫水線下、暗色）
+  ctx.fillStyle = '#2a1a0a';
+  ctx.beginPath();
+  ctx.moveTo(70, 5);
+  ctx.bezierCurveTo(60, 16, 30, 18, -50, 14);
+  ctx.bezierCurveTo(-65, 12, -72, 8, -72, 5);
+  ctx.lineTo(70, 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // 喫水線（白いライン）
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(75, 5);
+  ctx.bezierCurveTo(60, 12, 30, 14, -50, 11);
+  ctx.bezierCurveTo(-65, 9, -72, 6, -72, 5);
+  ctx.stroke();
+
+  // 船体本体（船腹、明色）
+  const hullGrad = ctx.createLinearGradient(0, -25, 0, 5);
+  hullGrad.addColorStop(0, '#a87848');
+  hullGrad.addColorStop(0.5, '#8a5828');
+  hullGrad.addColorStop(1, '#5a3a18');
+  ctx.fillStyle = hullGrad;
+  ctx.beginPath();
+  ctx.moveTo(78, -2);             // 艦首上端
+  ctx.lineTo(75, 5);              // 艦首水面
+  ctx.bezierCurveTo(60, 12, 30, 14, -50, 11);
+  ctx.bezierCurveTo(-65, 9, -78, 6, -82, 0);
+  ctx.lineTo(-82, -8);            // 艦尾後ろ
+  ctx.lineTo(-72, -28);           // 艦尾楼上端
+  ctx.lineTo(-50, -25);
+  ctx.bezierCurveTo(-20, -27, 30, -27, 60, -23);
+  ctx.lineTo(78, -2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#3a2010';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // === 砲門（3段、横の縞＋黒い四角）===
+  const deckYs = [-20, -12, -4];   // 上甲板/中/下
+  ctx.strokeStyle = '#ffcc44';
+  ctx.lineWidth = 1.5;
+  deckYs.forEach(y => {
+    ctx.beginPath();
+    ctx.moveTo(-65, y); ctx.lineTo(60, y);
+    ctx.stroke();
+  });
+  ctx.fillStyle = '#000';
+  for (let i = -55; i <= 55; i += 10) {
+    deckYs.forEach(y => {
+      ctx.fillRect(i - 2, y - 1, 4, 3);
+    });
+  }
+
+  // === 艦首像（フィギュアヘッド）===
+  ctx.fillStyle = '#ddaa66';
+  ctx.beginPath();
+  ctx.arc(80, -3, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  // === バウスプリット（艦首の斜檣）===
+  ctx.strokeStyle = '#664422';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(78, -5);
+  ctx.lineTo(118, -22);
+  ctx.stroke();
+
+  // === 艦尾装飾（窓と装飾）===
+  ctx.fillStyle = '#fff8aa';
+  for (let i = 0; i < 3; i++) {
+    ctx.fillRect(-78, -22 + i*5, 4, 3);
+    ctx.fillRect(-72, -22 + i*5, 4, 3);
+    ctx.fillRect(-66, -22 + i*5, 4, 3);
+  }
+
+  // === マスト（3本、tall高さ強調）===
+  const mastConfigs = [
+    { x: 38,  height: 130 },   // フォアマスト
+    { x: 5,   height: 145 },   // メインマスト（最大）
+    { x: -28, height: 125 },   // ミズンマスト
+  ];
+
+  mastConfigs.forEach(m => {
+    // マスト棒
+    ctx.strokeStyle = '#3a2818';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(m.x, -22);
+    ctx.lineTo(m.x, -22 - m.height);
+    ctx.stroke();
+
+    // 帆段数
+    if (sailMode === 'furled') {
+      // 畳まれた帆 → ヤード(横棒)だけ
+      [0.3, 0.55, 0.8].forEach(p => {
+        const yy = -22 - m.height * p;
+        ctx.strokeStyle = '#876';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(m.x - 12, yy);
+        ctx.lineTo(m.x + 12, yy);
+        ctx.stroke();
+      });
+    } else {
+      const segs = sailMode === 'full' ? [
+        { yp: 0.25, w: 22, h: 22 },   // 下段（コース）大
+        { yp: 0.55, w: 20, h: 20 },   // 中段（トップスル）
+        { yp: 0.80, w: 16, h: 18 },   // 上段（トゲルン）
+      ] : [
+        { yp: 0.25, w: 22, h: 22 },   // 戦闘帆は下中の2段
+        { yp: 0.55, w: 20, h: 20 },
+      ];
+      segs.forEach(seg => {
+        const yardY = -22 - m.height * seg.yp;
+        // 帆面（風で膨らんだ台形）
+        const grad = ctx.createLinearGradient(m.x - seg.w, 0, m.x + seg.w, 0);
+        grad.addColorStop(0, '#a89878');
+        grad.addColorStop(0.5, '#f5ebd0');
+        grad.addColorStop(1, '#c9b88a');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(m.x - seg.w, yardY);
+        ctx.lineTo(m.x + seg.w, yardY);
+        ctx.bezierCurveTo(
+          m.x + seg.w + 4, yardY + seg.h,
+          m.x - seg.w - 4, yardY + seg.h,
+          m.x - seg.w, yardY
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#665544';
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+        // ヤード（横棒）
+        ctx.strokeStyle = '#3a2818';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(m.x - seg.w - 2, yardY);
+        ctx.lineTo(m.x + seg.w + 2, yardY);
+        ctx.stroke();
+      });
+    }
+
+    // マスト先端の檣楼
+    ctx.fillStyle = '#3a2818';
+    ctx.beginPath();
+    ctx.rect(m.x - 4, -22 - m.height, 8, 3);
+    ctx.fill();
+  });
+
+  // === 索具（マスト間の斜め線）===
+  ctx.strokeStyle = 'rgba(40,30,20,0.6)';
+  ctx.lineWidth = 0.6;
+  for (let i = 0; i < mastConfigs.length - 1; i++) {
+    const a = mastConfigs[i], b = mastConfigs[i+1];
+    ctx.beginPath();
+    ctx.moveTo(a.x, -22 - a.height + 5);
+    ctx.lineTo(b.x, -22 - b.height + 5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(a.x, -22 - a.height * 0.5);
+    ctx.lineTo(b.x, -22 - b.height * 0.5);
+    ctx.stroke();
+  }
+  // バウスプリット→フォアマストへの索
+  ctx.beginPath();
+  ctx.moveTo(118, -22);
+  ctx.lineTo(38, -22 - mastConfigs[0].height + 5);
+  ctx.stroke();
+
+  // === メインマスト先端の旗 ===
+  if (opts.flag) {
+    ctx.fillStyle = opts.flag;
+    const fy = -22 - mastConfigs[1].height - 2;
+    ctx.beginPath();
+    ctx.moveTo(5, fy);
+    ctx.lineTo(28, fy + 3);
+    ctx.lineTo(28, fy + 8);
+    ctx.lineTo(5, fy + 5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // === 波しぶき（艦首前方）===
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.ellipse(85, 8, 8, 3, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(95, 10, 5, 2, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+drawShip3D('ship3d1', { sailMode: 'full', flag: '#cc2222' });
+drawShip3D('ship3d2', { sailMode: 'battle', flag: '#2244cc' });
+</script>
+</body>
+</html>

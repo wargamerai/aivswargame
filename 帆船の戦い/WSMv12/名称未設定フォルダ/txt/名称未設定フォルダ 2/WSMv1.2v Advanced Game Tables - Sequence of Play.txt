@@ -1,0 +1,46 @@
+
+ADVANCED GAME TABLES
+
+ADVANCED GAME SEQUENCE OF PLAY
+
+A. WIND PHASE:
+	+  Roll two dice each turn to determine if the wind changes, and if so, how it will change.
+B.  UNFOULING PHASE:
+	+  Make attempts to unfoul ships fouled on previous moves
+	+  Roll for sinking or exploding ships
+	+  Roll for ships on fire 
+C.  MOVEMENT NOTATION PHASE:
+	+  Plot movement
+	+  Plot repairs
+	+  Plot anchoring or up-anchoring, cutting of anchor cables
+	+  Plot changes in sail status (from FS to BS or from BS to FS)
+D.  MOVEMENT EXECUTION PHASE:
+	+  Each ship is moved exactly as ordered in the log
+	+  After all ships with movement have been moved, ships due to drift, drift
+	+  Resolve all collisions, check for fouling
+	+  Place a MIR marker on any ships changing sail status
+E.  GRAPPLING AND UNGRAPPLING PHASE:
+	+  Make all attempts to grapple
+	+  Make all attempts to avoid grappling
+	+  Make all attempts to ungrapple ships grapple on previous turns
+F.  BOARDING PREPARATION PHASE:
+	+  Write any boarding parties in the logs of any ships involved
+	+  Assign crew sections to fight fires
+G.  COMBAT PHASE:
+	+  Resolve all firing, and mark all hits in the logs (remember firing is simultaneous)
+	+  Resolve all critical hits
+	+  Determine status of any ship due to surrender (by striking, immobility or firepower), place any appropriate markers
+H.  MELEE PHASE:
+	+  Resolve all melees
+I.  RELOAD PHASE:  
+	+  Reload any one empty broadside, mark off one reload square (two if loading with doubleshot)
+	+  Announce any completed repairs and erase any applicable squares of damage
+J.  FULL SAIL PHASE:
+	+  Place or remove full sail markers based on notations made during Movement Notation
+	+  Remove MIR marker
+WOODEN SHIPS & IRON MEN
+THE AVALON HILL GAME COMPANY’S TRADEMARK FOR ITS FIGHTING SAIL GAME
+TOURNAMENT EDITION RULES 1.2b
+
+
+

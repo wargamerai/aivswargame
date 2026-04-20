@@ -1,0 +1,308 @@
+A-2.3  Unit Counters
+There have been several informational counters added that players may use to assist play (these are not shown in the rules).  A counter has been added to indicate a ship has Men in the Rigging (MIR).  Counters have been added to show ships  currently on fire, grappled, fouled or with waterline damage.  
+
+A-2.31.6  Seven new nationalities have been added,  Batavians (Dutch), Danish, Ottoman Empire,  Portuguese, Russians and Swedes.  Counters are available for each.  New counters for the United States 74’s are also available.  Ships available for all  nationalities are shown on the accompanying Ship Specification Sheets in the Addendum – Part 2.
+
+A-6.1  This is a new rule to aid unfouling by allowing a modifier if a player is willing to lose a rigging square.  This is to clarify that for each ship rolling during an Unfouling Phase, a maximum of one rigging square may be lost in this fashion with a maximum gain of +1.  Players may not mark off two rigging squares to gain a +2, etc..  Note if the two ships fouled together both roll for unfouling, both may take this option.  However it must be taken separately.  Friendly ships fouled together cannot decide to have one ship take two rigging squares lost and gain +2 with the remaining ship rolling normally.
+
+A-7.1.12  Basically because movement is essentially two parts; how many movement points you can move in a turn and how many movement points you can move in any attitude to the wind, there is some confusion as to how this is applied.  Your starting position for the turn dictates how much movement you have for the turn.  This is the momentum your ship has based on its position and attitude to the wind.  Thus frigates in Attitude A at the start of the turn can move up to 4 hexes in a turn at battle sails.  This comprises the first part of movement, the total hexes you have due to its momentum.  Your plotting of movement introduces the second part of movement.  Having determined the total movement points one has at one’s disposal, one must decide how they are spent.  Each attitude has a movement factor that not only serves to determine total movement points allowed (in the first part of movement), it dictates the maximum movement one can move in any one attitude (the second part).  The confusion usually occurs when moving from a high movement attitude such as A (factor of 4) to a low movement attitude such as C (factor of 1) due to the differences in movement allowed.  Again,  a  frigate at battle sails starting the turn in Attitude A has a movement of 4, can turn into Attitude C, move forward 1 hex, turn back out of Attitude C and continue moving 1 hex.  Turns do not count against the movement in an attitude, so the fact that the ship made two turns involving Attitude C does not count towards the limit the ship has for a one hex movement in Attitude C.  Moving ahead one hex while in Attitude C does not use up all its remaining movement, thus it does not force the ship to end its movement.  The ship at that point has a choice, to move no further as it has reached the limit allowed in that attitude or to turn and continue using any of its remaining movement points in another attitude.
+
+A-8.3.5  Collisions / Fouling
+Collisions/Fouling has adapted a two dice system.  When a collision occurs and players check for fouling, two dice are rolled.  Additionally there are a number of modifiers which can affect the outcome.  On the whole, it is slightly tougher to become fouled than before.  The decision to make these changes were based: 1.) To conform with the two dice systems being made to Unfouling and Grappling/Ungrappling. 2.) That it was actually much harder to foul than in the game.  The WS&IM computer game has a much wider range of movement possibilities because it is not limited by hexes.  Yet it is much harder to foul ships than in the board game (I would have expected the reverse as the limitation imposed by hexes would require some abstraction which should have been reflected in the Fouling Table that would not be needed with the wider range of movement).  I tried on any number of occasions to purposely foul by ramming enemy ships and could not foul.  Additionally, ships attempting to enter the same hex can be anywhere from 1-99 yards from each other within the collision hex.  The original table does not seem to take into account for this possible gap in distance in addition to the actual odds of the ships of becoming entangled, ie. fouled, if they did collide.  A one-third chance seems way too high.
+
+A-9.1  Grappling
+Grappling in the game is far too easy given the difficulty of throwing a grapple from the deck of a pitching ship.  Additionally, the use of 100 yards to a hex as the measure of distance makes it is possible for adjacent ships to be anywhere from 1-199 yards apart.  Thus for a good part of the distance, a ship is not reachable by grapple.  Grappling and ungrappling are now based on a roll of two dice, with a number of modifiers that either improve or hinder one's effort to grapple/ungrapple.  It is harder to grapple, and, once grappled, it is tougher to ungrapple.
+
+A-10.0  Boarding Party Preparation Phase
+DBPs have been reworked to be a viable selection over a OBP.  DBPs now have a defensive bonus of +2 per crew square (+1 if being raked).  A further detailed explanation is located in A-12.3 Melees below.  
+
+Crews plotted to conduct repairs during the game turn are restricted to having a DBP, negating the repair underway.
+
+Crews plotted for a sail status change with MIR, can plot using the crew section involved in the sail status change, but only as a DBP which if done negates the sail change.  Players can plot an OBP using the two free sections not involved in the sail change, only the section involved in the sail change must be a DBP if used. 
+
+
+
+A-11.3.2  Raking: 
+
+
+
+
+
+
+
+
+
+This example shows the exception to the rule.  Ship A even though it is in a position to return fire with a bow or stern section broadside, finds itself being raked by the opposing ship.
+
+A-12.1.4  Crew quality was achieved over a period of intense training under firm leadership.  The notion that one can place a green crew with  little if any training on board with an elite crew in the middle of a battle and it can suddenly become its equal is an oversimplification.  Now the transferring of crews will result in the overall crew quality becoming that of the worst crew quality of the two.  One can argue that this is too harsh a remedy.  However the old rule left too big a loophole.  Historically, transfers of crew were to effect replacements of lost and injured crew and it is upon this assumption the rule is based.  Too many times this is used to create large crews with which to melee.  Combine a green crew with a crack or elite crew and go crack some heads.  Within the timeframe of most games, the historic use of transfers would simply not occur, let alone the type typically seen in games, thus the change. 
+
+Please Note:  Prize crews retain their quality separate from that of the captured to which they are assigned.  Thus prizes will have two crew qualities, one for the captured crew and one for the prize crew.  This rule does come into play if additional crew is added to a prize with a crew quality different from the quality already on the prize.
+
+
+
+A-12.3  Melees
+Melees along with the reduced fields of fire cause the largest number of headaches at tournament time.  It is far too easy to melee in the game compared to historic realities.  Historically few SOL’s were lost by melee.  Yet it is all too frequently the preferred method of gaining victory points.  Hence along with changes being made to grappling and fouling, there are a number of changes being made to melees.  
+1. DBP’s in the original game were worth the same as OBP’s.  With the ability to capture a ship, why have anything but a OBP?  This led to many melees as both players chose OBPs because there was no viable alternative.  There is now a viable alternative in the DBP.  DBPs gain a crew a +2 point per square advantage over an OBP of the same quality (this is reduced to +1 if the target ship is being raked).  Now with a DBP, players can hold back a crew section and fire while holding on to his ship, something virtually impossible before unless there was a very wide difference in the number of crew squares.
+2.  Interpretation of OBPs (based on the original rules and not on any changes made in the revision):  OBPs once formed must continue until successful, failure or the ships become ungrappled/unfouled.  One cannot attempt to capture a ship by forming an OBP, see the battle turning against him and on the next turn change to a DBP.  With the changes made to ungrappling, ships grappled for the purpose of meleeing will most likely remain so.  Melees were fought to conclusion and were not interrupted by becoming unfouled or ungrappled.
+Example:  A British Crack 74, Large Class, is grappled by an Average French 80 (side by side).  Neither ship has taken any crew hits up to this point.  The British 74 has crew sections of 10-8-8. The French 80 has crew sections of 12-12-10.  The French seeing an opportunity in numbers form a OBP while the British form a DBP.  Let’s look at the numbers for Total Melee Strength (TMS):
+
+British DBP
+26 crew squares @ 6 pts.  = 156 pts.
+Total:			      = 156 TMS	 
+French OBP
+34 crew squares @ 3 pts.  =  102 pts.
+Total:                                 = 102TMS
+
+156 to 102, both are the 81+ column.  Now there are three rounds of melee.
+Round One: The British roll a 3 with the French losing four crew squares.  The French roll a 1 and return the favor, the British lose four crew squares.   
+Each player then recalculates his TMS.         
+
+End of Round One:
+British DBP
+22 crew squares @ 6 pts.  = 132 TMS
+French OBP
+30 crew squares @ 3 pts.  =  90 TMS
+
+Neither player has a 3-1 advantage in TMS, so the melee continues to round two.  Note the 3-1 advantage is based on the TMS and not the number of crew squares.  Both are still on the 81+ column.
+Round Two:  The British roll a 5 inflicting two crew squares of damage to the French.  The French roll a 4, again causing four crew squares of damage to the British. So the players look like this:
+
+End of Round Two:
+British DBP
+18 crew squares @ 6 pts.  = 108 TMS
+
+French OBP
+28 crew squares @ 3 pts.  =  84 TMS
+
+Neither player has a 3-1 advantage in TMS, so the melee continues to round three.  Both are still on the 81+ column.
+
+Round Three:  The British roll a 6 inflicting two crew squares of damage to the French.  The French roll a 2, again causing four crew squares of damage to the British.  So the players look like this:
+
+End of Round Three:
+British DBP
+14 crew squares @ 6 pts.  = 84 TMS
+ 
+French OBP
+26 crew squares @ 3 pts.  =  78 TMS
+
+Neither player has a 3-1 advantage in TMS, so the melee end for this turn and will continue the next game turn.  Because the ships are grappled, neither can plot during the Movement Notation Phase.  Either player can attempt to ungrapple during the Grappling and Ungrappling Phase.  However please note that due there being a melee in progress, all attempts to ungrapple suffer a –6 dice roll modifier, meaning in all likelihood, the melee will continue.  The French having things their way the last turn do not attempt to ungrapple.  The British do and fail their roll.  Note that because the French had an OBP last turn, it must continue this turn as an OBP, so boarding party preparation for the French is a no brainer.  The British can still decide between the DBP and the OBP.  Considering how things went last turn, they continue with the DBP.  Both calculate their TMS which is unchanged since last turn’s melee rounds.  Remember to always recalculate and not just rely on the last totals as ships in multiple ship games may take damage to their crew during the Combat Phase which precedes the Melee Phase.
+
+Round Four: The British start on the 81+ column while the French have dropped to the 71-80 column,  The British roll a 3 with the French losing four crew squares.  The French roll a 6 and cause the British to lose two crew squares. 
+
+End of Round Four:
+British DBP
+12 crew squares @ 6 pts.  = 72 TMS
+
+French OBP
+22 crew squares @ 3 pts.  =  66 TMS
+
+ Neither player has a 3-1 advantage in TMS, so the melee continues to round three.  Both are still on the 81+ column.
+                             
+Round Five: The British roll a 2 with the French losing four crew squares.  The French roll a 4 and return fire, the British lose two crew squares. 
+
+ End of Round Five:
+British DBP
+10 crew squares @ 6 pts.  = 60 TMS
+
+French OBP
+18 crew squares @ 3 pts.  =  54 TMS
+
+ Neither player has a 3-1 advantage in TMS, so the melee continues to round six.  The British drop tp the 51-60 column as do the French.
+
+Round Six: The British roll a 5 with the French losing one crew squares.  The French roll a one and the British lose three crew squares. 
+
+ End of Round Six:
+British DBP
+7 crew squares @ 6 pts.  = 42 TMS
+
+French OBP
+17 crew squares @ 3 pts.  =  51 TMS
+ Neither player has a 3-1 advantage in TMS, so the melee continues to round seven which will start the Melee Phase of the next  game turn.  The British is drop to the 41-50 column while the French remain on the 51-60 column. 
+
+Again neither ship can plot movement, so they will drift this turn.  Both players may attempt to ungrapple during the Grappling/Ungrappling Phase.  Again the French decline and the British try and fail.  So the Melee Phase brings back to where we ended last turn with TMS totals of 42 for the British and 51 for the French.
+
+Round Seven: The British roll a 2 with the French losing just two crew squares.  The French roll a 1  and the British lose three crew squares. Both players are beginning to suffer diminishing returns from the Melee Table.
+
+ End of Round Seven:
+British DBP
+4 crew squares @ 6 pts.  = 24TMS
+
+French OBP
+15 crew squares @ 3 pts.  =  45 TMS
+
+ Neither player has a 3-1 advantage in TMS, so the melee continues to round eight.  The British drop to the 21-30 column while the French drop to the 41-50 column. 
+
+Round Eight: The British roll another 1 with the French losing two crew squares.  The French roll a 2 and the British lose three crew squares. 
+
+ End of Round Eight:
+British DBP
+1 crew squares @ 6 pts.  = 6 pts.
+
+French OBP
+13 crew squares @ 3 pts.  =  39 pts.
+ The French finally gain a 3-1 ratio in TMS, 39-6 resulting in the capture of the British ship and the demotion of both captains for allowing such a bloodbath.
+
+Example:
+
+
+
+
+
+
+
+
+The original situation for this example has Ship A colliding with enemy Ship C on turn 18.  Due to the resultant fouling of the ships, they found themselves engaged in a melee which was not resolved.  Ship C had plotted for a DBP while Ship A had written an OBP.  This meant for the start of turn 19, neither ship could move and were locked in melee.  Ship C on the short end of the melee with Ship A during turn 18, attempts to unfoul but fails due to the modifier for a melee being progress.  During the Movement Execution Phase, Ship C’s brother in arms, Ship B moves adjacent to Ship A and successfully grapples.  This is the situated represented in the diagram.  Ship A having plotted an OBP on the previous turn against Ship C’s DBP is locked into an OBP this turn as well.  Ship B plots an OBP which will result in the automatic capture of Ship A.  Whoa, wait a minute.  Why can’t Ship A seeing Ship B organizing a boarding party change to a DBP?  It wouldn’t leave a ship undefended goes the argument.  Well, hindsight has 20/10 vision.  If Ship A had such vision to anticipate Ship B’s move, it wouldn’t have plotted an OBP on turn 18, instead it would have plotted a DBP.  It basically gambled it could capture Ship C before Ship B could move adjacent and manage to grapple, it lost.  The reason Ship A cannot revert to a DBP is, its crew is on the decks of Ship C locked in battle.  Well, what if both Ship A and Ship C had written for OBPs, wouldn’t the battle be on both ships and couldn’t Ship A revert to a DBP then?  No.  While the battle may be on both ships, the problem is that the crew is locked in battle and cannot in the middle of a battle move to take up defensive positions.  Its stuck with its OBP.  In this situation, Ship B’s OBP would not result in the automatic capture of Ship A, some of A’s crew would move to intercept it.  Instead, the TMS for both Ships B and C are combined to form one total TMS which is used against the TMS of Ship A which will likely result in the capture of A.  Whether this is fair or not is not as much the problem as our all too frequent use of melees.
+
+There are always questions involving TBPs.  Why can’t a TBP see the OBP trying to board the same ship they are and join in?  Think of the logistics of each and what purpose each are designed to achieve.  Crews were largely armed with hand weapons (eg. Cutlasses) which were stored in buckets and placed out for use during the battle preparation.  Crew members simply grabbed a weapon and they were ready to board (OBP).  An OBP could be formed quickly when  grappled/fouled to an enemy ship.  A TBP was more involved.  Crew members were being transferred and as such carried their belongings with them.  Not anticipating a fight, they were not armed.  Friendly ships involved in a TBP are not even required to be grappled, simply be adjacent.  This involves the lowering of the ship’s boats to effect the transfer.  And TBP’s are formed very slowly.  A ship’s captain would receive a signal to effect a transfer, the ship would then have to position itself next to the ship due to receive the transfer.  The men would have to gathered with their belongings to complete the transfer by ship’s boat.  In a three minute game turn, the scope of what’s involved is much different for there to be the ability to change from TBP to OBP within a single game turn without foreknowledge.  Well, couldn’t I form an OBP to my ship having a DBP to assist it in dealing with any enemy OBP?  Without a melee actually taking place on board, no.  Again within the context of a three minute game turn, how would the captain know the ship was in danger?  Historically, ships frequently fought at very close quarters without any threat of a melee.  It is only in the context of the game where virtually every such close contact results in a melee is it possible to have such foresight.  Only in the  game turn after a DBP is engaged by an enemy OBP can friendly adjacent ships come to its aid by a OBP to the DBP ship.   What happens to my TBP to a friendly ship having a DBP which becomes engaged with an OBP and surrenders?  The TBP surrenders along with the rest of the ship.  Remember in the context of a game turn, the TBP is arriving over the course of the Melee Phase and is considered to be on the new ship by the end of phase where it finds itself faced with an active armed enemy while it is unarmed.  It is incapable of posing a defense until it has time to organize and arm itself (ie. the next game turn).  Thus it suffers the same fate as the ship.  Can a ship having a DBP, being victorious against the OBP and after boarding and capturing the enemy ship use crew from a TBP as prize crew?  No, not directly, but indirectly the effect would be same.  The victorious crew would become the prize crew with the TBP crew replacing the crew which left to become the prize crew.  The distinction is important because the crew quality of the two crews may vary.
+A-12.4.11  Clarification: Losses to the prize crew are based on the consecutive running total, not on a game turn basis.  Thus if a ship suffers 1 crew loss on turn 26 and 1 crew loss on turn 27, both the prize crew and the captured crew would have each suffered a loss.  The loss suffered on turn 27 is considered the second loss and hence even, not as another odd numbered loss against the prize crew.  
+
+A-16.1.2.2.2  This has been misapplied in most games.  Players frequency take the loss immediately and not at the end of the Combat Phase.  The distinction is important, particularly as it regards rigging sections.  Players frequently marked out a rigging section when the critical was rolled and then take further damage from other firing ships.  If the critical is properly applied at the end of the Combat Phase, some cases will result in less overall damage as the other firing ships will cause damage to a rigging section which will then be marked out when applying the critical instead of being applied to the next section.  Other cases will result in more damage, as the other firing ships may take out the last squares in a section resulting in the section being marked out being another entire section.  Crews which have suffered a demoralization result and have not fired yet this Combat Phase, still get to fire one last time at their old crew quality.  Note this is a clarification of the original rules and should be followed even when mutually agreeing to use the original Critical Hit Table.
+
+A-20.1 Full Sails
+Three main changes have been introduced here:
+1.  Rigging hits at ships at FS are no longer doubled but instead gain additional rigging hits as indicated on the Hit Tables (R results inside ( ) are added to the normal result when the ship is at full sail).  Losses are now roughly 50% greater instead of 100%.
+2.  Players must now plot changes in sail status during the Movement Notation Phase.  This will require placing Men in the Rigging (MIR) which will affect combat, boarding parties and any tasks requiring the availability of all three crew sections.
+3.  Ships at FS will suffer a Hit Table modifier to reflect the less stable nature as a firing platform.
+These changes, in combination with changes made to the rake rule, should mean that ships will retain more  mobility than in past tournaments.  The counter to this better mobility is the cost in modifiers for crew devoted to changing sail and the less stable nature of FS over BS ships.  Players who are constantly changing sail status may find themselves losing not because of board position, but due to the constant –1 and –2 modifiers they are inflicting on themselves, giving their opponents an edge in gunnery.
+Example:  A crack British 74, Large Class, at full sail, fires at a target located three hexes away firing a full broadside of 18 guns.  Looking at the HDT, the ship receives +2 for range and +2 for crew quality, total of +4.  However, due to the ship being at FS, the ship receives a further modifier of –1, reducing the Hit Table from Table 4 to Table 3.  The same ship firing at a range of two would have had +3 for range, +2 for crew quality and –2 for FS, meaning its Table 5 shot became a Table 3 shot because of FS.
+Example:  Looking at the same ship, a crack British 74, Large Class, at full sail, but it now has MIR to change sail status to BS.  It fires at a target located three hexes away firing a full broadside of 18 guns.  Looking at the HDT, the ship receives +2 for range and +2 for crew quality, total of +4.  However, due to the ship being at FS, the ship receives a further modifier of –1 which is further reduced by –1 for being a crew section down as the MIR requires the assignment of a crew section to the task of changing the sail status; reducing the Hit Table from Table 4 to Table 2.  The same ship firing at a range of two would have had +3 for range, +2 for crew quality, –2 for FS and –2 for being a crew section down, meaning its Table 5 shot became a Table 1 shot because of FS and having MIR.
+Example:  Finally, looking at the same ship, a crack British 74, Large Class, but it is no longer at FS, its at BS.  However, it has MIR to change sail status to FS.  It fires at a target located three hexes away firing a full broadside of 18 guns.  Looking at the HDT, the ship receives +2 for range and +2 for crew quality, total of +4.  However, due to the ship having MIR, the ship receives a  modifier of –1 for being a crew section down as the MIR requires the assignment of a crew section to the task of changing the sail status; reducing the Hit Table from Table 4 to Table 3.  Note that even though it has plotted to change its sail status from BS to FS, it does not suffer the FS penalty.  The same ship firing at a range of two would have had +3 for range, +2 for crew quality, and –2 for being a crew section down, meaning its Table 5 shot became a Table 3 shot because of  MIR.
+
+A-20.3.8  Ships of the period actually had two anchors and the game simplified this to a single anchor cable.  It was easier to keep track of a single anchor in the Notations than two.  Ships now have two anchors.  With the revision of the Ship’s Log, each anchor is represented by its own square for recordkeeping.  Note the loss of a single anchor does not take away a ship’s ability to anchor, but it does remove the benefits it received for firing and moving on springs.  This is more realistic and explains why it took so long to up-anchor in the game, it was really two anchors being up-anchored.
+
+A-20.4.2  I have always believed the ability to plot “L1R” for two more consecutive game turns had more to do with rakes than any belief that ships could make two such turns consecutively.  Some players have always argued that the original rules were unrealistic, ships could not make two such turns.  But games sometimes have to sacrifice realism for the sake of game play.  It this case, I believe that the rules were written this way because ships would be subject to rakes too frequently otherwise.  The Advanced Game rake rules was only an approximation due to the limitation imposed by using hexagons to represent movement, firing, etc.  Corresponding, movement was too an approximation.  With the moving of the Optional Rake Determination to the Advanced Game Rules and the reduction in the range at which a rake is possible, rakes will be tougher to get and ships will 
+no longer need the protection the original approximation afforded.  Thus, ships may no longer plot two consecutive turns across two game turns.
+
+A-20.5  Repairs
+The game simplifies the task of making repairs.  Too often, repairs are an afterthought born from not being able to do anything else that turn, eg. firing  guns.  This greatly diminishes the work involved.  Remember, game turns are only three minutes in real time.  Rarely were repairs attempted during battle conditions.  Hence the following changes have been added to making repairs:
+1.  Repair notations must be made during the Movement Notation Phase.
+2.  Only the threat of melee can cancel the repair once the notation has been made.  Ships in a position to be boarded may form DBPs voiding the repair.
+This means players will no longer be able to decide to make repairs because they can do nothing else that turn.  And once committed to the repair, they cannot decide to take that juicy shot that just presented itself.
+
+A-24.1  Reduced Field-of-Fire
+This is one of the least understood sections of the rules and creates the largest number of headaches during tournaments (outside of maybe melees).  The original rules are devoid of suitable examples to guide proper play.  Hope to remedy that situation now.
+
+Example #1
+The example shows (see diagram next column) one of the more frustrating situations encountered.  We have a situation in which Ships A & B are attacking Ship C.  What ships have shots against which ships?  Ship C has the best of all worlds in this example.  Ship C can fire at either Ship A or Ship B.  Ship A can return fire at Ship C.  However Ship B has no shot.  Let’s look closer.  Ship C has Ship A in its field 4 which means it can only fire its stern guns, a half broadside shot.  Ship B is in its full field of fire (fields 1, 2, or 3).  Wouldn’t Ship A block Ship C’s field of fire?  In this case, no, because it does not 
+
+
+
+
+
+
+
+
+
+straddle both field 4 and the full field of fire fields of 1,2 and 3.  Ships always have the option to fire at either ships in their full field of fire or at ships in either field 4 or field 5 (they can not shoot at both, they must choose one or the other).  Doesn’t the fact that Ship A is closer mean anything?  In this particular case, because Ship A is wholly in field 4 
+
+extend into any other field of fire, it does not become a factor.  It would only be a factor for other ships in field 4.  Ship C thus can decide to take a stern broadside only at Ship A at a range of 2 or take a full broadside shot at Ship B at a range of five.  Ship A can return fire with the same half broadside (a bow broadside) shot as Ship C has on it.  The real trouble is Ship B.  This is where players have problems.  How in the world can Ship C have a full broadside at Ship B and Ship B not return fire?  Its problem is Ship A straddles its field 4 as well as its full field of 1,2 and 3.  When determining a shot, a player must determine if any ships lie closer than the target.  For this purpose Ship A is considered to be both in field 4 for any ships also in field 4, and in field 2 for any ships in the full fields of fire 1,2 or3.  Since Ship C lies in Ship B’s full field of fire, for the purposes of determining a shot, Ship A is considered to be in Field 2.  As Ship A is closer than Ship C, Ship B is prohibited from firing because it must fire at the closest ship in the full field (fields 1, 2 and 3).  Think of the broadside as a shotgun blast.  As the shot leaves the barrel of the gun, the shot pellets expand outward in a pattern.  In a full broadside this pattern is represented by fields 1, 2 and 3.  The fact that some of his broadside might hit Ship A instead of Ship B wouldn’t deter Ship C from firing at Ship B.  However the possibility that part of broadside fired from Ship B might hit Ship A would impact on his decision to not fire.  If Ship C had been closer than Ship A, then it would absorb the broadside before it could reach Ship A allaying fears on striking the wrong ship.  Well couldn’t Ship B fire only its bow guns at Ship C?  In this case, no.  Ship B could only fire its bow guns if Ship C straddled both fields 5 and 3 and thus for the purposes of making a bow section broadside could be considered in field 5.  Despite appearances to the contrary, Ship A is simply too close to Ship B for that captain to chance firing.
+
+Example #2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+In this example, we have added another ship to the mix.  How does this change firing from the previous example?  The only change is the relation between Ships B and C.  While B remains in C’s full field of fire, it is now no longer the closer ship in that field.  Ship D now assumes that honor.  For purposes of line of sight, Ship D is assumed to occupy both fields 2 and 4.  Thus, Ship C can no longer fire at Ship B.  Well, if Ship C can no longer fire at Ship B, can it still fire its full broadside at Ship D now that its closer?  Unfortunately, no.  Ship D straddles two fields, 2 and 4.  For the purposes of determining fire, it is assumed to occupy the lowest numbered field.  Okay, so far, it’s a full field, why no full broadside?  Because there are two exceptions to this rule.  The exception applied to this case is when a ship straddles fields 2 and 4, it may not fire its stern section if there is another ship closer in field 4.  Looking at the example again, that is the case here. Ship A is in field 4 and is closer than D to Ship C.  Ship C is reduced to a bow section shot if it desires to take advantage of the rake its been presented.  It still retains the ability to take a stern shot at Ship A.  Note, Ship C cannot split his fire; firing his stern at Ship A and his bow at Ship D even though this does not involve firing any section more than once and is the equal to a full broadside.
+
+Amplifying Remarks:  I feel compelled to make a few comments in defense of the current system for Fields of Fire in light of the growing clamor for changes, in particular involving fields 4 and 5 and blocked ships.  Many believe it is unrealistic and unreasonable that a ship in the full field can block a target in either 4 and 5, wanting instead the ability to be able to fire a bow or stern section shot at the offending ship.  There are a number of “house rules” that use some variation of this theme, which if both players are willing to use, I have no problems per se.  However, I feel this trend is neither realistic or reasonable.  As has been stated a number of times, many aspects of game design are an abstraction of real life and this area is certainly no exception.  I think that the abstraction that comes into play here is both from a real life perspective and the fighting orders of the day.  Unstated in many of the complaints about the blocked ships is the fact that it is frequently their own ship doing the blocking.  It is the nature of today’s cardboard admirals to send individual ships in various directions from the main force to seek some advantage that leads to these situations.  Situations their counterparts some 200 years ago would have found appalling.  Even Nelson maintained some sort ship formation that took into account the fields of fire of the ships to the enemy.  One of the most important reasons for maintaining some sort of formation was, one knew where one’s own ships were limiting friendly fire incidents.  In today’s world of perfect intelligence it’s easy to forget that once the firing begin, the field of battle was going to be covered by a huge blanket of smoke, greatly hindering one’s ability to see.  Formations allowed captains to rightly foresee their lines as opposed to the enemy’s.  Captains darting off out of formation would have done so at their peril as it may have been impossible to determine whether a ship was friend or foe.  The further claim that one could fire a stern or bow shot safely I feel defies the realities of the day.  First, the guns of the period were not rifled meaning the term aim meant direction and not as in bull’s-eye target practice.  It was not a rifle shot, a broadside was akin to firing a sawed-off shotgun, the shot pattern was very wide and only good for a short distance (effective range verses its maximum range), particularly when fired from a pitching ship.  The game only allows for shots out to a distance of 10 hexes or a thousand yards.  The guns of the period actually had ranges out to 2500 yards.  Even carronades of the period had ranges from 800-1100 yards.  The game does not use these distances I believe largely because the ability to hit and target at such ranges with enough weight of shot to register damage was not possible with enough frequency for game purposes.  Particularly a damage system predicated on the use of a six sided die.  I also believe based on my readings, that the stern and bow shots allowed in the game are an abstraction of a full shot.  The guns of the period actually had a remarkable degree of rotation and ships in fields 4 and 5 could be brought to bear under a full broadside.  However due to the shot pattern and the fact that from fields 4 and 5, ships present a smaller target due to the angle to the firing ship, the effectiveness of the full broadside was about halve, hence the use of stern and bow halve shots in the game.  But this means that the pattern is actually larger that players believe and there is less margin of safety in their broadside also hitting the blocked ship.  I just don’t think that any captain of the day would risk such a shot if the ship was friendly or would pass up a shot if it was not, to fire at a ship at a greater distance and from a more difficult angle even if they could see it through the smoke.  Now I’m not arguing that one must maintain a formation or follow the old fighting instruction method of battle.  But I am saying that if one chooses to use what would have been very unorthodox tactics even for Nelson, the occasional problem with blocked ships is the price you pay. 
+
+A-24.2.2.4  Chainshot
+The prohibition against British use of chainshot is  one rule often done away with by players.  One of the things odd about this is, though players want the British to be able to use chainshot, it is seldom used by any player, let alone British players.  The reason for this being in the original rules is simple: the British disdained shooting at the rigging.  They had as much access to chainshot as anyone else.  They simply felt it was shot wasted that could/should have been fired at hull and sinking or otherwise disabling the enemy ship.  All British tactics and training were based on this devotion to firing at the hull.  The British frequently were loaded with, and fired doubleshot, for example.  The British wanted to batter his enemy and deny its navy ships in which to carry on the war.  The French on the other hand were the mirror opposite of the British.  They disdained firing at hull.  Their objective was to maintain a fleet in being and, hence, tie up British resources.  They fired almost exclusively at the rigging to deny the British the ability to impose their superior seamanship by severely limiting their mobility.  It was better to knock down the British rigging and sail off to fight another day than risk the loss of ships unless in a vastly superior position.  These different philosophies account for their corresponding arrangement of their navies.  The British with their focus on the hull, made greater use of carronades; devastating in close but with limited range.  The French and their focus on rigging made greater use of the long guns for firing at rigging out of range of the British carronades and chainshot for its ability to bring down rigging.  Because of this, British ships are slightly cheaper to build and in game terms are cheaper in victory points than the French.  A player, particularly if he plans on using French ships is giving away his “advantage” to allow British ships use of chainshot.  Be that as it may, players may still mutually agree to allow the British use of chainshot, but it remains in the rules.
+
+A-24.2.3  Doubleshot
+Doubleshot was the simple adding an additional ball shot to the gun loaded with a regular load.  It did not require any additional powder, hence its shortness in range; the same powder charge had to push out two shot instead of the usual one. Because this shouldn’t take a full three minutes longer in game time to effect, doubleshot now only takes one turn to load if you’re at full crew.  Ships of the period used doubleshot far more frequently than it is ever used in the game.  This can be attributed to the its short range and the fact it takes two turns to load.  This eliminates one of those impediments.  Further, it was the frequent practice to be loaded with a normal round and then when conditions presented itself, add another shot to double the load just prior to firing.  To affect this in game terms, players may load with doubleshot and should the target not be within range of doubleshot, fire the load as normal roundshot (to simulate not loading the extra shot).  Granting this flexibility comes at a price, players expend two reloads for the initial loading of doubleshot regardless of what is later fired.
+
+
+A-24.2.4.5 Grapeshot
+Currently grapeshot is virtually never used in the game.  This can be largely attributed to the short range and the uniqueness of the conditions under which it is the most beneficial.  The normal practice of the period was to place a grapeshot canister or charge in on top of a roundshot load.  This allowed the use of grapeshot when conditions indicated its use by simply placing the grapeshot load in with whatever was already being loaded.  To reflect this in game terms, this rule will allow a player prior to the firing of a broadside loaded with roundshot to fire grapeshot instead if the conditions warrant.  Damage is either taken as a roundshot load or as a grapeshot load.  You do not enjoy the benefit of both as they would have, but that is the price for the flexibility being given.  
+
+A-24.3.2.3.1  Exploding Ships
+The only real change here is the insertion of this rule as part of the Advanced Game Rules from its position as an Optional Rule in the 2nd Edition.  The rule has been updated to reflect the new Critical Hit Table for ships catching fire.  Fires are no longer known quantities as to their duration.  Players roll each turn to determine if they have managed to put out the fire.  Also, fires  now cause damage when previously fires could rage for up to five turns and you suffered no damage.  To check for fires, roll one die.  If you roll equal to or lower than the Hit Table fired on, the ship’s on fire.  To check to see if the fire is out of control, roll one die and if a six, the fire is out of control.  Place an exploding ship marker on the ship, otherwise a fire starts.  Players may immediately assign crew sections to fight the fire or assign them during the Boarding Party Preparation Phase.  During each Unfouling Phase, players roll one die.  If it is equal to or lower than the number of crew sections assigned to fight the fire, the fire is put out.  Any other result and the fire continues, the player marks out one rigging and one hull square.
+
+A-24.4 Rakes
+Two main changes have been made: 1.) The insertion of the Optional Rake Determination method from the Optional Rules to the Advanced Game rules.  2.)  The range for a rake has been reduced to five hexes.
+
+
+
+
+A-24.5 Men in the Rigging
+Ships of the period tended to enter battle at what the game refers to as battle sails.  There is only one major battle in which any of the combatants entered in what the game refers to as full sails, Trafalgar.  Ships also tended to remain at the sail status they entered battle.  One reason for this was the quantity of men needed to change sail status.  Fully a third of the crew was involved to make a sail change.  Secondly, a ship was a more stable firing platform at battle sails.  Thirdly, it reduced damage taken by the rigging (sails).  The game greatly simplifies this, allowing one to make changes much more than any captain would have thought of doing historically.  To more accurately reflect conditions involved in changing sail status, several changes have been made.
+1. Players must now plot their sail changes during the Movement Notation Phase.  This is called Men in the Rigging (MIR).
+2.  Having MIR involves the devotion of one crew section to the task of changing sails from either BS to FS or FS to BS.
+3.  The result of using a crew section is the reduction in firing, the inability to up-anchor or repair at the same time and its affect on boarding parties.
+
+Players are free to continue to make sail changes as frequently as they want. However, now there is a cost for doing so.
+
+A-26.1  Loads
+A-26.1.1  Ships of the period carried large quantities of shot and powder, sufficient quantities to extend firing beyond that to which is normal in the game.  For example, the HMS. Victory carried 120 tons of shot.  She fired a broadside weighting half a ton.  This translates to 240 broadsides.  With a broadsides on average every 90 seconds, this translates to a 120 game turns of firing.  That’s a lot of broadsides.  The powder was stored in the magazine in kegs.  The gun master and his mates would fill silk (and later flannel) sacks called cartridges with the powder to form the proper charge used.  Only a portion of the powder would put into cartridges.  In action, once the cartridges were used up, the crews serving the guns would be forced to ladle the powder directly into the gun.  This would slow down the rate of fire at which the gun could be fired.  Additionally the longer the action, the more fatigued the crew became.  The standard gun crew of the day was 6-14 crew members, each assigned a number for ease of being heard in battle.  The crew was drilled to service the gun “by the numbers”, meaning each crew member in turn would perform his task.  Then they collectively would manhandle the gun weighting about 3.5 tons into position (remember this is all in 90 seconds).  Crew fatigue would mean a slower rate of fire.  This rule was added to reflect both crew fatigue and the limitation on the number of cartridges.  Thus each ship is assigned 30 reloads which are spent to reload broadsides during the Reload Phase.  Once a ship is out of reloads, it suffers a Hit Table reduction due exhaustion of both men and cartridges for the rest of the action.  For game purposes this condition is being called “Low Powder”.
+
+A – Critical Hit Table
+The Critical Hit Table has undergone a major revision.  The original Critical Hit Table (CHT) was based on the roll of one die plus the Hit Table fired on.  This had the effect of placing certain damage results off-limits depending on the Hit Table used.  While certain results were clearly more likely to happen on the higher Hit Tables, (eg. Magazine may Explode) in real life, they’re always possible.  To reflect the possibility of fate’s intervention, the CHT has been revised using a two dice system so that all the results are available regardless of Hit Table.  The more severe results, while now possible to be received from a Hit Table 1 shot, require a qualifying die roll (roll one die and if its equal or less than the Hit Table fired on, you get the result) weighted to be more likely at the higher Hit Tables.  Note, the nature of the qualifying roll means while Hit Table 0 does have access to results it did not in the original, it does not have access to the severe results (this is intentional). 
+
+A -  Fouling Table
+The Fouling Table has undergone a major revision.  In addition to a conversion to a two dice system; it is tougher to become fouled and there are a broader range of modifiers to affect the outcome.  More emphasis is now being placed on speed (ie. motionless ships are easier to avoid, faster ships have less time to avoid collisions) and crew quality (ie. the better the crew the more capable they are to avoid a collision).  There is a broader discussion of fouling in A-8.3.5 Collisions/Fouling above.
+
+A -  Grappling Table
+The Grappling Table has undergone a major revision.  In addition to a conversion to a two dice system; it is tougher to grapple and there are a broader range of modifiers to affect the outcome.  Emphasis is on crew quality (the difference between crews), speed (motionless ships are easier to grapple, ships moving fast are harder to grapple) and weather conditions (light conditions make it easier, heavy conditions make it harder).  Note friendly ships must now roll to grapple (this to account for weather conditions and speed making it tougher to grapple even when both ships desire it).
+
+A -  Unfouling Table
+The Unfouling Table has undergone a major revision.  In addition to a conversion to a two dice system; it is tougher to unfoul and there are a broader range of modifiers to affect the outcome.
+
+A -  Ungrappling Table
+The Ungrappling Table has undergone a major revision.  In addition to a conversion to a two dice system; it is tougher to ungrapple and there are a broader range of modifiers to affect the outcome.
+WOODEN SHIPS & IRON MEN
+THE AVALON HILL GAME COMPANY’S TRADEMARK FOR ITS FIGHTING SAIL GAME
+TOURNAMENT EDITION RULES – ADDENDUM v1.2b
+ 
+
+
+Page  PAGE 1of  NUMPAGES 13
+
+
+
+
+
+
+C
+
+B
+
+A
+
+
+
+
+SHIP A
+
+SHIP A
+
+SHIP B
+
+C
+
+C 
+
+ B 
+
+A 
+
+D
+
+A 
+
+B 
+
+C 
+
+
+

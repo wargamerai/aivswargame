@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>帆船の戦い - サンドボックス</title>
+<style>
+  body { background:#0a1a2a; color:#fff; font-family:sans-serif; padding:20px; }
+  .panel { background:#13243a; border:1px solid #234; border-radius:6px; padding:14px; margin-bottom:14px; }
+  h1 { color:#88ccff; margin-top:0; }
+  h2 { color:#ffcc88; font-size:1.1em; border-bottom:1px solid #345; padding-bottom:4px; }
+  label { display:inline-block; margin:4px 8px 4px 0; }
+  select, input[type=number] { background:#0a1a2a; color:#fff; border:1px solid #456; padding:4px 8px; border-radius:3px; }
+  button { background:#2266cc; color:#fff; border:none; padding:8px 16px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:1em; }
+  button:hover { background:#3377dd; }
+  button.back { background:#555; }
+  .fleet-list { max-height:200px; overflow-y:auto; border:1px solid #345; padding:6px; margin-top:6px; background:#0a1a2a; }
+  .ship-item { display:flex; justify-content:space-between; padding:3px 6px; border-bottom:1px dotted #234; font-size:0.9em; }
+  .ship-item:last-child { border-bottom:none; }
+  .ship-item .spec { color:#aac; font-size:0.85em; }
+  .nation-tag { display:inline-block; padding:1px 6px; background:#345; border-radius:3px; font-size:0.8em; margin-right:6px; }
+</style>
+</head>
+<body>
+<a href="../index1.html" class="back"><button class="back">← トップへ</button></a>
+<h1>⚓ 帆船の戦い - サンドボックス</h1>
+
+<div class="panel">
+  <h2>風の設定</h2>
+  <label>風向:
+    <select id="windDir">
+      <option value="1">南西 (SW)</option>
+      <option value="3">南東 (SE)</option>
+      <option value="4">西 (W)</option>
+      <option value="6">東 (E)</option>
+      <option value="7" selected>北西 (NW)</option>
+      <option value="9">北東 (NE)</option>
+    </select>
+  </label>
+  <label>風速:
+    <select id="windVel">
+      <option value="1">1 - 微風</option>
+      <option value="2">2 - 弱風</option>
+      <option value="3" selected>3 - 中風</option>
+      <option value="4">4 - 強風</option>
+      <option value="5">5 - 暴風</option>
+      <option value="6">6 - 疾風</option>
+    </select>
+  </label>
+  <label>変化番号:
+    <select id="windChangeNum">
+      <option value="7">7</option>
+      <option value="9" selected>9</option>
+      <option value="11">11</option>
+    </select>
+  </label>
+</div>
+
+<div class="panel">
+  <h2>自軍艦隊（青）</h2>
+  <div>
+    <label>国:
+      <select id="jpNation" onchange="refreshShipList('jp')"></select>
+    </label>
+    <label>乗員品質:
+      <select id="jpQuality">
+        <option value="elite">精鋭 (Elite)</option>
+        <option value="crack">熟練 (Crack)</option>
+        <option value="average" selected>平均 (Average)</option>
+        <option value="green">新兵 (Green)</option>
+        <option value="poor">最低 (Poor)</option>
+      </select>
+    </label>
+    <label>艦:
+      <select id="jpShip" style="min-width:200px;"></select>
+    </label>
+    <input type="text" id="jpName" placeholder="艦名" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:4px;border-radius:3px;">
+    <button onclick="addShip('jp')">追加</button>
+  </div>
+  <div class="fleet-list" id="jpFleetList"></div>
+</div>
+
+<div class="panel">
+  <h2>敵軍艦隊（赤）</h2>
+  <div>
+    <label>国:
+      <select id="usNation" onchange="refreshShipList('us')"></select>
+    </label>
+    <label>乗員品質:
+      <select id="usQuality">
+        <option value="elite">精鋭 (Elite)</option>
+        <option value="crack">熟練 (Crack)</option>
+        <option value="average" selected>平均 (Average)</option>
+        <option value="green">新兵 (Green)</option>
+        <option value="poor">最低 (Poor)</option>
+      </select>
+    </label>
+    <label>艦:
+      <select id="usShip" style="min-width:200px;"></select>
+    </label>
+    <input type="text" id="usName" placeholder="艦名" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:4px;border-radius:3px;">
+    <button onclick="addShip('us')">追加</button>
+  </div>
+  <div class="fleet-list" id="usFleetList"></div>
+</div>
+
+<div class="panel">
+  <button onclick="startBattle()" style="background:#cc6644;font-size:1.2em;padding:10px 30px;">⚓ 戦闘開始</button>
+  <button onclick="loadPreset('fleet_vs')" style="background:#445;margin-left:10px;">プリセット: 艦隊戦（英 vs 仏）</button>
+  <button onclick="loadPreset('frigate_duel')" style="background:#445;">プリセット: フリゲート一騎打ち</button>
+  <button onclick="clearAll()" style="background:#844;margin-left:10px;">クリア</button>
+</div>
+
+<script src="shipdata.js"></script>
+<script src="hittables.js"></script>
+<script src="criticaldata.js"></script>
+<script src="chartsdata.js"></script>
+<script>
+const jpFleet = [];
+const usFleet = [];
+
+// 国セレクタ初期化
+function initNationSelector(id) {
+  const sel = document.getElementById(id);
+  Object.keys(SHIP_SPECS).forEach(code => {
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = `${code} - ${NATION_NAMES_JP[code] || code}`;
+    sel.appendChild(opt);
+  });
+}
+initNationSelector('jpNation');
+initNationSelector('usNation');
+document.getElementById('jpNation').value = 'GB';
+document.getElementById('usNation').value = 'FR';
+
+// 艦セレクタ初期化
+function refreshShipList(side) {
+  const nationSel = document.getElementById(side + 'Nation');
+  const shipSel = document.getElementById(side + 'Ship');
+  shipSel.innerHTML = '';
+  const ships = SHIP_SPECS[nationSel.value] || [];
+  ships.forEach((s, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    const clsJa = SHIP_CLASS_NAMES_JP[s.class] || s.class;
+    opt.textContent = `${s.guns}門 ${clsJa} ${s.notes ? '['+s.notes+']' : ''}`;
+    shipSel.appendChild(opt);
+  });
+}
+refreshShipList('jp');
+refreshShipList('us');
+
+function renderFleet(side) {
+  const fleet = side === 'jp' ? jpFleet : usFleet;
+  const div = document.getElementById(side + 'FleetList');
+  if (fleet.length === 0) {
+    div.innerHTML = '<div style="color:#678;padding:10px;text-align:center;">（艦を追加してください）</div>';
+    return;
+  }
+  div.innerHTML = fleet.map((s, i) => {
+    const clsJa = SHIP_CLASS_NAMES_JP[s.type] || s.type;
+    return `<div class="ship-item">
+      <span><span class="nation-tag">${s.nation}</span><b>${s.name}</b> <span class="spec">${s.guns}門 ${clsJa} / ${CREW_QUALITY_LABEL(s.crewQuality)}</span></span>
+      <button onclick="removeShip('${side}', ${i})" style="background:#844;padding:2px 8px;font-size:0.85em;">×</button>
+    </div>`;
+  }).join('');
+}
+
+function CREW_QUALITY_LABEL(q) {
+  return { poor:'最低', green:'新兵', average:'平均', crack:'熟練', elite:'精鋭' }[q] || q;
+}
+
+function addShip(side) {
+  const nation = document.getElementById(side + 'Nation').value;
+  const shipIdx = parseInt(document.getElementById(side + 'Ship').value);
+  const quality = document.getElementById(side + 'Quality').value;
+  const name = document.getElementById(side + 'Name').value.trim() ||
+    `${nation}-${SHIP_SPECS[nation][shipIdx].guns}#${(side === 'jp' ? jpFleet : usFleet).length + 1}`;
+  const spec = SHIP_SPECS[nation][shipIdx];
+  const ship = buildShipFromSpec(spec, side, name, quality, nation);
+  if (ship) {
+    (side === 'jp' ? jpFleet : usFleet).push(ship);
+    document.getElementById(side + 'Name').value = '';
+    renderFleet(side);
+  }
+}
+
+function removeShip(side, idx) {
+  (side === 'jp' ? jpFleet : usFleet).splice(idx, 1);
+  renderFleet(side);
+}
+
+function clearAll() {
+  jpFleet.length = 0;
+  usFleet.length = 0;
+  renderFleet('jp');
+  renderFleet('us');
+}
+
+function loadPreset(name) {
+  clearAll();
+  if (name === 'fleet_vs') {
+    // 英国 vs フランス 小艦隊
+    const gb = SHIP_SPECS['GB'];
+    jpFleet.push(buildShipFromSpec(gb.find(s => s.guns === 100 && s.class === 'SOL'), 'jp', 'Victory', 'elite', 'GB'));
+    jpFleet.push(buildShipFromSpec(gb.find(s => s.guns === 74 && s.class === 'SOL'), 'jp', 'Bellerophon', 'crack', 'GB'));
+    jpFleet.push(buildShipFromSpec(gb.find(s => s.guns === 74 && s.class === 'SOL'), 'jp', 'Orion', 'crack', 'GB'));
+    const fr = SHIP_SPECS['FR'];
+    usFleet.push(buildShipFromSpec(fr.find(s => s.guns === 120 && s.class === 'SOL'), 'us', 'Bucentaure', 'average', 'FR'));
+    usFleet.push(buildShipFromSpec(fr.find(s => s.guns === 80 && s.class === 'SOL'), 'us', 'Neptune', 'average', 'FR'));
+    usFleet.push(buildShipFromSpec(fr.find(s => s.guns === 74 && s.class === 'SOL'), 'us', 'Aigle', 'green', 'FR'));
+    renderFleet('jp');
+    renderFleet('us');
+  } else if (name === 'frigate_duel') {
+    const gb = SHIP_SPECS['GB'];
+    const us_ = SHIP_SPECS['US'];
+    jpFleet.push(buildShipFromSpec(gb.find(s => s.guns === 38 && s.class === 'F'), 'jp', 'Guerriere', 'crack', 'GB'));
+    usFleet.push(buildShipFromSpec(us_.find(s => s.guns === 44 && s.class === 'F'), 'us', 'Constitution', 'elite', 'US'));
+    renderFleet('jp');
+    renderFleet('us');
+  }
+}
+
+// クラス別 WSM デフォルト値
+function getWSMSpeeds(cls, classNum) {
+  // BS: 3 or 4 / FS: 5,6,7 / TA: 1〜
+  if (cls === 'SOL') {
+    if (classNum === 1) return { bs: 3, fs: 5, ta: 1 };  // 大型SOL
+    return { bs: 3, fs: 5, ta: 2 };                        // 標準SOL
+  }
+  if (cls === 'F') return { bs: 4, fs: 6, ta: 3 };  // フリゲート
+  if (cls === 'C') return { bs: 4, fs: 6, ta: 3 };  // コルベット
+  if (cls === 'B') return { bs: 4, fs: 7, ta: 4 };  // ブリッグ
+  if (cls === 'S') return { bs: 4, fs: 7, ta: 4 };  // スループ
+  return { bs: 4, fs: 6, ta: 3 };
+}
+
+function buildShipFromSpec(spec, side, name, crewQuality, nation) {
+  if (!spec) return null;
+  const qKey = crewQuality?.substring(0,2) || 'av';
+  const sp = getWSMSpeeds(spec.class, spec.classNum);
+  return {
+    name, type: spec.class, shipClass: spec.class, classNum: spec.classNum,
+    guns: spec.guns, side, nation: nation || null,
+    crewQuality: crewQuality || 'average',
+    vp: spec.pv ? (spec.pv[qKey] ?? spec.pv.av ?? 10) : 10,
+    col: -1, row: -1, dir: 6,
+    sailState: 'battle', sailBroken: false,
+    // WSM 速度・転舵
+    battleSailSpeed: sp.bs,
+    fullSailSpeed: sp.fs,
+    turningAbility: sp.ta,
+    hull:    { max: spec.hull || 10, remain: spec.hull || 10 },
+    rigging: {
+      L: { max: spec.rigging?.l || 0, remain: spec.rigging?.l || 0 },
+      C: { max: spec.rigging?.c || 0, remain: spec.rigging?.c || 0 },
+      R: { max: spec.rigging?.r || 0, remain: spec.rigging?.r || 0 },
+    },
+    crew: {
+      L: { max: spec.crew?.l || 0, remain: spec.crew?.l || 0 },
+      R: { max: spec.crew?.r || 0, remain: spec.crew?.r || 0 },
+    },
+    gunHitTable: { ...(spec.gunHitTable || {}) },
+    carronades: {
+      L: { max: spec.carronades?.l || 0, remain: spec.carronades?.l || 0 },
+      R: { max: spec.carronades?.r || 0, remain: spec.carronades?.r || 0 },
+    },
+    depth: spec.depth,
+    status: 'ok', faceUp: true, isLead: false,
+    capG: spec.hull || 10, capM: spec.hull || 10, dmgG: 0, dmgM: 0,
+    speed: sp.bs,
+    fouledWith: [], grappledWith: [],
+    // プロット用
+    plottedMoves: [],
+    plotDone: false,
+  };
+}
+
+function startBattle() {
+  if (jpFleet.length === 0 || usFleet.length === 0) {
+    alert('両軍に艦が必要です');
+    return;
+  }
+  const state = {
+    combatTurn: 1,
+    phase: 'init',
+    initiative: null,
+    spotRange: 10,
+    battleStarted: false,
+    deployMode: true,
+    deployIdx: 0,
+    jpFleet, usFleet,
+    jpFreeMove: false, usFreeMove: false,
+    jpDetected: false, usDetected: false, contactMade: false,
+    wind: {
+      direction: parseInt(document.getElementById('windDir').value),
+      velocity: parseInt(document.getElementById('windVel').value),
+      windChangeNumber: parseInt(document.getElementById('windChangeNum').value),
+      initialDirection: parseInt(document.getElementById('windDir').value),
+    },
+  };
+  localStorage.setItem('hubState', JSON.stringify(state));
+  localStorage.setItem('campaignReady', 'true');
+  localStorage.setItem('scenarioMode', 'sandbox');
+  localStorage.setItem('scenarioRules', JSON.stringify({ jpHandicap: 0 }));
+  localStorage.setItem('jpAutoAI', '0');
+  localStorage.setItem('fullAutoAI', '0');
+  window.location.href = 'wsm_hub.html';
+}
+
+// 初期表示
+renderFleet('jp');
+renderFleet('us');
+</script>
+</body>
+</html>

@@ -1,0 +1,1029 @@
+ADVANCED GAME TABLES
+
+WOODEN SHIPS & IRON MEN
+THE AVALON HILL GAME COMPANY’S TRADEMARK FOR ITS FIGHTING SAIL GAME
+TOURNAMENT EDITION RULES 1.2b
+
+
+HIT DETERMINATION TABLE (HDT)
+
+1
+
+2
+
+3
+
+4
+
+5, 6
+
+7-10
+
+1-3
+
+4-6
+
+25+
+
+22-24
+
+7-9
+
+10-12
+
+13-15
+
+16-18
+
+19-21
+
+0  (4)
+
+5  (9)
+
+4  (8)
+
+HIT TABLE MODIFIERS
+
+RAKE
+
+STERN
+
+4  (8)
+
+4  (7)
+
+1  (2)
+
+0  (1)
+
+-1  (0)
+
+-2  (-1)
+
+-3  (-2)
+
+-4  (-3)
+
+1  (2)
+
+1  (2)
+
+1  (2)
+
+1  (2)
+
+1  (3)
+
+1  (3)
+
+0  (3)
+
+0  (3)
+
+-1  (0)
+
+-1  (0)
+
+-1  (0)
+
+-2  (0)
+
+0  (1)
+
+0  (1)
+
+0  (1)
+
+-2  (-1)
+
+-2  (-1)
+
+-2  (-1)
+
+-3  (-2)
+
+-3  (-2)
+
+2  (3)
+
+2  (3)
+
+-1  (1)
+
+-1  (2)
+
+4  (7)
+
+3  (7)
+
+3  (6)
+
+3  (6)
+
+3  (6)
+
+3  (5)
+
+3  (5)
+
+2  (5)
+
+2  (5)
+
+1  (5)
+
+2  (6)
+
+2  (4)
+
+2  (4)
+
+2  (4)
+
+1  (4)
+
+1  (4)
+
+0  (2)
+
+0  (2)
+
+-1  (1)
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
++1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
++2
+
++2
+
+-1
+
+-1
+
+-1
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++3
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
++2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-2
+
+-3
+
+-3
+
+-4
+
+-4
+
+-4
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+0
+
+EL
+
+PR
+
+CR
+
+AV
+
+GR
+
+GP
+
+CH
+
+DS
+
+RS
+
+AT FULL SAIL
+
+ALL ANCHOR
+
+CREW SECT. LOSS
+
+INITIAL BRDSDE
+
+AMMUNITION TYPE USED
+
+CREW QUALITY
+
+ADVANCED GAME MODIFIERS
+
+CAPT. SHIP
+
+RANGE IN HEXES
+
+NUMBER OF GUNS FIRING
+
+NUMBER 0
+
+0
+
+HULL
+
+RIGGING
+
+5R-2H (2R)
+
+7R-H-G-2C* (4R)
+
+5H-G-2C*
+
+4R-H (2R)
+
+3R-G-C (2R)
+
+3R-H (R)
+
+4R-H-G-C* (2R)
+
+6R-2H-2C (3R)
+
+6R-G-C (3R)
+
+6R-H-2G (3R)
+
+7R-2G* (4R)
+
+6H-2G-2C* (R)
+
+5H-G-2C-R
+
+5H-G-2R
+
+4H-2G-C-R
+
+5R-2G (3R)
+
+0
+
+
+
+
+
+
+
+
+
+3H-3G-C-R
+
+5R-H-C (2R)
+
+0
+
+
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+RIGGING
+
+HULL
+
+3H-G-C*
+
+2H-2G-4C (R)
+
+NUMBER 10
+
+
+0
+
+0
+
+
+
+
+
+6R-2G-C (3R)
+
+0
+
+5R-2G-C (3R)
+
+3H-G-R
+
+2H-2G-C
+
+2H-G-C
+
+2R-G (R)
+
+2R-G-C (R)
+
+3R-G (R)
+
+2R-C (R)
+
+4R-H-C* (2R)
+
+3H-G*
+
+0
+
+3H-C
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+NUMBER 2
+
+RIGGING
+
+HULL
+
+0
+
+NUMBER 1
+
+2H-G-C
+
+2H-G-R
+
+H-2C-R
+
+R-C (R)
+
+R-H (R)
+
+R-G (R)
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+RIGGING
+
+HULL
+
+H-G-C (R)
+
+NUMBER 5
+
+H-R
+
+0
+
+0
+
+RIGGING
+
+HULL
+
+G-C (R)
+
+NUMBER 4
+
+2R-G (R)
+
+2R (R)
+
+R-G
+
+2R-H-C* (R)
+
+2H-2G*
+
+2H-C
+
+2H-R
+
+H-G-C
+
+R-C
+
+R-G
+
+HIT   TABLES
+
+R-G (R)
+
+R-C
+
+2R-H-C* (R)
+
+2H-G*
+
+H-C-R
+
+H-C
+
+H-G
+
+H (R)
+
+0 (R)
+
+R
+
+0 (R)
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+RIGGING
+
+HULL
+
+G-C
+
+0
+
+NUMBER 3
+
+0
+
+0
+
+0
+
+C
+
+H
+
+G*
+
+C*
+
+C
+
+R
+
+0 (R)
+
+0 (R)
+
+G
+
+H-G
+
+H-C
+
+H-C-R*
+
+R-C-G*
+
+H
+
+0
+
+0
+
+RIGGING
+
+HULL
+
+G
+
+R
+
+C (R)
+
+HR
+
+4H-G-3R
+
+4H-2G-2C
+
+3H-2G-2C-R
+
+4R-H-C (2R)
+
+4R-H-G (2R)
+
+5R-G-C (3R)
+
+4R-H-G (2R)
+
+6R-H-2C* (3R)
+
+4H-2G-2C*
+
+4H-G-2R
+
+4H-2G-C
+
+3H-2G-2C 
+
+3H-2G-2C (R)
+
+4R-H-G (2R)
+
+3R-H-G (2R)
+
+3R-G (R)
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+RIGGING
+
+HULL
+
+2H-3G-C (R)
+
+NUMBER 9
+
+3H-G-C-R
+
+0
+
+0
+
+RIGGING
+
+HULL
+
+2H-G-2C (R)
+
+NUMBER 8
+
+5R-2G-C (2R)
+
+4R-H-2C (2R)
+
+3R-H-G (2R)
+
+5R-2H-G* (2R)
+
+4H-2G-C-R*
+
+4H-2G-C
+
+3H-2G-2C
+
+3H-2G (R)
+
+3R-G (2R)
+
+4R-G (R)
+
+4R-H (2R)
+
+3R-H-G (R)
+
+5R-H-C* (3R)
+
+4H-2G-C*
+
+3H-G-C (R)
+
+2H-2G-C
+
+2H-2G-R
+
+2H-G-R
+
+2R-C (R)
+
+2R-G-C (R)
+
+2R-C (R)
+
+6
+
+5
+
+4
+
+3
+
+2
+
+1
+
+RIGGING
+
+HULL
+
+2H-G-C
+
+NUMBER 7
+
+2H-C-R
+
+0
+
+0
+
+RIGGING
+
+HULL
+L
+
+H-G-2C
+
+NUMBER 6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+LOW POWDER
+
+-2
+
+-2
+
+-1
+
+-1
+
+-1
+
+-1
+
+-1
+
+1
+
+1
+
+2
+
+4
+
+DOUBLE SHOT
+
+GRAPE SHOT
+
+CHAIN SHOT
+
+ROUND SHOT
+
+10
+
+MAXIMUM RANGE IN HEXES 
+
+CARRONADE
+
+-1
+
+-1
+
+WEAPON OR TYPE OF AMMO
+
+MUNITION RANGE TABLE
+
+
+
