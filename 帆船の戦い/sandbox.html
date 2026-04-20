@@ -107,6 +107,7 @@
   <button onclick="startBattle()" style="background:#cc6644;font-size:1.2em;padding:10px 30px;">⚓ 戦闘開始</button>
   <button onclick="loadPreset('fleet_vs')" style="background:#445;margin-left:10px;">プリセット: 艦隊戦（英 vs 仏）</button>
   <button onclick="loadPreset('frigate_duel')" style="background:#445;">プリセット: フリゲート一騎打ち</button>
+  <button onclick="loadPreset('scenario_10')" style="background:#484;">シナリオ10: Mars vs Hercule</button>
   <button onclick="clearAll()" style="background:#844;margin-left:10px;">クリア</button>
 </div>
 
@@ -216,6 +217,24 @@ function loadPreset(name) {
     const us_ = SHIP_SPECS['US'];
     jpFleet.push(buildShipFromSpec(gb.find(s => s.guns === 38 && s.class === 'F'), 'jp', 'Guerriere', 'crack', 'GB'));
     usFleet.push(buildShipFromSpec(us_.find(s => s.guns === 44 && s.class === 'F'), 'us', 'Constitution', 'elite', 'US'));
+    renderFleet('jp');
+    renderFleet('us');
+  } else if (name === 'scenario_10') {
+    // シナリオ10: Mars (74 Crack) vs Hercule (74 Average) / 風向1・風力3・変化5
+    const gb = SHIP_SPECS['GB'];
+    const fr = SHIP_SPECS['FR'];
+    const mars = buildShipFromSpec(gb.find(s => s.guns === 74 && s.class === 'SOL'), 'jp', 'Mars', 'crack', 'GB');
+    if (mars) {
+      mars.turningAbility = 2; mars.battleSailSpeed = 3; mars.fullSailSpeed = 5;
+      mars.col = 18; mars.row = 22; mars.dir = 9; // S23 WSM方向2(NE)=numpad9
+    }
+    jpFleet.push(mars);
+    const hercule = buildShipFromSpec(fr.find(s => s.guns === 74 && s.class === 'SOL'), 'us', 'Hercule', 'average', 'FR');
+    if (hercule) {
+      hercule.turningAbility = 2; hercule.battleSailSpeed = 3; hercule.fullSailSpeed = 5;
+      hercule.col = 31; hercule.row = 15; hercule.dir = 9; // FF16 WSM方向2(NE)=numpad9
+    }
+    usFleet.push(hercule);
     renderFleet('jp');
     renderFleet('us');
   }

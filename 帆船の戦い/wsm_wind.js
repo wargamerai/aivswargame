@@ -6,9 +6,16 @@ function roll2D6() { return rollD6() + rollD6(); }
 
 // 風向変化判定（メインエントリ）
 // 戻り値: { changed, oldWind, newWind, log: [] }
+// 3ターンごとに判定
 function executeWindPhase(wind) {
   const log = [];
+  if (!wind.turnCounter) wind.turnCounter = 0;
+  wind.turnCounter++;
   const oldWind = JSON.parse(JSON.stringify(wind));
+  if (wind.turnCounter % 3 !== 0) {
+    log.push(`風期: ${wind.turnCounter}ターン目（3ターンごと判定）`);
+    return { changed: false, oldWind, newWind: wind, log };
+  }
   const wcn = wind.windChangeNumber || 9;
   const r = roll2D6();
   log.push(`風変化判定: 2d6=${r} vs 変化番号${wcn}`);

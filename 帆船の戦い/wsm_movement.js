@@ -43,6 +43,18 @@ function computeAttitude(ship, wind) {
 function baseSpeed(ship) {
   // IJNフォールバック: ship.speedがあれば流用
   if (ship.speed && !ship.shipClass) return ship.speed;
+  // §20.1 フルセイル時は full_sail_speed を使用（ship.fullSailSpeed または class default）
+  if (ship.sailState === 'full') {
+    if (ship.fullSailSpeed) return ship.fullSailSpeed;
+    const clsF = ship.shipClass || ship.type;
+    const full = {
+      'SOL': 5, 'BB': 5, 'OBB': 5,
+      'F': 6, 'CA': 6, 'CL': 6, 'CLAA': 6,
+      'C': 6,
+      'B': 7, 'S': 7, 'DD': 7,
+    };
+    return full[clsF] || 6;
+  }
   const cls = ship.shipClass || ship.type;
   // WSMデフォルトのBattle Sail Speed
   const base = {
@@ -66,7 +78,7 @@ function maxMoveForAttitude(ship, wind) {
   // attitude係数
   const attCoef = { 'A': 1.0, 'B': 0.75, 'C': 0.5 }[attitude] || 0.5;
   // sail係数
-  const sailCoef = { 'furled': 0.0, 'battle': 1.0, 'full': 1.33 }[sail] || 1.0;
+  const sailCoef = { 'furled': 0.0, 'battle': 1.0, 'full': 1.0 }[sail] || 1.0;
   // wind velocity係数（1=微風〜6=疾風）
   // WSM: 風速1=低速, 3-4=標準, 6=危険
   const velCoef = [0, 0.5, 0.75, 1.0, 1.0, 1.1, 1.1][Math.min(6, Math.max(0, vel))];

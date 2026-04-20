@@ -174,6 +174,14 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
         <button class="np" onclick="plotKey('0')" style="grid-column:1/3;">0<small>STOP</small></button>
         <button class="np" onclick="clearPlot()" style="background:#844;">CLR</button>
       </div>
+      <div style="display:flex;gap:4px;margin-top:4px;">
+        <button class="np" onclick="plotSailChange('full')" style="flex:1;background:#286;">全帆ON</button>
+        <button class="np" onclick="plotSailChange('battle')" style="flex:1;background:#862;">全帆OFF</button>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px;">
+        <button class="np" onclick="plotAnchor(true)" style="flex:1;background:#448;">投錨</button>
+        <button class="np" onclick="plotAnchor(false)" style="flex:1;background:#844;">抜錨</button>
+      </div>
       <button class="np" onclick="donePlot()" style="width:100%;background:#446699;margin-top:4px;">確定 (Enter)</button>
     </div>
     <h3>行動ログ</h3>
@@ -208,7 +216,12 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
 // ============================================================
 // 方位値: numpad 8=N(真上), 9=NE, 3=SE, 2=S, 1=SW, 7=NW（IJN方式 + flat-top）
 const DIR_OPPOSITE = { 8:2, 9:1, 3:7, 2:8, 1:9, 7:3 };
-const DIR_NAMES_JP = { 8:'N', 9:'NE', 3:'SE', 2:'S', 1:'SW', 7:'NW' };
+const DIR_NAMES_JP = { 8:'1(N)', 9:'2(NE)', 3:'3(SE)', 2:'4(S)', 1:'5(SW)', 7:'6(NW)' };
+// WSM方位(1-6) ↔ 内部numpad方位 変換
+const WSM_TO_NP = { 1:8, 2:9, 3:3, 4:2, 5:1, 6:7 };
+const NP_TO_WSM = { 8:1, 9:2, 3:3, 2:4, 1:5, 7:6 };
+function wsmToNp(w) { return WSM_TO_NP[w] || w; }
+function npToWsm(n) { return NP_TO_WSM[n] || n; }
 // canvas角度（Y-down）: N=270°(上), NE=330°, SE=30°, S=90°, SW=150°, NW=210°
 const DIR_ANGLE = { 8:270, 9:330, 3:30, 2:90, 1:150, 7:210 };
 const SAIL_STATES = ['furled', 'battle', 'full'];
@@ -266,7 +279,15 @@ function hexDist(c1, r1, c2, r2) {
 
 // ヘクスID変換
 function hexId(col, row) {
-  return String(col + 1).padStart(2, '0') + String(row + 1).padStart(2, '0');
+  // WSM式: 列=A,B,...,Z,AA,BB,CC... 行=01-30+
+  const c = col;
+  let letter;
+  if (c < 26) letter = String.fromCharCode(65 + c);
+  else {
+    const ch = String.fromCharCode(65 + ((c - 26) % 26));
+    letter = ch + ch;  // AA, BB, CC...
+  }
+  return letter + String(row + 1).padStart(2, '0');
 }
 
 // ============================================================
@@ -579,23 +600,24 @@ function ensureTestFleets() {
     };
   }
   if (state.jpFleet.length === 0) {
-    state.jpFleet.push(build(gb.find(s=>s.guns===100&&s.class==='SOL'), 'jp', 'Victory',     'elite',   'GB'));
-    state.jpFleet.push(build(gb.find(s=>s.guns===74 &&s.class==='SOL'), 'jp', 'Bellerophon', 'crack',   'GB'));
-    state.jpFleet.push(build(gb.find(s=>s.guns===74 &&s.class==='SOL'), 'jp', 'Orion',       'crack',   'GB'));
-    state.jpFleet.push(build(gb.find(s=>s.guns===64 &&s.class==='SOL'), 'jp', 'Agamemnon',   'crack',   'GB'));
-    state.jpFleet.push(build(gb.find(s=>s.guns===38 &&s.class==='F'),   'jp', 'Surprise',    'crack',   'GB'));
-    state.jpFleet.push(build(gb.find(s=>s.guns===32 &&s.class==='F'),   'jp', 'Naiad',       'average', 'GB'));
-    state.jpFleet[0].isLead = true;
+    // シナリオ10: Mars (74 SOL, Crack) vs Hercule
+    const mars = build(gb.find(s=>s.guns===74 && s.class==='SOL'), 'jp', 'Mars', 'crack', 'GB');
+    if (mars) {
+      mars.turningAbility = 2; mars.battleSailSpeed = 3; mars.fullSailSpeed = 5; mars.isLead = true;
+      mars.col = 18; mars.row = 22; mars.dir = wsmToNp(2); // S23 WSM方向2(NE)
+    }
+    state.jpFleet.push(mars);
   }
   if (state.usFleet.length === 0) {
-    state.usFleet.push(build(fr.find(s=>s.guns===120&&s.class==='SOL'), 'us', 'Bucentaure', 'average', 'FR'));
-    state.usFleet.push(build(fr.find(s=>s.guns===80 &&s.class==='SOL'), 'us', 'Neptune',    'average', 'FR'));
-    state.usFleet.push(build(fr.find(s=>s.guns===74 &&s.class==='SOL'), 'us', 'Aigle',      'average', 'FR'));
-    state.usFleet.push(build(fr.find(s=>s.guns===74 &&s.class==='SOL'), 'us', 'Pluton',     'green',   'FR'));
-    state.usFleet.push(build(fr.find(s=>s.guns===44 &&s.class==='F'),   'us', 'Hortense',   'average', 'FR'));
-    state.usFleet.push(build(fr.find(s=>s.guns===40 &&s.class==='F'),   'us', 'Cornelie',   'green',   'FR'));
-    state.usFleet[0].isLead = true;
+    const hercule = build(fr.find(s=>s.guns===74 && s.class==='SOL'), 'us', 'Hercule', 'average', 'FR');
+    if (hercule) {
+      hercule.turningAbility = 2; hercule.battleSailSpeed = 3; hercule.fullSailSpeed = 5; hercule.isLead = true;
+      hercule.col = 31; hercule.row = 15; hercule.dir = wsmToNp(2); // FF16 WSM方向2(NE)
+    }
+    state.usFleet.push(hercule);
   }
+  // シナリオ10: 風向きWSM1(北) / 風力3 / 変化番号5
+  state.wind = { direction: wsmToNp(1), velocity: 3, windChangeNumber: 5, initialDirection: wsmToNp(1), turnCounter: 0 };
   state.jpFleet = state.jpFleet.filter(Boolean);
   state.usFleet = state.usFleet.filter(Boolean);
 }
@@ -775,12 +797,13 @@ function advancePhase() {
   }
   setInfo(`フェイズ: ${state.phase}`);
   showPhaseOverlay(PHASE_NAMES_JP[state.phase] || state.phase, '', null, 1500);
-  // C. 移動記入に入ったら全艦プロットをクリア
+  // C. 移動記入に入ったら全艦プロットをクリア、us側はAI自動プロット
   if (state.phase === 'moveNote') {
     [...state.jpFleet, ...state.usFleet].forEach(s => {
       s.plottedMoves = [];
       s.plotDone = false;
     });
+    if (typeof aiRunAll === 'function') aiRunAll(state);
     isExecuting = false;
   }
   draw();
@@ -1168,6 +1191,7 @@ function endTurn() {
 <!-- WSMロジックモジュール -->
 <script src="wsm_movement.js"></script>
 <script src="wsm_wind.js"></script>
+<script src="wsm_ai.js"></script>
 <script src="wsm_gunnery.js"></script>
 <script src="wsm_critical.js"></script>
 <script src="wsm_boarding.js"></script>
@@ -1239,7 +1263,27 @@ function clearPlot() {
   if (!s) return;
   s.plottedMoves = [];
   s.plotDone = false;
+  s.plannedSail = null;
   addLog(`${s.name} プロットクリア`);
+  draw();
+}
+
+// 帆切替指示 (満帆帆走期で反映)
+function plotSailChange(target) {
+  const s = state.selectedShip;
+  if (!s) return;
+  s.pendingSailMode = target;
+  addLog(`${s.name} 帆指示: ${target === 'full' ? '全帆ON' : '全帆OFF'}`);
+  draw();
+}
+
+// 投錨/抜錨指示 (移動実行期で反映)
+function plotAnchor(drop) {
+  const s = state.selectedShip;
+  if (!s) return;
+  if (drop && s.anchorCableBroken) { alert('錨綱が切れているため投錨できません'); return; }
+  s.plannedAnchor = drop ? 'drop' : 'raise';
+  addLog(`${s.name} 錨指示: ${drop ? '投錨' : '抜錨'}`);
   draw();
 }
 
