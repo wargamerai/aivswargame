@@ -350,6 +350,10 @@
   .action-btn.discard:hover { background: #755; }
   .action-btn:hover { background: #555; }
   .action-btn.active { background: #c33; border-color: #fff; }
+  .action-btn.row3 { grid-row: 3; }
+  .action-btn.row3-c1 { grid-row: 3; grid-column: 1; }
+  .action-btn.row3-c2 { grid-row: 3; grid-column: 2; }
+  .action-btn.row3-c3 { grid-row: 3; grid-column: 3; }
   .decide-btn {
     background: #3a3; color: #fff;
     border: 1px solid #6c6; border-radius: 4px;
@@ -842,9 +846,9 @@
       <button class="action-btn" data-act="infiltrate">侵入</button>
       <button class="action-btn" data-act="cc">白兵戦</button>
       <button class="action-btn" data-act="crew">クルー</button>
-      <button class="action-btn" id="btn-confirm" disabled>確定</button>
-      <button class="action-btn discard" id="btn-discard" data-act="discard">捨て札</button>
-      <button class="action-btn end" id="btn-end-turn">終了</button>
+      <button class="action-btn row3-c1" id="btn-confirm" disabled>確定</button>
+      <button class="action-btn discard row3-c2" id="btn-discard" data-act="discard">捨て札</button>
+      <button class="action-btn end row3-c3" id="btn-end-turn">終了</button>
     </div>
   </div>
 </div>
@@ -2116,14 +2120,11 @@ function makeMainGroup(side, group, idx) {
   // ヘッダー (グループ名 + 距離)
   const header = document.createElement('div');
   header.className = 'group-header';
-  // §17.6 包囲判定: このグループを挟む敵グループ2つが相対距離4以下
+  // §17.6 包囲判定: isGroupEncircled で統一
   const enemySide = side === 'player' ? 'ai' : 'player';
   const enemyGroups = state.groups[enemySide] || [];
   const R_enc = window.INFANTRY_RULES;
-  const isGrpAlive = g => g && !g.eliminated && g.cards && g.cards.some(c => R_enc && R_enc.isAlive(c));
-  const left = enemyGroups[idx - 1], right = enemyGroups[idx + 1];
-  const isSurrounded = !group.eliminated && isGrpAlive(left) && isGrpAlive(right) &&
-    R_enc && R_enc.canEncircle && R_enc.canEncircle(left, right, group);
+  const isSurrounded = isGroupEncircled(group, side);
   // §17 側面射撃判定: 横向き移動カードを出している、または相対距離4で敵隣接グループの背後にいる
   const top = group.terrain && group.terrain.length > 0 ? group.terrain[group.terrain.length - 1] : null;
   const hasLateral = top && top.terrain && top.terrain.type === 'MOVEMENT' && top._moveMode === 'lateral';
@@ -2210,6 +2211,14 @@ function makeMainGroup(side, group, idx) {
       m.textContent = '狂';
       m.style.cssText = 'position:absolute;bottom:2px;left:2px;background:#f0f;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;border:1px solid #fff;z-index:5;';
       m.title = '狂暴兵';
+      c.appendChild(m);
+    }
+    // 故障マーカー (§19)
+    if (card.malfunctioned) {
+      const m = document.createElement('div');
+      m.textContent = '故';
+      m.style.cssText = 'position:absolute;top:2px;right:2px;background:#888;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;border:1px solid #fff;z-index:5;';
+      m.title = '武器故障';
       c.appendChild(m);
     }
     c.addEventListener('click', () => {
@@ -2648,9 +2657,10 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     state.playerHand.splice(cardIdx, 1);
     // AI側グループに置く場合: AIが拒否するか自動判定
     if (target.side === 'ai') {
+      const isStream = card.terrain && card.terrain.type === 'STREAM';
       const lastMove = findLastMovement(grp);
-      // AIは移動カードがあれば50%の確率で拒否
-      if (lastMove && Math.random() < 0.5) {
+      // §8.5 河川は拒否不可。他は移動カードがあれば50%の確率で拒否
+      if (!isStream && lastMove && Math.random() < 0.5) {
         if (lastMove.mode === 'advance') grp.distance -= 1;
         else if (lastMove.mode === 'retreat') grp.distance += 1;
         if (lastMove.mode === 'lateral') {
@@ -3081,7 +3091,7 @@ function resultColor(r) {
 }
 
 /** 全滅グループの地形カードを捨て札にしてグループを除去 */
-// §17.6 グループが包囲されているかを判定
+// §17.6 グループが包囲されているかを判定（両隣の敵が横向き移動中で距離4以下）
 function isGroupEncircled(group, side) {
   const R = window.INFANTRY_RULES;
   if (!R || !R.canEncircle || !group || group.eliminated) return false;
@@ -3091,7 +3101,11 @@ function isGroupEncircled(group, side) {
   if (idx < 0) return false;
   const left = enemyGroups[idx - 1], right = enemyGroups[idx + 1];
   const isGrpAlive = g => g && !g.eliminated && g.cards && g.cards.some(c => R.isAlive(c));
-  return isGrpAlive(left) && isGrpAlive(right) && R.canEncircle(left, right, group);
+  const hasLateral = g => {
+    const top = g && g.terrain && g.terrain.length > 0 ? g.terrain[g.terrain.length - 1] : null;
+    return top && top.terrain && top.terrain.type === 'MOVEMENT' && top._moveMode === 'lateral';
+  };
+  return isGrpAlive(left) && isGrpAlive(right) && R.canEncircle(left, right, group) && (hasLateral(left) || hasLateral(right));
 }
 
 function cleanupEliminatedGroups() {

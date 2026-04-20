@@ -234,7 +234,9 @@
 
       // データ駆動: rangeData[idx] から FP を決定
       const rd = (def.rangeData && def.rangeData[idx]) || null;
-      const hasAssistant = !!(opts.crewMap && opts.crewMap[i] != null);
+      const assistIdxC = (opts.crewMap && opts.crewMap[i] != null) ? opts.crewMap[i] : -1;
+      const assistCardC = assistIdxC >= 0 ? group.cards[assistIdxC] : null;
+      const hasAssistant = !!(assistCardC && isAlive(assistCardC) && !isPinned(assistCardC));
       // データ駆動のクルー判定: 括弧あり = クルー必要兵器
       const needsCrew = !!def.needsCrew;
       let fp;
