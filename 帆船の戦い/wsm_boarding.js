@@ -37,20 +37,11 @@ function rollFouling(shipA, shipB, wind) {
 // ============================================================
 function rollUnfouling(ship, wind, unfoulingAttemptsThisTurn) {
   const log = [];
-  const r = roll2D6();
-  let mod = 0;
-  const q = ship.crewQuality || 'average';
-  if (q === 'crack') { mod += 1; log.push('熟練+1'); }
-  else if (q === 'elite') { mod += 2; log.push('精鋭+2'); }
-  // 索具1枠消去で+1（オプション、呼び出し側制御）
-  // 両艦停止(-4), 白兵戦中(-6) は呼び出し側でチェック
-  if (ship.sailState === 'full') { mod -= 1; log.push('全帆-1'); }
-  if (wind?.velocity === 6) { mod -= 2; log.push('風速6: -2'); }
-
-  const total = r + mod;
-  const success = r === 12 || total >= 10;
-  log.unshift(`2d6=${r} +修正${mod} = ${total} (${success ? '解除成功' : '絡み継続'})`);
-  return { success, roll: r, total, log };
+  // 1d6: 1-2 成功、3-6 失敗
+  const r = 1 + Math.floor(Math.random() * 6);
+  const success = r <= 2;
+  log.push(`1d6=${r} (${success ? '解除成功' : '絡み継続'})`);
+  return { success, roll: r, total: r, log };
 }
 
 // ============================================================

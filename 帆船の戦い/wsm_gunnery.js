@@ -1,6 +1,15 @@
 // wsm_gunnery.js — WSM 砲撃処理（射界・Rake・HDT→Hit Table）
 // 前提: hub.html の hexNeighbor, getSternHex, hexDist, DIR_OPPOSITE 等
 
+// 弾種別射程 (hex)
+const MUNITION_RANGE = {
+  ROUND_SHOT: 10,     // 球弾: 標準
+  CHAIN_SHOT: 5,      // 鎖弾: 索具狙い、短射程
+  DOUBLE_SHOT: 1,     // 二斉射撃: 至近1hex
+  GRAPE_SHOT: 1,      // ぶどう弾: 至近1hex
+  CARRONADE_SHOT: 3,  // カロネード: 短射程
+};
+
 // ============================================================
 // 射界（Arc）判定 — 2ヘクス艦の5分割
 // ============================================================
