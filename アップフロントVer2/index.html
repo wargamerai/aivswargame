@@ -837,6 +837,8 @@
     <div class="action-menu">
       <button class="action-btn" data-act="fire">射撃</button>
       <button class="action-btn" data-act="move">移動</button>
+      <button class="action-btn" data-act="flank">側面</button>
+      <button class="action-btn" data-act="encircle">包囲</button>
       <button class="action-btn" data-act="cross-stream">渡河</button>
       <button class="action-btn" data-act="recover">回復</button>
       <button class="action-btn" data-act="snipe">狙撃</button>
@@ -2120,16 +2122,13 @@ function makeMainGroup(side, group, idx) {
   // ヘッダー (グループ名 + 距離)
   const header = document.createElement('div');
   header.className = 'group-header';
-  // §17.6 包囲判定: isGroupEncircled で統一
+  // 手動設定された側面/包囲フラグを使用
   const enemySide = side === 'player' ? 'ai' : 'player';
   const enemyGroups = state.groups[enemySide] || [];
   const R_enc = window.INFANTRY_RULES;
-  const isSurrounded = isGroupEncircled(group, side);
-  // §17 側面射撃判定: 横向き移動カードを出している、または相対距離4で敵隣接グループの背後にいる
   const top = group.terrain && group.terrain.length > 0 ? group.terrain[group.terrain.length - 1] : null;
-  const hasLateral = top && top.terrain && top.terrain.type === 'MOVEMENT' && top._moveMode === 'lateral';
-  const at4 = enemyGroups[idx] && R_enc && R_enc.relativeRange(group.distance, enemyGroups[idx].distance) === 4;
-  const isFlanking = !group.eliminated && (hasLateral || at4);
+  const isFlanking = !group.eliminated && group.flankingTarget != null;
+  const isSurrounded = !group.eliminated && !!group.encircled;
   const flankTag = isFlanking ? '<span style="color:#fa0;margin-left:8px;font-weight:bold;font-size:12px;">▶側面</span>' : '';
   const encTag = isSurrounded ? '<span style="color:#f33;margin-left:8px;font-weight:bold;font-size:12px;">⚠包囲</span>' : '';
   // 正面の敵との距離に応じたグループ火力を表示（正面不在なら隣接敵を使用）
@@ -2442,8 +2441,8 @@ function renderHands() {
 state.fireSource = null; // {side:'player'|'ai', idx:int}
 state.fireTarget = null;
 
-const ACTIONS_NEED_SOURCE = ['fire','move','cross-stream','recover','snipe','terrain','wire-remove','repair','infiltrate','cc','crew'];
-const ACTIONS_NEED_TARGET = ['fire','snipe','terrain','infiltrate'];
+const ACTIONS_NEED_SOURCE = ['fire','move','flank','encircle','cross-stream','recover','snipe','terrain','wire-remove','repair','infiltrate','cc','crew'];
+const ACTIONS_NEED_TARGET = ['fire','snipe','terrain','infiltrate','flank','encircle'];
 
 document.querySelectorAll('.action-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2602,6 +2601,51 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       if (m) grp.crewPairs[parseInt(m[1], 10)] = parseInt(m[2], 10);
     });
     renderField('player');
+    playerDidRuleAction = true;
+  }
+
+  if (act === 'flank') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card || !state.fireSource || !state.fireTarget) return;
+    if (!card.terrain || card.terrain.type !== 'MOVEMENT') { alert('移動カードを選択してください'); return; }
+    const srcGrp = state.groups.player[state.fireSource.idx];
+    const tgtGrp = state.groups.ai[state.fireTarget.idx];
+    const R = window.INFANTRY_RULES;
+    if (!R) return;
+    const diff = Math.abs(state.fireSource.idx - state.fireTarget.idx);
+    if (diff !== 1) { alert('側面射撃は敵隣接グループに対してのみ可能です'); return; }
+    state.playerHand.splice(cardIdx, 1);
+    card._moveMode = 'lateral';
+    srcGrp.terrain.push(card);
+    srcGrp.flankingTarget = state.fireTarget.idx;
+    alert(`側面射撃成立: GROUP ${srcGrp.name} → GROUP ${tgtGrp.name}`);
+    playerDidRuleAction = true;
+  }
+
+  if (act === 'encircle') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card || !state.fireSource || !state.fireTarget) return;
+    if (!card.terrain || card.terrain.type !== 'MOVEMENT') { alert('移動カードを選択してください'); return; }
+    const srcGrp = state.groups.player[state.fireSource.idx];
+    const tgtGrp = state.groups.ai[state.fireTarget.idx];
+    const R = window.INFANTRY_RULES;
+    if (!R) return;
+    const diff = Math.abs(state.fireSource.idx - state.fireTarget.idx);
+    if (diff !== 1) { alert('包囲は敵隣接グループに対してのみ可能です'); return; }
+    // 相手グループのもう一方の隣接（自軍側）グループを確認
+    const otherIdx = state.fireTarget.idx === state.fireSource.idx - 1 ? state.fireTarget.idx - 1 : state.fireTarget.idx + 1;
+    const partner = state.groups.player[otherIdx];
+    if (!partner || partner.eliminated) { alert('包囲を構成するもう1つの自軍グループがありません'); return; }
+    const r1 = R.relativeRange(srcGrp.distance, tgtGrp.distance);
+    const r2 = R.relativeRange(partner.distance, tgtGrp.distance);
+    if (r1 > 4 || r2 > 4) { alert(`包囲不成立: 相対距離${r1}/${r2}（両方4以下必要）`); return; }
+    state.playerHand.splice(cardIdx, 1);
+    card._moveMode = 'lateral';
+    srcGrp.terrain.push(card);
+    tgtGrp.encircled = true;
+    alert(`包囲成立: GROUP ${tgtGrp.name} を包囲`);
     playerDidRuleAction = true;
   }
 
@@ -3728,18 +3772,12 @@ function resolveFireAction() {
   }
   // §20.51 侵入兵がいる場合、右2コラムシフト（+2）
   const infShift = (CC && CC.hasInfiltratorsTargeting(srcGroup, tgt.side, tgt.idx)) ? 2 : 0;
-  // §17.4 側面射撃: 横向き移動カード or 相対距離4 で火力2倍。解除: 防御側移動(§17.43)、防御側除去(§17.44)
-  // §17.612 包囲下のグループへの射撃は全て側面射撃扱い
-  const srcTopMv = srcGroup.terrain.length > 0 ? srcGroup.terrain[srcGroup.terrain.length - 1] : null;
-  const srcHasLateral = srcTopMv && srcTopMv.terrain && srcTopMv.terrain.type === 'MOVEMENT' && srcTopMv._moveMode === 'lateral';
-  const tgtTopMv = tgtGroup.terrain.length > 0 ? tgtGroup.terrain[tgtGroup.terrain.length - 1] : null;
-  const tgtMoved = tgtTopMv && tgtTopMv.terrain && tgtTopMv.terrain.type === 'MOVEMENT';
+  // §17.4 側面射撃: 手動設定フラグ参照。§17.612 包囲下は自動で側面射撃扱い
   const tgtEliminated = tgtGroup.eliminated;
-  const tgtEncircled = isGroupEncircled(tgtGroup, tgt.side);
-  const isFlankFire = (tgtEncircled || ((srcHasLateral || (R.relativeRange(srcGroup.distance, tgtGroup.distance) === 4)) && !tgtMoved)) && !tgtEliminated;
+  const isFlankFire = ((srcGroup.flankingTarget === tgt.idx) || !!tgtGroup.encircled) && !tgtEliminated;
   const movingFP = moving ? Math.floor(strength / 2) : strength;
   const flankFP = isFlankFire ? movingFP * 2 : movingFP;
-  let baseFP = Math.max(0, flankFP + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift);
+  let baseFP = flankFP + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift;
   let malfuncMod = 0;
 
   // 各防御兵士に判定（1回の射撃で全員に判定）
@@ -3747,7 +3785,7 @@ function resolveFireAction() {
   for (let i = 0; i < tgtGroup.cards.length; i++) {
     const card = tgtGroup.cards[i];
     if (!R.isAlive(card)) continue;
-    const finalFP = Math.max(0, baseFP + malfuncMod);
+    const finalFP = baseFP + malfuncMod;
     const judge = drawTerrainCard();
     if (!judge) continue;
     const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
@@ -3759,7 +3797,7 @@ function resolveFireAction() {
     const commissarMod = hasCommissar(tgtGroup) ? 1 : 0;
     const malfMoraleMod = (card.malfunctioned || card.destroyed) ? -1 : 0;
     // §17.613 包囲下のピン兵士はパニック値-1
-    const encircleMod = (tgtEncircled && wasPinned) ? -1 : 0;
+    const encircleMod = (tgtGroup && tgtGroup.encircled && wasPinned) ? -1 : 0;
     const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod + encircleMod);
     // §20.9 狂暴兵チェック（ソ連軍ピン状態兵がPANIC_KIAのとき）
     let actualResult = r.result;
@@ -4523,15 +4561,10 @@ function aiPerformFire(plan) {
     const marshDefMod = R.isInMarsh(tgt) ? -1 : 0;
     // §20.51 AI侵入兵の右2コラムシフト
     const aiInfShift = (window.CC_ACTION && window.CC_ACTION.hasInfiltratorsTargeting(src, 'player', plan.ti)) ? 2 : 0;
-    // §17.4 側面射撃: 火力2倍。§17.612 包囲下は自動で側面射撃扱い
-    const srcTopMv = src.terrain.length > 0 ? src.terrain[src.terrain.length - 1] : null;
-    const srcHasLateral = srcTopMv && srcTopMv.terrain && srcTopMv.terrain.type === 'MOVEMENT' && srcTopMv._moveMode === 'lateral';
-    const tgtTopMv = tgt.terrain.length > 0 ? tgt.terrain[tgt.terrain.length - 1] : null;
-    const tgtMoved = tgtTopMv && tgtTopMv.terrain && tgtTopMv.terrain.type === 'MOVEMENT';
-    const tgtEncircled = isGroupEncircled(tgt, 'player');
-    const isFlankFire = (tgtEncircled || ((srcHasLateral || (R.relativeRange(src.distance, tgt.distance) === 4)) && !tgtMoved)) && !tgt.eliminated;
+    // §17.4 側面射撃: 手動設定フラグ参照。§17.612 包囲下は自動で側面射撃扱い
+    const isFlankFire = ((src.flankingTarget === plan.ti) || !!tgt.encircled) && !tgt.eliminated;
     const flankStrength = isFlankFire ? baseStrength * 2 : baseStrength;
-    let baseFP = Math.max(0, flankStrength + atkMod + defMod + concealMod + gullyMod + marshDefMod + aiInfShift);
+    let baseFP = flankStrength + atkMod + defMod + concealMod + gullyMod + marshDefMod + aiInfShift;
     let malfuncMod = 0;
 
     const results = [];
@@ -4540,7 +4573,7 @@ function aiPerformFire(plan) {
     for (let ci = 0; ci < tgt.cards.length; ci++) {
       const card = tgt.cards[ci];
       if (!R.isAlive(card)) continue;
-      finalFP = Math.max(0, baseFP + malfuncMod);
+      finalFP = baseFP + malfuncMod;
       const judge = drawTerrainCard();
       if (!judge) continue;
       lastJudge = judge;
@@ -4553,7 +4586,7 @@ function aiPerformFire(plan) {
       const commissarMod = hasCommissar(tgt) ? 1 : 0;
       const malfMoraleMod = (card.malfunctioned || card.destroyed) ? -1 : 0;
       // §17.613 包囲下のピン兵士はパニック値-1
-      const encircleMod = (tgtEncircled && wasPinned) ? -1 : 0;
+      const encircleMod = (tgt && tgt.encircled && wasPinned) ? -1 : 0;
       const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod + encircleMod);
       // §20.9 狂暴兵チェック（プレイヤー側ソ連兵がPANIC_KIA）
       let actualResult2 = r.result;
