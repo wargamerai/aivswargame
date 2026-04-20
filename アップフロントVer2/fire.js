@@ -82,6 +82,9 @@
       baseStrength += circledToNum(m ? m[1] : '');
     });
 
+    // §44.2 イギリス軍: 必要火力+1
+    if (srcKey === 'uk' && needed > 0) needed += 1;
+
     if (needed === 0) return { ok: false, error: '射撃カードを選択してください' };
     if (fp < needed) return { ok: false, error: '火力不足: 必要 ' + needed + ' / 利用可能 ' + fp };
 

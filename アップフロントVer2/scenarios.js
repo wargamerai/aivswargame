@@ -330,11 +330,11 @@
       // 各グループ内のクルー兵器にアシスタントを割当
       groups2.forEach(g => {
         g.cards.forEach((card, ci) => {
-          const e = enriched.find(x => x.unit === card);
+          const e = enriched.find(x => x.num === card.num);
           if (!e || !e.crew) return;
           const candidate = g.cards.find((c2, ci2) => {
             if (ci2 === ci) return false;
-            const e2 = enriched.find(x => x.unit === c2);
+            const e2 = enriched.find(x => x.num === c2.num);
             if (!e2) return false;
             if (e2.crew) return false;
             return true;
@@ -451,13 +451,13 @@
       // ピック済アシスタント番号セット
       const used = new Set();
       g.cards.forEach((card, ci) => {
-        const e = enriched.find(x => x.unit === card);
+        const e = enriched.find(x => x.num === card.num);
         if (!e || !e.crew) return;
         // 同グループから assistant 候補を探す
         const candidate = g.cards.find((c2, ci2) => {
           if (ci2 === ci) return false;
           if (used.has(c2.num != null ? c2.num : extractNum(c2))) return false;
-          const e2 = enriched.find(x => x.unit === c2);
+          const e2 = enriched.find(x => x.num === c2.num);
           if (!e2) return false;
           // 別のクルー兵器でないこと, リーダーは可とする
           if (e2.crew) return false;

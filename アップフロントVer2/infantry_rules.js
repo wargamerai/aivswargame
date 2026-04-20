@@ -313,14 +313,34 @@
       return { atk: 0, def: v };
     };
 
-    // スタック内全カード (地形・移動・煙幕・鉄条網) の modifier を合計
+    // §7.2: 煙幕/鉄条網は積まれていれば加算、その下は最後の地形/移動 + 最後が移動なら直前の地形も加算
     let mod = 0;
+    const overlays = [];
+    const baseStack = [];
     terrainStack.forEach(card => {
       const t = card && card.terrain;
       if (!t) return;
-      const m = parseMod(t.modifier);
+      if (t.type === 'SMOKE' || t.type === 'WIRE') overlays.push(card);
+      else baseStack.push(card);
+    });
+    // 煙幕/鉄条網の修正を加算
+    overlays.forEach(card => {
+      const m = parseMod(card.terrain.modifier);
       mod += asAttacker ? m.atk : m.def;
     });
+    if (baseStack.length > 0) {
+      const last = baseStack[baseStack.length - 1];
+      const lastMod = parseMod(last.terrain.modifier);
+      mod += asAttacker ? lastMod.atk : lastMod.def;
+      // 最後が移動で直前が地形なら加算（直前も移動なら加算しない＝移動2枚で脱出）
+      if (last.terrain.type === 'MOVEMENT' && baseStack.length >= 2) {
+        const prev = baseStack[baseStack.length - 2];
+        if (prev.terrain.type !== 'MOVEMENT') {
+          const prevMod = parseMod(prev.terrain.modifier);
+          mod += asAttacker ? prevMod.atk : prevMod.def;
+        }
+      }
+    }
     return mod;
   }
 
