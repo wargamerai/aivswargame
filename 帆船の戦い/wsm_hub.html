@@ -279,15 +279,30 @@ function hexDist(c1, r1, c2, r2) {
 
 // ヘクスID変換
 function hexId(col, row) {
-  // WSM式: 列=A,B,...,Z,AA,BB,CC... 行=01-30+
-  const c = col;
+  // WSM式: 列=A,B,...,Z,AA,BB,CC,...,YY（同字重複、上限YY=51列目） 行=01-35
+  let c = col;
+  if (c > 50) c = 50; // YY = index 50
+  let r = row;
+  if (r > 34) r = 34; // 35 = index 34
   let letter;
   if (c < 26) letter = String.fromCharCode(65 + c);
   else {
-    const ch = String.fromCharCode(65 + ((c - 26) % 26));
-    letter = ch + ch;  // AA, BB, CC...
+    const ch = String.fromCharCode(65 + (c - 26));
+    letter = ch + ch;  // AA, BB, CC,...,YY
   }
-  return letter + String(row + 1).padStart(2, '0');
+  return letter + String(r + 1).padStart(2, '0');
+}
+
+// xlsヘクス表記(例: "S1","CC1","BB32") → {col,row}
+function parseWsmHex(s) {
+  const m = String(s).match(/^([A-Z]+)(\d+)$/);
+  if (!m) return null;
+  const letters = m[1];
+  const row = parseInt(m[2], 10) - 1;
+  let col;
+  if (letters.length === 1) col = letters.charCodeAt(0) - 65;
+  else col = 26 + (letters.charCodeAt(0) - 65);
+  return { col, row };
 }
 
 // ============================================================
@@ -570,56 +585,228 @@ function loadFromSandbox() {
   } catch(e) { console.error(e); ensureTestFleets(); autoPlaceFleets(); return true; }
 }
 
-// テスト用艦隊を自動生成（sandbox 未設定時）
+// ============================================================
+// シナリオ登録 (WSM Master Scenario Chart より)
+// qual: Cr=crack, Gr=green, Av=average, El=elite, Pr=poor
+// bow=WSMヘクス表記 (例 "S1","CC1","BB32")、dir=WSM方向(1-6)
+// crew=[sec1,sec2,sec3]、rig=[sec1,sec2,sec3,sec4]
+// ============================================================
+const SCENARIOS = {
+  2: { name:'Sc.2: Ranger vs Drake (1778)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Ranger',guns:18,cls:'S',bow:'S1',dir:3,hull:3,qual:'Cr',crew:[1,1,1],gL:1,gR:1,cL:0,cR:0,rig:[3,3,3,3],depth:12,pv:8}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Drake',guns:20,cls:'S',bow:'CC1',dir:4,hull:3,qual:'Gr',crew:[1,1,1],gL:1,gR:1,cL:0,cR:0,rig:[3,3,3,3],depth:12,pv:6}
+    ]}
+  ]},
+  4: { name:'Sc.4: Bonhomme-Richard vs Serapis (1779)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Bonhomme-Richard',guns:42,cls:'M',bow:'BB32',dir:2,hull:7,qual:'Cr',crew:[2,2,2],gL:2,gR:2,cL:0,cR:0,rig:[5,5,5,0],depth:17,pv:11}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Serapis',guns:44,cls:'F',bow:'DD20',dir:2,hull:7,qual:'Cr',crew:[2,2,2],gL:3,gR:3,cL:0,cR:0,rig:[5,5,5,5],depth:17,pv:12}
+    ]}
+  ]},
+  9: { name:'Sc.9: Nymphe vs Cleopatre (1793)', sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:'Nymphe',guns:36,cls:'F',bow:'R23',dir:2,hull:7,qual:'Cr',crew:[2,2,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:15,pv:11}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:'Cleopatre',guns:36,cls:'F',bow:'FF16',dir:2,hull:7,qual:'Av',crew:[2,2,2],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:15,pv:10}
+    ]}
+  ]},
+  10: { name:'Sc.10: Mars vs Hercule (1798)', sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:'Mars',guns:74,cls:'SOL',bow:'R23',dir:2,hull:14,qual:'Cr',crew:[5,4,4],gL:9,gR:9,cL:1,cR:1,rig:[7,7,7,0],depth:21,pv:25}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:'Hercule',guns:74,cls:'SOL',bow:'FF16',dir:2,hull:14,qual:'Av',crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:22,pv:23}
+    ]}
+  ]},
+  12: { name:'Sc.12: Ambuscade vs Baionnaise (1798)', sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:'Ambuscade',guns:32,cls:'F',bow:'R23',dir:2,hull:5,qual:'Av',crew:[2,1,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:13,pv:9}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:'Baionnaise',guns:24,cls:'F',bow:'FF16',dir:2,hull:4,qual:'Av',crew:[2,2,2],gL:1,gR:1,cL:0,cR:0,rig:[4,4,4,4],depth:12,pv:9}
+    ]}
+  ]},
+  13: { name:'Sc.13: Constellation vs Insurgent (1799)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Constellation',guns:38,cls:'F',bow:'NN25',dir:6,hull:9,qual:'El',crew:[2,2,2],gL:2,gR:2,cL:3,cR:3,rig:[5,5,5,5],depth:17,pv:17}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:'Insurgent',guns:36,cls:'F',bow:'N20',dir:2,hull:7,qual:'Av',crew:[3,3,2],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:15,pv:11}
+    ]}
+  ]},
+  14: { name:'Sc.14: Constellation vs Vengeance (1800)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Constellation',guns:38,cls:'F',bow:'Q27',dir:2,hull:9,qual:'El',crew:[3,2,2],gL:2,gR:2,cL:3,cR:3,rig:[5,5,5,5],depth:17,pv:17}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:'Vengeance',guns:40,cls:'F',bow:'T15',dir:2,hull:10,qual:'Av',crew:[4,3,3],gL:3,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:19,pv:15}
+    ]}
+  ]},
+  16: { name:'Sc.16: Lissa (1811)', sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:'Amphion',guns:32,cls:'F',bow:'DD7',dir:3,hull:7,qual:'El',crew:[2,2,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:15,pv:13},
+      {name:'Active',guns:38,cls:'F',bow:'BB6',dir:3,hull:9,qual:'El',crew:[2,2,2],gL:2,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:18,pv:18},
+      {name:'Volage',guns:22,cls:'F',bow:'Z5',dir:3,hull:4,qual:'El',crew:[1,1,1],gL:0,gR:0,cL:4,cR:4,rig:[4,4,4,4],depth:12,pv:11},
+      {name:'Cerberus',guns:32,cls:'F',bow:'X4',dir:3,hull:7,qual:'El',crew:[2,2,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:15,pv:13}
+    ]},
+    { nation:'FR', label:'French+Venetian', side:'us', ships:[
+      {name:'Favorite',guns:40,cls:'F',bow:'S13',dir:2,hull:9,qual:'Av',crew:[3,3,2],gL:3,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:19,pv:15},
+      {name:'Flore',guns:40,cls:'F',bow:'Q14',dir:2,hull:9,qual:'Av',crew:[3,3,2],gL:3,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:19,pv:15},
+      {name:"Dana'e",guns:40,cls:'F',bow:'N10',dir:2,hull:9,qual:'Av',crew:[3,3,2],gL:3,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:19,pv:15},
+      {name:'Bellona',guns:32,cls:'F',bow:'O15',dir:2,hull:7,qual:'Gr',crew:[2,2,2],gL:2,gR:2,cL:0,cR:0,rig:[5,5,5,5],depth:15,pv:9},
+      {name:'Corona',guns:40,cls:'F',bow:'K12',dir:2,hull:9,qual:'Gr',crew:[3,3,2],gL:3,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:19,pv:12},
+      {name:'Carolina',guns:30,cls:'F',bow:'H13',dir:2,hull:5,qual:'Gr',crew:[2,2,1],gL:1,gR:1,cL:0,cR:0,rig:[4,4,4,4],depth:13,pv:7}
+    ]}
+  ]},
+  17: { name:'Sc.17: Constitution vs Guerriere (1812)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Constitution',guns:44,cls:'F',bow:'T16',dir:1,hull:12,qual:'El',crew:[3,3,3],gL:4,gR:4,cL:3,cR:3,rig:[6,6,6,6],depth:19,pv:24}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Guerriere',guns:38,cls:'F',bow:'FF16',dir:3,hull:9,qual:'Cr',crew:[2,2,1],gL:3,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:17,pv:15}
+    ]}
+  ]},
+  18: { name:'Sc.18: United States vs Macedonian (1812)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'United States',guns:44,cls:'F',bow:'DD9',dir:5,hull:12,qual:'El',crew:[4,3,3],gL:4,gR:4,cL:4,cR:4,rig:[6,6,6,6],depth:19,pv:24}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Macedonian',guns:38,cls:'F',bow:'R21',dir:1,hull:9,qual:'Cr',crew:[2,2,2],gL:3,gR:3,cL:2,cR:2,rig:[5,5,5,5],depth:17,pv:15}
+    ]}
+  ]},
+  19: { name:'Sc.19: Constitution vs Java (1812)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Constitution',guns:44,cls:'F',bow:'AA13',dir:2,hull:12,qual:'El',crew:[4,3,3],gL:4,gR:4,cL:3,cR:3,rig:[6,6,6,6],depth:19,pv:24}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Java',guns:38,cls:'F',bow:'AA24',dir:2,hull:9,qual:'Cr',crew:[3,3,3],gL:3,gR:3,cL:3,cR:3,rig:[5,5,5,5],depth:17,pv:19}
+    ]}
+  ]},
+  20: { name:'Sc.20: Chesapeake vs Shannon (1813)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Chesapeake',guns:38,cls:'F',bow:'BB29',dir:2,hull:9,qual:'Av',crew:[3,3,2],gL:3,gR:3,cL:3,cR:3,rig:[5,5,5,5],depth:17,pv:14}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Shannon',guns:38,cls:'F',bow:'DD16',dir:2,hull:9,qual:'El',crew:[3,2,2],gL:3,gR:3,cL:3,cR:3,rig:[5,5,5,5],depth:17,pv:17}
+    ]}
+  ]},
+  21: { name:'Sc.21: Lake Erie (1813)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Lawrence',guns:20,cls:'B',bow:'OO18',dir:6,hull:4,qual:'Cr',crew:[2,1,1],gL:0,gR:0,cL:3,cR:3,rig:[4,4,4,4],depth:9,pv:9},
+      {name:'Niagra',guns:20,cls:'B',bow:'UU21',dir:6,hull:4,qual:'Cr',crew:[2,1,1],gL:0,gR:0,cL:3,cR:3,rig:[4,4,4,4],depth:9,pv:9}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Lady Prevost',guns:13,cls:'B',bow:'N18',dir:2,hull:3,qual:'Cr',crew:[1,1,0],gL:0,gR:0,cL:1,cR:1,rig:[2,2,2,2],depth:6,pv:5},
+      {name:'Detroit',guns:19,cls:'B',bow:'K20',dir:2,hull:3,qual:'Cr',crew:[1,1,1],gL:1,gR:1,cL:0,cR:0,rig:[4,4,4,4],depth:8,pv:7},
+      {name:'Q. Charlotte',guns:17,cls:'B',bow:'H21',dir:2,hull:3,qual:'Cr',crew:[1,1,1],gL:0,gR:0,cL:2,cR:2,rig:[3,3,3,3],depth:7,pv:6}
+    ]}
+  ]},
+  22: { name:'Sc.22: Wasp vs Reindeer (1814)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Wasp',guns:20,cls:'B',bow:'N19',dir:2,hull:4,qual:'El',crew:[2,1,1],gL:0,gR:0,cL:3,cR:3,rig:[4,4,4,4],depth:12,pv:12}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Reindeer',guns:18,cls:'B',bow:'V26',dir:2,hull:3,qual:'El',crew:[1,1,1],gL:0,gR:0,cL:3,cR:3,rig:[4,4,4,4],depth:11,pv:9}
+    ]}
+  ]},
+  23: { name:'Sc.23: Constitution vs Cyane+Levant (1815)', sides:[
+    { nation:'US', label:'American', side:'jp', ships:[
+      {name:'Constitution',guns:44,cls:'F',bow:'U27',dir:2,hull:12,qual:'El',crew:[3,3,3],gL:4,gR:4,cL:4,cR:4,rig:[6,6,6,6],depth:19,pv:24}
+    ]},
+    { nation:'GB', label:'British', side:'us', ships:[
+      {name:'Cyane',guns:24,cls:'S',bow:'M20',dir:2,hull:4,qual:'Cr',crew:[2,1,1],gL:0,gR:0,cL:5,cR:5,rig:[4,4,4,4],depth:13,pv:11},
+      {name:'Levant',guns:20,cls:'S',bow:'K21',dir:2,hull:4,qual:'Cr',crew:[1,1,1],gL:0,gR:0,cL:4,cR:4,rig:[4,4,4,4],depth:12,pv:10}
+    ]}
+  ]}
+};
+
+const QUAL_MAP = {Cr:'crack',Gr:'green',Av:'average',El:'elite',Pr:'poor',CR:'crack',GR:'green',AV:'average',EL:'elite',PR:'poor'};
+
+function buildScenarioShip(s, side, nation) {
+  const specList = (typeof SHIP_SPECS !== 'undefined' && SHIP_SPECS[nation]) || [];
+  const spec = specList.find(x => x.guns === s.guns && x.class === s.cls) || {};
+  const hex = parseWsmHex(s.bow);
+  return {
+    name: s.name,
+    type: s.cls, shipClass: s.cls, classNum: spec.classNum,
+    guns: s.guns, side, nation, crewQuality: QUAL_MAP[s.qual] || 'average',
+    vp: s.pv,
+    col: hex ? hex.col : -1,
+    row: hex ? hex.row : -1,
+    dir: wsmToNp(s.dir),
+    sailState: 'battle', sailBroken: false,
+    battleSailSpeed: 4, fullSailSpeed: 6, turningAbility: 3,
+    hull: { max: s.hull, remain: s.hull },
+    rigging: {
+      L: { max: s.rig[0], remain: s.rig[0] },
+      C: { max: s.rig[1], remain: s.rig[1] },
+      R: { max: s.rig[2], remain: s.rig[2] }
+    },
+    crew: {
+      L: { max: s.crew[0], remain: s.crew[0] },
+      R: { max: s.crew[2], remain: s.crew[2] }
+    },
+    gunHitTable: { ...(spec.gunHitTable||{}) },
+    carronades: {
+      L: { max: s.cL, remain: s.cL },
+      R: { max: s.cR, remain: s.cR }
+    },
+    depth: s.depth, status:'ok', faceUp:true, isLead:false,
+    capG: s.hull, capM: s.hull, dmgG:0, dmgM:0, speed:4,
+    fouledWith:[], grappledWith:[],
+    plottedMoves:[], plotDone:false,
+  };
+}
+
+// Variable Wind: 3d6 で 風向/風速/変化番号 を決定（§34.0）
+// WCNは1-3が出たら3に丸める（下限3、固定）
+function rollScenarioWind() {
+  const dirRoll = rollD6();
+  const velRoll = rollD6();
+  const wcnRoll = rollD6();
+  const dirTable = [8,9,3,2,1,7]; // WSM 1-6 → numpad
+  const wcn = wcnRoll < 3 ? 3 : wcnRoll;
+  const npDir = dirTable[dirRoll-1];
+  return {
+    direction: npDir,
+    velocity: velRoll,
+    windChangeNumber: wcn,
+    initialDirection: npDir,
+    turnCounter: 0,
+  };
+}
+
+function loadScenario(n) {
+  const sc = SCENARIOS[n];
+  if (!sc) { console.warn('Unknown scenario:', n); return false; }
+  state.jpFleet = [];
+  state.usFleet = [];
+  for (const sd of sc.sides) {
+    for (const shipData of sd.ships) {
+      const ship = buildScenarioShip(shipData, sd.side, sd.nation);
+      if (sd.side === 'jp') state.jpFleet.push(ship);
+      else state.usFleet.push(ship);
+    }
+  }
+  if (state.jpFleet[0]) state.jpFleet[0].isLead = true;
+  if (state.usFleet[0]) state.usFleet[0].isLead = true;
+  state.wind = rollScenarioWind();
+  console.log(`[${sc.name}] 風: 方向${state.wind.direction}/風速${state.wind.velocity}/変化番号${state.wind.windChangeNumber}`);
+  return true;
+}
+
+// デフォルトは Sc.10
 function ensureTestFleets() {
   if (typeof SHIP_SPECS === 'undefined') return;
-  const gb = SHIP_SPECS['GB'] || [];
-  const fr = SHIP_SPECS['FR'] || [];
-  function build(spec, side, name, q, nation) {
-    if (!spec) return null;
-    return {
-      name, type: spec.class, shipClass: spec.class, classNum: spec.classNum,
-      guns: spec.guns, side, nation, crewQuality: q,
-      vp: spec.pv?.av || 10,
-      col: -1, row: -1, dir: side==='jp' ? 9 : 7,
-      sailState: 'battle', sailBroken: false,
-      battleSailSpeed: 4, fullSailSpeed: 6, turningAbility: 3,
-      hull:    { max: spec.hull||10, remain: spec.hull||10 },
-      rigging: { L:{max:spec.rigging?.l||0,remain:spec.rigging?.l||0},
-                 C:{max:spec.rigging?.c||0,remain:spec.rigging?.c||0},
-                 R:{max:spec.rigging?.r||0,remain:spec.rigging?.r||0} },
-      crew:    { L:{max:spec.crew?.l||0,remain:spec.crew?.l||0},
-                 R:{max:spec.crew?.r||0,remain:spec.crew?.r||0} },
-      gunHitTable: { ...(spec.gunHitTable||{}) },
-      carronades: { L:{max:spec.carronades?.l||0,remain:spec.carronades?.l||0},
-                    R:{max:spec.carronades?.r||0,remain:spec.carronades?.r||0} },
-      depth: spec.depth, status:'ok', faceUp:true, isLead:false,
-      capG: spec.hull||10, capM: spec.hull||10, dmgG:0, dmgM:0, speed:4,
-      fouledWith:[], grappledWith:[],
-      plottedMoves:[], plotDone:false,
-    };
+  if (state.jpFleet.length === 0 && state.usFleet.length === 0) {
+    loadScenario(10);
   }
-  if (state.jpFleet.length === 0) {
-    // シナリオ10: Mars (74 SOL, Crack) vs Hercule
-    const mars = build(gb.find(s=>s.guns===74 && s.class==='SOL'), 'jp', 'Mars', 'crack', 'GB');
-    if (mars) {
-      mars.turningAbility = 2; mars.battleSailSpeed = 3; mars.fullSailSpeed = 5; mars.isLead = true;
-      mars.col = 18; mars.row = 22; mars.dir = wsmToNp(2); // S23 WSM方向2(NE)
-    }
-    state.jpFleet.push(mars);
-  }
-  if (state.usFleet.length === 0) {
-    const hercule = build(fr.find(s=>s.guns===74 && s.class==='SOL'), 'us', 'Hercule', 'average', 'FR');
-    if (hercule) {
-      hercule.turningAbility = 2; hercule.battleSailSpeed = 3; hercule.fullSailSpeed = 5; hercule.isLead = true;
-      hercule.col = 31; hercule.row = 15; hercule.dir = wsmToNp(2); // FF16 WSM方向2(NE)
-    }
-    state.usFleet.push(hercule);
-  }
-  // シナリオ10: 風向きWSM1(北) / 風力3 / 変化番号5
-  state.wind = { direction: wsmToNp(1), velocity: 3, windChangeNumber: 5, initialDirection: wsmToNp(1), turnCounter: 0 };
-  state.jpFleet = state.jpFleet.filter(Boolean);
-  state.usFleet = state.usFleet.filter(Boolean);
 }
 
 function autoPlaceFleets() {

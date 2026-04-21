@@ -6,21 +6,21 @@ function roll2D6() { return rollD6() + rollD6(); }
 
 // 風向変化判定（メインエントリ）
 // 戻り値: { changed, oldWind, newWind, log: [] }
-// 3ターンごとに判定
+// WCNターンごとに判定（WCNは固定）
 function executeWindPhase(wind) {
   const log = [];
   if (!wind.turnCounter) wind.turnCounter = 0;
   wind.turnCounter++;
   const oldWind = JSON.parse(JSON.stringify(wind));
-  if (wind.turnCounter % 3 !== 0) {
-    log.push(`風期: ${wind.turnCounter}ターン目（3ターンごと判定）`);
+  const wcn = wind.windChangeNumber || 3;
+  if (wind.turnCounter % wcn !== 0) {
+    log.push(`風期: ${wind.turnCounter}ターン目（${wcn}ターンごと判定）`);
     return { changed: false, oldWind, newWind: wind, log };
   }
-  const wcn = wind.windChangeNumber || 9;
-  const r = roll2D6();
-  log.push(`風変化判定: 2d6=${r} vs 変化番号${wcn}`);
+  const r = rollD6();
+  log.push(`風変化判定: 1d6=${r} vs 変化番号${wcn}`);
 
-  if (r > wcn) {
+  if (r < wcn) {
     log.push('→ 変化なし');
     return { changed: false, oldWind, newWind: wind, log };
   }
@@ -35,9 +35,7 @@ function executeWindPhase(wind) {
   const velRoll = rollD6();
   applyWindVelocityChange(wind, velRoll, log);
 
-  // 3) 新しい変化番号（1d6）
-  const wcnRoll = rollD6();
-  applyChangingWindNumber(wind, wcnRoll, log);
+  // WCN は固定（更新しない）
 
   return { changed: true, oldWind, newWind: wind, log };
 }
