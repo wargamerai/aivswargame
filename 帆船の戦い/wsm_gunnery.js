@@ -1,14 +1,6 @@
 // wsm_gunnery.js — WSM 砲撃処理（射界・Rake・HDT→Hit Table）
 // 前提: hub.html の hexNeighbor, getSternHex, hexDist, DIR_OPPOSITE 等
-
-// 弾種別射程 (hex)
-const MUNITION_RANGE = {
-  ROUND_SHOT: 10,     // 球弾: 標準
-  CHAIN_SHOT: 5,      // 鎖弾: 索具狙い、短射程
-  DOUBLE_SHOT: 1,     // 二斉射撃: 至近1hex
-  GRAPE_SHOT: 1,      // ぶどう弾: 至近1hex
-  CARRONADE_SHOT: 3,  // カロネード: 短射程
-};
+// MUNITION_RANGE は hittables.js で定義済み
 
 // ============================================================
 // 射界（Arc）判定 — 2ヘクス艦の5分割
@@ -225,19 +217,14 @@ function resolveGunnery(firer, target, arc, ammo) {
     return { hit: false, log };
   }
 
-  // 砲数算出（舷側別、Rakeの場合は艦首/艦尾の砲）
+  // 砲数算出: 舷側（port/stbd）のみ発射可。broadsideGuns.remain を使用
   let numGuns = 0;
   if (arc === 'port' || arc === 'stbd') {
     const side = arc === 'port' ? 'L' : 'R';
-    numGuns = (firer.crew?.[side]?.remain || 0);
-    // カロネード加算
+    numGuns = (firer.broadsideGuns?.[side]?.remain || 0);
     if (ammo === 'carronade') {
       numGuns = firer.carronades?.[side]?.remain || 0;
     }
-  } else if (arc === 'bow' || arc === 'stern') {
-    // 艦首/艦尾砲（舷側の半分相当として簡略）
-    const sec = arc === 'bow' ? Math.max(firer.crew?.L?.remain||0, firer.crew?.R?.remain||0) : 0;
-    numGuns = Math.floor(sec / 2);
   }
   if (numGuns <= 0) { log.push('発砲可能砲なし'); return { hit: false, log }; }
 
@@ -255,11 +242,18 @@ function resolveGunnery(firer, target, arc, ammo) {
   const mc = calcGunneryModifiers(firer, target);
   if (mc.mods.length) log.push('修正: ' + mc.mods.map(m => m.label).join(' '));
 
+  // 最終Hit Table値（マイナスはハズレ）
+  const finalTable = tableNum + mc.total;
+  log.push(`最終Hit Table = ${tableNum} + (${mc.total}) = ${finalTable}`);
+  if (finalTable < 0) {
+    log.push('最終値マイナス → 外れ');
+    return { hit: false, log, miss: 'modifier', table: finalTable, range, rake };
+  }
+
   // 命中判定（1d6で Hit Table参照）
   const die = rollD6();
-  // 弾種により hull/rigging を選択（Round=hull、Chain=rigging が基本）
   const dmgType = (ammo === 'chain') ? 'rigging' : 'hull';
-  const adjustedTable = Math.max(0, Math.min(10, tableNum + mc.total));
+  const adjustedTable = Math.min(10, finalTable);
   const code = lookupHitTable(adjustedTable, die, dmgType);
   log.push(`1d6=${die}, Table#${adjustedTable}(${dmgType}) → "${code}"`);
 

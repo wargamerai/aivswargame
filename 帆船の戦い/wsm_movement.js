@@ -1,128 +1,109 @@
 // wsm_movement.js — WSM 移動関連の計算
-// 風向態勢（Attitude）、移動力算出、転舵コスト
-// 前提: hub.html の定数・ヘルパー（DIR_ANGLE, hexNeighbor, getSternHex 等）が読み込み済み
+// 風相対角による移動力（戦闘帆/帆走）＋ Wind Effects Table の風速修正子
+// Attitude割当: A=後ろ斜め(d=1), B=真後ろ(d=0), C=斜前(d=2), D=正面(d=3)
 
-// --- 風向態勢 (Attitude) ---
-// A = Stern to Wind（追い風）: 最速
-// B = Beam to Wind（横風）
-// C = Close-hauled（詰め開き）
-// D = In Irons（逆風停止）: 動けない
-// 艦首方向(ship.dir)と風の「吹いてくる方位」で相対角を出す
-// WSM慣例: 風の「from」方位を基準にする → 風が9(NE)から吹く場合、逆向き6(E)側に流れる
-// ここでは state.wind.direction は「風が向かう方位」として扱う
+// 艦の dir と風向（numpad）の相対角を算出 (0=直後/B, 1=後斜め/A, 2=斜前/C, 3=正面/D)
 function getRelativeWindAngle(shipDir, windDir) {
-  // 方位1-6をヘクス番号に変換（IJN numpad: 9,6,3,1,4,7）
-  const dirIdx = { 9:0, 6:1, 3:2, 1:3, 4:4, 7:5 };
-  const a = dirIdx[shipDir];
-  const b = dirIdx[windDir];
-  if (a === undefined || b === undefined) return 0;
-  // 相対: 0=同方向（追い風受け）, 1=60°, 2=120°, 3=正面（向かい風）, 4=120°, 5=60°
-  let diff = (a - b + 6) % 6;
+  const order = [8, 9, 3, 2, 1, 7];  // 時計回り: N,NE,SE,S,SW,NW
+  const a = order.indexOf(shipDir);
+  const b = order.indexOf(windDir);
+  if (a < 0 || b < 0) return 0;
+  let diff = Math.abs(a - b);
   if (diff > 3) diff = 6 - diff;
-  return diff;  // 0〜3
+  return diff;
+}
+
+// d -> Attitude文字 (A=後斜/d=1, B=真後/d=0, C=斜前/d=2, D=正面/d=3)
+function dToAttitude(d) {
+  return ['B','A','C','D'][d] || 'A';
 }
 
 function computeAttitude(ship, wind) {
   if (!ship || !wind) return 'A';
   if (ship.sailBroken) return 'D';
-  const d = getRelativeWindAngle(ship.dir, wind.direction);
-  // d=0: 風が艦首から吹く(後から追い風) → A 追い風
-  // d=1: 60°差 → A/B
-  // d=2: 120°差（横風気味）→ B
-  // d=3: 180°差（真正面に風）→ D 逆風停止
-  if (d === 0) return 'A';       // 追い風
-  if (d === 1) return 'A';       // 追い風寄り
-  if (d === 2) return 'B';       // 横風
-  if (d === 3) return 'D';       // 逆風停止
-  return 'C';
+  return dToAttitude(getRelativeWindAngle(ship.dir, wind.direction));
+}
+const ATTITUDE_JP = { 'A':'後斜', 'B':'追風', 'C':'斜前', 'D':'正面' };
+
+// Wind Effects Table
+// WIND_EFFECTS[velocity][classGroup][A/B/C/D]
+// classGroup: 1=N1, 2=N2, 3=N3&4, 4=N5&6
+const WIND_EFFECTS = {
+  1: { 1:{A:-3,B:-2,C:-2,D:0}, 2:{A:-3,B:-2,C:-1,D:0}, 3:{A:-3,B:-2,C:-1,D:0}, 4:{A:-2,B:-1,C:0,D:0} },
+  2: { 1:{A:-1,B:-1,C:-1,D:0}, 2:{A:-1,B:-1,C:0,D:0},  3:{A:-1,B:0,C:0,D:0},  4:{A:-1,B:0,C:0,D:0}   },
+  3: { 1:{A:0,B:0,C:0,D:0},    2:{A:0,B:0,C:0,D:0},    3:{A:0,B:0,C:0,D:0},    4:{A:0,B:0,C:0,D:0}    },
+  4: { 1:{A:0,B:0,C:0,D:0},    2:{A:-1,B:0,C:0,D:0},   3:{A:-1,B:-1,C:0,D:0},   4:{A:-2,B:-2,C:-1,D:0} },
+  5: { 1:{A:-1,B:0,C:0,D:0},   2:{A:-1,B:-1,C:0,D:0},  3:{A:-1,B:-1,C:-1,D:0},  4:{A:-3,B:-2,C:-2,D:0} },
+  6: { 1:{A:-2,B:-1,C:-1,D:0}, 2:{A:-3,B:-2,C:-1,D:0}, 3:{A:-3,B:-2,C:-1,D:0},  4:{A:-3,B:-3,C:-2,D:0} },
+};
+
+function classGroup(classNum) {
+  if (classNum === 1) return 1;
+  if (classNum === 2) return 2;
+  if (classNum === 3 || classNum === 4) return 3;
+  return 4; // 5, 6
 }
 
-// --- 最大移動力 ---
-// WSM: 帆状態(furled/battle/full) × attitude × 風速 で決まる
-// 簡略実装: class別 base speed × attitude × sail状態 × wind係数
-function baseSpeed(ship) {
-  // IJNフォールバック: ship.speedがあれば流用
-  if (ship.speed && !ship.shipClass) return ship.speed;
-  // §20.1 フルセイル時は full_sail_speed を使用（ship.fullSailSpeed または class default）
-  if (ship.sailState === 'full') {
-    if (ship.fullSailSpeed) return ship.fullSailSpeed;
-    const clsF = ship.shipClass || ship.type;
-    const full = {
-      'SOL': 5, 'BB': 5, 'OBB': 5,
-      'F': 6, 'CA': 6, 'CL': 6, 'CLAA': 6,
-      'C': 6,
-      'B': 7, 'S': 7, 'DD': 7,
-    };
-    return full[clsF] || 6;
-  }
-  const cls = ship.shipClass || ship.type;
-  // WSMデフォルトのBattle Sail Speed
-  const base = {
-    'SOL': 3, 'BB': 3, 'OBB': 3,
-    'F': 4, 'CA': 4, 'CL': 4, 'CLAA': 4,
-    'C': 4,
-    'B': 5, 'S': 5, 'DD': 5,
-  };
-  return base[cls] || 4;
+function getWindModifier(ship, wind) {
+  const v = wind.velocity;
+  if (!v || v < 1 || v > 6) return 0;
+  const cg = classGroup(ship.classNum || 3);
+  const att = computeAttitude(ship, wind);
+  return WIND_EFFECTS[v]?.[cg]?.[att] ?? 0;
 }
 
+// 帆状態の有効化：トーナメント由来の降格処理は除外
+function effectiveSailState(ship, wind) {
+  return ship.sailState || 'battle';
+}
+
+// 最大移動力（基本MP＋Wind Effects修正、下限0）
 function maxMoveForAttitude(ship, wind) {
   if (!ship || !wind) return 0;
-  const attitude = computeAttitude(ship, wind);
-  if (attitude === 'D') return 0;   // 逆風停止
+  if (ship.sailBroken) return 0;
+  if (wind.velocity === 0) return 0;   // Becalmed
+  if (wind.velocity === 7) return 0;   // Hurricane
 
-  const base = baseSpeed(ship);
-  const sail = ship.sailState || 'battle';
-  const vel = wind.velocity || 3;
+  const sail = effectiveSailState(ship, wind);
+  if (sail === 'furled') return 0;
 
-  // attitude係数
-  const attCoef = { 'A': 1.0, 'B': 0.75, 'C': 0.5 }[attitude] || 0.5;
-  // sail係数
-  const sailCoef = { 'furled': 0.0, 'battle': 1.0, 'full': 1.0 }[sail] || 1.0;
-  // wind velocity係数（1=微風〜6=疾風）
-  // WSM: 風速1=低速, 3-4=標準, 6=危険
-  const velCoef = [0, 0.5, 0.75, 1.0, 1.0, 1.1, 1.1][Math.min(6, Math.max(0, vel))];
+  const d = getRelativeWindAngle(ship.dir, wind.direction);
+  const bs = ship.battleSailSpeed || 3;
+  const fs = ship.fullSailSpeed || 5;
 
-  let mv = base * attCoef * sailCoef * velCoef;
-
-  // 索具損傷ペナルティ
-  if (ship.rigging) {
-    const rigTotal = (ship.rigging.L?.max || 0) + (ship.rigging.C?.max || 0) + (ship.rigging.R?.max || 0);
-    const rigRemain = (ship.rigging.L?.remain || 0) + (ship.rigging.C?.remain || 0) + (ship.rigging.R?.remain || 0);
-    if (rigTotal > 0) {
-      const ratio = rigRemain / rigTotal;
-      if (ratio < 0.3) mv *= 0.3;
-      else if (ratio < 0.5) mv *= 0.6;
-      else if (ratio < 0.7) mv *= 0.8;
-    }
+  let base;
+  if (sail === 'full') {
+    if (d === 3) return 0;           // 正面=D
+    else if (d === 2) base = 2;      // 斜前=C (固定2)
+    else if (d === 1) base = fs;     // 後斜め=A (fs)
+    else base = Math.max(0, fs - 1); // 真後ろ=B (fs-1)
+  } else {
+    if (d === 3) return 0;
+    else if (d === 2) base = 1;      // 斜前=C (固定1)
+    else if (d === 1) base = bs;     // 後斜め=A (bs)
+    else base = Math.max(0, bs - 1); // 真後ろ=B (bs-1)
   }
 
-  return Math.floor(mv);
+  const mod = getWindModifier(ship, wind);
+  return Math.max(0, base + mod);
 }
 
-// --- 転舵コスト ---
-// 60°転舵ごとに1移動ポイント消費
 function turnCost(fromDir, toDir) {
-  const dirIdx = { 9:0, 6:1, 3:2, 1:3, 4:4, 7:5 };
-  const a = dirIdx[fromDir], b = dirIdx[toDir];
-  if (a === undefined || b === undefined) return 0;
+  const order = [8, 9, 3, 2, 1, 7];
+  const a = order.indexOf(fromDir), b = order.indexOf(toDir);
+  if (a < 0 || b < 0) return 0;
   let d = Math.abs(a - b);
   if (d > 3) d = 6 - d;
-  return d;  // 0〜3（60°単位）
+  return d;
 }
 
-// 60°時計回り／反時計回り
 function rotate60(dir, cw) {
-  const order = [9, 6, 3, 1, 4, 7];  // 時計回り順
+  const order = [8, 9, 3, 2, 1, 7];
   const i = order.indexOf(dir);
   if (i < 0) return dir;
   return order[(i + (cw ? 1 : -1) + 6) % 6];
 }
 
-// --- Attitude表示用の日本語ラベル ---
-const ATTITUDE_JP = { 'A': '追風', 'B': '横風', 'C': '詰開', 'D': '逆風停止' };
-
-// --- デバッグ用: 艦の移動情報サマリ ---
 function getMoveSummary(ship, wind) {
   if (!ship || !wind) return '';
   const att = computeAttitude(ship, wind);

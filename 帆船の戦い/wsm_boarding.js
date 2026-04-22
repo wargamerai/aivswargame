@@ -45,54 +45,28 @@ function rollUnfouling(ship, wind, unfoulingAttemptsThisTurn) {
 }
 
 // ============================================================
-// 鉤縄判定 (Grappling)
+// 鉤縄判定 (Grappling) — 1d6: 1-3で成立
 // ============================================================
 function rollGrappling(attacker, target, opts) {
   const log = [];
-  const r = roll2D6();
-  let mod = 0;
-  // 乗員品質差（攻撃側視点）
-  const qOrder = { poor:0, green:1, average:2, crack:3, elite:4 };
-  const qa = qOrder[attacker.crewQuality || 'average'] ?? 2;
-  const qt = qOrder[target.crewQuality || 'average'] ?? 2;
-  const diff = qa - qt;
-  if (diff !== 0) { mod += diff; log.push(`品質差${diff > 0 ? '+' : ''}${diff}`); }
-  if (attacker.crewQuality === 'elite') { mod += 2; log.push('精鋭+2'); }
-  if (attacker.side === target.side) { mod += 4; log.push('友軍+4'); }
-  if (!(opts?.meleeInProgress)) { mod += 1; log.push('白兵戦未進行+1'); }
-  if (target.stopped || opts?.targetMotionless) { mod += 1; log.push('停止相手+1'); }
-  if (opts?.windVelocity === 1) { mod += 1; log.push('風速1: +1'); }
-  if (opts?.meleeInProgress) { mod -= 6; log.push('白兵戦中-6'); }
-
-  const total = r + mod;
-  const success = r === 12 || total >= 10;
-  log.unshift(`2d6=${r} +修正${mod} = ${total} (${success ? '鉤縄成立' : '失敗'})`);
-  return { success, roll: r, total, log };
+  const r = rollD6();
+  const success = r <= 3;
+  log.push(`1d6=${r} (${success ? '鉤縄成立(1-3)' : '失敗'})`);
+  return { success, roll: r, total: r, log };
 }
 
 // ============================================================
-// 鉤縄解除 (Ungrappling)
+// 鉤縄解除 (Ungrappling) — 1d6: 1-2で解除成功
 // ============================================================
 function rollUngrappling(ship, target, opts) {
   const log = [];
-  // 友軍同士なら自動成功
   if (ship.side === target.side) {
     return { success: true, auto: true, log: ['友軍同士: 自動解除'] };
   }
-  const r = roll2D6();
-  let mod = 0;
-  if (ship.crewQuality === 'crack') { mod += 1; log.push('熟練+1'); }
-  if (ship.crewQuality === 'elite') { mod += 2; log.push('精鋭+2'); }
-  if (opts?.windVelocity === 6) { mod += 1; log.push('風速6: +1'); }
-  if (opts?.windVelocity === 5) { mod -= 1; log.push('風速5: -1'); }
-  if (opts?.targetMoveNoted && opts.targetMoveNoted > 1) {
-    const d = -(opts.targetMoveNoted - 1);
-    mod += d; log.push(`相手移動宣言${d}`);
-  }
-  const total = r + mod;
-  const success = r === 12 || total >= 10;
-  log.unshift(`2d6=${r} +修正${mod} = ${total} (${success ? '解除成功' : '失敗'})`);
-  return { success, roll: r, total, log };
+  const r = rollD6();
+  const success = r <= 2;
+  log.push(`1d6=${r} (${success ? '解除成功(1-2)' : '失敗'})`);
+  return { success, roll: r, total: r, log };
 }
 
 // ============================================================
