@@ -590,8 +590,8 @@ let state = {
 // sandbox からの遷移データ読み込み
 function loadFromSandbox() {
   // ゲームモード読込
-  state.gameMode = localStorage.getItem('gameMode') || 'human-vs-ai';
-  const s = localStorage.getItem('hubState');
+  state.gameMode = localStorage.getItem('wsmGameMode') || 'human-vs-ai';
+  const s = localStorage.getItem('wsmHubState');
   if (!s) { ensureTestFleets(); autoPlaceFleets(); return true; }
   try {
     const saved = JSON.parse(s);
@@ -855,8 +855,8 @@ function loadScenario(n) {
 function ensureTestFleets() {
   if (typeof SHIP_SPECS === 'undefined') return;
   if (state.jpFleet.length === 0 && state.usFleet.length === 0) {
-    const p = parseInt(localStorage.getItem('pendingScenario') || '10', 10);
-    localStorage.removeItem('pendingScenario');
+    const p = parseInt(localStorage.getItem('wsmPendingScenario') || '10', 10);
+    localStorage.removeItem('wsmPendingScenario');
     if (!loadScenario(p)) loadScenario(10);
   }
 }
