@@ -71,9 +71,9 @@ function renderScenarios() {
 
 function startScenario(n) {
   const mode = document.querySelector('input[name="gameMode"]:checked')?.value || 'human-vs-ai';
-  localStorage.removeItem('hubState');
-  localStorage.setItem('pendingScenario', String(n));
-  localStorage.setItem('gameMode', mode);
+  localStorage.removeItem('wsmHubState');
+  localStorage.setItem('wsmPendingScenario', String(n));
+  localStorage.setItem('wsmGameMode', mode);
   localStorage.setItem('campaignReady', 'true');
   localStorage.setItem('scenarioMode', 'scenario');
   localStorage.setItem('scenarioRules', JSON.stringify({ jpHandicap: 0 }));
