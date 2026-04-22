@@ -826,13 +826,20 @@ function executeAllGunnery() {
   if (typeof resolveGunnery !== 'function') { addLog('砲撃: モジュール未読込'); return; }
   addLog('=== G. 砲撃 ===');
   const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.col >= 0 && s.status === 'ok');
+  // 12.4.11: 砲撃フェイズ内損失カウントを初期化
+  allShips.forEach(s => { s._crewLossCountInPhase = 0; });
   const overlayLines = [];
   let hits = 0, misses = 0;
+  // 白兵戦中判定: 鉤縄成立かつOBP/DBP割当済の艦
+  const isInMelee = (s) => !!(s.grappledWith?.length > 0 && (s.obpAssigned > 0 || s.dbpAssigned > 0));
   for (const firer of allShips) {
+    // 白兵戦中（鉤縄中の敵と乗組戦闘中）は射撃不可
+    if (isInMelee(firer)) continue;
     const enemies = (firer.side === 'jp' ? state.usFleet : state.jpFleet).filter(t => t.col >= 0 && t.status === 'ok');
     if (enemies.length === 0) continue;
     let bestArc = null, bestTarget = null, bestDist = Infinity;
     for (const tgt of enemies) {
+      if (isInMelee(tgt)) continue;  // 白兵戦中の敵は撃てない
       const d = hexDist(firer.col, firer.row, tgt.col, tgt.row);
       if (d > 10) continue;
       const arc = getArcToTarget(firer, tgt);
@@ -840,12 +847,49 @@ function executeAllGunnery() {
       if (d < bestDist) { bestDist = d; bestTarget = tgt; bestArc = arc; }
     }
     if (!bestTarget) continue;
-    const result = resolveGunnery(firer, bestTarget, bestArc, 'round');
-    addLog(`${firer.name} → ${bestTarget.name} (${bestArc}, ${bestDist}hex)`);
+
+    // 弾種選択: 装填済弾種（ammoLoaded）優先、未設定ならround
+    const side = bestArc === 'port' ? 'L' : (bestArc === 'stbd' ? 'R' : null);
+    const ammo = (side && firer.ammoLoaded?.[side]) || 'round';
+
+    // 船体/帆選択: AIシンプル判定（距離6+は自動rigging強制）
+    let aimAt = null;
+    if (bestDist < 6) {
+      // 基本は船体。ただし帆残量が多い目標には帆狙いも検討
+      aimAt = 'hull';
+      const riggingTotal = ['L','C','R'].reduce((a,k)=>a+(bestTarget.rigging?.[k]?.remain||0),0);
+      const hullRemain = bestTarget.hull?.remain || 0;
+      if (hullRemain >= (bestTarget.hull?.max||0) * 0.8 && riggingTotal > 0) {
+        // 船体が無傷に近ければ帆狙いを選ぶ可能性
+        if (Math.random() < 0.3) aimAt = 'rigging';
+      }
+    }
+
+    const result = resolveGunnery(firer, bestTarget, bestArc, ammo, aimAt);
+    addLog(`${firer.name} → ${bestTarget.name} (${bestArc}, ${bestDist}hex, ${ammo}→${result.aimAt||'?'})`);
     if (result.log) result.log.forEach(l => addLog('  ' + l));
     const hitLabel = result.hit ? '命中' : '外れ';
     if (result.hit) hits++; else misses++;
     let overlayLine = `${firer.name}→${bestTarget.name} [${bestArc},${bestDist}hex] ${hitLabel}`;
+
+    // 射撃成立（miss理由がmelee/not_allowed/unloaded/range/no_gunsでない）なら装填済フラグクリア
+    const fired = !result.miss || result.miss === 'modifier';
+    if (fired && side) {
+      // 初段発射フラグ記録
+      const everFlag = side === 'L' ? 'everFiredLeft' : 'everFiredRight';
+      firer[everFlag] = true;
+      // 装填要フラグ（二重弾は2ターン必要）
+      const dirtyFlag = side === 'L' ? 'firedLeftDirty' : 'firedRightDirty';
+      firer[dirtyFlag] = true;
+      if (ammo === 'double') {
+        const reloadTurnsFlag = side === 'L' ? 'reloadTurnsLeft' : 'reloadTurnsRight';
+        firer[reloadTurnsFlag] = 2;  // 二重弾は装填2ターン
+      } else {
+        const reloadTurnsFlag = side === 'L' ? 'reloadTurnsLeft' : 'reloadTurnsRight';
+        firer[reloadTurnsFlag] = 1;
+      }
+    }
+
     if (result.hit && result.damages) {
       const applied = (typeof applyDamageWSM === 'function')
         ? applyDamageWSM(bestTarget, result.damages, { arc: bestArc, rake: result.rake })
@@ -907,6 +951,16 @@ function executeUnfoulPhase() {
         rollDestroyedHull(s, log);
         s._hullDestroyedChecked = true;
         log.forEach(l => { addLog(`${s.name}: ${l}`); overlayLines.push(`${s.name}: ${l}`); });
+      }
+    }
+  }
+  // 2.5. 12.4.9 拿捕要員と捕虜の比率チェック
+  if (typeof checkPrizeCrewRatio === 'function') {
+    for (const s of allShips) {
+      if (s.prizeCrew) {
+        const before = s.capturedBy;
+        checkPrizeCrewRatio(s, overlayLines);
+        if (before && !s.capturedBy) addLog(`${s.name}: 捕虜蜂起により元所有者へ復帰`);
       }
     }
   }
@@ -1095,22 +1149,89 @@ function executeMeleePhase() {
   if (typeof resolveMelee !== 'function') return;
   const processed = new Set();
   const overlayLines = [];
-  for (const a of [...state.jpFleet, ...state.usFleet]) {
+  const allShips = [...state.jpFleet, ...state.usFleet];
+  // 白兵戦中フラグを初期化
+  allShips.forEach(s => { s._inMelee = false; });
+
+  // 12.1 TBP 転属処理
+  for (const s of allShips) {
+    if (s.status !== 'ok' || !s.tbpAssigned || !s.tbpTarget) continue;
+    const tgt = allShips.find(x => x.name === s.tbpTarget && x.status === 'ok');
+    if (!tgt) continue;
+    if (hexDist(s.col, s.row, tgt.col, tgt.row) > 1) continue;  // 隣接必要
+    // 12.1.4: 品質は低い方を採用
+    const qOrder = ['elite','crack','average','green','poor'];
+    const newQ = qOrder[Math.max(qOrder.indexOf(s.crewQuality||'average'), qOrder.indexOf(tgt.crewQuality||'average'))];
+    tgt.crewQuality = newQ;
+    // 乗員を転属（簡略: L側から）
+    const n = s.tbpAssigned;
+    if (s.crew?.L?.remain >= n) s.crew.L.remain -= n;
+    else if (s.crew?.R?.remain >= n) s.crew.R.remain -= n;
+    if (tgt.crew?.L) tgt.crew.L.remain = Math.min(tgt.crew.L.max||99, (tgt.crew.L.remain||0) + n);
+    const line = `${s.name} →TBP→ ${tgt.name}: 乗員${n}転属（品質→${newQ}）`;
+    addLog(line); overlayLines.push(line);
+    s.tbpAssigned = 0;
+  }
+
+  // 12.2 乗込手順: ペアごとに処理
+  for (const a of allShips) {
     if (a.status !== 'ok' || !a.grappledWith) continue;
     for (const bName of a.grappledWith) {
       const key = [a.name, bName].sort().join('|');
       if (processed.has(key)) continue;
       processed.add(key);
-      const b = [...state.jpFleet, ...state.usFleet].find(s => s.name === bName);
+      const b = allShips.find(s => s.name === bName);
       if (!b || b.status !== 'ok') continue;
-      const aSecs = Math.max(1, Math.floor(((a.crew?.L?.remain||0)+(a.crew?.R?.remain||0))/2));
-      const bSecs = Math.max(1, Math.floor(((b.crew?.L?.remain||0)+(b.crew?.R?.remain||0))/2));
-      const result = resolveMelee(
-        { ship: a, sections: aSecs, partyType: 'obp' },
-        { ship: b, sections: bSecs, partyType: 'dbp' }
-      );
+      if (a.side === b.side) continue;  // 友軍同士は白兵戦なし
+
+      const aHasOBP = (a.obpAssigned||0) > 0;
+      const aHasDBP = (a.dbpAssigned||0) > 0;
+      const bHasOBP = (b.obpAssigned||0) > 0;
+      const bHasDBP = (b.dbpAssigned||0) > 0;
+      const aHasAny = aHasOBP || aHasDBP;
+      const bHasAny = bHasOBP || bHasDBP;
+
+      // 12.2.3: どちらもOBPなし → 白兵戦なし
+      if (!aHasOBP && !bHasOBP) {
+        overlayLines.push(`${a.name} ⇔ ${b.name}: OBPなし、白兵戦なし`);
+        continue;
+      }
+
+      // 12.2.4: OBP vs NBP/TBPのみ → 自動捕獲
+      if (aHasOBP && !bHasAny) {
+        capturePrize(a, b, overlayLines);
+        a._inMelee = false;
+        continue;
+      }
+      if (bHasOBP && !aHasAny) {
+        capturePrize(b, a, overlayLines);
+        b._inMelee = false;
+        continue;
+      }
+
+      // 白兵戦成立
+      a._inMelee = true; b._inMelee = true;
+      let pa, pb;
+      // 12.2.2: 両者OBP → OBP vs OBP
+      if (aHasOBP && bHasOBP) {
+        pa = { ship: a, sections: a.obpAssigned, partyType: 'obp' };
+        pb = { ship: b, sections: b.obpAssigned, partyType: 'obp' };
+      }
+      // 12.2.6: OBP vs (OBP+DBP) は上で処理済み
+      // OBP vs DBP
+      else if (aHasOBP && bHasDBP) {
+        pa = { ship: a, sections: a.obpAssigned, partyType: 'obp' };
+        pb = { ship: b, sections: b.dbpAssigned, partyType: 'dbp' };
+      }
+      else if (bHasOBP && aHasDBP) {
+        pa = { ship: a, sections: a.dbpAssigned, partyType: 'dbp' };
+        pb = { ship: b, sections: b.obpAssigned, partyType: 'obp' };
+      }
+      else continue;
+
+      const result = resolveMelee(pa, pb);
       result.log.forEach(l => addLog('  ' + l));
-      overlayLines.push(`${a.name} ⚔ ${b.name}: ${result.log.join(' / ')}`);
+      overlayLines.push(`${a.name} ⚔ ${b.name}: ${result.winner ? result.winner.name + '勝利' : '決着せず'}`);
     }
   }
   const detail = overlayLines.length ? overlayLines.slice(0, 6).join('\n') : '鉤縄成立艦なし';
@@ -1124,9 +1245,25 @@ function executeReloadPhase() {
   const overlayLines = [];
   for (const s of [...state.jpFleet, ...state.usFleet]) {
     if (s.status !== 'ok') continue;
-    // 1. 装填: 1舷側分（dirty=trueの舷側を1つreloadedに）
-    if (s.firedLeftDirty) { s.firedLeftDirty = false; s.reloaded = true; const l = `${s.name}: 左舷装填完了`; addLog(l); overlayLines.push(l); }
-    else if (s.firedRightDirty) { s.firedRightDirty = false; s.reloaded = true; const l = `${s.name}: 右舷装填完了`; addLog(l); overlayLines.push(l); }
+    // 1. 装填: 舷側別に残装填ターンをカウントダウン
+    //    reloadTurnsLeft/Right が0になったら firedXxxDirty を解除
+    for (const side of ['Left', 'Right']) {
+      const turnsFlag = 'reloadTurns' + side;
+      const dirtyFlag = 'fired' + side + 'Dirty';
+      if (s[dirtyFlag] && s[turnsFlag] > 0) {
+        s[turnsFlag]--;
+        if (s[turnsFlag] <= 0) {
+          s[dirtyFlag] = false;
+          delete s[turnsFlag];
+          s.reloaded = true;
+          const l = `${s.name}: ${side === 'Left' ? '左舷' : '右舷'}装填完了`;
+          addLog(l); overlayLines.push(l);
+        } else {
+          const l = `${s.name}: ${side === 'Left' ? '左舷' : '右舷'}装填中（残${s[turnsFlag]}ターン）`;
+          addLog(l); overlayLines.push(l);
+        }
+      }
+    }
     // 2. 修理完了: 計画した修理を反映
     if (s.repairPlanRH && s.hull && s.hull.remain < s.hull.max) {
       s.hull.remain = Math.min(s.hull.max, s.hull.remain + 1);

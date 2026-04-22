@@ -111,55 +111,109 @@ function computeMeleeStrength(ship, crewSections, partyType) {
 }
 
 // ============================================================
-// 白兵戦解決 (Melee Resolution)
-// 両軍の合計強度を計算 → 1d6でMELEE_RESOLUTION参照 → 相手に損害
+// 白兵戦解決 (Melee Resolution) - 12.3
+// 12.3.3: 3ラウンド/ターン、決着しなければ翌ターン継続
+// partyA, partyB: { ship, sections, partyType: 'obp'|'dbp'|'dbp_raked' }
 // ============================================================
-// partyA, partyB: { ship, sections, partyType }
 function resolveMelee(partyA, partyB) {
   const log = [];
-  const strengthA = computeMeleeStrength(partyA.ship, partyA.sections, partyA.partyType);
-  const strengthB = computeMeleeStrength(partyB.ship, partyB.sections, partyB.partyType);
-  log.push(`${partyA.ship.name}強度=${strengthA}, ${partyB.ship.name}強度=${strengthB}`);
-
-  // 各陣営の1d6で相手に損害
-  function rollDamage(ownStrength) {
-    const die = rollD6();
-    // 強度帯を特定
-    const bands = ['1-10','11-20','21-30','31-40','41-50','51-60','61-70','71-80','81+'];
-    let bandIdx;
-    if (ownStrength >= 81) bandIdx = 8;
-    else bandIdx = Math.min(7, Math.floor((ownStrength - 1) / 10));
-    // MELEE_RESOLUTION 検索
-    const dieBand = die <= 2 ? '1-2' : die <= 4 ? '3-4' : '5-6';
-    const row = (typeof MELEE_RESOLUTION !== 'undefined') ? MELEE_RESOLUTION.find(r => r.die === dieBand) : null;
-    const dmg = row ? (row[bands[bandIdx]] || 0) : 0;
-    return { die, band: bands[bandIdx], damage: dmg };
-  }
-
-  const dmgToB = rollDamage(strengthA);
-  const dmgToA = rollDamage(strengthB);
-  log.push(`${partyA.ship.name}→${partyB.ship.name}: 1d6=${dmgToB.die}(${dmgToB.band}) 損害${dmgToB.damage}セクション`);
-  log.push(`${partyB.ship.name}→${partyA.ship.name}: 1d6=${dmgToA.die}(${dmgToA.band}) 損害${dmgToA.damage}セクション`);
-
-  // 乗員損失適用（両舷均等、小さい側から）
-  applyCrewLossSection(partyB.ship, dmgToB.damage);
-  applyCrewLossSection(partyA.ship, dmgToA.damage);
-
-  // 決着判定: 一方の強度が相手の3倍以上で勝利
   let winner = null;
-  if (strengthA >= strengthB * 3 && strengthB > 0) winner = partyA.ship;
-  else if (strengthB >= strengthA * 3 && strengthA > 0) winner = partyB.ship;
-  else if (strengthA > 0 && strengthB === 0) winner = partyA.ship;
-  else if (strengthB > 0 && strengthA === 0) winner = partyB.ship;
+  let rounds = 0;
+
+  for (let round = 1; round <= 3; round++) {
+    // 強度が0なら終了
+    const sA = (partyA.ship.crew?.L?.remain||0) + (partyA.ship.crew?.R?.remain||0);
+    const sB = (partyB.ship.crew?.L?.remain||0) + (partyB.ship.crew?.R?.remain||0);
+    if (sA <= 0 || sB <= 0) break;
+    rounds = round;
+    log.push(`━ ラウンド${round} ━`);
+    const strengthA = computeMeleeStrength(partyA.ship, partyA.sections, partyA.partyType);
+    const strengthB = computeMeleeStrength(partyB.ship, partyB.sections, partyB.partyType);
+    log.push(`${partyA.ship.name}強度=${strengthA}, ${partyB.ship.name}強度=${strengthB}`);
+
+    const dmgToB = rollDamageMelee(strengthA);
+    const dmgToA = rollDamageMelee(strengthB);
+    log.push(`${partyA.ship.name}→${partyB.ship.name}: 1d6=${dmgToB.die}(${dmgToB.band}) 損害${dmgToB.damage}セクション`);
+    log.push(`${partyB.ship.name}→${partyA.ship.name}: 1d6=${dmgToA.die}(${dmgToA.band}) 損害${dmgToA.damage}セクション`);
+
+    // 12.3.2: 最下位乗員セクションから消去
+    applyCrewLossSection(partyB.ship, dmgToB.damage);
+    applyCrewLossSection(partyA.ship, dmgToA.damage);
+
+    // 12.3.3: 3倍差で勝敗確定
+    const postA = computeMeleeStrength(partyA.ship, partyA.sections, partyA.partyType);
+    const postB = computeMeleeStrength(partyB.ship, partyB.sections, partyB.partyType);
+    if (postA >= postB * 3 && postB > 0) { winner = partyA.ship; break; }
+    if (postB >= postA * 3 && postA > 0) { winner = partyB.ship; break; }
+    if (postA > 0 && postB === 0) { winner = partyA.ship; break; }
+    if (postB > 0 && postA === 0) { winner = partyB.ship; break; }
+  }
 
   if (winner) {
     const loser = winner === partyA.ship ? partyB.ship : partyA.ship;
-    loser.status = 'struck';  // 拿捕
-    loser.capturedBy = winner.side;
-    log.push(`🏴 ${loser.name} が拿捕された（${winner.name}の白兵戦勝利）`);
+    capturePrize(winner, loser, log);
+  } else {
+    // 決着せず: 翌ターン継続フラグ
+    partyA.ship._meleeContinuing = true;
+    partyB.ship._meleeContinuing = true;
+    log.push('🔁 3ラウンド決着せず → 次ターン継続');
   }
 
-  return { strengthA, strengthB, dmgToA, dmgToB, winner, log };
+  return { winner, rounds, log };
+}
+
+// 1d6でMELEE_RESOLUTION参照
+function rollDamageMelee(ownStrength) {
+  const die = rollD6();
+  const bands = ['1-10','11-20','21-30','31-40','41-50','51-60','61-70','71-80','81+'];
+  let bandIdx;
+  if (ownStrength >= 81) bandIdx = 8;
+  else bandIdx = Math.min(7, Math.floor((ownStrength - 1) / 10));
+  const dieBand = die <= 2 ? '1-2' : die <= 4 ? '3-4' : '5-6';
+  const row = (typeof MELEE_RESOLUTION !== 'undefined') ? MELEE_RESOLUTION.find(r => r.die === dieBand) : null;
+  const dmg = row ? (row[bands[bandIdx]] || 0) : 0;
+  return { die, band: bands[bandIdx], damage: dmg };
+}
+
+// ============================================================
+// 捕獲処理 12.4
+// ============================================================
+function capturePrize(winner, loser, log) {
+  loser.status = 'struck';
+  loser.capturedBy = winner.side;
+  // 12.4.10: 拿捕艦は拿捕要員の品質を採用
+  loser.originalCrewQuality = loser.crewQuality;
+  loser.crewQuality = winner.crewQuality;
+  // 拿捕要員記録: winner側から一定数を拿捕要員として配置（簡略: 勝者OBPの半分）
+  const prizeCount = Math.max(1, Math.floor(((winner.crew?.L?.remain||0) + (winner.crew?.R?.remain||0)) / 4));
+  loser.prizeCrew = {
+    fromShip: winner.name,
+    side: winner.side,
+    quality: winner.crewQuality,
+    sections: prizeCount,
+  };
+  loser.prisoners = ((loser.crew?.L?.remain||0) + (loser.crew?.R?.remain||0));
+  // 12.4.5: 拿捕艦の砲撃は-2テーブル
+  loser.prizeCrewFiringPenalty = -2;
+  log.push(`🏴 ${loser.name} 拿捕成立（${winner.name}の白兵戦勝利、拿捕要員${prizeCount}・捕虜${loser.prisoners}）`);
+}
+
+// ============================================================
+// 12.4.9: 拿捕要員と捕虜の比率チェック（1:6）
+// 下回ると捕虜が蜂起、艦が元の所有者に戻る
+// ============================================================
+function checkPrizeCrewRatio(ship, log) {
+  if (!ship.prizeCrew || ship.prisoners == null) return;
+  if (ship.prizeCrew.sections <= 0 || ship.prisoners / ship.prizeCrew.sections > 6) {
+    log.push(`⚠️ ${ship.name}: 捕虜比率崩壊（${ship.prisoners}/${ship.prizeCrew.sections}）→ 元所有者へ復帰`);
+    ship.capturedBy = null;
+    ship.crewQuality = ship.originalCrewQuality || ship.crewQuality;
+    delete ship.prizeCrew;
+    delete ship.prisoners;
+    delete ship.prizeCrewFiringPenalty;
+    delete ship.originalCrewQuality;
+    ship.status = 'ok';  // 元所有者が復活
+  }
 }
 
 // 乗員セクションを損失（最小番号セクションから）

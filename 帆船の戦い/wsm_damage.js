@@ -58,20 +58,34 @@ function applyDamageWSM(target, damages, ctx) {
       }
       case 'C': {
         if (!target.crew) break;
-        // 被弾舷側の最小番号（=番号小さいものから、WSMではセクション1から）
-        // 簡略: 被弾舷側の残を減らす、空なら反対舷
+        // 12.4.11: 拿捕艦は奇数損失=拿捕要員、偶数=捕虜
+        const isPrize = !!target.prizeCrew;
         const primary = hitSide || 'L';
         const secondary = primary === 'L' ? 'R' : 'L';
         let removed = 0;
-        while (removed < n && target.crew[primary]?.remain > 0) {
-          target.crew[primary].remain--;
-          removed++;
+        while (removed < n) {
+          if (isPrize) {
+            // 同一砲撃フェイズ内の損失カウント
+            target._crewLossCountInPhase = (target._crewLossCountInPhase || 0) + 1;
+            const isOdd = (target._crewLossCountInPhase % 2) === 1;
+            if (isOdd && target.prizeCrew.sections > 0) {
+              target.prizeCrew.sections--;
+              removed++;
+              applied.push(`拿捕要員-1`);
+              continue;
+            } else if (!isOdd && target.prisoners > 0) {
+              // 捕虜（=元乗員）からの損失
+              if (target.crew[primary]?.remain > 0) { target.crew[primary].remain--; removed++; target.prisoners--; continue; }
+              if (target.crew[secondary]?.remain > 0) { target.crew[secondary].remain--; removed++; target.prisoners--; continue; }
+            }
+            // どちらも不可なら終了
+            break;
+          }
+          if (target.crew[primary]?.remain > 0) { target.crew[primary].remain--; removed++; continue; }
+          if (target.crew[secondary]?.remain > 0) { target.crew[secondary].remain--; removed++; continue; }
+          break;
         }
-        while (removed < n && target.crew[secondary]?.remain > 0) {
-          target.crew[secondary].remain--;
-          removed++;
-        }
-        applied.push(`乗員(${primary}優先)-${removed}`);
+        if (!isPrize) applied.push(`乗員(${primary}優先)-${removed}`);
         break;
       }
       case 'G': {
