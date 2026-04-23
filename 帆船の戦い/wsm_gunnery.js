@@ -175,21 +175,73 @@ function parseDamageCode(code) {
 // ============================================================
 // 砲撃修正子計算
 // ============================================================
+// 砲数帯: 0=1-3, 1=4-6, 2=7-9, 3=10-12, 4=13-15, 5=16-18, 6=19-21, 7=22-24, 8=25+
+function gunCountBand(n) {
+  if (n <= 3) return 0;
+  if (n <= 6) return 1;
+  if (n <= 9) return 2;
+  if (n <= 12) return 3;
+  if (n <= 15) return 4;
+  if (n <= 18) return 5;
+  if (n <= 21) return 6;
+  if (n <= 24) return 7;
+  return 8;
+}
+
+// HDT 修整表（砲数帯別）
+const HDT_MOD_TABLE = {
+  sternRake: [1,1,1,1,1,1,1,1,1],
+  crewSectLoss: [-1,-1,-1,-1,-1,-1,-2,-2,-2],
+  initialBroadside: [1,1,1,1,2,2,2,2,2],
+  captShip: [-1,-1,-2,-2,-2,-2,-2,-2,-2],
+  grapeShot: [-1,-1,-2,-2,-3,-3,-4,-4,-4],
+  chainShot: [1,1,1,1,2,2,2,2,2],
+  doubleShot: [1,1,1,1,2,2,2,2,2],
+  allAnchor: [1,1,1,1,1,1,2,2,2],
+  crewQuality: {
+    elite: [1,1,2,2,2,2,2,2,3],
+    crack: [1,1,1,1,2,2,2,2,2],
+    average: [0,0,0,0,0,0,0,0,0],
+    green: [0,0,0,0,0,-1,-1,-1,-1],
+    poor: [-1,-1,-1,-1,-1,-1,-2,-2,-2],
+  },
+};
+
 function calcGunneryModifiers(firer, target, opts) {
   const mods = [];
   let total = 0;
-  // 全帆展開（Full Sail）射撃ペナルティ
-  if (firer.sailState === 'full') { mods.push({label:'全帆-1', v:-1}); total += -1; }
-  // 火災中目標
-  if (target.onFire) { mods.push({label:'火災-1', v:-1}); total += -1; }
-  // 投錨中
-  if (firer.anchored) { mods.push({label:'錨泊+1', v:+1}); total += +1; }
-  // 乗員品質
+  const numGuns = opts?.numGuns || 0;
+  const band = gunCountBand(numGuns);
+  const isCaptured = !!firer.capturedBy;
+  // Captured Ship: 砲数帯変動（crew loss は無視）
+  if (isCaptured) {
+    const v = HDT_MOD_TABLE.captShip[band];
+    mods.push({label:`拿捕${v}`, v}); total += v;
+  } else {
+    // Crew Section Loss: 喪失セクション × 砲数帯変動
+    const crewLost = (firer.crew?.abilitiesMax||[]).filter((m, i) => m > 0 && (firer.crew?.abilities||[])[i] === 0).length;
+    if (crewLost > 0) {
+      const v = HDT_MOD_TABLE.crewSectLoss[band] * crewLost;
+      mods.push({label:`乗員喪失${v}`, v}); total += v;
+    }
+  }
+  // Initial Broadside: 砲数帯変動（各舷初回のみ）
+  const side = opts?.side;
+  if ((side === 'L' && !firer.firedInitialL) || (side === 'R' && !firer.firedInitialR)) {
+    const v = HDT_MOD_TABLE.initialBroadside[band];
+    mods.push({label:`初回舷側+${v}`, v}); total += v;
+  }
+  // All Anchor: 砲数帯変動
+  if (firer.anchored) {
+    const v = HDT_MOD_TABLE.allAnchor[band];
+    mods.push({label:`錨泊+${v}`, v}); total += v;
+  }
+  // Crew Quality: 砲数帯変動
   const cq = firer.crewQuality || 'average';
-  const cqMod = { elite: +2, crack: +1, average: 0, green: -1, poor: -2 }[cq] || 0;
-  if (cqMod !== 0) { mods.push({label:`${cq}${cqMod>0?'+':''}${cqMod}`, v:cqMod}); total += cqMod; }
-  // クリティカル: 指揮所被弾（後フェイズで実装）
-  if (firer.critHitMod) { mods.push({label:`指揮所${firer.critHitMod>0?'+':''}${firer.critHitMod}`, v:firer.critHitMod}); total += firer.critHitMod; }
+  const cqv = HDT_MOD_TABLE.crewQuality[cq]?.[band] || 0;
+  if (cqv !== 0) {
+    mods.push({label:`${cq}${cqv>0?'+':''}${cqv}`, v:cqv}); total += cqv;
+  }
   return { total, mods };
 }
 
@@ -270,8 +322,26 @@ function resolveGunnery(firer, target, arc, ammo, dmgType) {
   if (tableNum === null) { log.push('HDT射程外'); return { hit: false, log }; }
   log.push(`HDT: 砲${numGuns}門 × ${range}hex${rake?' (縦射)':''} → Hit Table #${tableNum}`);
 
-  // 修正子
-  const mc = calcGunneryModifiers(firer, target);
+  // 修正子（舷側・砲数情報を渡す）
+  const sideKey = (arc === 'port') ? 'L' : (arc === 'stbd') ? 'R' : null;
+  const band = gunCountBand(numGuns);
+  const mc = calcGunneryModifiers(firer, target, { side: sideKey, numGuns });
+  // 弾種修整（砲数帯変動）
+  if (ammo === 'chain') {
+    const v = HDT_MOD_TABLE.chainShot[band];
+    mc.mods.push({label:`鎖弾+${v}`, v}); mc.total += v;
+  } else if (ammo === 'double' && range <= 3) {
+    const v = HDT_MOD_TABLE.doubleShot[band];
+    mc.mods.push({label:`二重弾+${v}`, v}); mc.total += v;
+  } else if (ammo === 'grape') {
+    const v = HDT_MOD_TABLE.grapeShot[band];
+    mc.mods.push({label:`ぶどう弾${v}`, v}); mc.total += v;
+  }
+  // Stern Rake: +1
+  if (rake === 'stern_rake') {
+    const v = HDT_MOD_TABLE.sternRake[band];
+    mc.mods.push({label:`艦尾縦射+${v}`, v}); mc.total += v;
+  }
   if (mc.mods.length) log.push('修正: ' + mc.mods.map(m => m.label).join(' '));
 
   // 最終Hit Table値（マイナスはハズレ）

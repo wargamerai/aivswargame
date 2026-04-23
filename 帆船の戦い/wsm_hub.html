@@ -1238,6 +1238,13 @@ async function executeAllGunnery() {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let hits = 0, misses = 0;
   for (const firer of ordered) {
+    // 乗員全投入で艦運営不可なら砲撃不可
+    const crewTotal = (firer.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+    const assigned = (firer.obpAssigned||0) + (firer.dbpAssigned||0) + (firer.tbpAssigned||0);
+    if (crewTotal > 0 && assigned >= crewTotal) {
+      addLog(`${firer.name}: 乗員全投入のため砲撃不可`);
+      continue;
+    }
     const enemies = (firer.side === 'jp' ? state.usFleet : state.jpFleet).filter(t => t.col >= 0 && t.status === 'ok');
     if (enemies.length === 0) { addLog(`${firer.name}: 敵艦なし`); continue; }
     const cand = [];
@@ -1333,9 +1340,11 @@ async function executeAllGunnery() {
       await showGunneryStageModal(`砲撃予告: ${firer.name}`, summaryHtml, '発射');
     }
 
-    // 3. 発射確定: 装填要フラグ
+    // 3. 発射確定: 装填要フラグ、初回舷側マーク
     firer['fired' + sideForDirty + 'Dirty'] = true;
     firer['reloadTurns' + sideForDirty] = (ammo === 'double') ? 2 : 1;
+    if (sideForDirty === 'Left') firer.firedInitialL = true;
+    else firer.firedInitialR = true;
     addLog(`${firer.name}: ${sideForDirty === 'Left' ? '左舷' : '右舷'}発射済み（装填要: ${firer['reloadTurns' + sideForDirty]}ターン）`);
 
     // 4. マイナス時は弾道・ダイス省略、結果モーダルのみ
