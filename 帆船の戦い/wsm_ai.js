@@ -30,8 +30,8 @@ function aiSelectTarget(ship, state) {
       ? maxMoveForAttitude({ ...ship, dir: bear }, wind) : 4;
     // 弱さ: 船体残率 + クルー残率
     const hullPct = e.hull ? (e.hull.remain / e.hull.max) : 1;
-    const crewRem = (e.crew?.L?.remain||0) + (e.crew?.R?.remain||0);
-    const crewMax = (e.crew?.L?.max||1) + (e.crew?.R?.max||1);
+    const crewRem = (e.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+    const crewMax = Math.max(1, (e.crew?.abilitiesMax||[]).reduce((a,v) => a + (v||0), 0));
     const crewPct = crewMax > 0 ? crewRem / crewMax : 1;
     const weakness = 2 - hullPct - crewPct;  // 0〜2、大きいほど弱い
     // スコア: 距離近 + 弱い + 到達性あり
@@ -50,7 +50,7 @@ function aiAmmoDecide(ship, target, dist) {
   if (dist > 10) return 'round';
   if (dist >= 6) return 'chain';  // 帆狙い強制
   if (dist <= 1) {
-    const crewRem = (target.crew?.L?.remain||0) + (target.crew?.R?.remain||0);
+    const crewRem = (target.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
     const hullPct = target.hull ? target.hull.remain / target.hull.max : 1;
     if (crewRem >= 8) return 'grape';  // 多数乗員にはグレープ
     if (hullPct < 0.5) return 'double';  // 船体薄いならダブルで仕留め
@@ -127,6 +127,7 @@ function enumeratePlots(ship, state, target) {
 // 2ターン先読み: 今ターン各葉から、次ターンの推定最良位置までシミュレート
 function aiPlotMoves(ship, state) {
   if (!ship || ship.status !== 'ok') return;
+  if (ship.grappledWith?.length > 0) { ship.plottedMoves = []; ship.plotDone = true; return; }
   const target = aiSelectTarget(ship, state);
   if (!target) { ship.plottedMoves = []; ship.plotDone = true; return; }
 
@@ -191,8 +192,8 @@ function aiBoardDecide(ship, state) {
     if (d > 1) continue;
     const myQ = qOrder[ship.crewQuality||'average'];
     const enQ = qOrder[e.crewQuality||'average'];
-    const myCrew = (ship.crew?.L?.remain||0) + (ship.crew?.R?.remain||0);
-    const enCrew = (e.crew?.L?.remain||0) + (e.crew?.R?.remain||0);
+    const myCrew = (ship.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+    const enCrew = (e.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
     if (myQ >= enQ && myCrew >= enCrew) {
       ship.obpAssigned = Math.max(1, Math.floor(myCrew / 2));
       ship.dbpAssigned = myCrew - ship.obpAssigned;

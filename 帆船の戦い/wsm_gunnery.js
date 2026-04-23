@@ -21,46 +21,41 @@ function idxToDir(i) { return DIR_CW_ORDER[((i % 6) + 6) % 6]; }
 
 // 艦Aから艦B（または座標）への方位（最寄りの6方位）
 function bearingToHex(fromCol, fromRow, toCol, toRow) {
-  // axial座標で角度算出
-  const fromA = offsetToAxial(fromCol, fromRow);
-  const toA = offsetToAxial(toCol, toRow);
-  const dq = toA.q - fromA.q;
-  const dr = toA.r - fromA.r;
-  // 6方位ベクトル（axial）
-  const dirVecs = {
-    9: [+1, -1], 6: [+1, 0], 3: [0, +1], 1: [-1, +1], 4: [-1, 0], 7: [0, -1]
-  };
-  // 一番内積が大きい方位
-  let best = 9, bestScore = -Infinity;
-  const len = Math.sqrt(dq*dq + dr*dr) || 1;
-  for (const [d, [vq, vr]] of Object.entries(dirVecs)) {
-    const vlen = Math.sqrt(vq*vq + vr*vr);
-    const score = (dq*vq + dr*vr) / (len * vlen);
-    if (score > bestScore) { bestScore = score; best = parseInt(d); }
+  // 各 numpad 方位について hexNeighbor を取って、目標までの距離が最小の方位を返す
+  const dirs = [8, 9, 3, 2, 1, 7];
+  let best = 9, bestDist = Infinity;
+  for (const d of dirs) {
+    const n = (typeof hexNeighbor === 'function') ? hexNeighbor(fromCol, fromRow, d) : null;
+    if (!n) continue;
+    const dist = (typeof hexDist === 'function') ? hexDist(n.col, n.row, toCol, toRow) : Math.hypot(n.col - toCol, n.row - toRow);
+    if (dist < bestDist) { bestDist = dist; best = d; }
   }
   return best;
 }
 
 // 射界判定: firer から target が どのarcにあるか
+// ARC_TEMPLATE を唯一の真実源とする。field 1/2/3 = 舷側砲可 → port/stbd。他は 'none'。
 function getArcToTarget(firer, target) {
-  // firerが占有する2ヘクスのうち、targetに最も近い側から見る
-  const tCenter = avgPos(target);
-  const fBow = { col: firer.col, row: firer.row };
-  const fStern = getSternHex(firer);
-  // どちらのヘクスからの距離で判定するか（両方の和が小さい側）
-  // → 簡略: bowヘクスからの方位を基準
-  const bear = bearingToHex(fBow.col, fBow.row, tCenter.col, tCenter.row);
-  const fIdx = dirToIdx(firer.dir);  // 艦首
-  const bIdx = dirToIdx(bear);
-  if (fIdx < 0 || bIdx < 0) return 'none';
+  if (typeof getArcFieldInfo !== 'function') return 'none';
+  const fStern = (typeof getSternHex === 'function') ? getSternHex(firer) : null;
+  const tStern = (target && target.dir != null && typeof getSternHex === 'function') ? getSternHex(target) : null;
 
-  // 相対方位（艦首基準で時計回りに何度ずれているか）
-  let rel = (bIdx - fIdx + 6) % 6;
-  // rel: 0=艦首前方, 1=右舷前(CW60°), 2=右舷後(CW120°), 3=艦尾真後ろ, 4=左舷後(CCW120°), 5=左舷前(CCW60°)
-  if (rel === 0) return 'bow';
-  if (rel === 3) return 'stern';
-  if (rel === 1 || rel === 2) return 'stbd';
-  if (rel === 4 || rel === 5) return 'port';
+  const firerHexes = [{ col: firer.col, row: firer.row, dir: firer.dir }];
+  if (fStern) firerHexes.push({ col: fStern.col, row: fStern.row, dir: firer.dir });
+  const targetHexes = [{ col: target.col, row: target.row }];
+  if (tStern) targetHexes.push({ col: tStern.col, row: tStern.row });
+
+  for (const fh of firerHexes) {
+    for (const th of targetHexes) {
+      const info = getArcFieldInfo(fh, th);
+      if (typeof debugLog === 'function') {
+        debugLog(`[getArcToTarget] firer@(${fh.col},${fh.row})dir${fh.dir} → target@(${th.col},${th.row}) field=${info.field} side=${info.side||'-'}`);
+      }
+      if (BOW_GUN_ARCS.includes(info.field) || STERN_GUN_ARCS.includes(info.field)) {
+        return info.side;
+      }
+    }
+  }
   return 'none';
 }
 
@@ -94,22 +89,22 @@ function isRaking(firer, target) {
 // ============================================================
 // 行（砲数）: 1-3 / 4-6 / 7-9 / 10-12 / 13-15 / 16-18 / 19-21 / 22-24 / 25+
 // 列（射程hex）: 1 / 2 / 3 / 4 / 5,6 / 7-10
-// セル値: "X (Y)" — Y は全帆展開時
+// セル値: "X (Y)" — Y は縦射(rake)時
 const HDT_TABLE = [
   // [numGunsRange, [r1, r2, r3, r4, r5_6, r7_10]]
-  // 各セルは {normal, fullSail}
-  { guns: [1,3],    table: [{n:1,f:2},  {n:0,f:1},  {n:-1,f:0}, {n:-2,f:-1},{n:-3,f:-2},{n:-4,f:-3}] },
-  { guns: [4,6],    table: [{n:1,f:2},  {n:1,f:2},  {n:0,f:1},  {n:-1,f:0}, {n:-2,f:-1},{n:-3,f:-2}] },
-  { guns: [7,9],    table: [{n:2,f:3},  {n:1,f:2},  {n:0,f:1},  {n:-1,f:0}, {n:-2,f:-1},{n:-3,f:-2}] },
-  { guns: [10,12],  table: [{n:2,f:3},  {n:1,f:2},  {n:0,f:1},  {n:-1,f:0}, {n:-2,f:-1},{n:-3,f:-2}] },
-  { guns: [13,15],  table: [{n:3,f:4},  {n:2,f:3},  {n:1,f:2},  {n:0,f:1},  {n:-1,f:0}, {n:-2,f:-1}] },
-  { guns: [16,18],  table: [{n:3,f:4},  {n:2,f:3},  {n:1,f:2},  {n:0,f:1},  {n:-1,f:0}, {n:-2,f:-1}] },
-  { guns: [19,21],  table: [{n:4,f:5},  {n:3,f:4},  {n:2,f:3},  {n:1,f:2},  {n:0,f:1},  {n:-1,f:0}] },
-  { guns: [22,24],  table: [{n:4,f:5},  {n:3,f:4},  {n:2,f:3},  {n:1,f:2},  {n:0,f:1},  {n:-1,f:0}] },
-  { guns: [25,99],  table: [{n:4,f:5},  {n:4,f:5},  {n:3,f:4},  {n:2,f:3},  {n:1,f:2},  {n:0,f:1}] },
+  // 各セルは {normal, rake}
+  { guns: [1,3],    table: [{n:1,r:2},  {n:0,r:1},  {n:-1,r:0}, {n:-2,r:-1},{n:-3,r:-2},{n:-4,r:-3}] },
+  { guns: [4,6],    table: [{n:1,r:2},  {n:1,r:2},  {n:0,r:1},  {n:-1,r:0}, {n:-2,r:-1},{n:-3,r:-2}] },
+  { guns: [7,9],    table: [{n:2,r:3},  {n:1,r:2},  {n:0,r:1},  {n:-1,r:0}, {n:-2,r:-1},{n:-3,r:-2}] },
+  { guns: [10,12],  table: [{n:2,r:4},  {n:2,r:3},  {n:1,r:2},  {n:0,r:1},  {n:-1,r:0}, {n:-2,r:-1}] },
+  { guns: [13,15],  table: [{n:3,r:5},  {n:2,r:4},  {n:1,r:3},  {n:0,r:2},  {n:-1,r:1}, {n:-2,r:0}] },
+  { guns: [16,18],  table: [{n:3,r:6},  {n:3,r:5},  {n:2,r:4},  {n:1,r:3},  {n:0,r:2},  {n:-1,r:1}] },
+  { guns: [19,21],  table: [{n:4,r:7},  {n:3,r:6},  {n:2,r:5},  {n:1,r:4},  {n:0,r:3},  {n:-1,r:2}] },
+  { guns: [22,24],  table: [{n:4,r:8},  {n:4,r:7},  {n:3,r:6},  {n:2,r:5},  {n:1,r:4},  {n:0,r:3}] },
+  { guns: [25,99],  table: [{n:5,r:9},  {n:4,r:8},  {n:3,r:7},  {n:2,r:6},  {n:1,r:5},  {n:0,r:4}] },
 ];
 
-function lookupHDT(numGuns, rangeHex, fullSail) {
+function lookupHDT(numGuns, rangeHex, isRake) {
   // 射程→列index
   let colIdx;
   if (rangeHex <= 1) colIdx = 0;
@@ -124,7 +119,7 @@ function lookupHDT(numGuns, rangeHex, fullSail) {
   for (const row of HDT_TABLE) {
     if (numGuns >= row.guns[0] && numGuns <= row.guns[1]) {
       const cell = row.table[colIdx];
-      return fullSail ? cell.f : cell.n;
+      return isRake ? cell.r : cell.n;
     }
   }
   return 0;
@@ -203,12 +198,21 @@ function calcGunneryModifiers(firer, target, opts) {
 // ============================================================
 // firer, target: ship オブジェクト
 // arc: 'port' | 'stbd' | 'bow' | 'stern' （撃つ舷）
-// ammo: 'round' | 'chain' | 'double' | 'grape' | 'carronade'
-function resolveGunnery(firer, target, arc, ammo) {
+// ammo: 'round' | 'chain' | 'double' | 'grape' | 'canister'
+// dmgType: 'hull' | 'rigging' （省略時は弾種から自動決定）
+function resolveGunnery(firer, target, arc, ammo, dmgType) {
   ammo = ammo || 'round';
   const log = [];
-  const fAvg = avgPos(firer);
-  const range = hexDist(fAvg.col, fAvg.row, target.col, target.row);
+  // 射程: 両艦の bow/stern ヘクスの最短距離
+  const fHexes = [{col:firer.col,row:firer.row}];
+  const fStern = getSternHex(firer); if (fStern) fHexes.push(fStern);
+  const tHexes2 = [{col:target.col,row:target.row}];
+  const tStern2 = getSternHex(target); if (tStern2) tHexes2.push(tStern2);
+  let range = Infinity;
+  for (const f of fHexes) for (const t of tHexes2) {
+    const d = hexDist(f.col, f.row, t.col, t.row);
+    if (d < range) range = d;
+  }
 
   // 弾種射程チェック
   const maxR = MUNITION_RANGE?.[ammo.toUpperCase() === 'ROUND' ? 'ROUND_SHOT' : ammo.toUpperCase() + '_SHOT'] || 10;
@@ -217,26 +221,54 @@ function resolveGunnery(firer, target, arc, ammo) {
     return { hit: false, log };
   }
 
-  // 砲数算出: 舷側（port/stbd）のみ発射可。broadsideGuns.remain を使用
+  // 砲数算出: 舷側のみ。field番号で fore/aft/全舷 を選択
   let numGuns = 0;
+  let firingPortion = 'full';  // full | fore | aft
   if (arc === 'port' || arc === 'stbd') {
     const side = arc === 'port' ? 'L' : 'R';
-    numGuns = (firer.broadsideGuns?.[side]?.remain || 0);
-    if (ammo === 'carronade') {
-      numGuns = firer.carronades?.[side]?.remain || 0;
+    const gunData = firer.broadsideGuns?.[side];
+    // 目標の field を判定して fore/aft を選択
+    let field = 0;
+    if (typeof getArcFieldNumber === 'function') {
+      const tStern = (typeof getSternHex === 'function') ? getSternHex(target) : null;
+      const tHexes = [{ col: target.col, row: target.row }];
+      if (tStern) tHexes.push(tStern);
+      for (const h of tHexes) {
+        const f = getArcFieldNumber(firer, h);
+        if (f >= 1 && f <= 3) { field = f; break; }
+        if (f !== 0 && field === 0) field = f;
+      }
     }
+    if (field === 5) {
+      numGuns = gunData?.foreRemain || 0;
+      firingPortion = 'fore';
+    } else if (field === 4) {
+      numGuns = gunData?.aftRemain || 0;
+      firingPortion = 'aft';
+    } else {
+      // field 1/2/3: 全舷
+      numGuns = gunData?.remain || 0;
+      firingPortion = 'full';
+    }
+    // カロネード: 射程2hex以内なら同舷カロネードを加算（射界は通常砲と同一）
+    let carronadesAdded = 0;
+    if (range <= 2) {
+      carronadesAdded = firer.carronades?.[side]?.remain || 0;
+      numGuns += carronadesAdded;
+    }
+    log.push(`砲数: ${side}舷 field=${field} ${firingPortion} = ${numGuns}門${carronadesAdded ? ` (うちカロネード${carronadesAdded})` : ''}`);
   }
   if (numGuns <= 0) { log.push('発砲可能砲なし'); return { hit: false, log }; }
 
-  // HDT → Hit Table番号
-  const fullSail = firer.sailState === 'full';
-  const tableNum = lookupHDT(numGuns, range, fullSail);
-  if (tableNum === null) { log.push('HDT射程外'); return { hit: false, log }; }
-  log.push(`HDT: 砲${numGuns}門 × ${range}hex${fullSail?' (FullSail)':''} → Hit Table #${tableNum}`);
-
-  // Rake判定
+  // Rake判定（HDT参照前）
   const rake = isRaking(firer, target);
   if (rake) log.push(`Rake判定: ${rake === 'bow_rake' ? '艦首縦射' : '艦尾縦射'}`);
+
+  // HDT → Hit Table番号（縦射時は rake 値を使用）
+  const fullSail = firer.sailState === 'full';
+  const tableNum = lookupHDT(numGuns, range, !!rake);
+  if (tableNum === null) { log.push('HDT射程外'); return { hit: false, log }; }
+  log.push(`HDT: 砲${numGuns}門 × ${range}hex${rake?' (縦射)':''} → Hit Table #${tableNum}`);
 
   // 修正子
   const mc = calcGunneryModifiers(firer, target);
@@ -250,14 +282,21 @@ function resolveGunnery(firer, target, arc, ammo) {
     return { hit: false, log, miss: 'modifier', table: finalTable, range, rake };
   }
 
-  // 命中判定（1d6で Hit Table参照）
-  const die = rollD6();
-  const dmgType = (ammo === 'chain') ? 'rigging' : 'hull';
+  if (!dmgType) dmgType = (ammo === 'chain') ? 'rigging' : 'hull';
   const adjustedTable = Math.min(10, finalTable);
-  const code = lookupHitTable(adjustedTable, die, dmgType);
-  log.push(`1d6=${die}, Table#${adjustedTable}(${dmgType}) → "${code}"`);
-
-  const damages = parseDamageCode(code);
+  let die, code, damages;
+  if (ammo === 'grape') {
+    // ぶどう弾: ダイスなし、命中No.の値だけ乗員損失
+    die = null;
+    code = `${adjustedTable}C`;
+    damages = [{ type: 'C', n: adjustedTable }];
+    log.push(`ぶどう弾: Table#${adjustedTable} → 乗員 ${adjustedTable} セクション損失`);
+  } else {
+    die = rollD6();
+    code = lookupHitTable(adjustedTable, die, dmgType);
+    log.push(`1d6=${die}, Table#${adjustedTable}(${dmgType}) → "${code}"`);
+    damages = parseDamageCode(code);
+  }
   // Rake時 (R) extras を有効化
   if (rake) {
     damages.forEach(d => { if (d.extra) d.apply = true; });
@@ -291,30 +330,29 @@ function applyDamage(target, damages, fromArc) {
         }
         break;
       case 'R':
-        if (target.rigging) {
-          // 最大番号(R)から消去 — 簡略: 残量が一番多いセクションから
-          const sections = ['L','C','R'];
+        if (Array.isArray(target.rigging?.sections)) {
           const n = d.n || 1;
-          for (let k = 0; k < n; k++) {
-            const sortedSections = sections.filter(s => target.rigging[s].remain > 0)
-              .sort((a,b) => target.rigging[b].remain - target.rigging[a].remain);
-            if (sortedSections.length === 0) break;
-            target.rigging[sortedSections[0]].remain--;
+          let removed = 0;
+          for (let i = 0; i < target.rigging.sections.length && removed < n; i++) {
+            while (removed < n && target.rigging.sections[i] > 0) {
+              target.rigging.sections[i]--;
+              removed++;
+            }
           }
-          applied.push(`索具-${n}`);
+          applied.push(`索具-${removed}`);
         }
         break;
       case 'C':
-        if (target.crew) {
-          // 最小番号から消去 — 攻撃舷側（fromArcの反対 = 被弾側）
-          const targetSide = (fromArc === 'port' || fromArc === 'stbd')
-            ? (fromArc === 'port' ? 'R' : 'L')  // 自分のportは相手のstbdに撃つ
-            : 'L';
+        if (Array.isArray(target.crew?.abilities)) {
           const n = d.n || 1;
-          if (target.crew[targetSide].remain > 0) {
-            target.crew[targetSide].remain = Math.max(0, target.crew[targetSide].remain - n);
-            applied.push(`乗員${targetSide}-${n}`);
+          let removed = 0;
+          for (let i = 0; i < target.crew.abilities.length && removed < n; i++) {
+            while (removed < n && target.crew.abilities[i] > 0) {
+              target.crew.abilities[i]--;
+              removed++;
+            }
           }
+          applied.push(`乗員-${removed}`);
         }
         break;
       case 'G':

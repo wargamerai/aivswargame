@@ -160,7 +160,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
   <div id="rightPane">
     <h3>選択艦</h3>
     <div id="shipDetail">艦を選択</div>
-    <h3>移動プロット</h3>
+    <h3 id="plotHeader">移動プロット</h3>
     <div id="plotPanel" style="background:#0a1a2a;padding:8px;border-radius:4px;margin-bottom:6px;">
       <div id="plotDisplay" style="background:#000;color:#0f8;padding:4px 8px;border-radius:3px;font-family:monospace;min-height:24px;margin-bottom:6px;">-</div>
       <div id="numpad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;">
@@ -196,7 +196,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
   </div>
 </div>
 <!-- フロート型デバッグログ（常に最前面、ドラッグ不可だが閉じられる） -->
-<div id="debugLogWrap" style="position:fixed;left:8px;bottom:60px;width:380px;height:220px;background:#000;border:2px solid #4f8;border-radius:4px;z-index:1000;display:flex;flex-direction:column;">
+<div id="debugLogWrap" style="position:fixed;left:8px;bottom:60px;width:380px;height:220px;background:#000;border:2px solid #4f8;border-radius:4px;z-index:1000;display:none;flex-direction:column;">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 6px;background:#1a3a1a;color:#8f8;font-weight:bold;font-size:0.75em;">
     <span>デバッグログ</span>
     <span>
@@ -213,10 +213,13 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
 <div id="bottomBar">
   <span id="infoLabel">戦闘準備中</span>
   <button class="act" onclick="runWindPhase()">🌬 風判定</button>
+  <span id="plotBottomButtons">
   <button class="act" onclick="executeAllPlots()" style="background:#22aa66;">▶ プロット実行</button>
   <button class="act" onclick="clearPlot()" style="background:#666;">プロット消去</button>
   <button class="act" onclick="donePlot()" style="background:#446699;">プロット確定 (Enter)</button>
+  </span>
   <button class="act" id="btnArcs" onclick="toggleArcs()" style="background:#884466;">射界: OFF</button>
+  <button class="act" id="btnAttackRange" onclick="toggleAttackRange()" style="background:#446644;">攻撃範囲: OFF</button>
   <button class="act" onclick="advancePhase()">次のフェイズ</button>
   <button class="act" style="background:#aa4444;" onclick="endTurn()">ターン終了</button>
   <button class="act" style="background:#2a5a2a;" onclick="const w=document.getElementById('debugLogWrap');w.style.display=w.style.display==='none'?'flex':'none';">DEBUG</button>
@@ -452,6 +455,43 @@ function draw() {
   // 5. 艦描画
   [...state.jpFleet, ...state.usFleet].forEach(s => drawShip(s));
 
+  // 5.5 鉤縄接続線
+  {
+    const processed = new Set();
+    for (const a of [...state.jpFleet, ...state.usFleet]) {
+      if (!a.grappledWith?.length) continue;
+      for (const bName of a.grappledWith) {
+        const key = [a.name, bName].sort().join('|');
+        if (processed.has(key)) continue;
+        processed.add(key);
+        const b = [...state.jpFleet, ...state.usFleet].find(s => s.name === bName);
+        if (!b || b.col < 0) continue;
+        const p1 = hexPt(a.col, a.row);
+        const p2 = hexPt(b.col, b.row);
+        ctx.save();
+        ctx.strokeStyle = '#ff8800';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // 中央に🪝記号
+        const mx = (p1.x + p2.x) / 2;
+        const my = (p1.y + p2.y) / 2;
+        ctx.fillStyle = '#ffcc44';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.font = `bold ${Math.round(HEX_SIZE * 1.0)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeText('🪝', mx, my);
+        ctx.fillText('🪝', mx, my);
+        ctx.restore();
+      }
+    }
+  }
+
   // 6. 選択艦ハイライト
   if (state.selectedShip) {
     const s = state.selectedShip;
@@ -466,6 +506,9 @@ function draw() {
 
   // 射界表示
   if (state.showArcs && state.selectedShip) drawArcsForShip(state.selectedShip);
+
+  // 攻撃範囲表示（実際に射撃候補となるヘクス）
+  if (state.showAttackRange && state.selectedShip) drawAttackRangeForShip(state.selectedShip);
 
   // プロット予測線（移動実行中は表示しない）
   if (typeof drawPlotPreview === 'function' && !isExecuting) drawPlotPreview();
@@ -749,16 +792,14 @@ const SCENARIOS = {
 };
 
 const QUAL_MAP = {Cr:'crack',Gr:'green',Av:'average',El:'elite',Pr:'poor',CR:'crack',GR:'green',AV:'average',EL:'elite',PR:'poor'};
-const SHOT_TYPES = ['round','canister','double','grape'];
-const SHOT_TYPE_JP = { round:'球弾', canister:'散弾', double:'二重弾', grape:'ぶどう弾' };
+const SHOT_TYPES = ['round','chain','double','grape'];
+const SHOT_TYPE_JP = { round:'球形弾', chain:'鎖弾', double:'二重弾', grape:'ぶどう弾' };
 
 function buildScenarioShip(s, side, nation) {
   const specList = (typeof SHIP_SPECS !== 'undefined' && SHIP_SPECS[nation]) || [];
   const spec = specList.find(x => x.guns === s.guns && x.class === s.cls) || {};
   const hex = parseWsmHex(s.bow);
   const hullAdj = Math.ceil(s.hull * 1.5);
-  const crewL = s.crew[0] * 2;
-  const crewR = s.crew[2] * 2;
   const carL = s.cL * 2;
   const carR = s.cR * 2;
   const gunL = s.gL * 2;
@@ -777,20 +818,18 @@ function buildScenarioShip(s, side, nation) {
     battleSailSpeed: s.bs ?? 4, fullSailSpeed: s.fs ?? 6, turningAbility: 3,
     hull: { max: hullAdj, remain: hullAdj },
     rigging: {
-      L: { max: s.rig[0], remain: s.rig[0] },
-      C: { max: s.rig[1], remain: s.rig[1] },
-      R: { max: s.rig[2], remain: s.rig[2] },
-      sections: (s.rig || []).slice()
+      sections: (s.rig || []).slice(),
+      sectionsMax: (s.rig || []).slice()
     },
     crew: {
-      L: { max: crewL, remain: crewL },
-      R: { max: crewR, remain: crewR },
-      abilities: (s.crew || []).map(v => v * 2)
+      abilities: (s.crew || []).map(v => v * 2),
+      abilitiesMax: (s.crew || []).map(v => v * 2)
     },
     gunHitTable: ght,
     broadsideGuns: {
-      L: { max: gunL, remain: gunL },
-      R: { max: gunR, remain: gunR }
+      // fore/aft別管理。破壊された場合はそれぞれ独立に減算
+      L: { max: gunL, remain: gunL, foreMax: Math.ceil(gunL/2), foreRemain: Math.ceil(gunL/2), aftMax: Math.floor(gunL/2), aftRemain: Math.floor(gunL/2) },
+      R: { max: gunR, remain: gunR, foreMax: Math.ceil(gunR/2), foreRemain: Math.ceil(gunR/2), aftMax: Math.floor(gunR/2), aftRemain: Math.floor(gunR/2) }
     },
     carronades: {
       L: { max: carL, remain: carL },
@@ -949,18 +988,64 @@ function updatePlotDisplay() {
   el.textContent = (moves.length === 0 ? '(なし)' : moves.join(' ')) + done;
 }
 
+function renderShipCardHtml(s) {
+  const hp = s.hull ? `${s.hull.remain}/${s.hull.max}` : '-';
+  const hpPct = s.hull ? (s.hull.remain / s.hull.max * 100) : 0;
+  const att = (typeof computeAttitude === 'function') ? computeAttitude(s, state.wind) : '-';
+  const statusMark = s.status === 'ok' ? '' : s.status === 'struck' ? '🏳 ' : s.status === 'sunk' ? '🌊 ' : s.status === 'exploded' ? '💥 ' : '';
+  return `
+    <div style="border:1px solid #345;padding:6px;margin-bottom:6px;background:#0a1a2a;border-radius:4px;">
+      <div style="font-weight:bold;font-size:0.95em;color:${s.side==='jp'?'#88bbff':'#ffbbbb'};">${statusMark}${s.name}</div>
+      <div style="color:#aac;font-size:0.8em;">${s.guns}門 ${s.type} / ${s.nation||''}</div>
+      <div class="stat-row"><span class="lbl">船体</span><span class="val">${hp} <span class="bar"><div style="width:${hpPct}%;"></div></span></span></div>
+      <table style="width:100%;border-collapse:collapse;font-size:0.75em;margin:2px 0;">
+        <tr style="color:#aac;"><th colspan="4" style="text-align:left;padding:1px 2px;">索具</th></tr>
+        <tr style="color:#fff;font-weight:bold;text-align:center;"><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[0]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[1]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[2]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[3]??'-'}</td></tr>
+      </table>
+      <table style="width:100%;border-collapse:collapse;font-size:0.75em;margin:2px 0;">
+        <tr style="color:#aac;"><th colspan="4" style="text-align:left;padding:1px 2px;">乗員</th></tr>
+        <tr style="color:#fff;font-weight:bold;text-align:center;"><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[0]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[1]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[2]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[3]??'-'}</td></tr>
+      </table>
+      <div class="stat-row" style="font-size:0.8em;"><span class="lbl">砲/カ</span><span class="val">${Math.ceil((s.broadsideGuns?.L?.remain||0)/2)}/${Math.ceil((s.broadsideGuns?.R?.remain||0)/2)} ・${Math.ceil((s.carronades?.L?.remain||0)/2)}/${Math.ceil((s.carronades?.R?.remain||0)/2)}</span></div>
+      <div class="stat-row" style="font-size:0.8em;"><span class="lbl">装填</span><span class="val">${s.firedLeftDirty?'空':SHOT_TYPE_JP[s.loadedShot?.L||'round']}/${s.firedRightDirty?'空':SHOT_TYPE_JP[s.loadedShot?.R||'round']}</span></div>
+      <div class="stat-row" style="font-size:0.8em;"><span class="lbl">態勢/位置</span><span class="val">${att} / ${s.col>=0?hexId(s.col,s.row):'-'}</span></div>
+    </div>
+  `;
+}
+
 function renderShipDetail() {
   updatePlotDisplay();
   const el = document.getElementById('shipDetail');
+  // 高速観戦モード: 左パネル=FR、右パネル=GB、プロット/ログを非表示
+  if (typeof isFastAiObserve === 'function' && isFastAiObserve()) {
+    const plotHeader = document.getElementById('plotHeader');
+    const plotPanel = document.getElementById('plotPanel');
+    const actionLog = document.getElementById('actionLog');
+    if (plotHeader) plotHeader.style.display = 'none';
+    if (plotPanel) plotPanel.style.display = 'none';
+    if (actionLog) actionLog.style.display = 'none';
+    document.querySelectorAll('#rightPane h3').forEach(h => {
+      if (h.textContent === '行動ログ' || h.textContent === '選択艦') h.style.display = 'none';
+    });
+    const allShips = [...state.jpFleet, ...state.usFleet];
+    const fr = allShips.filter(x => x.nation === 'FR');
+    const gb = allShips.filter(x => x.nation === 'GB');
+    const lp = document.getElementById('leftPane');
+    if (lp) {
+      lp.innerHTML = `<h3>フランス艦隊</h3>` + fr.map(renderShipCardHtml).join('');
+    }
+    el.innerHTML = `<div style="font-weight:bold;color:#ffcc44;font-size:1em;margin-bottom:6px;">イギリス艦隊</div>` + gb.map(renderShipCardHtml).join('');
+    return;
+  }
   const s = state.selectedShip;
   if (!s) { el.textContent = '艦を選択'; return; }
   const hp = s.hull ? `${s.hull.remain}/${s.hull.max}` : '-';
   const hpPct = s.hull ? (s.hull.remain / s.hull.max * 100) : 0;
-  const rigTotal = (s.rigging?.L?.max||0) + (s.rigging?.C?.max||0) + (s.rigging?.R?.max||0);
-  const rigRemain = (s.rigging?.L?.remain||0) + (s.rigging?.C?.remain||0) + (s.rigging?.R?.remain||0);
+  const rigTotal = (s.rigging?.sectionsMax||[]).reduce((a,v) => a + (v||0), 0);
+  const rigRemain = (s.rigging?.sections||[]).reduce((a,v) => a + (v||0), 0);
   const rigPct = rigTotal > 0 ? (rigRemain / rigTotal * 100) : 0;
-  const crewTotal = (s.crew?.L?.max||0) + (s.crew?.R?.max||0);
-  const crewRemain = (s.crew?.L?.remain||0) + (s.crew?.R?.remain||0);
+  const crewTotal = (s.crew?.abilitiesMax||[]).reduce((a,v) => a + (v||0), 0);
+  const crewRemain = (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
   const crewPct = crewTotal > 0 ? (crewRemain / crewTotal * 100) : 0;
   const att = (typeof computeAttitude === 'function') ? computeAttitude(s, state.wind) : '-';
   const mv = (typeof maxMoveForAttitude === 'function') ? maxMoveForAttitude(s, state.wind) : '-';
@@ -982,7 +1067,7 @@ function renderShipDetail() {
       </table>
       <div class="stat-row"><span class="lbl">大砲(艦首L/R・艦尾L/R)</span><span class="val">${Math.ceil((s.broadsideGuns?.L?.remain||0)/2)}/${Math.ceil((s.broadsideGuns?.R?.remain||0)/2)}・${Math.floor((s.broadsideGuns?.L?.remain||0)/2)}/${Math.floor((s.broadsideGuns?.R?.remain||0)/2)}</span></div>
       <div class="stat-row"><span class="lbl">カロネード(艦首L/R・艦尾L/R)</span><span class="val">${Math.ceil((s.carronades?.L?.remain||0)/2)}/${Math.ceil((s.carronades?.R?.remain||0)/2)}・${Math.floor((s.carronades?.L?.remain||0)/2)}/${Math.floor((s.carronades?.R?.remain||0)/2)}</span></div>
-      <div class="stat-row"><span class="lbl">装填(L/R)</span><span class="val">${SHOT_TYPE_JP[s.loadedShot?.L||'round']}/${SHOT_TYPE_JP[s.loadedShot?.R||'round']}</span></div>
+      <div class="stat-row"><span class="lbl">装填(L/R)</span><span class="val">${s.firedLeftDirty?'<span style="color:#ff8888;">空</span>':SHOT_TYPE_JP[s.loadedShot?.L||'round']}/${s.firedRightDirty?'<span style="color:#ff8888;">空</span>':SHOT_TYPE_JP[s.loadedShot?.R||'round']}</span></div>
       ${state.phase==='reload' ? `
       <div class="stat-row" style="flex-direction:column;align-items:stretch;">
         <span class="lbl">次回装填弾種</span>
@@ -1028,7 +1113,12 @@ function setInfo(msg) {
 
 // 画面中央のフェイズ/判定オーバーレイ
 let _overlayTimer = null;
+function isFastAiObserve() {
+  return state.gameMode === 'ai-vs-ai-auto';
+}
 function showPhaseOverlay(title, detail, dice, duration) {
+  // 高速観戦モード: 砲撃結果と白兵戦のみ表示
+  if (isFastAiObserve() && title !== PHASE_NAMES_JP['melee'] && !(title && title.startsWith('砲撃結果'))) return;
   const el = document.getElementById('phaseOverlay');
   if (!el) return;
   let html = `<div class="ph-title">${title || ''}</div>`;
@@ -1045,12 +1135,11 @@ function showPhaseOverlay(title, detail, dice, duration) {
 // ============================================================
 // フェイズ進行
 // ============================================================
-const PHASE_ORDER = ['wind', 'unfoul', 'moveNote', 'moveExec', 'grapple', 'boardPrep', 'combat', 'melee', 'reload', 'fullSail'];
+const PHASE_ORDER = ['wind', 'unfoul', 'moveNote', 'grapple', 'boardPrep', 'combat', 'melee', 'reload', 'fullSail'];
 const PHASE_NAMES_JP = {
   wind:      'A. 風',
   unfoul:    'B. 絡み解除',
   moveNote:  'C. 移動記入',
-  moveExec:  'D. 移動実行',
   grapple:   'E. 鉤縄/解除',
   boardPrep: 'F. 接舷準備',
   combat:    'G. 砲撃',
@@ -1058,6 +1147,15 @@ const PHASE_NAMES_JP = {
   reload:    'I. 装填',
   fullSail:  'J. 全帆',
 };
+function updatePlotVisibility() {
+  const show = state.phase === 'moveNote';
+  const header = document.getElementById('plotHeader');
+  const panel = document.getElementById('plotPanel');
+  const bottom = document.getElementById('plotBottomButtons');
+  if (header) header.style.display = show ? '' : 'none';
+  if (panel) panel.style.display = show ? '' : 'none';
+  if (bottom) bottom.style.display = show ? '' : 'none';
+}
 function advancePhase() {
   const i = PHASE_ORDER.indexOf(state.phase);
   if (i < 0 || i === PHASE_ORDER.length - 1) {
@@ -1066,7 +1164,15 @@ function advancePhase() {
     state.phase = PHASE_ORDER[i + 1];
   }
   setInfo(`フェイズ: ${state.phase}`);
-  showPhaseOverlay(PHASE_NAMES_JP[state.phase] || state.phase, '', null, 1500);
+  updatePlotVisibility();
+  if (state.phase === 'grapple' || state.phase === 'reload' || state.phase === 'fullSail') {
+    // grapple/reload/fullSail はオーバーレイ表示スキップ
+    const el = document.getElementById('phaseOverlay');
+    if (el) el.classList.remove('show');
+    clearTimeout(_overlayTimer);
+  } else {
+    showPhaseOverlay(PHASE_NAMES_JP[state.phase] || state.phase, '', null, 1500);
+  }
   // C. 移動記入に入ったら全艦プロットをクリア、AI自動プロット
   if (state.phase === 'moveNote') {
     [...state.jpFleet, ...state.usFleet].forEach(s => {
@@ -1081,12 +1187,16 @@ function advancePhase() {
       }
     }
     isExecuting = false;
+    // AI対AI時は自動的に全プロット確定＆実行
+    if (state.gameMode && state.gameMode.startsWith('ai-vs-ai')) {
+      [...state.jpFleet, ...state.usFleet].forEach(s => { if ((s.plottedMoves||[]).length > 0) s.plotDone = true; });
+      if (typeof executeAllPlots === 'function') executeAllPlots();
+    }
   }
   draw();
   // 各フェイズの自動処理
   if (state.phase === 'wind') runWindPhase();
   if (state.phase === 'unfoul') executeUnfoulPhase();
-  if (state.phase === 'moveExec') executeAllPlots();
   if (state.phase === 'grapple') executeGrapplePhase();
   if (state.phase === 'boardPrep') executeBoardPrepPhase();
   if (state.phase === 'combat') executeAllGunnery();
@@ -1100,6 +1210,7 @@ function advancePhase() {
 // ============================================================
 async function executeAllGunnery() {
   if (typeof resolveGunnery !== 'function') { addLog('砲撃: モジュール未読込'); return; }
+  isExecuting = true;
   addLog('=== G. 砲撃 ===');
   const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.col >= 0 && s.status === 'ok');
   // 順序: 人間(jp)先、AI(us)後
@@ -1117,42 +1228,58 @@ async function executeAllGunnery() {
       const arc = getArcToTarget(firer, tgt);
       cand.push({ tgt, d, arc });
     }
-    // 舷側（port/stbd）のみ有効。bow/stern は発射不可
-    const valid = cand.filter(c => c.d <= 10 && (c.arc === 'port' || c.arc === 'stbd'));
-    if (valid.length === 0) {
+    // 両舷独立判定（舷側 port/stbd それぞれに対して最近敵を決定）
+    const portValid = cand.filter(c => c.d <= 10 && c.arc === 'port');
+    const stbdValid = cand.filter(c => c.d <= 10 && c.arc === 'stbd');
+    if (portValid.length === 0 && stbdValid.length === 0) {
       const in10 = cand.filter(c => c.d <= 10);
       addLog(`${firer.name}: ${in10.length ? '射程内敵は死角' : '射程内に敵なし'}`);
       continue;
     }
 
+    // 各舷独立に処理: port → stbd 順
+    for (const sideKey of ['port', 'stbd']) {
+    const sideValid = sideKey === 'port' ? portValid : stbdValid;
+    if (sideValid.length === 0) continue;
+
+    // 自動選択（最近敵、弾種=装填済みの弾種）
     let bestTarget, bestArc, bestDist, ammo;
-    if (firer.side === 'jp') {
-      // プレイヤー選択
-      const choice = await showGunneryChoice(firer, valid);
-      if (choice === 'skip') { addLog(`${firer.name}: 砲撃スキップ`); continue; }
-      bestTarget = choice.target; bestArc = choice.arc; bestDist = choice.dist; ammo = choice.ammo;
-    } else {
-      // AI自動選択（最近敵）
+    {
       let best = null;
-      for (const c of valid) if (!best || c.d < best.d) best = c;
-      bestTarget = best.tgt; bestArc = best.arc; bestDist = best.d; ammo = 'round';
+      for (const c of sideValid) if (!best || c.d < best.d) best = c;
+      bestTarget = best.tgt; bestArc = sideKey; bestDist = best.d;
+      ammo = firer.loadedShot?.[sideKey === 'port' ? 'L' : 'R'] || 'round';
+    }
+
+    // 空舷（dirty）判定
+    const sideForDirty = bestArc === 'port' ? 'Left' : 'Right';
+    const isEmpty = !!firer['fired' + sideForDirty + 'Dirty'];
+    if (isEmpty) {
+      const sideLabel = sideForDirty === 'Left' ? '左舷' : '右舷';
+      if (firer.side === 'jp') {
+        const emptyHtml = `
+          <div style="font-size:1.3em;text-align:center;color:#ff8888;font-weight:bold;margin-bottom:10px;">${sideLabel}: 空 / 発射不可</div>
+          <div style="color:#aac;text-align:center;">装填フェイズで装填してください</div>
+          <div style="margin-top:8px;color:#88ccff;">発射艦: <b style="color:#fff;">${firer.name}</b> / 目標艦: <b style="color:#fff;">${bestTarget.name}</b></div>
+        `;
+        await showGunneryStageModal(`砲撃: ${firer.name} (空舷)`, emptyHtml, ['スキップ']);
+      }
+      addLog(`${firer.name}: ${sideLabel}空、発射不可 → スキップ`);
+      continue;
     }
 
     // 1. resolveGunnery でスペック事前計算
     const result = resolveGunnery(firer, bestTarget, bestArc, ammo);
+    const isNegative = (result.table !== undefined && result.table < 0) || (!result.hit && result.miss === 'modifier');
+    const tableVal = result.table ?? '-';
 
-    // マイナス値なら砲撃スキップ（発射しない）
-    if (result.table !== undefined && result.table < 0) {
-      addLog(`${firer.name}: Hit Table ${result.table} → 発射不可（命中表マイナス）`);
-      continue;
-    }
-    if (!result.hit && result.miss === 'modifier') {
-      addLog(`${firer.name}: 修正値で不成立`);
+    // AI側: マイナスなら自動スキップ
+    if (firer.side !== 'jp' && isNegative) {
+      addLog(`${firer.name}: Hit Table ${tableVal} → 自動スキップ（マイナス）`);
       continue;
     }
 
-    // 2. 砲撃前サマリ（修正値表示＋確認ボタン）
-    // ダイス結果と損害コードは隠す（1d6= 以降のログを除外）
+    // 2. 砲撃予告モーダル
     const preDiceLog = (result.log || []).filter(l => !l.includes('1d6=') && !l.includes('10超過分') && !l.includes('H/G'));
     const modRows = preDiceLog.map(l => `<tr><td style="padding:3px 8px;border-bottom:1px solid #234;">${l}</td></tr>`).join('');
     const summaryHtml = `
@@ -1160,19 +1287,59 @@ async function executeAllGunnery() {
         <div style="color:#88ccff;">発射艦: <b style="color:#fff;">${firer.name}</b></div>
         <div style="color:#88ccff;">目標艦: <b style="color:#fff;">${bestTarget.name}</b></div>
         <div style="color:#88ccff;">距離: <b style="color:#fff;">${bestDist}hex</b>　舷側: <b style="color:#fff;">${bestArc}</b>　弾種: <b style="color:#fff;">${ammo}</b></div>
+        ${isNegative ? `<div style="color:#ff8888;margin-top:4px;">最終 Hit Table: <b>${tableVal}</b>（マイナス → 発射しても外れ）</div>` : ''}
       </div>
       <div style="margin-top:10px;color:#ffcc88;font-weight:bold;">修正値・Hit Table:</div>
       <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:0.95em;background:#0a1a2a;">${modRows}</table>
     `;
-    await showGunneryStageModal(`砲撃予告: ${firer.name}`, summaryHtml, '発射');
+    if (firer.side === 'jp') {
+      const isGrappled = !!(firer.grappled || (firer.grappledWith?.length) || bestTarget.grappled || (bestTarget.grappledWith?.length));
+      // 状況別の目標部位固定: 白兵戦>grape>chain>距離6以上round
+      let forceDmgType = null, lockReason = '';
+      if (isGrappled) { forceDmgType = 'hull'; lockReason = '白兵戦中: 船体のみ'; }
+      else if (ammo === 'grape') { forceDmgType = 'hull'; lockReason = 'ぶどう弾: 船体のみ'; }
+      else if (ammo === 'chain') { forceDmgType = 'rigging'; lockReason = '鎖弾: 帆のみ'; }
+      else if (ammo === 'round' && bestDist >= 6) { forceDmgType = 'rigging'; lockReason = '球弾 6hex以上: 帆のみ'; }
+      const defaultDmgType = forceDmgType || (ammo === 'chain' ? 'rigging' : 'hull');
+      const resp = await showGunneryConfirmModal(`砲撃予告: ${firer.name}`, summaryHtml, defaultDmgType, isGrappled, forceDmgType, lockReason);
+      if (resp.action === 'cancel') { addLog(`${firer.name}: 砲撃キャンセル`); continue; }
+      if (!isNegative && resp.dmgType !== defaultDmgType && typeof lookupHitTable === 'function' && typeof parseDamageCode === 'function') {
+        const newCode = lookupHitTable(Math.min(10, result.table), result.die, resp.dmgType);
+        if (newCode) {
+          result.code = newCode;
+          result.damages = parseDamageCode(newCode);
+          addLog(`${firer.name}: 目標=${resp.dmgType === 'hull' ? '船体' : '帆'} に変更`);
+        }
+      }
+    } else {
+      await showGunneryStageModal(`砲撃予告: ${firer.name}`, summaryHtml, '発射');
+    }
 
-    // 3. 弾道アニメ
-    await showGunneryProjectile(firer, bestTarget);
+    // 3. 発射確定: 装填要フラグ
+    firer['fired' + sideForDirty + 'Dirty'] = true;
+    firer['reloadTurns' + sideForDirty] = (ammo === 'double') ? 2 : 1;
+    addLog(`${firer.name}: ${sideForDirty === 'Left' ? '左舷' : '右舷'}発射済み（装填要: ${firer['reloadTurns' + sideForDirty]}ターン）`);
 
-    // 4. ダイスロール演出
+    // 4. マイナス時は弾道・ダイス省略、結果モーダルのみ
+    if (isNegative) {
+      addLog(`${firer.name} → ${bestTarget.name} (${bestArc}, ${bestDist}hex) 外れ`);
+      misses++;
+      const resultHtml = `
+        <div style="font-size:1.4em;text-align:center;color:#ff8888;font-weight:bold;margin-bottom:12px;">✗ 外れ（命中表マイナス）</div>
+        <div style="line-height:1.6;">
+          <div style="color:#88ccff;">発射艦: <b style="color:#fff;">${firer.name}</b></div>
+          <div style="color:#88ccff;">目標艦: <b style="color:#fff;">${bestTarget.name}</b></div>
+          <div style="color:#88ccff;">最終 Hit Table: <b style="color:#ff8888;">${tableVal}</b></div>
+        </div>
+      `;
+      await showGunneryStageModal(`砲撃結果: ${firer.name}`, resultHtml, '次へ');
+      continue;
+    }
+
+    // 6. ダイスロール演出
     await showDiceRollAnimation(result.die);
 
-    // 5. 結果構造化表示＋確認
+    // 7. 結果表示
     const hitLabel = result.hit ? '🎯' : '✗ 外れ';
     if (result.hit) hits++; else misses++;
     let damageRows = '';
@@ -1210,9 +1377,13 @@ async function executeAllGunnery() {
       updateShipStatus(bestTarget, log);
       log.forEach(l => addLog('  ' + l));
     }
+    checkGameEnd();
     draw();
+    if (state.gameEnded) { isExecuting = false; return; }
+    } // end side loop
   }
   draw();
+  isExecuting = false;
 }
 
 // 弾道線アニメーション（DOMオーバーレイ canvas独立、draw()で消えない）
@@ -1277,16 +1448,168 @@ function showGunneryProjectile(firer, target) {
 
 // 確認ボタン付きモーダル表示
 function showGunneryStageModal(title, contentHtml, buttonLabel) {
+  // 高速観戦モード: 砲撃結果は通常モーダル表示＋自動クローズ、他はスキップ
+  const fastResultMode = isFastAiObserve() && title && title.startsWith('砲撃結果');
+  if (isFastAiObserve() && !fastResultMode) {
+    return Promise.resolve(0);
+  }
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;display:flex;align-items:center;justify-content:center;';
     const panel = document.createElement('div');
     panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:24px;border:2px solid #ffcc44;border-radius:8px;min-width:480px;max-width:640px;max-height:80vh;overflow-y:auto;';
     panel.innerHTML = `<div style="font-size:1.3em;color:#ffcc44;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #456;padding-bottom:6px;">${title}</div>${contentHtml}`;
+    const labels = Array.isArray(buttonLabel) ? buttonLabel : [buttonLabel || '確認'];
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;margin-top:16px;';
+    const btns = [];
+    labels.forEach((lbl, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = lbl;
+      const bg = (labels.length > 1 && i === labels.length - 1) ? '#884444' : '#4488cc';
+      btn.style.cssText = `padding:10px 20px;background:${bg};color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;font-weight:bold;flex:1;`;
+      btn.onclick = () => { if (overlay.parentNode) document.body.removeChild(overlay); resolve(i); };
+      btnRow.appendChild(btn);
+      btns.push(btn);
+    });
+    panel.appendChild(btnRow);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    if (fastResultMode && btns[0]) {
+      setTimeout(() => { if (overlay.parentNode) btns[0].click(); }, 1500);
+    }
+  });
+}
+
+// 砲撃予告: 目標(船体/帆) × 発射/キャンセル 2×2 ボタン
+function showGunneryConfirmModal(title, contentHtml, defaultDmgType, grappleDisabled, forceDmgType, lockReason) {
+  // 高速観戦モード: 自動で発射（デフォルト部位）
+  if (isFastAiObserve()) {
+    return Promise.resolve({ action: 'fire', dmgType: forceDmgType || defaultDmgType || 'hull' });
+  }
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:24px;border:2px solid #ffcc44;border-radius:8px;min-width:480px;max-width:640px;max-height:80vh;overflow-y:auto;';
+    let headHtml = `<div style="font-size:1.3em;color:#ffcc44;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #456;padding-bottom:6px;">${title}</div>${contentHtml}`;
+    if (forceDmgType && lockReason) {
+      headHtml += `<div style="margin-top:10px;color:#ffaa66;font-size:0.9em;">${lockReason}</div>`;
+    }
+    panel.innerHTML = headHtml;
+    let selectedDmgType = forceDmgType || (grappleDisabled ? 'hull' : (defaultDmgType || 'hull'));
+    const hullLocked = !!(forceDmgType && forceDmgType !== 'hull');
+    const rigLocked = !!((forceDmgType && forceDmgType !== 'rigging') || (!forceDmgType && grappleDisabled));
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px;';
+    const btnHull = document.createElement('button');
+    btnHull.textContent = '船体';
+    btnHull.style.cssText = 'padding:10px 20px;color:#fff;border:2px solid transparent;border-radius:4px;font-size:1.1em;font-weight:bold;';
+    if (hullLocked) { btnHull.style.cursor = 'not-allowed'; btnHull.style.background = '#444'; btnHull.style.opacity = '0.5'; btnHull.disabled = true; }
+    else { btnHull.style.cursor = 'pointer'; }
+    const btnRig = document.createElement('button');
+    btnRig.textContent = '帆';
+    btnRig.style.cssText = 'padding:10px 20px;color:#fff;border:2px solid transparent;border-radius:4px;font-size:1.1em;font-weight:bold;';
+    if (rigLocked) { btnRig.style.cursor = 'not-allowed'; btnRig.style.background = '#444'; btnRig.style.opacity = '0.5'; btnRig.disabled = true; }
+    else { btnRig.style.cursor = 'pointer'; }
+    function updateSelection() {
+      if (!hullLocked) {
+        btnHull.style.background = selectedDmgType === 'hull' ? '#44cc88' : '#4488cc';
+        btnHull.style.borderColor = selectedDmgType === 'hull' ? '#8fff88' : 'transparent';
+      }
+      if (!rigLocked) {
+        btnRig.style.background = selectedDmgType === 'rigging' ? '#44cc88' : '#4488cc';
+        btnRig.style.borderColor = selectedDmgType === 'rigging' ? '#8fff88' : 'transparent';
+      }
+    }
+    updateSelection();
+    btnHull.onclick = () => { if (!hullLocked) { selectedDmgType = 'hull'; updateSelection(); } };
+    btnRig.onclick = () => { if (!rigLocked) { selectedDmgType = 'rigging'; updateSelection(); } };
+    const btnFire = document.createElement('button');
+    btnFire.textContent = '発射';
+    btnFire.style.cssText = 'padding:10px 20px;background:#cc6644;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;font-weight:bold;';
+    btnFire.onclick = () => { document.body.removeChild(overlay); resolve({ action: 'fire', dmgType: selectedDmgType }); };
+    const btnCancel = document.createElement('button');
+    btnCancel.textContent = 'キャンセル';
+    btnCancel.style.cssText = 'padding:10px 20px;background:#884444;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;font-weight:bold;';
+    btnCancel.onclick = () => { document.body.removeChild(overlay); resolve({ action: 'cancel' }); };
+    grid.appendChild(btnHull);
+    grid.appendChild(btnRig);
+    grid.appendChild(btnFire);
+    grid.appendChild(btnCancel);
+    panel.appendChild(grid);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  });
+}
+
+// プレイヤー装填UI: 空舷装填選択 + 次回装填弾種選択モーダル
+function showReloadChoiceModal(ships) {
+  // 高速観戦モード: 自動で全空舷を装填
+  if (isFastAiObserve()) {
+    const choices = ships.map(s => ({
+      ship: s,
+      reload: { L: !!s.firedLeftDirty, R: !!s.firedRightDirty },
+      ammo: { L: s.plannedShot?.L || 'round', R: s.plannedShot?.R || 'round' },
+      plannedAmmo: { L: s.plannedShot?.L || 'round', R: s.plannedShot?.R || 'round' },
+    }));
+    return Promise.resolve(choices);
+  }
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2100;display:flex;align-items:center;justify-content:center;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:20px;border:2px solid #ffcc44;border-radius:8px;min-width:540px;max-width:760px;max-height:85vh;overflow-y:auto;';
+    let bodyHtml = '<div style="font-size:1.3em;color:#ffcc44;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #456;padding-bottom:6px;">装填 / 次回装填弾種選択</div>';
+    for (const s of ships) {
+      bodyHtml += `<div style="border:1px solid #345;padding:10px;margin-bottom:8px;background:#0a1a2a;border-radius:4px;">`;
+      bodyHtml += `<div style="font-weight:bold;color:#88bbff;margin-bottom:6px;">${s.name}</div>`;
+      for (const side of ['L', 'R']) {
+        const sideName = side === 'L' ? 'Left' : 'Right';
+        const dirtyFlag = 'fired' + sideName + 'Dirty';
+        const isEmpty = !!s[dirtyFlag];
+        const currentLoaded = s.loadedShot?.[side] || 'round';
+        const currentPlanned = s.plannedShot?.[side] || 'round';
+        bodyHtml += `<div style="margin-bottom:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">`;
+        bodyHtml += `<span style="color:#aac;min-width:50px;">${side === 'L' ? '左舷' : '右舷'}:</span>`;
+        if (isEmpty) {
+          bodyHtml += `<span style="color:#ff8888;font-weight:bold;">空</span>`;
+          bodyHtml += `<label><input type="checkbox" data-ship="${s.name}" data-side="${side}" data-action="reload"> 装填する</label>`;
+          bodyHtml += `<select data-ship="${s.name}" data-side="${side}" data-action="ammo" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;">`;
+          bodyHtml += SHOT_TYPES.map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
+          bodyHtml += `</select>`;
+        } else {
+          bodyHtml += `<span style="color:#88ff88;">${SHOT_TYPE_JP[currentLoaded]}</span>`;
+          bodyHtml += `<span style="color:#aac;">次回装填弾種:</span>`;
+          bodyHtml += `<select data-ship="${s.name}" data-side="${side}" data-action="planned" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;">`;
+          bodyHtml += SHOT_TYPES.map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
+          bodyHtml += `</select>`;
+        }
+        bodyHtml += `</div>`;
+      }
+      bodyHtml += `</div>`;
+    }
+    panel.innerHTML = bodyHtml;
     const btn = document.createElement('button');
-    btn.textContent = buttonLabel || '確認';
-    btn.style.cssText = 'margin-top:16px;padding:10px 20px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;font-weight:bold;width:100%;';
-    btn.onclick = () => { document.body.removeChild(overlay); resolve(); };
+    btn.textContent = '確定';
+    btn.style.cssText = 'margin-top:10px;padding:10px 20px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;font-weight:bold;width:100%;';
+    btn.onclick = () => {
+      const choices = [];
+      for (const s of ships) {
+        const ch = { ship: s, reload: { L: false, R: false }, ammo: { L: s.loadedShot?.L||'round', R: s.loadedShot?.R||'round' }, plannedAmmo: { L: s.plannedShot?.L||'round', R: s.plannedShot?.R||'round' } };
+        for (const side of ['L', 'R']) {
+          const reloadCheck = panel.querySelector(`input[data-ship="${s.name}"][data-side="${side}"][data-action="reload"]`);
+          const ammoSelect = panel.querySelector(`select[data-ship="${s.name}"][data-side="${side}"][data-action="ammo"]`);
+          const plannedSelect = panel.querySelector(`select[data-ship="${s.name}"][data-side="${side}"][data-action="planned"]`);
+          if (reloadCheck) ch.reload[side] = reloadCheck.checked;
+          if (ammoSelect) { ch.ammo[side] = ammoSelect.value; ch.plannedAmmo[side] = ammoSelect.value; }
+          if (plannedSelect) ch.plannedAmmo[side] = plannedSelect.value;
+        }
+        choices.push(ch);
+      }
+      document.body.removeChild(overlay);
+      resolve(choices);
+    };
     panel.appendChild(btn);
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
@@ -1326,10 +1649,10 @@ function showGunneryChoice(firer, validCandidates) {
     panel.appendChild(ammoLabel);
     const ammoSel = document.createElement('select');
     ammoSel.style.cssText = 'width:100%;padding:4px;background:#0a1a2a;color:#fff;border:1px solid #456;margin-bottom:8px;';
-    ['round','chain','double','grape','carronade'].forEach(a => {
+    ['round','chain','double','grape'].forEach(a => {
       const opt = document.createElement('option');
       opt.value = a;
-      opt.textContent = { round:'球弾(round)', chain:'鎖弾(chain)', double:'二重弾(double)', grape:'ぶどう弾(grape)', carronade:'カロネード(carronade)' }[a];
+      opt.textContent = { round:'球弾(round)', chain:'鎖弾(chain)', double:'二重弾(double)', grape:'ぶどう弾(grape)' }[a];
       ammoSel.appendChild(opt);
     });
     panel.appendChild(ammoSel);
@@ -1497,7 +1820,7 @@ async function executeGrapplePhase() {
   for (const a of allShips) {
     const enemies = (a.side === 'jp' ? state.usFleet : state.jpFleet).filter(t => t.col >= 0 && t.status === 'ok');
     for (const b of enemies) {
-      if (shipDistance(a, b) > 1) continue;
+      if (shipDistance(a, b) !== 1) continue;
       if ((a.grappledWith||[]).includes(b.name)) continue;
       const key = [a.name, b.name].sort().join('|');
       if (processed.has(key)) continue;
@@ -1530,7 +1853,11 @@ async function executeGrapplePhase() {
         outcome = '鉤縄成立→即解除';
       }
     }
-    resultLines.push(`${jp.name} ↔ ${us.name}: ${outcome}（${attacker.name}が仕掛け）`);
+    const resultColor = outcome === '鉤縄成立' ? '#44ff44'
+                      : outcome === '鉤縄成立→即解除' ? '#ffaa44'
+                      : '#ff6666';
+    const bigResult = `<span style="font-size:1.8em;font-weight:bold;color:${resultColor};">${outcome}</span>`;
+    resultLines.push(`${jp.name} ↔ ${us.name}: ${bigResult}（${attacker.name}が仕掛け）`);
   }
 
   const detail = resultLines.length ? resultLines.join('\n') : '隣接敵艦なし';
@@ -1540,6 +1867,8 @@ async function executeGrapplePhase() {
 
 // 汎用 Yes/No 確認モーダル
 function showConfirmModal(msg) {
+  // 高速観戦モード: 自動で false（解除試行せず、鉤縄仕掛けは AI 側に任せる）
+  if (isFastAiObserve()) return Promise.resolve(false);
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:2000;display:flex;align-items:center;justify-content:center;';
@@ -1568,22 +1897,34 @@ function executeMoveAftermath() {
   let driftCount = 0, collCount = 0, foulCount = 0;
   // 1. ドリフト判定（連続2ターン bow ヘクス不変の艦は風下へ1hex）
   for (const s of allShips) {
-    if (s._prevCol === s.col && s._prevRow === s.row) {
+    if (s._prevCol === s.col && s._prevRow === s.row && s._prevDir === s.dir) {
       s.consecutiveStillTurns = (s.consecutiveStillTurns || 0) + 1;
       if (s.consecutiveStillTurns >= 2 && state.wind?.direction) {
         const n = hexNeighbor(s.col, s.row, state.wind.direction);
         if (n && n.col >= 0 && n.row >= 0 && n.col < MAP_CONFIG.cols && n.row < MAP_CONFIG.rows) {
-          const line = `${s.name}: ドリフト → (${n.col},${n.row})`;
-          addLog(line);
-          overlayLines.push(line);
-          driftCount++;
-          s.col = n.col; s.row = n.row;
+          // ドリフト先が他艦で占有されていないか確認（bow + stern 両方）
+          const occupied = allShips.some(o => {
+            if (o === s) return false;
+            if (o.col === n.col && o.row === n.row) return true;
+            const oStern = getSternHex(o);
+            if (oStern && oStern.col === n.col && oStern.row === n.row) return true;
+            return false;
+          });
+          if (occupied) {
+            addLog(`${s.name}: ドリフト先占有のため留まる`);
+          } else {
+            const line = `${s.name}: ドリフト → (${n.col},${n.row})`;
+            addLog(line);
+            overlayLines.push(line);
+            driftCount++;
+            s.col = n.col; s.row = n.row;
+          }
         }
       }
     } else {
       s.consecutiveStillTurns = 0;
     }
-    s._prevCol = s.col; s._prevRow = s.row;
+    s._prevCol = s.col; s._prevRow = s.row; s._prevDir = s.dir;
   }
   // 2. 衝突検出（同一ヘクスに複数艦）
   const hexMap = {};
@@ -1643,69 +1984,313 @@ function executeMoveAftermath() {
     const dice = `💨 ドリフト${driftCount} / 衝突${collCount} / 絡み${foulCount}`;
     showPhaseOverlay('D. 移動後処理', detail, dice, 4000);
   }
+  checkGameEnd();
 }
 
-function executeBoardPrepPhase() {
+async function executeBoardPrepPhase() {
   addLog('=== F. 接舷準備 ===');
-  // 鉤縄成立艦の OBP/DBP を自動編成（乗員の半分を割り当て、Q低い側がDBP）
   const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok');
-  const overlayLines = [];
-  for (const s of allShips) {
-    if (s.grappledWith && s.grappledWith.length > 0) {
-      const total = (s.crew?.L?.remain||0) + (s.crew?.R?.remain||0);
-      s.obpAssigned = Math.max(1, Math.floor(total / 2));
-      s.dbpAssigned = total - s.obpAssigned;
-      const line = `${s.name}: OBP=${s.obpAssigned}, DBP=${s.dbpAssigned}`;
-      addLog(line);
-      overlayLines.push(line);
-    }
-    // 火災中艦に消火乗員を割り当て（残乗員から1セクション）
-    if (s.onFire) {
-      s.crewAssignedFireFight = 1;
-      const line = `${s.name}: 消火に乗員1割当`;
-      addLog(line);
-      overlayLines.push(line);
+
+  // jp艦の鉤縄艦をまとめて一括入力
+  const jpGrappled = allShips.filter(s => s.side === 'jp' && s.grappledWith?.length > 0);
+  if (jpGrappled.length > 0) {
+    const choices = await showBoardPrepModalMulti(jpGrappled);
+    for (const c of choices) {
+      c.ship.obpAssigned = c.obp;
+      c.ship.dbpAssigned = c.dbp;
+      c.ship.tbpAssigned = c.tbp;
+      addLog(`${c.ship.name}: 攻撃隊=${c.obp} 防御隊=${c.dbp} 上甲板隊=${c.tbp}`);
     }
   }
-  const detail = overlayLines.length ? overlayLines.slice(0, 8).join('\n') : '鉤縄/火災艦なし';
-  const dice = overlayLines.length ? `🪢 編成 ${overlayLines.length}件` : null;
-  showPhaseOverlay(PHASE_NAMES_JP['boardPrep'], detail, dice, 3000);
+
+  const rows = [];
+  for (const s of allShips) {
+    let hasGrapple = false;
+    if (s.grappledWith && s.grappledWith.length > 0) {
+      hasGrapple = true;
+      if (s.side === 'us') {
+        // us艦: 自動編成（半分ずつ）
+        const total = (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+        s.obpAssigned = Math.max(1, Math.floor(total / 2));
+        s.dbpAssigned = total - s.obpAssigned;
+        addLog(`${s.name}: 攻撃隊=${s.obpAssigned}, 防御隊=${s.dbpAssigned}`);
+      }
+    }
+    if (s.onFire) {
+      s.crewAssignedFireFight = 1;
+      addLog(`${s.name}: 消火に乗員1割当`);
+    }
+    if (hasGrapple || s.onFire) {
+      rows.push({
+        name: s.name,
+        obp: hasGrapple ? s.obpAssigned : '-',
+        dbp: hasGrapple ? s.dbpAssigned : '-',
+        tbp: hasGrapple ? (s.tbpAssigned||0) : '-',
+        fire: s.onFire ? 1 : 0,
+      });
+    }
+  }
+  const tableHtml = rows.length
+    ? `<table style="border-collapse:collapse;font-size:0.9em;margin:0 auto;"><tr style="color:#aac;"><th style="padding:2px 8px;border:1px solid #456;">艦名</th><th style="padding:2px 8px;border:1px solid #456;">攻</th><th style="padding:2px 8px;border:1px solid #456;">防</th><th style="padding:2px 8px;border:1px solid #456;">上</th><th style="padding:2px 8px;border:1px solid #456;">消火</th></tr>${rows.map(r => `<tr><td style="padding:2px 8px;border:1px solid #456;">${r.name}</td><td style="padding:2px 8px;border:1px solid #456;text-align:center;">${r.obp}</td><td style="padding:2px 8px;border:1px solid #456;text-align:center;">${r.dbp}</td><td style="padding:2px 8px;border:1px solid #456;text-align:center;">${r.tbp}</td><td style="padding:2px 8px;border:1px solid #456;text-align:center;">${r.fire}</td></tr>`).join('')}</table>`
+    : '鉤縄/火災艦なし';
+  showPhaseOverlay(PHASE_NAMES_JP['boardPrep'], tableHtml, null, 3000);
+}
+
+// 接舷準備UI: OBP/DBP/TBP/NBP 割当モーダル
+function showBoardPrepModal(ship, total) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:20px;border:2px solid #ffcc44;border-radius:8px;min-width:420px;';
+    panel.innerHTML = `
+      <div style="font-size:1.2em;color:#ffcc44;font-weight:bold;margin-bottom:10px;">${ship.name} 接舷準備（乗員総数: ${total}）</div>
+      <div style="color:#aac;margin-bottom:6px;">攻撃隊/防御隊/上甲板隊 にクルーを割当（合計 ≤ ${total}、残りは非参加）</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px;margin-bottom:12px;">
+        <label>攻撃隊:</label><input type="number" id="_bpOBP" value="${ship.obpAssigned ?? 0}" min="0" max="${total}" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 6px;">
+        <label>防御隊:</label><input type="number" id="_bpDBP" value="${ship.dbpAssigned ?? total}" min="0" max="${total}" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 6px;">
+        <label>上甲板隊:</label><input type="number" id="_bpTBP" value="${ship.tbpAssigned ?? 0}" min="0" max="${total}" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 6px;">
+      </div>
+    `;
+    const btn = document.createElement('button');
+    btn.textContent = '確定';
+    btn.style.cssText = 'width:100%;padding:8px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;';
+    btn.onclick = () => {
+      const obp = parseInt(document.getElementById('_bpOBP').value) || 0;
+      const dbp = parseInt(document.getElementById('_bpDBP').value) || 0;
+      const tbp = parseInt(document.getElementById('_bpTBP').value) || 0;
+      document.body.removeChild(overlay);
+      resolve({ obp, dbp, tbp });
+    };
+    panel.appendChild(btn);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  });
+}
+
+// 接舷準備UI: 複数艦をまとめて入力
+function showBoardPrepModalMulti(ships) {
+  // 高速観戦モード: 自動で半分ずつ攻防に割当
+  if (isFastAiObserve()) {
+    const results = ships.map(s => {
+      const total = (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+      const obp = s.obpAssigned ?? Math.floor(total / 2);
+      const dbp = s.dbpAssigned ?? (total - Math.floor(total / 2));
+      const tbp = s.tbpAssigned ?? 0;
+      return { ship: s, obp, dbp, tbp };
+    });
+    return Promise.resolve(results);
+  }
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:20px;border:2px solid #ffcc44;border-radius:8px;min-width:560px;max-width:90vw;max-height:85vh;overflow-y:auto;';
+    let bodyHtml = `<div style="font-size:1.2em;color:#ffcc44;font-weight:bold;margin-bottom:10px;">接舷準備 — 全艦一括入力</div><div style="color:#aac;margin-bottom:10px;font-size:0.9em;">各艦に 攻撃隊/防御隊/上甲板隊 を割当（合計 ≤ 乗員総数、残りは非参加）</div>`;
+    bodyHtml += `<table style="border-collapse:collapse;width:100%;font-size:0.95em;"><tr style="color:#aac;"><th style="padding:4px 8px;border:1px solid #456;">艦名</th><th style="padding:4px 8px;border:1px solid #456;">総数</th><th style="padding:4px 8px;border:1px solid #456;">攻撃隊</th><th style="padding:4px 8px;border:1px solid #456;">防御隊</th><th style="padding:4px 8px;border:1px solid #456;">上甲板隊</th></tr>`;
+    for (const s of ships) {
+      const total = (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+      const defObp = s.obpAssigned ?? Math.floor(total / 2);
+      const defDbp = s.dbpAssigned ?? (total - Math.floor(total / 2));
+      const defTbp = s.tbpAssigned ?? 0;
+      bodyHtml += `<tr><td style="padding:4px 8px;border:1px solid #456;">${s.name}</td><td style="padding:4px 8px;border:1px solid #456;text-align:center;">${total}</td><td style="padding:4px 8px;border:1px solid #456;"><input type="number" data-ship="${s.name}" data-key="obp" value="${defObp}" min="0" max="${total}" style="width:60px;background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;"></td><td style="padding:4px 8px;border:1px solid #456;"><input type="number" data-ship="${s.name}" data-key="dbp" value="${defDbp}" min="0" max="${total}" style="width:60px;background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;"></td><td style="padding:4px 8px;border:1px solid #456;"><input type="number" data-ship="${s.name}" data-key="tbp" value="${defTbp}" min="0" max="${total}" style="width:60px;background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;"></td></tr>`;
+    }
+    bodyHtml += `</table>`;
+    panel.innerHTML = bodyHtml;
+    const btn = document.createElement('button');
+    btn.textContent = '確定';
+    btn.style.cssText = 'margin-top:12px;width:100%;padding:10px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:1.05em;';
+    btn.onclick = () => {
+      const results = [];
+      for (const s of ships) {
+        const obpInp = panel.querySelector(`input[data-ship="${s.name}"][data-key="obp"]`);
+        const dbpInp = panel.querySelector(`input[data-ship="${s.name}"][data-key="dbp"]`);
+        const tbpInp = panel.querySelector(`input[data-ship="${s.name}"][data-key="tbp"]`);
+        results.push({
+          ship: s,
+          obp: parseInt(obpInp?.value) || 0,
+          dbp: parseInt(dbpInp?.value) || 0,
+          tbp: parseInt(tbpInp?.value) || 0,
+        });
+      }
+      document.body.removeChild(overlay);
+      resolve(results);
+    };
+    panel.appendChild(btn);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  });
 }
 
 function executeMeleePhase() {
   addLog('=== H. 白兵戦 ===');
   if (typeof resolveMelee !== 'function') return;
-  const processed = new Set();
+  const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok');
+  const shipByName = {};
+  for (const s of allShips) shipByName[s.name] = s;
   const overlayLines = [];
-  for (const a of [...state.jpFleet, ...state.usFleet]) {
-    if (a.status !== 'ok' || !a.grappledWith) continue;
-    for (const bName of a.grappledWith) {
-      const key = [a.name, bName].sort().join('|');
-      if (processed.has(key)) continue;
-      processed.add(key);
-      const b = [...state.jpFleet, ...state.usFleet].find(s => s.name === bName);
-      if (!b || b.status !== 'ok') continue;
-      // 隣接確認（離れていたら白兵戦不可）
-      if (hexDist(a.col, a.row, b.col, b.row) > 1) {
-        addLog(`${a.name} ⇔ ${b.name}: 離脱（距離${hexDist(a.col, a.row, b.col, b.row)}hex、白兵戦なし）`);
-        a.grappledWith = (a.grappledWith||[]).filter(n => n !== bName);
-        b.grappledWith = (b.grappledWith||[]).filter(n => n !== a.name);
-        continue;
+
+  // 隣接判定（艦首・艦尾の最小距離がちょうど1）
+  function adjacent(a, b) {
+    const aStern = getSternHex(a);
+    const bStern = getSternHex(b);
+    const aHex = [{col:a.col,row:a.row}]; if (aStern) aHex.push(aStern);
+    const bHex = [{col:b.col,row:b.row}]; if (bStern) bHex.push(bStern);
+    let minDist = Infinity;
+    for (const p of aHex) for (const q of bHex) {
+      const d = hexDist(p.col, p.row, q.col, q.row);
+      if (d < minDist) minDist = d;
+    }
+    return minDist === 1;
+  }
+
+  // 離脱艦の grappledWith を除去
+  for (const a of allShips) {
+    if (!a.grappledWith) continue;
+    for (const bName of [...a.grappledWith]) {
+      const b = shipByName[bName];
+      if (!b || b.status !== 'ok' || !adjacent(a, b)) {
+        addLog(`${a.name} ⇔ ${bName}: 離脱（白兵戦なし）`);
+        a.grappledWith = a.grappledWith.filter(n => n !== bName);
+        if (b) b.grappledWith = (b.grappledWith||[]).filter(n => n !== a.name);
       }
-      const aSecs = Math.max(1, Math.floor(((a.crew?.L?.remain||0)+(a.crew?.R?.remain||0))/2));
-      const bSecs = Math.max(1, Math.floor(((b.crew?.L?.remain||0)+(b.crew?.R?.remain||0))/2));
-      const result = resolveMelee(
-        { ship: a, sections: aSecs, partyType: 'obp' },
-        { ship: b, sections: bSecs, partyType: 'dbp' }
-      );
-      result.log.forEach(l => addLog('  ' + l));
-      overlayLines.push(`${a.name} ⚔ ${b.name}: ${result.log.join(' / ')}`);
     }
   }
-  const detail = overlayLines.length ? overlayLines.slice(0, 6).join('\n') : '鉤縄成立艦なし';
+
+  // 連結成分で鉤縄グループを列挙
+  const visited = new Set();
+  const groups = [];
+  for (const s of allShips) {
+    if (visited.has(s.name)) continue;
+    if (!s.grappledWith || s.grappledWith.length === 0) continue;
+    const stack = [s];
+    const group = [];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (visited.has(cur.name)) continue;
+      visited.add(cur.name);
+      group.push(cur);
+      for (const nm of (cur.grappledWith||[])) {
+        const nxt = shipByName[nm];
+        if (nxt && !visited.has(nxt.name)) stack.push(nxt);
+      }
+    }
+    if (group.length >= 2) groups.push(group);
+  }
+
+  // 各グループで合算強度の白兵戦（最大3ラウンド）
+  for (const group of groups) {
+    const jpShips = group.filter(s => s.side === 'jp');
+    const usShips = group.filter(s => s.side === 'us');
+    if (jpShips.length === 0 || usShips.length === 0) continue;
+
+    const jpNames = jpShips.map(s => s.name).join('+');
+    const usNames = usShips.map(s => s.name).join('+');
+    addLog(`【グループ】${jpNames} vs ${usNames}`);
+
+    // 残量に応じてセクション数をクランプ
+    function availSections(s) {
+      return (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+    }
+    function sumStrength(ships, partyType) {
+      let sum = 0;
+      for (const s of ships) {
+        const assigned = partyType === 'obp' ? (s.obpAssigned||0) : (s.dbpAssigned||0);
+        const sec = Math.min(assigned, availSections(s));
+        sum += computeMeleeStrength(s, sec, partyType);
+      }
+      return sum;
+    }
+    function rollGroupDamage(atkStr) {
+      const die = rollD6();
+      const bands = ['1-10','11-20','21-30','31-40','41-50','51-60','61-70','71-80','81+'];
+      let bandIdx;
+      if (atkStr >= 81) bandIdx = 8;
+      else bandIdx = Math.min(7, Math.floor(Math.max(0, atkStr - 1) / 10));
+      const dieBand = die <= 2 ? '1-2' : die <= 4 ? '3-4' : '5-6';
+      const row = (typeof MELEE_RESOLUTION !== 'undefined') ? MELEE_RESOLUTION.find(r => r.die === dieBand) : null;
+      const dmg = row ? (row[bands[bandIdx]] || 0) : 0;
+      return { die, band: bands[bandIdx], damage: dmg };
+    }
+    function distribute(ships, total) {
+      if (total <= 0) return;
+      const weights = ships.map(s => availSections(s));
+      const sumW = weights.reduce((a,v) => a + v, 0);
+      if (sumW === 0) return;
+      const assigned = ships.map((s, i) => Math.floor(total * weights[i] / sumW));
+      let rem = total - assigned.reduce((a,v) => a + v, 0);
+      for (let i = 0; rem > 0 && i < ships.length; i++, rem--) assigned[i]++;
+      ships.forEach((s, i) => {
+        if (assigned[i] > 0 && typeof applyCrewLossSection === 'function') {
+          applyCrewLossSection(s, assigned[i]);
+          addLog(`    ${s.name}: 乗員-${assigned[i]}`);
+        }
+      });
+    }
+
+    let winnerSide = null;
+    const roundsData = [];
+    for (let round = 1; round <= 3 && !winnerSide; round++) {
+      const jpAtk = sumStrength(jpShips, 'obp');
+      const jpDef = sumStrength(jpShips, 'dbp');
+      const usAtk = sumStrength(usShips, 'obp');
+      const usDef = sumStrength(usShips, 'dbp');
+      addLog(`  ラウンド${round}: jp攻=${jpAtk} 防=${jpDef} / us攻=${usAtk} 防=${usDef}`);
+
+      const dmgToUs = rollGroupDamage(jpAtk);
+      addLog(`    jp攻(${jpAtk}) → us: 1d6=${dmgToUs.die}(${dmgToUs.band}) 損害${dmgToUs.damage}セクション`);
+      const dmgToJp = rollGroupDamage(usAtk);
+      addLog(`    us攻(${usAtk}) → jp: 1d6=${dmgToJp.die}(${dmgToJp.band}) 損害${dmgToJp.damage}セクション`);
+      distribute(usShips, dmgToUs.damage);
+      distribute(jpShips, dmgToJp.damage);
+
+      roundsData.push({
+        round,
+        jpAtk, jpDef, usAtk, usDef,
+        jpDie: dmgToJp.die, jpBand: dmgToJp.band, jpDmg: dmgToJp.damage,
+        usDie: dmgToUs.die, usBand: dmgToUs.band, usDmg: dmgToUs.damage,
+      });
+
+      const jpTotal = sumStrength(jpShips, 'obp') + sumStrength(jpShips, 'dbp');
+      const usTotal = sumStrength(usShips, 'obp') + sumStrength(usShips, 'dbp');
+      if (usTotal === 0 && jpTotal > 0) winnerSide = 'jp';
+      else if (jpTotal === 0 && usTotal > 0) winnerSide = 'us';
+      else if (jpTotal >= usTotal * 3 && usTotal > 0) winnerSide = 'jp';
+      else if (usTotal >= jpTotal * 3 && jpTotal > 0) winnerSide = 'us';
+    }
+
+    if (winnerSide) {
+      const losers = winnerSide === 'jp' ? usShips : jpShips;
+      losers.forEach(s => {
+        s.status = 'struck';
+        s.capturedBy = winnerSide;
+        addLog(`🏴 ${s.name} 拿捕（${winnerSide}勝利）`);
+      });
+    } else {
+      addLog(`  3ラウンド経過、決着なし`);
+    }
+
+    const resultText = winnerSide ? `${winnerSide === 'jp' ? '味方' : '敵'}勝利` : '決着なし';
+    const resultColor = winnerSide === 'jp' ? '#44ff44' : winnerSide === 'us' ? '#ff6666' : '#ffaa44';
+    const tableHtml = `<div style="margin-bottom:8px;"><div style="font-weight:bold;color:#ffcc44;">${jpNames} ⚔ ${usNames} — <span style="color:${resultColor};">${resultText}</span></div>`
+      + `<table style="border-collapse:collapse;font-size:0.85em;margin:4px auto 0;"><tr style="color:#aac;"><th style="padding:2px 8px;border:1px solid #456;">R</th><th style="padding:2px 8px;border:1px solid #456;">味方(jp)</th><th style="padding:2px 8px;border:1px solid #456;">敵(us)</th></tr>`
+      + roundsData.map(r => `<tr><td style="padding:2px 8px;border:1px solid #456;text-align:center;">${r.round}</td>`
+        + `<td style="padding:2px 8px;border:1px solid #456;">攻${r.jpAtk}/防${r.jpDef} 1d6=${r.usDie}→損害${r.usDmg}</td>`
+        + `<td style="padding:2px 8px;border:1px solid #456;">攻${r.usAtk}/防${r.usDef} 1d6=${r.jpDie}→損害${r.jpDmg}</td></tr>`).join('')
+      + `</table></div>`;
+    overlayLines.push(tableHtml);
+  }
+
+  const detail = overlayLines.length ? overlayLines.join('\n') : '鉤縄成立艦なし';
   const dice = overlayLines.length ? `⚔ 白兵戦 ${overlayLines.length}組` : null;
-  showPhaseOverlay(PHASE_NAMES_JP['melee'], detail, dice, 4000);
+  showPhaseOverlay(PHASE_NAMES_JP['melee'], detail, dice, 5000);
   draw();
+  // 高速観戦モード時は白兵戦結果を見せるため 5秒間オート進行を止める
+  if (isFastAiObserve() && overlayLines.length) {
+    isExecuting = true;
+    setTimeout(() => { isExecuting = false; }, 5000);
+  }
+  checkGameEnd();
 }
 
 function setPlannedShot(side, shotType) {
@@ -1717,26 +2302,53 @@ function setPlannedShot(side, shotType) {
   draw();
 }
 
-function executeReloadPhase() {
-  addLog('=== I. 装填/修理完了 ===');
+async function executeReloadPhase() {
+  addLog('=== I. 装填 ===');
   const overlayLines = [];
-  for (const s of [...state.jpFleet, ...state.usFleet]) {
-    if (s.status !== 'ok') continue;
+  const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok');
+  for (const s of allShips) {
     if (!s.loadedShot) s.loadedShot = { L:'round', R:'round' };
     if (!s.plannedShot) s.plannedShot = { L:'round', R:'round' };
-    // 1. 装填: 1舷側分（dirty=trueの舷側を1つreloadedに）→ 弾種はplannedShot適用
-    if (s.firedLeftDirty) {
-      s.firedLeftDirty = false; s.reloaded = true;
-      s.loadedShot.L = s.plannedShot.L;
-      const l = `${s.name}: 左舷装填完了 (${SHOT_TYPE_JP[s.loadedShot.L]})`;
-      addLog(l); overlayLines.push(l);
+  }
+
+  // プレイヤー側（jp）: 装填選択モーダル（必ず表示）
+  const jpShips = allShips.filter(s => s.side === 'jp');
+  if (jpShips.length > 0) {
+    const choices = await showReloadChoiceModal(jpShips);
+    for (const ch of choices) {
+      const s = ch.ship;
+      for (const side of ['L', 'R']) {
+        const sideName = side === 'L' ? 'Left' : 'Right';
+        const dirtyFlag = 'fired' + sideName + 'Dirty';
+        if (s[dirtyFlag] && ch.reload[side]) {
+          s.loadedShot[side] = ch.ammo[side];
+          s[dirtyFlag] = false;
+          delete s['reloadTurns' + sideName];
+          const l = `${s.name}: ${side === 'L' ? '左舷' : '右舷'}装填 (${SHOT_TYPE_JP[s.loadedShot[side]]})`;
+          addLog(l); overlayLines.push(l);
+        }
+        s.plannedShot[side] = ch.plannedAmmo[side];
+      }
     }
-    else if (s.firedRightDirty) {
-      s.firedRightDirty = false; s.reloaded = true;
-      s.loadedShot.R = s.plannedShot.R;
-      const l = `${s.name}: 右舷装填完了 (${SHOT_TYPE_JP[s.loadedShot.R]})`;
-      addLog(l); overlayLines.push(l);
+  }
+
+  // AI側（us）: 空なら自動装填（弾種は plannedShot または round）
+  const usShips = allShips.filter(s => s.side === 'us');
+  for (const s of usShips) {
+    for (const side of ['L', 'R']) {
+      const sideName = side === 'L' ? 'Left' : 'Right';
+      const dirtyFlag = 'fired' + sideName + 'Dirty';
+      if (s[dirtyFlag]) {
+        s.loadedShot[side] = s.plannedShot[side] || 'round';
+        s[dirtyFlag] = false;
+        delete s['reloadTurns' + sideName];
+        const l = `${s.name}: ${side === 'L' ? '左舷' : '右舷'}装填 (${SHOT_TYPE_JP[s.loadedShot[side]]})`;
+        addLog(l); overlayLines.push(l);
+      }
     }
+  }
+
+  for (const s of allShips) {
     // 2. 修理完了: 計画した修理を反映
     if (s.repairPlanRH && s.hull && s.hull.remain < s.hull.max) {
       s.hull.remain = Math.min(s.hull.max, s.hull.remain + 1);
@@ -1744,12 +2356,12 @@ function executeReloadPhase() {
       const l = `${s.name}: 船体修理 +1 (${s.hull.remain}/${s.hull.max})`;
       addLog(l); overlayLines.push(l);
     }
-    if (s.repairPlanRR && s.rigging) {
-      ['L','C','R'].forEach(k => {
-        if (s.rigging[k].remain < s.rigging[k].max) {
-          s.rigging[k].remain = Math.min(s.rigging[k].max, s.rigging[k].remain + 1);
+    if (s.repairPlanRR && Array.isArray(s.rigging?.sections) && Array.isArray(s.rigging?.sectionsMax)) {
+      for (let i = 0; i < s.rigging.sections.length; i++) {
+        if (s.rigging.sections[i] < s.rigging.sectionsMax[i]) {
+          s.rigging.sections[i] = Math.min(s.rigging.sectionsMax[i], s.rigging.sections[i] + 1);
         }
-      });
+      }
       s.repairPlanRR = false;
       const l = `${s.name}: 索具修理 +1`;
       addLog(l); overlayLines.push(l);
@@ -1765,17 +2377,31 @@ function executeReloadPhase() {
       addLog(l); overlayLines.push(l);
     }
   }
-  const detail = overlayLines.length ? overlayLines.slice(0, 8).join('\n') : '該当艦なし';
-  const dice = overlayLines.length ? `📦 装填/修理 ${overlayLines.length}件` : null;
-  showPhaseOverlay(PHASE_NAMES_JP['reload'], detail, dice, 3000);
   draw();
 }
 
-function executeFullSailPhase() {
+async function executeFullSailPhase() {
   addLog('=== J. 全帆/帆変更 ===');
   const overlayLines = [];
-  // 計画された帆変更を反映（pendingSailMode → sailState）
-  for (const s of [...state.jpFleet, ...state.usFleet]) {
+  const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok');
+
+  // プレイヤー側（jp）: 帆状態選択モーダル（必ず表示）
+  const jpShips = allShips.filter(s => s.side === 'jp');
+  if (jpShips.length > 0) {
+    const choices = await showSailChoiceModal(jpShips);
+    for (const ch of choices) {
+      if (ch.sailState !== ch.ship.sailState) {
+        ch.ship.sailState = ch.sailState;
+        const l = `${ch.ship.name} 帆: ${ch.sailState}`;
+        addLog(l); overlayLines.push(l);
+      }
+      ch.ship.pendingSailMode = null;
+    }
+  }
+
+  // AI側（us）: 従来通り pendingSailMode を反映
+  const usShips = allShips.filter(s => s.side === 'us');
+  for (const s of usShips) {
     debugLog(`[DEBUG fullSail] ${s.name} sailState=${s.sailState} pending=${s.pendingSailMode}`);
     if (s.pendingSailMode) {
       s.sailState = s.pendingSailMode;
@@ -1783,14 +2409,88 @@ function executeFullSailPhase() {
       const l = `${s.name} 帆: ${s.sailState}`;
       addLog(l); overlayLines.push(l);
     }
-    if (s.mir) s.mir = false;
   }
-  const detail = overlayLines.length ? overlayLines.slice(0, 8).join('\n') : '帆変更なし';
-  const dice = overlayLines.length ? `⛵ 帆変更 ${overlayLines.length}艦` : null;
-  showPhaseOverlay(PHASE_NAMES_JP['fullSail'], detail, dice, 3000);
+  for (const s of allShips) { if (s.mir) s.mir = false; }
+
   draw();
 }
+
+// 帆状態選択モーダル
+function showSailChoiceModal(ships) {
+  // 高速観戦モード: 現状維持で自動確定
+  if (isFastAiObserve()) {
+    return Promise.resolve(ships.map(s => ({ ship: s, sailState: s.sailState || 'battle' })));
+  }
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:2100;display:flex;align-items:center;justify-content:center;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:20px;border:2px solid #ffcc44;border-radius:8px;min-width:500px;max-width:700px;max-height:85vh;overflow-y:auto;';
+    const SAIL_OPTIONS = ['battle', 'full'];
+    let bodyHtml = '<div style="font-size:1.3em;color:#ffcc44;font-weight:bold;margin-bottom:8px;border-bottom:1px solid #456;padding-bottom:6px;">帆状態選択</div>';
+    bodyHtml += '<div style="color:#ffaa88;font-size:0.85em;margin-bottom:10px;">※ 全帆（full）では被弾時の索具ダメージが 2 倍になります</div>';
+    for (const s of ships) {
+      bodyHtml += `<div style="border:1px solid #345;padding:10px;margin-bottom:8px;background:#0a1a2a;border-radius:4px;">`;
+      bodyHtml += `<div style="font-weight:bold;color:#88bbff;margin-bottom:6px;">${s.name}（現在: ${SAIL_STATE_JP[s.sailState||'battle']||s.sailState}）</div>`;
+      bodyHtml += `<div style="display:flex;gap:16px;">`;
+      for (const mode of SAIL_OPTIONS) {
+        const checked = (s.sailState || 'battle') === mode ? 'checked' : '';
+        bodyHtml += `<label style="cursor:pointer;"><input type="radio" name="sail_${s.name}" value="${mode}" ${checked}> ${SAIL_STATE_JP[mode]||mode}</label>`;
+      }
+      bodyHtml += `</div></div>`;
+    }
+    panel.innerHTML = bodyHtml;
+    const btn = document.createElement('button');
+    btn.textContent = '確定';
+    btn.style.cssText = 'margin-top:10px;padding:10px 20px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;font-weight:bold;width:100%;';
+    btn.onclick = () => {
+      const choices = [];
+      for (const s of ships) {
+        const checked = panel.querySelector(`input[name="sail_${s.name}"]:checked`);
+        choices.push({ ship: s, sailState: checked ? checked.value : (s.sailState || 'battle') });
+      }
+      document.body.removeChild(overlay);
+      resolve(choices);
+    };
+    panel.appendChild(btn);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  });
+}
+function checkGameEnd() {
+  if (state.gameEnded) return;
+  const jpAlive = state.jpFleet.filter(s => s.status === 'ok').length;
+  const usAlive = state.usFleet.filter(s => s.status === 'ok').length;
+  if (jpAlive === 0 || usAlive === 0) {
+    state.gameEnded = true;
+    const winner = jpAlive > 0 ? '自軍' : usAlive > 0 ? '敵軍' : '引き分け';
+    addLog(`=== ゲーム終了: ${winner}勝利 ===`);
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:3000;display:flex;align-items:center;justify-content:center;overflow-y:auto;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:24px 32px;border:3px solid #ffcc44;border-radius:12px;text-align:center;max-width:95vw;max-height:95vh;overflow-y:auto;';
+    const allShips = [...state.jpFleet, ...state.usFleet];
+    const fr = allShips.filter(x => x.nation === 'FR');
+    const gb = allShips.filter(x => x.nation === 'GB');
+    panel.innerHTML = `<div style="font-size:2em;font-weight:bold;color:#ffcc44;margin-bottom:12px;">ゲーム終了</div>`
+      + `<div style="font-size:1.5em;color:${jpAlive > 0 ? '#88ccff' : '#ff8888'};margin-bottom:20px;">${winner}勝利</div>`
+      + `<div style="display:flex;gap:16px;text-align:left;">`
+      + `<div style="flex:1;min-width:280px;"><div style="font-weight:bold;color:#88bbff;margin-bottom:6px;font-size:1.1em;">フランス艦隊</div>${fr.map(renderShipCardHtml).join('') || '（なし）'}</div>`
+      + `<div style="flex:1;min-width:280px;"><div style="font-weight:bold;color:#ffbbbb;margin-bottom:6px;font-size:1.1em;">イギリス艦隊</div>${gb.map(renderShipCardHtml).join('') || '（なし）'}</div>`
+      + `</div>`;
+    const btn = document.createElement('button');
+    btn.textContent = '閉じる';
+    btn.style.cssText = 'margin-top:16px;padding:10px 30px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;';
+    btn.onclick = () => document.body.removeChild(overlay);
+    panel.appendChild(btn);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  }
+}
+
 function endTurn() {
+  checkGameEnd();
+  if (state.gameEnded) return;
   state.turn++;
   state.phase = 'wind';
   setInfo(`ターン ${state.turn}`);
@@ -1834,6 +2534,26 @@ document.getElementById('zoomSlider').addEventListener('input', e => {
   draw();
 });
 
+// キャンバスマウス移動 → ヘクス情報表示
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) / zoomLevel;
+  const py = (e.clientY - rect.top) / zoomLevel;
+  let closest = null, minD = Infinity;
+  for (let c = 0; c < MAP_CONFIG.cols; c++) {
+    for (let r = 0; r < MAP_CONFIG.rows; r++) {
+      const p = hexPt(c, r);
+      const d = (px-p.x)**2 + (py-p.y)**2;
+      if (d < minD) { minD = d; closest = {col:c, row:r}; }
+    }
+  }
+  if (closest && minD < HEX_SIZE * HEX_SIZE * 1.5) {
+    const id = hexId(closest.col, closest.row);
+    const depth = DEPTH_MAP[id] || '-';
+    setInfo(`ヘクス ${id} (depth: ${depth})`);
+  }
+});
+
 // キャンバスクリック → ヘクス選択
 canvas.addEventListener('click', e => {
   const rect = canvas.getBoundingClientRect();
@@ -1867,6 +2587,7 @@ function plotKey(key) {
   const s = state.selectedShip;
   if (!s) { debugLog(`[DEBUG plotKey] key=${key} 艦未選択`); setInfo('艦を選択してください'); return; }
   if (s.col < 0) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} 未配置`); setInfo('未配置の艦'); return; }
+  if (s.grappledWith?.length > 0) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} 鉤縄接続中`); setInfo(`${s.name}: 鉤縄接続中 - 移動プロット不可`); return; }
   if (s.plotDone) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} plotDone=true（確定済）`); setInfo(`${s.name}: プロット確定済み（変更不可）`); return; }
   if (!s.plottedMoves) s.plottedMoves = [];
   s.plottedMoves.push(key);
@@ -1948,6 +2669,54 @@ document.addEventListener('keydown', e => {
 // プロット予測線描画（drawの最後に呼ばれる）
 // ============================================================
 // 射界表示トグル
+function toggleAttackRange() {
+  state.showAttackRange = !state.showAttackRange;
+  document.getElementById('btnAttackRange').textContent = '攻撃範囲: ' + (state.showAttackRange ? 'ON' : 'OFF');
+  draw();
+}
+function drawAttackRangeForShip(ship) {
+  if (!ship || ship.col < 0) return;
+  if (typeof ARC_TEMPLATE === 'object') {
+    const dirOrder = [8, 9, 3, 2, 1, 7];
+    const shipIdx = dirOrder.indexOf(ship.dir);
+    if (shipIdx < 0) return;
+    const rotations = shipIdx;
+    const fieldColors = {
+      1: 'rgba(255,80,80,0.35)',
+      2: 'rgba(255,180,60,0.35)',
+      3: 'rgba(255,240,80,0.35)',
+      4: 'rgba(80,180,255,0.35)',
+      5: 'rgba(180,80,255,0.35)',
+    };
+    const entries = [];
+    for (const key in ARC_TEMPLATE) {
+      const [dc, dr] = key.split(',').map(Number);
+      const f = ARC_TEMPLATE[key];
+      entries.push({ dc, dr, field: f });
+      if (dc !== 0) entries.push({ dc: -dc, dr, field: f });
+    }
+    for (const e of entries) {
+      let cube = offsetDeltaToCube(e.dc, e.dr);
+      for (let i = 0; i < rotations; i++) cube = rotateCube60CW(cube);
+      const target = cubeDeltaToShipTarget(cube, ship.col, ship.row);
+      if (target.col < 0 || target.col >= MAP_CONFIG.cols) continue;
+      if (target.row < 0 || target.row >= MAP_CONFIG.rows) continue;
+      const color = fieldColors[e.field];
+      if (!color) continue;
+      const {x, y} = hexPt(target.col, target.row);
+      drawHexPath(x, y);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.font = `bold ${Math.round(HEX_SIZE * 0.35)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(e.field), x, y);
+    }
+    return;
+  }
+  drawArcsForShipLegacy(ship);
+}
 function toggleArcs() {
   state.showArcs = !state.showArcs;
   document.getElementById('btnArcs').textContent = '射界: ' + (state.showArcs ? 'ON' : 'OFF');
@@ -1983,24 +2752,37 @@ const STERN_GUN_ARCS = [1, 2, 4];
 
 // firer から target が ARC_TEMPLATE のどのフィールド番号(1-5)にあるか判定
 function getArcFieldNumber(firer, target) {
-  if (typeof ARC_TEMPLATE !== 'object') return 0;
+  return getArcFieldInfo(firer, target).field;
+}
+
+// field と side (port/stbd) を返す
+// ARC_TEMPLATE は dc<0 のみ定義。オリジナル=port、ミラー(dc→-dc)=stbd と規約
+function getArcFieldInfo(firer, target) {
+  if (typeof ARC_TEMPLATE !== 'object') return { field: 0, side: null };
   const dirOrder = [8, 9, 3, 2, 1, 7];
   const shipIdx = dirOrder.indexOf(firer.dir);
-  if (shipIdx < 0) return 0;
-  const entries = [];
+  if (shipIdx < 0) return { field: 0, side: null };
   for (const key in ARC_TEMPLATE) {
     const [dc, dr] = key.split(',').map(Number);
     const f = ARC_TEMPLATE[key];
-    entries.push({ dc, dr, field: f });
-    if (dc !== 0) entries.push({ dc: -dc, dr, field: f });
+    // オリジナル (dc<0 → port)
+    let cubeP = offsetDeltaToCube(dc, dr);
+    for (let i = 0; i < shipIdx; i++) cubeP = rotateCube60CW(cubeP);
+    const posP = cubeDeltaToShipTarget(cubeP, firer.col, firer.row);
+    if (posP.col === target.col && posP.row === target.row) {
+      return { field: f, side: 'port' };
+    }
+    // ミラー (dc>0 → stbd)
+    if (dc !== 0) {
+      let cubeS = offsetDeltaToCube(-dc, dr);
+      for (let i = 0; i < shipIdx; i++) cubeS = rotateCube60CW(cubeS);
+      const posS = cubeDeltaToShipTarget(cubeS, firer.col, firer.row);
+      if (posS.col === target.col && posS.row === target.row) {
+        return { field: f, side: 'stbd' };
+      }
+    }
   }
-  for (const e of entries) {
-    let cube = offsetDeltaToCube(e.dc, e.dr);
-    for (let i = 0; i < shipIdx; i++) cube = rotateCube60CW(cube);
-    const pos = cubeDeltaToShipTarget(cube, firer.col, firer.row);
-    if (pos.col === target.col && pos.row === target.row) return e.field;
-  }
-  return 0;
+  return { field: 0, side: null };
 }
 
 // 艦首/艦尾大砲で撃てるかチェック
@@ -2197,7 +2979,7 @@ function executeAllPlots() {
   });
 
   let step = 1;
-  const stepDuration = 400;  // ms per step
+  const stepDuration = 150;  // ms per step
 
   function nextStep() {
     if (step >= maxSteps) {
@@ -2245,20 +3027,13 @@ function executeAllPlots() {
       hexes.forEach(h => { occupiedByStatic[h] = p; });
     });
     // 動く艦の次位置のbow/stern を収集
-    // bow位置が前step と同じなら「居残り」(転舵のみ)、違えば「侵入者」
     const movingCandidates = paths.map(p => {
       if (p.stopped) return null;
       if (step >= p.path.length) return null;
       const pos = p.path[step];
-      const prev = p.path[step - 1] || { col: p.ship.col, row: p.ship.row };
-      const isOccupant = (pos.col === prev.col && pos.row === prev.row);
-      return { p, pos, hexes: getOccupiedHexes(pos.col, pos.row, pos.dir), isOccupant };
+      return { p, pos, hexes: getOccupiedHexes(pos.col, pos.row, pos.dir) };
     }).filter(Boolean);
-    // 居残り艦(転舵のみ)は静的占有者として登録
-    movingCandidates.forEach(c => {
-      if (c.isOccupant) c.hexes.forEach(h => { occupiedByStatic[h] = c.p; });
-    });
-    // 衝突: 動く艦同士、または動く艦 vs 静止艦、いずれかで bow/stern のhex重なり
+    // 衝突検出: 動く艦のhex全て vs 静止艦hex or 他の動く艦hex
     const collisionsByHex = {};
     movingCandidates.forEach(c => {
       c.hexes.forEach(h => {
@@ -2273,46 +3048,56 @@ function executeAllPlots() {
       if (!hasConflict) continue;
       const combatants = [...group];
       if (staticOwner && !combatants.some(c => c.p === staticOwner)) combatants.push(staticOwner);
-      // 同一ペア再処理防止
       const key = combatants.map(c => c.p.ship.name).sort().join('|');
       if (processedPairs.has(key)) continue;
       processedPairs.add(key);
       const [hc, hr] = h.split(',').map(Number);
       addLog(`衝突検出 @${hexId(hc, hr)}: ${combatants.map(c => c.p.ship.name).join(' vs ')}`);
-      // 勝者決定: 転舵のみの居残り艦は自動勝者、実際に動く艦（侵入者）のみ判定対象
-      const moving = combatants.filter(c => c && !c.p?.stopped && step < (c.p?.path?.length ?? 0) && !c.isOccupant);
-      if (moving.length === 0) continue;
-      let winner, losers;
-      if (staticOwner && moving.length === 1) {
-        // 動く艦1 vs 静止艦1 → 1d6で判定
-        const rA = rollD6(), rB = rollD6();
-        addLog(`勝者判定: ${moving[0].p.ship.name}=${rA}, ${staticOwner.p.ship.name}(静止)=${rB}`);
-        if (rA > rB) { winner = moving[0]; losers = []; }
-        else { winner = null; losers = [moving[0]]; }
-      } else {
+      // 停止中艦が1隻でもあれば、そちらが優先。動艦は全て一歩手前に戻る
+      const movingOnly = combatants.filter(c => !c.p.stopped && step < c.p.path.length);
+      const staticExists = combatants.some(c => c.p.stopped || step >= c.p.path.length);
+      let losers;
+      if (staticExists) {
+        // 静止艦優先、動艦は全員敗者
+        losers = movingOnly;
+      } else if (movingOnly.length >= 2) {
+        // 動vs動: d6判定、同点は再振り
         while (true) {
-          const rolls = moving.map(g => ({ g, r: rollD6() }));
+          const rolls = movingOnly.map(g => ({ g, r: rollD6() }));
           rolls.sort((a, b) => b.r - a.r);
           addLog(`勝者判定: ${rolls.map(x => `${x.g.p.ship.name}=${x.r}`).join(', ')}`);
-          if (rolls.length === 1 || rolls[0].r !== rolls[1].r) {
-            winner = rolls[0].g;
+          if (rolls[0].r !== rolls[1].r) {
             losers = rolls.slice(1).map(x => x.g);
             break;
           }
           addLog(`同点 → 振り直し`);
         }
+      } else {
+        losers = movingOnly;
       }
-      // 敗者は手前で侵入キャンセル → 停止
+      // 敗者は手前で侵入キャンセル → 停止（重なり解消まで後退）
       losers.forEach(l => {
         l.p.stopped = true;
-        l.p.path = l.p.path.slice(0, step);
+        let retreatIdx = step - 1;
+        while (retreatIdx >= 0) {
+          const pos = l.p.path[retreatIdx];
+          const hexes = getOccupiedHexes(pos.col, pos.row, pos.dir);
+          const conflicts = paths.some(other => {
+            if (other === l.p) return false;
+            const oHexes = getOccupiedHexes(other.ship.col, other.ship.row, other.ship.dir);
+            return hexes.some(h => oHexes.includes(h));
+          });
+          if (!conflicts) break;
+          retreatIdx--;
+        }
+        l.p.path = l.p.path.slice(0, Math.max(0, retreatIdx + 1));
         if (l.p.path.length > 0) {
           const prev = l.p.path[l.p.path.length - 1];
           l.p.ship.col = prev.col;
           l.p.ship.row = prev.row;
           l.p.ship.dir = prev.dir;
         }
-        addLog(`${l.p.ship.name}: 侵入キャンセル、手前で停止`);
+        addLog(`${l.p.ship.name}: 侵入キャンセル、step ${retreatIdx >= 0 ? retreatIdx : '開始'}まで後退`);
       });
     }
 
@@ -2340,14 +3125,26 @@ function executeAllPlots() {
       movers.forEach(p => {
         if (p.stopped) return;
         p.stopped = true;
-        p.path = p.path.slice(0, step);
+        let retreatIdx = step - 1;
+        while (retreatIdx >= 0) {
+          const pos = p.path[retreatIdx];
+          const hexes = getOccupiedHexes(pos.col, pos.row, pos.dir);
+          const conflicts = paths.some(other => {
+            if (other === p) return false;
+            const oHexes = getOccupiedHexes(other.ship.col, other.ship.row, other.ship.dir);
+            return hexes.some(h => oHexes.includes(h));
+          });
+          if (!conflicts) break;
+          retreatIdx--;
+        }
+        p.path = p.path.slice(0, Math.max(0, retreatIdx + 1));
         if (p.path.length > 0) {
           const prev = p.path[p.path.length - 1];
           p.ship.col = prev.col;
           p.ship.row = prev.row;
           p.ship.dir = prev.dir;
         }
-        addLog(`${p.ship.name}: 再重なり検出 @${hexId(hc, hr)} → 侵入キャンセル`);
+        addLog(`${p.ship.name}: 再重なり検出 @${hexId(hc, hr)} → step ${retreatIdx >= 0 ? retreatIdx : '開始'}まで後退`);
       });
     }
     // 通常移動（停止していない艦のみ step 位置へ）
@@ -2363,6 +3160,18 @@ function executeAllPlots() {
         debugLog(`[step${step}] [${p.ship.name}] path外 (path長=${p.path.length})`);
       }
     });
+    // 高速観戦モード: 動いている jp艦にセンタリング
+    if (isFastAiObserve()) {
+      const movingJp = paths.find(p => p.ship.side === 'jp' && !p.stopped && step < p.path.length);
+      if (movingJp) {
+        const { x, y } = hexPt(movingJp.ship.col, movingJp.ship.row);
+        const ma = document.getElementById('mapArea');
+        if (ma) {
+          ma.scrollLeft = x * zoomLevel - ma.clientWidth / 2;
+          ma.scrollTop = y * zoomLevel - ma.clientHeight / 2;
+        }
+      }
+    }
     draw();
     step++;
     setTimeout(nextStep, stepDuration);
@@ -2590,9 +3399,10 @@ function toggleAutoAdvance() {
     clearInterval(autoAdvanceTimer);
     autoAdvanceTimer = null;
   } else {
+    const interval = isFastAiObserve() ? 400 : AUTO_STEP_INTERVAL;
     autoAdvanceTimer = setInterval(() => {
       if (!isExecuting) advancePhase();
-    }, AUTO_STEP_INTERVAL);
+    }, interval);
   }
   updateAutoButton();
 }

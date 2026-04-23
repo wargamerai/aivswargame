@@ -136,17 +136,15 @@ function resolveMelee(partyA, partyB) {
   return { strengthA, strengthB, dmgToA, dmgToB, winner, log };
 }
 
-// 乗員セクションを損失（最小番号セクションから）
+// 乗員セクションを損失（能1=index 0 から消去）
 function applyCrewLossSection(ship, n) {
-  if (!ship.crew || n <= 0) return;
-  // L/R 交互に均等消去
-  for (let i = 0; i < n; i++) {
-    const l = ship.crew.L?.remain || 0;
-    const r = ship.crew.R?.remain || 0;
-    if (l === 0 && r === 0) break;
-    // 多い側から減らす
-    if (l >= r) ship.crew.L.remain--;
-    else ship.crew.R.remain--;
+  if (!ship.crew || !Array.isArray(ship.crew.abilities) || n <= 0) return;
+  let removed = 0;
+  for (let i = 0; i < ship.crew.abilities.length && removed < n; i++) {
+    while (removed < n && ship.crew.abilities[i] > 0) {
+      ship.crew.abilities[i]--;
+      removed++;
+    }
   }
 }
 
