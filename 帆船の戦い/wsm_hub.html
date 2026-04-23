@@ -63,8 +63,9 @@ body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; fle
 .stat-row { display:flex; justify-content:space-between; padding:2px 0; font-size:0.85em; }
 .stat-row .lbl { color:#aac; }
 .stat-row .val { color:#fff; font-weight:bold; }
-.bar { display:inline-block; width:70px; height:8px; background:#334; border-radius:2px; overflow:hidden; vertical-align:middle; }
-.bar > div { height:100%; background:#4a8; }
+.bar { display:inline-flex; width:100px; height:10px; background:#222; border-radius:2px; overflow:hidden; vertical-align:middle; }
+.bar > .remain { height:100%; background:#4a8; }
+.bar > .lost { height:100%; background:#c44; }
 
 #actionLog {
   max-height:200px; overflow-y:auto; background:#0a1a2a;
@@ -991,22 +992,35 @@ function updatePlotDisplay() {
 function renderShipCardHtml(s) {
   const hp = s.hull ? `${s.hull.remain}/${s.hull.max}` : '-';
   const hpPct = s.hull ? (s.hull.remain / s.hull.max * 100) : 0;
+  const rigTotal = (s.rigging?.sectionsMax||[]).reduce((a,v) => a + (v||0), 0);
+  const rigRemain = (s.rigging?.sections||[]).reduce((a,v) => a + (v||0), 0);
+  const rigPct = rigTotal > 0 ? (rigRemain / rigTotal * 100) : 0;
+  const crewTotal = (s.crew?.abilitiesMax||[]).reduce((a,v) => a + (v||0), 0);
+  const crewRemain = (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+  const crewPct = crewTotal > 0 ? (crewRemain / crewTotal * 100) : 0;
   const att = (typeof computeAttitude === 'function') ? computeAttitude(s, state.wind) : '-';
   const statusMark = s.status === 'ok' ? '' : s.status === 'struck' ? '🏳 ' : s.status === 'sunk' ? '🌊 ' : s.status === 'exploded' ? '💥 ' : '';
   return `
     <div style="border:1px solid #345;padding:6px;margin-bottom:6px;background:#0a1a2a;border-radius:4px;">
       <div style="font-weight:bold;font-size:0.95em;color:${s.side==='jp'?'#88bbff':'#ffbbbb'};">${statusMark}${s.name}</div>
       <div style="color:#aac;font-size:0.8em;">${s.guns}門 ${s.type} / ${s.nation||''}</div>
-      <div class="stat-row"><span class="lbl">船体</span><span class="val">${hp} <span class="bar"><div style="width:${hpPct}%;"></div></span></span></div>
-      <table style="width:100%;border-collapse:collapse;font-size:0.75em;margin:2px 0;">
-        <tr style="color:#aac;"><th colspan="4" style="text-align:left;padding:1px 2px;">索具</th></tr>
-        <tr style="color:#fff;font-weight:bold;text-align:center;"><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[0]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[1]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[2]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.rigging?.sections||[])[3]??'-'}</td></tr>
-      </table>
-      <table style="width:100%;border-collapse:collapse;font-size:0.75em;margin:2px 0;">
-        <tr style="color:#aac;"><th colspan="4" style="text-align:left;padding:1px 2px;">乗員</th></tr>
-        <tr style="color:#fff;font-weight:bold;text-align:center;"><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[0]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[1]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[2]??'-'}</td><td style="border:1px solid #345;padding:0 2px;">${(s.crew?.abilities||[])[3]??'-'}</td></tr>
-      </table>
-      <div class="stat-row" style="font-size:0.8em;"><span class="lbl">砲/カ</span><span class="val">${Math.ceil((s.broadsideGuns?.L?.remain||0)/2)}/${Math.ceil((s.broadsideGuns?.R?.remain||0)/2)} ・${Math.ceil((s.carronades?.L?.remain||0)/2)}/${Math.ceil((s.carronades?.R?.remain||0)/2)}</span></div>
+      <div class="stat-row"><span class="lbl">船体</span><span class="val">${hp} <span class="bar"><div class="remain" style="width:${hpPct}%;"></div><div class="lost" style="width:${100-hpPct}%;"></div></span></span></div>
+      ${[0,1,2,3].map(i => {
+        const r = (s.rigging?.sections||[])[i];
+        const m = (s.rigging?.sectionsMax||[])[i];
+        if (m == null || m === 0) return '';
+        const pct = (r / m) * 100;
+        return `<div class="stat-row"><span class="lbl">索${i+1}</span><span class="val">${r}/${m} <span class="bar"><div class="remain" style="width:${pct}%;"></div><div class="lost" style="width:${100-pct}%;"></div></span></span></div>`;
+      }).join('')}
+      ${[0,1,2,3].map(i => {
+        const r = (s.crew?.abilities||[])[i];
+        const m = (s.crew?.abilitiesMax||[])[i];
+        if (m == null || m === 0) return '';
+        const pct = (r / m) * 100;
+        return `<div class="stat-row"><span class="lbl">能${i+1}</span><span class="val">${r}/${m} <span class="bar"><div class="remain" style="width:${pct}%;"></div><div class="lost" style="width:${100-pct}%;"></div></span></span></div>`;
+      }).join('')}
+      <div class="stat-row" style="font-size:0.8em;"><span class="lbl">大砲(艦首L/R・艦尾L/R)</span><span class="val">${Math.ceil((s.broadsideGuns?.L?.remain||0)/2)}/${Math.ceil((s.broadsideGuns?.R?.remain||0)/2)}・${Math.floor((s.broadsideGuns?.L?.remain||0)/2)}/${Math.floor((s.broadsideGuns?.R?.remain||0)/2)}</span></div>
+      <div class="stat-row" style="font-size:0.8em;"><span class="lbl">カロネード(艦首L/R・艦尾L/R)</span><span class="val">${Math.ceil((s.carronades?.L?.remain||0)/2)}/${Math.ceil((s.carronades?.R?.remain||0)/2)}・${Math.floor((s.carronades?.L?.remain||0)/2)}/${Math.floor((s.carronades?.R?.remain||0)/2)}</span></div>
       <div class="stat-row" style="font-size:0.8em;"><span class="lbl">装填</span><span class="val">${s.firedLeftDirty?'空':SHOT_TYPE_JP[s.loadedShot?.L||'round']}/${s.firedRightDirty?'空':SHOT_TYPE_JP[s.loadedShot?.R||'round']}</span></div>
       <div class="stat-row" style="font-size:0.8em;"><span class="lbl">態勢/位置</span><span class="val">${att} / ${s.col>=0?hexId(s.col,s.row):'-'}</span></div>
     </div>
@@ -1054,17 +1068,21 @@ function renderShipDetail() {
     <div style="font-weight:bold;font-size:1.05em;color:${s.side==='jp'?'#88bbff':'#ffbbbb'};">${s.name}</div>
     <div style="color:#aac;font-size:0.9em;">${s.guns}門 ${s.type} / ${s.nation||''}</div>
     <div style="margin-top:6px;">
-      <div class="stat-row"><span class="lbl">船体</span><span class="val">${hp} <span class="bar"><div style="width:${hpPct}%;"></div></span></span></div>
-      <div class="stat-row"><span class="lbl">索具</span></div>
-      <table style="width:100%;border-collapse:collapse;font-size:0.8em;margin-bottom:3px;">
-        <tr style="color:#aac;"><th style="border:1px solid #345;padding:1px 4px;">索1</th><th style="border:1px solid #345;padding:1px 4px;">索2</th><th style="border:1px solid #345;padding:1px 4px;">索3</th><th style="border:1px solid #345;padding:1px 4px;">索4</th></tr>
-        <tr style="color:#fff;font-weight:bold;text-align:center;"><td style="border:1px solid #345;padding:1px 4px;">${(s.rigging?.sections||[])[0]??'-'}</td><td style="border:1px solid #345;padding:1px 4px;">${(s.rigging?.sections||[])[1]??'-'}</td><td style="border:1px solid #345;padding:1px 4px;">${(s.rigging?.sections||[])[2]??'-'}</td><td style="border:1px solid #345;padding:1px 4px;">${(s.rigging?.sections||[])[3]??'-'}</td></tr>
-      </table>
-      <div class="stat-row"><span class="lbl">乗員</span></div>
-      <table style="width:100%;border-collapse:collapse;font-size:0.8em;margin-bottom:3px;">
-        <tr style="color:#aac;"><th style="border:1px solid #345;padding:1px 4px;">能1</th><th style="border:1px solid #345;padding:1px 4px;">能2</th><th style="border:1px solid #345;padding:1px 4px;">能3</th><th style="border:1px solid #345;padding:1px 4px;">能4</th></tr>
-        <tr style="color:#fff;font-weight:bold;text-align:center;"><td style="border:1px solid #345;padding:1px 4px;">${(s.crew?.abilities||[])[0]??'-'}</td><td style="border:1px solid #345;padding:1px 4px;">${(s.crew?.abilities||[])[1]??'-'}</td><td style="border:1px solid #345;padding:1px 4px;">${(s.crew?.abilities||[])[2]??'-'}</td><td style="border:1px solid #345;padding:1px 4px;">${(s.crew?.abilities||[])[3]??'-'}</td></tr>
-      </table>
+      <div class="stat-row"><span class="lbl">船体</span><span class="val">${hp} <span class="bar"><div class="remain" style="width:${hpPct}%;"></div><div class="lost" style="width:${100-hpPct}%;"></div></span></span></div>
+      ${[0,1,2,3].map(i => {
+        const r = (s.rigging?.sections||[])[i];
+        const m = (s.rigging?.sectionsMax||[])[i];
+        if (m == null || m === 0) return '';
+        const pct = (r / m) * 100;
+        return `<div class="stat-row"><span class="lbl">索${i+1}</span><span class="val">${r}/${m} <span class="bar"><div class="remain" style="width:${pct}%;"></div><div class="lost" style="width:${100-pct}%;"></div></span></span></div>`;
+      }).join('')}
+      ${[0,1,2,3].map(i => {
+        const r = (s.crew?.abilities||[])[i];
+        const m = (s.crew?.abilitiesMax||[])[i];
+        if (m == null || m === 0) return '';
+        const pct = (r / m) * 100;
+        return `<div class="stat-row"><span class="lbl">能${i+1}</span><span class="val">${r}/${m} <span class="bar"><div class="remain" style="width:${pct}%;"></div><div class="lost" style="width:${100-pct}%;"></div></span></span></div>`;
+      }).join('')}
       <div class="stat-row"><span class="lbl">大砲(艦首L/R・艦尾L/R)</span><span class="val">${Math.ceil((s.broadsideGuns?.L?.remain||0)/2)}/${Math.ceil((s.broadsideGuns?.R?.remain||0)/2)}・${Math.floor((s.broadsideGuns?.L?.remain||0)/2)}/${Math.floor((s.broadsideGuns?.R?.remain||0)/2)}</span></div>
       <div class="stat-row"><span class="lbl">カロネード(艦首L/R・艦尾L/R)</span><span class="val">${Math.ceil((s.carronades?.L?.remain||0)/2)}/${Math.ceil((s.carronades?.R?.remain||0)/2)}・${Math.floor((s.carronades?.L?.remain||0)/2)}/${Math.floor((s.carronades?.R?.remain||0)/2)}</span></div>
       <div class="stat-row"><span class="lbl">装填(L/R)</span><span class="val">${s.firedLeftDirty?'<span style="color:#ff8888;">空</span>':SHOT_TYPE_JP[s.loadedShot?.L||'round']}/${s.firedRightDirty?'<span style="color:#ff8888;">空</span>':SHOT_TYPE_JP[s.loadedShot?.R||'round']}</span></div>

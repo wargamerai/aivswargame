@@ -85,7 +85,9 @@ function maxMoveForAttitude(ship, wind) {
   }
 
   const mod = getWindModifier(ship, wind);
-  return Math.max(0, base + mod);
+  // 乗員セクションが0になるたび移動力-1
+  const crewLost = (ship.crew?.abilitiesMax||[]).filter((m, i) => m > 0 && (ship.crew?.abilities||[])[i] === 0).length;
+  return Math.max(0, base + mod - crewLost);
 }
 
 function turnCost(fromDir, toDir) {
