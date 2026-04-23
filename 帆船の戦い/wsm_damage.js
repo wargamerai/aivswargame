@@ -34,20 +34,20 @@ function applyDamageWSM(target, damages, ctx) {
         break;
       }
       case 'R': {
-        if (!target.rigging) break;
-        // WSM: 最大番号セクションから消去（R→C→L）
-        const order = ['R', 'C', 'L'];
+        if (!target.rigging || !Array.isArray(target.rigging.sections)) break;
+        // 能1（index 0）から消去
+        // 全帆（full sail）時は索具ダメージが 2 倍
+        const nR = (target.sailState === 'full') ? n * 2 : n;
         let removed = 0;
-        for (const k of order) {
-          while (removed < n && target.rigging[k]?.remain > 0) {
-            target.rigging[k].remain--;
+        for (let i = 0; i < target.rigging.sections.length && removed < nR; i++) {
+          while (removed < nR && target.rigging.sections[i] > 0) {
+            target.rigging.sections[i]--;
             removed++;
           }
-          if (removed >= n) break;
         }
-        applied.push(`索具-${removed}`);
+        applied.push((target.sailState === 'full') ? `索具-${removed}（全帆×2）` : `索具-${removed}`);
         // 索具全滅判定
-        const total = order.reduce((a,k) => a + (target.rigging[k]?.remain||0), 0);
+        const total = target.rigging.sections.reduce((a,v) => a + (v||0), 0);
         if (total === 0) {
           if (!target.sailBroken) {
             target.sailBroken = true;
@@ -57,21 +57,16 @@ function applyDamageWSM(target, damages, ctx) {
         break;
       }
       case 'C': {
-        if (!target.crew) break;
-        // 被弾舷側の最小番号（=番号小さいものから、WSMではセクション1から）
-        // 簡略: 被弾舷側の残を減らす、空なら反対舷
-        const primary = hitSide || 'L';
-        const secondary = primary === 'L' ? 'R' : 'L';
+        if (!target.crew || !Array.isArray(target.crew.abilities)) break;
+        // 能1（index 0）から消去
         let removed = 0;
-        while (removed < n && target.crew[primary]?.remain > 0) {
-          target.crew[primary].remain--;
-          removed++;
+        for (let i = 0; i < target.crew.abilities.length && removed < n; i++) {
+          while (removed < n && target.crew.abilities[i] > 0) {
+            target.crew.abilities[i]--;
+            removed++;
+          }
         }
-        while (removed < n && target.crew[secondary]?.remain > 0) {
-          target.crew[secondary].remain--;
-          removed++;
-        }
-        applied.push(`乗員(${primary}優先)-${removed}`);
+        applied.push(`乗員-${removed}`);
         break;
       }
       case 'G': {
@@ -90,6 +85,15 @@ function applyDamageWSM(target, damages, ctx) {
             if (target.gunHitTable[sec] === 0) valid.shift();
           } else {
             valid.shift();
+          }
+        }
+        // 右パネル表示用 broadsideGuns も同期（被弾舷から減算）
+        if (target.broadsideGuns) {
+          const gunSide = hitSide || 'L';
+          const gd = target.broadsideGuns[gunSide];
+          if (gd) {
+            let rem = removed;
+            while (rem > 0 && gd.remain > 0) { gd.remain--; rem--; }
           }
         }
         applied.push(`砲セクション-${removed}`);
@@ -163,8 +167,8 @@ function checkSurrenderConditions(ship) {
   if (ship.hull && ship.hull.remain === 0) return true;
   // 乗員半数以下 + 士気低下で降伏
   if (ship.crew) {
-    const maxCrew = (ship.crew.L?.max||0) + (ship.crew.R?.max||0);
-    const curCrew = (ship.crew.L?.remain||0) + (ship.crew.R?.remain||0);
+    const maxCrew = (ship.crew.abilitiesMax||[]).reduce((a,v) => a + (v||0), 0);
+    const curCrew = (ship.crew.abilities||[]).reduce((a,v) => a + (v||0), 0);
     if (maxCrew > 0 && curCrew / maxCrew <= 0.4 && (ship.crewQuality === 'poor' || ship.crewQuality === 'green')) {
       return true;
     }
@@ -192,9 +196,10 @@ function processFireProgression(ship, crewAssignedToFire, log) {
   }
   // 火災継続: 船体1+索具1消去
   if (ship.hull?.remain > 0) { ship.hull.remain--; log.push('火災延焼: 船体-1'); }
-  const rigOrder = ['R','C','L'];
-  for (const k of rigOrder) {
-    if (ship.rigging?.[k]?.remain > 0) { ship.rigging[k].remain--; log.push(`火災延焼: 索具${k}-1`); break; }
+  if (Array.isArray(ship.rigging?.sections)) {
+    for (let i = 0; i < ship.rigging.sections.length; i++) {
+      if (ship.rigging.sections[i] > 0) { ship.rigging.sections[i]--; log.push('火災延焼: 索具-1'); break; }
+    }
   }
   // 制御不能で爆発リスク
   if (ship.fireOutOfControl) {
