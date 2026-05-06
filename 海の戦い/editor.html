@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>海の戦い - 座標エディタ</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+
+#topbar {
+  display:flex; align-items:center; gap:10px; padding:6px 10px;
+  background:#13243a; border-bottom:2px solid #234; font-size:0.9em;
+  flex-shrink:0;
+}
+#topbar h1 { font-size:1em; color:#88ccff; margin-right:6px; }
+
+#main { flex:1; display:flex; min-height:0; }
+
+#sidePane {
+  width:340px; background:#13243a; border-right:1px solid #234;
+  overflow-y:auto; font-size:0.85em; flex-shrink:0; padding:8px;
+}
+#sidePane h3 { color:#88ccff; margin-bottom:6px; font-size:0.95em; padding:4px 0; }
+
+#mapArea {
+  flex:1; overflow:auto; background:#051020; position:relative;
+}
+#mapInner { display:inline-block; position:relative; }
+#mapInner img#mapImg { max-width:none; display:block; }
+
+.zbtn {
+  background:#234; color:#fff; border:1px solid #456;
+  width:28px; height:24px; border-radius:3px; cursor:pointer;
+  font-weight:bold; font-size:1em;
+}
+.zbtn:hover { background:#2266cc; }
+
+input[type=text], input[type=number], textarea, select {
+  background:#0a1a2a; color:#fff; border:1px solid #456;
+  padding:4px 6px; border-radius:3px; font-family:monospace;
+  font-size:0.85em; width:100%;
+}
+button.act {
+  background:#2266cc; color:#fff; border:none; padding:5px 12px;
+  border-radius:3px; cursor:pointer; font-weight:bold; font-size:0.85em;
+  margin:2px;
+}
+button.act:hover { background:#3377dd; }
+button.del {
+  background:#883333; color:#fff; border:none; padding:2px 6px;
+  border-radius:3px; cursor:pointer; font-size:0.75em;
+}
+
+.item-row {
+  display:flex; align-items:center; gap:4px;
+  padding:3px 4px; border-bottom:1px dotted #234; cursor:pointer;
+}
+.item-row.sel { background:#2a4a7a; }
+.item-row .iname { flex:1; font-size:0.85em; }
+.item-row .icoord { font-size:0.75em; color:#aac; font-family:monospace; }
+
+/* 仮ユニット（駒） - 本物の艦船駒と同じサイズ(4.5%幅)。中心が座標。 */
+.marker {
+  position:absolute; cursor:move;
+  width:4.5%;            /* index.htmlの艦船駒と同じ%幅 */
+  aspect-ratio:1/1;      /* 正方形 */
+  border:2px solid #ffcc44; border-radius:3px;
+  background:rgba(0,80,150,0.9); color:#ffcc44;
+  font-size:9px; font-weight:bold;
+  display:flex; align-items:center; justify-content:center; text-align:center;
+  padding:1px; word-break:break-all; line-height:1.05;
+  transform:translate(-50%,-50%); /* 中心揃え */
+  box-shadow:0 0 4px #000;
+  user-select:none; overflow:hidden;
+}
+.marker.sel { border-color:#ff4444; background:rgba(150,0,0,0.9); color:#ff4444; z-index:5; }
+.marker:hover { box-shadow:0 0 8px #ffcc44; z-index:5; }
+
+#hoverInfo {
+  position:fixed; background:rgba(0,0,0,0.85); color:#ffcc44;
+  padding:4px 8px; border-radius:3px; font-family:monospace; font-size:0.85em;
+  pointer-events:none; z-index:1000; display:none;
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>📍 座標エディタ（ドラッグで配置）</h1>
+  <span id="info" style="font-size:0.85em;color:#ffcc88;"></span>
+  <span style="flex:1;"></span>
+  <a href="index.html" style="color:#88ccff;font-size:0.85em;">← ゲーム画面へ</a>
+  <label style="font-size:0.85em;">
+    ズーム:
+    <button class="zbtn" onclick="setZoom(-10)">−</button>
+    <input type="range" id="zoomSlider" min="20" max="150" value="60" step="5" style="width:120px;vertical-align:middle;">
+    <button class="zbtn" onclick="setZoom(10)">＋</button>
+    <span id="zoomLabel">60%</span>
+  </label>
+</div>
+
+<div id="main">
+  <div id="sidePane">
+    <h3>項目を追加</h3>
+    <input type="text" id="newName" placeholder="例: NorthSea / Germany / Turn1Allied" />
+    <button class="act" onclick="addItem()" style="margin-top:4px;width:100%;">追加（地図中央に置く）</button>
+
+    <h3 style="margin-top:14px;">項目一覧</h3>
+    <div style="font-size:0.75em;color:#aac;margin-bottom:4px;">駒をドラッグして配置。座標は駒の中心。</div>
+    <div id="itemList"></div>
+
+    <h3 style="margin-top:14px;">エクスポート</h3>
+    <button class="act" onclick="exportJSON()">JSON出力</button>
+    <button class="act" onclick="copyJSON()">コピー</button>
+    <button class="act" onclick="loadJSON()">JSON読込</button>
+    <button class="act" onclick="clearAll()" style="background:#883333;">全削除</button>
+    <textarea id="jsonArea" rows="10" style="margin-top:6px;"></textarea>
+  </div>
+
+  <div id="mapArea">
+    <div id="mapInner">
+      <img id="mapImg" src="../WAS24/images/war_at_sea_board.gif" alt="Map">
+    </div>
+  </div>
+</div>
+
+<div id="hoverInfo"></div>
+
+<script>
+const MAP_W = 1593;
+const STORAGE_KEY = 'wasEditor_items';
+let items = []; // [{name, x, y}]  座標は駒の中心(%)
+let selectedIdx = -1;
+
+// ---- ズーム ----
+const slider = document.getElementById('zoomSlider');
+const zlabel = document.getElementById('zoomLabel');
+const mapImg = document.getElementById('mapImg');
+function applyZoom(){
+  const v = +slider.value;
+  zlabel.textContent = v + '%';
+  mapImg.style.width = (MAP_W * v / 100) + 'px';
+}
+function setZoom(d){
+  slider.value = Math.max(+slider.min, Math.min(+slider.max, +slider.value + d));
+  applyZoom();
+}
+slider.addEventListener('input', applyZoom);
+applyZoom();
+
+// ---- 項目操作 ----
+function loadFromStorage(){
+  try{
+    const s = localStorage.getItem(STORAGE_KEY);
+    if(s) items = JSON.parse(s);
+  }catch(e){}
+}
+function saveToStorage(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+}
+function addItem(){
+  const name = document.getElementById('newName').value.trim();
+  if(!name) return;
+  // 地図中央に配置
+  items.push({ name, x:50, y:50 });
+  document.getElementById('newName').value = '';
+  selectedIdx = items.length - 1;
+  saveToStorage(); render();
+}
+function selectItem(i){ selectedIdx = i; render(); }
+function deleteItem(i){
+  if(!confirm('削除しますか: '+items[i].name)) return;
+  items.splice(i,1);
+  if(selectedIdx === i) selectedIdx = -1;
+  else if(selectedIdx > i) selectedIdx--;
+  saveToStorage(); render();
+}
+function clearAll(){
+  if(!confirm('全項目を削除しますか？')) return;
+  items = []; selectedIdx = -1;
+  saveToStorage(); render();
+}
+
+// ---- ドラッグ ----
+let dragIdx = -1;
+let dragOffsetX = 0, dragOffsetY = 0;
+function onMarkerDown(e, i){
+  e.preventDefault();
+  dragIdx = i;
+  selectedIdx = i;
+  // クリック時のオフセット（駒の中心からの差分）
+  const r = mapImg.getBoundingClientRect();
+  const px = (items[i].x/100) * r.width + r.left;
+  const py = (items[i].y/100) * r.height + r.top;
+  dragOffsetX = e.clientX - px;
+  dragOffsetY = e.clientY - py;
+  render();
+}
+document.addEventListener('mousemove', (e)=>{
+  if(dragIdx < 0) return;
+  const r = mapImg.getBoundingClientRect();
+  const x = ((e.clientX - dragOffsetX) - r.left) / r.width * 100;
+  const y = ((e.clientY - dragOffsetY) - r.top) / r.height * 100;
+  items[dragIdx].x = +Math.max(0, Math.min(100, x)).toFixed(2);
+  items[dragIdx].y = +Math.max(0, Math.min(100, y)).toFixed(2);
+  render();
+});
+document.addEventListener('mouseup', ()=>{
+  if(dragIdx >= 0){ saveToStorage(); }
+  dragIdx = -1;
+});
+
+// ---- ホバー時座標表示 ----
+const hoverInfo = document.getElementById('hoverInfo');
+mapImg.addEventListener('mousemove', (e)=>{
+  const r = mapImg.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * 100;
+  const y = (e.clientY - r.top) / r.height * 100;
+  hoverInfo.style.display = 'block';
+  hoverInfo.style.left = (e.clientX + 12) + 'px';
+  hoverInfo.style.top = (e.clientY + 12) + 'px';
+  hoverInfo.textContent = `x:${x.toFixed(2)}% y:${y.toFixed(2)}%`;
+});
+mapImg.addEventListener('mouseleave', ()=>{ hoverInfo.style.display = 'none'; });
+
+// ---- 描画 ----
+function render(){
+  // リスト
+  const list = document.getElementById('itemList');
+  list.innerHTML = items.map((it,i)=>{
+    const sel = i===selectedIdx ? ' sel' : '';
+    const coord = `${it.x.toFixed(2)}, ${it.y.toFixed(2)}`;
+    return `<div class="item-row${sel}" onclick="selectItem(${i})">
+      <span class="iname">${it.name}</span>
+      <span class="icoord">${coord}</span>
+      <button class="del" onclick="event.stopPropagation();deleteItem(${i})">×</button>
+    </div>`;
+  }).join('');
+
+  // マーカー（仮ユニット）
+  document.querySelectorAll('.marker').forEach(e=>e.remove());
+  const inner = document.getElementById('mapInner');
+  items.forEach((it,i)=>{
+    const div = document.createElement('div');
+    div.className = 'marker' + (i===selectedIdx?' sel':'');
+    div.style.left = it.x + '%';
+    div.style.top  = it.y + '%';
+    div.textContent = it.name;
+    div.addEventListener('mousedown', (e)=> onMarkerDown(e, i));
+    inner.appendChild(div);
+  });
+
+  // 情報
+  document.getElementById('info').textContent = `項目:${items.length}`;
+}
+
+// ---- エクスポート/インポート ----
+function exportJSON(){
+  document.getElementById('jsonArea').value = JSON.stringify(items, null, 2);
+}
+function copyJSON(){
+  exportJSON();
+  navigator.clipboard.writeText(document.getElementById('jsonArea').value);
+  alert('コピーしました');
+}
+function loadJSON(){
+  const t = document.getElementById('jsonArea').value;
+  try{
+    const arr = JSON.parse(t);
+    if(Array.isArray(arr)){ items = arr; saveToStorage(); render(); }
+  }catch(e){ alert('JSONエラー: '+e.message); }
+}
+
+loadFromStorage();
+render();
+</script>
+</body>
+</html>

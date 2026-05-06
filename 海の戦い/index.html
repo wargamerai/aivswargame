@@ -1,0 +1,4407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>海の戦い - War at Sea</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+
+#topbar {
+  display:flex; align-items:center; gap:10px; padding:6px 10px;
+  background:#13243a; border-bottom:2px solid #234; font-size:0.9em;
+  flex-shrink:0;
+}
+#topbar h1 { font-size:1em; color:#88ccff; margin-right:6px; }
+
+#main { flex:1; display:flex; min-height:0; }
+
+#leftPane {
+  width:260px; background:#13243a; border-right:1px solid #234;
+  overflow-y:auto; font-size:0.85em; flex-shrink:0;
+}
+#leftPane h3 {
+  padding:4px 8px; background:#3a1a2a; color:#ff8888;
+  border-bottom:1px solid #234; font-size:0.95em;
+}
+
+#rightPane {
+  width:260px; background:#13243a; border-left:1px solid #234;
+  overflow-y:auto; font-size:0.85em; flex-shrink:0;
+}
+#rightPane h3 {
+  padding:4px 8px; background:#1a3a5a; color:#88ccff;
+  border-bottom:1px solid #234; font-size:0.95em;
+}
+
+.ship-entry {
+  padding:3px 6px; border-bottom:1px dotted #234;
+  display:flex; align-items:center; gap:6px; cursor:pointer;
+}
+.ship-entry:hover { background:#1a3a5a; }
+.ship-entry.sel {
+  background:#2a4a7a;
+  border-left:4px solid #ffcc44;
+  padding-left:6px;
+}
+.ship-entry img { width:28px; height:28px; image-rendering:pixelated; }
+.ship-entry .name { font-weight:bold; font-size:0.85em; }
+.ship-entry .spec { font-size:0.75em; color:#aac; }
+.ship-entry.sunk {
+  opacity:0.5; background:#3a0a0a; border-left:3px solid #ff4444;
+}
+.ship-entry.sunk .name { text-decoration:line-through; color:#ff8888; }
+.ship-entry.sunk img { filter:grayscale(80%); }
+
+.locBtn {
+  background:#234; color:#fff; border:1px solid #456;
+  padding:3px 8px; border-radius:3px; cursor:pointer;
+  font-size:0.8em;
+}
+.locBtn:hover { background:#2266cc; }
+.locBtn.sel { background:#3377dd; border-color:#88ccff; font-weight:bold; }
+.locBtn.port { border-color:#6a8; }
+.locBtn.sea  { border-color:#68a; }
+
+#mapArea {
+  flex:1; overflow:auto; background:#051020; position:relative;
+}
+#mapInner { display:inline-block; position:relative; }
+#mapInner img#mapImg { max-width:none; display:block; }
+.tt-ship {
+  position:absolute;
+  transform:translate(-50%,-50%); /* 座標は駒の中心 */
+  cursor:pointer;
+}
+.tt-ship img {
+  display:block; image-rendering:pixelated;
+}
+body.hide-units .tt-ship { display:none; }
+body.hide-units .control-marker { display:none; }
+
+.control-marker {
+  position:absolute;
+  transform:translate(-50%,-50%);
+  pointer-events:none; z-index:0;
+}
+.control-marker img { display:block; opacity:0.85; }
+
+/* 拡大モーダル */
+#modal {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,0.85); display:none;
+  align-items:center; justify-content:center; z-index:1000;
+}
+#modal.show { display:flex; }
+.modal-box {
+  background:#13243a; border:2px solid #234; border-radius:8px;
+  padding:16px 20px; max-width:80%; max-height:85%;
+  overflow:auto; min-width:600px;
+}
+.modal-box h3 { color:#88ccff; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #234; }
+.modal-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:6px 20px;
+}
+.modal-ship {
+  display:flex; align-items:center; gap:12px; padding:6px 4px;
+  border-bottom:1px dotted #234;
+}
+.modal-ship img { width:64px; height:64px; image-rendering:pixelated; }
+.modal-ship .info { flex:1; }
+.modal-ship .info .nm { font-weight:bold; font-size:1em; color:#fff; }
+.modal-ship .info .sp { font-size:0.85em; color:#aac; }
+.modal-close {
+  background:#2266cc; color:#fff; border:none; padding:6px 14px;
+  border-radius:3px; cursor:pointer; font-weight:bold; margin-top:10px;
+}
+
+/* 戦闘モーダル */
+#combatModal, #axisReturnModal {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  background:rgba(0,0,0,0.9); display:none;
+  align-items:center; justify-content:center; z-index:1000;
+}
+#combatModal.show, #axisReturnModal.show { display:flex; }
+#axisReturnTable { width:100%; border-collapse:collapse; color:#eee; font-size:0.9em; }
+#axisReturnTable th { background:#234; color:#cde; padding:4px 8px; text-align:left; border-bottom:1px solid #456; }
+#axisReturnTable td { padding:4px 8px; border-bottom:1px solid #234; vertical-align:middle; }
+#axisReturnTable tr:hover td { background:#1a2230; }
+#axisReturnTable .ret-btn { background:#345; color:#fff; border:1px solid #567; padding:3px 8px; margin:0 2px; border-radius:3px; cursor:pointer; font-size:0.85em; }
+#axisReturnTable .ret-btn:hover:not(:disabled) { background:#456; border-color:#789; }
+#axisReturnTable .ret-btn.refuel { background:#643; border-color:#864; }
+#axisReturnTable .ret-btn.refuel:hover:not(:disabled) { background:#754; }
+#axisReturnTable .ret-btn:disabled { background:#222; color:#666; border-color:#333; cursor:not-allowed; }
+#axisReturnTable .ret-result { color:#ffcc44; font-weight:bold; }
+.combat-box {
+  background:#1a2a3a; border:2px solid #ffcc44; border-radius:8px;
+  padding:14px 18px; width:90vw; max-width:1100px; max-height:88vh;
+  display:flex; flex-direction:column;
+}
+.combat-box h3 { color:#ffcc44; margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid #234; }
+#phaseLabel {
+  font-size:1.1em; color:#ffcc44; padding:6px 10px; margin:6px 0;
+  background:rgba(255,204,68,0.1); border-radius:4px; min-height:1.5em;
+}
+.combat-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; flex:1; overflow-y:auto; }
+.combat-col h4 {
+  color:#fff; font-size:0.9em; padding:4px 8px; margin-bottom:6px;
+  border-radius:3px;
+}
+.combat-col.allies h4 { background:#2a4a7a; }
+.combat-col.axis h4   { background:#7a2a2a; }
+
+.cs-row {
+  display:grid;
+  grid-template-columns:36px minmax(110px,auto) 1fr;
+  grid-template-rows:auto auto;
+  gap:1px 8px; align-items:center;
+  padding:5px 6px; margin-bottom:4px;
+  background:#0a1a2a; border-left:3px solid #234;
+  font-size:0.85em; transition:all .3s;
+}
+.cs-row .cs-img { grid-column:1; grid-row:1/3; }
+.cs-row img { width:36px; height:36px; image-rendering:pixelated; display:block; }
+.cs-row .cs-name { grid-column:2; grid-row:1; font-weight:bold; white-space:nowrap; }
+.cs-row .cs-status { grid-column:2; grid-row:2; font-size:0.85em; color:#cca; white-space:nowrap; }
+.cs-row .cs-dice {
+  grid-column:3; grid-row:1/3;
+  display:flex; align-items:center; gap:3px; flex-wrap:wrap;
+  min-width:0;
+}
+.cs-row .cs-dice:empty::before {
+  content:''; display:inline-block;
+}
+.cs-row.firing { background:#1a3a5a; border-left-color:#88ccff; }
+.cs-row.target { background:#3a1a2a; border-left-color:#ff6666; }
+.cs-row.sunk   { opacity:0.4; background:#3a0a0a; }
+.cs-row.disabled { opacity:0.6; background:#3a3a1a; border-left-color:#ffcc44; }
+.cs-row.selectable {
+  cursor:pointer;
+  outline:2px solid #ffcc44;
+  background:#2a3a5a;
+}
+.cs-row.selectable:hover {
+  background:#3a5a8a;
+  outline-color:#ffff66;
+}
+
+/* PG風 ダイス */
+.dice {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:34px; height:34px; line-height:1;
+  background:#111; border:2px solid #c8a020; border-radius:6px;
+  font-size:1.3em; font-weight:bold; color:#ff0;
+  margin:0 2px; transition:border-color .15s, color .15s;
+}
+.dice.hit  { color:#ff6666; border-color:#ff6666; box-shadow:0 0 8px rgba(255,102,102,0.5); }
+.dice.dis  { color:#ffcc44; border-color:#ffcc44; }
+.dice.miss { color:#888;    border-color:#666;    }
+.dice.dmg  { color:#ff8844; border-color:#ff8844; box-shadow:0 0 6px rgba(255,136,68,0.5); }
+.dice.rolling {
+  animation: shake 0.08s infinite;
+  border-color:#f44; color:#fff;
+}
+@keyframes shake {
+  0%,100% { transform:rotate(0deg) scale(1); }
+  25% { transform:rotate(-10deg) scale(1.1); }
+  75% { transform:rotate(10deg) scale(1.1); }
+}
+@keyframes flashHit {
+  0%, 100% { background:#3a1a2a; }
+  50% { background:#aa3333; }
+}
+.cs-row.flash { animation:flashHit .4s; }
+.result-label {
+  display:inline-block; padding:3px 10px; border-radius:4px;
+  font-weight:bold; font-size:0.95em; margin-left:6px;
+}
+.result-label.miss     { background:#333;     color:#888; }
+.result-label.disabled { background:#6a5a20;  color:#fd8; }
+.result-label.hit      { background:#6a2020;  color:#f88; }
+.result-label.sunk     { background:#800;     color:#fff; }
+
+.zbtn {
+  background:#234; color:#fff; border:1px solid #456;
+  width:28px; height:24px; border-radius:3px; cursor:pointer;
+  font-weight:bold; font-size:1em;
+}
+.zbtn:hover { background:#2266cc; }
+
+.ph-cell {
+  padding:2px 7px; background:#1a2a3a; color:#aac;
+  border:1px solid #345; border-radius:3px; white-space:nowrap;
+  font-size:0.85em;
+}
+.ph-cell.current { background:#ffcc44; color:#000; font-weight:bold; border-color:#fff; }
+.ph-cell.done { background:#1a3a1a; color:#8c8; border-color:#4a6a4a; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>⚓ 海の戦い - War at Sea</h1>
+  <label style="font-size:0.85em;">
+    ターン:
+    <button class="zbtn" onclick="changeTurn(-1)">−</button>
+    <span id="turnLabel" style="display:inline-block;min-width:24px;text-align:center;font-weight:bold;color:#ffcc44;">1</span>
+    <button class="zbtn" onclick="changeTurn(1)">＋</button>
+  </label>
+  <div id="phaseBar" style="display:flex;gap:2px;flex-wrap:wrap;font-size:0.7em;margin-left:8px;"></div>
+  <button class="zbtn" onclick="advancePhase()" style="width:auto;padding:0 8px;font-size:0.8em;">次フェイズ▶</button>
+  <button class="zbtn" onclick="endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;">ターン終了</button>
+  <span style="font-size:0.85em;color:#ffcc44;">POC:<span id="pocVal" style="font-weight:bold;margin-left:4px;">0</span></span>
+  <span style="flex:1;"></span>
+  <label style="font-size:0.85em;">
+    ズーム:
+    <button class="zbtn" onclick="setZoom(-10)">−</button>
+    <input type="range" id="zoomSlider" min="20" max="150" value="70" step="5" style="width:120px;vertical-align:middle;">
+    <button class="zbtn" onclick="setZoom(10)">＋</button>
+    <span id="zoomLabel">70%</span>
+  </label>
+  <button class="zbtn" id="toggleUnits" onclick="toggleUnits()" style="width:auto;padding:0 10px;font-size:0.85em;">駒表示</button>
+  <button class="zbtn" onclick="showCombatLog()" style="width:auto;padding:0 10px;font-size:0.85em;background:#557;display:none;">戦闘ログ</button>
+  <label style="font-size:0.85em;margin-left:8px;display:none;">プレイ陣営:
+    <select id="humanSideSelect" onchange="setHumanSide(this.value)" style="font-size:0.85em;">
+      <option value="axis">枢軸</option>
+      <option value="allies" disabled>連合（準備中）</option>
+    </select>
+  </label>
+</div>
+
+<div id="modal" onclick="if(event.target.id==='modal')closeModal()"><div class="modal-box" id="modalBox"></div></div>
+<div id="combatLogModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#0a1a2a;border:2px solid #456;border-radius:6px;width:80%;max-width:800px;max-height:80vh;display:flex;flex-direction:column;">
+    <h3 style="margin:0;padding:8px 12px;background:#234;color:#cde;">戦闘ログ</h3>
+    <div id="combatLogBody" style="overflow-y:auto;flex:1;padding:6px 8px;color:#eee;"></div>
+    <div style="padding:6px 12px;text-align:right;background:#123;">
+      <button onclick="hideCombatLog()" style="background:#456;color:#fff;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;">閉じる</button>
+    </div>
+  </div>
+</div>
+<style>#combatLogModal.show{display:flex !important;}</style>
+<div id="axisReturnModal">
+  <div class="combat-box" style="max-width:900px;">
+    <h3>枢軸艦 帰還フェイズ</h3>
+    <div style="overflow-y:auto;flex:1;padding:6px 0;">
+      <table id="axisReturnTable">
+        <thead><tr><th>艦名</th><th>現在地</th><th>帰還先 / 洋上補給</th></tr></thead>
+        <tbody id="axisReturnBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="combatModal">
+  <div class="combat-box">
+    <h3 id="combatTitle">戦闘解決</h3>
+    <div id="phaseLabel">―</div>
+    <div class="combat-grid">
+      <div class="combat-col allies"><h4>連合軍</h4><div id="alliesShipList"></div></div>
+      <div class="combat-col axis"><h4>枢軸軍</h4><div id="axisShipList"></div></div>
+    </div>
+    <div style="margin-top:8px;text-align:right;">
+      <button onclick="runAICombat()" style="background:#a55;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;margin-right:8px;">AI戦闘実行</button>
+      <button onclick="runFastCombat()" style="background:#a85;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;margin-right:8px;">高速戦闘</button>
+      <button id="combatConfirmBtn" onclick="onCombatConfirm()" style="background:#585;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;margin-right:8px;display:none;">戦闘確認</button>
+      <button id="roundEndBtn" onclick="onRoundEnd()" style="background:#558;color:#fff;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;margin-right:8px;display:none;">ラウンド終了</button>
+      <button class="modal-close" onclick="closeCombatModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="leftPane">
+    <h3>枢軸軍 AXIS</h3>
+    <div id="axisList"></div>
+    <h3 style="margin-top:8px;">連合軍 ALLIES</h3>
+    <div id="alliesList"></div>
+  </div>
+  <div id="mapArea">
+    <div id="mapInner">
+      <img id="mapImg" src="../WAS24/images/war_at_sea_board.gif" alt="War at Sea board">
+    </div>
+  </div>
+  <div id="rightPane">
+    <div id="phaseSwitcher" style="display:flex;padding:4px 6px;gap:4px;background:#0a1a2a;border-bottom:1px solid #234;">
+      <button class="locBtn" id="phaseMoveBtn"   onclick="setPhase('move')"   style="flex:1;font-weight:bold;">移動</button>
+      <button class="locBtn" id="phaseCombatBtn" onclick="setPhase('combat')" style="flex:1;font-weight:bold;">戦闘</button>
+    </div>
+
+    <!-- 移動フェイズ -->
+    <div id="movePane">
+      <h3>港湾</h3>
+      <div id="portButtons" style="display:flex;flex-wrap:wrap;gap:3px;padding:4px 6px;"></div>
+      <h3 id="locTitle" style="margin-top:6px;">艦船一覧</h3>
+      <div style="padding:2px 6px;display:flex;gap:4px;">
+        <button class="locBtn" onclick="selectAllShipsHere()" style="font-size:0.75em;">全艦選択</button>
+      </div>
+      <div id="locShipList" style="padding:0 4px;"></div>
+      <h3 style="margin-top:6px;">移動先</h3>
+      <div id="destButtons" style="display:flex;flex-wrap:wrap;gap:3px;padding:4px 6px;"></div>
+      <div id="moveStatus" style="padding:4px 6px;font-size:0.8em;color:#ffcc88;"></div>
+      <div style="padding:4px 6px;display:flex;gap:6px;">
+        <button class="locBtn" style="background:#2266cc;font-weight:bold;padding:5px 12px;" onclick="executeMove()">実行</button>
+        <button class="locBtn" onclick="clearSelection()">解除</button>
+      </div>
+      <h3 style="margin-top:6px;display:none;">連合軍AI</h3>
+      <div style="padding:4px 6px;display:none;">
+        <button class="locBtn" style="background:#246;font-weight:bold;padding:5px 12px;width:100%;" onclick="aiAlliedMove()">連合軍AI移動実行</button>
+        <button class="locBtn" style="background:#624;font-weight:bold;padding:5px 12px;width:100%;margin-top:4px;" onclick="runSimulation100()">100回高速シミュレート</button>
+        <div id="aiLog" style="font-size:0.75em;color:#cce;margin-top:4px;max-height:120px;overflow-y:auto;"></div>
+      </div>
+
+      <h3 style="margin-top:6px;display:none;">修理 (13)</h3>
+      <div style="padding:4px 6px;display:none;">
+        <button class="locBtn" style="background:#484;font-weight:bold;padding:5px 12px;" onclick="executeRepair()">修理実行</button>
+        <div id="repairStatus" style="font-size:0.8em;color:#cce;margin-top:4px;"></div>
+      </div>
+      <h3 style="margin-top:6px;">海域リセット</h3>
+      <div id="seaResetButtons" style="display:flex;flex-wrap:wrap;gap:3px;padding:4px 6px;"></div>
+    </div>
+
+    <!-- 戦闘フェイズ -->
+    <div id="combatPane" style="display:none;">
+      <h3>1. Uボート戦闘 (ASW + 反撃)</h3>
+      <div id="uboatCombatList" style="padding:4px 6px;"></div>
+
+      <h3>3. 航空攻撃 (LBA + 空母)</h3>
+      <div style="padding:4px 6px;">
+        <div style="font-size:0.8em;color:#cce;margin-bottom:3px;">連合 (空爆値3, 1回/ターン)</div>
+        <div id="lbaAlliedButtons" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px;"></div>
+        <div style="font-size:0.8em;color:#fcc;margin-bottom:3px;">枢軸 (空爆値3, 1回/ターン)</div>
+        <div id="lbaAxisButtons" style="display:flex;flex-wrap:wrap;gap:3px;"></div>
+      </div>
+
+      <h3>4. 水上戦闘</h3>
+      <div id="surfaceSeaList" style="padding:4px 6px;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="battle.js"></script>
+<script>
+// === 初期配置（ship.location と ship.homePort をセット） ===
+function initShipLocations(){
+  SHIPS.forEach(s=>{
+    if(s.country==='US' && s.enterTurn) s.location = 'T' + s.enterTurn;
+    else if(s.country==='US') s.location = 'USA';
+    else if(s.country==='UK' && !s.enterTurn) s.location = 'England';
+    else if(s.country==='DE' && !s.enterTurn) s.location = 'Germany';
+    else if(s.country==='IT' && !s.enterTurn) s.location = 'Italy';
+    else if(s.enterTurn) s.location = 'T' + s.enterTurn;
+    else s.location = null;
+    s.homePort = s.location;
+    // 戦闘ステータス
+    s.damage = 0;
+    s.disabled = false;
+    s.sunk = false;
+    s.atkOrig = s.atk;
+    s.spdOrig = s.spd;
+    if(s.country === 'US') s.usEntered = false;
+  });
+  // === マルタ初期配置: 速力3の戦艦7隻 ===
+  const setMalta = s => { s.location = 'Malta'; s.homePort = 'Malta'; };
+  SHIPS.filter(s => s.country === 'UK' && !s.enterTurn && s.type === 'BB' && s.spd === 3).forEach(setMalta);
+}
+initShipLocations();
+
+// === 左パネル：艦船一覧（陣営別） ===
+function renderSideList(side, elId){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  const ships = SHIPS.filter(s => s.side === side);
+  const byCountry = {};
+  ships.forEach(s => { (byCountry[s.country] ||= []).push(s); });
+  let html = '';
+  for(const country in byCountry){
+    html += `<div style="padding:3px 6px;background:#1a2a3a;color:#cde;font-size:0.8em;">${country}</div>`;
+    byCountry[country].forEach(s => {
+      const enter = s.enterTurn ? ` (T${s.enterTurn})` : '';
+      const cls = s.sunk ? ' sunk' : '';
+      let status = '';
+      if(s.sunk) status = ' <span style="color:#ff4444;font-weight:bold;">[撃沈]</span>';
+      else if(s.damage > 0) status = ` <span style="color:#fa8;">[損害${s.damage}]</span>`;
+      html += `<div class="ship-entry${cls}">
+        <img src="../WAS24/images/${s.file}" alt="${s.name}">
+        <div>
+          <div class="name">${s.name}${enter}${status}</div>
+          <div class="spec">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
+        </div>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+function renderAxisList(){ renderSideList('axis', 'axisList'); }
+function renderAlliesList(){ renderSideList('allies', 'alliesList'); }
+renderAxisList();
+renderAlliesList();
+
+// === 戦闘ログ ===
+const combatLog = []; // [{turn, sea, type, lines:[]}]
+let _curLog = null;
+function startCombatLogEntry(sea, type){
+  _curLog = { turn: currentTurn, sea: sea || '', type: type || '', lines: [] };
+  combatLog.push(_curLog);
+}
+function logCombatLine(text){
+  if(_curLog) _curLog.lines.push(text);
+}
+function endCombatLogEntry(){
+  if(_curLog && !_curLog.lines.length){
+    // 空エントリは破棄
+    const idx = combatLog.indexOf(_curLog);
+    if(idx >= 0) combatLog.splice(idx, 1);
+  }
+  _curLog = null;
+}
+function showCombatLog(){
+  const modal = document.getElementById('combatLogModal');
+  const body = document.getElementById('combatLogBody');
+  if(!combatLog.length){
+    body.innerHTML = '<div style="padding:10px;color:#aac;">戦闘ログなし</div>';
+  } else {
+    body.innerHTML = combatLog.map(entry => {
+      const head = `<div style="background:#234;color:#cde;padding:4px 8px;font-weight:bold;margin-top:6px;">T${entry.turn} ${entry.sea} - ${entry.type}</div>`;
+      const lines = entry.lines.map(l => `<div style="padding:2px 12px;font-size:0.9em;">${l}</div>`).join('');
+      return head + lines;
+    }).join('');
+  }
+  modal.classList.add('show');
+}
+function hideCombatLog(){ document.getElementById('combatLogModal').classList.remove('show'); }
+
+// === ターン ===
+let currentTurn = 1;
+let aiMode = false; // AI戦闘実行中は目標選択を自動化
+let humanSide = 'axis'; // 人間プレイヤーの陣営 ('axis' or 'allies')
+let aiSide = 'allies'; // AI 陣営 (humanSide の反対)
+function setHumanSide(side){
+  humanSide = side;
+  aiSide = (side === 'axis') ? 'allies' : 'axis';
+  if(typeof renderPortButtons === 'function') renderPortButtons();
+}
+let italySurrendered = false; // ターン8初めの接収ダイス判定で確定
+function changeTurn(d){
+  currentTurn = Math.max(1, Math.min(8, currentTurn + d));
+  document.getElementById('turnLabel').textContent = currentTurn;
+  renderPortButtons(); renderDestButtons();
+}
+
+// === フェイズ ===
+const PHASE_NAMES = [
+  '1.増援配置','2.連合移動','3.枢軸移動','4.修理',
+  '5.支配除去','6.戦闘','7.支配配置','8.帰還','9.POC'
+];
+let phaseIdx = 1; // 1〜9
+function renderPhaseBar(){
+  const el = document.getElementById('phaseBar');
+  if(!el) return;
+  el.innerHTML = PHASE_NAMES.map((nm, i) => {
+    const id = i + 1;
+    let cls = '';
+    if(id === phaseIdx) cls = 'current';
+    else if(id < phaseIdx) cls = 'done';
+    return `<span class="ph-cell ${cls}">${nm}</span>`;
+  }).join('');
+}
+async function advancePhase(){
+  if(phaseIdx >= 9) return; // 9 (POC) で止まる、ターン終了ボタンで次ターンへ
+  phaseIdx = phaseIdx + 1;
+  renderPhaseBar();
+  // フェイズ進行時の自動処理
+  if(phaseIdx === 2){
+    await aiAlliedMove();
+  } else if(phaseIdx === 4){
+    const log = executeRepair();
+    if(log && log.length){
+      alert('修理結果:\n' + log.map(l => l.replace(/<[^>]+>/g,'')).join('\n'));
+    } else {
+      alert('修理対象艦なし');
+    }
+  } else if(phaseIdx === 5){
+    // 支配除去: 全海域の支配マーカーを除去
+    Object.keys(seaControl).forEach(k => delete seaControl[k]);
+    placeControlMarkers();
+  } else if(phaseIdx === 8){
+    // 地中海の連合艦のうち、イタリア生存艦総数+1 を超える分は England に直接帰還
+    // （phase 8 時点ではイタリア艦は港に戻っているため、生存総数で比較する）
+    const itTotalCount = SHIPS.filter(s => s.country === 'IT' && !s.sunk && !s.removed && s.type !== 'UBOAT').length;
+    const medAllied = SHIPS.filter(s => s.location === 'Mediterranean' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY');
+    const keepMed = itTotalCount + 1;
+    if(medAllied.length > keepMed){
+      const excessShips = medAllied.slice(0, medAllied.length - keepMed);
+      for(const s of excessShips){
+        s.location = 'England';
+        s.atDock = false;
+        console.log(`[帰還超過] ${s.name}: 地中海 → England (イタリア総数${itTotalCount}+1=${keepMed}超過)`);
+      }
+    }
+    // バレンツ海の UK・US 水上艦は England に直接帰還（Russia には行かない、コンボイは除外）
+    const barUkUs = SHIPS.filter(s =>
+      s.location === 'Barents' && !s.sunk && !s.removed &&
+      s.type !== 'CONVOY' && (s.country === 'UK' || s.country === 'US')
+    );
+    for(const s of barUkUs){
+      s.location = 'England';
+      s.atDock = false;
+      console.log(`[帰還] ${s.name}: バレンツ海 → England (${s.country})`);
+    }
+    // Uボートの帰還先は必ず Germany（中立港・France等に行かせない）
+    const allUboats = SHIPS.filter(s =>
+      s.type === 'UBOAT' && !s.sunk && !s.removed &&
+      s.location && SEAS[s.location]
+    );
+    for(const u of allUboats){
+      const from = u.location;
+      u.location = 'Germany';
+      u.atDock = false;
+      console.log(`[帰還] ${u.name}: ${from} → Germany (Uボート専用)`);
+    }
+    // 帰還: 海域の艦を港湾へ
+    const shipsToReturn = SHIPS.filter(s =>
+      s.location && SEAS[s.location] && !s.sunk && !s.removed &&
+      s.type !== 'CONVOY' && s.refuelTurn !== currentTurn
+    );
+    // 連合艦は既存の自動配置
+    const alliesToReturn = shipsToReturn.filter(s => s.side === 'allies');
+    for(const ship of alliesToReturn){
+      const ports = getReturnPorts(ship);
+      if(ports.length === 0){
+        ship.location = ship.homePort || HOME_PORT[ship.country];
+      } else {
+        ship.location = ports.includes(ship.homePort) ? ship.homePort : ports[0];
+      }
+      ship.atDock = false;
+    }
+    // 枢軸艦は新UIで個別選択（港 or 洋上補給）
+    const axisToReturn = shipsToReturn.filter(s => s.side === 'axis');
+    if(axisToReturn.length){
+      await showAxisReturnUI(axisToReturn);
+    }
+    placeAllShips();
+    renderLocShipList(); renderSeaResetButtons();
+  } else if(phaseIdx === 7){
+    // 支配配置: 各海域の支配を判定してマーカー配置
+    // Uボートだけの海域は支配できない（ただし相手の支配は消す = 支配なし扱い）
+    Object.keys(SEAS).forEach(seaKey => {
+      const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk);
+      const al = ships.some(s => s.side === 'allies' && s.type !== 'UBOAT');
+      const ax = ships.some(s => s.side === 'axis' && s.type !== 'UBOAT');
+      const ub = ships.some(s => s.type === 'UBOAT');
+      if(al && !ax && !ub)       seaControl[seaKey] = 'allies';
+      else if(ax && !al)         seaControl[seaKey] = 'axis';
+      else                       seaControl[seaKey] = null; // Uボートのみ含む全ての残りケース
+    });
+    placeControlMarkers();
+  } else if(phaseIdx === 9){
+    // POC計算: 各海域の支配側に加算
+    const pocBefore = poc;
+    console.log('[POC] phase 9 開始: poc=', poc, 'seaControl=', JSON.stringify(seaControl));
+    let delta = 0;
+    Object.keys(seaControl).forEach(seaKey => {
+      const side = seaControl[seaKey];
+      if(side === 'axis')        { delta -= SEAS[seaKey].axis;   console.log(`[POC]   ${seaKey} axis支配 → -${SEAS[seaKey].axis}`); }
+      else if(side === 'allies') { delta += SEAS[seaKey].allies; console.log(`[POC]   ${seaKey} allies支配 → +${SEAS[seaKey].allies}`); }
+      else                       { console.log(`[POC]   ${seaKey} 支配なし(${side}) → 0`); }
+    });
+    poc = Math.max(-10, Math.min(10, poc + delta));
+    console.log(`[POC] phase 9 完了: delta=${delta} poc ${pocBefore} → ${poc}`);
+    updatePOC();
+  }
+}
+function setPhaseIdx(n){
+  phaseIdx = Math.max(1, Math.min(9, n));
+  renderPhaseBar();
+}
+
+// === 右パネル：港湾→艦一覧→移動先 ===
+let selectedLoc = null;        // 一覧表示中の場所
+let selectedShipIds = [];      // 移動対象艦（複数）
+let selectedDest = null;       // 移動先
+
+const PORT_LABEL = {
+  USA:'米国', England:'英国', Malta:'マルタ', Russia:'ロシア',
+  Leningrad:'レニングラード', Germany:'ドイツ', France:'フランス',
+  Italy:'イタリア', Neutral:'中立港'
+};
+const SEA_LABEL = {
+  NorthAtlantic:'北大西洋', Barents:'バレンツ海', NorthSea:'北海',
+  Baltic:'バルト海', Mediterranean:'地中海', SouthAtlantic:'南大西洋'
+};
+const SEA_COLOR = {
+  NorthAtlantic: '#3b6db5',
+  Barents:       '#5aa5b8',
+  NorthSea:      '#b58f3b',
+  Baltic:        '#9a4f9a',
+  Mediterranean: '#6fa53b',
+  SouthAtlantic: '#a55f4f'
+};
+
+function locLabel(loc){
+  if(!loc) return '';
+  if(loc.startsWith('T')) return `ターン${loc.slice(1)}`;
+  return PORT_LABEL[loc] || SEA_LABEL[loc] || loc;
+}
+
+function renderPortButtons(){
+  const el = document.getElementById('portButtons');
+  const hidePortsAxis = ['USA', 'England', 'Malta', 'Russia', 'Leningrad'];
+  const hidePortsAllies = ['Germany', 'France', 'Italy'];
+  const hideSeasAxis = ['Mediterranean', 'Baltic'];
+  const hideSeasAllies = [];
+  const hidePortList = humanSide === 'axis' ? hidePortsAxis : hidePortsAllies;
+  const hideSeaList = humanSide === 'axis' ? hideSeasAxis : hideSeasAllies;
+  const portBtns = Object.keys(PORT_LABEL)
+    .filter(k => !hidePortList.includes(k))
+    .map(k =>{
+      const port = PORTS[k];
+      const usable = port.available.includes(currentTurn);
+      const cls = usable ? '' : ' style="opacity:0.4;"';
+      const sel = selectedLoc===k ? ' sel' : '';
+      return `<button class="locBtn port${sel}"${cls} onclick="selectLoc('${k}')">${PORT_LABEL[k]}</button>`;
+    }).join('');
+  const seaBtns = Object.keys(SEA_LABEL)
+    .filter(k => !hideSeaList.includes(k))
+    .map(k =>{
+      const sel = selectedLoc===k ? ' sel' : '';
+      return `<button class="locBtn sea${sel}" style="background:${SEA_COLOR[k]};border-color:${SEA_COLOR[k]};color:#fff;" onclick="selectLoc('${k}')">${SEA_LABEL[k]}</button>`;
+    }).join('');
+  el.innerHTML = `<div style="display:flex;gap:6px;width:100%;">
+    <div style="display:flex;flex-direction:column;gap:3px;flex:1;">${portBtns}</div>
+    <div style="display:flex;flex-direction:column;gap:3px;flex:1;">${seaBtns}</div>
+  </div>`;
+}
+
+function renderLocShipList(){
+  const title = document.getElementById('locTitle');
+  const el = document.getElementById('locShipList');
+  if(!selectedLoc){
+    title.textContent = '艦船一覧';
+    el.innerHTML = '<div style="padding:6px;color:#aac;font-size:0.8em;">港湾を選択してください</div>';
+    return;
+  }
+  title.textContent = `${locLabel(selectedLoc)} の艦船 (複数選択可)`;
+  // 現在ここにいる艦 + このターンここから出た艦（消さない）
+  const ships = SHIPS.filter(s =>
+    s.location === selectedLoc ||
+    (s.movedThisTurn && s.originThisTurn === selectedLoc)
+  );
+  if(!ships.length){
+    el.innerHTML = '<div style="padding:6px;color:#aac;font-size:0.8em;">なし</div>';
+    return;
+  }
+  el.innerHTML = ships.map(s=>{
+    const sel = selectedShipIds.includes(s.id) ? ' sel' : '';
+    const dmgText = s.damage > 0 ? ` <span style="color:#fa8;">[損害${s.damage}]</span>` : '';
+    if(s.failedMove){
+      return `<div class="ship-entry" style="opacity:0.4;cursor:not-allowed;background:#3a2a2a;">
+        <img src="../WAS24/images/${s.file}">
+        <div>
+          <div class="name">${s.name}${dmgText} <span style="color:#f88;">[移動失敗・配置不可]</span></div>
+          <div class="spec">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
+        </div>
+      </div>`;
+    }
+    if(s.movedThisTurn && s.location !== selectedLoc){
+      // 移動済み: 移動先の海域色で表示
+      const bg = SEA_COLOR[s.location] || '#1a3a2a';
+      return `<div class="ship-entry" style="background:${bg};cursor:default;">
+        <img src="../WAS24/images/${s.file}">
+        <div>
+          <div class="name" style="color:#fff;">${s.name}${dmgText} <span style="font-size:0.85em;">→ ${locLabel(s.location)}</span></div>
+          <div class="spec" style="color:#eef;">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
+        </div>
+      </div>`;
+    }
+    return `<div class="ship-entry${sel}" onclick="toggleShip('${s.id}')">
+      <img src="../WAS24/images/${s.file}">
+      <div>
+        <div class="name">${s.name}${dmgText}</div>
+        <div class="spec">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getValidDests(){
+  if(!selectedLoc) return { seas:[], seas2:[], ports:[] };
+  const firstShip = selectedShipIds.length ? SHIPS.find(s => s.id === selectedShipIds[0]) : null;
+  const isUboat = firstShip && firstShip.type === 'UBOAT';
+
+  // 6.5 Uボートはどこにでも配置可
+  if(isUboat){
+    return {
+      seas: Object.keys(SEAS),
+      seas2: [],
+      ports: ['Germany']
+    };
+  }
+
+  const isPort = !!PORTS[selectedLoc];
+  const isSea  = !!SEAS[selectedLoc];
+  let seas = [], seas2 = [], ports = [];
+  if(isPort){
+    seas = PORT_SEAS[selectedLoc] || [];
+    seas.forEach(s1 => {
+      (SEA_ADJ[s1] || []).forEach(s2 => {
+        if(s2 !== selectedLoc && !seas.includes(s2) && !seas2.includes(s2)){
+          seas2.push(s2);
+        }
+      });
+    });
+  } else if(isSea){
+    seas = SEA_ADJ[selectedLoc] || [];
+    ports = Object.keys(PORT_SEAS).filter(p => PORT_SEAS[p].includes(selectedLoc));
+  }
+  // 地中海はどこからでも直接移動可
+  if(selectedLoc !== 'Mediterranean' && !seas.includes('Mediterranean')){
+    seas.push('Mediterranean');
+  }
+
+  // 6.6 バルト海はロシアとドイツの艦のみ（艦選択時のみ判定）
+  if(firstShip){
+    const country = firstShip.country;
+    const allowBaltic = country === 'RU' || country === 'DE';
+    if(!allowBaltic){
+      seas  = seas.filter(s => s !== 'Baltic');
+      seas2 = seas2.filter(s => s !== 'Baltic');
+    }
+  }
+  // 14.3 船団は2海域同時移動不可、海上での2ターン目以降のみバレンツ海可
+  if(firstShip && firstShip.type === 'CONVOY'){
+    seas2 = []; // 2海域移動不可
+    if(!firstShip.turnsAtSea || firstShip.turnsAtSea < 1){
+      seas = seas.filter(s => s !== 'Barents');
+    }
+  }
+  // 16.1 給油成功ドイツ艦は次ターン全海域配置可（海域→海域 直接）
+  if(firstShip && firstShip.refuelTurn === currentTurn - 1){
+    seas = Object.keys(SEAS);
+    seas2 = [];
+  }
+  // 15.1 ロシア艦はバルト海のみ
+  if(firstShip && firstShip.country === 'RU'){
+    seas = seas.filter(s => s === 'Baltic');
+    seas2 = seas2.filter(s => s === 'Baltic');
+    ports = ports.filter(p => p === 'Leningrad');
+  }
+  // 15.4 米国艦は北大西洋と米国のみ（船団除く: 船団は欧州へ向かう）
+  if(firstShip && firstShip.country === 'US' && firstShip.type !== 'CONVOY'){
+    seas = seas.filter(s => s === 'NorthAtlantic');
+    seas2 = [];
+    ports = ports.filter(p => p === 'USA');
+  }
+  // イタリア艦はCAのみ南大西洋へ移動可
+  if(firstShip && firstShip.country === 'IT' && firstShip.type !== 'CA'){
+    seas = seas.filter(s => s !== 'SouthAtlantic');
+    seas2 = seas2.filter(s => s !== 'SouthAtlantic');
+  }
+  // 14.1 同一海域に既に船団があれば船団は移動不可
+  if(firstShip && firstShip.type === 'CONVOY'){
+    seas = seas.filter(seaKey => {
+      const existing = SHIPS.find(s => s !== firstShip && s.type === 'CONVOY' && s.location === seaKey && !s.sunk && !s.removed);
+      return !existing;
+    });
+  }
+
+  // 港のフィルタ: 使用可能ターン + 同陣営/中立のみ
+  const side = firstShip ? firstShip.side : null;
+  ports = ports.filter(p=>{
+    const port = PORTS[p];
+    if(!port.available.includes(currentTurn)) return false;
+    if(side && port.side !== 'neutral' && port.side !== side) return false;
+    return true;
+  });
+  return { seas, seas2, ports };
+}
+
+function renderDestButtons(){
+  const el = document.getElementById('destButtons');
+  if(!selectedLoc){
+    el.innerHTML = '<div style="font-size:0.8em;color:#aac;">港湾/海域を選択</div>';
+    return;
+  }
+  const { seas, seas2, ports } = getValidDests();
+  if(!seas.length && !seas2.length && !ports.length){
+    el.innerHTML = '<div style="font-size:0.8em;color:#aac;">移動先なし</div>';
+    return;
+  }
+  const seaBtns = seas.map(k =>
+    `<button class="locBtn sea${selectedDest===k?' sel':''}" style="background:${SEA_COLOR[k]};border-color:${SEA_COLOR[k]};" onclick="selectDest('${k}')">${SEA_LABEL[k]}</button>`
+  ).join('');
+  const sea2Btns = seas2.map(k =>
+    `<button class="locBtn sea${selectedDest===k?' sel':''}" style="background:${SEA_COLOR[k]};border-color:${SEA_COLOR[k]};opacity:0.7;border-style:dashed;" title="2海域移動・ダイス判定" onclick="selectDest('${k}')">⚂${SEA_LABEL[k]}</button>`
+  ).join('');
+  const portBtns = ports.map(k =>
+    `<button class="locBtn port${selectedDest===k?' sel':''}" onclick="selectDest('${k}')">${PORT_LABEL[k]}</button>`
+  ).join('');
+  let html = seaBtns + sea2Btns + portBtns;
+  if(seas2.length){
+    html += `<div style="width:100%;font-size:0.7em;color:#aac;">⚂=2海域(ダイス判定)</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderStatus(){
+  const el = document.getElementById('moveStatus');
+  const lines = [];
+  if(selectedShipIds.length) lines.push(`選択艦: ${selectedShipIds.length}隻`);
+  if(selectedDest) lines.push(`先: ${locLabel(selectedDest)}`);
+  el.textContent = lines.join(' / ') || '艦と移動先を選択して「実行」';
+}
+
+function renderSeaResetButtons(){
+  const el = document.getElementById('seaResetButtons');
+  el.innerHTML = Object.keys(SEA_LABEL).map(k=>{
+    const ax = SHIPS.filter(s => s.location === k && s.side==='axis').length;
+    const al = SHIPS.filter(s => s.location === k && s.side==='allies').length;
+    return `<div style="display:flex;gap:3px;align-items:center;margin-bottom:2px;">
+      <span style="font-size:0.75em;width:80px;color:#fff;background:${SEA_COLOR[k]};padding:2px 4px;border-radius:2px;">${SEA_LABEL[k]}</span>
+      <button class="locBtn" style="border-color:#3377dd;font-size:0.75em;" onclick="resetSea('${k}','allies')">連合(${al})</button>
+      <button class="locBtn" style="border-color:#cc4444;font-size:0.75em;" onclick="resetSea('${k}','axis')">枢軸(${ax})</button>
+    </div>`;
+  }).join('');
+}
+
+function selectLoc(loc){
+  selectedLoc = loc;
+  selectedShipIds = [];
+  selectedDest = null;
+  renderPortButtons(); renderLocShipList(); renderDestButtons(); renderStatus();
+}
+function toggleShip(id){
+  const i = selectedShipIds.indexOf(id);
+  if(i >= 0) selectedShipIds.splice(i, 1);
+  else selectedShipIds.push(id);
+  renderLocShipList(); renderStatus();
+}
+function selectAllShipsHere(){
+  if(!selectedLoc) return;
+  selectedShipIds = SHIPS.filter(s => s.location === selectedLoc && !s.failedMove).map(s => s.id);
+  renderLocShipList(); renderStatus();
+}
+function selectDest(loc){
+  selectedDest = loc;
+  renderDestButtons(); renderStatus();
+}
+function rollD6(){ return Math.floor(Math.random()*6) + 1; }
+
+// === フェイズ切替 ===
+let currentPhase = 'move';
+function setPhase(p){
+  currentPhase = p;
+  document.getElementById('movePane').style.display   = (p==='move')   ? '' : 'none';
+  document.getElementById('combatPane').style.display = (p==='combat') ? '' : 'none';
+  document.getElementById('phaseMoveBtn').classList.toggle('sel',   p==='move');
+  document.getElementById('phaseCombatBtn').classList.toggle('sel', p==='combat');
+  if(p==='combat') renderCombatPane();
+}
+
+function renderCombatPane(){
+  const noneMsg = '<div style="color:#aac;padding:6px;font-size:0.8em;">対象なし</div>';
+
+  // 1. Uボート戦闘（ASW + 反撃を同一海域で一括）
+  const ubCombatEl = document.getElementById('uboatCombatList');
+  const ubCombatSeas = Object.keys(SEAS).filter(seaKey => {
+    if(combatDone.uboat.has(seaKey)) return false; // 処理済み
+    const allies = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies');
+    const ub = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.type==='UBOAT');
+    return allies.length && ub.length;
+  });
+  ubCombatEl.innerHTML = ubCombatSeas.length
+    ? ubCombatSeas.map(k => seaButton(k, 'resolveUboatCombatPhase', 'Uボート戦闘')).join('')
+    : noneMsg;
+
+  // 3. LBA + 空母
+  renderLbaButtons();
+
+  // 4. 水上戦闘
+  const surfEl = document.getElementById('surfaceSeaList');
+  const surfSeas = Object.keys(SEAS).filter(seaKey => {
+    if(combatDone.surface.has(seaKey)) return false; // 処理済み
+    const al = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies' && s.type!=='UBOAT');
+    const ax = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='axis'   && s.type!=='UBOAT');
+    return al.length && ax.length;
+  });
+  surfEl.innerHTML = surfSeas.length
+    ? surfSeas.map(k => seaButton(k, 'resolveSurfacePhase', '水上戦闘')).join('')
+    : noneMsg;
+}
+
+function seaButton(seaKey, fn, label){
+  const ships = SHIPS.filter(s => s.location===seaKey && !s.sunk);
+  const al = ships.filter(s => s.side==='allies' && s.type!=='UBOAT').length;
+  const ax = ships.filter(s => s.side==='axis'   && s.type!=='UBOAT').length;
+  const ub = ships.filter(s => s.type==='UBOAT').length;
+  return `<button class="locBtn sea" style="background:${SEA_COLOR[seaKey]};border-color:${SEA_COLOR[seaKey]};display:block;width:100%;text-align:left;padding:6px 10px;margin-bottom:4px;font-weight:bold;" onclick="${fn}('${seaKey}')">
+    ${SEA_LABEL[seaKey]}<br>
+    <span style="font-size:0.8em;font-weight:normal;">連合${al} vs 枢軸${ax}${ub?` + Uボート${ub}`:''}</span>
+  </button>`;
+}
+
+function renderLbaButtons(){
+  ['allies','axis'].forEach(side => {
+    const el = document.getElementById(side==='allies' ? 'lbaAlliedButtons' : 'lbaAxisButtons');
+    const enemyName = side==='allies' ? 'axis' : 'allies';
+    // CV所在海域も対象に追加（空母のみ攻撃用）
+    const cvSeas = new Set();
+    SHIPS.filter(s => s.side === side && !s.sunk && s.type === 'CV' && s.location && SEAS[s.location]).forEach(s => cvSeas.add(s.location));
+    // LBA使用済みなら CV所在海域のみ表示
+    const candidateAreas = lbaUsed[side]
+      ? [...cvSeas]
+      : [...new Set([...LBA_TARGETS[side], ...cvSeas])];
+    const targets = candidateAreas.filter(area => {
+      const ships = SHIPS.filter(s =>
+        s.location === area && !s.sunk && s.side === enemyName && s.type !== 'UBOAT'
+      );
+      return ships.length > 0;
+    });
+    if(!targets.length){
+      el.innerHTML = '<div style="color:#888;font-size:0.8em;padding:3px;">攻撃可能なし</div>';
+      return;
+    }
+    el.innerHTML = targets.map(area => {
+      const isPort = !!PORTS[area];
+      const label = isPort ? PORT_LABEL[area] : SEA_LABEL[area];
+      const bg = isPort ? '#444' : SEA_COLOR[area];
+      const lbaOk = LBA_TARGETS[side].includes(area);
+      const cvHere = cvSeas.has(area);
+      let prefix = '';
+      if(lbaOk && cvHere) prefix = 'LBA+空母 ';
+      else if(lbaOk) prefix = 'LBA ';
+      else if(cvHere) prefix = '空母のみ ';
+      return `<button class="locBtn" style="background:${bg};border-color:${bg};font-size:0.85em;padding:4px 8px;" onclick="startLbaBombing('${side}','${area}')">${prefix}${label}</button>`;
+    }).join('');
+  });
+}
+
+// 1発の空爆（5=即時帰還, 6=命中→損害ダイス）
+function airFireAt(attacker, target, events){
+  const r = rollD6();
+  let dmgRoll = null;
+  if(r === 6){
+    dmgRoll = rollD6();
+    events.push({ type:'fire', attacker: attacker.id, attackerName: attacker.name,
+      target: target.id, targetName: target.name,
+      dice:[{r, dmgRoll}], dmgTotal: dmgRoll, disabled: false });
+    applyDamage(target, dmgRoll, events);
+  } else if(r === 5){
+    if(typeof logCombatLine === 'function') logCombatLine(`${target.name}: 即時帰還 (空爆)`);
+    events.push({ type:'fire', attacker: attacker.id, attackerName: attacker.name,
+      target: target.id, targetName: target.name,
+      dice:[{r, dmgRoll:null}], dmgTotal: 0, disabled: true });
+    // 'disabled' イベントで帰還港選択（UI or 自動）を行う
+    events.push({ type:'disabled', ship: target.id, name: target.name });
+  } else {
+    events.push({ type:'fire', attacker: attacker.id, attackerName: attacker.name,
+      target: target.id, targetName: target.name,
+      dice:[{r, dmgRoll:null}], dmgTotal: 0, disabled: false });
+  }
+}
+
+// LBA空爆 + 同海域の友軍空母合計
+async function startLbaBombing(side, area){
+  console.log('[DBG] startLbaBombing 呼び出し', side, area);
+  console.trace();
+  const lbaUsable = LBA_TARGETS[side].includes(area) && !lbaUsed[side];
+  const enableAi = (side === aiSide);
+  if(enableAi) aiMode = true;
+  startCombatLogEntry(SEA_LABEL[area]||PORT_LABEL[area]||area, `LBA空爆 (${side==='allies'?'連合':'枢軸'})`);
+  try {
+  const enemyName = side==='allies' ? 'axis' : 'allies';
+  // 9.5 即時帰還で当ターン帰還の艦は対象外
+  const candidates = SHIPS.filter(s =>
+    s.location === area && !s.sunk && s.side === enemyName && s.type !== 'UBOAT' && !s.disabledThisTurn
+  );
+  if(!candidates.length){ alert('対象艦なし'); return; }
+  // 友軍CV: 同海域のCVのみ（空母は海にいる船のみ攻撃可、港湾攻撃には参加しない）
+  let cvs = [];
+  if(SEAS[area]){
+    cvs = SHIPS.filter(s => s.location === area && !s.sunk && s.side === side && s.type === 'CV');
+  }
+
+  // 空母はLBA同等扱いで攻撃に参加（港湾攻撃には参加しない）
+  const cvShots = cvs.reduce((sum, cv) => sum + cv.def, 0);
+  const lbaShots = lbaUsable ? LBA_VALUE : 0;
+  if(!lbaUsable && cvShots === 0){ alert('攻撃手段なし'); return; }
+
+  const initEvents = [{
+    type:'phase', sea: area, phase:'lba',
+    label: `空爆 ${side==='allies'?'(連合)':'(枢軸)'} - LBA${lbaShots} + 空母${cvShots}`
+  }];
+  await openCombatModal(area, initEvents, {excludeUboat: true});
+  const lbaImg = side==='allies' ? 'イギリス/allied_lba.gif' : 'ドイツ/axis_lba.gif';
+  const lbaCol = side==='allies' ? 'alliesShipList' : 'axisShipList';
+  const colEl = document.getElementById(lbaCol);
+  colEl.innerHTML = '';
+  // LBA行: lbaShots 分（LBA_TARGETS該当海域のみ）
+  for(let i=lbaShots-1; i>=0; i--){
+    const rid = `lba-${i}`;
+    const html = `<div class="cs-row" id="cs-${rid}">
+      <div class="cs-img"><img src="../WAS24/images/${lbaImg}"></div>
+      <div class="cs-name">陸上攻撃機 ${i+1}/${lbaShots}</div>
+      <div class="cs-status" id="cs-st-${rid}">空爆</div>
+      <div class="cs-dice" id="cs-dc-${rid}"></div>
+    </div>`;
+    colEl.insertAdjacentHTML('afterbegin', html);
+  }
+  // 空母行: 各空母を cv.def 行ずつ独立表示（船名・画像）
+  for(const cv of cvs){
+    const existing = document.getElementById(`cs-${cv.id}`);
+    if(existing) existing.remove();
+    for(let i=0; i<cv.def; i++){
+      const rid = `${cv.id}-${i}`;
+      const html = `<div class="cs-row" id="cs-${rid}">
+        <div class="cs-img"><img src="../WAS24/images/${cv.file}"></div>
+        <div class="cs-name">${cv.name} ${i+1}/${cv.def}</div>
+        <div class="cs-status" id="cs-st-${rid}">空爆</div>
+        <div class="cs-dice" id="cs-dc-${rid}"></div>
+      </div>`;
+      colEl.insertAdjacentHTML('beforeend', html);
+    }
+  }
+  await playEvents(initEvents);
+
+  const targetSide = enemyName;
+
+  // 1) LBA: lbaShots 発（LBA_TARGETS該当海域のみ）
+  for(let i=0; i<lbaShots; i++){
+    const remaining = candidates.filter(s => !s.sunk);
+    if(!remaining.length) break;
+    const rid = `lba-${i}`;
+    setPhaseLabel(`LBA ${i+1}/${lbaShots} 発: 目標艦をクリック`);
+    highlightShip(rid, 'firing');
+    const target = await waitForTargetClickIn(targetSide, area, undefined, 'air');
+    unhighlightShip(rid, 'firing');
+    if(!target) break;
+    const fireEvents = [];
+    airFireAt({id:rid, name:`LBA${i+1}`}, target, fireEvents);
+    await playEvents(fireEvents);
+    placeAllShips();
+  }
+  // 2) 各空母が cv.def 発ずつ
+  for(const cv of cvs){
+    if(cv.sunk) continue;
+    const dice = cv.def;
+    for(let i=0; i<dice; i++){
+      const remaining = candidates.filter(s => !s.sunk);
+      if(!remaining.length) break;
+      const rid = `${cv.id}-${i}`;
+      setPhaseLabel(`${cv.name} 空爆 ${i+1}/${dice} 発: 目標艦をクリック`);
+      highlightShip(rid, 'firing');
+      const target = await waitForTargetClickIn(targetSide, area, undefined, 'cv');
+      unhighlightShip(rid, 'firing');
+      if(!target) break;
+      const fireEvents = [];
+      airFireAt({id:rid, name:`${cv.name}${i+1}`}, target, fireEvents);
+      await playEvents(fireEvents);
+      placeAllShips();
+    }
+  }
+
+  if(lbaUsable) lbaUsed[side] = true;
+  // 撃沈・即時帰還艦の表示クリア
+  cleanupCombatModal();
+  await flushPendingAxisDisabledUI();
+  setPhaseLabel('━ 空爆 終了 ━');
+  placeAllShips();
+  renderLocShipList(); renderSeaResetButtons(); renderCombatPane();
+  } finally {
+    aiMode = false;
+    endCombatLogEntry();
+  }
+}
+
+// waitForTargetClick の拡張: 既ターゲット除外
+function waitForTargetClickIn(side, focusSea, excludeIds, mode){
+  return new Promise(resolve => {
+    const candidates = SHIPS.filter(s =>
+      s.side === side && !s.sunk && s.location === focusSea && (!excludeIds || !excludeIds.has(s.id)) && s.type !== 'UBOAT' && !s.disabledThisTurn
+    );
+    if(!candidates.length){ resolve(null); return; }
+    if(aiMode && side === humanSide){
+      if(mode === 'air'){
+        // 航空攻撃: 第1巡 無傷で未攻撃の艦を def 低い順
+        const undamagedUnhit = candidates.filter(c => c.damage === 0 && !c._aiAirHit1);
+        if(undamagedUnhit.length){
+          undamagedUnhit.sort((a,b) => (a.def||0) - (b.def||0));
+          undamagedUnhit[0]._aiAirHit1 = true;
+          undamagedUnhit[0]._aiAirHits = (undamagedUnhit[0]._aiAirHits || 0) + 1;
+          resolve(undamagedUnhit[0]); return;
+        }
+        // 航空攻撃: 第2巡以降 hit数最小、damage少ない、def低い順
+        const minAirHits = Math.min(...candidates.map(c => c._aiAirHits || 0));
+        const airPool = candidates.filter(c => (c._aiAirHits || 0) === minAirHits);
+        airPool.sort((a, b) => {
+          if((a.damage||0) !== (b.damage||0)) return (a.damage||0) - (b.damage||0);
+          return (a.def||0) - (b.def||0);
+        });
+        airPool[0]._aiAirHits = minAirHits + 1;
+        resolve(airPool[0]); return;
+      }
+      if(mode === 'cv'){
+        // 空母: 一番強い (atk高い) 無傷艦に集中、damage>0/即時帰還で次の無傷艦へ
+        const undamaged = candidates.filter(c => c.damage === 0);
+        if(undamaged.length){
+          undamaged.sort((a,b) => (b.atk||0) - (a.atk||0));
+          resolve(undamaged[0]); return;
+        }
+        // 全艦損害ありなら全艦から atk 高い順
+        const sorted = [...candidates].sort((a,b) => (b.atk||0) - (a.atk||0));
+        resolve(sorted[0]); return;
+      }
+      // 水上戦闘: 無傷艦があればモーダル順で先頭、なければモーダル順で先頭
+      const undamaged = candidates.filter(c => c.damage === 0);
+      resolve(undamaged.length ? undamaged[0] : candidates[0]); return;
+    }
+    const handlers = {};
+    candidates.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(!row) return;
+      row.classList.add('selectable');
+      const onClick = () => {
+        candidates.forEach(c => {
+          const r = document.getElementById(`cs-${c.id}`);
+          if(r){ r.classList.remove('selectable'); if(handlers[c.id]) r.removeEventListener('click', handlers[c.id]); }
+        });
+        resolve(s);
+      };
+      handlers[s.id] = onClick;
+      row.addEventListener('click', onClick);
+    });
+  });
+}
+
+// 1. ASWのみ
+async function resolveASWPhase(seaKey){
+  startCombatLogEntry(SEA_LABEL[seaKey]||seaKey, 'ASW');
+  const events = [];
+  resolveUboatASW(seaKey, events);
+  if(!events.length){ endCombatLogEntry(); alert('ASW対象なし'); return; }
+  await openCombatModal(seaKey, events, {aswOnly: true});
+  await playEvents(events);
+  setPhaseLabel('━ ASW 終了 ━');
+  endCombatLogEntry();
+  placeAllShips();
+  renderCombatPane();
+}
+
+// 1+2 統合: 同一海域でASW→Uボート反撃を連続実行（損害同時適用）
+async function resolveUboatCombatPhase(seaKey){
+  console.log('[DBG] resolveUboatCombatPhase 呼び出し', seaKey);
+  console.trace();
+  startCombatLogEntry(SEA_LABEL[seaKey]||seaKey, 'Uボート戦闘 (ASW+反撃)');
+  // 同時適用用のpending: ASW結果(撃沈/帰還) + 反撃ダメージ/即時帰還
+  const pending = {
+    uboatSunk: new Set(), uboatReturn: new Set(),
+    damage: {}, disabled: new Set()
+  };
+  const aswEvents = [];
+  resolveUboatASW(seaKey, aswEvents, pending);
+  let modalOpened = false;
+  if(aswEvents.length){
+    await openCombatModal(seaKey, aswEvents, {aswOnly: true});
+    modalOpened = true;
+    await playEvents(aswEvents);
+  }
+  // 反撃: ASWで撃沈/即時帰還となったUボートは反撃不可
+  const uboats = SHIPS.filter(s =>
+    s.type==='UBOAT' && s.side==='axis' && s.location===seaKey && !s.sunk
+    && !pending.uboatSunk.has(s.id) && !pending.uboatReturn.has(s.id)
+  );
+  if(uboats.length){
+    const allies = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies');
+    if(allies.length){
+      if(!modalOpened){
+        await openCombatModal(seaKey, [{type:'phase', sea:seaKey, label:'Uボート反撃'}], {aswOnly: true});
+        modalOpened = true;
+      } else {
+        await playEvents([{type:'phase', sea:seaKey, label:'Uボート反撃'}]);
+      }
+      for(const u of uboats){
+        highlightShip(u.id, 'firing');
+        const dispName = pending.uboatSunk.has(u.id) ? `${u.name}[撃沈中]` : (pending.uboatReturn.has(u.id) ? `${u.name}[帰還中]` : u.name);
+        setPhaseLabel(`${dispName} の目標をクリック`);
+        const target = await waitForTargetClickIn('allies', seaKey);
+        unhighlightShip(u.id, 'firing');
+        if(!target) break;
+        const fireEvents = [];
+        uboatFireAt(u, target, fireEvents, pending);
+        await playEvents(fireEvents);
+      }
+    }
+  }
+  // 同時適用
+  setPhaseLabel('━ 損害適用 ━');
+  const applyEvents = [];
+  for(const tid in pending.damage){
+    const ship = SHIPS.find(s => s.id === tid);
+    if(ship) applyDamage(ship, pending.damage[tid], applyEvents);
+  }
+  for(const tid of pending.disabled){
+    const ship = SHIPS.find(s => s.id === tid);
+    if(ship && !ship.sunk){
+      ship.location = ship.homePort;
+      applyEvents.push({ type:'return_disabled', ship: ship.id, name: ship.name });
+    }
+  }
+  for(const id of pending.uboatSunk){
+    const u = SHIPS.find(s => s.id === id);
+    if(u) u.sunk = true;
+  }
+  for(const id of pending.uboatReturn){
+    const u = SHIPS.find(s => s.id === id);
+    if(u && !u.sunk) u.location = 'Germany';
+  }
+  await playEvents(applyEvents);
+  combatDone.uboat.add(seaKey);
+  // 撃沈・即時帰還艦の表示クリア
+  cleanupCombatModal();
+  await flushPendingAxisDisabledUI();
+  setPhaseLabel('━ Uボート戦闘 終了 ━');
+  endCombatLogEntry();
+  placeAllShips();
+  renderCombatPane();
+}
+
+// 撃沈艦は表示削除、帰還艦はatDock=true、ダイス/ラベルクリア
+function cleanupCombatModal(){
+  SHIPS.forEach(s => {
+    if(s.sunk){
+      const row = document.getElementById(`cs-${s.id}`);
+      if(row) row.remove();
+    } else if(s.location && PORTS[s.location]){
+      s.atDock = true;
+      const row = document.getElementById(`cs-${s.id}`);
+      if(row) row.remove();
+    }
+  });
+  document.querySelectorAll('#combatModal [id^="cs-dc-"]').forEach(el => el.innerHTML = '');
+  document.querySelectorAll('#combatModal .result-label').forEach(el => el.remove());
+}
+
+// 2. Uボート反撃のみ
+async function resolveUboatCounterPhase(seaKey){
+  const uboats = SHIPS.filter(s => s.type==='UBOAT' && s.side==='axis' && s.location===seaKey && !s.sunk);
+  if(!uboats.length){ alert('生存Uボートなし'); return; }
+  const allies = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies');
+  if(!allies.length){ alert('目標連合艦なし'); return; }
+  startCombatLogEntry(SEA_LABEL[seaKey]||seaKey, 'Uボート反撃');
+  await openCombatModal(seaKey, [{type:'phase', sea:seaKey, label:'Uボート反撃'}]);
+  await playEvents([{type:'phase', sea:seaKey, label:'Uボート反撃'}]);
+  for(const u of uboats){
+    highlightShip(u.id, 'firing');
+    setPhaseLabel(`${u.name} の目標をクリック`);
+    const target = await waitForTargetClickIn('allies', seaKey);
+    unhighlightShip(u.id, 'firing');
+    if(!target) break;
+    const fireEvents = [];
+    uboatFireAt(u, target, fireEvents);
+    await playEvents(fireEvents);
+  }
+  setPhaseLabel('━ Uボート反撃 終了 ━');
+  endCombatLogEntry();
+  placeAllShips();
+  renderCombatPane();
+}
+
+// 4. 水上戦闘のみ
+async function resolveSurfacePhase(seaKey){
+  console.log('[DBG] resolveSurfacePhase 呼び出し', seaKey);
+  console.trace();
+  const al = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies' && s.type!=='UBOAT');
+  const ax = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='axis'   && s.type!=='UBOAT');
+  console.log('[DBG] al=', al.length, 'ax=', ax.length);
+  if(!al.length || !ax.length){ alert('水上戦闘対象なし'); return; }
+  startCombatLogEntry(SEA_LABEL[seaKey]||seaKey, '水上戦闘');
+  await openCombatModal(seaKey, [{type:'phase', sea:seaKey, label:'水上戦闘'}], {excludeUboat: true});
+  // ASW等の前フェイズ表示をクリア
+  document.querySelectorAll('#combatModal [id^="cs-dc-"]').forEach(el => el.innerHTML = '');
+  document.querySelectorAll('#combatModal .result-label').forEach(el => el.remove());
+  await resolveSurfaceCombat(seaKey, true);
+  combatDone.surface.add(seaKey);
+  await flushPendingAxisDisabledUI();
+  setPhaseLabel('━ 水上戦闘 終了 ━');
+  endCombatLogEntry();
+  placeAllShips();
+  renderCombatPane();
+}
+
+async function resolveCombatOne(seaKey){
+  // 1) ASW（自動・即時適用）
+  const aswEvents = [];
+  resolveUboatASW(seaKey, aswEvents);
+  let modalOpened = false;
+  if(aswEvents.length){
+    await openCombatModal(seaKey, aswEvents);
+    modalOpened = true;
+    await playEvents(aswEvents);
+  }
+
+  // 2) Uボート反撃: 生存Uボートごとに目標を毎回クリック選択
+  const uboats = SHIPS.filter(s => s.type === 'UBOAT' && s.side === 'axis' && s.location === seaKey && !s.sunk);
+  if(uboats.length){
+    if(!modalOpened){ await openCombatModal(seaKey, []); modalOpened = true; }
+    setPhaseLabel('━ Uボート反撃 ━ 各艦の目標をクリック');
+    for(const u of uboats){
+      highlightShip(u.id, 'firing');
+      setPhaseLabel(`${u.name} の目標をクリック`);
+      const target = await waitForTargetClickIn('allies', seaKey);
+      unhighlightShip(u.id, 'firing');
+      if(!target) break;
+      const fireEvents = [];
+      uboatFireAt(u, target, fireEvents);
+      await playEvents(fireEvents);
+    }
+  }
+
+  // 3) 航空戦闘 (5.62, 9, 10) - 連合 + 枢軸
+  modalOpened = await playAirPhase('allies', seaKey, modalOpened);
+  modalOpened = await playAirPhase('axis',   seaKey, modalOpened);
+
+  // 4) 水上戦闘 (11.x)
+  await resolveSurfaceCombat(seaKey, modalOpened);
+
+  await flushPendingAxisDisabledUI();
+
+  setPhaseLabel('━ 戦闘終了 ━');
+  placeAllShips();
+  renderLocShipList(); renderSeaResetButtons(); renderCombatPane();
+}
+
+// 戦闘で即時帰還した枢軸艦の帰還港選択UIを呼び出す共通関数
+async function flushPendingAxisDisabledUI(){
+  if(!pendingAxisDisabledForUI.length) return;
+  const ships = pendingAxisDisabledForUI.map(p => SHIPS.find(s => s.id === p.shipId)).filter(s => s && !s.sunk);
+  pendingAxisDisabledForUI = [];
+  if(ships.length){
+    setPhaseLabel('━ 即時帰還 帰還港選択 ━');
+    await showAxisReturnUI(ships);
+    placeAllShips();
+  }
+}
+
+// 5.62 航空戦闘（連合 or 枢軸の片方ずつ実行）
+async function playAirPhase(side, seaKey, modalAlreadyOpen){
+  const enemyName = side==='allies' ? 'axis' : 'allies';
+  const cvs = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === side && s.type === 'CV');
+  const lbaUsable = !lbaUsed[side] && LBA_TARGETS[side].includes(seaKey);
+  // 攻撃手段なし
+  if(!cvs.length && !lbaUsable) return modalAlreadyOpen;
+  // 目標なし
+  const targets = SHIPS.filter(s =>
+    s.location === seaKey && !s.sunk && s.side === enemyName && s.type !== 'UBOAT' && !s.disabledThisTurn
+  );
+  if(!targets.length) return modalAlreadyOpen;
+
+  // LBA使用確認
+  let useLba = false;
+  if(lbaUsable){
+    useLba = confirm(`${side==='allies'?'連合':'枢軸'} LBAを ${SEA_LABEL[seaKey]} に使用しますか？`);
+  }
+  if(!useLba && !cvs.length) return modalAlreadyOpen;
+
+  // モーダル準備
+  if(!modalAlreadyOpen){
+    await openCombatModal(seaKey, [{type:'phase', sea:seaKey, label:'航空戦闘'}], {excludeUboat: true});
+    modalAlreadyOpen = true;
+  }
+  setPhaseLabel(`━ 航空戦闘 ${side==='allies'?'(連合)':'(枢軸)'} ━`);
+  await new Promise(r=>setTimeout(r,500));
+
+  // LBAマーカー挿入: ダイス数分の行
+  const colId = side==='allies' ? 'alliesShipList' : 'axisShipList';
+  const colEl = document.getElementById(colId);
+  if(colEl.children.length === 1 && colEl.firstElementChild && colEl.firstElementChild.tagName === 'DIV' && colEl.firstElementChild.style.color){
+    colEl.innerHTML = '';
+  }
+  if(useLba){
+    const lbaImg = side==='allies' ? 'イギリス/allied_lba.gif' : 'ドイツ/axis_lba.gif';
+    for(let i=LBA_VALUE-1; i>=0; i--){
+      const rid = `lba-${side}-${i}`;
+      const html = `<div class="cs-row" id="cs-${rid}">
+        <div class="cs-img"><img src="../WAS24/images/${lbaImg}"></div>
+        <div class="cs-name">陸上攻撃機 ${i+1}/${LBA_VALUE}</div>
+        <div class="cs-status" id="cs-st-${rid}">空爆</div>
+        <div class="cs-dice" id="cs-dc-${rid}"></div>
+      </div>`;
+      colEl.insertAdjacentHTML('afterbegin', html);
+    }
+  }
+  // CV: 火力(def)分の射撃行を追加（元のCV行は触らない）
+  for(const cv of cvs){
+    for(let i=0; i<cv.def; i++){
+      const rid = `${cv.id}-air-${i}`;
+      const html = `<div class="cs-row" id="cs-${rid}">
+        <div class="cs-img"><img src="../WAS24/images/${cv.file}"></div>
+        <div class="cs-name">${cv.name} ${i+1}/${cv.def}</div>
+        <div class="cs-status" id="cs-st-${rid}">空爆</div>
+        <div class="cs-dice" id="cs-dc-${rid}"></div>
+      </div>`;
+      colEl.insertAdjacentHTML('beforeend', html);
+    }
+  }
+
+  const fireOneShot = async (attackerId, attackerName, label, mode) => {
+    const remaining = SHIPS.filter(s =>
+      s.location === seaKey && !s.sunk && s.side === enemyName && s.type !== 'UBOAT' && !s.disabledThisTurn
+    );
+    if(!remaining.length) return false;
+    setPhaseLabel(`${label}: 目標をクリック`);
+    highlightShip(attackerId, 'firing');
+    const target = await waitForTargetClickIn(enemyName, seaKey, undefined, mode);
+    unhighlightShip(attackerId, 'firing');
+    if(!target) return false;
+    const events = [];
+    airFireAt({id: attackerId, name: attackerName}, target, events);
+    await playEvents(events);
+    return true;
+  };
+
+  if(useLba){
+    for(let i=0; i<LBA_VALUE; i++){
+      const ok = await fireOneShot(`lba-${side}-${i}`, `LBA${i+1}`, `LBA ${i+1}/${LBA_VALUE}`, 'air');
+      if(!ok) break;
+    }
+    lbaUsed[side] = true;
+  }
+  for(const cv of cvs){
+    if(cv.sunk) continue;
+    const dice = cv.def;
+    for(let i=0; i<dice; i++){
+      const ok = await fireOneShot(`${cv.id}-air-${i}`, `${cv.name}${i+1}`, `${cv.name} ${i+1}/${dice}`, 'cv');
+      if(!ok) break;
+    }
+  }
+  return modalAlreadyOpen;
+}
+
+// 11. 水上戦闘
+async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
+  console.log('[DBG] resolveSurfaceCombat 呼び出し', seaKey, 'modalAlreadyOpen=', modalAlreadyOpen);
+  console.trace();
+  let firstIter = true;
+  while(true){
+    const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.type !== 'UBOAT');
+    const allies = ships.filter(s => s.side === 'allies');
+    const axis   = ships.filter(s => s.side === 'axis');
+    if(!allies.length || !axis.length) return;
+
+    if(!modalAlreadyOpen){
+      await openCombatModal(seaKey, [{ type:'phase', sea:seaKey, label:'水上戦闘' }], {excludeUboat: true});
+      modalAlreadyOpen = true;
+      await playEvents([{ type:'phase', sea:seaKey, label:'水上戦闘' }]);
+    } else {
+      // 水上戦闘移行時: 前フェーズで撃沈/帰還した艦・Uボートを除外して再描画
+      if(firstIter){
+        document.getElementById('alliesShipList').innerHTML = allies.map(renderShipRow).join('') || '<div style="color:#aac;padding:6px;">―</div>';
+        document.getElementById('axisShipList').innerHTML   = axis.map(renderShipRow).join('')   || '<div style="color:#aac;padding:6px;">―</div>';
+      }
+      setPhaseLabel(`━ 水上戦闘 (${SEA_LABEL[seaKey]}) ━`);
+    }
+    firstIter = false;
+
+    // ラウンド開始時の枢軸艦リスト（11.3 撃沈/不能でも反撃可）
+    const axisAtStart = axis.slice();
+    // 損害保留（11.3 同時適用）
+    const pending = { damage: {}, disabled: new Set(), firedAtBy: { allies: new Set(), axis: new Set() } };
+
+    // === 連合先攻 ===
+    setPhaseLabel(`連合: 各艦の目標をクリック`);
+    for(const ship of allies){
+      if(ship.sunk) continue;
+      if(ship.type === 'CV') continue; // 水上戦闘では空母は射撃しない
+      if(ship.disabled || ship.atk === 0) continue;
+      highlightShip(ship.id, 'firing');
+      setPhaseLabel(`${ship.name}(${ship.atk}発): 目標をクリック`);
+      const target = await waitForSurfaceTarget('axis', seaKey, ship, pending);
+      unhighlightShip(ship.id, 'firing');
+      if(!target) break;
+      pending.firedAtBy.allies.add(target.id);
+      const fireEvents = [];
+      surfaceFireOne(ship, target, fireEvents, pending);
+      await playEvents(fireEvents);
+      // CV 即時反撃: 攻撃された target が CV で atk>=1 なら即座に反撃
+      if(target.type === 'CV' && target.atk >= 1 && !target.sunk && !target.disabled){
+        highlightShip(target.id, 'firing');
+        setPhaseLabel(`${target.name}(${target.atk}発) 即時反撃: 目標をクリック`);
+        const counterTarget = await waitForSurfaceTarget('allies', seaKey, target, pending);
+        unhighlightShip(target.id, 'firing');
+        if(counterTarget){
+          pending.firedAtBy.axis.add(counterTarget.id);
+          const counterEvents = [];
+          surfaceFireOne(target, counterTarget, counterEvents, pending);
+          await playEvents(counterEvents);
+        }
+      }
+    }
+
+    // === 枢軸反撃（撃沈/不能艦も砲撃可、損害は保留）===
+    setPhaseLabel(`枢軸: 各艦の目標をクリック`);
+    for(const ship of axisAtStart){
+      if(ship.type === 'CV') continue; // 水上戦闘では空母は射撃しない
+      if(ship.atk === 0) continue;
+      const targets = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === 'allies' && s.type !== 'UBOAT' && !s.disabledThisTurn);
+      if(!targets.length) break;
+      highlightShip(ship.id, 'firing');
+      const dispName = ship.sunk ? `${ship.name}[撃沈中]` : (ship.disabled ? `${ship.name}[即時帰還]` : ship.name);
+      setPhaseLabel(`${dispName}(${ship.atk}発): 目標をクリック`);
+      const target = await waitForSurfaceTarget('allies', seaKey, ship, pending);
+      unhighlightShip(ship.id, 'firing');
+      if(!target) break;
+      pending.firedAtBy.axis.add(target.id);
+      const fireEvents = [];
+      surfaceFireOne(ship, target, fireEvents, pending);
+      await playEvents(fireEvents);
+      // CV 即時反撃: 攻撃された target が CV で atk>=1 なら即座に反撃
+      if(target.type === 'CV' && target.atk >= 1 && !target.sunk && !target.disabled){
+        highlightShip(target.id, 'firing');
+        setPhaseLabel(`${target.name}(${target.atk}発) 即時反撃: 目標をクリック`);
+        const counterTarget = await waitForSurfaceTarget('axis', seaKey, target, pending);
+        unhighlightShip(target.id, 'firing');
+        if(counterTarget){
+          pending.firedAtBy.allies.add(counterTarget.id);
+          const counterEvents = [];
+          surfaceFireOne(target, counterTarget, counterEvents, pending);
+          await playEvents(counterEvents);
+        }
+      }
+    }
+
+    // === 同時適用（11.3）===
+    setPhaseLabel('━ 損害適用 ━');
+    const applyEvents = [];
+    for(const tid in pending.damage){
+      const ship = SHIPS.find(s => s.id === tid);
+      if(!ship) continue;
+      applyDamage(ship, pending.damage[tid], applyEvents);
+    }
+    for(const tid of pending.disabled){
+      const ship = SHIPS.find(s => s.id === tid);
+      if(!ship || ship.sunk) continue;
+      ship.disabled = true;
+      logCombatLine(`${ship.name}: 即時帰還 (砲撃)`);
+      applyEvents.push({ type:'disabled', ship: ship.id, name: ship.name });
+    }
+    await playEvents(applyEvents);
+    placeAllShips();
+
+    // 戦闘確認ボタン待ち（撃沈/帰還艦消去・ドック表示・ダイスクリア）
+    setPhaseLabel('戦闘確認ボタンを押してください');
+    await waitForCombatConfirm();
+
+    // ラウンド終了ボタン待ち（撤退/追撃判定へ進む）
+    setPhaseLabel('ラウンド終了ボタンで撤退/追撃判定へ');
+    await waitForRoundEnd();
+
+    // 即時帰還した枢軸艦の行を戦闘モーダルから削除（後で帰還港UIで処理）
+    for(const p of pendingAxisDisabledForUI){
+      const row = document.getElementById(`cs-${p.shipId}`);
+      if(row) row.remove();
+    }
+
+    // === 撤退判定（12.x）===
+    let allyRetreat = await tryRetreat('allies', seaKey);
+    const axisRetreat = await tryRetreat('axis',   seaKey);
+    // AI（連合）が撤退宣言したが、こちら（枢軸）も撤退する場合 → AI 撤回して支配を確保
+    if(allyRetreat && axisRetreat && aiSide === 'allies'){
+      allyRetreat = null;
+      setPhaseLabel('連合: 枢軸も撤退のため撤回 → 残留');
+      await new Promise(r => setTimeout(r, 800));
+    }
+    // 同様に AI が枢軸の場合も対応
+    let finalAxisRetreat = axisRetreat;
+    if(allyRetreat && axisRetreat && aiSide === 'axis'){
+      finalAxisRetreat = null;
+      setPhaseLabel('枢軸: 連合も撤退のため撤回 → 残留');
+      await new Promise(r => setTimeout(r, 800));
+    }
+    if(allyRetreat || finalAxisRetreat){
+      retreatedSeas.add(seaKey); // 12.4 POC獲得不可
+    }
+    // 連合撤退→枢軸追跡（グループ別）
+    if(allyRetreat){
+      const pursuits = await tryPursuit('axis', seaKey, allyRetreat);
+      if(pursuits){
+        for(const p of pursuits){
+          await runPursuitRound(p.pursuers, p.retreaters);
+        }
+      }
+      for(const group of allyRetreat){
+        await retreatToPort(group);
+      }
+    }
+    // 枢軸撤退→連合追跡（グループ別）
+    if(finalAxisRetreat){
+      const pursuits = await tryPursuit('allies', seaKey, finalAxisRetreat);
+      if(pursuits){
+        for(const p of pursuits){
+          await runPursuitRound(p.pursuers, p.retreaters);
+        }
+      }
+      for(const group of finalAxisRetreat){
+        await retreatToPort(group);
+      }
+    }
+    placeAllShips();
+    // 11.4 両軍存続なら次ラウンド
+  }
+}
+
+// 追跡戦闘: 追跡側が諦めるか、片側が壊滅するか、速度不足になるまで継続
+async function runPursuitRound(pursuit, retreat){
+  const sea = pursuit.length ? (pursuit[0].location || retreat[0]?.location || '') : (retreat[0]?.location || '');
+  startCombatLogEntry(SEA_LABEL[sea]||sea, '追撃戦闘');
+  logCombatLine(`追跡側: ${pursuit.map(s=>s.name).join(', ') || '―'}`);
+  logCombatLine(`撤退側: ${retreat.map(s=>s.name).join(', ') || '―'}`);
+  // 撃沈艦の cs-row を一掃するヘルパー
+  const sweepSunk = () => {
+    SHIPS.forEach(s => {
+      if(s.sunk){
+        const row = document.getElementById(`cs-${s.id}`);
+        if(row) row.remove();
+      }
+    });
+  };
+  try {
+  sweepSunk(); // 開始時の掃除
+  while(true){
+    const alivePur = pursuit.filter(s => !s.sunk);
+    const aliveRet = retreat.filter(s => !s.sunk);
+    if(!alivePur.length || !aliveRet.length){
+      setPhaseLabel('片側壊滅 → 追跡終了');
+      break;
+    }
+    // 速度判定（撤退側最遅速力以上の追跡艦のみ追える）
+    const minRetSpd = Math.min(...aliveRet.map(s => s.spd));
+    const eligible = alivePur.filter(s => s.spd >= minRetSpd);
+    if(!eligible.length){
+      setPhaseLabel('追跡速度不足 → 追跡終了');
+      await new Promise(r=>setTimeout(r,800));
+      break;
+    }
+    setPhaseLabel('━ 追跡ラウンド ━');
+    const pending = { damage: {}, disabled: new Set(), firedAtBy: { allies: new Set(), axis: new Set() } };
+    // 追跡側射撃
+    setPhaseLabel('追跡側 射撃');
+    for(const ship of eligible){
+      if(ship.atk === 0) continue;
+      highlightShip(ship.id, 'firing');
+      setPhaseLabel(`${ship.name}(${ship.atk}発): 撤退艦から目標`);
+      const target = await waitForTargetClickFromList(aliveRet, ship);
+      unhighlightShip(ship.id, 'firing');
+      if(!target) break;
+      const fireEvents = [];
+      surfaceFireOne(ship, target, fireEvents, pending);
+      await playEvents(fireEvents);
+    }
+    // 撤退側反撃（11.3 同時）
+    setPhaseLabel('撤退側 反撃');
+    for(const ship of aliveRet){
+      if(ship.atk === 0) continue;
+      highlightShip(ship.id, 'firing');
+      setPhaseLabel(`${ship.name}(${ship.atk}発): 追跡艦から目標`);
+      const target = await waitForTargetClickFromList(eligible, ship);
+      unhighlightShip(ship.id, 'firing');
+      if(!target) break;
+      const fireEvents = [];
+      surfaceFireOne(ship, target, fireEvents, pending);
+      await playEvents(fireEvents);
+    }
+    // 損害適用
+    setPhaseLabel('━ 損害適用 ━');
+    const applyEvents = [];
+    for(const tid in pending.damage){
+      const ship = SHIPS.find(s => s.id === tid);
+      if(ship) applyDamage(ship, pending.damage[tid], applyEvents);
+    }
+    for(const tid of pending.disabled){
+      const ship = SHIPS.find(s => s.id === tid);
+      if(ship && !ship.sunk){
+        ship.disabled = true;
+        logCombatLine(`${ship.name}: 即時帰還 (追撃砲撃)`);
+        applyEvents.push({ type:'disabled', ship: ship.id, name: ship.name });
+      }
+    }
+    await playEvents(applyEvents);
+    placeAllShips();
+
+    // 12.5 追跡継続確認
+    const stillPur = pursuit.filter(s => !s.sunk);
+    const stillRet = retreat.filter(s => !s.sunk);
+    if(!stillPur.length || !stillRet.length){ break; }
+    const newMin = Math.min(...stillRet.map(s => s.spd));
+    if(!stillPur.some(s => s.spd >= newMin)){
+      setPhaseLabel('速度不足 → 追跡終了');
+      await new Promise(r=>setTimeout(r,800));
+      break;
+    }
+    // 追跡側が AI なら自動継続、人間側のみ確認
+    const pursuerSide = pursuit[0]?.side;
+    const cont = (pursuerSide === aiSide) ? true : confirm('追跡を続けますか？(キャンセル=追撃中止し母港帰還)');
+    if(!cont){
+      // 追撃中止 → 追跡側艦を母港に帰還
+      for(const ship of stillPur){
+        if(ship.sunk || ship.removed) continue;
+        const ports = getReturnPorts(ship);
+        if(ports.length === 0){
+          ship.location = ship.homePort || HOME_PORT[ship.country];
+        } else {
+          ship.location = ports.includes(ship.homePort) ? ship.homePort : ports[0];
+        }
+        ship.atDock = false;
+        logCombatLine(`${ship.name}: 追撃中止 → ${PORT_LABEL[ship.location]||ship.location}`);
+      }
+      break;
+    }
+  }
+  } finally {
+    endCombatLogEntry();
+  }
+}
+
+// 追跡対象（撤退艦）から選択
+function waitForTargetClickFromList(targetList, attacker){
+  return new Promise(resolve => {
+    const candidates = targetList.filter(s => !s.sunk);
+    if(!candidates.length){ resolve(null); return; }
+    // AI側の射撃のみ自動選択。人間側はクリック待ち
+    const isAiAttacker = attacker && attacker.side === aiSide;
+    if(isAiAttacker){ resolve(candidates[0]); return; }
+    const handlers = {};
+    candidates.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(!row) return;
+      row.classList.add('selectable');
+      const onClick = () => {
+        candidates.forEach(c => {
+          const r = document.getElementById(`cs-${c.id}`);
+          if(r){ r.classList.remove('selectable'); if(handlers[c.id]) r.removeEventListener('click', handlers[c.id]); }
+        });
+        resolve(s);
+      };
+      handlers[s.id] = onClick;
+      row.addEventListener('click', onClick);
+    });
+  });
+}
+
+// 撤退艦を港へ移動（各艦帰還港選択）
+async function retreatToPort(ships){
+  console.log('[retreatToPort] 開始 group:', ships.map(s=>`${s.name}(loc=${s.location},sunk=${s.sunk})`).join(', '));
+  for(const ship of ships){
+    if(ship.sunk){ console.log(`  → ${ship.name}: sunk スキップ`); continue; }
+    if(!SEAS[ship.location]){ console.log(`  → ${ship.name}: location=${ship.location} は海域でない、スキップ`); continue; }
+    const port = decideRetreatPort(ship);
+    ship.location = port;
+    ship.atDock = false;
+    setPhaseLabel(`${ship.name} 撤退 → ${PORT_LABEL[port]||port}`);
+    console.log(`  → ${ship.name}: ${port} へ移動`);
+    await new Promise(r => setTimeout(r, 200));
+  }
+  console.log('[retreatToPort] 終了');
+}
+
+function decideRetreatPort(ship){
+  // ドイツ艦: 損害艦は France3/Germany8、超過は均等。無傷は Germany
+  if(ship.country === 'DE'){
+    if(ship.damage === 0) return 'Germany';
+    const inFrance = SHIPS.filter(s => s.country === 'DE' && s.location === 'France').length;
+    const inGermany = SHIPS.filter(s => s.country === 'DE' && s.location === 'Germany').length;
+    if(inFrance < 3) return 'France';
+    if(inGermany < 8) return 'Germany';
+    return inFrance <= inGermany ? 'France' : 'Germany';
+  }
+  // UK 艦: homePort=Malta なら基本 Malta、降伏後は Malta = 4 + DE接収伊艦数
+  if(ship.country === 'UK'){
+    if(ship.homePort === 'Malta'){
+      if(italySurrendered){
+        const deItalyCount = SHIPS.filter(s => s.country === 'IT' && s.controlledBy === 'DE').length;
+        const cap = 4 + deItalyCount;
+        const inMalta = SHIPS.filter(s => s.country === 'UK' && s.location === 'Malta').length;
+        if(inMalta < cap) return 'Malta';
+        return 'England';
+      }
+      return 'Malta';
+    }
+    return 'England';
+  }
+  // それ以外: homePort
+  return ship.homePort;
+}
+
+// 水上戦闘の目標選択 (11.6 空母保護, 14.8 船団保護)
+function waitForSurfaceTarget(side, focusSea, attacker, pending){
+  return new Promise(resolve => {
+    const isAiAttacker = aiMode && attacker && attacker.side === aiSide;
+    // pending damageで撃沈確定の艦を除外
+    const willBeSunk = (s) => {
+      if(!pending) return false;
+      const pd = pending.damage[s.id] || 0;
+      return (s.damage + pd) > s.def;
+    };
+    const enemies = SHIPS.filter(s =>
+      s.side === side && !s.sunk && s.location === focusSea && s.type !== 'UBOAT' && !s.disabledThisTurn && !s.removed && !willBeSunk(s)
+    );
+    // 通常艦（CV/CONVOYでない）
+    const normal = enemies.filter(s => s.type !== 'CV' && s.type !== 'CONVOY');
+    const cv = enemies.filter(s => s.type === 'CV');
+    const convoy = enemies.filter(s => s.type === 'CONVOY');
+    // 14.8 船団保護 / 11.6 空母保護: 同ラウンドで攻撃側が全非保護艦を砲撃済みになったら保護艦も対象
+    const attackerSide = attacker?.side || (side === 'allies' ? 'axis' : 'allies');
+    const firedAt = (pending && pending.firedAtBy && pending.firedAtBy[attackerSide]) || new Set();
+    const allNormalFired = normal.length === 0 || normal.every(s => firedAt.has(s.id));
+    const allConvoyFired = convoy.length === 0 || convoy.every(s => firedAt.has(s.id));
+    const candidates = [...normal];
+    if(allNormalFired) candidates.push(...convoy);
+    if(allNormalFired && allConvoyFired) candidates.push(...cv);
+    if(!candidates.length){ resolve(null); return; }
+    // デバックログ
+    console.log('[waitForSurfaceTarget]', {
+      side, focusSea, attacker: attacker?.name,
+      enemiesCount: enemies.length, enemiesIds: enemies.map(s=>s.id+'('+s.type+')'),
+      normalCount: normal.length, cvCount: cv.length, convoyCount: convoy.length,
+      allNormalFired, allConvoyFired, candidatesCount: candidates.length, candidatesIds: candidates.map(s=>s.id+'('+s.type+')'),
+      missingRows: candidates.filter(s => !document.getElementById(`cs-${s.id}`)).map(s=>s.id)
+    });
+    if(isAiAttacker){
+      const firedAt = (pending && pending.firedAtBy && pending.firedAtBy[attackerSide]) || new Set();
+      const unfired = candidates.filter(c => !firedAt.has(c.id));
+      if(unfired.length){
+        const undamaged = unfired.filter(c => c.damage === 0);
+        resolve(undamaged.length ? undamaged[0] : unfired[0]); return;
+      }
+      // 全艦攻撃済 → 無傷艦から
+      const undamaged = candidates.filter(c => c.damage === 0);
+      resolve(undamaged.length ? undamaged[0] : candidates[0]); return;
+    }
+    const handlers = {};
+    candidates.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(!row) return;
+      row.classList.add('selectable');
+      const onClick = () => {
+        candidates.forEach(c => {
+          const r = document.getElementById(`cs-${c.id}`);
+          if(r){ r.classList.remove('selectable'); if(handlers[c.id]) r.removeEventListener('click', handlers[c.id]); }
+        });
+        resolve(s);
+      };
+      handlers[s.id] = onClick;
+      row.addEventListener('click', onClick);
+    });
+  });
+}
+
+async function resolveCombatAll(){
+  const events = [];
+  resolveAllCombat(events);
+  if(!events.length){
+    alert('戦闘対象なし');
+    return;
+  }
+  await playCombatEvents(events);
+  placeAllShips();
+  renderLocShipList(); renderSeaResetButtons(); renderCombatPane();
+}
+
+const DICE_GLYPH = ['','⚀','⚁','⚂','⚃','⚄','⚅'];
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function diceClass(r){ return r===6 ? 'hit' : (r===5 ? 'dis' : 'miss'); }
+
+function renderShipRow(s){
+  const grp = s.group ? `<span class="cs-group" style="color:#fc4;font-weight:bold;margin-left:8px;">${s.group}</span>` : '';
+  return `<div class="cs-row" id="cs-${s.id}">
+    <div class="cs-img"><img src="../WAS24/images/${s.file}"></div>
+    <div class="cs-name">${s.name}${grp}</div>
+    <div class="cs-status" id="cs-st-${s.id}">${s.atk}-${s.def}-${s.spd} ${s.type}${s.damage?` 損害${s.damage}`:''}</div>
+    <div class="cs-dice" id="cs-dc-${s.id}"></div>
+  </div>`;
+}
+
+function setPhaseLabel(txt){
+  document.getElementById('phaseLabel').textContent = txt;
+}
+function highlightShip(id, cls){
+  const el = document.getElementById(`cs-${id}`);
+  if(el) el.classList.add(cls);
+}
+function unhighlightShip(id, cls){
+  const el = document.getElementById(`cs-${id}`);
+  if(el) el.classList.remove(cls);
+}
+
+async function openCombatModal(focusSea, initialEvents, opts){
+  opts = opts || {};
+  const excludeUboat = !!opts.excludeUboat;
+  const aswOnly = !!opts.aswOnly;
+  const modal = document.getElementById('combatModal');
+  modal.classList.add('show');
+  // 参加艦: 海域内の生存艦のみ（撃沈艦は表示しない）
+  const ids = new Set();
+  (initialEvents || []).forEach(e => {
+    const checkId = (id) => {
+      if(!id) return;
+      const s = SHIPS.find(x => x.id === id);
+      if(!s || s.sunk) return;
+      ids.add(id);
+    };
+    checkId(e.attacker);
+    checkId(e.target);
+    checkId(e.ship);
+  });
+  if(focusSea){
+    SHIPS.forEach(s => {
+      if(s.location !== focusSea) return;
+      if(s.sunk) return;
+      if(excludeUboat && s.type === 'UBOAT') return;
+      // ASW表示: 枢軸はUボートのみ（イタリア艦等の水上艦を除外）
+      if(aswOnly && s.side === 'axis' && s.type !== 'UBOAT') return;
+      ids.add(s.id);
+    });
+  }
+  const inv = SHIPS.filter(s => ids.has(s.id) && !s.sunk);
+  const allies = inv.filter(s => s.side === 'allies');
+  const axis   = inv.filter(s => s.side === 'axis');
+  document.getElementById('alliesShipList').innerHTML = allies.map(renderShipRow).join('') || '<div style="color:#aac;padding:6px;">―</div>';
+  document.getElementById('axisShipList').innerHTML   = axis.map(renderShipRow).join('')   || '<div style="color:#aac;padding:6px;">―</div>';
+  document.getElementById('combatTitle').textContent = focusSea ? `戦闘解決: ${SEA_LABEL[focusSea]}` : '戦闘解決';
+  setPhaseLabel('━ 開始 ━');
+}
+
+async function playEvents(events){
+  for(const e of events){
+    await playOneEvent(e);
+  }
+}
+
+// 後方互換
+async function playCombatEvents(events, focusSea){
+  await openCombatModal(focusSea, events);
+  await playEvents(events);
+  setPhaseLabel('━ 終了 ━');
+}
+
+// 帰還可能港の取得（艦の現在の海域に隣接する友軍/中立で使用可能な港）
+function getReturnPorts(ship){
+  const sea = ship.location;
+  if(!SEAS[sea]) return [];
+  // 南大西洋のドイツ艦特例: 無傷=France(不可なら中立)、損害=中立のみ
+  if(sea === 'SouthAtlantic' && ship.country === 'DE'){
+    const franceUsable = PORTS.France.available.includes(currentTurn);
+    if(ship.damage > 0) return ['Neutral'];
+    return franceUsable ? ['France'] : ['Neutral'];
+  }
+  let adjacent = Object.keys(PORT_SEAS).filter(p => PORT_SEAS[p].includes(sea));
+  // 地図ルール特例
+  // NorthAtlantic のドイツ艦は Germany 帰還可
+  if(sea === 'NorthAtlantic' && ship.country === 'DE'){
+    if(!adjacent.includes('Germany')) adjacent.push('Germany');
+  }
+  // Mediterranean の英国艦は England 帰還可
+  if(sea === 'Mediterranean' && ship.country === 'UK'){
+    if(!adjacent.includes('England')) adjacent.push('England');
+  }
+  return adjacent.filter(p => {
+    const port = PORTS[p];
+    if(!port.available.includes(currentTurn)) return false;
+    if(port.side !== 'neutral' && port.side !== ship.side) return false;
+    if(port.side === 'neutral' && ship.country === 'UK') return false; // UK艦は中立港使用不可
+    if(p === 'Russia' && ship.country === 'UK') return false; // UK艦はRussia帰還不可（Englandへ）
+    return true;
+  });
+}
+
+// 枢軸艦帰還UI: 縦に艦一覧、各行に到達可能港ボタン＋洋上補給ボタン＋やり直し
+async function showAxisReturnUI(allShips){
+  // 港にいる艦は決定不要（既に到着済み）→ 海域にいる艦のみ対象
+  const ships = allShips.filter(s => s.location && SEAS[s.location]);
+  if(!ships.length) return;
+  return new Promise(resolve => {
+    const modal = document.getElementById('axisReturnModal');
+    const tbody = document.getElementById('axisReturnBody');
+    // 元状態を保存（やり直し用）
+    const orig = ships.map(s => ({
+      shipId: s.id,
+      location: s.location,
+      atDock: s.atDock,
+      arrivedNeutralTurn: s.arrivedNeutralTurn,
+      refuelTurn: s.refuelTurn
+    }));
+    let remaining = ships.length;
+    const decided = new Set(); // 既に選択した艦ID
+    tbody.innerHTML = '';
+
+    function buildRow(ship){
+      const o = orig.find(x => x.shipId === ship.id);
+      const ports = getReturnPorts(ship);
+      const tr = document.createElement('tr');
+      tr.id = `axret-${ship.id}`;
+
+      const tdName = document.createElement('td');
+      const dmgText = ship.damage > 0 ? ` <span style="color:#fa8;">[損害${ship.damage}/${ship.def}]</span>` : '';
+      tdName.innerHTML = ship.name + dmgText;
+      tr.appendChild(tdName);
+
+      const tdLoc = document.createElement('td');
+      tdLoc.textContent = SEA_LABEL[o.location] || o.location;
+      tr.appendChild(tdLoc);
+
+      const tdBtn = document.createElement('td');
+
+      const showResult = (resultHtml) => {
+        tdBtn.innerHTML = '';
+        const span = document.createElement('span');
+        span.className = 'ret-result';
+        span.innerHTML = resultHtml;
+        tdBtn.appendChild(span);
+        const redoBtn = document.createElement('button');
+        redoBtn.className = 'ret-btn';
+        redoBtn.textContent = 'やり直し';
+        redoBtn.style.background = '#844';
+        redoBtn.style.marginLeft = '8px';
+        redoBtn.onclick = () => {
+          // 状態を元に戻す
+          ship.location = o.location;
+          ship.atDock = o.atDock;
+          ship.arrivedNeutralTurn = o.arrivedNeutralTurn;
+          ship.refuelTurn = o.refuelTurn;
+          decided.delete(ship.id);
+          remaining++;
+          placeAllShips();
+          // 行を再構築
+          const newTr = buildRow(ship);
+          tr.parentNode.replaceChild(newTr, tr);
+        };
+        tdBtn.appendChild(redoBtn);
+      };
+
+      const commit = (resultHtml) => {
+        if(!decided.has(ship.id)){
+          decided.add(ship.id);
+          remaining--;
+        }
+        showResult(resultHtml);
+        placeAllShips();
+        if(remaining === 0){
+          setTimeout(() => { modal.classList.remove('show'); resolve(); }, 600);
+        }
+      };
+
+      ports.forEach(p => {
+        const btn = document.createElement('button');
+        btn.className = 'ret-btn';
+        btn.textContent = PORT_LABEL[p] || p;
+        btn.onclick = () => {
+          ship.location = p;
+          ship.atDock = false;
+          if(p === 'Neutral') ship.arrivedNeutralTurn = currentTurn;
+          commit(`→ ${PORT_LABEL[p]||p}`);
+        };
+        tdBtn.appendChild(btn);
+      });
+
+      const refuelBtn = document.createElement('button');
+      refuelBtn.className = 'ret-btn refuel';
+      refuelBtn.textContent = '洋上補給';
+      const isRefuelable = (
+        ship.country === 'DE' &&
+        currentTurn <= 3 &&
+        (o.location === 'NorthAtlantic' || o.location === 'SouthAtlantic')
+      );
+      if(!isRefuelable){
+        refuelBtn.disabled = true;
+      } else {
+        refuelBtn.onclick = () => {
+          const maxRoll = 6 - currentTurn;
+          const r = rollD6();
+          if(r <= maxRoll){
+            ship.refuelTurn = currentTurn;
+            ship.atDock = false;
+            commit(`補給⚂${r}≤${maxRoll} 成功 → 海上残留`);
+          } else {
+            ship.location = 'Neutral';
+            ship.arrivedNeutralTurn = currentTurn;
+            ship.atDock = false;
+            commit(`補給⚂${r}>${maxRoll} 失敗 → 中立港`);
+          }
+        };
+      }
+      tdBtn.appendChild(refuelBtn);
+
+      tr.appendChild(tdBtn);
+      return tr;
+    }
+
+    for(const ship of ships){
+      const tr = buildRow(ship);
+      tbody.appendChild(tr);
+      // デフォルト選択: ドイツ艦 → Germany、イタリア艦 → Italy（候補に含まれる場合のみ自動コミット）
+      const defaultPort = ship.country === 'DE' ? 'Germany' : (ship.country === 'IT' ? 'Italy' : null);
+      if(defaultPort){
+        const ports = getReturnPorts(ship);
+        if(ports.includes(defaultPort)){
+          ship.location = defaultPort;
+          ship.atDock = false;
+          decided.add(ship.id);
+          remaining--;
+          // 既存行を再構築（やり直し付きの結果表示状態にする）
+          const newTr = buildRow(ship);
+          // 元状態は orig に保持済み、newTr は orig.location を使うので OK
+          tr.parentNode.replaceChild(newTr, tr);
+          // 結果表示に差し替え
+          const tdBtnNew = newTr.querySelector('td:last-child');
+          if(tdBtnNew){
+            tdBtnNew.innerHTML = '';
+            const span = document.createElement('span');
+            span.className = 'ret-result';
+            span.innerHTML = `→ ${PORT_LABEL[defaultPort]}`;
+            tdBtnNew.appendChild(span);
+            const redoBtn = document.createElement('button');
+            redoBtn.className = 'ret-btn';
+            redoBtn.textContent = 'やり直し';
+            redoBtn.style.background = '#844';
+            redoBtn.style.marginLeft = '8px';
+            redoBtn.onclick = () => {
+              const o = orig.find(x => x.shipId === ship.id);
+              ship.location = o.location;
+              ship.atDock = o.atDock;
+              ship.arrivedNeutralTurn = o.arrivedNeutralTurn;
+              ship.refuelTurn = o.refuelTurn;
+              decided.delete(ship.id);
+              remaining++;
+              placeAllShips();
+              const rebuiltTr = buildRow(ship);
+              newTr.parentNode.replaceChild(rebuiltTr, newTr);
+            };
+            tdBtnNew.appendChild(redoBtn);
+          }
+        }
+      }
+    }
+    placeAllShips();
+    if(remaining === 0){
+      setTimeout(() => { modal.classList.remove('show'); resolve(); }, 600);
+      return;
+    }
+
+    modal.classList.add('show');
+  });
+}
+
+// 港選択ダイアログ（港 / 修理ドック 両方）
+function waitForPortChoice(ports, shipName){
+  return new Promise(resolve => {
+    const phaseEl = document.getElementById('phaseLabel');
+    const buttons = ports.map(p => {
+      const portBtn = `<button class="locBtn port" data-port="${p}" data-dock="0" style="margin-left:6px;font-size:0.85em;padding:3px 10px;">${PORT_LABEL[p]||p} 港</button>`;
+      const dockBtn = `<button class="locBtn port" data-port="${p}" data-dock="1" style="margin-left:3px;font-size:0.85em;padding:3px 10px;background:#683;">${PORT_LABEL[p]||p} 修理ドック</button>`;
+      return portBtn + dockBtn;
+    }).join('');
+    phaseEl.innerHTML = `${shipName} 帰還先を選択: ${buttons}`;
+    phaseEl.querySelectorAll('button[data-port]').forEach(btn => {
+      btn.onclick = () => {
+        const p = btn.dataset.port;
+        const isDock = btn.dataset.dock === '1';
+        phaseEl.innerHTML = `${shipName} → ${PORT_LABEL[p]||p}${isDock?'(修理ドック)':''}`;
+        resolve({ port: p, atDock: isDock });
+      };
+    });
+  });
+}
+
+// 複数艦選択（撤退/追跡用）
+function selectShipsMulti(candidates, prompt){
+  return new Promise(resolve => {
+    console.log('[selectShipsMulti] candidates:', candidates.map(s => `${s.name}(cs-row=${!!document.getElementById('cs-'+s.id)})`).join(', '));
+    if(!candidates.length){ resolve([]); return; }
+    const selected = new Set();
+    const handlers = {};
+    // cs-row が無い候補は再描画
+    candidates.forEach(s => {
+      if(document.getElementById(`cs-${s.id}`)) return;
+      const listId = s.side === 'allies' ? 'alliesShipList' : 'axisShipList';
+      const list = document.getElementById(listId);
+      if(list){
+        list.insertAdjacentHTML('beforeend', renderShipRow(s));
+        console.log('[selectShipsMulti] cs-row recreated for', s.name);
+      }
+    });
+    candidates.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(!row){ console.log('[selectShipsMulti] cs-row 未生成:', s.name); return; }
+      row.classList.add('selectable');
+      const onClick = () => {
+        if(selected.has(s.id)){
+          selected.delete(s.id);
+          row.style.boxShadow = '';
+        } else {
+          selected.add(s.id);
+          row.style.boxShadow = 'inset 0 0 0 3px #fc4';
+        }
+      };
+      handlers[s.id] = onClick;
+      row.addEventListener('click', onClick);
+    });
+    const phaseEl = document.getElementById('phaseLabel');
+    phaseEl.innerHTML = `${prompt} <button class="locBtn" id="_msOk" style="margin-left:8px;background:#2266cc;">確定</button> <button class="locBtn" id="_msCancel">取消</button>`;
+    const cleanup = () => {
+      candidates.forEach(s => {
+        const row = document.getElementById(`cs-${s.id}`);
+        if(row){
+          row.classList.remove('selectable');
+          row.style.boxShadow = '';
+          if(handlers[s.id]) row.removeEventListener('click', handlers[s.id]);
+        }
+      });
+    };
+    document.getElementById('_msOk').onclick = () => {
+      cleanup();
+      resolve(candidates.filter(s => selected.has(s.id)));
+    };
+    document.getElementById('_msCancel').onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+  });
+}
+
+// 撤退判定（連合/枢軸別、ラウンド終了時）
+async function tryRetreat(side, seaKey){
+  const candidates = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === side && s.type !== 'UBOAT');
+  if(!candidates.length) return null;
+  const sideName = side === 'allies' ? '連合' : '枢軸';
+  // AI 側は自動判断
+  if(side === aiSide){
+    if(!aiShouldRetreat(candidates, seaKey)){
+      setPhaseLabel(`${sideName}: AI判断で残留`);
+      await new Promise(r => setTimeout(r, 800));
+      return null;
+    }
+    const groups = aiSplitGroups(candidates, seaKey);
+    setPhaseLabel(`${sideName}: AI判断で撤退（${groups.length}グループ）`);
+    await new Promise(r => setTimeout(r, 800));
+    return groups;
+  }
+  setPhaseLabel(`${sideName}: 撤退しますか？`);
+  const yes = confirm(`${sideName}は全艦撤退しますか？`);
+  if(!yes) return null;
+  const groups = await splitIntoGroups(candidates, sideName);
+  return groups; // Array of Array of ships
+}
+
+function aiShouldRetreat(candidates, seaKey){
+  // 戦闘可能艦のみ（atk>=1, CV等は除外）
+  const myFighters = candidates.filter(s => s.atk >= 1);
+  const enemy = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === humanSide && s.type !== 'UBOAT');
+  const enemyFighters = enemy.filter(s => s.atk >= 1);
+  // 攻撃力合計で比較（損害艦も atk が落ちているので現状値で計算）
+  const myStrength = myFighters.reduce((sum, s) => sum + (s.atk || 0), 0);
+  const enemyStrength = enemyFighters.reduce((sum, s) => sum + (s.atk || 0), 0);
+  // 自軍攻撃力 < 敵攻撃力 なら撤退
+  return myStrength < enemyStrength;
+}
+
+function aiSplitGroups(candidates, seaKey){
+  const enemy = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === humanSide && s.type !== 'UBOAT');
+  const enemyMaxSpd = enemy.length ? Math.max(...enemy.map(s => s.spd)) : 0;
+  // コンボイは見捨てる（戦闘海域に取り残される）
+  const targets = candidates.filter(s => s.type !== 'CONVOY');
+  // 逃げ切れる組: 速力が敵最高速力以上 / 逃げ切れない組: それ未満
+  const fast = targets.filter(s => s.spd >= enemyMaxSpd);
+  const slow = targets.filter(s => s.spd < enemyMaxSpd);
+  const groups = [];
+  if(fast.length) groups.push(fast); // 逃げ切れる組をまとめて1グループ
+  if(slow.length) groups.push(slow); // 逃げ切れない組をまとめて1グループ
+  const result = groups.filter(g => g.length > 0);
+  // 各艦にグループタグを割り当て、cs-row上に表示反映
+  result.forEach((grp, i) => {
+    const tag = String.fromCharCode(65 + i); // A, B, C...
+    grp.forEach(s => {
+      s.group = tag;
+      const row = document.getElementById(`cs-${s.id}`);
+      if(row){
+        let grpEl = row.querySelector('.cs-group');
+        if(!grpEl){
+          grpEl = document.createElement('span');
+          grpEl.className = 'cs-group';
+          grpEl.style.cssText = 'color:#fc4;font-weight:bold;margin-left:8px;';
+          const nameEl = row.querySelector('.cs-name');
+          if(nameEl) nameEl.appendChild(grpEl);
+        }
+        grpEl.textContent = tag;
+      }
+    });
+  });
+  return result;
+}
+
+function splitIntoGroups(ships, sideName){
+  return new Promise(resolve => {
+    let activeGroup = 'A';
+    const assignments = {};
+    const groupNames = ['A','B','C'];
+    const phaseEl = document.getElementById('phaseLabel');
+    const grpBtnsHtml = groupNames.map(g =>
+      `<button class="grpBtn" data-grp="${g}" style="padding:4px 10px;margin-right:4px;">${g}</button>`
+    ).join('');
+    phaseEl.innerHTML = `${sideName}: タグを選び艦をクリックでグループ分け ${grpBtnsHtml} <button id="_grpOk" style="background:#2266cc;color:#fff;padding:4px 10px;margin-left:8px;">確定</button>`;
+    const updateBtns = () => {
+      phaseEl.querySelectorAll('button[data-grp]').forEach(b => {
+        b.style.background = (b.dataset.grp === activeGroup) ? '#fc4' : '#446';
+        b.style.color = (b.dataset.grp === activeGroup) ? '#000' : '#fff';
+      });
+    };
+    updateBtns();
+    phaseEl.querySelectorAll('button[data-grp]').forEach(b => {
+      b.onclick = () => { activeGroup = b.dataset.grp; updateBtns(); };
+    });
+    const handlers = {};
+    const updateRowSort = () => {
+      const lists = ['alliesShipList','axisShipList'];
+      lists.forEach(lid => {
+        const list = document.getElementById(lid);
+        if(!list) return;
+        const rows = Array.from(list.children);
+        rows.sort((a,b) => {
+          const sa = SHIPS.find(x => `cs-${x.id}` === a.id);
+          const sb = SHIPS.find(x => `cs-${x.id}` === b.id);
+          const ga = (sa && sa.group) || 'Z';
+          const gb = (sb && sb.group) || 'Z';
+          return ga.localeCompare(gb);
+        });
+        rows.forEach(r => list.appendChild(r));
+      });
+    };
+    ships.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(!row) return;
+      row.classList.add('selectable');
+      const onClick = () => {
+        assignments[s.id] = activeGroup;
+        s.group = activeGroup;
+        let grpEl = row.querySelector('.cs-group');
+        if(!grpEl){
+          grpEl = document.createElement('span');
+          grpEl.className = 'cs-group';
+          grpEl.style.cssText = 'color:#fc4;font-weight:bold;margin-left:8px;';
+          row.appendChild(grpEl);
+        }
+        grpEl.textContent = activeGroup;
+        updateRowSort();
+      };
+      handlers[s.id] = onClick;
+      row.addEventListener('click', onClick);
+    });
+    document.getElementById('_grpOk').onclick = () => {
+      ships.forEach(s => {
+        const row = document.getElementById(`cs-${s.id}`);
+        if(row){
+          row.classList.remove('selectable');
+          if(handlers[s.id]) row.removeEventListener('click', handlers[s.id]);
+        }
+      });
+      const groups = [];
+      groupNames.forEach(g => {
+        const grpShips = ships.filter(s => assignments[s.id] === g);
+        if(grpShips.length) groups.push(grpShips);
+      });
+      const unassigned = ships.filter(s => !assignments[s.id]);
+      if(unassigned.length) groups.push(unassigned);
+      resolve(groups.length ? groups : [ships]);
+    };
+  });
+}
+
+// 追跡判定（グループ別対応）
+async function tryPursuit(pursuerSide, seaKey, retreatGroups){
+  if(!retreatGroups || !retreatGroups.length) return null;
+  const sideName = pursuerSide === 'allies' ? '連合' : '枢軸';
+  const isAi = pursuerSide === aiSide;
+  const pursuits = [];
+
+  if(isAi){
+    // AI: グループごとに自動判定
+    for(let i = 0; i < retreatGroups.length; i++){
+      const group = retreatGroups[i];
+      if(!group.length) continue;
+      const minSpd = Math.min(...group.map(s => s.spd));
+      const eligible = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && s.type !== 'CV' && s.spd >= minSpd);
+      if(!eligible.length) continue;
+      const pursuers = aiSelectPursuers(eligible, group);
+      if(!pursuers || !pursuers.length) continue;
+      pursuits.push({ pursuers, retreaters: group });
+    }
+    if(pursuits.length){
+      setPhaseLabel(`${sideName}: AI判断で追撃（${pursuits.length}グループ）`);
+    } else {
+      setPhaseLabel(`${sideName}: AI判断で追撃せず`);
+    }
+    await new Promise(r => setTimeout(r, 800));
+  } else {
+    // 人間側: 全グループを一覧表示してまとめて選択
+    const result = await selectPursuitAssignments(retreatGroups, seaKey, pursuerSide, sideName);
+    if(result){
+      for(const [gidx, ships] of Object.entries(result)){
+        if(ships && ships.length){
+          pursuits.push({ pursuers: ships, retreaters: retreatGroups[Number(gidx)] });
+        }
+      }
+    }
+  }
+
+  return pursuits.length ? pursuits : null;
+}
+
+// 人間側の追撃グループ一括選択UI
+function selectPursuitAssignments(retreatGroups, seaKey, pursuerSide, sideName){
+  return new Promise(resolve => {
+    const groupsInfo = retreatGroups.map((group, i) => {
+      const grpName = String.fromCharCode(65 + i);
+      const minSpd = group.length ? Math.min(...group.map(s => s.spd)) : 0;
+      const eligible = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && s.type !== 'CV' && s.spd >= minSpd);
+      return { idx: i, grpName, group, minSpd, eligible };
+    }).filter(g => g.group.length);
+
+    if(!groupsInfo.length){ resolve(null); return; }
+
+    // 追撃可能な枢軸艦の和集合
+    const allEligibleIds = new Set();
+    groupsInfo.forEach(g => g.eligible.forEach(s => allEligibleIds.add(s.id)));
+    const allEligible = SHIPS.filter(s => allEligibleIds.has(s.id));
+
+    // shipId → groupIdx の割り当て
+    const assignments = {};
+
+    const phaseEl = document.getElementById('phaseLabel');
+    let html = `<div style="display:flex;flex-direction:column;gap:4px;font-size:0.9em;">`;
+    html += `<div style="font-weight:bold;color:#fc4;">${sideName}追撃選択 — 各グループ別に追撃艦を割当</div>`;
+    groupsInfo.forEach(g => {
+      const shipsList = g.group.map(s => `${s.name}(spd${s.spd})`).join(', ');
+      const elNames = g.eligible.map(s => s.name).join(', ') || '該当なし';
+      const tagColor = g.eligible.length ? '#fc4' : '#888';
+      html += `<div style="border:1px solid #456;padding:4px 6px;background:#1a2a3a;">`;
+      html += `<span style="color:${tagColor};font-weight:bold;">グループ${g.grpName}</span> (最遅spd${g.minSpd}): ${shipsList}<br>`;
+      html += `<span style="font-size:0.85em;color:#aac;">追撃可能枢軸: ${elNames}</span>`;
+      html += `</div>`;
+    });
+    html += `<div style="font-size:0.85em;color:#aac;">枢軸艦の右にあるグループボタンをクリックで割当 (- は不参加)</div>`;
+    html += `<div><button id="_purOk" style="background:#2266cc;color:#fff;padding:4px 14px;border:none;border-radius:3px;cursor:pointer;">確定</button> <button id="_purCancel" style="background:#666;color:#fff;padding:4px 14px;border:none;border-radius:3px;cursor:pointer;margin-left:6px;">追撃しない</button></div>`;
+    html += `</div>`;
+    phaseEl.innerHTML = html;
+
+    // 各枢軸艦のcs-rowにグループ割当ボタン群を追加
+    allEligible.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(!row) return;
+      row.classList.add('selectable');
+      const eligibleGroups = groupsInfo.filter(g => g.eligible.some(e => e.id === s.id));
+      const btnContainer = document.createElement('span');
+      btnContainer.className = 'pur-btns';
+      btnContainer.style.cssText = 'margin-left:8px;display:inline-flex;gap:2px;';
+      let btnHtml = '';
+      eligibleGroups.forEach(g => {
+        btnHtml += `<button data-shipid="${s.id}" data-gidx="${g.idx}" class="purBtn" style="background:#446;color:#fff;padding:1px 7px;border:1px solid #678;border-radius:3px;cursor:pointer;font-size:0.85em;">${g.grpName}</button>`;
+      });
+      btnHtml += `<button data-shipid="${s.id}" data-gidx="-1" class="purBtn" style="background:#642;color:#fff;padding:1px 7px;border:1px solid #864;border-radius:3px;cursor:pointer;font-size:0.85em;">-</button>`;
+      btnContainer.innerHTML = btnHtml;
+      const nameEl = row.querySelector('.cs-name');
+      if(nameEl) nameEl.appendChild(btnContainer);
+
+      // 初期状態: 最初の追撃可能グループに自動割当 (確定で即追撃が始まるよう)
+      const defaultGidx = eligibleGroups.length ? eligibleGroups[0].idx : -1;
+      assignments[s.id] = defaultGidx;
+      const updateBtnStyle = (gidx) => {
+        btnContainer.querySelectorAll('.purBtn').forEach(bb => {
+          const isActive = Number(bb.dataset.gidx) === gidx;
+          bb.style.background = isActive ? '#fc4' : (Number(bb.dataset.gidx) === -1 ? '#642' : '#446');
+          bb.style.color = isActive ? '#000' : '#fff';
+        });
+      };
+      updateBtnStyle(defaultGidx);
+
+      btnContainer.querySelectorAll('.purBtn').forEach(b => {
+        b.onclick = (e) => {
+          e.stopPropagation();
+          const gidx = Number(b.dataset.gidx);
+          assignments[s.id] = gidx;
+          updateBtnStyle(gidx);
+        };
+      });
+    });
+
+    const cleanup = () => {
+      allEligible.forEach(s => {
+        const row = document.getElementById(`cs-${s.id}`);
+        if(row){
+          row.classList.remove('selectable');
+          const btnEl = row.querySelector('.pur-btns');
+          if(btnEl) btnEl.remove();
+        }
+      });
+    };
+
+    document.getElementById('_purOk').onclick = () => {
+      cleanup();
+      const result = {};
+      for(const [shipId, gidx] of Object.entries(assignments)){
+        if(gidx < 0) continue;
+        const ship = SHIPS.find(s => s.id === shipId);
+        if(!ship) continue;
+        if(!result[gidx]) result[gidx] = [];
+        result[gidx].push(ship);
+      }
+      resolve(result);
+    };
+    document.getElementById('_purCancel').onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+  });
+}
+
+function aiSelectPursuers(eligible, retreaters){
+  // 1艦残して残り全艦で追撃（残すのは速い艦）
+  if(eligible.length <= 1) return null;
+  const sorted = [...eligible].sort((a, b) => b.spd - a.spd);
+  const candidates = sorted.slice(1); // 最速1艦を残す
+  if(!retreaters || !retreaters.length) return candidates;
+  // 撤退側の戦力評価
+  const retCV = retreaters.some(s => s.type === 'CV' && !s.sunk);
+  const retAtk = retreaters.filter(s => !s.sunk).reduce((sum, s) => sum + (s.atk || 0), 0);
+  const purAtk = candidates.filter(s => !s.sunk).reduce((sum, s) => sum + (s.atk || 0), 0);
+  // 撤退側にCVがある場合: 追撃側攻撃力が撤退側の1.5倍未満なら追撃せず
+  if(retCV && purAtk < retAtk * 1.5) return null;
+  // CVなしでも追撃側攻撃力が撤退側未満なら追撃せず
+  if(!retCV && purAtk < retAtk) return null;
+  return candidates;
+}
+
+// プレイヤー目標選択
+function waitForTargetClick(side, focusSea){
+  return new Promise(resolve => {
+    const candidates = SHIPS.filter(s =>
+      s.side === side && !s.sunk && s.location === focusSea
+    );
+    if(!candidates.length){ resolve(null); return; }
+    const handlers = [];
+    candidates.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(!row) return;
+      row.classList.add('selectable');
+      const onClick = () => {
+        candidates.forEach(c => {
+          const r = document.getElementById(`cs-${c.id}`);
+          if(r){ r.classList.remove('selectable'); r.removeEventListener('click', handlers[c.id]); }
+        });
+        resolve(s);
+      };
+      handlers[s.id] = onClick;
+      row.addEventListener('click', onClick);
+    });
+  });
+}
+
+// 1ダイスを「ロール（シェイク）→ 結果表示」で演出
+async function rollAnimDice(diceEl, finalRoll, finalCls, durationMs=550){
+  // ロール中: shake + ランダム数字
+  diceEl.classList.add('rolling');
+  diceEl.textContent = '?';
+  const startTime = Date.now();
+  while(Date.now() - startTime < durationMs){
+    diceEl.textContent = (1 + Math.floor(Math.random()*6));
+    await wait(70);
+  }
+  diceEl.classList.remove('rolling');
+  diceEl.classList.add(finalCls);
+  diceEl.textContent = finalRoll;
+}
+
+function diceClassByRoll(r){ return r===6 ? 'hit' : (r===5 ? 'dis' : 'miss'); }
+
+async function playOneEvent(e){
+  const phaseEl = document.getElementById('phaseLabel');
+  switch(e.type){
+    case 'phase':
+      phaseEl.textContent = `━ ${e.label} (${SEA_LABEL[e.sea] || e.sea}) ━`;
+      await wait(700);
+      break;
+    case 'asw_ship': {
+      // 各連合艦が個別にASWダイスを振る
+      const diceEl = document.getElementById(`cs-dc-${e.ship}`);
+      const tgtRow = document.getElementById(`cs-${e.ship}`);
+      if(tgtRow) tgtRow.classList.add('firing');
+      if(diceEl){
+        diceEl.innerHTML = '';
+        for(const r of e.dice){
+          const d = document.createElement('span');
+          d.className = 'dice';
+          diceEl.appendChild(d);
+          await rollAnimDice(d, r, diceClassByRoll(r));
+        }
+        const hit = e.dice.filter(r=>r===6).length;
+        const dis = e.dice.filter(r=>r===5).length;
+        const labelHtml = (hit||dis)
+          ? `<span class="result-label hit">命中${hit}・不能${dis}</span>`
+          : `<span class="result-label miss">外れ</span>`;
+        diceEl.insertAdjacentHTML('beforeend', labelHtml);
+      }
+      await wait(300);
+      if(tgtRow) tgtRow.classList.remove('firing');
+      break;
+    }
+    case 'asw_summary':
+      phaseEl.textContent = `ASW結果: Uボート撃沈${e.sunk}・即時帰還${e.disabled}`;
+      await wait(700);
+      break;
+    case 'fire_volley': {
+      const attRow = document.getElementById(`cs-${e.attacker}`);
+      const tgtRow = document.getElementById(`cs-${e.target}`);
+      const diceEl = document.getElementById(`cs-dc-${e.attacker}`);
+      if(attRow) attRow.classList.add('firing');
+      if(tgtRow) tgtRow.classList.add('target');
+      if(diceEl){
+        diceEl.innerHTML = `<span style="color:#aac;margin-right:4px;">→${e.targetName}</span>`;
+        // 攻撃ダイスを順番にロール
+        for(const x of e.dice){
+          const d = document.createElement('span');
+          d.className = 'dice';
+          diceEl.appendChild(d);
+          const cls = x.isHit ? 'hit' : (x.isDis ? 'dis' : 'miss');
+          await rollAnimDice(d, x.r, cls);
+        }
+        // 6の回数分、損害ダイス
+        if(e.damageRolls.length){
+          diceEl.insertAdjacentHTML('beforeend', '<span style="color:#fa8;margin:0 6px;font-weight:bold;">損害:</span>');
+          for(const dr of e.damageRolls){
+            const dd = document.createElement('span');
+            dd.className = 'dice';
+            diceEl.appendChild(dd);
+            await rollAnimDice(dd, dr, 'dmg');
+            if(tgtRow){
+              tgtRow.classList.add('flash');
+              setTimeout(()=>tgtRow.classList.remove('flash'),400);
+            }
+          }
+          if(e.dmgTotal !== undefined){
+            diceEl.insertAdjacentHTML('beforeend', `<span style="color:#fa8;margin-left:6px;font-weight:bold;">合計${e.dmgTotal}</span>`);
+          }
+          // 目標艦に累積損害を逐次表示
+          const tgtSt = document.getElementById(`cs-st-${e.target}`);
+          const tgtShip = SHIPS.find(s => s.id === e.target);
+          if(tgtSt && tgtShip){
+            const accum = (e.accumDamage !== undefined) ? e.accumDamage : ((tgtShip.damage || 0) + e.dmgTotal);
+            tgtSt.innerHTML = `<span style="color:#fa8;font-weight:bold;">損害${accum}/${tgtShip.def}</span>`;
+          }
+        } else {
+          diceEl.insertAdjacentHTML('beforeend', '<span class="result-label miss">外れ</span>');
+        }
+        // 5(即時帰還)が出ていれば、損害有無に関わらず目標艦に即時帰還ラベルを表示
+        if(e.hasDisabled){
+          const tgtSt = document.getElementById(`cs-st-${e.target}`);
+          if(tgtSt && !tgtSt.querySelector('.result-label.disabled')) tgtSt.insertAdjacentHTML('beforeend', ' <span class="result-label disabled">即時帰還</span>');
+        }
+      }
+      await wait(400);
+      if(attRow) attRow.classList.remove('firing');
+      if(tgtRow) tgtRow.classList.remove('target');
+      break;
+    }
+    case 'fire': {
+      const attRow = document.getElementById(`cs-${e.attacker}`);
+      const tgtRow = document.getElementById(`cs-${e.target}`);
+      const diceEl = document.getElementById(`cs-dc-${e.attacker}`);
+      if(attRow) attRow.classList.add('firing');
+      if(tgtRow) tgtRow.classList.add('target');
+      if(diceEl){
+        diceEl.innerHTML = `<span style="color:#aac;margin-right:4px;">→${e.targetName}</span>`;
+        for(const x of e.dice){
+          const d = document.createElement('span');
+          d.className = 'dice';
+          diceEl.appendChild(d);
+          await rollAnimDice(d, x.r, diceClassByRoll(x.r));
+          if(x.dmgRoll){
+            const dmg = document.createElement('span');
+            dmg.className = 'dice';
+            diceEl.appendChild(dmg);
+            await rollAnimDice(dmg, x.dmgRoll, 'dmg', 450);
+            if(tgtRow){
+              tgtRow.classList.add('flash');
+              setTimeout(()=> tgtRow.classList.remove('flash'), 400);
+            }
+          }
+        }
+        let label;
+        if(e.dmgTotal>0)    label = `<span class="result-label hit">命中・損害${e.dmgTotal}</span>`;
+        else if(e.disabled) label = `<span class="result-label disabled">即時帰還</span>`;
+        else                label = `<span class="result-label miss">外れ</span>`;
+        diceEl.insertAdjacentHTML('beforeend', label);
+      }
+      await wait(400);
+      if(attRow) attRow.classList.remove('firing');
+      if(tgtRow) tgtRow.classList.remove('target');
+      break;
+    }
+    case 'damage': {
+      const stEl = document.getElementById(`cs-st-${e.ship}`);
+      if(stEl) stEl.innerHTML = `<span style="color:#fa8;">損害${e.damage}/${e.def}・速力${e.spd}</span>`;
+      await wait(250);
+      break;
+    }
+    case 'sunk': {
+      const row = document.getElementById(`cs-${e.ship}`);
+      const stEl = document.getElementById(`cs-st-${e.ship}`);
+      if(row) row.classList.add('sunk');
+      if(stEl) stEl.innerHTML = `<span class="result-label sunk">★撃沈</span>`;
+      await wait(500);
+      break;
+    }
+    case 'disabled': {
+      const row = document.getElementById(`cs-${e.ship}`);
+      const stEl = document.getElementById(`cs-st-${e.ship}`);
+      if(row) row.classList.add('disabled');
+      if(stEl && !stEl.querySelector('.result-label.disabled')) stEl.insertAdjacentHTML('beforeend', ' <span class="result-label disabled">即時帰還</span>');
+      await wait(300);
+      // 即時帰還
+      const ship = SHIPS.find(s => s.id === e.ship);
+      if(ship && SEAS[ship.location]){
+        // 枢軸艦（船団除く・人間プレイ時のみ）は戦闘終了後にUIで選択させる（自動配置せず）
+        if(ship.side === 'axis' && ship.type !== 'CONVOY' && humanSide === 'axis'){
+          ship.disabled = false;
+          ship.disabledThisTurn = true;
+          if(!pendingAxisDisabledForUI.find(p => p.shipId === ship.id)){
+            pendingAxisDisabledForUI.push({ shipId: ship.id, originalSea: ship.location });
+          }
+          await wait(200);
+          break;
+        }
+        let chosenPort, atDock = false;
+        // 14.7 即時帰還船団は米国へ自動
+        if(ship.type === 'CONVOY'){
+          chosenPort = 'USA';
+        } else if(ship.location === 'SouthAtlantic'){
+          // UK艦は中立港使用不可、homePort (England) へ
+          chosenPort = (ship.country === 'UK') ? (ship.homePort || 'England') : 'Neutral';
+        } else {
+          const ports = getReturnPorts(ship);
+          if(ports.length === 0)      chosenPort = ship.homePort;
+          else                        chosenPort = ports.includes(ship.homePort) ? ship.homePort : ports[0];
+        }
+        if(chosenPort === 'Neutral') ship.arrivedNeutralTurn = currentTurn;
+        ship.atDock = atDock;
+        ship.location = chosenPort;
+        ship.disabled = false;
+        ship.disabledThisTurn = true; // 9.5 同ターン中の空爆対象外
+        if(stEl) stEl.insertAdjacentHTML('beforeend',
+          ` → <span style="color:#cca;">${PORT_LABEL[chosenPort]||chosenPort}</span>`);
+        await wait(400);
+      }
+      break;
+    }
+    case 'uboat_disabled': {
+      const row = document.getElementById(`cs-${e.ship}`);
+      const stEl = document.getElementById(`cs-st-${e.ship}`);
+      if(row) row.classList.add('disabled');
+      if(stEl) stEl.innerHTML = '<span class="result-label disabled">即時帰還→ドイツ</span>';
+      await wait(400);
+      break;
+    }
+    case 'return_disabled': {
+      const stEl = document.getElementById(`cs-st-${e.ship}`);
+      if(stEl && !stEl.querySelector('.result-label.disabled')) stEl.insertAdjacentHTML('beforeend', ' <span class="result-label disabled">即時帰還</span>');
+      await wait(300);
+      break;
+    }
+  }
+}
+
+// 修理 (13)
+function executeRepair(side){
+  const log = [];
+  console.log('[executeRepair]', { side, currentTurn });
+  Object.keys(PORTS).forEach(portKey => {
+    const port = PORTS[portKey];
+    const portShipsAll = SHIPS.filter(s => s.location === portKey && !s.sunk);
+    const damagedShipsAll = portShipsAll.filter(s => s.damage > 0);
+    if(damagedShipsAll.length){
+      console.log(`[executeRepair] ${portKey} (repair=${port.repair}, avail=${port.available}, side=${port.side}):`, damagedShipsAll.map(s => `${s.name}(${s.side},dmg${s.damage})`));
+    }
+    if(port.repair <= 0){ if(damagedShipsAll.length) console.log(`  → skip: repair<=0`); return; }
+    if(!port.available.includes(currentTurn)){ if(damagedShipsAll.length) console.log(`  → skip: turn ${currentTurn} not in available`); return; }
+    if(side && port.side !== 'neutral' && port.side !== side){ if(damagedShipsAll.length) console.log(`  → skip: side filter (${side} vs ${port.side})`); return; }
+    const ships = SHIPS.filter(s =>
+      s.location === portKey && !s.sunk && s.damage > 0 &&
+      (!side || s.side === side)
+    );
+    if(!ships.length){ console.log(`  → no ships match filter`); return; }
+    let budget = port.repair;
+    const lines = [];
+    for(const ship of ships){
+      if(budget <= 0) break;
+      const rep = Math.min(budget, ship.damage);
+      ship.damage -= rep;
+      budget -= rep;
+      ship.spd = Math.max(1, ship.spdOrig - ship.damage);
+      if(ship.damage < ship.def && ship.atkOrig > 0){
+        ship.atk = ship.atkOrig;
+      }
+      lines.push(`${ship.name}: -${rep} → 残${ship.damage}/${ship.def}`);
+    }
+    if(lines.length){
+      log.push(`<b>${PORT_LABEL[portKey]||portKey}(${port.repair})</b>: ${lines.join(' / ')}`);
+    }
+  });
+  document.getElementById('repairStatus').innerHTML = log.length ? log.join('<br>') : '修理対象艦なし';
+  placeAllShips();
+  renderLocShipList();
+  return log;
+}
+
+// シミュレーションモード（true=高速・アニメ無し）
+let simMode = false;
+
+// 連合軍AI移動 + 修理
+async function aiAlliedMove(bbTargetOverride){
+  const aiLog = [];
+  // ロシア艦出港判定（ターン3以降、毎ターン、ダイス5+で成功）
+  if(currentTurn >= 3){
+    const ruResults = [];
+    SHIPS.filter(s => s.country === 'RU' && !s.sunk).forEach(s => {
+      const r = rollD6();
+      s.canMoveThisTurn = (r >= 5);
+      aiLog.push(`${s.name}: ロシア出港⚂${r} ${s.canMoveThisTurn ? '成功' : '失敗'}`);
+      ruResults.push(`${s.name}: ⚂${r} ${s.canMoveThisTurn ? '成功' : '失敗'}`);
+    });
+    if(ruResults.length){
+      alert('ロシア艦出港判定:\n' + ruResults.join('\n'));
+    }
+  } else {
+    SHIPS.filter(s => s.country === 'RU' && !s.sunk).forEach(s => {
+      s.canMoveThisTurn = false;
+    });
+    aiLog.push(`ロシア艦: ターン${currentTurn}<3 - 出港判定スキップ`);
+  }
+
+  // === 地中海補填を最優先で実施 ===
+  // Malta 艦の地中海派遣判定: マルタ艦数 ≥ イタリア艦数（生存総数、損害含む）なら出撃。劣勢なら控える
+  const itTotalAlive = SHIPS.filter(s => s.country === 'IT' && !s.sunk && !s.removed && s.type !== 'UBOAT').length;
+  const maltaTotalAlive = SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY').length;
+  if(maltaTotalAlive >= itTotalAlive){
+    SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY' && !s.movedThisTurn).forEach(s => {
+      s.location = 'Mediterranean';
+      s.movedThisTurn = true;
+    });
+    aiLog.push(`Malta出撃: マルタ${maltaTotalAlive} ≥ IT${itTotalAlive}`);
+  } else {
+    aiLog.push(`Malta出撃控え（数劣勢）: マルタ${maltaTotalAlive} < IT${itTotalAlive}`);
+  }
+  // 不足補充: マルタ艦撃沈分を England から地中海へ派遣（2海域移動なので1隻ずつダイス判定、成功するまで送る）
+  const maltaSunkCount = SHIPS.filter(s => s.homePort === 'Malta' && s.sunk).length;
+  if(maltaSunkCount > 0){
+    const englandReinforce = SHIPS.filter(s => s.location === 'England' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY' && !s.movedThisTurn && !(s.damage > 0));
+    let sent = 0;
+    for(const s of englandReinforce){
+      if(sent >= maltaSunkCount) break;
+      const roll = rollD6();
+      if(roll < s.spd){
+        s.location = 'Mediterranean';
+        s.movedThisTurn = true;
+        sent++;
+        aiLog.push(`${s.name}: England → 地中海 ⚂${roll}<${s.spd} 成功 (補充${sent}/${maltaSunkCount})`);
+      } else {
+        s.location = s.homePort || 'England';
+        s.movedThisTurn = true;
+        s.failedMove = true;
+        aiLog.push(`${s.name}: England → 地中海 ⚂${roll}≥${s.spd} 失敗 → ${locLabel(s.location)}帰還`);
+      }
+    }
+    if(sent < maltaSunkCount){
+      aiLog.push(`<b>地中海補充: ${sent}/${maltaSunkCount} (England艦不足)</b>`);
+    }
+  }
+
+  // 本番実行時はルールベース配置（各艦→海域のマッピング）を計算（地中海補填後の England 残艦が対象）
+  let bestConfig = null;
+  if(!bbTargetOverride && !simMode){
+    bestConfig = computeAlliedConfig();
+  }
+  const movable = SHIPS.filter(s =>
+    s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn &&
+    s.location && PORTS[s.location] &&
+    s.damage === 0
+  );
+
+  // モンテカルロで決定した配置を適用（bestConfig がある場合、各艦を直接配置）
+  if(bestConfig){
+    for(const shipId in bestConfig){
+      const ship = SHIPS.find(s => s.id === shipId);
+      if(!ship || ship.movedThisTurn) continue;
+      // 米国艦は投入ロール (ダイス6で成功、永続)
+      if(ship.country === 'US' && ship.type !== 'CONVOY' && !ship.usEntered){
+        const v = rollD6();
+        const success = v === 6;
+        aiLog.push(`${ship.name}: 米投入⚂${v}${success?'成功(永続)':'失敗'}`);
+        alert(`${ship.name}: 米投入⚂${v} ${success ? '成功(永続)' : '失敗'}`);
+        if(!success){
+          ship.movedThisTurn = true;
+          ship.failedMove = true;
+          continue;
+        }
+        ship.usEntered = true;
+      }
+      ship.location = bestConfig[shipId];
+      ship.movedThisTurn = true;
+      aiLog.push(`${ship.name} → ${SEA_LABEL[bestConfig[shipId]]||bestConfig[shipId]} (MC)`);
+    }
+    if(!simMode) placeAllShips();
+  }
+
+  // 枢軸数(Uボート除く)
+  const axisCount = {};
+  Object.keys(SEAS).forEach(k => {
+    axisCount[k] = SHIPS.filter(s => s.side === 'axis' && s.location === k && !s.sunk && s.type !== 'UBOAT').length;
+  });
+  // 連合既配置数
+  const allyCount = {};
+  Object.keys(SEAS).forEach(k => {
+    allyCount[k] = SHIPS.filter(s => s.side === 'allies' && s.location === k && !s.sunk).length;
+  });
+  // 不足数（枢軸 - 連合）
+  const need = {};
+  Object.keys(SEAS).forEach(k => need[k] = Math.max(0, axisCount[k] - allyCount[k]));
+  // 14.1 船団の海域占有
+  const convoyOccupied = new Set();
+  SHIPS.forEach(s => {
+    if(s.type === 'CONVOY' && SEAS[s.location] && !s.sunk && !s.removed) convoyOccupied.add(s.location);
+  });
+  // 既配置CV数
+  const cvCount = {};
+  Object.keys(SEAS).forEach(k => {
+    cvCount[k] = SHIPS.filter(s => s.side === 'allies' && s.type === 'CV' && s.location === k && !s.sunk).length;
+  });
+
+  function reachable(ship, dest){
+    // 6.6 バルト海はRU/DEのみ
+    if(dest === 'Baltic' && ship.country !== 'RU' && ship.country !== 'DE') return null;
+    // 15.1 ロシア艦はバルト海のみ
+    if(ship.country === 'RU' && dest !== 'Baltic') return null;
+    // 15.4 米国艦(船団除く)は北大西洋のみ
+    if(ship.country === 'US' && ship.type !== 'CONVOY' && dest !== 'NorthAtlantic') return null;
+    const adj = PORT_SEAS[ship.location] || [];
+    if(adj.includes(dest)) return { adj:true, two:false };
+    for(const s1 of adj){
+      if((SEA_ADJ[s1] || []).includes(dest)) return { adj:false, two:true };
+    }
+    return null;
+  }
+
+  async function tryApply(ship, dest){
+    // 既に移動済み（失敗含む）の艦は再試行しない
+    if(ship.movedThisTurn) return false;
+    const r = reachable(ship, dest);
+    if(!r) return false;
+    let success = true;
+    if(ship.country === 'RU'){
+      success = !!ship.canMoveThisTurn;
+    }
+    if(success && ship.country === 'US' && ship.type !== 'CONVOY'){
+      if(currentTurn < 4){ aiLog.push(`${ship.name}: T4以降のみ`); success = false; }
+      else if(!ship.usEntered){
+        const v = rollD6();
+        success = v === 6;
+        aiLog.push(`${ship.name}: 米投入⚂${v}${success?'成功(永続)':'失敗'}`);
+        alert(`${ship.name}: 米投入⚂${v} ${success ? '成功(永続)' : '失敗'}`);
+        if(success) ship.usEntered = true;
+      }
+    }
+    if(success && r.two){
+      const v = rollD6();
+      success = v < ship.spd;
+      aiLog.push(`${ship.name}: 2海域⚂${v}<${ship.spd}=${success?'成功':'失敗'}`);
+    }
+    if(!success){
+      ship.movedThisTurn = true;
+      ship.failedMove = true;
+      return false;
+    }
+    ship.location = dest;
+    ship.movedThisTurn = true;
+    allyCount[dest]++;
+    if(need[dest] > 0) need[dest]--;
+    if(ship.type === 'CV') cvCount[dest]++;
+    aiLog.push(`${ship.name} → ${SEA_LABEL[dest]||dest}`);
+    if(!simMode){
+      placeAllShips();
+      await new Promise(rs=>setTimeout(rs,180));
+    }
+    return true;
+  }
+
+  // 想定独最大戦力
+  const deAlive = SHIPS.filter(s => s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT').length;
+  const deDamaged = SHIPS.filter(s => s.country === 'DE' && !s.sunk && s.damage > 0 && s.type !== 'UBOAT').length;
+  const deStrength = deAlive - deDamaged * 0.5; // 損害有り艦は半分換算
+  const itAlive = SHIPS.filter(s => s.country === 'IT' && !s.sunk && !s.removed).length;
+  const deNonUboat = deAlive + itAlive;
+  const expectedThreat = Math.max(0, deNonUboat - 2);
+  // Uボート数
+  const uboatCount = {};
+  Object.keys(SEAS).forEach(k => {
+    uboatCount[k] = SHIPS.filter(s => s.type === 'UBOAT' && s.location === k && !s.sunk).length;
+  });
+  // コンボイ位置別カウント
+  const convoysAtBarents = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'Barents' && !s.sunk && !s.removed).length;
+  const convoysAtNA = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'NorthAtlantic' && !s.sunk && !s.removed).length;
+  const convoysAtUSA = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'USA' && !s.sunk && !s.removed).length;
+
+  // === 戦略総当たり評価 ===
+  // 初期差分: axis 6 (NS+Bar+Bal) - allies 3 (NA+Med+SA) = -3
+  const strategies = [];
+  // ルート1: ロシア重点（コンボイ→Barents→ロシア +3、ロシア艦Bal +3スイング、Bar防衛）
+  {
+    let s = -3; // baseline
+    s += 3 * convoysAtBarents; // 即時上陸
+    s += 1.5 * convoysAtNA; // 50%確率で次T到達
+    s += 3; // Bal制圧
+    s += deStrength <= 6 ? 3 : 1; // Bar制圧（独弱なら高確率）
+    strategies.push({ name:'Russia', score: s });
+  }
+  // ルート2: 大西洋・NS集中（コンボイ→英国 +1、NS制圧 +4スイング）
+  {
+    let s = -3;
+    s += 1 * (convoysAtBarents + convoysAtNA + convoysAtUSA);
+    s += deStrength <= 7 ? 4 : 2; // NS制圧（独強だと厳しい）
+    strategies.push({ name:'England-NS', score: s });
+  }
+  // ルート3: NS総力決戦
+  {
+    let s = -3;
+    s += deStrength <= 6 ? 5 : 1; // 決戦勝利でNS取れれば+1、+移動制限効果
+    s += 1 * convoysAtUSA; // 英国上陸サブ
+    strategies.push({ name:'NS-Decisive', score: s });
+  }
+  // ルート4: イタリア狩り（地中海集中、ITが地中海に居る時のみ有効）
+  {
+    let s = -3;
+    s += axisCount['Mediterranean'] >= 3 ? 3 : 0; // IT地中海居れば殲滅で+3
+    s += 1 * convoysAtUSA;
+    strategies.push({ name:'Italy-Hunt', score: s });
+  }
+  // ルート5: バル/バレンツ封じ
+  {
+    let s = -3;
+    s += 3; // Bar制圧
+    s += 3; // Bal制圧
+    s += 1 * convoysAtUSA;
+    strategies.push({ name:'BarBal-Deny', score: s });
+  }
+  strategies.sort((a,b) => b.score - a.score);
+  let chosenStrategy = strategies[0].name;
+  // コンボイ無し時: 確率で「通常削り(70%) vs NS+BarBal積極(30%)」を選択
+  const totalConvoys = convoysAtBarents + convoysAtNA + convoysAtUSA;
+  if(totalConvoys === 0){
+    chosenStrategy = Math.random() < 0.3 ? 'NoConvoy-Aggressive' : 'NoConvoy-Attrition';
+  }
+  aiLog.push(`<b>戦略選択: ${chosenStrategy}</b> | 候補スコア: ` + strategies.map(s=>`${s.name}=${s.score}`).join(', '));
+
+  // 戦艦目標: 戦略により切り替え
+  const bbTarget = {
+    NorthAtlantic: 0, SouthAtlantic: 0, Mediterranean: 0, Barents: 0, NorthSea: 0
+  };
+  if(chosenStrategy === 'Russia'){
+    bbTarget.Barents = convoyOccupied.has('Barents') ? Math.max(4, Math.ceil(deStrength * 0.6)) : 2;
+    bbTarget.NorthAtlantic = Math.ceil(expectedThreat * 0.3);
+    bbTarget.SouthAtlantic = Math.ceil(expectedThreat * 0.3);
+    bbTarget.Mediterranean = Math.max(2, axisCount['Mediterranean']);
+  } else if(chosenStrategy === 'England-NS'){
+    bbTarget.NorthAtlantic = Math.ceil(expectedThreat * 0.4);
+    bbTarget.SouthAtlantic = Math.ceil(expectedThreat * 0.4);
+    bbTarget.NorthSea = Math.max(4, Math.ceil(deStrength * 0.5));
+    bbTarget.Mediterranean = Math.max(2, axisCount['Mediterranean']);
+  } else if(chosenStrategy === 'NS-Decisive'){
+    bbTarget.NorthSea = Math.max(6, Math.ceil(deStrength * 0.8));
+    bbTarget.NorthAtlantic = 1;
+    bbTarget.SouthAtlantic = 1;
+    bbTarget.Mediterranean = Math.max(2, axisCount['Mediterranean']);
+  } else if(chosenStrategy === 'Italy-Hunt'){
+    bbTarget.Mediterranean = Math.max(4, axisCount['Mediterranean'] + 1);
+    bbTarget.NorthAtlantic = Math.ceil(expectedThreat * 0.3);
+    bbTarget.SouthAtlantic = Math.ceil(expectedThreat * 0.3);
+  } else if(chosenStrategy === 'BarBal-Deny'){
+    bbTarget.Barents = Math.max(3, Math.ceil(deStrength * 0.4));
+    bbTarget.NorthAtlantic = Math.ceil(expectedThreat * 0.3);
+    bbTarget.SouthAtlantic = Math.ceil(expectedThreat * 0.3);
+    bbTarget.Mediterranean = Math.max(2, axisCount['Mediterranean']);
+  } else if(chosenStrategy === 'NoConvoy-Attrition'){
+    // 削り重視・無理しない: 各海域に最低限、大西洋維持、Bar/NSに削り艦
+    bbTarget.NorthAtlantic = Math.ceil(expectedThreat * 0.35);
+    bbTarget.SouthAtlantic = Math.ceil(expectedThreat * 0.35);
+    bbTarget.Mediterranean = Math.max(2, axisCount['Mediterranean']);
+    bbTarget.Barents = 2; // spd7削り
+    bbTarget.NorthSea = 0; // 嫌がらせ1隻のみ別処理
+  } else if(chosenStrategy === 'NoConvoy-Aggressive'){
+    // A+B: NS決戦 + Bar/Bal封じ
+    bbTarget.NorthSea = Math.max(5, Math.ceil(deStrength * 0.5));
+    bbTarget.Barents = Math.max(3, Math.ceil(deStrength * 0.3));
+    bbTarget.NorthAtlantic = Math.ceil(expectedThreat * 0.2);
+    bbTarget.SouthAtlantic = Math.ceil(expectedThreat * 0.2);
+    bbTarget.Mediterranean = Math.max(2, axisCount['Mediterranean']);
+  }
+  // 地中海: Malta 艦で対抗できない不足分のみ他港から派遣
+  const maltaAllyShips = SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY').length;
+  bbTarget.Mediterranean = Math.max(0, axisCount['Mediterranean'] + 1 - maltaAllyShips);
+  // 外部からの bbTarget 上書き（モンテカルロシミュレーション用）
+  if(bbTargetOverride){
+    Object.assign(bbTarget, bbTargetOverride);
+  }
+  const allyBB = {};
+  Object.keys(SEAS).forEach(k => {
+    allyBB[k] = SHIPS.filter(s => s.side === 'allies' && s.location === k && !s.sunk && (s.type === 'BB' || s.type === 'BC')).length;
+  });
+  // tryApplyラッパ: BB/CV配置時にカウンタ更新
+  const origTryApply = tryApply;
+  const tryApplyTracked = async (ship, dest) => {
+    const ok = await origTryApply(ship, dest);
+    if(ok && (ship.type === 'BB' || ship.type === 'BC')) allyBB[dest] = (allyBB[dest]||0) + 1;
+    return ok;
+  };
+
+  // 1a-1) 損害コンボイ NA → England 上陸 (POC +1 連合)
+  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && s.damage > 0)){
+    ship.location = 'England';
+    ship.removed = true;
+    ship.movedThisTurn = true;
+    convoyOccupied.delete('NorthAtlantic');
+    poc = Math.max(-10, Math.min(10, poc + 1));
+    aiLog.push(`<b>${ship.name}: 損害により England 上陸 +1POC(連合)</b>`);
+    if(!simMode){
+      placeAllShips();
+      await new Promise(rs=>setTimeout(rs,180));
+    }
+  }
+  // 1a-2) 無傷船団 NA→バレンツ海（海上2ターン目以降、ロシア向け）
+  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && (s.turnsAtSea||0) >= 1 && s.damage === 0)){
+    if(convoyOccupied.has('Barents')) continue;
+    ship.location = 'Barents';
+    ship.movedThisTurn = true;
+    convoyOccupied.add('Barents');
+    convoyOccupied.delete('NorthAtlantic');
+    allyCount['Barents'] = (allyCount['Barents']||0) + 1;
+    aiLog.push(`<b>${ship.name} → バレンツ海(ロシア向)</b>`);
+    if(!simMode){
+      placeAllShips();
+      await new Promise(rs=>setTimeout(rs,180));
+    }
+  }
+  // 1b) 船団 USA→NA
+  for(const ship of movable.filter(s => s.type === 'CONVOY')){
+    if(ship.location === 'USA' && !convoyOccupied.has('NorthAtlantic')){
+      if(await tryApplyTracked(ship, 'NorthAtlantic')) convoyOccupied.add('NorthAtlantic');
+    }
+  }
+
+  // 2) 母港固定艦 (Leningrad→Baltic, Russia→Barents)
+  for(const ship of movable.filter(s => s.type !== 'CONVOY' && (s.location==='Leningrad'||s.location==='Russia'))){
+    if(ship.movedThisTurn) continue;
+    const dest = ship.location==='Leningrad'?'Baltic':'Barents';
+    await tryApplyTracked(ship, dest);
+  }
+
+  // 3) Malta艦のBB/CA→地中海 (CVは後で)
+  for(const ship of movable.filter(s => s.location==='Malta' && s.type !== 'CV' && s.type !== 'CONVOY' && !s.movedThisTurn)){
+    await tryApplyTracked(ship, 'Mediterranean');
+  }
+
+  // 4) 戦艦割当（spd7+優先で先に処理、Barents/NSも目標あれば配置）
+  const bbsAtPort = movable.filter(s => (s.type === 'BB' || s.type === 'BC') && !s.movedThisTurn);
+  bbsAtPort.sort((a,b) => b.spd - a.spd); // 高速優先
+  for(const bb of bbsAtPort){
+    const targets = ['NorthAtlantic','SouthAtlantic','Mediterranean'];
+    if((bbTarget.Barents||0) > 0 || convoyOccupied.has('Barents')) targets.unshift('Barents');
+    if((bbTarget.NorthSea||0) > 0) targets.push('NorthSea');
+    targets.sort((a,b) => {
+      const nA = Math.max(0, (bbTarget[a]||0)-allyBB[a]);
+      const nB = Math.max(0, (bbTarget[b]||0)-allyBB[b]);
+      // 同需要なら spd<7 はBarents/NSを後回し
+      if(nA === nB){
+        const dangerA = (a==='Barents'||a==='NorthSea') ? 1 : 0;
+        const dangerB = (b==='Barents'||b==='NorthSea') ? 1 : 0;
+        if(bb.spd < 7) return dangerA - dangerB;
+      }
+      return nB - nA;
+    });
+    for(const target of targets){
+      const need2 = Math.max(0, (bbTarget[target]||0) - allyBB[target]);
+      if(need2 <= 0) continue;
+      if(await tryApplyTracked(bb, target)) break;
+    }
+  }
+
+  // 5) 空母配置: バレンツ海最優先、行けないなら北海・大西洋。護衛3隻以上必須
+  const axisLbaSeas = ['Barents','Baltic','Mediterranean']; // 枢軸LBA射程
+  const nonCvAllyCount = (k) => SHIPS.filter(s => s.side==='allies' && s.location===k && !s.sunk && s.type!=='CV' && s.type!=='CONVOY').length;
+  const cvsAtPort = movable.filter(s => s.type === 'CV' && !s.movedThisTurn);
+  for(const cv of cvsAtPort){
+    const targets = ['Barents','NorthSea','NorthAtlantic'];
+    for(const target of targets){
+      // 護衛: 敵殴り込みに耐える数（敵艦数+1、最低3隻）
+      const requiredEscort = Math.max(3, axisCount[target] + 1);
+      if(nonCvAllyCount(target) < requiredEscort) continue;
+      if(await tryApplyTracked(cv, target)) break;
+    }
+  }
+
+  // 5.5) 重巡(CA)配置: バレンツ海最優先、行けないなら北海・大西洋
+  const casAtPort = movable.filter(s => s.type === 'CA' && !s.movedThisTurn);
+  for(const ca of casAtPort){
+    const targets = ['Barents','NorthSea','NorthAtlantic'];
+    for(const target of targets){
+      if(await tryApplyTracked(ca, target)) break;
+    }
+  }
+
+  // 6) 巡洋艦/その他: 戦艦のいる主要海域に随伴配置（バレンツは CV/CA 専用のため除外）
+  const primary = ['NorthAtlantic','SouthAtlantic'];
+  const others = movable.filter(s => s.type !== 'CV' && s.type !== 'CONVOY' && s.type !== 'BB' && s.type !== 'BC' && s.type !== 'CA' && !s.movedThisTurn);
+  for(const ship of others){
+    // この艦が選べる候補のみ（spd<7はBarents/NS除外）
+    const myPrimary = primary.filter(p => ship.spd >= 7 || (p !== 'Barents' && p !== 'NorthSea'));
+    myPrimary.sort((a,b) => {
+      const aHas = allyBB[a] > 0 ? 1 : 0;
+      const bHas = allyBB[b] > 0 ? 1 : 0;
+      if(aHas !== bHas) return bHas - aHas;
+      return allyCount[a] - allyCount[b];
+    });
+    let placed = false;
+    for(const target of myPrimary){
+      if(allyBB[target] === 0) continue;
+      if(await tryApplyTracked(ship, target)){ placed = true; break; }
+    }
+    if(placed) continue;
+    for(const target of myPrimary){
+      if(await tryApplyTracked(ship, target)){ placed = true; break; }
+    }
+    if(placed) continue;
+    // spd7+のみBarents追加投入
+    if(ship.spd >= 7){
+      if(await tryApplyTracked(ship, 'Barents')){ placed = true; }
+    }
+  }
+
+  // 6.5) 北海への嫌がらせ: spd7+艦を1隻（追撃回避）
+  const nsHasAlly = SHIPS.some(s => s.side === 'allies' && s.location === 'NorthSea' && !s.sunk);
+  if(!nsHasAlly){
+    const harassPool = SHIPS.filter(s => s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && PORTS[s.location] && s.type !== 'CONVOY' && s.type !== 'CV' && s.country !== 'RU' && s.country !== 'US' && s.spd >= 7);
+    harassPool.sort((a,b) => (a.atk + a.def) - (b.atk + b.def));
+    for(const ship of harassPool){
+      if(await tryApplyTracked(ship, 'NorthSea')) break;
+    }
+  }
+
+  // 7) 余剰艦: spd7+のみBarents/NS、遅艦は安全海域へ
+  const primaryFilled = primary.every(k => allyBB[k] >= (bbTarget[k]||0));
+  if(primaryFilled){
+    const surplus = SHIPS.filter(s => s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && PORTS[s.location] && s.type !== 'CONVOY');
+    for(const ship of surplus){
+      if(ship.spd >= 7){
+        if(await tryApplyTracked(ship, 'Barents')) continue;
+        if(await tryApplyTracked(ship, 'NorthSea')) continue;
+      } else {
+        // 遅艦は安全海域へ（NA/SA/Med）
+        const safe = ['NorthAtlantic','SouthAtlantic','Mediterranean'];
+        for(const target of safe){
+          if(await tryApplyTracked(ship, target)) break;
+        }
+      }
+    }
+  }
+
+  // 修理: phase 4 で手動処理（AI自動修理なし）
+
+  if(!simMode){
+    document.getElementById('aiLog').innerHTML = aiLog.join('<br>');
+  }
+}
+
+// 枢軸軍AI移動 + 修理
+async function aiAxisMove(){
+  const aiLog = [];
+  // 連合艦の海域別 (Uボート除く)
+  const allyShips = {};
+  const allyStr = {}; // 戦力 (atk + def 合計)
+  Object.keys(SEAS).forEach(k => {
+    allyShips[k] = SHIPS.filter(s => s.side === 'allies' && s.location === k && !s.sunk && s.type !== 'UBOAT');
+    allyStr[k] = allyShips[k].reduce((sum, s) => sum + s.atk + s.def, 0);
+  });
+  const convoy = {};
+  Object.keys(SEAS).forEach(k => {
+    convoy[k] = SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && s.location === k && !s.sunk).length;
+  });
+  // 移動可能枢軸艦 (港にいる + 海域に残っている給油成功艦も含む、損傷艦は除外)
+  const movable = SHIPS.filter(s =>
+    s.side === 'axis' && !s.sunk && !s.removed && !s.movedThisTurn && (PORTS[s.location] || SEAS[s.location]) &&
+    !(s.damage > 0)
+  );
+  // ドイツ水上艦 / イタリア / Uボート 分類
+  const deShips = movable.filter(s => s.country === 'DE' && s.type !== 'UBOAT');
+  const itShips = movable.filter(s => s.country === 'IT');
+  const uboats = movable.filter(s => s.type === 'UBOAT');
+  // 既配置枢軸戦力 (海域別)
+  const placedStr = {};
+  Object.keys(SEAS).forEach(k => {
+    placedStr[k] = SHIPS.filter(s => s.side === 'axis' && s.location === k && !s.sunk && s.type !== 'UBOAT').reduce((sum, s) => sum + s.atk + s.def, 0);
+  });
+
+  // === ドイツ水上艦配置 ===
+  // 港別の到達可能海域
+  const portToSeas = (port) => PORT_SEAS[port] || [];
+  // 必勝マージン: 連合戦力 + 5
+  const winThreshold = (sea) => allyStr[sea] + 5;
+
+  // 配置優先度を決定
+  // 1. 北海・バルト = 最優先 (必勝戦力まで)
+  // 2. バレンツ・北大西洋・南大西洋 はコンボイ位置で優先決定
+  const priorityList = ['NorthSea', 'Baltic'];
+  // コンボイがいる海域を勝率順 (連合戦力低い順) でリスト化
+  const convoySeas = ['Barents', 'NorthAtlantic', 'SouthAtlantic'].filter(k => convoy[k] > 0);
+  convoySeas.sort((a, b) => allyStr[a] - allyStr[b]); // 連合戦力低い順 = 勝率高い順
+  // コンボイあり海域を優先リストに追加
+  priorityList.push(...convoySeas);
+  // 残りバレンツ (コンボイ無し時) は最後
+  if(!convoy.Barents && !priorityList.includes('Barents')) priorityList.push('Barents');
+
+  // ドイツ艦を BB > BC > PB > CA > CV の順で大型から配置
+  const typeOrder = { BB: 0, BC: 1, PB: 2, CA: 3, CV: 4 };
+  const sortedDe = [...deShips].sort((a, b) => (typeOrder[a.type] ?? 5) - (typeOrder[b.type] ?? 5));
+
+  for(const ship of sortedDe){
+    const reachable = portToSeas(ship.location);
+    // 優先度順で必勝戦力に未達の海域を探す
+    let dest = null;
+    for(const target of priorityList){
+      if(!reachable.includes(target)) continue;
+      if(placedStr[target] < winThreshold(target)){
+        dest = target;
+        break;
+      }
+    }
+    // 優先海域全部が必勝達成済みなら、コンボイ無しバレンツに余裕配置
+    if(!dest && reachable.includes('Barents') && placedStr.Barents < allyStr.Barents + 3){
+      dest = 'Barents';
+    }
+    if(!dest) continue; // 配置先無し → 港待機
+    ship.location = dest;
+    ship.movedThisTurn = true;
+    placedStr[dest] += ship.atk + ship.def;
+    aiLog.push(`${ship.name} → ${SEA_LABEL[dest]}`);
+  }
+
+  // === イタリア配置 ===
+  const itTotalStr = itShips.reduce((sum, s) => sum + s.atk + s.def, 0);
+  const medAllyStr = allyStr.Mediterranean;
+  // 攻撃判定: 1.1倍以上で出撃 / 2.0倍以上で積極攻撃 (CAも南大西洋等へ展開)
+  if(itTotalStr >= medAllyStr * 1.1){
+    const aggressive = itTotalStr >= medAllyStr * 2.0;
+    for(const ship of itShips){
+      if(!portToSeas(ship.location).includes('Mediterranean')) continue;
+      // 積極攻撃: CAは南大西洋の連合艦が弱いなら派遣
+      if(aggressive && ship.type === 'CA' && allyStr.SouthAtlantic < itShips.filter(s => s.type==='CA').reduce((sum, s)=>sum+s.atk+s.def,0)){
+        // CAのみ南大西洋へ
+        ship.location = 'SouthAtlantic';
+        ship.movedThisTurn = true;
+        aiLog.push(`${ship.name} → 南大西洋 (積極攻撃)`);
+        continue;
+      }
+      ship.location = 'Mediterranean';
+      ship.movedThisTurn = true;
+      aiLog.push(`${ship.name} → 地中海 (出撃)`);
+    }
+    if(aggressive) aiLog.push(`イタリア: 積極攻撃モード (戦力${itTotalStr} vs 連合${medAllyStr})`);
+  } else {
+    aiLog.push(`イタリア: 出撃見送り (戦力${itTotalStr} vs 連合${medAllyStr})`);
+  }
+
+  // === Uボート配置 ===
+  const uboatsInPortCount = SHIPS.filter(s => s.type === 'UBOAT' && s.location === 'Germany' && !s.sunk && !s.removed).length;
+  // 連合のASW戦力推定: 連合艦数 (CV/CONVOY=3, 他=1) per sea
+  const aswDice = (sea) => allyShips[sea].reduce((sum, s) => sum + ((s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1), 0);
+  // バレンツ海のコンボイ最優先
+  let uTarget = null;
+  if(convoy.Barents > 0){
+    uTarget = 'Barents';
+  } else if(uboatsInPortCount >= 7){
+    // 7隻溜まったら他のコンボイ海域 or ドイツ攻撃エリア
+    if(convoy.NorthAtlantic > 0) uTarget = 'NorthAtlantic';
+    else if(convoy.SouthAtlantic > 0) uTarget = 'SouthAtlantic';
+    else {
+      // ドイツ艦の集中先を探す
+      const deSeas = ['NorthSea', 'Baltic', 'Barents', 'NorthAtlantic'];
+      const deTarget = deSeas.find(k => placedStr[k] > allyStr[k]);
+      uTarget = deTarget;
+    }
+  }
+  if(uTarget){
+    // ASW期待損失を試算: aswDice * 1/6 = 撃沈期待数
+    const expectedSunk = aswDice(uTarget) / 6;
+    const uboatsAvail = uboats.filter(s => portToSeas(s.location).includes(uTarget));
+    if(uboatsAvail.length > expectedSunk){
+      // 攻撃可能性ある
+      for(const u of uboatsAvail){
+        u.location = uTarget;
+        u.movedThisTurn = true;
+        aiLog.push(`${u.name} → ${SEA_LABEL[uTarget]}`);
+      }
+    } else {
+      aiLog.push(`Uボート: ${SEA_LABEL[uTarget]} 出撃見送り (ASW${aswDice(uTarget)}ダイス)`);
+    }
+  } else {
+    aiLog.push(`Uボート: 温存 (港${uboatsInPortCount}隻)`);
+  }
+
+  // 修理: phase 4 で手動処理（AI自動修理なし）
+
+  placeAllShips();
+  if(!simMode){
+    document.getElementById('moveStatus').innerHTML = aiLog.join('<br>');
+  }
+}
+
+// 枢軸の簡易AI（シミュレーション用）
+function simulateAxisMove(){
+  const alliedBalCount = SHIPS.filter(s => s.side === 'allies' && s.location === 'Baltic' && !s.sunk).length;
+  const alliedNSCount = SHIPS.filter(s => s.side === 'allies' && s.location === 'NorthSea' && !s.sunk).length;
+  const dePool = SHIPS.filter(s => s.country === 'DE' && s.type !== 'UBOAT' && !s.sunk && !s.removed && PORTS[s.location]);
+  // バルト: 連合と同数
+  let toBal = 0;
+  for(const s of dePool){
+    if(toBal >= alliedBalCount) break;
+    s.location = 'Baltic'; s.movedThisTurn = true; toBal++;
+  }
+  // 北海: 連合と同数
+  let toNS = 0;
+  for(const s of dePool){
+    if(s.movedThisTurn) continue;
+    if(toNS >= alliedNSCount) break;
+    s.location = 'NorthSea'; s.movedThisTurn = true; toNS++;
+  }
+  // 残り: ランダムでNA/SA/Bar/NSに集中
+  const concChoices = ['NorthAtlantic','SouthAtlantic','Barents','NorthSea'];
+  const concentrate = concChoices[Math.floor(Math.random()*concChoices.length)];
+  for(const s of dePool){
+    if(s.movedThisTurn) continue;
+    s.location = concentrate; s.movedThisTurn = true;
+  }
+  // Uボート: 集中先と同じ
+  SHIPS.filter(s => s.type === 'UBOAT' && !s.sunk && !s.removed && s.location === 'Germany').forEach(s => {
+    s.location = concentrate; s.movedThisTurn = true;
+  });
+  // IT: 地中海
+  SHIPS.filter(s => s.country === 'IT' && !s.sunk && !s.removed && s.location === 'Italy').forEach(s => {
+    s.location = 'Mediterranean'; s.movedThisTurn = true;
+  });
+  return concentrate;
+}
+
+// 100回シミュレーション
+async function runSimulation100(){
+  const N = 100;
+  const results = [];
+  const concDist = {};
+  // 元の状態保存
+  const savedShips = SHIPS.map(s => ({...s}));
+  const savedPoc = poc;
+  const savedTurn = currentTurn;
+  const savedLba = {...lbaUsed};
+  const savedSeaCtrl = {...seaControl};
+  const savedRetreat = new Set(retreatedSeas);
+
+  simMode = true;
+  try {
+    for(let i=0; i<N; i++){
+      // ターン5・無傷・全艦母港にリセット
+      SHIPS.forEach((s, idx) => {
+        const o = savedShips[idx];
+        Object.assign(s, o);
+        s.location = s.homePort;
+        s.damage = 0; s.sunk = false; s.removed = false; s.atDock = false;
+        s.movedThisTurn = false; s.disabled = false; s.disabledThisTurn = false;
+        s.atk = s.atkOrig; s.spd = s.spdOrig;
+        s.turnsAtSea = 0; s.failedMove = false; s.usEntered = false;
+        s.refuelTurn = undefined; s.arrivedNeutralTurn = undefined;
+      });
+      currentTurn = 5;
+      Object.keys(seaControl).forEach(k => delete seaControl[k]);
+      lbaUsed.allies = false; lbaUsed.axis = false;
+      retreatedSeas.clear();
+
+      // 連合AI移動
+      await aiAlliedMove();
+      // 枢軸移動
+      const conc = simulateAxisMove();
+      concDist[conc] = (concDist[conc]||0) + 1;
+      // 戦闘解決
+      const evs = [];
+      resolveAllCombat(evs);
+      // POC計算
+      let pocChange = 0;
+      Object.keys(SEAS).forEach(k => {
+        const ships = SHIPS.filter(s => s.location === k && !s.sunk);
+        const al = ships.some(s => s.side === 'allies' && s.type !== 'UBOAT');
+        const ax = ships.some(s => s.side === 'axis' && s.type !== 'UBOAT');
+        const ub = ships.some(s => s.type === 'UBOAT');
+        if(al && !ax && !ub) pocChange += SEAS[k].allies;
+        else if(ax && !al) pocChange -= SEAS[k].axis;
+        else if(ub && !ax && !al) pocChange -= SEAS[k].axis;
+      });
+      results.push(pocChange);
+    }
+  } finally {
+    simMode = false;
+    // 状態復元
+    SHIPS.forEach((s, idx) => {
+      const o = savedShips[idx];
+      Object.keys(s).forEach(k => delete s[k]);
+      Object.assign(s, o);
+    });
+    poc = savedPoc; currentTurn = savedTurn;
+    Object.keys(seaControl).forEach(k => delete seaControl[k]);
+    Object.assign(seaControl, savedSeaCtrl);
+    lbaUsed.allies = savedLba.allies; lbaUsed.axis = savedLba.axis;
+    retreatedSeas.clear();
+    savedRetreat.forEach(s => retreatedSeas.add(s));
+    placeAllShips();
+    updatePOC();
+  }
+
+  const avg = results.reduce((a,b)=>a+b,0) / results.length;
+  const min = Math.min(...results);
+  const max = Math.max(...results);
+  const win = results.filter(r => r > 0).length;
+  const lose = results.filter(r => r < 0).length;
+  const draw = results.filter(r => r === 0).length;
+  const distLog = Object.entries(concDist).map(([k,v]) => `${SEA_LABEL[k]||k}:${v}`).join(' / ');
+  alert(`100回シミュレーション結果:\n平均POC: ${avg.toFixed(2)}\n最小: ${min}  最大: ${max}\n連合勝(POC>0): ${win}回\n引分: ${draw}回\n枢軸勝: ${lose}回\n枢軸集中先分布: ${distLog}`);
+}
+
+// === 連合配置 ルールベース ===
+// コンボイあり: 北海=ドイツ艦数+1〜2(強い順), バレンツ=CV/CA全派遣, NA=余艦全派遣, SA=単独CA1隻
+// コンボイなし: NA/Bar=単独CA1隻, SA=単独CA1隻, 北海=残艦
+//   北海でドイツ艦数 > 連合艦数なら捨てる → 余艦 NA+Bar:SA = 7:3
+function computeAlliedConfig(){
+  const config = {};
+  const movableShips = SHIPS.filter(s =>
+    s.side === 'allies' && !s.sunk && !s.removed &&
+    s.location && PORTS[s.location] && s.type !== 'CONVOY' &&
+    s.location !== 'Malta' &&
+    !(s.country === 'US' && currentTurn < 4) &&
+    !(s.damage > 0)
+  );
+  const cvs = movableShips.filter(s => s.type === 'CV');
+  const cas = movableShips.filter(s => s.type === 'CA');
+  const bbs = movableShips.filter(s => s.type === 'BB' || s.type === 'BC');
+  const sortByWeak = arr => [...arr].sort((a, b) => {
+    const ta = (a.atk||0) + (a.def||0);
+    const tb = (b.atk||0) + (b.def||0);
+    if(ta !== tb) return ta - tb;
+    return (a.spd||0) - (b.spd||0);
+  });
+  const sortByStrong = arr => [...arr].sort((a, b) => {
+    const ta = (a.atk||0) + (a.def||0);
+    const tb = (b.atk||0) + (b.def||0);
+    if(tb !== ta) return tb - ta;
+    return (b.spd||0) - (a.spd||0);
+  });
+  const casByWeak = sortByWeak(cas);
+  const bbsByWeak = sortByWeak(bbs);
+  const reachable = (s, sea) => {
+    if(s.country === 'US' && s.type !== 'CONVOY' && sea !== 'NorthAtlantic') return false;
+    return (PORT_SEAS[s.location] || []).includes(sea);
+  };
+  const reachableTwoHops = (s, dest) => {
+    if(s.country === 'US' && s.type !== 'CONVOY' && dest !== 'NorthAtlantic') return false;
+    if(reachable(s, dest)) return true;
+    if(s.spd < 7) return false;
+    const adjacent = PORT_SEAS[s.location] || [];
+    return adjacent.some(mid => (SEA_ADJ[mid] || []).includes(dest));
+  };
+
+  // ドイツ艦数（ドイツ/フランス在泊・無傷）とコンボイ位置
+  const deShipCount = SHIPS.filter(s =>
+    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
+    s.damage === 0 && (s.location === 'Germany' || s.location === 'France')
+  ).length;
+  const convoysAtBar = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'Barents' && !s.sunk && !s.removed).length;
+  const convoysAtNA = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'NorthAtlantic' && !s.sunk && !s.removed).length;
+  const convoysToBar = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'NorthAtlantic' && !s.sunk && !s.removed && (s.turnsAtSea||0) >= 1).length;
+  const hasBarConvoy = convoysAtBar > 0 || convoysToBar > 0;
+  const hasConvoy = convoysAtBar > 0 || convoysAtNA > 0;
+
+  // SA: フランス/中立にいるドイツ艦と同数を配置（弱い艦優先）
+  const deAtFranceNeutral = SHIPS.filter(s =>
+    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
+    (s.location === 'France' || s.location === 'Neutral')
+  ).length;
+  if(deAtFranceNeutral > 0){
+    const saCandidates = sortByWeak([...cas, ...bbs]).filter(s => !config[s.id] && reachable(s, 'SouthAtlantic'));
+    let saPlaced = 0;
+    for(const s of saCandidates){
+      if(saPlaced >= deAtFranceNeutral) break;
+      config[s.id] = 'SouthAtlantic';
+      saPlaced++;
+    }
+  }
+
+  // バレンツ: コンボイがバレンツにいる/今ターン到着予定の時のみ CV/CA 全派遣（それ以外は配置しない）
+  if(hasBarConvoy){
+    cvs.forEach(s => { if(!config[s.id] && reachableTwoHops(s, 'Barents')) config[s.id] = 'Barents'; });
+    cas.forEach(s => { if(!config[s.id] && reachableTwoHops(s, 'Barents')) config[s.id] = 'Barents'; });
+  }
+  // NA: コンボイなしの時は単独 CA 1隻
+  if(!hasConvoy){
+    let shipForNA = casByWeak.find(s => reachable(s, 'NorthAtlantic') && !config[s.id]);
+    if(!shipForNA) shipForNA = bbsByWeak.find(s => reachable(s, 'NorthAtlantic') && !config[s.id]);
+    if(shipForNA) config[shipForNA.id] = 'NorthAtlantic';
+  }
+
+  // 北海: ドイツ攻撃力(独/仏在泊・無傷DE艦)以上の攻撃力になるまで配置（強い艦優先）+ 追加で艦種問わず1隻
+  const deAtkSum = SHIPS.filter(s =>
+    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
+    s.damage === 0 && (s.location === 'Germany' || s.location === 'France')
+  ).reduce((sum, s) => sum + (s.atk||0), 0);
+  const reachableForNS = (s) => !config[s.id] && reachable(s, 'NorthSea');
+  let nsAtkSum = 0;
+  for(const s of sortByStrong(bbs.filter(reachableForNS))){
+    if(nsAtkSum >= deAtkSum) break;
+    config[s.id] = 'NorthSea';
+    nsAtkSum += (s.atk||0);
+  }
+  if(nsAtkSum < deAtkSum){
+    for(const s of sortByStrong([...cvs, ...cas].filter(reachableForNS))){
+      if(nsAtkSum >= deAtkSum) break;
+      config[s.id] = 'NorthSea';
+      nsAtkSum += (s.atk||0);
+    }
+  }
+  // 追加 +1隻: 艦種問わず到達可能な艦から1隻（強い順）
+  const extra = sortByStrong([...bbs, ...cvs, ...cas].filter(reachableForNS))[0];
+  if(extra) config[extra.id] = 'NorthSea';
+
+  // アメリカ来訪時: NAに到着済みの US 戦闘艦と同数のUK艦を NS（barConvoyありなら Barents 可）へ追加配置
+  const usCount = SHIPS.filter(s =>
+    s.country === 'US' && s.type !== 'CONVOY' && !s.sunk && !s.removed && s.location === 'NorthAtlantic'
+  ).length;
+  if(usCount > 0){
+    let placed = 0;
+    const ukAvail = sortByStrong(movableShips.filter(s => s.country === 'UK' && !config[s.id]));
+    for(const s of ukAvail){
+      if(placed >= usCount) break;
+      if(convoysAtBar > 0 && reachableTwoHops(s, 'Barents')){
+        config[s.id] = 'Barents';
+        placed++;
+      } else if(reachable(s, 'NorthSea')){
+        config[s.id] = 'NorthSea';
+        placed++;
+      }
+    }
+  }
+
+  // 余艦: NA / SA に均等配置（北海連合支配の場合 SA は1ユニットまで）バレンツは対象外
+  const distTargets = ['NorthAtlantic', 'SouthAtlantic'];
+  const distCounts = { NorthAtlantic: 0, SouthAtlantic: 0 };
+  Object.values(config).forEach(sea => {
+    if(distCounts[sea] !== undefined) distCounts[sea]++;
+  });
+  const frenchDeCount = SHIPS.filter(s =>
+    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
+    s.damage === 0 && s.location === 'France'
+  ).length;
+  const saLimit = (seaControl['NorthSea'] === 'allies') ? (frenchDeCount + 1) : Infinity;
+  for(const ship of movableShips.filter(s => !config[s.id])){
+    const sortedTargets = [...distTargets].sort((a, b) => distCounts[a] - distCounts[b]);
+    for(const t of sortedTargets){
+      if(t === 'SouthAtlantic' && distCounts.SouthAtlantic >= saLimit) continue;
+      if(reachable(ship, t)){
+        config[ship.id] = t;
+        distCounts[t]++;
+        break;
+      }
+    }
+  }
+
+  // ログ
+  const dist = {};
+  Object.values(config).forEach(sea => { dist[sea] = (dist[sea]||0) + 1; });
+  console.log(`[配置決定] コンボイ=${hasConvoy?'あり':'なし'} ドイツ艦=${deShipCount} 配置=${JSON.stringify(dist)} 配置艦=${Object.keys(config).length}隻`);
+  return config;
+}
+
+// === 連合配置 真のモンテカルロ（各艦を完全ランダム配置 N=500回試行） ===
+// 戻り値: bestConfig = { shipId: 'NorthSea' | 'NorthAtlantic' | ... }
+async function selectBestAlliedPattern(){
+  const N = 500;
+  // 状態保存
+  const savedShips = SHIPS.map(s => ({...s}));
+  const savedPoc = poc;
+  const savedTurn = currentTurn;
+  const savedLba = {...lbaUsed};
+  const savedSeaCtrl = {...seaControl};
+  const savedRetreat = new Set(retreatedSeas);
+
+  // 配置候補艦と各艦の reachable 海域（コンボイ・Malta艦・Russia艦・US艦(T<4)は除外）
+  const targetSeas = ['NorthSea', 'NorthAtlantic', 'SouthAtlantic', 'Barents'];
+  const movableShips = SHIPS.filter(s =>
+    s.side === 'allies' && !s.sunk && !s.removed &&
+    s.location && PORTS[s.location] && s.type !== 'CONVOY' &&
+    s.location !== 'Malta' &&
+    !(s.country === 'US' && currentTurn < 4)
+  );
+  const shipReachable = movableShips.map(s => ({
+    id: s.id,
+    reachable: (PORT_SEAS[s.location] || []).filter(sea => targetSeas.includes(sea))
+  })).filter(s => s.reachable.length > 0);
+
+  let bestPoc = -Infinity;
+  let bestConfig = null;
+  simMode = true;
+  try {
+    for(let i = 0; i < N; i++){
+      // 艦リセット
+      SHIPS.forEach((s, idx) => {
+        const o = savedShips[idx];
+        Object.keys(s).forEach(k => delete s[k]);
+        Object.assign(s, o);
+      });
+      Object.keys(seaControl).forEach(k => delete seaControl[k]);
+      lbaUsed.allies = false; lbaUsed.axis = false;
+      retreatedSeas.clear();
+
+      // 各艦の配置先をランダム決定
+      const config = {};
+      for(const sr of shipReachable){
+        config[sr.id] = sr.reachable[Math.floor(Math.random() * sr.reachable.length)];
+      }
+
+      // 配置適用
+      for(const shipId in config){
+        const ship = SHIPS.find(s => s.id === shipId);
+        if(!ship) continue;
+        ship.location = config[shipId];
+        ship.movedThisTurn = true;
+      }
+
+      // 枢軸移動・戦闘
+      simulateAxisMove();
+      const evs = [];
+      resolveAllCombat(evs);
+
+      // POC計算
+      let pocChange = 0;
+      Object.keys(SEAS).forEach(k => {
+        const ships = SHIPS.filter(s => s.location === k && !s.sunk);
+        const al = ships.some(s => s.side === 'allies' && s.type !== 'UBOAT');
+        const ax = ships.some(s => s.side === 'axis' && s.type !== 'UBOAT');
+        const ub = ships.some(s => s.type === 'UBOAT');
+        if(al && !ax && !ub) pocChange += SEAS[k].allies;
+        else if(ax && !al) pocChange -= SEAS[k].axis;
+        else if(ub && !ax && !al) pocChange -= SEAS[k].axis;
+        else if(!al && !ax && !ub) pocChange -= SEAS[k].axis; // ガラ空きは枢軸支配扱い
+      });
+
+      if(pocChange > bestPoc){
+        bestPoc = pocChange;
+        bestConfig = {...config};
+      }
+    }
+  } finally {
+    simMode = false;
+    // 状態復元
+    SHIPS.forEach((s, idx) => {
+      const o = savedShips[idx];
+      Object.keys(s).forEach(k => delete s[k]);
+      Object.assign(s, o);
+    });
+    poc = savedPoc;
+    currentTurn = savedTurn;
+    Object.keys(seaControl).forEach(k => delete seaControl[k]);
+    Object.assign(seaControl, savedSeaCtrl);
+    lbaUsed.allies = savedLba.allies;
+    lbaUsed.axis = savedLba.axis;
+    retreatedSeas.clear();
+    savedRetreat.forEach(s => retreatedSeas.add(s));
+  }
+  // 配置数の集計（ログ用）
+  const distLog = {};
+  if(bestConfig) Object.values(bestConfig).forEach(sea => { distLog[sea] = (distLog[sea]||0) + 1; });
+  console.log(`[モンテカルロ] N=${N}試行 最良POC=${bestPoc} 配置数=${JSON.stringify(distLog)} 配置艦=${Object.keys(bestConfig||{}).length}隻`);
+  return bestConfig;
+}
+
+function setupTest(){
+  // 全艦リセット
+  SHIPS.forEach(s => {
+    s.location = s.homePort;
+    s.damage = 0;
+    s.disabled = false;
+    s.sunk = false;
+    s.atk = s.atkOrig;
+    s.spd = s.spdOrig;
+    s.failedMove = false;
+    s.movedThisTurn = false;
+    s.originThisTurn = null;
+  });
+  // 地中海: イタリア艦隊 全部
+  const italians = SHIPS.filter(s => s.country === 'IT' && !s.enterTurn);
+  italians.forEach(s => s.location = 'Mediterranean');
+  // 地中海: イタリアと同数のイギリス艦（CV以外から優先）
+  const ukNonCv = SHIPS.filter(s => s.country === 'UK' && !s.enterTurn && s.type !== 'CV');
+  ukNonCv.slice(0, italians.length).forEach(s => s.location = 'Mediterranean');
+  // 地中海: 英国空母 1隻
+  const ukCv = SHIPS.find(s => s.country === 'UK' && !s.enterTurn && s.type === 'CV');
+  if(ukCv) ukCv.location = 'Mediterranean';
+  placeAllShips();
+  renderLocShipList(); renderSeaResetButtons();
+  document.getElementById('moveStatus').textContent =
+    `テスト配置: 地中海にイタリア艦${italians.length}・イギリス艦${italians.length}+空母1`;
+}
+
+function executeMove(){
+  if(!selectedShipIds.length || !selectedDest){
+    alert('艦と移動先を選択してください');
+    return;
+  }
+  const log = [];
+  selectedShipIds.forEach(id=>{
+    const s = SHIPS.find(x => x.id === id);
+    if(!s) return;
+    // 15.2 ロシア艦は5/6で出港
+    if(s.country === 'RU'){
+      const r = rollD6();
+      if(r < 5){
+        log.push(`${s.name}: 出港判定⚂${r}<5 失敗 → 移動不可`);
+        s.movedThisTurn = true; // 試みたので移動済み扱い
+        return;
+      }
+      log.push(`${s.name}: 出港判定⚂${r}≥5 成功`);
+    }
+    // 15.3 米国艦はターン4以降、6で永続投入
+    if(s.country === 'US' && s.type !== 'CONVOY'){
+      if(currentTurn < 4){
+        log.push(`${s.name}: ターン4以降に出撃可`);
+        s.movedThisTurn = true;
+        return;
+      }
+      if(!s.usEntered){
+        const r = rollD6();
+        if(r !== 6){
+          log.push(`${s.name}: 投入判定⚂${r}≠6 失敗`);
+          s.movedThisTurn = true;
+          return;
+        }
+        s.usEntered = true;
+        log.push(`${s.name}: 投入判定⚂${r}=6 成功(永続)`);
+      }
+    }
+    const origin = s.location;
+    const dest = selectedDest;
+    // 移動済みフラグ＆起点記憶
+    if(!s.originThisTurn) s.originThisTurn = origin;
+    s.movedThisTurn = true;
+    // 隣接判定
+    let adj = [];
+    if(PORTS[origin]) adj = PORT_SEAS[origin] || [];
+    else if(SEAS[origin]) adj = SEA_ADJ[origin] || [];
+    const isAdjacent = adj.includes(dest);
+    const isPortDest = !!PORTS[dest];
+    if(s.type === 'UBOAT'){
+      // 6.5 Uボートはどこでも自由配置、判定なし
+      s.location = dest;
+      if(dest === 'Neutral') s.arrivedNeutralTurn = currentTurn;
+      log.push(`${s.name}: Uボート → ${locLabel(dest)}`);
+    } else if(isAdjacent || isPortDest){
+      // 1海域 or 港湾帰還: 判定なし
+      s.location = dest;
+      if(dest === 'Neutral') s.arrivedNeutralTurn = currentTurn;
+      log.push(`${s.name}: → ${locLabel(dest)}`);
+    } else {
+      // 2海域: ダイス判定 (出目 < 速力 = 成功)
+      const roll = rollD6();
+      const ok = roll < s.spd;
+      if(ok){
+        s.location = dest;
+        log.push(`${s.name}: 2海域 ⚂${roll}<${s.spd} 成功 → ${locLabel(dest)}`);
+      } else {
+        s.location = s.homePort || origin;
+        s.failedMove = true; // このターンは再配置不可
+        log.push(`${s.name}: 2海域 ⚂${roll}≥${s.spd} 失敗 → ${locLabel(s.location)}へ帰還(配置不可)`);
+      }
+    }
+  });
+  selectedShipIds = [];
+  selectedDest = null;
+  placeAllShips();
+  renderLocShipList(); renderDestButtons(); renderStatus(); renderSeaResetButtons();
+  // ログ表示
+  document.getElementById('moveStatus').innerHTML = log.join('<br>');
+}
+function clearSelection(){
+  selectedShipIds = [];
+  selectedDest = null;
+  renderLocShipList(); renderDestButtons(); renderStatus();
+}
+function resetSea(seaKey, side){
+  // 指定海域の指定陣営のみ母港に戻す
+  const ships = SHIPS.filter(s => s.location === seaKey && s.side === side);
+  if(!ships.length) return;
+  ships.forEach(s => { s.location = s.homePort; });
+  placeAllShips();
+  renderLocShipList(); renderSeaResetButtons(); renderStatus();
+}
+
+// === ズーム ===
+const MAP_W = 1593;
+const slider = document.getElementById('zoomSlider');
+const zlabel = document.getElementById('zoomLabel');
+const mapImg = document.getElementById('mapImg');
+function applyZoom(){
+  const v = +slider.value;
+  zlabel.textContent = v + '%';
+  mapImg.style.width = (MAP_W * v / 100) + 'px';
+}
+function setZoom(delta){
+  slider.value = Math.max(+slider.min, Math.min(+slider.max, +slider.value + delta));
+  applyZoom();
+}
+slider.addEventListener('input', applyZoom);
+applyZoom();
+
+function toggleUnits(){
+  document.body.classList.toggle('hide-units');
+  const btn = document.getElementById('toggleUnits');
+  btn.textContent = document.body.classList.contains('hide-units') ? '駒非表示' : '駒表示';
+}
+
+// === 艦船配置 ===
+// 座標は駒の中心。スタックは右斜め上にカスケード。クリックで拡大。
+const COUNTER_W = 4.0;
+const PORT_COUNTER_W = 3.0;
+const OFFSET_PER_SHIP = 0.35; // %（右+x、上-y）
+
+const stacks = {}; // stackId → { label, ships:[] }
+
+function placeStack(stackId, label, ships, x, y, w){
+  if(!ships.length) return;
+  stacks[stackId] = { label, ships };
+  const inner = document.getElementById('mapInner');
+  ships.forEach((s, i)=>{
+    const dx = i * OFFSET_PER_SHIP;
+    const dy = -i * OFFSET_PER_SHIP;
+    const div = document.createElement('div');
+    div.className = 'tt-ship';
+    div.style.left  = (x + dx) + '%';
+    div.style.top   = (y + dy) + '%';
+    div.style.width = w + '%';
+    div.title = `${label}: ${s.name}${s.damage?` (損害${s.damage}/${s.def})`:''}${s.disabled?' [即時帰還]':''}`;
+    div.dataset.stack = stackId;
+    div.onclick = ()=> showStack(stackId);
+    let html = `<img src="../WAS24/images/${s.file}" style="width:100%;height:auto;display:block;">`;
+    if(s.damage > 0){
+      // 損害バッジ（数字を赤い丸で）
+      html += `<div style="position:absolute;bottom:-25%;right:-15%;background:#c00;color:#fff;font-weight:bold;font-size:1.4em;padding:0 6px;border-radius:50%;border:2px solid #fff;line-height:1.2;min-width:1.2em;text-align:center;box-shadow:0 0 4px #000;">${s.damage}</div>`;
+    }
+    if(s.disabled){
+      html += `<div style="position:absolute;top:-15%;left:-15%;background:#fc4;color:#000;font-weight:bold;font-size:0.9em;padding:1px 6px;border-radius:3px;border:2px solid #fff;box-shadow:0 0 4px #000;">DIS</div>`;
+    }
+    div.innerHTML = html;
+    inner.appendChild(div);
+  });
+}
+
+function getLocCoord(loc){
+  if(!loc) return null;
+  if(loc.startsWith('T')){
+    const t = +loc.slice(1);
+    return TURN_BOX[t] || null;
+  }
+  return PORT_COORDS[loc] || SEA_COORDS[loc] || null;
+}
+
+// 海域内では陣営/タイプ別の位置を返す
+function getShipCoord(ship){
+  const loc = ship.location;
+  if(!loc) return null;
+  if(SEAS[loc]){
+    const positions = SEA_POSITIONS[loc];
+    if(positions){
+      let sub;
+      if(ship.type === 'UBOAT')      sub = 'uboat';
+      else if(ship.type === 'CONVOY') sub = 'convoy';
+      else if(ship.side === 'allies') sub = 'allies';
+      else                            sub = 'axis';
+      if(positions[sub]) return positions[sub];
+    }
+    return SEA_COORDS[loc];
+  }
+  // 港: atDock なら修理ドック座標
+  const portCoord = PORT_COORDS[loc];
+  if(portCoord && ship.atDock && portCoord.repairX !== undefined){
+    return { x: portCoord.repairX, y: portCoord.repairY };
+  }
+  return getLocCoord(loc);
+}
+
+// 陣営/タイプ別の配置キー（海域は陣営毎に分割）
+function getPlaceKey(ship){
+  const loc = ship.location;
+  if(!loc) return null;
+  if(SEAS[loc]){
+    let sub;
+    if(ship.type === 'UBOAT')      sub = 'uboat';
+    else if(ship.type === 'CONVOY') sub = 'convoy';
+    else if(ship.side === 'allies') sub = 'allies';
+    else                            sub = 'axis';
+    return `${loc}:${sub}`;
+  }
+  return loc;
+}
+
+// 支配状態（ターン終了時のみ更新）
+const seaControl = {}; // seaKey → 'allies' | 'axis' | null
+const retreatedSeas = new Set(); // 12.4 撤退発生海域はPOC獲得不可
+let poc = 0; // -10(枢軸勝利) ... +10(連合勝利)
+
+// 戦闘フェイズ完了トラック（同一海域での重複処理防止）
+const combatDone = { uboat: new Set(), surface: new Set() };
+// 9.0 陸上攻撃機（LBA）。各陣営1個、毎ターン1回。
+const lbaUsed = { allies: false, axis: false };
+const LBA_TARGETS = {
+  allies: ['Germany', 'France', 'Italy', 'Mediterranean'],
+  axis:   ['Barents', 'Leningrad', 'Malta', 'Mediterranean']
+};
+const LBA_VALUE = 3; // 空爆値
+function updatePOC(){
+  const el = document.getElementById('pocVal');
+  if(el){
+    el.textContent = (poc>=0?'+':'') + poc;
+    el.style.color = poc > 0 ? '#88ccff' : (poc < 0 ? '#ff8888' : '#ffcc44');
+  }
+}
+
+// 国別母港
+const HOME_PORT = { UK:'England', DE:'Germany', IT:'Italy', US:'USA', RU:'Leningrad' };
+
+function placeAllShips(){
+  renderAxisList(); // 撃沈反映
+  renderAlliesList();
+  const inner = document.getElementById('mapInner');
+  inner.querySelectorAll('.tt-ship').forEach(e => e.remove());
+  Object.keys(stacks).forEach(k => delete stacks[k]);
+
+  // place key（海域内で陣営/タイプ別に分割）でグルーピング
+  const byKey = {};
+  SHIPS.forEach(s => {
+    if(!s.location || s.sunk || s.removed) return;
+    const key = getPlaceKey(s);
+    (byKey[key] ||= []).push(s);
+  });
+  for(const key in byKey){
+    const ship0 = byKey[key][0];
+    const c = getShipCoord(ship0);
+    if(!c) continue;
+    const isTrack = key.startsWith('T') && !key.includes(':');
+    const w = isTrack ? COUNTER_W : PORT_COUNTER_W;
+    placeStack(key, locLabel(ship0.location), byKey[key], c.x, c.y, w);
+  }
+}
+
+function placeControlMarkers(){
+  const inner = document.getElementById('mapInner');
+  inner.querySelectorAll('.control-marker').forEach(e => e.remove());
+  Object.keys(seaControl).forEach(seaKey => {
+    const side = seaControl[seaKey];
+    if(!side) return;
+    const img = side === 'allies' ? 'maker/allied_control.gif' : 'maker/axis_control.gif';
+    const c = SEA_CONTROL_COORDS[seaKey] || SEA_COORDS[seaKey];
+    if(!c) return;
+    const div = document.createElement('div');
+    div.className = 'control-marker';
+    div.style.left = c.x + '%';
+    div.style.top  = c.y + '%';
+    div.style.width = '5%';
+    div.innerHTML = `<img src="../WAS24/images/${img}" style="width:100%;height:auto;">`;
+    inner.appendChild(div);
+  });
+}
+
+function closeCombatModal(){
+  document.getElementById('combatModal').classList.remove('show');
+}
+
+function endCombatRound(){
+  SHIPS.filter(s => s.disabled && !s.sunk).forEach(s => {
+    s.location = s.homePort;
+    s.disabled = false;
+  });
+  placeAllShips();
+  renderCombatPane();
+}
+
+let _combatConfirmResolve = null;
+let _roundEndResolve = null;
+let pendingAxisDisabledForUI = []; // 戦闘中に即時帰還した枢軸艦（戦闘解決後にUIで帰還港選択）
+function onCombatConfirm(){
+  // 撃沈/帰還艦をモーダルから除去、帰還艦は atDock=true でマップのドック表示、ダイス表示クリア
+  SHIPS.forEach(s => {
+    if(s.sunk){
+      const row = document.getElementById(`cs-${s.id}`);
+      if(row) row.remove();
+    } else if(s.location && PORTS[s.location]){
+      // 戦闘で帰還した艦
+      s.atDock = true;
+      const row = document.getElementById(`cs-${s.id}`);
+      if(row) row.remove();
+    }
+  });
+  document.querySelectorAll('#combatModal [id^="cs-dc-"]').forEach(el => el.innerHTML = '');
+  document.querySelectorAll('#combatModal .result-label').forEach(el => el.remove());
+  placeAllShips();
+  document.getElementById('combatConfirmBtn').style.display = 'none';
+  if(_combatConfirmResolve){ const r = _combatConfirmResolve; _combatConfirmResolve = null; r(); }
+}
+function onRoundEnd(){
+  document.getElementById('roundEndBtn').style.display = 'none';
+  if(_roundEndResolve){ const r = _roundEndResolve; _roundEndResolve = null; r(); }
+}
+function waitForCombatConfirm(){
+  return new Promise(resolve => {
+    document.getElementById('combatConfirmBtn').style.display = 'inline-block';
+    _combatConfirmResolve = resolve;
+  });
+}
+function waitForRoundEnd(){
+  return new Promise(resolve => {
+    document.getElementById('roundEndBtn').style.display = 'inline-block';
+    _roundEndResolve = resolve;
+  });
+}
+
+function runFastCombat(){
+  console.log('[DBG] runFastCombat 呼び出し');
+  console.trace();
+  const events = [];
+  const start = performance.now();
+  resolveAllCombat(events);
+  const elapsed = performance.now() - start;
+  let sunkAllies = 0, sunkAxis = 0, dmgAllies = 0, dmgAxis = 0;
+  events.forEach(e => {
+    const s = SHIPS.find(x => x.id === e.ship);
+    if(!s) return;
+    if(e.type === 'sunk'){
+      if(s.side === 'allies') sunkAllies++; else sunkAxis++;
+    } else if(e.type === 'damage'){
+      if(s.side === 'allies') dmgAllies += (e.damage || 0); else dmgAxis += (e.damage || 0);
+    }
+  });
+  placeAllShips();
+  document.getElementById('phaseLabel').textContent =
+    `高速戦闘完了 (${elapsed.toFixed(1)}ms) - 撃沈: 連合${sunkAllies}/枢軸${sunkAxis} 損害: 連合${dmgAllies}/枢軸${dmgAxis}`;
+}
+
+async function runAICombat(){
+  console.log('[DBG] runAICombat 呼び出し');
+  console.trace();
+  aiMode = true;
+  document.getElementById('combatModal').classList.add('show');
+  try {
+    // 水上戦闘のみ全海域で実行 (ASW/LBA/航空攻撃は個別ボタンで手動実行)
+    for(const seaKey of Object.keys(SEAS)){
+      const surfAllies = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies' && s.type!=='UBOAT');
+      const surfAxis = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='axis' && s.type!=='UBOAT');
+      if(!surfAllies.length || !surfAxis.length) continue;
+      startCombatLogEntry(SEA_LABEL[seaKey]||seaKey, '水上戦闘 (AI)');
+      await resolveSurfaceCombat(seaKey, false);
+      endCombatLogEntry();
+    }
+  } finally {
+    aiMode = false;
+    placeAllShips();
+    renderCombatPane();
+  }
+}
+
+function endTurn(){
+  const log = [];
+  const wasAtLastTurn = currentTurn >= 8; // ターン8終了時のみ true（ゲーム終了表示用）
+  // 海域支配は phase 7 で設定済み（前ターン維持ルール含む）、ここでは触らない
+  // POC加算（5.8）: 海域支配POCはphase 9で加算済み、ここでは中立残留・船団上陸のみ
+  let delta = 0;
+  // 16. ドイツ艦の給油: phase 8 で自動判定するように移動済み（ここでは何もしない）
+
+  // 17.2 中立港の残留ペナルティ（到着ターン以外、毎ターン1艦1POC損失）
+  SHIPS.forEach(s => {
+    if(s.location !== 'Neutral' || s.sunk || s.removed) return;
+    if(s.arrivedNeutralTurn === currentTurn) return; // 到着ターンは免除
+    if(s.side === 'allies'){
+      delta -= 1; // 連合-1POC = カウンタ-1
+      log.push(`${s.name} 中立港残留 → 連合 -1POC`);
+    } else if(s.side === 'axis'){
+      delta += 1; // 枢軸-1POC = カウンタ+1
+      log.push(`${s.name} 中立港残留 → 枢軸 -1POC`);
+    }
+  });
+
+  // 14. 船団の上陸（AI判断: 基本ロシアを目指すので英国は上陸しない）
+  SHIPS.forEach(s => {
+    if(s.type !== 'CONVOY' || s.sunk || s.removed) return;
+    if(s.location === 'Barents'){
+      // ロシア自動上陸 +3POC
+      s.removed = true; s.location = null;
+      delta += 3;
+      log.push(`船団 ${s.name} ロシア上陸 +3POC(連合)`);
+    }
+    // NA留まり: 次ターンBarentsへ進ませる（英国上陸はしない）
+  });
+  const pocBeforeEnd = poc;
+  poc = Math.max(-10, Math.min(10, poc + delta));
+  console.log(`[POC] endTurn delta=${delta} poc ${pocBeforeEnd} → ${poc} (中立港・コンボイ分)`);
+  log.push(`POC変動: ${delta>=0?'+':''}${delta} → 累計${poc>=0?'+':''}${poc}`);
+
+  // 3) フラグ解除と船団のターン経過カウント（帰還は phase 8 で完結）
+  SHIPS.forEach(s => {
+    s.failedMove = false;
+    s.movedThisTurn = false;
+    s.originThisTurn = null;
+    s.disabledThisTurn = false;
+    // 一度マルタに移動した UK 艦は homePort を Malta に固定
+    if(s.country === 'UK' && s.location === 'Malta'){
+      s.homePort = 'Malta';
+    }
+    // 船団のターン経過カウント
+    if(s.type === 'CONVOY' && !s.removed){
+      if(s.location && SEAS[s.location]) s.turnsAtSea = (s.turnsAtSea || 0) + 1;
+      else s.turnsAtSea = 0;
+    }
+  });
+
+  // LBA使用フラグリセット
+  lbaUsed.allies = false;
+  lbaUsed.axis = false;
+  // 戦闘完了フラグリセット
+  combatDone.uboat.clear();
+  combatDone.surface.clear();
+  // 撤退海域フラグリセット
+  retreatedSeas.clear();
+
+  // 4) 支配マーカー更新
+  placeControlMarkers();
+
+  // 5) ターン進行（5.9）
+  if(currentTurn < 8){
+    currentTurn++;
+    document.getElementById('turnLabel').textContent = currentTurn;
+  } else {
+    log.push('ゲーム終了');
+  }
+  // 6) ターントラック処理 / US 戦闘艦は1回ロール統一（6で北大西洋直行、失敗で T+1）
+  //    ターン8終了時もここを実行 → T_n に残った艦に最終判定機会を与える
+  const usResults = [];
+  SHIPS.forEach(s => {
+    if(s.location && s.location.startsWith('T')){
+      const t = parseInt(s.location.slice(1));
+      if(t <= currentTurn){
+        if(s.country === 'US' && (s.type === 'BB' || s.type === 'CA')){
+          const r = rollD6();
+          if(r === 6){
+            s.location = 'NorthAtlantic';
+            s.homePort = HOME_PORT[s.country] || 'USA';
+            s.usEntered = true;
+            const line = `${s.name}: 出撃ロール⚂${r} 成功 → 北大西洋`;
+            log.push(line); usResults.push(line);
+          } else if(currentTurn < 8){
+            s.location = 'T' + (currentTurn + 1);
+            const line = `${s.name}: 出撃ロール⚂${r} 失敗 → T${currentTurn + 1}`;
+            log.push(line); usResults.push(line);
+          } else {
+            // ターン8の最終判定で失敗 → 出撃せず終了
+            const line = `${s.name}: 出撃ロール⚂${r} 失敗 (最終判定)`;
+            log.push(line); usResults.push(line);
+          }
+        } else {
+          const home = HOME_PORT[s.country] || null;
+          s.location = home;
+          s.homePort = home;
+        }
+      }
+    }
+  });
+  if(usResults.length){
+    alert('US 出撃判定:\n' + usResults.join('\n'));
+  }
+  // 6.5) Uボート総数が8以上なら超過分を削除（enterTurnが新しい順）— ターン進行時のみ
+  if(currentTurn < 8 || phaseIdx >= 1){
+    const allUboats = SHIPS.filter(s => s.type === 'UBOAT' && !s.sunk && !s.removed);
+    if(allUboats.length >= 8){
+      const sorted = allUboats.slice().sort((a,b) => (b.enterTurn || 0) - (a.enterTurn || 0));
+      const excess = allUboats.length - 7;
+      for(let i = 0; i < excess; i++){
+        sorted[i].removed = true;
+        sorted[i].location = null;
+        log.push(`${sorted[i].name}: Uボート総数8隻以上のため削除`);
+      }
+    }
+  }
+
+  // 7) 描画
+  phaseIdx = 1;
+  renderPhaseBar();
+  placeAllShips();
+  renderPortButtons(); renderLocShipList(); renderDestButtons();
+  renderStatus(); renderSeaResetButtons(); updatePOC();
+  document.getElementById('moveStatus').innerHTML = log.join('<br>');
+
+  // ターン8終了 → ゲーム終了 → 戦闘ログ自動表示（ターン7終了時の currentTurn=8 では表示しない）
+  if(wasAtLastTurn){
+    setTimeout(() => showCombatLog(), 200);
+  }
+}
+
+function showStack(stackId){
+  const st = stacks[stackId];
+  if(!st) return;
+  let html = `<h3>${st.label} (${st.ships.length}艦)</h3><div class="modal-grid">`;
+  st.ships.forEach(s=>{
+    const enter = s.enterTurn ? ` (T${s.enterTurn})` : '';
+    let statusHtml = '';
+    if(s.sunk) statusHtml = `<span style="color:#f44;font-weight:bold;">★撃沈</span>`;
+    else if(s.damage > 0) statusHtml = `<span style="color:#fa8;">損害${s.damage}/${s.def}・速力${s.spd}</span>`;
+    if(s.disabled) statusHtml += ` <span style="color:#fc4;">[即時帰還]</span>`;
+    html += `<div class="modal-ship">
+      <img src="../WAS24/images/${s.file}">
+      <div class="info">
+        <div class="nm">${s.name}${enter}</div>
+        <div class="sp">${s.country} / ${s.atkOrig}-${s.def}-${s.spdOrig} ${s.type}</div>
+        ${statusHtml ? `<div style="font-size:0.85em;">${statusHtml}</div>` : ''}
+      </div>
+    </div>`;
+  });
+  html += `</div><button class="modal-close" onclick="closeModal()">閉じる</button>`;
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal(){
+  document.getElementById('modal').classList.remove('show');
+}
+
+// === 初期化呼び出し（全定義の後で実行） ===
+renderPortButtons();
+renderLocShipList();
+renderDestButtons();
+renderStatus();
+renderSeaResetButtons();
+updatePOC();
+placeAllShips();
+setPhase('move');
+renderPhaseBar();
+</script>
+</body>
+</html>
