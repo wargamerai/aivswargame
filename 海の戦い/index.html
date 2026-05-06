@@ -317,7 +317,7 @@ body.hide-units .control-marker { display:none; }
   </div>
   <div id="mapArea">
     <div id="mapInner">
-      <img id="mapImg" src="../WAS24/images/war_at_sea_board.gif" alt="War at Sea board">
+      <img id="mapImg" src="images/war_at_sea_board.gif" alt="War at Sea board">
     </div>
   </div>
   <div id="rightPane">
@@ -422,7 +422,7 @@ function renderSideList(side, elId){
       if(s.sunk) status = ' <span style="color:#ff4444;font-weight:bold;">[撃沈]</span>';
       else if(s.damage > 0) status = ` <span style="color:#fa8;">[損害${s.damage}]</span>`;
       html += `<div class="ship-entry${cls}">
-        <img src="../WAS24/images/${s.file}" alt="${s.name}">
+        <img src="images/${s.file}" alt="${s.name}">
         <div>
           <div class="name">${s.name}${enter}${status}</div>
           <div class="spec">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
@@ -696,7 +696,7 @@ function renderLocShipList(){
     const dmgText = s.damage > 0 ? ` <span style="color:#fa8;">[損害${s.damage}]</span>` : '';
     if(s.failedMove){
       return `<div class="ship-entry" style="opacity:0.4;cursor:not-allowed;background:#3a2a2a;">
-        <img src="../WAS24/images/${s.file}">
+        <img src="images/${s.file}">
         <div>
           <div class="name">${s.name}${dmgText} <span style="color:#f88;">[移動失敗・配置不可]</span></div>
           <div class="spec">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
@@ -707,7 +707,7 @@ function renderLocShipList(){
       // 移動済み: 移動先の海域色で表示
       const bg = SEA_COLOR[s.location] || '#1a3a2a';
       return `<div class="ship-entry" style="background:${bg};cursor:default;">
-        <img src="../WAS24/images/${s.file}">
+        <img src="images/${s.file}">
         <div>
           <div class="name" style="color:#fff;">${s.name}${dmgText} <span style="font-size:0.85em;">→ ${locLabel(s.location)}</span></div>
           <div class="spec" style="color:#eef;">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
@@ -715,7 +715,7 @@ function renderLocShipList(){
       </div>`;
     }
     return `<div class="ship-entry${sel}" onclick="toggleShip('${s.id}')">
-      <img src="../WAS24/images/${s.file}">
+      <img src="images/${s.file}">
       <div>
         <div class="name">${s.name}${dmgText}</div>
         <div class="spec">${s.atk}-${s.def}-${s.spd} ${s.type}</div>
@@ -1039,7 +1039,7 @@ async function startLbaBombing(side, area){
   for(let i=lbaShots-1; i>=0; i--){
     const rid = `lba-${i}`;
     const html = `<div class="cs-row" id="cs-${rid}">
-      <div class="cs-img"><img src="../WAS24/images/${lbaImg}"></div>
+      <div class="cs-img"><img src="images/${lbaImg}"></div>
       <div class="cs-name">陸上攻撃機 ${i+1}/${lbaShots}</div>
       <div class="cs-status" id="cs-st-${rid}">空爆</div>
       <div class="cs-dice" id="cs-dc-${rid}"></div>
@@ -1053,7 +1053,7 @@ async function startLbaBombing(side, area){
     for(let i=0; i<cv.def; i++){
       const rid = `${cv.id}-${i}`;
       const html = `<div class="cs-row" id="cs-${rid}">
-        <div class="cs-img"><img src="../WAS24/images/${cv.file}"></div>
+        <div class="cs-img"><img src="images/${cv.file}"></div>
         <div class="cs-name">${cv.name} ${i+1}/${cv.def}</div>
         <div class="cs-status" id="cs-st-${rid}">空爆</div>
         <div class="cs-dice" id="cs-dc-${rid}"></div>
@@ -1421,7 +1421,7 @@ async function playAirPhase(side, seaKey, modalAlreadyOpen){
     for(let i=LBA_VALUE-1; i>=0; i--){
       const rid = `lba-${side}-${i}`;
       const html = `<div class="cs-row" id="cs-${rid}">
-        <div class="cs-img"><img src="../WAS24/images/${lbaImg}"></div>
+        <div class="cs-img"><img src="images/${lbaImg}"></div>
         <div class="cs-name">陸上攻撃機 ${i+1}/${LBA_VALUE}</div>
         <div class="cs-status" id="cs-st-${rid}">空爆</div>
         <div class="cs-dice" id="cs-dc-${rid}"></div>
@@ -1434,7 +1434,7 @@ async function playAirPhase(side, seaKey, modalAlreadyOpen){
     for(let i=0; i<cv.def; i++){
       const rid = `${cv.id}-air-${i}`;
       const html = `<div class="cs-row" id="cs-${rid}">
-        <div class="cs-img"><img src="../WAS24/images/${cv.file}"></div>
+        <div class="cs-img"><img src="images/${cv.file}"></div>
         <div class="cs-name">${cv.name} ${i+1}/${cv.def}</div>
         <div class="cs-status" id="cs-st-${rid}">空爆</div>
         <div class="cs-dice" id="cs-dc-${rid}"></div>
@@ -1913,7 +1913,7 @@ function diceClass(r){ return r===6 ? 'hit' : (r===5 ? 'dis' : 'miss'); }
 function renderShipRow(s){
   const grp = s.group ? `<span class="cs-group" style="color:#fc4;font-weight:bold;margin-left:8px;">${s.group}</span>` : '';
   return `<div class="cs-row" id="cs-${s.id}">
-    <div class="cs-img"><img src="../WAS24/images/${s.file}"></div>
+    <div class="cs-img"><img src="images/${s.file}"></div>
     <div class="cs-name">${s.name}${grp}</div>
     <div class="cs-status" id="cs-st-${s.id}">${s.atk}-${s.def}-${s.spd} ${s.type}${s.damage?` 損害${s.damage}`:''}</div>
     <div class="cs-dice" id="cs-dc-${s.id}"></div>
@@ -4004,7 +4004,7 @@ function placeStack(stackId, label, ships, x, y, w){
     div.title = `${label}: ${s.name}${s.damage?` (損害${s.damage}/${s.def})`:''}${s.disabled?' [即時帰還]':''}`;
     div.dataset.stack = stackId;
     div.onclick = ()=> showStack(stackId);
-    let html = `<img src="../WAS24/images/${s.file}" style="width:100%;height:auto;display:block;">`;
+    let html = `<img src="images/${s.file}" style="width:100%;height:auto;display:block;">`;
     if(s.damage > 0){
       // 損害バッジ（数字を赤い丸で）
       html += `<div style="position:absolute;bottom:-25%;right:-15%;background:#c00;color:#fff;font-weight:bold;font-size:1.4em;padding:0 6px;border-radius:50%;border:2px solid #fff;line-height:1.2;min-width:1.2em;text-align:center;box-shadow:0 0 4px #000;">${s.damage}</div>`;
@@ -4128,7 +4128,7 @@ function placeControlMarkers(){
     div.style.left = c.x + '%';
     div.style.top  = c.y + '%';
     div.style.width = '5%';
-    div.innerHTML = `<img src="../WAS24/images/${img}" style="width:100%;height:auto;">`;
+    div.innerHTML = `<img src="images/${img}" style="width:100%;height:auto;">`;
     inner.appendChild(div);
   });
 }
@@ -4376,7 +4376,7 @@ function showStack(stackId){
     else if(s.damage > 0) statusHtml = `<span style="color:#fa8;">損害${s.damage}/${s.def}・速力${s.spd}</span>`;
     if(s.disabled) statusHtml += ` <span style="color:#fc4;">[即時帰還]</span>`;
     html += `<div class="modal-ship">
-      <img src="../WAS24/images/${s.file}">
+      <img src="images/${s.file}">
       <div class="info">
         <div class="nm">${s.name}${enter}</div>
         <div class="sp">${s.country} / ${s.atkOrig}-${s.def}-${s.spdOrig} ${s.type}</div>
