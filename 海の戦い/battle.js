@@ -150,33 +150,36 @@ function resolveUboatASW(seaKey, events, pending){
 
   allies.forEach(s => {
     const numDice = (s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1;
+    // 1艦の連合艦は1隻のUボートを選んで全ダイスをまとめて適用（3個ダイスは分割不可）
+    const targetU = uboats.find(x => !x.sunk && x.location === seaKey && !isPendingHit(x));
     const dice = [];
     const applyEvents = [];
+    let resolved6 = false, resolved5 = false;
     for(let i=0; i<numDice; i++){
       const r = rollD6();
       dice.push(r);
-      if(r === 6){
-        const u = uboats.find(x => !x.sunk && x.location === seaKey && !isPendingHit(x));
-        if(u){
-          if(pending){
-            pending.uboatSunk.add(u.id);
-          } else {
-            u.sunk = true;
-          }
-          if(typeof logCombatLine === 'function') logCombatLine(`★ ${u.name} 撃沈 (ASW: ${s.name})`);
-          applyEvents.push({ type:'sunk', ship: u.id, name: u.name });
+      if(targetU){
+        if(r === 6 && !resolved6) resolved6 = true;
+        else if(r === 5 && !resolved6 && !resolved5) resolved5 = true;
+      }
+    }
+    if(targetU){
+      if(resolved6){
+        if(pending){
+          pending.uboatSunk.add(targetU.id);
+        } else {
+          targetU.sunk = true;
         }
-      } else if(r === 5){
-        const u = uboats.find(x => !x.sunk && x.location === seaKey && !isPendingHit(x));
-        if(u){
-          if(pending){
-            pending.uboatReturn.add(u.id);
-          } else {
-            u.location = 'Germany';
-          }
-          if(typeof logCombatLine === 'function') logCombatLine(`${u.name}: 帰還 (ASW: ${s.name})`);
-          applyEvents.push({ type:'uboat_disabled', ship: u.id, name: u.name });
+        if(typeof logCombatLine === 'function') logCombatLine(`★ ${targetU.name} 撃沈 (ASW: ${s.name})`);
+        applyEvents.push({ type:'sunk', ship: targetU.id, name: targetU.name });
+      } else if(resolved5){
+        if(pending){
+          pending.uboatReturn.add(targetU.id);
+        } else {
+          targetU.location = 'Germany';
         }
+        if(typeof logCombatLine === 'function') logCombatLine(`${targetU.name}: 帰還 (ASW: ${s.name})`);
+        applyEvents.push({ type:'uboat_disabled', ship: targetU.id, name: targetU.name });
       }
     }
     // ダイス表示 → その後で適用イベント
