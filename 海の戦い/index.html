@@ -122,6 +122,17 @@ body.hide-units .control-marker { display:none; }
   align-items:center; justify-content:center; z-index:1000;
 }
 #combatModal.show, #axisReturnModal.show { display:flex; }
+/* 戦闘オーバーレイ（フェイズ切替時に大きく表示） */
+#combatOverlayFlash {
+  position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+  background:rgba(0,0,0,0.92); color:#ffcc44; padding:24px 60px;
+  border:3px solid #ffcc44; border-radius:10px;
+  font-size:2.4em; font-weight:bold; letter-spacing:0.1em;
+  z-index:2000; pointer-events:none; opacity:0;
+  transition:opacity 0.3s; text-shadow:0 0 8px rgba(255,204,68,0.6);
+  white-space:nowrap;
+}
+#combatOverlayFlash.show { opacity:1; }
 #axisReturnTable { width:100%; border-collapse:collapse; color:#eee; font-size:0.9em; }
 #axisReturnTable th { background:#234; color:#cde; padding:4px 8px; text-align:left; border-bottom:1px solid #456; }
 #axisReturnTable td { padding:4px 8px; border-bottom:1px solid #234; vertical-align:middle; }
@@ -290,6 +301,7 @@ body.hide-units .control-marker { display:none; }
     </div>
   </div>
 </div>
+<div id="combatOverlayFlash"></div>
 <div id="combatModal">
   <div class="combat-box">
     <h3 id="combatTitle">戦闘解決</h3>
@@ -1500,12 +1512,16 @@ async function playAirPhase(side, seaKey, modalAlreadyOpen){
 async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
   console.log('[DBG] resolveSurfaceCombat 呼び出し', seaKey, 'modalAlreadyOpen=', modalAlreadyOpen);
   console.trace();
+  await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 ━`, 1500);
   let firstIter = true;
   while(true){
     const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.type !== 'UBOAT');
     const allies = ships.filter(s => s.side === 'allies');
     const axis   = ships.filter(s => s.side === 'axis');
-    if(!allies.length || !axis.length) return;
+    if(!allies.length || !axis.length){
+      await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 終了 ━`, 1200);
+      return;
+    }
 
     if(!modalAlreadyOpen){
       await openCombatModal(seaKey, [{ type:'phase', sea:seaKey, label:'水上戦闘' }], {excludeUboat: true});
@@ -1664,13 +1680,14 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
       }
     }
     placeAllShips();
-    // 11.4 両軍存続なら次ラウンド
+    // 11.4 両軍存続なら次ラウンド（次ループ冒頭の判定で終了オーバーレイ表示）
   }
 }
 
 // 追跡戦闘: 追跡側が諦めるか、片側が壊滅するか、速度不足になるまで継続
 async function runPursuitRound(pursuit, retreat){
   const sea = pursuit.length ? (pursuit[0].location || retreat[0]?.location || '') : (retreat[0]?.location || '');
+  await flashCombatOverlay(`━ ${SEA_LABEL[sea]||sea} 追撃戦 ━`, 1500);
   startCombatLogEntry(SEA_LABEL[sea]||sea, '追撃戦闘');
   logCombatLine(`追跡側: ${pursuit.map(s=>s.name).join(', ') || '―'}`);
   logCombatLine(`撤退側: ${retreat.map(s=>s.name).join(', ') || '―'}`);
@@ -1776,6 +1793,7 @@ async function runPursuitRound(pursuit, retreat){
     }
   }
   } finally {
+    await flashCombatOverlay('━ 追撃戦 終了 ━', 1200);
     endCombatLogEntry();
   }
 }
@@ -1937,6 +1955,18 @@ function renderShipRow(s){
     <div class="cs-status" id="cs-st-${s.id}">${s.atk}-${s.def}-${s.spd} ${s.type}${s.damage?` 損害${s.damage}`:''}</div>
     <div class="cs-dice" id="cs-dc-${s.id}"></div>
   </div>`;
+}
+
+// フェイズ切替時に大きく表示するオーバーレイ
+async function flashCombatOverlay(text, durationMs){
+  const el = document.getElementById('combatOverlayFlash');
+  if(!el) return;
+  durationMs = durationMs || 1500;
+  el.textContent = text;
+  el.classList.add('show');
+  await new Promise(r => setTimeout(r, durationMs));
+  el.classList.remove('show');
+  await new Promise(r => setTimeout(r, 300));
 }
 
 function setPhaseLabel(txt){
@@ -2908,92 +2938,42 @@ async function aiAlliedMove(bbTargetOverride){
     aiLog.push(`ロシア艦: ターン${currentTurn}<3 - 出港判定スキップ`);
   }
 
-  // === 地中海補填を最優先で実施 ===
-  // Malta 艦の地中海派遣判定: マルタ艦数 ≥ イタリア艦数（生存総数、損害含む）なら出撃。劣勢なら控える
-  const itTotalAlive = SHIPS.filter(s => s.country === 'IT' && !s.sunk && !s.removed && s.type !== 'UBOAT').length;
-  const maltaTotalAlive = SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY').length;
-  if(maltaTotalAlive >= itTotalAlive){
-    SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY' && !s.movedThisTurn).forEach(s => {
-      s.location = 'Mediterranean';
-      s.movedThisTurn = true;
-    });
-    aiLog.push(`Malta出撃: マルタ${maltaTotalAlive} ≥ IT${itTotalAlive}`);
-  } else {
-    aiLog.push(`Malta出撃控え（数劣勢）: マルタ${maltaTotalAlive} < IT${itTotalAlive}`);
+  // === コンボイ移動を最優先で実施 ===
+  const _convoyOccupiedEarly = new Set();
+  SHIPS.forEach(s => {
+    if(s.type === 'CONVOY' && SEAS[s.location] && !s.sunk && !s.removed) _convoyOccupiedEarly.add(s.location);
+  });
+  // 1a-1) 損害コンボイ NA → England 上陸 (POC +1 連合)
+  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && s.damage > 0)){
+    ship.location = 'England';
+    ship.removed = true;
+    ship.movedThisTurn = true;
+    _convoyOccupiedEarly.delete('NorthAtlantic');
+    poc = Math.max(-10, Math.min(10, poc + 1));
+    aiLog.push(`<b>${ship.name}: 損害により England 上陸 +1POC(連合)</b>`);
   }
-  // 戦力調整 (ターン2以降): マルタ系UK艦の攻撃力 ≥ イタリア攻撃力+1 を維持
-  // 不足分は England から地中海へ強い艦から派遣（2海域移動、1隻ずつダイス判定）
-  if(currentTurn >= 2){
-    const italyAtk = SHIPS.filter(s =>
-      s.country === 'IT' && !s.sunk && !s.removed && s.type !== 'UBOAT'
-    ).reduce((sum, s) => sum + (s.atk || 0), 0);
-    const maltaAlliedAtk = SHIPS.filter(s =>
-      s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY' &&
-      (s.location === 'Malta' || s.location === 'Mediterranean')
-    ).reduce((sum, s) => sum + (s.atk || 0), 0);
-    const targetAtk = italyAtk + 1;
-    const need = targetAtk - maltaAlliedAtk;
-    if(need > 0){
-      const candidates = SHIPS.filter(s =>
-        s.location === 'England' && s.side === 'allies' && !s.sunk && !s.removed &&
-        s.type !== 'CONVOY' && !s.movedThisTurn && !(s.damage > 0)
-      ).sort((a, b) => (b.atk || 0) - (a.atk || 0));
-      let addedAtk = 0;
-      for(const s of candidates){
-        if(addedAtk >= need) break;
-        const roll = rollD6();
-        if(roll < s.spd){
-          s.location = 'Mediterranean';
-          s.movedThisTurn = true;
-          addedAtk += (s.atk || 0);
-          aiLog.push(`${s.name}: England → 地中海 ⚂${roll}<${s.spd} 戦力補強+${s.atk} (累計+${addedAtk})`);
-        } else {
-          s.location = s.homePort || 'England';
-          s.movedThisTurn = true;
-          s.failedMove = true;
-          aiLog.push(`${s.name}: England → 地中海 ⚂${roll}≥${s.spd} 失敗`);
-        }
-      }
-      if((maltaAlliedAtk + addedAtk) < targetAtk){
-        aiLog.push(`<b>地中海戦力不足: マルタ系${maltaAlliedAtk}+補強${addedAtk} < IT${italyAtk}+1</b>`);
-      } else {
-        aiLog.push(`地中海戦力: マルタ系${maltaAlliedAtk}+補強${addedAtk} ≥ IT${italyAtk}+1`);
-      }
-    } else if(need < 0){
-      // 過剰分: 地中海・マルタの弱い UK 艦を England へ戻す（+1 を下回らない範囲、Malta は最低2隻残す）
-      const excess = -need;
-      const candidates = SHIPS.filter(s =>
-        s.side === 'allies' && s.country === 'UK' && !s.sunk && !s.removed &&
-        s.type !== 'CONVOY' && !s.movedThisTurn && !(s.damage > 0) &&
-        (s.location === 'Mediterranean' || s.location === 'Malta')
-      ).sort((a, b) => {
-        // 地中海を優先、同じ場所なら攻撃力低い順
-        if(a.location !== b.location) return a.location === 'Mediterranean' ? -1 : 1;
-        return (a.atk || 0) - (b.atk || 0);
-      });
-      let removedAtk = 0;
-      for(const s of candidates){
-        if(removedAtk + (s.atk || 0) > excess) continue; // 戻すと +1 を下回る → スキップ
-        // マルタは最低2隻残す（イタリア消滅後でも維持）
-        if(s.location === 'Malta'){
-          const remainingMalta = SHIPS.filter(x =>
-            x !== s && x.location === 'Malta' && x.side === 'allies' && !x.sunk && !x.removed && x.type !== 'CONVOY'
-          ).length;
-          if(remainingMalta < 2) continue;
-        }
-        const fromLoc = s.location;
-        s.location = 'England';
-        s.movedThisTurn = true;
-        removedAtk += (s.atk || 0);
-        aiLog.push(`${s.name}: ${fromLoc === 'Malta' ? 'マルタ' : '地中海'} → England (戦力過剰 -${s.atk})`);
-      }
-      aiLog.push(`地中海戦力調整: マルタ系${maltaAlliedAtk}-過剰戻し${removedAtk} (目標 IT${italyAtk}+1)`);
-    } else {
-      aiLog.push(`地中海戦力ちょうど: マルタ系${maltaAlliedAtk} = IT${italyAtk}+1`);
-    }
+  // 1a-2) 無傷船団 NA→バレンツ海（海上2ターン目以降、ロシア向け）
+  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && (s.turnsAtSea||0) >= 1 && s.damage === 0)){
+    if(_convoyOccupiedEarly.has('Barents')) continue;
+    ship.location = 'Barents';
+    ship.movedThisTurn = true;
+    _convoyOccupiedEarly.add('Barents');
+    _convoyOccupiedEarly.delete('NorthAtlantic');
+    aiLog.push(`<b>${ship.name} → バレンツ海(ロシア向)</b>`);
   }
+  // 1b) 船団 USA→NA
+  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'USA')){
+    if(_convoyOccupiedEarly.has('NorthAtlantic')) continue;
+    ship.location = 'NorthAtlantic';
+    ship.movedThisTurn = true;
+    _convoyOccupiedEarly.add('NorthAtlantic');
+    aiLog.push(`${ship.name} → 北大西洋`);
+  }
+  if(!simMode) placeAllShips();
 
-  // 本番実行時はルールベース配置（各艦→海域のマッピング）を計算（地中海補填後の England 残艦が対象）
+  // === 配置優先順序: コンボイ(上) → ロシア(出港判定済) → 北海 → 地中海 → バレンツ → 北大西洋 → 南大西洋 ===
+
+  // 北海/SA/NA: computeAlliedConfig で計算（北海最優先）
   let bestConfig = null;
   if(!bbTargetOverride && !simMode){
     bestConfig = computeAlliedConfig();
@@ -3028,6 +3008,149 @@ async function aiAlliedMove(bbTargetOverride){
     }
     if(!simMode) placeAllShips();
   }
+
+  // === 地中海: 北海配置後に処理 ===
+  // Malta 艦の地中海派遣判定: マルタ艦数 ≥ イタリア艦数（生存総数）なら出撃
+  const itTotalAlive = SHIPS.filter(s => s.country === 'IT' && !s.sunk && !s.removed && s.type !== 'UBOAT').length;
+  const maltaTotalAlive = SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY').length;
+  if(maltaTotalAlive >= itTotalAlive){
+    SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY' && !s.movedThisTurn).forEach(s => {
+      s.location = 'Mediterranean';
+      s.movedThisTurn = true;
+    });
+    aiLog.push(`Malta出撃: マルタ${maltaTotalAlive} ≥ IT${itTotalAlive}`);
+  } else {
+    aiLog.push(`Malta出撃控え（数劣勢）: マルタ${maltaTotalAlive} < IT${itTotalAlive}`);
+  }
+  // 戦力調整 (ターン2以降): マルタ系UK艦の攻撃力 ≥ イタリア攻撃力+1 を維持
+  if(currentTurn >= 2){
+    const italyAtk = SHIPS.filter(s =>
+      s.country === 'IT' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
+      !(s.location && typeof s.location === 'string' && s.location.startsWith('T'))
+    ).reduce((sum, s) => sum + (s.atk || 0), 0);
+    const maltaAlliedAtk = SHIPS.filter(s =>
+      s.side === 'allies' && !s.sunk && !s.removed && s.type !== 'CONVOY' &&
+      (s.location === 'Malta' || s.location === 'Mediterranean')
+    ).reduce((sum, s) => sum + (s.atk || 0), 0);
+    const targetAtk = italyAtk + 1;
+    const medNeed = targetAtk - maltaAlliedAtk;
+    if(medNeed > 0){
+      const candidates = SHIPS.filter(s =>
+        s.location === 'England' && s.side === 'allies' && !s.sunk && !s.removed &&
+        s.type !== 'CONVOY' && !s.movedThisTurn && !(s.damage > 0)
+      ).sort((a, b) => (b.atk || 0) - (a.atk || 0));
+      let addedAtk = 0;
+      for(const s of candidates){
+        if(addedAtk >= medNeed) break;
+        const roll = rollD6();
+        if(roll < s.spd){
+          s.location = 'Mediterranean';
+          s.movedThisTurn = true;
+          addedAtk += (s.atk || 0);
+          aiLog.push(`${s.name}: England → 地中海 ⚂${roll}<${s.spd} 戦力補強+${s.atk} (累計+${addedAtk})`);
+        } else {
+          s.location = s.homePort || 'England';
+          s.movedThisTurn = true;
+          s.failedMove = true;
+          aiLog.push(`${s.name}: England → 地中海 ⚂${roll}≥${s.spd} 失敗`);
+        }
+      }
+      if((maltaAlliedAtk + addedAtk) < targetAtk){
+        aiLog.push(`<b>地中海戦力不足: マルタ系${maltaAlliedAtk}+補強${addedAtk} < IT${italyAtk}+1</b>`);
+      } else {
+        aiLog.push(`地中海戦力: マルタ系${maltaAlliedAtk}+補強${addedAtk} ≥ IT${italyAtk}+1`);
+      }
+    } else if(medNeed < 0){
+      // 過剰分: 地中海・マルタの弱い UK 艦を England へ戻す（+1 を下回らない範囲、Malta は最低2隻残す）
+      const excess = -medNeed;
+      const candidates = SHIPS.filter(s =>
+        s.side === 'allies' && s.country === 'UK' && !s.sunk && !s.removed &&
+        s.type !== 'CONVOY' && !s.movedThisTurn && !(s.damage > 0) &&
+        (s.location === 'Mediterranean' || s.location === 'Malta')
+      ).sort((a, b) => {
+        if(a.location !== b.location) return a.location === 'Mediterranean' ? -1 : 1;
+        return (a.atk || 0) - (b.atk || 0);
+      });
+      let removedAtk = 0;
+      for(const s of candidates){
+        if(removedAtk + (s.atk || 0) > excess) continue;
+        if(s.location === 'Malta'){
+          const remainingMalta = SHIPS.filter(x =>
+            x !== s && x.location === 'Malta' && x.side === 'allies' && !x.sunk && !x.removed && x.type !== 'CONVOY'
+          ).length;
+          if(remainingMalta < 2) continue;
+        }
+        const fromLoc = s.location;
+        s.location = 'England';
+        s.movedThisTurn = true;
+        removedAtk += (s.atk || 0);
+        aiLog.push(`${s.name}: ${fromLoc === 'Malta' ? 'マルタ' : '地中海'} → England (戦力過剰 -${s.atk})`);
+      }
+      aiLog.push(`地中海戦力調整: マルタ系${maltaAlliedAtk}-過剰戻し${removedAtk} (目標 IT${italyAtk}+1)`);
+    } else {
+      aiLog.push(`地中海戦力ちょうど: マルタ系${maltaAlliedAtk} = IT${italyAtk}+1`);
+    }
+  }
+
+  // === バレンツ配置: コンボイがバレンツにいる/到着予定の時のみ CV/CA 全派遣（地中海処理後の残り艦から） ===
+  const convoysAtBarTotal = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'Barents' && !s.sunk && !s.removed).length;
+  const convoysToBarTotal = SHIPS.filter(s => s.type === 'CONVOY' && s.location === 'NorthAtlantic' && !s.sunk && !s.removed && (s.turnsAtSea||0) >= 1).length;
+  if(convoysAtBarTotal > 0 || convoysToBarTotal > 0){
+    const barentsCandidates = SHIPS.filter(s =>
+      s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn &&
+      s.type !== 'CONVOY' && !(s.damage > 0) &&
+      s.location && PORTS[s.location] && s.location !== 'Malta' &&
+      (s.type === 'CV' || s.type === 'CA')
+    );
+    for(const s of barentsCandidates){
+      // 2-hop到達判定: 隣接海域経由で Barents に届くか（spd>=7）
+      const adjacent = PORT_SEAS[s.location] || [];
+      const reachable1 = adjacent.includes('Barents');
+      const reachable2 = s.spd >= 7 && adjacent.some(mid => (SEA_ADJ[mid] || []).includes('Barents'));
+      if(!reachable1 && !reachable2) continue;
+      s.location = 'Barents';
+      s.movedThisTurn = true;
+      aiLog.push(`${s.name}: ${s.homePort||'?'} → バレンツ海 (コンボイ護衛)`);
+    }
+  }
+
+  // === 余艦分配: バレンツ配置後の残り艦を NA/SA へ均等配置 ===
+  const _frenchDeCountLate = SHIPS.filter(s =>
+    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
+    s.damage === 0 && s.location === 'France'
+  ).length;
+  const _saLimitLate = (seaControl['NorthSea'] === 'allies') ? (_frenchDeCountLate + 1) : Infinity;
+  const _distCountsLate = { NorthAtlantic: 0, SouthAtlantic: 0 };
+  SHIPS.forEach(s => {
+    if(s.side === 'allies' && (s.location === 'NorthAtlantic' || s.location === 'SouthAtlantic')){
+      _distCountsLate[s.location]++;
+    }
+  });
+  const _surplus = SHIPS.filter(s =>
+    s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn &&
+    s.type !== 'CONVOY' && !(s.damage > 0) &&
+    s.location && PORTS[s.location] && s.location !== 'Malta' &&
+    !(s.country === 'US' && currentTurn < 4)
+  );
+  const _reachableLate = (ship, dest) => {
+    if(ship.country === 'US' && ship.type !== 'CONVOY' && dest !== 'NorthAtlantic') return false;
+    return (PORT_SEAS[ship.location] || []).includes(dest);
+  };
+  for(const ship of _surplus){
+    const targets = ['NorthAtlantic', 'SouthAtlantic'].sort((a, b) => _distCountsLate[a] - _distCountsLate[b]);
+    for(const t of targets){
+      if(t === 'SouthAtlantic' && _distCountsLate.SouthAtlantic >= _saLimitLate) continue;
+      if(_reachableLate(ship, t)){
+        ship.location = t;
+        ship.movedThisTurn = true;
+        _distCountsLate[t]++;
+        aiLog.push(`${ship.name} → ${SEA_LABEL[t]||t} (余艦)`);
+        break;
+      }
+    }
+  }
+
+  if(!simMode) placeAllShips();
 
   // 枢軸数(Uボート除く)
   const axisCount = {};
@@ -3393,6 +3516,9 @@ async function aiAlliedMove(bbTargetOverride){
 
   if(!simMode){
     document.getElementById('aiLog').innerHTML = aiLog.join('<br>');
+    // moveStatus にも出して可視化（連合軍AIセクション非表示対応）
+    const ms = document.getElementById('moveStatus');
+    if(ms) ms.innerHTML = aiLog.join('<br>');
   }
 }
 
@@ -3709,34 +3835,9 @@ function computeAlliedConfig(){
   const hasBarConvoy = convoysAtBar > 0 || convoysToBar > 0;
   const hasConvoy = convoysAtBar > 0 || convoysAtNA > 0;
 
-  // SA: フランス/中立にいるドイツ艦と同数を配置（弱い艦優先）
-  const deAtFranceNeutral = SHIPS.filter(s =>
-    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
-    (s.location === 'France' || s.location === 'Neutral')
-  ).length;
-  if(deAtFranceNeutral > 0){
-    const saCandidates = sortByWeak([...cas, ...bbs]).filter(s => !config[s.id] && reachable(s, 'SouthAtlantic'));
-    let saPlaced = 0;
-    for(const s of saCandidates){
-      if(saPlaced >= deAtFranceNeutral) break;
-      config[s.id] = 'SouthAtlantic';
-      saPlaced++;
-    }
-  }
+  // === 優先順序: 北海 → バレンツ(コンボイあれば) → 南大西洋 → 北大西洋 ===
 
-  // バレンツ: コンボイがバレンツにいる/今ターン到着予定の時のみ CV/CA 全派遣（それ以外は配置しない）
-  if(hasBarConvoy){
-    cvs.forEach(s => { if(!config[s.id] && reachableTwoHops(s, 'Barents')) config[s.id] = 'Barents'; });
-    cas.forEach(s => { if(!config[s.id] && reachableTwoHops(s, 'Barents')) config[s.id] = 'Barents'; });
-  }
-  // NA: コンボイなしの時は単独 CA 1隻
-  if(!hasConvoy){
-    let shipForNA = casByWeak.find(s => reachable(s, 'NorthAtlantic') && !config[s.id]);
-    if(!shipForNA) shipForNA = bbsByWeak.find(s => reachable(s, 'NorthAtlantic') && !config[s.id]);
-    if(shipForNA) config[shipForNA.id] = 'NorthAtlantic';
-  }
-
-  // 北海: ドイツ攻撃力(独/仏在泊・無傷DE艦)以上の攻撃力になるまで配置（強い艦優先）+ 追加で艦種問わず1隻
+  // 1) 北海最優先: ドイツ攻撃力(独/仏在泊・無傷DE艦)以上の攻撃力 + 1隻
   const deAtkSum = SHIPS.filter(s =>
     s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
     s.damage === 0 && (s.location === 'Germany' || s.location === 'France')
@@ -3755,9 +3856,32 @@ function computeAlliedConfig(){
       nsAtkSum += (s.atk||0);
     }
   }
-  // 追加 +1隻: 艦種問わず到達可能な艦から1隻（強い順）
   const extra = sortByStrong([...bbs, ...cvs, ...cas].filter(reachableForNS))[0];
   if(extra) config[extra.id] = 'NorthSea';
+
+  // 2) バレンツは aiAlliedMove で地中海の後に配置（順序: 北海 → 地中海 → バレンツ → NA → SA）
+
+  // 3) 南大西洋: フランス/中立にいるドイツ艦と同数（弱い艦優先）
+  const deAtFranceNeutral = SHIPS.filter(s =>
+    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
+    (s.location === 'France' || s.location === 'Neutral')
+  ).length;
+  if(deAtFranceNeutral > 0){
+    const saCandidates = sortByWeak([...cas, ...bbs]).filter(s => !config[s.id] && reachable(s, 'SouthAtlantic'));
+    let saPlaced = 0;
+    for(const s of saCandidates){
+      if(saPlaced >= deAtFranceNeutral) break;
+      config[s.id] = 'SouthAtlantic';
+      saPlaced++;
+    }
+  }
+
+  // 4) 北大西洋: コンボイなしの時は単独 CA 1隻
+  if(!hasConvoy){
+    let shipForNA = casByWeak.find(s => reachable(s, 'NorthAtlantic') && !config[s.id]);
+    if(!shipForNA) shipForNA = bbsByWeak.find(s => reachable(s, 'NorthAtlantic') && !config[s.id]);
+    if(shipForNA) config[shipForNA.id] = 'NorthAtlantic';
+  }
 
   // アメリカ来訪時: NAに到着済みの US 戦闘艦と同数のUK艦を NS（barConvoyありなら Barents 可）へ追加配置
   const usCount = SHIPS.filter(s =>
@@ -3778,28 +3902,7 @@ function computeAlliedConfig(){
     }
   }
 
-  // 余艦: NA / SA に均等配置（北海連合支配の場合 SA は1ユニットまで）バレンツは対象外
-  const distTargets = ['NorthAtlantic', 'SouthAtlantic'];
-  const distCounts = { NorthAtlantic: 0, SouthAtlantic: 0 };
-  Object.values(config).forEach(sea => {
-    if(distCounts[sea] !== undefined) distCounts[sea]++;
-  });
-  const frenchDeCount = SHIPS.filter(s =>
-    s.country === 'DE' && !s.sunk && !s.removed && s.type !== 'UBOAT' &&
-    s.damage === 0 && s.location === 'France'
-  ).length;
-  const saLimit = (seaControl['NorthSea'] === 'allies') ? (frenchDeCount + 1) : Infinity;
-  for(const ship of movableShips.filter(s => !config[s.id])){
-    const sortedTargets = [...distTargets].sort((a, b) => distCounts[a] - distCounts[b]);
-    for(const t of sortedTargets){
-      if(t === 'SouthAtlantic' && distCounts.SouthAtlantic >= saLimit) continue;
-      if(reachable(ship, t)){
-        config[ship.id] = t;
-        distCounts[t]++;
-        break;
-      }
-    }
-  }
+  // 余艦分配は aiAlliedMove のバレンツ配置の後で実施（順序: 北海 → 地中海 → バレンツ → 余艦NA/SA）
 
   // ログ
   const dist = {};
