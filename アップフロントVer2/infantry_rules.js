@@ -198,10 +198,14 @@
     const idx = rangeIndex(distance);
     const inMarsh = isInMarsh(group);
     const inStream = isInStream(group);
+    // §11 クルーアシスタント（副兵）は射撃しない（主兵のクルー扱い）
+    const assistantSet = new Set(Object.values(opts.crewMap || {}));
     let total = 0;
     group.cards.forEach((card, i) => {
       // §10.11 ピン状態の兵士の火力は加算しない
       if (isPinned(card) || !isAlive(card)) return;
+      // クルーアシスタントは火力に加算しない
+      if (assistantSet.has(i)) return;
       // 故障・破壊した武器は射撃不可
       if (card.malfunctioned || card.destroyed) return;
       const def = lookupSoldier(card, factionKey);
@@ -234,7 +238,9 @@
 
       // データ駆動: rangeData[idx] から FP を決定
       const rd = (def.rangeData && def.rangeData[idx]) || null;
-      const hasAssistant = !!(opts.crewMap && opts.crewMap[i] != null);
+      const assistIdxC = (opts.crewMap && opts.crewMap[i] != null) ? opts.crewMap[i] : -1;
+      const assistCardC = assistIdxC >= 0 ? group.cards[assistIdxC] : null;
+      const hasAssistant = !!(assistCardC && isAlive(assistCardC) && !isPinned(assistCardC));
       // データ駆動のクルー判定: 括弧あり = クルー必要兵器
       const needsCrew = !!def.needsCrew;
       let fp;
@@ -294,34 +300,60 @@
    *                 false なら防御側として「○無し修正」のみを返す
    * 戻り値: 修正値 (整数)
    */
-  function calcTerrainMod(terrainStack, asAttacker) {
+  function _parseTerrainMod(rawMod) {
+    if (!rawMod) return { atk: 0, def: 0 };
+    const s = String(rawMod);
+    const clean = s.replace(/[*⊙]/g, '');
+    if (clean.indexOf('/') >= 0) {
+      const parts = clean.split('/');
+      return {
+        atk: num(parts[0].replace(/[^\-+0-9]/g, '')),
+        def: num(parts[1].replace(/[^\-+0-9]/g, '')),
+      };
+    }
+    const v = num(clean.replace(/[^\-+0-9]/g, ''));
+    if (s.indexOf('⊙') >= 0) return { atk: v, def: 0 };
+    return { atk: 0, def: v };
+  }
+
+  function calcTerrainMod(terrainStack, asAttacker, opts) {
     if (!terrainStack || terrainStack.length === 0) return 0;
-
-    const parseMod = (rawMod) => {
-      if (!rawMod) return { atk: 0, def: 0 };
-      const s = String(rawMod);
-      const clean = s.replace(/[*⊙]/g, '');
-      if (clean.indexOf('/') >= 0) {
-        const parts = clean.split('/');
-        return {
-          atk: num(parts[0].replace(/[^\-+0-9]/g, '')),
-          def: num(parts[1].replace(/[^\-+0-9]/g, '')),
-        };
-      }
-      const v = num(clean.replace(/[^\-+0-9]/g, ''));
-      if (s.indexOf('⊙') >= 0) return { atk: v, def: 0 };
-      return { atk: 0, def: v };
-    };
-
-    // スタック内全カード (地形・移動・煙幕・鉄条網) の modifier を合計
+    const o = opts || {};
     let mod = 0;
     terrainStack.forEach(card => {
       const t = card && card.terrain;
       if (!t) return;
-      const m = parseMod(t.modifier);
+      let m;
+      if (o.japanBuildings && t.type === 'BUILDINGS') {
+        m = { atk: 0, def: -3 };
+      } else {
+        m = _parseTerrainMod(t.modifier);
+      }
       mod += asAttacker ? m.atk : m.def;
     });
     return mod;
+  }
+
+  /**
+   * calcTerrainMod の内訳を返す: terrain スタックの各カードごとに [{type, mod}, ...]
+   */
+  function getTerrainModBreakdown(terrainStack, asAttacker, opts) {
+    const result = [];
+    if (!terrainStack || terrainStack.length === 0) return result;
+    const o = opts || {};
+    terrainStack.forEach(card => {
+      const t = card && card.terrain;
+      if (!t) return;
+      let m;
+      if (o.japanBuildings && t.type === 'BUILDINGS') {
+        m = { atk: 0, def: -3 };
+      } else {
+        m = _parseTerrainMod(t.modifier);
+      }
+      const v = asAttacker ? m.atk : m.def;
+      if (v !== 0) result.push({ type: t.type, mod: v });
+    });
+    return result;
   }
 
   // ===== §6.5/§6.6 射撃結果解決 ====================================
@@ -908,7 +940,7 @@
     relativeRange, relativeRangeBetweenGroups, canRetreat, isBlocked,
 
     // firepower
-    calcGroupFirepower, calcTerrainMod,
+    calcGroupFirepower, calcTerrainMod, getTerrainModBreakdown,
 
     // gully
     isInGully, canFireAtGully,

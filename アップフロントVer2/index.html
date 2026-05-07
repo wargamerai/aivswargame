@@ -350,6 +350,10 @@
   .action-btn.discard:hover { background: #755; }
   .action-btn:hover { background: #555; }
   .action-btn.active { background: #c33; border-color: #fff; }
+  .action-btn.row3 { grid-row: 3; }
+  .action-btn.row3-c1 { grid-row: 3; grid-column: 1; }
+  .action-btn.row3-c2 { grid-row: 3; grid-column: 2; }
+  .action-btn.row3-c3 { grid-row: 3; grid-column: 3; }
   .decide-btn {
     background: #3a3; color: #fff;
     border: 1px solid #6c6; border-radius: 4px;
@@ -772,6 +776,7 @@
       <button class="cancel" id="setup-reset">リセット</button>
       <button class="cancel" id="setup-sort">モラル順 ↓</button>
       <button class="crew" id="setup-crew">クルー設定</button>
+      <button class="crew" id="setup-demo" style="background:#a44;border-color:#f66;">爆薬</button>
       <button id="setup-start" disabled>ゲーム開始</button>
     </div>
   </div>
@@ -833,20 +838,20 @@
     <div class="action-menu">
       <button class="action-btn" data-act="fire">射撃</button>
       <button class="action-btn" data-act="move">移動</button>
+      <button class="action-btn" data-act="flank">側面</button>
+      <button class="action-btn" data-act="encircle">包囲</button>
+      <button class="action-btn" data-act="cross-stream">渡河</button>
       <button class="action-btn" data-act="recover">回復</button>
       <button class="action-btn" data-act="snipe">狙撃</button>
       <button class="action-btn" data-act="terrain">地形配置</button>
       <button class="action-btn" data-act="repair">修理</button>
-      <button class="action-btn" data-act="smoke" disabled>煙幕</button>
-      <button class="action-btn" data-act="entrench" disabled>塹壕</button>
-      <button class="action-btn" data-act="transfer" disabled>移送</button>
       <button class="action-btn" data-act="wire-remove">鉄条網除去</button>
-      <button class="action-btn" data-act="mine-remove" disabled>地雷除去</button>
       <button class="action-btn" data-act="infiltrate">侵入</button>
       <button class="action-btn" data-act="cc">白兵戦</button>
-      <button class="action-btn" id="btn-confirm" disabled>確定</button>
-      <button class="action-btn discard" id="btn-discard" data-act="discard">捨て札</button>
-      <button class="action-btn end" id="btn-end-turn">終了</button>
+      <button class="action-btn" data-act="crew">クルー</button>
+      <button class="action-btn row3-c1" id="btn-confirm" disabled>確定</button>
+      <button class="action-btn discard row3-c2" id="btn-discard" data-act="discard">捨て札</button>
+      <button class="action-btn end row3-c3" id="btn-end-turn">終了</button>
     </div>
   </div>
 </div>
@@ -934,30 +939,70 @@ function parseTerrainCSV(text) {
     const c = line.split(',');
     const num = parseInt(c[0], 10);
     if (!num) return;
-    // RPC列: 値と色が交互 (c[11],c[12]), (c[13],c[14]), ...
+    // 新CSV列構造: [0]# [1-5]左国名 [6]左種別 [7-11]右国名 [12]右種別 [13]修正 [14]射程 [15]色 [16]サブ [17+]dice
     const diceKeys = ['1','2b','3','4c','5o','6','7w','8','9','0r'];
     const dice = {};
     const diceColor = {};
     diceKeys.forEach((key, i) => {
-      dice[key]      = c[11 + i * 2] || '';
-      diceColor[key] = c[12 + i * 2] || '';  // '赤' or ''(=黒)
+      dice[key]      = c[17 + i * 2] || '';
+      diceColor[key] = c[18 + i * 2] || '';  // '赤' or ''(=黒)
     });
+    const leftFactions = [c[1], c[2], c[3], c[4], c[5]].map(x => (x || '').trim()).filter(x => x);
+    const rightFactions = [c[7], c[8], c[9], c[10], c[11]].map(x => (x || '').trim()).filter(x => x);
+    const leftType = (c[6] || '').trim();
+    const rightType = (c[12] || '').trim();
     out.push({
       num,
-      restrictions: [c[1], c[2], c[4], c[5], c[6]].filter(x => x && x.trim()),
-      type:     c[3] || '',
-      modifier: c[7] || '',
-      range:    c[8] || '',
-      rncColor: (c[9] || '').trim(),   // '黒' or '赤'
-      sub:      c[10] || '',
+      leftFactions,
+      rightFactions,
+      leftType,
+      rightType,
+      restrictions: leftFactions,
+      type:     leftType, // デフォルトは左種別（カード使用時に faction で実効値が決まる）
+      modifier: c[13] || '',
+      range:    c[14] || '',
+      rncColor: (c[15] || '').trim(),
+      sub:      c[16] || '',
       dice,
       diceColor,
-      note: (c[31] || '').trim(),
+      note: (c[37] || '').trim(),
       img:     encPath(`upfrontimages/地形カード/AD ${num}.gif`),
       imgBack: encPath(`upfrontimages/地形カード/AD Back.gif`),
     });
   });
   return out;
+}
+
+// 国別カード（左/右で種別・修正値が異なる）の実効値を、使用する faction で確定する
+function applyFactionToTerrainCard(card, factionKey) {
+  const t = card && card.terrain;
+  if (!t || t._factionApplied) return;
+  const factionLabelMap = { ger: '独', rus: 'ソ', jpn: '日', uk: '英', us: '米' };
+  const factionLabel = factionLabelMap[factionKey] || factionKey;
+  const inLeft  = t.leftFactions  && t.leftFactions.indexOf(factionLabel)  >= 0;
+  const inRight = t.rightFactions && t.rightFactions.indexOf(factionLabel) >= 0;
+  const mods = (t.modifier || '').split('/');
+  if (inRight && t.rightType) {
+    t.type = t.rightType;
+    t.modifier = mods.slice(1).join('/');
+  } else {
+    t.type = t.leftType || t.type;
+    t.modifier = mods[0] != null ? mods[0] : t.modifier;
+  }
+  t._factionApplied = true;
+}
+
+function getGroupFaction(grp) {
+  if (!grp || typeof state === 'undefined' || !state || !state.groups) return null;
+  if (state.groups.player && state.groups.player.indexOf(grp) >= 0) return getFactionKey(state.player);
+  if (state.groups.ai     && state.groups.ai.indexOf(grp)     >= 0) return getFactionKey(state.ai);
+  return null;
+}
+
+function pushTerrainWithFaction(grp, card) {
+  const facKey = getGroupFaction(grp);
+  if (facKey) applyFactionToTerrainCard(card, facKey);
+  grp.terrain.push(card);
 }
 
 function applyTerrainCsvText(text) {
@@ -1127,7 +1172,7 @@ function checkBreezeRemoveSmoke(judgeCard) {
     });
   });
   if (removed > 0) {
-    showAIAction('風: 煙幕 ' + removed + '枚除去');
+    showAIAction('風: 煙幕 ' + removed + '枚除去', judgeCard);
     renderField('player'); renderField('ai');
   }
 }
@@ -1381,6 +1426,8 @@ function openSetupScreen(factionKey) {
   setupState.crewLeader = null;
   setupState.selected = null;
   setupState.targetGroup = 0;
+  setupState.demoMode = false;
+  setupState.demoHolders = new Set(); // "<grpIdx>:<num>" 形式
   // プールに使用兵士全員
   const nums = (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.getSoldierNumbers(scenario, factionKey)) || [];
   setupState.pool = nums.slice();
@@ -1473,13 +1520,45 @@ function buildSetupCard(num, location) {
       lk.title = 'アシスタント設定済み';
       el.appendChild(lk);
     }
+    // 爆薬保持者
+    if (setupState.demoHolders && setupState.demoHolders.has(key)) {
+      const demo = document.createElement('img');
+      demo.src = encPath(getDemoImagePath(setupState.faction));
+      demo.className = 'demoIcon';
+      demo.style.cssText = 'position:absolute;top:2px;right:2px;width:28px;height:28px;z-index:3;border:1px solid #f66;border-radius:3px;background:#000;';
+      demo.title = '爆薬保持';
+      el.appendChild(demo);
+    }
   }
 
   el.addEventListener('click', () => onSetupCardClick(num, location));
   return el;
 }
 
+function getDemoImagePath(factionKey) {
+  const map = {
+    ger: 'images/ドイツマーカ/Wpn Front DEMO Ger.gif',
+    rus: 'images/ソ連マーカー/Wpn Front DEMO Russian.gif',
+    us:  'images/アメリカマーカ/Wpn Front DEMO US.gif',
+    jpn: 'images/日本マーカー/Wpn Front DEMO Jap.gif',
+    uk:  'images/共通マーカー/イギリスマーカー/Wpn Front DEMO Brit.gif',
+  };
+  return map[factionKey] || '';
+}
+
 function onSetupCardClick(num, location) {
+  // 爆薬モード: 配置済み兵士をクリックで爆薬保持を切り替え
+  if (setupState.demoMode) {
+    if (typeof location !== 'number') { alert('グループ内の兵士を選択してください'); return; }
+    const key = `${location}:${num}`;
+    if (setupState.demoHolders.has(key)) {
+      setupState.demoHolders.delete(key);
+    } else {
+      setupState.demoHolders.add(key);
+    }
+    renderSetup();
+    return;
+  }
   // クルー設定モード時の動作
   if (setupState.crewMode) {
     if (!setupState.crewLeader) {
@@ -1649,6 +1728,18 @@ document.getElementById('setup-crew').addEventListener('click', () => {
   setupState.crewMode = !setupState.crewMode;
   setupState.crewLeader = null;
   document.getElementById('setup-crew').classList.toggle('active', setupState.crewMode);
+  // 他モード解除
+  setupState.demoMode = false;
+  document.getElementById('setup-demo').classList.remove('active');
+  renderSetup();
+});
+document.getElementById('setup-demo').addEventListener('click', () => {
+  setupState.demoMode = !setupState.demoMode;
+  document.getElementById('setup-demo').classList.toggle('active', setupState.demoMode);
+  // 他モード解除
+  setupState.crewMode = false;
+  setupState.crewLeader = null;
+  document.getElementById('setup-crew').classList.remove('active');
   renderSetup();
 });
 document.getElementById('setup-sort').addEventListener('click', () => {
@@ -1899,7 +1990,14 @@ function startGameWithSetup() {
   state.groups.player = setupState.groups
     .map((nums, gi) => ({
       name: NAMES[gi],
-      cards: nums.map(num => makeCardWithMeta(playerFaction, num)),
+      cards: nums.map(num => {
+        const card = makeCardWithMeta(playerFaction, num);
+        const key = `${gi}:${num}`;
+        if (setupState.demoHolders && setupState.demoHolders.has(key)) {
+          card.demoCharge = true;
+        }
+        return card;
+      }),
       distance: 0,
       terrain: [],
       actions: [],
@@ -1913,6 +2011,12 @@ function startGameWithSetup() {
   state.groups.ai = (window.SCENARIO_HELPERS && scenario)
     ? window.SCENARIO_HELPERS.buildAIGroupsSmart(scenario, aiKey)
     : [];
+  // AI 側: 各グループの先頭兵士に爆薬を付与
+  state.groups.ai.forEach(grp => {
+    if (grp.cards && grp.cards.length > 0) {
+      grp.cards[0].demoCharge = true;
+    }
+  });
 
   // 初期兵士数を記録（敗北判定用）
   state.initialSoldierCount = {
@@ -2118,7 +2222,33 @@ function makeMainGroup(side, group, idx) {
   // ヘッダー (グループ名 + 距離)
   const header = document.createElement('div');
   header.className = 'group-header';
-  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>`;
+  // 手動設定された側面/包囲フラグを使用
+  const enemySide = side === 'player' ? 'ai' : 'player';
+  const enemyGroups = state.groups[enemySide] || [];
+  const R_enc = window.INFANTRY_RULES;
+  const top = group.terrain && group.terrain.length > 0 ? group.terrain[group.terrain.length - 1] : null;
+  const isFlanking = !group.eliminated && group.flankingTarget != null;
+  const isSurrounded = !group.eliminated && !!group.encircled;
+  const flankTag = isFlanking ? '<span style="color:#fa0;margin-left:8px;font-weight:bold;font-size:12px;">▶側面</span>' : '';
+  const encTag = isSurrounded ? '<span style="color:#f33;margin-left:8px;font-weight:bold;font-size:12px;">⚠包囲</span>' : '';
+  // 正面の敵との距離に応じたグループ火力を表示（正面不在なら隣接敵を使用）
+  let fpTag = '';
+  if (!group.eliminated && R_enc && R_enc.calcGroupFirepower) {
+    const isAlive = g => g && !g.eliminated;
+    let targetEnemy = enemyGroups[idx];
+    if (!isAlive(targetEnemy)) targetEnemy = enemyGroups[idx - 1];
+    if (!isAlive(targetEnemy)) targetEnemy = enemyGroups[idx + 1];
+    if (isAlive(targetEnemy)) {
+      const fac = side === 'player' ? state.player : state.ai;
+      const facKey = getFactionKey(fac);
+      const dist = R_enc.relativeRange(group.distance, targetEnemy.distance);
+      const moving = !!(top && top.terrain && top.terrain.type === 'MOVEMENT');
+      const crewMap = group.crewPairs ? buildCrewMapFromPairs(group) : {};
+      const fp = R_enc.calcGroupFirepower(group, facKey, dist, { moving, crewMap });
+      fpTag = `<span style="color:#8cf;margin-left:8px;font-size:12px;">FP:${fp}@距離${dist}</span>`;
+    }
+  }
+  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${fpTag}${flankTag}${encTag}`;
 
   const dctrl = document.createElement('div');
   dctrl.className = 'distance-ctrl';
@@ -2182,6 +2312,24 @@ function makeMainGroup(side, group, idx) {
       m.title = '狂暴兵';
       c.appendChild(m);
     }
+    // 故障マーカー (§19)
+    if (card.malfunctioned) {
+      const m = document.createElement('div');
+      m.textContent = '故';
+      m.style.cssText = 'position:absolute;top:2px;right:2px;background:#888;color:#fff;font-size:10px;font-weight:bold;padding:1px 4px;border-radius:3px;border:1px solid #fff;z-index:5;';
+      m.title = '武器故障';
+      c.appendChild(m);
+    }
+    // 爆薬保持マーカー (シナリオB)
+    if (card.demoCharge) {
+      const demo = document.createElement('img');
+      const facKey = side === 'player' ? getFactionKey(state.player) : getFactionKey(state.ai);
+      demo.src = encPath(getDemoImagePath(facKey));
+      demo.style.cssText = 'position:absolute;top:50%;left:2px;transform:translateY(-50%);width:22px;height:22px;border:1px solid #f66;border-radius:2px;background:#000;z-index:6;';
+      demo.title = '爆薬保持';
+      demo.onerror = () => { demo.style.display = 'none'; };
+      c.appendChild(demo);
+    }
     c.addEventListener('click', () => {
       if (state.selectedAction === 'snipe' && side === 'ai') {
         state.sniperTarget = { side, grpIdx: idx, cardIdx: ci };
@@ -2241,7 +2389,11 @@ function buildTerrainStack(group) {
   group.terrain.forEach((card, i) => {
     const img = document.createElement('img');
     img.src = card.img;
-    const lateral = card._moveMode === 'lateral';
+    // 涸れ谷/湿地/河川からの最初の移動カードは横向き表示（§8.22/§8.4/§8.53）
+    const prevCard = i > 0 ? group.terrain[i - 1] : null;
+    const isFirstMoveFromSpecial = card.terrain && card.terrain.type === 'MOVEMENT' &&
+      prevCard && prevCard.terrain && (prevCard.terrain.type === 'GULLY' || prevCard.terrain.type === 'MARSH' || prevCard.terrain.type === 'STREAM');
+    const lateral = card._moveMode === 'lateral' || isFirstMoveFromSpecial;
     const transform = lateral ? 'translateX(-50%) rotate(90deg)' : 'translateX(-50%)';
     img.style.cssText = 'position:absolute;left:50%;transform:' + transform + ';width:80px;border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,0.5);top:' + (i * offset) + 'px;z-index:' + i + ';';
     img.onerror = () => { img.style.display = 'none'; };
@@ -2399,8 +2551,8 @@ function renderHands() {
 state.fireSource = null; // {side:'player'|'ai', idx:int}
 state.fireTarget = null;
 
-const ACTIONS_NEED_SOURCE = ['fire','move','recover','snipe','terrain','wire-remove','repair','infiltrate','cc'];
-const ACTIONS_NEED_TARGET = ['fire','snipe','terrain','infiltrate'];
+const ACTIONS_NEED_SOURCE = ['fire','move','flank','encircle','cross-stream','recover','snipe','terrain','wire-remove','repair','infiltrate','cc','crew'];
+const ACTIONS_NEED_TARGET = ['fire','snipe','terrain','infiltrate','flank','encircle'];
 
 document.querySelectorAll('.action-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -2538,6 +2690,108 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     return;
   }
 
+  if (act === 'crew') {
+    if (!state.fireSource) return;
+    const grp = state.groups.player[state.fireSource.idx];
+    const R = window.INFANTRY_RULES;
+    if (!R) return;
+    const playerKey = getFactionKey(state.player);
+    const pairs = grp.crewPairs || {};
+    const pairStr = Object.entries(pairs).map(([o, a]) => `${o}→${a}`).join(', ') || '(なし)';
+    const soldierList = grp.cards.filter(c => R.isAlive(c))
+      .map(c => { const d = R.lookupSoldier(c, playerKey); return `${c.num}: ${d ? d.name : c.id} (${d ? d.weaponCat : '-'})`; })
+      .join('\n');
+    const input = prompt(`現在のクルーペア: ${pairStr}\n\n兵士一覧:\n${soldierList}\n\n操作:\n・解除: clear\n・設定: オーナー番号=アシスタント番号 (例 3=17)\n・全解除+新設定: clear;3=17`);
+    if (input == null) return;
+    if (!grp.crewPairs) grp.crewPairs = {};
+    input.split(';').forEach(cmd => {
+      cmd = cmd.trim();
+      if (cmd === 'clear') { grp.crewPairs = {}; return; }
+      const m = cmd.match(/^(\d+)=(\d+)$/);
+      if (m) grp.crewPairs[parseInt(m[1], 10)] = parseInt(m[2], 10);
+    });
+    renderField('player');
+    playerDidRuleAction = true;
+  }
+
+  if (act === 'flank') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card || !state.fireSource || !state.fireTarget) return;
+    if (!card.terrain || card.terrain.type !== 'MOVEMENT') { alert('移動カードを選択してください'); return; }
+    const srcGrp = state.groups.player[state.fireSource.idx];
+    const tgtGrp = state.groups.ai[state.fireTarget.idx];
+    const R = window.INFANTRY_RULES;
+    if (!R) return;
+    const diff = Math.abs(state.fireSource.idx - state.fireTarget.idx);
+    if (diff !== 1) { alert('側面射撃は敵隣接グループに対してのみ可能です'); return; }
+    state.playerHand.splice(cardIdx, 1);
+    card._moveMode = 'lateral';
+    pushTerrainWithFaction(srcGrp, card);
+    srcGrp.flankingTarget = state.fireTarget.idx;
+    alert(`側面射撃成立: GROUP ${srcGrp.name} → GROUP ${tgtGrp.name}`);
+    playerDidRuleAction = true;
+  }
+
+  if (act === 'encircle') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card || !state.fireSource || !state.fireTarget) return;
+    if (!card.terrain || card.terrain.type !== 'MOVEMENT') { alert('移動カードを選択してください'); return; }
+    const srcGrp = state.groups.player[state.fireSource.idx];
+    const tgtGrp = state.groups.ai[state.fireTarget.idx];
+    const R = window.INFANTRY_RULES;
+    if (!R) return;
+    const diff = Math.abs(state.fireSource.idx - state.fireTarget.idx);
+    if (diff !== 1) { alert('包囲は敵隣接グループに対してのみ可能です'); return; }
+    // 相手グループのもう一方の隣接（自軍側）グループを確認
+    const otherIdx = state.fireTarget.idx === state.fireSource.idx - 1 ? state.fireTarget.idx - 1 : state.fireTarget.idx + 1;
+    const partner = state.groups.player[otherIdx];
+    if (!partner || partner.eliminated) { alert('包囲を構成するもう1つの自軍グループがありません'); return; }
+    const r1 = R.relativeRange(srcGrp.distance, tgtGrp.distance);
+    const r2 = R.relativeRange(partner.distance, tgtGrp.distance);
+    if (r1 > 4 || r2 > 4) { alert(`包囲不成立: 相対距離${r1}/${r2}（両方4以下必要）`); return; }
+    state.playerHand.splice(cardIdx, 1);
+    card._moveMode = 'lateral';
+    pushTerrainWithFaction(srcGrp, card);
+    tgtGrp.encircled = true;
+    alert(`包囲成立: GROUP ${tgtGrp.name} を包囲`);
+    playerDidRuleAction = true;
+  }
+
+  if (act === 'cross-stream') {
+    const cardIdx = [...state.selectedHand][0];
+    const card = state.playerHand[cardIdx];
+    if (!card || !state.fireSource) return;
+    const grp = state.groups.player[state.fireSource.idx];
+    const R = window.INFANTRY_RULES;
+    if (!R) return;
+    if (!R.isInStream(grp)) { alert('このグループは河川内ではありません'); return; }
+    if (R.hasCrossedStream(grp)) { alert('既に渡河済みです'); return; }
+    if (grp.cards.some(c => R.isPinned(c))) { alert('PIN状態の兵士がいると渡河できません'); return; }
+    if (!card.terrain || card.terrain.type !== 'MOVEMENT') { alert('移動カードを選択してください'); return; }
+    state.playerHand.splice(cardIdx, 1);
+    if (R.isFordCard(card)) {
+      card._moveMode = 'lateral';
+      pushTerrainWithFaction(grp, card);
+      alert('渡河成功（渡河カード使用）');
+    } else {
+      const judge = drawTerrainCard();
+      showJudgeCard(judge);
+      if (judge) { checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge); }
+      const isBlack = !(judge && judge.terrain && judge.terrain.rncColor === '赤');
+      if (isBlack) {
+        card._moveMode = 'lateral';
+        pushTerrainWithFaction(grp, card);
+        alert('渡河成功（RNC 黒）');
+      } else {
+        pushTerrainToDiscard(card);
+        alert('渡河失敗（RNC 赤）— カードは捨て札');
+      }
+    }
+    playerDidRuleAction = true;
+  }
+
   if (act === 'terrain') {
     const cardIdx = [...state.selectedHand][0];
     const card = state.playerHand[cardIdx];
@@ -2557,11 +2811,18 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     state.playerHand.splice(cardIdx, 1);
     // AI側グループに置く場合: AIが拒否するか自動判定
     if (target.side === 'ai') {
+      const isStream = card.terrain && card.terrain.type === 'STREAM';
+      const isWire = card.terrain && card.terrain.type === 'WIRE';
       const lastMove = findLastMovement(grp);
-      // AIは移動カードがあれば50%の確率で拒否
-      if (lastMove && Math.random() < 0.5) {
-        if (lastMove.mode === 'advance') grp.distance -= 1;
-        else if (lastMove.mode === 'retreat') grp.distance += 1;
+      // §8.5 河川は拒否不可。鉄条網も拒否不可。他は移動カードがあれば50%の確率で拒否
+      if (!isStream && !isWire && lastMove && Math.random() < 0.5) {
+        if (lastMove.mode === 'advance') {
+          grp.distance -= 1;
+          if (lastMove.card) lastMove.card._moveMode = 'lateral';
+        } else if (lastMove.mode === 'retreat') {
+          grp.distance += 1;
+          if (lastMove.card) lastMove.card._moveMode = 'lateral';
+        }
         if (lastMove.mode === 'lateral') {
           grp.terrain.splice(lastMove.idx, 1);
           pushTerrainToDiscard(lastMove.card);
@@ -2571,19 +2832,27 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
         playerDidRuleAction = true;
         // 以降のリセット処理へ
       } else {
-        // §7.34 受け入れ: 下のカードを全て捨て札
-        while (grp.terrain.length > 0) {
-          pushTerrainToDiscard(grp.terrain.pop());
+        // §7.34 受け入れ: 下のカードを全て捨て札（煙幕/鉄条網は重ねるだけ）
+        const tType1 = card.terrain && card.terrain.type;
+        const isOverlay1 = tType1 === 'SMOKE' || tType1 === 'WIRE';
+        if (!isOverlay1) {
+          while (grp.terrain.length > 0) {
+            pushTerrainToDiscard(grp.terrain.pop());
+          }
         }
-        grp.terrain.push(card);
+        pushTerrainWithFaction(grp, card);
         playerDidRuleAction = true;
       }
     } else {
-      // §7.34 新しい地形に入る: 下のカードを全て捨て札
-      while (grp.terrain.length > 0) {
-        pushTerrainToDiscard(grp.terrain.pop());
+      // §7.34 新しい地形に入る: 下のカードを全て捨て札（煙幕/鉄条網は重ねるだけ）
+      const tType2 = card.terrain && card.terrain.type;
+      const isOverlay2 = tType2 === 'SMOKE' || tType2 === 'WIRE';
+      if (!isOverlay2) {
+        while (grp.terrain.length > 0) {
+          pushTerrainToDiscard(grp.terrain.pop());
+        }
       }
-      grp.terrain.push(card);
+      pushTerrainWithFaction(grp, card);
       playerDidRuleAction = true;
     }
   }
@@ -2663,14 +2932,16 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     const grp = state.groups.player[state.fireSource.idx];
     const R = window.INFANTRY_RULES;
     if (!R) return;
-    // RALLY X → X人回復、HERO → 1人回復
+    // RALLY X → X人回復、RALLY ALL → 全員回復、HERO → 1人回復
+    const pinnedIdx = grp.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c)) ? i : -1).filter(i => i >= 0);
     let rallyVal = 0;
-    if (card.terrain.type === 'HERO') {
+    if (card.terrain.type === 'RALLY ALL') {
+      rallyVal = pinnedIdx.length;
+    } else if (card.terrain.type === 'HERO') {
       rallyVal = 1;
     } else {
       rallyVal = parseInt(card.terrain.type.replace('RALLY ', ''), 10) || 0;
     }
-    const pinnedIdx = grp.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c)) ? i : -1).filter(i => i >= 0);
     if (pinnedIdx.length === 0) { alert('このグループにPIN状態の兵士がいません'); return; }
     const playerKey = getFactionKey(state.player);
     if (rallyVal >= pinnedIdx.length) {
@@ -2887,6 +3158,12 @@ function getFactionKey(facObj) {
   return Object.keys(FACTIONS).find(k => FACTIONS[k] === facObj);
 }
 
+// 日本軍がゲームに参加しているか（建物-3 / 全射撃-1 ルール用）
+function isJapanInGame() {
+  return (state && state.player && getFactionKey(state.player) === 'jpn') ||
+         (state && state.ai     && getFactionKey(state.ai)     === 'jpn');
+}
+
 // ===== 隠蔽カード処理 =====
 function findConcealedIndices(hand) {
   const out = [];
@@ -2911,6 +3188,14 @@ function askPlayerConcealment() {
     const grid = document.getElementById('conceal-cards');
     grid.innerHTML = '';
     const selected = new Set();
+    modal.style.display = 'flex';
+    const useBtn = document.getElementById('conceal-use');
+    const skipBtn = document.getElementById('conceal-skip');
+    const updateUseBtn = () => {
+      useBtn.disabled = selected.size === 0;
+      useBtn.style.opacity = selected.size === 0 ? '0.4' : '1';
+      useBtn.style.cursor = selected.size === 0 ? 'not-allowed' : 'pointer';
+    };
     indices.forEach(idx => {
       const card = state.playerHand[idx];
       const wrap = document.createElement('div');
@@ -2922,12 +3207,11 @@ function askPlayerConcealment() {
       wrap.addEventListener('click', () => {
         if (selected.has(idx)) { selected.delete(idx); wrap.style.borderColor = '#555'; }
         else { selected.add(idx); wrap.style.borderColor = '#ffeb3b'; }
+        updateUseBtn();
       });
       grid.appendChild(wrap);
     });
-    modal.style.display = 'flex';
-    const useBtn = document.getElementById('conceal-use');
-    const skipBtn = document.getElementById('conceal-skip');
+    updateUseBtn();
     const cleanup = () => {
       modal.style.display = 'none';
       useBtn.replaceWith(useBtn.cloneNode(true));
@@ -2981,17 +3265,35 @@ function resultColor(r) {
 }
 
 /** 全滅グループの地形カードを捨て札にしてグループを除去 */
+// §17.6 グループが包囲されているかを判定（両隣の敵が横向き移動中で距離4以下）
+function isGroupEncircled(group, side) {
+  const R = window.INFANTRY_RULES;
+  if (!R || !R.canEncircle || !group || group.eliminated) return false;
+  const enemySide = side === 'player' ? 'ai' : 'player';
+  const enemyGroups = state.groups[enemySide] || [];
+  const idx = state.groups[side].indexOf(group);
+  if (idx < 0) return false;
+  const left = enemyGroups[idx - 1], right = enemyGroups[idx + 1];
+  const isGrpAlive = g => g && !g.eliminated && g.cards && g.cards.some(c => R.isAlive(c));
+  const hasLateral = g => {
+    const top = g && g.terrain && g.terrain.length > 0 ? g.terrain[g.terrain.length - 1] : null;
+    return top && top.terrain && top.terrain.type === 'MOVEMENT' && top._moveMode === 'lateral';
+  };
+  return isGrpAlive(left) && isGrpAlive(right) && R.canEncircle(left, right, group) && (hasLateral(left) || hasLateral(right));
+}
+
 function cleanupEliminatedGroups() {
   const R = window.INFANTRY_RULES;
   if (!R) return;
+  // 消滅グループは削除せず eliminated フラグを立てて位置関係を保持
   ['player', 'ai'].forEach(side => {
-    state.groups[side] = state.groups[side].filter(grp => {
+    state.groups[side].forEach(grp => {
       const alive = grp.cards.some(c => R.isAlive(c));
-      if (!alive && grp.cards.length > 0) {
+      if (!alive && grp.cards.length > 0 && !grp.eliminated) {
         (grp.terrain || []).forEach(tc => { if (tc) pushTerrainToDiscard(tc); });
         grp.terrain = [];
+        grp.eliminated = true;
       }
-      return alive;
     });
   });
   checkDefeat();
@@ -3234,7 +3536,7 @@ function interimRepair(factionKey) {
   alert(`${repaired}件の武器を修理しました`);
 }
 
-function showFireResultOverlay(title, results) {
+function showFireResultOverlay(title, results, fireCard) {
   return new Promise(resolve => {
     let ov = document.getElementById('fire-result-overlay');
     if (!ov) {
@@ -3245,7 +3547,8 @@ function showFireResultOverlay(title, results) {
     }
     ov.style.display = 'flex';
 
-    let html = '<div style="background:#222;border:2px solid #888;border-radius:8px;padding:20px;min-width:420px;max-width:700px;max-height:80vh;overflow-y:auto;">';
+    let html = '<div style="display:flex;gap:12px;align-items:flex-start;max-height:90vh;">';
+    html += '<div style="background:#222;border:2px solid #888;border-radius:8px;padding:20px;min-width:420px;max-width:700px;max-height:80vh;overflow-y:auto;">';
     html += `<div style="font-size:16px;font-weight:bold;color:#ffeb3b;margin-bottom:10px;">${title}</div>`;
     // ヘッダー行
     html += '<div style="display:flex;gap:4px;padding:2px 8px;font-size:11px;color:#888;margin-bottom:4px;">';
@@ -3273,7 +3576,19 @@ function showFireResultOverlay(title, results) {
       html += '</div>';
     });
     html += `<button id="fire-result-ok" style="display:none;margin-top:12px;background:#3a3;color:#fff;border:1px solid #6c6;border-radius:4px;padding:8px 30px;font-size:14px;cursor:pointer;width:100%;">OK</button>`;
-    html += '</div>';
+    html += '</div>'; // 左ボックス閉じ
+    // 右側: 射撃に用いたカード（複数可）
+    const fireCards = Array.isArray(fireCard) ? fireCard : (fireCard ? [fireCard] : []);
+    const validFireCards = fireCards.filter(c => c && c.img);
+    if (validFireCards.length > 0) {
+      html += '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;background:#222;border:2px solid #888;border-radius:8px;padding:16px;max-height:80vh;overflow-y:auto;">';
+      html += '<div style="font-size:12px;color:#aaa;">射撃カード</div>';
+      validFireCards.forEach(c => {
+        html += `<img src="${c.img}" style="height:340px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.5);">`;
+      });
+      html += '</div>';
+    }
+    html += '</div>'; // 外側 flex 閉じ
     ov.innerHTML = html;
 
     const rows = ov.querySelectorAll('.fire-row');
@@ -3363,11 +3678,15 @@ function askTerrainRefusal(grp, terrainCard) {
 
     newAcc.addEventListener('click', () => {
       modal.style.display = 'none';
-      // §7.34 下のカードを全て捨て札
-      while (grp.terrain.length > 0) {
-        pushTerrainToDiscard(grp.terrain.pop());
+      // §7.34 下のカードを全て捨て札（煙幕/鉄条網は重ねるだけ）
+      const tType = terrainCard.terrain && terrainCard.terrain.type;
+      const isOverlay = tType === 'SMOKE' || tType === 'WIRE';
+      if (!isOverlay) {
+        while (grp.terrain.length > 0) {
+          pushTerrainToDiscard(grp.terrain.pop());
+        }
       }
-      grp.terrain.push(terrainCard);
+      pushTerrainWithFaction(grp, terrainCard);
       resolve('accept');
     });
 
@@ -3377,8 +3696,10 @@ function askTerrainRefusal(grp, terrainCard) {
       // 前進/後退の移動カード → 横移動に変更、距離を戻す
       if (lastMove.mode === 'advance') {
         grp.distance -= 1;
+        if (lastMove.card) lastMove.card._moveMode = 'lateral';
       } else if (lastMove.mode === 'retreat') {
         grp.distance += 1;
+        if (lastMove.card) lastMove.card._moveMode = 'lateral';
       }
       // 既に横移動モードなら移動カードを捨て札
       if (lastMove.mode === 'lateral') {
@@ -3423,7 +3744,9 @@ function showMoveDirectionModal(grp, card, cardIdx) {
 
   function finish() {
     modal.style.display = 'none';
-    if (window.DISCARD_RULES) window.DISCARD_RULES.markActed();
+    // §45 日本軍: 移動はアクションとしてカウントしない（捨て札制限に影響しない）
+    const facKey = getFactionKey(state.player);
+    if (facKey !== 'jpn' && window.DISCARD_RULES) window.DISCARD_RULES.markActed();
     if (!state.actedGroups) state.actedGroups = new Set();
     if (state.fireSource) state.actedGroups.add(state.fireSource.idx);
     // §20.53 移動カード使用 → 侵入状態解除
@@ -3446,12 +3769,26 @@ function showMoveDirectionModal(grp, card, cardIdx) {
     newAdv.disabled = true; newAdv.style.opacity = '0.4';
     newRet.disabled = true; newRet.style.opacity = '0.4';
   }
+  // §5.8 横移動後は前進/後退不可
+  const hasLateral = grp.terrain.some(c => c && c.terrain && c.terrain.type === 'MOVEMENT' && c._moveMode === 'lateral');
+  if (hasLateral) {
+    newAdv.disabled = true; newAdv.style.opacity = '0.4';
+    newRet.disabled = true; newRet.style.opacity = '0.4';
+  }
 
   newAdv.addEventListener('click', () => {
     if (inStream) return;
+    // §5.7 相対距離5 で前進不可
+    const R_blk = window.INFANTRY_RULES;
+    const selfIdx = state.groups.player.indexOf(grp);
+    const opposing = state.groups.ai[selfIdx];
+    if (opposing && R_blk && R_blk.isBlocked && R_blk.isBlocked(grp, opposing)) {
+      alert('相対距離5のため前進できません（§5.7）');
+      return;
+    }
     grp.distance += 1;
     card._moveMode = 'advance';
-    grp.terrain.push(card);
+    pushTerrainWithFaction(grp, card);
     state.playerHand.splice(cardIdx, 1);
     finish();
   });
@@ -3463,7 +3800,7 @@ function showMoveDirectionModal(grp, card, cardIdx) {
       state.playerHand.splice(cardIdx, 1);
       if (R.isFordCard(card)) {
         card._moveMode = 'lateral';
-        grp.terrain.push(card);
+        pushTerrainWithFaction(grp, card);
         alert('渡河成功（渡河カード使用）');
         finish();
       } else {
@@ -3474,7 +3811,7 @@ function showMoveDirectionModal(grp, card, cardIdx) {
         const isBlack = !(judge && judge.terrain && judge.terrain.rncColor === '赤');
         if (isBlack) {
           card._moveMode = 'lateral';
-          grp.terrain.push(card);
+          pushTerrainWithFaction(grp, card);
           alert('渡河成功（RNC 黒）');
         } else {
           pushTerrainToDiscard(card);
@@ -3485,7 +3822,7 @@ function showMoveDirectionModal(grp, card, cardIdx) {
       return;
     }
     card._moveMode = 'lateral';
-    grp.terrain.push(card);
+    pushTerrainWithFaction(grp, card);
     state.playerHand.splice(cardIdx, 1);
     finish();
   });
@@ -3555,8 +3892,9 @@ function resolveFireAction() {
   }
 
   // 地形修正 (攻撃側 + 防御側)
-  const atkMod = R.calcTerrainMod(srcGroup.terrain, true);
-  const defMod = R.calcTerrainMod(tgtGroup.terrain, false);
+  const jpOpts = { japanBuildings: isJapanInGame() };
+  const atkMod = R.calcTerrainMod(srcGroup.terrain, true, jpOpts);
+  const defMod = R.calcTerrainMod(tgtGroup.terrain, false, jpOpts);
   // §8.21 GULLY防御修正 / §8.4 MARSH防御修正
   const gullyMod = R.isInGully(tgtGroup) ? -2 : 0;
   const marshDefMod = R.isInMarsh(tgtGroup) ? -1 : 0;
@@ -3566,10 +3904,27 @@ function resolveFireAction() {
   const concealMod = getConcealMod(aiConcealCards);
 
   // 射撃力 = FIREカードの数字（合算しない、1枚目を使用）
-  const strength = parseInt(fireCards[0].terrain.type.replace('FIRE ', ''), 10) || 0;
+  let strength = parseInt(fireCards[0].terrain.type.replace('FIRE ', ''), 10) || 0;
+  // §10.45 英雄: 射撃と同時に英雄カード → 最高火力兵士の火力を倍（射撃力倍として近似）
+  const heroCard = [...state.selectedHand].map(i => state.playerHand[i]).find(c => c && c.terrain && c.terrain.type === 'HERO');
+  if (heroCard) {
+    // 日本/イギリスは黒の英雄カードのみ有効
+    const isBlackHero = !(heroCard.terrain.rncColor === '赤');
+    if ((srcFacKey === 'jpn' || srcFacKey === 'uk') && !isBlackHero) {
+      alert('日本軍/イギリス軍は黒の英雄カードでないと使えません');
+      return;
+    }
+    strength = strength * 2;
+  }
   // §20.51 侵入兵がいる場合、右2コラムシフト（+2）
   const infShift = (CC && CC.hasInfiltratorsTargeting(srcGroup, tgt.side, tgt.idx)) ? 2 : 0;
-  let baseFP = Math.max(0, (moving ? Math.floor(strength / 2) : strength) + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift);
+  // §17.4 側面射撃: 手動設定フラグ参照。§17.612 包囲下は自動で側面射撃扱い
+  const tgtEliminated = tgtGroup.eliminated;
+  const isFlankFire = ((srcGroup.flankingTarget === tgt.idx) || !!tgtGroup.encircled) && !tgtEliminated;
+  const movingFP = moving ? Math.floor(strength / 2) : strength;
+  const flankFP = isFlankFire ? movingFP * 2 : movingFP;
+  const japanRuleMod = isJapanInGame() ? -1 : 0;
+  let baseFP = flankFP + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift + japanRuleMod;
   let malfuncMod = 0;
 
   // 各防御兵士に判定（1回の射撃で全員に判定）
@@ -3577,7 +3932,7 @@ function resolveFireAction() {
   for (let i = 0; i < tgtGroup.cards.length; i++) {
     const card = tgtGroup.cards[i];
     if (!R.isAlive(card)) continue;
-    const finalFP = Math.max(0, baseFP + malfuncMod);
+    const finalFP = baseFP + malfuncMod;
     const judge = drawTerrainCard();
     if (!judge) continue;
     const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
@@ -3588,7 +3943,9 @@ function resolveFireAction() {
     const wasPinned = R.isPinned(card);
     const commissarMod = hasCommissar(tgtGroup) ? 1 : 0;
     const malfMoraleMod = (card.malfunctioned || card.destroyed) ? -1 : 0;
-    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod);
+    // §17.613 包囲下のピン兵士はパニック値-1
+    const encircleMod = (tgtGroup && tgtGroup.encircled && wasPinned) ? -1 : 0;
+    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod + encircleMod);
     // §20.9 狂暴兵チェック（ソ連軍ピン状態兵がPANIC_KIAのとき）
     let actualResult = r.result;
     if (r.result === 'PANIC_KIA' && def && window.CC_ACTION) {
@@ -3622,18 +3979,36 @@ function resolveFireAction() {
     checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge);
   }
 
-  // 使用した射撃カードを手札から除去
+  // 使用した射撃カードを手札から除去（カード参照は保持）
+  const usedFireCards = [];
   const indices = [...state.selectedHand].sort((a,b) => b-a);
   indices.forEach(i => {
     const hc = state.playerHand[i];
+    if (hc) usedFireCards.unshift(hc);
     state.playerHand.splice(i, 1);
     if (hc) pushTerrainToDiscard(hc);
   });
 
-  // 結果をオーバーレイ表示
-  const concealNote = aiConcealCards.length > 0 ? ` 隠蔽${concealMod}` : '';
-  const title = `射撃 ${srcGroup.name}→${tgtGroup.name} 距離${distance} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod}${concealNote}`;
-  showFireResultOverlay(title, results).then(() => {
+  // 修正項目の内訳を取得（カードごとに表示）
+  const atkBreakdown = R.getTerrainModBreakdown ? R.getTerrainModBreakdown(srcGroup.terrain, true, jpOpts) : [];
+  const defBreakdown = R.getTerrainModBreakdown ? R.getTerrainModBreakdown(tgtGroup.terrain, false, jpOpts) : [];
+
+  // 結果をオーバーレイ表示（修正項目を全て列挙）
+  const mods = [];
+  if (isFlankFire) mods.push('側面射撃(火力×2)');
+  atkBreakdown.forEach(x => {
+    const label = x.type === 'MOVEMENT' ? '攻撃側移動カード' : `攻撃側 ${x.type}`;
+    mods.push(`${label} ${x.mod>=0?'+':''}${x.mod}`);
+  });
+  defBreakdown.forEach(x => {
+    const label = x.type === 'MOVEMENT' ? '防御側移動カード' : `防御側 ${x.type}`;
+    mods.push(`${label} ${x.mod>=0?'+':''}${x.mod}`);
+  });
+  if (concealMod) mods.push(`隠蔽${concealMod>=0?'+':''}${concealMod}`);
+  if (malfuncMod) mods.push(`故障${malfuncMod>=0?'+':''}${malfuncMod}`);
+  if (japanRuleMod) mods.push(`日本ルール ${japanRuleMod>=0?'+':''}${japanRuleMod}`);
+  const title = `射撃 ${srcGroup.name}→${tgtGroup.name} 距離${distance} 基礎射撃力${strength}<br/>修正項目:<br/>${mods.length ? mods.join('<br/>') : 'なし'}`;
+  showFireResultOverlay(title, results, usedFireCards).then(() => {
     cleanupEliminatedGroups();
     renderField('player'); renderField('ai');
     renderHands();
@@ -4067,6 +4442,7 @@ function endPlayerTurn() {
   // 次ターンでSLペナルティリセット
   resetSLDamagePenalty();
   state.currentTurn = 'ai';
+  state.actedGroups = new Set();
   renderHands();
   updateTurnBanner();
   setTimeout(aiTurn, 3000);
@@ -4085,6 +4461,7 @@ function endAITurn() {
   state.aiHandCount = state.aiHand.length;
   state.currentTurn = 'player';
   state.actionDone = false;
+  state.actedGroups = new Set();
   if (window.DISCARD_RULES) window.DISCARD_RULES.resetTurn();
   document.querySelectorAll('.action-btn').forEach(b => { b.disabled = false; });
   renderField('player'); renderField('ai');
@@ -4130,21 +4507,49 @@ function endAITurn() {
 //   5. 不利な地形カードを相手に配置
 //   それでも何もできなければ捨て札
 
-function showAIAction(text) {
-  // 手番オーバーレイが消えてから表示
-  const turnOv = document.getElementById('turn-overlay');
-  if (turnOv) turnOv.style.opacity = '0';
-  let ov = document.getElementById('ai-action-overlay');
-  if (!ov) {
-    ov = document.createElement('div');
-    ov.id = 'ai-action-overlay';
-    ov.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3000;background:rgba(180,30,30,0.85);color:#fff;font-size:28px;font-weight:bold;padding:16px 40px;border-radius:8px;border:2px solid #f66;pointer-events:none;transition:opacity 0.4s;';
-    document.body.appendChild(ov);
-  }
-  ov.textContent = text;
-  ov.style.opacity = '1';
-  clearTimeout(ov._timer);
-  ov._timer = setTimeout(() => { ov.style.opacity = '0'; }, 2500);
+function showAIAction(text, cards) {
+  return new Promise(resolve => {
+    // 手番オーバーレイが消えてから表示
+    const turnOv = document.getElementById('turn-overlay');
+    if (turnOv) turnOv.style.opacity = '0';
+    let ov = document.getElementById('ai-action-overlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'ai-action-overlay';
+      document.body.appendChild(ov);
+    }
+    ov.style.cssText = 'position:fixed;top:15%;left:50%;transform:translate(-50%,0);z-index:3500;background:rgba(180,30,30,0.92);color:#fff;padding:16px 28px;border-radius:8px;border:2px solid #f66;pointer-events:auto;transition:opacity 0.4s;display:flex;flex-direction:column;align-items:center;';
+    ov.innerHTML = '';
+    const label = document.createElement('div');
+    label.textContent = '▶ ' + text;
+    label.style.cssText = 'font-size:30px;font-weight:bold;margin-bottom:12px;text-shadow:0 2px 4px rgba(0,0,0,0.7);';
+    ov.appendChild(label);
+    const cardList = Array.isArray(cards) ? cards : (cards ? [cards] : []);
+    const valid = cardList.filter(c => c && c.img);
+    if (valid.length > 0) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:8px;justify-content:center;flex-wrap:wrap;max-width:90vw;';
+      valid.forEach(c => {
+        const img = document.createElement('img');
+        img.src = c.img;
+        img.style.cssText = 'height:260px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.5);';
+        row.appendChild(img);
+      });
+      ov.appendChild(row);
+    }
+    const btn = document.createElement('button');
+    btn.textContent = '確認';
+    btn.style.cssText = 'margin-top:14px;padding:10px 30px;font-size:20px;font-weight:bold;background:#fff;color:#b00;border:2px solid #fff;border-radius:6px;cursor:pointer;';
+    btn.onclick = () => {
+      ov.style.opacity = '0';
+      ov.style.pointerEvents = 'none';
+      clearTimeout(ov._timer);
+      resolve();
+    };
+    ov.appendChild(btn);
+    ov.style.opacity = '1';
+    clearTimeout(ov._timer);
+  });
 }
 
 // §20 AI白兵戦: 侵入済みの兵士がいればCC実行
@@ -4157,8 +4562,8 @@ function aiTryCC() {
     const grp = state.groups.ai[gi];
     const inf = CC.getInfiltratingFromGroup(grp);
     if (inf.length === 0) continue;
-    showAIAction('AI: 白兵戦');
     (async () => {
+      await showAIAction('AI: 白兵戦');
       await CC.aiExecuteCC(grp, gi, drawTerrainCard, aiKey);
       cleanupEliminatedGroups();
       renderField('player'); renderField('ai');
@@ -4172,7 +4577,7 @@ function aiTryCC() {
 }
 
 // §20 AI侵入: 距離5の敵グループに対し侵入試行
-function aiTryInfiltrate() {
+async function aiTryInfiltrate() {
   const CC = window.CC_ACTION;
   const R = window.INFANTRY_RULES;
   if (!CC || !R) return false;
@@ -4186,7 +4591,7 @@ function aiTryInfiltrate() {
       if (!tgt.cards.some(c => R.isAlive(c))) continue;
       const chk = CC.canAttemptInfiltration(src, tgt, 'ai');
       if (!chk.ok) continue;
-      showAIAction('AI: 侵入');
+      await showAIAction('AI: 侵入');
       const res = CC.aiExecuteInfiltration(src, gi, tgt, 'player', ti, drawTerrainCard, aiKey);
       state.aiHandCount = (state.aiHand || []).length;
       renderField('player'); renderField('ai');
@@ -4198,7 +4603,7 @@ function aiTryInfiltrate() {
   return false;
 }
 
-function aiTurn() {
+async function aiTurn() {
   if (state.phase !== 'play' || state.currentTurn !== 'ai') return;
   const R = window.INFANTRY_RULES;
   if (!R) { endAITurn(); return; }
@@ -4207,15 +4612,17 @@ function aiTurn() {
   if (aiTryFireMovingEnemy()) { return; }
   // §20 AI白兵戦（侵入済み兵士がいればCC優先）
   if (aiTryCC())              { return; }
-  if (aiTryCrossStream())     { setTimeout(endAITurn, 3000); return; }
-  if (aiTryPlaceOwnTerrain()) { showAIAction('AI: 地形配置'); setTimeout(endAITurn, 3000); return; }
-  if (aiTryMove())            { showAIAction('AI: 移動'); setTimeout(endAITurn, 3000); return; }
-  if (aiTryRemoveWire())      { showAIAction('AI: 鉄条網除去'); setTimeout(endAITurn, 3000); return; }
-  if (aiTryRally())           { showAIAction('AI: 回復'); setTimeout(endAITurn, 3000); return; }
+  if (await aiTryCrossStream())     { endAITurn(); return; }
+  if (await aiTryPlaceOwnTerrain()) { endAITurn(); return; }
+  if (await aiTryRemoveWire())      { endAITurn(); return; }
+  if (await aiTryMove())            { endAITurn(); return; }
+  if (await aiTryRally())           { endAITurn(); return; }
+  if (await aiTryRepair())          { endAITurn(); return; }
   if (aiTryFireAny())         { return; }
+  if (await aiTrySnipe())     { endAITurn(); return; }
   // §20 AI侵入（距離5の敵グループがあれば試行）
-  if (aiTryInfiltrate())      { setTimeout(endAITurn, 3000); return; }
-  if (aiTryPlaceBadTerrain()) { return; }
+  if (await aiTryInfiltrate())      { endAITurn(); return; }
+  if (await aiTryPlaceBadTerrain()) { return; }
 
   // 何もできなければ捨て札（国籍ルールに従う）
   if (state.aiHand.length > 0) {
@@ -4223,15 +4630,16 @@ function aiTurn() {
     const limits = { ger: 1, us: 2, rus: 4 };
     const max = limits[aiKey] || 1;
     const count = Math.min(state.aiHand.length, max === Infinity ? state.aiHand.length : max);
+    const dumpedCards = [];
     for (let i = 0; i < count; i++) {
       const dumped = state.aiHand.shift();
-      if (dumped) pushTerrainToDiscard(dumped);
+      if (dumped) { pushTerrainToDiscard(dumped); dumpedCards.push(dumped); }
     }
     state.aiHandCount = state.aiHand.length;
     renderHands();
-    showAIAction('AI: 捨て札 ' + count + '枚');
+    await showAIAction('AI: 捨て札 ' + count + '枚', dumpedCards);
   }
-  setTimeout(endAITurn, 3000);
+  endAITurn();
 }
 
 function aiIsGroupMoving(g) {
@@ -4274,14 +4682,29 @@ function aiFireAt(targetIdxList) {
       const dist = adjacent ? baseDist : Math.max(0, baseDist - 1);
       if (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {})) return;
       const crewMap = buildCrewMapFromPairs(src);
-      let fp = R.calcGroupFirepower(src, aiKey, dist, { moving: false, crewMap });
+      const srcTop = src.terrain && src.terrain.length > 0 ? src.terrain[src.terrain.length - 1] : null;
+      const srcMoving = !!(srcTop && srcTop.terrain && srcTop.terrain.type === 'MOVEMENT');
+      let fp = R.calcGroupFirepower(src, aiKey, dist, { moving: srcMoving, crewMap });
       // §20.51 AI侵入兵の火力2倍
       if (window.CC_ACTION) fp += window.CC_ACTION.calcInfiltrationFPBonus(src, 'player', ti, aiKey, dist);
+      // §44.2 イギリス軍: 利用可能火力+1（必要火力1少なくても撃てる）
+      if (aiKey === 'uk') fp += 1;
       if (fp <= 0) return;
       fireIdxs.forEach(fi => {
         const card = state.aiHand[fi];
         const m2 = (card.terrain.sub || '').match(/FP(.)/);
-        const need = circledToNum((m2 && m2[1]) || '');
+        let need = circledToNum((m2 && m2[1]) || '');
+        // ===== DEBUG LOG =====
+        try {
+          const usable = !(need <= 0 || fp < need);
+          console.log('[FIRE-AI cand] si='+si+' ti='+ti
+            +' card="'+card.terrain.type+'" range='+card.terrain.range+' sub="'+card.terrain.sub+'"'
+            +' src.dist='+src.distance+' tgt.dist='+tgt.distance
+            +' baseDist='+baseDist+' adjacent='+adjacent+' dist='+dist
+            +' fp='+fp+' need='+need+' usable='+usable
+            +(usable ? ' score='+((need*2)+(5-dist)) : ''));
+        } catch(e){}
+        // =====================
         if (need <= 0 || fp < need) return;
         const score = (need * 2) + (5 - dist);
         if (!best || score > best.score) {
@@ -4291,6 +4714,13 @@ function aiFireAt(targetIdxList) {
     });
   });
   if (!best) return false;
+  // ===== DEBUG LOG =====
+  try {
+    console.log('[FIRE-AI selected] si='+best.si+' ti='+best.ti
+      +' card="'+best.card.terrain.type+'" range='+best.card.terrain.range+' sub="'+best.card.terrain.sub+'"'
+      +' need='+best.need+' fp='+best.fp+' dist='+best.dist+' score='+best.score);
+  } catch(e){}
+  // =====================
   return aiPerformFire(best);
 }
 
@@ -4300,18 +4730,40 @@ function aiPerformFire(plan) {
   const src = state.groups.ai[plan.si];
   const tgt = state.groups.player[plan.ti];
 
-  const atkMod = R.calcTerrainMod(src.terrain, true);
-  const defMod = R.calcTerrainMod(tgt.terrain, false);
-  const baseStrength = parseInt(plan.card.terrain.type.replace('FIRE ', ''), 10) || 0;
+  const jpOpts = { japanBuildings: isJapanInGame() };
+  const atkBreakdown = R.getTerrainModBreakdown ? R.getTerrainModBreakdown(src.terrain, true, jpOpts) : [];
+  const defBreakdown = R.getTerrainModBreakdown ? R.getTerrainModBreakdown(tgt.terrain, false, jpOpts) : [];
+  const atkMod = R.calcTerrainMod(src.terrain, true, jpOpts);
+  const defMod = R.calcTerrainMod(tgt.terrain, false, jpOpts);
+  const rawBaseStrength = parseInt(plan.card.terrain.type.replace('FIRE ', ''), 10) || 0;
+  // §12.1 移動射撃: 基礎射撃力半減
+  const srcTop = src.terrain && src.terrain.length > 0 ? src.terrain[src.terrain.length - 1] : null;
+  const srcMoving = !!(srcTop && srcTop.terrain && srcTop.terrain.type === 'MOVEMENT' && srcTop._moveMode !== 'lateral');
+  const baseStrength = srcMoving ? Math.floor(rawBaseStrength / 2) : rawBaseStrength;
 
   // プレイヤーに隠蔽カード選択を求める
-  askPlayerConcealment().then(concealCards => {
+  askPlayerConcealment().then(async concealCards => {
     const concealMod = getConcealMod(concealCards);
     const gullyMod = R.isInGully(tgt) ? -2 : 0;
     const marshDefMod = R.isInMarsh(tgt) ? -1 : 0;
     // §20.51 AI侵入兵の右2コラムシフト
     const aiInfShift = (window.CC_ACTION && window.CC_ACTION.hasInfiltratorsTargeting(src, 'player', plan.ti)) ? 2 : 0;
-    let baseFP = Math.max(0, baseStrength + atkMod + defMod + concealMod + gullyMod + marshDefMod + aiInfShift);
+    // §17.4 側面射撃: 手動設定フラグ参照。§17.612 包囲下は自動で側面射撃扱い
+    const isFlankFire = ((src.flankingTarget === plan.ti) || !!tgt.encircled) && !tgt.eliminated;
+    const flankStrength = isFlankFire ? baseStrength * 2 : baseStrength;
+    const japanRuleMod = isJapanInGame() ? -1 : 0;
+    let baseFP = flankStrength + atkMod + defMod + concealMod + gullyMod + marshDefMod + aiInfShift + japanRuleMod;
+    // ===== DEBUG LOG =====
+    try {
+      console.log('[FIRE-AI exec] card="'+plan.card.terrain.type+'" range='+plan.card.terrain.range+' sub="'+plan.card.terrain.sub+'"'
+        +' src.idx='+plan.si+' src.dist='+src.distance
+        +' tgt.idx='+plan.ti+' tgt.dist='+tgt.distance+' plan.dist='+plan.dist
+        +' baseStrength='+baseStrength+' isFlankFire='+isFlankFire+' flankStrength='+flankStrength
+        +' atkMod='+atkMod+' defMod='+defMod+' concealMod='+concealMod
+        +' gullyMod='+gullyMod+' marshDefMod='+marshDefMod+' aiInfShift='+aiInfShift
+        +' baseFP='+baseFP);
+    } catch(e){}
+    // =====================
     let malfuncMod = 0;
 
     const results = [];
@@ -4320,7 +4772,7 @@ function aiPerformFire(plan) {
     for (let ci = 0; ci < tgt.cards.length; ci++) {
       const card = tgt.cards[ci];
       if (!R.isAlive(card)) continue;
-      finalFP = Math.max(0, baseFP + malfuncMod);
+      finalFP = baseFP + malfuncMod;
       const judge = drawTerrainCard();
       if (!judge) continue;
       lastJudge = judge;
@@ -4332,7 +4784,9 @@ function aiPerformFire(plan) {
       const wasPinned = R.isPinned(card);
       const commissarMod = hasCommissar(tgt) ? 1 : 0;
       const malfMoraleMod = (card.malfunctioned || card.destroyed) ? -1 : 0;
-      const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod);
+      // §17.613 包囲下のピン兵士はパニック値-1
+      const encircleMod = (tgt && tgt.encircled && wasPinned) ? -1 : 0;
+      const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod + encircleMod);
       // §20.9 狂暴兵チェック（プレイヤー側ソ連兵がPANIC_KIA）
       let actualResult2 = r.result;
       if (r.result === 'PANIC_KIA' && def && window.CC_ACTION) {
@@ -4360,6 +4814,16 @@ function aiPerformFire(plan) {
       const morale = def ? (wasPinned ? parseInt(def.panic,10)||0 : parseInt(def.morale,10)||0) : 0;
       const kia = def ? (wasPinned ? parseInt(def.kiaBack,10)||0 : parseInt(def.kiaFront,10)||0) : 0;
       results.push({ name: def ? def.name : card.id, result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP, sum: finalFP + rnc, morale, kia, wasPinned });
+      // ===== DEBUG LOG =====
+      try {
+        console.log('[FIRE-AI hit] target='+(def?def.name:card.id)
+          +' judge.type="'+(judge.terrain&&judge.terrain.type)+'"'
+          +' rncAbs='+rncAbs+' rncColor='+(isRed?'赤':'黒')+' rnc='+rnc
+          +' finalFP='+finalFP+' combatResult='+(finalFP+rnc)
+          +' wasPinned='+wasPinned+' morale='+morale+' kia='+kia
+          +' result='+actualResult2);
+      } catch(e){}
+      // =====================
       const aiKey = getFactionKey(state.ai);
       malfuncMod += checkMalfunction(judge, src, aiKey);
       checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge);
@@ -4371,10 +4835,26 @@ function aiPerformFire(plan) {
     if (fireCard) pushTerrainToDiscard(fireCard);
     state.aiHandCount = state.aiHand.length;
 
-    const concealNote = concealCards.length > 0 ? ` 隠蔽${concealMod}` : '';
-    const title = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 修正${atkMod>=0?'+':''}${atkMod}/${defMod>=0?'+':''}${defMod}${concealNote} → 最終${finalFP}`;
-    showAIAction(`AI: 射撃 ${src.name}→${tgt.name}`);
-    showFireResultOverlay(title, results).then(() => {
+    const mods = [];
+    if (srcMoving && rawBaseStrength !== baseStrength) mods.push(`移動半減 -${rawBaseStrength - baseStrength}`);
+    if (isFlankFire) mods.push(`側面射撃 ×2 → ${flankStrength}`);
+    atkBreakdown.forEach(x => {
+      const label = x.type === 'MOVEMENT' ? '攻撃側移動カード' : `攻撃側 ${x.type}`;
+      mods.push(`${label} ${x.mod>=0?'+':''}${x.mod}`);
+    });
+    defBreakdown.forEach(x => {
+      const label = x.type === 'MOVEMENT' ? '防御側移動カード' : `防御側 ${x.type}`;
+      mods.push(`${label} ${x.mod>=0?'+':''}${x.mod}`);
+    });
+    if (concealMod) mods.push(`隠蔽${concealMod>=0?'+':''}${concealMod}`);
+    if (malfuncMod) mods.push(`故障${malfuncMod>=0?'+':''}${malfuncMod}`);
+    if (gullyMod) mods.push(`涸れ谷${gullyMod>=0?'+':''}${gullyMod}`);
+    if (marshDefMod) mods.push(`湿地防御${marshDefMod>=0?'+':''}${marshDefMod}`);
+    if (aiInfShift) mods.push(`AI侵入シフト${aiInfShift>=0?'+':''}${aiInfShift}`);
+    if (japanRuleMod) mods.push(`日本ルール ${japanRuleMod>=0?'+':''}${japanRuleMod}`);
+    const title = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 基礎射撃力${rawBaseStrength}<br/>修正項目:<br/>${mods.length ? mods.join('<br/>') : 'なし'}<br/>→ 最終火力${finalFP}`;
+    await showAIAction(`AI: 射撃 ${src.name}→${tgt.name}`, fireCard);
+    showFireResultOverlay(title, results, fireCard).then(() => {
       cleanupEliminatedGroups();
       renderField('player'); renderField('ai');
       renderHands();
@@ -4389,7 +4869,7 @@ function aiPerformFireDone() {
   setTimeout(endAITurn, 3000);
 }
 
-function aiTryRemoveWire() {
+async function aiTryRemoveWire() {
   const R = window.INFANTRY_RULES;
   const moveIdx = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT');
   if (moveIdx < 0) return false;
@@ -4399,18 +4879,20 @@ function aiTryRemoveWire() {
     if (wireIdx < 0) continue;
     // §13.34 ピン状態がいると除去不可
     if (g.cards.some(c => R.isPinned(c))) continue;
-    g.terrain.splice(wireIdx, 1);
+    const wire = g.terrain.splice(wireIdx, 1)[0];
+    if (wire) pushTerrainToDiscard(wire);
     const moveCard = state.aiHand[moveIdx];
     state.aiHand.splice(moveIdx, 1);
     if (moveCard) pushTerrainToDiscard(moveCard);
     state.aiHandCount = state.aiHand.length;
     renderField('ai'); renderHands();
+    await showAIAction('AI: 鉄条網除去', moveCard);
     return true;
   }
   return false;
 }
 
-function aiTryCrossStream() {
+async function aiTryCrossStream() {
   const R = window.INFANTRY_RULES;
   if (!R) return false;
   const moveIdx = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT');
@@ -4425,38 +4907,45 @@ function aiTryCrossStream() {
     state.aiHand.splice(moveIdx, 1);
     if (R.isFordCard(card)) {
       card._moveMode = 'lateral';
-      g.terrain.push(card);
-      showAIAction('AI: 渡河成功（渡河カード）');
+      pushTerrainWithFaction(g, card);
+      state.aiHandCount = state.aiHand.length;
+      renderField('ai'); renderHands();
+      await showAIAction('AI: 渡河成功（渡河カード）', card);
     } else {
       const judge = drawTerrainCard();
       if (judge) { checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge); }
       const isBlack = !(judge && judge.terrain && judge.terrain.rncColor === '赤');
       if (isBlack) {
         card._moveMode = 'lateral';
-        g.terrain.push(card);
-        showAIAction('AI: 渡河成功（RNC 黒）');
+        pushTerrainWithFaction(g, card);
+        state.aiHandCount = state.aiHand.length;
+        renderField('ai'); renderHands();
+        await showAIAction('AI: 渡河成功（RNC 黒）', [card, judge]);
       } else {
         pushTerrainToDiscard(card);
-        showAIAction('AI: 渡河失敗（RNC 赤）');
+        state.aiHandCount = state.aiHand.length;
+        renderField('ai'); renderHands();
+        await showAIAction('AI: 渡河失敗（RNC 赤）', [card, judge]);
       }
     }
-    state.aiHandCount = state.aiHand.length;
-    renderField('ai'); renderHands();
     return true;
   }
   return false;
 }
 
-function aiTryMove() {
+async function aiTryMove() {
   const R = window.INFANTRY_RULES;
   const moveIdx = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT');
   if (moveIdx < 0) return false;
 
-  // 主力 (一番人数の多い、河川内でない) AI グループを前進
+  // 主力 (一番人数の多い、河川内でない、§5.7 相対距離5未満) AI グループを前進
   let bestIdx = -1, bestSize = -1;
   state.groups.ai.forEach((g, i) => {
     if (g.cards.some(c => R.isPinned(c))) return; // §10.12
     if (R.isInStream(g)) return; // 河川内は前進不可
+    if (R.hasTerrainType && R.hasTerrainType(g, 'WIRE')) return; // 鉄条網持ちは移動カードで前進しない（除去用に温存）
+    const opposing = state.groups.player[i];
+    if (opposing && R.isBlocked && R.isBlocked(g, opposing)) return; // §5.7
     const alive = g.cards.filter(c => R.isAlive(c)).length;
     if (alive > bestSize) { bestSize = alive; bestIdx = i; }
   });
@@ -4465,14 +4954,15 @@ function aiTryMove() {
   grp.distance += 1;
   const moveCard = state.aiHand[moveIdx];
   moveCard._moveMode = 'advance';
-  grp.terrain.push(moveCard);
+  pushTerrainWithFaction(grp, moveCard);
   state.aiHand.splice(moveIdx, 1);
   state.aiHandCount = state.aiHand.length;
   renderField('ai'); renderHands();
+  await showAIAction('AI: 移動', moveCard);
   return true;
 }
 
-function aiTryPlaceOwnTerrain() {
+async function aiTryPlaceOwnTerrain() {
   const R = window.INFANTRY_RULES;
   const SH = window.SCENARIO_HELPERS;
   const goodTerrain = ['WOODS','BUILDINGS','BRUSH','HILL'];
@@ -4503,14 +4993,16 @@ function aiTryPlaceOwnTerrain() {
   while (grp.terrain.length > 0) {
     pushTerrainToDiscard(grp.terrain.pop());
   }
-  grp.terrain.push(state.aiHand[tIdx]);
+  const placedCard = state.aiHand[tIdx];
+  pushTerrainWithFaction(grp, placedCard);
   state.aiHand.splice(tIdx, 1);
   state.aiHandCount = state.aiHand.length;
   renderField('ai'); renderHands();
+  await showAIAction('AI: 地形配置', placedCard);
   return true;
 }
 
-function aiTryRally() {
+async function aiTryRally() {
   const R = window.INFANTRY_RULES;
   // RALLYまたはHEROカードを探す
   const rallyIdx = state.aiHand.findIndex(c =>
@@ -4518,12 +5010,18 @@ function aiTryRally() {
   if (rallyIdx < 0) return false;
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
     const g = state.groups.ai[gi];
+    // 移動中（terrain 最上が MOVEMENT で lateral ではない）は回復不可
+    const gTop = g.terrain && g.terrain.length > 0 ? g.terrain[g.terrain.length - 1] : null;
+    const gMoving = !!(gTop && gTop.terrain && gTop.terrain.type === 'MOVEMENT' && gTop._moveMode !== 'lateral');
+    if (gMoving) continue;
     const pinnedIdx = g.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c)) ? i : -1).filter(i => i >= 0);
     if (pinnedIdx.length === 0) continue;
     const rallyCard = state.aiHand[rallyIdx];
     // RALLY値を取得
     let rallyVal = 0;
-    if (rallyCard.terrain.type === 'HERO') {
+    if (rallyCard.terrain.type === 'RALLY ALL') {
+      rallyVal = pinnedIdx.length;
+    } else if (rallyCard.terrain.type === 'HERO') {
       rallyVal = 1;
     } else {
       rallyVal = parseInt(rallyCard.terrain.type.replace('RALLY ', ''), 10) || 0;
@@ -4537,12 +5035,120 @@ function aiTryRally() {
     if (rallyCard) pushTerrainToDiscard(rallyCard);
     state.aiHandCount = state.aiHand.length;
     renderField('ai'); renderHands();
+    await showAIAction('AI: 回復', rallyCard);
     return true;
   }
   return false;
 }
 
-function aiTryPlaceBadTerrain() {
+async function aiTryRepair() {
+  const R = window.INFANTRY_RULES;
+  if (!R) return false;
+  const aiKey = getFactionKey(state.ai);
+  for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    const grp = state.groups.ai[gi];
+    if (grp.eliminated) continue;
+    if (R.isInMarsh && R.isInMarsh(grp)) continue;
+    if (R.isInStream && R.isInStream(grp)) continue;
+    // 移動中（最上がMOVEMENT）はNG
+    const top = grp.terrain && grp.terrain.length > 0 ? grp.terrain[grp.terrain.length - 1] : null;
+    if (top && top.terrain && top.terrain.type === 'MOVEMENT') continue;
+    const broken = grp.cards.filter(c => c.malfunctioned && R.isAlive(c));
+    if (broken.length === 0) continue;
+    const card = broken[0];
+    const def = R.lookupSoldier(card, aiKey);
+    if (!def) continue;
+    const judge = drawTerrainCard();
+    showJudgeCard(judge);
+    if (judge) { checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge); }
+    const isBlack = !(judge && judge.terrain && judge.terrain.rncColor === '赤');
+    if (isBlack) {
+      card.malfunctioned = false;
+      await showAIAction(`AI: 修理成功 ${def.name}`, judge);
+    } else {
+      await showAIAction(`AI: 修理失敗 ${def.name}`, judge);
+    }
+    renderField('ai');
+    return true;
+  }
+  return false;
+}
+
+async function aiTrySnipe() {
+  const R = window.INFANTRY_RULES;
+  if (!R) return false;
+  const snipeIdx = state.aiHand.findIndex(c => {
+    if (!c || !c.terrain) return false;
+    const m = c.terrain.modifier || '';
+    return m.indexOf('KIA') >= 0 || m.indexOf('PIN') >= 0;
+  });
+  if (snipeIdx < 0) return false;
+  const card = state.aiHand[snipeIdx];
+  const playerKey = getFactionKey(state.player);
+  let tgtGrpIdx = -1, tgtCardIdx = -1;
+  for (let gi = 0; gi < state.groups.player.length; gi++) {
+    const g = state.groups.player[gi];
+    if (g.eliminated) continue;
+    for (let ci = 0; ci < g.cards.length; ci++) {
+      const c = g.cards[ci];
+      if (!R.isAlive(c)) continue;
+      const def = R.lookupSoldier(c, playerKey);
+      if (def && def.leader === '分隊長') { tgtGrpIdx = gi; tgtCardIdx = ci; break; }
+    }
+    if (tgtGrpIdx >= 0) break;
+  }
+  if (tgtGrpIdx < 0) {
+    for (let gi = 0; gi < state.groups.player.length; gi++) {
+      const g = state.groups.player[gi];
+      if (g.eliminated) continue;
+      const alive = g.cards.map((c, i) => R.isAlive(c) ? i : -1).filter(i => i >= 0);
+      if (alive.length > 0) { tgtGrpIdx = gi; tgtCardIdx = alive[Math.floor(Math.random() * alive.length)]; break; }
+    }
+  }
+  if (tgtGrpIdx < 0) return false;
+  const grp = state.groups.player[tgtGrpIdx];
+  const soldier = grp.cards[tgtCardIdx];
+  const judge = drawTerrainCard();
+  showJudgeCard(judge);
+  if (judge) { checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge); }
+  const rnc = parseInt((judge && judge.terrain && judge.terrain.range) || '0', 10) || 0;
+  const def = R.lookupSoldier(soldier, playerKey);
+  const wasPinned = R.isPinned(soldier);
+  let kiaRange = [], pinRange = [];
+  if (card.terrain.modifier) {
+    const mk = card.terrain.modifier.match(/KIA[:\s]*([0-9\-]+)/);
+    const mp = card.terrain.modifier.match(/PIN[:\s]*([0-9\-]+)/);
+    kiaRange = mk ? mk[1].split('-').map(Number) : [];
+    pinRange = mp ? mp[1].split('-').map(Number) : [];
+  }
+  let result = 'MISS';
+  if (kiaRange.length === 2 && rnc >= kiaRange[0] && rnc <= kiaRange[1]) result = 'KIA';
+  else if (kiaRange.length === 1 && rnc === kiaRange[0]) result = 'KIA';
+  else if (pinRange.length === 2 && rnc >= pinRange[0] && rnc <= pinRange[1]) result = 'PIN';
+  else if (pinRange.length === 1 && rnc === pinRange[0]) result = 'PIN';
+  if (result === 'KIA') R.killSoldier(soldier);
+  else if (result === 'PIN') {
+    if (wasPinned) { R.killSoldier(soldier); result = 'PANIC'; }
+    else R.pinSoldier(soldier);
+  }
+  state.aiHand.splice(snipeIdx, 1);
+  pushTerrainToDiscard(card);
+  state.aiHandCount = state.aiHand.length;
+  const name = def ? def.name : soldier.id;
+  const kiaStr = kiaRange.length ? kiaRange.join('-') : '—';
+  const pinStr = pinRange.length ? pinRange.join('-') : '—';
+  const snipeResults = [{ name, rnc, rncColor: '黒', result, finalFP: null, sum: rnc, morale: null, kia: null, wasPinned, snipeKia: kiaStr, snipePin: pinStr }];
+  const title = `AI狙撃 → ${name} (KIA:${kiaStr} / PIN:${pinStr})`;
+  await showAIAction(`AI: 狙撃 → ${name}`, card);
+  await showFireResultOverlay(title, snipeResults);
+  cleanupEliminatedGroups();
+  renderField('player'); renderField('ai');
+  renderHands();
+  updateDeckCounts();
+  return true;
+}
+
+async function aiTryPlaceBadTerrain() {
   // 相手の前進・射撃を妨げる地形 (鉄条網/河川/湿地/地雷原) を相手に置く
   const bad = ['WIRE','STREAM','MARSH','MINEFIELD'];
   const SH = window.SCENARIO_HELPERS;
@@ -4551,19 +5157,30 @@ function aiTryPlaceBadTerrain() {
   const terrainType = state.aiHand[idx].terrain.type;
   const groups = state.groups.player;
   if (groups.length === 0) return false;
-  // 鉄条網は既に地形があるグループにのみ
+  // 相手グループが移動中 (最上 MOVEMENT) のみ対象
+  const isMoving = g => {
+    const top = g.terrain && g.terrain.length > 0 ? g.terrain[g.terrain.length - 1] : null;
+    return top && top.terrain && top.terrain.type === 'MOVEMENT';
+  };
   let candidates;
   if (terrainType === 'WIRE') {
-    candidates = groups.map((g, i) => (g.terrain && g.terrain.length > 0) ? i : -1).filter(i => i >= 0);
-    if (candidates.length === 0) return false;
+    // 鉄条網は地形の上のみ（移動中ではない自然地形が最上の時）
+    const naturalTerrains = ['WOODS','BUILDINGS','BRUSH','HILL','WALL','STREAM','MARSH','GULLY'];
+    candidates = groups.map((g, i) => {
+      if (g.eliminated) return -1;
+      const top = g.terrain && g.terrain.length > 0 ? g.terrain[g.terrain.length - 1] : null;
+      const topType = top && top.terrain && top.terrain.type;
+      return (topType && naturalTerrains.indexOf(topType) >= 0) ? i : -1;
+    }).filter(i => i >= 0);
   } else {
-    candidates = groups.map((_, i) => i);
+    candidates = groups.map((g, i) => (!g.eliminated && isMoving(g)) ? i : -1).filter(i => i >= 0);
   }
+  if (candidates.length === 0) return false;
   const gi = candidates[Math.floor(Math.random() * candidates.length)];
   const terrainCard = state.aiHand[idx];
   state.aiHand.splice(idx, 1);
   state.aiHandCount = state.aiHand.length;
-  showAIAction('AI: 地形配置 → GROUP ' + groups[gi].name);
+  await showAIAction('AI: 地形配置 → GROUP ' + groups[gi].name, terrainCard);
   // §7.32 プレイヤーに拒否の選択肢を出す
   askTerrainRefusal(groups[gi], terrainCard).then(result => {
     renderField('player'); renderField('ai');
@@ -4593,7 +5210,30 @@ function tryAdvanceTerrainPhase() {
 function placeTerrainOnGroup(side, groupIdx, card, fromHand /* 'player'|'ai' */) {
   const group = state.groups[side][groupIdx];
   if (!group) return false;
-  group.terrain.push(card);
+  const cardType = card && card.terrain && card.terrain.type;
+  // 初期配置では1グループに地形1枚まで
+  if (state.phase === 'terrainPlacement' && group.terrain && group.terrain.length > 0) {
+    if (fromHand === 'player') alert('初期配置では1グループに地形1枚までです');
+    return false;
+  }
+  const top = group.terrain && group.terrain.length > 0 ? group.terrain[group.terrain.length - 1] : null;
+  const topType = top && top.terrain && top.terrain.type;
+  // プレイ中: 移動中のグループにのみ地形カード配置可能（煙幕/鉄条網を除く）
+  if (state.phase === 'play' && cardType !== 'SMOKE' && cardType !== 'WIRE') {
+    if (topType !== 'MOVEMENT') {
+      if (fromHand === 'player') alert('移動中のグループにのみ地形を配置できます');
+      return false;
+    }
+  }
+  // 煙幕/鉄条網は自然地形の上にのみ（移動中/空は不可）
+  if (cardType === 'SMOKE' || cardType === 'WIRE') {
+    const naturalTerrains = ['WOODS','BUILDINGS','BRUSH','HILL','WALL','STREAM','MARSH','GULLY'];
+    if (!topType || naturalTerrains.indexOf(topType) < 0) {
+      if (fromHand === 'player') alert('煙幕/鉄条網は地形の上にのみ置けます（移動中は不可）');
+      return false;
+    }
+  }
+  pushTerrainWithFaction(group, card);
   // 手札から取り除く
   const hand = fromHand === 'player' ? state.playerHand : state.aiHand;
   const idx = hand.indexOf(card);

@@ -82,6 +82,9 @@
       baseStrength += circledToNum(m ? m[1] : '');
     });
 
+    // §44.2 イギリス軍: 利用可能火力+1（必要火力1少なくても撃てる）
+    if (srcKey === 'uk') fp += 1;
+
     if (needed === 0) return { ok: false, error: '射撃カードを選択してください' };
     if (fp < needed) return { ok: false, error: '火力不足: 必要 ' + needed + ' / 利用可能 ' + fp };
 
@@ -94,6 +97,20 @@
 
     // 最終火力 (隠蔽は後で適用)
     var finalFP = Math.max(0, strength + atkMod + defMod);
+
+    // ===== DEBUG LOG =====
+    try {
+      var fcLog = fireCards.map(function(c){return '"'+(c.terrain&&c.terrain.type)+'" range='+(c.terrain&&c.terrain.range)+' sub="'+(c.terrain&&c.terrain.sub)+'"';}).join(' | ');
+      console.log('[FIRE-PL exec] cards=['+fcLog+']'
+        +' src.dist='+srcGroup.distance+' tgt.dist='+tgtGroup.distance
+        +' relativeRange='+distance
+        +' moving='+moving
+        +' fp='+fp+' needed='+needed
+        +' baseStrength='+baseStrength+' strength(after_move_halve)='+strength
+        +' atkMod='+atkMod+' defMod='+defMod
+        +' finalFP='+finalFP);
+    } catch(e){}
+    // =====================
 
     // §9 敵隠蔽カード確認 (AIは自動判断)
     // ここでは隠蔽なしで進む。将来: 隠蔽カードの適用UIを追加
@@ -155,6 +172,19 @@
       }
 
       results.push({ name: name, result: result, rnc: rncVal, combat: combatResult, malfunc: malfunc });
+
+      // ===== DEBUG LOG =====
+      try {
+        console.log('[FIRE-PL hit] target='+name
+          +' judge.type="'+(judge.terrain&&judge.terrain.type)+'"'
+          +' rncAbs='+rncAbs+' rncColor='+(isRed?'赤':'黒')+' rnc='+rncVal
+          +' finalFP='+finalFP+' combatResult='+combatResult
+          +' wasPinned='+wasPinned
+          +' morale='+(parseInt(def&&def.morale,10)||0)+' kiaFront='+(parseInt(def&&def.kiaFront,10)||0)
+          +' kiaBack='+(parseInt(def&&def.kiaBack,10)||0)+' panic='+(parseInt(def&&def.panic,10)||0)
+          +' result='+result);
+      } catch(e){}
+      // =====================
     });
 
     if (lastJudge && showJudgeFn) showJudgeFn(lastJudge);
