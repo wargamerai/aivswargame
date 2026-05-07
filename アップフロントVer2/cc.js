@@ -1098,15 +1098,32 @@
     }
     const results = [];
     let malfunctioned = false;
-    // 防御側の地形修正 / 隠蔽 / GULLY等（§21.3: 攻撃側の地形修正は適用されない）
-    const defMod = R().calcTerrainMod(tgtGroup.terrain, false);
-    const gullyMod = R().isInGully(tgtGroup) ? -2 : 0;
-    const marshDefMod = R().isInMarsh(tgtGroup) ? -1 : 0;
-    const baseFP = Math.max(0, 8 + defMod + gullyMod + marshDefMod);
+    // 爆薬: 火力8 固定（修正値なし）
+    const baseFP = 8;
+
+    // 攻撃対象: 防御側グループの全兵士 + 同じ侵入先にいる他の味方侵入兵（自分自身は除く）
+    const targets = [];
+    tgtGroup.cards.forEach(c => { if (c && c !== attackerCard) targets.push({ card: c, facKey: tgtFacKey, friendly: false }); });
+    const st = global.state;
+    if (st && st.groups) {
+      ['player','ai'].forEach(side => {
+        (st.groups[side] || []).forEach(g => {
+          (g.cards || []).forEach(c => {
+            if (!c || c === attackerCard) return;
+            if (c.infiltrating && c.infiltratedGroupSide === tgtSide && c.infiltratedGroupIdx === tgtIdx) {
+              if (targets.some(t => t.card === c)) return;
+              const isFriendly = (side === srcSide);
+              const facK = isFriendly ? atkFacKey : tgtFacKey;
+              targets.push({ card: c, facKey: facK, friendly: isFriendly });
+            }
+          });
+        });
+      });
+    }
 
     let first = true;
-    for (let i = 0; i < tgtGroup.cards.length; i++) {
-      const card = tgtGroup.cards[i];
+    for (let i = 0; i < targets.length; i++) {
+      const { card, facKey, friendly } = targets[i];
       if (!R().isAlive(card)) continue;
       const judge = drawFn();
       if (!judge) continue;
@@ -1121,7 +1138,7 @@
         break;
       }
       first = false;
-      const def = R().lookupSoldier(card, tgtFacKey);
+      const def = R().lookupSoldier(card, facKey);
       const wasPinned = R().isPinned(card);
       const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
       const r = R().resolveFireOnSoldier(baseFP, rnc, def, wasPinned, rpc0r, 0, 0);
@@ -1130,7 +1147,8 @@
       else if (r.result === 'PIN') R().pinSoldier(card);
       const morale = def ? (wasPinned ? parseInt(def.panic,10)||0 : parseInt(def.morale,10)||0) : 0;
       const kia = def ? (wasPinned ? parseInt(def.kiaBack,10)||0 : parseInt(def.kiaFront,10)||0) : 0;
-      results.push({ name: def ? def.name : card.id, result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP: baseFP, sum: baseFP + rnc, morale, kia, wasPinned });
+      const namePrefix = friendly ? '[味方] ' : '';
+      results.push({ name: namePrefix + (def ? def.name : card.id), result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP: baseFP, sum: baseFP + rnc, morale, kia, wasPinned });
     }
     // 爆薬は使用済み
     attackerCard.demoCharge = false;
