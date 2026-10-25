@@ -224,7 +224,7 @@
         prefix = num <= 30 ? 'russian' : 'Rus';
       }
       return {
-        id: `${prefix}_${num}`,
+        id: `${prefix} ${num}`,
         img:     enc(`${dir}/${prefix} ${num}f.gif`),
         imgBack: enc(`${dir}/${prefix} ${num}b.gif`),
       };
@@ -494,10 +494,14 @@
 
   // ===== デッキ除去ルール ============================================
 
-  /** このシナリオで地形カードとして使用不可か判定する */
-  function isCardDisabledAsTerrain(scenario, card) {
-    if (!scenario || !scenario.treatAsPlain || !card || !card.terrain) return false;
-    return scenario.treatAsPlain.indexOf(card.terrain.type) >= 0;
+  /** このシナリオで地形カードとして使用不可か判定する
+   *  isAttacker=true なら攻撃側のみ非機能の treatAsPlainAttacker も含めて判定 */
+  function isCardDisabledAsTerrain(scenario, card, isAttacker) {
+    if (!scenario || !card || !card.terrain) return false;
+    const t = card.terrain.type;
+    if (scenario.treatAsPlain && scenario.treatAsPlain.indexOf(t) >= 0) return true;
+    if (isAttacker && scenario.treatAsPlainAttacker && scenario.treatAsPlainAttacker.indexOf(t) >= 0) return true;
+    return false;
   }
 
   /** カードが捨て札になる前に除去対象か判定する。

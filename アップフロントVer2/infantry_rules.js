@@ -56,11 +56,10 @@
   ];
 
   // クルー操作兵器のカテゴリ (歩兵範囲)
-  // 中機関銃 / 軽機関銃 / バズーカ / パンツァーシュレック / 火炎放射器 / 迫撃砲
+  // 中機関銃 / 軽機関銃 / バズーカ / パンツァーシュレック / 迫撃砲（火炎放射器はクルー不要）
   const CREW_WEAPON_PREFIXES = [
     '中機関銃', '軽機関銃',
     // 'バズーカ', 'パンツァーシュレック',  // 搭載しないため処理からはずす
-    '火炎放射器',
     '迫撃砲', '60mm迫撃砲', '50mm迫撃砲',
   ];
 
@@ -268,11 +267,8 @@
         fp = rd.noCrew;
       }
 
-      // §12.1 移動射撃: 火力半減
+      // §12.1 移動射撃: 兵士火力は半減しない（基礎射撃力で半減）
       if (opts.moving) {
-        if (def.weaponCat.indexOf('火炎放射器') !== 0) {
-          fp = Math.floor(fp / 2);
-        }
         if (def.weaponCat.indexOf('中機関銃') === 0) fp = 0;
         if (def.weaponCat.indexOf('軽機関銃') === 0 && !hasAssistant) fp = 0;
         // §12.12 迫撃砲は移動中射撃不可
@@ -284,6 +280,8 @@
     if (inMarsh && total > 0) total = Math.max(0, total - 1);
     // §8.52 河川内から射撃: 全射撃力から-1
     if (inStream && total > 0) total = Math.max(0, total - 1);
+    // §10.45 英雄効果: そのターン中、グループの兵士火力を2倍
+    if (group.heroDoubleThisTurn) total *= 2;
     return total;
   }
 
@@ -323,6 +321,16 @@
     terrainStack.forEach(card => {
       const t = card && card.terrain;
       if (!t) return;
+      // 裏向き(平地扱い)は modifier 無視
+      if (card._faceDown) return;
+      // 地雷原は射撃修正に影響しない（平地扱い）
+      if (t.type === 'MINEFIELD') return;
+      // WALL: 被攻撃側のとき 正面(同位置敵) -2、隣のグループからの攻撃 -1
+      // 攻撃側には WALL の効果なし (modifier "-2*/-1" を一般処理させない)
+      if (t.type === 'WALL') {
+        if (!asAttacker) mod += o.isFlank ? -1 : -2;
+        return;
+      }
       let m;
       if (o.japanBuildings && t.type === 'BUILDINGS') {
         m = { atk: 0, def: -3 };
@@ -344,6 +352,19 @@
     terrainStack.forEach(card => {
       const t = card && card.terrain;
       if (!t) return;
+      // 裏向き(平地扱い)は modifier 無視
+      if (card._faceDown) return;
+      // 地雷原は射撃修正に影響しない（平地扱い）
+      if (t.type === 'MINEFIELD') return;
+      // WALL: 被攻撃側のとき 正面 -2、側面 -1
+      // 攻撃側には WALL の効果なし (modifier "-2*/-1" を一般処理させない)
+      if (t.type === 'WALL') {
+        if (!asAttacker) {
+          const v = o.isFlank ? -1 : -2;
+          if (v !== 0) result.push({ type: t.type, mod: v });
+        }
+        return;
+      }
       let m;
       if (o.japanBuildings && t.type === 'BUILDINGS') {
         m = { atk: 0, def: -3 };
@@ -368,15 +389,16 @@
    *   rncRPC  : 同カードの RPC (パニック→潰走判定用, 0..9)
    * 戻り値: { result: 'NONE'|'PIN'|'PANIC_KIA'|'PANIC_ROUT'|'KIA' }
    */
-  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod) {
+  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod) {
     const sum = (finalFP | 0) + (rnc | 0);
     if (!soldier) return { result: 'NONE' };
     const mMod = moraleMod || 0;
     const pMod = panicMod || 0;
+    const kMod = kiaMod || 0;
 
     if (!wasPinned) {
       const morale = num(soldier.morale) + mMod;
-      const kia    = num(soldier.kiaFront);
+      const kia    = num(soldier.kiaFront) + kMod;
       // KIA 値以上 → 戦死
       if (kia > 0 && sum >= kia) return { result: 'KIA' };
       // モラル値以上 (KIA未満) → ピン
@@ -385,7 +407,7 @@
     }
 
     // 既にピン状態 → KIA(裏)/パニック値で判定
-    const kiaBack = num(soldier.kiaBack);
+    const kiaBack = num(soldier.kiaBack) + kMod;
     const panic   = num(soldier.panic) + pMod;
     if (kiaBack > 0 && sum >= kiaBack) return { result: 'KIA' };
     if (panic > 0 && sum >= panic) {
@@ -500,6 +522,29 @@
     return marshMoveCount(group) >= 2;
   }
 
+  /**
+   * §8.22 涸れ谷上の移動カード枚数を返す
+   */
+  function gullyMoveCount(group) {
+    if (!group.terrain || group.terrain.length === 0) return 0;
+    let count = 0;
+    for (let i = group.terrain.length - 1; i >= 0; i--) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === 'MOVEMENT') count++;
+      else break;
+    }
+    return count;
+  }
+
+  /**
+   * §8.22 涸れ谷上に地形カードを置けるか（移動2枚必要）
+   */
+  function canPlaceTerrainOnGully(group) {
+    if (!isInGully(group)) return true;
+    return gullyMoveCount(group) >= 2;
+  }
+
   // ===== §8.5 河川 (STREAM) ==========================================
 
   /** グループがSTREAM内にいるか */
@@ -530,6 +575,33 @@
   /** 移動カードが渡河カード(sub=渡河)か */
   function isFordCard(card) {
     return !!(card && card.terrain && card.terrain.sub && card.terrain.sub.indexOf('渡河') >= 0);
+  }
+
+  /**
+   * §8.5 河川上の移動カード枚数を返す（渡河成功した移動カードも含む）
+   */
+  function streamMoveCount(group) {
+    if (!group.terrain || group.terrain.length === 0) return 0;
+    let count = 0;
+    let foundStream = false;
+    for (let i = 0; i < group.terrain.length; i++) {
+      const t = group.terrain[i] && group.terrain[i].terrain;
+      if (!t) continue;
+      if (t.type === 'STREAM') { foundStream = true; continue; }
+      if (foundStream) {
+        if (t.type === 'MOVEMENT') count++;
+        else break;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * §8.5 河川上に地形カードを置けるか（渡河成功＋移動1枚＝合計2枚以上の移動が必要）
+   */
+  function canPlaceTerrainOnStream(group) {
+    if (!isInStream(group)) return true;
+    return streamMoveCount(group) >= 2;
   }
 
   // ===== §8.6-8.8 建物・森林・繁み ===================================
@@ -943,13 +1015,13 @@
     calcGroupFirepower, calcTerrainMod, getTerrainModBreakdown,
 
     // gully
-    isInGully, canFireAtGully,
+    isInGully, canFireAtGully, gullyMoveCount, canPlaceTerrainOnGully,
 
     // marsh
     isInMarsh, marshMoveCount, canPlaceTerrainOnMarsh,
 
     // stream
-    isInStream, hasCrossedStream, isFordCard,
+    isInStream, hasCrossedStream, isFordCard, streamMoveCount, canPlaceTerrainOnStream,
 
     // terrain type checks
     isInTerrainType, isInBuildings, isInWoods, isInBrush,
