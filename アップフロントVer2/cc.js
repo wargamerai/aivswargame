@@ -196,32 +196,42 @@
    * @returns {number} 1〜10
    */
   function calcInfiltrationColumn(tgtGroup, srcGroup, opts) {
+    return calcInfiltrationColumnDetailed(tgtGroup, srcGroup, opts).column;
+  }
+
+  function calcInfiltrationColumnDetailed(tgtGroup, srcGroup, opts) {
     opts = opts || {};
-    // 基本コラム = 防御側の生存ユニット数
-    let col = aliveCards(tgtGroup).length;
-    // 攻撃側地形シフト (§20.33-20.37)
-    col += attackerTerrainShift(srcGroup);
-    // 防御側地形シフト (§20.36 トーチカ)
-    col += defenderTerrainShift(tgtGroup);
-    // §20.38 ピン状態の防御兵 → 左1ずつ
-    col -= pinnedCount(tgtGroup);
-    // §20.39 攻撃側移動中 → 右2
-    if (isMoving(srcGroup)) col += 2;
-    // §20.39 防御側移動中 → 右2
-    if (isMoving(tgtGroup)) col += 2;
-    // §20.39 攻撃側が既に侵入されている → 右2
-    if (opts.srcAlreadyInfiltrated) col += 2;
-    // §45 日本軍は侵入判定で +1 コラム
-    if (opts.srcFacKey === 'jpn') col += 1;
-    // §20.32 煙幕 → 左2×枚数（両方の煙幕）
-    col -= smokeCount(srcGroup) * 2;
-    col -= smokeCount(tgtGroup) * 2;
-    // §20.31 夜間 → 左3
-    if (opts.night) col -= 3;
-    // 隠ぺいカード → 左N
-    if (opts.concealValue) col -= opts.concealValue;
-    // クランプ 1〜10
-    return Math.max(1, Math.min(10, col));
+    const breakdown = [];
+    const baseAlive = aliveCards(tgtGroup).length;
+    breakdown.push({ label: '防御側生存数(基礎)', value: baseAlive });
+    let col = baseAlive;
+
+    const atkTerrShift = attackerTerrainShift(srcGroup);
+    if (atkTerrShift) { breakdown.push({ label: '攻撃側地形シフト', value: atkTerrShift }); col += atkTerrShift; }
+
+    const defTerrShift = defenderTerrainShift(tgtGroup);
+    if (defTerrShift) { breakdown.push({ label: '防御側地形シフト', value: defTerrShift }); col += defTerrShift; }
+
+    const pinned = pinnedCount(tgtGroup);
+    if (pinned) { breakdown.push({ label: 'ピン状態防御兵', value: -pinned }); col -= pinned; }
+
+    if (isMoving(srcGroup)) { breakdown.push({ label: '攻撃側移動中', value: 2 }); col += 2; }
+    if (isMoving(tgtGroup)) { breakdown.push({ label: '防御側移動中', value: 2 }); col += 2; }
+    if (opts.srcAlreadyInfiltrated) { breakdown.push({ label: '攻撃側既侵入', value: 2 }); col += 2; }
+    if (opts.srcFacKey === 'jpn') { breakdown.push({ label: '日本軍 左1', value: -1 }); col -= 1; }
+
+    const sSmoke = smokeCount(srcGroup);
+    if (sSmoke) { breakdown.push({ label: `攻撃側煙幕×${sSmoke}`, value: -sSmoke * 2 }); col -= sSmoke * 2; }
+
+    const tSmoke = smokeCount(tgtGroup);
+    if (tSmoke) { breakdown.push({ label: `防御側煙幕×${tSmoke}`, value: -tSmoke * 2 }); col -= tSmoke * 2; }
+
+    if (opts.night) { breakdown.push({ label: '夜間', value: -3 }); col -= 3; }
+    if (opts.concealValue) { breakdown.push({ label: '隠蔽', value: -opts.concealValue }); col -= opts.concealValue; }
+
+    const final = Math.max(1, Math.min(10, col));
+    if (final !== col) breakdown.push({ label: 'クランプ(1-10)', value: final - col });
+    return { column: final, breakdown, raw: col };
   }
 
   /**
@@ -366,7 +376,9 @@
 
       // コラム情報
       const baseCol = aliveCards(tgtGroup).length;
-      const col = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey });
+      const _isNight = !!(global.state && global.state.isNight);
+      const _sFlared = !!(srcGroup && srcGroup.flaredUntilTurn && global.state && srcGroup.flaredUntilTurn >= (global.state.turnCount || 0));
+      const col = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey, night: _isNight && !_sFlared });
       const info = el('div', { color:'#ccc', fontSize:'13px', marginBottom:'12px' },
         `防御兵数: ${baseCol} | 最終コラム: ${col}`);
       frag.appendChild(info);
@@ -377,10 +389,17 @@
         `手札の移動カード: ${moveCards.length}枚`);
       frag.appendChild(moveInfo);
 
-      // 兵士リスト
+      // 兵士リスト（テーブル形式）
       const alive = aliveCards(srcGroup);
-      const selections = []; // { card, cardIdx, soldierDef, selected, useMove }
-      const listDiv = el('div', { marginBottom:'16px' });
+      const selections = [];
+      const listTable = document.createElement('table');
+      listTable.style.cssText = 'width:100%; border-collapse:collapse; margin-bottom:16px;';
+      const thead = el('tr', { background:'#444' });
+      ['', '兵士', '士気', '爆薬', '方法'].forEach(h => {
+        const th = el('th', { padding:'4px 6px', textAlign:'center', borderBottom:'1px solid #666', fontSize:'11px', color:'#aaa' }, h);
+        thead.appendChild(th);
+      });
+      listTable.appendChild(thead);
 
       alive.forEach(card => {
         const cardIdx = srcGroup.cards.indexOf(card);
@@ -389,50 +408,63 @@
         const isPinned = R().isPinned(card);
         const morale = parseInt(def.morale, 10) || 0;
 
-        const row = el('div', {
-          display:'flex', alignItems:'center', gap:'8px',
-          padding:'4px 0', borderBottom:'1px solid #555',
-        });
-
-        const entry = { card, cardIdx, soldierDef: def, selected: false, useMove: false, row };
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #555';
+        const entry = { card, cardIdx, soldierDef: def, selected: false, useMove: false };
         selections.push(entry);
 
         if (isPinned) {
-          row.style.opacity = '0.4';
-          row.appendChild(el('span', { color:'#f88', fontSize:'13px' },
-            `✕ #${card.num} ${def.name} (ピン状態)`));
+          tr.style.opacity = '0.4';
+          const td = el('td', { padding:'4px 6px', color:'#f88', fontSize:'13px' }, `✕ #${card.num} ${def.name} (ピン状態)`);
+          td.colSpan = 5;
+          tr.appendChild(td);
         } else {
-          // チェックボックス
+          // チェックボックス（デフォルトON）
+          const tdCb = el('td', { padding:'4px 6px', textAlign:'center' });
           const cb = document.createElement('input');
           cb.type = 'checkbox';
+          cb.checked = true;
+          entry.selected = true;
           cb.onchange = () => { entry.selected = cb.checked; updateMoveCount(); };
-          row.appendChild(cb);
+          tdCb.appendChild(cb);
+          tr.appendChild(tdCb);
 
           // 兵士情報
-          row.appendChild(el('span', { color:'#eee', fontSize:'13px', minWidth:'140px' },
-            `#${card.num} ${def.name} (士気${morale})`));
+          tr.appendChild(el('td', { padding:'4px 6px', color:'#eee', fontSize:'13px' }, `#${card.num} ${def.name}`));
 
-          // 方法選択ラジオ
+          // 士気
+          tr.appendChild(el('td', { padding:'4px 6px', color:'#adf', fontSize:'13px', textAlign:'center' }, String(morale)));
+
+          // 爆薬
+          const tdDemo = el('td', { padding:'4px 6px', textAlign:'center', fontSize:'14px' }, card.demoCharge ? '💣' : '');
+          if (card.demoCharge) tdDemo.style.color = '#f66';
+          tr.appendChild(tdDemo);
+
+          // 方法
+          const tdMethod = document.createElement('td');
+          tdMethod.style.cssText = 'padding:4px 6px; text-align:center;';
           const radioName = `inf_method_${card.id}`;
-          const lblMorale = el('label', { color:'#ccc', fontSize:'12px', cursor:'pointer' });
+          const lblMorale = el('label', { color:'#ccc', fontSize:'12px', cursor:'pointer', marginRight:'8px' });
           const rMorale = document.createElement('input');
           rMorale.type = 'radio'; rMorale.name = radioName; rMorale.checked = true;
           rMorale.onchange = () => { entry.useMove = false; updateMoveCount(); };
           lblMorale.appendChild(rMorale);
           lblMorale.appendChild(document.createTextNode('モラル'));
-          row.appendChild(lblMorale);
+          tdMethod.appendChild(lblMorale);
 
           const lblMove = el('label', { color:'#ccc', fontSize:'12px', cursor:'pointer' });
           const rMove = document.createElement('input');
           rMove.type = 'radio'; rMove.name = radioName;
           rMove.onchange = () => { entry.useMove = true; updateMoveCount(); };
           lblMove.appendChild(rMove);
-          lblMove.appendChild(document.createTextNode('移動カード'));
-          row.appendChild(lblMove);
+          lblMove.appendChild(document.createTextNode('移動'));
+          tdMethod.appendChild(lblMove);
+
+          tr.appendChild(tdMethod);
         }
-        listDiv.appendChild(row);
+        listTable.appendChild(tr);
       });
-      frag.appendChild(listDiv);
+      frag.appendChild(listTable);
 
       // 移動カード必要数表示
       const moveCountDiv = el('div', { color:'#ff9', fontSize:'12px', marginBottom:'16px' });
@@ -472,7 +504,66 @@
   }
 
   /**
-   * 侵入結果オーバーレイ
+   * モラルチェック結果オーバーレイ
+   */
+  function showMoralCheckOverlay(title, results) {
+    return new Promise(resolve => {
+      const frag = document.createDocumentFragment();
+      frag.appendChild(el('div', TITLE_STYLE, title));
+
+      const table = document.createElement('table');
+      table.style.cssText = 'width:100%; border-collapse:collapse; font-size:13px; color:#eee;';
+      const thead = el('tr', { background:'#555' });
+      ['兵士','方法','士気','RNC','結果'].forEach(h => {
+        const th = el('th', { padding:'4px 6px', textAlign:'center', borderBottom:'1px solid #777' }, h);
+        thead.appendChild(th);
+      });
+      table.appendChild(thead);
+
+      let passCount = 0;
+      results.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #444';
+        const cells = [];
+        cells.push(r.name);
+        cells.push(r.method);
+        cells.push(r.morale != null ? String(r.morale) : '--');
+        if (r.exempted) cells.push('--');
+        else if (r.rnc != null) cells.push(`${r.rncColor}${Math.abs(r.rnc)}`);
+        else cells.push('--');
+        let resText, resColor;
+        if (r.exempted) { resText = '免除(移動)'; resColor = '#6cf'; passCount++; }
+        else if (r.passed) { resText = '通過'; resColor = '#4f4'; passCount++; }
+        else if (r.pinned) { resText = 'ピン'; resColor = '#fd0'; }
+        else { resText = 'NG'; resColor = '#f88'; }
+        cells.push(resText);
+        cells.forEach((text, ci) => {
+          const td = el('td', { padding:'4px 6px', textAlign:'center' }, text);
+          if (ci === cells.length - 1) td.style.color = resColor;
+          if (ci === 3 && r.rncColor === '赤') td.style.color = '#f66';
+          if (ci === 3 && r.rncColor === '黒') td.style.color = '#6cf';
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      frag.appendChild(table);
+
+      const summary = el('div', { marginTop:'12px', fontSize:'14px', color:'#ffeb3b' },
+        `モラル通過: ${passCount}名 / 全${results.length}名`);
+      frag.appendChild(summary);
+
+      const btnRow = el('div', { display:'flex', justifyContent:'flex-end', marginTop:'16px' });
+      const btn = el('button', BTN_PRIMARY, 'OK');
+      btn.onclick = () => { removeOverlay(overlay); resolve(); };
+      btnRow.appendChild(btn);
+      frag.appendChild(btnRow);
+
+      const overlay = showOverlay(frag);
+    });
+  }
+
+  /**
+   * 侵入結果オーバーレイ（内訳付き）
    * @returns {Promise<void>}
    */
   function showInfiltrationResultOverlay(title, results) {
@@ -480,66 +571,44 @@
       const frag = document.createDocumentFragment();
       frag.appendChild(el('div', TITLE_STYLE, title));
 
-      // テーブル
+      // テーブル: 兵士、コラム計算内訳、最終列、RPC、結果
       const table = document.createElement('table');
       table.style.cssText = 'width:100%; border-collapse:collapse; font-size:13px; color:#eee;';
       const thead = el('tr', { background:'#555' });
-      ['兵士','方法','士気','RNC','判定','コラム','RPC色','結果'].forEach(h => {
+      ['兵士','コラム内訳','最終列','RPC','結果'].forEach(h => {
         const th = el('th', { padding:'4px 6px', textAlign:'center', borderBottom:'1px solid #777' }, h);
         thead.appendChild(th);
       });
       table.appendChild(thead);
 
       let successCount = 0;
-      results.forEach((r, i) => {
+      results.forEach(r => {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #444';
         const cells = [];
-
         cells.push(r.name);
-        cells.push(r.method);
-        cells.push(r.morale != null ? String(r.morale) : '--');
-
-        // RNC
-        if (r.rnc != null) {
-          const rncText = `${r.rncColor}${Math.abs(r.rnc)}`;
-          cells.push(rncText);
-        } else {
-          cells.push('--');
+        // 内訳をテキスト化
+        let bdText = '--';
+        if (r.breakdown && r.breakdown.length) {
+          bdText = r.breakdown.map(b => `${b.label}${b.value>=0?'+':''}${b.value}`).join(' / ');
         }
-
-        // 判定
-        if (r.moraleResult != null) {
-          cells.push(r.moraleResult ? 'OK' : 'NG');
-        } else {
-          cells.push('OK');
-        }
-
-        // コラム
+        cells.push(bdText);
         cells.push(r.column != null ? String(r.column) : '--');
-
-        // RPC色
-        if (r.rpcColor != null) {
-          cells.push(r.rpcColor);
-        } else {
-          cells.push('--');
-        }
-
+        // RPC
+        if (r.rpcColor != null && r.rpcValue != null) cells.push(`${r.rpcColor}${r.rpcValue}`);
+        else cells.push('--');
         // 結果
         let resText, resColor;
-        if (r.infiltrated) { resText = '成功'; resColor = '#4f4'; successCount++; }
-        else if (r.pinned) { resText = 'ピン'; resColor = '#fd0'; }
-        else if (r.moraleResult === false) { resText = 'ピン(士気)'; resColor = '#fd0'; }
+        if (r.infiltrated) { resText = '侵入成功'; resColor = '#4f4'; successCount++; }
         else { resText = '失敗'; resColor = '#f88'; }
         cells.push(resText);
 
         cells.forEach((text, ci) => {
-          const td = el('td', { padding:'4px 6px', textAlign:'center' }, text);
+          const td = el('td', { padding:'4px 6px', textAlign:ci === 1 ? 'left' : 'center' }, text);
+          if (ci === 1) td.style.fontSize = '11px';
           if (ci === cells.length - 1) td.style.color = resColor;
-          if (ci === 3 && r.rncColor === '赤') td.style.color = '#f66';
-          if (ci === 3 && r.rncColor === '黒') td.style.color = '#6cf';
-          if (ci === 6 && r.rpcColor === '赤') td.style.color = '#f66';
-          if (ci === 6 && r.rpcColor === '黒') td.style.color = '#6cf';
+          if (ci === 3 && r.rpcColor === '赤') td.style.color = '#f66';
+          if (ci === 3 && r.rpcColor === '黒') td.style.color = '#6cf';
           tr.appendChild(td);
         });
         table.appendChild(tr);
@@ -548,7 +617,7 @@
 
       // サマリー
       const summary = el('div', { marginTop:'12px', fontSize:'14px', color:'#ffeb3b' },
-        `侵入成功: ${successCount}名`);
+        `侵入成功: ${successCount}名 / 判定${results.length}名`);
       frag.appendChild(summary);
 
       // OKボタン
@@ -579,7 +648,14 @@
       const moveCards = playerHand.filter(c => c.terrain && c.terrain.type === 'MOVEMENT');
       const concealCards = playerHand.filter(c => c.terrain && c.terrain.type === 'CONCEALED');
 
-      const listDiv = el('div', { marginBottom:'12px' });
+      const listTable = document.createElement('table');
+      listTable.style.cssText = 'width:100%; border-collapse:collapse; margin-bottom:12px;';
+      const thead = el('tr', { background:'#444' });
+      ['', '兵士', 'CCV', '爆薬', '方法'].forEach(h => {
+        const th = el('th', { padding:'4px 6px', textAlign:'center', borderBottom:'1px solid #666', fontSize:'11px', color:'#aaa' }, h);
+        thead.appendChild(th);
+      });
+      listTable.appendChild(thead);
       const entries = [];
 
       infiltrators.forEach(inf => {
@@ -587,44 +663,54 @@
         if (!def) return;
         const ccv = getCCV(inf.card, def, {});
 
-        const row = el('div', {
-          display:'flex', alignItems:'center', gap:'8px',
-          padding:'4px 0', borderBottom:'1px solid #555',
-        });
-
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #555';
         const entry = { ...inf, soldierDef: def, ccv, selected: true, useMove: false };
         entries.push(entry);
 
         // チェックボックス（デフォルトON）
+        const tdCb = el('td', { padding:'4px 6px', textAlign:'center' });
         const cb = document.createElement('input');
         cb.type = 'checkbox'; cb.checked = true;
         cb.onchange = () => { entry.selected = cb.checked; };
-        row.appendChild(cb);
+        tdCb.appendChild(cb);
+        tr.appendChild(tdCb);
 
-        row.appendChild(el('span', { color:'#eee', fontSize:'13px', minWidth:'180px' },
-          `#${inf.card.num} ${def.name} (CCV:${ccv})`));
+        // 兵士
+        tr.appendChild(el('td', { padding:'4px 6px', color:'#eee', fontSize:'13px' }, `#${inf.card.num} ${def.name}`));
 
-        // 方法選択
+        // CCV
+        tr.appendChild(el('td', { padding:'4px 6px', color:'#fa6', fontSize:'13px', textAlign:'center' }, String(ccv)));
+
+        // 爆薬
+        const tdDemo = el('td', { padding:'4px 6px', textAlign:'center', fontSize:'14px' }, inf.card.demoCharge ? '💣' : '');
+        if (inf.card.demoCharge) tdDemo.style.color = '#f66';
+        tr.appendChild(tdDemo);
+
+        // 方法
+        const tdMethod = document.createElement('td');
+        tdMethod.style.cssText = 'padding:4px 6px; text-align:center;';
         const radioName = `cc_method_${inf.card.id}`;
-        const lblMorale = el('label', { color:'#ccc', fontSize:'12px', cursor:'pointer' });
+        const lblMorale = el('label', { color:'#ccc', fontSize:'12px', cursor:'pointer', marginRight:'8px' });
         const rMorale = document.createElement('input');
         rMorale.type = 'radio'; rMorale.name = radioName; rMorale.checked = true;
         rMorale.onchange = () => { entry.useMove = false; };
         lblMorale.appendChild(rMorale);
         lblMorale.appendChild(document.createTextNode('モラル'));
-        row.appendChild(lblMorale);
+        tdMethod.appendChild(lblMorale);
 
         const lblMove = el('label', { color:'#ccc', fontSize:'12px', cursor:'pointer' });
         const rMove = document.createElement('input');
         rMove.type = 'radio'; rMove.name = radioName;
         rMove.onchange = () => { entry.useMove = true; };
         lblMove.appendChild(rMove);
-        lblMove.appendChild(document.createTextNode('移動カード'));
-        row.appendChild(lblMove);
+        lblMove.appendChild(document.createTextNode('移動'));
+        tdMethod.appendChild(lblMove);
+        tr.appendChild(tdMethod);
 
-        listDiv.appendChild(row);
+        listTable.appendChild(tr);
       });
-      frag.appendChild(listDiv);
+      frag.appendChild(listTable);
 
       // 隠ぺいカード
       let selectedConceal = null;
@@ -787,78 +873,87 @@
     const setup = await showInfiltrationSetupModal(srcGroup, tgtGroup, playerHand, srcFacKey);
     if (setup.cancelled) return { ok: false, results: [], actionUsed: false };
 
-    const results = [];
     const moveCards = playerHand.filter(c => c.terrain && c.terrain.type === 'MOVEMENT');
     let moveCardUsed = 0;
 
+    // ステップ1: モラルチェック（移動カード使用者は免除）
+    const moralResults = [];
+    const passedSoldiers = [];
     for (const sel of setup.soldiers) {
       const def = sel.soldierDef;
       const morale = parseInt(def.morale, 10) || 0;
       const entry = { name: `#${sel.card.num} ${def.name}`, morale };
 
-      // §20.22 移動カード使用 → モラルチェック不要
       if (sel.useMove) {
-        entry.method = '移動';
-        entry.moraleResult = true;
-        // 移動カードを消費
+        entry.method = '移動カード(免除)';
+        entry.exempted = true;
+        entry.passed = true;
         if (moveCardUsed < moveCards.length) {
           const mc = moveCards[moveCardUsed];
           const handIdx = playerHand.indexOf(mc);
           if (handIdx >= 0) {
             playerHand.splice(handIdx, 1);
-            if (mc.terrainIndex != null && st.terrainDeck) {
-              st.terrainDeck.discard.push(mc.terrainIndex);
-            }
+            if (mc.terrainIndex != null && st.terrainDeck) st.terrainDeck.discard.push(mc.terrainIndex);
           }
           moveCardUsed++;
         }
       } else {
-        // §20.21 モラルチェック
-        entry.method = 'モラル';
+        entry.method = 'モラルチェック';
         const rncCard = drawFn();
-        if (!rncCard) { entry.moraleResult = false; entry.infiltrated = false; results.push(entry); continue; }
+        if (!rncCard) { entry.passed = false; moralResults.push(entry); continue; }
         const check = checkInfiltrationMorale(def, rncCard);
         entry.rnc = check.rnc;
         entry.rncColor = check.rncColor;
         entry.morale = check.morale;
-        entry.moraleResult = check.pass;
-
+        entry.passed = check.pass;
         if (!check.pass) {
-          // §20.21 失敗 → ピン状態
           R().pinSoldier(sel.card);
           entry.pinned = true;
-          entry.infiltrated = false;
-          results.push(entry);
-          continue;
         }
       }
+      moralResults.push(entry);
+      if (entry.passed) passedSoldiers.push(sel);
+    }
 
-      // §20.3 侵入判定RPC
-      const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey });
-      entry.column = column;
+    // モラルチェック結果オーバーレイ
+    await showMoralCheckOverlay(`モラルチェック — ${srcGroup.name} → 敵${tgtGroup.name}`, moralResults);
 
+    // ステップ2: 侵入RPC判定（モラルパス者のみ、各兵士ごとに修正値内訳を取得）
+    const infResults = [];
+    for (const sel of passedSoldiers) {
+      const def = sel.soldierDef;
+      const _isNight2 = !!(global.state && global.state.isNight);
+      const _sFlared2 = !!(srcGroup && srcGroup.flaredUntilTurn && global.state && srcGroup.flaredUntilTurn >= (global.state.turnCount || 0));
+      const colDetail = calcInfiltrationColumnDetailed(tgtGroup, srcGroup, { srcFacKey, night: _isNight2 && !_sFlared2 });
+      const entry = {
+        name: `#${sel.card.num} ${def.name}`,
+        column: colDetail.column,
+        breakdown: colDetail.breakdown,
+      };
       const rpcCard = drawFn();
-      if (!rpcCard) { entry.infiltrated = false; results.push(entry); continue; }
-      const rpcResult = resolveInfiltrationRPC(rpcCard, column);
+      if (!rpcCard) { entry.infiltrated = false; infResults.push(entry); continue; }
+      const rpcResult = resolveInfiltrationRPC(rpcCard, colDetail.column);
       entry.rpcColor = rpcResult.color;
       entry.rpcValue = rpcResult.posValue;
       entry.infiltrated = rpcResult.success;
 
       if (rpcResult.success) {
-        // 侵入成功 → 侵入チット
         sel.card.infiltrating = true;
         sel.card.infiltratedGroupSide = tgtSide;
         sel.card.infiltratedGroupIdx = tgtIdx;
-        sel.card.infiltratedThisTurn = true; // §21.2 爆薬使用可能期間
+        sel.card.infiltratedThisTurn = true;
       }
-
-      results.push(entry);
+      infResults.push(entry);
     }
 
-    // 結果オーバーレイ
-    const titleText = `侵入結果 — ${srcGroup.name} → 敵${tgtGroup.name}`;
-    await showInfiltrationResultOverlay(titleText, results);
+    // 侵入結果オーバーレイ（内訳付き）
+    await showInfiltrationResultOverlay(`侵入チェック — ${srcGroup.name} → 敵${tgtGroup.name}`, infResults);
 
+    // 互換のため統合結果も返す
+    const results = moralResults.map(m => {
+      const inf = infResults.find(i => i.name === m.name);
+      return Object.assign({}, m, inf || {}, { moraleResult: m.passed });
+    });
     return { ok: true, results, actionUsed: true };
   }
 
@@ -902,6 +997,14 @@
       if (useDemo) {
         return await executeDemoCharge(demoEligible.card, srcGroup, srcSide, tgtGroup, tgtSide, tgtIdx, drawFn, srcFacKey, tgtFacKey);
       }
+    }
+
+    // トーチカ/地雷原のあるグループには通常 CC（白兵戦）不可
+    const tgtHasPillbox = (tgtGroup.terrain || []).some(c => c && c.terrain && c.terrain.type === 'PILLBOX');
+    const tgtHasMinefield = (tgtGroup.terrain || []).some(c => c && c.terrain && c.terrain.type === 'MINEFIELD');
+    if (tgtHasPillbox || tgtHasMinefield) {
+      alert(`${tgtHasPillbox ? 'トーチカ' : '地雷原'}のあるグループには白兵戦は挑めません（爆薬攻撃のみ可）`);
+      return { ok: false, battles: [], actionUsed: false };
     }
 
     // CCセットアップモーダル
@@ -967,7 +1070,7 @@
       }
     }
 
-    // 各参加者のCC相手をRPCで決定
+    // 各参加者のCC相手をRPCで決定 (攻撃者の数だけRPC、戦闘は1回のみ)
     const assignments = []; // { attacker, defender, defCardIdx }
     for (const p of participants) {
       const rpcCard = drawFn();
@@ -1018,9 +1121,12 @@
 
         const combat = resolveCCCombat(atkCCV, defCCV, atkRncCard, defRncCard);
 
+        const stCC = global.state || {};
+        const atkFlag = (srcSide === 'player' ? (stCC.player && stCC.player.flag) : (stCC.ai && stCC.ai.flag)) || '';
+        const defFlag = (tgtSide === 'player' ? (stCC.player && stCC.player.flag) : (stCC.ai && stCC.ai.flag)) || '';
         const battle = {
-          atkName: `#${atk.attacker.card.num} ${atkDef.name}`,
-          defName: `#${defCard.num} ${defDef.name}`,
+          atkName: `${atkFlag ? atkFlag + ' ' : ''}#${atk.attacker.card.num} ${atkDef.name}`,
+          defName: `${defFlag ? defFlag + ' ' : ''}#${defCard.num} ${defDef.name}`,
           atkCCV, defCCV,
           atkRnc: combat.atkRnc, defRnc: combat.defRnc,
           atkRncColor: combat.atkRncColor, defRncColor: combat.defRncColor,
@@ -1035,6 +1141,8 @@
         // 結果適用
         if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') {
           R().killSoldier(defCard);
+          // §42.43 CC殺害カウント
+          atk.attacker.card.ccKills = (atk.attacker.card.ccKills || 0) + 1;
           // 侵入状態解除
           atk.attacker.card.infiltrating = false;
           delete atk.attacker.card.infiltratedGroupSide;
@@ -1122,6 +1230,7 @@
     }
 
     let first = true;
+    let demoEnemyKills = 0;
     for (let i = 0; i < targets.length; i++) {
       const { card, facKey, friendly } = targets[i];
       if (!R().isAlive(card)) continue;
@@ -1142,24 +1251,38 @@
       const wasPinned = R().isPinned(card);
       const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
       const r = R().resolveFireOnSoldier(baseFP, rnc, def, wasPinned, rpc0r, 0, 0);
-      if (r.result === 'KIA' || r.result === 'PANIC_KIA') R().killSoldier(card);
-      else if (r.result === 'PANIC_ROUT') R().routSoldier(card);
-      else if (r.result === 'PIN') R().pinSoldier(card);
+      if (r.result === 'KIA' || r.result === 'PANIC_KIA') {
+        R().killSoldier(card);
+        if (!friendly) demoEnemyKills++;
+      } else if (r.result === 'PANIC_ROUT') {
+        R().routSoldier(card);
+        if (!friendly) demoEnemyKills++;
+      } else if (r.result === 'PIN') R().pinSoldier(card);
       const morale = def ? (wasPinned ? parseInt(def.panic,10)||0 : parseInt(def.morale,10)||0) : 0;
       const kia = def ? (wasPinned ? parseInt(def.kiaBack,10)||0 : parseInt(def.kiaFront,10)||0) : 0;
       const namePrefix = friendly ? '[味方] ' : '';
-      results.push({ name: namePrefix + (def ? def.name : card.id), result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP: baseFP, sum: baseFP + rnc, morale, kia, wasPinned });
+      const stD = global.state || {};
+      const sideFac = friendly ? (srcSide === 'player' ? stD.player : stD.ai) : (tgtSide === 'player' ? stD.player : stD.ai);
+      const sideFlag = (sideFac && sideFac.flag) ? sideFac.flag + ' ' : '';
+      results.push({ name: namePrefix + sideFlag + (def ? def.name : card.id), result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP: baseFP, sum: baseFP + rnc, morale, kia, wasPinned });
     }
     // 爆薬は使用済み
     attackerCard.demoCharge = false;
+    // §42.43 爆薬で3人以上殺害/潰走
+    if (demoEnemyKills >= 3) attackerCard.demoKilled3OrMore = true;
 
     const title = malfunctioned
       ? `爆薬故障 (赤6) — 攻撃失敗 / 爆薬喪失`
       : `爆薬攻撃 — ${srcGroup.name} → ${tgtSide === 'player' ? '自' : '敵'}${tgtGroup.name} (FP ${baseFP})`;
-    // 結果表示: fire overlay の流用は難しいので alert + 簡易一覧
-    let msg = title + '\n';
-    results.forEach(r => { msg += `${r.name}: ${r.result} (RNC ${r.rncColor}${Math.abs(r.rnc)})\n`; });
-    alert(msg);
+    // 射撃判定と同じ形式で結果表示
+    const showFn = global.showFireResultOverlay || (typeof window !== 'undefined' && window.showFireResultOverlay);
+    if (showFn) {
+      await showFn(title, results, null);
+    } else {
+      let msg = title + '\n';
+      results.forEach(r => { msg += `${r.name}: ${r.result} (RNC ${r.rncColor}${Math.abs(r.rnc)})\n`; });
+      alert(msg);
+    }
 
     return { ok: true, malfunctioned, results, actionUsed: true };
   }
@@ -1317,6 +1440,8 @@
     // 結果適用
     if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') {
       R().killSoldier(defCard);
+      // §42.43 CC殺害カウント (狂暴兵)
+      berserkCard.ccKills = (berserkCard.ccKills || 0) + 1;
     }
     if (combat.result === 'ATK_KIA' || combat.result === 'BOTH_KIA') {
       R().killSoldier(berserkCard);
@@ -1387,7 +1512,9 @@
       }
 
       // 侵入RPC判定
-      const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey: aiFacKey });
+      const _isNight3 = !!(global.state && global.state.isNight);
+      const _sFlared3 = !!(srcGroup && srcGroup.flaredUntilTurn && global.state && srcGroup.flaredUntilTurn >= (global.state.turnCount || 0));
+      const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey: aiFacKey, night: _isNight3 && !_sFlared3 });
       entry.column = column;
       const rpcCard = drawFn();
       if (!rpcCard) { entry.infiltrated = false; results.push(entry); continue; }
@@ -1468,7 +1595,7 @@
 
     if (participants.length === 0) return { ok: true, actionUsed: true, battles: [] };
 
-    // RPCで防御側決定 & CC解決
+    // RPCで防御側決定 & CC解決 (攻撃者の数だけRPC、戦闘は1回のみ)
     const battles = [];
     const assignments = [];
     for (const card of participants) {
@@ -1506,9 +1633,11 @@
         if (!atkRncCard || !defRncCard) break;
         const combat = resolveCCCombat(atkCCV, defCCV, atkRncCard, defRncCard);
 
+        const atkFlag = (st.ai && st.ai.flag) ? st.ai.flag + ' ' : '';
+        const defFlag = (tgtSide === 'player' ? (st.player && st.player.flag) : (st.ai && st.ai.flag)) || '';
         battles.push({
-          atkName: `#${atk.card.num} ${atkDef.name}`,
-          defName: `#${defCard.num} ${defDef.name}`,
+          atkName: `${atkFlag}#${atk.card.num} ${atkDef.name}`,
+          defName: `${defFlag ? defFlag + ' ' : ''}#${defCard.num} ${defDef.name}`,
           atkCCV, defCCV,
           atkRnc: combat.atkRnc, defRnc: combat.defRnc,
           atkRncColor: combat.atkRncColor, defRncColor: combat.defRncColor,
@@ -1517,7 +1646,11 @@
           result: combat.result,
         });
 
-        if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') R().killSoldier(defCard);
+        if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') {
+          R().killSoldier(defCard);
+          // §42.43 CC殺害カウント
+          atk.card.ccKills = (atk.card.ccKills || 0) + 1;
+        }
         if (combat.result === 'ATK_KIA' || combat.result === 'BOTH_KIA') {
           R().killSoldier(atk.card);
           atk.card.infiltrating = false;
@@ -1574,6 +1707,7 @@
     executeDemoCharge,
     // 内部（テスト用）
     calcInfiltrationColumn,
+    calcInfiltrationColumnDetailed,
     resolveInfiltrationRPC,
     resolveCCCombat,
     determineCCTarget,
