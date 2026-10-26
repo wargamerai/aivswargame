@@ -17,8 +17,11 @@
 </style>
 </head>
 <body>
-<a href="../index1.html"><button class="back">← トップへ</button></a>
-<h1>⚓ 帆船の戦い - シナリオ選択</h1>
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+  <a href="../index1.html"><button class="back">← トップへ</button></a>
+  <h1 style="margin:0;flex:1;">⚓ 帆船の戦い - シナリオ選択</h1>
+  <button onclick="openAiSettingsModal()" style="background:#646;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-weight:bold;">⚙️ AI設定</button>
+</div>
 
 <div class="panel">
   <h3 style="color:#ffcc88;margin:0 0 8px 0;">ゲームモード</h3>
@@ -30,6 +33,15 @@
 </div>
 
 <div class="panel">
+  <h3 style="color:#88ffcc;margin:0 0 8px 0;">💾 セーブから再開</h3>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <input type="file" id="resumeFile" accept=".json,application/json" style="color:#fff;">
+    <button id="resumeBtn" onclick="resumeFromFile()" style="background:#2a8;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-weight:bold;">続きから再開</button>
+    <span id="resumeStatus" style="color:#bcd;font-size:0.9em;"></span>
+  </div>
+</div>
+
+<div class="panel">
   <div class="scen-grid" id="scenGrid"></div>
 </div>
 
@@ -37,6 +49,8 @@
 <script src="hittables.js"></script>
 <script src="criticaldata.js"></script>
 <script src="chartsdata.js"></script>
+<script src="wsm_ai.js"></script>
+<script src="wsm_ai_ui.js"></script>
 <script>
 // wsm_hub.html の SCENARIOS と同一の一覧を定義（艦名表示のみに使用）
 // 実際のゲームデータは wsm_hub.html 内 SCENARIOS を参照
@@ -56,6 +70,7 @@ const SCENARIO_LIST = [
   { n:21, title:'Lake Erie (1813)',                   sides:'米2隻 / 英3隻' },
   { n:22, title:'Wasp vs Reindeer (1814)',            sides:'米:Wasp / 英:Reindeer' },
   { n:23, title:'Constitution vs Cyane+Levant (1815)',sides:'米:Constitution / 英:Cyane, Levant' },
+  { n:25, title:'Trafalgar (1805)',                   sides:'英27隻 / 仏18隻+西15隻' },
 ];
 
 function renderScenarios() {
@@ -72,6 +87,7 @@ function renderScenarios() {
 function startScenario(n) {
   const mode = document.querySelector('input[name="gameMode"]:checked')?.value || 'human-vs-ai';
   localStorage.removeItem('wsmHubState');
+  localStorage.removeItem('wsmResumeSave');
   localStorage.setItem('wsmPendingScenario', String(n));
   localStorage.setItem('wsmGameMode', mode);
   localStorage.setItem('campaignReady', 'true');
@@ -80,6 +96,40 @@ function startScenario(n) {
   localStorage.setItem('jpAutoAI', mode === 'human-vs-ai' ? '0' : '1');
   localStorage.setItem('fullAutoAI', mode === 'ai-vs-ai-auto' ? '1' : '0');
   window.location.href = 'wsm_hub.html';
+}
+
+function resumeFromFile() {
+  const fileInput = document.getElementById('resumeFile');
+  const status = document.getElementById('resumeStatus');
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) { status.textContent = 'JSONファイルを選択してください'; status.style.color = '#f88'; return; }
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const text = ev.target.result;
+      const payload = JSON.parse(text);
+      if (!payload || !payload._wsmSave || !payload.state) throw new Error('帆船の戦いのセーブファイルではありません');
+      const mode = payload.gameMode || document.querySelector('input[name="gameMode"]:checked')?.value || 'human-vs-ai';
+      localStorage.removeItem('wsmHubState');
+      localStorage.removeItem('wsmPendingScenario');
+      localStorage.setItem('wsmResumeSave', text);
+      localStorage.setItem('wsmGameMode', mode);
+      localStorage.setItem('campaignReady', 'true');
+      localStorage.setItem('scenarioMode', 'scenario');
+      localStorage.setItem('scenarioRules', JSON.stringify({ jpHandicap: 0 }));
+      localStorage.setItem('jpAutoAI', mode === 'human-vs-ai' ? '0' : '1');
+      localStorage.setItem('fullAutoAI', mode === 'ai-vs-ai-auto' ? '1' : '0');
+      status.textContent = `読込OK (T${payload.state.turn}/${payload.state.phase}) → 遷移します`;
+      status.style.color = '#8f8';
+      setTimeout(() => { window.location.href = 'wsm_hub.html'; }, 300);
+    } catch (e) {
+      console.error(e);
+      status.textContent = '読込失敗: ' + e.message;
+      status.style.color = '#f88';
+    }
+  };
+  reader.onerror = () => { status.textContent = 'ファイル読込エラー'; status.style.color = '#f88'; };
+  reader.readAsText(f);
 }
 
 renderScenarios();
