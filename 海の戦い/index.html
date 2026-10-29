@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <title>海の戦い - War at Sea</title>
 <script src="lang.js"></script>
+<script>
+// ブラウザの「戻る」でゲームの画面を離れないようにする。離れる・再読み込みするときは確認を出す
+//   ブラウザは操作の前の履歴の追加を無視することがあるので、最初の操作のときに追加する
+window.addEventListener('pointerdown', () => {
+  try { history.pushState(null, '', location.href); } catch(e){}
+}, { once: true });
+window.addEventListener('popstate', () => {
+  try { history.pushState(null, '', location.href); } catch(e){}
+});
+window.addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue = ''; });
+</script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
@@ -294,6 +305,7 @@ body.hide-units .control-marker { display:none; }
 <!-- ゲーム立ち上げ時のオプションルール選択 -->
 <div id="optionStartModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:1100;">
   <div class="modal-box" style="min-width:320px;">
+    <p style="color:#ffcc44;margin-bottom:10px;">あなたはドイツ軍（枢軸）を担当します。連合軍はAIが動かします。</p>
     <h3>オプションルール</h3>
     <div style="display:flex;flex-direction:column;gap:8px;color:#cde;margin:8px 0 14px;">
       <label><input type="checkbox" class="optRule" data-opt="ubNoLimit" onchange="setOptionRule(this)"> Uボート上限なし</label>
