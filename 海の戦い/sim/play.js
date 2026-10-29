@@ -636,10 +636,10 @@ function buildReport(result, finalPoc){
   return L.join('\n');
 }
 
-// ===== 観戦ページ（watch） =====
-const LOC_JA = { ...SEA_JA, Germany:'ドイツ', France:'フランス', Italy:'イタリア', Malta:'マルタ', England:'英国', USA:'米国', Leningrad:'レニングラード', Russia:'ロシア', Neutral:'中立港' };
+// ===== 観戦ページ（watch、英語） =====
+const SEA_EN = { NorthAtlantic:'North Atlantic', Barents:'Barents Sea', NorthSea:'North Sea', Baltic:'Baltic Sea', Mediterranean:'Mediterranean', SouthAtlantic:'South Atlantic' };
+const LOC_EN = { ...SEA_EN, Germany:'Germany', France:'France', Italy:'Italy', Malta:'Malta', England:'Britain', USA:'USA', Leningrad:'Leningrad', Russia:'Russia', Neutral:'Neutral port' };
 const WATCH_PORTS = ['England', 'Malta', 'USA', 'Russia', 'Leningrad', 'Germany', 'France', 'Italy', 'Neutral'];
-const SIDE_JA = { allies:'連合', axis:'枢軸' };
 const watchTurns = [];
 // 1ターン分：海域ごとの両軍（戦闘直前の位置と出発地）、移動の失敗、戦闘の結果、支配
 function watchTurnData(turn, start, before, cb, ctl, gain, total){
@@ -657,42 +657,48 @@ function watchTurnData(turn, start, before, cb, ctl, gain, total){
       return { res: hit ? 'dmg' : '', dmg };
     };
     const side = sd => ({
-      ships: here.filter(b => b.side === sd).map(b => ({ name: b.name, type: b.type, from: LOC_JA[start[b.id].loc] || start[b.id].loc, failed: b.failed, ...res(b) })),
+      ships: here.filter(b => b.side === sd).map(b => ({ name: b.name, type: b.type, from: LOC_EN[start[b.id].loc] || start[b.id].loc, failed: b.failed, ...res(b) })),
     });
     return { allies: side('allies'), axis: side('axis') };
   };
   const seas = {};
-  for(const sea of Object.keys(SEA_JA)) seas[sea] = shipsAt(sea);
+  for(const sea of Object.keys(SEA_EN)) seas[sea] = shipsAt(sea);
   // 港（出撃しなかった艦）。艦のいない港は載せない
   const ports = [];
   for(const port of WATCH_PORTS){
     const p = shipsAt(port);
-    if(p.allies.ships.length || p.axis.ships.length) ports.push({ loc: port, name: LOC_JA[port], ...p });
+    if(p.allies.ships.length || p.axis.ships.length) ports.push({ loc: port, name: LOC_EN[port], ...p });
   }
   const failed = Object.values(before).filter(b => b.failed && !b.sunk).map(b => ({
-    side: b.side, name: b.name, at: LOC_JA[b.loc] || b.loc,
-    why: b.country === 'US' && !b.usEntered ? '米国の参戦ロール失敗' : '2エリア移動の失敗',
+    side: b.side, name: b.name, at: LOC_EN[b.loc] || b.loc,
+    why: b.country === 'US' && !b.usEntered ? 'US entry roll failed' : '2-area move failed',
   }));
-  const combat = Object.keys(cb).map(loc => ({ loc: LOC_JA[loc] || loc, port: !SEA_JA[loc], ...cb[loc] }));
-  const lba = (lbaRec[turn] || []).map(x => ({ side: x.side, loc: x.area, name: LOC_JA[x.area] || x.area }));
+  // 損害の表記「艦名(損害2/3)」を英語に
+  const dmgEn = arr => arr.map(x => x.replace(/\(損害(.*)\)$/, ' (damage $1)'));
+  const combat = Object.keys(cb).map(loc => ({ loc: LOC_EN[loc] || loc, port: !SEA_EN[loc], ...cb[loc],
+    damaged: { allies: dmgEn(cb[loc].damaged.allies), axis: dmgEn(cb[loc].damaged.axis) } }));
+  const lba = (lbaRec[turn] || []).map(x => ({ side: x.side, loc: x.area, name: LOC_EN[x.area] || x.area }));
   return { turn, seas, ports, failed, combat, ctl, gain, total, lba };
 }
 function buildWatchHtml(finalPoc){
   const opts = ['--ub-nolimit', '--bismarck7', '--us-ease'].filter(o => process.argv.includes(o));
-  const data = { turns: watchTurns, seaJa: SEA_JA, finalPoc, opts,
+  const data = { turns: watchTurns, seaName: SEA_EN, finalPoc, opts,
     sunk: { allies: G('SHIPS').filter(s => s.side === 'allies' && s.sunk && s.type !== 'UBOAT').map(s => s.name),
             axis: G('SHIPS').filter(s => s.side === 'axis' && s.sunk && s.type !== 'UBOAT').map(s => s.name),
             ubAxis: G('SHIPS').filter(s => s.side === 'axis' && s.sunk && s.type === 'UBOAT').length } };
+  // 一覧のページ用の情報
+  const meta = { finalPoc, opts };
   return `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>海の戦い 観戦</title>
+<!--META ${JSON.stringify(meta)}-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War at Sea Battle Watch</title>
 <style>
 :root{ --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --mute:#667085; --line:#d9dee7; --al:#1f5fbf; --ax:#b42318; --none:#98a2b3;
   --ctl-none:#fff; --ctl-al:#d6e4ff; --ctl-ax:#ffd9d4; --r-sunk:#d10000; --r-dmg:#c25e00; --r-ret:#7a2fc0; }
 @media (prefers-color-scheme: dark){ :root{ --bg:#14171d; --card:#1d222b; --fg:#e6e9ef; --mute:#98a2b3; --line:#2f3642; --al:#6ea8ff; --ax:#ff7a6e; --none:#667085;
   --ctl-none:#1d222b; --ctl-al:#1b2f55; --ctl-ax:#4f1f1b; --r-sunk:#ff6b6b; --r-dmg:#ffa94d; --r-ret:#c599ff; } }
 *{ box-sizing:border-box; }
-body{ margin:0; background:var(--bg); color:var(--fg); font:14px/1.6 -apple-system,"Hiragino Sans",sans-serif; }
+body{ margin:0; background:var(--bg); color:var(--fg); font:14px/1.6 -apple-system,"Helvetica Neue",Arial,sans-serif; }
 .wrap{ max-width:1100px; margin:0 auto; padding:16px; }
 h1{ font-size:20px; margin:0 0 4px; } .sub{ color:var(--mute); font-size:12px; margin-bottom:12px; }
 .nav{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
@@ -718,7 +724,7 @@ b.allies{ color:var(--al); } b.axis{ color:var(--ax); }
 table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid var(--line); padding:4px 6px; text-align:left; vertical-align:top; }
 .poc{ font-size:15px; margin-top:8px; }
 </style></head><body><div class="wrap">
-<h1>海の戦い 観戦</h1>
+<h1>War at Sea: Battle Watch</h1>
 <div class="sub" id="sub"></div>
 <div class="nav" id="nav"></div>
 <div id="view"></div>
@@ -727,77 +733,122 @@ table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid va
 const D = ${JSON.stringify(data).replace(/</g, '\\u003c')};
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
 const sgn = n => (n >= 0 ? '+' : '') + n;
-const CTL = { allies:'連合', axis:'枢軸' };
+const CTL = { allies:'Allies', axis:'Axis' };
+const OPT = { '--ub-nolimit':'No U-boat limit', '--bismarck7':'Bismarck class Defense 7', '--us-ease':'Easier US entry' };
 let cur = 0;
-document.getElementById('sub').textContent = 'オプション：' + (D.opts.length ? D.opts.join(' ') : 'なし') + '　POCは＋が連合、−が枢軸';
+document.getElementById('sub').textContent = 'AI vs AI. Optional rules: ' + (D.opts.length ? D.opts.map(o => OPT[o] || o).join(', ') : 'none') + '. POC: + favors the Allies, - favors the Axis.';
 // inPort: 港の欄（出発地の代わりに、移動の失敗を書く）
 function side(sd, x, locName, inPort){
-  const name = sd === 'allies' ? '連合' : '枢軸';
   if(!x.ships.length) return '';
-  let h = '<div class="side"><b class="' + sd + '">' + name + '</b>';
-  const note = s => inPort ? (s.failed ? ' <span class="from">移動失敗</span>' : '')
-    : ' <span class="from">' + (s.from === locName ? '留まる' : '← ' + esc(s.from)) + '</span>';
-  if(x.ships.length) h += '<ul>' + x.ships.map(s => '<li><span class="' + (s.res ? 'r-' + s.res : '') + '">' + esc(s.name) + '</span>' + (s.dmg ? '（損害' + s.dmg + '）' : '') + note(s) + '</li>').join('') + '</ul>';
+  let h = '<div class="side"><b class="' + sd + '">' + CTL[sd] + '</b>';
+  const note = s => inPort ? (s.failed ? ' <span class="from">move failed</span>' : '')
+    : ' <span class="from">' + (s.from === locName ? 'stayed' : '← ' + esc(s.from)) + '</span>';
+  h += '<ul>' + x.ships.map(s => '<li><span class="' + (s.res ? 'r-' + s.res : '') + '">' + esc(s.name) + '</span>' + (s.dmg ? ' (damage ' + s.dmg + ')' : '') + note(s) + '</li>').join('') + '</ul>';
   return h + '</div>';
 }
-function list(arr){ return arr.length ? arr.map(esc).join('、') : ''; }
+function list(arr){ return arr.length ? arr.map(esc).join(', ') : ''; }
 function render(){
   const nav = document.getElementById('nav');
-  nav.innerHTML = '<button id="prev">◀ 前へ</button>' + D.turns.map((t, i) => '<button data-i="' + i + '" class="' + (i === cur ? 'on' : '') + '">T' + t.turn + '</button>').join('') + '<button data-i="sum" class="' + (cur === 'sum' ? 'on' : '') + '">総括</button><button id="next">次へ ▶</button>';
+  nav.innerHTML = '<button id="prev">◀ Prev</button>' + D.turns.map((t, i) => '<button data-i="' + i + '" class="' + (i === cur ? 'on' : '') + '">T' + t.turn + '</button>').join('') + '<button data-i="sum" class="' + (cur === 'sum' ? 'on' : '') + '">Summary</button><button id="next">Next ▶</button>';
   nav.querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { cur = b.dataset.i === 'sum' ? 'sum' : +b.dataset.i; render(); });
   document.getElementById('prev').onclick = () => { if(cur === 'sum') cur = D.turns.length - 1; else if(cur > 0) cur--; render(); };
   document.getElementById('next').onclick = () => { if(cur === 'sum') return; cur = cur < D.turns.length - 1 ? cur + 1 : 'sum'; render(); };
   const v = document.getElementById('view');
   if(cur === 'sum'){
-    v.innerHTML = '<h2>総括</h2><div class="card"><div class="poc">最終POC ' + sgn(D.finalPoc) + '（' + (D.finalPoc < 0 ? '枢軸の勝ち' : D.finalPoc > 0 ? '連合の勝ち' : '引き分け') + '）</div>'
-      + '<p>連合の撃沈 ' + D.sunk.allies.length + '隻：' + (list(D.sunk.allies) || 'なし') + '</p>'
-      + '<p>枢軸の撃沈 ' + D.sunk.axis.length + '隻：' + (list(D.sunk.axis) || 'なし') + '　Uボート ' + D.sunk.ubAxis + '隻</p>'
-      + '<table><tr><th>ターン</th><th>獲得</th><th>累計</th></tr>' + D.turns.map(t => '<tr><td>T' + t.turn + '</td><td>' + sgn(t.gain) + '</td><td>' + sgn(t.total) + '</td></tr>').join('') + '</table></div>';
+    v.innerHTML = '<h2>Summary</h2><div class="card"><div class="poc">Final POC ' + sgn(D.finalPoc) + ' (' + (D.finalPoc < 0 ? 'Axis victory' : D.finalPoc > 0 ? 'Allied victory' : 'Draw') + ')</div>'
+      + '<p>Allied ships sunk: ' + D.sunk.allies.length + ' — ' + (list(D.sunk.allies) || 'none') + '</p>'
+      + '<p>Axis ships sunk: ' + D.sunk.axis.length + ' — ' + (list(D.sunk.axis) || 'none') + '. U-boats lost: ' + D.sunk.ubAxis + '</p>'
+      + '<table><tr><th>Turn</th><th>Gained</th><th>Total</th></tr>' + D.turns.map(t => '<tr><td>T' + t.turn + '</td><td>' + sgn(t.gain) + '</td><td>' + sgn(t.total) + '</td></tr>').join('') + '</table></div>';
     return;
   }
   const t = D.turns[cur];
   // LBA（陸上機）の印。海域・港の欄の見出しに付ける
-  const lbaOf = loc => (t.lba || []).filter(x => x.loc === loc).map(x => '<span class="lba ' + x.side + '">✈' + (x.side === 'allies' ? '連合' : '枢軸') + 'LBA</span>').join('');
-  let h = '<h2>移動（戦闘直前の位置）<span class="legend"><span class="r-sunk">撃沈</span><span class="r-dmg">損害</span><span class="r-ret">帰還</span></span></h2><div class="grid">';
-  for(const sea of Object.keys(D.seaJa)){
+  const lbaOf = loc => (t.lba || []).filter(x => x.loc === loc).map(x => '<span class="lba ' + x.side + '">✈' + CTL[x.side] + ' LBA</span>').join('');
+  let h = '<h2>Movement (positions before combat)<span class="legend"><span class="r-sunk">Sunk</span><span class="r-dmg">Damaged</span><span class="r-ret">Returned</span></span></h2><div class="grid">';
+  for(const sea of Object.keys(D.seaName)){
     const s = t.seas[sea], c = t.ctl[sea];
-    const body = side('allies', s.allies, D.seaJa[sea]) + side('axis', s.axis, D.seaJa[sea]);
-    h += '<div class="card sea ctl-' + (c || 'none') + '" style="grid-area:' + sea + '"><h3><span>' + D.seaJa[sea] + lbaOf(sea) + '</span><span class="tag ' + (c || 'none') + '">' + (CTL[c] || '支配なし') + '</span></h3>' + (body || '<div class="empty">艦なし</div>') + '</div>';
+    const body = side('allies', s.allies, D.seaName[sea]) + side('axis', s.axis, D.seaName[sea]);
+    h += '<div class="card sea ctl-' + (c || 'none') + '" style="grid-area:' + sea + '"><h3><span>' + D.seaName[sea] + lbaOf(sea) + '</span><span class="tag ' + (c || 'none') + '">' + (CTL[c] || 'Uncontrolled') + '</span></h3>' + (body || '<div class="empty">No ships</div>') + '</div>';
   }
   h += '</div>';
-  h += '<h2>港（出撃しなかった艦）</h2><div class="ports">' + t.ports.map(p => '<div class="card"><h3>' + esc(p.name) + lbaOf(p.loc) + '</h3>' + side('allies', p.allies, p.name, true) + side('axis', p.axis, p.name, true) + '</div>').join('') + '</div>';
-  if(t.failed.length) h += '<h2>移動の失敗</h2><div class="card"><ul>' + t.failed.map(f => '<li><b class="' + f.side + '">' + (f.side === 'allies' ? '連合' : '枢軸') + '</b> ' + esc(f.name) + '：' + f.why + '（' + esc(f.at) + 'に残る）</li>').join('') + '</ul></div>';
-  h += '<h2>戦闘結果</h2>';
-  if(!t.combat.length) h += '<div class="card empty">戦闘なし</div>';
+  h += '<h2>In port (did not sail)</h2><div class="ports">' + t.ports.map(p => '<div class="card"><h3>' + esc(p.name) + lbaOf(p.loc) + '</h3>' + side('allies', p.allies, p.name, true) + side('axis', p.axis, p.name, true) + '</div>').join('') + '</div>';
+  if(t.failed.length) h += '<h2>Failed moves</h2><div class="card"><ul>' + t.failed.map(f => '<li><b class="' + f.side + '">' + CTL[f.side] + '</b> ' + esc(f.name) + ': ' + f.why + ' (stays in ' + esc(f.at) + ')</li>').join('') + '</ul></div>';
+  h += '<h2>Combat results</h2>';
+  if(!t.combat.length) h += '<div class="card empty">No combat</div>';
   else {
-    h += '<div class="card"><table><tr><th>場所</th><th>連合</th><th>枢軸</th></tr>';
+    h += '<div class="card"><table><tr><th>Location</th><th>Allies</th><th>Axis</th></tr>';
     for(const c of t.combat){
       const cell = sd => {
         const r = [];
-        if(c.sunk[sd].length) r.push('撃沈：' + list(c.sunk[sd]));
-        if(c.damaged[sd].length) r.push('損害：' + list(c.damaged[sd]));
-        if(c.forced[sd].length) r.push('強制帰還：' + list(c.forced[sd]));
-        if(c.retreat[sd].length) r.push('撤退：' + list(c.retreat[sd]));
-        return r.length ? r.join('<br>') : '<span class="empty">被害なし</span>';
+        if(c.sunk[sd].length) r.push('Sunk: ' + list(c.sunk[sd]));
+        if(c.damaged[sd].length) r.push('Damaged: ' + list(c.damaged[sd]));
+        if(c.forced[sd].length) r.push('Forced return: ' + list(c.forced[sd]));
+        if(c.retreat[sd].length) r.push('Retreated: ' + list(c.retreat[sd]));
+        return r.length ? r.join('<br>') : '<span class="empty">No losses</span>';
       };
-      h += '<tr><td>' + esc(c.loc) + (c.port ? '（港）' : '') + '</td><td>' + cell('allies') + '</td><td>' + cell('axis') + '</td></tr>';
+      h += '<tr><td>' + esc(c.loc) + (c.port ? ' (port)' : '') + '</td><td>' + cell('allies') + '</td><td>' + cell('axis') + '</td></tr>';
     }
     h += '</table></div>';
   }
   // 支配とPOCは一番上に
-  h = '<h2>第' + t.turn + 'ターン　支配</h2><div class="card">' + Object.keys(D.seaJa).map(k => D.seaJa[k] + '：<b class="' + (t.ctl[k] || '') + '">' + (CTL[t.ctl[k]] || 'なし') + '</b>').join('　')
-    + '<div>LBA：' + (['allies', 'axis'].map(sd => { const x = (t.lba || []).filter(l => l.side === sd); return '<b class="' + sd + '">' + (sd === 'allies' ? '連合' : '枢軸') + '</b> ' + (x.length ? x.map(l => esc(l.name)).join('、') : '使わず'); }).join('　')) + '</div>'
-    + '<div class="poc">このターンのPOC ' + sgn(t.gain) + '　累計 ' + sgn(t.total) + '</div></div>' + h;
+  h = '<h2>Turn ' + t.turn + ': Control</h2><div class="card">' + Object.keys(D.seaName).map(k => D.seaName[k] + ': <b class="' + (t.ctl[k] || '') + '">' + (CTL[t.ctl[k]] || 'none') + '</b>').join(' &nbsp; ')
+    + '<div>LBA: ' + (['allies', 'axis'].map(sd => { const x = (t.lba || []).filter(l => l.side === sd); return '<b class="' + sd + '">' + CTL[sd] + '</b> ' + (x.length ? x.map(l => esc(l.name)).join(', ') : 'not used'); }).join(' &nbsp; ')) + '</div>'
+    + '<div class="poc">POC this turn ' + sgn(t.gain) + ' &nbsp; Total ' + sgn(t.total) + '</div></div>' + h;
   v.innerHTML = h;
 }
 render();
 </script></body></html>`;
 }
 
+// ===== 一覧のページ（sim/index.html） =====
+// 観戦ページ（英語）と提督レポート（日本語）を新しい順に並べる。書き出すたびに作り直す
+function buildIndexHtml(){
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  const sgn = n => (n >= 0 ? '+' : '') + n;
+  const stamp = f => { const m = f.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : f; };
+  const files = dir => { try { return fs.readdirSync(path.join(__dirname, dir)).sort().reverse(); } catch(e){ return []; } };
+  const OPT = { '--ub-nolimit':'No U-boat limit', '--bismarck7':'Bismarck class Def 7', '--us-ease':'Easier US entry' };
+  const watchRows = files('watch').filter(f => f.endsWith('.html')).map(f => {
+    let meta = null;
+    try { const m = fs.readFileSync(path.join(__dirname, 'watch', f), 'utf8').match(/<!--META (.*?)-->/); if(m) meta = JSON.parse(m[1]); } catch(e){}
+    const res = meta ? `Final POC ${sgn(meta.finalPoc)} (${meta.finalPoc < 0 ? 'Axis victory' : meta.finalPoc > 0 ? 'Allied victory' : 'Draw'})` : '';
+    const opts = meta && meta.opts.length ? meta.opts.map(o => OPT[o] || o).join(', ') : 'none';
+    return `<tr><td><a href="watch/${encodeURIComponent(f)}">${esc(stamp(f))}</a></td><td>${esc(res)}</td><td>${esc(opts)}</td></tr>`;
+  });
+  const reportRows = files('reports').filter(f => f.endsWith('.txt')).map(f => {
+    let res = '';
+    try { const m = fs.readFileSync(path.join(__dirname, 'reports', f), 'utf8').match(/最終POC ([+-]?\d+)/); if(m){ const p = +m[1]; res = `最終POC ${sgn(p)}（${p < 0 ? '枢軸の勝ち' : p > 0 ? '連合の勝ち' : '引き分け'}）`; } } catch(e){}
+    return `<tr><td><a href="reports/${encodeURIComponent(f)}">${esc(stamp(f))}</a></td><td>${esc(res)}</td></tr>`;
+  });
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War at Sea Reports</title>
+<style>
+:root{ --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --mute:#667085; --line:#d9dee7; --link:#1f5fbf; }
+@media (prefers-color-scheme: dark){ :root{ --bg:#14171d; --card:#1d222b; --fg:#e6e9ef; --mute:#98a2b3; --line:#2f3642; --link:#6ea8ff; } }
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--bg); color:var(--fg); font:14px/1.6 -apple-system,"Helvetica Neue",Arial,"Hiragino Sans",sans-serif; }
+.wrap{ max-width:900px; margin:0 auto; padding:16px; }
+h1{ font-size:20px; margin:0 0 12px; } h2{ font-size:16px; margin:20px 0 8px; }
+.card{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; overflow-x:auto; }
+table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid var(--line); padding:6px; text-align:left; white-space:nowrap; }
+a{ color:var(--link); } .empty{ color:var(--mute); }
+</style></head><body><div class="wrap">
+<h1>War at Sea: Reports</h1>
+<h2>Battle Watch (AI vs AI)</h2>
+<div class="card">${watchRows.length ? `<table><tr><th>Date</th><th>Result</th><th>Optional rules</th></tr>${watchRows.join('')}</table>` : '<div class="empty">No games yet.</div>'}</div>
+<h2 lang="ja">ドイツ海軍 提督レポート</h2>
+<div class="card" lang="ja">${reportRows.length ? `<table><tr><th>日時</th><th>結果</th></tr>${reportRows.join('')}</table>` : '<div class="empty">まだありません。</div>'}</div>
+</div></body></html>`;
+}
+function writeIndex(){ fs.writeFileSync(path.join(__dirname, 'index.html'), buildIndexHtml()); }
+
 let cumPoc = 0, lastTurnGain = 0;
 // ゲームのPOCはターンごとに0へ戻すので、連合AIが見る累計は play.js の累計に置き換える
 w.alliedCumPoc = () => cumPoc;
 (async () => {
+  // index: 対戦せずに一覧のページだけ作り直す
+  if(process.argv.includes('index')){ writeIndex(); console.log('一覧: ' + path.join(__dirname, 'index.html')); process.exit(0); }
   const result = [];
   for(let turn = 1; turn <= 8; turn++){
     const turnStart = snapShips();
@@ -844,6 +895,7 @@ w.alliedCumPoc = () => cumPoc;
     const file = path.join(dir, `watch_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.html`);
     fs.writeFileSync(file, buildWatchHtml(cumPoc));
     console.log('観戦ページ: ' + file);
+    writeIndex();
   }
   if(process.argv.includes('report')){
     const text = buildReport(result, cumPoc);
@@ -854,6 +906,7 @@ w.alliedCumPoc = () => cumPoc;
     fs.writeFileSync(file, text);
     console.log(text);
     console.log('\n保存: ' + file);
+    writeIndex();
     process.exit(0);
   }
   const sunk = side => G('SHIPS').filter(s => s.side === side && s.sunk && s.type !== 'UBOAT').map(s => s.name);
