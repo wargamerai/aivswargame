@@ -1714,6 +1714,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
   await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 ━`, 1500);
   clearRetreatGroups(); // 前の戦闘の撤退グループの印を消す
   SHIPS.forEach(s => { delete s._cvDeclared; }); // 空母の攻撃の宣言は戦闘ごと
+  chooseAlliedTargetMode(seaKey); // 連合AIの目標の選び方（この戦闘のあいだ同じ。画面には出さない）
   let cvAsked = false;
   let firstIter = true;
   while(true){
@@ -1722,6 +1723,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
     const axis   = ships.filter(s => s.side === 'axis');
     if(!allies.length || !axis.length){
       SHIPS.forEach(s => { delete s._cvDeclared; }); // 戦闘が終わったら空母の扱いに戻す
+      alliedTargetMode = 'normal'; // 戦闘の外（航空攻撃など）は今まで通り
       await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 終了 ━`, 1200);
       return;
     }
@@ -2066,9 +2068,43 @@ async function runPursuitRound(pursuit, retreat){
 // 追跡対象（撤退艦）から選択
 // 連合AIの目標選択: Bismarck・Tirpitz は後回し → 速力の高い艦から → 同速なら撃沈に近い艦から
 //   順位が決まっているので、撃沈が確実になる（pending の損害で耐久超え）まで同じ艦に集中する
+// 連合AIの目標の選び方（水上戦闘ごとにパターンを決める。戦闘の外では「今まで通り」）
+//   normal: Bismarck・Tirpitz を後回しにして、速い艦、同じなら残りの耐久が少ない艦
+//   big   : 攻撃力と防御力の合計が一番大きい艦に集中（沈むと見込まれたら次の艦へ）
+//   spread: このラウンドでまだ誰も狙っていない艦からくじ。全部狙ったら損害の少ない艦からくじ
+let alliedTargetMode = 'normal';
+const alliedTargetModeLog = []; // { turn, sea, mode, ratio }（観戦ページ・レポート用）
+const ALLIED_TARGET_WEIGHTS = {
+  strong: { big: 50, normal: 30, spread: 20 }, // 連合が1.5倍以上
+  even:   { big: 20, normal: 50, spread: 30 },
+  weak:   { big: 10, normal: 40, spread: 50 }  // 連合が下回る
+};
+// 戦闘の始まりに、戦力の比べでくじの割合を変えてパターンを決める
+function chooseAlliedTargetMode(seaKey){
+  const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk && !s.returnPending && s.type !== 'UBOAT');
+  const e = battleEval(ships.filter(s => s.side === 'allies'), ships.filter(s => s.side === 'axis'));
+  const ratio = e.theirs > 0 ? e.ours / e.theirs : Infinity;
+  const w = ALLIED_TARGET_WEIGHTS[ratio >= 1.5 ? 'strong' : ratio >= 1 ? 'even' : 'weak'];
+  let r = Math.random() * (w.big + w.normal + w.spread);
+  alliedTargetMode = (r -= w.big) < 0 ? 'big' : (r -= w.normal) < 0 ? 'normal' : 'spread';
+  alliedTargetModeLog.push({ turn: currentTurn, sea: seaKey, mode: alliedTargetMode, ratio: Math.round(ratio * 10) / 10 });
+}
 function alliedPickTarget(cands, pending){
+  if(!cands.length) return null;
   const pd = s => (pending && pending.damage && pending.damage[s.id]) || 0;
   const left = s => (s.def || 0) - (s.damage || 0) - pd(s);
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  if(alliedTargetMode === 'big'){
+    const val = s => (s.atkOrig || s.atk || 0) + (s.def || 0);
+    return cands.slice().sort((a, b) => (val(b) - val(a)) || (left(a) - left(b)))[0];
+  }
+  if(alliedTargetMode === 'spread'){
+    const fired = (pending && pending.firedAtBy && pending.firedAtBy.allies) || new Set();
+    const fresh = cands.filter(s => !fired.has(s.id));
+    if(fresh.length) return pick(fresh);
+    const minDmg = Math.min(...cands.map(s => (s.damage || 0) + pd(s)));
+    return pick(cands.filter(s => (s.damage || 0) + pd(s) === minDmg));
+  }
   const isBT = s => s.name === 'Bismarck' || s.name === 'Tirpitz';
   let pool = cands.filter(s => !isBT(s));
   if(!pool.length) pool = cands;
@@ -3375,7 +3411,9 @@ function battleGeq(ours, theirs){
   return e.ours >= e.theirs && e.ours > 0;
 }
 
+const alliedPostureLog = []; // { turn, posture }（観戦ページ・レポート用）
 function planAlliedDeployment(aiLog){
+  let posture = 'normal';
   const plan = {}; // shipId → 移動先
   const pw = s => (s.atk || 0) + (s.air || 0); // 攻撃力（空母は航空攻撃力を加算）
   const sumAtk = arr => arr.reduce((t, s) => t + pw(s), 0);
@@ -3398,6 +3436,22 @@ function planAlliedDeployment(aiLog){
     (s.location === 'Germany' && s.spd >= 7 && deHomeToAtl) ||
     (s.country === 'IT' && s.type === 'CA' && seaControl['Mediterranean'] !== 'allies')
   );
+  // 海域ごとの大西洋の脅威: このターンにその海域まで来られるドイツ艦だけ
+  //   港から隣（1エリア）か、途中の海域が連合の支配でないときの2エリア移動。洋上補給の成功艦はどこでも
+  //   ドイツ本国の艦は速力7のみ（今までどおり）。イタリアは重巡だけが地中海を通って南大西洋へ
+  const reachesSea = (s, sea) => {
+    if(s.refuelTurn === currentTurn - 1 && SEAS[s.location]) return true;
+    if(SEAS[s.location]) return s.location === sea || (SEA_ADJ[s.location] || []).includes(sea);
+    if(s.location === 'Germany' && s.spd < 7) return false;
+    if(s.country === 'IT' && (s.type !== 'CA' || sea !== 'SouthAtlantic')) return false;
+    const adj = PORT_SEAS[s.location] || [];
+    if(adj.includes(sea)) return true;
+    return adj.some(mid => seaControl[mid] !== 'allies' && (SEA_ADJ[mid] || []).includes(sea));
+  };
+  const atlThreatSea = {
+    NorthAtlantic: atlThreat.filter(s => reachesSea(s, 'NorthAtlantic')),
+    SouthAtlantic: atlThreat.filter(s => reachesSea(s, 'SouthAtlantic'))
+  };
   const threat = {
     Barents: axisReady.filter(s => s.location === 'Germany' || (s.country === 'DE' && s.spd >= 7)),
     Mediterranean: axisReady.filter(s => s.location === 'Italy' || s.location === 'Mediterranean')
@@ -3512,6 +3566,10 @@ function planAlliedDeployment(aiLog){
     }
   } else {
     // ===== ターン2以降: ドイツの戦力に合わせて必要な分だけ置き、残りを広く薄く =====
+    // 連合の構え（ターンごとのくじ）: 北海重視 40% / 今まで通り 40% / 大西洋重視 20%
+    const pr = Math.random();
+    posture = pr < 0.4 ? 'ns' : pr < 0.8 ? 'normal' : 'atl';
+    alliedPostureLog.push({ turn: currentTurn, posture });
     // 1) 地中海の増援: 連続支配3かつ南大西洋を連合が支配しているときだけ、勝てる量まで（強い艦から）
     if(streak3 && seaControl['SouthAtlantic'] === 'allies'){
       const medWins = () => battleGeq([...maltaShips, ...placed.Mediterranean], medThreat)
@@ -3565,14 +3623,30 @@ function planAlliedDeployment(aiLog){
       if(!cands.length) break;
       assign(cands[0], 'Barents');
     }
-    // 8) 余った艦: 北大西洋 → 南大西洋。勝てる（戦力の合計が同じ以上・艦数で上回る）ときだけ置く。残りは北海
-    leftoverMode = '大西洋(勝てるとき)';
-    const wins = arr => battleGeq(arr, atlThreat) && arr.length > atlThreat.length;
+    // 8) 余った艦の置き方: ターンごとにくじで決めた構えに従う
+    //   北海重視  : 北海を戦力と艦の数の両方でドイツ本国を上回るまで厚くしてから、大西洋
+    //   今まで通り: 大西洋（その海域まで来られるドイツ艦がいて、勝てるとき）、残りは北海
+    //   大西洋重視: 大西洋に、来られるドイツ艦の1.3倍の戦力まで厚めに置く、残りは北海
+    leftoverMode = { ns:'北海重視', normal:'今まで通り', atl:'大西洋重視' }[posture];
+    if(posture === 'ns'){
+      while(!(battleGeq(placed.NorthSea, deHome) && placed.NorthSea.length > deHome.length)){
+        const cands = freeShips().filter(nsOk).sort((a, b) => (isFast(a) ? 1 : 0) - (isFast(b) ? 1 : 0) || pw(b) - pw(a));
+        if(!cands.length) break;
+        assign(cands[0], 'NorthSea');
+      }
+    }
+    const margin = posture === 'atl' ? 1.3 : 1;
+    const wins = (arr, th) => {
+      const e = battleEval(arr, th);
+      return e.ours >= e.theirs * margin && e.ours > 0 && arr.length > th.length;
+    };
     for(const sea of ['NorthAtlantic', 'SouthAtlantic']){
+      const th = atlThreatSea[sea];
+      if(!th.length) continue; // 来られるドイツ艦がいない海域には、最低1隻（6）より多くは置かない
       const cands = freeShips().filter(s => hop(s, sea) === 1).sort((a, b) => pw(b) - pw(a));
-      if(!wins([...placed[sea], ...cands])) continue;
+      if(!wins([...placed[sea], ...cands], th)) continue;
       for(const s of cands){
-        if(wins(placed[sea])) break;
+        if(wins(placed[sea], th)) break;
         assign(s, sea);
       }
     }
@@ -3598,7 +3672,7 @@ function planAlliedDeployment(aiLog){
 
   const dist = Object.keys(placed).map(k => `${SEA_LABEL[k]}${placed[k].length}`).join(' ');
   aiLog.push(`<b>配分: ${dist} / 余り=${leftoverMode} / マルタ出撃=${sortie ? 'する' : 'しない'}(連合${medAtk.toFixed(1)} vs 伊${itAtk.toFixed(1)})</b>`);
-  aiLog.push(`ドイツ側: 本国${deHome.length}隻(攻${deAtk}) 大西洋${atlThreat.length}隻(攻${sumAtk(atlThreat)}) 地中海${medThreat.length}隻(攻${itAtk})`);
+  aiLog.push(`ドイツ側: 本国${deHome.length}隻(攻${deAtk}) 北大西洋${atlThreatSea.NorthAtlantic.length}隻 南大西洋${atlThreatSea.SouthAtlantic.length}隻 地中海${medThreat.length}隻(攻${itAtk})`);
   // マルタの余力: イタリアに勝てる量（攻撃力が同じ以上・艦数で上回る）を強い艦から地中海に残し、
   //   超えた無傷艦は南大西洋へ（地中海経由の2エリア移動）
   let maltaGo = sortie ? maltaShips : [];
@@ -3646,36 +3720,8 @@ async function aiAlliedMove(bbTargetOverride){
   SHIPS.forEach(s => {
     if(s.type === 'CONVOY' && SEAS[s.location] && !s.sunk && !s.removed) _convoyOccupiedEarly.add(s.location);
   });
-  // 1a-1) 損害コンボイ NA → England 上陸 (POC +1 連合)
-  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && s.damage > 0)){
-    ship.location = 'England';
-    ship.removed = true;
-    ship.landed = true; // 上陸した港に置いたまま（以後動かない）
-    ship.movedThisTurn = true;
-    _convoyOccupiedEarly.delete('NorthAtlantic');
-    poc = Math.max(-10, Math.min(10, poc + 1));
-    aiLog.push(`<b>${ship.name}: 損害により England 上陸 +1POC(連合)</b>`);
-    announceBig(`${ship.name} 英国上陸 ＋1 POC（連合）`);
-  }
-  // 1a-2) 無傷船団 NA→バレンツ海（海上2ターン目以降、ロシア向け）
-  //       累計POCで連合がリード、または護衛が貧弱ならバレンツへ行かず England 上陸 +1
-  //       護衛が貧弱: 英国の無傷艦を全部合わせてもドイツ本国の無傷艦に battleGeq で勝てない
-  const cumPocNow = alliedCumPoc();
-  const escortPool = SHIPS.filter(s => s.side === 'allies' && s.location === 'England' && !s.sunk && !s.removed && !(s.damage > 0) && s.type !== 'CONVOY' && s.type !== 'UBOAT');
-  const deHomeNow = SHIPS.filter(s => s.side === 'axis' && s.country === 'DE' && s.location === 'Germany' && !s.sunk && !s.removed && !(s.damage > 0) && s.type !== 'UBOAT');
-  const escortWeak = !battleGeq(escortPool, deHomeNow);
-  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && (s.turnsAtSea||0) >= 1 && s.damage === 0)){
-    if(cumPocNow > 0 || escortWeak){
-      ship.location = 'England';
-      ship.removed = true;
-      ship.landed = true; // 上陸した港に置いたまま（以後動かない）
-      ship.movedThisTurn = true;
-      _convoyOccupiedEarly.delete('NorthAtlantic');
-      poc = Math.max(-10, Math.min(10, poc + 1));
-      aiLog.push(`<b>${ship.name}: ${cumPocNow > 0 ? `連合リード(累計${cumPocNow})` : '護衛が貧弱'} → England 上陸 +1POC(連合)</b>`);
-      announceBig(`${ship.name} 英国上陸 ＋1 POC（連合）`);
-      continue;
-    }
+  // 1a) 船団 NA→バレンツ海（海上2ターン目以降）。損害を受けていてもロシアを目指す
+  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && (s.turnsAtSea||0) >= 1)){
     if(_convoyOccupiedEarly.has('Barents')) continue;
     ship.location = 'Barents';
     ship.movedThisTurn = true;

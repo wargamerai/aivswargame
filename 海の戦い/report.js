@@ -44,7 +44,7 @@ function repTurnData(turn, ctl, gain, total){
   const before = REP.before || start;
   const cb = REP.combat || {};
   const shipsAt = loc => {
-    const here = Object.values(before).filter(b => b.loc === loc && !b.sunk && !b.removed);
+    const here = Object.values(before).filter(b => b.loc === loc && !b.sunk && (!b.removed || b.landed));
     const c = cb[loc];
     const res = b => {
       if(!c) return { res: '', dmg: b.damage ? `${b.damage}/${b.def}` : '' };
@@ -55,7 +55,7 @@ function repTurnData(turn, ctl, gain, total){
     };
     const side = sd => ({ ships: here.filter(b => b.side === sd).map(b => {
       const from = start[b.id] ? start[b.id].loc : b.loc;
-      return { name: b.name, type: b.type, from: REP_LOC[from] || from, failed: b.failed, ...res(b) };
+      return { name: b.name, type: b.type, from: REP_LOC[from] || from, failed: b.failed, landed: b.landed, ...res(b) };
     }) });
     return { allies: side('allies'), axis: side('axis') };
   };
@@ -76,7 +76,11 @@ function repTurnData(turn, ctl, gain, total){
   const now = repSnap();
   const convoys = Object.values(now).filter(n => n.type === 'CONVOY' && n.landed && !(start[n.id] && start[n.id].landed))
     .map(n => ({ name: n.name, port: REP_LOC[n.loc] || n.loc, pts: n.loc === 'Russia' ? 3 : 1 }));
-  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys };
+  // 水上戦闘ごとの連合AIの目標の選び方（倍率は戦闘の始まりの連合/枢軸の戦力）
+  const targeting = (typeof alliedTargetModeLog !== 'undefined' ? alliedTargetModeLog : []).filter(x => x.turn === turn)
+    .map(x => ({ sea: REP_LOC[x.sea] || x.sea, mode: x.mode, ratio: isFinite(x.ratio) ? x.ratio : null }));
+  const pst = (typeof alliedPostureLog !== 'undefined' ? alliedPostureLog : []).find(x => x.turn === turn);
+  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys, targeting, posture: pst ? pst.posture : null };
 }
 
 // ---------- 呼び出しの前後で記録を取る ----------
@@ -168,7 +172,7 @@ document.getElementById('sub').textContent = 'Player (Axis) vs AI (Allies). Opti
 function side(sd, x, locName, inPort){
   if(!x.ships.length) return '';
   let h = '<div class="side"><b class="' + sd + '">' + CTL[sd] + '</b>';
-  const note = s => inPort ? (s.failed ? ' <span class="from">move failed</span>' : '')
+  const note = s => inPort ? (s.landed ? ' <span class="from">landed</span>' : s.failed ? ' <span class="from">move failed</span>' : '')
     : ' <span class="from">' + (s.from === locName ? 'stayed' : '← ' + esc(s.from)) + '</span>';
   h += '<ul>' + x.ships.map(s => '<li><span class="' + (s.res ? 'r-' + s.res : '') + '">' + esc(s.name) + '</span>' + (s.dmg ? ' (damage ' + s.dmg + ')' : '') + note(s) + '</li>').join('') + '</ul>';
   return h + '</div>';
@@ -193,6 +197,8 @@ function render(){
   const lbaOf = loc => (t.lba || []).filter(x => x.loc === loc).map(x => '<span class="lba ' + x.side + '">✈' + CTL[x.side] + ' LBA</span>').join('');
   let h = '<h2>Turn ' + t.turn + ': Control</h2><div class="card">' + Object.keys(D.seaName).map(k => D.seaName[k] + ': <b class="' + (t.ctl[k] || '') + '">' + (CTL[t.ctl[k]] || 'none') + '</b>').join(' &nbsp; ')
     + '<div>LBA: ' + (['allies', 'axis'].map(sd => { const x = (t.lba || []).filter(l => l.side === sd); return '<b class="' + sd + '">' + CTL[sd] + '</b> ' + (x.length ? x.map(l => esc(l.name)).join(', ') : 'not used'); }).join(' &nbsp; ')) + '</div>'
+    + (t.posture ? '<div>Allied posture: ' + ({ ns:'North Sea heavy', normal:'standard', atl:'Atlantic heavy' })[t.posture] + '</div>' : '')
+    + ((t.targeting || []).length ? '<div>Allied targeting: ' + t.targeting.map(x => esc(x.sea) + ' — ' + ({ big:'concentrate on big ships', normal:'standard (fast ships first)', spread:'spread fire' })[x.mode] + ' (' + (x.ratio === null ? '-' : x.ratio + 'x') + ')').join(', ') + '</div>' : '')
     + ((t.convoys || []).length ? '<div>Convoys: ' + t.convoys.map(c => esc(c.name) + ' landed in ' + esc(c.port) + ' (<b class="allies">Allies +' + c.pts + '</b>)').join(', ') + '</div>' : '')
     + '<div class="poc">POC this turn ' + sgn(t.gain) + ' &nbsp; Total ' + sgn(t.total) + '</div></div>';
   h += '<h2>Movement (positions before combat)<span class="legend"><span class="r-sunk">Sunk</span><span class="r-dmg">Damaged</span><span class="r-ret">Returned</span></span></h2><div class="grid">';
