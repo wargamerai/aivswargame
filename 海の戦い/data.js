@@ -102,18 +102,18 @@ const PORT_SEAS = {
   Russia:    ['Barents'],
   Leningrad: ['Baltic'],
   Italy:     ['Mediterranean'],
-  France:    ['NorthAtlantic','Mediterranean','SouthAtlantic'],
+  France:    ['NorthSea','SouthAtlantic'],
   Germany:   ['NorthSea','Baltic','Barents'],
   Neutral:   ['SouthAtlantic']
 };
 
 // 海域→隣接海域
 const SEA_ADJ = {
-  NorthAtlantic: ['Barents','NorthSea','SouthAtlantic','Mediterranean'],
+  NorthAtlantic: ['Barents','NorthSea','SouthAtlantic'],
   Barents:       ['NorthAtlantic','NorthSea'],
   NorthSea:      ['NorthAtlantic','Barents','Baltic','SouthAtlantic'],
   Baltic:        ['NorthSea'],
-  Mediterranean: ['SouthAtlantic','NorthAtlantic'],
+  Mediterranean: ['SouthAtlantic'],
   SouthAtlantic: ['NorthAtlantic','NorthSea','Mediterranean']
 };
 
@@ -157,14 +157,15 @@ const SHIPS = [
   S('uk_dukeofyork', 'allies','UK','DukeOfYork',     4,5,6,'BB','イギリス/456_dukeofyork.gif',{ enterTurn:3 }),
   S('uk_anson',      'allies','UK','Anson',          4,5,6,'BB','イギリス/456_anson.gif',{ enterTurn:4 }),
   S('uk_howe',       'allies','UK','Howe',           4,5,6,'BB','イギリス/456_howe.gif',{ enterTurn:5 }),
-  S('uk_arkroyal',   'allies','UK','ArkRoyal',       0,2,7,'CV','イギリス/027_arkroyal.gif'),
-  S('uk_formidable', 'allies','UK','Formidable',     0,2,7,'CV','イギリス/027_formidable.gif'),
-  S('uk_victorious', 'allies','UK','Victorious',     0,2,7,'CV','イギリス/027_victorious.gif',{ enterTurn:3 }),
-  S('uk_illustrious27','allies','UK','Illustrious',  0,2,7,'CV','イギリス/027_illustrious.gif'),
-  S('uk_illustrious16','allies','UK','Illustrious',  0,1,6,'CV','イギリス/016_illustrious.gif',{ enterTurn:5 }),
-  S('uk_courageous', 'allies','UK','Courageous',     0,1,6,'CV','イギリス/016_courageous.gif'),
-  S('uk_glorious',   'allies','UK','Glorious',       0,1,6,'CV','イギリス/016_glorious.gif'),
-  S('uk_eagle',      'allies','UK','Eagle',          1,2,4,'CV','イギリス/124_eagle.gif'),
+  // 空母の air = 航空攻撃力（LBAと同じタイミングの航空攻撃の攻撃数）
+  S('uk_arkroyal',   'allies','UK','ArkRoyal',       0,2,7,'CV','イギリス/027_arkroyal.gif',{ air:3 }),
+  S('uk_formidable', 'allies','UK','Formidable',     0,2,7,'CV','イギリス/027_formidable.gif',{ air:2 }),
+  S('uk_victorious', 'allies','UK','Victorious',     0,2,7,'CV','イギリス/027_victorious.gif',{ enterTurn:3, air:2 }),
+  S('uk_illustrious27','allies','UK','Illustrious',  0,2,7,'CV','イギリス/027_illustrious.gif',{ air:2 }),
+  S('uk_illustrious16','allies','UK','Illustrious',  0,1,6,'CV','イギリス/016_illustrious.gif',{ enterTurn:5, air:2 }),
+  S('uk_courageous', 'allies','UK','Courageous',     0,1,6,'CV','イギリス/016_courageous.gif',{ air:2 }),
+  S('uk_glorious',   'allies','UK','Glorious',       0,1,6,'CV','イギリス/016_glorious.gif',{ air:2 }),
+  S('uk_eagle',      'allies','UK','Eagle',          1,2,4,'CV','イギリス/124_eagle.gif',{ air:1 }),
   S('uk_norfolk',    'allies','UK','Norfolk',        1,1,7,'CA','イギリス/117_norfolk.gif'),
   S('uk_suffolk',    'allies','UK','Suffolk',        1,1,7,'CA','イギリス/117_suffolk.gif'),
   S('uk_kent',       'allies','UK','Kent',           1,1,7,'CA','イギリス/117_kent.gif'),
@@ -197,7 +198,7 @@ const SHIPS = [
   S('de_admscheer',  'axis','DE','AdmiralScheer',    2,2,5,'PB','ドイツ/225_admscheer.gif'),
   S('de_grafspee',   'axis','DE','GrafSpee',         2,2,5,'PB','ドイツ/225_grafspee.gif'),
   S('de_lutzow',     'axis','DE','Lutzow',           2,2,5,'PB','ドイツ/225_lutzow.gif'),
-  S('de_grafzep',    'axis','DE','GrafZeppelin',     1,2,8,'CV','ドイツ/128_grafzeppelin.gif',{ enterTurn:4 }),
+  S('de_grafzep',    'axis','DE','GrafZeppelin',     1,2,8,'CV','ドイツ/128_grafzeppelin.gif',{ enterTurn:4, air:2 }),
   S('de_admhipper',  'axis','DE','AdmiralHipper',    1,2,7,'CA','ドイツ/127_admhipper.gif'),
   S('de_blucher',    'axis','DE','Blucher',          1,2,7,'CA','ドイツ/127_blucher.gif'),
   S('de_prinzeugen', 'axis','DE','PrinzEugen',       1,2,7,'CA','ドイツ/127_prinzeugen.gif',{ enterTurn:2 }),

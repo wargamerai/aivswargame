@@ -139,7 +139,7 @@ function uboatFireAt(u, target, events, pending){
 function resolveUboatASW(seaKey, events, pending){
   console.log('[DBG] resolveUboatASW 呼び出し', seaKey, 'pending=', !!pending);
   console.trace();
-  const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk);
+  const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk && !s.returnPending); // 帰還待ちは不参加
   const allies = ships.filter(s => s.side === 'allies');
   let uboats = ships.filter(s => s.type === 'UBOAT' && s.side === 'axis');
   if(!uboats.length || !allies.length) return;
