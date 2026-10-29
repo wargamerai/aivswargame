@@ -178,8 +178,11 @@ body.hide-units .control-marker { display:none; }
 #phaseLabel {
   font-size:1.1em; color:#ffcc44; padding:6px 10px; margin:6px 0;
   background:rgba(255,204,68,0.1); border-radius:4px; min-height:1.5em;
+  /* 長い説明やボタン（追撃の割り当てなど）でも縮めない。長すぎるときは欄の中で縦に動かす */
+  flex-shrink:0; max-height:45vh; overflow-y:auto;
 }
-.combat-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; flex:1; overflow-y:auto; }
+#combatModal .combat-box h3, #aiDecisionLabel { flex-shrink:0; }
+.combat-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; flex:1; overflow-y:auto; min-height:0; }
 .combat-col h4 {
   color:#fff; font-size:0.9em; padding:4px 8px; margin-bottom:6px;
   border-radius:3px;
@@ -1324,7 +1327,11 @@ function waitForTargetClickIn(side, focusSea, excludeIds, mode){
     );
     if(!candidates.length){ resolve(null); return; }
     if(aiMode && side === humanSide){
-      if(side === 'axis' && (mode === 'air' || mode === 'cv')){ resolve(alliedPickTarget(candidates, null)); return; }
+      // 連合の航空攻撃（空母・LBA）: 大物（攻撃力+防御力が最大）を狙う。5の目で帰還させると影響が大きい
+      if(side === 'axis' && (mode === 'air' || mode === 'cv')){
+        const val = c => (c.atkOrig || c.atk || 0) + (c.def || 0);
+        resolve(candidates.slice().sort((a, b) => val(b) - val(a) || (a.damage || 0) - (b.damage || 0))[0]); return;
+      }
       if(mode === 'air'){
         // 航空攻撃: 第1巡 無傷で未攻撃の艦を def 低い順
         const undamagedUnhit = candidates.filter(c => c.damage === 0 && !c._aiAirHit1);
@@ -1714,7 +1721,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
   await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 ━`, 1500);
   clearRetreatGroups(); // 前の戦闘の撤退グループの印を消す
   SHIPS.forEach(s => { delete s._cvDeclared; }); // 空母の攻撃の宣言は戦闘ごと
-  chooseAlliedTargetMode(seaKey); // 連合AIの目標の選び方（この戦闘のあいだ同じ。画面には出さない）
+  chooseAlliedFireStyle(seaKey); // 連合AIの割り振り方（この戦闘のあいだ同じ。画面には出さない）
   let cvAsked = false;
   let firstIter = true;
   while(true){
@@ -1905,13 +1912,19 @@ function addDeclared(decl, ship, target, pendDecl){
 }
 // 水上戦闘の1陣営分の宣言。撃たれると宣言された空母（攻撃力1以上）は、判定の前に撃ち返す目標も宣言する
 async function declareSurfaceTargets(shooters, enemySide, seaKey, decl, pendDecl){
+  const canFire = ship => !(ship.type === 'CV' && !ship._cvDeclared) && ship.atk !== 0; // 空母は、攻撃を宣言したときだけ撃つ
+  // 連合AI: 敵の全艦に割り振る計画を先に作る
+  const firing = shooters.filter(canFire);
+  const aiPlan = (firing.length && firing[0].side === 'allies' && aiSide === 'allies')
+    ? planAlliedFire(firing, SHIPS.filter(s => s.location === seaKey && !s.sunk && !s.returnPending && s.side === enemySide && s.type !== 'UBOAT' && !s.disabledThisTurn))
+    : null;
   for(const ship of shooters){
-    if(ship.type === 'CV' && !ship._cvDeclared) continue; // 空母は、攻撃を宣言したときだけ撃つ
-    if(ship.atk === 0) continue;
+    if(!canFire(ship)) continue;
     highlightShip(ship.id, 'firing');
     const dispName = ship.sunk ? `${ship.name}[撃沈中]` : (ship.disabled ? `${ship.name}[即時帰還]` : ship.name);
     setPhaseLabel(`${dispName}(${ship.atk}発): 目標をクリック`);
-    const target = await waitForSurfaceTarget(enemySide, seaKey, ship, pendDecl[ship.side]);
+    const target = aiPlan ? (aiPlan.get(ship.id) || null) : await waitForSurfaceTarget(enemySide, seaKey, ship, pendDecl[ship.side]);
+    if(aiPlan) await new Promise(r => setTimeout(r, 150));
     unhighlightShip(ship.id, 'firing');
     if(!target) break;
     addDeclared(decl, ship, target, pendDecl[ship.side]);
@@ -1988,11 +2001,14 @@ async function runPursuitRound(pursuit, retreat){
     const decl = [];
     const pendPur = newDeclPending(), pendRet = newDeclPending();
     setPhaseLabel('追跡側 目標の宣言');
+    const aiPlanOf = (shooters, targets) => (shooters.length && shooters[0].side === 'allies' && aiSide === 'allies')
+      ? planAlliedFire(shooters.filter(x => x.atk !== 0), targets) : null;
+    const planPur = aiPlanOf(eligible, aliveRet), planRet = aiPlanOf(aliveRet, eligible);
     for(const ship of eligible){
       if(ship.atk === 0) continue;
       highlightShip(ship.id, 'firing');
       setPhaseLabel(`${ship.name}(${ship.atk}発): 撤退艦から目標`);
-      const target = await waitForTargetClickFromList(aliveRet, ship, pendPur);
+      const target = planPur ? (planPur.get(ship.id) || null) : await waitForTargetClickFromList(aliveRet, ship, pendPur);
       unhighlightShip(ship.id, 'firing');
       if(!target) break;
       addDeclared(decl, ship, target, pendPur);
@@ -2002,7 +2018,7 @@ async function runPursuitRound(pursuit, retreat){
       if(ship.atk === 0) continue;
       highlightShip(ship.id, 'firing');
       setPhaseLabel(`${ship.name}(${ship.atk}発): 追跡艦から目標`);
-      const target = await waitForTargetClickFromList(eligible, ship, pendRet);
+      const target = planRet ? (planRet.get(ship.id) || null) : await waitForTargetClickFromList(eligible, ship, pendRet);
       unhighlightShip(ship.id, 'firing');
       if(!target) break;
       addDeclared(decl, ship, target, pendRet);
@@ -2088,6 +2104,31 @@ function chooseAlliedTargetMode(seaKey){
   let r = Math.random() * (w.big + w.normal + w.spread);
   alliedTargetMode = (r -= w.big) < 0 ? 'big' : (r -= w.normal) < 0 ? 'normal' : 'spread';
   alliedTargetModeLog.push({ turn: currentTurn, sea: seaKey, mode: alliedTargetMode, ratio: Math.round(ratio * 10) / 10 });
+}
+// 連合AIの水上戦闘の割り振り: 敵の全艦に少なくとも1隻ずつ割り振る（5の目で帰還させる機会を増やす）
+//   割り振り方は戦闘ごとのくじ
+//     pair   : strong=強い敵に強い艦をあてる / weak=弱い敵から順に強い艦をあてる
+//     surplus: 余った艦を strong=強い敵へ / weak=弱い敵へ
+//   空母（攻撃を宣言していない）と船団は保護があるので、通常の艦に全部割り振ったあと
+let alliedFireStyle = { pair: 'strong', surplus: 'strong' };
+function chooseAlliedFireStyle(seaKey){
+  alliedFireStyle = { pair: Math.random() < 0.5 ? 'strong' : 'weak', surplus: Math.random() < 0.5 ? 'strong' : 'weak' };
+  alliedTargetModeLog.push({ turn: currentTurn, sea: seaKey, mode: `${alliedFireStyle.pair}/${alliedFireStyle.surplus}`, ratio: null });
+}
+// 射撃する艦ごとの目標を先に決める（射撃艦ID → 目標の艦）
+function planAlliedFire(shooters, enemies){
+  const val = s => (s.atkOrig || s.atk || 0) + (s.def || 0);
+  const normals = enemies.filter(s => (s.type !== 'CV' || s._cvDeclared) && s.type !== 'CONVOY').sort((a, b) => val(b) - val(a));
+  const later = [...enemies.filter(s => s.type === 'CONVOY'), ...enemies.filter(s => s.type === 'CV' && !s._cvDeclared)];
+  const sh = shooters.slice().sort((a, b) => (b.atk || 0) - (a.atk || 0));
+  const cover = [...(alliedFireStyle.pair === 'strong' ? normals : normals.slice().reverse()), ...later];
+  const surplusOrder = [...(alliedFireStyle.surplus === 'strong' ? normals : normals.slice().reverse()), ...later];
+  const plan = new Map();
+  sh.forEach((ship, i) => {
+    if(i < cover.length) plan.set(ship.id, cover[i]);
+    else if(surplusOrder.length) plan.set(ship.id, surplusOrder[(i - cover.length) % surplusOrder.length]);
+  });
+  return plan;
 }
 function alliedPickTarget(cands, pending){
   if(!cands.length) return null;
@@ -2934,7 +2975,9 @@ function selectPursuitAssignments(retreatGroups, seaKey, pursuerSide, sideName){
 
     const phaseEl = document.getElementById('phaseLabel');
     let html = `<div style="display:flex;flex-direction:column;gap:4px;font-size:0.9em;">`;
-    html += `<div style="font-weight:bold;color:#fc4;">${sideName}追撃選択 — 各グループ別に追撃艦を割当</div>`;
+    html += `<div style="font-weight:bold;color:#fc4;">${sideName}追撃選択 — 各グループ別に追撃艦を割当`
+      + ` <button id="_purOk" style="background:#2266cc;color:#fff;padding:4px 14px;border:none;border-radius:3px;cursor:pointer;margin-left:10px;">確定</button>`
+      + ` <button id="_purCancel" style="background:#666;color:#fff;padding:4px 14px;border:none;border-radius:3px;cursor:pointer;margin-left:6px;">追撃しない</button></div>`;
     groupsInfo.forEach(g => {
       const shipsList = g.group.map(s => `${s.name}(spd${s.spd})`).join(', ');
       const elNames = g.eligible.map(s => s.name).join(', ') || '該当なし';
@@ -2945,7 +2988,6 @@ function selectPursuitAssignments(retreatGroups, seaKey, pursuerSide, sideName){
       html += `</div>`;
     });
     html += `<div style="font-size:0.85em;color:#aac;">枢軸艦の右にあるグループボタンをクリックで割当 (- は不参加)</div>`;
-    html += `<div><button id="_purOk" style="background:#2266cc;color:#fff;padding:4px 14px;border:none;border-radius:3px;cursor:pointer;">確定</button> <button id="_purCancel" style="background:#666;color:#fff;padding:4px 14px;border:none;border-radius:3px;cursor:pointer;margin-left:6px;">追撃しない</button></div>`;
     html += `</div>`;
     phaseEl.innerHTML = html;
 
@@ -3591,6 +3633,8 @@ function planAlliedDeployment(aiLog){
       seas.sort((a, b) => aswDice(a) - aswDice(b) || aswSeas.indexOf(a) - aswSeas.indexOf(b));
       assign(s, seas[0]);
     });
+    // 2b) 参戦した米国艦は北大西洋へ（米国艦は北大西洋にしか行けない）。北大西洋は基本、米国に任せる
+    freeShips().filter(s => s.country === 'US' && hop(s, 'NorthAtlantic') === 1).forEach(s => assign(s, 'NorthAtlantic'));
     // 3) 北海: 遅い艦を攻撃力の高い順に、ドイツ本国の戦力以上になるまで
     while(!battleGeq(placed.NorthSea, deHome)){
       const cands = freeShips().filter(s => !isFast(s) && nsOk(s)).sort((a, b) => pw(b) - pw(a));
@@ -3611,25 +3655,34 @@ function planAlliedDeployment(aiLog){
       unassign(cands[0]);
       assign(cands[0], 'NorthSea');
     }
-    // 6) 北大西洋・南大西洋: まだ1隻もいなければ、一番弱い艦を1隻
-    for(const sea of ['NorthAtlantic', 'SouthAtlantic']){
-      if(placed[sea].length) continue;
-      const cand = freeShips().filter(s => hop(s, sea) === 1).sort((a, b) => strength(a) - strength(b))[0];
-      if(cand) assign(cand, sea);
-    }
-    // 7) バレンツ海（2段目）: 余力があれば艦の数でもドイツ本国を上回るまで（弱い艦から）
+    // 6) バレンツ海（2段目）: 艦の数でもドイツ本国を上回るまで（弱い艦から）
     while(placed.Barents.length <= deHome.length){
       const cands = freeShips().filter(s => isFast(s) && barOk(s)).sort((a, b) => strength(a) - strength(b));
       if(!cands.length) break;
       assign(cands[0], 'Barents');
     }
+    // 7) 北海（2段目）: 戦力と艦の数の両方でドイツ本国を上回るまで（遅い艦から）
+    //    北海とバレンツ海の支配を取れれば北大西洋は取り返せるので、大西洋より先に固める
+    while(!(battleGeq(placed.NorthSea, deHome) && placed.NorthSea.length > deHome.length)){
+      const cands = freeShips().filter(nsOk).sort((a, b) => (isFast(a) ? 1 : 0) - (isFast(b) ? 1 : 0) || pw(b) - pw(a));
+      if(!cands.length) break;
+      assign(cands[0], 'NorthSea');
+    }
+    // 7b) 北大西洋・南大西洋: まだ1隻もいなければ、一番弱い艦を1隻（北大西洋は米国艦がいればそれでよい）
+    for(const sea of ['NorthAtlantic', 'SouthAtlantic']){
+      if(placed[sea].length) continue;
+      const cand = freeShips().filter(s => hop(s, sea) === 1).sort((a, b) => strength(a) - strength(b))[0];
+      if(cand) assign(cand, sea);
+    }
     // 8) 余った艦の置き方: ターンごとにくじで決めた構えに従う
-    //   北海重視  : 北海を戦力と艦の数の両方でドイツ本国を上回るまで厚くしてから、大西洋
+    //   北海重視  : 北海をドイツ本国の1.3倍の戦力まで厚くしてから、大西洋
     //   今まで通り: 大西洋（その海域まで来られるドイツ艦がいて、勝てるとき）、残りは北海
     //   大西洋重視: 大西洋に、来られるドイツ艦の1.3倍の戦力まで厚めに置く、残りは北海
     leftoverMode = { ns:'北海重視', normal:'今まで通り', atl:'大西洋重視' }[posture];
     if(posture === 'ns'){
-      while(!(battleGeq(placed.NorthSea, deHome) && placed.NorthSea.length > deHome.length)){
+      // 北海重視: 北海をドイツ本国の1.3倍の戦力まで、さらに厚くしてから大西洋
+      const nsStrong = () => { const e = battleEval(placed.NorthSea, deHome); return e.ours >= e.theirs * 1.3 && e.ours > 0; };
+      while(deHome.length && !nsStrong()){
         const cands = freeShips().filter(nsOk).sort((a, b) => (isFast(a) ? 1 : 0) - (isFast(b) ? 1 : 0) || pw(b) - pw(a));
         if(!cands.length) break;
         assign(cands[0], 'NorthSea');
