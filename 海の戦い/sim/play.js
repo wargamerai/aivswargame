@@ -692,6 +692,7 @@ function buildWatchHtml(finalPoc){
 <!--META ${JSON.stringify(meta)}-->
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>War at Sea Battle Watch</title>
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <style>
 :root{ --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --mute:#667085; --line:#d9dee7; --al:#1f5fbf; --ax:#b42318; --none:#98a2b3;
   --ctl-none:#fff; --ctl-al:#d6e4ff; --ctl-ax:#ffd9d4; --r-sunk:#d10000; --r-dmg:#c25e00; --r-ret:#7a2fc0; }
@@ -823,6 +824,7 @@ function buildIndexHtml(){
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>War at Sea Reports</title>
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <style>
 :root{ --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --mute:#667085; --line:#d9dee7; --link:#1f5fbf; }
 @media (prefers-color-scheme: dark){ :root{ --bg:#14171d; --card:#1d222b; --fg:#e6e9ef; --mute:#98a2b3; --line:#2f3642; --link:#6ea8ff; } }
