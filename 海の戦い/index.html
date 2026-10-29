@@ -6,6 +6,7 @@
 <!-- アクセス解析（GoatCounter） -->
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script src="lang.js"></script>
+<script src="report.js"></script>
 <script>
 // ブラウザの「戻る」でゲームの画面を離れないようにする。離れる・再読み込みするときは確認を出す
 //   ブラウザは操作の前の履歴の追加を無視することがあるので、最初の操作のときに追加する
@@ -1007,12 +1008,20 @@ function toggleShip(id){
   const i = selectedShipIds.indexOf(id);
   if(i >= 0) selectedShipIds.splice(i, 1);
   else selectedShipIds.push(id);
+  refreshDestAfterSelect();
   renderLocShipList(); renderStatus();
 }
 function selectAllShipsHere(){
   if(!selectedLoc) return;
   selectedShipIds = SHIPS.filter(s => s.location === selectedLoc && !s.failedMove).map(s => s.id);
+  refreshDestAfterSelect();
   renderLocShipList(); renderStatus();
+}
+// 選んだ艦で行き先が変わる（Uボートは地中海へも行ける、など）ので、移動先を作り直す
+function refreshDestAfterSelect(){
+  const { seas, seas2, ports } = getValidDests();
+  if(selectedDest && ![...seas, ...seas2, ...ports].includes(selectedDest)) selectedDest = null;
+  renderDestButtons();
 }
 function selectDest(loc){
   selectedDest = loc;
@@ -1337,7 +1346,7 @@ function waitForTargetClickIn(side, focusSea, excludeIds, mode){
     }
     const handlers = {};
     candidates.forEach(s => {
-      const row = document.getElementById(`cs-${s.id}`);
+      const row = ensureCombatRow(s);
       if(!row) return;
       row.classList.add('selectable');
       const onClick = () => {
@@ -1688,6 +1697,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
   console.log('[DBG] resolveSurfaceCombat 呼び出し', seaKey, 'modalAlreadyOpen=', modalAlreadyOpen);
   console.trace();
   await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 ━`, 1500);
+  clearRetreatGroups(); // 前の戦闘の撤退グループの印を消す
   let firstIter = true;
   while(true){
     const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.type !== 'UBOAT' && !s.returnPending);
@@ -1869,6 +1879,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
         await retreatToPort(group);
       }
     }
+    clearRetreatGroups(); // 撤退・追撃が終わったら、グループの印を消す
     placeAllShips();
     // 11.4 両軍存続なら次ラウンド（次ループ冒頭の判定で終了オーバーレイ表示）
   }
@@ -1952,6 +1963,9 @@ async function runPursuitRound(pursuit, retreat){
     }
     await playEvents(applyEvents);
     placeAllShips();
+    // 結果を確認してから片づける（撃沈・帰還艦の行とダイスの表示を消す）
+    setPhaseLabel('戦闘確認ボタンを押してください');
+    await waitForCombatConfirm();
 
     // 12.5 追跡継続確認
     const stillPur = pursuit.filter(s => !s.sunk && !s.returnPending);
@@ -1965,7 +1979,10 @@ async function runPursuitRound(pursuit, retreat){
     }
     // 追跡側が AI なら自動継続、人間側のみ確認
     const pursuerSide = pursuit[0]?.side;
-    const cont = (pursuerSide === aiSide) ? true : confirm('追跡を続けますか？(キャンセル=追撃中止し母港帰還)');
+    const cont = (pursuerSide === aiSide) ? true : await chooseInPhaseLabel('追跡を続けますか？', [
+      { label:'追撃を続ける', value:true, bg:'#a55' },
+      { label:'追撃をやめる（母港へ帰還）', value:false, bg:'#666' }
+    ]);
     if(!cont){
       // 追撃中止 → 追跡側艦は帰還待ち（帰還フェイズで帰還）
       for(const ship of stillPur){
@@ -2009,7 +2026,7 @@ function waitForTargetClickFromList(targetList, attacker, pending){
     if(isAiAttacker){ resolve(candidates[0]); return; }
     const handlers = {};
     candidates.forEach(s => {
-      const row = document.getElementById(`cs-${s.id}`);
+      const row = ensureCombatRow(s);
       if(!row) return;
       row.classList.add('selectable');
       const onClick = () => {
@@ -2117,7 +2134,7 @@ function waitForSurfaceTarget(side, focusSea, attacker, pending){
     }
     const handlers = {};
     candidates.forEach(s => {
-      const row = document.getElementById(`cs-${s.id}`);
+      const row = ensureCombatRow(s);
       if(!row) return;
       row.classList.add('selectable');
       const onClick = () => {
@@ -2149,6 +2166,20 @@ const DICE_GLYPH = ['','⚀','⚁','⚂','⚃','⚄','⚅'];
 const wait = ms => new Promise(r => setTimeout(r, ms));
 function diceClass(r){ return r===6 ? 'hit' : (r===5 ? 'dis' : 'miss'); }
 
+// 目標にできる艦の行が戦闘画面にないとクリックできずに止まるので、ないときは行を足す
+function ensureCombatRow(s){
+  let row = document.getElementById(`cs-${s.id}`);
+  if(row) return row;
+  const list = document.getElementById(s.side === 'allies' ? 'alliesShipList' : 'axisShipList');
+  if(!list) return null;
+  list.insertAdjacentHTML('beforeend', renderShipRow(s));
+  return document.getElementById(`cs-${s.id}`);
+}
+// 撤退のときに付けたグループの印（A/B/C）を、艦と戦闘画面の両方から消す
+function clearRetreatGroups(){
+  SHIPS.forEach(s => { delete s.group; });
+  document.querySelectorAll('#combatModal .cs-group').forEach(el => el.remove());
+}
 function renderShipRow(s){
   const grp = s.group ? `<span class="cs-group" style="color:#fc4;font-weight:bold;margin-left:8px;">${s.group}</span>` : '';
   return `<div class="cs-row" id="cs-${s.id}">
@@ -2884,7 +2915,7 @@ function waitForTargetClick(side, focusSea){
     if(!candidates.length){ resolve(null); return; }
     const handlers = [];
     candidates.forEach(s => {
-      const row = document.getElementById(`cs-${s.id}`);
+      const row = ensureCombatRow(s);
       if(!row) return;
       row.classList.add('selectable');
       const onClick = () => {
@@ -3165,7 +3196,8 @@ function showRepairUI(side){
           tdName.textContent = ship.name;
           tr.appendChild(tdName);
           const tdDmg = document.createElement('td');
-          tdDmg.innerHTML = `<span style="color:#fa8;">${ship.damage}/${ship.def}</span>${amt ? ` → 残${ship.damage - amt}` : ''}`;
+          tdDmg.style.whiteSpace = 'nowrap';
+          tdDmg.innerHTML = `<span style="color:#fa8;">${ship.damage}/${ship.def}</span><span style="display:inline-block;min-width:5em;">${amt ? ` → 残${ship.damage - amt}` : ''}</span>`;
           tr.appendChild(tdDmg);
           const tdAmt = document.createElement('td');
           const minus = document.createElement('button');
@@ -3334,10 +3366,11 @@ function planAlliedDeployment(aiLog){
   // 地中海の準備（マルタ艦・イタリアの脅威）
   const streak3 = medAxisStreak >= 3;
   const medThreat = threat.Mediterranean;
-  // マルタの無傷艦のみ出撃（損害艦はマルタに残る）。連続支配3のときは損害艦も出撃
+  // マルタの無傷艦のみ出撃（損害艦はマルタに残る）。連続支配3のときと最後のターンは損害艦も出撃
+  const lastTurn = currentTurn >= 8; // 最後のターンはマルタに残っても意味がないので全艦出撃
   const maltaShips = SHIPS.filter(s =>
     s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.type !== 'CONVOY' &&
-    (streak3 || !(s.damage > 0))
+    (streak3 || lastTurn || !(s.damage > 0))
   );
   const medOk = s => hop(s, 'Mediterranean') > 0;
   let leftoverMode;
@@ -3452,13 +3485,13 @@ function planAlliedDeployment(aiLog){
     freeShips().filter(nsOk).forEach(s => assign(s, 'NorthSea'));
   }
 
-  // 7) マルタ艦の出撃判断: イタリア以上=出撃 / 7割以上=比率の確率で出撃 / 7割未満=出撃しない / 連続支配3=必ず出撃
+  // 7) マルタ艦の出撃判断: イタリア以上=出撃 / 7割以上=比率の確率で出撃 / 7割未満=出撃しない / 連続支配3・最後のターン=必ず出撃
   const medEval = battleEval([...maltaShips, ...placed.Mediterranean], medThreat);
   const medAtk = medEval.ours;
   const itAtk = medEval.theirs;
   const ratio = itAtk > 0 ? medAtk / itAtk : Infinity;
   let sortie;
-  if(streak3 || ratio >= 1) sortie = true;
+  if(streak3 || lastTurn || ratio >= 1) sortie = true;
   else sortie = ratio >= 0.7 && Math.random() < ratio;
   if(!sortie){
     // 出撃しない場合は地中海への増援も取りやめ、北海へ
@@ -5385,9 +5418,9 @@ function endTurn(){
   renderStatus(); renderSeaResetButtons(); updatePOC();
   document.getElementById('moveStatus').innerHTML = log.join('<br>');
 
-  // ターン8終了 → ゲーム終了 → 戦闘ログ自動表示（ターン7終了時の currentTurn=8 では表示しない）
-  if(wasAtLastTurn){
-    setTimeout(() => showCombatLog(), 200);
+  // ターン8終了 → ゲーム終了 → レポートの保存画面（ターン7終了時の currentTurn=8 では表示しない）
+  if(wasAtLastTurn && typeof showReportSave === 'function'){
+    setTimeout(() => showReportSave(), 200);
   }
 }
 

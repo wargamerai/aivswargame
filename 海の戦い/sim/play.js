@@ -52,6 +52,8 @@ w.waitForCombatFlowBtn = () => Promise.resolve();
 w.waitForAirAttackBtn = () => Promise.resolve();
 w.waitForCombatConfirm = () => Promise.resolve();
 w.waitForRoundEnd = () => Promise.resolve();
+// 戦闘画面の中の選択ボタン（追撃を続けるか、など）は先頭の選択肢を選ぶ（前のブラウザの確認=「はい」と同じ）
+w.chooseInPhaseLabel = (title, choices) => Promise.resolve(choices[0].value);
 
 // ===== 陣営を一時的に入れ替えて、AI側の判断処理を枢軸にも使う =====
 const withAiSide = (side, fn) => {
