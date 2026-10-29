@@ -118,6 +118,21 @@
             text-transform: none;
         }
 
+        .theater-btn.soon,
+        .theater-btn.soon:hover,
+        .theater-btn.soon:active {
+            background-color: var(--text-main);
+            color: var(--btn-bg);
+            border: 2px solid var(--border-color);
+            transform: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.6);
+            cursor: not-allowed;
+        }
+
+        .theater-btn.soon span {
+            color: #5a5d60;
+        }
+
     </style>
 </head>
 <body>
@@ -135,6 +150,17 @@
             War at Sea
             <span>Naval war in European waters</span>
         </a>
+
+        <!-- 準備中: 色を反転させ、押しても開かない -->
+        <div class="theater-btn soon">
+            Up Front
+            <span>Coming soon</span>
+        </div>
+
+        <div class="theater-btn soon">
+            Wooden Ships &amp; Iron Men
+            <span>Coming soon</span>
+        </div>
     </div>
 
 </div>
