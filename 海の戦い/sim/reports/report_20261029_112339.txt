@@ -1,0 +1,76 @@
+ドイツ海軍　戦闘詳報
+作成 2026/10/29 11:23:39
+
+━━ 第1ターン　大西洋の狼たち ━━
+北大西洋には Scharnhorst を放った。敵の姿はなく、悠々と海を制した。
+南大西洋には Gneisenau を放った。敵影なし。通商路は我が手に落ちた。
+バルト海は AdmiralHipper が哨戒。ソ連艦隊は港を出ない。
+イタリア艦隊10隻が出撃（我28対敵36）。シチリア沖に砲声が響いた。敵 Ramillies、Resolution を撃沈。我が方は Zara、Pola、Fiume、Gorizia を失った。Littorio 被弾。敵は退いた。
+Uボートはバルト海3隻が潜航。
+――支配：北大西洋、バルト海、地中海、南大西洋。戦果、我が方に7点（このターンのPOC -7、累計 -7）。
+
+━━ 第2ターン　大西洋の狼たち ━━
+南大西洋には Gneisenau、Scharnhorst を放った。「右舷に敵影！」敵 Courageous を撃沈。
+中立港の Scharnhorst、Gneisenau は、居残りを許されず南大西洋へ出た。
+バルト海は AdmiralHipper が哨戒。ソ連艦隊は港を出ない。
+イタリア艦隊5隻が出撃（我20対敵18）。マルタ沖で激突。我が方は AndreaDoria を失った。VittorioVeneto 被弾。敵は退いた。
+Uボートはバルト海4隻が潜航。バレンツ海で ArkRoyal を仕留めた。
+――支配：バルト海、地中海、南大西洋。戦果、我が方に3点（このターンのPOC -3、累計 -10）。
+
+━━ 第3ターン　大西洋の狼たち ━━
+戦況は我に利あり。バレンツ海への無理な突入は避けた（我17.4対敵19）。
+南大西洋には Gneisenau を放った。敵影発見。敵 Illustrious を撃沈。
+中立港の Gneisenau は、居残りを許されず南大西洋へ出た。
+バルト海は AdmiralHipper が哨戒。ソ連艦隊は港を出ない。
+イタリア艦隊3隻が出撃（我12対敵19）。シチリア沖に砲声が響いた。我が方は CaioDuilio、ConteDiCavour を失った。GiulioCesare 被弾。
+Uボートは北海5隻が潜航。バレンツ海で Sussex を仕留めた。北海で3隻が帰らなかった。
+――支配：バルト海、南大西洋。戦果なし（このターンのPOC +0、累計 -10）。
+
+━━ 第4ターン　バレンツ海突入 ━━
+灰色の空の下、旗艦 Bismarck 以下9隻がバレンツ海へ突入した。我18.2対敵14。砲火が交わされた。敵 Hood、Devonshire、Convoy1A を撃沈。我が方は Blucher、U-Boat1、U-Boat6 を失った。敵は戦場を捨てた。バレンツ海は我が手に帰した。
+南大西洋には Scharnhorst を放った。「右舷に敵影！」敵 Exeter を撃沈。敵は戦場を捨てた。
+中立港の Scharnhorst は、居残りを許されず南大西洋へ出た。
+バルト海は AdmiralHipper が哨戒。ソ連艦隊は港を出ない。
+イタリア艦隊2隻が出撃（我8対敵14）。マルタ沖で激突。敵 Rodney を撃沈。Littorio 被弾。
+Uボートはバレンツ海4隻が潜航。
+――支配：バレンツ海、バルト海、地中海、南大西洋。戦果、我が方に6点（このターンのPOC -6、累計 -10）。
+
+━━ 第5ターン　大西洋の狼たち ━━
+北の海を背に、艦隊は再び大西洋へ。
+北大西洋には 旗艦 Bismarck 以下3隻を放った。「右舷に敵影！」敵 Glorious を撃沈。
+南大西洋には Scharnhorst を放った。「右舷に敵影！」双方とも決定打はなかった。敵は戦場を捨てた。
+中立港の Scharnhorst は、居残りを許されず南大西洋へ出た。
+バルト海にソ連艦隊（OktRevolutia）が出現。旗艦 AdmiralScheer 以下3隻が迎え撃つ（我4対敵3）。両艦隊が激突した。敵 OktRevolutia を撃沈。AdmiralHipper 被弾。
+イタリア艦隊2隻が出撃（我8対敵0）。シチリア沖に砲声が響いた。双方とも決定打はなかった。GiulioCesare 被弾。
+Uボートは地中海2隻が潜航。
+――支配：北大西洋、バルト海、地中海、南大西洋。戦果、我が方に4点（このターンのPOC -4、累計 -10）。
+
+━━ 第6ターン　大西洋の狼たち ━━
+北の海は敵に奪われたが、艦隊は再び大西洋へ向かった。
+南大西洋には Scharnhorst を放った。敵影発見。双方とも決定打はなかった。Scharnhorst 被弾。撤退の信号旗が掲げられた。
+中立港の Scharnhorst は、居残りを許されず南大西洋へ出た。
+バルト海は PrinzEugen が哨戒。ソ連艦隊は港を出ない。
+イタリア艦隊3隻が出撃（我12対敵13）。シチリア沖に砲声が響いた。双方とも決定打はなかった。Littorio 被弾。
+Uボートはバルト海2隻が潜航。
+――支配：バルト海。戦果、敵に4点（このターンのPOC +4、累計 -6）。
+
+━━ 第7ターン　大西洋の狼たち ━━
+北の海は敵に奪われたが、艦隊は再び大西洋へ向かった。
+南大西洋には Scharnhorst を放った。「右舷に敵影！」敵 Renown を撃沈。我が方は Scharnhorst を失った。
+中立港の Scharnhorst は、居残りを許されず南大西洋へ出た。
+バルト海は AdmiralHipper が哨戒。ソ連艦隊は港を出ない。
+イタリア艦隊4隻が出撃（我16対敵12）。マルタ沖で激突。敵 Revenge を撃沈。Impero 被弾。
+Uボートはバルト海2隻が潜航。
+――支配：バルト海、地中海。戦果なし（このターンのPOC +0、累計 -6）。
+
+━━ 第8ターン　大西洋の狼たち ━━
+大西洋へ向かえる艦はなかった。
+バルト海は AdmiralHipper が哨戒。東の海は静かだった。
+イタリア艦隊4隻が出撃（我16対敵13）。マルタ沖で激突。敵 Malaya を撃沈。我が方は VittorioVeneto を失った。敵は退いた。
+Uボートは南大西洋2隻が潜航。バレンツ海で Suffolk を仕留めた。
+――支配：バルト海、地中海。戦果なし（このターンのPOC +0、累計 -6）。
+
+━━ 総括 ━━
+大西洋の戦いは、我が方の勝利に終わった。最終POC -6。
+沈めた敵艦17隻：Rodney、Hood、Renown、Malaya、Ramillies、Resolution、Revenge、ArkRoyal、Illustrious、Courageous、Glorious、Suffolk、Sussex、Devonshire、Exeter、Convoy1A、OktRevolutia
+失った艦10隻：Scharnhorst、Blucher、VittorioVeneto、AndreaDoria、CaioDuilio、ConteDiCavour、Zara、Pola、Fiume、Gorizia
