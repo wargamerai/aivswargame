@@ -2934,16 +2934,25 @@ async function tryPursuit(pursuerSide, seaKey, retreatGroups){
   const pursuits = [];
 
   if(isAi){
-    // AI: グループごとに自動判定
-    for(let i = 0; i < retreatGroups.length; i++){
-      const group = retreatGroups[i];
-      if(!group.length) continue;
-      const minSpd = Math.min(...group.map(s => s.spd));
-      const eligible = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && (s.type !== 'CV' || s._cvDeclared) && !s.returnPending && s.spd >= minSpd);
-      if(!eligible.length) continue;
-      const pursuers = aiSelectPursuers(eligible, group);
-      if(!pursuers || !pursuers.length) continue;
-      pursuits.push({ pursuers, retreaters: group });
+    // AI: 追う艦も速力で振り分ける
+    //   追う艦は、自分が追いつける中で一番速い撤退グループへ（1隻は1グループだけ）。最も速い1隻は海域に残す
+    //   追撃する価値がないグループに割り当てた艦は、次に遅いグループへ回す
+    const groups = retreatGroups.filter(g => g.length).map(g => ({ g, min: Math.min(...g.map(s => s.spd)), ships: [] }))
+      .sort((a, b) => b.min - a.min);
+    let pool = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && (s.type !== 'CV' || s._cvDeclared) && !s.returnPending)
+      .sort((a, b) => b.spd - a.spd);
+    if(pool.length > 1){
+      pool = pool.slice(1); // 最速1隻は海域に残す
+      for(const ship of pool){
+        const grp = groups.find(x => x.min <= ship.spd);
+        if(grp) grp.ships.push(ship);
+      }
+      groups.forEach((grp, gi) => {
+        if(!grp.ships.length) return;
+        if(aiPursuitWorth(grp.ships, grp.g)){ pursuits.push({ pursuers: grp.ships, retreaters: grp.g }); return; }
+        const next = groups[gi + 1]; // 次に遅いグループ（速力が遅いので追いつける）
+        if(next) next.ships.push(...grp.ships);
+      });
     }
     if(pursuits.length){
       setPhaseLabel(`${sideName}: AI判断で追撃（${pursuits.length}グループ）`);
@@ -3076,6 +3085,14 @@ function selectPursuitAssignments(retreatGroups, seaKey, pursuerSide, sideName){
   });
 }
 
+// 追撃する価値があるか: 追う側の攻撃力が撤退する側以上（撤退する側に空母がいれば1.5倍以上）
+function aiPursuitWorth(pursuers, retreaters){
+  const retCV = retreaters.some(s => s.type === 'CV' && !s.sunk);
+  const retAtk = retreaters.filter(s => !s.sunk).reduce((sum, s) => sum + (s.atk || 0), 0);
+  const purAtk = pursuers.filter(s => !s.sunk).reduce((sum, s) => sum + (s.atk || 0), 0);
+  if(purAtk <= 0) return false;
+  return retCV ? purAtk >= retAtk * 1.5 : purAtk >= retAtk;
+}
 function aiSelectPursuers(eligible, retreaters){
   // 1艦残して残り全艦で追撃（残すのは速い艦）
   if(eligible.length <= 1) return null;
