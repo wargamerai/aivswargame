@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>War at Sea Manual</title>
+<!-- アクセス解析（GoatCounter） -->
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<style>
+  :root {
+    --bg-color: #151617;
+    --panel-bg: #2b2d30;
+    --text-main: #d0d3d4;
+    --text-accent: #ffffff;
+    --mute: #9a9ea2;
+    --btn-bg: #1e2022;
+    --border-color: #0a0a0b;
+    --accent-red: #8b0000;
+    --link: #8fb8ff;
+  }
+  body {
+    margin: 0;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font: 16px/1.7 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+    background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 2px, transparent 2px, transparent 4px);
+  }
+  .container {
+    background-color: var(--panel-bg);
+    border: 4px solid var(--border-color);
+    border-radius: 4px;
+    margin: 24px auto;
+    padding: 28px 32px;
+    width: 92%;
+    max-width: 900px;
+    box-sizing: border-box;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.9), inset 0 0 20px rgba(0,0,0,0.6);
+  }
+  h1 { color: var(--text-accent); letter-spacing: 2px; margin: 0 0 6px; font-size: 2em; }
+  h2 { color: var(--text-accent); border-bottom: 2px solid var(--border-color); padding-bottom: 6px; margin-top: 34px; font-size: 1.35em; }
+  h3 { color: var(--text-accent); margin-top: 22px; font-size: 1.1em; }
+  a { color: var(--link); }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .lang button {
+    background: var(--btn-bg); color: var(--text-main); border: 2px solid var(--border-color);
+    padding: 6px 14px; font-size: 0.95em; cursor: pointer; border-radius: 2px;
+  }
+  .lang button.on { color: var(--text-accent); border-left: 5px solid var(--accent-red); }
+  .note { background: #18191a; border-left: 5px solid #5a5d60; padding: 10px 16px; margin: 14px 0; }
+  .btn { display: inline-block; background: var(--btn-bg); border: 1px solid #555; border-radius: 3px; padding: 0 6px; font-size: 0.9em; color: var(--text-accent); white-space: nowrap; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  th, td { border-bottom: 1px solid #44474b; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--text-accent); }
+  ol li, ul li { margin-bottom: 4px; }
+  .back { margin-top: 30px; }
+  [data-lang] { display: none; }
+  body.en [data-lang="en"], body.ja [data-lang="ja"] { display: block; }
+</style>
+</head>
+<body class="en">
+<div class="container">
+
+<div class="top">
+  <h1>War at Sea (AH)</h1>
+  <div class="lang">
+    <button id="btnEn" onclick="setLang('en')">English</button>
+    <button id="btnJa" onclick="setLang('ja')">日本語</button>
+  </div>
+</div>
+
+<!-- ===================== English ===================== -->
+<div data-lang="en">
+<p>How to use the software. This page explains the screens and buttons of this browser version. It is not a rulebook.</p>
+
+<div class="note">
+You play the <b>German (Axis)</b> side. The Allies are moved by the AI.
+The game lasts 8 turns. Your progress is not saved, so do not reload or close the tab during a game.
+</div>
+
+<h2>1. Starting a game</h2>
+<ol>
+  <li>Open the game. If the text is in Japanese, press <span class="btn">EN</span> in the top bar.</li>
+  <li>The <b>Optional Rules</b> window appears. Tick any rules you want (No U-boat limit / Bismarck class: Defense 7 / Easier US entry rolls).</li>
+  <li>Press <span class="btn">Start Game</span>. The optional rules cannot be changed after the game has started.</li>
+</ol>
+
+<h2>2. The screen</h2>
+<table>
+  <tr><th>Area</th><th>What it does</th></tr>
+  <tr><td>Top bar</td><td>Current turn, the phase bar, <span class="btn">Next Phase ▶</span>, <span class="btn">End Turn</span>, POC, zoom (− / +), <span class="btn">Show Units</span> (hide or show the counters on the map), and the language button.</td></tr>
+  <tr><td>Phase bar</td><td>Shows the previous, current and next phase. Click it to see all nine phases; click again to collapse.</td></tr>
+  <tr><td>Left pane</td><td>List of all Axis and Allied ships. Click the ◀ tab to hide or show it.</td></tr>
+  <tr><td>Map</td><td>Counters are shown as stacks. Click a stack to see every ship in it, with its damage.</td></tr>
+  <tr><td>Right pane</td><td>Two tabs: <span class="btn">Move</span> (movement panel) and <span class="btn">Combat</span>.</td></tr>
+</table>
+<p>Ship values are shown as <b>Attack-Defense-Speed</b> followed by the ship type (for example <code>4-9-6 BB</code>).</p>
+
+<h2>3. Turn sequence</h2>
+<p>Press <span class="btn">Next Phase ▶</span> to go to the next phase. After phase 9, press <span class="btn">End Turn</span> to start the next turn.</p>
+<table>
+  <tr><th>Phase</th><th>What happens / what you do</th></tr>
+  <tr><td>1. Reinforcements</td><td>New ships for this turn appear in their ports.</td></tr>
+  <tr><td>2. Allied Move</td><td>The Allied AI moves its ships. Some die rolls are shown in pop-up messages.</td></tr>
+  <tr><td>3. Axis Move</td><td><b>You move your ships</b> with the movement panel (see section 4). Press <span class="btn">Next Phase ▶</span> when you are done.</td></tr>
+  <tr><td>4. Repair</td><td>If you have damaged ships in a port that can repair, a window opens. Use <span class="btn">+</span> / <span class="btn">−</span> to set how much to repair each ship (up to the port's repair limit), then press <span class="btn">OK</span>.</td></tr>
+  <tr><td>5. Remove Control</td><td>Automatic.</td></tr>
+  <tr><td>6. Combat</td><td>The combat window opens and battles are fought one by one (see section 5).</td></tr>
+  <tr><td>7. Place Control</td><td>Automatic. Control markers are placed on the map.</td></tr>
+  <tr><td>8. Return</td><td>A window opens for your ships at sea. Choose a return port (or Refuel at sea) for each ship (see section 6).</td></tr>
+  <tr><td>9. POC</td><td>Automatic. POC for this turn is added. Then press <span class="btn">End Turn</span>.</td></tr>
+</table>
+
+<h2>4. Movement (phase 3)</h2>
+
+<h3>4.1 Basic steps</h3>
+<ol>
+  <li>In the right pane, choose the <b>Move</b> tab.</li>
+  <li>Under <b>Ports</b>, click where the ships are now. Ports are listed on the left (Germany, France, Italy, Neutral port) and sea areas on the right. A greyed-out port cannot be used this turn.</li>
+  <li>The ships there are listed. Click ships to select them (click again to deselect), or press <span class="btn">Select All</span>.</li>
+  <li>Under <b>Destination</b>, click where they should go. Only legal destinations are shown.</li>
+  <li>Press <span class="btn">Execute</span>. The result (and any die rolls) is shown below the buttons. <span class="btn">Clear</span> cancels the current selection.</li>
+</ol>
+<p>All selected ships move to the same destination, so select ships going to different areas separately. A ship that has already moved stays in the list with the colour of its new sea area and "→ destination".</p>
+
+<h3>4.2 Destination buttons</h3>
+<table>
+  <tr><th>Button</th><th>Meaning</th></tr>
+  <tr><td>Solid button</td><td>An adjacent sea area. The move always succeeds.</td></tr>
+  <tr><td>Dashed button with ⚂</td><td>A <b>2-area move</b>. A die is rolled for each ship: if the roll is <b>lower than the ship's speed</b>, it arrives. If not, the ship goes back to its home port, is marked <b>[move failed, cannot deploy]</b>, and cannot move again this turn.</td></tr>
+</table>
+<p>A 2-area move is only offered when the first area on the way is <b>not controlled by the enemy</b>. An area with no control (for example because U-boats were there) can be passed through.</p>
+
+<h3>4.3 Where each Axis port leads</h3>
+<table>
+  <tr><th>Port</th><th>Adjacent sea areas</th></tr>
+  <tr><td>Germany</td><td>North Sea, Baltic Sea, Barents Sea</td></tr>
+  <tr><td>France</td><td>North Sea, South Atlantic (France can be used in turns 2–6)</td></tr>
+  <tr><td>Italy</td><td>Mediterranean</td></tr>
+  <tr><td>Neutral port</td><td>South Atlantic</td></tr>
+</table>
+<table>
+  <tr><th>Sea area</th><th>Adjacent sea areas</th></tr>
+  <tr><td>North Atlantic</td><td>Barents Sea, North Sea, South Atlantic</td></tr>
+  <tr><td>Barents Sea</td><td>North Atlantic, North Sea</td></tr>
+  <tr><td>North Sea</td><td>North Atlantic, Barents Sea, Baltic Sea, South Atlantic</td></tr>
+  <tr><td>Baltic Sea</td><td>North Sea</td></tr>
+  <tr><td>Mediterranean</td><td>South Atlantic</td></tr>
+  <tr><td>South Atlantic</td><td>North Atlantic, North Sea, Mediterranean</td></tr>
+</table>
+<p>Example: from Germany, the North Atlantic is a 2-area move through the North Sea or the Barents Sea.</p>
+
+<h3>4.4 Special cases</h3>
+<ul>
+  <li><b>U-boats</b>: select U-boats in Germany. They can be placed in any sea area with no die roll.</li>
+  <li><b>Ships refuelled at sea</b> (see section 6): next turn, select the sea area they are in. They can move directly to any sea area.</li>
+  <li><b>Ships in the Neutral port</b>: select <span class="btn">Neutral port</span> and move them to the South Atlantic.</li>
+  <li>Only German ships can enter the Baltic Sea (with Soviet ships). Of the Italian ships, only heavy cruisers (CA) can go to the South Atlantic.</li>
+  <li>Damaged ships move more slowly: speed is reduced by the damage taken.</li>
+</ul>
+
+<h2>5. Combat (phase 6)</h2>
+<p>When you enter phase 6, the combat window opens. Battles are fought in this order: U-boat combat → air strikes (Allied, then German) → surface combat. Follow the message at the top of the window and press the button that appears.</p>
+
+<h3>5.1 Buttons in the combat window</h3>
+<table>
+  <tr><th>Button</th><th>Meaning</th></tr>
+  <tr><td><span class="btn">Allied Attack</span> / <span class="btn">German Attack</span></td><td>Start that side's attack.</td></tr>
+  <tr><td><span class="btn">Attack</span></td><td>Roll the dice after the targets have been chosen.</td></tr>
+  <tr><td><span class="btn">Confirm Combat</span></td><td>Apply the results of the round.</td></tr>
+  <tr><td><span class="btn">End Round</span></td><td>End the round and go to the retreat / pursuit decision.</td></tr>
+  <tr><td><span class="btn">Next combat</span></td><td>Go to the next battle.</td></tr>
+  <tr><td><span class="btn">Close</span></td><td>Shown when all combat is finished. Close the window, then press <span class="btn">Next Phase ▶</span>.</td></tr>
+</table>
+
+<h3>5.2 What you do</h3>
+<ul>
+  <li><b>Choosing targets</b>: when the message says "click a target", click an enemy ship in the combat window. Each of your ships chooses in turn.</li>
+  <li><b>U-boats</b>: all U-boats choose their targets first (several may pick the same ship), then press <span class="btn">Attack</span>.</li>
+  <li><b>German air strike</b>: choose the area to attack (LBA, LBA + carriers, or carriers only), or <span class="btn">Done</span> to skip.</li>
+  <li><b>After each surface round</b>: choose <span class="btn">Stay</span>, <span class="btn">Retreat</span>, or (if the enemy is retreating) <span class="btn">Pursue</span>.
+    <ul>
+      <li>If you retreat, split your ships into groups: pick a group tag (A / B / C), click ships to put them in that group, then press <span class="btn">OK</span>.</li>
+      <li>If you pursue, assign your ships to the enemy groups with the buttons next to each ship, then press <span class="btn">OK</span>.</li>
+    </ul>
+  </li>
+  <li><b>Immediate return</b>: a ship forced to return during combat may ask you to choose a port, or a port's repair dock.</li>
+</ul>
+<p>The <b>Combat</b> tab in the right pane lists the battles of this turn. You normally do not need it, because the combat window runs them in order.</p>
+
+<h2>6. Return (phase 8)</h2>
+<ol>
+  <li>A window lists your ships at sea, with their current area.</li>
+  <li>For each ship, press the button of a port it can return to. Only legal ports are shown.</li>
+  <li><span class="btn">Refuel at sea</span> (German ships in the North or South Atlantic, turns 1–3 only): a die is rolled. If it succeeds, the ship stays at sea and can go anywhere next turn. If it fails, the ship goes to the Neutral port.</li>
+  <li><span class="btn">Redo</span> undoes the choice for that ship.</li>
+  <li>When every ship has a destination, press <span class="btn">Return</span>.</li>
+</ol>
+<p>Some ships already have a destination chosen for them (for example their starting port). You can change it with <span class="btn">Redo</span>.</p>
+
+<h2>7. POC and the end of the game</h2>
+<ul>
+  <li>POC is shown in the top bar. <b>Minus favors the Axis, plus favors the Allies.</b> It is limited to the range −10 to +10.</li>
+  <li>Each turn, the side that controls a sea area gains its POC value.</li>
+  <li>After turn 8, the game ends. A negative final POC is an Axis victory, a positive one an Allied victory.</li>
+</ul>
+
+<p class="back"><a href="./">← Back to Operations HQ</a></p>
+</div>
+
+<!-- ===================== 日本語 ===================== -->
+<div data-lang="ja">
+<p>このソフトの操作の説明です。画面とボタンの使い方を説明します。ルールブックではありません。</p>
+
+<div class="note">
+あなたは<b>ドイツ軍（枢軸）</b>を担当します。連合軍はAIが動かします。
+ゲームは8ターンです。途中の状態は保存されないので、ゲームの途中で再読み込みしたり、タブを閉じたりしないでください。
+</div>
+
+<h2>1. ゲームの始め方</h2>
+<ol>
+  <li>ゲームを開きます。英語で表示されているときは、上の帯の <span class="btn">日本語</span> を押すと日本語になります。</li>
+  <li>「オプションルール」の画面が出ます。使いたいルールにチェックを入れます（Uボート上限なし／ビスマルク級 防御7／米国投入ダイス緩和）。</li>
+  <li><span class="btn">ゲーム開始</span> を押します。始めたあとは、オプションルールは変えられません。</li>
+</ol>
+
+<h2>2. 画面の見方</h2>
+<table>
+  <tr><th>場所</th><th>内容</th></tr>
+  <tr><td>上の帯</td><td>今のターン、フェイズの表示、<span class="btn">次フェイズ▶</span>、<span class="btn">ターン終了</span>、POC、ズーム（−／＋）、<span class="btn">駒表示</span>（地図の駒を隠す／出す）、言語の切り替えボタン。</td></tr>
+  <tr><td>フェイズの表示</td><td>前・今・次のフェイズを表示します。クリックすると9つのフェイズを全部表示し、もう一度クリックすると戻ります。</td></tr>
+  <tr><td>左の欄</td><td>枢軸と連合のすべての艦の一覧です。◀ のつまみをクリックすると、隠したり出したりできます。</td></tr>
+  <tr><td>地図</td><td>駒は重ねて表示されます。重なりをクリックすると、中の艦と損害が全部表示されます。</td></tr>
+  <tr><td>右の欄</td><td><span class="btn">移動</span>（移動の操作）と <span class="btn">戦闘</span> の2つのタブがあります。</td></tr>
+</table>
+<p>艦の数値は「<b>攻撃力-防御力-速力</b>」と艦種で表示されます（例：<code>4-9-6 BB</code>）。</p>
+
+<h2>3. ターンの流れ</h2>
+<p><span class="btn">次フェイズ▶</span> を押すと、次のフェイズへ進みます。フェイズ9のあとに <span class="btn">ターン終了</span> を押すと、次のターンが始まります。</p>
+<table>
+  <tr><th>フェイズ</th><th>起きること／すること</th></tr>
+  <tr><td>1. 増援配置</td><td>このターンに登場する艦が、それぞれの港に出ます。</td></tr>
+  <tr><td>2. 連合移動</td><td>連合AIが艦を動かします。ダイスの結果が、メッセージで出ることがあります。</td></tr>
+  <tr><td>3. 枢軸移動</td><td><b>あなたが艦を動かします。</b>右の欄の移動の操作を使います（4章）。終わったら <span class="btn">次フェイズ▶</span> を押します。</td></tr>
+  <tr><td>4. 修理</td><td>修理できる港に損害を受けた艦がいると、画面が出ます。<span class="btn">＋</span>／<span class="btn">－</span> で艦ごとの修理量を決めて（港の修理量まで）、<span class="btn">決定</span> を押します。</td></tr>
+  <tr><td>5. 支配除去</td><td>自動です。</td></tr>
+  <tr><td>6. 戦闘</td><td>戦闘の画面が開き、戦闘が1つずつ進みます（5章）。</td></tr>
+  <tr><td>7. 支配配置</td><td>自動です。地図に支配のマーカーが置かれます。</td></tr>
+  <tr><td>8. 帰還</td><td>海にいる自分の艦の画面が出ます。艦ごとに帰還する港（または洋上補給）を選びます（6章）。</td></tr>
+  <tr><td>9. POC</td><td>自動です。このターンのPOCが加わります。そのあと <span class="btn">ターン終了</span> を押します。</td></tr>
+</table>
+
+<h2>4. 移動（フェイズ3）</h2>
+
+<h3>4.1 基本の手順</h3>
+<ol>
+  <li>右の欄で <b>移動</b> のタブを選びます。</li>
+  <li>「港湾」の欄で、艦が今いる場所をクリックします。左の列が港（ドイツ、フランス、イタリア、中立港）、右の列が海域です。薄く表示されている港は、このターンは使えません。</li>
+  <li>そこにいる艦が一覧に出ます。動かす艦をクリックして選びます（もう一度クリックすると外れます）。<span class="btn">全艦選択</span> で全部選べます。</li>
+  <li>「移動先」の欄で、行き先をクリックします。行ける場所だけが出ます。</li>
+  <li><span class="btn">実行</span> を押します。結果（ダイスを振ったときはその結果も）が、ボタンの下に出ます。<span class="btn">解除</span> で選択を取り消せます。</li>
+</ol>
+<p>選んだ艦はすべて同じ行き先へ動くので、行き先が違う艦は分けて動かしてください。動かした艦は、行き先の海域の色になり、「→ 行き先」が付いて一覧に残ります。</p>
+
+<h3>4.2 行き先のボタン</h3>
+<table>
+  <tr><th>ボタン</th><th>意味</th></tr>
+  <tr><td>普通のボタン</td><td>隣の海域です。必ず移動できます。</td></tr>
+  <tr><td>点線で ⚂ の付いたボタン</td><td><b>2エリア移動</b>です。艦ごとにダイスを振り、<b>出目が速力より小さければ</b>着きます。着けなかった艦は母港に戻り、<b>［移動失敗・配置不可］</b>になって、このターンはもう動かせません。</td></tr>
+</table>
+<p>2エリア移動は、途中の最初の海域が<b>敵の支配でないとき</b>だけ出ます。支配なし（たとえばUボートがいて支配が消えた海域）なら通れます。</p>
+
+<h3>4.3 枢軸の港から行ける場所</h3>
+<table>
+  <tr><th>港</th><th>隣の海域</th></tr>
+  <tr><td>ドイツ</td><td>北海、バルト海、バレンツ海</td></tr>
+  <tr><td>フランス</td><td>北海、南大西洋（フランスはターン2〜6に使えます）</td></tr>
+  <tr><td>イタリア</td><td>地中海</td></tr>
+  <tr><td>中立港</td><td>南大西洋</td></tr>
+</table>
+<table>
+  <tr><th>海域</th><th>隣の海域</th></tr>
+  <tr><td>北大西洋</td><td>バレンツ海、北海、南大西洋</td></tr>
+  <tr><td>バレンツ海</td><td>北大西洋、北海</td></tr>
+  <tr><td>北海</td><td>北大西洋、バレンツ海、バルト海、南大西洋</td></tr>
+  <tr><td>バルト海</td><td>北海</td></tr>
+  <tr><td>地中海</td><td>南大西洋</td></tr>
+  <tr><td>南大西洋</td><td>北大西洋、北海、地中海</td></tr>
+</table>
+<p>例：ドイツから北大西洋へは、北海かバレンツ海を通る2エリア移動になります。</p>
+
+<h3>4.4 特別な場合</h3>
+<ul>
+  <li><b>Uボート</b>：ドイツにいるUボートを選びます。ダイスなしで、どの海域にも置けます。</li>
+  <li><b>洋上補給に成功した艦</b>（6章）：次のターンに、その艦がいる海域を選びます。どの海域へも直接移動できます。</li>
+  <li><b>中立港の艦</b>：<span class="btn">中立港</span> を選んで、南大西洋へ動かします。</li>
+  <li>バルト海に入れるのは、ドイツ艦（とソ連艦）だけです。イタリア艦で南大西洋へ行けるのは、重巡洋艦（CA）だけです。</li>
+  <li>損害を受けた艦は、損害の分だけ速力が下がります。</li>
+</ul>
+
+<h2>5. 戦闘（フェイズ6）</h2>
+<p>フェイズ6に入ると、戦闘の画面が開きます。戦闘は、Uボート戦闘 → 航空攻撃（連合、次にドイツ）→ 水上戦闘の順に進みます。画面の上のメッセージに従って、出てきたボタンを押してください。</p>
+
+<h3>5.1 戦闘の画面のボタン</h3>
+<table>
+  <tr><th>ボタン</th><th>意味</th></tr>
+  <tr><td><span class="btn">連合軍の攻撃</span>／<span class="btn">ドイツ軍の攻撃</span></td><td>その陣営の攻撃を始めます。</td></tr>
+  <tr><td><span class="btn">攻撃</span></td><td>目標を決めたあと、ダイスを振ります。</td></tr>
+  <tr><td><span class="btn">戦闘確認</span></td><td>そのラウンドの結果を当てはめます。</td></tr>
+  <tr><td><span class="btn">ラウンド終了</span></td><td>ラウンドを終えて、撤退・追撃の判断へ進みます。</td></tr>
+  <tr><td><span class="btn">次の戦闘へ</span></td><td>次の戦闘へ進みます。</td></tr>
+  <tr><td><span class="btn">閉じる</span></td><td>すべての戦闘が終わると出ます。画面を閉じて、<span class="btn">次フェイズ▶</span> を押します。</td></tr>
+</table>
+
+<h3>5.2 あなたがすること</h3>
+<ul>
+  <li><b>目標を選ぶ</b>：「目標をクリック」と出たら、戦闘の画面の敵艦をクリックします。自分の艦が順番に選びます。</li>
+  <li><b>Uボート</b>：先に全部のUボートの目標を決めて（同じ艦を何隻で狙ってもかまいません）、<span class="btn">攻撃</span> を押します。</li>
+  <li><b>ドイツ軍の航空攻撃</b>：攻撃するエリア（LBA、LBA＋空母、空母のみ）を選びます。攻撃しないときは <span class="btn">終了</span> を押します。</li>
+  <li><b>水上戦闘の各ラウンドのあと</b>：<span class="btn">止まる</span>、<span class="btn">撤退する</span>、（敵が撤退するときは）<span class="btn">追撃する</span> から選びます。
+    <ul>
+      <li>撤退するときは、艦をグループに分けます。グループのタグ（A／B／C）を選び、艦をクリックしてそのグループに入れ、<span class="btn">確定</span> を押します。</li>
+      <li>追撃するときは、艦の横のボタンで、どの敵のグループを追うかを割り当てて、<span class="btn">確定</span> を押します。</li>
+    </ul>
+  </li>
+  <li><b>即時帰還</b>：戦闘中に帰還することになった艦は、帰る港（または港の修理ドック）を選ぶように聞かれることがあります。</li>
+</ul>
+<p>右の欄の <b>戦闘</b> のタブには、このターンの戦闘が並びます。戦闘の画面が順番に進めるので、ふつうは使わなくてかまいません。</p>
+
+<h2>6. 帰還（フェイズ8）</h2>
+<ol>
+  <li>海にいる自分の艦と、今いる海域の一覧が出ます。</li>
+  <li>艦ごとに、帰れる港のボタンを押します。帰れる港だけが出ます。</li>
+  <li><span class="btn">洋上補給</span>（北大西洋か南大西洋にいるドイツ艦、ターン1〜3だけ）：ダイスを振ります。成功すると海に残り、次のターンはどこへでも行けます。失敗すると中立港へ行きます。</li>
+  <li><span class="btn">やり直し</span> で、その艦の選択を取り消せます。</li>
+  <li>全部の艦の行き先が決まったら、<span class="btn">帰還</span> を押します。</li>
+</ol>
+<p>最初から行き先が決まっている艦もあります（出発した港など）。<span class="btn">やり直し</span> で変えられます。</p>
+
+<h2>7. POCとゲームの終わり</h2>
+<ul>
+  <li>POCは上の帯に出ます。<b>マイナスが枢軸に有利、プラスが連合に有利</b>です。−10から+10の範囲です。</li>
+  <li>毎ターン、海域を支配している側が、その海域のPOCを得ます。</li>
+  <li>ターン8が終わると、ゲームは終わりです。最終POCがマイナスなら枢軸の勝ち、プラスなら連合の勝ちです。</li>
+</ul>
+
+<p class="back"><a href="./">← 入り口へ戻る</a></p>
+</div>
+
+</div>
+<script>
+// 言語の切り替え。ゲームと同じく、選んだ言語を覚える
+function setLang(l){
+  document.body.className = l;
+  document.documentElement.lang = l;
+  document.getElementById('btnEn').classList.toggle('on', l === 'en');
+  document.getElementById('btnJa').classList.toggle('on', l === 'ja');
+  try { localStorage.setItem('wasLang', l); } catch(e){}
+}
+let initLang = 'en';
+try {
+  const q = new URLSearchParams(location.search).get('lang');
+  if(q === 'en' || q === 'ja') initLang = q;
+  else if(localStorage.getItem('wasLang') === 'ja') initLang = 'ja';
+} catch(e){}
+setLang(initLang);
+</script>
+</body>
+</html>
