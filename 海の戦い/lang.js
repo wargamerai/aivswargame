@@ -295,6 +295,7 @@ const LANG_TERMS = {
   '枢軸勝': 'Axis wins',
   '枢軸軍': 'Axis',
   '止まる': 'Stay',
+  '留まる': 'Stay',
   '現在地': 'Location',
   '移動先': 'Destination',
   '空爆値': 'strike value ',
