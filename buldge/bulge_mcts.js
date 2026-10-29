@@ -552,114 +552,165 @@ function mcSimCombatsAndScore(simUnits) {
   return score;
 }
 
+// ========== ドイツ軍の思考（地区別） ==========
+// 1手ごとに:
+//   1. 戦車（装甲のペア）を北 → 中央 → 南の順に。まだ動いていない戦車がいる地区の戦車だけで
+//      行き先の組み合わせを試し（1組あたり上位の行き先に絞る。4組以上いれば最も左の3組）、最良の配置で最初に動く戦車を動かす
+//      - 地区: 北=1SS・12SS、中央=Lehr、南=2Pz・116Pz。増援の装甲は北か中央の近いほう
+//      - ターン2から、連合が St. Vith を持っていれば、中央の戦車に St. Vith 攻略の点を足す
+//        （北の戦車は、このターンに St. Vith の隣まで来られるときだけ）
+//   2. 戦車が動き終わったら歩兵。どんどん左（西）へ進み、ほかのドイツ軍と1〜2ヘクス空けて並ぶ形を好む
+//      表の連合軍の隣は避け、裏返った連合軍に有利なら隣接してつつく
+//   3. なければパス
+const DE_AREA_INIT = {
+  de_1ss_1:'north', de_1ss_2:'north', de_12ss_1:'north', de_12ss_2:'north',
+  de_lehr_1:'center', de_lehr_2:'center',
+  de_2pz_1:'south', de_2pz_2:'south', de_116_1:'south', de_116_2:'south'
+};
+const DE_AREA_NAME = { north:'北', center:'中央', south:'南' };
+const DE_AREA_ROW = { north: 5.5, center: 10 }; // 増援の振り分けの目安（初期配置の行）
+const DE_ST_VITH_BONUS = 15;
+
+function deArea(u) {
+  if (DE_AREA_INIT[u.id]) return DE_AREA_INIT[u.id];
+  if (!u._deArea) {
+    // 増援: 北か中央の近いほう
+    const r = parseHexId(u.hexId).row;
+    u._deArea = Math.abs(r - DE_AREA_ROW.north) <= Math.abs(r - DE_AREA_ROW.center) ? 'north' : 'center';
+    if (u.mechPair) { const p = G.units.find(x => x.id === u.mechPair); if (p) p._deArea = u._deArea; }
+  }
+  return u._deArea;
+}
+function deAlive(u) { return !u.eliminated && !u.exited && u.hexId && u.hexId.length === 4; }
+function deMovable(u) { return u.side === 'german' && deAlive(u) && !u.acted && !u.flipped; }
+function deStVithHeld() { return getUnitsAt(ST_VITH).some(u => u.side === 'allied'); }
+function deStackOk(unit, hid) {
+  return getUnitsAt(hid).filter(u => u.side === 'german' && u.id !== unit.id && u.id !== unit.mechPair).length === 0;
+}
+// St. Vith 攻略の点（ターン2から、連合が St. Vith を持っているとき）
+function deStVithBonus(area, hid, canReachAdj) {
+  if (G.turn < 2 || !deStVithHeld()) return 0;
+  if (area !== 'center' && !(area === 'north' && canReachAdj)) return 0;
+  const d = hexDist(hid, ST_VITH);
+  return d === 1 ? DE_ST_VITH_BONUS : d === 2 ? 4 : 0;
+}
+
 function mcGermanMCPlan() {
-  const movableUnits = G.units.filter(u =>
-    u.side === 'german' && !u.acted && !u.flipped && !u.eliminated && !u.exited
-    && !mustHoldCity(u)
-  );
-  if (movableUnits.length === 0) return null;
+  const savedDbg = window.dbg;
+  window.dbg = () => {}; // 仮の計算が多いので、計算中のデバッグ出力は止める
+  try { return deThink(); }
+  finally { window.dbg = savedDbg; }
+}
 
-  // mechPairは1エントリにまとめる（ペアで同じヘクスに行く）
+function deThink() {
+  const movable = G.units.filter(deMovable);
+  if (!movable.length) return null;
+
+  // ===== 1. 戦車（地区別） =====
   const seen = new Set();
-  const stacks = []; // { unit, pair(or null) }
-  for (const u of movableUnits) {
-    if (seen.has(u.id)) continue;
+  const stacks = [];
+  for (const u of movable) {
+    if (!isMechanized(u) || seen.has(u.id)) continue;
     seen.add(u.id);
-    let pair = null;
-    if (u.mechPair) {
-      pair = movableUnits.find(p => p.id === u.mechPair);
-      if (pair) seen.add(pair.id);
-    }
-    stacks.push({ unit: u, pair: pair });
+    const pair = isStacked(u) ? movable.find(p => p.id === u.mechPair) : null;
+    if (pair) seen.add(pair.id);
+    stacks.push({ unit: u, pair, area: deArea(u) });
   }
-  if (stacks.length === 0) return null;
-
-  // 各スタックの移動先候補を列挙（現在地も含む）
-  const stackOptions = [];
-  for (const st of stacks) {
-    const reachable = calcReachable(st.unit);
-    const options = [st.unit.hexId]; // 現在地=動かない
-    for (const [hid] of reachable) {
-      if (hid === st.unit.hexId) continue;
-      const terrain = TERRAIN_MAP[hid];
-      if (terrain === 'f' && isMechanized(st.unit) && !hasRoadBetween(st.unit.hexId, hid)) continue;
-      options.push(hid);
+  for (const area of ['north', 'center', 'south']) {
+    // 4組以上いるときは、最も左（前）にいる3組だけで組み合わせを試す（残りは次の手番以降）
+    const st = stacks.filter(x => x.area === area)
+      .sort((p, q) => parseHexId(p.unit.hexId).col - parseHexId(q.unit.hexId).col).slice(0, 3);
+    if (!st.length) continue;
+    const plan = dePlanArea(area, st);
+    if (plan) {
+      addLog('move', `[AI判断] 戦車（${DE_AREA_NAME[area]}）: ${plan.st.unit.name} を ${dispHex(plan.hex)} へ${plan.note}`);
+      return { unit: plan.st.unit, hex: plan.hex, unstack: false };
     }
-    stackOptions.push({ stack: st, options: options });
   }
 
-  // 全組み合わせ探索（再帰）
-  let bestScore = -Infinity;
-  let bestAssignment = null; // [hex, hex, ...] stacksと同じ順
-
-  const assignment = new Array(stacks.length);
-  let evaluated = 0;
-
-  function search(depth) {
-    if (depth === stacks.length) {
-      // スタック制限チェック: 同じhexに2つ以上のスタックが入っていないか
-      const hexCount = {};
-      for (let i = 0; i < stacks.length; i++) {
-        const h = assignment[i];
-        if (!hexCount[h]) hexCount[h] = [];
-        hexCount[h].push(i);
+  // ===== 2. 歩兵 =====
+  const inf = movable.filter(u => !isMechanized(u));
+  let best = null;
+  for (const u of inf) {
+    const fromCol = parseHexId(u.hexId).col;
+    const mates = G.units.filter(g => g.side === 'german' && g.id !== u.id && deAlive(g));
+    for (const [hid, info] of calcReachable(u)) {
+      if (hid === u.hexId || !deStackOk(u, hid)) continue;
+      const col = parseHexId(hid).col;
+      let s = (fromCol - col) * 3; // 左へ
+      // 戦線の形: ほかのドイツ軍と1〜2ヘクス空け（距離2〜3）で並ぶ
+      s += Math.min(3, mates.filter(g => { const d = hexDist(g.hexId, hid); return d === 2 || d === 3; }).length) * 2;
+      if (FACILITY_MAP[hid] === 'c' && !getUnitsAt(hid).length) s += 20;
+      // 連合軍の隣: 表の敵は避ける。裏返った敵に有利ならつつく
+      const adjAllies = getNeighborIds(hid).flatMap(n => getUnitsAt(n).filter(e => e.side === 'allied'));
+      let note = '';
+      if (adjAllies.length) {
+        const faceUp = adjAllies.some(e => !e.flipped);
+        const defP = adjAllies.reduce((t, e) => t + (e.flipped ? e.def : e.atk), 0);
+        if (faceUp) s -= 20;
+        else if (u.atk - defP >= 2) { s += 10; note = '（裏返った連合軍をつつく）'; }
+        else s -= 20;
       }
-      for (const h in hexCount) {
-        if (hexCount[h].length > 1) return; // スタック違反
-      }
+      s -= info.path.length * 0.05;
+      if (s > 0 && (!best || s > best.s)) best = { u, hid, s, note };
+    }
+  }
+  if (best) {
+    addLog('move', `[AI判断] 歩兵: ${best.u.name} を ${dispHex(best.hid)} へ（左へ進む）${best.note}`);
+    return { unit: best.u, hex: best.hid, unstack: false };
+  }
+  addLog('move', '[AI判断] ドイツ軍: 動かす手なし → パス');
+  return null;
+}
 
-      // 仮盤面を作成
-      const simUnits = mcCloneUnits();
-      for (let i = 0; i < stacks.length; i++) {
-        const st = stacks[i];
-        const su = simUnits.find(u => u.id === st.unit.id);
-        if (su) su.hexId = assignment[i];
-        if (st.pair) {
-          const sp = simUnits.find(u => u.id === st.pair.id);
-          if (sp) sp.hexId = assignment[i];
-        }
-      }
+// 1つの地区の戦車の組み合わせを試し、最初に動かす戦車と行き先を返す（全員その場なら null）
+function dePlanArea(area, stacks) {
+  // 1組あたりの行き先の数（地区の戦車は最大3組なので、組み合わせは最大1,331通り）
+  const n = stacks.length;
+  const K = n <= 2 ? 12 : 10;
+  const nwHexes = new Set(getNWExitHexes());
+  const opts = stacks.map(st => {
+    const reach = calcReachable(st.unit);
+    const canAdj = [...reach.keys()].some(h => hexDist(h, ST_VITH) === 1);
+    st.canReachStVith = canAdj;
+    const fromCol = parseHexId(st.unit.hexId).col;
+    const cands = [];
+    for (const hid of reach.keys()) {
+      if (hid === st.unit.hexId || !deStackOk(st.unit, hid)) continue;
+      const col = parseHexId(hid).col;
+      let s = (fromCol - col) * 4; // 左へ
+      if (FACILITY_MAP[hid] === 'c') s += 10;
+      if (nwHexes.has(hid)) s += 20;
+      s += deStVithBonus(area, hid, canAdj);
+      cands.push({ hid, s });
+    }
+    cands.sort((a, b) => b.s - a.s);
+    return [st.unit.hexId, ...cands.slice(0, K).map(c => c.hid)]; // 先頭は「動かない」
+  });
 
-      // 仮戦闘＋盤面評価
-      const score = mcSimCombatsAndScore(simUnits);
-      evaluated++;
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestAssignment = assignment.slice();
-      }
+  let bestScore = -Infinity, bestA = null;
+  const a = new Array(n);
+  const search = depth => {
+    if (depth === n) {
+      if (new Set(a).size < n) return; // 同じヘクスに2組は入れない
+      const sim = mcCloneUnits();
+      stacks.forEach((st, i) => {
+        for (const u of [st.unit, st.pair].filter(Boolean)) { const su = sim.find(x => x.id === u.id); if (su) su.hexId = a[i]; }
+      });
+      let score = mcSimCombatsAndScore(sim);
+      stacks.forEach((st, i) => { score += deStVithBonus(area, a[i], st.canReachStVith); });
+      if (score > bestScore) { bestScore = score; bestA = a.slice(); }
       return;
     }
-
-    const opts = stackOptions[depth].options;
-    for (let i = 0; i < opts.length; i++) {
-      assignment[depth] = opts[i];
-      search(depth + 1);
-    }
-  }
-
+    for (const h of opts[depth]) { a[depth] = h; search(depth + 1); }
+  };
   search(0);
-  dbg('MC-PLAN', `全組み合わせ探索: ${evaluated}パターン評価`);
-
-  if (!bestAssignment) return null;
-
-  // bestAssignmentから、まだ行動していないスタックで最初に動くべきものを選ぶ
-  // 現在地と違うhexが割り当てられたスタックを優先
-  let chosenIdx = -1;
-  for (let i = 0; i < stacks.length; i++) {
-    if (bestAssignment[i] !== stacks[i].unit.hexId) {
-      chosenIdx = i;
-      break;
-    }
-  }
-  // 全員現在地のままなら最初のスタック
-  if (chosenIdx < 0) chosenIdx = 0;
-
-  const chosen = stacks[chosenIdx];
-  const chosenHex = bestAssignment[chosenIdx];
-
-  dbg('MC-PLAN', `最善配置: score=${bestScore} → ${chosen.unit.name} ${dispHex(chosen.unit.hexId)}→${dispHex(chosenHex)}`);
-  return { unit: chosen.unit, hex: chosenHex, unstack: false };
+  if (!bestA) return null;
+  const i = stacks.findIndex((st, k) => bestA[k] !== st.unit.hexId);
+  if (i < 0) return null;
+  const st = stacks[i];
+  const sv = deStVithBonus(area, bestA[i], st.canReachStVith) > 0 ? '（St. Vith 攻略）' : '';
+  return { st, hex: bestA[i], note: sv };
 }
 
 // 戦闘後前進MC判定: 後続の到達可能ヘクス数＋攻撃可能敵数＋戦闘支援＋歩兵攻撃による道開け
@@ -1391,16 +1442,358 @@ function findRoadBlockMove(movable, lineInfo) {
   return null;
 }
 
-// 連合軍ドクトリン移動メイン（シンプル版）
-// ルール1: 基本パス
-// ルール2: 左・左上・左下に敵 → 戦線維持しながら逃避
-// ルール3: ユニット除去 → 非必須ユニットで近辺道路の穴埋め
-// ルール4: 1ターン目+ドイツパス → 道路封鎖（バストーニュ優先）
-// ルール5: 1-2ターンは敵隣接禁止
-// ルール6: 82空挺→バストーニュ強制行軍（mustMarchToCityで処理済み）
-// ルール7: 9CC移動・戦闘禁止（包囲時は逃避許可）
+// ========== 連合軍の思考 ==========
+// 1手ごとに、上から順に当てはまる手を1つ選ぶ。何もなければパス（ドイツの動きを待つ）
+//   1. 危険な状況への対応（待たない）
+//      a. 都市を占領されそう: まだ動いていないドイツ軍が、連合のいない都市に入れる → 都市に入る／道をふさぐ
+//      b. 道路で遥か後方まで届く: まだ動いていないドイツの装甲が、戦線の後方（4列以上奥）や北西の出口まで届く → 道をふさぐ
+//      c. 味方が包囲されそう: 退路が1つ以下で、まだ動いていないドイツ軍が隣まで来られる → 逃げる
+//   2. 第82空挺をバストーニュへ（安全なとき）
+//   3. 戦線の維持: 北端と南端からZOCをつなぐ。動かすのは安全なユニットだけ
+//      （安全 = まだ動いていないドイツ軍が、このターンにそのユニットの隣まで来られない）
+//      間隔は1ヘクス空けが最良、2ヘクス空けまでは許す。道路のない森は装甲が通れないので壁とみなす
+//      （近くにドイツ歩兵がいる森は除く）。余力があれば完全にふさぎ、間隔を詰める
+//   4. 反撃: 得点で負けているときだけ、余剰のユニットでドイツ軍のいる都市を攻撃する
+//   5. パス
+// 増援の登場と第82空挺の移動も、この判断の中で行う（bulge.html 側で先に動かさない）
+const AL_DEEP_COLS = 4;      // 戦線の後方とみなす奥行き（列）
+const AL_FOREST_INF_DIST = 4; // この距離にドイツ歩兵がいる森は壁とみなさない
+
+function alAlive(u) { return !u.eliminated && !u.exited && u.hexId && u.hexId.length === 4; }
+function alFreshGermans() {
+  return G.units.filter(u => u.side === 'german' && alAlive(u) && !u.acted && !u.flipped);
+}
+function alGermanReach(g) {
+  const s = new Set(calcReachable(g).keys());
+  s.add(g.hexId);
+  return s;
+}
+// まだ動いていないドイツ軍が、このターンに隣まで来られるヘクス
+function alAttackZone(reaches) {
+  const z = new Set();
+  for (const r of reaches.values()) {
+    for (const h of r) { z.add(h); for (const n of getNeighborIds(h)) z.add(n); }
+  }
+  return z;
+}
+function alAdjGerman(hid) {
+  return getNeighborIds(hid).some(n => getUnitsAt(n).some(e => e.side === 'german'));
+}
+function alStackOk(unit, hid) {
+  const dest = getUnitsAt(hid).filter(u => u.side === unit.side && u.id !== unit.id && u.id !== unit.mechPair);
+  return dest.length === 0;
+}
+// 動かせるユニット（盤上）と増援（登場ヘクスから）。機械化ペアは1つにまとめる
+function alMovers(attackZone) {
+  const movers = [];
+  const seen = new Set();
+  for (const u of G.units) {
+    if (u.side !== 'allied' || !alAlive(u) || u.acted || u.flipped) continue;
+    if (typeof mustHoldCity === 'function' && mustHoldCity(u)) continue;
+    if (seen.has(u.id)) continue;
+    seen.add(u.id);
+    const pair = isStacked(u) ? G.units.find(p => p.id === u.mechPair && !p.acted && !p.flipped) : null;
+    if (pair) seen.add(pair.id);
+    movers.push({ unit: u, pair, entry: null, safe: !attackZone.has(u.hexId) });
+  }
+  // 増援（まだ盤外）
+  for (const ru of (G.reserves.allied || [])) {
+    if (seen.has(ru.id)) continue;
+    seen.add(ru.id);
+    const pair = ru.mechPair ? G.reserves.allied.find(p => p.id === ru.mechPair) : null;
+    if (pair) seen.add(pair.id);
+    const entries = getValidEntryHexes(ru).filter(h => !alAdjGerman(h));
+    if (!entries.length) continue;
+    // 安全な登場ヘクスを優先
+    entries.sort((a, b) => (attackZone.has(a) ? 1 : 0) - (attackZone.has(b) ? 1 : 0));
+    movers.push({ unit: ru, pair, entry: entries[0], safe: !attackZone.has(entries[0]) });
+  }
+  return movers;
+}
+// 仮に置いて fn を実行し、元に戻す（増援は一時的に盤上へ出す）
+function alWithAt(mover, hid, fn) {
+  const list = [mover.unit, mover.pair].filter(Boolean);
+  const saved = list.map(u => u.hexId);
+  const added = [];
+  for (const u of list) {
+    if (mover.entry && !G.units.includes(u)) { G.units.push(u); added.push(u); }
+    u.hexId = hid;
+  }
+  try { return fn(); }
+  finally {
+    list.forEach((u, i) => { u.hexId = saved[i]; });
+    for (const u of added) { const i = G.units.indexOf(u); if (i >= 0) G.units.splice(i, 1); }
+  }
+}
+// 行き先の候補（移動範囲）
+function alDests(mover) {
+  const from = mover.entry || mover.unit.hexId;
+  const m = alWithAt(mover, from, () => calcReachable(mover.unit));
+  const out = [];
+  for (const [hid, info] of m) {
+    if (hid === from) continue;
+    if (!alStackOk(mover.unit, hid)) continue;
+    out.push({ hid, len: info.path.length });
+  }
+  // 増援は登場ヘクスそのものにも置ける（登場して止まる）
+  if (mover.entry && alStackOk(mover.unit, mover.entry)) out.push({ hid: mover.entry, len: 0, stay: true });
+  return out;
+}
+// 決めた手を実行できる形にする（増援はここで盤上に出す）
+function alCommit(mover, dest, reason) {
+  if (mover.entry) {
+    for (const u of [mover.unit, mover.pair].filter(Boolean)) {
+      u.hexId = mover.entry;
+      G.reserves.allied = G.reserves.allied.filter(r => r.id !== u.id);
+      G.units.push(u);
+      addLog('turn', `[AI] 増援登場: ${u.name} → ${dispHex(mover.entry)}`);
+    }
+  }
+  addLog('move', `[AI判断] ${reason}`);
+  if (dest.stay || dest.hid === mover.unit.hexId) {
+    // 登場して止まる: 動かさずに手番を終える
+    for (const u of [mover.unit, mover.pair].filter(Boolean)) { u.acted = true; u.flipped = true; }
+    switchSide();
+    return { handled: true };
+  }
+  return { unit: mover.unit, hex: dest.hid };
+}
+
+// ---------- 戦線の評価 ----------
+// 北端（row=0）と南端（row=ROWS-1）から、連合のユニットとZOC（と壁）がどこまでつながっているか
+function alLineScore() {
+  const allies = G.units.filter(u => u.side === 'allied' && alAlive(u));
+  const germans = G.units.filter(u => u.side === 'german' && alAlive(u));
+  const germanHex = new Set(germans.map(u => u.hexId));
+  const germanInf = germans.filter(u => !isMechanized(u));
+  const wall = new Set();
+  for (const u of allies) {
+    wall.add(u.hexId);
+    for (const n of getNeighborIds(u.hexId)) if (!germanHex.has(n)) wall.add(n);
+  }
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    const h = hexId(c, r);
+    const t = TERRAIN_MAP[h];
+    if (!t || t === 'x') { wall.add(h); continue; }
+    // 道路のない森: 装甲は通れない。近くにドイツ歩兵がいなければ壁とみなす
+    if (t === 'f' && !(ROAD_MAP[h] && ROAD_MAP[h].length) && !germanHex.has(h)
+        && !germanInf.some(g => hexDist(g.hexId, h) <= AL_FOREST_INF_DIST)) wall.add(h);
+  }
+  const bfs = row => {
+    const seen = new Set(), q = [];
+    for (let c = 0; c < COLS; c++) { const h = hexId(c, row); if (wall.has(h)) { seen.add(h); q.push(h); } }
+    while (q.length) { const h = q.shift(); for (const n of getNeighborIds(h)) if (wall.has(n) && !seen.has(n)) { seen.add(n); q.push(n); } }
+    return seen;
+  };
+  const north = bfs(0), south = bfs(ROWS - 1);
+  let complete = false;
+  for (const h of north) if (south.has(h)) { complete = true; break; }
+  let nMax = -1, sMin = ROWS;
+  for (const h of north) nMax = Math.max(nMax, parseHexId(h).row);
+  for (const h of south) sMin = Math.min(sMin, parseHexId(h).row);
+  // 間隔: 戦線の前面（ドイツ軍から5ヘクス以内）のユニットどうしで、1ヘクス空け（距離2）の組を数える
+  const frontAllies = allies.filter(u => germans.some(g => hexDist(g.hexId, u.hexId) <= 5));
+  let tight = 0;
+  for (let i = 0; i < frontAllies.length; i++) for (let j = i + 1; j < frontAllies.length; j++) {
+    if (frontAllies[i].hexId !== frontAllies[j].hexId && hexDist(frontAllies[i].hexId, frontAllies[j].hexId) === 2) tight++;
+  }
+  const coverage = complete ? ROWS * 2 : (nMax + 1) + (ROWS - sMin);
+  return { score: coverage * 10 + (complete ? 100 : 0) + tight, complete, nMax, sMin };
+}
+
+// 戦線の前面（各行の、近くの連合ユニットの最も東の列）
+function alFrontCols() {
+  const allies = G.units.filter(u => u.side === 'allied' && alAlive(u));
+  const front = [];
+  for (let r = 0; r < ROWS; r++) {
+    let best = -1;
+    for (const u of allies) { const p = parseHexId(u.hexId); if (Math.abs(p.row - r) <= 2) best = Math.max(best, p.col); }
+    front.push(best);
+  }
+  const known = front.filter(c => c >= 0).sort((a, b) => a - b);
+  const mid = known.length ? known[Math.floor(known.length / 2)] : COLS - 1;
+  return front.map(c => c >= 0 ? c : mid);
+}
+function alDeepCount(reach, front, nw) {
+  let n = 0;
+  for (const h of reach) {
+    const p = parseHexId(h);
+    if (nw.has(h) || p.col <= front[p.row] - AL_DEEP_COLS) n++;
+  }
+  return n;
+}
+
+// ---------- 本体 ----------
 function mcAlliedDoctrineMove() {
-  // 1ターン目: 全員パス
+  const savedDbg = window.dbg;
+  window.dbg = () => {}; // 仮の計算が多いので、計算中のデバッグ出力は止める
+  try { return alThink(); }
+  finally { window.dbg = savedDbg; }
+}
+
+function alThink() {
+  const fresh = alFreshGermans();
+  const reaches = new Map(fresh.map(g => [g.id, alGermanReach(g)]));
+  const zone = alAttackZone(reaches);
+  const movers = alMovers(zone);
+  if (!movers.length) { addLog('move', '[AI判断] 動かせるユニットなし → パス'); return null; }
+  const destCache = new Map();
+  const dests = m => { if (!destCache.has(m)) destCache.set(m, alDests(m)); return destCache.get(m); };
+  const lineInfo = buildAlliedLine();
+  const isEssential = m => lineInfo.essential.has(m.unit.id);
+  // 行き先の好み: 敵に隣接しない（攻撃が必須になる）、森・都市、近い
+  const prefer = (m, d) => (alAdjGerman(d.hid) ? -50 : 0) + (TERRAIN_MAP[d.hid] === 'f' ? 2 : 0)
+    + (FACILITY_MAP[d.hid] === 'c' ? 3 : 0) - d.len * 0.1 - (isEssential(m) ? 5 : 0);
+
+  // ===== 1a. 都市を占領されそう =====
+  const cities = mcGetCityHexes().sort((a, b) => (HOLD_CITIES.includes(b) ? 1 : 0) - (HOLD_CITIES.includes(a) ? 1 : 0));
+  for (const c of cities) {
+    if (getUnitsAt(c).length) continue; // 連合がいる、またはすでにドイツが占領
+    const threats = fresh.filter(g => reaches.get(g.id).has(c));
+    if (!threats.length) continue;
+    const name = dispHex(c);
+    // 都市に入る
+    let best = null;
+    for (const m of movers) for (const d of dests(m)) {
+      if (d.hid !== c) continue;
+      const s = prefer(m, d) + 20;
+      if (!best || s > best.s) best = { m, d, s };
+    }
+    // 道をふさぐ（入れなくなるか）
+    const cand = new Set();
+    for (const g of threats) {
+      const info = calcReachable(g).get(c);
+      for (const h of (info ? info.path : [])) { cand.add(h); getNeighborIds(h).forEach(n => cand.add(n)); }
+    }
+    for (const m of movers) for (const d of dests(m)) {
+      if (!cand.has(d.hid)) continue;
+      const blocked = alWithAt(m, d.hid, () => threats.every(g => !calcReachable(g).has(c)));
+      if (!blocked) continue;
+      const s = prefer(m, d);
+      if (!best || s > best.s) best = { m, d, s };
+    }
+    if (best) {
+      const how = best.d.hid === c ? `${best.m.unit.name}で入る` : `${best.m.unit.name}で ${dispHex(best.d.hid)} をふさぐ`;
+      return alCommit(best.m, best.d, `危険: 都市 ${name} を占領されそう（${threats.map(g => g.name).join(',')}）→ ${how}`);
+    }
+    addLog('move', `[AI判断] 都市 ${name} が危ないが、間に合うユニットがない`);
+  }
+
+  // ===== 1b. 道路で遥か後方まで届く =====
+  {
+    const front = alFrontCols();
+    const nw = new Set(getNWExitHexes());
+    let worst = null;
+    for (const g of fresh) {
+      if (!isMechanized(g)) continue;
+      const n = alDeepCount(reaches.get(g.id), front, nw);
+      if (n > 0 && (!worst || n > worst.n)) worst = { g, n };
+    }
+    if (worst) {
+      const g = worst.g;
+      const reachMap = calcReachable(g);
+      const cand = new Set();
+      for (const [h, info] of reachMap) {
+        const p = parseHexId(h);
+        if (!(nw.has(h) || p.col <= front[p.row] - AL_DEEP_COLS)) continue;
+        for (const ph of info.path) { cand.add(ph); getNeighborIds(ph).forEach(n => cand.add(n)); }
+      }
+      let best = null;
+      for (const m of movers) for (const d of dests(m)) {
+        if (!cand.has(d.hid)) continue;
+        const after = alWithAt(m, d.hid, () => alDeepCount(alGermanReach(g), front, nw));
+        if (after >= worst.n) continue;
+        const s = (worst.n - after) * 3 + prefer(m, d);
+        if (!best || s > best.s) best = { m, d, s, after };
+      }
+      if (best) {
+        return alCommit(best.m, best.d, `危険: ${g.name} が道路で後方まで届く（${worst.n}ヘクス→${best.after}）→ ${best.m.unit.name}で ${dispHex(best.d.hid)} をふさぐ`);
+      }
+      addLog('move', `[AI判断] ${g.name} が後方まで届くが、ふさげるユニットがない`);
+    }
+  }
+
+  // ===== 1c. 味方が包囲されそう =====
+  for (const m of movers) {
+    if (m.entry) continue;
+    const u = m.unit;
+    if (getRetreatHexes(u).length > 1) continue;
+    const near = fresh.some(g => getNeighborIds(u.hexId).some(n => reaches.get(g.id).has(n)));
+    if (!near) continue;
+    const esc = findEscapeHex(u, lineInfo, true);
+    if (esc && esc.hex !== u.hexId) {
+      return alCommit(m, { hid: esc.hex, len: 0 }, `危険: ${u.name} が包囲されそう（退路${getRetreatHexes(u).length}）→ ${dispHex(esc.hex)} へ逃げる`);
+    }
+  }
+
+  // ===== 2. 第82空挺をバストーニュへ（安全なとき） =====
+  {
+    const m = movers.find(x => x.unit.id === 'us_82');
+    if (m && m.safe && m.unit.hexId !== BASTOGNE && !getUnitsAt(BASTOGNE).length) {
+      let best = null;
+      for (const d of dests(m)) {
+        if (alAdjGerman(d.hid)) continue;
+        const s = -hexDist(d.hid, BASTOGNE) * 10 - d.len * 0.1;
+        if (!best || s > best.s) best = { d, s };
+      }
+      if (best) return alCommit(m, best.d, `第82空挺をバストーニュへ → ${dispHex(best.d.hid)}`);
+    }
+  }
+
+  // ===== 3. 戦線の維持（安全なユニットだけ） =====
+  {
+    const base = alLineScore();
+    let best = null;
+    for (const m of movers) {
+      if (!m.safe) continue;
+      for (const d of dests(m)) {
+        if (alAdjGerman(d.hid)) continue; // 隣接すると攻撃が必須になる
+        const ls = alWithAt(m, d.hid, () => alLineScore());
+        const gain = ls.score - base.score;
+        if (gain <= 0) continue;
+        const s = gain + prefer(m, d) * 0.5;
+        if (!best || s > best.s) best = { m, d, s, ls };
+      }
+    }
+    if (best) {
+      const what = best.ls.complete
+        ? (base.complete ? '間隔を詰める' : '戦線を完全にふさぐ')
+        : `北から${best.ls.nMax + 1}行・南から${ROWS - best.ls.sMin}行までつなぐ`;
+      return alCommit(best.m, best.d, `戦線: ${best.m.unit.name} を ${dispHex(best.d.hid)} へ（${what}）`);
+    }
+  }
+
+  // ===== 4. 反撃（得点で負けているとき） =====
+  calcVP();
+  if (G.vpAllied < G.vpGerman) {
+    let best = null;
+    for (const c of mcGetCityHexes()) {
+      const defs = getUnitsAt(c).filter(e => e.side === 'german');
+      if (!defs.length) continue;
+      const defP = defs.reduce((s, e) => s + (e.flipped ? e.def : e.atk), 0);
+      for (const m of movers) {
+        if (isEssential(m)) continue;
+        const atkP = [m.unit, m.pair].filter(Boolean).reduce((s, u) => s + u.atk, 0);
+        if (atkP - defP < 2) continue; // 都市への攻撃は+2以上
+        for (const d of dests(m)) {
+          if (!getNeighborIds(d.hid).includes(c)) continue;
+          // ほかのドイツ軍にも隣接すると、そちらを攻撃してしまうことがあるので避ける
+          if (getNeighborIds(d.hid).some(n => n !== c && getUnitsAt(n).some(e => e.side === 'german'))) continue;
+          const s = (atkP - defP) * 10 - d.len * 0.1;
+          if (!best || s > best.s) best = { m, d, s, c, atkP, defP };
+        }
+      }
+    }
+    if (best) {
+      return alCommit(best.m, best.d, `反撃: 得点で負けている（独${G.vpGerman} 連${G.vpAllied}）→ ${best.m.unit.name}で都市 ${dispHex(best.c)} を攻撃（${best.atkP}対${best.defP}）`);
+    }
+  }
+
+  // ===== 5. パス =====
+  const waiting = movers.filter(m => !m.safe).length;
+  addLog('move', fresh.length
+    ? `[AI判断] 待機: ドイツ軍の未行動 ${fresh.length}隊（危険な所の味方 ${waiting}隊は動かさない）→ パス`
+    : '[AI判断] 動かす必要のあるユニットなし → パス');
   return null;
 }
 
