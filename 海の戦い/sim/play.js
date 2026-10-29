@@ -474,7 +474,7 @@ const combats = {}, sunkTotal = {};
 const SEA_JA = { NorthAtlantic:'北大西洋', Barents:'バレンツ海', NorthSea:'北海', Baltic:'バルト海', Mediterranean:'地中海', SouthAtlantic:'南大西洋' };
 function snapShips(){
   const m = {};
-  G('SHIPS').forEach(s => { m[s.id] = { id: s.id, name: s.name, side: s.side, type: s.type, country: s.country, loc: s.location, damage: s.damage || 0, def: s.def, sunk: !!s.sunk, ret: !!s.returnPending, forced: !!s.forcedReturn, failed: !!s.failedMove, removed: !!s.removed, usEntered: !!s.usEntered }; });
+  G('SHIPS').forEach(s => { m[s.id] = { id: s.id, name: s.name, side: s.side, type: s.type, country: s.country, loc: s.location, damage: s.damage || 0, def: s.def, sunk: !!s.sunk, ret: !!s.returnPending, forced: !!s.forcedReturn, failed: !!s.failedMove, removed: !!s.removed, usEntered: !!s.usEntered, landed: !!s.landed }; });
   return m;
 }
 const PORT_JA2 = { Germany:'ドイツ本国の港', France:'ブレスト港', Italy:'タラント港', Malta:'マルタ港', England:'英本国の港', Leningrad:'レニングラード港', Russia:'ムルマンスク港' };
@@ -644,7 +644,7 @@ const LOC_EN = { ...SEA_EN, Germany:'Germany', France:'France', Italy:'Italy', M
 const WATCH_PORTS = ['England', 'Malta', 'USA', 'Russia', 'Leningrad', 'Germany', 'France', 'Italy', 'Neutral'];
 const watchTurns = [];
 // 1ターン分：海域ごとの両軍（戦闘直前の位置と出発地）、移動の失敗、戦闘の結果、支配
-function watchTurnData(turn, start, before, cb, ctl, gain, total){
+function watchTurnData(turn, start, before, cb, ctl, gain, total, after){
   // 海域・港ごとの両軍の艦と、戦闘の結果（撃沈 > 帰還 > 損害）
   const shipsAt = loc => {
     const here = Object.values(before).filter(b => b.loc === loc && !b.sunk && !b.removed);
@@ -680,7 +680,10 @@ function watchTurnData(turn, start, before, cb, ctl, gain, total){
   const combat = Object.keys(cb).map(loc => ({ loc: LOC_EN[loc] || loc, port: !SEA_EN[loc], ...cb[loc],
     damaged: { allies: dmgEn(cb[loc].damaged.allies), axis: dmgEn(cb[loc].damaged.axis) } }));
   const lba = (lbaRec[turn] || []).map(x => ({ side: x.side, loc: x.area, name: LOC_EN[x.area] || x.area }));
-  return { turn, seas, ports, failed, combat, ctl, gain, total, lba };
+  // このターンに上陸した船団（ロシア +3、英国 +1）
+  const convoys = Object.values(after || {}).filter(n => n.type === 'CONVOY' && n.landed && !(start[n.id] && start[n.id].landed))
+    .map(n => ({ name: n.name, port: LOC_EN[n.loc] || n.loc, pts: n.loc === 'Russia' ? 3 : 1 }));
+  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys };
 }
 function buildWatchHtml(finalPoc){
   const opts = ['--ub-nolimit', '--bismarck7', '--us-ease'].filter(o => process.argv.includes(o));
@@ -796,6 +799,7 @@ function render(){
   // 支配とPOCは一番上に
   h = '<h2>Turn ' + t.turn + ': Control</h2><div class="card">' + Object.keys(D.seaName).map(k => D.seaName[k] + ': <b class="' + (t.ctl[k] || '') + '">' + (CTL[t.ctl[k]] || 'none') + '</b>').join(' &nbsp; ')
     + '<div>LBA: ' + (['allies', 'axis'].map(sd => { const x = (t.lba || []).filter(l => l.side === sd); return '<b class="' + sd + '">' + CTL[sd] + '</b> ' + (x.length ? x.map(l => esc(l.name)).join(', ') : 'not used'); }).join(' &nbsp; ')) + '</div>'
+    + ((t.convoys || []).length ? '<div>Convoys: ' + t.convoys.map(c => esc(c.name) + ' landed in ' + esc(c.port) + ' (<b class="allies">Allies +' + c.pts + '</b>)').join(', ') + '</div>' : '')
     + '<div class="poc">POC this turn ' + sgn(t.gain) + ' &nbsp; Total ' + sgn(t.total) + '</div></div>' + h;
   v.innerHTML = h;
 }
@@ -882,7 +886,7 @@ w.alliedCumPoc = () => cumPoc;
     const pocEnd = G('poc');
     cumPoc = Math.max(-10, Math.min(10, cumPoc + (pocEnd - pocStart)));
     result.push({ turn, gain: pocEnd - pocStart, total: cumPoc, ctl });
-    watchTurns.push(watchTurnData(turn, turnStart, combatBefore, combats[turn] || {}, ctl, pocEnd - pocStart, cumPoc));
+    watchTurns.push(watchTurnData(turn, turnStart, combatBefore, combats[turn] || {}, ctl, pocEnd - pocStart, cumPoc, snapShips()));
     lastTurnGain = pocEnd - pocStart;
     sunkTotal[turn] = { allies: G('SHIPS').filter(s => s.side === 'allies' && s.sunk && s.type !== 'UBOAT').length, axis: G('SHIPS').filter(s => s.side === 'axis' && s.sunk && s.type !== 'UBOAT').length };
   }

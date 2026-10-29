@@ -208,6 +208,11 @@ body.hide-units .control-marker { display:none; }
 .cs-row .cs-dice:empty::before {
   content:''; display:inline-block;
 }
+.combat-col.allies .cs-row { margin-left:24px; }
+.combat-col.axis .cs-row { margin-right:24px; }
+/* 保護されている艦（攻撃を宣言していない空母・船団）は、敵の列から遠い側へずらす */
+.combat-col.allies .cs-row.protected { margin-left:0; margin-right:24px; }
+.combat-col.axis .cs-row.protected { margin-right:0; margin-left:24px; }
 .cs-row.firing { background:#1a3a5a; border-left-color:#88ccff; }
 .cs-row.target { background:#3a1a2a; border-left-color:#ff6666; }
 .cs-row.sunk   { opacity:0.4; background:#3a0a0a; }
@@ -491,6 +496,7 @@ function renderSideList(side, elId){
       const cls = s.sunk ? ' sunk' : '';
       let status = '';
       if(s.sunk) status = ' <span style="color:#ff4444;font-weight:bold;">[撃沈]</span>';
+      else if(s.landed) status = ` <span style="color:#8cf;">[上陸]</span>`;
       else if(s.damage > 0) status = ` <span style="color:#fa8;">[損害${s.damage}]</span>`;
       html += `<div class="ship-entry${cls}">
         <img src="images/${s.file}" alt="${s.name}">
@@ -633,10 +639,19 @@ async function advancePhase(){
       s.location === 'Barents' && !s.sunk && !s.removed &&
       s.type !== 'CONVOY' && (s.country === 'UK' || s.country === 'US')
     );
-    for(const s of barUkUs){
-      s.location = 'England';
+    // ターン3〜8（ロシアの港が使えるとき）は英国艦をロシアへ帰還させる（次のターンもバレンツ海へ1エリアで出られる）
+    //   無傷の艦と、ロシアの修理量に収まる損害艦はロシア、収まらない損害艦は修理のため英国へ
+    const russiaOpen = PORTS.Russia.available.includes(currentTurn);
+    let russiaBudget = russiaOpen ? PORTS.Russia.repair - SHIPS.filter(s => s.location === 'Russia' && !s.sunk && !s.landed && s.damage > 0).reduce((t, s) => t + s.damage, 0) : 0;
+    for(const s of barUkUs.slice().sort((a, b) => (a.damage || 0) - (b.damage || 0))){
+      let dest = 'England';
+      if(russiaOpen && s.country === 'UK'){
+        if(!(s.damage > 0)) dest = 'Russia';
+        else if(s.damage <= russiaBudget){ dest = 'Russia'; russiaBudget -= s.damage; }
+      }
+      s.location = dest;
       s.atDock = false;
-      console.log(`[帰還] ${s.name}: バレンツ海 → England (${s.country})`);
+      console.log(`[帰還] ${s.name}: バレンツ海 → ${dest} (${s.country})`);
     }
     // Uボートの帰還先は必ず Germany（中立港・France等に行かせない）
     const allUboats = SHIPS.filter(s =>
@@ -1698,12 +1713,15 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
   console.trace();
   await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 ━`, 1500);
   clearRetreatGroups(); // 前の戦闘の撤退グループの印を消す
+  SHIPS.forEach(s => { delete s._cvDeclared; }); // 空母の攻撃の宣言は戦闘ごと
+  let cvAsked = false;
   let firstIter = true;
   while(true){
     const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.type !== 'UBOAT' && !s.returnPending);
     const allies = ships.filter(s => s.side === 'allies');
     const axis   = ships.filter(s => s.side === 'axis');
     if(!allies.length || !axis.length){
+      SHIPS.forEach(s => { delete s._cvDeclared; }); // 戦闘が終わったら空母の扱いに戻す
       await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 終了 ━`, 1200);
       return;
     }
@@ -1727,72 +1745,30 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
     // 損害保留（11.3 同時適用）
     const pending = { damage: {}, disabled: new Set(), firedAtBy: { allies: new Set(), axis: new Set() } };
 
-    // === 連合先攻 ===
+    // === 空母の攻撃の宣言（戦闘の始まりに1回。以後この戦闘のあいだ続き、取り消せない）===
+    // 攻撃力のある空母は、攻撃すると宣言すれば、通常の艦と同じ扱い（撃てる・保護なし・即時反撃なし）
+    if(!cvAsked){ await declareCarrierAttacks(seaKey); cvAsked = true; }
+    startProtectedView(seaKey);
+    // === 目標の宣言（両軍とも先に全艦の目標を決め、結果を見てからは変えられない）===
+    const decl = [];
+    const pendDecl = { allies: newDeclPending(), axis: newDeclPending() };
+    // 連合の宣言
     setAiDecisionLabel('');
     setPhaseLabel('連合軍の攻撃ボタンを押してください');
     await waitForCombatFlowBtn('連合軍の攻撃');
     setPhaseLabel(`連合: 各艦の目標をクリック`);
-    for(const ship of allies){
-      if(ship.sunk) continue;
-      if(ship.type === 'CV') continue; // 水上戦闘では空母は射撃しない
-      if(ship.disabled || ship.atk === 0) continue;
-      highlightShip(ship.id, 'firing');
-      setPhaseLabel(`${ship.name}(${ship.atk}発): 目標をクリック`);
-      const target = await waitForSurfaceTarget('axis', seaKey, ship, pending);
-      unhighlightShip(ship.id, 'firing');
-      if(!target) break;
-      pending.firedAtBy.allies.add(target.id);
-      const fireEvents = [];
-      surfaceFireOne(ship, target, fireEvents, pending);
-      await playEvents(fireEvents);
-      // CV 即時反撃: 攻撃された target が CV で atk>=1 なら即座に反撃
-      if(target.type === 'CV' && target.atk >= 1 && !target.sunk && !target.disabled){
-        highlightShip(target.id, 'firing');
-        setPhaseLabel(`${target.name}(${target.atk}発) 即時反撃: 目標をクリック`);
-        const counterTarget = await waitForSurfaceTarget('allies', seaKey, target, pending);
-        unhighlightShip(target.id, 'firing');
-        if(counterTarget){
-          pending.firedAtBy.axis.add(counterTarget.id);
-          const counterEvents = [];
-          surfaceFireOne(target, counterTarget, counterEvents, pending);
-          await playEvents(counterEvents);
-        }
-      }
-    }
-
-    // === 枢軸反撃（撃沈/不能艦も砲撃可、損害は保留）===
+    await declareSurfaceTargets(allies.filter(s => !s.sunk && !s.disabled), 'axis', seaKey, decl, pendDecl);
+    // 枢軸の宣言（撃沈/不能でも反撃可）
     setPhaseLabel('ドイツ軍の攻撃ボタンを押してください');
     await waitForCombatFlowBtn('ドイツ軍の攻撃');
     setPhaseLabel(`枢軸: 各艦の目標をクリック`);
-    for(const ship of axisAtStart){
-      if(ship.type === 'CV') continue; // 水上戦闘では空母は射撃しない
-      if(ship.atk === 0) continue;
-      const targets = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === 'allies' && s.type !== 'UBOAT' && !s.disabledThisTurn);
-      if(!targets.length) break;
-      highlightShip(ship.id, 'firing');
-      const dispName = ship.sunk ? `${ship.name}[撃沈中]` : (ship.disabled ? `${ship.name}[即時帰還]` : ship.name);
-      setPhaseLabel(`${dispName}(${ship.atk}発): 目標をクリック`);
-      const target = await waitForSurfaceTarget('allies', seaKey, ship, pending);
-      unhighlightShip(ship.id, 'firing');
-      if(!target) break;
-      pending.firedAtBy.axis.add(target.id);
-      const fireEvents = [];
-      surfaceFireOne(ship, target, fireEvents, pending);
-      await playEvents(fireEvents);
-      // CV 即時反撃: 攻撃された target が CV で atk>=1 なら即座に反撃
-      if(target.type === 'CV' && target.atk >= 1 && !target.sunk && !target.disabled){
-        highlightShip(target.id, 'firing');
-        setPhaseLabel(`${target.name}(${target.atk}発) 即時反撃: 目標をクリック`);
-        const counterTarget = await waitForSurfaceTarget('axis', seaKey, target, pending);
-        unhighlightShip(target.id, 'firing');
-        if(counterTarget){
-          pending.firedAtBy.allies.add(counterTarget.id);
-          const counterEvents = [];
-          surfaceFireOne(target, counterTarget, counterEvents, pending);
-          await playEvents(counterEvents);
-        }
-      }
+    await declareSurfaceTargets(axisAtStart, 'allies', seaKey, decl, pendDecl);
+    // 判定: 宣言どおりに連合 → 枢軸の順にダイスを振る（損害は保留して同時に適用）
+    if(decl.length && humanSide === 'axis'){
+      setPhaseLabel('攻撃ボタンを押してください');
+      await waitForAirAttackBtn();
     }
+    await resolveDeclaredFire(decl, pending);
 
     // === 同時適用（11.3）===
     setPhaseLabel('━ 損害適用 ━');
@@ -1819,6 +1795,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
     // ラウンド終了ボタン待ち（撤退/追撃判定へ進む）
     setPhaseLabel('ラウンド終了ボタンで撤退/追撃判定へ');
     await waitForRoundEnd();
+    endProtectedView();
 
     // 即時帰還した枢軸艦の行を戦闘モーダルから削除（後で帰還港UIで処理）
     for(const p of pendingAxisDisabledForUI){
@@ -1833,51 +1810,44 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
       continue;
     }
 
-    // === 撤退判定（12.x）===
-    let allyRetreat = await tryRetreat('allies', seaKey);
-    const axisDecision = { enemyRetreating: !!allyRetreat, pursue: true };
-    const axisRetreat = await tryRetreat('axis',   seaKey, axisDecision);
-    // AI（連合）が撤退宣言したが、こちら（枢軸）も撤退する場合 → AI 撤回して支配を確保
-    if(allyRetreat && axisRetreat && aiSide === 'allies'){
-      allyRetreat = null;
-      setPhaseLabel('連合: 枢軸も撤退のため撤回 → 残留');
-      setAiDecisionLabel('連合: 撤退を撤回 → 止まる');
-      await new Promise(r => setTimeout(r, 800));
+    // === 撤退判定（12.x）: 両軍とも相手の判断を知らないまま決め、そろってから同時に公開する ===
+    const allyRetreat = await tryRetreat('allies', seaKey, { silent: true });
+    const axisRetreat = await tryRetreat('axis', seaKey, { enemyRetreating: false, silent: true });
+    const word = r => r ? `撤退（${r.length}グループ）` : '止まる';
+    setPhaseLabel(`判断の公開 ─ 連合: ${word(allyRetreat)} ／ 枢軸: ${word(axisRetreat)}`);
+    setAiDecisionLabel(`連合: ${word(allyRetreat)} ／ 枢軸: ${word(axisRetreat)}`);
+    showRetreatGroupTags([...(allyRetreat || []), ...(axisRetreat || [])]);
+    await new Promise(r => setTimeout(r, 1500));
+    if(allyRetreat || axisRetreat){
+      retreatedSeas.add(seaKey); // 12.4 POC獲得不可（双方撤退ならどちらも支配できない）
     }
-    // 同様に AI が枢軸の場合も対応
-    let finalAxisRetreat = axisRetreat;
-    if(allyRetreat && axisRetreat && aiSide === 'axis'){
-      finalAxisRetreat = null;
-      setPhaseLabel('枢軸: 連合も撤退のため撤回 → 残留');
-      await new Promise(r => setTimeout(r, 800));
-    }
-    if(allyRetreat || finalAxisRetreat){
-      retreatedSeas.add(seaKey); // 12.4 POC獲得不可
-    }
-    // 連合撤退→枢軸追跡（グループ別）
-    if(allyRetreat){
-      // 人間側が「止まる」を選んだ場合は追撃なし
-      const pursuits = (aiSide === 'axis' || axisDecision.pursue) ? await tryPursuit('axis', seaKey, allyRetreat) : null;
+    // 追撃できるのは、相手が撤退し、自分が止まったときだけ
+    if(allyRetreat && !axisRetreat){
+      // 枢軸（人間）は公開を見てから追撃するかを決める。AIの枢軸は tryPursuit 内で判断
+      let pursue = true;
+      if(humanSide === 'axis' && aiSide !== 'axis'){
+        pursue = await chooseInPhaseLabel('枢軸: 連合が撤退します。追撃しますか？', [
+          { label:'追撃する', value:true, bg:'#a55' },
+          { label:'追撃しない', value:false, bg:'#446' }
+        ]);
+      }
+      const pursuits = pursue ? await tryPursuit('axis', seaKey, allyRetreat) : null;
       if(pursuits){
         for(const p of pursuits){
           await runPursuitRound(p.pursuers, p.retreaters);
         }
       }
-      for(const group of allyRetreat){
-        await retreatToPort(group);
-      }
     }
-    // 枢軸撤退→連合追跡（グループ別）
-    if(finalAxisRetreat){
-      const pursuits = await tryPursuit('allies', seaKey, finalAxisRetreat);
+    if(axisRetreat && !allyRetreat){
+      const pursuits = await tryPursuit('allies', seaKey, axisRetreat);
       if(pursuits){
         for(const p of pursuits){
           await runPursuitRound(p.pursuers, p.retreaters);
         }
       }
-      for(const group of finalAxisRetreat){
-        await retreatToPort(group);
-      }
+    }
+    for(const group of [...(allyRetreat || []), ...(axisRetreat || [])]){
+      await retreatToPort(group);
     }
     clearRetreatGroups(); // 撤退・追撃が終わったら、グループの印を消す
     placeAllShips();
@@ -1886,6 +1856,98 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
 }
 
 // 追跡戦闘: 追跡側が諦めるか、片側が壊滅するか、速度不足になるまで継続
+// ===== 目標の宣言（水上戦闘・追撃）=====
+// 宣言の段階では結果が分からないので、連合AIは「見込みの損害」を足して、同じ艦に撃ちすぎないようにする
+function newDeclPending(){ return { damage: {}, disabled: new Set(), firedAtBy: { allies: new Set(), axis: new Set() } }; }
+function expectedHitDamage(ship){
+  const p = (ship.country === 'DE' && ship.damage === 0) ? 2/6 : 1/6; // 無傷のドイツ艦は出目+1
+  return (ship.atk || 0) * p * 3.5;
+}
+// 保護されている艦の表示（水上戦闘の目標の宣言のあいだ）
+//   船団: 相手がその陣営の通常の艦を全部目標に宣言するまで保護
+//   空母（攻撃を宣言していない）: 通常の艦と船団が全部目標に宣言されるまで保護
+const protView = { sea: null, firedAt: { allies: new Set(), axis: new Set() } };
+function startProtectedView(seaKey){
+  protView.sea = seaKey;
+  protView.firedAt = { allies: new Set(), axis: new Set() };
+  updateProtectedRows();
+}
+function endProtectedView(){
+  protView.sea = null;
+  document.querySelectorAll('#combatModal .cs-row.protected').forEach(r => r.classList.remove('protected'));
+}
+function updateProtectedRows(){
+  if(!protView.sea) return;
+  for(const side of ['allies', 'axis']){
+    const fired = protView.firedAt[side === 'allies' ? 'axis' : 'allies'];
+    const ships = SHIPS.filter(s => s.location === protView.sea && !s.sunk && !s.returnPending && s.side === side && s.type !== 'UBOAT');
+    const isCv = s => s.type === 'CV' && !s._cvDeclared;
+    const normal = ships.filter(s => !isCv(s) && s.type !== 'CONVOY');
+    const convoy = ships.filter(s => s.type === 'CONVOY');
+    const allN = normal.every(s => fired.has(s.id));
+    const allC = convoy.every(s => fired.has(s.id));
+    ships.forEach(s => {
+      const row = document.getElementById(`cs-${s.id}`);
+      if(row) row.classList.toggle('protected', (s.type === 'CONVOY' && !allN) || (isCv(s) && !(allN && allC)));
+    });
+  }
+}
+// 宣言を記録し、戦闘画面の射撃側の欄に「→目標」を表示する
+function addDeclared(decl, ship, target, pendDecl){
+  pendDecl.firedAtBy[ship.side].add(target.id);
+  if(protView.sea){ protView.firedAt[ship.side].add(target.id); updateProtectedRows(); }
+  if(ship.side === aiSide) pendDecl.damage[target.id] = (pendDecl.damage[target.id] || 0) + expectedHitDamage(ship);
+  decl.push({ ship, target });
+  const el = document.getElementById(`cs-dc-${ship.id}`);
+  if(el) el.innerHTML = `<span style="color:#aac;margin-right:4px;">→${target.name}</span>`;
+}
+// 水上戦闘の1陣営分の宣言。撃たれると宣言された空母（攻撃力1以上）は、判定の前に撃ち返す目標も宣言する
+async function declareSurfaceTargets(shooters, enemySide, seaKey, decl, pendDecl){
+  for(const ship of shooters){
+    if(ship.type === 'CV' && !ship._cvDeclared) continue; // 空母は、攻撃を宣言したときだけ撃つ
+    if(ship.atk === 0) continue;
+    highlightShip(ship.id, 'firing');
+    const dispName = ship.sunk ? `${ship.name}[撃沈中]` : (ship.disabled ? `${ship.name}[即時帰還]` : ship.name);
+    setPhaseLabel(`${dispName}(${ship.atk}発): 目標をクリック`);
+    const target = await waitForSurfaceTarget(enemySide, seaKey, ship, pendDecl[ship.side]);
+    unhighlightShip(ship.id, 'firing');
+    if(!target) break;
+    addDeclared(decl, ship, target, pendDecl[ship.side]);
+    // CV 即時反撃（攻撃を宣言した空母は通常の艦の扱いなので反撃しない）
+    if(target.type === 'CV' && !target._cvDeclared && target.atk >= 1 && !target.sunk && !target.disabled){
+      highlightShip(target.id, 'firing');
+      setPhaseLabel(`${target.name}(${target.atk}発) 即時反撃: 目標をクリック`);
+      const counterTarget = await waitForSurfaceTarget(ship.side, seaKey, target, pendDecl[target.side]);
+      unhighlightShip(target.id, 'firing');
+      if(counterTarget) addDeclared(decl, target, counterTarget, pendDecl[target.side]);
+    }
+  }
+}
+// 空母の攻撃の宣言。人間側は選ぶ、AI側は保護と即時反撃を残すため自分からは攻撃しない
+async function declareCarrierAttacks(seaKey){
+  const cvs = SHIPS.filter(s => s.location === seaKey && !s.sunk && !s.returnPending && s.type === 'CV' && s.atk >= 1 && !s.disabled);
+  for(const cv of cvs){
+    if(cv.side === aiSide) continue;
+    highlightShip(cv.id, 'firing');
+    const go = await chooseInPhaseLabel(`${cv.name}: 攻撃しますか？（攻撃すると、この戦闘のあいだ通常の艦と同じ扱い。取り消せません）`, [
+      { label:'攻撃しない', value:false, bg:'#446' },
+      { label:'攻撃する', value:true, bg:'#a55' }
+    ]);
+    unhighlightShip(cv.id, 'firing');
+    if(go) cv._cvDeclared = true;
+  }
+}
+// 宣言どおりにダイスを振る（損害は pending に保留し、あとで同時に適用）
+async function resolveDeclaredFire(decl, pending){
+  for(const d of decl){
+    highlightShip(d.ship.id, 'firing');
+    const fireEvents = [];
+    surfaceFireOne(d.ship, d.target, fireEvents, pending);
+    await playEvents(fireEvents);
+    unhighlightShip(d.ship.id, 'firing');
+  }
+}
+
 async function runPursuitRound(pursuit, retreat){
   const sea = pursuit.length ? (pursuit[0].location || retreat[0]?.location || '') : (retreat[0]?.location || '');
   await flashCombatOverlay(`━ ${SEA_LABEL[sea]||sea} 追撃戦 ━`, 1500);
@@ -1920,32 +1982,34 @@ async function runPursuitRound(pursuit, retreat){
     }
     setPhaseLabel('━ 追跡ラウンド ━');
     const pending = { damage: {}, disabled: new Set(), firedAtBy: { allies: new Set(), axis: new Set() } };
-    // 追跡側射撃
-    setPhaseLabel('追跡側 射撃');
+    // 目標の宣言（追う側 → 撤退する側。結果を見てからは変えられない）
+    const decl = [];
+    const pendPur = newDeclPending(), pendRet = newDeclPending();
+    setPhaseLabel('追跡側 目標の宣言');
     for(const ship of eligible){
       if(ship.atk === 0) continue;
       highlightShip(ship.id, 'firing');
       setPhaseLabel(`${ship.name}(${ship.atk}発): 撤退艦から目標`);
-      const target = await waitForTargetClickFromList(aliveRet, ship, pending);
+      const target = await waitForTargetClickFromList(aliveRet, ship, pendPur);
       unhighlightShip(ship.id, 'firing');
       if(!target) break;
-      const fireEvents = [];
-      surfaceFireOne(ship, target, fireEvents, pending);
-      await playEvents(fireEvents);
+      addDeclared(decl, ship, target, pendPur);
     }
-    // 撤退側反撃（11.3 同時）
-    setPhaseLabel('撤退側 反撃');
+    setPhaseLabel('撤退側 目標の宣言');
     for(const ship of aliveRet){
       if(ship.atk === 0) continue;
       highlightShip(ship.id, 'firing');
       setPhaseLabel(`${ship.name}(${ship.atk}発): 追跡艦から目標`);
-      const target = await waitForTargetClickFromList(eligible, ship, pending);
+      const target = await waitForTargetClickFromList(eligible, ship, pendRet);
       unhighlightShip(ship.id, 'firing');
       if(!target) break;
-      const fireEvents = [];
-      surfaceFireOne(ship, target, fireEvents, pending);
-      await playEvents(fireEvents);
+      addDeclared(decl, ship, target, pendRet);
     }
+    if(decl.length && humanSide === 'axis'){
+      setPhaseLabel('攻撃ボタンを押してください');
+      await waitForAirAttackBtn();
+    }
+    await resolveDeclaredFire(decl, pending);
     // 損害適用
     setPhaseLabel('━ 損害適用 ━');
     const applyEvents = [];
@@ -2100,8 +2164,9 @@ function waitForSurfaceTarget(side, focusSea, attacker, pending){
       s.side === side && !s.sunk && s.location === focusSea && s.type !== 'UBOAT' && !s.disabledThisTurn && !s.removed && !willBeSunk(s)
     );
     // 通常艦（CV/CONVOYでない）
-    const normal = enemies.filter(s => s.type !== 'CV' && s.type !== 'CONVOY');
-    const cv = enemies.filter(s => s.type === 'CV');
+    // 攻撃を宣言した空母は、このラウンドは通常の艦と同じ扱い
+    const normal = enemies.filter(s => (s.type !== 'CV' || s._cvDeclared) && s.type !== 'CONVOY');
+    const cv = enemies.filter(s => s.type === 'CV' && !s._cvDeclared);
     const convoy = enemies.filter(s => s.type === 'CONVOY');
     // 14.8 船団保護 / 11.6 空母保護: 同ラウンドで攻撃側が全非保護艦を砲撃済みになったら保護艦も対象
     const attackerSide = attacker?.side || (side === 'allies' ? 'axis' : 'allies');
@@ -2175,6 +2240,23 @@ function ensureCombatRow(s){
   list.insertAdjacentHTML('beforeend', renderShipRow(s));
   return document.getElementById(`cs-${s.id}`);
 }
+// 撤退のグループの印（A/B/C）を戦闘画面に表示する（同時公開のとき）
+function showRetreatGroupTags(groups){
+  groups.flat().forEach(s => {
+    if(!s.group) return;
+    const row = document.getElementById(`cs-${s.id}`);
+    if(!row) return;
+    let el = row.querySelector('.cs-group');
+    if(!el){
+      el = document.createElement('span');
+      el.className = 'cs-group';
+      el.style.cssText = 'color:#fc4;font-weight:bold;margin-left:8px;';
+      const nameEl = row.querySelector('.cs-name');
+      if(nameEl) nameEl.appendChild(el);
+    }
+    el.textContent = s.group;
+  });
+}
 // 撤退のときに付けたグループの印（A/B/C）を、艦と戦闘画面の両方から消す
 function clearRetreatGroups(){
   SHIPS.forEach(s => { delete s.group; });
@@ -2202,6 +2284,12 @@ async function flashCombatOverlay(text, durationMs){
   await new Promise(r => setTimeout(r, 300));
 }
 
+// 船団の上陸などを、画面の真ん中に大きく知らせる（重ならないように順番に出す）
+let _announceChain = Promise.resolve();
+function announceBig(text, durationMs){
+  if(simMode) return;
+  _announceChain = _announceChain.then(() => flashCombatOverlay(text, durationMs || 2500));
+}
 function setPhaseLabel(txt){
   document.getElementById('phaseLabel').textContent = txt;
 }
@@ -2304,7 +2392,7 @@ function getReturnPorts(ship){
     if(!port.available.includes(currentTurn)) return false;
     if(port.side !== 'neutral' && port.side !== ship.side) return false;
     if(port.side === 'neutral' && ship.country === 'UK') return false; // UK艦は中立港使用不可
-    if(p === 'Russia' && ship.country === 'UK') return false; // UK艦はRussia帰還不可（Englandへ）
+    if(p === 'Russia' && ship.country !== 'UK' && ship.country !== 'RU') return false; // ロシアへ帰還できるのは英国艦（ターン3〜8）とソ連艦
     return true;
   });
 }
@@ -2594,13 +2682,19 @@ async function tryRetreat(side, seaKey, decision){
   const sideName = side === 'allies' ? '連合' : '枢軸';
   // AI 側は自動判断
   if(side === aiSide){
+    const silent = decision && decision.silent; // 同時公開: 相手が決めるまで判断を見せない
     if(!aiShouldRetreat(candidates, seaKey)){
+      if(silent) return null;
       setPhaseLabel(`${sideName}: AI判断で残留`);
       setAiDecisionLabel(`${sideName}: 止まる`);
       await new Promise(r => setTimeout(r, 800));
       return null;
     }
     const groups = aiSplitGroups(candidates, seaKey);
+    if(silent){
+      groups.flat().forEach(s => { const g = document.querySelector(`#cs-${s.id} .cs-group`); if(g) g.remove(); });
+      return groups;
+    }
     setPhaseLabel(`${sideName}: AI判断で撤退（${groups.length}グループ）`);
     setAiDecisionLabel(`${sideName}: 撤退（${groups.length}グループ）`);
     await new Promise(r => setTimeout(r, 800));
@@ -2753,7 +2847,7 @@ async function tryPursuit(pursuerSide, seaKey, retreatGroups){
       const group = retreatGroups[i];
       if(!group.length) continue;
       const minSpd = Math.min(...group.map(s => s.spd));
-      const eligible = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && s.type !== 'CV' && !s.returnPending && s.spd >= minSpd);
+      const eligible = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && (s.type !== 'CV' || s._cvDeclared) && !s.returnPending && s.spd >= minSpd);
       if(!eligible.length) continue;
       const pursuers = aiSelectPursuers(eligible, group);
       if(!pursuers || !pursuers.length) continue;
@@ -2788,7 +2882,7 @@ function selectPursuitAssignments(retreatGroups, seaKey, pursuerSide, sideName){
     const groupsInfo = retreatGroups.map((group, i) => {
       const grpName = String.fromCharCode(65 + i);
       const minSpd = group.length ? Math.min(...group.map(s => s.spd)) : 0;
-      const eligible = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && s.type !== 'CV' && !s.returnPending && s.spd >= minSpd);
+      const eligible = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && (s.type !== 'CV' || s._cvDeclared) && !s.returnPending && s.spd >= minSpd);
       return { idx: i, grpName, group, minSpd, eligible };
     }).filter(g => g.group.length);
 
@@ -3123,7 +3217,7 @@ async function executeRepair(side){
   console.log('[executeRepair]', { side, currentTurn });
   Object.keys(PORTS).forEach(portKey => {
     const port = PORTS[portKey];
-    const portShipsAll = SHIPS.filter(s => s.location === portKey && !s.sunk);
+    const portShipsAll = SHIPS.filter(s => s.location === portKey && !s.sunk && !s.landed);
     const damagedShipsAll = portShipsAll.filter(s => s.damage > 0);
     if(damagedShipsAll.length){
       console.log(`[executeRepair] ${portKey} (repair=${port.repair}, avail=${port.available}, side=${port.side}):`, damagedShipsAll.map(s => `${s.name}(${s.side},dmg${s.damage})`));
@@ -3132,7 +3226,7 @@ async function executeRepair(side){
     if(!port.available.includes(currentTurn)){ if(damagedShipsAll.length) console.log(`  → skip: turn ${currentTurn} not in available`); return; }
     if(side && port.side !== 'neutral' && port.side !== side){ if(damagedShipsAll.length) console.log(`  → skip: side filter (${side} vs ${port.side})`); return; }
     const ships = SHIPS.filter(s =>
-      s.location === portKey && !s.sunk && s.damage > 0 &&
+      s.location === portKey && !s.sunk && !s.landed && s.damage > 0 &&
       (!side || s.side === side) && s.side !== humanSide
     );
     if(!ships.length){ console.log(`  → no ships match filter`); return; }
@@ -3172,7 +3266,7 @@ function showRepairUI(side){
     if(port.repair <= 0) return;
     if(!port.available.includes(currentTurn)) return;
     if(port.side !== 'neutral' && port.side !== side) return;
-    const ships = SHIPS.filter(s => s.location === portKey && !s.sunk && s.damage > 0 && s.side === side);
+    const ships = SHIPS.filter(s => s.location === portKey && !s.sunk && !s.landed && s.damage > 0 && s.side === side);
     if(ships.length) entries.push({ portKey, port, ships });
   });
   if(!entries.length) return Promise.resolve([]);
@@ -3556,10 +3650,12 @@ async function aiAlliedMove(bbTargetOverride){
   for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && s.damage > 0)){
     ship.location = 'England';
     ship.removed = true;
+    ship.landed = true; // 上陸した港に置いたまま（以後動かない）
     ship.movedThisTurn = true;
     _convoyOccupiedEarly.delete('NorthAtlantic');
     poc = Math.max(-10, Math.min(10, poc + 1));
     aiLog.push(`<b>${ship.name}: 損害により England 上陸 +1POC(連合)</b>`);
+    announceBig(`${ship.name} 英国上陸 ＋1 POC（連合）`);
   }
   // 1a-2) 無傷船団 NA→バレンツ海（海上2ターン目以降、ロシア向け）
   //       累計POCで連合がリード、または護衛が貧弱ならバレンツへ行かず England 上陸 +1
@@ -3572,10 +3668,12 @@ async function aiAlliedMove(bbTargetOverride){
     if(cumPocNow > 0 || escortWeak){
       ship.location = 'England';
       ship.removed = true;
+      ship.landed = true; // 上陸した港に置いたまま（以後動かない）
       ship.movedThisTurn = true;
       _convoyOccupiedEarly.delete('NorthAtlantic');
       poc = Math.max(-10, Math.min(10, poc + 1));
       aiLog.push(`<b>${ship.name}: ${cumPocNow > 0 ? `連合リード(累計${cumPocNow})` : '護衛が貧弱'} → England 上陸 +1POC(連合)</b>`);
+      announceBig(`${ship.name} 英国上陸 ＋1 POC（連合）`);
       continue;
     }
     if(_convoyOccupiedEarly.has('Barents')) continue;
@@ -4874,8 +4972,8 @@ function placeStack(stackId, label, ships, x, y, w){
       html += `<div style="position:absolute;top:-15%;left:-15%;background:#fc4;color:#000;font-weight:bold;font-size:0.9em;padding:1px 6px;border-radius:3px;border:2px solid #fff;box-shadow:0 0 4px #000;">DIS</div>`;
     }
     if(s.returnPending){
-      // 帰還待ちマーク（戦闘・支配判定に不参加）
-      html += `<div style="position:absolute;top:-15%;left:-15%;background:#f80;color:#000;font-weight:bold;font-size:0.9em;padding:1px 6px;border-radius:3px;border:2px solid #fff;box-shadow:0 0 4px #000;">帰還</div>`;
+      // 帰還待ちマーク（戦闘・支配判定に不参加）。言語に関係なく R（Return）
+      html += `<div style="position:absolute;top:-15%;left:-15%;background:#f80;color:#000;font-weight:bold;font-size:0.9em;padding:1px 6px;border-radius:3px;border:2px solid #fff;box-shadow:0 0 4px #000;">R</div>`;
     }
     div.innerHTML = html;
     inner.appendChild(div);
@@ -4998,7 +5096,7 @@ function placeAllShips(){
   // place key（海域内で陣営/タイプ別に分割）でグルーピング
   const byKey = {};
   SHIPS.forEach(s => {
-    if(!s.location || s.sunk || s.removed) return;
+    if(!s.location || s.sunk || (s.removed && !s.landed)) return;
     const key = getPlaceKey(s);
     (byKey[key] ||= []).push(s);
   });
@@ -5300,10 +5398,11 @@ function endTurn(){
   SHIPS.forEach(s => {
     if(s.type !== 'CONVOY' || s.sunk || s.removed) return;
     if(s.location === 'Barents'){
-      // ロシア自動上陸 +3POC
-      s.removed = true; s.location = null;
+      // ロシア自動上陸 +3POC。上陸したロシアの港に置いたまま（以後動かない）
+      s.removed = true; s.location = 'Russia'; s.landed = true;
       delta += 3;
       log.push(`船団 ${s.name} ロシア上陸 +3POC(連合)`);
+      announceBig(`${s.name} ロシア上陸 ＋3 POC（連合）`);
     }
     // NA留まり: 次ターンBarentsへ進ませる（英国上陸はしない）
   });
