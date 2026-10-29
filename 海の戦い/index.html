@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>海の戦い - War at Sea</title>
+<script src="lang.js"></script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
@@ -262,6 +263,7 @@ body.hide-units .control-marker { display:none; }
 
 <div id="topbar">
   <h1>⚓ War at Sea</h1>
+  <button class="zbtn" id="langBtn" onclick="toggleLang()" style="width:auto;padding:0 10px;font-size:0.8em;">EN</button>
   <label style="font-size:0.85em;">
     ターン:
     <span id="turnLabel" style="display:inline-block;min-width:24px;text-align:center;font-weight:bold;color:#ffcc44;">1</span>
