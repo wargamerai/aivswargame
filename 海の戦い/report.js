@@ -16,7 +16,7 @@ function repSnap(){
   const m = {};
   SHIPS.forEach(s => { m[s.id] = { id: s.id, name: s.name, side: s.side, type: s.type, country: s.country, loc: s.location,
     damage: s.damage || 0, def: s.def, sunk: !!s.sunk, ret: !!s.returnPending, forced: !!s.forcedReturn,
-    failed: !!s.failedMove, usEntered: !!s.usEntered, removed: !!s.removed }; });
+    failed: !!s.failedMove, usEntered: !!s.usEntered, removed: !!s.removed, landed: !!s.landed }; });
   return m;
 }
 // 戦闘の前後をくらべて、場所ごとの撃沈・損害・帰還をまとめる
@@ -72,7 +72,11 @@ function repTurnData(turn, ctl, gain, total){
   }));
   const combat = Object.keys(cb).map(loc => ({ loc: REP_LOC[loc] || loc, port: !REP_SEA[loc], sunk: cb[loc].sunk, damaged: cb[loc].damaged, retreat: cb[loc].retreat, forced: cb[loc].forced }));
   const lba = (REP.lba[turn] || []).map(x => ({ side: x.side, loc: x.area, name: REP_LOC[x.area] || x.area }));
-  return { turn, seas, ports, failed, combat, ctl, gain, total, lba };
+  // このターンに上陸した船団（ロシア +3、英国 +1）
+  const now = repSnap();
+  const convoys = Object.values(now).filter(n => n.type === 'CONVOY' && n.landed && !(start[n.id] && start[n.id].landed))
+    .map(n => ({ name: n.name, port: REP_LOC[n.loc] || n.loc, pts: n.loc === 'Russia' ? 3 : 1 }));
+  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys };
 }
 
 // ---------- 呼び出しの前後で記録を取る ----------
@@ -189,6 +193,7 @@ function render(){
   const lbaOf = loc => (t.lba || []).filter(x => x.loc === loc).map(x => '<span class="lba ' + x.side + '">✈' + CTL[x.side] + ' LBA</span>').join('');
   let h = '<h2>Turn ' + t.turn + ': Control</h2><div class="card">' + Object.keys(D.seaName).map(k => D.seaName[k] + ': <b class="' + (t.ctl[k] || '') + '">' + (CTL[t.ctl[k]] || 'none') + '</b>').join(' &nbsp; ')
     + '<div>LBA: ' + (['allies', 'axis'].map(sd => { const x = (t.lba || []).filter(l => l.side === sd); return '<b class="' + sd + '">' + CTL[sd] + '</b> ' + (x.length ? x.map(l => esc(l.name)).join(', ') : 'not used'); }).join(' &nbsp; ')) + '</div>'
+    + ((t.convoys || []).length ? '<div>Convoys: ' + t.convoys.map(c => esc(c.name) + ' landed in ' + esc(c.port) + ' (<b class="allies">Allies +' + c.pts + '</b>)').join(', ') + '</div>' : '')
     + '<div class="poc">POC this turn ' + sgn(t.gain) + ' &nbsp; Total ' + sgn(t.total) + '</div></div>';
   h += '<h2>Movement (positions before combat)<span class="legend"><span class="r-sunk">Sunk</span><span class="r-dmg">Damaged</span><span class="r-ret">Returned</span></span></h2><div class="grid">';
   for(const sea of Object.keys(D.seaName)){
