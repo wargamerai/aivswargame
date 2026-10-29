@@ -3595,6 +3595,8 @@ function planAlliedDeployment(aiLog){
   const isFast = s => s.spd >= 5; // 速力5以上=速い艦（バレンツ海） / 4以下=遅い艦（北海）
   const nsOk = s => hop(s, 'NorthSea') === 1;
   const barOk = s => hop(s, 'Barents') > 0;
+  // バレンツ海への移動の成功率（隣接=確実 / 2エリア移動=ダイス）
+  const barRate = s => hop(s, 'Barents') === 1 ? 1 : successRate(s);
 
   // 投入済みの米国艦は北大西洋
   freeShips().filter(s => s.country === 'US' && hop(s, 'NorthAtlantic') > 0).forEach(s => assign(s, 'NorthAtlantic'));
@@ -3619,10 +3621,12 @@ function planAlliedDeployment(aiLog){
 
   if(currentTurn === 1){
     // ===== ターン1: 北海とバレンツ海に全力（大西洋は考えない） =====
-    // 地中海のテコ入れ: 足の遅い戦艦2隻（Malaya・Barham）と重巡2隻を2エリア移動で地中海へ（成否はダイス）
+    // 地中海のテコ入れ: 足の遅い戦艦（Malaya・Barham）0〜1隻と重巡0〜2隻を2エリア移動で地中海へ（数はくじ、成否はダイス）
     {
-      const medBB = freeShips().filter(s => (s.id === 'uk_malaya' || s.id === 'uk_barham') && medOk(s));
-      const medCA = freeShips().filter(s => s.country === 'UK' && s.type === 'CA' && medOk(s)).slice(-2);
+      const nBB = Math.floor(Math.random() * 2), nCA = Math.floor(Math.random() * 3);
+      const medBB = freeShips().filter(s => (s.id === 'uk_malaya' || s.id === 'uk_barham') && medOk(s))
+        .sort(() => Math.random() - 0.5).slice(0, nBB);
+      const medCA = nCA ? freeShips().filter(s => s.country === 'UK' && s.type === 'CA' && medOk(s)).slice(-nCA) : [];
       [...medBB, ...medCA].forEach(s => assign(s, 'Mediterranean'));
     }
     // 空母: 航空攻撃力の大きい順に、バレンツ海・北海へ交互に振り分ける
@@ -3645,7 +3649,8 @@ function planAlliedDeployment(aiLog){
     // 北海が届かないとき: バレンツ海の余剰の範囲で北海へ回す
     while(!battleGeq(placed.NorthSea, deHome)){
       // バレンツ海から抜いてもドイツ本国以上を保てる艦（余剰）を北海へ
-      const cands = placed.Barents.filter(s => nsOk(s) && (s.atk || 0) > 0 && battleGeq(placed.Barents.filter(x => x !== s), deHome)).sort((a, b) => pw(b) - pw(a));
+      // バレンツ海への移動に失敗しうる艦から先に回す（確実に行ける艦はバレンツ海に残す）、同じなら攻撃力の高い艦
+      const cands = placed.Barents.filter(s => nsOk(s) && (s.atk || 0) > 0 && battleGeq(placed.Barents.filter(x => x !== s), deHome)).sort((a, b) => barRate(a) - barRate(b) || pw(b) - pw(a));
       if(!cands.length) break;
       unassign(cands[0]);
       assign(cands[0], 'NorthSea');
