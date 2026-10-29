@@ -2935,14 +2935,23 @@ async function tryPursuit(pursuerSide, seaKey, retreatGroups){
 
   if(isAi){
     // AI: 追う艦も速力で振り分ける
-    //   追う艦は、自分が追いつける中で一番速い撤退グループへ（1隻は1グループだけ）。最も速い1隻は海域に残す
+    //   追う艦は、自分が追いつける中で一番速い撤退グループへ（1隻は1グループだけ）
+    //   海域の支配を確実にするため1隻は残す（5の強制帰還で全艦いなくなるのを防ぐ）。追撃に加われない艦
+    //   （攻撃を宣言していない空母、どのグループにも追いつけない艦）がいればそれでよく、いなければ一番役に立たない艦を残す
     //   追撃する価値がないグループに割り当てた艦は、次に遅いグループへ回す
     const groups = retreatGroups.filter(g => g.length).map(g => ({ g, min: Math.min(...g.map(s => s.spd)), ships: [] }))
       .sort((a, b) => b.min - a.min);
-    let pool = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && (s.type !== 'CV' || s._cvDeclared) && !s.returnPending)
-      .sort((a, b) => b.spd - a.spd);
-    if(pool.length > 1){
-      pool = pool.slice(1); // 最速1隻は海域に残す
+    const here = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === pursuerSide && s.type !== 'UBOAT' && !s.returnPending);
+    const slowest = groups.length ? groups[groups.length - 1].min : Infinity;
+    let pool = here.filter(s => (s.type !== 'CV' || s._cvDeclared) && s.spd >= slowest);
+    const staysAnyway = here.some(s => !pool.includes(s));
+    if(!staysAnyway && pool.length){
+      // 一番役に立たない艦（攻撃力が低い、同じなら残りの耐久が少ない）を残す
+      const keep = pool.slice().sort((a, b) => (a.atk || 0) - (b.atk || 0) || ((a.def - a.damage) - (b.def - b.damage)))[0];
+      pool = pool.filter(s => s !== keep);
+    }
+    pool.sort((a, b) => b.spd - a.spd);
+    if(pool.length){
       for(const ship of pool){
         const grp = groups.find(x => x.min <= ship.spd);
         if(grp) grp.ships.push(ship);
