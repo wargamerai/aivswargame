@@ -2547,9 +2547,12 @@ function aiDoMovement() {
   dbg('aiDoMovement', {side:G.activeSide});
   const side = G.activeSide;
 
+  // 連合軍の思考（bulge_mcts.js）があるときは、増援の登場と第82空挺の移動もその判断の中で行う
+  const alliedThink = side === 'allied' && G.useMC && typeof mcAlliedDoctrineMove === 'function';
+
   // === 待機リストから増援呼び出し ===
   const reserves = G.reserves[side];
-  if (reserves && reserves.length > 0) {
+  if (!alliedThink && reserves && reserves.length > 0) {
     // 先頭のユニット（mechPairがあればペアも）を呼び出す
     const ru = reserves[0];
     let valid = getValidEntryHexes(ru);
@@ -2590,13 +2593,13 @@ function aiDoMovement() {
     units = units.filter(u => !mustHoldCity(u));
   }
 
-  if (units.length === 0) {
+  if (units.length === 0 && !alliedThink) {
     passPhase();
     return;
   }
 
   // === 強制都市移動（82空挺→バストーニュ、1歩兵→サンビット） ===
-  if (side === 'allied' && typeof mustMarchToCity === 'function') {
+  if (side === 'allied' && !alliedThink && typeof mustMarchToCity === 'function') {
     const marchUnit = units.find(u => mustMarchToCity(u) !== null);
     if (marchUnit) {
       const cityHex = mustMarchToCity(marchUnit);
@@ -2691,6 +2694,8 @@ function aiDoMovement() {
       passPhase();
       return;
     }
+    // 連合軍の思考の中で手番を終えた（増援が登場して止まった、など）
+    if (result.handled) return;
     unit = result.unit;
     bestHex = result.hex;
     // スタック解除禁止
