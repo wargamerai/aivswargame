@@ -647,7 +647,7 @@ const watchTurns = [];
 function watchTurnData(turn, start, before, cb, ctl, gain, total, after){
   // 海域・港ごとの両軍の艦と、戦闘の結果（撃沈 > 帰還 > 損害）
   const shipsAt = loc => {
-    const here = Object.values(before).filter(b => b.loc === loc && !b.sunk && !b.removed);
+    const here = Object.values(before).filter(b => b.loc === loc && !b.sunk && (!b.removed || b.landed));
     const c = cb[loc];
     const res = b => {
       if(!c) return { res: '', dmg: b.damage ? `${b.damage}/${b.def}` : '' };
@@ -659,7 +659,7 @@ function watchTurnData(turn, start, before, cb, ctl, gain, total, after){
       return { res: hit ? 'dmg' : '', dmg };
     };
     const side = sd => ({
-      ships: here.filter(b => b.side === sd).map(b => ({ name: b.name, type: b.type, from: LOC_EN[start[b.id].loc] || start[b.id].loc, failed: b.failed, ...res(b) })),
+      ships: here.filter(b => b.side === sd).map(b => ({ name: b.name, type: b.type, from: LOC_EN[start[b.id].loc] || start[b.id].loc, failed: b.failed, landed: b.landed, ...res(b) })),
     });
     return { allies: side('allies'), axis: side('axis') };
   };
@@ -683,7 +683,11 @@ function watchTurnData(turn, start, before, cb, ctl, gain, total, after){
   // このターンに上陸した船団（ロシア +3、英国 +1）
   const convoys = Object.values(after || {}).filter(n => n.type === 'CONVOY' && n.landed && !(start[n.id] && start[n.id].landed))
     .map(n => ({ name: n.name, port: LOC_EN[n.loc] || n.loc, pts: n.loc === 'Russia' ? 3 : 1 }));
-  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys };
+  // 水上戦闘ごとの連合AIの目標の選び方（倍率は戦闘の始まりの連合/枢軸の戦力）
+  const targeting = G('alliedTargetModeLog').filter(x => x.turn === turn)
+    .map(x => ({ sea: LOC_EN[x.sea] || x.sea, mode: x.mode, ratio: isFinite(x.ratio) ? x.ratio : null }));
+  const pst = G('alliedPostureLog').find(x => x.turn === turn);
+  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys, targeting, posture: pst ? pst.posture : null };
 }
 function buildWatchHtml(finalPoc){
   const opts = ['--ub-nolimit', '--bismarck7', '--us-ease'].filter(o => process.argv.includes(o));
@@ -747,7 +751,7 @@ document.getElementById('sub').textContent = 'AI vs AI. Optional rules: ' + (D.o
 function side(sd, x, locName, inPort){
   if(!x.ships.length) return '';
   let h = '<div class="side"><b class="' + sd + '">' + CTL[sd] + '</b>';
-  const note = s => inPort ? (s.failed ? ' <span class="from">move failed</span>' : '')
+  const note = s => inPort ? (s.landed ? ' <span class="from">landed</span>' : s.failed ? ' <span class="from">move failed</span>' : '')
     : ' <span class="from">' + (s.from === locName ? 'stayed' : '← ' + esc(s.from)) + '</span>';
   h += '<ul>' + x.ships.map(s => '<li><span class="' + (s.res ? 'r-' + s.res : '') + '">' + esc(s.name) + '</span>' + (s.dmg ? ' (damage ' + s.dmg + ')' : '') + note(s) + '</li>').join('') + '</ul>';
   return h + '</div>';
@@ -799,6 +803,8 @@ function render(){
   // 支配とPOCは一番上に
   h = '<h2>Turn ' + t.turn + ': Control</h2><div class="card">' + Object.keys(D.seaName).map(k => D.seaName[k] + ': <b class="' + (t.ctl[k] || '') + '">' + (CTL[t.ctl[k]] || 'none') + '</b>').join(' &nbsp; ')
     + '<div>LBA: ' + (['allies', 'axis'].map(sd => { const x = (t.lba || []).filter(l => l.side === sd); return '<b class="' + sd + '">' + CTL[sd] + '</b> ' + (x.length ? x.map(l => esc(l.name)).join(', ') : 'not used'); }).join(' &nbsp; ')) + '</div>'
+    + (t.posture ? '<div>Allied posture: ' + ({ ns:'North Sea heavy', normal:'standard', atl:'Atlantic heavy' })[t.posture] + '</div>' : '')
+    + ((t.targeting || []).length ? '<div>Allied targeting: ' + t.targeting.map(x => esc(x.sea) + ' — ' + ({ big:'concentrate on big ships', normal:'standard (fast ships first)', spread:'spread fire' })[x.mode] + ' (' + (x.ratio === null ? '-' : x.ratio + 'x') + ')').join(', ') + '</div>' : '')
     + ((t.convoys || []).length ? '<div>Convoys: ' + t.convoys.map(c => esc(c.name) + ' landed in ' + esc(c.port) + ' (<b class="allies">Allies +' + c.pts + '</b>)').join(', ') + '</div>' : '')
     + '<div class="poc">POC this turn ' + sgn(t.gain) + ' &nbsp; Total ' + sgn(t.total) + '</div></div>' + h;
   v.innerHTML = h;
