@@ -39,6 +39,7 @@ const LANG_EXACT = {
   '艦と移動先を選択して「実行」': 'Select ships and a destination, then press "Execute"',
   '港湾/海域を選択': 'Select a port or sea area',
   '艦一覧の表示/非表示': 'Show / hide ship list',
+  'あなたはドイツ軍（枢軸）を担当します。連合軍はAIが動かします。': 'You play the German (Axis) side. The Allies are controlled by the AI.',
   'ターン:': 'Turn:',
   'ズーム:': 'Zoom:',
   'プレイ陣営:': 'Play side:',
