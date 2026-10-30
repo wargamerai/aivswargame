@@ -229,6 +229,8 @@ function winProb(axisArr, alliedArr, n = 2000){
   return wins / n;
 }
 
+// イタリアの構え: 対戦の開始時に1回だけくじ（慎重派60% / 積極派40%）。積極派は必ず出撃するターン（1〜4）も決める
+const IT_STYLE = { style: Math.random() < 0.6 ? 'caut' : 'aggr', turn: 1 + Math.floor(Math.random() * 4) };
 function myAxisMove(){
   const SHIPS = G('SHIPS'), SEAS = G('SEAS'), PORT_SEAS = G('PORT_SEAS'), SEA_ADJ = G('SEA_ADJ');
   const seaControl = G('seaControl'), turn = G('currentTurn');
@@ -266,7 +268,13 @@ function myAxisMove(){
   const r1 = x => Math.round(x * 10) / 10;
   const itEval = w.battleEval(itShips, alliedAt('Mediterranean'));
   const medAllied = r1(itEval.theirs), itAtk = r1(itEval.ours);
-  if(itShips.length && medAllied < itAtk * 2){
+  // 出撃の判断はイタリアの構え（対戦の開始時のくじ）で決める
+  //   慎重派: 連合と同等以上のときだけ出撃。第7・8ターンは必ず出撃
+  //   積極派: くじで決めた第1〜4ターンのどこかで必ず出撃。ほかのターンは同等以上なら出撃
+  const itGo = IT_STYLE.style === 'caut'
+    ? (turn >= 7 || itAtk >= medAllied)
+    : (turn === IT_STYLE.turn || itAtk >= medAllied);
+  if(itShips.length && itGo){
     itShips.forEach(s => move(s, 'Mediterranean'));
     log.push(`イタリア出撃 ${itShips.length}隻(攻${itAtk}) vs 連合${medAllied}`);
     ops.italy = { sortie: true, n: itShips.length, atk: itAtk, al: medAllied };
@@ -343,15 +351,18 @@ function myAxisMove(){
     const force = de.filter(s => reach(s, target));
     const asEval = w.battleEval(force, alliedAt(target));
     const forceAtk = r1(asEval.ours), alAtk = r1(asEval.theirs);
-    // 突撃するかどうか（ターン3〜6）: 得点の状況で確率を変えてランダムに決める
-    //   逆転されそう = ドイツのリードが0以下、または前ターンに連合が取った点でリードが消える
+    // 突撃するかどうか（ターン3〜8）: 得点の状況で確率を変えてランダムに決める
+    //   最終的に逆転されそう = 前ターンに連合が取った点を残りのターン（このターンを含む）取られるとリードが消える
+    //   ターン7・8は、逆転されそうなら必ず突撃（温存しても取り返せない）
     const lead = -cumPoc;
-    const danger = lead <= 0 || lead - Math.max(0, lastTurnGain) <= 0;
+    const danger = lead - Math.max(0, lastTurnGain) * (8 - turn + 1) <= 0;
     const favorable = forceAtk >= alAtk * WIN_RATIO;
     let p = 0;
     if(turn >= 3 && turn <= 6){
       if(danger) p = favorable ? 0.9 : (turn === 6 ? 0.7 : 0.4);
       else p = favorable ? 0.4 : 0.05;
+    } else if(turn >= 7 && danger){
+      p = 1;
     }
     if(force.length && Math.random() < p){
       axisState.assaultTurn = turn; axisState.target = target;
@@ -361,7 +372,7 @@ function myAxisMove(){
       assaultNow = target;
       raid(de.filter(s => !s.movedThisTurn));
     } else {
-      if(turn >= 3 && turn <= 6){ log.push(`殴り込み見送り: ${target} (攻${forceAtk} vs 連合${alAtk}, リード${lead}, 確率${p})`); ops.assaultSkipped = { target, atk: forceAtk, al: alAtk, lead, danger }; }
+      if(turn >= 3){ log.push(`殴り込み見送り: ${target} (攻${forceAtk} vs 連合${alAtk}, リード${lead}, 確率${p})`); ops.assaultSkipped = { target, atk: forceAtk, al: alAtk, lead, danger }; }
       raid(de);
     }
   } else {
@@ -397,9 +408,12 @@ function myAxisMove(){
   if(ubs.length){
     const aswDice = sea => alliedAt(sea).reduce((t, s) => t + ((s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1), 0);
     const convoyAt = Object.keys(SEAS).find(k => SHIPS.some(s => alive(s) && s.type === 'CONVOY' && s.location === k));
-    // 連合がいて、ドイツ水上艦がいない海域（連合のPOCになる海域）を手薄な順に
+    // 連合がいて、ドイツ・イタリアの水上艦がいない海域（ドイツが支配を取れず、連合のPOCになる海域）を安全な順に
+    //   安全の見積もり = 対潜ダイス × くじの倍率（0.5〜1.5）。たまには地中海などダイスの多い海域にも行く
+    const danger = {};
+    Object.keys(SEAS).forEach(k => { danger[k] = aswDice(k) * (0.5 + Math.random()); });
     const thin = Object.keys(SEAS).filter(k => alliedAt(k).length && !placed[k].some(s => s.type !== 'UBOAT') && k !== convoyAt)
-      .sort((a, b) => aswDice(a) - aswDice(b));
+      .sort((a, b) => danger[a] - danger[b]);
     const queue = [...ubs];
     const put = (u, sea) => { u.location = sea; u.movedThisTurn = true; u.originThisTurn = 'Germany'; placed[sea].push(u); };
     // 連合の対潜ダイス3個につきUボート1隻を止められるとみなす。置くのは、それを上回る数を置ける海域だけ
@@ -421,20 +435,7 @@ function myAxisMove(){
       // 突撃のターン: 例外として、すべて突撃先に集中
       while(queue.length) put(queue.shift(), assaultNow);
     }
-    if(!assaultNow){
-      // 北海かバレンツ海の連合の支配を外す（次ターンに本国から北大西洋へ出るため）。足りる方の少ない海域から
-      const opts = ['NorthSea', 'Barents'].filter(sea => alliedAt(sea).length && need(sea) <= queue.length).sort((a, b) => need(a) - need(b));
-      const freeOpen = ['NorthSea', 'Barents'].some(sea => !alliedAt(sea).length);
-      if(!freeOpen && opts.length){
-        const n = need(opts[0]);
-        if(putOver(opts[0])) ops.ubBreak = { sea: opts[0], n };
-      }
-    }
-    if(!assaultNow && axisState.assaultTurn === null){
-      // 突撃までは溜めておく: 船団がいる海域に上回る数を置ければ置き、残りは安全な海域へ
-      if(convoyAt) putOver(convoyAt);
-      toSafe();
-    }
+    // 毎ターン: 船団の海域 → 連合の支配を打ち消せる海域（安全な順） → 余りは安全な海域へ
     if(convoyAt) putOver(convoyAt);
     for(const sea of thin) putOver(sea);
     toSafe();
