@@ -5830,6 +5830,13 @@ function showCardGridOverlay(title, cards) {
 overlay.addEventListener('click', e => {
   if (e.target === overlay || e.target === overlayImg) overlay.classList.remove('active');
 });
+// 1枚の拡大表示中は、画面のどこをクリックしても閉じる（ズーム中は拡大画像の外がなくなるため）
+document.addEventListener('click', e => {
+  if (overlay.classList.contains('active') && overlayImg.style.display !== 'none') {
+    e.stopPropagation(); e.preventDefault();
+    overlay.classList.remove('active');
+  }
+}, true);
 
 // ===== §3.6 開始時の地形交互配置フェーズ =====
 state.phase = 'play'; // 'play' | 'terrainPlacement'
