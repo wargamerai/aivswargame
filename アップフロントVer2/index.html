@@ -2704,24 +2704,24 @@ function makeMainGroup(side, group, idx) {
   const flankTag = isFlanking ? '<span style="color:#fa0;margin-left:8px;font-weight:bold;font-size:12px;">▶側面</span>' : '';
   const encTag = isSurrounded ? '<span style="color:#f33;margin-left:8px;font-weight:bold;font-size:12px;">⚠包囲</span>' : '';
   const ppTag = (!group.eliminated && group.pinpointed) ? '<span style="color:#ff6;margin-left:8px;font-weight:bold;font-size:12px;background:#660;padding:1px 6px;border-radius:3px;border:1px solid #ff6;">◎補足</span>' : '';
-  // 正面の敵との距離に応じたグループ火力を表示（正面不在なら隣接敵を使用）
-  let fpTag = '';
+  // 敵の各グループとの距離に応じたグループ火力を、名前の下の行に並べて表示（斜め射撃用）
+  let fpRow = '';
   if (!group.eliminated && R_enc && R_enc.calcGroupFirepower) {
-    const isAlive = g => g && !g.eliminated;
-    let targetEnemy = enemyGroups[idx];
-    if (!isAlive(targetEnemy)) targetEnemy = enemyGroups[idx - 1];
-    if (!isAlive(targetEnemy)) targetEnemy = enemyGroups[idx + 1];
-    if (isAlive(targetEnemy)) {
-      const fac = side === 'player' ? state.player : state.ai;
-      const facKey = getFactionKey(fac);
-      const dist = R_enc.relativeRange(group.distance, targetEnemy.distance);
-      const moving = !!(top && top.terrain && top.terrain.type === 'MOVEMENT');
-      const crewMap = group.crewPairs ? buildCrewMapFromPairs(group) : {};
+    const fac = side === 'player' ? state.player : state.ai;
+    const facKey = getFactionKey(fac);
+    const moving = !!(top && top.terrain && top.terrain.type === 'MOVEMENT');
+    const crewMap = group.crewPairs ? buildCrewMapFromPairs(group) : {};
+    const parts = [];
+    enemyGroups.forEach((eg, ei) => {
+      if (!eg || eg.eliminated) return;
+      const dist = R_enc.relativeRange(group.distance, eg.distance);
       const fp = R_enc.calcGroupFirepower(group, facKey, dist, { moving, crewMap });
-      fpTag = `<span style="color:#8cf;margin-left:8px;font-size:12px;">FP:${fp}@距離${dist}</span>`;
-    }
+      parts.push(`${eg.name}/${fp}`);
+    });
+    if (parts.length) fpRow = `<div style="flex-basis:100%;order:10;color:#8cf;font-size:12px;white-space:nowrap;">${parts.join(' ')}</div>`;
   }
-  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${fpTag}${flankTag}${encTag}${ppTag}`;
+  header.style.flexWrap = 'wrap';
+  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${flankTag}${encTag}${ppTag}${fpRow}`;
 
   const dctrl = document.createElement('div');
   dctrl.className = 'distance-ctrl';
