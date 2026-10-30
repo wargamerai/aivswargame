@@ -1339,6 +1339,14 @@ function waitForTargetClickIn(side, focusSea, excludeIds, mode){
       // 連合の航空攻撃（空母・LBA）: 大物（攻撃力+防御力が最大）を狙う。5の目で帰還させると影響が大きい
       if(side === 'axis' && (mode === 'air' || mode === 'cv')){
         const val = c => (c.atkOrig || c.atk || 0) + (c.def || 0);
+        // 味方の艦隊がいないとき: 大物を帰還させても意味がないので撃沈の確率が高い艦（防御力−損害が小さい艦）を狙う
+        //   撃沈 = 6の目のあと損害ダイス > 防御力−損害。残りが6以上の艦は撃沈できない
+        const fleet = SHIPS.some(s => s.side === 'allies' && !s.sunk && !s.removed && s.location === focusSea && s.type !== 'CONVOY');
+        const left = c => (c.def || 0) - (c.damage || 0);
+        const sinkable = candidates.filter(c => left(c) < 6);
+        if(!fleet && sinkable.length){
+          resolve(sinkable.slice().sort((a, b) => left(a) - left(b) || val(b) - val(a))[0]); return;
+        }
         resolve(candidates.slice().sort((a, b) => val(b) - val(a) || (a.damage || 0) - (b.damage || 0))[0]); return;
       }
       if(mode === 'air'){
@@ -1984,8 +1992,11 @@ async function resolveDeclaredFire(decl, pending){
 
 async function runPursuitRound(pursuit, retreat){
   const sea = pursuit.length ? (pursuit[0].location || retreat[0]?.location || '') : (retreat[0]?.location || '');
-  await flashCombatOverlay(`━ ${SEA_LABEL[sea]||sea} 追撃戦 ━`, 1500);
-  startCombatLogEntry(SEA_LABEL[sea]||sea, '追撃戦闘');
+  // 撤退側のグループ（どのグループへの追撃かを表示に入れる）
+  const grps = [...new Set(retreat.map(s => s.group).filter(Boolean))].sort();
+  const grpTxt = grps.length ? ` グループ${grps.join('・')}` : '';
+  await flashCombatOverlay(`━ ${SEA_LABEL[sea]||sea} 追撃戦${grpTxt} ━`, 1500);
+  startCombatLogEntry(SEA_LABEL[sea]||sea, `追撃戦闘${grpTxt}`);
   logCombatLine(`追跡側: ${pursuit.map(s=>s.name).join(', ') || '―'}`);
   logCombatLine(`撤退側: ${retreat.map(s=>s.name).join(', ') || '―'}`);
   // 撃沈艦の cs-row を一掃するヘルパー
