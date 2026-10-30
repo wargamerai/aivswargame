@@ -3879,13 +3879,15 @@ async function aiAlliedMove(bbTargetOverride){
       }
       ship.usEntered = true;
     }
-    // 2エリア移動: ダイス < 速力 で成功、失敗は港に残る
+    // 2エリア移動: ダイス < 速力 で成功。失敗は、目的の海域に隣接する味方の港があればそこへ、なければ元の港に残る
     if(!(PORT_SEAS[ship.location] || []).includes(dest)){
       const v = rollD6();
       if(v >= ship.spd){
         ship.movedThisTurn = true;
         ship.failedMove = true;
-        aiLog.push(`${ship.name}: ${SEA_LABEL[dest]||dest}へ2エリア移動 ⚂${v}≥${ship.spd} 失敗`);
+        const alt = failMovePorts(ship, dest, ship.location)[0];
+        if(alt) ship.location = alt;
+        aiLog.push(`${ship.name}: ${SEA_LABEL[dest]||dest}へ2エリア移動 ⚂${v}≥${ship.spd} 失敗${alt ? ` → ${PORTS[alt].name}` : ''}`);
         continue;
       }
       aiLog.push(`${ship.name}: 2エリア移動 ⚂${v}<${ship.spd} 成功`);
@@ -5059,6 +5061,10 @@ function executeMove(){
       } else {
         s.location = s.homePort || origin;
         s.failedMove = true; // このターンは再配置不可
+        // 目的の海域に隣接する味方の港があれば、元の港の代わりにそこへ入れる
+        for(const p of failMovePorts(s, dest, s.location)){
+          if(confirm(`${s.name}: 2海域移動 ⚂${roll}≥${s.spd} 失敗。\n${PORTS[p].name}に入る（OK）／${locLabel(s.location)}に残る（キャンセル）`)){ s.location = p; break; }
+        }
         log.push(`${s.name}: 2海域 ⚂${roll}≥${s.spd} 失敗 → ${locLabel(s.location)}へ帰還(配置不可)`);
       }
     }
@@ -5239,8 +5245,14 @@ const combatDone = { uboat: new Set(), surface: new Set(), alliedAir: new Set(),
 const lbaUsed = { allies: false, axis: false };
 const LBA_TARGETS = {
   allies: ['Germany', 'France', 'Italy', 'Mediterranean'],
-  axis:   ['Barents', 'Leningrad', 'Malta', 'Mediterranean']
+  axis:   ['Barents', 'Baltic', 'Leningrad', 'Malta', 'Mediterranean']
 };
+// 2エリア移動に失敗したとき入れる港: 目的の海域に隣接する味方の港（このターン使える港、国ごとに入れる港のみ。元の港は除く）
+function failMovePorts(ship, dest, origin){
+  const okC = { US:['USA'], RU:['Russia', 'Leningrad'], IT:['Italy'], UK:['England', 'Malta', 'Russia'], DE:['Germany', 'France'] }[ship.country] || [];
+  return Object.keys(PORTS).filter(p => p !== origin && okC.includes(p) && PORTS[p].side === ship.side &&
+    (PORTS[p].available || []).includes(currentTurn) && (PORT_SEAS[p] || []).includes(dest));
+}
 const LBA_VALUE = 3; // 空爆値
 function updatePOC(){
   const el = document.getElementById('pocVal');
