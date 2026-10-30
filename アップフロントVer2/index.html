@@ -1626,7 +1626,7 @@ if (_embedTerrain) {
 
 // ===== 初期化 =====
 document.querySelectorAll('.faction-btn').forEach(btn => {
-  btn.addEventListener('click', () => openSetupScreen(btn.dataset.faction));
+  btn.addEventListener('click', () => { setupState.fromCampaign = false; openSetupScreen(btn.dataset.faction); });
 });
 
 // ===== セットアップ画面 =====
@@ -2136,6 +2136,7 @@ document.getElementById('camp-start-scenario').addEventListener('click', () => {
   const others = ['ger', 'rus', 'us', 'jpn', 'uk'].filter(f => f !== campState.faction);
   const aiFaction = others[Math.floor(Math.random() * others.length)];
   setupState.aiFactionOverride = aiFaction;
+  setupState.fromCampaign = true;
   // キャンペーンでは 1/3 の確率で夜間モード
   const _tod = document.getElementById('time-of-day-pick');
   if (_tod) _tod.value = (Math.random() < 1/3) ? 'night' : 'day';
@@ -2303,6 +2304,7 @@ document.getElementById('camp-reset').addEventListener('click', () => {
 
 function startGameWithSetup() {
   state.campaignEnded = false; // 新シナリオ開始: 終了フラグリセット
+  state.isCampaign = !!setupState.fromCampaign; // キャンペーン編成から始めた時だけ true
   const playerFaction = setupState.faction;
   const scenario = setupState.scenario;
   state.player = FACTIONS[playerFaction];
@@ -4412,6 +4414,8 @@ function endCampaignScenario(winner) {
   // 重複呼び出し防止（1シナリオ内で1回のみ集計）
   if (state.campaignEnded) return;
   state.campaignEnded = true;
+  // キャンペーン編成から始めたシナリオ以外は、記録もキャンペーン結果画面もなし
+  if (!state.isCampaign) return;
   const R = window.INFANTRY_RULES;
   const C = window.CAMPAIGN_RULES;
   if (!R || !C) return;
