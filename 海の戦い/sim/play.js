@@ -256,7 +256,13 @@ function myAxisMove(){
     s.movedThisTurn = true;
     if(r === 2){
       const d = w.rollD6();
-      if(d >= s.spd){ s.failedMove = true; log.push(`${s.name}: ${sea}へ2エリア移動失敗`); ops.failed.push(s.name); return false; }
+      if(d >= s.spd){
+        // 失敗: 目的の海域に隣接する味方の港があればそこへ（例: 北海経由の南大西洋 → フランス）、なければ元の港
+        s.failedMove = true;
+        const alt = w.failMovePorts(s, sea, s.location)[0];
+        if(alt){ s.location = alt; s.movedThisTurn = true; }
+        log.push(`${s.name}: ${sea}へ2エリア移動失敗${alt ? ' → ' + alt : ''}`); ops.failed.push(s.name); return false;
+      }
     }
     s.location = sea;
     placed[sea].push(s);
