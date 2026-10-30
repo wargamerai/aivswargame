@@ -12,6 +12,9 @@
     user-select: none;
   }
   body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  /* 画面全体のズーム（ufZoom）: 高さは倍率で割り戻して画面に収める */
+  body.uf-zoomed { zoom: var(--uf-zoom); height: calc(100vh / var(--uf-zoom)); }
+  body.uf-zoomed #game { height: calc(100vh / var(--uf-zoom)); }
 
   /* ===== 陣営選択画面 ===== */
   #faction-select {
@@ -712,7 +715,10 @@
 <div id="faction-select">
   <h1>Up Front</h1>
   <!-- 言語の切り替え（lang.js）。各画面に置き、どれを押しても切り替わる -->
+  <div style="display:flex; align-items:center;">
   <button class="lang-btn" onclick="toggleLang()" style="margin-bottom:20px; background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; border-radius:6px; padding:10px 28px; font-size:18px; font-weight:bold; cursor:pointer;">🌐 English</button>
+  <span class="zoom-ctl" style="display:inline-flex; align-items:center; gap:4px; margin:0 0 20px 12px;"><button onclick="ufZoom(-10)" style="background:#444; color:#fff; border:1px solid #888; border-radius:4px; padding:6px 14px; font-size:18px; font-weight:bold; cursor:pointer;">−</button><span class="zoom-label" style="min-width:40px; text-align:center; color:#eee; font-size:16px;">100%</span><button onclick="ufZoom(10)" style="background:#444; color:#fff; border:1px solid #888; border-radius:4px; padding:6px 14px; font-size:18px; font-weight:bold; cursor:pointer;">＋</button></span>
+  </div>
   <div class="scenario-row" style="margin-bottom:24px; display:flex; align-items:center; gap:12px;">
     <label style="font-size:16px;">シナリオ:</label>
     <select id="scenario-pick" style="background:#444; color:#eee; border:1px solid #888; padding:8px 14px; font-size:15px; border-radius:4px;">
@@ -782,6 +788,7 @@
       <button class="cancel" id="camp-reset">リセット</button>
       <button class="cancel" id="camp-back">戻る</button>
       <button class="lang-btn" onclick="toggleLang()" style="background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; font-weight:bold;">🌐 English</button>
+      <span class="zoom-ctl" style="display:inline-flex; align-items:center; gap:4px;"><button onclick="ufZoom(-10)" style="">−</button><span class="zoom-label" style="min-width:40px; text-align:center; color:#eee; font-size:13px;">100%</span><button onclick="ufZoom(10)" style="">＋</button></span>
     </div>
     <input type="file" id="camp-import-file" style="display:none" accept="application/json">
   </div>
@@ -804,6 +811,7 @@
       <button class="crew" id="setup-demo" style="background:#a44;border-color:#f66;">爆薬</button>
       <button id="setup-start" disabled>ゲーム開始</button>
       <button class="lang-btn" onclick="toggleLang()" style="background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; font-weight:bold;">🌐 English</button>
+      <span class="zoom-ctl" style="display:inline-flex; align-items:center; gap:4px;"><button onclick="ufZoom(-10)" style="">−</button><span class="zoom-label" style="min-width:40px; text-align:center; color:#eee; font-size:13px;">100%</span><button onclick="ufZoom(10)" style="">＋</button></span>
     </div>
   </div>
   <div class="stage">
@@ -860,6 +868,7 @@
       <div class="name" id="player-name">自軍</div>
       <div>手札: <span id="player-hand-max">-</span> 枚 / 補充 <span id="player-hand-draw">-</span></div>
       <button class="lang-btn" onclick="toggleLang()" style="margin-top:6px; width:100%; background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; border-radius:4px; padding:4px 6px; font-size:13px; font-weight:bold; cursor:pointer;">🌐 English</button>
+      <span class="zoom-ctl" style="display:inline-flex; align-items:center; gap:4px; margin-top:4px; width:100%; justify-content:space-between;"><button onclick="ufZoom(-10)" style="background:#444; color:#fff; border:1px solid #888; border-radius:4px; padding:1px 8px; font-size:13px; font-weight:bold; cursor:pointer;">−</button><span class="zoom-label" style="min-width:40px; text-align:center; color:#eee; font-size:12px;">100%</span><button onclick="ufZoom(10)" style="background:#444; color:#fff; border:1px solid #888; border-radius:4px; padding:1px 8px; font-size:13px; font-weight:bold; cursor:pointer;">＋</button></span>
     </div>
     <div class="hand-cards" id="player-hand"></div>
     <div class="action-menu">
@@ -956,6 +965,22 @@
 <script src="mortar.js"></script>
 <script src="campaign.js"></script>
 <script src="lang.js"></script>
+<script>
+// 画面全体のズーム: 50%〜200%、10%きざみ。倍率は覚えておく（各画面の − ＋ ボタン）
+let ufZoomPct = 100;
+try { const z = parseInt(localStorage.getItem('ufZoom'), 10); if(z >= 50 && z <= 200) ufZoomPct = z; } catch(e){}
+function ufApplyZoom(){
+  document.body.style.setProperty('--uf-zoom', ufZoomPct / 100);
+  document.body.classList.toggle('uf-zoomed', ufZoomPct !== 100);
+  document.querySelectorAll('.zoom-label').forEach(el => { el.textContent = ufZoomPct + '%'; });
+}
+function ufZoom(delta){
+  ufZoomPct = Math.max(50, Math.min(200, ufZoomPct + delta));
+  try { localStorage.setItem('ufZoom', ufZoomPct); } catch(e){}
+  ufApplyZoom();
+}
+ufApplyZoom();
+</script>
 <script>
 // ===== パスエンコードヘルパ =====
 // ローカル(macOS)では NFD, GitHub Pages 等のリモートでは NFC で保存される。
