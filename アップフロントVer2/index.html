@@ -711,6 +711,8 @@
 <!-- 陣営選択 -->
 <div id="faction-select">
   <h1>Up Front</h1>
+  <!-- 言語の切り替え（lang.js）。各画面に置き、どれを押しても切り替わる -->
+  <button class="lang-btn" onclick="toggleLang()" style="margin-bottom:20px; background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; border-radius:6px; padding:10px 28px; font-size:18px; font-weight:bold; cursor:pointer;">🌐 English</button>
   <div class="scenario-row" style="margin-bottom:24px; display:flex; align-items:center; gap:12px;">
     <label style="font-size:16px;">シナリオ:</label>
     <select id="scenario-pick" style="background:#444; color:#eee; border:1px solid #888; padding:8px 14px; font-size:15px; border-radius:4px;">
@@ -779,6 +781,7 @@
       <button class="cancel" id="camp-import">インポート</button>
       <button class="cancel" id="camp-reset">リセット</button>
       <button class="cancel" id="camp-back">戻る</button>
+      <button class="lang-btn" onclick="toggleLang()" style="background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; font-weight:bold;">🌐 English</button>
     </div>
     <input type="file" id="camp-import-file" style="display:none" accept="application/json">
   </div>
@@ -800,6 +803,7 @@
       <button class="crew" id="setup-crew">クルー設定</button>
       <button class="crew" id="setup-demo" style="background:#a44;border-color:#f66;">爆薬</button>
       <button id="setup-start" disabled>ゲーム開始</button>
+      <button class="lang-btn" onclick="toggleLang()" style="background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; font-weight:bold;">🌐 English</button>
     </div>
   </div>
   <div class="stage">
@@ -855,6 +859,7 @@
     <div class="hand-info">
       <div class="name" id="player-name">自軍</div>
       <div>手札: <span id="player-hand-max">-</span> 枚 / 補充 <span id="player-hand-draw">-</span></div>
+      <button class="lang-btn" onclick="toggleLang()" style="margin-top:6px; width:100%; background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; border-radius:4px; padding:4px 6px; font-size:13px; font-weight:bold; cursor:pointer;">🌐 English</button>
     </div>
     <div class="hand-cards" id="player-hand"></div>
     <div class="action-menu">
@@ -950,6 +955,7 @@
 <script src="cc.js"></script>
 <script src="mortar.js"></script>
 <script src="campaign.js"></script>
+<script src="lang.js"></script>
 <script>
 // ===== パスエンコードヘルパ =====
 // ローカル(macOS)では NFD, GitHub Pages 等のリモートでは NFC で保存される。
@@ -2277,8 +2283,9 @@ function startGameWithSetup() {
   const scenario = setupState.scenario;
   state.player = FACTIONS[playerFaction];
   const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
+  // 敵の陣営: キャンペーンで決めた国、それ以外（通常の対戦）は自分以外の国からランダム
   const aiKey = (setupState.aiFactionOverride && others.indexOf(setupState.aiFactionOverride) >= 0)
-    ? setupState.aiFactionOverride : others[0];
+    ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
   state.ai = FACTIONS[aiKey];
   setupState.aiFactionOverride = null;
   state.scenario = scenario;
