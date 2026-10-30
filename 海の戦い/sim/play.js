@@ -322,12 +322,13 @@ function myAxisMove(){
   };
   const atlSeas = () => ['NorthAtlantic', 'SouthAtlantic'];
 
-  // バルト海: 毎ターン最低1隻。ソ連艦がいれば攻撃力と艦数で上回るまで（弱い艦から）
+  // バルト海: 毎ターン最低1隻。ソ連艦がいれば確実に仕留めるため、勝つ確率が WIN_PROB 以上になるまで（弱い艦から）
+  //   ソ連を取りこぼすと致命的。届かなければ届く艦を全部
   {
     const ru = alliedAt('Baltic');
     const balOk = de.filter(s => reach(s, 'Baltic') === 1).sort((a, b) => (pw(a) + a.def) - (pw(b) + b.def));
     const sent = [];
-    const wins = () => { const e = w.battleEval(sent, ru); return e.ours > e.theirs && sent.length > ru.length; };
+    const wins = () => sent.length > 0 && winProb(sent, ru) >= WIN_PROB;
     for(const s of balOk){
       if(sent.length >= 1 && (!ru.length || wins())) break;
       if(move(s, 'Baltic')) sent.push(s);
@@ -346,23 +347,37 @@ function myAxisMove(){
   }
 
   let assaultNow = null; // このターンに突撃する海域
-  if(axisState.assaultTurn === null){
+  const ruOut = alliedAt('Baltic').length > 0; // ソ連艦がバルト海に出てきたターンは突撃しない（バルト海の支配が優先）
+  // 最後の突撃: ターン7・8で最終的に逆転されそうなら、前の突撃の有無・戦力に関係なく、港の艦を損害艦も含めて全部突撃
+  const finalDanger = turn >= 7 && (-cumPoc) - Math.max(0, lastTurnGain) * (8 - turn + 1) <= 0;
+  if(finalDanger){
+    const target = pickTarget();
+    const pool = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.country === 'DE' && s.type !== 'UBOAT' && !s.movedThisTurn &&
+      (G('PORTS')[s.location] || (SEAS[s.location] && s.refuelTurn === turn - 1)));
+    const force = pool.filter(s => reach(s, target));
+    const asEval = w.battleEval(force, alliedAt(target));
+    const forceAtk = r1(asEval.ours), alAtk = r1(asEval.theirs);
+    axisState.assaultTurn = turn; axisState.target = target; axisState.won = null;
+    force.forEach(s => move(s, target));
+    log.push(`最後の突撃: ${target} ${force.length}隻(攻${forceAtk}) vs 連合${alAtk}`);
+    ops.assault = { target, atk: forceAtk, al: alAtk };
+    assaultNow = target;
+    raid(de.filter(s => !s.movedThisTurn));
+  } else if(axisState.assaultTurn === null){
     const target = pickTarget();
     const force = de.filter(s => reach(s, target));
     const asEval = w.battleEval(force, alliedAt(target));
     const forceAtk = r1(asEval.ours), alAtk = r1(asEval.theirs);
-    // 突撃するかどうか（ターン3〜8）: 得点の状況で確率を変えてランダムに決める
+    // 突撃するかどうか（ターン3〜6）: 得点の状況で確率を変えてランダムに決める
     //   最終的に逆転されそう = 前ターンに連合が取った点を残りのターン（このターンを含む）取られるとリードが消える
-    //   ターン7・8は、逆転されそうなら必ず突撃（温存しても取り返せない）
+    //   ターン7・8で逆転されそうなときは上の「最後の突撃」。ソ連艦が出てきたターンは突撃しない
     const lead = -cumPoc;
     const danger = lead - Math.max(0, lastTurnGain) * (8 - turn + 1) <= 0;
     const favorable = forceAtk >= alAtk * WIN_RATIO;
     let p = 0;
-    if(turn >= 3 && turn <= 6){
+    if(turn >= 3 && turn <= 6 && !ruOut){
       if(danger) p = favorable ? 0.9 : (turn === 6 ? 0.7 : 0.4);
       else p = favorable ? 0.4 : 0.05;
-    } else if(turn >= 7 && danger){
-      p = 1;
     }
     if(force.length && Math.random() < p){
       axisState.assaultTurn = turn; axisState.target = target;
@@ -403,6 +418,16 @@ function myAxisMove(){
     }
   }
 
+  // ソ連艦が出てきたターン: 港に残るくらいなら、残った無傷艦は全部バルト海へ（最低限ではなく厚く）
+  if(ruOut){
+    const extra = de.filter(s => !s.movedThisTurn && reach(s, 'Baltic') === 1 && move(s, 'Baltic'));
+    if(extra.length){
+      ops.baltic.ships.push(...extra.map(x => x.name));
+      ops.baltic.atk += sum(extra);
+      log.push(`バルト海へ追加 ${extra.length}隻: ${extra.map(x => x.name).join(',')}`);
+    }
+  }
+
   // --- Uボート ---
   const ubs = SHIPS.filter(s => alive(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany');
   if(ubs.length){
@@ -438,6 +463,9 @@ function myAxisMove(){
     // 毎ターン: 船団の海域 → 連合の支配を打ち消せる海域（安全な順） → 余りは安全な海域へ
     if(convoyAt) putOver(convoyAt);
     for(const sea of thin) putOver(sea);
+    // 余りは安全な海域で遊ばせず、置いた海域に順番に分けて足す（置いた海域がなければ安全な海域へ）
+    const used = Object.keys(SEAS).filter(k => alliedAt(k).length && placed[k].some(s => s.type === 'UBOAT'));
+    for(let i = 0; queue.length && used.length; i++) put(queue.shift(), used[i % used.length]);
     toSafe();
   }
 
@@ -529,7 +557,7 @@ function battleText(sea, c, opener){
 function buildReport(result, finalPoc){
   const L = [];
   L.push('ドイツ海軍　戦闘詳報');
-  L.push(`作成 ${new Date().toLocaleString('ja-JP')}`);
+  L.push(`第${gameNo()}局`);
   L.push('');
   for(const r of result){
     const ops = axisOps[r.turn] || {};
@@ -815,11 +843,21 @@ render();
 }
 
 // ===== 一覧のページ（sim/index.html） =====
+// 対局の通し番号（日時は出さない）: watch/ と reports/ の番号の最大+1。観戦ページとレポートは同じ番号
+let GAME_NO = null;
+function gameNo(){
+  if(GAME_NO !== null) return GAME_NO;
+  let max = 0;
+  for(const dir of ['watch', 'reports']){
+    try { fs.readdirSync(path.join(__dirname, dir)).forEach(f => { const m = f.match(/_(\d+)\.(html|txt)$/); if(m) max = Math.max(max, +m[1]); }); } catch(e){}
+  }
+  return GAME_NO = max + 1;
+}
 // 観戦ページ（英語）と提督レポート（日本語）を新しい順に並べる。書き出すたびに作り直す
 function buildIndexHtml(){
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
   const sgn = n => (n >= 0 ? '+' : '') + n;
-  const stamp = f => { const m = f.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : f; };
+  const num = f => { const m = f.match(/_(\d+)\.(html|txt)$/); return m ? +m[1] : f; };
   const files = dir => { try { return fs.readdirSync(path.join(__dirname, dir)).sort().reverse(); } catch(e){ return []; } };
   const OPT = { '--ub-nolimit':'No U-boat limit', '--bismarck7':'Bismarck class Def 7', '--us-ease':'Easier US entry' };
   const watchRows = files('watch').filter(f => f.endsWith('.html')).map(f => {
@@ -827,12 +865,12 @@ function buildIndexHtml(){
     try { const m = fs.readFileSync(path.join(__dirname, 'watch', f), 'utf8').match(/<!--META (.*?)-->/); if(m) meta = JSON.parse(m[1]); } catch(e){}
     const res = meta ? `Final POC ${sgn(meta.finalPoc)} (${meta.finalPoc < 0 ? 'Axis victory' : meta.finalPoc > 0 ? 'Allied victory' : 'Draw'})` : '';
     const opts = meta && meta.opts.length ? meta.opts.map(o => OPT[o] || o).join(', ') : 'none';
-    return `<tr><td><a href="watch/${encodeURIComponent(f)}">${esc(stamp(f))}</a></td><td>${esc(res)}</td><td>${esc(opts)}</td></tr>`;
+    return `<tr><td><a href="watch/${encodeURIComponent(f)}">Game ${esc(num(f))}</a></td><td>${esc(res)}</td><td>${esc(opts)}</td></tr>`;
   });
   const reportRows = files('reports').filter(f => f.endsWith('.txt')).map(f => {
     let res = '';
     try { const m = fs.readFileSync(path.join(__dirname, 'reports', f), 'utf8').match(/最終POC ([+-]?\d+)/); if(m){ const p = +m[1]; res = `最終POC ${sgn(p)}（${p < 0 ? '枢軸の勝ち' : p > 0 ? '連合の勝ち' : '引き分け'}）`; } } catch(e){}
-    return `<tr><td><a href="reports/${encodeURIComponent(f)}">${esc(stamp(f))}</a></td><td>${esc(res)}</td></tr>`;
+    return `<tr><td><a href="reports/${encodeURIComponent(f)}">第${esc(num(f))}局</a></td><td>${esc(res)}</td></tr>`;
   });
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -851,9 +889,9 @@ a{ color:var(--link); } .empty{ color:var(--mute); }
 </style></head><body><div class="wrap">
 <h1>War at Sea: Reports</h1>
 <h2>Battle Watch (AI vs AI)</h2>
-<div class="card">${watchRows.length ? `<table><tr><th>Date</th><th>Result</th><th>Optional rules</th></tr>${watchRows.join('')}</table>` : '<div class="empty">No games yet.</div>'}</div>
+<div class="card">${watchRows.length ? `<table><tr><th>Game</th><th>Result</th><th>Optional rules</th></tr>${watchRows.join('')}</table>` : '<div class="empty">No games yet.</div>'}</div>
 <h2 lang="ja">ドイツ海軍 提督レポート</h2>
-<div class="card" lang="ja">${reportRows.length ? `<table><tr><th>日時</th><th>結果</th></tr>${reportRows.join('')}</table>` : '<div class="empty">まだありません。</div>'}</div>
+<div class="card" lang="ja">${reportRows.length ? `<table><tr><th>対局</th><th>結果</th></tr>${reportRows.join('')}</table>` : '<div class="empty">まだありません。</div>'}</div>
 </div></body></html>`;
 }
 function writeIndex(){ fs.writeFileSync(path.join(__dirname, 'index.html'), buildIndexHtml()); }
@@ -906,8 +944,7 @@ w.alliedCumPoc = () => cumPoc;
   if(process.argv.includes('watch')){
     const dir = path.join(__dirname, 'watch');
     fs.mkdirSync(dir, { recursive: true });
-    const d = new Date(), z = n => String(n).padStart(2, '0');
-    const file = path.join(dir, `watch_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.html`);
+    const file = path.join(dir, `watch_${String(gameNo()).padStart(3, '0')}.html`);
     fs.writeFileSync(file, buildWatchHtml(cumPoc));
     console.log('観戦ページ: ' + file);
     writeIndex();
@@ -916,8 +953,7 @@ w.alliedCumPoc = () => cumPoc;
     const text = buildReport(result, cumPoc);
     const dir = path.join(__dirname, 'reports');
     fs.mkdirSync(dir, { recursive: true });
-    const d = new Date(), z = n => String(n).padStart(2, '0');
-    const file = path.join(dir, `report_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.txt`);
+    const file = path.join(dir, `report_${String(gameNo()).padStart(3, '0')}.txt`);
     fs.writeFileSync(file, text);
     console.log(text);
     console.log('\n保存: ' + file);
