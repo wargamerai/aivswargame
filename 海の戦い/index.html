@@ -5687,9 +5687,9 @@ function endTurn(){
     log.push('ゲーム終了');
   }
   // 6) ターントラック処理 / US 戦闘艦は1回ロール統一（6で北大西洋直行、失敗で T+1。オプションでターンごとに緩和）
-  //    ターン8終了時もここを実行 → T_n に残った艦に最終判定機会を与える
+  //    ターン8終了時はゲームが終わるので行わない（勝敗・レポートに影響しない）
   const usResults = [];
-  SHIPS.forEach(s => {
+  if(!wasAtLastTurn) SHIPS.forEach(s => {
     if(s.location && s.location.startsWith('T')){
       const t = parseInt(s.location.slice(1));
       if(t <= currentTurn){
