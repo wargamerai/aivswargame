@@ -3,13 +3,21 @@
 //   例:     node sim/run.js 10 A rus ger
 //   国を省くと毎局くじで決める（ger/us/rus/jpn/uk）。シナリオを省くと A。
 //   両軍とも index.html の AI（aiTurn）で動かす。プレイヤー側の手番は両軍のデータを入れ替えて AI に指させる。
+//   report: 対局ごとに AI 対 AI の対戦レポートを reports/ai_NNN.html に保存し、一覧のページも作り直す
+//           例: node sim/run.js 3 A ger rus report
+//   index:  対戦せずに、一覧のページ（reports/index.html）だけ作り直す。例: node sim/run.js index
 const path = require('path');
+const fs = require('fs');
 const { JSDOM, VirtualConsole } = require(path.join(__dirname, '../../海の戦い/sim/node_modules/jsdom'));
 
-const N = parseInt(process.argv[2] || '5', 10);
-const SCN = process.argv[3] || 'A';
-const FAC1 = process.argv[4] || null;
-const FAC2 = process.argv[5] || null;
+const FLAGS = ['report', 'index'];
+const ARGS = process.argv.slice(2).filter(a => FLAGS.indexOf(a) < 0);
+const REPORT = process.argv.includes('report');
+const N = parseInt(ARGS[0] || '5', 10);
+const SCN = ARGS[1] || 'A';
+const FAC1 = ARGS[2] || null;
+const FAC2 = ARGS[3] || null;
+const REPORT_DIR = path.join(__dirname, '../reports');
 const FACS = ['ger', 'us', 'rus', 'jpn', 'uk'];
 const MAX_HALF_TURNS = 400;
 
@@ -81,6 +89,21 @@ async function playOne(gameNo) {
       try { await _origAiTurn(); } finally { window.__sim.running = false; }
     };
     window.aiTurn = window.__runAI;
+    if (${REPORT}) {
+      // 対戦レポート用: AI の行動と射撃の結果も記録し、両軍を入れ替えている間（国1の手番）の記録は国1の側として付け直す
+      window.showAIAction = async (m) => { try { const me = window.__sim && window.__sim.swapped; ufReportLog(me ? 'player' : 'ai', m, me ? 'player' : 'ai'); } catch (e) {} };
+      window.showFireResultOverlay = async (title, results) => { try { ufLogFire(title, results); } catch (e) {} };
+      const os = ufSnapshot, oe = ufEvent;
+      window.ufSnapshot = function (label, side) {
+        const sw = window.__sim && window.__sim.swapped;
+        os(sw ? label.replace('敵の手番の終わり', '自軍の手番の終わり') : label, sw ? 'player' : side);
+        if (sw) { const sn = UF_REPORT.snaps[UF_REPORT.snaps.length - 1]; const t = sn.p; sn.p = sn.a; sn.a = t; }
+      };
+      window.ufEvent = function (side, text) {
+        const sw = window.__sim && window.__sim.swapped;
+        oe(sw ? (side === 'ai' ? 'player' : side === 'player' ? 'ai' : side) : side, text);
+      };
+    }
   `);
 
   // ---- 両軍のデータを入れ替える ----
@@ -190,11 +213,62 @@ async function playOne(gameNo) {
     phase: st().phase,
     errors: [...new Set(errors)].slice(0, 3),
   };
+  if (REPORT) {
+    try {
+      // 国名の手番の表示を「国1／国2の手番の終わり」に、終了時の盤面を足してからレポートを作る
+      w.eval(`window.__ufAiVsAi = true;
+        UF_REPORT.snaps.forEach(sn => { sn.label = sn.label.replace('自軍の手番の終わり', state.player.name + ' の手番の終わり').replace('敵の手番の終わり', state.ai.name + ' の手番の終わり'); });
+        if (!state._ufEndText) state._ufEndText = ${JSON.stringify(endAlert.replace(/\s+/g, ' '))};
+        if (!UF_REPORT.snaps.length || UF_REPORT.snaps[UF_REPORT.snaps.length - 1].label.indexOf('終了') < 0) ufSnapshot('終了時', '');`);
+      const html = w.eval('ufBuildReportHtml()');
+      fs.mkdirSync(REPORT_DIR, { recursive: true });
+      const nums = fs.readdirSync(REPORT_DIR).map(f => (f.match(/^ai_(\d+)\.html$/) || [])[1]).filter(Boolean).map(Number);
+      const file = path.join(REPORT_DIR, 'ai_' + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0') + '.html');
+      fs.writeFileSync(file, html);
+      out.report = path.basename(file);
+    } catch (e) { out.reportError = String(e && e.message || e); }
+  }
   w.close();
   return out;
 }
 
+// ===== 対戦レポートの一覧のページ（reports/index.html） =====
+function buildIndexHtml() {
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const files = (() => { try { return fs.readdirSync(REPORT_DIR); } catch (e) { return []; } })();
+  const meta = f => { try { const m = fs.readFileSync(path.join(REPORT_DIR, f), 'utf8').match(/<!--META (.*?)-->/); return m ? JSON.parse(m[1]) : null; } catch (e) { return null; } };
+  const rowOf = (f, label) => { const m = meta(f) || {};
+    return `<tr><td><a href="${encodeURIComponent(f)}">${esc(label)}</a></td><td>${esc(m.scenario ? m.scenario + ': ' + (m.scenarioName || '') : '')}</td><td>${esc(m.p1 && m.p2 ? m.p1 + ' vs ' + m.p2 : '')}</td><td>${esc(m.result || '')}</td></tr>`; };
+  const player = files.filter(f => /^upfront_report_\d{8}_\d{4}\.html$/.test(f)).sort().reverse()
+    .map(f => { const d = f.match(/_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\.html$/); return rowOf(f, d ? `${d[1]}-${d[2]}-${d[3]} ${d[4]}:${d[5]}` : f); });
+  const ai = files.filter(f => /^ai_\d+\.html$/.test(f)).sort().reverse().map(f => rowOf(f, 'Game ' + parseInt(f.match(/\d+/)[0], 10)));
+  const table = rows => rows.length ? `<table><tr><th>Date / Game</th><th>Scenario</th><th>Nations</th><th>Result</th></tr>${rows.join('')}</table>` : '<div class="empty">No games yet.</div>';
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Up Front Reports</title>
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<style>
+:root{ --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --mute:#667085; --line:#d9dee7; --link:#1f5fbf; }
+@media (prefers-color-scheme: dark){ :root{ --bg:#14171d; --card:#1d222b; --fg:#e6e9ef; --mute:#98a2b3; --line:#2f3642; --link:#6ea8ff; } }
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--bg); color:var(--fg); font:14px/1.6 -apple-system,"Helvetica Neue",Arial,"Hiragino Sans",sans-serif; }
+.wrap{ max-width:900px; margin:0 auto; padding:16px; }
+h1{ font-size:20px; margin:0 0 12px; } h2{ font-size:16px; margin:20px 0 8px; }
+.card{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; overflow-x:auto; }
+table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid var(--line); padding:6px; text-align:left; white-space:nowrap; }
+a{ color:var(--link); } .empty{ color:var(--mute); }
+</style></head><body><div class="wrap">
+<h1>Up Front: Reports</h1>
+<h2>Player vs AI</h2>
+<div class="card">${table(player)}</div>
+<h2>AI vs AI</h2>
+<div class="card">${table(ai)}</div>
+</div></body></html>`;
+}
+function writeIndex() { fs.mkdirSync(REPORT_DIR, { recursive: true }); fs.writeFileSync(path.join(REPORT_DIR, 'index.html'), buildIndexHtml()); }
+
 (async () => {
+  if (process.argv.includes('index')) { writeIndex(); console.log('一覧: ' + path.join(REPORT_DIR, 'index.html')); return; }
   const rows = [];
   for (let i = 1; i <= N; i++) {
     let r;
@@ -205,4 +279,5 @@ async function playOne(gameNo) {
   const tally = {};
   rows.forEach(r => { const k = r.winner || 'crash'; tally[k] = (tally[k] || 0) + 1; });
   console.log('\n=== 集計 ===', JSON.stringify(tally));
+  if (REPORT) { writeIndex(); console.log('一覧: ' + path.join(REPORT_DIR, 'index.html')); }
 })();

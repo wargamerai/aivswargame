@@ -3352,10 +3352,12 @@ function ufBuildReportHtml() {
   // 手番ごとにまとめる
   const byTurn = new Map();
   UF_REPORT.events.forEach(e => { if (!byTurn.has(e.turn)) byTurn.set(e.turn, []); byTurn.get(e.turn).push(e); });
-  const KIND = { ai: 'AI', player: L('自軍'), fire: L('射撃'), cc: L('白兵戦'), msg: '' };
+  const AVA = !!window.__ufAiVsAi; // AI 同士の対戦のレポート（画面なしの対戦で作る）
+  const ME = AVA ? L(state.player.name) : L('自軍'), EN = AVA ? L(state.ai.name) : L('敵');
+  const KIND = { ai: AVA ? EN : 'AI', player: ME, fire: L('射撃'), cc: L('白兵戦'), msg: '' };
   const turns = [...byTurn.keys()].sort((a, b) => a - b).map(t => {
     const evs = byTurn.get(t);
-    const who = evs[0] && evs[0].side === 'ai' ? L('敵') + ' (' + L(state.ai.name) + ')' : L('自軍') + ' (' + L(state.player.name) + ')';
+    const who = evs[0] && evs[0].side === 'ai' ? (AVA ? EN : L('敵') + ' (' + L(state.ai.name) + ')') : (AVA ? ME : L('自軍') + ' (' + L(state.player.name) + ')');
     return `<details${t === [...byTurn.keys()].pop() ? ' open' : ''}><summary>${esc(L('手番'))} ${t + 1}: ${esc(who)}</summary><ul>` +
       evs.map(e => `<li class="k-${e.kind}">${KIND[e.kind] ? '<b>' + esc(KIND[e.kind]) + '</b> ' : ''}${esc(L(e.text))}</li>`).join('') + '</ul></details>';
   }).join('');
@@ -3382,7 +3384,10 @@ ul{ margin:4px 0 6px; padding-left:20px; } li{ margin:2px 0; } .k-ai b{ color:va
 .st-rout{ color:#888; text-decoration:line-through; } .st-pris{ color:#7a2fc0; text-decoration:line-through; } .legend span{ margin-right:10px; font-size:12px; }
 ul.ev li.ai{ color:var(--ai); } ul.ev li.player{ color:var(--me); }
 </style></head><body><div class="wrap">
-<h1>Up Front ${esc(L('対戦レポート'))}</h1>
+<!--META ${JSON.stringify({ v: 1, aiVsAi: AVA, date: new Date().toISOString(), scenario: sc ? sc.id : '', scenarioName: sc ? sc.name : '',
+  p1: state.player.name, p2: state.ai.name, result: state._ufEndText || '', turns: state.turnCount || 0, vp: [vpP, vpA],
+  loss: [cP.kia + cP.rout + cP.prisoner, cA.kia + cA.rout + cA.prisoner] }).replace(/--/g, '\\u002d\\u002d')}-->
+<h1>Up Front ${esc(L('対戦レポート'))}${AVA ? '（AI 対 AI）' : ''}</h1>
 <h2>${esc(L('盤面と出来事'))}</h2>
 <div class="card"><div class="nav"><button id="bPrev">◀ ${esc(L('前へ'))}</button><button id="bNext">${esc(L('次へ'))} ▶</button><span id="nLbl"></span></div>
 <div id="board"></div><div id="evs"></div>
@@ -3391,10 +3396,10 @@ ul.ev li.ai{ color:var(--ai); } ul.ev li.player{ color:var(--me); }
 <div class="card"><div class="res">${esc(L(result))}</div>
 <table>
 ${row('シナリオ', sc ? `${sc.id}: ${sc.name}` : '-', state.isNight ? '夜間' : '昼間')}
-<tr><th></th><td><b>${esc(L('自軍'))}</b></td><td><b>${esc(L('敵'))} (AI)</b></td></tr>
+<tr><th></th><td><b>${esc(ME)}</b></td><td><b>${esc(EN)}${AVA ? '' : ' (AI)'}</b></td></tr>
 ${row('国', state.player.name, state.ai.name)}
 ${row('役割', state.playerRole === 'attacker' ? '攻撃側' : state.playerRole === 'defender' ? '防御側' : '-', state.aiRole === 'attacker' ? '攻撃側' : state.aiRole === 'defender' ? '防御側' : '-')}
-${row('AIの性格・作戦', '-', `${STY[state.aiStyle] || '-'} / ${names[aiStg] || '-'}`)}
+${row('AIの性格・作戦', AVA ? `${STY[state._playerStyle] || '-'} / ${names[((state.groups.player || []).find(g => g && g._strategy) || {})._strategy] || '-'}` : '-', `${STY[state.aiStyle] || '-'} / ${names[aiStg] || '-'}`)}
 ${row('勝利点', vpP, vpA)}
 ${row('兵の数', cP.total, cA.total)}
 ${row('戦死', cP.kia, cA.kia)}
@@ -3404,12 +3409,12 @@ ${row('生存（うち負傷）', `${cP.alive}（${cP.wounded}）`, `${cA.alive}
 ${row('手番の数', state.turnCount || 0, '')}
 </table></div>
 <h2>${esc(L('行動の回数'))}</h2>
-<div class="card"><table>${row('自軍', cnt(UF_REPORT.counts.player), '')}${row('敵 (AI)', cnt(UF_REPORT.counts.ai), '')}</table></div>
+<div class="card"><table>${row(ME, cnt(UF_REPORT.counts.player), '')}${row(AVA ? EN : '敵 (AI)', cnt(UF_REPORT.counts.ai), '')}</table></div>
 <details><summary>${esc(L('詳しい記録'))}</summary><div class="card">${turns || '-'}</div></details>
 <script>
 const SN = ${JSON.stringify(UF_REPORT.snaps.map(sn => ({ ...sn, label: L(sn.label), p: sn.p.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }), a: sn.a.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }) }))).replace(/</g, '\\u003c')};
 const EV = ${JSON.stringify(UF_REPORT.ev.map(e => ({ ...e, text: L(e.text) }))).replace(/</g, '\\u003c')};
-const NM = ${JSON.stringify({ p: L(state.player.name), a: L(state.ai.name), me: L('自軍'), en: L('敵'), turn: L('手番'), rr: L('相対距離'), dist: L('距離'), mv: L('移動中'), gone: L('消滅'), none: L('なし'), inf: L('侵入') })};
+const NM = ${JSON.stringify({ p: L(state.player.name), a: L(state.ai.name), me: ME, en: EN, turn: L('手番'), rr: L('相対距離'), dist: L('距離'), mv: L('移動中'), gone: L('消滅'), none: L('なし'), inf: L('侵入') })};
 let k = SN.length - 1;
 const esc2 = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 function rr(a, b){ let s = (a|0) + (b|0); if (s > 5) s = 10 - s; return Math.max(0, s); }
