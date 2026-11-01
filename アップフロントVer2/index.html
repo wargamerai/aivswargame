@@ -350,6 +350,11 @@
   }
   .hand-info .name { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
   .hand-cards { display: flex; gap: 3px; }
+  /* 捕虜の箱（捕まえているグループの右の列、Action in Play の下 §32） */
+  .prison-in-group { width: 90px; border: 1px solid #795548; border-radius: 4px; background: #2a201c; padding: 2px 3px 3px; }
+  .prison-in-group .pg-title { font-size: 10px; color: #d7b8a8; text-align: center; margin-bottom: 2px; }
+  .prison-in-group .pg-cards { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; }
+  .prison-in-group img { width: 26px; height: auto; border-radius: 2px; filter: grayscale(.6) brightness(.85); }
   .hand-card {
     width: 52px; height: 78px;
     background: #555; border: 1px solid #888;
@@ -4307,6 +4312,30 @@ function makeMainGroup(side, group, idx) {
 
   work.appendChild(terrain);
   work.appendChild(action);
+  // §32 捕虜: 監視役のいるグループに、捕虜のカードを小さく置く（解放された捕虜は出さない）
+  {
+    const Rp = window.INFANTRY_RULES;
+    const myFac = getFactionKey(side === 'player' ? state.player : state.ai);
+    const enFac = getFactionKey(side === 'player' ? state.ai : state.player);
+    const items = [];
+    group.cards.forEach(guard => (guard.prisoners || []).forEach(p => { if (p && !p.released) items.push({ p, guard }); }));
+    if (items.length) {
+      const box = document.createElement('div');
+      box.className = 'prison-in-group';
+      box.innerHTML = `<div class="pg-title">捕虜 ${items.length}</div>`;
+      const row = document.createElement('div'); row.className = 'pg-cards';
+      items.forEach(({ p, guard }) => {
+        const pd = Rp && Rp.lookupSoldier ? Rp.lookupSoldier(p, enFac) : null;
+        const gd = Rp && Rp.lookupSoldier ? Rp.lookupSoldier(guard, myFac) : null;
+        const im = document.createElement('img');
+        im.src = p.img; im.alt = pd ? pd.name : p.id;
+        im.title = `捕虜: ${pd ? pd.name : p.id}（監視役: ${gd ? gd.name : guard.id}）`;
+        row.appendChild(im);
+      });
+      box.appendChild(row);
+      work.appendChild(box);
+    }
+  }
   slot.appendChild(work);
 
   // 照明弾効果: 各カードに光る縁（照明弾1のチット=赤、裏返した照明弾2=オレンジ）
@@ -4402,58 +4431,74 @@ function buildCardBox(cls, cardList, placeholder, onClick) {
 
 // ===== 修理テーブル =====
 const REPAIR_TABLE = {
+  // 兵器チットの裏（images/各国マーカー/Wpn Back ...）の REPAIR（修理できる目）・BROKEN（壊れる目、赤）・MOR/PAN -1 のとおり
+  // チットの略号: BAR=ボルトアクション小銃 SAR=半自動小銃 CAR=カービン AR=突撃銃 MP=短機関銃 LMG=軽機関銃 MMG=中機関銃
+  //   MOR=迫撃砲 GL=擲弾筒 ATR=対戦車ライフル BAZ=バズーカ PSK=パンツァーシュレック FTR=火炎放射器 RAD=無線機
+  //   米の LMG チットは Browning BAR（BAR自動小銃）。名前は兵士のデータの武器の種類と前方一致で引く
   us: {
-    'BAR自動小銃':       { repair: '黒0-6,赤0', destroy: '赤6' },
-    'バズーカ':          { repair: '黒5-6', destroy: '赤0-6' },
-    'カービン':          { repair: '黒0-6', destroy: '赤6' },
-    '自動小銃':          { repair: '黒0-6,赤0', destroy: '赤6' },
-    '火炎放射器':        { repair: '黒6',   destroy: '赤0-6' },
-    '軽機関銃':          { repair: '黒0-6', destroy: '赤5-6' },
-    '短機関銃':          { repair: '黒1-6', destroy: '赤4-6' },
-    '迫撃砲':            { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
-    '無線機':            { repair: '黒4-6', destroy: '赤4-6' },
+    'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6',   moralePenalty: -1 }, // BAR SAR MMG
+    '半自動小銃':        { repair: '黒0-6,赤0', destroy: '赤6',   moralePenalty: -1 }, // BAR SAR MMG（M1ガーランド）
+    '中機関銃':          { repair: '黒0-6,赤0', destroy: '赤6',   moralePenalty: -1 }, // BAR SAR MMG
+    'BAR自動小銃':       { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // LMG（Browning BAR）
+    '軽機関銃':          { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // LMG
+    'カービン':          { repair: '黒0-6',     destroy: '赤6',   moralePenalty: -1 }, // CAR
+    '短機関銃':          { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP MOR
+    '迫撃砲':            { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP MOR
+    '60mm迫撃砲':        { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP MOR
+    'バズーカ':          { repair: '黒5-6',     destroy: '赤0-6', moralePenalty: -1 }, // BAZ
+    '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
+    '無線機':            { repair: '黒4-6',     destroy: '赤4-6', moralePenalty: -1 }, // RAD
   },
   rus: {
-    'BAR自動小銃':       { repair: '黒0-6', destroy: '赤6' },
-    '火炎放射器':        { repair: '黒6',   destroy: '赤0-6' },
-    '軽機関銃':          { repair: '黒1-6', destroy: '赤4-6' },
-    '迫撃砲':            { repair: '黒2-6', destroy: '赤3-6', moralePenalty: -1 },
-    '短機関銃':          { repair: '黒0-6', destroy: '赤5-6' },
-    '無線機':            { repair: '黒4-6', destroy: '赤3-6' },
-    '半自動小銃':        { repair: '黒1-6', destroy: '赤5-6' },
+    'ボルトアクション小銃': { repair: '黒0-6',     destroy: '赤6',   moralePenalty: -1 }, // BAR
+    '半自動小銃':        { repair: '黒1-6',     destroy: '赤5-6', moralePenalty: -1 }, // SAR MMG
+    '中機関銃':          { repair: '黒1-6',     destroy: '赤5-6', moralePenalty: -1 }, // SAR MMG
+    '軽機関銃':          { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // LMG ATR
+    '対戦車ライフル':    { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // LMG ATR
+    '短機関銃':          { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // MP
+    '迫撃砲':            { repair: '黒2-6',     destroy: '赤3-6', moralePenalty: -1 }, // MOR
+    '50mm迫撃砲':        { repair: '黒2-6',     destroy: '赤3-6', moralePenalty: -1 }, // MOR
+    '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
+    '無線機':            { repair: '黒4-6',     destroy: '赤3-6', moralePenalty: -1 }, // RAD
   },
   ger: {
-    'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6', moralePenalty: -1 },
-    '自動小銃':          { repair: '黒0-6', destroy: '赤5-6', moralePenalty: -1 },
-    '火炎放射器':        { repair: '黒6',   destroy: '赤0-6', moralePenalty: -1 },
-    '迫撃砲':            { repair: '黒2-6', destroy: '赤3-6', moralePenalty: -1 },
-    '軽機関銃':          { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
-    '中機関銃':          { repair: '黒0-6', destroy: '赤5-6', moralePenalty: -1 },
-    '短機関銃':          { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
-    'パンツァーシュレック': { repair: '黒5-6', destroy: '赤1-6', moralePenalty: -1 },
-    '無線機':            { repair: '黒4-6', destroy: '赤4-6' },
+    'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6',   moralePenalty: -1 }, // BAR
+    '突撃銃':            { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // AR MMG
+    '自動小銃':          { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // AR MMG
+    '中機関銃':          { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // AR MMG
+    '短機関銃':          { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP LMG ATR
+    '軽機関銃':          { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP LMG ATR
+    '対戦車ライフル':    { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP LMG ATR
+    '迫撃砲':            { repair: '黒2-6',     destroy: '赤3-6', moralePenalty: -1 }, // MOR
+    '50mm迫撃砲':        { repair: '黒2-6',     destroy: '赤3-6', moralePenalty: -1 }, // MOR
+    'パンツァーシュレック': { repair: '黒5-6',     destroy: '赤1-6', moralePenalty: -1 }, // PSK
+    '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
+    '無線機':            { repair: '黒4-6',     destroy: '赤4-6', moralePenalty: -1 }, // RAD
   },
   jpn: {
-    'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6', moralePenalty: -1 },
-    '火炎放射器':        { repair: '黒6',   destroy: '赤0-6', moralePenalty: -1 },
-    '迫撃砲':            { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
-    '軽機関銃':          { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
-    '中機関銃':          { repair: '黒0-6', destroy: '赤5-6', moralePenalty: -1 },
-    '短機関銃':          { repair: '黒2-6', destroy: '赤4-6', moralePenalty: -1 },
-    'パンツァーシュレック': { repair: '黒5-6', destroy: '赤1-6', moralePenalty: -1 },
-    '無線機':            { repair: '黒4-6', destroy: '赤4-6' },
+    'ボルトアクション小銃': { repair: '黒0-6',     destroy: '赤6',   moralePenalty: -1 }, // BAR
+    '軽機関銃':          { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // LMG ATR GL
+    '対戦車ライフル':    { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // LMG ATR GL
+    '擲弾筒':            { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // LMG ATR GL
+    '中機関銃':          { repair: '黒1-6',     destroy: '赤5-6', moralePenalty: -1 }, // MMG
+    '短機関銃':          { repair: '黒2-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP
+    '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
+    '無線機':            { repair: '黒4-6',     destroy: '赤3-6', moralePenalty: -1 }, // RAD
   },
   uk: {
-    'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6', moralePenalty: -1 },
-    '火炎放射器':        { repair: '黒6',   destroy: '赤0-6', moralePenalty: -1 },
-    '迫撃砲':            { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
-    '軽機関銃':          { repair: '黒0-6', destroy: '赤5-6', moralePenalty: -1 },
-    '中機関銃':          { repair: '黒0-6', destroy: '赤5-6', moralePenalty: -1 },
-    '短機関銃':          { repair: '黒0-6', destroy: '赤4-6', moralePenalty: -1 },
-    'パンツァーシュレック': { repair: '黒5-6', destroy: '赤1-6', moralePenalty: -1 },
-    '無線機':            { repair: '黒4-6', destroy: '赤4-6' },
+    'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6',   moralePenalty: -1 }, // BAR
+    '軽機関銃':          { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // LMG MMG
+    '中機関銃':          { repair: '黒0-6',     destroy: '赤5-6', moralePenalty: -1 }, // LMG MMG
+    '短機関銃':          { repair: '黒0-6',     destroy: '赤4-6', moralePenalty: -1 }, // MP
+    '迫撃砲':            { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MOR
+    '50mm迫撃砲':        { repair: '黒1-6',     destroy: '赤4-6', moralePenalty: -1 }, // MOR
+    '対戦車ライフル':    { repair: '黒1-6',     destroy: '赤5-6', moralePenalty: -1 }, // ATR
+    'PIAT':              { repair: '黒3-6',     destroy: '赤1-6', moralePenalty: -1 }, // PIAT
+    '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
+    '無線機':            { repair: '黒4-6',     destroy: '赤4-6', moralePenalty: -1 }, // RAD
   },
 };
+
 
 function parseRepairRange(str) {
   if (!str) return [];
