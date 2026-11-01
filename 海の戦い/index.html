@@ -294,6 +294,9 @@ body.hide-units .control-marker { display:none; }
   <div id="phaseBar" style="display:flex;gap:2px;flex-wrap:wrap;font-size:0.7em;margin-left:8px;"></div>
   <button class="zbtn" onclick="if(!resignedGuard()) advancePhase()" style="width:auto;padding:0 8px;font-size:0.8em;">次フェイズ▶</button>
   <button class="zbtn" onclick="if(!resignedGuard()) endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;">ターン終了</button>
+  <button class="zbtn" onclick="saveGameToFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#365;" title="ここまでの状態をファイルに保存する">セーブ</button>
+  <button class="zbtn" onclick="pickLoadFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#356;" title="セーブファイルを読み込んで続きから遊ぶ">ロード</button>
+  <input type="file" id="loadFileInput" accept=".json,application/json" style="display:none;" onchange="loadGameFromFile(this)">
   <span style="font-size:0.85em;color:#ffcc44;">POC:<span id="pocVal" style="font-weight:bold;margin-left:4px;">0</span></span>
   <span style="flex:1;"></span>
   <label style="font-size:0.85em;">
@@ -332,6 +335,7 @@ body.hide-units .control-marker { display:none; }
       <label><input type="checkbox" class="optRule" data-opt="usEase" onchange="setOptionRule(this)"> 米国投入ダイス緩和</label>
     </div>
     <button class="locBtn" style="background:#2266cc;padding:6px 18px;" onclick="startWithOptions()">ゲーム開始</button>
+    <button class="locBtn" style="background:#356;padding:6px 18px;margin-left:8px;" onclick="pickLoadFile()">セーブから再開</button>
   </div>
 </div>
 <div id="combatLogModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;">
@@ -5774,6 +5778,119 @@ function showStack(stackId){
 }
 function closeModal(){
   document.getElementById('modal').classList.remove('show');
+}
+
+// === 途中セーブ・ロード（ファイルに書き出し、ファイルから読み込む） ===
+// 戦闘フェイズ（6）は戦闘が画面の連続で進むため、セーブはそれ以外のフェイズで行う
+const SAVE_VERSION = 1;
+function saveBlockedReason(){
+  if(phaseIdx === 6) return '戦闘フェイズ中はセーブできません。戦闘が終わって次のフェイズに進んでからセーブしてください';
+  if(document.querySelector('#modal.show, #combatModal.show, #axisReturnModal.show, #axisRepairModal.show, #combatLogModal.show')) return '画面を閉じてからセーブしてください';
+  if(document.getElementById('optionStartModal').style.display !== 'none') return 'ゲームを開始してからセーブしてください';
+  return null;
+}
+function buildSaveData(){
+  const setsToArr = o => { const r = {}; Object.keys(o).forEach(k => { r[k] = [...o[k]]; }); return r; };
+  return {
+    game: 'war-at-sea', version: SAVE_VERSION, savedAt: new Date().toISOString(),
+    ships: SHIPS.map(s => ({ ...s })),
+    vars: {
+      currentTurn, phaseIdx, humanSide, aiSide, italySurrendered,
+      optionRules: { ...optionRules },
+      convoyOpenSides: { ...convoyOpenSides },
+      alliedTargetMode, alliedFireStyle: { ...alliedFireStyle },
+      poc, pocAtTurnStart, lastTurnPocGain, medAxisStreak, italySeizurePending,
+      seaControl: { ...seaControl },
+      retreatedSeas: [...retreatedSeas],
+      combatDone: setsToArr(combatDone),
+      lbaUsed: { ...lbaUsed },
+      axisLbaChecked,
+      pendingAxisDisabledForUI: pendingAxisDisabledForUI.map(s => s && s.id ? s.id : s),
+      combatLog, alliedTargetModeLog, alliedPostureLog,
+      gameResigned: window.gameResigned || null
+    },
+    rep: (typeof REP !== 'undefined') ? REP : null
+  };
+}
+function saveGameToFile(){
+  if(resignedGuard()) return;
+  const why = saveBlockedReason();
+  if(why){ alert(why); return; }
+  const data = buildSaveData();
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  const ts = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `was_save_T${currentTurn}_P${phaseIdx}_${ts}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function pickLoadFile(){
+  const inp = document.getElementById('loadFileInput');
+  inp.value = '';
+  inp.click();
+}
+function loadGameFromFile(inp){
+  const f = inp.files && inp.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data;
+    try { data = JSON.parse(reader.result); } catch(e){ alert('セーブファイルを読み込めませんでした'); return; }
+    if(!data || data.game !== 'war-at-sea' || !Array.isArray(data.ships) || !data.vars){ alert('海の戦いのセーブファイルではありません'); return; }
+    applySaveData(data);
+  };
+  reader.readAsText(f);
+}
+function applySaveData(data){
+  const v = data.vars;
+  // 艦: id で対応する艦の中身を入れ替える
+  data.ships.forEach(saved => {
+    const s = SHIPS.find(x => x.id === saved.id);
+    if(!s) return;
+    Object.keys(s).forEach(k => { delete s[k]; });
+    Object.assign(s, saved);
+  });
+  currentTurn = v.currentTurn; phaseIdx = v.phaseIdx;
+  humanSide = v.humanSide; aiSide = v.aiSide;
+  italySurrendered = v.italySurrendered;
+  Object.assign(optionRules, v.optionRules);
+  Object.assign(convoyOpenSides, v.convoyOpenSides);
+  alliedTargetMode = v.alliedTargetMode;
+  Object.assign(alliedFireStyle, v.alliedFireStyle);
+  poc = v.poc; pocAtTurnStart = v.pocAtTurnStart; lastTurnPocGain = v.lastTurnPocGain;
+  medAxisStreak = v.medAxisStreak; italySeizurePending = v.italySeizurePending;
+  Object.keys(seaControl).forEach(k => { delete seaControl[k]; });
+  Object.assign(seaControl, v.seaControl);
+  retreatedSeas.clear(); v.retreatedSeas.forEach(k => retreatedSeas.add(k));
+  Object.keys(combatDone).forEach(k => { combatDone[k].clear(); (v.combatDone[k] || []).forEach(x => combatDone[k].add(x)); });
+  Object.assign(lbaUsed, v.lbaUsed);
+  axisLbaChecked = v.axisLbaChecked;
+  pendingAxisDisabledForUI = (v.pendingAxisDisabledForUI || []).map(id => SHIPS.find(s => s.id === id)).filter(Boolean);
+  combatLog.length = 0; combatLog.push(...(v.combatLog || []));
+  alliedTargetModeLog.length = 0; alliedTargetModeLog.push(...(v.alliedTargetModeLog || []));
+  alliedPostureLog.length = 0; alliedPostureLog.push(...(v.alliedPostureLog || []));
+  window.gameResigned = v.gameResigned || null;
+  if(data.rep && typeof REP !== 'undefined'){
+    Object.keys(REP).forEach(k => { delete REP[k]; });
+    Object.assign(REP, data.rep);
+  }
+  // オプションルールは確定済みとして固定
+  document.querySelectorAll('.optRule').forEach(cb => { cb.checked = !!optionRules[cb.dataset.opt]; });
+  lockOptionRules();
+  document.getElementById('optionStartModal').style.display = 'none';
+  // 選択状態を解除して描画し直す
+  selectedLoc = null; selectedShipIds = []; selectedDest = null;
+  document.getElementById('turnLabel').textContent = currentTurn;
+  setPhase('move');
+  renderPhaseBar();
+  placeAllShips();
+  placeControlMarkers();
+  renderPortButtons(); renderLocShipList(); renderDestButtons();
+  renderStatus(); renderSeaResetButtons(); updatePOC();
+  document.getElementById('moveStatus').innerHTML = '';
+  alert(`ロードしました（ターン${currentTurn}・${PHASE_NAMES[phaseIdx - 1]}）`);
 }
 
 // === 初期化呼び出し（全定義の後で実行） ===

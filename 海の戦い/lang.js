@@ -50,6 +50,16 @@ const LANG_EXACT = {
   '投了したので、ゲームは終わっています': 'You resigned, so the game is over',
   '負けを認めてゲームを終わり、ここまでのレポートを保存できる': 'Concede the game and save the report so far',
   'プレイ陣営:': 'Play side:',
+  'セーブ': 'Save',
+  'ロード': 'Load',
+  'セーブから再開': 'Load saved game',
+  'ここまでの状態をファイルに保存する': 'Save the game so far to a file',
+  'セーブファイルを読み込んで続きから遊ぶ': 'Load a save file and continue',
+  '戦闘フェイズ中はセーブできません。戦闘が終わって次のフェイズに進んでからセーブしてください': 'You cannot save during the Combat phase. Save after the combats are over and you have moved on to the next phase',
+  '画面を閉じてからセーブしてください': 'Close the open window before saving',
+  'ゲームを開始してからセーブしてください': 'Start the game before saving',
+  'セーブファイルを読み込めませんでした': 'Could not read the save file',
+  '海の戦いのセーブファイルではありません': 'This is not a War at Sea save file',
 };
 
 // 語句の訳（長い語句から順に置き換える）
@@ -173,6 +183,7 @@ const LANG_TERMS = {
   '連合の勝ち': 'Allied victory',
   '引き分け': 'Draw',
   'ゲーム開始': 'Start Game',
+  'ロードしました': 'Loaded',
   'ターン終了': 'End Turn',
   'ダイス判定': 'die roll',
   'テスト配置': 'Test setup',
