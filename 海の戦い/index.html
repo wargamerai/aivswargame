@@ -287,7 +287,6 @@ body.hide-units .control-marker { display:none; }
 
 <div id="topbar">
   <h1>⚓ War at Sea</h1>
-  <button class="zbtn" id="langBtn" onclick="toggleLang()" style="width:auto;padding:0 10px;font-size:0.8em;">EN</button>
   <label style="font-size:0.85em;">
     ターン:
     <span id="turnLabel" style="display:inline-block;min-width:24px;text-align:center;font-weight:bold;color:#ffcc44;">1</span>
@@ -298,12 +297,6 @@ body.hide-units .control-marker { display:none; }
   <button class="zbtn" onclick="resignGame()" style="width:auto;padding:0 10px;font-size:0.8em;background:#822;" title="負けを認めてゲームを終わり、ここまでのレポートを保存できる">投了</button>
   <span style="font-size:0.85em;color:#ffcc44;">POC:<span id="pocVal" style="font-weight:bold;margin-left:4px;">0</span></span>
   <span style="flex:1;"></span>
-  <label style="font-size:0.85em;">
-    画面:
-    <button class="zbtn" onclick="setPageZoom(-10)">−</button>
-    <span id="pageZoomLabel">125%</span>
-    <button class="zbtn" onclick="setPageZoom(10)">＋</button>
-  </label>
   <label style="font-size:0.85em;">
     ズーム:
     <button class="zbtn" onclick="setZoom(-10)">−</button>
@@ -325,6 +318,13 @@ body.hide-units .control-marker { display:none; }
 <!-- ゲーム立ち上げ時のオプションルール選択 -->
 <div id="optionStartModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:1100;">
   <div class="modal-box" style="min-width:320px;">
+    <div class="no-lang">
+      <h3>言語 / Language</h3>
+      <div style="display:flex;gap:16px;color:#cde;margin:6px 0 12px;">
+        <label><input type="radio" name="langPick" value="ja" onchange="setLang(this.value)"> 日本語</label>
+        <label><input type="radio" name="langPick" value="en" onchange="setLang(this.value)"> English</label>
+      </div>
+    </div>
     <p style="color:#ffcc44;margin-bottom:10px;">あなたはドイツ軍（枢軸）を担当します。連合軍はAIが動かします。</p>
     <h3>オプションルール</h3>
     <div style="display:flex;flex-direction:column;gap:8px;color:#cde;margin:8px 0 14px;">
@@ -5116,8 +5116,8 @@ function setZoom(delta){
 slider.addEventListener('input', applyZoom);
 applyZoom();
 
-// === 画面全体の倍率（ボタン・左右の欄・地図をまとめて拡大）。開いた時は毎回 125% ===
-let pageZoomPct = 125;
+// === 画面全体の倍率（ボタン・左右の欄・地図をまとめて拡大）。今は 100% に固定（帯の操作は外してある） ===
+let pageZoomPct = 100;
 function applyPageZoom(){
   document.body.style.setProperty('--was-zoom', pageZoomPct / 100);
   document.body.classList.toggle('was-zoomed', pageZoomPct !== 100);
@@ -5129,6 +5129,13 @@ function setPageZoom(delta){
   applyPageZoom();
 }
 applyPageZoom();
+
+// 対戦の最初の画面で、今の言語の方を選んだ状態にする（言語はこの画面で選ぶ。ゲーム中の切り替えボタンはない）
+document.addEventListener('DOMContentLoaded', () => {
+  const cur = (typeof LANG !== 'undefined' && LANG === 'en') ? 'en' : 'ja';
+  const r = document.querySelector('input[name="langPick"][value="' + cur + '"]');
+  if(r) r.checked = true;
+});
 
 // === 投了: 負けを認めてゲームを終わり、ここまでのレポートを保存できる（プレイヤーは枢軸 → 連合の勝ち） ===
 window.gameResigned = null;

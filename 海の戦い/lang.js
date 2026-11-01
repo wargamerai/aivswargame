@@ -479,6 +479,7 @@ function langWalk(root, fn){
   if(root.nodeType === 3){ fn.text(root); return; }
   if(root.nodeType !== 1) return;
   if(root.tagName === 'SCRIPT' || root.tagName === 'STYLE') return;
+  if(root.classList && root.classList.contains('no-lang')) return; // 言語の選択（日本語 / English）は訳さない
   if(root.hasAttribute('title')) fn.title(root);
   for(const c of root.childNodes) langWalk(c, fn);
 }
