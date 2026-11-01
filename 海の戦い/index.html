@@ -21,6 +21,8 @@ window.addEventListener('beforeunload', e => { e.preventDefault(); e.returnValue
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+/* 画面全体の拡大（ボタン・左右の欄・地図をまとめて）。高さは倍率で割り戻して画面に収める */
+body.was-zoomed { zoom: var(--was-zoom); height: calc(100vh / var(--was-zoom)); }
 
 #topbar {
   display:flex; align-items:center; gap:10px; padding:6px 10px;
@@ -291,10 +293,17 @@ body.hide-units .control-marker { display:none; }
     <span id="turnLabel" style="display:inline-block;min-width:24px;text-align:center;font-weight:bold;color:#ffcc44;">1</span>
   </label>
   <div id="phaseBar" style="display:flex;gap:2px;flex-wrap:wrap;font-size:0.7em;margin-left:8px;"></div>
-  <button class="zbtn" onclick="advancePhase()" style="width:auto;padding:0 8px;font-size:0.8em;">次フェイズ▶</button>
-  <button class="zbtn" onclick="endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;">ターン終了</button>
+  <button class="zbtn" onclick="if(!resignedGuard()) advancePhase()" style="width:auto;padding:0 8px;font-size:0.8em;">次フェイズ▶</button>
+  <button class="zbtn" onclick="if(!resignedGuard()) endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;">ターン終了</button>
+  <button class="zbtn" onclick="resignGame()" style="width:auto;padding:0 10px;font-size:0.8em;background:#822;" title="負けを認めてゲームを終わり、ここまでのレポートを保存できる">投了</button>
   <span style="font-size:0.85em;color:#ffcc44;">POC:<span id="pocVal" style="font-weight:bold;margin-left:4px;">0</span></span>
   <span style="flex:1;"></span>
+  <label style="font-size:0.85em;">
+    画面:
+    <button class="zbtn" onclick="setPageZoom(-10)">−</button>
+    <span id="pageZoomLabel">125%</span>
+    <button class="zbtn" onclick="setPageZoom(10)">＋</button>
+  </label>
   <label style="font-size:0.85em;">
     ズーム:
     <button class="zbtn" onclick="setZoom(-10)">−</button>
@@ -5106,6 +5115,34 @@ function setZoom(delta){
 }
 slider.addEventListener('input', applyZoom);
 applyZoom();
+
+// === 画面全体の倍率（ボタン・左右の欄・地図をまとめて拡大）。開いた時は毎回 125% ===
+let pageZoomPct = 125;
+function applyPageZoom(){
+  document.body.style.setProperty('--was-zoom', pageZoomPct / 100);
+  document.body.classList.toggle('was-zoomed', pageZoomPct !== 100);
+  const el = document.getElementById('pageZoomLabel');
+  if(el) el.textContent = pageZoomPct + '%';
+}
+function setPageZoom(delta){
+  pageZoomPct = Math.max(70, Math.min(200, pageZoomPct + delta));
+  applyPageZoom();
+}
+applyPageZoom();
+
+// === 投了: 負けを認めてゲームを終わり、ここまでのレポートを保存できる（プレイヤーは枢軸 → 連合の勝ち） ===
+window.gameResigned = null;
+function resignedGuard(){
+  if(!window.gameResigned) return false;
+  alert('投了したので、ゲームは終わっています');
+  return true;
+}
+function resignGame(){
+  if(window.gameResigned){ if(typeof showReportSave === 'function') showReportSave(); return; }
+  if(!confirm('投了しますか？（連合の勝ちとしてゲームを終わり、ここまでのレポートを保存できます）')) return;
+  window.gameResigned = { turn: currentTurn };
+  if(typeof showReportSave === 'function') showReportSave();
+}
 
 function toggleUnits(){
   document.body.classList.toggle('hide-units');

@@ -44,11 +44,18 @@ const LANG_EXACT = {
   'レポートを保存': 'Save report',
   'ターン:': 'Turn:',
   'ズーム:': 'Zoom:',
+  '画面:': 'Screen:',
+  '投了': 'Resign',
+  '投了しますか？（連合の勝ちとしてゲームを終わり、ここまでのレポートを保存できます）': 'Resign? (The game ends as an Allied victory, and you can save the report so far)',
+  '投了したので、ゲームは終わっています': 'You resigned, so the game is over',
+  '負けを認めてゲームを終わり、ここまでのレポートを保存できる': 'Concede the game and save the report so far',
   'プレイ陣営:': 'Play side:',
 };
 
 // 語句の訳（長い語句から順に置き換える）
 const LANG_TERMS = {
+  '枢軸の投了（ターン': 'Axis resigned (turn ',
+  '）— 連合の勝ち': ') — Allied victory',
   // 長い文・決まった言い回し
   'ドイツ軍 航空攻撃：攻撃するエリアを選んでください': 'German air strike: choose an area to attack',
   '枢軸艦の右にあるグループボタンをクリックで割当': 'Click the group button to the right of each Axis ship to assign it',
