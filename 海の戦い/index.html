@@ -294,8 +294,8 @@ body.hide-units .control-marker { display:none; }
   <div id="phaseBar" style="display:flex;gap:2px;flex-wrap:wrap;font-size:0.7em;margin-left:8px;"></div>
   <button class="zbtn" onclick="if(!resignedGuard()) advancePhase()" style="width:auto;padding:0 8px;font-size:0.8em;">次フェイズ▶</button>
   <button class="zbtn" onclick="if(!resignedGuard()) endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;">ターン終了</button>
-  <button class="zbtn" onclick="saveGameToFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#365;" title="ここまでの状態をファイルに保存する">セーブ</button>
-  <button class="zbtn" onclick="pickLoadFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#356;" title="セーブファイルを読み込んで続きから遊ぶ">ロード</button>
+  <button class="zbtn" onclick="saveGameToFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#365;" title="ここまでの状態をファイルに保存する">Save</button>
+  <button class="zbtn" onclick="pickLoadFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#356;" title="セーブファイルを読み込んで続きから遊ぶ">Load</button>
   <input type="file" id="loadFileInput" accept=".json,application/json" style="display:none;" onchange="loadGameFromFile(this)">
   <span style="font-size:0.85em;color:#ffcc44;">POC:<span id="pocVal" style="font-weight:bold;margin-left:4px;">0</span></span>
   <span style="flex:1;"></span>
