@@ -294,7 +294,6 @@ body.hide-units .control-marker { display:none; }
   <div id="phaseBar" style="display:flex;gap:2px;flex-wrap:wrap;font-size:0.7em;margin-left:8px;"></div>
   <button class="zbtn" onclick="if(!resignedGuard()) advancePhase()" style="width:auto;padding:0 8px;font-size:0.8em;">次フェイズ▶</button>
   <button class="zbtn" onclick="if(!resignedGuard()) endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;">ターン終了</button>
-  <button class="zbtn" onclick="resignGame()" style="width:auto;padding:0 10px;font-size:0.8em;background:#822;" title="負けを認めてゲームを終わり、ここまでのレポートを保存できる">投了</button>
   <span style="font-size:0.85em;color:#ffcc44;">POC:<span id="pocVal" style="font-weight:bold;margin-left:4px;">0</span></span>
   <span style="flex:1;"></span>
   <label style="font-size:0.85em;">
@@ -444,6 +443,10 @@ body.hide-units .control-marker { display:none; }
       </div>
       <h3 style="margin-top:6px;">海域リセット</h3>
       <div id="seaResetButtons" style="display:flex;flex-wrap:wrap;gap:3px;padding:4px 6px;"></div>
+      <!-- 投了: 間違えて押さないように、海域リセットの一番下に離して置く -->
+      <div style="padding:6px;margin-top:16px;border-top:1px solid #234;">
+        <button class="locBtn" style="background:#822;border-color:#c44;font-size:0.8em;padding:3px 12px;" onclick="resignGame()" title="負けを認めてゲームを終わり、ここまでのレポートを保存できる">投了</button>
+      </div>
     </div>
 
     <!-- 戦闘フェイズ -->
