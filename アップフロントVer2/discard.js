@@ -100,7 +100,16 @@
     return Math.max(0, max - discardedThisTurn);
   }
 
+  /** 途中セーブ・ロード用: このターンの行動・捨て札の状態 */
+  function getState() { return { actedThisTurn: actedThisTurn, discardedThisTurn: discardedThisTurn }; }
+  function setState(st) {
+    actedThisTurn = !!(st && st.actedThisTurn);
+    discardedThisTurn = (st && st.discardedThisTurn) || 0;
+  }
+
   global.DISCARD_RULES = {
+    getState: getState,
+    setState: setState,
     execute: execute,
     markActed: markActed,
     consume: consume,

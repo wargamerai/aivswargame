@@ -129,6 +129,15 @@ const LANG_EXACT = {
   '配置を終える': 'Finish placing',
   '全部表': 'All face up',
   '全部裏': 'All face down',
+  'ここまでの状態をファイルに保存する': 'Save the game so far to a file',
+  'セーブファイルを読み込んで続きから遊ぶ': 'Load a save file and continue',
+  '自分の手番の間だけセーブできます': 'You can only save during your own turn',
+  '自分の手番の間だけロードできます': 'You can only load during your own turn',
+  'アクションの途中ではセーブできません。アクションを終えるか取り消してからセーブしてください': 'You cannot save in the middle of an action. Finish or cancel the action first',
+  'アクションの途中ではロードできません。アクションを終えるか取り消してからロードしてください': 'You cannot load in the middle of an action. Finish or cancel the action first',
+  'セーブファイルを読み込めませんでした': 'Could not read the save file',
+  'アップフロントのセーブファイルではありません': 'This is not an Up Front save file',
+  'ロードしました': 'Loaded',
 };
 
 // 語句の訳（長い語句から順に置き換える）

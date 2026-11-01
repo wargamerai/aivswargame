@@ -752,6 +752,7 @@
 <body>
 
 <!-- 陣営選択 -->
+<input type="file" id="uf-load-file" accept=".json,application/json" style="display:none;" onchange="ufLoadFromFile(this)">
 <div id="faction-select">
   <h1>Up Front</h1>
   <!-- 言語の切り替え（lang.js）。各画面に置き、どれを押しても切り替わる -->
@@ -768,6 +769,7 @@
       <option value="D">D: 後衛戦（非対称）</option>
     </select>
     <span id="scenario-info" style="font-size:12px; color:#aaa;"></span>
+    <button onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ" style="background:#365; color:#fff; border:1px solid #6a9; padding:8px 14px; font-size:15px; border-radius:4px; cursor:pointer;">Load</button>
     <span id="first-player-row" style="display:none; margin-left:12px; font-size:15px;">
       先攻:
       <select id="first-player-pick" style="background:#444; color:#eee; border:1px solid #888; padding:6px 10px; font-size:14px; border-radius:4px;">
@@ -956,6 +958,11 @@
         </div>
         <div class="judge-slot" id="judge-slot" title="判定 (有効化されたら押す)">判定</div>
         <div class="judge-result" id="judge-result"></div>
+      <!-- セーブ・ロード（ゲームの途中の状態をファイルに保存・読み込み） -->
+    <div style="margin-top:14px;display:flex;gap:6px;justify-content:flex-end;">
+      <button style="padding:2px 12px;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;" onclick="ufSaveGame()" title="ここまでの状態をファイルに保存する">Save</button>
+      <button style="padding:2px 12px;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;" onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ">Load</button>
+    </div>
       <!-- 投了: 間違えて押さないように、一番下に離して置く -->
     <div style="margin-top:14px;padding-top:8px;border-top:1px solid #555;text-align:right;">
       <button class="action-btn" style="width:auto;padding:2px 12px;background:#822;border-color:#c44;" onclick="ufResign()" title="負けを認めてゲームを終わり、ここまでのレポートを保存できる">投了</button>
@@ -2615,7 +2622,9 @@ function weaponChitCode(weaponCat, fac) {
   if (w.indexOf('カービン') === 0) return 'CAR';
   if (w.indexOf('突撃銃') === 0) return 'AR';
   if (w.indexOf('短機関銃') === 0) return 'MP';
-  if (w.indexOf('BAR') === 0) return 'BAR';
+  // 画像の「BAR」は B.A Rifle（ボルトアクション小銃）。米国のブローニングBARの画像は「LMG」のファイル
+  if (w.indexOf('ボルトアクション小銃') === 0) return 'BAR';
+  if (w.indexOf('BAR') === 0) return 'LMG';
   if (w.indexOf('軽機関銃') === 0) return fac === 'jpn' ? 'LMG1' : 'LMG';
   if (w.indexOf('中機関銃') === 0) return 'MMG';
   if (w.indexOf('擲弾筒') === 0) return fac === 'jpn' ? 'GL' : 'MTR';
@@ -3473,6 +3482,161 @@ function ufShowGameOver() {
   </div>`;
 }
 /** 投了: 負けを認めてゲームを終わる（AIの勝ち）。ここまでのレポートを保存できる */
+// ===== 途中セーブ・ロード（ファイルに書き出し、ファイルから読み込む） =====
+// 自分の手番の間（アクションの途中でないとき）にセーブできる。
+// 同じ物を指している所（手札・グループ・カードなど）はそのつながりのまま保存し、
+// 国・シナリオ・地形カード表・兵士カード表は名前で保存して、読み込み時に元の物を指し直す。
+const UF_SAVE_VERSION = 1;
+// セーブ・ロードの知らせは対戦レポートに残さない（alert は対戦レポートに記録されるため、記録した分を戻す）
+function ufSaveAlert(msg) {
+  const ev = UF_REPORT.events, n = ev ? ev.length : 0;
+  alert(msg);
+  if (UF_REPORT.events === ev && ev) ev.length = n;
+}
+function ufSaveExtRefs() {
+  const m = new Map();
+  Object.keys(FACTIONS).forEach(k => m.set(FACTIONS[k], 'F:' + k));
+  const sc = window.SCENARIOS || {};
+  Object.keys(sc).forEach(k => { if (sc[k] && typeof sc[k] === 'object') m.set(sc[k], 'S:' + k); });
+  TERRAIN_CARDS.forEach((c, i) => { if (c && typeof c === 'object') m.set(c, 'T:' + i); });
+  Object.keys(SOLDIER_CARDS).forEach(f => (SOLDIER_CARDS[f] || []).forEach((c, i) => { if (c && typeof c === 'object') m.set(c, 'P:' + f + ':' + i); }));
+  return m;
+}
+function ufSaveResolveExt(key) {
+  const p = key.split(':');
+  if (p[0] === 'F') return FACTIONS[p[1]];
+  if (p[0] === 'S') return (window.SCENARIOS || {})[p[1]];
+  if (p[0] === 'T') return TERRAIN_CARDS[+p[1]];
+  if (p[0] === 'P') return (SOLDIER_CARDS[p[1]] || [])[+p[2]];
+  return null;
+}
+function ufSaveEncode(root) {
+  const ext = ufSaveExtRefs(), ids = new Map();
+  let n = 0;
+  const enc = v => {
+    if (typeof v === 'function' || typeof v === 'symbol') return undefined;
+    if (typeof v === 'number' && !isFinite(v)) return { $num: String(v) };
+    if (v === null || typeof v !== 'object') return v;
+    if (ext.has(v)) return { $ext: ext.get(v) };
+    if (typeof Node !== 'undefined' && v instanceof Node) return null;
+    if (ids.has(v)) return { $ref: ids.get(v) };
+    const id = n++; ids.set(v, id);
+    if (Array.isArray(v)) return { $id: id, $arr: v.map(x => { const e = enc(x); return e === undefined ? null : e; }) };
+    if (v instanceof Set) return { $id: id, $set: [...v].map(enc) };
+    if (v instanceof Map) return { $id: id, $map: [...v].map(([k, x]) => [enc(k), enc(x)]) };
+    const o = {};
+    Object.keys(v).forEach(k => { const e = enc(v[k]); if (e !== undefined) o[k] = e; });
+    return { $id: id, $obj: o };
+  };
+  return enc(root);
+}
+function ufSaveDecode(d) {
+  const objs = [];
+  const dec = v => {
+    if (v === null || typeof v !== 'object') return v;
+    if ('$num' in v) return Number(v.$num);
+    if ('$ext' in v) return ufSaveResolveExt(v.$ext);
+    if ('$ref' in v) return objs[v.$ref];
+    if ('$arr' in v) { const a = []; objs[v.$id] = a; v.$arr.forEach(x => a.push(dec(x))); return a; }
+    if ('$set' in v) { const s = new Set(); objs[v.$id] = s; v.$set.forEach(x => s.add(dec(x))); return s; }
+    if ('$map' in v) { const m = new Map(); objs[v.$id] = m; v.$map.forEach(([k, x]) => m.set(dec(k), dec(x))); return m; }
+    const o = {}; objs[v.$id] = o;
+    Object.keys(v.$obj).forEach(k => { o[k] = dec(v.$obj[k]); });
+    return o;
+  };
+  return dec(d);
+}
+// アクションの途中（選んだ行動・射撃元・目標などが残っている）か
+function ufActionInProgress() {
+  return !!(state.selectedAction || state.fireSource || state.fireTarget || state.sniperTarget || state.woundCheckPending);
+}
+function ufSaveBlockedReason() {
+  if (!state.player || state.phase !== 'play' || state.currentTurn !== 'player') return '自分の手番の間だけセーブできます';
+  if (ufActionInProgress()) return 'アクションの途中ではセーブできません。アクションを終えるか取り消してからセーブしてください';
+  return null;
+}
+function ufBuildSaveData() {
+  return {
+    game: 'up-front', version: UF_SAVE_VERSION, savedAt: new Date().toISOString(),
+    data: ufSaveEncode({
+      state, report: UF_REPORT,
+      discard: (window.DISCARD_RULES && window.DISCARD_RULES.getState) ? window.DISCARD_RULES.getState() : null,
+    }),
+  };
+}
+function ufSaveGame() {
+  const why = ufSaveBlockedReason();
+  if (why) { ufSaveAlert(why); return; }
+  const blob = new Blob([JSON.stringify(ufBuildSaveData())], { type: 'application/json' });
+  const d = new Date(), p = x => String(x).padStart(2, '0');
+  const ts = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `upfront_save_${getFactionKey(state.player)}_${(state.scenario && state.scenario.id) || ''}_T${(state.turnCount || 0) + 1}_${ts}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function ufPickLoad() {
+  // 相手の手番やアクションの途中に読み込むと、進行中の処理と食い違うので止める
+  if (state.player && state.phase !== 'gameover') {
+    if (state.phase !== 'play' || state.currentTurn !== 'player') { ufSaveAlert('自分の手番の間だけロードできます'); return; }
+    if (ufActionInProgress()) { ufSaveAlert('アクションの途中ではロードできません。アクションを終えるか取り消してからロードしてください'); return; }
+  }
+  const inp = document.getElementById('uf-load-file');
+  inp.value = '';
+  inp.click();
+}
+function ufLoadFromFile(inp) {
+  const f = inp.files && inp.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let saved;
+    try { saved = JSON.parse(reader.result); } catch (e) { ufSaveAlert('セーブファイルを読み込めませんでした'); return; }
+    if (!saved || saved.game !== 'up-front' || !saved.data) { ufSaveAlert('アップフロントのセーブファイルではありません'); return; }
+    ufApplySaveData(saved);
+  };
+  reader.readAsText(f);
+}
+function ufApplySaveData(saved) {
+  const all = ufSaveDecode(saved.data);
+  // state・レポートは同じ物を使い続ける（他のファイルから参照されているため中身だけ入れ替える）
+  Object.keys(state).forEach(k => { delete state[k]; });
+  Object.assign(state, all.state);
+  Object.keys(UF_REPORT).forEach(k => { delete UF_REPORT[k]; });
+  Object.assign(UF_REPORT, all.report);
+  if (window.DISCARD_RULES && window.DISCARD_RULES.setState) window.DISCARD_RULES.setState(all.discard);
+  // 選択中の物は持ち越さない
+  state.selectedAction = null;
+  state.selectedHand = new Set();
+  state.fireSource = null;
+  state.fireTarget = null;
+  state.sniperTarget = null;
+  state.terrainSelected = null;
+  _lastActingGroupIdx = null;
+  // 画面をゲーム画面にして描き直す
+  document.getElementById('faction-select').style.display = 'none';
+  ['setup-screen', 'campaign-screen', 'phase-banner'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('active'); });
+  const go = document.getElementById('ufGameOver'); if (go) go.remove();
+  document.getElementById('game').classList.add('active');
+  document.getElementById('player-name').textContent = state.player.flag + ' ' + state.player.name;
+  document.getElementById('ai-name').textContent     = state.ai.flag + ' ' + state.ai.name;
+  document.getElementById('player-hand-max').textContent  = state.player.handMax;
+  document.getElementById('player-hand-draw').textContent = state.player.handDraw;
+  document.getElementById('ai-hand-max').textContent      = state.ai.handMax;
+  document.getElementById('ai-hand-draw').textContent     = state.ai.handDraw;
+  document.querySelectorAll('.action-btn').forEach(b => { b.classList.remove('active'); b.disabled = false; });
+  updateCommissarMarker('player');
+  updateCommissarMarker('ai');
+  renderField('player');
+  renderField('ai');
+  renderHands();
+  updateDeckCounts();
+  updateConfirmBtn();
+  ufSaveAlert('ロードしました');
+  if (state.phase === 'gameover') ufShowGameOver();
+}
+
 function ufResign() {
   if (state.phase === 'gameover') { ufShowGameOver(); return; }
   if (state.phase !== 'play') return;
