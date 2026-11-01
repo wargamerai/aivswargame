@@ -2035,8 +2035,8 @@ function addDeclared(decl, ship, target, pendDecl){
 }
 // 水上戦闘の1陣営分の宣言。撃たれると宣言された空母（攻撃力1以上）は、判定の前に撃ち返す目標も宣言する
 async function declareSurfaceTargets(shooters, enemySide, seaKey, decl, pendDecl){
-  // 空母は、攻撃を宣言したときだけ撃つ。船団は撃たない（対潜戦闘のダイスだけ）
-  const canFire = ship => !(ship.type === 'CV' && !ship._cvDeclared) && ship.atk !== 0 && ship.type !== 'CONVOY';
+  // 空母は、攻撃を宣言したときだけ撃つ。船団は、攻撃目標になれるラウンド（14.8 の保護が外れた時）だけ撃つ
+  const canFire = ship => !(ship.type === 'CV' && !ship._cvDeclared) && ship.atk !== 0 && (ship.type !== 'CONVOY' || convoyOpenSides[ship.side]);
   // 連合AI: 敵の全艦に割り振る計画を先に作る
   const firing = shooters.filter(canFire);
   const aiPlan = (firing.length && firing[0].side === 'allies' && aiSide === 'allies')
@@ -2140,10 +2140,10 @@ async function runPursuitRound(pursuit, retreat){
     const pendPur = newDeclPending(), pendRet = newDeclPending();
     setPhaseLabel('追跡側 目標の宣言');
     const aiPlanOf = (shooters, targets) => (shooters.length && shooters[0].side === 'allies' && aiSide === 'allies')
-      ? planAlliedFire(shooters.filter(x => x.atk !== 0 && x.type !== 'CONVOY'), targets) : null;
-    const planPur = aiPlanOf(eligible.filter(x => x.type !== 'CONVOY'), aliveRet), planRet = aiPlanOf(aliveRet.filter(x => x.type !== 'CONVOY'), eligible);
+      ? planAlliedFire(shooters.filter(x => x.atk !== 0), targets) : null;
+    const planPur = aiPlanOf(eligible, aliveRet), planRet = aiPlanOf(aliveRet, eligible);
     const declLoop = async (shooters, getTarget, pend, label) => {
-      const list = shooters.filter(x => x.atk !== 0 && x.type !== 'CONVOY'); // 船団は撃たない
+      const list = shooters.filter(x => x.atk !== 0); // 追撃戦では船団も攻撃目標になるので撃てる
       const steps = [];
       for(let i = 0; i < list.length; ){
         const ship = list[i];
