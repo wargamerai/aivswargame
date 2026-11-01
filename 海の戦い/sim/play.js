@@ -855,7 +855,7 @@ function gameNo(){
   if(GAME_NO !== null) return GAME_NO;
   let max = 0;
   for(const dir of ['watch', 'reports']){
-    try { fs.readdirSync(path.join(__dirname, dir)).forEach(f => { const m = f.match(/_(\d+)\.(html|txt)$/); if(m) max = Math.max(max, +m[1]); }); } catch(e){}
+    try { fs.readdirSync(path.join(__dirname, dir)).forEach(f => { if(/^war_at_sea_report_/.test(f)) return; const m = f.match(/_(\d+)\.(html|txt)$/); if(m) max = Math.max(max, +m[1]); }); } catch(e){} // プレイヤー対AIのレポートは番号に数えない
   }
   return GAME_NO = max + 1;
 }
@@ -866,7 +866,7 @@ function buildIndexHtml(){
   const num = f => { const m = f.match(/_(\d+)\.(html|txt)$/); return m ? +m[1] : f; };
   const files = dir => { try { return fs.readdirSync(path.join(__dirname, dir)).sort().reverse(); } catch(e){ return []; } };
   const OPT = { '--ub-nolimit':'No U-boat limit', '--bismarck7':'Bismarck class Def 7', '--us-ease':'Easier US entry' };
-  const watchRows = files('watch').filter(f => f.endsWith('.html')).map(f => {
+  const watchRows = files('watch').filter(f => /^watch_.*\.html$/.test(f)).map(f => {
     let meta = null;
     try { const m = fs.readFileSync(path.join(__dirname, 'watch', f), 'utf8').match(/<!--META (.*?)-->/); if(m) meta = JSON.parse(m[1]); } catch(e){}
     const res = meta ? `Final POC ${sgn(meta.finalPoc)} (${meta.finalPoc < 0 ? 'Axis victory' : meta.finalPoc > 0 ? 'Allied victory' : 'Draw'})` : '';
@@ -877,6 +877,20 @@ function buildIndexHtml(){
     let res = '';
     try { const m = fs.readFileSync(path.join(__dirname, 'reports', f), 'utf8').match(/最終POC ([+-]?\d+)/); if(m){ const p = +m[1]; res = `最終POC ${sgn(p)}（${p < 0 ? '枢軸の勝ち' : p > 0 ? '連合の勝ち' : '引き分け'}）`; } } catch(e){}
     return `<tr><td><a href="reports/${encodeURIComponent(f)}">第${esc(num(f))}局</a></td><td>${esc(res)}</td></tr>`;
+  });
+  // プレイヤー（枢軸）対 AI（連合）の対戦レポート: ゲームの「レポートを保存」で作り、watch/ に置いたもの（ファイル名の日時で新しい順）
+  const OPTK = { ubNoLimit:'No U-boat limit', bismarck7:'Bismarck class Def 7', usEase:'Easier US entry' };
+  const playerRows = files('watch').filter(f => /^war_at_sea_report_\d{8}_\d{4}\.html$/.test(f)).map(f => {
+    const m = f.match(/_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\.html$/);
+    const when = m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : f;
+    let res = '', opts = 'none';
+    try {
+      const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'watch', f), 'utf8').match(/const D = (\{.*?\});\n/)[1]);
+      res = d.resigned ? `Axis resigned on turn ${d.resigned.turn} (Allied victory)`
+        : `Final POC ${sgn(d.finalPoc)} (${d.finalPoc < 0 ? 'Axis victory' : d.finalPoc > 0 ? 'Allied victory' : 'Draw'})`;
+      if(d.opts && d.opts.length) opts = d.opts.map(o => OPTK[o] || o).join(', ');
+    } catch(e){}
+    return `<tr><td><a href="watch/${encodeURIComponent(f)}">${esc(when)}</a></td><td>${esc(res)}</td><td>${esc(opts)}</td></tr>`;
   });
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -894,6 +908,8 @@ table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid va
 a{ color:var(--link); } .empty{ color:var(--mute); }
 </style></head><body><div class="wrap">
 <h1>War at Sea: Reports</h1>
+<h2>Player vs AI (player: Axis)</h2>
+<div class="card">${playerRows.length ? `<table><tr><th>Date</th><th>Result</th><th>Optional rules</th></tr>${playerRows.join('')}</table>` : '<div class="empty">No games yet.</div>'}</div>
 <h2>Battle Watch (AI vs AI)</h2>
 <div class="card">${watchRows.length ? `<table><tr><th>Game</th><th>Result</th><th>Optional rules</th></tr>${watchRows.join('')}</table>` : '<div class="empty">No games yet.</div>'}</div>
 <h2 lang="ja">ドイツ海軍 提督レポート</h2>
