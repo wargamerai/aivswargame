@@ -15,18 +15,20 @@
   const RPC_KEYS = ['1','2b','3','4c','5o','6','7w','8','9','0r'];
 
   /** 兵器カテゴリ → CC兵器値 (§20.6) */
-  const WEAPON_CCV = {
-    'カービン銃':4, '突撃銃':4,
-    '小銃':5, 'ライフル':5,
-    '短機関銃':3,
-    'BAR自動小銃':2, 'BAR':2,
-    '軽機関銃':1, 'LMG':1,
-    '火炎放射器':-1,
-    '機関銃':0, 'MMG':0, '中機関銃':0,
-    '対戦車ライフル':0, 'ATR':0,
-    '迫撃砲':0, '歩兵砲':0,
-    'バズーカ':0, 'パンツァーファウスト':0,
-  };
+  // §20.6 兵器値（上から順に照合。具体的な名前を先に置く）
+  const WEAPON_CCV = [
+    ['非武装', 0],
+    ['BAR', 2],
+    ['対戦車ライフル', 0], ['ATR', 0],
+    ['軽機関銃', 1], ['LMG', 1],
+    ['短機関銃', 3],
+    ['中機関銃', 0], ['MMG', 0], ['機関銃', 0],
+    ['カービン', 4], ['突撃銃', 4],
+    ['火炎放射器', -1],
+    ['迫撃砲', 0], ['擲弾筒', 0], ['歩兵砲', 0], ['対戦車砲', 0],
+    ['バズーカ', 0], ['パンツァー', 0], ['PIAT', 0],
+    ['小銃', 5], ['ライフル', 5],
+  ];
 
   // ===========================================================
   // 2. ユーティリティ
@@ -60,10 +62,10 @@
   /** 兵器カテゴリ → CC兵器値 */
   function getWeaponValue(weaponCat) {
     if (!weaponCat) return 0;
-    for (const [key, val] of Object.entries(WEAPON_CCV)) {
+    for (const [key, val] of WEAPON_CCV) {
       if (weaponCat.includes(key)) return val;
     }
-    return 5; // デフォルト: ライフル
+    return 5; // その他のライフル
   }
 
   /** グループ内の生存兵士 */
@@ -76,6 +78,11 @@
     return aliveCards(group).filter(c => !R().isPinned(c));
   }
 
+  /** §32.21 監視役（捕虜を監視している兵）は潜入を試みられない */
+  function isGuard(card) { return !!(card && card.prisoners && card.prisoners.length); }
+  /** §32.21 監視役・§33.5 負傷兵は潜入を試みられない */
+  function cannotInfiltrate(card) { return isGuard(card) || !!(R().isWoundActive && R().isWoundActive(card)); }
+
   /** グループ内のピン状態兵士数 */
   function pinnedCount(group) {
     return aliveCards(group).filter(c => R().isPinned(c)).length;
@@ -87,21 +94,65 @@
   }
 
   /** グループの煙幕カード枚数 */
+  /** §20.39 そのグループが敵の侵入を受けているか */
+  function isInfiltratedByEnemy(group) {
+    const st = global.state;
+    if (!st || !st.groups || !group) return false;
+    for (const side of ['player', 'ai']) {
+      const idx = (st.groups[side] || []).indexOf(group);
+      if (idx < 0) continue;
+      const enemy = side === 'player' ? 'ai' : 'player';
+      return (st.groups[enemy] || []).some(g => g && g.cards.some(c => c.infiltrating && R().isAlive(c)
+        && c.infiltratedGroupSide === side && c.infiltratedGroupIdx === idx));
+    }
+    return false;
+  }
+
+  /** §20.23 中機関銃・迫撃砲を持つ兵士は侵入を試みる時その兵器を手放す（グループの兵器チットとして残る） */
+  function abandonHeavyWeapon(group, card, facKey, side) {
+    const def = R().lookupSoldier(card, facKey);
+    if (!def || !def.weaponCat) return false;
+    if (def.weaponCat.indexOf('中機関銃') !== 0 && def.weaponCat.indexOf('迫撃砲') < 0) return false;
+    if (typeof global.dropWeaponToPool === 'function') global.dropWeaponToPool(group, card, facKey, side);
+    return true;
+  }
+
+  /** §10.43 侵入・CC参加の試みでピン状態になった兵士をヒーローで回復して、もう一度試みるか（プレイヤーのみ） */
+  function offerHeroRetry(card, def, what) {
+    const st = global.state;
+    if (!st || !st.playerHand) return false;
+    const hi = st.playerHand.findIndex(c => c && c.terrain && c.terrain.type === 'HERO');
+    if (hi < 0) return false;
+    if (!confirm(`${def ? def.name : card.id} はピン状態になりました。ヒーローカードで回復して、もう一度${what}を試みますか？（§10.43）`)) return false;
+    const hero = st.playerHand.splice(hi, 1)[0];
+    if (hero && hero.terrainIndex != null && st.terrainDeck) st.terrainDeck.discard.push(hero.terrainIndex);
+    R().unpinSoldier(card);
+    card.heroRecovery = true;
+    if (global.renderHands) global.renderHands();
+    return true;
+  }
+
+  /** §11.13 その兵士が持ち主または助手になっているクルーを解く */
+  function breakCrewOf(group, card) {
+    if (!group || !group.crewPairs || !card || card.num == null) return;
+    Object.keys(group.crewPairs).forEach(o => {
+      if (parseInt(o, 10) === card.num || Number(group.crewPairs[o]) === card.num) delete group.crewPairs[o];
+    });
+  }
+
   function smokeCount(group) {
+    // §13.26 夜間シナリオでは煙幕は非機能カード
+    if (global.state && global.state.isNight) return 0;
     return (group.terrain || []).filter(c => c.terrain && c.terrain.type === 'SMOKE').length;
   }
 
   /** 攻撃側の地形タイプ → 侵入コラムシフト (§20.33-20.37) */
   function attackerTerrainShift(group) {
-    if (R().isInBrush(group))    return -2;  // 繁み
+    if (R().isInBrush(group))    return -1;  // 繁み (§8.82 左へ1)
     if (R().isInWoods(group))    return -1;  // 森林
     if (R().isInTerrainType(group, 'HILL')) return +1;  // 丘
-    // 保護地形なし = 平地
-    const hasProtective = (group.terrain || []).some(c => {
-      const t = c.terrain && c.terrain.type;
-      return t && t !== 'MOVEMENT' && t !== 'FIRE' && !t.startsWith('FIRE') && t !== 'CONCEALED';
-    });
-    if (!hasProtective) return +2; // 平地
+    // §8.12 平地（地形なし・平地カード・移動カード2枚で地形を出た状態 §5.2）は右へ2
+    if (R().currentTerrainType(group) === 'PLAIN') return +2; // 平地
     return 0; // 建物・その他
   }
 
@@ -176,9 +227,15 @@
         return { ok: false, error: '真正面または隣接グループにのみ侵入可能 (§20.2)' };
       }
     }
-    // §8.5 河川内からは侵入不可
-    if (R().isInStream && R().isInStream(srcGroup))
+    // §20.24 未渡河の河川: 「移動」カードを使う形でしか侵入できない（プレイヤーは移動カードの兵士だけ。AI は試みない）
+    if (R().isInStream && R().isInStream(srcGroup) && !R().hasCrossedStream(srcGroup) && srcSide !== 'player')
       return { ok: false, error: '河川内からは侵入できません' };
+    // §23.5 トーチカにいるグループからは侵入できない
+    if (R().currentTerrainType && R().currentTerrainType(srcGroup) === 'PILLBOX')
+      return { ok: false, error: 'トーチカにいるグループからは侵入できません（§23.5）' };
+    // §20.24 湿地: 移動カードが2枚のせられるまでは侵入できない
+    if (R().isInMarsh && R().isInMarsh(srcGroup) && R().marshMoveCount(srcGroup) < 2)
+      return { ok: false, error: '湿地からは、移動カードが2枚のせられるまで侵入できません（§20.24）' };
     // §20.24 地雷原・鉄条網にいるグループからは侵入不可
     if (R().hasTerrainType(srcGroup, 'MINEFIELD') || R().hasTerrainType(srcGroup, 'WIRE'))
       return { ok: false, error: '地雷原または鉄条網内からは侵入できません' };
@@ -186,8 +243,8 @@
     if (R().hasTerrainType(tgtGroup, 'MINEFIELD'))
       return { ok: false, error: '地雷原にいるグループには侵入できません' };
     // ピン状態でない生存兵士が必要
-    const eligible = unpinnedAlive(srcGroup);
-    if (eligible.length === 0) return { ok: false, error: 'ピン状態でない兵士がいません' };
+    const eligible = unpinnedAlive(srcGroup).filter(c => !cannotInfiltrate(c)); // §32.21 監視役・§33.5 負傷兵は潜入不可
+    if (eligible.length === 0) return { ok: false, error: 'ピン状態でない兵士がいません（監視役・負傷兵は潜入できません）' };
     return { ok: true };
   }
 
@@ -217,7 +274,9 @@
 
     if (isMoving(srcGroup)) { breakdown.push({ label: '攻撃側移動中', value: 2 }); col += 2; }
     if (isMoving(tgtGroup)) { breakdown.push({ label: '防御側移動中', value: 2 }); col += 2; }
-    if (opts.srcAlreadyInfiltrated) { breakdown.push({ label: '攻撃側既侵入', value: 2 }); col += 2; }
+    // §20.39 攻撃側グループがすでに敵に侵入されている
+    const _srcInfiltrated = opts.srcAlreadyInfiltrated != null ? opts.srcAlreadyInfiltrated : isInfiltratedByEnemy(srcGroup);
+    if (_srcInfiltrated) { breakdown.push({ label: '攻撃側が侵入を受けている', value: 2 }); col += 2; }
     if (opts.srcFacKey === 'jpn') { breakdown.push({ label: '日本軍 左1', value: -1 }); col -= 1; }
 
     const sSmoke = smokeCount(srcGroup);
@@ -274,13 +333,215 @@
    */
   function getCCV(card, soldierDef, opts) {
     opts = opts || {};
-    const pinned = R().isPinned(card);
-    // 基本CCVはカードの印刷値を使用
-    const ccvStr = pinned ? soldierDef.ccvBack : soldierDef.ccvFront;
-    let ccv = parseCCV(ccvStr).armed;
+    const pinnedReal = R().isPinned(card);
+    // §33.5 負傷兵: 良好な状態の間は「ピン時の CCV」、ピン状態の間は「ピン時かつ非武装時の CCV」
+    const wounded = R().isWoundActive && R().isWoundActive(card);
+    const pinned = pinnedReal || wounded;
+    // カードの印刷値（キャンペーンで上がった値があればそれ: lookupSoldier が反映）
+    const p = parseCCV(pinned ? soldierDef.ccvBack : soldierDef.ccvFront);
+    if (wounded && pinnedReal) {
+      let wccv = p.unarmed;
+      if (card.prisoners && card.prisoners.length) wccv = Math.floor(wccv / 2); // §32.21
+      return wccv;
+    }
+    // 助手かどうか（§20.61 助手の兵器値は常に0）
+    let isAsst = false;
+    const g = opts.group;
+    if (g && g.crewPairs && card.num != null) isAsst = Object.values(g.crewPairs).some(v => Number(v) === card.num);
+    let ccv;
+    if (card.destroyed || (soldierDef.weaponCat === '非武装' && card.acquiredWeapon)) {
+      // 兵器を失った: 印刷の非武装時の値（斜線のあと）
+      ccv = p.unarmed;
+    } else if (card.acquiredWeapon || isAsst) {
+      // §20.6 兵器を変えた・助手: モラル値＋兵器値（ピン状態は -4）。キャンペーンで上がった分も足す
+      const morale = parseInt(soldierDef.morale, 10) || 0;
+      ccv = morale + (isAsst ? 0 : getWeaponValue(soldierDef.weaponCat)) + (card._ccvDelta || 0);
+      if (pinned) ccv -= 4;
+    } else {
+      ccv = p.armed;
+    }
     // §20.6 兵器故障中: -1
     if (card.malfunctioned || opts.weaponMalfunction) ccv -= 1;
+    // §32.21 監視役（捕虜を監視している兵）は CCV が半分（端数切り捨て）
+    if (card.prisoners && card.prisoners.length) ccv = Math.floor(ccv / 2);
     return ccv;
+  }
+
+  /** クルーの相棒（持ち主⇔助手） */
+  function crewPartnerOf(group, card) {
+    if (!group || !group.crewPairs || card.num == null) return null;
+    const cp = group.crewPairs;
+    if (cp[card.num] != null) return group.cards.find(c => c.num === Number(cp[card.num])) || null;
+    const owner = Object.keys(cp).find(o => Number(cp[o]) === card.num);
+    return owner != null ? (group.cards.find(c => c.num === Number(owner)) || null) : null;
+  }
+
+  /** §20.74 CC に勝った兵士は、倒した兵士の兵器を捕獲するか、プレイから除去する（砲兵器は除く） */
+  function ccCaptureOrRemove(winner, winnerSide, winnerFac, loser, loserFac) {
+    loser._weaponHandled = true; // 兵器チットとしては残らない
+    const w = (typeof global.weaponOfCard === 'function') ? global.weaponOfCard(loser, loserFac) : null;
+    if (!w || /対戦車砲|歩兵砲/.test(w.weaponCat)) return;
+    if (winnerSide !== 'player') return; // AI は除去を選ぶ
+    const wd = R().lookupSoldier(winner, winnerFac), ld = R().lookupSoldier(loser, loserFac);
+    if (confirm(`§20.74 ${wd ? wd.name : winner.id} が CC で倒した ${ld ? ld.name : loser.id} の兵器「${w.weaponName || w.weaponCat}」を捕獲しますか？\n（キャンセル: プレイから除去）`)) {
+      winner.acquiredWeapon = Object.assign({}, w, { captured: true });
+    }
+  }
+
+  /** §20.52/§20.62/§20.7 CC の解決（プレイヤー・AI 共通）
+   *  - 攻撃側ごとに RPC で相手を決める
+   *  - §20.621 隠ぺい: 攻撃側・防御側とも 1回の CC に 1枚、相手の兵士1人の CCV を下げる
+   *  - §20.622/§20.72 余分な（ピン状態でない）兵士1人につき +3。攻撃するのは1名ずつ
+   *  - §20.71 防御側がクルーなら、直接攻撃されていない相棒も加わる（攻撃側は勝てば続けて相棒と戦う）
+   *  - §20.73 最後の相手を3以上の差で破った時だけ侵入状態を保つ
+   *  - §20.74 勝った兵士は倒した兵士の兵器を捕獲か除去。§20.742 相打ちなら兵器は侵入されたグループに残る */
+  async function resolveCCBattles(ctx) {
+    const { srcGroup, srcSide, srcFacKey, tgtGroup, tgtSide, tgtIdx, tgtFacKey, participants, drawFn } = ctx;
+    const st = global.state || {};
+    const alive = c => R().isAlive(c);
+    const nameOf = (c, fk) => { const d = R().lookupSoldier(c, fk); return d ? d.name : c.id; };
+    // 相手の決定
+    const defMap = new Map(); // 防御側 card → [攻撃側 card]
+    for (const card of participants) {
+      const rpcCard = drawFn();
+      if (!rpcCard) continue;
+      const target = determineCCTarget(rpcCard, tgtGroup);
+      if (!target) continue;
+      if (!defMap.has(target.card)) defMap.set(target.card, []);
+      defMap.get(target.card).push(card);
+    }
+    const defenders = [...defMap.keys()];
+    const conceal = new Map(); // card → CCV の減少
+    const gcm = typeof global.getConcealMod === 'function' ? global.getConcealMod : (() => 0);
+    const pickFrom = (list, fk, msg) => {
+      if (list.length <= 1) return list[0] || null;
+      const lst = list.map((c, k) => `${k + 1}: ${nameOf(c, fk)}`).join('\n');
+      const a = prompt(`${msg}\n${lst}`, '1');
+      return list[(parseInt(a, 10) || 1) - 1] || list[0];
+    };
+    const strongest = (list, fk, grp) => list.slice().sort((x, y) =>
+      getCCV(y, R().lookupSoldier(y, fk), { group: grp }) - getCCV(x, R().lookupSoldier(x, fk), { group: grp }))[0];
+    // 攻撃側の隠ぺい → 防御側1人の CCV を下げる
+    if (srcSide === 'player') {
+      if (ctx.atkConcealValue > 0 && defenders.length) {
+        const d = pickFrom(defenders, tgtFacKey, 'CCV を下げる防御側の兵士を番号で選んでください（隠ぺいカード §20.621）');
+        if (d) conceal.set(d, ctx.atkConcealValue);
+      }
+    } else if (typeof global.aiUseConcealment === 'function' && defenders.length) {
+      const cc = global.aiUseConcealment();
+      if (cc && cc.length) conceal.set(strongest(defenders, tgtFacKey, tgtGroup), Math.abs(gcm(cc)));
+    }
+    // 防御側の隠ぺい → 攻撃側1人の CCV を下げる
+    const attackers = participants.filter(c => [...defMap.values()].some(l => l.indexOf(c) >= 0));
+    // §27.2 白兵戦に入った迫撃砲の兵士は捕捉を失う
+    if (typeof global.loseAcquisitionForCards === 'function') global.loseAcquisitionForCards(attackers.concat([...defMap.keys()]));
+    if (attackers.length) {
+      if (tgtSide === 'player' && typeof global.askPlayerConcealment === 'function') {
+        const cc = await global.askPlayerConcealment();
+        if (cc && cc.length) {
+          const a = pickFrom(attackers, srcFacKey, 'CCV を下げる攻撃側の兵士を番号で選んでください（隠ぺいカード §20.621）');
+          if (a) conceal.set(a, Math.abs(gcm(cc)));
+        }
+      } else if (tgtSide !== 'player' && typeof global.aiUseConcealment === 'function') {
+        const cc = global.aiUseConcealment();
+        if (cc && cc.length) conceal.set(strongest(attackers, srcFacKey, srcGroup), Math.abs(gcm(cc)));
+      }
+    }
+
+    // §32.11 捕虜を取る: 解決の前に攻撃側の CCV から 2 を引くと宣言する。勝てば敗れた兵は捕虜になる
+    let takePrisoners = false;
+    if (attackers.length && typeof global.capturePrisoner === 'function') {
+      if (srcSide === 'player') {
+        takePrisoners = confirm('捕虜を取りますか？（攻撃側の CCV −2。白兵戦に勝てば、敗れた兵は捕虜になる §32.11）');
+      } else {
+        // AI: −2 しても攻撃側の CCV の平均が防御側の平均より 1 以上高ければ捕虜を取る
+        const avg = (list, fk, grp) => list.reduce((s, x) => s + getCCV(x, R().lookupSoldier(x, fk), { group: grp }), 0) / Math.max(1, list.length);
+        takePrisoners = avg(attackers, srcFacKey, srcGroup) - 2 >= avg(defenders, tgtFacKey, tgtGroup) + 1;
+      }
+    }
+
+    const battles = [];
+    const atkFlag = (srcSide === 'player' ? (st.player && st.player.flag) : (st.ai && st.ai.flag)) || '';
+    const defFlag = (tgtSide === 'player' ? (st.player && st.player.flag) : (st.ai && st.ai.flag)) || '';
+    for (const [primary, atkList] of defMap) {
+      if (!alive(primary)) continue;
+      const defs = [primary];
+      const partner = crewPartnerOf(tgtGroup, primary);
+      if (partner && alive(partner) && !defMap.has(partner)) defs.push(partner); // §20.71
+      let ai = 0, di = 0;
+      const lastDiff = new Map();
+      while (ai < atkList.length && di < defs.length) {
+        const a = atkList[ai], d = defs[di];
+        if (!alive(a)) { ai++; continue; }
+        if (!alive(d)) { di++; continue; }
+        const aDef = R().lookupSoldier(a, srcFacKey), dDef = R().lookupSoldier(d, tgtFacKey);
+        if (!aDef || !dDef) break;
+        // §33.5 負傷兵は追加の兵としての +3 を加えない
+        const aBonus = atkList.slice(ai + 1).filter(x => alive(x) && !R().isPinned(x) && !R().isWoundActive(x)).length * 3;
+        const dBonus = defs.filter((x, k) => k !== di && alive(x) && !R().isPinned(x) && !R().isWoundActive(x)).length * 3;
+        const aCon = conceal.get(a) || 0, dCon = conceal.get(d) || 0;
+        const atkCCV = getCCV(a, aDef, { group: srcGroup }) + aBonus - aCon - (takePrisoners ? 2 : 0); // §32.11
+        const defCCV = getCCV(d, dDef, { group: tgtGroup }) + dBonus - dCon;
+        // §33.5 ピン状態かつ非武装の負傷兵が単独で防御する白兵戦は自動的に敗北
+        const dAloneUnarmedWounded = R().isWoundActive(d) && R().isPinned(d)
+          && (d.destroyed || dDef.weaponCat === '非武装')
+          && defs.filter(x => alive(x)).length === 1;
+        let combat;
+        if (dAloneUnarmedWounded) {
+          combat = { result: 'DEF_KIA', atkTotal: atkCCV, defTotal: defCCV, diff: 99,
+                     atkRnc: 0, defRnc: 0, atkRncColor: '自動', defRncColor: '自動' };
+        } else {
+          const atkRncCard = drawFn();
+          const defRncCard = drawFn();
+          if (!atkRncCard || !defRncCard) break;
+          combat = resolveCCCombat(atkCCV, defCCV, atkRncCard, defRncCard);
+        }
+        battles.push({
+          atkName: `${atkFlag ? atkFlag + ' ' : ''}#${a.num} ${aDef.name}`,
+          defName: `${defFlag ? defFlag + ' ' : ''}#${d.num} ${dDef.name}`,
+          atkCCV, defCCV,
+          atkRnc: combat.atkRnc, defRnc: combat.defRnc,
+          atkRncColor: combat.atkRncColor, defRncColor: combat.defRncColor,
+          atkTotal: combat.atkTotal, defTotal: combat.defTotal,
+          atkBonus: aBonus, defBonus: dBonus, concealMod: aCon + dCon,
+          result: combat.result,
+        });
+        if (combat.result === 'DEF_KIA' && takePrisoners && global.capturePrisoner(d, tgtSide, srcGroup, srcSide)) {
+          // §32.11 敗れた兵は捕虜になる。捕虜を取った兵は潜入状態を失う
+          battles[battles.length - 1].defName += '（捕虜）';
+          ccCaptureOrRemove(a, srcSide, srcFacKey, d, tgtFacKey);
+          a._tookPrisoner = true;
+          lastDiff.set(a, combat.diff);
+          di++;
+        } else if (combat.result === 'DEF_KIA') {
+          R().killSoldier(d);
+          a.ccKills = (a.ccKills || 0) + 1; // §42.43
+          ccCaptureOrRemove(a, srcSide, srcFacKey, d, tgtFacKey);
+          lastDiff.set(a, combat.diff);
+          di++; // §20.71 相棒がいれば続けて戦う
+        } else if (combat.result === 'ATK_KIA') {
+          R().killSoldier(a);
+          ccCaptureOrRemove(d, tgtSide, tgtFacKey, a, srcFacKey);
+          clearSoldierInfiltration(a);
+          ai++; // §20.72 次の攻撃側
+        } else { // BOTH_KIA §20.742 兵器は侵入されたグループに残る
+          a._dropSide = tgtSide; a._dropIdx = tgtIdx;
+          R().killSoldier(d);
+          R().killSoldier(a);
+          clearSoldierInfiltration(a);
+          ai++; di++;
+        }
+      }
+      // §20.73 最後の相手を3以上の差で破った攻撃側だけ侵入状態を保つ
+      for (const [a, diff] of lastDiff) {
+        const tookPrisoner = !!a._tookPrisoner; delete a._tookPrisoner;
+        if (!alive(a)) continue;
+        if (tookPrisoner) { clearSoldierInfiltration(a); continue; } // §32.11 捕虜を取った兵は潜入状態を失う
+        if (diff >= 3) { a.infiltrating = true; a.infiltratedGroupSide = tgtSide; a.infiltratedGroupIdx = tgtIdx; }
+        else clearSoldierInfiltration(a);
+      }
+    }
+    return battles;
   }
 
   /**
@@ -377,7 +638,7 @@
       // コラム情報
       const baseCol = aliveCards(tgtGroup).length;
       const _isNight = !!(global.state && global.state.isNight);
-      const _sFlared = !!(srcGroup && srcGroup.flaredUntilTurn && global.state && srcGroup.flaredUntilTurn >= (global.state.turnCount || 0));
+      const _sFlared = !!(tgtGroup && tgtGroup.flaredUntilTurn && global.state && tgtGroup.flaredUntilTurn >= (global.state.turnCount || 0)); // §38.6 潜入される側が照らされているか
       const col = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey, night: _isNight && !_sFlared });
       const info = el('div', { color:'#ccc', fontSize:'13px', marginBottom:'12px' },
         `防御兵数: ${baseCol} | 最終コラム: ${col}`);
@@ -413,9 +674,9 @@
         const entry = { card, cardIdx, soldierDef: def, selected: false, useMove: false };
         selections.push(entry);
 
-        if (isPinned) {
+        if (isPinned || cannotInfiltrate(card)) {
           tr.style.opacity = '0.4';
-          const td = el('td', { padding:'4px 6px', color:'#f88', fontSize:'13px' }, `✕ #${card.num} ${def.name} (ピン状態)`);
+          const td = el('td', { padding:'4px 6px', color:'#f88', fontSize:'13px' }, `✕ #${card.num} ${def.name} (${isPinned ? 'ピン状態' : isGuard(card) ? '監視役 §32.21' : '負傷 §33.5'})`);
           td.colSpan = 5;
           tr.appendChild(td);
         } else {
@@ -507,6 +768,7 @@
    * モラルチェック結果オーバーレイ
    */
   function showMoralCheckOverlay(title, results) {
+    if (global.__HEADLESS) return Promise.resolve(); // 画面なし対戦（sim）では待たない
     return new Promise(resolve => {
       const frag = document.createDocumentFragment();
       frag.appendChild(el('div', TITLE_STYLE, title));
@@ -567,6 +829,9 @@
    * @returns {Promise<void>}
    */
   function showInfiltrationResultOverlay(title, results) {
+    try { if (typeof global.ufEvent === 'function') { const ok = (results || []).filter(r => r.infiltrated).length, ng = (results || []).length - ok;
+      global.ufEvent(global.state && global.state.currentTurn, `侵入（${String(title).replace(/^.*?—\s*/, '')}）→ 成功${ok}・失敗${ng}`); } } catch (e) {}
+    if (global.__HEADLESS) return Promise.resolve(); // 画面なし対戦（sim）では待たない
     return new Promise(resolve => {
       const frag = document.createDocumentFragment();
       frag.appendChild(el('div', TITLE_STYLE, title));
@@ -777,6 +1042,10 @@
    * @returns {Promise<void>}
    */
   function showCCResultOverlay(title, battles) {
+    try { if (typeof global.ufReportLog === 'function') global.ufReportLog('cc', title + ' → ' + (battles || []).map(b => `${b.atkName} 対 ${b.defName}: ${b.result}`).join('、')); } catch (e) {}
+    try { if (typeof global.ufEvent === 'function') { const w = (battles || []).filter(b => b.result === 'DEF_KIA').length, l = (battles || []).filter(b => b.result === 'ATK_KIA').length, d = (battles || []).filter(b => b.result === 'BOTH_KIA').length;
+      global.ufEvent(global.state && global.state.currentTurn, `白兵戦（${String(title).replace(/^.*?—\s*/, '')}）→ 攻撃側の勝ち${w}・負け${l}${d ? '・相打ち' + d : ''}`); } } catch (e) {}
+    if (global.__HEADLESS) return Promise.resolve(); // 画面なし対戦（sim）では待たない
     return new Promise(resolve => {
       const frag = document.createDocumentFragment();
       frag.appendChild(el('div', TITLE_STYLE, title));
@@ -883,13 +1152,25 @@
       const def = sel.soldierDef;
       const morale = parseInt(def.morale, 10) || 0;
       const entry = { name: `#${sel.card.num} ${def.name}`, morale };
+      breakCrewOf(srcGroup, sel.card); // §11.13 侵入を試みるとクルーは解かれる
+      // §20.23 中機関銃・迫撃砲の兵士は兵器を手放す
+      if (abandonHeavyWeapon(srcGroup, sel.card, srcFacKey, 'player')) entry.abandoned = true;
+      // §20.24 未渡河の河川からは「移動」カードを使う形でしか侵入できない
+      const _inStream = R().isInStream(srcGroup) && !R().hasCrossedStream(srcGroup);
+      if (_inStream && !sel.useMove) {
+        entry.method = '河川（移動カードが必要）';
+        entry.passed = false;
+        moralResults.push(entry);
+        continue;
+      }
 
       if (sel.useMove) {
         entry.method = '移動カード(免除)';
         entry.exempted = true;
         entry.passed = true;
+        let mc = null;
         if (moveCardUsed < moveCards.length) {
-          const mc = moveCards[moveCardUsed];
+          mc = moveCards[moveCardUsed];
           const handIdx = playerHand.indexOf(mc);
           if (handIdx >= 0) {
             playerHand.splice(handIdx, 1);
@@ -897,18 +1178,35 @@
           }
           moveCardUsed++;
         }
+        // §20.24 河川: 渡河カードなら成功。他の移動カードなら RNC を引き、黒なら渡河成功で同じカードを侵入の RPC に使う
+        if (_inStream) {
+          const isFord = !!(mc && mc.terrain && mc.terrain.sub === '渡河');
+          if (!isFord) {
+            const cr = drawFn();
+            const ok = !!cr && !(cr.terrain && cr.terrain.rncColor === '赤');
+            entry.method = ok ? '移動カード・渡河成功（RNC黒）' : '移動カード・渡河失敗（RNC赤）';
+            entry.passed = ok;
+            if (ok) sel._rpcCard = cr;
+          } else {
+            entry.method = '渡河カード（渡河成功）';
+          }
+        }
       } else {
         entry.method = 'モラルチェック';
-        const rncCard = drawFn();
-        if (!rncCard) { entry.passed = false; moralResults.push(entry); continue; }
-        const check = checkInfiltrationMorale(def, rncCard);
-        entry.rnc = check.rnc;
-        entry.rncColor = check.rncColor;
-        entry.morale = check.morale;
-        entry.passed = check.pass;
-        if (!check.pass) {
+        // §10.43 ピン状態になってもヒーローで回復すれば、もう一度試みられる
+        for (;;) {
+          const rncCard = drawFn();
+          if (!rncCard) { entry.passed = false; break; }
+          const check = checkInfiltrationMorale(def, rncCard);
+          entry.rnc = check.rnc;
+          entry.rncColor = check.rncColor;
+          entry.morale = check.morale;
+          entry.passed = check.pass;
+          if (check.pass) { entry.pinned = false; break; }
           R().pinSoldier(sel.card);
           entry.pinned = true;
+          if (!offerHeroRetry(sel.card, def, '侵入')) break;
+          entry.method = 'モラルチェック（ヒーローで再試行）';
         }
       }
       moralResults.push(entry);
@@ -923,14 +1221,21 @@
     for (const sel of passedSoldiers) {
       const def = sel.soldierDef;
       const _isNight2 = !!(global.state && global.state.isNight);
-      const _sFlared2 = !!(srcGroup && srcGroup.flaredUntilTurn && global.state && srcGroup.flaredUntilTurn >= (global.state.turnCount || 0));
-      const colDetail = calcInfiltrationColumnDetailed(tgtGroup, srcGroup, { srcFacKey, night: _isNight2 && !_sFlared2 });
+      const _sFlared2 = !!(tgtGroup && tgtGroup.flaredUntilTurn && global.state && tgtGroup.flaredUntilTurn >= (global.state.turnCount || 0)); // §38.6 潜入される側が照らされているか
+      // §9.4 侵入を試みる兵士1名につき隠ぺいカード1枚で援護できる（カードの値だけ左へシフト）
+      let _concealVal = 0;
+      if (typeof global.askPlayerConcealment === 'function' && typeof global.getConcealMod === 'function') {
+        const _cc = await global.askPlayerConcealment();
+        if (_cc && _cc.length) _concealVal = Math.abs(global.getConcealMod(_cc));
+      }
+      const colDetail = calcInfiltrationColumnDetailed(tgtGroup, srcGroup, { srcFacKey, night: _isNight2 && !_sFlared2, concealValue: _concealVal });
       const entry = {
         name: `#${sel.card.num} ${def.name}`,
         column: colDetail.column,
         breakdown: colDetail.breakdown,
       };
-      const rpcCard = drawFn();
+      const rpcCard = sel._rpcCard || drawFn(); // §20.24 渡河の RNC を侵入の RPC に使う
+      delete sel._rpcCard;
       if (!rpcCard) { entry.infiltrated = false; infResults.push(entry); continue; }
       const rpcResult = resolveInfiltrationRPC(rpcCard, colDetail.column);
       entry.rpcColor = rpcResult.color;
@@ -1033,19 +1338,20 @@
         }
         participants.push(p);
       } else {
-        // モラルチェック (§20.21)
-        const rncCard = drawFn();
-        if (!rncCard) continue;
-        const rnc = parseInt(rncCard.terrain.range, 10) || 0;
-        const morale = parseInt(def.morale, 10) || 0;
-        if (rnc < morale) {
-          participants.push(p);
-        } else {
+        // モラルチェック (§20.21)。§10.43 ピン状態になってもヒーローで回復すれば、もう一度試みられる
+        for (;;) {
+          const rncCard = drawFn();
+          if (!rncCard) break;
+          const rnc = parseInt(rncCard.terrain.range, 10) || 0;
+          const morale = parseInt(def.morale, 10) || 0;
+          if (rnc < morale) { participants.push(p); break; }
           R().pinSoldier(p.card);
+          if (offerHeroRetry(p.card, def, 'CC参加')) continue;
           // §20.53 ピン → 侵入状態解除
           p.card.infiltrating = false;
           delete p.card.infiltratedGroupSide;
           delete p.card.infiltratedGroupIdx;
+          break;
         }
       }
     }
@@ -1055,121 +1361,20 @@
       return { ok: true, battles: [], actionUsed: true };
     }
 
-    // §20.52 RPCで防御側ポジション決定 & CC解決
-    const battles = [];
-    const concealMod = setup.concealCard ? setup.concealCard.value : 0;
-
-    // 隠ぺいカード消費
+    // §20.621 攻撃側の隠ぺいカード（1枚）を消費（手札の位置はずれていることがあるのでカードで探す）
+    let atkConcealValue = 0;
     if (setup.concealCard) {
-      const ci = setup.concealCard.handIdx;
-      if (ci >= 0 && ci < playerHand.length) {
+      const ci = playerHand.indexOf(setup.concealCard.card);
+      if (ci >= 0) {
         const removed = playerHand.splice(ci, 1)[0];
-        if (removed && removed.terrainIndex != null && st.terrainDeck) {
-          st.terrainDeck.discard.push(removed.terrainIndex);
-        }
+        if (removed && removed.terrainIndex != null && st.terrainDeck) st.terrainDeck.discard.push(removed.terrainIndex);
+        atkConcealValue = setup.concealCard.value || 0;
       }
     }
-
-    // 各参加者のCC相手をRPCで決定 (攻撃者の数だけRPC、戦闘は1回のみ)
-    const assignments = []; // { attacker, defender, defCardIdx }
-    for (const p of participants) {
-      const rpcCard = drawFn();
-      if (!rpcCard) continue;
-      const target = determineCCTarget(rpcCard, tgtGroup);
-      if (!target) continue;
-      assignments.push({ attacker: p, defCard: target.card, defCardIdx: target.cardIdx, defPosition: target.position });
-    }
-
-    // §20.72 同じ防御側に複数の攻撃者 → +3ボーナス
-    const defMap = new Map(); // defCardIdx → [attackers]
-    for (const a of assignments) {
-      if (!defMap.has(a.defCardIdx)) defMap.set(a.defCardIdx, []);
-      defMap.get(a.defCardIdx).push(a);
-    }
-
-    // 各戦闘解決
-    for (const [defCardIdx, attackers] of defMap) {
-      const defCard = tgtGroup.cards[defCardIdx];
-      if (!defCard || !R().isAlive(defCard)) continue;
-      const defDef = R().lookupSoldier(defCard, tgtFacKey);
-      if (!defDef) continue;
-
-      let defCCV = getCCV(defCard, defDef, {});
-      // 隠ぺいカード（攻撃側が防御側のCCVを減少）
-      defCCV = Math.max(0, defCCV - concealMod);
-
-      // §20.622 余分な攻撃者ボーナス
-      const extraAttackers = Math.max(0, attackers.length - 1);
-      const atkBonus = extraAttackers * 3;
-
-      // 主攻撃者（最初の1名）で戦闘
-      let attackerIdx = 0;
-      while (attackerIdx < attackers.length && R().isAlive(defCard)) {
-        const atk = attackers[attackerIdx];
-        const atkDef = R().lookupSoldier(atk.attacker.card, srcFacKey);
-        if (!atkDef) { attackerIdx++; continue; }
-
-        let atkCCV = getCCV(atk.attacker.card, atkDef, {});
-        // §20.72 最初の攻撃者のみボーナス加算（除去されたら次の攻撃者にはその分は消える）
-        const currentBonus = Math.max(0, (attackers.length - 1 - attackerIdx)) * 3;
-        atkCCV += currentBonus;
-
-        // §20.7 RNC引き
-        const atkRncCard = drawFn();
-        const defRncCard = drawFn();
-        if (!atkRncCard || !defRncCard) break;
-
-        const combat = resolveCCCombat(atkCCV, defCCV, atkRncCard, defRncCard);
-
-        const stCC = global.state || {};
-        const atkFlag = (srcSide === 'player' ? (stCC.player && stCC.player.flag) : (stCC.ai && stCC.ai.flag)) || '';
-        const defFlag = (tgtSide === 'player' ? (stCC.player && stCC.player.flag) : (stCC.ai && stCC.ai.flag)) || '';
-        const battle = {
-          atkName: `${atkFlag ? atkFlag + ' ' : ''}#${atk.attacker.card.num} ${atkDef.name}`,
-          defName: `${defFlag ? defFlag + ' ' : ''}#${defCard.num} ${defDef.name}`,
-          atkCCV, defCCV,
-          atkRnc: combat.atkRnc, defRnc: combat.defRnc,
-          atkRncColor: combat.atkRncColor, defRncColor: combat.defRncColor,
-          atkTotal: combat.atkTotal, defTotal: combat.defTotal,
-          atkBonus: currentBonus > 0 ? currentBonus : 0,
-          defBonus: 0,
-          concealMod: concealMod > 0 ? concealMod : 0,
-          result: combat.result,
-        };
-        battles.push(battle);
-
-        // 結果適用
-        if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') {
-          R().killSoldier(defCard);
-          // §42.43 CC殺害カウント
-          atk.attacker.card.ccKills = (atk.attacker.card.ccKills || 0) + 1;
-          // 侵入状態解除
-          atk.attacker.card.infiltrating = false;
-          delete atk.attacker.card.infiltratedGroupSide;
-          delete atk.attacker.card.infiltratedGroupIdx;
-
-          // §20.73 3以上の差で勝った場合、侵入状態維持
-          if (combat.result === 'DEF_KIA' && combat.diff >= 3) {
-            atk.attacker.card.infiltrating = true;
-            atk.attacker.card.infiltratedGroupSide = tgtSide;
-            atk.attacker.card.infiltratedGroupIdx = tgtIdx;
-          }
-        }
-        if (combat.result === 'ATK_KIA' || combat.result === 'BOTH_KIA') {
-          R().killSoldier(atk.attacker.card);
-          atk.attacker.card.infiltrating = false;
-          delete atk.attacker.card.infiltratedGroupSide;
-          delete atk.attacker.card.infiltratedGroupIdx;
-        }
-
-        // §20.72 攻撃者除去 → 次の攻撃者
-        if (combat.result === 'ATK_KIA') {
-          attackerIdx++;
-        } else {
-          break; // 攻撃者勝利 or 両者KIA → この防御者の戦闘終了
-        }
-      }
-    }
+    const battles = await resolveCCBattles({
+      srcGroup, srcSide, srcFacKey, tgtGroup, tgtSide, tgtIdx, tgtFacKey,
+      participants: participants.map(p => p.card), drawFn, atkConcealValue,
+    });
 
     // 結果オーバーレイ
     const titleText = `白兵戦結果 — ${srcGroup.name} → 敵${tgtGroup.name}`;
@@ -1250,7 +1455,20 @@
       const def = R().lookupSoldier(card, facKey);
       const wasPinned = R().isPinned(card);
       const rpc0r = parseInt((judge.terrain && judge.terrain.dice && judge.terrain.dice['0r']) || '0', 10) || 0;
-      const r = R().resolveFireOnSoldier(baseFP, rnc, def, wasPinned, rpc0r, 0, 0);
+      // §15.52 ピン状態でないコミッサールのいるグループはモラル値・パニック値 +1
+      const _cm = (typeof global.commissarModOf === 'function') ? global.commissarModOf(tgtGroup) : 0;
+      // §21.3 目標グループに侵入している味方の兵士は、自分のグループの地形の修正を受けられる
+      let fpHere = baseFP;
+      let _cmF = _cm;
+      if (friendly && st && st.groups) {
+        const og = (st.groups[srcSide] || []).find(g => g && g.cards.indexOf(card) >= 0);
+        if (og) {
+          fpHere += R().calcTerrainMod(og.terrain, false, {});
+          _cmF = (typeof global.commissarModOf === 'function') ? global.commissarModOf(og) : 0;
+        }
+      }
+      const r = R().resolveFireOnSoldier(fpHere, rnc, def, wasPinned, rpc0r, _cmF, _cmF, 0, R().rpc7wOf(judge));
+      if (r.result === 'WOUND' && typeof global.applyWound === 'function') r.result = global.applyWound(card); // §33.1
       if (r.result === 'KIA' || r.result === 'PANIC_KIA') {
         R().killSoldier(card);
         if (!friendly) demoEnemyKills++;
@@ -1264,7 +1482,7 @@
       const stD = global.state || {};
       const sideFac = friendly ? (srcSide === 'player' ? stD.player : stD.ai) : (tgtSide === 'player' ? stD.player : stD.ai);
       const sideFlag = (sideFac && sideFac.flag) ? sideFac.flag + ' ' : '';
-      results.push({ name: namePrefix + sideFlag + (def ? def.name : card.id), result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP: baseFP, sum: baseFP + rnc, morale, kia, wasPinned });
+      results.push({ name: namePrefix + sideFlag + (def ? def.name : card.id), result: r.result, rnc, rncColor: isRed ? '赤' : '黒', finalFP: fpHere, sum: fpHere + rnc, morale, kia, wasPinned });
     }
     // 爆薬は使用済み
     attackerCard.demoCharge = false;
@@ -1296,6 +1514,7 @@
     if (!group || !group.cards) return;
     for (const card of group.cards) {
       if (!card.infiltrating) continue;
+      if (reason === 'fire' && card._noFire) continue; // §20.531 射撃に参加しなかった侵入兵は侵入状態のまま
       if (reason === 'move' || reason === 'fire') {
         card.infiltrating = false;
         delete card.infiltratedGroupSide;
@@ -1354,7 +1573,7 @@
     for (const card of (srcGroup.cards || [])) {
       if (!R().isAlive(card) || R().isPinned(card)) continue;
       if (card.malfunctioned || card.destroyed) continue;
-      if (!card.infiltrating) continue;
+      if (!card.infiltrating || card._noFire) continue; // §20.531 射撃に参加しない侵入兵
       if (card.infiltratedGroupSide !== tgtSide || card.infiltratedGroupIdx !== tgtIdx) continue;
       const def = R().lookupSoldier(card, srcFacKey);
       if (!def) continue;
@@ -1465,7 +1684,9 @@
    * AI自動侵入（モーダルなし）
    */
   async function aiExecuteInfiltration(srcGroup, srcIdx, tgtGroup, tgtSide, tgtIdx, drawFn, aiFacKey) {
-    const eligible = unpinnedAlive(srcGroup);
+    const eligible = unpinnedAlive(srcGroup).filter(c => !cannotInfiltrate(c)); // §32.21 監視役・§33.5 負傷兵は潜入不可
+    // 爆薬を持つ兵を先頭に: 移動カード（モラルチェックなし）と隠ぺいカードを優先して使い、侵入を助ける
+    eligible.sort((a, b) => (b.demoCharge ? 1 : 0) - (a.demoCharge ? 1 : 0));
     if (eligible.length === 0) return { ok: false, actionUsed: false };
 
     // AI: 移動カードがあれば使う、なければモラルチェック
@@ -1480,6 +1701,7 @@
       if (!def) continue;
       const morale = parseInt(def.morale, 10) || 0;
       const entry = { name: `#${card.num} ${def.name}`, morale };
+      breakCrewOf(srcGroup, card); // §11.13 侵入を試みるとクルーは解かれる
 
       // 移動カードがあれば優先使用
       if (moveUsed < moveCards.length) {
@@ -1513,8 +1735,14 @@
 
       // 侵入RPC判定
       const _isNight3 = !!(global.state && global.state.isNight);
-      const _sFlared3 = !!(srcGroup && srcGroup.flaredUntilTurn && global.state && srcGroup.flaredUntilTurn >= (global.state.turnCount || 0));
-      const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey: aiFacKey, night: _isNight3 && !_sFlared3 });
+      const _sFlared3 = !!(tgtGroup && tgtGroup.flaredUntilTurn && global.state && tgtGroup.flaredUntilTurn >= (global.state.turnCount || 0)); // §38.6 潜入される側が照らされているか
+      // §9.4 AI も侵入する兵士1名につき隠ぺいカード1枚で援護する（持っていれば使う）
+      let _aiConcealVal = 0;
+      if (typeof global.aiUseConcealment === 'function' && typeof global.getConcealMod === 'function') {
+        const _acc = global.aiUseConcealment();
+        if (_acc && _acc.length) _aiConcealVal = Math.abs(global.getConcealMod(_acc));
+      }
+      const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey: aiFacKey, night: _isNight3 && !_sFlared3, concealValue: _aiConcealVal });
       entry.column = column;
       const rpcCard = drawFn();
       if (!rpcCard) { entry.infiltrated = false; results.push(entry); continue; }
@@ -1595,78 +1823,10 @@
 
     if (participants.length === 0) return { ok: true, actionUsed: true, battles: [] };
 
-    // RPCで防御側決定 & CC解決 (攻撃者の数だけRPC、戦闘は1回のみ)
-    const battles = [];
-    const assignments = [];
-    for (const card of participants) {
-      const rpcCard = drawFn();
-      if (!rpcCard) continue;
-      const target = determineCCTarget(rpcCard, tgtGroup);
-      if (!target) continue;
-      assignments.push({ card, defCard: target.card, defCardIdx: target.cardIdx });
-    }
-
-    const defMap = new Map();
-    for (const a of assignments) {
-      if (!defMap.has(a.defCardIdx)) defMap.set(a.defCardIdx, []);
-      defMap.get(a.defCardIdx).push(a);
-    }
-
-    for (const [defCardIdx, attackers] of defMap) {
-      const defCard = tgtGroup.cards[defCardIdx];
-      if (!defCard || !R().isAlive(defCard)) continue;
-      const defDef = R().lookupSoldier(defCard, tgtFacKey);
-      if (!defDef) continue;
-      let defCCV = getCCV(defCard, defDef, {});
-
-      let attackerIdx = 0;
-      while (attackerIdx < attackers.length && R().isAlive(defCard)) {
-        const atk = attackers[attackerIdx];
-        const atkDef = R().lookupSoldier(atk.card, aiFacKey);
-        if (!atkDef) { attackerIdx++; continue; }
-        let atkCCV = getCCV(atk.card, atkDef, {});
-        const currentBonus = Math.max(0, (attackers.length - 1 - attackerIdx)) * 3;
-        atkCCV += currentBonus;
-
-        const atkRncCard = drawFn();
-        const defRncCard = drawFn();
-        if (!atkRncCard || !defRncCard) break;
-        const combat = resolveCCCombat(atkCCV, defCCV, atkRncCard, defRncCard);
-
-        const atkFlag = (st.ai && st.ai.flag) ? st.ai.flag + ' ' : '';
-        const defFlag = (tgtSide === 'player' ? (st.player && st.player.flag) : (st.ai && st.ai.flag)) || '';
-        battles.push({
-          atkName: `${atkFlag}#${atk.card.num} ${atkDef.name}`,
-          defName: `${defFlag ? defFlag + ' ' : ''}#${defCard.num} ${defDef.name}`,
-          atkCCV, defCCV,
-          atkRnc: combat.atkRnc, defRnc: combat.defRnc,
-          atkRncColor: combat.atkRncColor, defRncColor: combat.defRncColor,
-          atkTotal: combat.atkTotal, defTotal: combat.defTotal,
-          atkBonus: currentBonus, defBonus: 0, concealMod: 0,
-          result: combat.result,
-        });
-
-        if (combat.result === 'DEF_KIA' || combat.result === 'BOTH_KIA') {
-          R().killSoldier(defCard);
-          // §42.43 CC殺害カウント
-          atk.card.ccKills = (atk.card.ccKills || 0) + 1;
-        }
-        if (combat.result === 'ATK_KIA' || combat.result === 'BOTH_KIA') {
-          R().killSoldier(atk.card);
-          atk.card.infiltrating = false;
-        }
-        if (combat.result === 'DEF_KIA') {
-          atk.card.infiltrating = false;
-          if (combat.diff >= 3) {
-            atk.card.infiltrating = true;
-            atk.card.infiltratedGroupSide = tgtSide;
-            atk.card.infiltratedGroupIdx = tgtIdx;
-          }
-        }
-        if (combat.result === 'ATK_KIA') attackerIdx++;
-        else break;
-      }
-    }
+    const battles = await resolveCCBattles({
+      srcGroup, srcSide: 'ai', srcFacKey: aiFacKey, tgtGroup, tgtSide, tgtIdx, tgtFacKey,
+      participants, drawFn, atkConcealValue: null,
+    });
 
     if (battles.length > 0) {
       await showCCResultOverlay(`AI白兵戦 — ${srcGroup.name} → ${tgtGroup.name}`, battles);

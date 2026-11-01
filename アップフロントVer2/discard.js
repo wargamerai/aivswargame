@@ -43,7 +43,7 @@
     const sel = Array.from(s.selectedHand);
     const allCower = (key === 'jpn' && SH && SH.isCardDisabledAsTerrain) && sel.every(i => {
       const c = s.playerHand[i];
-      return c && SH.isCardDisabledAsTerrain(s.scenario, c);
+      return c && SH.isCardDisabledAsTerrain(s.scenario, c, s.playerRole === 'attacker'); // 攻撃側だけ使えないカードも含む
     });
 
     const max = getMaxDiscard();
@@ -80,6 +80,17 @@
   }
 
   function markActed() { actedThisTurn = true; }
+  /** §7.3 捨て札の代わりに相手へ地形を置いた: 捨て札1枚分を使う */
+  function consume(n) { discardedThisTurn += (n || 1); }
+  /** §4.3/§14.1 このターンの捨て札（狙撃・相手への地形配置を含む）の後でもアクションできるか
+   *  （米・ソ・日・英は捨て札をしたターンにアクション不可、独は1枚までなら可） */
+  function canStillAct() {
+    const key = getFactionKey();
+    if (!key || !DISCARD_LIMITS[key]) return true;
+    return discardedThisTurn <= DISCARD_LIMITS[key].withAction;
+  }
+  /** §4.6 このターンにアクションか捨て札をしたか */
+  function didAnything() { return actedThisTurn || discardedThisTurn > 0; }
   function resetTurn() { actedThisTurn = false; discardedThisTurn = 0; }
 
   /** このターンまだ捨てられる枚数（米: 未行動で最大2／行動後0、ソ: 未行動は無制限／行動後0） */
@@ -92,6 +103,9 @@
   global.DISCARD_RULES = {
     execute: execute,
     markActed: markActed,
+    consume: consume,
+    didAnything: didAnything,
+    canStillAct: canStillAct,
     resetTurn: resetTurn,
     getMaxDiscard: getMaxDiscard,
     getRemainingDiscard: getRemainingDiscard,

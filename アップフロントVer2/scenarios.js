@@ -279,7 +279,9 @@
 
   // ===== AI 用の賢い編成 ============================================
 
-  const CREW_WEAPON_PREFIXES = ['中機関銃','軽機関銃','バズーカ','パンツァーシュレック','火炎放射器'];
+  // 火炎放射器は助手の要らない兵器（ルールの側と同じ）。クルー兵器には数えない
+  const CREW_WEAPON_PREFIXES = ['中機関銃','軽機関銃','バズーカ','パンツァーシュレック'];
+  function isFlameDef(def) { return !!(def && def.weaponCat && def.weaponCat.indexOf('火炎放射器') === 0); }
   function isCrewWeaponDef(def) {
     if (!def || !def.weaponCat) return false;
     return CREW_WEAPON_PREFIXES.some(p => def.weaponCat.indexOf(p) === 0);
@@ -302,7 +304,7 @@
    * 戻り値: state.groups.{player|ai} に直接代入できる配列
    *         各グループは crewPairs (主番号→副番号) を含む
    */
-  function buildAIGroupsSmart(scenario, factionKey, role) {
+  function _buildGroupsWaveOrSplit(scenario, factionKey, role, mode) {
     const units = buildUnitCards(scenario, factionKey, role);
     const N = units.length;
     // シナリオA: モラル4以上を勝利目標グループに、残りを火力支援グループに
@@ -321,12 +323,19 @@
       const victorySize = Math.min(5, Math.max(4, Math.floor(N / 2)));
       const victory = enriched.slice(0, victorySize);
       const support = enriched.slice(victorySize);
-      const NAMES2 = ['A', 'B'];
+      // 支援の兵が 7人以上なら、1グループ 6人までになるように B・C（・D）に分ける。
+      //   大きいグループは 1人ピン状態になると全体が動けず、回復カードは 1〜2人のものが多いため
+      const supportGroups = mode === 'wave' ? 1 : Math.min(3, Math.max(1, Math.ceil(support.length / 6)));
+      const NAMES2 = ['A', 'B', 'C', 'D'].slice(0, 1 + supportGroups);
       const groups2 = NAMES2.map((nm, gi) => ({
         name: nm, cards: [], distance: 0, terrain: [], actions: [], _faction: factionKey, crewPairs: {},
       }));
       victory.forEach(e => addCard(groups2[0], e));
-      support.forEach(e => addCard(groups2[1], e));
+      // クルー兵器の持ち主を先に各グループへ分け、残りは人数の少ないグループへ（クルーの助手は後で同じグループ内から割り当てる）
+      const sg = groups2.slice(1);
+      const smallest = () => sg.reduce((a, b) => (b.cards.length < a.cards.length ? b : a));
+      support.filter(e => e.crew).forEach(e => addCard(smallest(), e));
+      support.filter(e => !e.crew).forEach(e => addCard(smallest(), e));
       // 各グループ内のクルー兵器にアシスタントを割当
       groups2.forEach(g => {
         g.cards.forEach((card, ci) => {
@@ -380,8 +389,12 @@
       // 1 グループ全員 (極小編成)
       if (N >= 2 && N <= 10) candidates.push([N]);
       // 4 人以上を含むものに限定
-      const valid = candidates.filter(arr => arr.some(x => x >= 4));
-      const pool = valid.length ? valid : candidates;
+      // 人海戦術: 2グループの分け方だけ。小分け: 1グループ 6人まで（大きいグループは 1人ピン状態で全体が動けない）
+      let cands = candidates;
+      if (mode === 'wave') { const two = candidates.filter(arr => arr.length === 2); if (two.length) cands = two; }
+      const valid6 = mode === 'wave' ? [] : cands.filter(arr => arr.some(x => x >= 4) && arr.every(x => x <= 6));
+      const valid = valid6.length ? valid6 : cands.filter(arr => arr.some(x => x >= 4));
+      const pool = valid.length ? valid : cands;
       groupSizes = pool[Math.floor(Math.random() * pool.length)];
       groupCount = groupSizes.length;
     }
@@ -475,6 +488,134 @@
     return groups;
   }
 
+  // ===== AI の作戦（ゲームの始めに 1回選ぶ） =====
+  //   wave=人海戦術（2グループで押す） / split=小分け（1グループ 6人まで） /
+  //   fireMove=火力と機動（真ん中に機関銃の大きなグループ、両側に小さな機動のグループ） /
+  //   assault=突撃（モラル 4以上の兵のグループが止まらず前進し、残りが支援）
+  const AI_STRATEGY_NAMES = { wave: '人海戦術', split: '小分け', fireMove: '火力と機動', assault: '突撃', hold: '守備' };
+
+  function _enrichUnits(units, factionKey) {
+    return units.map(u => {
+      const m = String(u.id).match(/(\d+)\s*$/);
+      const num = m ? parseInt(m[1], 10) : null;
+      const def = getSoldierDefByNum(factionKey, num);
+      return { unit: u, num, def, morale: def ? (parseInt(def.morale, 10) || 0) : 0, leader: isLeaderDef(def), crew: isCrewWeaponDef(def), flame: isFlameDef(def) };
+    });
+  }
+
+  /** 国ごとの作戦の傾向（出やすくする作戦は重み 3倍） */
+  const AI_STRATEGY_NATION = {
+    rus: ['wave', 'assault'],    // ソ連: 人数が多い
+    ger: ['fireMove'],           // ドイツ: 機関銃を中心に戦う
+    us:  ['fireMove', 'split'],  // アメリカ: 火力が大きく、モラルの高い兵が少ない
+    jpn: ['assault'],            // 日本: モラルの高い兵が多く、白兵戦が得意
+    uk:  ['split', 'fireMove'],  // イギリス: 人数が少なめで、モラル 5の兵が多い
+  };
+
+  /** 部隊の中身・シナリオ・性格・国から作戦をくじで選ぶ */
+  function chooseAIStrategy(scenario, enriched, style, factionKey) {
+    const w = { wave: 1, split: 1 };
+    if (enriched.length >= 5 && enriched.some(e => e.crew)) w.fireMove = 1;
+    if (enriched.filter(e => e.morale >= 4).length >= 4) w.assault = 1; // 突撃: モラル 4以上の兵が 4人以上
+    if (scenario && scenario.id === 'A') { if (w.assault) w.assault *= 2; w.wave *= 2; } // 距離が勝利条件: 前へ出る作戦
+    if (style === 'aggr') { if (w.assault) w.assault *= 2; w.wave *= 2; }
+    if (style === 'def' && w.fireMove) w.fireMove *= 3;
+    (AI_STRATEGY_NATION[factionKey] || []).forEach(k => { if (w[k]) w[k] *= 3; }); // 国の傾向
+    const keys = Object.keys(w);
+    const total = keys.reduce((t, k) => t + w[k], 0);
+    let r = Math.random() * total;
+    for (const k of keys) { r -= w[k]; if (r < 0) return k; }
+    return keys[0];
+  }
+
+  function _newGroup(name, factionKey) {
+    return { name, cards: [], distance: 0, terrain: [], actions: [], _faction: factionKey, crewPairs: {} };
+  }
+  /** 各クルー兵器に、同じグループの非クルー兵器の兵を助手として付ける */
+  function _assignCrew(groups, enriched) {
+    groups.forEach(g => {
+      const used = new Set();
+      g.cards.forEach((card, ci) => {
+        const e = enriched.find(x => x.num === card.num);
+        if (!e || !e.crew) return;
+        const cand = g.cards.find((c2, ci2) => {
+          if (ci2 === ci || used.has(c2.num)) return false;
+          const e2 = enriched.find(x => x.num === c2.num);
+          return e2 && !e2.crew;
+        });
+        if (cand) { g.crewPairs[e.num] = cand.num; used.add(cand.num); }
+      });
+    });
+  }
+  /** 兵を、人数の少ないグループへ順に入れる（指揮官は先に 1人ずつ別のグループへ） */
+  function _spread(groups, list) {
+    const smallest = () => groups.reduce((a, b) => (b.cards.length < a.cards.length ? b : a));
+    const leaders = list.filter(e => e.leader), others = list.filter(e => !e.leader);
+    leaders.forEach((e, k) => addCard(k < groups.length ? groups[k] : smallest(), e)); // 1人ずつ別のグループへ、余れば人数の少ないグループへ
+    others.sort((a, b) => b.morale - a.morale).forEach(e => addCard(smallest(), e));
+  }
+
+  /** 火力と機動: 真ん中（B）にクルー兵器と助手とライフル兵で約半分、両側（A・C）に残りを小さく。残りが 6人未満なら A だけ */
+  function _formFireMove(enriched, factionKey) {
+    const N = enriched.length;
+    const fireSize = Math.min(10, Math.max(3, Math.round(N / 2)));
+    const fire = [], pool = enriched.slice();
+    const take = e => { pool.splice(pool.indexOf(e), 1); fire.push(e); };
+    pool.filter(e => e.crew).forEach(take);
+    // 助手とライフル兵: 指揮官以外の、モラルの低い兵から（モラルの高い兵は機動へ）
+    pool.filter(e => !e.leader && !e.crew && !e.flame).sort((a, b) => a.morale - b.morale).forEach(e => { if (fire.length < fireSize) take(e); });
+    const rest = pool;
+    const nMan = rest.length >= 6 ? 2 : (rest.length > 0 ? 1 : 0);
+    const fireG = _newGroup('B', factionKey); fireG._role = 'fire';
+    fire.forEach(e => addCard(fireG, e));
+    const man = [];
+    for (let k = 0; k < nMan; k++) { const g = _newGroup(k === 0 ? 'A' : 'C', factionKey); g._role = 'maneuver'; man.push(g); }
+    if (man.length) _spread(man, rest);
+    const groups = nMan === 0 ? [Object.assign(fireG, { name: 'A' })] : (nMan === 1 ? [man[0], fireG] : [man[0], fireG, man[1]]);
+    groups.forEach((g, i) => { g.name = ['A', 'B', 'C', 'D'][i]; });
+    return groups;
+  }
+
+  /** 突撃: モラル 4以上の兵をモラルの高い順に 4〜6人（指揮官がいなければモラルの一番高い指揮官を足す）で A、残りで支援（7人を超えれば 2つ） */
+  function _formAssault(enriched, factionKey) {
+    const elite = enriched.filter(e => e.morale >= 4).sort((a, b) => (b.morale - a.morale) || (b.leader - a.leader)).slice(0, 6);
+    if (!elite.some(e => e.leader)) {
+      const ld = enriched.filter(e => e.leader && elite.indexOf(e) < 0).sort((a, b) => b.morale - a.morale)[0];
+      if (ld) elite.push(ld);
+    }
+    // 火炎放射器（相対距離5でだけ撃てる）は、前に出る突撃のグループへ
+    enriched.filter(e => e.flame && elite.indexOf(e) < 0).forEach(e => elite.push(e));
+    const rest = enriched.filter(e => elite.indexOf(e) < 0);
+    const aG = _newGroup('A', factionKey); aG._role = 'assault';
+    elite.forEach(e => addCard(aG, e));
+    const nSup = rest.length > 7 ? 2 : (rest.length > 0 ? 1 : 0);
+    const sup = [];
+    for (let k = 0; k < nSup; k++) { const g = _newGroup(k === 0 ? 'B' : 'C', factionKey); g._role = 'support'; sup.push(g); }
+    if (sup.length) _spread(sup, rest);
+    return [aG].concat(sup);
+  }
+
+  /** AI のグループを作る（作戦を選び、各グループに役割 _role と作戦 _strategy を付ける）。style: AI の性格 */
+  function buildAIGroupsSmart(scenario, factionKey, role, style) {
+    const units = buildUnitCards(scenario, factionKey, role);
+    if (!units.length) return [];
+    const enriched = _enrichUnits(units, factionKey);
+    // シナリオC の防御側: 「守備」。小分けで作り、全グループが前に出ない（射撃・隠蔽・回復を最優先）
+    if (scenario && scenario.id === 'C' && role === 'defender') {
+      const g0 = _buildGroupsWaveOrSplit(scenario, factionKey, role, 'split').filter(g => g.cards.length > 0);
+      g0.forEach(g => { g._strategy = 'hold'; g._role = 'hold'; });
+      return g0;
+    }
+    const strategy = chooseAIStrategy(scenario, enriched, style, factionKey);
+    let groups;
+    if (strategy === 'fireMove') { groups = _formFireMove(enriched, factionKey); _assignCrew(groups, enriched); }
+    else if (strategy === 'assault') { groups = _formAssault(enriched, factionKey); _assignCrew(groups, enriched); }
+    else groups = _buildGroupsWaveOrSplit(scenario, factionKey, role, strategy);
+    groups = groups.filter(g => g.cards.length > 0);
+    groups.forEach(g => { g._strategy = strategy; });
+    return groups;
+  }
+
   function addCard(group, e) {
     // unit に num を持たせて場の描画でも使えるように
     const u = Object.assign({}, e.unit, { num: e.num });
@@ -540,6 +681,8 @@
     distributeIntoGroups,
     buildInitialGroups,
     buildAIGroupsSmart,
+    chooseAIStrategy,
+    AI_STRATEGY_NAMES,
     shouldRemoveFromGame,
     isCardDisabledAsTerrain,
     getPromotionTable,

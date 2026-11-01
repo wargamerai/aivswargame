@@ -112,12 +112,41 @@
     const m = String(card.id).match(/(\d+)\s*$/);
     if (!m) return null;
     const num = parseInt(m[1], 10);
-    return list.find(s => s.num === num) || null;
+    const base = list.find(s => s.num === num) || null;
+    // §18.2 拾った兵器を持っていれば、カードに印刷された兵器の代わりにそれを使う
+    // §42 キャンペーンで変わった能力値（モラル・パニック・KIA・CCV）
+    if (base && (card._statOverride || card.acquiredWeapon || card.destroyed)) {
+      const d = Object.assign({}, base, card._statOverride || {}, card.acquiredWeapon || {});
+      // §22.4 印刷されていない火炎放射器を持つ間は KIA 値 -1、印刷されている火炎放射器を失ったら KIA 値 +1
+      if (card.acquiredWeapon || card.destroyed) {
+        const isFT = w => !!(w && w.indexOf('火炎放射器') === 0);
+        const hasFT = !card.destroyed && isFT(d.weaponCat); // 兵器が除去されていれば持っていない
+        const delta = (hasFT && !isFT(base.weaponCat)) ? -1 : (!hasFT && isFT(base.weaponCat)) ? 1 : 0;
+        if (delta) {
+          if (d.kiaFront !== '' && d.kiaFront != null) d.kiaFront = String((parseInt(d.kiaFront, 10) || 0) + delta);
+          if (d.kiaBack !== '' && d.kiaBack != null) d.kiaBack = String((parseInt(d.kiaBack, 10) || 0) + delta);
+        }
+      }
+      return d;
+    }
+    return base;
   }
 
   // ユニットの ピン状態フラグ (UI が card.pinned を持つ前提)
   function isPinned(card)   { return !!(card && card.pinned && !card.killed && !card.routed); }
   function isWounded(card)  { return !!(card && card.wounded); }
+  /** §33.9 負傷の効果が働いているか（ヒーローカードでそのプレイヤーターンの間は止まる） */
+  function isWoundActive(card) {
+    if (!card || !card.wounded) return false;
+    const st = (typeof window !== 'undefined' && window.state) || null;
+    return !(st && card.woundSuspendedTurn != null && card.woundSuspendedTurn === (st.turnCount || 0));
+  }
+  /** §33.1 判定カードの「7w」列のランダム位置番号 */
+  function rpc7wOf(judge) {
+    const v = judge && judge.terrain && judge.terrain.dice && judge.terrain.dice['7w'];
+    const n = parseInt(v, 10);
+    return isNaN(n) ? null : n;
+  }
   function isKilled(card)   { return !!(card && card.killed); }
   function isPanicked(card) { return !!(card && card.panicked); }
   function isAlive(card)    { return card && !card.killed && !card.routed && !card.panicked; }
@@ -205,6 +234,8 @@
       if (isPinned(card) || !isAlive(card)) return;
       // クルーアシスタントは火力に加算しない
       if (assistantSet.has(i)) return;
+      // §20.531 射撃に参加しないことにした侵入兵
+      if (card._noFire) return;
       // 故障・破壊した武器は射撃不可
       if (card.malfunctioned || card.destroyed) return;
       const def = lookupSoldier(card, factionKey);
@@ -253,6 +284,12 @@
       } else {
         fp = num(def.range[idx]);
       }
+      // §26.3 迫撃砲の兵士は、迫撃砲の射程（命中数値の欄）では小火器の火力を持たない。
+      //   最小射程未満（カードの「NA/nFP」）でだけ、主要操作者が n の小火器の火力を持つ
+      if (def.weaponCat && def.weaponCat.indexOf('迫撃砲') >= 0) {
+        const mfp = String((def.range && def.range[idx]) || '').match(/NA\s*\/\s*(\d+)\s*FP/);
+        fp = mfp ? parseInt(mfp[1], 10) : 0;
+      }
       // §45.5 日本軍 SL/精鋭は非武装時 RR5 で 1 FP
       if (factionKey === 'jpn' && def.leader === '分隊長' && (!def.weaponCat || def.weaponCat === '非武装') && idx === 5) {
         fp = Math.max(fp, 1);
@@ -270,9 +307,29 @@
       // §12.1 移動射撃: 兵士火力は半減しない（基礎射撃力で半減）
       if (opts.moving) {
         if (def.weaponCat.indexOf('中機関銃') === 0) fp = 0;
-        if (def.weaponCat.indexOf('軽機関銃') === 0 && !hasAssistant) fp = 0;
+        // 軽機関銃は移動中、クルー無しは 0、クルーがいても () 内火力を使用
+        if (def.weaponCat.indexOf('軽機関銃') === 0) {
+          if (!hasAssistant) fp = 0;
+          else if (rd && !rd.na && rd.noCrew != null) fp = rd.noCrew;
+        }
         // §12.12 迫撃砲は移動中射撃不可
         if (def.weaponCat.indexOf('迫撃砲') >= 0) fp = 0;
+        // §12.11 ボルトアクション・ライフルは移動中 ½（端数切り捨て）
+        if (isBoltAction(def.weaponCat)) fp = Math.floor(fp / 2);
+      }
+      // §10.45 ヒーロー: その兵士1名の火力をそのターン2倍（2枚目なら3倍）。
+      //   機関銃はクルーが完備していても () 内の火力を倍にする。迫撃砲は対象外
+      if (card._heroEnhanced && fp > 0 && def.weaponCat.indexOf('迫撃砲') < 0) {
+        let hfp = fp;
+        if (def.weaponCat.indexOf('機関銃') >= 0 && rd && !rd.na && rd.noCrew != null) hfp = rd.noCrew;
+        fp = hfp * (card._heroEnhanced >= 2 ? 3 : 2);
+      }
+      // §32.21 監視役（捕虜を監視している兵）は火力が半分（端数切り捨て）
+      if (card.prisoners && card.prisoners.length) fp = Math.floor(fp / 2);
+      // §33.2 負傷兵: 移動射撃はできない。火力は半分（端数切り捨て）。主武器が火砲（迫撃砲）なら火力ではなく命中頻度 -1（mortar.js）
+      if (isWoundActive(card)) {
+        if (opts.moving) fp = 0;
+        else if (!(def.weaponCat && def.weaponCat.indexOf('迫撃砲') >= 0)) fp = Math.floor(fp / 2);
       }
       total += fp;
     });
@@ -280,8 +337,6 @@
     if (inMarsh && total > 0) total = Math.max(0, total - 1);
     // §8.52 河川内から射撃: 全射撃力から-1
     if (inStream && total > 0) total = Math.max(0, total - 1);
-    // §10.45 英雄効果: そのターン中、グループの兵士火力を2倍
-    if (group.heroDoubleThisTurn) total *= 2;
     return total;
   }
 
@@ -315,20 +370,53 @@
   }
 
   function calcTerrainMod(terrainStack, asAttacker, opts) {
-    if (!terrainStack || terrainStack.length === 0) return 0;
+    return _terrainModItems(terrainStack, asAttacker, opts).reduce((s, x) => s + x.mod, 0);
+  }
+
+  /** スタックの「今いる地形」（移動・煙幕・鉄条網を飛ばした最上の地形）が type か */
+  function _stackIsIn(stack, type) {
+    return currentTerrainType({ terrain: stack }) === type;
+  }
+
+  /** 地形修正の項目リスト [{type, mod}]（calcTerrainMod / getTerrainModBreakdown 共通）
+   *  opts.otherStack: 相手グループの地形スタック（§8.31/8.32 丘の例外判定）
+   *  opts.encircled : 防御グループが包囲下（§8.9 障壁の修正なし） */
+  function _terrainModItems(terrainStack, asAttacker, opts) {
+    const result = [];
+    if (!terrainStack || terrainStack.length === 0) return result;
     const o = opts || {};
-    let mod = 0;
-    terrainStack.forEach(card => {
+    // §7.2 例E: 地形の上に移動カードが2枚あれば平地に出たので、その地形の修正は使わない（移動カードは両方使う）
+    //   §8.42 湿地も同じ。§8.22 涸れ谷だけは1枚目の移動の修正も使わない（2枚目の+1のみ）
+    //   煙幕・鉄条網・地雷原は地形カードではないので飛ばして、移動カードの下の地形を探す
+    const skip = new Set();
+    for (let i = terrainStack.length - 1; i >= 0; i--) {
+      const ty = terrainStack[i] && terrainStack[i].terrain && terrainStack[i].terrain.type;
+      if (!ty || ty === 'MOVEMENT' || ty === 'SMOKE' || ty === 'WIRE' || ty === 'MINEFIELD') continue;
+      const moves = [];
+      for (let j = i + 1; j < terrainStack.length; j++) {
+        const tj = terrainStack[j] && terrainStack[j].terrain && terrainStack[j].terrain.type;
+        if (tj === 'MOVEMENT') moves.push(j);
+      }
+      if (moves.length >= 2) {
+        skip.add(i);
+        if (ty === 'GULLY') skip.add(moves[0]);
+      }
+      break;
+    }
+    terrainStack.forEach((card, idx) => {
       const t = card && card.terrain;
       if (!t) return;
+      if (skip.has(idx)) return;
       // 裏向き(平地扱い)は modifier 無視
       if (card._faceDown) return;
       // 地雷原は射撃修正に影響しない（平地扱い）
       if (t.type === 'MINEFIELD') return;
-      // WALL: 被攻撃側のとき 正面(同位置敵) -2、隣のグループからの攻撃 -1
+      // §13.26 夜間シナリオでは煙幕は非機能カード（修正なし）
+      if (t.type === 'SMOKE' && typeof window !== 'undefined' && window.state && window.state.isNight) return;
+      // WALL: 被攻撃側のとき 正面(同位置敵) -2、隣のグループからの攻撃 -1。§8.9 包囲下は修正なし
       // 攻撃側には WALL の効果なし (modifier "-2*/-1" を一般処理させない)
       if (t.type === 'WALL') {
-        if (!asAttacker) mod += o.isFlank ? -1 : -2;
+        if (!asAttacker && !o.encircled) result.push({ type: t.type, mod: o.isFlank ? -1 : -2 });
         return;
       }
       let m;
@@ -337,44 +425,23 @@
       } else {
         m = _parseTerrainMod(t.modifier);
       }
-      mod += asAttacker ? m.atk : m.def;
+      let v = asAttacker ? m.atk : m.def;
+      // §8.31 丘からの射撃 +1 は、目標が丘・トーチカにいれば無し
+      // §8.32 丘の防御 -1 は、攻撃側も丘にいれば無し
+      if (t.type === 'HILL' && o.otherStack) {
+        if (asAttacker && (_stackIsIn(o.otherStack, 'HILL') || _stackIsIn(o.otherStack, 'PILLBOX'))) v = 0;
+        if (!asAttacker && _stackIsIn(o.otherStack, 'HILL')) v = 0;
+      }
+      if (v !== 0) result.push({ type: t.type, mod: v });
     });
-    return mod;
+    return result;
   }
 
   /**
    * calcTerrainMod の内訳を返す: terrain スタックの各カードごとに [{type, mod}, ...]
    */
   function getTerrainModBreakdown(terrainStack, asAttacker, opts) {
-    const result = [];
-    if (!terrainStack || terrainStack.length === 0) return result;
-    const o = opts || {};
-    terrainStack.forEach(card => {
-      const t = card && card.terrain;
-      if (!t) return;
-      // 裏向き(平地扱い)は modifier 無視
-      if (card._faceDown) return;
-      // 地雷原は射撃修正に影響しない（平地扱い）
-      if (t.type === 'MINEFIELD') return;
-      // WALL: 被攻撃側のとき 正面 -2、側面 -1
-      // 攻撃側には WALL の効果なし (modifier "-2*/-1" を一般処理させない)
-      if (t.type === 'WALL') {
-        if (!asAttacker) {
-          const v = o.isFlank ? -1 : -2;
-          if (v !== 0) result.push({ type: t.type, mod: v });
-        }
-        return;
-      }
-      let m;
-      if (o.japanBuildings && t.type === 'BUILDINGS') {
-        m = { atk: 0, def: -3 };
-      } else {
-        m = _parseTerrainMod(t.modifier);
-      }
-      const v = asAttacker ? m.atk : m.def;
-      if (v !== 0) result.push({ type: t.type, mod: v });
-    });
-    return result;
+    return _terrainModItems(terrainStack, asAttacker, opts);
   }
 
   // ===== §6.5/§6.6 射撃結果解決 ====================================
@@ -389,7 +456,22 @@
    *   rncRPC  : 同カードの RPC (パニック→潰走判定用, 0..9)
    * 戻り値: { result: 'NONE'|'PIN'|'PANIC_KIA'|'PANIC_ROUT'|'KIA' }
    */
-  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod) {
+  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod, woundRPN) {
+    const res = _resolveFireOnSoldierCore(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod);
+    // §33.1 負傷: 敗走する時、または最終攻撃値が KIA の最低値とちょうど等しくて KIA になる時（ピン状態のパニックによる KIA を含む）、
+    //   その RNC の「7w」列のランダム位置番号が兵士の印刷された士気値と等しければ、代わりに負傷
+    if (soldier && woundRPN != null) {
+      const sum = (finalFP | 0) + (rnc | 0);
+      const kMod = kiaMod || 0;
+      let eligible = false;
+      if (res.result === 'PANIC_ROUT' || res.result === 'PANIC_KIA') eligible = true;
+      else if (res.result === 'KIA') eligible = sum === (wasPinned ? num(soldier.kiaBack) : num(soldier.kiaFront)) + kMod;
+      if (eligible && woundRPN === num(soldier.morale)) return { result: 'WOUND', replaced: res.result };
+    }
+    return res;
+  }
+
+  function _resolveFireOnSoldierCore(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod) {
     const sum = (finalFP | 0) + (rnc | 0);
     if (!soldier) return { result: 'NONE' };
     const mMod = moraleMod || 0;
@@ -538,11 +620,11 @@
   }
 
   /**
-   * §8.22 涸れ谷上に地形カードを置けるか（移動2枚必要）
+   * §8.22 涸れ谷上に地形カードを置けるか（移動1枚の上に置ける。1枚目は横移動で距離は変わらない）
    */
   function canPlaceTerrainOnGully(group) {
     if (!isInGully(group)) return true;
-    return gullyMoveCount(group) >= 2;
+    return gullyMoveCount(group) >= 1;
   }
 
   // ===== §8.5 河川 (STREAM) ==========================================
@@ -608,14 +690,24 @@
 
   /** グループが指定typeの地形内にいるか（移動1枚ではまだ影響下 §7.4） */
   function isInTerrainType(group, type) {
-    if (!group.terrain || group.terrain.length === 0) return false;
-    for (let i = group.terrain.length - 1; i >= 0; i--) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
+    return currentTerrainType(group) === type;
+  }
+
+  /** §5.2 グループが今いる地形の種類。地形カードの上に移動カードが2枚あれば平地。
+   *  煙幕・鉄条網は地形カードではないので飛ばす。地形が無ければ 'PLAIN' */
+  function currentTerrainType(group) {
+    const st = (group && group.terrain) || [];
+    let moves = 0;
+    for (let i = st.length - 1; i >= 0; i--) {
+      const c = st[i];
+      const t = c && c.terrain;
       if (!t) continue;
-      if (t.type === type) return true;
-      if (t.type !== 'MOVEMENT') return false;
+      if (t.type === 'SMOKE' || t.type === 'WIRE') continue;
+      if (t.type === 'MOVEMENT') { moves++; continue; }
+      if (c._faceDown || c._isPlain || t.type === 'PLAIN') return 'PLAIN';
+      return moves >= 2 ? 'PLAIN' : t.type;
     }
-    return false;
+    return 'PLAIN';
   }
 
   function isInBuildings(group) { return isInTerrainType(group, 'BUILDINGS'); }
@@ -638,7 +730,11 @@
   function pinSoldier(card)   { card.pinned = true; }
   function unpinSoldier(card) { card.pinned = false; }
   function killSoldier(card)  { card.killed = true; }
-  function routSoldier(card)  { card.routed = true; }
+  function routSoldier(card)  {
+    // §32.12 相対射程5に敵の歩兵グループがいれば、敗走の代わりに降伏して捕虜になることがある（index.html の onSoldierRout）
+    if (card && !card.captured && typeof global.onSoldierRout === 'function' && global.onSoldierRout(card)) return;
+    card.routed = true;
+  }
 
   /**
    * §10.2 回復: rallyValue 名までピン解除
@@ -1005,7 +1101,7 @@
 
     // helpers
     lookupSoldier, isInfantryWeapon, isCrewWeapon, isArtillery, isBoltAction,
-    isPinned, isWounded, isKilled, isPanicked, isAlive,
+    isPinned, isWounded, isWoundActive, rpc7wOf, isKilled, isPanicked, isAlive,
     rangeIndex,
 
     // distance/movement
@@ -1024,7 +1120,7 @@
     isInStream, hasCrossedStream, isFordCard, streamMoveCount, canPlaceTerrainOnStream,
 
     // terrain type checks
-    isInTerrainType, isInBuildings, isInWoods, isInBrush,
+    isInTerrainType, currentTerrainType, isInBuildings, isInWoods, isInBrush,
 
     // fire resolution
     resolveFireOnSoldier, resolveFireOnGroup,

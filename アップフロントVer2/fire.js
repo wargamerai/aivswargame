@@ -92,8 +92,8 @@
     var strength = moving ? Math.floor(baseStrength / 2) : baseStrength;
 
     // §7 地形修正
-    var atkMod = R.calcTerrainMod(srcGroup.terrain, true);
-    var defMod = R.calcTerrainMod(tgtGroup.terrain, false);
+    var atkMod = R.calcTerrainMod(srcGroup.terrain, true, { otherStack: tgtGroup.terrain });
+    var defMod = R.calcTerrainMod(tgtGroup.terrain, false, { otherStack: srcGroup.terrain, encircled: !!tgtGroup.encircled });
 
     // 最終火力 (隠蔽は後で適用)
     var finalFP = Math.max(0, strength + atkMod + defMod);

@@ -13,7 +13,7 @@
  *   - 命中したら兵士ごとに判定カードを引き、RNCの数字を加算（射撃と同様）
  *
  * 撃てない地形:
- *   - 建物・トーチカ・川・湿地から撃てない（枯れ谷OK）
+ *   - 建物・トーチカ・川・湿地・森林から撃てない（枯れ谷OK §26.2）
  *   - 味方煙幕がある場合、補足中の敵にのみ不利修正(-1ランク)で撃てる
  *
  * クルー:
@@ -97,10 +97,15 @@
   /** 地形スタックの一番上の地形タイプ（MOVEMENTを除く直近の地形） */
   function topNonMoveTerrain(group) {
     if (!group || !group.terrain) return null;
+    let moves = 0;
     for (let i = group.terrain.length - 1; i >= 0; i--) {
       const t = group.terrain[i] && group.terrain[i].terrain;
       if (!t) continue;
-      if (t.type !== 'MOVEMENT') return t;
+      // 煙幕・鉄条網は地形カードではない（§13.1）ので飛ばす
+      if (t.type === 'SMOKE' || t.type === 'WIRE') continue;
+      if (t.type === 'MOVEMENT') { moves++; continue; }
+      // §5.2 地形カードの上に移動カードが2枚あれば平地に出ている
+      return moves >= 2 ? null : t;
     }
     return null;
   }
@@ -108,6 +113,8 @@
   /** グループが「煙幕」状態か（地形スタックに SMOKE があるか） */
   function hasSmoke(group) {
     if (!group || !group.terrain) return false;
+    // §13.26 夜間シナリオでは煙幕は非機能カード
+    if (typeof window !== 'undefined' && window.state && window.state.isNight) return false;
     return group.terrain.some(c => c && c.terrain && c.terrain.type === 'SMOKE');
   }
 
@@ -143,14 +150,17 @@
     if (top) {
       if (top.type === 'BUILDINGS') return { ok: false, reason: '建物からは迫撃砲を撃てません' };
       if (top.type === 'BUNKER' || top.type === 'PILLBOX') return { ok: false, reason: 'トーチカからは迫撃砲を撃てません' };
+      if (top.type === 'WOODS') return { ok: false, reason: '森林からは迫撃砲を撃てません' };
     }
     if (R.isInStream && R.isInStream(srcGroup)) return { ok: false, reason: '河川内からは迫撃砲を撃てません' };
     if (R.isInMarsh && R.isInMarsh(srcGroup))  return { ok: false, reason: '湿地内からは迫撃砲を撃てません' };
 
     // 味方煙幕: 砲撃不可、ただし補足中の敵には不利修正で可
+    // opts.acquired: この迫撃砲がその目標を捕捉しているか（§27 捕捉は火砲ごと）
+    const acquired = opts.acquired != null ? !!opts.acquired : !!(tgtGroup && tgtGroup.pinpointed);
     let smokePenalty = false;
     if (hasSmoke(srcGroup)) {
-      if (tgtGroup && tgtGroup.pinpointed) {
+      if (acquired) {
         smokePenalty = true;
       } else {
         return { ok: false, reason: '味方側に煙幕があるため迫撃砲を撃てません（補足中の敵には可）' };
@@ -165,7 +175,7 @@
    *   shooter: { def, idx }
    *   distance: 相対距離 (0..5)
    *   group: 射手グループ（クルー判定用）
-   *   opts: { conceals:int, pinpoint:bool, wall:bool, smokePenalty:bool }
+   *   opts: { conceals:int, pinpoint:bool, wall:bool, smokePenalty:bool, targetSmoke:bool, night:bool, guard:bool, wounded:bool }
    * 戻り値: { ceiling:int, na:bool, base:int, hasCrew:bool }
    */
   function calcHitCeiling(shooter, distance, group, opts) {
@@ -183,6 +193,10 @@
     if (opts.wall)     ceiling -= 1;             // 壁から撃つ: -1ランク
     if (opts.hill)     ceiling += 1;             // 丘から撃つ: +1ランク
     if (opts.smokePenalty) ceiling -= 1;         // 味方煙幕越し砲撃: -1ランク
+    if (opts.targetSmoke) ceiling -= 1;
+    if (opts.night) ceiling -= 1;
+    if (opts.guard) ceiling -= 1;                // §32.21 監視役が火砲を撃つ: 命中頻度 -1
+    if (opts.wounded) ceiling -= 1;              // §33.2 負傷兵が火砲を撃つ: 命中頻度 -1                // §38.4 夜間の火砲の攻撃: 命中頻度 -1（照らされた目標には無し §38.52）          // §27.12 目標が煙幕の中: -1ランク（捕捉の +1 と両方つく）
     if (ceiling < 0) ceiling = -1;               // 負は命中不可
     return { ceiling: ceiling, na: false, base: base, hasCrew: hasCrew };
   }
