@@ -907,6 +907,11 @@
         <button class="action-btn discard" id="btn-discard" data-act="discard">捨て札</button>
         <button class="action-btn ap-big" id="btn-confirm" disabled>確定</button>
         <button class="action-btn end ap-big" id="btn-end-turn">終了</button>
+        <!-- セーブ・ロード（ゲームの途中の状態をファイルに保存・読み込み） -->
+        <div style="display:flex;gap:4px;margin-top:4px;">
+          <button style="flex:1;padding:3px 0;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;font-size:12px;" onclick="ufSaveGame()" title="ここまでの状態をファイルに保存する">Save</button>
+          <button style="flex:1;padding:3px 0;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;font-size:12px;" onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ">Load</button>
+        </div>
       </div>
       <div class="ap-col">
         <div class="ap-head">アクション</div>
@@ -958,11 +963,6 @@
         </div>
         <div class="judge-slot" id="judge-slot" title="判定 (有効化されたら押す)">判定</div>
         <div class="judge-result" id="judge-result"></div>
-      <!-- セーブ・ロード（ゲームの途中の状態をファイルに保存・読み込み） -->
-    <div style="margin-top:14px;display:flex;gap:6px;justify-content:flex-end;">
-      <button style="padding:2px 12px;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;" onclick="ufSaveGame()" title="ここまでの状態をファイルに保存する">Save</button>
-      <button style="padding:2px 12px;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;" onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ">Load</button>
-    </div>
       <!-- 投了: 間違えて押さないように、一番下に離して置く -->
     <div style="margin-top:14px;padding-top:8px;border-top:1px solid #555;text-align:right;">
       <button class="action-btn" style="width:auto;padding:2px 12px;background:#822;border-color:#c44;" onclick="ufResign()" title="負けを認めてゲームを終わり、ここまでのレポートを保存できる">投了</button>
