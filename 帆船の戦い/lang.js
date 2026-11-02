@@ -140,8 +140,7 @@ function setLang(lang) {
     wsimApplyAll();
     wsimObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: WSIM_ATTRS });
   }
-  const sel = document.getElementById('wsimLangSel');
-  if (sel) sel.value = lang;
+  wsimMarkLang();
 }
 // alert / confirm / prompt も訳す
 (function () {
@@ -150,21 +149,29 @@ function setLang(lang) {
   window.confirm = m => c(langTranslate(m));
   window.prompt = (m, d) => p(langTranslate(m), d);
 })();
-// 言語の選択（画面の右下）。どのページにも同じものを出す
+// 言語の選択。シナリオ選択の画面（#wsimLangSlot がある所）にだけボタンを出す。戦闘画面はここで選んだ言語で表示する
 function wsimAddSelector() {
-  if (document.getElementById('wsimLangSel')) return;
-  const box = document.createElement('div');
-  box.className = 'no-lang';
-  box.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:9999;background:rgba(20,30,45,.92);border:1px solid #567;border-radius:4px;padding:3px 6px;font-size:12px;color:#cde;';
-  const sel = document.createElement('select');
-  sel.id = 'wsimLangSel';
-  sel.style.cssText = 'background:#123;color:#fff;border:1px solid #567;font-size:12px;';
-  for (const k of Object.keys(WSIM_LANGS)) { const o = document.createElement('option'); o.value = k; o.textContent = WSIM_LANGS[k]; sel.appendChild(o); }
-  sel.value = LANG;
-  sel.onchange = () => setLang(sel.value);
-  box.appendChild(document.createTextNode('🌐 '));
-  box.appendChild(sel);
-  document.body.appendChild(box);
+  const slot = document.getElementById('wsimLangSlot');
+  if (!slot || slot.dataset.ready) return;
+  slot.dataset.ready = '1';
+  slot.style.cssText += ';display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+  const lbl = document.createElement('span');
+  lbl.textContent = '🌐 言語 / Language / Sprache';
+  lbl.style.cssText = 'color:#cde;font-weight:bold;margin-right:6px;';
+  slot.appendChild(lbl);
+  for (const k of Object.keys(WSIM_LANGS)) {
+    const b = document.createElement('button');
+    b.className = 'wsimLangBtn';
+    b.dataset.lang = k;
+    b.textContent = WSIM_LANGS[k];
+    b.style.cssText = 'border:1px solid #567;padding:6px 16px;border-radius:4px;cursor:pointer;font-weight:bold;color:#fff;';
+    b.onclick = () => setLang(k);
+    slot.appendChild(b);
+  }
+  wsimMarkLang();
+}
+function wsimMarkLang() {
+  document.querySelectorAll('.wsimLangBtn').forEach(b => { b.style.background = b.dataset.lang === LANG ? '#2a6a9a' : '#223'; });
 }
 function wsimInit() { wsimAddSelector(); setLang(LANG); }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wsimInit); else wsimInit();

@@ -15,14 +15,19 @@
   .scen-btn .n { color:#88ccff; font-size:1.1em; display:block; margin-bottom:3px; }
   .scen-btn .t { font-weight:normal; font-size:0.92em; color:#fff; }
   .scen-btn .s { font-weight:normal; font-size:0.85em; color:#bcd; margin-top:4px; display:block; }
+  /* 画面全体を 80%（ブラウザで2段階縮小した大きさ）で表示する */
+  html { zoom: 0.8; }
 </style>
 </head>
 <body>
 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-  <a href="../index1.html"><button class="back">← トップへ</button></a>
+  <a href="../en/index.html"><button class="back">← トップへ</button></a>
   <h1 style="margin:0;flex:1;">⚓ 帆船の戦い - シナリオ選択</h1>
   <button onclick="openAiSettingsModal()" style="background:#646;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-weight:bold;">⚙️ AI設定</button>
 </div>
+
+<!-- 言語の切り替え（ここで選んだ言語で戦闘画面も表示する） -->
+<div class="panel no-lang" id="wsimLangSlot"></div>
 
 <div class="panel">
   <h3 style="color:#ffcc88;margin:0 0 8px 0;">ゲームモード</h3>
