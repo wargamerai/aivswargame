@@ -9,7 +9,8 @@
   :root { --bg:#0d1620; --panel:#14212e; --line:#2a3b4d; --txt:#d8e2ec; --mute:#8aa0b5; --acc:#ffcc66; --good:#7ee08a; --bad:#ff8a7a; --dice:#9ec9ff; }
   * { box-sizing: border-box; }
   html { font-size: var(--fs, 15px); }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--txt); font: 1rem/1.6 'Hiragino Kaku Gothic ProN','Hiragino Sans',Meiryo,sans-serif; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--txt); }
+  body { font: 1rem/1.6 'Hiragino Kaku Gothic ProN','Hiragino Sans',Meiryo,sans-serif; }
   body { display:flex; flex-direction:column; height:100vh; }
   #bar { flex:0 0 auto; display:flex; gap:6px; align-items:center; padding:4px 10px; background:#0a1118; border-bottom:1px solid var(--line); font-size:0.87rem; flex-wrap:wrap; }
   #bar .t { color:var(--acc); font-weight:bold; margin-right:auto; }
