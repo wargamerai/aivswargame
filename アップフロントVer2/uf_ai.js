@@ -196,6 +196,15 @@ async function aiTurn() {
   let discardTurn = false;
   if (aiKeyT !== 'ger' && aiHarassAvailable()) {
     discardTurn = !(style === 'aggr' && aiHasFireOption());
+    // 夜間: 近づく途中か、射撃カードが貯まって撃てるなら、捨て札のターンにしない（ユーザーの指示 2026-11-03）
+    if (state.isNight && (aiNightFireReady() || aiNightWantsMove())) discardTurn = false;
+  }
+  // 夜間に射撃に専念する段階で、射撃カードが貯まっていなければ、捨て札のターンにして手札を入れ替える（ユーザーの指示 2026-11-03）
+  if (aiKeyT !== 'ger' && aiNightFocusFire() && !aiNightFireReady()) {
+    const _Rn = window.INFANTRY_RULES;
+    const _lit = (state.groups.player || []).some(g => g && !g.eliminated && isGroupFlared(g));
+    const _pin = (state.groups.ai || []).some(g => g && !g.eliminated && g.cards.some(c => _Rn.isAlive(c) && _Rn.isPinned(c)));
+    if (!_lit && !_pin) discardTurn = true;
   }
   state.aiDiscardTurn = discardTurn;
 
@@ -209,7 +218,7 @@ async function aiTurn() {
       mine: async () => (await aiTryMineRemove()) || (await aiTryMineLateral()),
       cross: aiTryCrossStream, wire: aiTryRemoveWire, repair: aiTryRepair, crew: aiTryCrewSetup,
       weapon: aiTryPickupWeapon, receive: aiTryReceiveTransfer, loner: aiTryTransferLoner,
-      scout: aiTryScout, flare: aiTryFlare, cc: aiTryCC, infiltrate: aiTryInfiltrate, ccRetreat: aiTryRetreatFromCC,
+      scout: aiTryScout, flare: aiTryFlare, fireLit: aiTryFireLit, cc: aiTryCC, infiltrate: aiTryInfiltrate, ccRetreat: aiTryRetreatFromCC,
       fireAny: aiTryFireAny, flank: aiTryFlankEncircle, smoke: aiTryPlaceOwnSmoke, move: aiTryMove, trench: aiTryTrench,
       guard: aiTryGuardChange, heroWound: aiTryHeroWound, shift: aiTryGroupShift, uninfiltrate: aiTryUninfiltrate,
     };
@@ -230,11 +239,23 @@ async function aiTurn() {
       ? ['ccRetreat', 'rally', 'heroWound', 'fireMoving', 'mortar', 'fireAny', 'weapon', 'receive', 'repair', 'crew', 'ownTerrain', 'smoke',
          'wire', 'mine', 'cross', 'guard', 'scout', 'flare', 'trench']
       : ORDER;
+    // 夜間（ユーザーの指示 2026-11-03）: 見つけたら照明弾で照らし、照らした敵を全グループで撃つ。
+    //   順番: 照明弾 → 照らされた敵を射撃 → 見つけている敵を射撃 → 前進 → 索敵
+    //   攻撃的な性格は、白兵戦・侵入をこれより先に行う（昼と同じ）
+    const NIGHT_FIRST = ['flare', 'fireLit', 'fireAny', 'move', 'scout'];
+    let orderNow = ORDER_USE;
+    if (state.isNight) {
+      const rest = ORDER_USE.filter(k => NIGHT_FIRST.indexOf(k) < 0);
+      const atInf = style === 'aggr' ? rest.indexOf('infiltrate') : -1;
+      const at = (atInf >= 0 ? atInf : rest.indexOf('ccRetreat')) + 1;
+      orderNow = [...rest.slice(0, at), ...NIGHT_FIRST, ...rest.slice(at)];
+    }
     let safety = 30;
     outer: while (safety-- > 0) {
-      for (const key of ORDER_USE) {
+      for (const key of orderNow) {
         const r = await S[key]();
         if (!r) continue;
+        if (r === 'detected') continue outer; // §38.2 索敵は失敗した時だけアクションになる
         // §10.4 ヒーローでの回復はアクションにしない。§45 日本軍の移動もアクションにしない
         if ((key === 'rally' || key === 'heroWound') && r === 'hero') continue outer;
         if (key === 'move' && aiKeyT === 'jpn') continue outer;
@@ -285,13 +306,15 @@ async function aiTurn() {
       const pickDiscard = aiDiscardChooser(); // 捨てるカードの選び方（aiDiscardChooser）
       const dumpedCards = [];
       for (let i = 0; i < count; i++) {
-        const dumpIdx = pickDiscard().idx;
+        const _pick = pickDiscard();
+        if (aiNightFocusFire() && !_pick.junk) break; // 射撃に専念する段階は、効果のある射撃カードと英雄まで捨てない
+        const dumpIdx = _pick.idx;
         const dumped = state.aiHand.splice(dumpIdx, 1)[0];
         if (dumped) { pushTerrainToDiscard(dumped); dumpedCards.push(dumped); state.aiDumpedThisTurn = true; }
       }
       state.aiHandCount = state.aiHand.length;
       renderHands();
-      await showAIAction('AI: 捨て札 ' + count + '枚', dumpedCards);
+      if (dumpedCards.length) await showAIAction('AI: 捨て札 ' + dumpedCards.length + '枚', dumpedCards);
     }
   }
   endAITurn();
@@ -430,6 +453,7 @@ function aiDiscardChooser() {
       .map(t => { const m = (t.sub || '').match(/FP(.)/); return circledToNum((m && m[1]) || ''); })
       .filter(n => n > 0).sort((x, y) => x - y);
     const median = needs.length ? needs[Math.floor(needs.length / 2)] : 3;
+    if (state.isNight) return true; // 夜間は射撃カードを溜める（ユーザーの指示 2026-11-03）
     return maxPossibleFP >= median;
   })();
   // 鉄条網・地雷原・未渡河の河川にいるグループがあれば、移動カードは要る
@@ -437,7 +461,10 @@ function aiDiscardChooser() {
     && (R_d.hasTerrainType(g, 'WIRE') || R_d.hasTerrainType(g, 'MINEFIELD') || (R_d.isInStream(g) && !R_d.hasCrossedStream(g))));
   // 残すカード: 撃てる状態=射撃・隠蔽、まだ撃てない状態=移動・地形
   const _hold = state.groups.ai.some(g => g && g._role === 'hold');
-  const keep = c => isHero(c) || (_hold && isConceal(c)) || (canFireNow ? (isFire(c) || isConceal(c)) : (isMove(c) || isTerrainCard(c)));
+  // 夜間に近づいている途中は、移動カードも残す（ユーザーの指示 2026-11-03）
+  const nightNeedMove = !!state.isNight && aiNightWantsMove(true);
+  const nightFocus = aiNightFocusFire(); // 射撃に専念する段階は、射撃カードと英雄だけ残して入れ替える
+  const keep = c => nightFocus ? (isHero(c) || aiFireCardEffectiveAny(c)) : isHero(c) || (_hold && isConceal(c)) || (nightNeedMove && isMove(c)) || (canFireNow ? (isFire(c) || isConceal(c)) : (isMove(c) || isTerrainCard(c)));
   return function pick() {
     let dumpIdx = -1;
     // 優先0: 非機能 (cower) カード
@@ -452,7 +479,7 @@ function aiDiscardChooser() {
     if (dumpIdx < 0) dumpIdx = findLowestRally();
     if (canFireNow) {
       // 撃てる状態: 射撃・隠蔽を残し、移動（要らなければ）・地形から捨てる
-      if (dumpIdx < 0 && !needMoveCards) dumpIdx = state.aiHand.findIndex(isMove);
+      if (dumpIdx < 0 && !needMoveCards && !nightNeedMove) dumpIdx = state.aiHand.findIndex(isMove);
       if (dumpIdx < 0) dumpIdx = state.aiHand.findIndex(isAllyBadTerrain);
       if (dumpIdx < 0) dumpIdx = state.aiHand.findIndex(c => c && c.terrain && goodTerrainTypes.indexOf(c.terrain.type) >= 0);
     } else {
@@ -599,36 +626,103 @@ function retrogradeObservationOk(actSide, tgtGrp, tgtIdx) {
   return (state.groups[actSide] || []).some(g => g && !g.eliminated && (g.recognizedTargets || []).indexOf(tgtIdx) >= 0);
 }
 
+/** 夜間に前進を終える位置か: 火力10に届いたら性格で分かれる（ユーザーの指示 2026-11-03）
+ *  攻撃的=距離5まで前進して白兵戦を目指す / バランス・防御的=止まって射撃に専念する。火力が届かなくても距離5で終わり */
+function aiNightInPlace(g, i) {
+  const R = window.INFANTRY_RULES;
+  const aiKey = getFactionKey(state.ai);
+  let closest = 0, best = 0;
+  (state.groups.player || []).forEach((e, j) => {
+    if (!e || e.eliminated || !e.cards.some(c => R.isAlive(c))) return;
+    const base = R.relativeRange(g.distance, e.distance);
+    const rr = Math.abs(i - j) > 1 ? Math.max(0, base - 1) : base;
+    if (rr > closest) closest = rr;
+    best = Math.max(best, R.calcGroupFirepower(g, aiKey, rr, { moving: false, crewMap: buildCrewMapFromPairs(g) }));
+  });
+  if (g._role === 'hold') return true;
+  if (closest >= 5) return true;
+  return (state.aiStyle || 'bal') !== 'aggr' && best >= 10;
+}
+/** 夜間: 射撃に専念する段階か（攻撃的でない性格で、全グループが前進を終えた） */
+function aiNightFocusFire() {
+  const R = window.INFANTRY_RULES;
+  if (!state.isNight || (state.aiStyle || 'bal') === 'aggr') return false;
+  return (state.groups.ai || []).every((g, i) => !g || g.eliminated || !g.cards.some(c => R.isAlive(c)) || aiNightInPlace(g, i));
+}
+/** 夜間: まだ近づきたいグループがあるか。anyHand=true なら手札の移動カードの有無を問わない */
+function aiNightWantsMove(anyHand) {
+  const R = window.INFANTRY_RULES;
+  if (!anyHand && !state.aiHand.some(c => c && c.terrain && c.terrain.type === 'MOVEMENT')) return false;
+  return (state.groups.ai || []).some((g, i) => g && !g.eliminated && g.cards.some(c => R.isAlive(c)) && !aiNightInPlace(g, i));
+}
+/** この射撃カードが、照らした敵に効果があるか（必要な火力に届き、地形を引いても射撃力が残る） */
+function aiFireCardEffectiveAt(c, ti) {
+  const R = window.INFANTRY_RULES;
+  const aiKey = getFactionKey(state.ai);
+  const tgt = state.groups.player[ti];
+  if (!tgt || tgt.eliminated || !tgt.cards.some(x => R.isAlive(x))) return false;
+  if (!c || !c.terrain || String(c.terrain.type).indexOf('FIRE') !== 0) return false;
+  const m = (c.terrain.sub || '').match(/FP(.)/);
+  const need = circledToNum((m && m[1]) || '');
+  if (!(need > 0)) return false;
+  const jpOpts = { japanBuildings: isJapanInGame() };
+  const japanMod = isJapanInGame() ? -1 : 0;
+  const raw = parseInt(c.terrain.type.replace('FIRE ', ''), 10) || 0;
+  return state.groups.ai.some((src, si) => {
+    if (!src || src.eliminated || R.isInGully(src) || !src.cards.some(x => R.isAlive(x))) return false;
+    const rel = pillboxRelation('ai', si, ti);
+    if (rel === 'blocked') return false;
+    const base = R.relativeRange(src.distance, tgt.distance);
+    const dist = Math.abs(si - ti) <= 1 ? base : Math.max(0, base - 1);
+    if (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {})) return false;
+    const moving = isMovingIgnoringOverlays(src);
+    const fp = R.calcGroupFirepower(src, aiKey, dist, { moving, crewMap: buildCrewMapFromPairs(src) });
+    if (fp < need) return false;
+    let str = halvedFireStrength(raw, moving, false); // 照らせば夜間の半減はない（§38.52）
+    if (rel === 'half') str = Math.floor(str / 2);
+    const atk = R.calcTerrainMod(src.terrain, true, Object.assign({}, jpOpts, { otherStack: tgt.terrain }));
+    const def = R.calcTerrainMod(tgt.terrain, false, Object.assign({}, jpOpts, { isFlank: si !== ti, otherStack: src.terrain, encircled: !!tgt.encircled }));
+    return str + atk + def + japanMod > 0;
+  });
+}
+/** 手札の射撃カードのうち、照らした敵に効果がある枚数 */
+function aiEffectiveFireCount(ti) {
+  return state.aiHand.filter(c => aiFireCardEffectiveAt(c, ti)).length;
+}
+/** どれかの敵に効果がある射撃カードか */
+function aiFireCardEffectiveAny(c) {
+  return (state.groups.player || []).some((_, ti) => aiFireCardEffectiveAt(c, ti));
+}
+/** 夜間: 射撃カードが2枚貯まり、効果のある敵がいるか */
+function aiNightFireReady() {
+  return (state.groups.player || []).some((_, ti) => aiEffectiveFireCount(ti) >= 2);
+}
+/** ピン状態でない分隊長がいるか（§38.5 照明弾を使える） */
+function aiGroupHasUnpinnedSL(g, aiKey) {
+  const R = window.INFANTRY_RULES;
+  return !!g && !g.eliminated && g.cards.some(c => {
+    if (!R.isAlive(c) || R.isPinned(c)) return false;
+    const def = R.lookupSoldier(c, aiKey);
+    return def && def.leader === '分隊長';
+  });
+}
+/** 夜間: 照明弾で照らされている敵を撃つ（§38.52 索敵不要・射撃力の半減なし） */
+async function aiTryFireLit() {
+  if (!state.isNight) return false;
+  const lit = state.groups.player.map((g, i) => (g && !g.eliminated && isGroupFlared(g)) ? i : -1).filter(i => i >= 0);
+  if (!lit.length) return false;
+  return await aiFireAt(lit);
+}
+
 async function aiTryFlare() {
   if (!state.isNight) return false;
   const R = window.INFANTRY_RULES;
   if (!R) return false;
   const acted = state.aiActedGroups || new Set();
   const aiKey = getFactionKey(state.ai);
-  // 手札に FIRE カードが 2 枚以上
+  // 手札に FIRE カードが 2 枚以上（照らしたあとに撃つため）
   const fireCards = state.aiHand.filter(c => c && c.terrain && c.terrain.type && c.terrain.type.indexOf('FIRE') === 0);
   if (fireCards.length < 2) return false;
-  // B グループ (idx=1) が認知済み敵に通常射撃可能か
-  const B = state.groups.ai[1];
-  if (!B || B.eliminated) return false;
-  const Brec = B.recognizedTargets || [];
-  let bCanFire = false;
-  for (const tiB of Brec) {
-    const tgtB = state.groups.player[tiB];
-    if (!tgtB || tgtB.eliminated) continue;
-    const adjB = Math.abs(1 - tiB) <= 1;
-    const baseDB = R.relativeRange(B.distance, tgtB.distance);
-    const distB = adjB ? baseDB : Math.max(0, baseDB - 1);
-    const crewMapB = buildCrewMapFromPairs(B);
-    const fpB = R.calcGroupFirepower(B, aiKey, distB, { moving: false, crewMap: crewMapB });
-    for (const fc of fireCards) {
-      const m = (fc.terrain.sub || '').match(/FP(.)/);
-      const need = circledToNum((m && m[1]) || '');
-      if (need > 0 && fpB >= need) { bCanFire = true; break; }
-    }
-    if (bCanFire) break;
-  }
-  if (!bCanFire) return false;
   for (let si = 0; si < state.groups.ai.length; si++) {
     if (acted.has(si)) continue;
     if (state.aiFiredGroups && state.aiFiredGroups.has(si)) continue; // §38.5 唯一の行動
@@ -648,6 +742,7 @@ async function aiTryFlare() {
       const dist = R.relativeRange(src.distance, tgt.distance);
       if (dist < 1 || dist > 5) continue;
       if (isGroupFlared(tgt)) continue;
+      if (aiEffectiveFireCount(ti) < 2) continue; // 照らしても効果のある射撃を2回できないなら使わない
       await showAIAction(`AI: 照明弾 → GROUP ${tgt.name}`, null, si);
       applyStarshell('ai', ti); // §38.51
       acted.add(si);
@@ -676,8 +771,12 @@ async function aiTryScout() {
   if (!R) return false;
   // 手札に「打てる」FIRE カードがある場合のみ索敵
   const _fireCardsScout = state.aiHand.filter(c => c && c.terrain && c.terrain.type && c.terrain.type.indexOf('FIRE') === 0);
-  if (_fireCardsScout.length === 0) return false;
+  // 攻撃的な性格は、距離5なら射撃カードがなくても侵入のために索敵する（ユーザーの指示 2026-11-03）
+  const _aggrScout = (state.aiStyle || 'bal') === 'aggr';
+  if (_fireCardsScout.length === 0 && !_aggrScout) return false;
   const _aiKeyScout = getFactionKey(state.ai);
+  // 射撃カードが貯まるまで索敵しない。照明弾を使えないなら1枚でよい（ユーザーの指示 2026-11-03）
+  const _needCards = state.groups.ai.some(g => aiGroupHasUnpinnedSL(g, _aiKeyScout)) ? 2 : 1;
   let _canFireAny = false;
   for (let _si = 0; _si < state.groups.ai.length && !_canFireAny; _si++) {
     const _src = state.groups.ai[_si];
@@ -698,7 +797,7 @@ async function aiTryScout() {
       }
     }
   }
-  if (!_canFireAny) return false;
+  if (!_canFireAny && !_aggrScout) return false;
   const acted = state.aiActedGroups || new Set();
   const fired = state.aiFiredGroups || new Set();
   const aiKey = getFactionKey(state.ai);
@@ -710,6 +809,7 @@ async function aiTryScout() {
     if (!src || src.eliminated) continue;
     if (src.cards.some(c => R.isPinned(c))) continue;
     if (src._observeTriedTurn === (state.turnCount || 0)) continue; // §38.2 1ターンに敵グループ1つだけ
+    if (!aiNightInPlace(src, si)) continue; // まだ近づく途中は索敵しない
     for (let ti = 0; ti < state.groups.player.length; ti++) {
       const tgt = state.groups.player[ti];
       if (!tgt || tgt.eliminated) continue;
@@ -717,6 +817,8 @@ async function aiTryScout() {
       if (src.recognizedTargets && src.recognizedTargets.indexOf(ti) >= 0) continue;
       if (tgt.flaredUntilTurn && tgt.flaredUntilTurn >= (state.turnCount || 0)) continue;
       const dist = R.relativeRange(src.distance, tgt.distance);
+      const _forCC = _aggrScout && dist >= 5; // 白兵戦のための索敵
+      if (!_forCC && aiEffectiveFireCount(ti) < _needCards) continue; // 撃っても効果がない敵は索敵しない
       if (!gullyObservationAllowed(src, tgt, aiKey)) continue; // §38.2
       const threshold = observationRange(src, tgt).total; // §38.3
       const successProb = threshold <= 0 ? _RNC_COUNTS[1] / _RNC_TOTAL : _calcScoutSuccessProb(threshold);
@@ -741,6 +843,8 @@ async function aiTryScout() {
     if (!src.recognizedTargets) src.recognizedTargets = [];
     if (src.recognizedTargets.indexOf(bestTi) < 0) src.recognizedTargets.push(bestTi);
     await showAIAction(`AI: 索敵成功 → GROUP ${tgt.name}`, null, bestSi);
+    renderField('player'); renderField('ai');
+    return 'detected'; // §38.2 成功はアクションにならない
   } else {
     await showAIAction(`AI: 索敵失敗 → GROUP ${tgt.name}`, null, bestSi);
     acted.add(bestSi);
@@ -1539,6 +1643,7 @@ function aiGroupWantsAdvance(g, i) {
   if (g._role === 'hold') return false; // 守備（シナリオC の防御側）: 前に出ない
   // 使える火炎放射器（相対距離5でだけ火力がある）を持つグループは、性格・役割に関係なく相対距離5まで前進する
   if (aiGroupHasUsableFlame(g)) return true;
+  if (state.isNight) return !aiNightInPlace(g, i); // 夜間の前進（ユーザーの指示 2026-11-03）
   if (g._role === 'fire') return eff < 3;
   if (g._role === 'maneuver' || g._role === 'assault') return true;
   const style = state.aiStyle || 'bal';

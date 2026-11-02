@@ -10,9 +10,10 @@ const path = require('path');
 const fs = require('fs');
 const { JSDOM, VirtualConsole } = require(path.join(__dirname, '../../海の戦い/sim/node_modules/jsdom'));
 
-const FLAGS = ['report', 'index'];
+const FLAGS = ['report', 'index', 'night'];
 const ARGS = process.argv.slice(2).filter(a => FLAGS.indexOf(a) < 0);
 const REPORT = process.argv.includes('report');
+const NIGHT = process.argv.includes('night'); // night: 夜間で対戦する。例: node sim/run.js 20 A ger jpn night
 const N = parseInt(ARGS[0] || '5', 10);
 const SCN = ARGS[1] || 'A';
 const FAC1 = ARGS[2] || null;
@@ -47,7 +48,8 @@ async function playOne(gameNo) {
 
   // ---- 画面の操作を待つ処理を差し替え ----
   w.eval(`
-    window.showAIAction = async () => {};
+    window.__acts = {};
+    window.showAIAction = async (t) => { const k = String(t).replace(/^AI: /, '').split(/[ →]/)[0]; window.__acts[k] = (window.__acts[k] || 0) + 1; };
     window._showAIActionImpl = async () => {};
     window.showFireResultOverlay = async () => {};
     window.showJudgeCard = () => {};
@@ -157,7 +159,7 @@ async function playOne(gameNo) {
       setupState.fromCampaign = false;
       setupState.aiFactionOverride = '${f2}';
       const fp = document.getElementById('first-player-pick'); if (fp) fp.value = Math.random() < 0.5 ? 'player' : 'ai';
-      const tod = document.getElementById('time-of-day-pick'); if (tod) tod.value = 'day';
+      const tod = document.getElementById('time-of-day-pick'); if (tod) tod.value = '${NIGHT ? 'night' : 'day'}';
       startGameWithSetup();
       // プレイヤー側（国1）にも AI と同じクルー割当と性格のくじ
       // 作戦と役割（_strategy / _role）は、カード番号の受け渡しで消えるので付け直す
@@ -211,6 +213,7 @@ async function playOne(gameNo) {
     end: endAlert.replace(/\s+/g, ' ').slice(0, 80),
     endCount: endAlerts.length,
     phase: st().phase,
+    acts: w.__acts,
     errors: [...new Set(errors)].slice(0, 3),
   };
   if (REPORT) {
