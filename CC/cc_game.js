@@ -557,6 +557,14 @@ async function engage(ub, opts) {
       }
       // 9.6 コルベットの攻撃
       if (help.escort) { help.escort = false; const r = await escortHelp(ub); if (r !== 'continue') return r; }
+      // 爆雷もヘッジホッグも残っていなければ、4インチ砲で撃てる時（浮上中）を除いて、探知も接近もせず先へ進む（ユーザーの指示 2026-11-03）
+      if (SH().dcLeft <= 0 && !(SH().equipped.hh && SH().hhLeft > 0) && !ub.surfaced) {
+        UI.bad(L('爆雷が残っていない！ U ボートを追わず、船団の護衛に戻る。', 'No depth charges left! Breaking off the hunt and returning to the convoy.'));
+        if (ub.attacksLeft <= 0) ub.rng = 'L'; // 攻撃が残っていなければ、そのまま戦闘海域から去る
+        phase = await lostContact(ub, opts);
+        if (phase === 'end') return 'withdrew';
+        continue;
+      }
       const det = await asdicDetect(ub, help);
       if (det) {
         if (help.sunderland && S.mission.weather !== 2) {
@@ -911,6 +919,7 @@ async function randomEvent() {
       if (w >= 2) return none(L('霧／雪・暴風雨のため', 'Because of fog/snow or storm'));
       UI.log(L('小艇に乗った漂流者を発見し、救助に向かう。', 'Survivors spotted in a small boat; going to their rescue.'));
       UI.story(L('見張り長「右舷前方に小艇！ 人が乗っています！」——艦を寄せ、縄梯子を下ろす。', 'Chief Lookout: "Small boat fine on the starboard bow! There are people in it!"——We close and lower the scrambling nets.'));
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       const r = d66(); UI.dice(`d66＝${r}`);
       if (r === 11 || r === 66) { UI.story(L('救助のさなか、聴音員が叫んだ。「魚雷音！ 近い！」', 'In the middle of the rescue the hydrophone operator shouts: "Torpedo! Close!"')); UI.bad(L('U ボートが近距離からコルベットを雷撃！', 'A U-boat torpedoes the corvette at close range!')); await torpedo('C', {}); }
       else { UI.good(L('漂流者を救助した。', 'The survivors were rescued.')); UI.story(L('凍えた生存者たちが毛布にくるまれ、熱い紅茶を手にしている。「ありがとう……ありがとう……」', 'The frozen survivors sit wrapped in blankets, mugs of hot tea in their hands. "Thank you... thank you..."')); J(L('漂流者を救助。', 'Survivors rescued.'), L('生存者救助', 'survivors rescued')); }
@@ -919,6 +928,7 @@ async function randomEvent() {
     case 3: { // 油膜発見
       if (w === 3) return none(L('暴風雨のため', 'Because of the storm'));
       UI.story(L('見張り「海面に油膜！ かなり広がっています」', 'Lookout: "Oil slick on the water! A big one!"'));
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       const r = d6(); UI.dice(L(`海面に油膜。1d6＝${r}`, `Oil slick on the water. 1d6=${r}`));
       if (r <= 3) { UI.log(L('何も発見できない。', 'Nothing found.')); UI.story(L('しばらく周辺を捜索したが、何も見つからなかった。', 'We searched the area for a while but found nothing.')); backRE(n); }
       else if (r <= 5) {
@@ -940,6 +950,7 @@ async function randomEvent() {
       if (sec === 'W') {
         UI.story(L('見張り長「前方に浮遊機雷！ ゆっくり船団に近づいています！」——「対空砲、撃ち方用意！」', 'Chief Lookout: "Floating mine ahead! Drifting slowly towards the convoy!"——"AA gun, stand by!"'));
         UI.log(L('浮遊する機雷がゆっくり船団に近づいている！ 対空砲で爆破を試みる（14.4.1）', 'A floating mine drifts slowly towards the convoy! Trying to explode it with the AA gun (14.4.1)'));
+        await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
         for (const r of ['L', 'M', 'C']) {
           if (await check(L(`対空砲で機雷を爆破（${RANGE_NAME[r]}）`, `Exploding the mine with the AA gun (${RANGE_NAME[r]})`), skill('aa'), 4 + secDiff('aa'), { sec: 'aa', mine: true })) { UI.good(L('機雷を爆破した。', 'The mine was exploded.')); UI.story(L('対空砲が吠え、機雷は水柱とともに砕け散った。', 'The AA gun barks, and the mine bursts in a column of water.')); J(L('浮遊機雷を対空砲で爆破。', 'Exploded a floating mine with the AA gun.'), L('機雷処分', 'mine destroyed')); backRE(n); return; }
         }
@@ -950,6 +961,7 @@ async function randomEvent() {
       } else {
         if (w === 3) return none(L('暴風雨のため', 'Because of the storm'));
         UI.story(L('聴音員「ASDIC に反応！ 何かいます！」', 'Hydrophone operator: "ASDIC contact! Something\'s there!"'));
+        await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
         const r = d6(); UI.dice(L(`ソナーに感あり（14.4.2）。1d6＝${r}`, `Sonar contact (14.4.2). 1d6=${r}`));
         if (r <= 3) { UI.log(L('鯨だった。', 'It was a whale.')); UI.story(L('……鯨だった。巨大な影が悠々と船団の下をくぐっていく。', '...a whale. A huge shadow glides unhurried beneath the convoy.')); backRE(n); }
         else if (r <= 5) { UI.log(L('水中漂流物だった。', 'It was underwater wreckage.')); UI.story(L('……沈んだ船の残骸だった。誰も口をきかなかった。', '...the wreck of a sunken ship. Nobody said a word.')); backRE(n); }
@@ -967,6 +979,7 @@ async function randomEvent() {
     case 6: { // 潜望鏡発見
       if (w === 3) return none(L('暴風雨のため', 'Because of the storm'));
       UI.story(L(`通信長「船団司令より。中央の船が潜望鏡らしきものを発見！」　${S.captain ? S.captain + '艦長' : '艦長'}は調査を命じた。`, `Telegraphist: "From the convoy commodore. A ship in the centre reports a periscope!"　${S.captain ? 'Captain ' + S.captain : 'The captain'} orders a search.`));
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       const r = d6(); UI.dice(L(`中央の船が潜望鏡を発見との連絡。調査する 1d6＝${r}`, `A ship in the centre reports a periscope. Investigating, 1d6=${r}`));
       if (r <= 3) { UI.log(L('何も見つからない。', 'Nothing found.')); UI.story(L('付近を捜索したが、何も見つからない。見間違いだったのだろうか。', 'We searched the area and found nothing. A false sighting, perhaps.')); backRE(n); }
       else if (r <= 5) { UI.log(L('誰かが海に落としたモップだった。', 'It was a mop someone had dropped overboard.')); UI.story(L('……波間に浮かんでいたのは、誰かが海に落としたモップだった。艦橋に乾いた笑いが広がる。', '...bobbing in the waves was a mop somebody had dropped over the side. A dry laugh spreads across the bridge.')); backRE(n); }
@@ -979,6 +992,7 @@ async function randomEvent() {
       else {
         UI.story(L('通信長「司令部より。アンソン機が付近に墜落、乗員を捜索せよ」', 'Telegraphist: "From HQ. An Anson has come down nearby; search for the crew."'));
         UI.log(L('墜落したアブロ・アンソン機の乗員の捜索を命じられた（14.7）', 'Ordered to search for the crew of a downed Avro Anson (14.7)'));
+        await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
         let ok = false;
         for (const [r, a, p] of [['L', 0, 1], ['M', 0, 0], ['C', 1, 0]]) {
           if (await check(L(`捜索（${RANGE_NAME[r]}）`, `Search (${RANGE_NAME[r]})`), skill('watch') + a, 3 + p + secDiff('watch'), { sec: 'watch', mine: true })) { ok = true; break; }
@@ -991,6 +1005,7 @@ async function randomEvent() {
       if (w === 3) { UI.log(L('暴風雨なので、別のマーカーを引き直す。', 'It is a storm, so draw another marker.')); backRE(n); return await randomEvent(); }
       UI.story(L('通信長「司令部より、船団後方で落伍した3隻を支援せよ」——現場に急行すると、砲声が聞こえる。浮上した U ボートが商船を砲撃している！', 'Telegraphist: "From HQ: support the three stragglers astern of the convoy."——Racing to the scene, we hear gunfire. A surfaced U-boat is shelling a merchantman!'));
       UI.log(L('落伍した3隻の支援を命じられた。現場に向かうと、浮上中の U ボートが1隻を砲撃中だった！', 'Ordered to support three stragglers. On arrival, a surfaced U-boat is shelling one of them!'));
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       const ub = drawUboat();
       if (!ub) break;
       const res = await engage(ub, { catchup: true });
@@ -1021,6 +1036,7 @@ async function randomEvent() {
       else {
         UI.story(L('見張り「水平線に艦影——潜水艦が2隻、並んでいます！」 補給中のミルヒ・クーだ。慌てて潜航した跡に、ゴムボートが取り残されている。', 'Lookout: "Ships on the horizon——two submarines side by side!" A Milch Cow, refuelling. Where they crash-dived, a rubber dinghy is left drifting.'));
         UI.log(L('洋上で U ボートに補給中のミルヒ・クーを発見！ 位置が特定された。回避値1の U ボートに爆雷攻撃を1回行う（14.11）', 'A Milch Cow refuelling U-boats at sea! Her position is fixed. One depth charge attack against an evasion-1 U-boat (14.11)'));
+        await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
         const ub = { id: L('ミルヒ・クー', 'Milch Cow'), type: 7, range: 'C', atk: 0, eva: 1, attacksLeft: 0, damage: 0, rng: 'C', surfaced: false };
         if (SH().dcLeft > 0) {
           const res = await depthCharge(ub, 'dc', {});
@@ -1032,6 +1048,7 @@ async function randomEvent() {
       if (w === 3) return none(L('暴風雨のため', 'Because of the storm'));
       UI.story(L('見張り「前方に損傷した商船！ 救助を求める信号を出しています！」——機関長たちが乗り移った。', 'Lookout: "Damaged merchantman ahead! She\'s signalling for help!"——The Chief and his men go across.'));
       UI.log(L('前の船団の落伍船と遭遇。損傷していて修理が必要だ。', 'We meet a straggler from an earlier convoy. She is damaged and needs repairs.'));
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       if (await check(L('落伍船の修理', 'Repairing the straggler'), skill('engine'), 2 + secDiff('engine'), { sec: 'engine', mine: true })) {
         const t = (d6() + 6) * 1000; M.reduce += t; UI.story(L('半日がかりの修理の末、商船の機関が息を吹き返した。汽笛が礼を言うように鳴った。', 'After half a day\'s work, the merchantman\'s engine coughs back to life. Her whistle sounds, as if to say thank you.')); UI.good(L(`修理成功。この任務の喪失トン数が ${t.toLocaleString()}トン軽減される。`, `Repaired. This mission's lost tonnage is reduced by ${t.toLocaleString()} tons.`)); J(L('前の船団の落伍船を修理し、救う。', 'Repaired and saved a straggler from an earlier convoy.'), L(`喪失 ${t.toLocaleString()}トン軽減`, `lost tonnage reduced by ${t.toLocaleString()} tons`));
       } else { UI.log(L('修理できなかった（罰則なし）。', 'Could not repair her (no penalty).')); UI.story(L('手は尽くしたが、商船の機関は直らなかった。', 'We did all we could, but her engine would not run.')); }
@@ -1048,6 +1065,7 @@ async function randomEvent() {
     case 15: { // 暗号通信
       UI.story(L('聴音員「微弱な反応……潜望鏡深度の U ボートです！ 通信を送ろうとしているようです！」', 'Hydrophone operator: "Faint contact... a U-boat at periscope depth! She seems to be trying to transmit!"'));
       UI.log(L('損傷した U ボートが重要な通信を送るため、潜望鏡深度まで浮上した！', 'A damaged U-boat has come up to periscope depth to send an important signal!'));
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       const ub = drawUboat();
       if (!ub) break;
       const res = await engage(ub, { cryptic: true, noWolf: true });
@@ -1063,6 +1081,7 @@ async function randomEvent() {
       break;
     }
     case 18: { // 急病人
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       const r = d66(); UI.dice(`d66＝${r}`);
       if (r === 11 || r === 66) {
         const s = d6(); let k = ['watch', 'asdic', 'aa', 'gun4', 'dc', 'engine'][s - 1];
@@ -1074,6 +1093,7 @@ async function randomEvent() {
       break;
     }
     case 19: { // 火災発生
+      await UI.wait(); // 内容を読めるよう、結果を出す前に止まる（ユーザーの指示 2026-11-03）
       const r = d66(); UI.dice(`d66＝${r}`);
       if (r === 11 || r === 66) {
         const k = d3(); UI.big(L('見張り長「船団の中央で火災！ 炎が夜空を照らしています！」——これでは、U ボートに位置を教えているようなものだ。', 'Chief Lookout: "Fire in the middle of the convoy! The flames are lighting up the night sky!"——We might as well be showing the U-boats where we are.'), 'bad'); UI.bad(L(`船団内の1隻で火災発生！ 気づいた群狼 ${k}隻が1隻ずつ攻撃してくる。`, `A ship in the convoy is on fire! ${k} U-boat(s) of the wolfpack notice and attack one at a time.`)); J(L('船団内の1隻で火災。群狼が集まる。', 'Fire aboard a ship in the convoy. The wolfpack gathers.'), L(`U ボート ${k}隻`, `${k} U-boat(s)`));

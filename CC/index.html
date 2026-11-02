@@ -141,6 +141,9 @@
     document.querySelectorAll('[data-en]').forEach(e => { e.textContent = e.dataset.en; });
     document.querySelectorAll('[data-en-title]').forEach(e => { e.title = e.dataset.enTitle; });
   }
+  // ブラウザの「戻る」でゲームから離れないようにする（ユーザーの指示 2026-11-03）
+  history.pushState(null, '', location.href);
+  window.addEventListener('popstate', () => { history.pushState(null, '', location.href); });
 </script>
 </body>
 </html>
