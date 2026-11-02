@@ -145,7 +145,225 @@ const AI = {
     // メイン：decideMove
     // グループ戦術・ラテラルロール・後攻スコア対応版
     // ==========================================
+    // =====================================================================
+    // 撃てる位置を狙う移動（兵器の性能に合わせて、有利な位置で撃つ）
+    //   今撃てる見込み（自分が動いた直後に撃つ）＋次のターンに撃てる見込み
+    //   − まだ動いていない敵から撃たれる危険 ＋ 位置取りの補助（後ろを取る・高度・端を避ける）
+    // =====================================================================
+    // 表の値 v に対して 2d6 の合計が v 未満なら撃墜、v と同じなら損害
+    hitProb: function(v) {
+        const W = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1];
+        let kill = 0, dmg = 0;
+        for (let s = 2; s <= 12; s++) { if (s < v) kill += W[s]; else if (s === v) dmg += W[s]; }
+        return (kill + 0.35 * dmg) / 36;
+    },
+    mTypeOf: function(u) {
+        let nation = (window.PLANE_CHART_TYPE && window.PLANE_CHART_TYPE[u.aircraft]) || (u.team === 'Red' ? 'ソ連' : '米国後期');
+        let mType = u.missileType || nation;
+        if (window.COMBAT_CHARTS && window.COMBAT_CHARTS.HS && !window.COMBAT_CHARTS.HS[mType]) {
+            let keys = Object.keys(window.COMBAT_CHARTS.HS);
+            mType = keys.find(k => nation.includes(k) || k.includes(nation)) || keys[0] || mType;
+        }
+        return mType;
+    },
+    // コマンドの上昇(8)・降下(2)の数で高度が決まる（ゲーム本体と同じ）
+    simAlt: function(unit, cmd, r, c) {
+        let up = (cmd.match(/8/g) || []).length, dn = (cmd.match(/2/g) || []).length;
+        if (up || dn) return unit.altitude + (up ? up : -dn);
+        return unit.altitude + (parseInt(window.planeData[unit.aircraft].alt[r][c]) || 0);
+    },
+    // sh（位置 s）が tg（位置 t）を撃った時の撃墜の見込み（使える兵器のうち一番よいもの）
+    fireValue: function(sh, s, t, opt) {
+        opt = opt || {};
+        let dist = this.getHexDistance(s.x, s.y, t.x, t.y);
+        let altDiff = Math.abs(s.alt - t.alt);
+        let { arc, aspect } = this.getArcAndAspect(s.x, s.y, s.dir, t.x, t.y, t.dir, dist);
+        if (arc !== '前方') return 0;
+        let best = 0, mType = this.mTypeOf(sh);
+        if (!opt.rhOnly && sh.gun > 0 && altDiff <= 1 && dist <= 2 && (aspect === '後方' || aspect === '後方側面' || aspect === '前方')) {
+            let v = (window.COMBAT_CHARTS.GUN[sh.gunType || 'A'] || {})[aspect];
+            best = Math.max(best, this.hitProb(v ? (v[dist] || 0) : 0));
+        }
+        if (!opt.rhOnly && sh.missiles && sh.missiles.hs > 0 && altDiff <= 2 && aspect === '後方' && dist >= 1) {
+            let v = this.getMissileTargetValue('HS', mType, dist);
+            if (v >= 3) best = Math.max(best, this.hitProb(v));
+        }
+        if (!opt.noRH && sh.team !== 'Red' && sh.missiles && sh.missiles.rh > 0 && altDiff <= 3 && dist >= 4) {
+            let v = this.getMissileTargetValue('RH', mType, dist);
+            // RH はロックオン→発射→次のターンに命中判定なので割り引く
+            if (v >= 3) best = Math.max(best, this.hitProb(v) * 0.55);
+        }
+        return best;
+    },
+    // 機体が取りうる移動の行き先（{r,c,cmd,s}）を全部挙げる
+    endStates: function(unit, limit) {
+        let out = [], seen = {};
+        let r0 = unit.startRow != null ? unit.startRow : 2, c0 = unit.startCol != null ? unit.startCol : 2;
+        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+            if (Math.abs(dr) + Math.abs(dc) > 2) continue;
+            let r = r0 + dr, c = c0 + dc;
+            if (r < 0 || r > 4 || c < 0 || c > 4) continue;
+            if ((unit.damage === '損害あり' || unit.bomb_equipped) && (r < 1 || r > 3 || c < 1 || c > 3)) continue;
+            if (unit.altitude >= 40 && r === 0) continue;
+            let cmds;
+            try { cmds = this.generateAllValidCommands(unit, r, c); } catch (e) { continue; }
+            for (let cmd of cmds) {
+                let sim = this.simulatePosition(unit, cmd, r, c);
+                let alt = this.simAlt(unit, cmd, r, c);
+                if (sim.isOffMap || alt > 40 || alt < 1) continue;
+                let key = sim.c + ',' + sim.r + ',' + sim.dir + ',' + alt + ',' + r + ',' + c;
+                if (seen[key]) continue;
+                seen[key] = 1;
+                out.push({ r, c, cmd, steps: sim.finalSteps || 0, s: { x: sim.c, y: sim.r, dir: sim.dir, alt } });
+            }
+        }
+        if (limit && out.length > limit) {
+            for (let i = out.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+            out = out.slice(0, limit);
+        }
+        return out;
+    },
+    stateOf: function(u) { return { x: u.x, y: u.y, dir: u.direction, alt: u.altitude }; },
+    // 行き先 e から、次のターンに動ける機体（仮）を作る
+    unitAt: function(unit, e) {
+        return Object.assign({}, unit, { x: e.s.x, y: e.s.y, direction: e.s.dir, altitude: e.s.alt, startRow: e.r, startCol: e.c, cursorRow: e.r, cursorCol: e.c, prevRow: e.r, stepsSinceLastTurn: e.steps });
+    },
+    // このターン、自分より後に動く敵か
+    movesAfter: function(unit, e) {
+        try {
+            if (typeof turnOrder !== 'undefined' && typeof currentOrderIndex !== 'undefined' && turnOrder && turnOrder.length) {
+                let mine = turnOrder.findIndex(o => o.u === unit || (o.u && o.u.id === unit.id));
+                let his = turnOrder.findIndex(o => o.u === e || (o.u && o.u.id === e.id));
+                if (mine >= 0 && his >= 0) return his > mine;
+            }
+        } catch (err) {}
+        if (e.altitude !== unit.altitude) return e.altitude > unit.altitude;
+        return unit.team === 'Red' && e.team !== 'Red';
+    },
+    edgePenalty: function(s) {
+        let maxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
+        let maxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
+        let dL = s.x, dR = maxC - s.x, dT = s.y, dB = maxR - s.y;
+        let edge = Math.min(dL, dR, dT, dB);
+        if (edge <= 0) return 99999;
+        if (edge > 5) return 0;
+        let deg = this.DIR_ANGLES[s.dir] || 0, facing = false;
+        if (dR <= 5 && deg > -90 && deg < 90) facing = true;
+        if (dL <= 5 && (deg > 90 || deg < -90)) facing = true;
+        if (dB <= 5 && deg > 0 && deg < 180) facing = true;
+        if (dT <= 5 && deg < 0 && deg > -180) facing = true;
+        return (6 - edge) * 60 + (facing ? 400 : 0);
+    },
     decideMove: function(unit, enemies) {
+        if (!unit) return { r: 2, c: 2, cmd: '5' };
+        let foes = enemies ? enemies.filter(e => e.status !== 'destroyed') : [];
+        if (foes.length === 0) {
+            let reqS = window.planeData[unit.aircraft].speed[unit.cursorRow][unit.cursorCol].toString().split('/')[0];
+            return { r: unit.cursorRow, c: unit.cursorCol, cmd: '5'.repeat(Number(reqS)) };
+        }
+        let allUnits = (typeof units !== 'undefined') ? units : [unit];
+        let myUnits = allUnits.filter(u => u.team === unit.team && u.status !== 'destroyed');
+        let focus = this.assignGroupTarget(unit, myUnits, foes) || foes[0];
+        let armed = unit.gun > 0 || (unit.missiles && (unit.missiles.hs > 0 || unit.missiles.rh > 0));
+
+        let cands = this.endStates(unit);
+        if (cands.length === 0) return this.decideMoveOld(unit, enemies);
+
+        // 敵の今の位置と、まだ動いていない敵の行き先の予想
+        let foeNow = foes.map(e => this.stateOf(e));
+        let foeAfter = foes.map(e => this.movesAfter(unit, e) ? this.endStates(e, 60).map(x => x.s) : null);
+        // 次のターンの敵の位置の目安（そのままの速さで直進）
+        let foeNext = foes.map(e => {
+            try {
+                let sp = Number(window.planeData[e.aircraft].speed[e.cursorRow != null ? e.cursorRow : 2][e.cursorCol != null ? e.cursorCol : 2].toString().split('/')[0]) || 3;
+                let sim = this.simulatePosition(e, '5'.repeat(sp), e.cursorRow != null ? e.cursorRow : 2, e.cursorCol != null ? e.cursorCol : 2);
+                return { x: sim.c, y: sim.r, dir: sim.dir, alt: e.altitude };
+            } catch (err) { return this.stateOf(e); }
+        });
+        let inFlight = unit.rhMissileInFlight ? foes.findIndex(e => e.id === unit.rhMissileInFlight.targetId) : -1;
+
+        for (let k of cands) {
+            let s = k.s;
+            // 1) 動いた直後に撃てる見込み（機関砲・HS は今の敵の位置に撃つ。RH はこのターンの最後）
+            let now = 0;
+            foes.forEach((e, i) => {
+                now = Math.max(now, this.fireValue(unit, s, foeNow[i], { noRH: true }));
+                let rhT = (foeAfter[i] && foeAfter[i].length) ? foeAfter[i] : [foeNow[i]];
+                let rh = rhT.reduce((a, t) => a + this.fireValue(unit, s, t, { rhOnly: true }), 0) / rhT.length;
+                now = Math.max(now, rh);
+            });
+            // 2) まだ動いていない敵から撃たれる危険（敵は一番よい手を選ぶとみる）
+            let threat = 0;
+            foes.forEach((e, i) => {
+                if (!foeAfter[i] || !foeAfter[i].length) return;
+                let vs = foeAfter[i].map(t => this.fireValue(e, t, s, { noRH: true }));
+                let mx = Math.max(...vs), mean = vs.reduce((a, b) => a + b, 0) / vs.length;
+                threat += 0.6 * mx + 0.4 * mean;
+            });
+            // 3) 位置取りの補助
+            let t = this.stateOf(focus), ti = foes.indexOf(focus);
+            if (foeAfter[ti] && foeAfter[ti].length) t = foeNext[ti];
+            let dist = this.getHexDistance(s.x, s.y, t.x, t.y);
+            let { arc, aspect } = this.getArcAndAspect(s.x, s.y, s.dir, t.x, t.y, t.dir, dist);
+            let pos = 0;
+            if (arc === '前方' && aspect === '後方') pos += 120;
+            else if (arc === '前方' && aspect === '後方側面') pos += 60;
+            else if (arc === '前方') pos += 25;
+            // 持っている兵器に合った距離へ
+            let ideal = (unit.missiles && unit.missiles.hs > 0) ? 3 : (unit.team !== 'Red' && unit.missiles && unit.missiles.rh > 0) ? 8 : 1;
+            pos -= Math.abs(dist - ideal) * 6;
+            // 敵の方を向く
+            let sx = s.x * 37.5, sy = s.y * 43.301 + (s.x % 2) * 21.650;
+            let tx = t.x * 37.5, ty = t.y * 43.301 + (t.x % 2) * 21.650;
+            let hd = Math.abs(((Math.atan2(ty - sy, tx - sx) * 180 / Math.PI - (this.DIR_ANGLES[s.dir] || 0) + 540) % 360) - 180);
+            pos += 40 * (1 - hd / 180);
+            // 高度は敵と同じか少し上
+            let altAdv = s.alt - t.alt;
+            pos -= Math.abs(altAdv) * 6;
+            if (altAdv >= 1 && altAdv <= 2) pos += 10;
+            if (s.alt > 35) pos -= (s.alt - 35) * 25;
+            // 飛翔中の RH は前方に捉え続ける
+            if (inFlight >= 0) {
+                let tt = foeAfter[inFlight] ? foeNext[inFlight] : foeNow[inFlight];
+                let d2 = this.getHexDistance(s.x, s.y, tt.x, tt.y);
+                let a2 = this.getArcAndAspect(s.x, s.y, s.dir, tt.x, tt.y, tt.dir, d2).arc;
+                pos += a2 === '前方' ? 300 : -300;
+            }
+            pos -= this.edgePenalty(s);
+            if (!armed) { k.score = -800 * threat + dist * 8 - this.edgePenalty(s); continue; }
+            k.now = now; k.threat = threat; k.pos = pos;
+            k.score = 1000 * now - 800 * threat + pos;
+        }
+
+        // 4) 上位の手は、次のターンに撃てる位置へ回り込めるかを一手先まで読む
+        if (armed) {
+            cands.sort((a, b) => b.score - a.score);
+            let top = cands.slice(0, 12);
+            for (let k of top) {
+                let v = this.unitAt(unit, k), best = 0;
+                let nexts = this.endStates(v, 120);
+                for (let n of nexts) {
+                    if (this.edgePenalty(n.s) > 1000) continue;
+                    foes.forEach((e, i) => { best = Math.max(best, this.fireValue(unit, n.s, foeNext[i], { noRH: true })); });
+                }
+                k.next = best;
+                k.score += 450 * best;
+            }
+        }
+        cands.forEach(k => { if (!isFinite(k.score)) { if (!this._nanWarned) { console.log('[AI_MOVE2] NaN', JSON.stringify(k)); this._nanWarned = true; } k.score = -1e9; } });
+        cands.sort((a, b) => b.score - a.score);
+        let pick = cands[0];
+        if (!pick) return this.decideMoveOld(unit, enemies);
+        // 同じくらいよい手が複数あれば、少しだけばらつかせる
+        let close = cands.filter(k => k.score >= pick.score - 5).slice(0, 3);
+        if (close.length) pick = close[Math.floor(Math.random() * close.length)];
+        console.log(`[AI_MOVE2] ${unit.id} → r${pick.r}c${pick.c} [${pick.cmd}] 今撃てる見込み:${((pick.now || 0) * 100).toFixed(0)}% 次:${((pick.next || 0) * 100).toFixed(0)}% 危険:${((pick.threat || 0) * 100).toFixed(0)}% 候補:${cands.length}`);
+        unit._lastPlan = { now: pick.now || 0, next: pick.next || 0, threat: pick.threat || 0 };
+        return { r: pick.r, c: pick.c, cmd: pick.cmd };
+    },
+
+    // 元の移動の決め方（比べるために残す）
+    decideMoveOld: function(unit, enemies) {
         if (!unit) return { r: 2, c: 2, cmd: '5' };
 
         let validEnemies = enemies ? enemies.filter(e => e.status !== 'destroyed') : [];
@@ -719,8 +937,10 @@ const AI = {
         let maxC = (window.AI && window.AI.mapMaxC !== undefined) ? window.AI.mapMaxC : 27;
         let maxR = (window.AI && window.AI.mapMaxR !== undefined) ? window.AI.mapMaxR : 53;
         let cD = Infinity, cH = {c: 0, r: 0};
-        for (let c = 0; c <= maxC; c++) {
-            for (let r = 0; r <= maxR; r++) {
+        let c0 = Math.max(0, Math.min(maxC, Math.round(cx / hStep)));
+        for (let c = Math.max(0, c0 - 2); c <= Math.min(maxC, c0 + 2); c++) {
+            let r0 = Math.max(0, Math.min(maxR, Math.round((cy - (c % 2) * (vStep / 2)) / vStep)));
+            for (let r = Math.max(0, r0 - 2); r <= Math.min(maxR, r0 + 2); r++) {
                 let hx = c * hStep, hy = r * vStep + (c % 2) * (vStep / 2);
                 let d = Math.hypot(cx - hx, cy - hy);
                 if (d < cD) { cD = d; cH = {c, r}; }
