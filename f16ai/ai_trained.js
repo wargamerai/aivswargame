@@ -157,6 +157,12 @@ const AI = {
         for (let s = 2; s <= 12; s++) { if (s < v) kill += W[s]; else if (s === v) dmg += W[s]; }
         return (kill + 0.35 * dmg) / 36;
     },
+    // RH: 2d6 の合計が値以下なら撃墜（損害はない）
+    rhProb: function(v) {
+        const W = [0, 0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1];
+        let k = 0; for (let s = 2; s <= 12; s++) if (s <= v) k += W[s];
+        return k / 36;
+    },
     mTypeOf: function(u) {
         let nation = (window.PLANE_CHART_TYPE && window.PLANE_CHART_TYPE[u.aircraft]) || (u.team === 'Red' ? 'ソ連' : '米国後期');
         let mType = u.missileType || nation;
@@ -190,8 +196,8 @@ const AI = {
         }
         if (!opt.noRH && sh.team !== 'Red' && sh.missiles && sh.missiles.rh > 0 && altDiff <= 3 && dist >= 4) {
             let v = this.getMissileTargetValue('RH', mType, dist);
-            // RH はロックオン→発射→次のターンに命中判定なので割り引く
-            if (v >= 3) best = Math.max(best, this.hitProb(v) * 0.55);
+            // RH はロックオン→発射→次のターンに命中判定。まだロックしていなければ少し割り引く
+            if (v >= 5) best = Math.max(best, this.rhProb(v) * (sh.lockOnTargetId ? 0.85 : 0.7));
         }
         return best;
     },
@@ -223,6 +229,37 @@ const AI = {
         }
         return out;
     },
+    // RH の目標の割り振り: 味方と敵の距離の合計が一番短い組み合わせ（目の前の敵）
+    rhAssign: function(unit, myUnits, foes) {
+        if (unit._rhTarget) { let t = foes.find(e => e.id === unit._rhTarget); if (t) return t; }
+        let mates = myUnits.filter(m => m.team === unit.team && m.status !== 'destroyed').sort((a, b) => a.id.localeCompare(b.id));
+        let best = null, bestSum = Infinity;
+        const perm = (arr, n) => n === 0 ? [[]] : arr.flatMap((x, i) => perm(arr.filter((_, j) => j !== i), n - 1).map(p => [x, ...p]));
+        let n = Math.min(mates.length, foes.length);
+        for (let p of perm(foes, n)) {
+            let sum = 0; for (let i = 0; i < n; i++) sum += this.getHexDistance(mates[i].x, mates[i].y, p[i].x, p[i].y);
+            if (sum < bestSum) { bestSum = sum; best = p; }
+        }
+        let idx = mates.findIndex(m => m.id === unit.id);
+        let t = (best && idx >= 0 && idx < best.length) ? best[idx] : foes[0];
+        unit._rhTarget = t.id;
+        return t;
+    },
+    // RH の段取りごとの、このヘクスの値（s=自分、t=目標。ターンの最後の位置）
+    rhGoal: function(unit, s, t, phase) {
+        let d = this.getHexDistance(s.x, s.y, t.x, t.y);
+        let { arc, aspect } = this.getArcAndAspect(s.x, s.y, s.dir, t.x, t.y, t.dir, d);
+        if (arc !== '前方' || Math.abs(s.alt - t.alt) > 3) return 0;
+        let v = this.getMissileTargetValue('RH', unit.missileType || this.mTypeOf(unit), d);
+        if (phase === 'lock') return v >= 3 ? 0.3 + (d >= 10 && d <= 20 ? 0.1 : 0) : 0;
+        // 正面から向かい合っている（目標がこちらを向いている）時は、すれ違わない遠めの距離ほどよい
+        if (phase === 'fire') return d >= 4 ? this.rhProb(v) * (this.headOn(aspect) ? (d >= 10 ? 1 : d >= 8 ? 0.75 : 0.6) : 1) : 0;
+        // 飛んでいる RH の誘導を保つ（命中は発射時の距離で決まる）＋もう1発撃てるなら少し上乗せ
+        let pf = 1;
+        if (unit.rhMissileInFlight && unit.rhMissileInFlight.launchDist != null) pf = this.rhProb(this.getMissileTargetValue('RH', unit.missileType || this.mTypeOf(unit), unit.rhMissileInFlight.launchDist));
+        return pf + (unit.missiles.rh > 1 && d >= 4 ? 0.3 * this.rhProb(v) : 0);
+    },
+    headOn: function(aspect) { return aspect === '前方' || aspect === '側面'; },
     stateOf: function(u) { return { x: u.x, y: u.y, dir: u.direction, alt: u.altitude }; },
     // 行き先 e から、次のターンに動ける機体（仮）を作る
     unitAt: function(unit, e) {
@@ -271,7 +308,8 @@ const AI = {
 
         // 敵の今の位置と、まだ動いていない敵の行き先の予想
         let foeNow = foes.map(e => this.stateOf(e));
-        let foeAfter = foes.map(e => this.movesAfter(unit, e) ? this.endStates(e, 60).map(x => x.s) : null);
+        let foeAfterAll = foes.map(e => this.movesAfter(unit, e) ? this.endStates(e).map(x => x.s) : null);
+        let foeAfter = foeAfterAll.map(a => { if (!a) return null; if (a.length <= 60) return a; let b = a.slice(); for (let i = b.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b.slice(0, 60); });
         // 次のターンの敵の位置の目安（そのままの速さで直進）
         let foeNext = foes.map(e => {
             try {
@@ -281,6 +319,30 @@ const AI = {
             } catch (err) { return this.stateOf(e); }
         });
         let inFlight = unit.rhMissileInFlight ? foes.findIndex(e => e.id === unit.rhMissileInFlight.targetId) : -1;
+        // RH 用の機動を使うか: RH が残っていて、一番近い敵がまだ距離4以上（または RH が飛んでいる）
+        let nearest = Math.min(...foes.map(e => this.getHexDistance(unit.x, unit.y, e.x, e.y)));
+        if (unit._rh0 == null && unit.missiles) unit._rh0 = unit.missiles.rh;
+        // 最初の1発を撃ったら、そのあとはどの敵でも正面に入ったものを狙う
+        if (unit.missiles && unit.missiles.rh < unit._rh0) unit._rhFirstDone = true;
+        // 最初のすれ違いを過ぎたら（1発撃って、敵が距離7以内に来たら）HS の戦いへ
+        if (unit._rhFirstDone && nearest <= 7) unit._merged = true;
+        let rhMode = unit.team !== 'Red' && unit.missiles && !unit._merged && (unit.missiles.rh > 0 || inFlight >= 0);
+        let rhTgt = rhMode ? this.rhAssign(unit, myUnits, foes) : null;
+        let locked = unit.lockOnTargetId ? foes.find(e => e.id === unit.lockOnTargetId) : null;
+        if (inFlight >= 0) rhTgt = foes[inFlight];
+        else if (locked) rhTgt = locked;
+        let rhPhase = inFlight >= 0 ? 'flight' : (rhTgt && unit.lockOnTargetId === rhTgt.id) ? 'fire' : 'lock';
+        // 狙う相手: 飛んでいる／ロック中ならその敵、最初の1発までは担当の敵、そのあとは誰でも
+        let goalIdx = (inFlight >= 0 || locked || !unit._rhFirstDone) ? [foes.indexOf(rhTgt)] : foes.map((e, i) => i);
+        let mates = myUnits.filter(m => m !== unit && m.id !== unit.id && m.status !== 'destroyed');
+        let hsRole = null, watcher = null, baitUnit = null;
+        if (unit.team !== 'Red' && mates.length) {
+            const nd = u => Math.min(...foes.map(e => this.getHexDistance(u.x, u.y, e.x, e.y)));
+            let pair = [unit, mates[0]].sort((a, b) => nd(a) - nd(b) || a.id.localeCompare(b.id));
+            hsRole = pair[0] === unit ? 'bait' : 'watch';
+            watcher = hsRole === 'bait' ? mates[0] : null;
+            baitUnit = hsRole === 'watch' ? mates[0] : null;
+        }
 
         for (let k of cands) {
             let s = k.s;
@@ -294,11 +356,12 @@ const AI = {
             });
             // 2) まだ動いていない敵から撃たれる危険（敵は一番よい手を選ぶとみる）
             let threat = 0;
+            // 後から動く MiG は、撃てる位置に来られるなら必ず来るとみる（取りうる動きを全部調べて一番高い確率）
             foes.forEach((e, i) => {
-                if (!foeAfter[i] || !foeAfter[i].length) return;
-                let vs = foeAfter[i].map(t => this.fireValue(e, t, s, { noRH: true }));
-                let mx = Math.max(...vs), mean = vs.reduce((a, b) => a + b, 0) / vs.length;
-                threat += 0.6 * mx + 0.4 * mean;
+                if (!foeAfterAll[i] || !foeAfterAll[i].length) return;
+                let mx = 0;
+                for (let t of foeAfterAll[i]) { let v = this.fireValue(e, t, s, { noRH: true }); if (v > mx) mx = v; }
+                threat += mx;
             });
             // 3) 位置取りの補助
             let t = this.stateOf(focus), ti = foes.indexOf(focus);
@@ -324,19 +387,195 @@ const AI = {
             if (s.alt > 35) pos -= (s.alt - 35) * 25;
             // 飛翔中の RH は前方に捉え続ける
             if (inFlight >= 0) {
-                let tt = foeAfter[inFlight] ? foeNext[inFlight] : foeNow[inFlight];
-                let d2 = this.getHexDistance(s.x, s.y, tt.x, tt.y);
-                let a2 = this.getArcAndAspect(s.x, s.y, s.dir, tt.x, tt.y, tt.dir, d2).arc;
-                pos += a2 === '前方' ? 300 : -300;
+                // 命中判定はこのターンの全機の移動のあと。その時に前方・距離4以上に捉えていられるか
+                let tts = (foeAfter[inFlight] && foeAfter[inFlight].length) ? foeAfter[inFlight] : [foeNow[inFlight]];
+                let sum = 0, inArc = 0;
+                for (let tt of tts) {
+                    let d2 = this.getHexDistance(s.x, s.y, tt.x, tt.y);
+                    let a2 = this.getArcAndAspect(s.x, s.y, s.dir, tt.x, tt.y, tt.dir, d2).arc;
+                    if (a2 === '前方' && Math.abs(s.alt - tt.alt) <= 3) inArc++;
+                }
+                let ld = unit.rhMissileInFlight.launchDist != null ? unit.rhMissileInFlight.launchDist : this.getHexDistance(unit.x, unit.y, foeNow[inFlight].x, foeNow[inFlight].y);
+                let pr = this.rhProb(this.getMissileTargetValue('RH', unit.missileType || this.mTypeOf(unit), ld));
+                pos += 1500 * pr * inArc / tts.length - (inArc ? 0 : 300);
+            }
+            // 2. 一撃離脱: RH が残っていて近くで撃てない時は、いったん離れて RH の距離で捉え直す
+            if (unit.team !== 'Red' && unit.missiles && unit.missiles.rh > 0) {
+                let rhNext = 0;
+                foes.forEach((e, i) => { rhNext = Math.max(rhNext, this.fireValue(unit, s, foeNext[i], { rhOnly: true })); });
+                pos += 350 * rhNext;
+                let curD = this.getHexDistance(unit.x, unit.y, t.x, t.y);
+                if (curD < 4 && now < 0.15) pos += (dist - curD) * 15;
+            }
+            // 4. 僚機との連携: 同じ敵を狙う味方と違う方向から回り込む
+            let mates = myUnits.filter(m => m !== unit && m.id !== unit.id && m.status !== 'destroyed');
+            for (let m of mates) {
+                let mt = this.assignGroupTarget(m, myUnits, foes);
+                if (!mt || mt.id !== focus.id) continue;
+                let md = this.getHexDistance(m.x, m.y, t.x, t.y);
+                if (md > 15 || dist > 15) continue;
+                let ex = t.x * 37.5, ey = t.y * 43.301 + (t.x % 2) * 21.650;
+                let mx = m.x * 37.5, my = m.y * 43.301 + (m.x % 2) * 21.650;
+                let a1 = Math.atan2(sy - ey, sx - ex), a2 = Math.atan2(my - ey, mx - ex);
+                let ad = Math.abs(a1 - a2) * 180 / Math.PI; if (ad > 180) ad = 360 - ad;
+                pos += ad >= 90 ? 80 : ad >= 60 ? 40 : ad < 30 ? -60 : 0;
             }
             pos -= this.edgePenalty(s);
             if (!armed) { k.score = -800 * threat + dist * 8 - this.edgePenalty(s); continue; }
+            // ── HS の戦い（すれ違ったあとの米軍）──
+            //   落とせる確率（HS・機関砲・RH の高い方）− 落とされる確率
+            //   ＋ MiG から距離5〜7の外回り（内側に切り込まない）＋ 僚機と支え合える距離
+            if (!rhMode && unit.team !== 'Red') {
+                let rhImm = 0;
+                if ((unit.missiles && unit.missiles.rh > 0) || inFlight >= 0) {
+                    foes.forEach((e, i) => {
+                        let ts = (foeAfter[i] && foeAfter[i].length) ? foeAfter[i] : [foeNow[i]];
+                        let ph = i === inFlight ? 'flight' : (unit.lockOnTargetId === e.id ? 'fire' : 'lock');
+                        let g = ts.reduce((a, tt) => a + this.rhGoal(unit, s, tt, ph), 0) / ts.length;
+                        if (ph === 'fire' && unit.missiles.rh <= 1 && g < 0.58) g = 0;   // 最後の1発は最高の時だけ
+                        if (ph === 'lock') g *= 0.5;
+                        rhImm = Math.max(rhImm, g);
+                    });
+                }
+                let ring = 0;
+                foes.forEach((e, i) => {
+                    let ts = (foeAfter[i] && foeAfter[i].length) ? foeAfter[i] : [foeNow[i]];
+                    let dAvg = 0, inside = 0;
+                    for (let tt of ts) {
+                        let d4 = this.getHexDistance(s.x, s.y, tt.x, tt.y);
+                        dAvg += d4;
+                        let ea = this.getArcAndAspect(tt.x, tt.y, tt.dir, s.x, s.y, s.dir, d4).arc;
+                        if (d4 <= 4 && (ea === '前方' || ea === '前方側面')) inside++;
+                    }
+                    dAvg /= ts.length;
+                    if (dAvg >= 5 && dAvg <= 7) ring += 0.05;
+                    else if (dAvg <= 2) ring -= 0.1;
+                    ring -= 0.15 * inside / ts.length;   // MiG の内側に切り込まない（旋回されたらやられる）
+                });
+                let sup = 0;
+                for (let m of mates) {
+                    let dm = this.getHexDistance(s.x, s.y, m.x, m.y);
+                    if (dm >= 4 && dm <= 10) sup += 0.04; else if (dm < 3) sup -= 0.04;
+                }
+                let roleTerm = 0;
+                if (hsRole === 'bait' && watcher) {
+                    // 格闘戦役: 絶対に近づかない（距離4未満に入らない）、見守り役を背にして飛ぶ
+                    foes.forEach((e, i) => {
+                        let ts = (foeAfter[i] && foeAfter[i].length) ? foeAfter[i] : [foeNow[i]];
+                        let dAvg = ts.reduce((a, tt) => a + this.getHexDistance(s.x, s.y, tt.x, tt.y), 0) / ts.length;
+                        if (dAvg < 4) roleTerm -= 0.15 * (4 - dAvg);
+                    });
+                    let wx = watcher.x * 37.5, wy = watcher.y * 43.301 + (watcher.x % 2) * 21.650;
+                    let awayDeg = Math.atan2(sy - wy, sx - wx) * 180 / Math.PI;   // 見守り役から自分への向き
+                    let hd2 = Math.abs(((awayDeg - (this.DIR_ANGLES[s.dir] || 0) + 540) % 360) - 180);
+                    roleTerm += 0.06 * (1 - hd2 / 180);
+                } else if (hsRole === 'watch') {
+                    // 見守り役: MiG と距離7以上を保つ（2ターン先を撃てる位置は、あとで読む）
+                    foes.forEach((e, i) => {
+                        let ts = (foeAfter[i] && foeAfter[i].length) ? foeAfter[i] : [foeNow[i]];
+                        let dAvg = ts.reduce((a, tt) => a + this.getHexDistance(s.x, s.y, tt.x, tt.y), 0) / ts.length;
+                        if (dAvg < 7) roleTerm -= 0.04 * (7 - dAvg);
+                    });
+                }
+                k.now = now; k.threat = threat; k.pos = pos; k.rh = rhImm;
+                k.score = 1000 * (Math.max(now, rhImm) - threat + ring + sup + roleTerm) - this.edgePenalty(s);
+                continue;
+            }
+            // ── RH 用の機動: 担当の敵に、ロックオン→発射（距離7〜12が最高）→誘導の維持 ──
+            if (rhMode) {
+                let imm = 0;
+                for (let gi of goalIdx) {
+                    if (gi < 0) continue;
+                    let tEnd = (foeAfter[gi] && foeAfter[gi].length) ? foeAfter[gi] : [foeNow[gi]];
+                    let ph = gi === inFlight ? 'flight' : (unit.lockOnTargetId === foes[gi].id ? 'fire' : 'lock');
+                    imm = Math.max(imm, tEnd.reduce((a, tt) => a + this.rhGoal(unit, s, tt, ph), 0) / tEnd.length);
+                }
+                // MiG の兵器（機関砲は距離2以内、HS は後ろから距離10以内）が届かない距離11以上を取る
+                let away = 0;   // 次のターン以降の危険の目安（距離11未満の MiG 1機・1ヘクスにつき 0.03）
+                foes.forEach((e, i) => {
+                    let ts = (foeAfter[i] && foeAfter[i].length) ? foeAfter[i] : [foeNow[i]];
+                    let dAvg = ts.reduce((a, tt) => a + this.getHexDistance(s.x, s.y, tt.x, tt.y), 0) / ts.length;
+                    if (dAvg < 11) away -= (11 - dAvg) * 0.03;
+                });
+                // 僚機とも離れる（MiG がどちらかを追えば、もう1機の正面に入る）。高度も上下に分かれる
+                let sep = 0;
+                for (let m of mates) {
+                    let dm = this.getHexDistance(s.x, s.y, m.x, m.y);
+                    sep += Math.min(dm, 15) * 0.01 + (Math.abs(s.alt - m.altitude) >= 3 ? 0.04 : 0);
+                }
+                k.imm = imm; k.now = now; k.threat = threat; k.pos = pos;
+                // 自分が落とせる確率 − 落とされる確率（＋次のターン以降の危険の目安）で比べる
+                k.score = 1000 * (imm - threat + away + sep) - this.edgePenalty(s);
+                continue;
+            }
             k.now = now; k.threat = threat; k.pos = pos;
             k.score = 1000 * now - 800 * threat + pos;
         }
 
-        // 4) 上位の手は、次のターンに撃てる位置へ回り込めるかを一手先まで読む
-        if (armed) {
+        // 4) RH 用の機動: 次のターンの RH フェイズまで読む。終わりの高度で次のターンの順番が決まる
+        //    （敵より高ければ敵の後に動ける＝敵の動きを見てから一番よいヘクスへ。低ければ先に動く）
+        if (rhMode && goalIdx.length === 1 && goalIdx[0] >= 0) {
+            cands.sort((a, b) => b.score - a.score);
+            let ti = goalIdx[0];
+            let tEnd = (foeAfter[ti] && foeAfter[ti].length) ? foeAfter[ti].slice(0, 6) : [foeNow[ti]];
+            let tNext = [];
+            let k0x = cands[0] ? cands[0].s.x : unit.x, k0y = cands[0] ? cands[0].s.y : unit.y;
+            for (let te of tEnd) {
+                let tv = Object.assign({}, rhTgt, { x: te.x, y: te.y, direction: te.dir, altitude: te.alt });
+                let all = this.endStates(tv).map(x => x.s);
+                // こちらに近づく動きを優先して取る（正面から詰めてくる危険を低く見ない）
+                all.sort((a, b) => this.getHexDistance(a.x, a.y, k0x, k0y) - this.getHexDistance(b.x, b.y, k0x, k0y));
+                let n = Math.max(4, Math.floor(24 / tEnd.length));
+                tNext = tNext.concat(all.slice(0, Math.ceil(n * 0.6)), all.slice(Math.ceil(n * 0.6)).sort(() => Math.random() - 0.5).slice(0, n - Math.ceil(n * 0.6)));
+            }
+            if (!tNext.length) tNext = [this.stateOf(rhTgt)];
+            let tAlt = tEnd.reduce((a, t) => a + t.alt, 0) / tEnd.length;
+            for (let k of cands.slice(0, 25)) {
+                // このターンの最後に目標を達成できたら、次の段取りへ
+                let nextPhase = rhPhase === 'lock' ? (k.imm > 0.2 ? 'fire' : 'lock') : rhPhase === 'fire' ? (k.imm > 0.2 ? 'flight' : 'fire') : (unit.missiles.rh > 0 ? 'fire' : 'flight');
+                let mine = this.endStates(this.unitAt(unit, k), 150).filter(m => this.edgePenalty(m.s) < 1000);
+                if (!mine.length) { k.V = 0; continue; }
+                let after = k.s.alt > tAlt;   // 次のターン、敵の後に動けるか
+                let V = 0;
+                if (after) {
+                    for (let t of tNext) { let b = 0; for (let m of mine) b = Math.max(b, this.rhGoal(unit, m.s, t, nextPhase)); V += b; }
+                    V /= tNext.length;
+                } else {
+                    for (let m of mine) { let a = 0; for (let t of tNext) a += this.rhGoal(unit, m.s, t, nextPhase); V = Math.max(V, a / tNext.length); }
+                }
+                k.V = V; k.after = after;
+                k.score += 700 * V;
+            }
+        }
+        // 4'') 見守り役: MiG の2ターン先の分布へ、次のターンに RH・HS を撃てる位置を逆算する（ざっくり）
+        if (armed && !rhMode && hsRole === 'watch' && baitUnit) {
+            let mi = 0, md = Infinity;
+            foes.forEach((e, i) => { let d6 = this.getHexDistance(baitUnit.x, baitUnit.y, e.x, e.y); if (d6 < md) { md = d6; mi = i; } });
+            let e = foes[mi];
+            let one = this.endStates(e, 8);
+            let dist2 = [];
+            for (let o of one) {
+                let ev = Object.assign({}, e, { x: o.s.x, y: o.s.y, direction: o.s.dir, altitude: o.s.alt, startRow: o.r, startCol: o.c, cursorRow: o.r, cursorCol: o.c, prevRow: o.r, stepsSinceLastTurn: o.steps });
+                dist2 = dist2.concat(this.endStates(ev, 8).map(x => x.s));
+            }
+            if (dist2.length) {
+                cands.sort((a, b) => b.score - a.score);
+                for (let k of cands.slice(0, 30)) {
+                    let mine = this.endStates(this.unitAt(unit, k), 100).filter(m => this.edgePenalty(m.s) < 1000);
+                    let best = 0;
+                    for (let m of mine) {
+                        let v = 0;
+                        for (let t of dist2) v += this.fireValue(unit, m.s, t);
+                        v /= dist2.length;
+                        if (v > best) best = v;
+                    }
+                    k.watch2 = best;
+                    k.score += 600 * best;
+                }
+            }
+        }
+        // 4') 格闘戦: 上位の手は、次のターンに撃てる位置へ回り込めるかを一手先まで読む
+        if (armed && !rhMode) {
             cands.sort((a, b) => b.score - a.score);
             let top = cands.slice(0, 12);
             for (let k of top) {
@@ -344,11 +583,26 @@ const AI = {
                 let nexts = this.endStates(v, 120);
                 for (let n of nexts) {
                     if (this.edgePenalty(n.s) > 1000) continue;
-                    foes.forEach((e, i) => { best = Math.max(best, this.fireValue(unit, n.s, foeNext[i], { noRH: true })); });
+                    foes.forEach((e, i) => { best = Math.max(best, this.fireValue(unit, n.s, foeNext[i])); });
                 }
                 k.next = best;
                 k.score += 450 * best;
             }
+        }
+        // RH が飛んでいる間は、何があっても誘導しきる: 目標を前方・高度差3以内に捉え続けられる見込みが一番高い手だけに絞る
+        if (inFlight >= 0) {
+            let tgt = foes[inFlight];
+            let ts = (foeAfterAll[inFlight] && foeAfterAll[inFlight].length) ? foeAfterAll[inFlight] : [foeNow[inFlight]];
+            for (let k of cands) {
+                let keep = 0;
+                for (let tt of ts) {
+                    let d7 = this.getHexDistance(k.s.x, k.s.y, tt.x, tt.y);
+                    if (this.getArcAndAspect(k.s.x, k.s.y, k.s.dir, tt.x, tt.y, tt.dir, d7).arc === '前方' && Math.abs(k.s.alt - tt.alt) <= 3) keep++;
+                }
+                k.keep = keep / ts.length;
+            }
+            let mk = Math.max(...cands.map(k => k.keep));
+            if (mk > 0) cands = cands.filter(k => k.keep >= mk - 1e-9);
         }
         cands.forEach(k => { if (!isFinite(k.score)) { if (!this._nanWarned) { console.log('[AI_MOVE2] NaN', JSON.stringify(k)); this._nanWarned = true; } k.score = -1e9; } });
         cands.sort((a, b) => b.score - a.score);
@@ -357,7 +611,7 @@ const AI = {
         // 同じくらいよい手が複数あれば、少しだけばらつかせる
         let close = cands.filter(k => k.score >= pick.score - 5).slice(0, 3);
         if (close.length) pick = close[Math.floor(Math.random() * close.length)];
-        console.log(`[AI_MOVE2] ${unit.id} → r${pick.r}c${pick.c} [${pick.cmd}] 今撃てる見込み:${((pick.now || 0) * 100).toFixed(0)}% 次:${((pick.next || 0) * 100).toFixed(0)}% 危険:${((pick.threat || 0) * 100).toFixed(0)}% 候補:${cands.length}`);
+        console.log(`[AI_MOVE2] ${unit.id}${rhMode ? '（RH ' + rhPhase + ' 目標' + rhTgt.id + ' 今' + ((pick.imm || 0) * 100).toFixed(0) + '% 次' + ((pick.V || 0) * 100).toFixed(0) + '%' + (pick.after ? ' 次は後手' : ' 次は先手') + '）' : ''} → r${pick.r}c${pick.c} [${pick.cmd}] 今撃てる見込み:${((pick.now || 0) * 100).toFixed(0)}% 次:${((pick.next || 0) * 100).toFixed(0)}% 危険:${((pick.threat || 0) * 100).toFixed(0)}% 候補:${cands.length}`);
         unit._lastPlan = { now: pick.now || 0, next: pick.next || 0, threat: pick.threat || 0 };
         return { r: pick.r, c: pick.c, cmd: pick.cmd };
     },
@@ -1022,20 +1276,25 @@ const AI = {
             }
 
             // RHミサイル：ソ連はスキップ
-            if (!isSoviet && unit.missiles.rh > 0 && altDiff <= 3 && dist >= 4) {
+            let rhOnlyTarget = !unit._rhFirstDone && unit._rhTarget && valid.some(e => e.id === unit._rhTarget) && target.id !== unit._rhTarget;
+            if (!isSoviet && !rhOnlyTarget && unit.missiles.rh > 0 && altDiff <= 3 && dist >= 4) {
                 let val = this.getMissileTargetValue('RH', mType, dist);
                 if (val >= 3) {
                     if (!unit.lockOnTargetId) {
                         if (val > best.score) best = { type: 'RH_LOCK', targetId: target.id, score: val };
                     } else if (unit.lockOnTargetId === target.id) {
-                        if (!unit.rhMissileInFlight || unit.rhMissileInFlight.targetId !== target.id) {
-                            if (val > best.score) best = { type: 'RH_FIRE', targetId: target.id, score: val };
+                        let headOnNear = this.headOn(aspect) && dist < 10 && dist >= 7 && unit._rhWait !== target.id;
+                        if (headOnNear) unit._rhWait = target.id;   // 1回だけ待つ（次のターンに遠い位置から撃つ）
+                        if (!headOnNear && (!unit.rhMissileInFlight || unit.rhMissileInFlight.targetId !== target.id) && (val >= 7 || (val >= 6 && dist <= 6 && unit.missiles.rh > 1)) && (unit.missiles.rh > 1 || val >= 7)) {
+                            if (val > best.score || best.type === 'RH_LOCK') best = { type: 'RH_FIRE', targetId: target.id, score: Math.max(val, best.score) };
                         }
                     }
                 }
             }
         }
 
+        // RH が飛んでいる間は、何があっても誘導しきる（機関砲・HS は撃たない。撃つと誘導が切れる）
+        if (!isSoviet && unit.rhMissileInFlight && (best.type === 'GUN' || best.type === 'HS')) best = { type: 'SKIP', score: -1 };
         // RH誘導維持：非ソ連のみ
         if (!isSoviet && unit.rhMissileInFlight) {
             let t = valid.find(e => e.id === unit.rhMissileInFlight.targetId);
