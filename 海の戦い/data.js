@@ -162,10 +162,9 @@ const SHIPS = [
   S('uk_howe',       'allies','UK','Howe',           4,5,6,'BB','イギリス/456_howe.gif',{ enterTurn:5 }),
   // 空母の air = 航空攻撃力（LBAと同じタイミングの航空攻撃の攻撃数）
   S('uk_arkroyal',   'allies','UK','ArkRoyal',       0,2,7,'CV','イギリス/027_arkroyal.gif',{ air:3 }),
-  S('uk_formidable', 'allies','UK','Formidable',     0,2,7,'CV','イギリス/027_formidable.gif',{ air:2 }),
+  S('uk_formidable', 'allies','UK','Formidable',     0,2,7,'CV','イギリス/027_formidable.gif',{ enterTurn:2, air:2 }),
   S('uk_victorious', 'allies','UK','Victorious',     0,2,7,'CV','イギリス/027_victorious.gif',{ enterTurn:3, air:2 }),
-  S('uk_illustrious27','allies','UK','Illustrious',  0,2,7,'CV','イギリス/027_illustrious.gif',{ air:2 }),
-  S('uk_illustrious16','allies','UK','Illustrious',  0,1,6,'CV','イギリス/016_illustrious.gif',{ enterTurn:5, air:2 }),
+  S('uk_illustrious27','allies','UK','Illustrious',  0,2,7,'CV','イギリス/027_illustrious.gif',{ enterTurn:5, air:2 }),
   S('uk_courageous', 'allies','UK','Courageous',     0,1,6,'CV','イギリス/016_courageous.gif',{ air:2 }),
   S('uk_glorious',   'allies','UK','Glorious',       0,1,6,'CV','イギリス/016_glorious.gif',{ air:2 }),
   S('uk_eagle',      'allies','UK','Eagle',          1,2,4,'CV','イギリス/124_eagle.gif',{ air:1 }),
