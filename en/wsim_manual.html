@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wooden Ships &amp; Iron Men Manual</title>
+<!-- アクセス解析（GoatCounter） -->
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<style>
+  :root {
+    --bg-color: #151617;
+    --panel-bg: #2b2d30;
+    --text-main: #d0d3d4;
+    --text-accent: #ffffff;
+    --mute: #9a9ea2;
+    --btn-bg: #1e2022;
+    --border-color: #0a0a0b;
+    --accent-red: #8b0000;
+    --link: #8fb8ff;
+  }
+  body {
+    margin: 0;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font: 16px/1.7 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+    background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.2) 0px, rgba(0,0,0,0.2) 2px, transparent 2px, transparent 4px);
+  }
+  .container {
+    background-color: var(--panel-bg);
+    border: 4px solid var(--border-color);
+    border-radius: 4px;
+    margin: 24px auto;
+    padding: 28px 32px;
+    width: 92%;
+    max-width: 900px;
+    box-sizing: border-box;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.9), inset 0 0 20px rgba(0,0,0,0.6);
+  }
+  h1 { color: var(--text-accent); letter-spacing: 2px; margin: 0 0 6px; font-size: 2em; }
+  h2 { color: var(--text-accent); border-bottom: 2px solid var(--border-color); padding-bottom: 6px; margin-top: 34px; font-size: 1.35em; }
+  h3 { color: var(--text-accent); margin-top: 22px; font-size: 1.1em; }
+  a { color: var(--link); }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .lang { display: flex; gap: 6px; flex-wrap: wrap; }
+  kbd { display: inline-block; background: #111; border: 1px solid #666; border-bottom-width: 2px; border-radius: 3px; padding: 0 6px; font-size: 0.9em; color: #fff; }
+  .lang button {
+    background: var(--btn-bg); color: var(--text-main); border: 2px solid var(--border-color);
+    padding: 6px 14px; font-size: 0.95em; cursor: pointer; border-radius: 2px;
+  }
+  .lang button.on { color: var(--text-accent); border-left: 5px solid var(--accent-red); }
+  .note { background: #18191a; border-left: 5px solid #5a5d60; padding: 10px 16px; margin: 14px 0; }
+  .btn { display: inline-block; background: var(--btn-bg); border: 1px solid #555; border-radius: 3px; padding: 0 6px; font-size: 0.9em; color: var(--text-accent); white-space: nowrap; }
+  .mk { display: inline-block; border-radius: 3px; padding: 0 5px; font-size: 0.85em; font-weight: bold; color: #000; white-space: nowrap; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  th, td { border-bottom: 1px solid #44474b; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { color: var(--text-accent); }
+  ol li, ul li { margin-bottom: 4px; }
+  .back { margin-top: 30px; }
+  [data-lang] { display: none; }
+  body.en [data-lang="en"], body.ja [data-lang="ja"], body.de [data-lang="de"] { display: block; }
+  @media (max-width: 600px) { .container { padding: 18px 16px; width: auto; margin: 12px 16px; } table { font-size: 0.9em; } }
+</style>
+</head>
+<body class="en">
+<div class="container">
+<div class="top">
+  <h1>Wooden Ships &amp; Iron Men (AH)</h1>
+  <div class="lang">
+    <button id="btn_ja" onclick="setLang('ja')">日本語</button>
+    <button id="btn_en" onclick="setLang('en')">English</button>
+    <button id="btn_de" onclick="setLang('de')">Deutsch</button>
+  </div>
+</div>
+
+<!-- ===================== English ===================== -->
+<div data-lang="en">
+<p>How to use the software: the screens and the controls of this browser version. It is not a rulebook.</p>
+<div class="note">You command the side shown as <b>Your fleet</b>; the AI commands the <b>Enemy fleet</b>. The game resolves the rules (dice, damage, wind) for you — your job is to plot movement and answer the dialog windows.</div>
+
+<h2>1. Starting a game</h2>
+<ol>
+  <li>The language is chosen with the <b>🌐</b> box at the bottom right of every screen (日本語 / English / Deutsch). The choice is remembered.</li>
+  <li>Choose the <b>Game mode</b>:
+    <ul>
+      <li><b>Human vs AI</b> — you play.</li>
+      <li><b>AI vs AI step by step</b> — the AI plays both sides; you advance phase by phase.</li>
+      <li><b>AI vs AI auto watch</b> — the AI plays both sides and the game runs by itself.</li>
+    </ul></li>
+  <li>Click a <b>scenario</b> to start.</li>
+  <li>To continue a saved game: under <span class="btn">💾 Resume from save</span> choose the save file, then press <span class="btn">Continue</span>.</li>
+</ol>
+
+<h2>2. The screen</h2>
+<table>
+  <tr><th>Area</th><th>What it shows / does</th></tr>
+  <tr><td>Top bar</td><td>The phases of the turn (A–J, the current one is lit), the wind (direction / speed and change number), the zoom (<span class="btn">−</span> <span class="btn">＋</span> and slider), <span class="btn">💾 Save</span> and <span class="btn">← Back to setup</span>.</td></tr>
+  <tr><td>Left pane</td><td><b>Your fleet</b> and <b>Enemy fleet</b>: name, guns, type, crew quality, hull and sails. ★ marks the flagship. Click a ship to select it.</td></tr>
+  <tr><td>Map</td><td>Click a ship to select it. Hover over a hex to see its number and depth (bottom bar).</td></tr>
+  <tr><td>Right pane</td><td><b>Selected ship</b> (full details), <b>Movement plot</b> (keypad, only in phase C) and the <b>Action log</b>.</td></tr>
+  <tr><td>Bottom bar</td><td>Messages, the plot buttons (phase C), the strength bar of both sides, <span class="btn">Arcs: OFF</span>, <span class="btn">Attack range: OFF</span>, <span class="btn">Next phase</span> and <span class="btn">End turn</span>.</td></tr>
+</table>
+
+<h2>3. Playing a turn</h2>
+<p>Press <span class="btn">Next phase</span> to move to the next phase. Each phase is resolved automatically; when you have a decision to make, a window opens.</p>
+<table>
+  <tr><th>Phase</th><th>What you do</th></tr>
+  <tr><td>A: Wind</td><td>Checked automatically at the start of each turn (<span class="btn">🌬 Wind check</span> also does it, once per turn).</td></tr>
+  <tr><td>B: Unfouling</td><td>For a fouled ship: <b>Yes</b> / <b>No</b> — try to get free?</td></tr>
+  <tr><td>C: Movement notation</td><td>Plot the movement of each of your ships, then <span class="btn">▶ Execute plots</span>. See section 4.</td></tr>
+  <tr><td>E: Grapple</td><td>Next to an enemy ship: <b>Yes</b> / <b>No</b> — throw grapples?</td></tr>
+  <tr><td>F: Boarding preparation</td><td>For grappled ships: split the crew into <b>Boarding party (attack)</b>, <b>Boarding party (defense)</b> and <b>Upper deck party</b>, choose the <b>Attack target</b>, then <span class="btn">Confirm</span>.</td></tr>
+  <tr><td>G: Gunfire</td><td>For each broadside that can fire, a <b>Gunfire preview</b> opens. See section 5.</td></tr>
+  <tr><td>H: Melee</td><td>Resolved automatically.</td></tr>
+  <tr><td>I: Reload</td><td>Tick <span class="btn">Load</span> for empty broadsides and choose the shot type; for loaded broadsides choose the <b>Next shot type</b>. Then <span class="btn">Confirm</span>.</td></tr>
+  <tr><td>J: Full sail</td><td>Choose battle sails or full sail for each ship, then <span class="btn">Confirm</span>. With full sail, rigging damage from hits is doubled.</td></tr>
+</table>
+<p>After J, <span class="btn">Next phase</span> starts the next turn. (<span class="btn">End turn</span> jumps straight to the next turn and skips the remaining phases; normally use <span class="btn">Next phase</span>.)</p>
+
+<h2>4. Plotting movement (phase C)</h2>
+<ol>
+  <li>Select one of your ships (click it on the map or in the left pane).</li>
+  <li>Enter the moves with the keypad on the right, or with the number keys / numeric keypad:
+    <table>
+      <tr><th>Key</th><th>Meaning</th></tr>
+      <tr><td><kbd>5</kbd></td><td>Move forward 1 hex.</td></tr>
+      <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>Turn to face that direction (8 = north, 9 = north-east, 3 = south-east, 2 = south, 1 = south-west, 7 = north-west). Only one hexside at a time (a direction next to the current heading), at most one turn per hex. A turn uses 1 movement point.</td></tr>
+      <tr><td><kbd>4</kbd></td><td>Back (uses 1 movement point; the ship stays).</td></tr>
+      <tr><td><kbd>6</kbd></td><td>Drift 1 hex with the wind (for a ship adrift).</td></tr>
+      <tr><td><kbd>0</kbd></td><td>Stop (stay this step).</td></tr>
+      <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>Clear the plot of the selected ship.</td></tr>
+      <tr><td><span class="btn">Confirm (Enter)</span> / <kbd>Enter</kbd></td><td>Confirm the plot (a green ✓ appears; it can no longer be changed).</td></tr>
+    </table></li>
+  <li>The plotted course is drawn as a yellow dashed line with a faint ship at the end. The enemy's plots are hidden.</li>
+  <li>Orders given with the plot: <span class="btn">Full sail ON</span> / <span class="btn">Full sail OFF</span>, <span class="btn">Anchor</span> / <span class="btn">Weigh anchor</span> / <span class="btn">Anchor cable cut</span>, <span class="btn">Grapple</span> / <span class="btn">Ungrapple</span>.</li>
+  <li>When all your ships are plotted, press <span class="btn">▶ Execute plots</span>. All ships move at the same time. Then press <span class="btn">Next phase</span>.</li>
+</ol>
+<div class="note">A ship that is grappled cannot be plotted, and a ship at anchor does not move. A ship cannot enter a hex occupied by another ship; it stops before it.</div>
+
+<h2>5. Gunfire (phase G)</h2>
+<p>The target is chosen automatically (the nearest enemy in each broadside's arc) and the shot loaded in that broadside is used. The <b>Gunfire preview</b> window shows the range, the modifiers and the hit table.</p>
+<ul>
+  <li>Choose what to aim at: <span class="btn">Hull</span> or <span class="btn">Sails</span>. Sometimes one is locked: in melee, or with grapeshot: hull only; with chain shot, or round shot at 6 hexes or more: sails only.</li>
+  <li><span class="btn">Fire</span> fires; <span class="btn">Cancel</span> holds this broadside.</li>
+  <li>The die is rolled and the <b>Gunfire result</b> is shown; press <span class="btn">Next</span>.</li>
+  <li>An empty broadside is shown with only <span class="btn">Skip</span>.</li>
+</ul>
+
+<h2>6. Display aids</h2>
+<ul>
+  <li><span class="btn">Arcs: OFF</span> → ON shows the firing arcs of the selected ship.</li>
+  <li><span class="btn">Attack range: OFF</span> → ON shows the hexes the selected ship can hit.</li>
+  <li>Zoom with <span class="btn">−</span> / <span class="btn">＋</span> or the slider.</li>
+</ul>
+
+<h2>7. Watching AI vs AI</h2>
+<p>In the AI vs AI modes the top bar has <span class="btn">Auto: OFF</span> (press to run the phases automatically; press again to stop) and <span class="btn">Next phase</span> (advance one phase).</p>
+
+<h2>8. Save and resume</h2>
+<ul>
+  <li><span class="btn">💾 Save</span> downloads the game as a file (<code>wsm_save_T…json</code>).</li>
+  <li>To continue: on the scenario screen, choose the file under <span class="btn">💾 Resume from save</span> and press <span class="btn">Continue</span>.</li>
+</ul>
+<p class="back"><a href="./">← Back to the entrance</a> · <a href="../帆船の戦い/sandbox.html?lang=en">Play</a></p>
+</div>
+
+<!-- ===================== 日本語 ===================== -->
+<div data-lang="ja">
+<p>ソフトの使い方です。このブラウザ版の画面と操作を説明します。ルールブックではありません。</p>
+<div class="note">あなたは <b>自軍艦隊</b> を指揮し、AI が <b>敵軍艦隊</b> を指揮します。ダイス・損害・風などのルールはゲームが処理します。あなたの仕事は、移動のプロットと、開く小窓への答えです。</div>
+
+<h2>1. ゲームを始める</h2>
+<ol>
+  <li>言語は、どの画面でも右下の <b>🌐</b> の欄で選べます（日本語 / English / Deutsch）。選んだ言語は覚えておきます。</li>
+  <li><b>ゲームモード</b> を選びます。
+    <ul>
+      <li><b>人間対AI</b>：あなたが遊びます。</li>
+      <li><b>AI対AI ステップ確認</b>：両軍とも AI。フェイズごとに止まります。</li>
+      <li><b>AI対AI オート観戦</b>：両軍とも AI。自動で進みます。</li>
+    </ul></li>
+  <li><b>シナリオ</b> をクリックすると始まります。</li>
+  <li>セーブの続きから遊ぶ時は、<span class="btn">💾 セーブから再開</span> でファイルを選び、<span class="btn">続きから再開</span> を押します。</li>
+</ol>
+
+<h2>2. 画面</h2>
+<table>
+  <tr><th>場所</th><th>表示・働き</th></tr>
+  <tr><td>上のバー</td><td>ターンのフェイズ（A〜J、今のフェイズが光る）、風（風向／風速と変化番号）、ズーム（<span class="btn">−</span> <span class="btn">＋</span> とスライダー）、<span class="btn">💾 保存</span>、<span class="btn">← 編成へ</span>。</td></tr>
+  <tr><td>左の欄</td><td><b>自軍艦隊</b> と <b>敵軍艦隊</b>：艦名、砲数、艦種、乗員品質、船体、帆。★ が旗艦。クリックで艦を選びます。</td></tr>
+  <tr><td>地図</td><td>艦をクリックすると選べます。ヘクスにマウスを乗せると、番号と水深が下のバーに出ます。</td></tr>
+  <tr><td>右の欄</td><td><b>選択艦</b>（詳しい情報）、<b>移動プロット</b>（テンキー。C フェイズだけ）、<b>行動ログ</b>。</td></tr>
+  <tr><td>下のバー</td><td>メッセージ、プロットのボタン（C フェイズ）、両軍の戦力バー、<span class="btn">射界: OFF</span>、<span class="btn">攻撃範囲: OFF</span>、<span class="btn">次のフェイズ</span>、<span class="btn">ターン終了</span>。</td></tr>
+</table>
+
+<h2>3. ターンの進め方</h2>
+<p><span class="btn">次のフェイズ</span> を押すと次のフェイズへ進みます。各フェイズは自動で処理され、あなたが決めることがある時は小窓が開きます。</p>
+<table>
+  <tr><th>フェイズ</th><th>あなたがすること</th></tr>
+  <tr><td>A:風</td><td>ターンの始めに自動で判定します（<span class="btn">🌬 風判定</span> でも行えます。1ターンに1回）。</td></tr>
+  <tr><td>B:絡み解除</td><td>絡んだ艦について、解除を試みるか <b>はい</b> / <b>いいえ</b>。</td></tr>
+  <tr><td>C:移動記入</td><td>自軍の各艦の移動をプロットし、<span class="btn">▶ プロット実行</span>。4章を見てください。</td></tr>
+  <tr><td>E:鉤縄</td><td>敵艦の隣にいる時、鉤縄を仕掛けるか <b>はい</b> / <b>いいえ</b>。</td></tr>
+  <tr><td>F:接舷準備</td><td>鉤縄でつながった艦の乗員を <b>攻撃隊</b>・<b>防御隊</b>・<b>上甲板隊</b> に分け、<b>攻撃目標</b> を選んで <span class="btn">確定</span>。</td></tr>
+  <tr><td>G:砲撃</td><td>撃てる舷ごとに <b>砲撃予告</b> が開きます。5章を見てください。</td></tr>
+  <tr><td>H:白兵</td><td>自動で処理します。</td></tr>
+  <tr><td>I:装填</td><td>空の舷は <span class="btn">装填する</span> にチェックして弾種を選び、装填済みの舷は <b>次回装填弾種</b> を選んで <span class="btn">確定</span>。</td></tr>
+  <tr><td>J:全帆</td><td>各艦の帆（戦闘帆 / 全帆）を選んで <span class="btn">確定</span>。全帆だと被弾時の索具の損害が2倍になります。</td></tr>
+</table>
+<p>J の後に <span class="btn">次のフェイズ</span> を押すと次のターンになります。（<span class="btn">ターン終了</span> は残りのフェイズを飛ばして次のターンへ進みます。ふだんは <span class="btn">次のフェイズ</span> を使ってください。）</p>
+
+<h2>4. 移動のプロット（C フェイズ）</h2>
+<ol>
+  <li>自軍の艦を選びます（地図か左の欄でクリック）。</li>
+  <li>右の欄のテンキー、またはキーボードの数字キー／テンキーで動きを入れます。
+    <table>
+      <tr><th>キー</th><th>意味</th></tr>
+      <tr><td><kbd>5</kbd></td><td>1ヘクス前進。</td></tr>
+      <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>その方向へ転舵（8＝北、9＝北東、3＝南東、2＝南、1＝南西、7＝北西）。今の向きの隣の方向だけで、1ヘクスで1回まで。転舵1回で移動力を1使います。</td></tr>
+      <tr><td><kbd>4</kbd></td><td>バック（移動力を1使い、その場に留まる）。</td></tr>
+      <tr><td><kbd>6</kbd></td><td>風で1ヘクス流される（漂流中の艦用）。</td></tr>
+      <tr><td><kbd>0</kbd></td><td>停止（その回は動かない）。</td></tr>
+      <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>選んでいる艦のプロットを消す。</td></tr>
+      <tr><td><span class="btn">確定 (Enter)</span> / <kbd>Enter</kbd></td><td>プロットを確定（緑の ✓ が付き、変えられなくなる）。</td></tr>
+    </table></li>
+  <li>プロットした進路は黄色の点線で、行き先に薄い艦の絵が出ます。敵のプロットは見えません。</li>
+  <li>プロットと一緒に出す指示：<span class="btn">全帆ON</span> / <span class="btn">全帆OFF</span>、<span class="btn">投錨</span> / <span class="btn">抜錨</span> / <span class="btn">錨綱切断</span>、<span class="btn">鉤かけ</span> / <span class="btn">鉤はずし</span>。</li>
+  <li>自軍の艦をプロットし終えたら <span class="btn">▶ プロット実行</span>。全艦が同時に動きます。その後 <span class="btn">次のフェイズ</span>。</li>
+</ol>
+<div class="note">鉤縄でつながっている艦はプロットできません。錨泊中の艦は動きません。ほかの艦がいるヘクスへは入れず、そこで止まります。</div>
+
+<h2>5. 砲撃（G フェイズ）</h2>
+<p>目標は自動で決まります（各舷の射界で一番近い敵）。弾はその舷に装填済みのものを使います。<b>砲撃予告</b> の小窓に距離・修正・命中表が出ます。</p>
+<ul>
+  <li>狙う所を <span class="btn">船体</span> か <span class="btn">帆</span> で選びます。片方しか選べない時があります：白兵戦中・ぶどう弾は船体のみ、鎖弾・6ヘクス以上の球弾は帆のみ。</li>
+  <li><span class="btn">発射</span> で撃ちます。<span class="btn">キャンセル</span> でその舷は撃ちません。</li>
+  <li>ダイスを振り、<b>砲撃結果</b> が出ます。<span class="btn">次へ</span> を押します。</li>
+  <li>空の舷は <span class="btn">スキップ</span> だけが出ます。</li>
+</ul>
+
+<h2>6. 表示の補助</h2>
+<ul>
+  <li><span class="btn">射界: OFF</span> を ON にすると、選んだ艦の射界が出ます。</li>
+  <li><span class="btn">攻撃範囲: OFF</span> を ON にすると、選んだ艦が撃てるヘクスが出ます。</li>
+  <li>ズームは <span class="btn">−</span> / <span class="btn">＋</span> かスライダーで。</li>
+</ul>
+
+<h2>7. AI 対 AI を見る</h2>
+<p>AI対AI のモードでは、上のバーに <span class="btn">オート: OFF</span>（押すと自動で進む。もう一度押すと止まる）と <span class="btn">次フェイズ</span>（1フェイズ進む）が出ます。</p>
+
+<h2>8. セーブと再開</h2>
+<ul>
+  <li><span class="btn">💾 保存</span> でゲームをファイル（<code>wsm_save_T…json</code>）にダウンロードします。</li>
+  <li>続きから遊ぶ時は、シナリオ選択の画面の <span class="btn">💾 セーブから再開</span> でファイルを選び、<span class="btn">続きから再開</span> を押します。</li>
+</ul>
+<p class="back"><a href="./">← 入り口へ戻る</a> · <a href="../帆船の戦い/sandbox.html?lang=ja">遊ぶ</a></p>
+</div>
+
+<!-- ===================== Deutsch ===================== -->
+<div data-lang="de">
+<p>Bedienung der Software: die Bildschirme und die Steuerung dieser Browserversion. Dies ist kein Regelheft.</p>
+<div class="note">Du führst die Seite <b>Eigene Flotte</b>, die KI führt die <b>Feindliche Flotte</b>. Die Regeln (Würfel, Schaden, Wind) wickelt das Spiel ab — du planst die Bewegung und beantwortest die Dialogfenster.</div>
+
+<h2>1. Ein Spiel beginnen</h2>
+<ol>
+  <li>Die Sprache wählst du im Feld <b>🌐</b> unten rechts auf jedem Bildschirm (日本語 / English / Deutsch). Die Wahl wird gespeichert.</li>
+  <li>Wähle den <b>Spielmodus</b>:
+    <ul>
+      <li><b>Mensch gegen AI</b> — du spielst.</li>
+      <li><b>AI gegen AI Schrittweise</b> — die KI spielt beide Seiten; du gehst Phase für Phase weiter.</li>
+      <li><b>AI gegen AI Auto-Zuschauen</b> — die KI spielt beide Seiten und das Spiel läuft von selbst.</li>
+    </ul></li>
+  <li>Klicke ein <b>Szenario</b> an, um zu beginnen.</li>
+  <li>Gespeichertes Spiel fortsetzen: unter <span class="btn">💾 Spielstand fortsetzen</span> die Datei wählen, dann <span class="btn">Fortsetzen</span> drücken.</li>
+</ol>
+
+<h2>2. Der Bildschirm</h2>
+<table>
+  <tr><th>Bereich</th><th>Anzeige / Funktion</th></tr>
+  <tr><td>Obere Leiste</td><td>Die Phasen des Zuges (A–J, die aktuelle leuchtet), der Wind (Richtung / Stärke und Änderungszahl), der Zoom (<span class="btn">−</span> <span class="btn">＋</span> und Schieberegler), <span class="btn">💾 Speichern</span> und <span class="btn">← Zur Aufstellung</span>.</td></tr>
+  <tr><td>Linker Bereich</td><td><b>Eigene Flotte</b> und <b>Feindliche Flotte</b>: Name, Geschütze, Typ, Besatzungsqualität, Rumpf und Segel. ★ = Flaggschiff. Klick wählt das Schiff.</td></tr>
+  <tr><td>Karte</td><td>Klick auf ein Schiff wählt es. Fährt die Maus über ein Feld, erscheinen Feldnummer und Tiefe in der unteren Leiste.</td></tr>
+  <tr><td>Rechter Bereich</td><td><b>Gewähltes Schiff</b> (alle Daten), <b>Bewegungsplan</b> (Ziffernblock, nur in Phase C) und das <b>Aktionsprotokoll</b>.</td></tr>
+  <tr><td>Untere Leiste</td><td>Meldungen, die Planungsknöpfe (Phase C), der Stärkebalken beider Seiten, <span class="btn">Schussfelder: OFF</span>, <span class="btn">Angriffsbereich: OFF</span>, <span class="btn">Nächste Phase</span> und <span class="btn">Zug beenden</span>.</td></tr>
+</table>
+
+<h2>3. Einen Zug spielen</h2>
+<p>Mit <span class="btn">Nächste Phase</span> geht es zur nächsten Phase. Jede Phase wird automatisch abgewickelt; musst du etwas entscheiden, öffnet sich ein Fenster.</p>
+<table>
+  <tr><th>Phase</th><th>Was du tust</th></tr>
+  <tr><td>A: Wind</td><td>Wird zu Beginn jedes Zuges automatisch geprüft (<span class="btn">🌬 Windprüfung</span> tut es ebenfalls, einmal pro Zug).</td></tr>
+  <tr><td>B: Entwirren</td><td>Für ein verheddertes Schiff: <b>Ja</b> / <b>Nein</b> — Lösen versuchen?</td></tr>
+  <tr><td>C: Bewegungsnotiz</td><td>Plane die Bewegung jedes eigenen Schiffes, dann <span class="btn">▶ Pläne ausführen</span>. Siehe Abschnitt 4.</td></tr>
+  <tr><td>E: Enterhaken</td><td>Neben einem feindlichen Schiff: <b>Ja</b> / <b>Nein</b> — Enterhaken werfen?</td></tr>
+  <tr><td>F: Entervorbereitung</td><td>Für verhakte Schiffe: die Besatzung auf <b>Enterkommando (Angriff)</b>, <b>Enterkommando (Abwehr)</b> und <b>Oberdeck-Trupp</b> verteilen, das <b>Angriffsziel</b> wählen, dann <span class="btn">Bestätigen</span>.</td></tr>
+  <tr><td>G: Beschuss</td><td>Für jede Breitseite, die feuern kann, öffnet sich eine <b>Beschussvorschau</b>. Siehe Abschnitt 5.</td></tr>
+  <tr><td>H: Nahkampf</td><td>Wird automatisch abgewickelt.</td></tr>
+  <tr><td>I: Nachladen</td><td>Bei leeren Breitseiten <span class="btn">Laden</span> ankreuzen und die Munition wählen; bei geladenen die <b>Nächste Munition</b> wählen. Dann <span class="btn">Bestätigen</span>.</td></tr>
+  <tr><td>J: Vollzeug</td><td>Für jedes Schiff Gefechtssegel oder Vollzeug wählen, dann <span class="btn">Bestätigen</span>. Unter Vollzeug verdoppelt sich der Takelageschaden bei Treffern.</td></tr>
+</table>
+<p>Nach J beginnt mit <span class="btn">Nächste Phase</span> der nächste Zug. (<span class="btn">Zug beenden</span> springt sofort zum nächsten Zug und überspringt die restlichen Phasen; normalerweise <span class="btn">Nächste Phase</span> verwenden.)</p>
+
+<h2>4. Bewegung planen (Phase C)</h2>
+<ol>
+  <li>Wähle eines deiner Schiffe (Klick auf der Karte oder im linken Bereich).</li>
+  <li>Gib die Bewegung mit dem Ziffernblock rechts oder mit den Zifferntasten / dem Nummernblock ein:
+    <table>
+      <tr><th>Taste</th><th>Bedeutung</th></tr>
+      <tr><td><kbd>5</kbd></td><td>1 Feld vorwärts.</td></tr>
+      <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>In diese Richtung wenden (8 = Nord, 9 = Nordost, 3 = Südost, 2 = Süd, 1 = Südwest, 7 = Nordwest). Nur um eine Feldseite (eine Richtung neben dem aktuellen Kurs), höchstens einmal pro Feld. Eine Wende kostet 1 Bewegungspunkt.</td></tr>
+      <tr><td><kbd>4</kbd></td><td>Zurück (kostet 1 Bewegungspunkt; das Schiff bleibt stehen).</td></tr>
+      <tr><td><kbd>6</kbd></td><td>1 Feld mit dem Wind treiben (für ein treibendes Schiff).</td></tr>
+      <tr><td><kbd>0</kbd></td><td>Halt (in diesem Schritt nicht bewegen).</td></tr>
+      <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>Den Plan des gewählten Schiffes löschen.</td></tr>
+      <tr><td><span class="btn">Bestätigen (Enter)</span> / <kbd>Enter</kbd></td><td>Den Plan bestätigen (ein grünes ✓ erscheint; danach nicht mehr änderbar).</td></tr>
+    </table></li>
+  <li>Der geplante Kurs wird als gelbe gestrichelte Linie mit einem blassen Schiff am Ende gezeigt. Die Pläne des Gegners sind verborgen.</li>
+  <li>Befehle zusammen mit dem Plan: <span class="btn">Vollzeug ON</span> / <span class="btn">Vollzeug OFF</span>, <span class="btn">Ankern</span> / <span class="btn">Anker lichten</span> / <span class="btn">Ankertau gekappt</span>, <span class="btn">Entern</span> / <span class="btn">Lösen</span>.</li>
+  <li>Sind alle eigenen Schiffe geplant, drücke <span class="btn">▶ Pläne ausführen</span>. Alle Schiffe fahren gleichzeitig. Danach <span class="btn">Nächste Phase</span>.</li>
+</ol>
+<div class="note">Ein verhaktes Schiff kann nicht geplant werden, ein ankerndes Schiff fährt nicht. In ein Feld mit einem anderen Schiff kann man nicht einfahren; das Schiff hält davor an.</div>
+
+<h2>5. Beschuss (Phase G)</h2>
+<p>Das Ziel wird automatisch gewählt (der nächste Gegner im Schussfeld der Breitseite), und es wird die in dieser Breitseite geladene Munition verwendet. Die <b>Beschussvorschau</b> zeigt Entfernung, Modifikatoren und Treffertabelle.</p>
+<ul>
+  <li>Wähle das Ziel: <span class="btn">Rumpf</span> oder <span class="btn">Segel</span>. Manchmal ist eines gesperrt: im Nahkampf oder mit Kartätschen nur Rumpf; mit Kettenkugeln oder Rundkugeln ab 6 Feldern nur Segel.</li>
+  <li><span class="btn">Feuern</span> feuert; <span class="btn">Abbrechen</span> hält diese Breitseite zurück.</li>
+  <li>Es wird gewürfelt und das <b>Beschussergebnis</b> erscheint; drücke <span class="btn">Weiter</span>.</li>
+  <li>Bei einer leeren Breitseite erscheint nur <span class="btn">Überspringen</span>.</li>
+</ul>
+
+<h2>6. Anzeigehilfen</h2>
+<ul>
+  <li><span class="btn">Schussfelder: OFF</span> → ON zeigt die Schussfelder des gewählten Schiffes.</li>
+  <li><span class="btn">Angriffsbereich: OFF</span> → ON zeigt die Felder, die das gewählte Schiff treffen kann.</li>
+  <li>Zoom mit <span class="btn">−</span> / <span class="btn">＋</span> oder dem Schieberegler.</li>
+</ul>
+
+<h2>7. KI gegen KI zusehen</h2>
+<p>In den Modi „AI gegen AI“ hat die obere Leiste <span class="btn">Auto: OFF</span> (drücken, um die Phasen automatisch ablaufen zu lassen; erneut drücken zum Anhalten) und <span class="btn">Nächste Phase</span> (eine Phase weiter).</p>
+
+<h2>8. Speichern und fortsetzen</h2>
+<ul>
+  <li><span class="btn">💾 Speichern</span> lädt das Spiel als Datei herunter (<code>wsm_save_T…json</code>).</li>
+  <li>Fortsetzen: im Szenario-Bildschirm unter <span class="btn">💾 Spielstand fortsetzen</span> die Datei wählen und <span class="btn">Fortsetzen</span> drücken.</li>
+</ul>
+<p class="back"><a href="./">← Zurück zum Eingang</a> · <a href="../帆船の戦い/sandbox.html?lang=de">Spielen</a></p>
+</div>
+
+</div>
+<script>
+// 言語の切り替え。ゲームと同じ記憶（wsimLang）を使う
+function setLang(l){
+  document.body.className = l;
+  document.documentElement.lang = l;
+  ['ja','en','de'].forEach(k => document.getElementById('btn_' + k).classList.toggle('on', k === l));
+  try { localStorage.setItem('wsimLang', l); } catch(e){}
+}
+let initLang = 'en';
+let v = null;
+try { v = localStorage.getItem('wsimLang'); } catch(e){}
+const q = new URLSearchParams(location.search).get('lang');
+if (q === 'en' || q === 'ja' || q === 'de') initLang = q;
+else if (v === 'ja' || v === 'de' || v === 'en') initLang = v;
+setLang(initLang);
+</script>
+</body>
+</html>

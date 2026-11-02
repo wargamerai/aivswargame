@@ -218,7 +218,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
       <button onclick="const w=document.getElementById('debugLogWrap');w.style.display=w.style.display==='none'?'flex':'none';" style="background:#244;color:#8f8;border:1px solid #4a4;padding:0 6px;cursor:pointer;font-size:0.7em;">×</button>
     </span>
   </div>
-  <div id="debugLog" style="color:#8f8;font-family:monospace;font-size:0.68em;overflow-y:auto;padding:4px;flex:1;line-height:1.2;"></div>
+  <div id="debugLog" class="no-lang" style="color:#8f8;font-family:monospace;font-size:0.68em;overflow-y:auto;padding:4px;flex:1;line-height:1.2;"></div>
 </div>
 
 <div id="phaseOverlay"></div>
@@ -1436,7 +1436,8 @@ function renderShipDetail() {
     if (plotPanel) plotPanel.style.display = 'none';
     if (actionLog) actionLog.style.display = 'none';
     document.querySelectorAll('#rightPane h3').forEach(h => {
-      if (h.textContent === '行動ログ' || h.textContent === '選択艦') h.style.display = 'none';
+      const ht = (typeof langOriginal === 'function') ? langOriginal(h) : h.textContent;
+      if (ht === '行動ログ' || ht === '選択艦') h.style.display = 'none';
     });
     const NATION_JP = { FR:'フランス', GB:'イギリス', US:'アメリカ', ES:'スペイン' };
     const fleetLabel = fleet => {
@@ -4176,5 +4177,6 @@ if (mapImgLoaded) { initCanvas(); draw(); }
 
 </script>
 
+<script src="lang.js"></script>
 </body>
 </html>

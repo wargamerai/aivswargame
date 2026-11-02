@@ -1,0 +1,170 @@
+// 帆船の戦い 言語の切り替え（日本語 / English / Deutsch）
+//   画面に出る日本語の「ひと続きの部分」を、下の表で英語・ドイツ語に置き換える。表にない時は、表の語句を長い順に当てはめる
+//   画面の文字・title・placeholder・alert / confirm / prompt を訳す。選んだ言語は localStorage（wsimLang）に覚える。URL の ?lang=en|de|ja でも指定できる
+// 表: 日本語 → [英語, ドイツ語]（AI 対 AI で画面に出た文字と、ソースの文字列から作った）
+const WSIM_TR = {"占有":["occupied","besetzt"],"、索具":[", rigging",", Takelage"],"【グループ】":["[Group]","[Gruppe]"],"【攻撃】":["[Attack]","[Angriff]"],"が出た場合、旋回能力値が恒久的に":["is rolled, the turning ability is permanently","gewürfelt wird, sinkt die Wendefähigkeit dauerhaft um"],"つ消す。":["removed.","gestrichen."],"で":["at","bei"],"による）":[")",")"],"に戻る":["returns to","kehrt zurück zu"],"まで後退":["backed to","zurück bis"],"アメリカ艦隊":["American fleet","Amerikanische Flotte"],"イギリス艦隊":["British fleet","Britische Flotte"],"オート":["Auto","Auto"],"オート観戦（自動進行）":["auto watch (runs by itself)","Auto-Zuschauen (läuft selbst)"],"カロネード":["Carronade","Karronade"],"クリティカル":["Critical","Kritisch"],"クリティカル判定":["Critical hit check","Kritischer Treffer"],"クリティカル発動":["Critical hit!","Kritischer Treffer!"],"クルー":["Crew","Besatzung"],"ゲームモード":["Game mode","Spielmodus"],"ゲーム終了":["Game over","Spielende"],"シナリオ":["Scenario","Szenario"],"シナリオ選択":["Scenario select","Szenarioauswahl"],"ステップ":["Step","Schritt"],"ステップ確認（フェイズ毎に停止）":["step by step (stops every phase)","Schrittweise (hält jede Phase)"],"ズーム":["Zoom","Zoom"],"セーブから再開":["Resume from save","Spielstand fortsetzen"],"ターン":["Turn","Zug"],"ターンごと判定）":["checked every turn)","jeden Zug geprüft)"],"ターンの間、命中表を":["turns, the hit table is reduced by","Züge lang wird die Treffertabelle verringert um"],"ターン目（":["turn (",". Zug ("],"ターン終了":["End turn","Zug beenden"],"ターン）":["turns)","Züge)"],"ダイス":["Die","Würfel"],"ダイスロール":["Die roll","Würfelwurf"],"デバッグログ":["Debug log","Debug-Protokoll"],"トップへ":["Top","Start"],"フェイズ":["Phase","Phase"],"プロット実行":["Execute plots","Pläne ausführen"],"プロット実行中":["Executing plots","Pläne werden ausgeführt"],"プロット実行完了":["Plots executed","Pläne ausgeführt"],"プロット消去":["Clear plot","Plan löschen"],"プロット済みの艦がありません":["No ship has a plot","Kein Schiff hat einen Plan"],"プロット確定":["Confirm plot","Plan bestätigen"],"モード":["Mode","Modus"],"ラウンド":["Round","Runde"],"ラウンド経過、決着なし":["rounds passed, no decision","Runden vorbei, keine Entscheidung"],"・":[",",","],"・艦尾":[", stern",", Heck"],"上甲板隊":["Upper deck party","Oberdeck-Trupp"],"乗員":["Crew","Besatzung"],"乗員全投入のため砲撃不可":["cannot fire: all crew committed","kann nicht feuern: ganze Besatzung eingesetzt"],"乗員品質強度":["Crew quality strength","Besatzungsstärke"],"乗員士気崩壊。":["crew morale collapses.","Moral der Besatzung bricht zusammen."],"人間、敵軍":["human, enemy","Mensch, Gegner"],"人間対":["Human vs","Mensch gegen"],"仏":["Fr.","Fr."],"以下なら、乗員品質が":["or less, crew quality drops","oder weniger, sinkt die Besatzungsqualität"],"件":["entries","Einträge"],"伊":["It.","It."],"侵入キャンセル、":["entry cancelled,","Eintritt abgebrochen,"],"保存":["Save","Speichern"],"停止中":["Stopped","Angehalten"],"全帆":["Full sail","Vollzeug"],"再重なり検出":["Overlap found again","Erneute Überlappung"],"初期方向":["Initial direction","Anfangsrichtung"],"前進":["Forward","Vorwärts"],"効果なし":["No effect","Keine Wirkung"],"勝者判定":["Winner","Sieger"],"即時解除チェック":["Immediate release check","Sofortige Lösungsprüfung"],"反時計回り":["counterclockwise","gegen den Uhrzeigersinn"],"右舷発射済み（装填要":["starboard fired (reload needed:","Steuerbord gefeuert (Nachladen nötig:"],"右舷装填":["Starboard loaded","Steuerbord geladen"],"同点":["Tie","Gleichstand"],"呼出":["call","Aufruf"],"地図から消去":["removed from the map","von der Karte entfernt"],"士気低下！":["Morale drops!","Moral sinkt!"],"変化なし":["No change","Keine Änderung"],"変化番号":["Change number","Änderungszahl"],"変化発生":["Change!","Änderung!"],"外":["out","außerhalb"],"外れ":["Miss","Fehlschuss"],"外れ（命中表マイナス）":["Miss (hit table below 0)","Fehlschuss (Treffertabelle unter 0)"],"大砲":["Guns","Geschütze"],"大砲全損":["All guns lost","Alle Geschütze verloren"],"失った乗員セクション数が":["the number of crew sections lost is","die Zahl verlorener Besatzungsabschnitte ist"],"失敗":["Failed","Fehlgeschlagen"],"対":["vs","gegen"],"射界":["Arcs","Schussfelder"],"射程内に敵なし":["No enemy in range","Kein Gegner in Reichweite"],"射程内敵は死角":["Enemies in range are in blind arcs","Gegner in Reichweite im toten Winkel"],"射線上に他艦":["another ship in the line of fire","anderes Schiff in der Schusslinie"],"左舷発射済み（装填要":["port fired (reload needed:","Backbord gefeuert (Nachladen nötig:"],"左舷砲":["Port guns","Backbord-Geschütze"],"左舷装填":["Port loaded","Backbord geladen"],"帆":["Sails","Segel"],"帆変更":["Sail change","Segeländerung"],"帆船の戦い":["Wooden Ships & Iron Men","Wooden Ships & Iron Men"],"戦闘画面":["Combat window","Gefechtsfenster"],"戦闘開始":["Combat begins","Gefecht beginnt"],"投錨":["Anchor","Ankern"],"抜錨":["Weigh anchor","Anker lichten"],"拿捕":["Captured","Gekapert"],"拿捕（":["Captured (","Gekapert ("],"振り直し":["Reroll","Neu würfeln"],"接舷準備":["Boarding preparation","Entervorbereitung"],"損害":["Damage","Schaden"],"損害コード":["Damage code","Schadenscode"],"損害内訳":["Damage breakdown","Schadensaufstellung"],"撃退":["Repelled","Abgewehrt"],"撃退成功":["Repelled","Abgewehrt"],"操舵損傷":["Steering damaged","Ruderschaden"],"操舵損傷の可能性。":["Possible steering damage.","Möglicher Ruderschaden."],"操舵損傷判定":["Steering damage check","Ruderschaden-Prüfung"],"攻":["Atk","Angr"],"攻撃側":["Attacker","Angreifer"],"攻撃範囲":["Attack range","Angriffsbereich"],"攻撃隊":["Boarding party (attack)","Enterkommando (Angriff)"],"敵艦なし":["No enemy ship","Kein feindliches Schiff"],"敵軍":["Enemy","Gegner"],"敵軍勝利":["Enemy wins","Sieg des Gegners"],"敵軍艦隊":["Enemy fleet","Feindliche Flotte"],"旋回能力恒久":["turning ability permanently","Wendefähigkeit dauerhaft"],"時計回り":["clockwise","im Uhrzeigersinn"],"最終":["Final","Endwert"],"最終位置確定":["Final positions fixed","Endpositionen festgelegt"],"次のフェイズ":["Next phase","Nächste Phase"],"次フェイズ":["Next phase","Nächste Phase"],"残":["left","übrig"],"段階低下。":["step(s) lower.","Stufe(n) niedriger."],"決着なし":["No decision","Keine Entscheidung"],"減らす。索具マスを":["reduced. Rigging boxes:","verringert. Takelagefelder:"],"減少。":["reduced.","verringert."],"現在位置":["Current position","Aktuelle Position"],"球形弾":["Round shot","Rundkugel"],"発射不可":["cannot fire","kann nicht feuern"],"発射艦":["Firing ship","Feuerndes Schiff"],"白兵":["Melee","Nahkampf"],"白兵戦":["Melee","Nahkampf"],"目標":["Target","Ziel"],"目標艦":["Target ship","Zielschiff"],"直進":["Straight","Geradeaus"],"砲セクション":["Gun section","Geschützabschnitt"],"砲撃":["Gunfire","Beschuss"],"砲撃用残":["left for gunnery","übrig für Geschütze"],"砲撃結果":["Gunfire result","Beschussergebnis"],"確定":["Confirm","Bestätigen"],"移動プロット":["Movement plot","Bewegungsplan"],"移動記入":["Movement notation","Bewegungsnotiz"],"米":["US","US"],"索具":["Rigging","Takelage"],"索具に遮蔽され":["screened by rigging","durch Takelage verdeckt"],"組":["pairs","Paare"],"絡み解除":["Unfouling","Entwirren"],"続きから再開":["Continue","Fortsetzen"],"編成へ":["Back to setup","Zur Aufstellung"],"自動":["Auto","Auto"],"自動スキップ（マイナス）":["auto skip (below 0)","automatisch übersprungen (unter 0)"],"自軍":["Your side","Eigene Seite"],"自軍勝利":["You win","Sieg"],"自軍艦隊":["Your fleet","Eigene Flotte"],"船体":["Hull","Rumpf"],"艦を選択":["Select ship","Schiff wählen"],"艦削除":["Ship removed","Schiff entfernt"],"艦首":["Bow","Bug"],"英":["Br.","Br."],"落下した索具が左舷側の砲撃セクションを遮る。今後":["Fallen rigging blocks the port gun sections. From now on","Gefallene Takelage blockiert die Backbord-Geschütze. Ab jetzt"],"行動ログ":["Action log","Aktionsprotokoll"],"衝突検出":["Collision found","Kollision erkannt"],"装填":["Reload","Nachladen"],"西":["Sp.","Sp."],"解除試行":["Try to release","Lösen versuchen"],"設定":["Settings","Einstellungen"],"転舵":["Turn","Wenden"],"選択艦":["Selected ship","Gewähltes Schiff"],"鉤かけ":["Grapple","Entern"],"鉤はずし":["Ungrapple","Lösen"],"鉤縄":["Grapple","Enterhaken"],"鉤縄フェイズ":["Grappling phase","Enterhaken-Phase"],"鉤縄成立":["Grappled","Verhakt"],"鉤縄成立艦なし":["No grappled ships","Keine verhakten Schiffe"],"錨綱切断":["Anchor cable cut","Ankertau gekappt"],"長":["long","lang"],"閉じる":["Close","Schließen"],"開始":["Start","Start"],"防":["Def","Vert"],"防御側":["Defender","Verteidiger"],"防御隊":["Boarding party (defense)","Enterkommando (Abwehr)"],"隻":["ships","Schiffe"],"離脱フェイズ":["Unfouling phase","Entwirr-Phase"],"風":["Wind","Wind"],"風判定":["Wind check","Windprüfung"],"風向":["Wind direction","Windrichtung"],"風変化なし":["No wind change","Keine Windänderung"],"風変化判定":["Wind change check","Windänderungsprüfung"],"風変化！":["Wind changes!","Wind ändert sich!"],"風期":["Wind period","Windperiode"],"風速":["Wind speed","Windstärke"],"（全帆":["(full sail","(Vollzeug"],"（自軍":["(your side","(eigene Seite"],"、味方援護なし）":[", no friendly support)",", keine eigene Unterstützung)"],"、残りは非参加）":[", the rest do not take part)",", der Rest nimmt nicht teil)"],"いいえ":["No","Nein"],"いずれかが停止している場合":["if either ship is stopped","wenn eines der Schiffe steht"],"いずれかの艦が":["if any ship","wenn ein Schiff"],"が":[":",":"],"が仕掛け）":["attempts)","versucht)"],"が出たら制御不能となり爆発。それ以外は鎮火までに要するターン数で、その期間被害艦の命中表がその数字だけ減少。":["is rolled, the fire is out of control and explodes. Otherwise it is the number of turns until it is put out; during that time the damaged ship's hit table is reduced by that number.","gewürfelt wird, ist das Feuer außer Kontrolle und explodiert. Sonst ist es die Zahl der Züge bis zum Löschen; so lange sinkt die Treffertabelle des Schiffs um diese Zahl."],"が消滅（":["is gone (","ist verschwunden ("],"すでに最低品質":["already lowest quality","bereits niedrigste Qualität"],"で錨を切らねばならない。以後錨泊不可。":["must cut the anchor. It can no longer anchor.","muss den Anker kappen. Ankern danach nicht mehr möglich."],"との鉤縄を解除試行しますか？":[": try to release the grapple?",": Enterhaken lösen versuchen?"],"なし":["None","Keine"],"にクルーを割当（合計":["assign crew (total","Besatzung zuteilen (gesamt"],"に同じ":["same as","wie"],"に同じ（マスト倒壊）":["same as (mast falls)","wie (Mast fällt)"],"に同じ（乗員士気崩壊）":["same as (crew morale collapses)","wie (Moral bricht zusammen)"],"に同じ（錨索切断）":["same as (anchor cable cut)","wie (Ankertau gekappt)"],"に変更":["changed to","geändert zu"],"に強制戻し":["forced back to","zurückgesetzt auf"],"に登場":["enters at","erscheint bei"],"に鉤縄を仕掛けますか？":[": throw grapples?",": Enterhaken werfen?"],"のいずれか":["any of","eines von"],"の場合":["if","falls"],"の白兵戦勝利、":["wins the melee,","gewinnt den Nahkampf,"],"の砲撃":["fires","feuert"],"はい":["Yes","Ja"],"は判定済み":["already checked","bereits geprüft"],"は常に成功":["always succeeds","gelingt immer"],"は常に絡み成立":["always fouls","verheddert sich immer"],"は常に解除成功":["always released","löst sich immer"],"ぶどう弾":["Grapeshot","Kartätsche"],"または":["or","oder"],"を割当、攻撃目標を選択":["assigned, choose the attack target","zugeteilt, Angriffsziel wählen"],"を復元":["restored","wiederhergestellt"],"を浸水対応に固定":["fixed to pumping","fest zum Pumpen eingeteilt"],"を超える分だけ":["only the part above","nur der Teil über"],"アメリカ":["USA","USA"],"イギリス":["Britain","Großbritannien"],"オランダ":["Netherlands","Niederlande"],"キャンセル":["Cancel","Abbrechen"],"コルベット":["Corvette","Korvette"],"サンドボックスから艦隊を編成してください":["Set up the fleets from the sandbox","Stelle die Flotten im Sandkasten auf"],"シナリオ指定":["Scenario","Szenario"],"スウェーデン":["Sweden","Schweden"],"スキップ":["Skip","Überspringen"],"スペイン":["Spain","Spanien"],"スループ":["Sloop","Schaluppe"],"セクション":["section","Abschnitt"],"セクションを喪失する。":["section(s) lost.","Abschnitt(e) verloren."],"セクションを浮揚維持に恒久的に充当。":["section(s) permanently assigned to keeping afloat.","Abschnitt(e) dauerhaft zum Schwimmfähighalten eingeteilt."],"セクションを消す。":["section(s) removed.","Abschnitt(e) gestrichen."],"セクション損失":["section loss","Abschnittsverlust"],"セットでドリフト":["drifts with the set","treibt mit der Strömung"],"セーブ":["Save","Speichern"],"セーブの復元に失敗しました":["Could not restore the save","Spielstand konnte nicht geladen werden"],"セーブ形式が不正":["Invalid save format","Ungültiges Spielstandformat"],"セーブ復元失敗":["Save restore failed","Laden fehlgeschlagen"],"ターン。この期間、被害艦の命中表が":["turns. During this time the damaged ship's hit table is","Züge. So lange ist die Treffertabelle des Schiffs"],"ターン目":["turn",". Zug"],"デンマーク":["Denmark","Dänemark"],"トルコ":["Turkey","Türkei"],"ドリフト":["Drift","Abdrift"],"ドリフト先占有のため留まる":["stays: the drift hex is occupied","bleibt: Abdriftfeld ist besetzt"],"ファイルを選択してください":["Choose a file","Datei wählen"],"ファイル読込エラー":["File read error","Fehler beim Lesen der Datei"],"フランス":["France","Frankreich"],"フリゲート":["Frigate","Fregatte"],"ブリッグ":["Brig","Brigg"],"プロットクリア":["Clear plot","Plan löschen"],"プロット確定済み（変更不可）":["plot confirmed (cannot change)","Plan bestätigt (nicht änderbar)"],"ヘクス":["hex","Feld"],"ヘクス以下の場合、縦射により砲および乗員の損害が全て倍になる。":["hexes or less, the rake doubles all gun and crew damage.","Felder oder weniger, verdoppelt der Längsbeschuss alle Geschütz- und Besatzungsschäden."],"ヘクス以下の場合、縦射により索具":["hexes or less, the rake makes rigging","Felder oder weniger, macht der Längsbeschuss Takelage"],"ポルトガル":["Portugal","Portugal"],"マストが倒れる。索具":["The mast falls. Rigging","Der Mast fällt. Takelage"],"マスト喪失":["Mast lost","Mast verloren"],"マップ外":["Off map","Außerhalb der Karte"],"モジュール未読込":["module not loaded","Modul nicht geladen"],"レジー（上甲板切除改造艦）":["Razee (cut down by one deck)","Rasee (um ein Deck verkürzt)"],"ロシア":["Russia","Russland"],"上":["up","hoch"],"不利":["Unfavorable","Ungünstig"],"両艦が友軍同士の場合":["if both ships are friendly","wenn beide Schiffe befreundet sind"],"両艦が友軍同士の場合は自動解除":["automatically released if both ships are friendly","automatisch gelöst, wenn beide Schiffe befreundet sind"],"中風":["Moderate breeze","Mäßige Brise"],"乗員セクション":["Crew section","Besatzungsabschnitt"],"乗員品質が熟練の場合":["if crew quality is Crack","wenn die Besatzung Erprobt ist"],"乗員品質が精鋭の場合":["if crew quality is Elite","wenn die Besatzung Elite ist"],"乗員喪失":["Crew loss","Besatzungsverlust"],"二重弾":["Double shot","Doppelladung"],"以上":["or more","oder mehr"],"以上の移動力を宣言している場合":["or more movement declared","oder mehr Bewegung angesagt"],"以下なら爆発。":["or less: explodes.","oder weniger: Explosion."],"位置":["Position","Position"],"保存に失敗しました":["Could not save","Speichern fehlgeschlagen"],"修正":["Modifier","Modifikator"],"修正値・":["Modifiers,","Modifikatoren,"],"倍":["×","×"],"倍になります":["is doubled","wird verdoppelt"],"倍強度）":["× strength)","× Stärke)"],"停止":["Stop","Halt"],"停止している艦ごとに":["for each stopped ship","für jedes stehende Schiff"],"入場ヘクス未定義":["entry hex not defined","Eintrittsfeld nicht festgelegt"],"全":["All","Alle"],"全帆展開のため索具":["because of full sail, rigging","wegen Vollzeug, Takelage"],"全帆展開の艦ごとに":["for each ship under full sail","für jedes Schiff unter Vollzeug"],"全帆展開時の索具":["rigging under full sail","Takelage unter Vollzeug"],"全帆柱喪失":["All masts lost","Alle Masten verloren"],"全帆（":["Full sail (","Vollzeug ("],"全艦一括入力":["Enter for all ships","Für alle Schiffe eingeben"],"出目":["Roll","Wurf"],"初回舷側":["First broadside","Erste Breitseite"],"判定":["Check","Prüfung"],"割当":["Assign","Zuteilen"],"劣勢":["Weaker","Unterlegen"],"勝利":["Victory","Sieg"],"即解除":["Released at once","Sofort gelöst"],"友軍同士":["Friendly ships","Befreundete Schiffe"],"右舷":["Starboard","Steuerbord"],"右舷砲":["Starboard guns","Steuerbord-Geschütze"],"各艦に":["to each ship","jedem Schiff"],"同方位":["same direction","gleiche Richtung"],"品質":["Quality","Qualität"],"喫水線判定":["Waterline check","Wasserlinienprüfung"],"喫水線損傷。乗員":["Waterline damage. Crew","Schaden an der Wasserlinie. Besatzung"],"喫水線損傷！":["Waterline damage!","Schaden an der Wasserlinie!"],"回頭プロット":["Turn plot","Wendeplan"],"増援":["Reinforcements","Verstärkung"],"増援配置失敗（入場ヘクス周辺が全て埋まっている）":["could not place reinforcements (all hexes around the entry hex are occupied)","Verstärkung nicht platziert (alle Felder um das Eintrittsfeld besetzt)"],"士気判定":["Morale check","Moralprüfung"],"変化":["Change","Änderung"],"大型級":["Large class","Große Klasse"],"対象外":["not applicable","nicht betroffen"],"対象索具なし":["no rigging to remove","keine Takelage betroffen"],"対象艦なし":["No ships","Keine Schiffe"],"対象艦の宣言移動力が":["the target ship's declared movement is","die angesagte Bewegung des Zielschiffs ist"],"射程":["Range","Reichweite"],"射程外":["Out of range","Außer Reichweite"],"小型級":["Small class","Kleine Klasse"],"層甲板":["-decker","-Decker"],"左舷":["Port","Backbord"],"帆のみ":["rigging only","nur Takelage"],"帆指示":["Sail order","Segelbefehl"],"帆操作中の被害":["damage while setting sail","Schaden beim Segelsetzen"],"帆柱倒壊":["Mast falls","Mast fällt"],"帆柱倒壊！":["Mast falls!","Mast fällt!"],"帆状態":["Sail status","Segelstellung"],"帆状態選択":["Choose sail status","Segelstellung wählen"],"帆船の戦いのセーブファイルではありません":["This is not a Wooden Ships & Iron Men save file","Dies ist kein Spielstand von Wooden Ships & Iron Men"],"平均":["Average","Durchschnitt"],"引き分け":["Draw","Unentschieden"],"弱風":["Light breeze","Leichte Brise"],"強度":["Strength","Stärke"],"強風":["Strong breeze","Starke Brise"],"弾種":["Shot type","Munition"],"弾薬庫爆発の可能性。":["Possible magazine explosion.","Mögliche Explosion der Pulverkammer."],"弾薬庫爆発！":["Magazine explodes!","Pulverkammer explodiert!"],"弾薬庫発火":["Magazine fire","Brand in der Pulverkammer"],"後斜":["Broad reach","Raumschots"],"微風":["Calm","Flaute"],"態勢":["Attitude","Kurs zum Wind"],"戦":["Battle","Gefechts"],"戦列艦":["Ship of the line","Linienschiff"],"戦闘準備中":["Preparing for combat","Gefechtsvorbereitung"],"折":["broken","gebrochen"],"抜錨完了":["Anchor weighed","Anker gelichtet"],"接舷準備（乗員総数":["Boarding preparation (total crew","Entervorbereitung (Besatzung gesamt"],"接舷（鉤縄）成功":["Grappled (boarding possible)","Verhakt (Entern möglich)"],"攻撃目標":["Attack target","Angriffsziel"],"攻撃目標未設定の艦のみ":["only ships with no attack target","nur Schiffe ohne Angriffsziel"],"数が":["number is","Zahl ist"],"敵艦との乗員品質差":["crew quality difference with the enemy ship","Qualitätsunterschied zur feindlichen Besatzung"],"斜前":["Close hauled","Am Wind"],"新兵":["Green","Unerfahren"],"新兵乗員の艦ごとに":["for each ship with Green crew","für jedes Schiff mit unerfahrener Besatzung"],"方位":["Bearing","Peilung"],"方向":["Direction","Richtung"],"暴風":["Gale","Sturm"],"曳航鉤縄破壊":["Towing grapple broken","Schlepphaken gerissen"],"最低":["Poor","Schlecht"],"最低品質乗員の艦ごとに":["for each ship with Poor crew","für jedes Schiff mit schlechter Besatzung"],"最大移動力":["Max movement","Maximale Bewegung"],"最終値マイナス":["final value below 0","Endwert unter 0"],"有利":["Favorable","Günstig"],"未配置":["not placed","nicht platziert"],"未配置の艦":["Ships not placed","Nicht platzierte Schiffe"],"条件未満":["below the condition","unter der Bedingung"],"条件未満（":["below the condition (","unter der Bedingung ("],"林":["Woods","Wald"],"枠を消去することで":["by crossing out boxes","durch Streichen von Feldern"],"森林":["Forest","Wald"],"次へ":["Next","Weiter"],"次ターンから移動可能、以後投錨不可":["can move from next turn; can no longer anchor","kann ab dem nächsten Zug fahren; Ankern nicht mehr möglich"],"次回装填":["Next load","Nächste Ladung"],"次回装填弾種":["Next shot type","Nächste Munition"],"次回装填弾種選択":["Choose next shot type","Nächste Munition wählen"],"正面":["Head on","Von vorn"],"段ごとに":["for each step","für jede Stufe"],"段階上がる":["step(s) up","Stufe(n) höher"],"段階下がる":["step(s) down","Stufe(n) niedriger"],"沈没せず":["does not sink","sinkt nicht"],"沈没可能性":["may sink","kann sinken"],"沈没確定":["Sinks","Sinkt"],"浅":["Shallow","Flach"],"浅瀬":["Shoal","Untiefe"],"海":["Sea","See"],"消火":["Firefighting","Brandbekämpfung"],"消火に乗員":["crew to firefighting","Besatzung zur Brandbekämpfung"],"深":["Deep","Tief"],"深海":["Deep water","Tiefes Wasser"],"湖":["Lake","See"],"漂流":["Adrift","Treibend"],"漂流から復帰":["no longer adrift","treibt nicht mehr"],"火災":["Fire","Feuer"],"火災制御不能":["Fire out of control","Feuer außer Kontrolle"],"火災制御不能（次フェイズから爆発判定）":["Fire out of control (explosion check from next phase)","Feuer außer Kontrolle (Explosionsprüfung ab nächster Phase)"],"火災延焼":["Fire spreads","Feuer breitet sich aus"],"火災発生。":["Fire breaks out.","Feuer bricht aus."],"火災発生！":["Fire!","Feuer!"],"火災継続":["Fire continues","Feuer brennt weiter"],"火災艦なし":["No ships on fire","Keine brennenden Schiffe"],"熟練":["Crack","Erprobt"],"熟練乗員の艦ごとに":["for each ship with Crack crew","für jedes Schiff mit erprobter Besatzung"],"爆発":["Explosion","Explosion"],"爆発せず":["does not explode","explodiert nicht"],"爆発可能性":["may explode","kann explodieren"],"球弾":["Round shot","Rundkugel"],"町":["Town","Stadt"],"畳":["furled","gerefft"],"疾風":["Fresh breeze","Frische Brise"],"発射":["Fire","Feuern"],"発射しても外れ）":["firing would miss)","Feuern würde verfehlen)"],"発射済み（装填要":["fired (reload needed:","gefeuert (Nachladen nötig:"],"発砲可能砲なし":["no guns can fire","keine Geschütze feuerbereit"],"白兵戦が進行していない場合":["if no melee is in progress","wenn kein Nahkampf läuft"],"白兵戦中":["In melee","Im Nahkampf"],"白兵戦進行中の場合":["if a melee is in progress","wenn ein Nahkampf läuft"],"相当火災発生":["fire breaks out (equivalent)","Feuer bricht aus (entsprechend)"],"砲":["Guns","Geschütze"],"砲修理":["Gun repair","Geschützreparatur"],"砲撃キャンセル":["Gunfire cancelled","Beschuss abgebrochen"],"砲撃予告":["Gunfire preview","Beschussvorschau"],"砲数":["Guns","Geschütze"],"確認":["Check","Prüfen"],"移動":["Move","Bewegung"],"移動プロット不可":["cannot plot movement","keine Bewegung planbar"],"移動後処理":["After movement","Nach der Bewegung"],"空":["empty","leer"],"空、発射不可":["empty, cannot fire","leer, kann nicht feuern"],"空舷":["empty broadside","leere Breitseite"],"等級":["Rate","Rang"],"精鋭":["Elite","Elite"],"精鋭乗員の艦ごとに":["for each ship with Elite crew","für jedes Schiff mit Elite-Besatzung"],"索":["rig","Tak"],"索具修理":["Rigging repair","Takelagereparatur"],"索具全損":["All rigging lost","Ganze Takelage verloren"],"絡み":["Fouled","Verheddert"],"絡みは残る":["still fouled","bleibt verheddert"],"絡み解除成功":["Unfouled","Entwirrt"],"総数":["Total","Gesamt"],"縦射":["Rake","Längsbeschuss"],"縦射でないため効果なし":["no effect: not a rake","keine Wirkung: kein Längsbeschuss"],"縦射により乗員と砲の損害が倍になる。":["The rake doubles crew and gun damage.","Der Längsbeschuss verdoppelt Besatzungs- und Geschützschaden."],"縦射により索具":["The rake makes rigging","Der Längsbeschuss macht Takelage"],"縦射損害":["Rake damage","Längsbeschuss-Schaden"],"縦射特別":["Rake special","Längsbeschuss-Sonderfall"],"縦射索具喪失":["Rigging lost by rake","Takelage durch Längsbeschuss verloren"],"能":["ability","Fähigkeit"],"自動成立":["Automatic","Automatisch"],"自動解除":["Released automatically","Automatisch gelöst"],"舵破壊":["Rudder destroyed","Ruder zerstört"],"舵破壊（次の移動フェイズ転舵不可、転舵能力恒久":["Rudder destroyed (no turning next movement phase; turning ability permanently","Ruder zerstört (kein Wenden in der nächsten Bewegungsphase; Wendefähigkeit dauerhaft"],"舵輪破壊（次の移動フェイズで転舵不可）":["Wheel destroyed (no turning next movement phase)","Steuerrad zerstört (kein Wenden in der nächsten Bewegungsphase)"],"舷":["broadside","Breitseite"],"舷側":["Broadside","Breitseite"],"船体のみ":["hull only","nur Rumpf"],"船体修理":["Hull repair","Rumpfreparatur"],"船体全損":["Hull destroyed","Rumpf zerstört"],"船体破壊判定":["Destroyed hull check","Prüfung zerstörter Rumpf"],"艦":["ship","Schiff"],"艦は沈没の可能性あり":["the ship may sink","das Schiff kann sinken"],"艦は爆発の可能性あり":["the ship may explode","das Schiff kann explodieren"],"艦は絡まない":["ships do not foul","Schiffe verheddern sich nicht"],"艦は絡み合う":["ships foul","Schiffe verheddern sich"],"艦は降伏（旗を降ろす）":["the ship strikes its colours","das Schiff streicht die Flagge"],"艦を選択してください":["Select a ship","Wähle ein Schiff"],"艦名":["Ship","Schiff"],"艦尾縦射":["Stern rake","Heck-Längsbeschuss"],"艦未選択":["No ship selected","Kein Schiff gewählt"],"艦隊":["Fleet","Flotte"],"艦隊未設定":["No fleet set up","Keine Flotte aufgestellt"],"艦首方位固定":["Bow direction fixed","Bugrichtung fest"],"艦首縦射のため効果なし":["no effect: bow rake","keine Wirkung: Bug-Längsbeschuss"],"荒地":["Rough","Unwegsam"],"落下した索具が右舷側の砲撃セクションを遮る。今後":["Fallen rigging blocks the starboard gun sections. From now on","Gefallene Takelage blockiert die Steuerbord-Geschütze. Ab jetzt"],"衝突":["Collision","Kollision"],"装填する":["Load","Laden"],"装填フェイズで装填してください":["Load in the reload phase","Im Nachladen-Phase laden"],"解除":["Release","Lösen"],"解除成功":["Released","Gelöst"],"試行ごとに索具":["for each attempt, rigging","für jeden Versuch Takelage"],"試行失敗":["Attempt failed","Versuch fehlgeschlagen"],"読込":["Load","Laden"],"読込失敗":["Load failed","Laden fehlgeschlagen"],"超過分":["excess","Überschuss"],"距離":["Range","Entfernung"],"踏み止まる":["holds","hält stand"],"近距離縦射":["Close-range rake","Längsbeschuss auf kurze Distanz"],"近距離縦射損害":["Close-range rake damage","Schaden durch Längsbeschuss auf kurze Distanz"],"近距離縦射索具喪失":["Rigging lost by close-range rake","Takelage durch Längsbeschuss auf kurze Distanz verloren"],"追加":["Add","Hinzufügen"],"追風":["Running","Vor dem Wind"],"通常級":["Common class","Normale Klasse"],"遷移します":["moves on","wechselt"],"都市":["City","Stadt"],"配置乗員":["assigned crew","zugeteilte Besatzung"],"鉤縄グループ":["Grapple group","Enterhaken-Gruppe"],"鉤縄失敗":["Grapple failed","Entern fehlgeschlagen"],"鉤縄指示":["Grapple order","Enterbefehl"],"鉤縄接続中":["Grappled","Verhakt"],"鉤縄操作失敗（隣接艦なし）":["grapple failed (no adjacent ship)","Entern fehlgeschlagen (kein Schiff daneben)"],"鉤縄未成立、白兵戦不可":["not grappled, no melee","nicht verhakt, kein Nahkampf"],"錨指示":["Anchor order","Ankerbefehl"],"錨泊":["At anchor","Vor Anker"],"錨索切断。錨泊中の艦は":["Anchor cable cut. A ship at anchor","Ankertau gekappt. Ein ankerndes Schiff"],"錨綱が切れているため投錨できません":["cannot anchor: the anchor cable is cut","kann nicht ankern: Ankertau gekappt"],"錨綱切断済みのため投錨不可":["cannot anchor: anchor cable already cut","kann nicht ankern: Ankertau bereits gekappt"],"錨綱切断（以後錨泊不可）":["Anchor cable cut (can no longer anchor)","Ankertau gekappt (Ankern nicht mehr möglich)"],"鎖弾":["Chain shot","Kettenkugel"],"鎮火まで":["until put out","bis gelöscht"],"鎮火成功":["Fire put out","Feuer gelöscht"],"門":["guns","Geschütze"],"降伏":["Struck","Gestrichen"],"降伏（":["Struck (","Gestrichen ("],"降伏（旗を降ろす）":["Struck (colours lowered)","Gestrichen (Flagge eingeholt)"],"隣接敵艦なし":["no adjacent enemy ship","kein feindliches Schiff daneben"],"離脱（白兵戦なし）":["Disengaged (no melee)","Gelöst (kein Nahkampf)"],"風下":["Leeward","Lee"],"風向が初期方向に戻る":["Wind returns to its initial direction","Wind dreht auf die Anfangsrichtung zurück"],"風向が反時計回りに":["Wind shifts counterclockwise by","Wind dreht gegen den Uhrzeigersinn um"],"風向が時計回りに":["Wind shifts clockwise by","Wind dreht im Uhrzeigersinn um"],"風向態勢":["Attitude to the wind","Kurs zum Wind"],"風変化発生":["Wind change","Windänderung"],"風速が":["Wind speed:","Windstärke:"],"風速番号が":["Wind speed number:","Windstärkezahl:"],"（なし）":["(none)","(keine)"],"（マイナス":["(below","(unter"],"（現在":["(now","(jetzt"],"）では被弾時の索具ダメージが":["), rigging damage from hits is",") ist der Takelageschaden bei Treffern"]};
+const WSIM_LANGS = { ja: '日本語', en: 'English', de: 'Deutsch' };
+const WSIM_TITLES = { ja: null, en: 'Wooden Ships & Iron Men', de: 'Wooden Ships & Iron Men' };
+const WSIM_RUN = /[　-〿぀-ヿ一-鿿！-～ー々]+/g;
+const WSIM_JP = /[぀-ヿ一-鿿々]/;
+const WSIM_PUNCT = { '（': '(', '）': ')', '、': ', ', '。': '. ', '：': ': ', '！': '!', '？': '?', '・': ', ', '／': '/', '＋': '+', '－': '-', '　': ' ', '「': '"', '」': '"', '【': '[', '】': ']', '〜': '~', '＝': '=', '％': '%', '＜': '<', '＞': '>' };
+const WSIM_MAXLEN = Object.keys(WSIM_TR).reduce((m, k) => Math.max(m, k.length), 0);
+const wsimCache = { en: new Map(), de: new Map() };
+let LANG = 'ja';
+try {
+  const q = new URLSearchParams(location.search).get('lang');
+  if (q && WSIM_LANGS[q]) { LANG = q; localStorage.setItem('wsimLang', q); }
+  else { const v = localStorage.getItem('wsimLang'); if (v && WSIM_LANGS[v]) LANG = v; }
+} catch (e) {}
+
+// 日本語のひと続きを訳す
+function wsimRun(run, k) {
+  const hit = WSIM_TR[run];
+  if (hit) return hit[k];
+  let out = '', i = 0;
+  while (i < run.length) {
+    let found = null;
+    for (let len = Math.min(WSIM_MAXLEN, run.length - i); len > 0; len--) {
+      const sub = run.substr(i, len);
+      if (WSIM_TR[sub]) { found = sub; break; }
+    }
+    if (found) {
+      const t = WSIM_TR[found][k];
+      if (out && /[A-Za-z0-9)]$/.test(out) && /^[A-Za-z0-9(]/.test(t)) out += ' ';
+      out += t; i += found.length;
+    } else {
+      const ch = run[i];
+      out += (WSIM_PUNCT[ch] !== undefined ? WSIM_PUNCT[ch] : ch);
+      i++;
+    }
+  }
+  return out;
+}
+// 文字列を訳す（日本語の部分だけ置き換え、英字・数字と続く所には空白を入れる）
+function langTranslate(s, lang) {
+  lang = lang || LANG;
+  if (lang === 'ja' || s == null) return s;
+  s = String(s);
+  if (!WSIM_JP.test(s)) return s;
+  const cache = wsimCache[lang];
+  if (cache.has(s)) return cache.get(s);
+  const k = lang === 'en' ? 0 : 1;
+  let out = s.replace(WSIM_RUN, (run, off) => {
+    if (!WSIM_JP.test(run)) return run.replace(/./g, ch => (WSIM_PUNCT[ch] !== undefined ? WSIM_PUNCT[ch] : ch));
+    let t = wsimRun(run, k);
+    const before = s[off - 1], after = s[off + run.length];
+    if (before && /[A-Za-z0-9)\]]/.test(before) && /^[A-Za-z0-9(]/.test(t)) t = ' ' + t;
+    if (after && /[A-Za-z0-9(\[]/.test(after) && /[A-Za-z0-9)]$/.test(t)) t = t + ' ';
+    return t;
+  });
+  out = out.replace(/ {2,}/g, ' ').replace(/ ([,.:;!?)\]])/g, '$1').replace(/\( /g, '(');
+  cache.set(s, out);
+  return out;
+}
+
+// 画面の文字の元の日本語を覚えて、言語を切り替えたら戻せるようにする
+const wsimText = new WeakMap(), wsimAttr = new WeakMap();
+let wsimApplying = false;
+function wsimApplyText(node) {
+  const v = node.nodeValue;
+  const rec = wsimText.get(node);
+  if (rec && (v === rec.tr || (v === rec.ja && LANG === 'ja'))) return;
+  if (!WSIM_JP.test(v)) { if (rec) wsimText.delete(node); return; }
+  const tr = langTranslate(v);
+  wsimText.set(node, { ja: v, tr });
+  if (LANG !== 'ja' && tr !== v) node.nodeValue = tr;
+}
+const WSIM_ATTRS = ['title', 'placeholder'];
+function wsimApplyAttr(el) {
+  for (const a of WSIM_ATTRS) {
+    const v = el.getAttribute && el.getAttribute(a);
+    if (v == null) continue;
+    let m = wsimAttr.get(el); if (!m) { m = {}; wsimAttr.set(el, m); }
+    const rec = m[a];
+    if (rec && (v === rec.tr || (v === rec.ja && LANG === 'ja'))) continue;
+    if (!WSIM_JP.test(v)) { delete m[a]; continue; }
+    const tr = langTranslate(v);
+    m[a] = { ja: v, tr };
+    if (LANG !== 'ja' && tr !== v) el.setAttribute(a, tr);
+  }
+}
+function wsimWalk(root, fn) {
+  if (!root) return;
+  if (root.nodeType === 3) { fn.text(root); return; }
+  if (root.nodeType !== 1) return;
+  if (root.tagName === 'SCRIPT' || root.tagName === 'STYLE') return;
+  if (root.classList && root.classList.contains('no-lang')) return;
+  fn.attr(root);
+  for (const c of root.childNodes) wsimWalk(c, fn);
+}
+function wsimApplyAll() {
+  wsimApplying = true;
+  wsimWalk(document.body, { text: wsimApplyText, attr: wsimApplyAttr });
+  wsimApplying = false;
+}
+function wsimRestoreAll() {
+  wsimWalk(document.body, {
+    text: n => { const r = wsimText.get(n); if (r) { n.nodeValue = r.ja; wsimText.delete(n); } },
+    attr: el => { const m = wsimAttr.get(el); if (m) { for (const a in m) el.setAttribute(a, m[a].ja); wsimAttr.delete(el); } },
+  });
+}
+// 元の日本語（ゲームが画面の文字で判断する所で使う）
+function langOriginal(el) {
+  if (!el) return '';
+  let s = '';
+  const rec = n => { if (n.nodeType === 3) { const r = wsimText.get(n); s += (r && n.nodeValue === r.tr) ? r.ja : n.nodeValue; } else n.childNodes.forEach(rec); };
+  rec(el);
+  return s;
+}
+const wsimObserver = new MutationObserver(muts => {
+  if (LANG === 'ja' || wsimApplying) return;
+  wsimApplying = true;
+  for (const m of muts) {
+    if (m.type === 'characterData') wsimApplyText(m.target);
+    else if (m.type === 'attributes') wsimApplyAttr(m.target);
+    else m.addedNodes.forEach(n => wsimWalk(n, { text: wsimApplyText, attr: wsimApplyAttr }));
+  }
+  wsimApplying = false;
+});
+let wsimDocTitleJa = null;
+function setLang(lang) {
+  if (!WSIM_LANGS[lang]) return;
+  const prev = LANG;
+  if (prev !== 'ja') { wsimObserver.disconnect(); wsimRestoreAll(); }
+  LANG = lang;
+  try { localStorage.setItem('wsimLang', lang); } catch (e) {}
+  document.documentElement.lang = lang;
+  if (wsimDocTitleJa == null) wsimDocTitleJa = document.title;
+  document.title = WSIM_TITLES[lang] || wsimDocTitleJa;
+  if (lang !== 'ja') {
+    wsimApplyAll();
+    wsimObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: WSIM_ATTRS });
+  }
+  const sel = document.getElementById('wsimLangSel');
+  if (sel) sel.value = lang;
+}
+// alert / confirm / prompt も訳す
+(function () {
+  const a = window.alert.bind(window), c = window.confirm.bind(window), p = window.prompt.bind(window);
+  window.alert = m => a(langTranslate(m));
+  window.confirm = m => c(langTranslate(m));
+  window.prompt = (m, d) => p(langTranslate(m), d);
+})();
+// 言語の選択（画面の右下）。どのページにも同じものを出す
+function wsimAddSelector() {
+  if (document.getElementById('wsimLangSel')) return;
+  const box = document.createElement('div');
+  box.className = 'no-lang';
+  box.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:9999;background:rgba(20,30,45,.92);border:1px solid #567;border-radius:4px;padding:3px 6px;font-size:12px;color:#cde;';
+  const sel = document.createElement('select');
+  sel.id = 'wsimLangSel';
+  sel.style.cssText = 'background:#123;color:#fff;border:1px solid #567;font-size:12px;';
+  for (const k of Object.keys(WSIM_LANGS)) { const o = document.createElement('option'); o.value = k; o.textContent = WSIM_LANGS[k]; sel.appendChild(o); }
+  sel.value = LANG;
+  sel.onchange = () => setLang(sel.value);
+  box.appendChild(document.createTextNode('🌐 '));
+  box.appendChild(sel);
+  document.body.appendChild(box);
+}
+function wsimInit() { wsimAddSelector(); setLang(LANG); }
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wsimInit); else wsimInit();
