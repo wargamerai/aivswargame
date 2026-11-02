@@ -7,6 +7,7 @@
 
 // 文全体が一致したときの訳（語句の置き換えより先に使う）
 const LANG_EXACT = {
+  'Uボート基地': 'U-Boat Pens',
   // 5.6 戦闘は1つの海域ずつ
   '戦闘する海域の選択': 'Choose the sea area for combat',
   '次に戦闘する海域を選んでください（戦闘は1つの海域ずつ、Uボート戦闘→航空攻撃→水上戦闘）': 'Choose the next area to fight in (one area at a time: U-boat combat → air strikes → surface combat)',

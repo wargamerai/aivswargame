@@ -107,7 +107,13 @@ button.del {
 
     <h3 style="margin-top:14px;">項目一覧</h3>
     <div style="font-size:0.75em;color:#aac;margin-bottom:4px;">駒をドラッグして配置。座標は駒の中心。</div>
+    <div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap;">
+      <button class="act" onclick="checkAll(true)" style="font-size:0.8em;">全部チェック</button>
+      <button class="act" onclick="checkAll(false)" style="font-size:0.8em;">チェックを外す</button>
+    </div>
     <div id="itemList"></div>
+    <button class="act" onclick="deleteChecked()" style="margin-top:4px;width:100%;background:#883333;">チェックしたものを削除</button>
+    <button class="act" onclick="deleteSelected()" style="margin-top:4px;width:100%;background:#663333;">選んだ駒を削除（Delete キー）</button>
 
     <h3 style="margin-top:14px;">エクスポート</h3>
     <button class="act" onclick="exportJSON()">JSON出力</button>
@@ -171,13 +177,39 @@ function selectItem(i){ selectedIdx = i; render(); }
 function deleteItem(i){
   if(!confirm('削除しますか: '+items[i].name)) return;
   items.splice(i,1);
+  checked.clear();
   if(selectedIdx === i) selectedIdx = -1;
   else if(selectedIdx > i) selectedIdx--;
   saveToStorage(); render();
 }
+// まとめて削除: 一覧でチェックしたもの（確認は1回）
+const checked = new Set();
+function toggleCheck(i, on){ if(on) checked.add(i); else checked.delete(i); }
+function checkAll(on){ checked.clear(); if(on) items.forEach((_, i) => checked.add(i)); render(); }
+function deleteChecked(){
+  if(!checked.size){ alert('削除する項目にチェックを付けてください'); return; }
+  const names = [...checked].sort((a, b) => a - b).map(i => items[i].name);
+  if(!confirm(`${names.length}件を削除しますか:\n` + names.join(', '))) return;
+  items = items.filter((_, i) => !checked.has(i));
+  checked.clear(); selectedIdx = -1;
+  saveToStorage(); render();
+}
+// 地図で選んでいる駒を削除（Delete / Backspace キーでも）
+function deleteSelected(){
+  if(selectedIdx < 0 || !items[selectedIdx]){ alert('削除する駒を地図か一覧で選んでください'); return; }
+  const name = items[selectedIdx].name;
+  items.splice(selectedIdx, 1);
+  checked.clear(); selectedIdx = -1;
+  saveToStorage(); render();
+  document.getElementById('info').textContent = `項目:${items.length}（${name} を削除）`;
+}
+document.addEventListener('keydown', e => {
+  if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if(e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); deleteSelected(); }
+});
 function clearAll(){
   if(!confirm('全項目を削除しますか？')) return;
-  items = []; selectedIdx = -1;
+  items = []; selectedIdx = -1; checked.clear();
   saveToStorage(); render();
 }
 
@@ -231,6 +263,7 @@ function render(){
     const sel = i===selectedIdx ? ' sel' : '';
     const coord = `${it.x.toFixed(2)}, ${it.y.toFixed(2)}`;
     return `<div class="item-row${sel}" onclick="selectItem(${i})">
+      <input type="checkbox" ${checked.has(i) ? 'checked' : ''} onclick="event.stopPropagation();toggleCheck(${i}, this.checked)">
       <span class="iname">${it.name}</span>
       <span class="icoord">${coord}</span>
       <button class="del" onclick="event.stopPropagation();deleteItem(${i})">×</button>

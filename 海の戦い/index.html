@@ -5339,6 +5339,7 @@ function getLocCoord(loc){
 function getShipCoord(ship){
   const loc = ship.location;
   if(!loc) return null;
+  if(loc === 'Germany' && ship.type === 'UBOAT' && typeof UBOAT_PEN_COORD !== 'undefined') return UBOAT_PEN_COORD; // U-Boat Pens
   if(SEAS[loc]){
     const positions = SEA_POSITIONS[loc];
     if(positions){
@@ -5363,6 +5364,7 @@ function getShipCoord(ship){
 function getPlaceKey(ship){
   const loc = ship.location;
   if(!loc) return null;
+  if(loc === 'Germany' && ship.type === 'UBOAT') return 'Germany:uboat'; // U-Boat Pens に分けて並べる
   if(SEAS[loc]){
     let sub;
     if(ship.type === 'UBOAT')      sub = 'uboat';
@@ -5458,7 +5460,7 @@ function placeAllShips(){
     if(!c) continue;
     const isTrack = key.startsWith('T') && !key.includes(':');
     const w = isTrack ? COUNTER_W : PORT_COUNTER_W;
-    placeStack(key, locLabel(ship0.location), byKey[key], c.x, c.y, w);
+    placeStack(key, key === 'Germany:uboat' ? 'Uボート基地' : locLabel(ship0.location), byKey[key], c.x, c.y, w);
   }
 }
 

@@ -7,21 +7,23 @@ const PORT_COORDS = {
   England:   { x: 38.55, y: 54.08, repairX: 38.50, repairY: 50.29 },
   Russia:    { x: 88.17, y: 26.46, repairX: 88.17, repairY: 30.07 },
   Leningrad: { x: 87.27, y: 40.49, repairX: 87.26, repairY: 43.99 },
-  Germany:   { x: 56.38, y: 56.38, repairX: 56.28, repairY: 59.95 },
+  Germany:   { x: 56.38, y: 52.85, repairX: 56.28, repairY: 60.18 }, // repair=損傷した艦を置く場所
   France:    { x: 38.40, y: 63.59, repairX: 39.20, repairY: 68.69 },
   Italy:     { x: 59.95, y: 73.14, repairX: 64.97, repairY: 73.20 },
-  Malta:     { x: 75.35, y: 95.32, repairX: 73.91, repairY: 87.97 },
+  Malta:     { x: 75.35, y: 95.32, repairX: 73.98, repairY: 87.97 },
   Neutral:   { x: 5.11,  y: 89.67 }
 };
+// ドイツの港にいる Uボートは、ほかのドイツ艦と分けてここ（U-Boat Pens）に並べる
+const UBOAT_PEN_COORD = { x: 63.65, y: 52.96 };
 
 // 支配マーカー配置位置（各海域）
 const SEA_CONTROL_COORDS = {
-  NorthAtlantic: { x: 12.89, y: 38.85 }, // c1
-  Barents:       { x: 54.17, y: 19.54 }, // c2
-  NorthSea:      { x: 43.27, y: 48.72 }, // c3
-  Baltic:        { x: 77.42, y: 44.03 }, // c4
-  SouthAtlantic: { x: 13.64, y: 60.13 }, // c5
-  Mediterranean: { x: 63.11, y: 80.50 }  // c6
+  NorthAtlantic: { x: 21.58, y: 35.47 }, // c1
+  Barents:       { x: 45.34, y: 16.47 }, // con
+  NorthSea:      { x: 48.16, y: 49.84 }, // c3
+  Baltic:        { x: 77.44, y: 37.94 }, // c4
+  SouthAtlantic: { x: 22.30, y: 73.70 }, // c5
+  Mediterranean: { x: 75.66, y: 83.23 }  // c6
 };
 
 // 海域中心座標（%）暫定値。後で調整可。
@@ -34,38 +36,39 @@ const SEA_COORDS = {
   SouthAtlantic: { x: 13.0, y: 65.0 }
 };
 
-// 海域内の陣営/タイプ別配置位置（提供座標を反映）
+// 海域内の陣営/タイプ別配置位置（座標エディタで決めた位置。2026-11-02 更新）
 const SEA_POSITIONS = {
   NorthAtlantic: {
-    allies: { x: 10.02, y: 22.82 }, // nao-e
-    axis:   { x: 16.20, y: 22.82 }, // nao-g
-    uboat:  { x: 16.20, y: 26.74 }, // nao-u
-    convoy: { x: 10.02, y: 26.74 }  // nao-c
+    allies: { x: 9.10,  y: 22.16 }, // nao-e
+    axis:   { x: 15.91, y: 21.97 }, // nao-g
+    uboat:  { x: 16.12, y: 26.92 }, // nao-u
+    convoy: { x: 8.84,  y: 26.99 }  // nao-c
   },
   Barents: {
-    allies: { x: 50.39, y: 8.32 },  // b-e
-    axis:   { x: 58.02, y: 8.17 },  // b-g
-    convoy: { x: 50.29, y: 12.17 }, // bec
-    uboat:  { x: 58.02, y: 15.60 }  // bgu
+    allies: { x: 47.01, y: 26.52 }, // b-e
+    axis:   { x: 54.07, y: 24.16 }, // b-g
+    uboat:  { x: 54.18, y: 28.38 }, // bga
+    convoy: { x: 46.99, y: 30.53 }  // c2
   },
   NorthSea: {
-    allies: { x: 40.34, y: 41.73 }, // nb
-    axis:   { x: 45.65, y: 41.66 }  // ng
+    allies: { x: 38.51, y: 37.27 }, // nb
+    axis:   { x: 44.54, y: 37.22 }, // 6（ドイツ）
+    uboat:  { x: 44.92, y: 42.00 }  // ng（Uボート）
   },
   Baltic: {
-    allies: { x: 77.14, y: 32.49 }, // br (ロシア)
-    axis:   { x: 77.33, y: 40.47 }, // bg
-    uboat:  { x: 77.14, y: 36.62 }  // bga
+    allies: { x: 71.79, y: 46.19 }, // bg（ソ連）
+    axis:   { x: 66.89, y: 43.72 }, // br（ドイツ）
+    uboat:  { x: 66.89, y: 47.55 }  // bga
   },
   SouthAtlantic: {
-    allies: { x: 9.82,  y: 64.22 }, // saob
-    axis:   { x: 15.52, y: 64.29 }  // saog
+    allies: { x: 14.03, y: 64.15 }, // saob
+    axis:   { x: 21.75, y: 64.00 }, // saog
+    uboat:  { x: 21.79, y: 68.96 }  // 12
   },
   Mediterranean: {
-    allies: { x: 51.83, y: 80.20 }, // mb
-    axis:   { x: 46.72, y: 80.34 }, // mi (伊中心)
-    uboat:  { x: 46.72, y: 84.05 }, // mg → ここをuboatに割り当て(暫定)
-    convoy: { x: 51.83, y: 76.69 }  // mf
+    allies: { x: 57.51, y: 83.33 }, // mf（左・イギリス）
+    axis:   { x: 64.47, y: 83.27 }, // mf（右・イタリア）
+    uboat:  { x: 64.78, y: 88.30 }  // mb
   }
 };
 
