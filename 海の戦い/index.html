@@ -899,7 +899,13 @@ function renderPortButtons(){
       const usable = port.available.includes(currentTurn);
       const cls = usable ? '' : ' style="opacity:0.4;"';
       const sel = selectedLoc===k ? ' sel' : '';
-      return `<button class="locBtn port${sel}"${cls} onclick="selectLoc('${k}')">${PORT_LABEL[k]}</button>`;
+      const btn = `<button class="locBtn port${sel}"${cls} onclick="selectLoc('${k}')">${PORT_LABEL[k]}</button>`;
+      // ドイツの下に U-Boat Pens（ドイツの港にいる Uボートだけ）
+      if(k === 'Germany'){
+        const selP = selectedLoc === 'UboatPens' ? ' sel' : '';
+        return btn + `<button class="locBtn port${selP}" onclick="selectLoc('UboatPens')">U-Boat Pens</button>`;
+      }
+      return btn;
     }).join('');
   const seaBtns = Object.keys(SEA_LABEL)
     .filter(k => !hideSeaList.includes(k))
@@ -913,6 +919,19 @@ function renderPortButtons(){
   </div>`;
 }
 
+// 右の欄で選んでいる場所に、その艦がいるか。U-Boat Pens（UboatPens）は「ドイツの港にいる Uボート」、
+// ドイツはそれ以外のドイツの港の艦
+function inSelLoc(s){
+  if(selectedLoc === 'UboatPens') return s.location === 'Germany' && s.type === 'UBOAT';
+  if(selectedLoc === 'Germany') return s.location === 'Germany' && s.type !== 'UBOAT';
+  return s.location === selectedLoc;
+}
+// このターン、選んでいる場所から出た艦か
+function fromSelLoc(s){
+  if(selectedLoc === 'UboatPens') return s.originThisTurn === 'Germany' && s.type === 'UBOAT';
+  if(selectedLoc === 'Germany') return s.originThisTurn === 'Germany' && s.type !== 'UBOAT';
+  return s.originThisTurn === selectedLoc;
+}
 function renderLocShipList(){
   const title = document.getElementById('locTitle');
   const el = document.getElementById('locShipList');
@@ -921,12 +940,9 @@ function renderLocShipList(){
     el.innerHTML = '<div style="padding:6px;color:#aac;font-size:0.8em;">港湾を選択してください</div>';
     return;
   }
-  title.textContent = `${locLabel(selectedLoc)} の艦船 (複数選択可)`;
+  title.textContent = `${selectedLoc === 'UboatPens' ? 'U-Boat Pens' : locLabel(selectedLoc)} の艦船 (複数選択可)`;
   // 現在ここにいる艦 + このターンここから出た艦（消さない）
-  const ships = SHIPS.filter(s =>
-    s.location === selectedLoc ||
-    (s.movedThisTurn && s.originThisTurn === selectedLoc)
-  );
+  const ships = SHIPS.filter(s => inSelLoc(s) || (s.movedThisTurn && fromSelLoc(s)));
   if(!ships.length){
     el.innerHTML = '<div style="padding:6px;color:#aac;font-size:0.8em;">なし</div>';
     return;
@@ -943,7 +959,7 @@ function renderLocShipList(){
         </div>
       </div>`;
     }
-    if(s.movedThisTurn && s.location !== selectedLoc){
+    if(s.movedThisTurn && !inSelLoc(s)){
       // 移動済み: 移動先の海域色で表示
       const bg = SEA_COLOR[s.location] || '#1a3a2a';
       return `<div class="ship-entry" style="background:${bg};cursor:default;">
@@ -1123,7 +1139,7 @@ function toggleShip(id){
 }
 function selectAllShipsHere(){
   if(!selectedLoc) return;
-  selectedShipIds = SHIPS.filter(s => s.location === selectedLoc && !s.failedMove).map(s => s.id);
+  selectedShipIds = SHIPS.filter(s => inSelLoc(s) && !s.failedMove).map(s => s.id);
   refreshDestAfterSelect();
   renderLocShipList(); renderStatus();
 }
