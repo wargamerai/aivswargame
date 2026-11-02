@@ -15,6 +15,11 @@
   .scen-btn .n { color:#88ccff; font-size:1.1em; display:block; margin-bottom:3px; }
   .scen-btn .t { font-weight:normal; font-size:0.92em; color:#fff; }
   .scen-btn .s { font-weight:normal; font-size:0.85em; color:#bcd; margin-top:4px; display:block; }
+  .scen-btn { cursor:default; }
+  .scen-btn:hover { background:#2266cc; }
+  .scen-btn .sides { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .side-btn { background:#13243a; color:#fff; border:1px solid #88ccff; padding:6px 10px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85em; }
+  .side-btn:hover { background:#3377dd; }
   /* 画面全体を 80%（ブラウザで2段階縮小した大きさ）で表示する */
   html { zoom: 0.8; }
 </style>
@@ -23,7 +28,6 @@
 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
   <a href="../en/index.html"><button class="back">← トップへ</button></a>
   <h1 style="margin:0;flex:1;">⚓ 帆船の戦い - シナリオ選択</h1>
-  <button onclick="openAiSettingsModal()" style="background:#646;color:#fff;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;font-weight:bold;">⚙️ AI設定</button>
 </div>
 
 <!-- 言語の切り替え（ここで選んだ言語で戦闘画面も表示する） -->
@@ -81,17 +85,21 @@ const SCENARIO_LIST = [
 
 function renderScenarios() {
   const grid = document.getElementById('scenGrid');
-  grid.innerHTML = SCENARIO_LIST.map(sc => `
-    <button class="scen-btn" onclick="startScenario(${sc.n})">
+  // 陣営ごとのボタン: 押した陣営を人間（自軍）が指揮し、もう片方を AI が指揮する
+  grid.innerHTML = SCENARIO_LIST.map(sc => {
+    const sides = sc.sides.split(' / ');
+    return `
+    <div class="scen-btn">
       <span class="n">シナリオ ${sc.n}</span>
       <span class="t">${sc.title}</span>
-      <span class="s">${sc.sides}</span>
-    </button>
-  `).join('');
+      <span class="sides">${sides.map((sd, i) => `<button class="side-btn" onclick="startScenario(${sc.n}, ${i})">指揮: ${sd}</button>`).join('')}</span>
+    </div>`;
+  }).join('');
 }
 
-function startScenario(n) {
+function startScenario(n, sideIdx) {
   const mode = document.querySelector('input[name="gameMode"]:checked')?.value || 'human-vs-ai';
+  localStorage.setItem('wsmHumanSide', String(sideIdx || 0)); // 0=シナリオの1番目の陣営、1=2番目の陣営を人間（自軍）が指揮
   localStorage.removeItem('wsmHubState');
   localStorage.removeItem('wsmResumeSave');
   localStorage.setItem('wsmPendingScenario', String(n));

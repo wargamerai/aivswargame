@@ -43,6 +43,12 @@ html { overflow:hidden; background:#0a1a2a; }
   border-bottom:1px solid #234; font-size:0.95em;
 }
 #leftPane h3.enemy { background:#3a1a2a; color:#ff8888; }
+/* 左の艦隊一覧の出し入れ（矢印） */
+#leftToggle {
+  width:16px; flex-shrink:0; background:#1a3a5a; border-right:1px solid #234; color:#88ccff;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:12px; user-select:none;
+}
+#leftToggle:hover { background:#2a4a7a; color:#fff; }
 .ship-entry {
   padding:4px 8px; border-bottom:1px dotted #234; cursor:pointer;
 }
@@ -110,7 +116,7 @@ button.np:hover { background:#2266cc; }
 
 #bottomBar {
   padding:6px 10px; background:#13243a; border-top:1px solid #234;
-  display:flex; gap:8px; font-size:0.85em; flex-shrink:0;
+  display:flex; gap:8px; font-size:0.85em; flex-shrink:0; align-items:center; flex-wrap:wrap;
 }
 button.act {
   background:#2266cc; color:#fff; border:none; padding:5px 12px;
@@ -138,29 +144,6 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
     <span class="ph" data-ph="reload"    title="RELOAD">I:装填</span>
     <span class="ph" data-ph="fullSail"  title="FULL SAIL">J:全帆</span>
   </div>
-  <div id="windInfo">
-    <span style="color:#88ccff;">風:</span>
-    <canvas id="windCompass" width="28" height="28"></canvas>
-    <span id="windDirLabel" style="font-weight:bold;">--</span>
-    <span style="color:#aac;">/</span>
-    <span id="windVelLabel" style="color:#ffe;font-weight:bold;">--</span>
-    <span style="color:#aac;font-size:0.85em;">変化番号:</span>
-    <span id="windChangeNumLabel" style="color:#ffe;font-weight:bold;">--</span>
-  </div>
-  <span style="flex:1;"></span>
-  <span id="modeLabel" style="font-size:0.85em;color:#ffcc88;font-weight:bold;">モード: --</span>
-  <button id="btnToggleAuto" onclick="toggleAutoAdvance()" style="background:#448;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;display:none;">オート: OFF</button>
-  <button id="btnNextPhase" onclick="nextPhaseStep()" style="background:#484;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;display:none;">次フェイズ</button>
-  <label style="font-size:0.85em;">
-    ズーム:
-    <button onclick="setZoom(-5)" style="background:#234;color:#fff;border:1px solid #456;width:24px;height:22px;border-radius:3px;cursor:pointer;font-weight:bold;">−</button>
-    <input type="range" id="zoomSlider" min="10" max="100" value="40" step="5" style="width:100px;vertical-align:middle;">
-    <button onclick="setZoom(5)" style="background:#234;color:#fff;border:1px solid #456;width:24px;height:22px;border-radius:3px;cursor:pointer;font-weight:bold;">＋</button>
-    <span id="zoomLabel">40%</span>
-  </label>
-  <button onclick="openAiSettingsModal()" style="background:#646;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">⚙️ AI設定</button>
-  <button onclick="saveGameToFile()" style="background:#864;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">💾 保存</button>
-  <button class="back" onclick="location.href='sandbox.html'">← 編成へ</button>
 </div>
 
 <!-- AI設定モーダルは wsm_ai_ui.js が動的挿入 -->
@@ -172,6 +155,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
     <h3 class="enemy">敵軍艦隊</h3>
     <div id="usFleetList"></div>
   </div>
+  <div id="leftToggle" onclick="toggleLeftPane()" title="艦隊一覧の表示／非表示">◀</div>
   <div id="mapArea">
     <canvas id="mapCanvas"></canvas>
   </div>
@@ -208,6 +192,12 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
         <button class="np" onclick="plotGrapple('detach')" style="flex:1;background:#a64;">鉤はずし</button>
       </div>
       <button class="np" onclick="donePlot()" style="width:100%;background:#446699;margin-top:4px;">確定 (Enter)</button>
+      <button class="np" onclick="executeAllPlots()" style="width:100%;background:#22aa66;margin-top:4px;font-weight:bold;">▶ プロット実行</button>
+    </div>
+    <!-- フェイズを進めるボタン（どのフェイズでも出す。移動記入の時はプロット実行のすぐ下） -->
+    <div id="phaseButtons" style="margin-bottom:8px;">
+      <button class="np" onclick="advancePhase()" style="width:100%;background:#335577;margin-top:4px;font-weight:bold;">次のフェイズ</button>
+      <button class="np" onclick="endTurn()" style="width:100%;background:#884444;margin-top:4px;">ターン終了</button>
     </div>
     <h3>行動ログ</h3>
     <div id="actionLog"></div>
@@ -230,12 +220,6 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
 
 <div id="bottomBar">
   <span id="infoLabel">戦闘準備中</span>
-  <button class="act" onclick="runWindPhase()">🌬 風判定</button>
-  <span id="plotBottomButtons">
-  <button class="act" onclick="executeAllPlots()" style="background:#22aa66;">▶ プロット実行</button>
-  <button class="act" onclick="clearPlot()" style="background:#666;">プロット消去</button>
-  <button class="act" onclick="donePlot()" style="background:#446699;">プロット確定 (Enter)</button>
-  </span>
   <div id="hpBar" style="display:none;align-items:center;gap:4px;font-size:0.78em;">
     <span id="hpBarLabelGB" style="color:#88bbff;font-weight:bold;min-width:70px;text-align:right;">GB: -</span>
     <div id="hpBarGraph" style="position:relative;width:360px;height:16px;background:#0a1520;border:1px solid #456;border-radius:2px;overflow:hidden;">
@@ -249,9 +233,29 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
   </div>
   <button class="act" id="btnArcs" onclick="toggleArcs()" style="background:#884466;">射界: OFF</button>
   <button class="act" id="btnAttackRange" onclick="toggleAttackRange()" style="background:#446644;">攻撃範囲: OFF</button>
-  <button class="act" onclick="advancePhase()">次のフェイズ</button>
-  <button class="act" style="background:#aa4444;" onclick="endTurn()">ターン終了</button>
   <button class="act" style="background:#2a5a2a;" onclick="const w=document.getElementById('debugLogWrap');w.style.display=w.style.display==='none'?'flex':'none';">DEBUG</button>
+  <!-- 風・オート・ズーム・保存・編成へ（上のバーから移した） -->
+  <span style="flex:1;"></span>
+  <div id="windInfo">
+    <span style="color:#88ccff;">風:</span>
+    <canvas id="windCompass" width="28" height="28"></canvas>
+    <span id="windDirLabel" style="font-weight:bold;">--</span>
+    <span style="color:#aac;">/</span>
+    <span id="windVelLabel" style="color:#ffe;font-weight:bold;">--</span>
+    <span style="color:#aac;font-size:0.85em;">変化番号:</span>
+    <span id="windChangeNumLabel" style="color:#ffe;font-weight:bold;">--</span>
+  </div>
+  <button id="btnToggleAuto" onclick="toggleAutoAdvance()" style="background:#448;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;display:none;">オート: OFF</button>
+  <button id="btnNextPhase" onclick="nextPhaseStep()" style="background:#484;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;display:none;">次フェイズ</button>
+  <label style="font-size:0.85em;">
+    ズーム:
+    <button onclick="setZoom(-5)" style="background:#234;color:#fff;border:1px solid #456;width:24px;height:22px;border-radius:3px;cursor:pointer;font-weight:bold;">−</button>
+    <input type="range" id="zoomSlider" min="10" max="100" value="40" step="5" style="width:100px;vertical-align:middle;display:none;">
+    <button onclick="setZoom(5)" style="background:#234;color:#fff;border:1px solid #456;width:24px;height:22px;border-radius:3px;cursor:pointer;font-weight:bold;">＋</button>
+    <span id="zoomLabel">40%</span>
+  </label>
+  <button onclick="saveGameToFile()" style="background:#864;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">💾 保存</button>
+  <button class="back" onclick="location.href='sandbox.html'">← 編成へ</button>
 </div>
 
 <!-- データモジュール -->
@@ -528,6 +532,8 @@ function draw() {
 
   // 5.0 鉤縄/白兵戦ヘクス強調（艦の下に敷く）
   drawGrappleHighlight();
+  // 4.9 移動記入の時: 選んだ船が行けるヘクスと、そこで向ける向き（艦の下に敷く）
+  if (state.phase === 'moveNote' && state.selectedShip && !isExecuting) drawMoveRange(state.selectedShip);
 
   // 5. 艦描画
   [...state.jpFleet, ...state.usFleet].forEach(s => drawShip(s));
@@ -802,6 +808,7 @@ function saveGameToFile() {
         log: state.log,
         gunneryArrows: state.gunneryArrows,
         damageSeqCounter: state.damageSeqCounter,
+        plotExecTurn: state._plotExecTurn,
       },
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -840,6 +847,7 @@ function loadFromSandbox() {
       if (sv.usFleet) state.usFleet = sv.usFleet;
       if (sv.wind) state.wind = sv.wind;
       if (sv.log) state.log = sv.log;
+      if (sv.plotExecTurn != null) state._plotExecTurn = sv.plotExecTurn;
       if (sv.gunneryArrows) state.gunneryArrows = sv.gunneryArrows;
       if (typeof sv.damageSeqCounter === 'number') state.damageSeqCounter = sv.damageSeqCounter;
       console.log(`[RESUME] T${state.turn}/${state.phase} を復元 (saved=${payload.savedAt})`);
@@ -1156,7 +1164,11 @@ function loadScenario(n) {
   if (!sc) { console.warn('Unknown scenario:', n); return false; }
   state.jpFleet = [];
   state.usFleet = [];
-  for (const sd of sc.sides) {
+  // シナリオ選択で 2番目の陣営を選んだ時は、陣営を入れ替える（jp=人間（自軍）、us=AI）
+  let _flip = false;
+  try { _flip = localStorage.getItem('wsmHumanSide') === '1'; } catch (e) {}
+  for (const sd0 of sc.sides) {
+    const sd = _flip ? Object.assign({}, sd0, { side: sd0.side === 'jp' ? 'us' : 'jp' }) : sd0;
     for (const shipData of sd.ships) {
       const ship = buildScenarioShip(shipData, sd.side, sd.nation);
       if (sd.side === 'jp') state.jpFleet.push(ship);
@@ -1530,6 +1542,22 @@ function debugLog(msg) {
   el.scrollTop = el.scrollHeight;
 }
 
+// 左の艦隊一覧の出し入れ（矢印のボタン）。開け閉めはこの人のブラウザに覚えておく
+function toggleLeftPane(show) {
+  const lp = document.getElementById('leftPane');
+  const bt = document.getElementById('leftToggle');
+  if (!lp || !bt) return;
+  if (typeof show !== 'boolean') show = lp.style.display === 'none';
+  lp.style.display = show ? '' : 'none';
+  bt.textContent = show ? '◀' : '▶';
+  try { localStorage.setItem('wsimLeftPane', show ? '1' : '0'); } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', () => {
+  let v = null;
+  try { v = localStorage.getItem('wsimLeftPane'); } catch (e) {}
+  if (v === '0') toggleLeftPane(false);
+});
+
 function setInfo(msg) {
   document.getElementById('infoLabel').textContent = msg;
 }
@@ -1580,7 +1608,23 @@ function updatePlotVisibility() {
   if (panel) panel.style.display = show ? '' : 'none';
   if (bottom) bottom.style.display = show ? '' : 'none';
 }
+// 人間対AI の C:移動記入 で、まだプロットを実行していなければ次のフェイズへ進ませない
+//   （動かせる自軍の艦が1隻もない時は止めない）
+function moveNotExecuted() {
+  if ((state.gameMode || 'human-vs-ai') !== 'human-vs-ai') return false;
+  if (state.phase !== 'moveNote' || state._plotExecTurn === state.turn) return false;
+  return humanMovableShips().length > 0;
+}
+// 人間対AI で、このターン動かせる自軍の艦（鉤縄でつながっていない・錨泊していない・登場済み）
+function humanMovableShips() {
+  return state.jpFleet.filter(s => s.status === 'ok' && s.col >= 0 && !(s.grappledWith && s.grappledWith.length)
+    && !s.anchored && (!s.enterTurn || state.turn >= s.enterTurn));
+}
 function advancePhase() {
+  if (moveNotExecuted()) {
+    alert('移動のプロットがまだ実行されていません。各艦の移動を入力し、「プロット実行」を押してから次のフェイズへ進んでください。');
+    return;
+  }
   const i = PHASE_ORDER.indexOf(state.phase);
   if (i < 0 || i === PHASE_ORDER.length - 1) {
     // 一周完了 → ターン繰上 + 増援処理
@@ -3643,12 +3687,98 @@ function drawPlotPreview() {
 }
 
 // ============================================================
+// 移動できる範囲（移動記入の時に、選んだ船について表示）
+//   simulatePlot と同じ決まりで計算する: 前進(5)は移動力1・地図の外と他艦（艦首・艦尾）のヘクスには入れない、
+//   転舵は今の向きの隣の向きだけ・1ヘクスで1回・移動力1（新しい向きの移動力が上限）。漂流・バックは含めない
+// 戻り値: Map "col,row" → { col, row, dirs:Set(向き) }
+// ============================================================
+function reachableMoves(ship) {
+  const out = new Map();
+  if (!ship || ship.col < 0 || ship.status !== 'ok' || ship.anchored || (ship.grappledWith && ship.grappledWith.length)) return out;
+  if (ship.enterTurn && state.turn < ship.enterTurn) return out;
+  const occupied = new Set();
+  [...(state.jpFleet || []), ...(state.usFleet || [])].filter(o => o !== ship && o.status === 'ok' && o.col >= 0).forEach(o => {
+    occupied.add(`${o.col},${o.row}`);
+    const st = getSternHex(o); if (st) occupied.add(`${st.col},${st.row}`);
+  });
+  const mpOf = d => (typeof maxMoveForAttitude === 'function') ? maxMoveForAttitude({ ...ship, dir: d }, state.wind) : 4;
+  const add = (c, r, d) => { const k = `${c},${r}`; if (!out.has(k)) out.set(k, { col: c, row: r, dirs: new Set() }); out.get(k).dirs.add(d); };
+  const seen = new Set();
+  const queue = [{ col: ship.col, row: ship.row, dir: ship.dir, mp: mpOf(ship.dir), turned: false }];
+  while (queue.length) {
+    const q = queue.shift();
+    const key = `${q.col},${q.row},${q.dir},${q.mp},${q.turned ? 1 : 0}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    add(q.col, q.row, q.dir);
+    // 前進
+    if (q.mp > 0) {
+      const n = hexNeighbor(q.col, q.row, q.dir);
+      if (n && inMap(n.col, n.row)) {
+        const st = hexNeighbor(n.col, n.row, DIR_OPPOSITE[q.dir]);
+        if (!(st && !inMap(st.col, st.row)) && !occupied.has(`${n.col},${n.row}`) && !(st && occupied.has(`${st.col},${st.row}`))) {
+          queue.push({ col: n.col, row: n.row, dir: q.dir, mp: q.mp - 1, turned: false });
+        }
+      }
+    }
+    // 転舵（1ヘクスで1回）
+    if (!q.turned) {
+      const ci = DIR_CW_ORDER.indexOf(q.dir);
+      [DIR_CW_ORDER[(ci + 1) % 6], DIR_CW_ORDER[(ci + 5) % 6]].forEach(nd => {
+        queue.push({ col: q.col, row: q.row, dir: nd, mp: Math.max(0, Math.min(q.mp - 1, mpOf(nd))), turned: true });
+      });
+    }
+  }
+  return out;
+}
+function drawMoveRange(ship) {
+  const reach = reachableMoves(ship);
+  if (reach.size <= 1) return;
+  const own = ship.side === 'jp';
+  // 向きの画面上の方向（隣のヘクスの中心への向き）。地図の中ほどのヘクスで測る
+  const c0 = Math.floor(MAP_CONFIG.cols / 2), r0 = Math.floor(MAP_CONFIG.rows / 2), p0 = hexPt(c0, r0);
+  const vec = {};
+  DIR_CW_ORDER.forEach(d => { const n = hexNeighbor(c0, r0, d); if (n) { const p = hexPt(n.col, n.row); const L = Math.hypot(p.x - p0.x, p.y - p0.y) || 1; vec[d] = { x: (p.x - p0.x) / L, y: (p.y - p0.y) / L }; } });
+  ctx.save();
+  reach.forEach(h => {
+    const { x, y } = hexPt(h.col, h.row);
+    drawHexPath(x, y);
+    ctx.fillStyle = own ? 'rgba(80,220,255,0.22)' : 'rgba(255,150,60,0.24)';
+    ctx.fill();
+    ctx.strokeStyle = own ? 'rgba(120,230,255,0.75)' : 'rgba(255,170,90,0.8)';
+    ctx.lineWidth = Math.max(1, HEX_SIZE * 0.04);
+    ctx.stroke();
+    // そのヘクスで向ける向き（短い線）
+    ctx.strokeStyle = own ? 'rgba(220,255,255,0.95)' : 'rgba(255,230,190,0.95)';
+    ctx.lineWidth = Math.max(1.5, HEX_SIZE * 0.07);
+    ctx.lineCap = 'round';
+    h.dirs.forEach(d => {
+      const v = vec[d]; if (!v) return;
+      ctx.beginPath();
+      ctx.moveTo(x + v.x * HEX_SIZE * 0.18, y + v.y * HEX_SIZE * 0.18);
+      ctx.lineTo(x + v.x * HEX_SIZE * 0.62, y + v.y * HEX_SIZE * 0.62);
+      ctx.stroke();
+    });
+  });
+  ctx.restore();
+}
+
+// ============================================================
 // 全艦プロット同時実行（アニメーション）
 // ============================================================
 let isExecuting = false;
 function executeAllPlots() {
   debugLog(`[DEBUG executeAllPlots] 呼出 isExecuting=${isExecuting}`);
   if (isExecuting) return;
+  // 人間対AI: 動かせる自軍の艦が全部「確定」してからでないと実行しない（複数の艦の入れ間違いを防ぐ）
+  if ((state.gameMode || 'human-vs-ai') === 'human-vs-ai' && state.phase === 'moveNote') {
+    const notDone = humanMovableShips().filter(s => !s.plotDone);
+    if (notDone.length) {
+      alert('まだ確定していない艦があります。各艦のプロットを入力して「確定」を押してから、プロット実行を押してください：' + notDone.map(s => s.name).join('、'));
+      if (!state.selectedShip || state.selectedShip.plotDone) { state.selectedShip = notDone[0]; draw(); }
+      return;
+    }
+  }
   const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.col >= 0 && (s.plottedMoves||[]).length > 0);
   debugLog(`[DEBUG executeAllPlots] allShips=${allShips.length}件 ${allShips.map(s=>s.name+':'+(s.plottedMoves||[]).join('')).join(', ')}`);
   if (allShips.length === 0) { setInfo('プロット済みの艦がありません'); return; }
@@ -3728,6 +3858,7 @@ function executeAllPlots() {
         p.ship.plotDone = false;
       });
       isExecuting = false;
+      state._plotExecTurn = state.turn; // このターンの移動を実行した
       executeMoveAftermath();
       addLog('=== プロット実行完了 ===');
       setInfo('プロット実行完了');
