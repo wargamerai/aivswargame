@@ -455,19 +455,9 @@ body.hide-units .control-marker { display:none; }
 
     <!-- 戦闘フェイズ -->
     <div id="combatPane" style="display:none;">
-      <h3>1. Uボート戦闘 (ASW + 反撃)</h3>
-      <div id="uboatCombatList" style="padding:4px 6px;"></div>
-
-      <h3>3. 航空攻撃 (LBA + 空母)</h3>
-      <div style="padding:4px 6px;">
-        <div style="font-size:0.8em;color:#cce;margin-bottom:3px;">連合 (空爆値3, 1回/ターン)</div>
-        <div id="lbaAlliedButtons" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:6px;"></div>
-        <div style="font-size:0.8em;color:#fcc;margin-bottom:3px;">枢軸 (空爆値3, 1回/ターン)</div>
-        <div id="lbaAxisButtons" style="display:flex;flex-wrap:wrap;gap:3px;"></div>
-      </div>
-
-      <h3>4. 水上戦闘</h3>
-      <div id="surfaceSeaList" style="padding:4px 6px;"></div>
+      <h3>戦闘の残っている海域</h3>
+      <div style="font-size:0.8em;color:#cce;padding:2px 6px;">1つの海域ずつ、Uボート戦闘 → 航空攻撃 → 水上戦闘 の順に戦います。次の海域は戦闘画面で選びます。</div>
+      <div id="combatAreaList" style="padding:4px 6px;"></div>
     </div>
   </div>
 </div>
@@ -974,6 +964,8 @@ function renderLocShipList(){
   }).join('');
 }
 
+// 2.4 フランスの港が閉じているか（6ターンの後）。閉じた後、フランスにいる艦は出撃できない
+function isFranceClosed(){ return currentTurn > 6; }
 function getValidDests(){
   if(!selectedLoc) return { seas:[], seas2:[], ports:[] };
   const firstShip = selectedShipIds.length ? SHIPS.find(s => s.id === selectedShipIds[0]) : null;
@@ -990,6 +982,8 @@ function getValidDests(){
 
   const isPort = !!PORTS[selectedLoc];
   const isSea  = !!SEAS[selectedLoc];
+  // 2.4 フランスは6ターンの後は使える港でなくなる。6ターンの終わりに戻った艦は、それ以降出撃できない
+  if(selectedLoc === 'France' && isFranceClosed()) return { seas:[], seas2:[], ports:[] };
   let seas = [], seas2 = [], ports = [];
   if(isPort){
     seas = PORT_SEAS[selectedLoc] || [];
@@ -1157,34 +1151,20 @@ function setPhase(p){
 }
 
 function renderCombatPane(){
-  const noneMsg = '<div style="color:#aac;padding:6px;font-size:0.8em;">対象なし</div>';
-
-  // 1. Uボート戦闘（ASW + 反撃を同一海域で一括）
-  const ubCombatEl = document.getElementById('uboatCombatList');
-  const ubCombatSeas = Object.keys(SEAS).filter(seaKey => {
-    if(combatDone.uboat.has(seaKey)) return false; // 処理済み
-    const allies = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies' && !s.returnPending);
-    const ub = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.type==='UBOAT' && !s.returnPending);
-    return allies.length && ub.length;
+  // 5.6 戦闘は1つの海域ずつ。ここは表示だけ（次の海域は戦闘画面で選ぶ）
+  const el = document.getElementById('combatAreaList');
+  if(!el) return;
+  const all = [...Object.keys(SEAS), ...Object.keys(PORTS)];
+  const STEP = { uboat: 'Uボート戦闘', alliedAir: '連合の航空攻撃', axisAir: 'ドイツの航空攻撃', surface: '水上戦闘' };
+  const rows = all.filter(a => a === combatArea || (!combatDone.area.has(a) && nextCombatStep(a))).map(a => {
+    const st = nextCombatStep(a);
+    const now = a === combatArea;
+    return `<div style="padding:4px 8px;margin-bottom:3px;border-radius:3px;background:${SEA_COLOR[a] || '#444'};${now ? 'outline:2px solid #fc4;' : 'opacity:0.85;'}">`
+      + `<b>${combatAreaLabel(a)}</b>${now ? '（戦闘中）' : ''}<br><span style="font-size:0.8em;">次: ${st ? STEP[st] : '終了'}</span></div>`;
   });
-  ubCombatEl.innerHTML = ubCombatSeas.length
-    ? ubCombatSeas.map(k => seaButton(k, 'resolveUboatCombatPhase', 'Uボート戦闘')).join('')
-    : noneMsg;
-
-  // 3. LBA + 空母
-  renderLbaButtons();
-
-  // 4. 水上戦闘
-  const surfEl = document.getElementById('surfaceSeaList');
-  const surfSeas = Object.keys(SEAS).filter(seaKey => {
-    if(combatDone.surface.has(seaKey)) return false; // 処理済み
-    const al = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='allies' && s.type!=='UBOAT' && !s.returnPending);
-    const ax = SHIPS.filter(s => s.location===seaKey && !s.sunk && s.side==='axis'   && s.type!=='UBOAT' && !s.returnPending);
-    return al.length && ax.length;
-  });
-  surfEl.innerHTML = surfSeas.length
-    ? surfSeas.map(k => seaButton(k, 'resolveSurfacePhase', '水上戦闘')).join('')
-    : noneMsg;
+  const done = all.filter(a => combatDone.area.has(a)).map(combatAreaLabel);
+  el.innerHTML = (rows.length ? rows.join('') : '<div style="color:#aac;padding:6px;font-size:0.8em;">対象なし</div>')
+    + (done.length ? `<div style="font-size:0.8em;color:#aac;margin-top:4px;">済み: ${done.join('、')}</div>` : '');
 }
 
 function seaButton(seaKey, fn, label){
@@ -1268,8 +1248,8 @@ async function startLbaBombing(side, area, cvOnly = false, useCv = true){
     document.getElementById('combatCloseBtn').style.display = '';
     return;
   }
-  if(side === 'axis' && SEAS[area]) combatDone.axisAir.add(area);
-  if(side === 'allies' && SEAS[area]){
+  if(side === 'axis') combatDone.axisAir.add(area);
+  if(side === 'allies'){
     combatDone.alliedAir.add(area);
     // 同じ海域のドイツ軍空母は、ここでは撃ち返さない。ドイツ軍の航空攻撃の選択で、同じ海域のLBAとまとめて攻撃する
   }
@@ -3645,7 +3625,7 @@ function planAlliedDeployment(aiLog){
   // 港か海域にいる艦のみ（ターン表の未登場艦は除く）
   const axisReady = SHIPS.filter(s =>
     s.side === 'axis' && !s.sunk && !s.removed && s.type !== 'UBOAT' && !(s.damage > 0) &&
-    s.location && (PORTS[s.location] || SEAS[s.location])
+    s.location && (PORTS[s.location] || SEAS[s.location]) && !(s.location === 'France' && isFranceClosed())
   );
   // ドイツ本国の戦力（北海・バレンツ海の必要量）
   const deHome = axisReady.filter(s => s.location === 'Germany');
@@ -4650,7 +4630,7 @@ async function aiAxisMove(){
   // 移動可能枢軸艦 (港にいる + 海域に残っている給油成功艦も含む、損傷艦は除外)
   const movable = SHIPS.filter(s =>
     s.side === 'axis' && !s.sunk && !s.removed && !s.movedThisTurn && (PORTS[s.location] || SEAS[s.location]) &&
-    !(s.damage > 0)
+    !(s.damage > 0) && !(s.location === 'France' && isFranceClosed()) // 2.4 閉じたフランスからは出撃できない
   );
   // ドイツ水上艦 / イタリア / Uボート 分類
   const deShips = movable.filter(s => s.country === 'DE' && s.type !== 'UBOAT');
@@ -4780,7 +4760,7 @@ async function aiAxisMove(){
 function simulateAxisMove(){
   const alliedBalCount = SHIPS.filter(s => s.side === 'allies' && s.location === 'Baltic' && !s.sunk).length;
   const alliedNSCount = SHIPS.filter(s => s.side === 'allies' && s.location === 'NorthSea' && !s.sunk).length;
-  const dePool = SHIPS.filter(s => s.country === 'DE' && s.type !== 'UBOAT' && !s.sunk && !s.removed && PORTS[s.location]);
+  const dePool = SHIPS.filter(s => s.country === 'DE' && s.type !== 'UBOAT' && !s.sunk && !s.removed && PORTS[s.location] && !(s.location === 'France' && isFranceClosed()));
   // バルト: 連合と同数
   let toBal = 0;
   for(const s of dePool){
@@ -5433,7 +5413,7 @@ function executeItalySeizure(log){
 }
 
 // 戦闘フェイズ完了トラック（同一海域での重複処理防止）
-const combatDone = { uboat: new Set(), surface: new Set(), alliedAir: new Set(), axisAir: new Set() };
+const combatDone = { uboat: new Set(), surface: new Set(), alliedAir: new Set(), axisAir: new Set(), area: new Set() };
 // 9.0 陸上攻撃機（LBA）。各陣営1個、毎ターン1回。
 const lbaUsed = { allies: false, axis: false };
 const LBA_TARGETS = {
@@ -5597,56 +5577,80 @@ function waitForAirAttackBtn(){
   });
 }
 
-// 戦闘フェイズの進行: 未処理の戦闘を1つ実行（Uボート戦闘 → 連合LBA/空母 → 水上戦闘）
-let axisLbaChecked = false; // ドイツ軍の航空攻撃で「終了」を選択済み（当ターン）
+// 戦闘フェイズの進行（5.6 戦闘は1つの海域ずつ解決する）:
+//   1つの海域で 5.61 Uボート戦闘（ASW＋反撃）→ 5.62 航空攻撃（連合→ドイツ）→ 5.63 水上戦闘 を全部済ませてから、次の海域へ。
+//   次にどの海域を戦闘するかは枢軸（人間）が選ぶ。港（LBA の目標）も航空攻撃だけの「エリア」として扱う
+let axisLbaChecked = false; // 互換のため残す（使わない）
+let combatArea = null;      // 今、戦闘を解決しているエリア
+const _shipsAt = (area, pred) => SHIPS.filter(s => s.location === area && !s.sunk && pred(s));
+const airTargetsAt = (area, enemy) => _shipsAt(area, s => s.side === enemy && s.type !== 'UBOAT' && !s.disabledThisTurn).length;
+const cvAt = (area, side) => !!SEAS[area] && _shipsAt(area, s => s.side === side && s.type === 'CV' && !s.disabledThisTurn).length > 0;
+const combatAreaLabel = a => SEA_LABEL[a] || PORT_LABEL[a] || a;
+// 連合AIの LBA を使うエリア: まだ戦闘を済ませていないエリアのうち、地中海に枢軸艦がいれば地中海、いなければ攻撃できる枢軸艦が一番多いエリア
+function alliedLbaArea(){
+  if(lbaUsed.allies) return null;
+  const open = LBA_TARGETS.allies.filter(a => !combatDone.area.has(a) && airTargetsAt(a, 'axis') > 0);
+  if(open.includes('Mediterranean')) return 'Mediterranean';
+  let best = null, max = 0;
+  open.forEach(a => { const n = airTargetsAt(a, 'axis'); if(n > max){ max = n; best = a; } });
+  return best;
+}
+// そのエリアで次にする戦闘（なければ null）
+function nextCombatStep(area){
+  const isSea = !!SEAS[area];
+  if(isSea && !combatDone.uboat.has(area)
+    && _shipsAt(area, s => s.side === 'allies' && !s.returnPending).length
+    && _shipsAt(area, s => s.type === 'UBOAT' && !s.returnPending).length) return 'uboat';
+  if(!combatDone.alliedAir.has(area) && airTargetsAt(area, 'axis') > 0
+    && (alliedLbaArea() === area || cvAt(area, 'allies'))) return 'alliedAir';
+  if(!combatDone.axisAir.has(area) && airTargetsAt(area, 'allies') > 0
+    && ((!lbaUsed.axis && LBA_TARGETS.axis.includes(area)) || cvAt(area, 'axis'))) return 'axisAir';
+  if(isSea && !combatDone.surface.has(area)
+    && _shipsAt(area, s => s.side === 'allies' && s.type !== 'UBOAT' && !s.returnPending).length
+    && _shipsAt(area, s => s.side === 'axis' && s.type !== 'UBOAT' && !s.returnPending).length) return 'surface';
+  return null;
+}
+// ドイツ軍の航空攻撃の選択肢（このエリアだけ）: LBA（同じ海域の空母と合計）・空母のみ
+function axisAirOptionsAt(area){
+  const cv = cvAt(area, 'axis');
+  const lbaOk = !lbaUsed.axis && LBA_TARGETS.axis.includes(area);
+  const opts = [];
+  if(lbaOk) opts.push({ area, cvOnly: false, useCv: cv, label: `${cv ? 'LBA+空母' : 'LBA'} ${combatAreaLabel(area)}` });
+  if(cv) opts.push({ area, cvOnly: true, useCv: true, label: `空母のみ ${combatAreaLabel(area)}` });
+  return opts;
+}
 async function runNextCombat(){
-  // 1) Uボート戦闘
-  const ubSea = Object.keys(SEAS).find(seaKey =>
-    !combatDone.uboat.has(seaKey)
-    && SHIPS.some(s => s.location===seaKey && !s.sunk && s.side==='allies' && !s.returnPending)
-    && SHIPS.some(s => s.location===seaKey && !s.sunk && s.type==='UBOAT' && !s.returnPending)
-  );
-  if(ubSea) return resolveUboatCombatPhase(ubSea);
-
-  // 2) 連合LBA: 地中海を優先。いなければ攻撃可能な枢軸艦が最多のエリア（同数はランダム）
-  const airTargetCount = area => SHIPS.filter(s =>
-    s.location === area && !s.sunk && s.side === 'axis' && s.type !== 'UBOAT' && !s.disabledThisTurn
-  ).length;
-  if(!lbaUsed.allies){
-    // 地中海に枢軸艦がいれば必ず地中海、いなければ攻撃可能な枢軸艦が最多のエリア
-    if(airTargetCount('Mediterranean') > 0) return startLbaBombing('allies', 'Mediterranean');
-    const areas = LBA_TARGETS.allies.filter(a => airTargetCount(a) > 0);
-    if(areas.length){
-      const max = Math.max(...areas.map(airTargetCount));
-      const best = areas.filter(a => airTargetCount(a) === max);
-      return startLbaBombing('allies', best[Math.floor(Math.random() * best.length)]);
-    }
+  // 今のエリアの戦闘が残っていれば続ける
+  if(combatArea && nextCombatStep(combatArea)) return runCombatStep(combatArea);
+  if(combatArea){ combatDone.area.add(combatArea); combatArea = null; }
+  const areas = [...Object.keys(SEAS), ...Object.keys(PORTS)].filter(a => !combatDone.area.has(a) && nextCombatStep(a));
+  if(!areas.length){
+    setPhaseLabel('━ 全戦闘 終了 ━');
+    document.getElementById('combatCloseBtn').style.display = '';
+    renderCombatPane();
+    // 全部の戦闘が終わったら、少し見せてから自動で閉じる
+    setTimeout(() => { if(document.getElementById('phaseLabel').textContent.includes('全戦闘 終了')) closeCombatModal(); }, 1200);
+    return;
   }
-  // 連合空母のみ（空母所在海域）
-  const cvSea = Object.keys(SEAS).find(seaKey =>
-    !combatDone.alliedAir.has(seaKey)
-    && SHIPS.some(s => s.location===seaKey && !s.sunk && s.side==='allies' && s.type==='CV' && !s.disabledThisTurn)
-    && airTargetCount(seaKey) > 0
-  );
-  if(cvSea) return startLbaBombing('allies', cvSea);
-
-  // 3) ドイツ軍の航空攻撃（LBA・空母を1つの選択画面から）
-  if(!axisLbaChecked){
-    const options = axisAirOptions();
-    if(options.length) return selectAxisAirStrike(options);
+  let area = areas[0];
+  // 次の海域は枢軸（人間）が選ぶ
+  if(areas.length > 1 && humanSide === 'axis'){
+    await openCombatModal(null, []);
+    document.getElementById('combatTitle').textContent = '戦闘する海域の選択';
+    area = await chooseInPhaseLabel('次に戦闘する海域を選んでください（戦闘は1つの海域ずつ、Uボート戦闘→航空攻撃→水上戦闘）',
+      areas.map(a => ({ label: combatAreaLabel(a), value: a, bg: SEA_COLOR[a] || '#444' })));
   }
-
-  // 4) 水上戦闘
-  const surfSea = Object.keys(SEAS).find(seaKey =>
-    !combatDone.surface.has(seaKey)
-    && SHIPS.some(s => s.location===seaKey && !s.sunk && s.side==='allies' && s.type!=='UBOAT' && !s.returnPending)
-    && SHIPS.some(s => s.location===seaKey && !s.sunk && s.side==='axis'   && s.type!=='UBOAT' && !s.returnPending)
-  );
-  if(surfSea) return resolveSurfacePhase(surfSea);
-  setPhaseLabel('━ 全戦闘 終了 ━');
-  document.getElementById('combatCloseBtn').style.display = '';
-  // 全部の戦闘が終わったら、少し見せてから自動で閉じる
-  setTimeout(() => { if(document.getElementById('phaseLabel').textContent.includes('全戦闘 終了')) closeCombatModal(); }, 1200);
+  combatArea = area;
+  renderCombatPane();
+  return runCombatStep(area);
+}
+function runCombatStep(area){
+  const step = nextCombatStep(area);
+  if(step === 'uboat') return resolveUboatCombatPhase(area);
+  if(step === 'alliedAir') return startLbaBombing('allies', area, alliedLbaArea() !== area, true);
+  if(step === 'axisAir') return selectAxisAirStrike(axisAirOptionsAt(area));
+  if(step === 'surface') return resolveSurfacePhase(area);
+  return runNextCombat();
 }
 
 // 戦闘画面の上部に選択ボタンを表示し、押されたボタンの値を返す
@@ -5693,10 +5697,11 @@ async function selectAxisAirStrike(options){
   await openCombatModal(null, []);
   document.getElementById('combatTitle').textContent = 'ドイツ軍 航空攻撃';
   const choices = options.map(o => ({ label: o.label, value: o, bg: SEA_COLOR[o.area] || '#444' }));
-  choices.push({ label: '終了', value: null, bg: '#666' });
-  const opt = await chooseInPhaseLabel('ドイツ軍 航空攻撃：攻撃するエリアを選んでください', choices);
+  choices.push({ label: 'ここでは航空攻撃をしない', value: null, bg: '#666' });
+  const _ar = options[0] && options[0].area;
+  const opt = await chooseInPhaseLabel(`ドイツ軍 航空攻撃（${combatAreaLabel(_ar)}）：攻撃のしかたを選んでください`, choices);
   if(!opt){
-    axisLbaChecked = true;
+    if(_ar) combatDone.axisAir.add(_ar);
     return runNextCombat();
   }
   return startLbaBombing('axis', opt.area, opt.cvOnly, opt.useCv);
@@ -5816,6 +5821,8 @@ function endTurn(){
   combatDone.surface.clear();
   combatDone.alliedAir.clear();
   combatDone.axisAir.clear();
+  combatDone.area.clear();
+  combatArea = null;
   axisLbaChecked = false;
   // 撤退海域フラグリセット
   retreatedSeas.clear();

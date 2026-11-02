@@ -148,44 +148,33 @@ function resolveUboatASW(seaKey, events, pending){
   // pending対象: 既に保留済みの艦も次の検索から除外
   const isPendingHit = (u) => pending && (pending.uboatSunk.has(u.id) || pending.uboatReturn.has(u.id));
 
+  // 8.3/8.4 Uボートは、その海域の連合艦全部からまとめて攻撃される（空母・船団は3個、その他は1個）。
+  //   ダイスを全部合わせ、6の数だけ Uボートを撃沈し、残りに 5の数だけ即時帰還を当てる（例 18: 6を先に数える）
+  let snk = 0, dis = 0;
   allies.forEach(s => {
     const numDice = (s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1;
-    // 1艦の連合艦は1隻のUボートを選んで全ダイスをまとめて適用（3個ダイスは分割不可）
-    const targetU = uboats.find(x => !x.sunk && x.location === seaKey && !isPendingHit(x));
     const dice = [];
-    const applyEvents = [];
-    let resolved6 = false, resolved5 = false;
     for(let i=0; i<numDice; i++){
       const r = rollD6();
       dice.push(r);
-      if(targetU){
-        if(r === 6 && !resolved6) resolved6 = true;
-        else if(r === 5 && !resolved6 && !resolved5) resolved5 = true;
-      }
+      if(r === 6) snk++; else if(r === 5) dis++;
     }
-    if(targetU){
-      if(resolved6){
-        if(pending){
-          pending.uboatSunk.add(targetU.id);
-        } else {
-          targetU.sunk = true;
-        }
-        if(typeof logCombatLine === 'function') logCombatLine(`★ ${targetU.name} 撃沈 (ASW: ${s.name})`);
-        applyEvents.push({ type:'sunk', ship: targetU.id, name: targetU.name });
-      } else if(resolved5){
-        if(pending){
-          pending.uboatReturn.add(targetU.id);
-        } else {
-          targetU.location = 'Germany';
-        }
-        if(typeof logCombatLine === 'function') logCombatLine(`${targetU.name}: 帰還 (ASW: ${s.name})`);
-        applyEvents.push({ type:'uboat_disabled', ship: targetU.id, name: targetU.name });
-      }
-    }
-    // ダイス表示 → その後で適用イベント
     events.push({ type:'asw_ship', ship: s.id, name: s.name, dice });
-    applyEvents.forEach(e => events.push(e));
   });
+  const targets = uboats.filter(u => !u.sunk && u.location === seaKey && !isPendingHit(u));
+  events.push({ type:'asw_summary', sea: seaKey, sunk: Math.min(snk, targets.length), disabled: Math.min(dis, Math.max(0, targets.length - snk)) });
+  for(let i=0; i<snk && targets.length; i++){
+    const u = targets.shift();
+    if(pending) pending.uboatSunk.add(u.id); else u.sunk = true;
+    if(typeof logCombatLine === 'function') logCombatLine(`★ ${u.name} 撃沈 (ASW)`);
+    events.push({ type:'sunk', ship: u.id, name: u.name });
+  }
+  for(let i=0; i<dis && targets.length; i++){
+    const u = targets.shift();
+    if(pending) pending.uboatReturn.add(u.id); else u.location = 'Germany';
+    if(typeof logCombatLine === 'function') logCombatLine(`${u.name}: 帰還 (ASW)`);
+    events.push({ type:'uboat_disabled', ship: u.id, name: u.name });
+  }
 }
 
 // 8.0 Uボート戦闘 (古い関数、互換性維持用に残す)

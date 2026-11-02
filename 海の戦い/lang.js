@@ -7,6 +7,12 @@
 
 // 文全体が一致したときの訳（語句の置き換えより先に使う）
 const LANG_EXACT = {
+  // 5.6 戦闘は1つの海域ずつ
+  '戦闘する海域の選択': 'Choose the sea area for combat',
+  '次に戦闘する海域を選んでください（戦闘は1つの海域ずつ、Uボート戦闘→航空攻撃→水上戦闘）': 'Choose the next area to fight in (one area at a time: U-boat combat → air strikes → surface combat)',
+  'ここでは航空攻撃をしない': 'No air strike here',
+  '戦闘の残っている海域': 'Areas with combat remaining',
+  '1つの海域ずつ、Uボート戦闘 → 航空攻撃 → 水上戦闘 の順に戦います。次の海域は戦闘画面で選びます。': 'Combat is resolved one area at a time: U-boat combat → air strikes → surface combat. Choose the next area in the combat window.',
   '終了': 'Done',
   '戦闘': 'Combat',
   '移動': 'Move',
@@ -64,6 +70,12 @@ const LANG_EXACT = {
 
 // 語句の訳（長い語句から順に置き換える）
 const LANG_TERMS = {
+  '：攻撃のしかたを選んでください': ': choose how to attack',
+  '連合の航空攻撃': 'Allied air strike',
+  'ドイツの航空攻撃': 'German air strike',
+  '（戦闘中）': ' (in combat)',
+  '済み: ': 'Done: ',
+  '次: ': 'Next: ',
   '枢軸の投了（ターン': 'Axis resigned (turn ',
   '）— 連合の勝ち': ') — Allied victory',
   // 長い文・決まった言い回し

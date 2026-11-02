@@ -243,6 +243,7 @@ function myAxisMove(){
   const ops = { northHeld: seaControl['NorthSea'] === 'axis' || seaControl['Barents'] === 'axis', italy: null, assault: null, assaultSkipped: null, raid: false, mode: null, failed: [] };
   // 到達: 1=確実 / 2=2エリア移動（ダイス<速力） / 0=不可
   const reach = (s, sea) => {
+    if(s.location === 'France' && turn > 6) return 0; // 2.4 フランスは6ターンの後は使える港でない。戻った艦は出撃できない
     if(s.refuelTurn === turn - 1 && SEAS[s.location]) return 1; // 洋上補給成功艦はどこでも
     const adj = PORT_SEAS[s.location] || [];
     if(adj.includes(sea)) return 1;
@@ -291,6 +292,7 @@ function myAxisMove(){
 
   // --- ドイツ水上艦 ---
   let de = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.country === 'DE' && s.type !== 'UBOAT' && !(s.damage > 0) &&
+    !(s.location === 'France' && turn > 6) && // 2.4 閉じたフランスからは出撃できない
     (G('PORTS')[s.location] || (SEAS[s.location] && s.refuelTurn === turn - 1)));
   // 船団の位置
   const convoySea = ['Barents', 'NorthSea'].find(k => SHIPS.some(s => alive(s) && s.type === 'CONVOY' && s.location === k));
