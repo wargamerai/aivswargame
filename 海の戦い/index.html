@@ -3596,7 +3596,7 @@ let simMode = false;
 // 順序: 船団護衛(船団がバレンツ在泊時) → ターン1とターン2以降で分岐
 //   ターン1: 空母を北海/バレンツに交互 → 北海(遅い艦でドイツ本国の戦力以上) → バレンツ(速い艦すべて)
 //            → 北海不足ならバレンツの余剰を北海へ → 余りは北海/バレンツにランダム
-//   ターン2以降: 地中海増援(連続支配3かつ南大西洋を連合支配) → 空母を対潜の手薄な海域へ1隻ずつ
+//   ターン2以降: 地中海増援(南大西洋を連合支配で、地中海が不利なとき) → 空母を対潜の手薄な海域へ1隻ずつ
 //            → 北海(遅い艦で攻撃力) → バレンツ(速い艦で攻撃力) → 北海不足ならバレンツの余剰を北海へ
 //            → 北/南大西洋に最低1隻 → バレンツ(余力で艦数も) → 余りは北大西洋→南大西洋（勝てるとき）、残りは北海
 // 戦力の評価（両軍のAIで共通）
@@ -3747,14 +3747,7 @@ function planAlliedDeployment(aiLog){
 
   if(currentTurn === 1){
     // ===== ターン1: 北海とバレンツ海に全力（大西洋は考えない） =====
-    // 地中海のテコ入れ: 足の遅い戦艦（Malaya・Barham）0〜1隻と重巡0〜2隻を2エリア移動で地中海へ（数はくじ、成否はダイス）
-    {
-      const nBB = Math.floor(Math.random() * 2), nCA = Math.floor(Math.random() * 3);
-      const medBB = freeShips().filter(s => (s.id === 'uk_malaya' || s.id === 'uk_barham') && medOk(s))
-        .sort(() => Math.random() - 0.5).slice(0, nBB);
-      const medCA = nCA ? freeShips().filter(s => s.country === 'UK' && s.type === 'CA' && medOk(s)).slice(-nCA) : [];
-      [...medBB, ...medCA].forEach(s => assign(s, 'Mediterranean'));
-    }
+    // 1ターン目は地中海へ送らない（ユーザーの指示 2026-11-03: 空母が減った分、北海・バレンツ海を優先）
     // 空母: 航空攻撃力の大きい順に、バレンツ海・北海へ交互に振り分ける
     let toBarents = true;
     freeShips().filter(s => s.type === 'CV').sort((a, b) => (b.air || 0) - (a.air || 0)).forEach(s => {
@@ -3795,8 +3788,8 @@ function planAlliedDeployment(aiLog){
     const pr = Math.random();
     posture = pr < 0.4 ? 'ns' : pr < 0.8 ? 'normal' : 'atl';
     alliedPostureLog.push({ turn: currentTurn, posture });
-    // 1) 地中海の増援: 連続支配3かつ南大西洋を連合が支配しているときだけ、勝てる量まで（強い艦から）
-    if(streak3 && seaControl['SouthAtlantic'] === 'allies'){
+    // 1) 地中海の増援: 南大西洋を連合が支配していて、地中海が不利なときは、勝てる量まで（強い艦から）
+    if(seaControl['SouthAtlantic'] === 'allies'){
       const itFull = italianFullThreat();
       const medWins = () => battleGeq([...maltaShips, ...placed.Mediterranean], itFull)
         && (maltaShips.length + placed.Mediterranean.length) > itFull.length;
@@ -3886,6 +3879,10 @@ function planAlliedDeployment(aiLog){
         if(wins(placed[sea], th)) break;
         assign(s, sea);
       }
+    }
+    // 残った艦: 南大西洋が1隻だけなら南大西洋へ（ユーザーの指示 2026-11-03）。行けない艦と、それ以外のときは北海へ
+    if(placed.SouthAtlantic.length === 1){
+      freeShips().filter(s => hop(s, 'SouthAtlantic') === 1).forEach(s => assign(s, 'SouthAtlantic'));
     }
     freeShips().filter(nsOk).forEach(s => assign(s, 'NorthSea'));
     // 9) 北海の立て直し（ユーザーの指示 2026-11-02）: 北海で負けたあと、北海が手薄なまま（例: 北海に戦艦1・空母1、
