@@ -15,11 +15,20 @@ function ST_time(night, after) {
   const h = ST_pick(hs);
   ST_lastHour = h;
   const m = ST_pick(['00', '10', '20', '30', '40', '50']);
+  if (LANG === 'en') return `${next ? 'Next day, ' : ''}${String(h).padStart(2, '0')}${m} hours`;
   return `${next}${h < 12 ? '午前' : '午後'}${h % 12 === 0 && h !== 0 ? 12 : h % 12}時${m === '00' ? '' : m + '分'}`;
 }
 // 輸送船の名前
 const ST_WORDS = ['ヘロン', 'ミード', 'ストーム', 'レインボー', 'ブリーズ', 'ガゼル', 'フロスト', 'シーガル', 'ドーン', 'ハーベスト', 'オリオン', 'トレーダー', 'ライオン', 'ウィンド', 'ハイランド', 'マーチャント', 'アトラス', 'コメット', 'アンバー', 'ヴァリアント', 'ポラリス', 'セレス', 'ハミルトン', 'ケンジントン', 'ボイジャー'];
+const ST_WORDS_EN = ['Heron', 'Mead', 'Storm', 'Rainbow', 'Breeze', 'Gazelle', 'Frost', 'Seagull', 'Dawn', 'Harvest', 'Orion', 'Trader', 'Lion', 'Wind', 'Highland', 'Merchant', 'Atlas', 'Comet', 'Amber', 'Valiant', 'Polaris', 'Ceres', 'Hamilton', 'Kensington', 'Voyager'];
 function ST_shipName(kind) {
+  if (LANG === 'en') {
+    const e = ST_pick(ST_WORDS_EN);
+    if (kind === '弾薬運搬船') return `the ammunition ship Empire ${e}`;
+    if (kind === 'タンカー') return `the tanker British ${e}`;
+    if (kind === '救難船') return `the rescue ship ${ST_pick(['Zaamzam', 'Toward', 'Pelican', 'Stockport', 'Gadila'])}`;
+    return ST_pick([`the freighter Empire ${e}`, `the freighter City of ${e}`, `the Norwegian ${e}`, `the Greek ${e}`, `the freighter ${e} Bay`]);
+  }
   const w = ST_pick(ST_WORDS);
   if (kind === '弾薬運搬船') return `弾薬運搬船〈エンパイア・${w}〉`;
   if (kind === 'タンカー') return `タンカー〈ブリティッシュ・${w}〉`;
@@ -214,11 +223,57 @@ Object.assign(STORY, {
   nextMission: ['副長「次の船団が待っています」', '副長「休む間もありませんな。次の船団です」', '老機関長「また行くのか。……まあ、行くしかないわな」'],
   stormNoUb: ['見張り「この嵐では、U ボートも手が出せますまい」', '古参の見張り長「この時化じゃ、奴らも潜望鏡を上げられませんよ」', '若い見張り員「波が高すぎて……でも、敵も同じですよね？」'],
 });
+// 入港の文（損害の大きさで変わる）: safe=全船無事 / good=2万5千トン未満 / mixed=5万トン未満 / bad=5万トン以上
+Object.assign(STORY, {
+  arriveSafe: [
+    '{port}の灯が見えてきた。一隻も欠けていない。{size}隻の船が、そろって港に入っていく。',
+    '水平線に{port}の街並みが浮かんだ。船団は一隻も失わなかった——こんな航海は、そうあるものではない。',
+    '{port}入港。岸壁から手を振る人々に、商船の汽笛が次々と応える。全船、無事だ。',
+  ],
+  arriveSafeCrew: [
+    '副長「全船無事です、{cap}艦長。……正直、信じられません」',
+    '老機関長「一隻も沈めずに着いたか。こいつは、港で言いふらしてもいい話だ」',
+    '若い見張り員「全部、いますよね？ 数え直したんです。三回も！」',
+  ],
+  arriveGood: [
+    '{port}の灯が見えてきた。生き延びた船たちが、一隻、また一隻と港に入っていく。',
+    '水平線に{port}の街並みが浮かんだ。乗員たちの肩から、ようやく力が抜けていく。',
+    '{port}入港。失った船のことを思えば胸は痛む。それでも、ほとんどの船を連れて帰ってこられた。',
+  ],
+  arriveGoodCrew: [
+    '副長「損害は軽く済みました。まずまずの航海です、艦長」',
+    '古参の見張り長「何隻かはやられましたが……これなら上出来でしょう」',
+    '航海長「船団、入港完了。熱い風呂が待ち遠しいですな」',
+  ],
+  arriveMixed: [
+    '{port}の灯が見えてきた。だが、船団の列は出港した時よりずいぶん短い。誰も歓声を上げない。',
+    '{port}入港。岸壁に並ぶ人々が、帰ってこなかった船の名を探している。',
+    '港の静かな水面が、かえって胸にこたえる。{port}にたどり着けたのは、全部ではなかった。',
+  ],
+  arriveMixedCrew: [
+    '副長「……着きました、艦長。ですが、失ったものも多い航海でした」',
+    '老機関長「沈んだ船の連中にも、帰りを待つ家族がいたんだろうな」',
+    '若い見張り員「もっと早く見つけていれば……」——誰も答えなかった。',
+  ],
+  arriveBad: [
+    '{port}の灯が見えてきた。船団は見る影もない。並んで入港していく船の間が、ぽっかりと空いている。',
+    '{port}入港。岸壁の人々は、待っていた船がもう来ないことを、次第に悟りはじめた。',
+    '霧のような小雨の中、{port}に入る。艦橋の誰もが黙り込み、ただ前だけを見ていた。',
+  ],
+  arriveBadCrew: [
+    '副長「……ひどい航海でした、艦長。報告書を書くのがつらい」',
+    '古参の見張り長「何十年も海にいますが、こんなにやられたのは初めてです」',
+    '老機関長「艦長のせいじゃない。……そう言っても、慰めにはならんか」',
+  ],
+});
 function story(k, v) {
-  const arr = k.split('.').reduce((o, x) => o && o[x], STORY);
-  // {cap} は艦長の名前（決めていなければ空。「{cap}艦長」は「艦長」になる）
-  v = Object.assign({ cap: (typeof S !== 'undefined' && S && S.captain) ? S.captain : '' }, v);
-  return ST_fill(Array.isArray(arr) ? ST_pick(arr) : (arr || ''), v);
+  const base = (LANG === 'en' && typeof STORY_EN !== 'undefined') ? STORY_EN : STORY;
+  const arr = k.split('.').reduce((o, x) => o && o[x], base);
+  // {cap} は艦長の名前（決めていなければ空。「{cap}艦長」は「艦長」になる）。英語は {capt}（Captain 名前）
+  const cap = (typeof S !== 'undefined' && S && S.captain) ? S.captain : '';
+  v = Object.assign({ cap, capt: cap ? 'Captain ' + cap : 'Captain' }, v);
+  const out = ST_fill(Array.isArray(arr) ? ST_pick(arr) : (arr || ''), v);
+  return LANG === 'en' ? out.charAt(0).toUpperCase() + out.slice(1) : out;
 }
-function ST_weather(w) { return ST_pick([STORY.wGood, STORY.wPoor, STORY.wFog, STORY.wStorm][w]); }
+function ST_weather(w) { const B = (LANG === 'en' && typeof STORY_EN !== 'undefined') ? STORY_EN : STORY; return ST_pick([B.wGood, B.wPoor, B.wFog, B.wStorm][w]); }
 function ST_brg() { return String(Math.floor(Math.random() * 36) * 10).padStart(3, '0'); }

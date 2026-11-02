@@ -19,6 +19,8 @@
   #status { flex:0 0 var(--top, 46vh); overflow:auto; padding:8px 10px; background:var(--panel); border-bottom:2px solid var(--line); display:flex; gap:14px; flex-wrap:wrap; align-content:flex-start; font-size:0.87rem; }
   #status .col { min-width:15em; }
   #status .col.ship { min-width:18em; }
+  #status .col.ub { flex:0 1 19em; }
+  .map { max-width:100%; overflow-x:auto; }
   #status .info { flex:1; min-width:16em; }
   #status .title { color:var(--acc); font-weight:bold; font-size:1.00rem; margin-bottom:4px; }
   .chips { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:3px; margin:2px 0 4px; }
@@ -109,15 +111,16 @@
 </head>
 <body>
 <div id="bar">
-  <span class="t">コルベット・コマンド</span>
-  <button onclick="fontSize(-1)" title="文字を小さく">文字−</button>
-  <button onclick="fontSize(1)" title="文字を大きく">文字＋</button>
-  <button id="stepBtn" onclick="toggleStep()">1手ずつ: ON</button>
-  <button onclick="openOptions()">オプション</button>
-  <button onclick="downloadLog()">航海日誌</button>
+  <span class="t" data-en="Corvette Command">コルベット・コマンド</span>
+  <button onclick="fontSize(-1)" title="文字を小さく" data-en="A−" data-en-title="Smaller text">文字−</button>
+  <button onclick="fontSize(1)" title="文字を大きく" data-en="A＋" data-en-title="Larger text">文字＋</button>
+  <button id="stepBtn" onclick="toggleStep()" data-en="Step by step: ON">1手ずつ: ON</button>
+  <button onclick="openOptions()" data-en="Options">オプション</button>
+  <button onclick="downloadLog()" data-en="Logbook">航海日誌</button>
   <button onclick="saveFile()">Save</button>
   <button onclick="loadFile()">Load</button>
-  <button onclick="restart()">最初から</button>
+  <button onclick="restart()" data-en="New game">最初から</button>
+  <button onclick="setLang(LANG === 'en' ? 'ja' : 'en')" title="言語 / Language">日本語 / English</button>
 </div>
 <div id="status"></div>
 <div id="split" title="つまんで上下に動かすと、上の画面の高さを変えられます（ダブルクリックで元に戻す）"><span></span></div>
@@ -125,8 +128,18 @@
   <div id="log"></div>
   <div id="choices"></div>
 </div>
+<script src="cc_lang.js"></script>
 <script src="cc_data.js"></script>
 <script src="cc_story.js"></script>
+<script src="cc_story_en.js"></script>
 <script src="cc_game.js"></script>
+<script>
+  // 英語の時は、上のボタンなどの文字を英語にする
+  if (LANG === 'en') {
+    document.title = 'Corvette Command';
+    document.querySelectorAll('[data-en]').forEach(e => { e.textContent = e.dataset.en; });
+    document.querySelectorAll('[data-en-title]').forEach(e => { e.title = e.dataset.enTitle; });
+  }
+</script>
 </body>
 </html>
