@@ -1037,6 +1037,11 @@ const LANG_PATTERNS_SRC = [
   ["AI: 後退 — GROUP {0}（白兵戦を避ける・§20.55）", "AI: falls back — GROUP {0} (avoiding close combat, §20.55)"],
   ["AI: GROUP {0} が相対距離3まで下がったので、侵入兵 {1#}名は侵入状態でなくなりました（§20.53）", "AI: GROUP {0} fell back to relative range 3, so {1} infiltrator(s) are no longer infiltrating (§20.53)"],
   ["AI: GROUP {0} が相対距離4で地形カードを置いたので、侵入兵 {1#}名は侵入状態でなくなりました（§20.53）", "AI: GROUP {0} played a terrain card at relative range 4, so {1} infiltrator(s) are no longer infiltrating (§20.53)"],
+  // §33.6 負傷兵の兵器（主兵器と爆薬の両方は持てない）
+  ["負傷した {0} は、主兵器と爆薬の両方は持てません（§33.6）。「OK」で爆薬を捨てて主兵器を残します。「キャンセル」で主兵器を捨てて爆薬を残します。", "Wounded {0} cannot carry both a primary weapon and a Demolition Charge (§33.6). OK: drop the Demolition Charge and keep the primary weapon. Cancel: drop the primary weapon and keep the Demolition Charge."],
+  ["AI: 負傷した {0} は爆薬を捨てました（§33.6）", "AI: wounded {0} dropped the Demolition Charge (§33.6)"],
+  ["AI: 負傷した {0} は主兵器を捨てて爆薬を残しました（§33.6）", "AI: wounded {0} dropped the primary weapon and kept the Demolition Charge (§33.6)"],
+  ["爆薬を持てる兵士がいません（§21.1 小銃・突撃銃・カービン・BAR・短機関銃か非武装で、爆薬を持っていない兵士。負傷兵は主兵器と両方は持てない §33.6）", "No soldier can carry the Demolition Charge (§21.1: unarmed, or armed with a rifle, assault rifle, carbine, BAR or machine pistol, and not already carrying one; a wounded man cannot carry it with a primary weapon §33.6)"],
 ];
 const LANG_PATTERNS = [];
 LANG_PATTERNS_SRC.forEach(([ja, en]) => {
