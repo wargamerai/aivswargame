@@ -1556,6 +1556,10 @@
     if (tgtGroup && R().hasTerrainType && R().hasTerrainType(tgtGroup, 'PILLBOX')) {
       return { ok: false, error: 'トーチカ内のグループはCC不可（火力2倍や爆薬のみ有効）' };
     }
+    // §20.55 侵入されたグループが移動して相対距離が5より小さい間は、距離5に戻るまで白兵戦を受けない
+    if (tgtGroup && R().relativeRange(srcGroup.distance, tgtGroup.distance) < 5) {
+      return { ok: false, error: '侵入されたグループが相対距離5より下がっているので、白兵戦はできません（§20.55）' };
+    }
     return { ok: true };
   }
 

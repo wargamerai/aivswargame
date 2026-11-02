@@ -1022,6 +1022,21 @@ const LANG_PATTERNS_SRC = [
   ["対戦車砲: 使えません", "Anti-tank gun: not available"],
   ["バズーカ: 使えません", "Bazooka: not available"],
   ["火炎放射器: 使えません", "Flamethrower: not available"],
+  // 撃たれる時の予告・§20.53/§20.55 の後退
+  ["敵の GROUP {0} が あなたの GROUP {1} を射撃します", "Enemy GROUP {0} is firing at your GROUP {1}"],
+  ["敵の GROUP {0} が迫撃砲で あなたの GROUP {1} を撃ちます", "Enemy GROUP {0} is firing its mortar at your GROUP {1}"],
+  ["攻撃の火力 {0#}（射撃カード {1#}・攻撃側の地形 {2#}・防御側の地形 {3#}）", "Attack strength {0} (Fire card {1}, attacker's terrain {2}, defender's terrain {3})"],
+  ["攻撃の火力 {0#}（射撃カード {1#}・攻撃側の地形 {2#}・防御側の地形 {3#}・日本軍 -1）", "Attack strength {0} (Fire card {1}, attacker's terrain {2}, defender's terrain {3}, Japanese -1)"],
+  ["射撃カードの火力 {0#} は、移動中・夜間のため {1#}", "Fire card strength {0} becomes {1} (moving / night)"],
+  ["距離 {0#}", "Range {0}"],
+  ["隠蔽カードを使うと、その数字だけ火力が下がります", "A Concealment card lowers the attack strength by its number"],
+  ["隠蔽カード1枚で命中の数字が1ランク下がります", "Each Concealment card lowers the hit number by one rank"],
+  ["侵入されたグループが相対距離5より下がっているので、白兵戦はできません（§20.55）", "The infiltrated group has fallen back below relative range 5, so close combat is not possible (§20.55)"],
+  ["GROUP {0} が相対距離3まで下がったので、敵の侵入兵 {1#}名は侵入状態でなくなりました（§20.53）", "GROUP {0} fell back to relative range 3, so {1} enemy infiltrator(s) are no longer infiltrating (§20.53)"],
+  ["GROUP {0} が相対距離4で地形カードを置いたので、敵の侵入兵 {1#}名は侵入状態でなくなりました（§20.53）", "GROUP {0} played a terrain card at relative range 4, so {1} enemy infiltrator(s) are no longer infiltrating (§20.53)"],
+  ["AI: 後退 — GROUP {0}（白兵戦を避ける・§20.55）", "AI: falls back — GROUP {0} (avoiding close combat, §20.55)"],
+  ["AI: GROUP {0} が相対距離3まで下がったので、侵入兵 {1#}名は侵入状態でなくなりました（§20.53）", "AI: GROUP {0} fell back to relative range 3, so {1} infiltrator(s) are no longer infiltrating (§20.53)"],
+  ["AI: GROUP {0} が相対距離4で地形カードを置いたので、侵入兵 {1#}名は侵入状態でなくなりました（§20.53）", "AI: GROUP {0} played a terrain card at relative range 4, so {1} infiltrator(s) are no longer infiltrating (§20.53)"],
 ];
 const LANG_PATTERNS = [];
 LANG_PATTERNS_SRC.forEach(([ja, en]) => {

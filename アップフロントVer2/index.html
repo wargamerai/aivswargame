@@ -511,6 +511,15 @@
   .main-group:hover { border-color: #aaa; }
   .main-group.target-source { border-color: #6c6; background: rgba(60,140,60,0.18); border-style: solid; }
   .main-group.target-enemy  { border-color: #c33; background: rgba(160,40,40,0.18); border-style: solid; }
+  /* 撃たれる時の予告: 撃つ敵のグループ（橙）と撃たれる自分のグループ（赤） */
+  .main-group.incoming-src { border-color: #f90; border-style: solid; box-shadow: 0 0 12px #f90; }
+  .main-group.incoming-tgt { border-color: #f33; border-style: solid; box-shadow: 0 0 16px #f33; background: rgba(160,40,40,0.22); }
+  #incoming-banner { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 2700; display: none;
+    background: rgba(45,12,12,0.96); border: 2px solid #f55; border-radius: 6px; padding: 8px 14px; color: #fff;
+    font-size: 14px; max-width: 92vw; text-align: center; pointer-events: none; box-shadow: 0 4px 18px rgba(0,0,0,0.7); }
+  #incoming-banner .ib-title { font-weight: bold; color: #ffcf6e; font-size: 15px; margin-bottom: 4px; }
+  #incoming-banner .ib-cards { display: flex; gap: 4px; justify-content: center; margin: 4px 0; }
+  #incoming-banner .ib-cards img { width: 54px; border-radius: 3px; }
   .main-group .group-header { grid-column: 1 / 3; }
   .main-group .cards-area   { grid-column: 1; grid-row: 2; }
   .main-group .work-row     { grid-column: 2; grid-row: 2; flex-direction: column; width: 90px; }
@@ -4090,6 +4099,10 @@ function renderField(side) {
 function makeMainGroup(side, group, idx) {
   const slot = document.createElement('div');
   slot.className = 'main-group';
+  if (state._incoming) { // 撃たれる時の予告（撃つ敵・撃たれる自分のグループを光らせる）
+    if (side === 'ai' && idx === state._incoming.si) slot.classList.add('incoming-src');
+    if (side === 'player' && idx === state._incoming.ti) slot.classList.add('incoming-tgt');
+  }
   // 夜間 + 相手陣営から認知されていない → 暗く表示（敵・味方とも）
   if (state.isNight) {
     const oppSide = side === 'player' ? 'ai' : 'player';
@@ -5157,6 +5170,8 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       }
       placePlainOnGroup(pGrp, card);
       playerDidRuleAction = true;
+      { const _n = releaseInfiltrationOnRetreat(pGrp, 'player', 'terrain'); // §20.53 相対距離4で地形カード
+        if (_n) setTimeout(() => alert(`GROUP ${pGrp.name} が相対距離4で地形カードを置いたので、敵の侵入兵 ${_n}名は侵入状態でなくなりました（§20.53）`), 50); }
     } else {
     const target = state.fireSource || state.fireTarget;
     if (!target) return;
@@ -5286,6 +5301,8 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       // 地形配置で側面状態解除
       grp.flankingTarget = null;
       playerDidRuleAction = true;
+      if (!isOverlay2) { const _n = releaseInfiltrationOnRetreat(grp, 'player', 'terrain'); // §20.53 相対距離4で地形カード
+        if (_n) setTimeout(() => alert(`GROUP ${grp.name} が相対距離4で地形カードを置いたので、敵の侵入兵 ${_n}名は侵入状態でなくなりました（§20.53）`), 50); }
     }
     } // 平地以外の地形カード
   }
@@ -6100,6 +6117,32 @@ function getConcealMod(cards) {
   });
   return mod;
 }
+
+/** 撃たれる時の予告: ヒーローの確認・隠蔽カードの選択の前に、どの敵がどのグループをどれだけの火力で撃つかを
+ *  画面の上に出し、撃つ敵のグループと撃たれる自分のグループを光らせる。info = { si, ti, title, cards, lines } */
+function setIncomingAttack(info) {
+  state._incoming = info;
+  let b = document.getElementById('incoming-banner');
+  if (!b) { b = document.createElement('div'); b.id = 'incoming-banner'; document.body.appendChild(b); }
+  b.innerHTML = '';
+  const t = document.createElement('div'); t.className = 'ib-title'; t.textContent = info.title; b.appendChild(t);
+  if (info.cards && info.cards.length) {
+    const row = document.createElement('div'); row.className = 'ib-cards';
+    info.cards.forEach(c => { if (c && c.img) { const im = document.createElement('img'); im.src = c.img; row.appendChild(im); } });
+    b.appendChild(row);
+  }
+  (info.lines || []).forEach(l => { const d = document.createElement('div'); d.textContent = l; b.appendChild(d); });
+  b.style.display = 'block';
+  renderField('ai'); renderField('player');
+}
+function clearIncomingAttack() {
+  if (!state._incoming) return;
+  state._incoming = null;
+  const b = document.getElementById('incoming-banner');
+  if (b) b.style.display = 'none';
+  renderField('ai'); renderField('player');
+}
+const _sgn = n => (n > 0 ? '+' + n : String(n));
 
 /** プレイヤーに隠蔽カード選択モーダルを表示し、選択結果をPromiseで返す */
 function askPlayerConcealment() {
@@ -7258,6 +7301,9 @@ function showMoveDirectionModal(grp, card, cardIdx) {
     if (state.fireSource) state.actedGroups.add(state.fireSource.idx);
     // §20.53 移動カード使用 → 侵入状態解除
     if (window.CC_ACTION) window.CC_ACTION.clearInfiltration(grp, 'move');
+    // §20.53 侵入されたグループが相対距離3まで下がった → 敵の侵入兵は侵入状態でなくなる
+    { const _n = releaseInfiltrationOnRetreat(grp, 'player', 'move');
+      if (_n) setTimeout(() => alert(`GROUP ${grp.name} が相対距離3まで下がったので、敵の侵入兵 ${_n}名は侵入状態でなくなりました（§20.53）`), 50); }
     state.selectedAction = null;
     state.selectedHand.clear();
     state.fireSource = null;
@@ -8986,7 +9032,10 @@ async function aiTryCC() {
     if (hasPillbox(grp)) continue;
     const inf = CC.getInfiltratingFromGroup(grp);
     if (inf.length === 0) continue;
+    if (!CC.canAttemptCC(grp).ok) continue; // §20.55 侵入先が相対距離5より下がっている など
     if (aiFlameShouldFire(grp, gi)) continue; // 火炎放射器で撃てるなら白兵戦より射撃を優先
+    { const _t = inf[0] && state.groups[inf[0].infiltratedGroupSide] && state.groups[inf[0].infiltratedGroupSide][inf[0].infiltratedGroupIdx];
+      if (_t && !inf.some(c => c.demoCharge) && !aiCCRankOK(grp, inf, _t).ok) continue; } // 相手と比べて不利なら白兵戦をしない
     await showAIAction('AI: 白兵戦', null, gi);
     await CC.aiExecuteCC(grp, gi, ccDrawCard, aiKey);
     cleanupEliminatedGroups();
@@ -9022,6 +9071,7 @@ async function aiTryInfiltrate() {
     for (let ti = 0; ti < state.groups.player.length; ti++) {
       const tgt = state.groups.player[ti];
       if (!tgt.cards.some(c => R.isAlive(c))) continue;
+      if (!_demoHere && !aiCCRankOK(src, _would, tgt).ok) continue; // 相手の白兵戦の値と比べて不利なら侵入しない
       if (!aiCanTargetRecognized(gi, ti)) continue; // 夜間: 未認知は侵入不可
       const chk = CC.canAttemptInfiltration(src, tgt, 'ai');
       if (!chk.ok) continue;
@@ -9096,25 +9146,25 @@ async function aiTurn() {
       mine: async () => (await aiTryMineRemove()) || (await aiTryMineLateral()),
       cross: aiTryCrossStream, wire: aiTryRemoveWire, repair: aiTryRepair, crew: aiTryCrewSetup,
       weapon: aiTryPickupWeapon, receive: aiTryReceiveTransfer, loner: aiTryTransferLoner,
-      scout: aiTryScout, flare: aiTryFlare, cc: aiTryCC, infiltrate: aiTryInfiltrate,
+      scout: aiTryScout, flare: aiTryFlare, cc: aiTryCC, infiltrate: aiTryInfiltrate, ccRetreat: aiTryRetreatFromCC,
       fireAny: aiTryFireAny, flank: aiTryFlankEncircle, smoke: aiTryPlaceOwnSmoke, move: aiTryMove, trench: aiTryTrench,
       guard: aiTryGuardChange, heroWound: aiTryHeroWound, shift: aiTryGroupShift, uninfiltrate: aiTryUninfiltrate,
     };
     const ORDER = {
       // 攻撃的: 白兵戦・侵入・射撃・前進を先に
-      aggr: ['weapon', 'receive', 'loner', 'uninfiltrate', 'cc', 'infiltrate', 'heroWound', 'flank', 'fireMoving', 'mortar', 'fireAny', 'smoke',
+      aggr: ['weapon', 'receive', 'loner', 'ccRetreat', 'uninfiltrate', 'cc', 'infiltrate', 'heroWound', 'flank', 'fireMoving', 'mortar', 'fireAny', 'smoke',
              'mine', 'cross', 'wire', 'shift', 'move', 'ownTerrain', 'rally', 'guard', 'repair', 'crew', 'scout', 'flare', 'trench'],
       // バランス: 従来の順
-      bal:  ['weapon', 'receive', 'loner', 'ownTerrain', 'rally', 'heroWound', 'flank', 'fireMoving', 'mortar', 'mine', 'cross', 'wire',
+      bal:  ['weapon', 'receive', 'loner', 'ccRetreat', 'ownTerrain', 'rally', 'heroWound', 'flank', 'fireMoving', 'mortar', 'mine', 'cross', 'wire',
              'guard', 'repair', 'crew', 'scout', 'flare', 'uninfiltrate', 'cc', 'infiltrate', 'fireAny', 'smoke', 'shift', 'move', 'trench'],
       // 防御的: 地形・回復・射撃を先に、前進は最後
-      def:  ['weapon', 'receive', 'loner', 'ownTerrain', 'rally', 'heroWound', 'flank', 'fireMoving', 'mortar', 'fireAny', 'smoke', 'guard', 'repair',
+      def:  ['weapon', 'receive', 'loner', 'ccRetreat', 'ownTerrain', 'rally', 'heroWound', 'flank', 'fireMoving', 'mortar', 'fireAny', 'smoke', 'guard', 'repair',
              'crew', 'mine', 'cross', 'wire', 'scout', 'flare', 'uninfiltrate', 'cc', 'infiltrate', 'trench', 'shift', 'move'],
     }[style] || [];
     // シナリオC の防御側（守備）: 回復・射撃を最優先。前進・側方移送・侵入・側面・包囲はしない（隠蔽は撃たれた時に使う）
     const _holdAll = (state.groups.ai || []).some(g => g && g._role === 'hold');
     const ORDER_USE = _holdAll
-      ? ['rally', 'heroWound', 'fireMoving', 'mortar', 'fireAny', 'weapon', 'receive', 'repair', 'crew', 'ownTerrain', 'smoke',
+      ? ['ccRetreat', 'rally', 'heroWound', 'fireMoving', 'mortar', 'fireAny', 'weapon', 'receive', 'repair', 'crew', 'ownTerrain', 'smoke',
          'wire', 'mine', 'cross', 'guard', 'scout', 'flare', 'trench']
       : ORDER;
     let safety = 30;
@@ -9682,8 +9732,12 @@ async function aiTryMortar() {
       pushTerrainToDiscard(fireCard);
 
       // §9.1 プレイヤーも迫撃砲の命中頻度を隠ぺいカードで下げられる（1枚で1ランク、§9.5 トーチカは不可）
+      setIncomingAttack({ si, ti, cards: [fireCard],
+        title: `敵の GROUP ${src.name} が迫撃砲で あなたの GROUP ${tgt.name} を撃ちます`,
+        lines: [`距離 ${distance}`, '隠蔽カード1枚で命中の数字が1ランク下がります']});
       await askPlayerHeroRally(tgt); // §10.4 解決前にヒーローで回復
       const _pConceal = canUseConcealment(tgt) ? await askPlayerConcealment() : [];
+      clearIncomingAttack();
       const conceals = _pConceal.length;
       const pinpoint = acquired;
       const smokePenalty = fireCheck.smokePenalty;
@@ -10035,7 +10089,19 @@ function aiPerformFire(plan) {
   if (pillboxRelation('ai', plan.si, plan.ti) === 'half') baseStrength = Math.floor(baseStrength / 2); // §23.7
 
   // §10.4 攻撃の解決前にヒーローでピン状態の兵士を回復できる → その後、隠蔽カード選択（§9.5 トーチカは不可）
+  {
+    const _jpMod = isJapanInGame() ? -1 : 0;
+    const _total = baseStrength + atkMod + defMod + _jpMod;
+    const _lines = [`攻撃の火力 ${_total}（射撃カード ${baseStrength}・攻撃側の地形 ${_sgn(atkMod)}・防御側の地形 ${_sgn(defMod)}${_jpMod ? '・日本軍 -1' : ''}）`];
+    if (baseStrength !== rawBaseStrength) _lines.push(`射撃カードの火力 ${rawBaseStrength} は、移動中・夜間のため ${baseStrength}`);
+    _lines.push(`距離 ${plan.dist}`);
+    _lines.push('隠蔽カードを使うと、その数字だけ火力が下がります');
+    setIncomingAttack({ si: plan.si, ti: plan.ti, lines: _lines,
+      cards: [plan.card].concat((plan.extras || []).map(ex => ex.card)),
+      title: `敵の GROUP ${src.name} が あなたの GROUP ${tgt.name} を射撃します` });
+  }
   askPlayerHeroRally(tgt).then(() => canUseConcealment(tgt) ? askPlayerConcealment() : []).then(async concealCards => {
+    clearIncomingAttack();
     const concealMod = getConcealMod(concealCards);
     const gullyMod = 0; // calcTerrainMod が CSV から既に算出
     const marshDefMod = 0; // 同上
@@ -10485,6 +10551,7 @@ async function aiTryMove() {
       if (opposing && R.isBlocked && R.isBlocked(g, opposing)) continue;
       const { eff, closest } = fireNow(g, i);
       if (closest >= 5) continue; // 相対距離5（白兵戦の距離）より先へは進まない
+      if (aiCCThreat(i, false)) continue; // 侵入されていて白兵戦が不利なら、白兵戦の距離へ戻らない（§20.55）
       if (!aiGroupWantsAdvance(g, i)) continue; // 性格と作戦の役割で決める
       const alive = g.cards.filter(c => R.isAlive(c)).length;
       if (eff < bestEff || (eff === bestEff && alive > bestSize)) { bestEff = eff; bestSize = alive; bestIdx = i; }
@@ -10635,6 +10702,8 @@ async function aiTryPlaceOwnTerrain() {
   state.aiHandCount = state.aiHand.length;
   renderField('ai'); renderHands();
   await showAIAction('AI: 地形配置', placedCard, targetGi);
+  { const _n = releaseInfiltrationOnRetreat(grp, 'ai', 'terrain'); // §20.53 相対距離4で地形カード
+    if (_n) await showAIAction(`AI: GROUP ${grp.name} が相対距離4で地形カードを置いたので、侵入兵 ${_n}名は侵入状態でなくなりました（§20.53）`, null, targetGi); }
   acted.add(targetGi);
   return true;
 }
@@ -10675,6 +10744,8 @@ async function aiTryPlaceOwnPlain() {
   placePlainOnGroup(grp, card);
   renderField('ai'); renderHands();
   await showAIAction('AI: 平地として配置', card, targetGi);
+  { const _n = releaseInfiltrationOnRetreat(grp, 'ai', 'terrain'); // §20.53 相対距離4で地形カード
+    if (_n) await showAIAction(`AI: GROUP ${grp.name} が相対距離4で地形カードを置いたので、侵入兵 ${_n}名は侵入状態でなくなりました（§20.53）`, null, targetGi); }
   acted.add(targetGi);
   return true;
 }
@@ -10834,15 +10905,126 @@ async function aiTryGroupShift() {
 
 /** AI がこの兵たちで白兵戦をするか: CCV の平均のランク（低 4以下 / 中 5〜7 / 高 8以上）と性格・作戦の役割で決める。
  *  攻撃的・突撃のグループ=すべて、バランス=中と高、防御的=高のみ。戻り値 { ok, avg, rank } */
-function aiCCRankOK(g, list) {
+function aiCCRankOK(g, list, tgt) {
   const R = window.INFANTRY_RULES, CC = window.CC_ACTION;
   const aiKey = getFactionKey(state.ai);
   if (!list.length || !CC || !CC.getCCV) return { ok: false, avg: 0, rank: 0 };
   const avg = list.reduce((sum, c) => sum + CC.getCCV(c, R.lookupSoldier(c, aiKey) || {}, { group: g }), 0) / list.length;
   const rank = avg <= 4 ? 1 : avg <= 7 ? 2 : 3;
   const style = state.aiStyle || 'bal';
-  if (style === 'aggr' || g._role === 'assault') return { ok: true, avg, rank };
-  return { ok: rank >= (style === 'def' ? 3 : 2), avg, rank };
+  const rankOk = (style === 'aggr' || g._role === 'assault') ? true : rank >= (style === 'def' ? 3 : 2);
+  // 相手（侵入先のグループ）の兵の CCV の平均と比べる。差（自分−相手）がこれ未満なら白兵戦をしない
+  //   攻撃的 -2 / バランス 0 / 防御的 +1。突撃のグループは -1（性格の方が緩ければそちら）
+  if (!tgt) return { ok: rankOk, avg, rank };
+  const defAvg = groupCCVAvg(tgt, 'player');
+  if (defAvg == null) return { ok: rankOk, avg, rank };
+  const margin = avg - defAvg;
+  let minMargin = { aggr: -2, bal: 0, def: 1 }[style];
+  if (minMargin == null) minMargin = 0;
+  if (g._role === 'assault') minMargin = Math.min(minMargin, -1);
+  return { ok: rankOk && margin >= minMargin, avg, rank, defAvg, margin };
+}
+
+/** グループの生きている兵の CCV の平均（side はそのグループの側）。兵がいなければ null */
+function groupCCVAvg(grp, side) {
+  const R = window.INFANTRY_RULES, CC = window.CC_ACTION;
+  if (!grp || !grp.cards || !R || !CC || !CC.getCCV) return null;
+  const key = getFactionKey(side === 'player' ? state.player : state.ai);
+  const alive = grp.cards.filter(c => R.isAlive(c));
+  if (!alive.length) return null;
+  return alive.reduce((s, c) => s + CC.getCCV(c, R.lookupSoldier(c, key) || {}, { group: grp }), 0) / alive.length;
+}
+
+/** §20.53 侵入されたグループが下がった時の侵入の終わり: 侵入兵のグループとの相対距離が 3以下になる、
+ *  または相対距離 4で自分に地形カードを置くと、そのグループに入っている敵の侵入兵は侵入状態でなくなる。
+ *  side = 侵入されたグループの側、reason = 'move' | 'terrain'。戻り値: 侵入状態でなくなった人数 */
+function releaseInfiltrationOnRetreat(grp, side, reason) {
+  const R = window.INFANTRY_RULES, CC = window.CC_ACTION;
+  if (!grp || !R || !CC || !state.groups[side]) return 0;
+  const idx = state.groups[side].indexOf(grp);
+  if (idx < 0) return 0;
+  const enemySide = side === 'player' ? 'ai' : 'player';
+  let n = 0;
+  (state.groups[enemySide] || []).forEach(eg => {
+    if (!eg || !eg.cards) return;
+    const rr = R.relativeRange(eg.distance, grp.distance);
+    if (!(rr <= 3 || (reason === 'terrain' && rr === 4))) return;
+    eg.cards.forEach(c => {
+      if (c.infiltrating && c.infiltratedGroupSide === side && c.infiltratedGroupIdx === idx) { CC.clearSoldierInfiltration(c); n++; }
+    });
+  });
+  if (n) { renderField('player'); renderField('ai'); }
+  return n;
+}
+
+/** AI のグループ gi にプレイヤーの侵入兵が入っていて、白兵戦が不利か。
+ *  不利の目安: 侵入兵の CCV の平均 − こちらの CCV の平均 が 防御的 0 / バランス +1 / 攻撃的 +3 以上（突撃のグループは +2）。
+ *  needRange5: 今、白兵戦を受ける距離（相対距離5）にいる時だけ true にする */
+function aiCCThreat(gi, needRange5) {
+  const R = window.INFANTRY_RULES, CC = window.CC_ACTION;
+  const g = state.groups.ai[gi];
+  if (!g || g.eliminated || !R || !CC || !CC.getCCV) return false;
+  const pKey = getFactionKey(state.player);
+  let sum = 0, n = 0, inRange5 = false;
+  (state.groups.player || []).forEach(pg => {
+    if (!pg || !pg.cards) return;
+    const ins = pg.cards.filter(c => c.infiltrating && c.infiltratedGroupSide === 'ai' && c.infiltratedGroupIdx === gi && R.isAlive(c));
+    if (!ins.length) return;
+    if (R.relativeRange(pg.distance, g.distance) >= 5) inRange5 = true;
+    ins.forEach(c => { sum += CC.getCCV(c, R.lookupSoldier(c, pKey) || {}, { group: pg }); n++; });
+  });
+  if (!n) return false;
+  if (needRange5 && !inRange5) return false;
+  const mine = groupCCVAvg(g, 'ai');
+  if (mine == null) return false;
+  const style = state.aiStyle || 'bal';
+  let lim = { def: 0, bal: 1, aggr: 3 }[style];
+  if (lim == null) lim = 1;
+  if (g._role === 'assault') lim = Math.min(lim, 2);
+  return (sum / n) - mine >= lim;
+}
+
+/** §20.55 AI の後退: 侵入されて白兵戦が不利なら、移動カードで1つ後退する（相対距離が5より小さくなれば白兵戦を受けない）。
+ *  さらに相対距離3まで下がるか、相対距離4で地形カードを置けば、侵入そのものが終わる（§20.53） */
+async function aiTryRetreatFromCC() {
+  const R = window.INFANTRY_RULES, CC = window.CC_ACTION;
+  if (!R || !CC) return false;
+  const moveIdx = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT');
+  if (moveIdx < 0) return false;
+  const card = state.aiHand[moveIdx];
+  const acted = state.aiActedGroups || new Set();
+  const fired = state.aiFiredGroups || new Set();
+  for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    if (acted.has(gi) || fired.has(gi)) continue;
+    const g = state.groups.ai[gi];
+    if (!g || g.eliminated) continue;
+    if (!aiCCThreat(gi, true)) continue;
+    // プレイヤーの後退と同じ制限: ピン状態の兵がいる・鉄条網・地雷原・トーチカ・河川/涸れ谷/湿地の1枚目・移送中は後退しない
+    if (g.cards.some(c => R.isAlive(c) && R.isPinned(c))) continue;
+    if (R.hasTerrainType && (R.hasTerrainType(g, 'WIRE') || R.hasTerrainType(g, 'MINEFIELD') || R.hasTerrainType(g, 'PILLBOX'))) continue;
+    if ((R.isInStream && R.isInStream(g) && R.streamMoveCount && R.streamMoveCount(g) === 0)
+      || (R.isInGully && R.isInGully(g) && R.gullyMoveCount && R.gullyMoveCount(g) === 0)
+      || (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0)) continue;
+    if (typeof groupInTransfer === 'function' && groupInTransfer('ai', gi)) continue;
+    // §5.51 一番近い敵との相対距離が 0より小さくなる後退は不可。距離チットがマイナスになるのは赤の RNC の移動カードだけ
+    const newDist = g.distance - 1;
+    const enemies = (state.groups.player || []).filter(e => e && !e.eliminated);
+    if (enemies.length && Math.min(...enemies.map(e => newDist + (e.distance || 0))) < 0) continue;
+    if (newDist < 0 && !(card.terrain && card.terrain.rncColor === '赤')) continue;
+    g.distance = newDist;
+    card._moveMode = 'retreat';
+    pushTerrainWithFaction(g, card);
+    state.aiHand.splice(moveIdx, 1);
+    state.aiHandCount = state.aiHand.length;
+    CC.clearInfiltration(g, 'move'); // §20.53 移動カードを使ったグループの侵入兵は侵入状態でなくなる
+    renderField('ai'); renderField('player'); renderHands();
+    await showAIAction(`AI: 後退 — GROUP ${g.name}（白兵戦を避ける・§20.55）`, card, gi);
+    const n = releaseInfiltrationOnRetreat(g, 'ai', 'move');
+    if (n) await showAIAction(`AI: GROUP ${g.name} が相対距離3まで下がったので、侵入兵 ${n}名は侵入状態でなくなりました（§20.53）`, null, gi);
+    acted.add(gi);
+    return true;
+  }
+  return false;
 }
 
 /** §20.56 AI の侵入解除: 侵入兵の CCV の平均をランク（低 4以下 / 中 5〜7 / 高 8以上）にして、
@@ -10853,24 +11035,21 @@ async function aiTryUninfiltrate() {
   const CC = window.CC_ACTION;
   if (!R || !CC || !CC.getCCV) return false;
   const aiKey = getFactionKey(state.ai);
-  const style = state.aiStyle || 'bal';
-  if (style === 'aggr') return false; // 攻撃的: どのランクでも白兵戦をする
-  const rankOf = v => v <= 4 ? 1 : v <= 7 ? 2 : 3; // 1=低 2=中 3=高
-  const minRank = style === 'def' ? 3 : 2;           // 防御的=高のみ、バランス=中と高
   const RANK_NAME = ['', '低', '中', '高'];
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
     if (_aiActed(gi)) continue;
     const g = state.groups.ai[gi];
     if (!g || g.eliminated) continue;
-    if (g._role === 'assault') continue; // 突撃のグループは白兵戦を続ける
     const infs = g.cards.filter(c => c.infiltrating && R.isAlive(c));
     if (!infs.length) continue;
     const byTgt = new Map();
     infs.forEach(c => { const k = c.infiltratedGroupSide + ':' + c.infiltratedGroupIdx; if (!byTgt.has(k)) byTgt.set(k, []); byTgt.get(k).push(c); });
     for (const [, list] of byTgt) {
-      const avg = list.reduce((sum, c) => sum + CC.getCCV(c, R.lookupSoldier(c, aiKey) || {}, { group: g }), 0) / list.length;
-      const rank = rankOf(avg);
-      if (rank >= minRank) continue; // 白兵戦をするランク
+      // ランク（性格）と、侵入先の兵の CCV との差で、白兵戦をするか決める（aiCCRankOK と同じ基準）
+      const _t = state.groups[list[0].infiltratedGroupSide] && state.groups[list[0].infiltratedGroupSide][list[0].infiltratedGroupIdx];
+      const chk = aiCCRankOK(g, list, _t);
+      const avg = chk.avg, rank = chk.rank;
+      if (chk.ok) continue; // 白兵戦をする
       list.forEach(c => CC.clearSoldierInfiltration(c));
       _aiMarkActed(gi);
       renderField('ai'); renderField('player');

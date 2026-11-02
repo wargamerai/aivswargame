@@ -516,7 +516,12 @@
   function chooseAIStrategy(scenario, enriched, style, factionKey) {
     const w = { wave: 1, split: 1 };
     if (enriched.length >= 5 && enriched.some(e => e.crew)) w.fireMove = 1;
-    if (enriched.filter(e => e.morale >= 4).length >= 4) w.assault = 1; // 突撃: モラル 4以上の兵が 4人以上
+    // 突撃: モラル 4以上の兵が 4人以上。さらに、突撃のグループになる兵（モラルの高い順に 6人まで）の白兵戦の値（CCV・武装時）の平均が 5以上
+    //   （モラルが高くても白兵戦の値が低い国＝イギリスなどは、着いてから負けるので突撃を選ばない）
+    const _elite = enriched.filter(e => e.morale >= 4).sort((a, b) => b.morale - a.morale).slice(0, 6);
+    const _ccvArmed = e => parseInt(String((e.def && e.def.ccvFront) || '0').split('/')[0], 10) || 0;
+    const _eliteCCV = _elite.length ? _elite.reduce((t, e) => t + _ccvArmed(e), 0) / _elite.length : 0;
+    if (_elite.length >= 4 && _eliteCCV >= 5) w.assault = 1;
     if (scenario && scenario.id === 'A') { if (w.assault) w.assault *= 2; w.wave *= 2; } // 距離が勝利条件: 前へ出る作戦
     if (style === 'aggr') { if (w.assault) w.assault *= 2; w.wave *= 2; }
     if (style === 'def' && w.fireMove) w.fireMove *= 3;
