@@ -177,7 +177,17 @@ function applyCriticalEffect(ctx, result, log) {
       const v = r + (ctx.range || 0);
       if (v <= 4) {
         t.status = 'exploded';
-        log.push(`💥 弾薬庫爆発！ (1d6=${r}+射程${ctx.range||0}=${v} ≤ 4)`);
+        // 地図から消去
+        t.col = -1;
+        if (t.grappledWith?.length && typeof state !== 'undefined' && state) {
+          const _all = [...(state.jpFleet||[]), ...(state.usFleet||[])];
+          for (const _nm of t.grappledWith) {
+            const _o = _all.find(x => x.name === _nm);
+            if (_o) _o.grappledWith = (_o.grappledWith||[]).filter(n => n !== t.name);
+          }
+          t.grappledWith = [];
+        }
+        log.push(`💥 弾薬庫爆発！ (1d6=${r}+射程${ctx.range||0}=${v} ≤ 4) → 地図から消去`);
       } else {
         t.onFire = (t.onFire || 0) + 1;
         log.push(`弾薬庫発火: 2H相当火災発生 (1d6=${r}+射程${ctx.range||0}=${v} > 4)`);

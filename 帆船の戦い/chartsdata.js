@@ -228,33 +228,33 @@ const CHANGING_WIND_NUMBER = [
   }
 ];
 
-// 乗員白兵戦強度表: 品質 → {obp, dbp_raked, dbp}
+// 乗員白兵戦強度表: 品質 → {obp, dbp_raked, dbp}（ルールの表は攻撃・防御とも同じ値: 精鋭5 熟練4 並3 新兵2 最低1）
 // OBP=攻撃側, DBP=防御側, DBP_raked=縦射を受けている防御側
 const CREW_MELEE_STRENGTH = {
   "elite": {
     "obp": 5,
-    "dbp_raked": 6,
-    "dbp": 7
+    "dbp_raked": 5,
+    "dbp": 5
   },
   "crack": {
     "obp": 4,
-    "dbp_raked": 5,
-    "dbp": 6
+    "dbp_raked": 4,
+    "dbp": 4
   },
   "average": {
     "obp": 3,
-    "dbp_raked": 4,
-    "dbp": 5
+    "dbp_raked": 3,
+    "dbp": 3
   },
   "green": {
     "obp": 2,
-    "dbp_raked": 3,
-    "dbp": 4
+    "dbp_raked": 2,
+    "dbp": 2
   },
   "poor": {
     "obp": 1,
-    "dbp_raked": 2,
-    "dbp": 3
+    "dbp_raked": 1,
+    "dbp": 1
   }
 };
 

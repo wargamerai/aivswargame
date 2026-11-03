@@ -3,33 +3,12 @@
 // 前提: chartsdata.js (FOULING_TABLES, CREW_MELEE_STRENGTH, MELEE_RESOLUTION)
 
 // ============================================================
-// 絡み判定 (Fouling)
-// 2艦が隣接していて、2d6 + 修正子 ≥ 10 で絡み成立
+// 絡み判定 (Fouling): 1d6 で 1〜3 なら絡む（絡みの表）
 // ============================================================
 function rollFouling(shipA, shipB, wind) {
-  const log = [];
-  const r = roll2D6();
-  let mod = 0;
-
-  function crewMod(ship, isMe) {
-    const q = ship.crewQuality || 'average';
-    if (q === 'crack')   { mod += isMe ? -1 : -1; log.push(`${ship.name}熟練-1`); }
-    else if (q === 'elite'){ mod += isMe ? -2 : -2; log.push(`${ship.name}精鋭-2`); }
-    else if (q === 'green'){ mod += isMe ? +1 : +1; log.push(`${ship.name}新兵+1`); }
-    else if (q === 'poor') { mod += isMe ? +2 : +2; log.push(`${ship.name}最低+2`); }
-  }
-  crewMod(shipA, true);
-  crewMod(shipB, false);
-  if (shipA.side === shipB.side) { mod -= 1; log.push('友軍同士-1'); }
-  // 宣言移動力3以上: 実装省略（プロット未実装のため）
-  if (shipA.sailState === 'full') { mod -= 1; log.push(`${shipA.name}全帆-1`); }
-  if (shipB.sailState === 'full') { mod -= 1; log.push(`${shipB.name}全帆-1`); }
-  if (wind?.velocity === 6) { mod -= 2; log.push('風速6: -2'); }
-
-  const total = r + mod;
-  const success = r === 12 || total >= 10;  // 12は常に絡み
-  log.unshift(`2d6=${r} +修正${mod} = ${total} (${success ? '絡み成立' : '絡まず'})`);
-  return { success, roll: r, total, log };
+  const r = rollD6();
+  const success = r <= 3;
+  return { success, roll: r, total: r, log: [`1d6=${r} (${success ? '絡み成立' : '絡まず'})`] };
 }
 
 // ============================================================
@@ -49,10 +28,16 @@ function rollUnfouling(ship, wind, unfoulingAttemptsThisTurn) {
 // ============================================================
 function rollGrappling(attacker, target, opts) {
   const log = [];
+  if (attacker && target && attacker.side === target.side) {
+    return { success: true, auto: true, roll: 0, total: 0, log: ['友軍同士: 自動成立'] };
+  }
+  // 鉤縄の表の注: 片方が移動フェイズに動かなかったら出目 -1、両方なら -2
+  const still = (attacker?.stoppedLastMove ? 1 : 0) + (target?.stoppedLastMove ? 1 : 0);
   const r = rollD6();
-  const success = r <= 3;
-  log.push(`1d6=${r} (${success ? '鉤縄成立(1-3)' : '失敗'})`);
-  return { success, roll: r, total: r, log };
+  const total = r - still;
+  const success = total <= 3;
+  log.push(`1d6=${r}${still ? ` -${still}(止まっていた艦)=${total}` : ''} (${success ? '鉤縄成立(1-3)' : '失敗'})`);
+  return { success, roll: r, total, log };
 }
 
 // ============================================================
@@ -89,53 +74,6 @@ function computeMeleeStrength(ship, crewSections, partyType) {
 // 両軍の合計強度を計算 → 1d6でMELEE_RESOLUTION参照 → 相手に損害
 // ============================================================
 // partyA, partyB: { ship, sections, partyType }
-function resolveMelee(partyA, partyB) {
-  const log = [];
-  const strengthA = computeMeleeStrength(partyA.ship, partyA.sections, partyA.partyType);
-  const strengthB = computeMeleeStrength(partyB.ship, partyB.sections, partyB.partyType);
-  log.push(`${partyA.ship.name}強度=${strengthA}, ${partyB.ship.name}強度=${strengthB}`);
-
-  // 各陣営の1d6で相手に損害
-  function rollDamage(ownStrength) {
-    const die = rollD6();
-    // 強度帯を特定
-    const bands = ['1-10','11-20','21-30','31-40','41-50','51-60','61-70','71-80','81+'];
-    let bandIdx;
-    if (ownStrength >= 81) bandIdx = 8;
-    else bandIdx = Math.min(7, Math.floor((ownStrength - 1) / 10));
-    // MELEE_RESOLUTION 検索
-    const dieBand = die <= 2 ? '1-2' : die <= 4 ? '3-4' : '5-6';
-    const row = (typeof MELEE_RESOLUTION !== 'undefined') ? MELEE_RESOLUTION.find(r => r.die === dieBand) : null;
-    const dmg = row ? (row[bands[bandIdx]] || 0) : 0;
-    return { die, band: bands[bandIdx], damage: dmg };
-  }
-
-  const dmgToB = rollDamage(strengthA);
-  const dmgToA = rollDamage(strengthB);
-  log.push(`${partyA.ship.name}→${partyB.ship.name}: 1d6=${dmgToB.die}(${dmgToB.band}) 損害${dmgToB.damage}セクション`);
-  log.push(`${partyB.ship.name}→${partyA.ship.name}: 1d6=${dmgToA.die}(${dmgToA.band}) 損害${dmgToA.damage}セクション`);
-
-  // 乗員損失適用（両舷均等、小さい側から）
-  applyCrewLossSection(partyB.ship, dmgToB.damage);
-  applyCrewLossSection(partyA.ship, dmgToA.damage);
-
-  // 決着判定: 一方の強度が相手の3倍以上で勝利
-  let winner = null;
-  if (strengthA >= strengthB * 3 && strengthB > 0) winner = partyA.ship;
-  else if (strengthB >= strengthA * 3 && strengthA > 0) winner = partyB.ship;
-  else if (strengthA > 0 && strengthB === 0) winner = partyA.ship;
-  else if (strengthB > 0 && strengthA === 0) winner = partyB.ship;
-
-  if (winner) {
-    const loser = winner === partyA.ship ? partyB.ship : partyA.ship;
-    loser.status = 'struck';  // 拿捕
-    loser.capturedBy = winner.side;
-    log.push(`🏴 ${loser.name} が拿捕された（${winner.name}の白兵戦勝利）`);
-  }
-
-  return { strengthA, strengthB, dmgToA, dmgToB, winner, log };
-}
-
 // 乗員セクションを損失（能1=index 0 から消去）
 function applyCrewLossSection(ship, n) {
   if (!ship.crew || !Array.isArray(ship.crew.abilities) || n <= 0) return;
@@ -146,28 +84,8 @@ function applyCrewLossSection(ship, n) {
       removed++;
     }
   }
-}
-
-// ============================================================
-// 白兵戦コーディネータ
-// 艦A・艦Bが鉤縄で接舷中、両者が乗員セクションをOBP/DBPに割り当てて白兵戦
-// ============================================================
-function initiateBoardingCombat(shipA, shipB, assignA, assignB, wsmCtx) {
-  const log = [];
-  log.push(`🗡 白兵戦: ${shipA.name}(${shipA.crewQuality}) vs ${shipB.name}(${shipB.crewQuality})`);
-
-  // 鉤縄成立チェック
-  const grapplingA = (shipA.grappledWith || []).includes(shipB.name);
-  if (!grapplingA) {
-    log.push('⚠ 鉤縄未成立、白兵戦不可');
-    return { success: false, log };
+  if (removed > 0 && typeof state !== 'undefined' && state) {
+    state.damageSeqCounter = (state.damageSeqCounter || 0) + 1;
+    ship.damageSeq = state.damageSeqCounter;
   }
-
-  // OBP/DBP 編成
-  const partyA = { ship: shipA, sections: assignA.obp || 0, partyType: 'obp' };
-  const partyB = { ship: shipB, sections: assignB.dbp || 0, partyType: wsmCtx?.bRaked ? 'dbp_raked' : 'dbp' };
-
-  const result = resolveMelee(partyA, partyB);
-  result.log.forEach(l => log.push(l));
-  return { success: true, log, result };
 }

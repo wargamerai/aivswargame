@@ -171,7 +171,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
         <button class="np" onclick="plotKey('9')">9<small>↗NE</small></button>
         <button class="np" onclick="plotKey('4')">4<small>BACK</small></button>
         <button class="np" onclick="plotKey('5')">5<small>直進</small></button>
-        <button class="np" onclick="plotKey('6')">6<small>DRIFT</small></button>
+        <span class="np" style="visibility:hidden;"></span>
         <button class="np" onclick="plotKey('1')">1<small>↙SW</small></button>
         <button class="np" onclick="plotKey('2')">2<small>↓S</small></button>
         <button class="np" onclick="plotKey('3')">3<small>↘SE</small></button>
@@ -184,6 +184,8 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
       </div>
       <div style="display:flex;gap:4px;margin-top:4px;">
         <button class="np" onclick="plotAnchor('drop')" style="flex:1;background:#448;">投錨</button>
+        <button class="np" onclick="plotAnchor('dropAS')" style="flex:1;background:#448;" title="スプリング: 艦尾を軸に向きを変えられる">艦尾投錨</button>
+        <button class="np" onclick="plotAnchor('dropAB')" style="flex:1;background:#448;" title="スプリング: 艦首を軸に向きを変えられる">艦首投錨</button>
         <button class="np" onclick="plotAnchor('raise')" style="flex:1;background:#844;">抜錨</button>
         <button class="np" onclick="plotAnchor('cut')" style="flex:1;background:#a44;">錨綱切断</button>
       </div>
@@ -361,13 +363,48 @@ function hexLineBetween(c1, r1, c2, r2) {
 }
 
 // firer→target の射線が他艦(bow/stern)でブロックされるか
+// 基本 VIII A 5〜6、上級 VIII A 6: 舷側の射界にいる艦のうち、いちばん近い艦しか撃てない。味方・降伏した艦が近ければふさがる
+//   区域1〜3の目標: より近い艦が射界のどこかにいれば撃てない
+//   区域4の目標: より近い艦が区域2か4にいれば撃てない / 区域5の目標: より近い艦が区域3か5にいれば撃てない
+function shipMinDist(a, b) {
+  const ah = [{ col: a.col, row: a.row }, getSternHex(a)].filter(Boolean), bh = [{ col: b.col, row: b.row }, getSternHex(b)].filter(Boolean);
+  let m = Infinity;
+  for (const p of ah) for (const q of bh) m = Math.min(m, hexDist(p.col, p.row, q.col, q.row));
+  return m;
+}
+function arcFieldsOn(firer, o, side) {
+  const fh = [{ col: firer.col, row: firer.row, dir: firer.dir }];
+  const fs = getSternHex(firer); if (fs) fh.push({ col: fs.col, row: fs.row, dir: firer.dir });
+  const oh = [{ col: o.col, row: o.row }, getSternHex(o)].filter(Boolean);
+  const out = new Set();
+  for (const f of fh) for (const h of oh) { const i = getArcFieldInfo(f, h); if (i.field && i.side === side) out.add(i.field); }
+  return [...out];
+}
+function isFireBlockedInArc(firer, target, side, allShips) {
+  const tf = arcFieldsOn(firer, target, side);
+  if (!tf.length) return true;
+  const zone = Math.min(...tf);
+  const d = shipMinDist(firer, target);
+  for (const o of allShips) {
+    if (!o || o === firer || o === target || o.col < 0 || o.status === 'sunk' || o.status === 'exploded') continue;
+    if (o.enterTurn && state.turn < o.enterTurn) continue;
+    if (shipMinDist(firer, o) >= d) continue;
+    const of = arcFieldsOn(firer, o, side);
+    if (!of.length) continue;
+    if (zone <= 3) return true;
+    if (zone === 4 && (of.includes(2) || of.includes(4))) return true;
+    if (zone === 5 && (of.includes(3) || of.includes(5))) return true;
+  }
+  return false;
+}
 function isGunneryLineBlocked(firer, target, allShips) {
   const mid = hexLineBetween(firer.col, firer.row, target.col, target.row);
   if (mid.length === 0) return false;
   const blockers = new Set();
   for (const o of allShips) {
     if (!o || o === firer || o === target) continue;
-    if (o.status !== 'ok' || o.col < 0) continue;
+    // 基本 VIII A 5: 降伏した艦も射界をふさぐ
+    if (o.status === 'sunk' || o.status === 'exploded' || o.col < 0) continue;
     blockers.add(`${o.col},${o.row}`);
     const oStern = (typeof getSternHex === 'function') ? getSternHex(o) : null;
     if (oStern) blockers.add(`${oStern.col},${oStern.row}`);
@@ -679,8 +716,9 @@ function drawGunneryArrows() {
 
 function drawShip(ship) {
   if (!ship || ship.col < 0) return;
-  if (ship.status === 'sunk' || ship.status === 'exploded' || ship.status === 'struck') return;  // 沈没/爆発/降伏艦は描画しない
+  if (ship.status === 'sunk' || ship.status === 'exploded') return;  // 沈没/爆発した艦は描画しない
   ctx.save();
+  if (ship.status === 'struck') ctx.globalAlpha = 0.45;  // 降伏した艦は薄く表示（盤に残る）
   const bow = hexPt(ship.col, ship.row);
   const sternHex = getSternHex(ship);
   const stern = sternHex ? hexPt(sternHex.col, sternHex.row) : { x: bow.x, y: bow.y };
@@ -1085,6 +1123,8 @@ const SCENARIOS = {
 
 const QUAL_MAP = {Cr:'crack',Gr:'green',Av:'average',El:'elite',Pr:'poor',CR:'crack',GR:'green',AV:'average',EL:'elite',PR:'poor'};
 const SHOT_TYPES = ['round','chain','double','grape'];
+// 上級 VIII B 2: イギリスは決して鎖弾を撃てない
+function shotOptionsFor(s) { return SHOT_TYPES.filter(t => !(t === 'chain' && s && s.nation === 'GB')); }
 const SHOT_TYPE_JP = { round:'球形弾', chain:'鎖弾', double:'二重弾', grape:'ぶどう弾' };
 
 function buildScenarioShip(s, side, nation) {
@@ -1508,10 +1548,10 @@ function renderShipDetail() {
         <span class="lbl">次回装填弾種</span>
         <div style="display:flex;gap:4px;margin-top:2px;">
           <label style="flex:1;font-size:0.8em;color:#aac;">L: <select onchange="setPlannedShot('L', this.value)" style="width:100%;background:#0a1a2a;color:#fff;border:1px solid #456;">
-            ${SHOT_TYPES.map(t=>`<option value="${t}" ${s.plannedShot?.L===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('')}
+            ${shotOptionsFor(s).map(t=>`<option value="${t}" ${s.plannedShot?.L===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('')}
           </select></label>
           <label style="flex:1;font-size:0.8em;color:#aac;">R: <select onchange="setPlannedShot('R', this.value)" style="width:100%;background:#0a1a2a;color:#fff;border:1px solid #456;">
-            ${SHOT_TYPES.map(t=>`<option value="${t}" ${s.plannedShot?.R===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('')}
+            ${shotOptionsFor(s).map(t=>`<option value="${t}" ${s.plannedShot?.R===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('')}
           </select></label>
         </div>
       </div>` : ''}
@@ -1695,6 +1735,7 @@ async function executeAllGunnery() {
   let hits = 0, misses = 0;
   for (const firer of ordered) {
     // 乗員全投入で艦運営不可なら砲撃不可
+    if (firer._springTurned || firer.raisingAnchorTurns > 0) { addLog(`${firer.name}: 錨の作業中のため砲撃不可`); continue; } // 上級 V C 4, 6
     const crewTotal = (firer.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
     const assigned = (firer.obpAssigned||0) + (firer.dbpAssigned||0) + (firer.tbpAssigned||0);
     if (crewTotal > 0 && assigned >= crewTotal) {
@@ -1707,10 +1748,9 @@ async function executeAllGunnery() {
     const cand = [];
     let blockedCount = 0;
     for (const tgt of enemies) {
-      const d = hexDist(firer.col, firer.row, tgt.col, tgt.row);
+      const d = shipMinDist(firer, tgt); // 基本 VIII B 1: 艦首でも艦尾でも近い方まで
       const arc = getArcToTarget(firer, tgt);
-      // 射線上に他艦があったら候補から除外
-      if (d <= 10 && isGunneryLineBlocked(firer, tgt, _allShipsForLOS)) {
+      if (d <= 10 && (arc === 'port' || arc === 'stbd') && isFireBlockedInArc(firer, tgt, arc, _allShipsForLOS)) {
         blockedCount++;
         continue;
       }
@@ -1760,6 +1800,11 @@ async function executeAllGunnery() {
       continue;
     }
 
+    // 上級 VIII B 4: 2ターン目以降の白兵戦をしている相手には、ぶどう弾を撃てない
+    if (ammo === 'grape' && firer.meleeWith && firer.meleeWith[bestTarget.name] >= 1) {
+      addLog(`${firer.name}: 白兵戦中の相手にはぶどう弾を撃てない → スキップ`);
+      continue;
+    }
     // 1. resolveGunnery でスペック事前計算
     const result = resolveGunnery(firer, bestTarget, bestArc, ammo);
     const isNegative = (result.table !== undefined && result.table < 0) || (!result.hit && result.miss === 'modifier');
@@ -1800,6 +1845,8 @@ async function executeAllGunnery() {
         if (newCode) {
           result.code = newCode;
           result.damages = parseDamageCode(newCode);
+          for (const e of (result.extraRolls || [])) result.damages = result.damages.concat(parseDamageCode(lookupHitTable(e.table, e.die, resp.dmgType)));
+          if (ammo === 'chain') result.damages = result.damages.filter(d => d.type !== 'H' && d.type !== 'G');
           addLog(`${firer.name}: 目標=${resp.dmgType === 'hull' ? '船体' : '帆'} に変更`);
         }
       }
@@ -1809,6 +1856,7 @@ async function executeAllGunnery() {
 
     // 3. 発射確定: 装填要フラグ、初回舷側マーク
     firer['fired' + sideForDirty + 'Dirty'] = true;
+    firer._firedThisTurn = true; // 上級 X B: 撃った艦は修理できない
     firer['reloadTurns' + sideForDirty] = (ammo === 'double') ? 2 : 1;
     if (sideForDirty === 'Left') firer.firedInitialL = true;
     else firer.firedInitialR = true;
@@ -1841,7 +1889,7 @@ async function executeAllGunnery() {
     let appliedArr = [];
     if (result.hit && result.damages) {
       appliedArr = (typeof applyDamageWSM === 'function')
-        ? applyDamageWSM(bestTarget, result.damages, { arc: bestArc, rake: result.rake })
+        ? applyDamageWSM(bestTarget, result.damages, { arc: bestArc, rake: result.rake, firer })
         : applyDamage(bestTarget, result.damages, bestArc);
       damageRows = appliedArr.map(a => `<tr><td style="padding:3px 8px;color:#ffcc88;border-bottom:1px solid #234;">${a}</td></tr>`).join('');
     }
@@ -1880,28 +1928,6 @@ async function executeAllGunnery() {
     } // end side loop
   }
   // 同時適用: 全艦の射撃完了後にまとめてゲーム終了判定
-  // ★砲撃フェイズ終了時の艦削除チェック: 船体/索具/大砲のいずれか全損で艦を画面から完全削除
-  for (const _s of [...state.jpFleet, ...state.usFleet]) {
-    if (!_s || _s.col < 0) continue;
-    let _reason = null;
-    if (_s.hull && _s.hull.remain === 0) _reason = '船体全損';
-    else if (_s.rigging?.sections && _s.rigging.sections.length > 0 && _s.rigging.sections.every(v => v === 0)) _reason = '索具全損';
-    else if (_s.gunHitTable && ['s1','s2','s3','s4'].every(k => (_s.gunHitTable[k]||0) === 0)) _reason = '大砲全損';
-    if (_reason) {
-      addLog(`💀 ${_s.name}: ${_reason} → 艦削除`);
-      _s.col = -1;
-      _s.status = 'sunk';
-      // 鉤縄リンクのクリーンアップ（残った相手側の橙破線・黄ハイライト除去）
-      if (_s.grappledWith?.length) {
-        const _all = [...state.jpFleet, ...state.usFleet];
-        for (const _nm of _s.grappledWith) {
-          const _o = _all.find(x => x.name === _nm);
-          if (_o) _o.grappledWith = (_o.grappledWith||[]).filter(n => n !== _s.name);
-        }
-        _s.grappledWith = [];
-      }
-    }
-  }
   checkSurrenderByDamage();
   checkGameEnd();
   draw();
@@ -2106,13 +2132,13 @@ function showReloadChoiceModal(ships) {
           bodyHtml += `<span style="color:#ff8888;font-weight:bold;">空</span>`;
           bodyHtml += `<label><input type="checkbox" data-ship="${s.name}" data-side="${side}" data-action="reload"> 装填する</label>`;
           bodyHtml += `<select data-ship="${s.name}" data-side="${side}" data-action="ammo" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;">`;
-          bodyHtml += SHOT_TYPES.map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
+          bodyHtml += shotOptionsFor(s).map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
           bodyHtml += `</select>`;
         } else {
           bodyHtml += `<span style="color:#88ff88;">${SHOT_TYPE_JP[currentLoaded]}</span>`;
           bodyHtml += `<span style="color:#aac;">次回装填弾種:</span>`;
           bodyHtml += `<select data-ship="${s.name}" data-side="${side}" data-action="planned" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;">`;
-          bodyHtml += SHOT_TYPES.map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
+          bodyHtml += shotOptionsFor(s).map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
           bodyHtml += `</select>`;
         }
         bodyHtml += `</div>`;
@@ -2302,14 +2328,22 @@ async function executeUnfoulPhase() {
       }
     }
   }
-  // 2. 沈没/爆発判定（船体破壊済み艦）
-  if (typeof rollDestroyedHull === 'function') {
-    for (const s of allShips) {
-      if (s.status === 'destroyed_hull' && !s._hullDestroyedChecked) {
+  // 2. 沈没/爆発のダイス（上級 VIII C）と、降伏からの復帰（基本 IX D 14）
+  checkPrizes();
+  {
+    const everyone = [...state.jpFleet, ...state.usFleet];
+    for (const s of everyone) {
+      if (s.status !== 'struck' || s.col < 0) continue;
+      if (s.pendingFate) {
         const log = [];
-        rollDestroyedHull(s, log);
-        s._hullDestroyedChecked = true;
-        log.forEach(l => { addLog(`${s.name}: ${l}`); overlayLines.push(`${s.name}: ${l}`); });
+        rollPendingFate(s, everyone, log);
+        log.forEach(l => { addLog(l); overlayLines.push(l); });
+        continue;
+      }
+      if (s.strikeType !== 'hull' && everyone.some(o => o !== s && o.side === s.side && o.status === 'ok' && o.col >= 0 && hexDist(s.col, s.row, o.col, o.row) <= 5)) {
+        s.status = 'ok'; s.capturedBy = null; s.strikeType = null;
+        const l = `${s.name}: 味方が5ヘクス以内に来たので、降伏の状態でなくなった`;
+        addLog(l); overlayLines.push(l);
       }
     }
   }
@@ -2427,8 +2461,10 @@ function showConfirmModal(msg) {
 }
 
 // D. 移動後処理: ドリフト/衝突/絡み判定
+// 戦列艦の等級か（シナリオの艦種 SOL）
+function isShipOfTheLine(s) { return s.shipClass === 'SOL'; }
 function executeMoveAftermath() {
-  const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok' && s.col >= 0 && (!s.enterTurn || state.turn >= s.enterTurn));
+  const allShips = [...state.jpFleet, ...state.usFleet].filter(s => (s.status === 'ok' || s.status === 'struck') && s.col >= 0 && (!s.enterTurn || state.turn >= s.enterTurn));
   const overlayLines = [];
   let driftCount = 0, collCount = 0, foulCount = 0;
   // 1. ドリフト判定（連続2ターン bow ヘクス不変の艦は風下へ1hex）
@@ -2440,16 +2476,27 @@ function executeMoveAftermath() {
     const q = [ship];
     while (q.length) {
       const cur = q.shift();
-      for (const nm of (cur.grappledWith || [])) {
+      for (const nm of [...(cur.grappledWith || []), ...(cur.fouledWith || [])]) {
         const nb = byName[nm];
         if (nb && !group.has(nb)) { group.add(nb); q.push(nb); }
       }
     }
     return [...group];
   }
+  // 上級 V: このフェイズに艦首ヘクスから動かなかった艦は、次の移動で制限を受ける（漂流の前に判定）
+  for (const s of allShips) {
+    s.stoppedLastMove = s._prevCol === s.col && s._prevRow === s.row;
+    // 基本 V B 5: マストを失った艦の、旋回までの漂流の期間
+    if (s.sailBroken) s.mastlessDriftTurns = (s._prevDir === s.dir) ? (s.mastlessDriftTurns || 0) + 1 : 0;
+  }
   for (const s of allShips) {
     if (_driftProcessed.has(s)) continue;
-    const group = (s.grappledWith && s.grappledWith.length > 0) ? _buildGrappleGroup(s) : [s];
+    const group = ((s.grappledWith && s.grappledWith.length > 0) || (s.fouledWith && s.fouledWith.length > 0)) ? _buildGrappleGroup(s) : [s];
+    // 投錨している艦は漂流しない（つながっている艦も一緒に留まる）
+    if (group.some(g => g.anchored)) {
+      for (const g of group) { _driftProcessed.add(g); g.consecutiveStillTurns = 0; }
+      continue;
+    }
     for (const g of group) _driftProcessed.add(g);
     const allStill = group.every(g => g._prevCol === g.col && g._prevRow === g.row && g._prevDir === g.dir);
     if (!allStill) {
@@ -2458,6 +2505,8 @@ function executeMoveAftermath() {
     }
     for (const g of group) g.consecutiveStillTurns = (g.consecutiveStillTurns || 0) + 1;
     if (group[0].consecutiveStillTurns < 2 || !state.wind?.direction) continue;
+    // 基本 V B 2: 戦列艦の等級の艦は2ターンに1回、フリゲート以下は毎ターン漂流する（グループは戦列艦が基準）
+    if (group.some(isShipOfTheLine) && group[0].consecutiveStillTurns % 2 !== 0) continue;
     const wd = state.wind.direction;
     // 各艦の bow/stern の移動先を計算、1つでも範囲外ならグループ全体停止
     const targets = [];
@@ -2505,58 +2554,27 @@ function executeMoveAftermath() {
   }
   // _prev を一括更新（以降のフェイズで参照されるため）
   for (const s of allShips) { s._prevCol = s.col; s._prevRow = s.row; s._prevDir = s.dir; }
-  // 2. 衝突検出（同一ヘクスに複数艦）
-  const hexMap = {};
-  for (const s of allShips) {
-    const key = s.col + ',' + s.row;
-    if (!hexMap[key]) hexMap[key] = [];
-    hexMap[key].push(s);
-    const stern = getSternHex(s);
-    if (stern) {
-      const sk = stern.col + ',' + stern.row;
-      if (!hexMap[sk]) hexMap[sk] = [];
-      hexMap[sk].push(s);
-    }
-  }
-  const collided = new Set();
-  for (const k in hexMap) {
-    if (hexMap[k].length > 1) {
-      const names = hexMap[k].map(s => s.name);
-      const key = [...new Set(names)].sort().join('|');
-      if (collided.has(key)) continue;
-      collided.add(key);
-      const line = `⚠️ 衝突: ${names.join(' と ')} at ${k}`;
-      addLog(line);
-      overlayLines.push(line);
-      collCount++;
-    }
-  }
-  // 3. 絡み判定（衝突艦に対して 2d6+修正 >= 10）
+  // 3. 絡み判定（基本 V C 5: 衝突ごとに判定する。衝突した艦は押し戻されて重ならないので、移動中に記録した組で行う）
   if (typeof rollFouling === 'function') {
     const processed = new Set();
-    for (const k in hexMap) {
-      if (hexMap[k].length <= 1) continue;
-      const ships = hexMap[k];
-      for (let i = 0; i < ships.length; i++) {
-        for (let j = i+1; j < ships.length; j++) {
-          const a = ships[i], b = ships[j];
-          if (a === b) continue;
-          const pk = [a.name, b.name].sort().join('|');
-          if (processed.has(pk)) continue;
-          processed.add(pk);
-          if ((a.fouledWith||[]).includes(b.name)) continue;
-          const r = rollFouling(a, b, state.wind);
-          const line = `${a.name} ↔ ${b.name} 絡み: ${r.log.join(' / ')}`;
-          addLog(line);
-          overlayLines.push(line);
-          foulCount++;
-          if (r.success) {
-            a.fouledWith = a.fouledWith || []; a.fouledWith.push(b.name);
-            b.fouledWith = b.fouledWith || []; b.fouledWith.push(a.name);
-          }
-        }
+    for (const [a, b] of (state._collisionPairs || [])) {
+      const pk = [a.name, b.name].sort().join('|');
+      if (processed.has(pk)) continue;
+      processed.add(pk);
+      const line0 = `⚠️ 衝突: ${a.name} と ${b.name}`;
+      addLog(line0); overlayLines.push(line0); collCount++;
+      if ((a.fouledWith||[]).includes(b.name)) continue;
+      const r = rollFouling(a, b, state.wind);
+      const line = `${a.name} ↔ ${b.name} 絡み: ${r.log.join(' / ')}`;
+      addLog(line);
+      overlayLines.push(line);
+      foulCount++;
+      if (r.success) {
+        a.fouledWith = a.fouledWith || []; a.fouledWith.push(b.name);
+        b.fouledWith = b.fouledWith || []; b.fouledWith.push(a.name);
       }
     }
+    state._collisionPairs = [];
   }
   if (overlayLines.length) {
     const detail = overlayLines.slice(0, 8).join('\n');
@@ -2581,6 +2599,24 @@ async function executeBoardPrepPhase() {
       c.ship.tbpAssigned = c.tbp;
       c.ship.obpTarget = c.target || null;
       addLog(`${c.ship.name}: 攻撃隊=${c.obp} 防御隊=${c.dbp} 上甲板隊=${c.tbp} 目標=${c.target||'-'}`);
+    }
+  }
+
+  // 基本 IX D 3: 降伏した艦は、隣の艦から乗り込めば拿捕できる（沈む艦・爆発する艦は拿捕できない: 上級 VIII C 5）
+  for (const s of allShips) {
+    if (s.col < 0) continue;
+    const enemiesStruck = (s.side === 'jp' ? state.usFleet : state.jpFleet).filter(t => t.status === 'struck' && t.col >= 0 && !t.pendingFate && !t.capturedFlag);
+    for (const t of enemiesStruck) {
+      const sh = [{ col: s.col, row: s.row }, getSternHex(s)].filter(Boolean), th = [{ col: t.col, row: t.row }, getSternHex(t)].filter(Boolean);
+      if (!sh.some(a => th.some(b => hexDist(a.col, a.row, b.col, b.row) === 1))) continue;
+      const sec = (s.crew?.abilities || []).find(v => v > 0) || 0;
+      if (!sec || (s.crew.abilities.filter(v => v > 0).length < 2)) continue; // 自分の艦を動かす乗員を残す
+      const go = (s.side === 'jp' && state.gameMode === 'human-vs-ai') ? await showConfirmModal(`${s.name}: 降伏した ${t.name} に回航員（乗員 ${sec}）を送りますか？`) : true;
+      if (!go) continue;
+      s.obpAssigned = sec;
+      capturePrize(t, [s]);
+      addLog(`🏴 ${t.name} 拿捕（${s.name} の回航員が乗り込んだ）`);
+      break;
     }
   }
 
@@ -2736,7 +2772,6 @@ function showBoardPrepModalMulti(ships) {
 
 function executeMeleePhase() {
   addLog('=== H. 白兵戦 ===');
-  if (typeof resolveMelee !== 'function') return;
   const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok');
   const shipByName = {};
   for (const s of allShips) shipByName[s.name] = s;
@@ -2891,24 +2926,12 @@ function executeMeleePhase() {
         const newDef = computeMeleeStrength(defender, Math.min(defender.dbpAssigned||0, availSections(defender)), 'dbp');
         if (newDef === 0 && newAtk > 0) captured = true;
         else if (newAtk === 0 && newDef > 0) repelled = true;
-        else if (newAtk >= newDef * 3 && newDef > 0) captured = true;
-        else if (newDef >= newAtk * 3 && newAtk > 0) repelled = true;
       }
       let outcome, color;
       if (captured) {
-        defender.status = 'struck';
-        defender.capturedBy = attackers[0].side;
-        // 地図から消去 + 鉤縄リンクのクリーンアップ
-        defender.col = -1;
-        if (defender.grappledWith?.length) {
-          const _all = [...state.jpFleet, ...state.usFleet];
-          for (const _nm of defender.grappledWith) {
-            const _o = _all.find(x => x.name === _nm);
-            if (_o) _o.grappledWith = (_o.grappledWith||[]).filter(n => n !== defender.name);
-          }
-          defender.grappledWith = [];
-        }
-        addLog(`🏴 ${defender.name} 拿捕（${atkNames}による） → 地図から消去`);
+        // 基本 IX D 2: 白兵戦で降伏した艦は、勝った接舷隊に自動的に拿捕される
+        capturePrize(defender, attackers);
+        addLog(`🏴 ${defender.name} 拿捕（${atkNames}による）`);
         outcome = `${defender.name} 拿捕`; color = '#44ff44';
       } else if (repelled) {
         addLog(`${defender.name}: 撃退成功`);
@@ -2917,6 +2940,12 @@ function executeMeleePhase() {
         addLog(`  3ラウンド経過、決着なし`);
         outcome = `決着なし`; color = '#ffaa44';
       }
+      attackers.forEach(a => {
+        a._noRepair = true;
+        a.meleeWith = a.meleeWith || {}; a.meleeWith[defender.name] = (a.meleeWith[defender.name] || 0) + 1;
+        defender.meleeWith = defender.meleeWith || {}; defender.meleeWith[a.name] = (defender.meleeWith[a.name] || 0) + 1;
+      });
+      defender._noRepair = true;
       const tableHtml = `<div style="margin-bottom:8px;"><div style="font-weight:bold;color:#ffcc44;">${atkNames} ⚔ ${defender.name} — <span style="color:${color};">${outcome}</span></div>`
         + `<table style="border-collapse:collapse;font-size:0.85em;margin:4px auto 0;"><tr style="color:#aac;"><th style="padding:2px 8px;border:1px solid #456;">R</th><th style="padding:2px 8px;border:1px solid #456;">攻撃側</th><th style="padding:2px 8px;border:1px solid #456;">防御側</th></tr>`
         + roundsData.map(r => `<tr><td style="padding:2px 8px;border:1px solid #456;text-align:center;">${r.round}</td>`
@@ -2958,6 +2987,46 @@ async function executeReloadPhase() {
     if (!s.plannedShot) s.plannedShot = { L:'round', R:'round' };
   }
 
+  // 基本 X: 1ターンに片方の舷側だけ装填できる。上級 VIII B 3: 二重弾は2ターンかかり、その間もう一方は装填できない
+  const reloadOne = (s, side, ammo) => {
+    if (s._reloadedThisTurn || s._springTurned || s.raisingAnchorTurns > 0) return false; // 上級 V C 4, 6
+    const sideName = side === 'L' ? 'Left' : 'Right';
+    const dirtyFlag = 'fired' + sideName + 'Dirty';
+    if (!s[dirtyFlag]) return false;
+    if (ammo === 'chain' && s.nation === 'GB') ammo = 'round';
+    s._reloadedThisTurn = true;
+    s._noRepair = true;
+    const label = side === 'L' ? '左舷' : '右舷';
+    if (ammo === 'double') {
+      s.dsLoading = { side, turns: 1 };
+      const l = `${s.name}: ${label}に二重弾を装填中 1/2ターン`;
+      addLog(l); overlayLines.push(l);
+      return true;
+    }
+    s.loadedShot[side] = ammo;
+    s[dirtyFlag] = false;
+    delete s['reloadTurns' + sideName];
+    const l = `${s.name}: ${label}装填 (${SHOT_TYPE_JP[ammo]})`;
+    addLog(l); overlayLines.push(l);
+    return true;
+  };
+  for (const s of allShips) {
+    s._reloadedThisTurn = false;
+    if (s.dsLoading) {
+      // 二重弾の2ターン目（一度始めたら続ける）
+      const { side } = s.dsLoading;
+      const sideName = side === 'L' ? 'Left' : 'Right';
+      s.loadedShot[side] = 'double';
+      s['fired' + sideName + 'Dirty'] = false;
+      delete s['reloadTurns' + sideName];
+      s.dsLoading = null;
+      s._reloadedThisTurn = true;
+      s._noRepair = true;
+      const l = `${s.name}: ${side === 'L' ? '左舷' : '右舷'}二重弾の装填完了`;
+      addLog(l); overlayLines.push(l);
+    }
+  }
+
   // プレイヤー側（jp）: 装填選択モーダル（必ず表示）
   const jpShips = allShips.filter(s => s.side === 'jp');
   if (jpShips.length > 0) {
@@ -2965,64 +3034,53 @@ async function executeReloadPhase() {
     for (const ch of choices) {
       const s = ch.ship;
       for (const side of ['L', 'R']) {
-        const sideName = side === 'L' ? 'Left' : 'Right';
-        const dirtyFlag = 'fired' + sideName + 'Dirty';
-        if (s[dirtyFlag] && ch.reload[side]) {
-          s.loadedShot[side] = ch.ammo[side];
-          s[dirtyFlag] = false;
-          delete s['reloadTurns' + sideName];
-          const l = `${s.name}: ${side === 'L' ? '左舷' : '右舷'}装填 (${SHOT_TYPE_JP[s.loadedShot[side]]})`;
-          addLog(l); overlayLines.push(l);
-        }
+        if (ch.reload[side]) reloadOne(s, side, ch.ammo[side]);
         s.plannedShot[side] = ch.plannedAmmo[side];
       }
     }
   }
 
-  // AI側（us）: 空なら自動装填（弾種は plannedShot または round）
+  // AI側（us）: 空の舷を1つ装填（弾種は plannedShot または round）
   const usShips = allShips.filter(s => s.side === 'us');
   for (const s of usShips) {
-    for (const side of ['L', 'R']) {
-      const sideName = side === 'L' ? 'Left' : 'Right';
-      const dirtyFlag = 'fired' + sideName + 'Dirty';
-      if (s[dirtyFlag]) {
-        s.loadedShot[side] = s.plannedShot[side] || 'round';
-        s[dirtyFlag] = false;
-        delete s['reloadTurns' + sideName];
-        const l = `${s.name}: ${side === 'L' ? '左舷' : '右舷'}装填 (${SHOT_TYPE_JP[s.loadedShot[side]]})`;
-        addLog(l); overlayLines.push(l);
-      }
-    }
+    for (const side of ['L', 'R']) reloadOne(s, side, s.plannedShot[side] || 'round');
   }
 
+  // 上級 X B: 修理。3ターン（続けてでなくてよい）で、船体・索具・砲のマスを2つ直す。1ターンに1種類
   for (const s of allShips) {
-    // 2. 修理完了: 計画した修理を反映
-    if (s.repairPlanRH && s.hull && s.hull.remain < s.hull.max) {
-      s.hull.remain = Math.min(s.hull.max, s.hull.remain + 1);
-      s.repairPlanRH = false;
-      const l = `${s.name}: 船体修理 +1 (${s.hull.remain}/${s.hull.max})`;
-      addLog(l); overlayLines.push(l);
-    }
-    if (s.repairPlanRR && Array.isArray(s.rigging?.sections) && Array.isArray(s.rigging?.sectionsMax)) {
-      for (let i = 0; i < s.rigging.sections.length; i++) {
-        if (s.rigging.sections[i] < s.rigging.sectionsMax[i]) {
-          s.rigging.sections[i] = Math.min(s.rigging.sectionsMax[i], s.rigging.sections[i] + 1);
-        }
+    if (s.firedLeftDirty || s.firedRightDirty) s._noRepair = s._noRepair || !!s._firedThisTurn;
+    if (s._lastSail && s._lastSail !== s.sailState) s._noRepair = true; // 全帆と戦闘帆の切り替え
+    s._lastSail = s.sailState;
+    const crewOk = (s.crew?.abilities || []).filter(v => v > 0).length >= 2;
+    const canRepair = !s._noRepair && !s._firedThisTurn && crewOk;
+    s._noRepair = false;
+    s._firedThisTurn = false;
+    s._springTurned = false;
+    if (!canRepair) continue;
+    const rigMissing = i => (s.rigging?.sectionsMax?.[i] || 0) - (s.rigging?.sections?.[i] || 0);
+    const hullHurt = s.hull && s.hull.remain < s.hull.max;
+    const rigHurt = (s.rigging?.sectionsMax || []).some((_, i) => rigMissing(i) > 0);
+    const gunSide = ['L', 'R'].find(k => { const g = s.broadsideGuns?.[k]; return g && g.remain < g.max; });
+    const kind = hullHurt ? 'RH' : rigHurt ? 'RR' : gunSide ? 'RG' : null;
+    if (!kind) continue;
+    s.repairProgress = s.repairProgress || {};
+    s.repairProgress[kind] = (s.repairProgress[kind] || 0) + 1;
+    const name = { RH: '船体', RR: '索具', RG: '砲' }[kind];
+    if (s.repairProgress[kind] < 3) { addLog(`${s.name}: ${name}修理 ${s.repairProgress[kind]}/3ターン`); continue; }
+    s.repairProgress[kind] = 0;
+    if (kind === 'RH') s.hull.remain = Math.min(s.hull.max, s.hull.remain + 2);
+    if (kind === 'RR') {
+      // いちばん新しく記入したマスから戻す（索具は番号の小さいセクションから消えるので、番号の大きい方が新しい）
+      for (let n = 0; n < 2; n++) {
+        for (let i = s.rigging.sections.length - 1; i >= 0; i--) { if (rigMissing(i) > 0) { s.rigging.sections[i]++; break; } }
       }
-      s.repairPlanRR = false;
-      const l = `${s.name}: 索具修理 +1`;
-      addLog(l); overlayLines.push(l);
+      if (s.rigging.sections.some(v => v > 0)) s.sailBroken = false;
     }
-    if (s.repairPlanRG && s.gunHitTable) {
-      ['s1','s2','s3','s4'].forEach(k => {
-        if (s.gunHitTable[k] !== undefined && s.gunHitTable[k] >= 0) {
-          s.gunHitTable[k]++;
-        }
-      });
-      s.repairPlanRG = false;
-      const l = `${s.name}: 砲修理 +1`;
-      addLog(l); overlayLines.push(l);
+    if (kind === 'RG') {
+      for (let n = 0; n < 2; n++) { const k = ['L', 'R'].find(x => s.broadsideGuns[x].remain < s.broadsideGuns[x].max); if (k) s.broadsideGuns[k].remain++; }
     }
+    const l = `${s.name}: ${name}修理完了 +2`;
+    addLog(l); overlayLines.push(l);
   }
   draw();
 }
@@ -3106,11 +3164,22 @@ function showSailChoiceModal(ships) {
 }
 function checkGameEnd() {
   if (state.gameEnded) return;
-  const jpAlive = state.jpFleet.filter(s => s.status === 'ok').length;
-  const usAlive = state.usFleet.filter(s => s.status === 'ok').length;
-  if (jpAlive === 0 || usAlive === 0) {
+  // 基本 XI A 3: 乗員のマスを全部失った艦は戦えない
+  const fights = s => s.status === 'ok' && (s.crew?.abilities || [1]).some(v => v > 0);
+  const jpAlive = state.jpFleet.filter(fights).length;
+  const usAlive = state.usFleet.filter(fights).length;
+  if (jpAlive === 0 || usAlive === 0 || state.forceEnd) {
     state.gameEnded = true;
-    const winner = jpAlive > 0 ? '自軍' : usAlive > 0 ? '敵軍' : '引き分け';
+    // 基本 XI B: 降伏・沈没・爆発した艦の点数は相手のもの。拿捕された艦は2倍
+    const everyone = [...state.jpFleet, ...state.usFleet];
+    const scoreOf = side => everyone.reduce((t, s) => {
+      if (s.capturedFlag && s.capturedBy === side) return t + (s.vp || 0) * 2; // 拿捕
+      if (!s.capturedFlag && s.status !== 'ok' && s.side !== side) return t + (s.vp || 0); // 降伏・沈没・爆発
+      return t;
+    }, 0);
+    const jpScore = scoreOf('jp'), usScore = scoreOf('us');
+    const winner = jpScore > usScore ? '自軍' : usScore > jpScore ? '敵軍' : (jpAlive > usAlive ? '自軍' : usAlive > jpAlive ? '敵軍' : '引き分け');
+    addLog(`点数: 自軍 ${jpScore} / 敵軍 ${usScore}`);
     addLog(`=== ゲーム終了: ${winner}勝利 ===`);
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:3000;display:flex;align-items:center;justify-content:center;overflow-y:auto;';
@@ -3122,7 +3191,7 @@ function checkGameEnd() {
       return (n.map(x => NATION_JP[x] || x).join('+') || '艦') + '艦隊';
     };
     panel.innerHTML = `<div style="font-size:2em;font-weight:bold;color:#ffcc44;margin-bottom:12px;">ゲーム終了</div>`
-      + `<div style="font-size:1.5em;color:${jpAlive > 0 ? '#88ccff' : '#ff8888'};margin-bottom:20px;">${winner}勝利</div>`
+      + `<div style="font-size:1.5em;color:${winner === '自軍' ? '#88ccff' : '#ff8888'};margin-bottom:20px;">${winner === '引き分け' ? '引き分け' : winner + '勝利'}（点数 ${jpScore} 対 ${usScore}）</div>`
       + `<div style="display:flex;gap:16px;text-align:left;">`
       + `<div style="flex:1;min-width:280px;"><div style="font-weight:bold;color:#88bbff;margin-bottom:6px;font-size:1.1em;">${fleetLabel(state.jpFleet)}</div>${state.jpFleet.map(renderShipCardHtml).join('') || '（なし）'}</div>`
       + `<div style="flex:1;min-width:280px;"><div style="font-weight:bold;color:#ffbbbb;margin-bottom:6px;font-size:1.1em;">${fleetLabel(state.usFleet)}</div>${state.usFleet.map(renderShipCardHtml).join('') || '（なし）'}</div>`
@@ -3137,33 +3206,83 @@ function checkGameEnd() {
   }
 }
 
+// 基本 VIII D 3, 4: 砲か索具を全部失い、同じか大きい等級の味方が10ヘクス以内にいない艦は、条件を満たした最初の敵艦に降伏する
+// ===== 拿捕した艦（基本 IX D）=====
+// 接舷隊の生き残りが回航員になり、元の乗員は捕虜になる。艦は拿捕した側の艦隊に移り、普通に動かして撃てる（命中表は2下がる）
+function capturePrize(ship, attackers) {
+  const captorSide = attackers[0].side;
+  let prize = 0;
+  for (const a of attackers) {
+    const n = Math.min(a.obpAssigned || 0, (a.crew?.abilities || []).reduce((t, v) => t + (v || 0), 0));
+    if (n > 0) { applyCrewLossSection(a, n); prize += n; }
+    a.obpAssigned = 0;
+  }
+  const prisoners = (ship.crew?.abilities || []).reduce((t, v) => t + (v || 0), 0);
+  (ship.grappledWith || []).forEach(nm => { const o = [...state.jpFleet, ...state.usFleet].find(x => x.name === nm); if (o) o.grappledWith = (o.grappledWith || []).filter(n => n !== ship.name); });
+  ship.grappledWith = [];
+  ship.capturedFlag = true;
+  ship.capturedBy = captorSide;
+  // 基本 IX D 12: ストライク（船体全損）で降伏した艦は、拿捕しても帆走も砲撃もできない
+  if (ship.strikeType === 'hull') { ship.status = 'struck'; ship.crew.abilities = ship.crew.abilities.map(() => 0); ship.crew.abilities[0] = prize; return; }
+  // 基本 IX D 9: 捕虜6につき回航員1が要る。足りなければ、捕虜がすぐに取り返す
+  if (prize * 6 < prisoners) {
+    addLog(`🏴 ${ship.name}: 回航員 ${prize} では捕虜 ${prisoners} を抑えられず、取り返された`);
+    ship.capturedFlag = false; ship.capturedBy = null;
+    return;
+  }
+  ship.origSide = ship.origSide || ship.side;
+  ship.origCrewQuality = ship.origCrewQuality || ship.crewQuality;
+  ship.prisoners = prisoners;
+  ship.crew.abilities = ship.crew.abilities.map(() => 0);
+  ship.crew.abilities[0] = prize;
+  ship.crewQuality = attackers[0].crewQuality; // 基本 IX D 10
+  ship.status = 'ok';
+  ship.strikeType = 'melee';
+  ship.obpAssigned = ship.dbpAssigned = ship.tbpAssigned = 0;
+  moveShipToSide(ship, captorSide);
+}
+function moveShipToSide(ship, side) {
+  state.jpFleet = state.jpFleet.filter(x => x !== ship);
+  state.usFleet = state.usFleet.filter(x => x !== ship);
+  ship.side = side;
+  (side === 'jp' ? state.jpFleet : state.usFleet).push(ship);
+}
+// 基本 IX D 8, 9, 14: 回航員がいなくなる・捕虜を抑えられない・元の味方が5ヘクス以内 → 元の持ち主に戻る
+function checkPrizes() {
+  for (const s of [...state.jpFleet, ...state.usFleet]) {
+    if (!s.origSide || s.status !== 'ok' || s.side === s.origSide) continue;
+    const prize = (s.crew?.abilities || []).reduce((t, v) => t + (v || 0), 0);
+    const near = (s.origSide === 'jp' ? state.jpFleet : state.usFleet).some(o => o !== s && o.status === 'ok' && o.col >= 0 && hexDist(s.col, s.row, o.col, o.row) <= 5);
+    if (prize > 0 && prize * 6 >= (s.prisoners || 0) && !near) continue;
+    addLog(`🏴 ${s.name}: 元の持ち主が取り返した`);
+    s.crew.abilities = s.crew.abilities.map(() => 0);
+    s.crew.abilities[0] = s.prisoners || 0;
+    s.prisoners = 0; s.capturedFlag = false; s.capturedBy = null; s.strikeType = null;
+    s.crewQuality = s.origCrewQuality || s.crewQuality;
+    moveShipToSide(s, s.origSide);
+    s.origSide = null;
+  }
+}
+
 function checkSurrenderByDamage() {
   const allShips = [...state.jpFleet, ...state.usFleet];
   for (const s of allShips) {
     if (s.status !== 'ok' || s.col < 0) continue;
-    const gunTotal = (s.broadsideGuns?.L?.remain || 0) + (s.broadsideGuns?.R?.remain || 0);
-    const rigTotal = (s.rigging?.sections||[]).reduce((a,v) => a + (v||0), 0);
-    if (gunTotal > 0 && rigTotal > 0) continue;  // 両方残っていれば降伏しない
-    // 味方が10hex以内にいるか
-    let alliedNear = false;
-    for (const o of allShips) {
-      if (o === s || o.side !== s.side || o.status !== 'ok' || o.col < 0) continue;
-      if (hexDist(s.col, s.row, o.col, o.row) <= 10) { alliedNear = true; break; }
-    }
-    if (alliedNear) continue;
+    const noGuns = (s.broadsideGuns?.L?.remain || 0) + (s.broadsideGuns?.R?.remain || 0) + (s.carronades?.L?.remain || 0) + (s.carronades?.R?.remain || 0) === 0; // カロネードも砲
+    const noRig = (s.rigging?.sections||[]).reduce((a,v) => a + (v||0), 0) === 0;
+    if (!noGuns && !noRig) continue;
+    const covered = allShips.some(o => o !== s && o.side === s.side && o.status === 'ok' && o.col >= 0
+      && (o.classNum || 9) <= (s.classNum || 9) && hexDist(s.col, s.row, o.col, o.row) <= 10);
+    if (covered) continue;
+    const enemies = allShips.filter(o => o.side !== s.side && o.status === 'ok' && o.col >= 0);
+    let by = null;
+    if (noGuns) by = enemies.find(e => { const a = getArcToTarget(e, s); return (a === 'port' || a === 'stbd') && hexDist(e.col, e.row, s.col, s.row) <= 1; });
+    if (!by && noRig) by = enemies.find(e => { const a = getArcToTarget(e, s); return (a === 'port' || a === 'stbd') && hexDist(e.col, e.row, s.col, s.row) <= 10 && isRaking(e, s); });
+    if (!by) continue;
     s.status = 'struck';
-    s.capturedBy = s.side === 'jp' ? 'us' : 'jp';
-    // 地図から消去 + 鉤縄リンクのクリーンアップ
-    s.col = -1;
-    if (s.grappledWith?.length) {
-      const _all = [...state.jpFleet, ...state.usFleet];
-      for (const _nm of s.grappledWith) {
-        const _o = _all.find(x => x.name === _nm);
-        if (_o) _o.grappledWith = (_o.grappledWith||[]).filter(n => n !== s.name);
-      }
-      s.grappledWith = [];
-    }
-    addLog(`🏴 ${s.name} 降伏（${gunTotal===0?'大砲全損':'帆全損'}、味方援護なし） → 地図から消去`);
+    s.strikeType = noGuns ? 'fire' : 'rig';
+    s.capturedBy = by.side;
+    addLog(`🏴 ${s.name} 降伏（${noGuns ? '火力' : '動けないこと'}による。相手 ${by.name}）`);
   }
 }
 
@@ -3243,6 +3362,8 @@ function runWindPhase() {
   const detail = result.log.join('\n');
   const dice = result.changed ? '🌬 風変化発生' : '🌬 風変化なし';
   showPhaseOverlay(PHASE_NAMES_JP['wind'], detail, dice, 4000);
+  // 上級 III A 3: 暴風からハリケーンになったら、ゲームはすぐに終わる
+  if (state.wind.velocity === 7) { addLog('風: ハリケーン → ゲーム終了'); state.forceEnd = true; checkGameEnd(); }
   draw();
 }
 
@@ -3319,7 +3440,9 @@ function plotKey(key) {
   if (!s) { debugLog(`[DEBUG plotKey] key=${key} 艦未選択`); setInfo('艦を選択してください'); return; }
   if (s.col < 0) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} 未配置`); setInfo('未配置の艦'); return; }
   if (s.grappledWith?.length > 0) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} 鉤縄接続中`); setInfo(`${s.name}: 鉤縄接続中 - 移動プロット不可`); return; }
+  if (s.fouledWith?.length > 0) { setInfo(`${s.name}: 絡み中 - 移動プロット不可`); return; }
   if (s.plotDone) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} plotDone=true（確定済）`); setInfo(`${s.name}: プロット確定済み（変更不可）`); return; }
+  if (key === '6') return; // 漂流は移動の後に自動で処理する（基本 V B）
   if (!s.plottedMoves) s.plottedMoves = [];
   s.plottedMoves.push(key);
   debugLog(`[DEBUG plotKey] key=${key} ${s.name} plot=${s.plottedMoves.join(' ')}`);
@@ -3350,6 +3473,8 @@ function plotSailChange(target) {
 function plotAnchor(action) {
   const s = state.selectedShip;
   if (!s) return;
+  if (action === 'dropAS' || action === 'dropAB') { s.anchorMode = action === 'dropAS' ? 'AS' : 'AB'; action = 'drop'; }
+  else if (action === 'drop') s.anchorMode = 'A';
   if (action === 'drop' && (s.anchorCableBroken || s.anchorCut)) {
     alert('錨綱が切れているため投錨できません');
     return;
@@ -3694,38 +3819,35 @@ function drawPlotPreview() {
 // ============================================================
 function reachableMoves(ship) {
   const out = new Map();
-  if (!ship || ship.col < 0 || ship.status !== 'ok' || ship.anchored || (ship.grappledWith && ship.grappledWith.length)) return out;
+  if (!ship || ship.col < 0 || ship.status !== 'ok' || ship.anchored || (ship.grappledWith && ship.grappledWith.length) || (ship.fouledWith && ship.fouledWith.length)) return out;
   if (ship.enterTurn && state.turn < ship.enterTurn) return out;
   const occupied = new Set();
-  [...(state.jpFleet || []), ...(state.usFleet || [])].filter(o => o !== ship && o.status === 'ok' && o.col >= 0).forEach(o => {
+  [...(state.jpFleet || []), ...(state.usFleet || [])].filter(o => o !== ship && o.status !== 'sunk' && o.status !== 'exploded' && o.col >= 0).forEach(o => {
     occupied.add(`${o.col},${o.row}`);
     const st = getSternHex(o); if (st) occupied.add(`${st.col},${st.row}`);
   });
-  const mpOf = d => (typeof maxMoveForAttitude === 'function') ? maxMoveForAttitude({ ...ship, dir: d }, state.wind) : 4;
   const add = (c, r, d) => { const k = `${c},${r}`; if (!out.has(k)) out.set(k, { col: c, row: r, dirs: new Set() }); out.get(k).dirs.add(d); };
   const seen = new Set();
-  const queue = [{ col: ship.col, row: ship.row, dir: ship.dir, mp: mpOf(ship.dir), turned: false }];
+  const queue = [moveStateInit(ship, state.wind)];
   while (queue.length) {
     const q = queue.shift();
-    const key = `${q.col},${q.row},${q.dir},${q.mp},${q.turned ? 1 : 0}`;
+    const key = [q.col, q.row, q.dir, q.mp, q.turned, q.turns, q.att, q.attHexes, q.stopped, q.pivotOnly, q.moved > 0].join(',');
     if (seen.has(key)) continue;
     seen.add(key);
     add(q.col, q.row, q.dir);
-    // 前進
-    if (q.mp > 0) {
+    if (moveCanAdvance(q, ship, state.wind)) {
       const n = hexNeighbor(q.col, q.row, q.dir);
       if (n && inMap(n.col, n.row)) {
         const st = hexNeighbor(n.col, n.row, DIR_OPPOSITE[q.dir]);
         if (!(st && !inMap(st.col, st.row)) && !occupied.has(`${n.col},${n.row}`) && !(st && occupied.has(`${st.col},${st.row}`))) {
-          queue.push({ col: n.col, row: n.row, dir: q.dir, mp: q.mp - 1, turned: false });
+          const c = { ...q }; moveApplyAdvance(c, n.col, n.row); queue.push(c);
         }
       }
     }
-    // 転舵（1ヘクスで1回）
-    if (!q.turned) {
+    if (moveCanTurn(q, ship, state.wind)) {
       const ci = DIR_CW_ORDER.indexOf(q.dir);
       [DIR_CW_ORDER[(ci + 1) % 6], DIR_CW_ORDER[(ci + 5) % 6]].forEach(nd => {
-        queue.push({ col: q.col, row: q.row, dir: nd, mp: Math.max(0, Math.min(q.mp - 1, mpOf(nd))), turned: true });
+        const c = { ...q }; moveApplyTurn(c, ship, state.wind, nd); queue.push(c);
       });
     }
   }
@@ -3847,7 +3969,14 @@ function executeAllPlots() {
         }
       }
       // 漂流/復帰カウンター更新
-      paths.forEach(p => updateDriftState(p.ship, p.path));
+      paths.forEach(p => {
+        updateDriftState(p.ship, p.path);
+        // 上級 X B: 旋回に移動力を使った艦は修理できない
+        if (p.path.some((x, i) => i > 0 && x.dir !== p.path[i - 1].dir)) p.ship._noRepair = true;
+        if (p.ship.plannedAnchor === 'raise') p.ship._noRepair = true;
+        // 上級 V C 4: スプリングで向きを変えた艦は、そのターンは装填も砲撃もできない
+        p.ship._springTurned = !!p.ship.anchored && p.path.some((x, i) => i > 0 && x.dir !== p.path[i - 1].dir);
+      });
       // 錨処理
       paths.forEach(p => updateAnchorState(p.ship));
       // 鉤縄処理
@@ -3877,7 +4006,7 @@ function executeAllPlots() {
     const pathShipNames = new Set(paths.map(p => p.ship.name));
     // プロットされていない艦（stateにあり paths 未登録）も占有登録
     for (const s of [...state.jpFleet, ...state.usFleet]) {
-      if (s.col < 0 || s.status !== 'ok') continue;
+      if (s.col < 0 || s.status === 'sunk' || s.status === 'exploded') continue;
       if (pathShipNames.has(s.name)) continue;
       const hexes = getOccupiedHexes(s.col, s.row, s.dir);
       hexes.forEach(h => { occupiedByStatic[h] = { ship: s, stopped: true, path: [] }; });
@@ -3922,6 +4051,11 @@ function executeAllPlots() {
       if (staticExists) {
         // 静止艦優先、動艦は全員敗者
         losers = movingOnly;
+      } else if (movingOnly.length >= 2 && movingOnly.some(c => {
+          // 基本 V C 2: 旋回で艦尾が入る艦と、艦首が入る艦では、艦首が入る方が残る
+          return `${c.pos.col},${c.pos.row}` === h && !(c.pos.dir !== c.p.path[step-1].dir);
+        }) && movingOnly.some(c => c.pos.dir !== c.p.path[step-1].dir && `${c.pos.col},${c.pos.row}` !== h)) {
+        losers = movingOnly.filter(c => c.pos.dir !== c.p.path[step-1].dir && `${c.pos.col},${c.pos.row}` !== h);
       } else if (movingOnly.length >= 2) {
         // 動vs動: d6判定、同点は再振り
         while (true) {
@@ -3937,6 +4071,13 @@ function executeAllPlots() {
       } else {
         losers = movingOnly;
       }
+      // 基本 V C 4, 5: 衝突した艦の移動はすべて終わり、絡み判定を行う
+      for (let _i = 0; _i < combatants.length; _i++) for (let _j = _i + 1; _j < combatants.length; _j++) {
+        const _a = combatants[_i].p.ship, _b = combatants[_j].p.ship;
+        (state._collisionPairs = state._collisionPairs || []).push([_a, _b]);
+        _a._noRepair = true; _b._noRepair = true;
+      }
+      combatants.forEach(c => { if (!losers.includes(c)) c.p.endAfterStep = true; });
       // 敗者は手前で侵入キャンセル → 停止（重なり解消まで後退）
       losers.forEach(l => {
         l.p.stopped = true;
@@ -4017,6 +4158,7 @@ function executeAllPlots() {
         p.ship.col = p.path[step].col;
         p.ship.row = p.path[step].row;
         p.ship.dir = p.path[step].dir;
+        if (p.endAfterStep) { p.stopped = true; p.path = p.path.slice(0, step + 1); }
         debugLog(`[step${step}] [${p.ship.name}] ${before} → (${p.ship.col},${p.ship.row})dir${p.ship.dir}`);
       } else {
         debugLog(`[step${step}] [${p.ship.name}] path外 (path長=${p.path.length})`);
@@ -4052,7 +4194,7 @@ function updateDriftState(s, path) {
   if (s.drifting) {
     if (hasTurn) {
       s.turningRecoverCount = (s.turningRecoverCount || 0) + 1;
-      const threshold = Math.max(1, 4 - bs);
+      const threshold = Math.max(1, 4 - (s.turningAbility != null ? s.turningAbility : 3)); // 基本 V B 5: 旋回能力で決まる
       if (s.turningRecoverCount >= threshold) {
         s.drifting = false;
         s.turningRecoverCount = 0;
@@ -4150,6 +4292,27 @@ function simulatePlot(ship) {
 
   // 投錨中は移動不可
   if (ship.anchored) {
+    // 上級 V C 3, 4: スプリングで投錨した艦は、移動実行フェイズに左右へ120度（2回）まで向きを変えられる
+    if (ship.anchorMode === 'AS' || ship.anchorMode === 'AB') {
+      let n = 0;
+      for (const tok of (ship.plottedMoves || [])) {
+        if (!['1','2','3','7','8','9'].includes(tok) || n >= 2) continue;
+        const nd = parseInt(tok);
+        const ci = DIR_CW_ORDER.indexOf(dir);
+        if (nd !== DIR_CW_ORDER[(ci + 1) % 6] && nd !== DIR_CW_ORDER[(ci + 5) % 6]) continue;
+        if (ship.anchorMode === 'AS') {
+          const st0 = getSternHex({ col, row, dir });
+          const nb = hexNeighbor(st0.col, st0.row, nd);
+          if (!nb || !inMap(nb.col, nb.row)) continue;
+          col = nb.col; row = nb.row;
+        } else {
+          const ns = hexNeighbor(col, row, DIR_OPPOSITE[nd]);
+          if (!ns || !inMap(ns.col, ns.row)) continue;
+        }
+        dir = nd; n++;
+        path.push({col, row, dir});
+      }
+    }
     path.push({col, row, dir});
     return path;
   }
@@ -4159,76 +4322,42 @@ function simulatePlot(ship) {
     return path;
   }
 
-  // 漂流中はプロット処理を通常通り行う（プレイヤー選択で漂流トークン'6'を使う）
-
-  let mp = (typeof maxMoveForAttitude === 'function') ? maxMoveForAttitude(ship, state.wind) : 4;
-  let turnedThisHex = false;
-  const dbg = (ship._debugPlot !== false);  // デバッグログ（既定ON）
-  // 他艦占有ヘクス集合（bow + stern 両方）— 同ヘクス進入を禁止するために使用
-  const _occupied = new Set();
-  {
-    const _others = [...(state.jpFleet||[]), ...(state.usFleet||[])].filter(o => o !== ship && o.status === 'ok' && o.col >= 0);
-    for (const o of _others) {
-      _occupied.add(`${o.col},${o.row}`);
-      const _oStern = (typeof getSternHex === 'function') ? getSternHex(o) : null;
-      if (_oStern) _occupied.add(`${_oStern.col},${_oStern.row}`);
-    }
+  // 絡んだ艦は動くことも旋回もできない（基本 V C 6）。投錨・鉤縄と同じく止まる
+  if (ship.fouledWith && ship.fouledWith.length > 0) {
+    path.push({col, row, dir});
+    return path;
   }
-  if (dbg) debugLog(`[simulatePlot] ${ship.name} 開始 col=${col} row=${row} dir=${dir} initMP=${mp} plot=${JSON.stringify(ship.plottedMoves)}`);
+  const st = moveStateInit(ship, state.wind);
+  const dbg = (ship._debugPlot !== false);
+  if (dbg) debugLog(`[simulatePlot] ${ship.name} 開始 col=${col} row=${row} dir=${dir} initMP=${st.mp} plot=${JSON.stringify(ship.plottedMoves)}`);
+  // 違反する書き込みがあれば、その艦の移動はそこで終わる（IV B 9）
   for (const tok of (ship.plottedMoves || [])) {
-    if (tok === '0') { path.push({col,row,dir}); if (dbg) debugLog(`  [${ship.name}] tok=0 stop`); continue; }
-    // 転舵トークンは mp=0 でも処理可能（新方位の mp プールに切替）
+    if (tok === '0' || tok === '6') { path.push({col: st.col, row: st.row, dir: st.dir}); continue; } // 漂流は移動の後に自動で行う
     if (['1','2','3','7','8','9'].includes(tok)) {
       const newDir = parseInt(tok);
-      if (newDir === dir) { path.push({col,row,dir}); if (dbg) debugLog(`  [${ship.name}] tok=${tok} 同方位 no-op`); continue; }
-      if (turnedThisHex) { if (dbg) debugLog(`  [${ship.name}] tok=${tok} → break (turnedThisHex)`); break; }
-      const ci = DIR_CW_ORDER.indexOf(dir);
-      const adj1 = DIR_CW_ORDER[(ci + 1) % 6];
-      const adj2 = DIR_CW_ORDER[(ci + 5) % 6];
-      if (newDir !== adj1 && newDir !== adj2) { if (dbg) debugLog(`  [${ship.name}] tok=${tok} → break (非隣接: adj=${adj1},${adj2})`); break; }
-      dir = newDir;
-      turnedThisHex = true;
-      const newMax = (typeof maxMoveForAttitude === 'function')
-        ? maxMoveForAttitude({ ...ship, dir }, state.wind) : mp;
-      // 新方位 mp を上限としてキャップ（増加なし、低下時は丸める、転舵コスト1）
-      mp = Math.max(0, Math.min(mp - 1, newMax));
-      if (dbg) debugLog(`  [${ship.name}] tok=${tok} 転舵→dir=${dir} mp=${mp} (newMax=${newMax})`);
-      path.push({col, row, dir});
+      if (newDir === st.dir) { path.push({col: st.col, row: st.row, dir: st.dir}); continue; }
+      const ci = DIR_CW_ORDER.indexOf(st.dir);
+      if (newDir !== DIR_CW_ORDER[(ci + 1) % 6] && newDir !== DIR_CW_ORDER[(ci + 5) % 6]) break;
+      if (!moveCanTurn(st, ship, state.wind)) break;
+      moveApplyTurn(st, ship, state.wind, newDir);
+      if (dbg) debugLog(`  [${ship.name}] tok=${tok} 転舵→dir=${st.dir} mp=${st.mp}`);
+      path.push({col: st.col, row: st.row, dir: st.dir});
       continue;
     }
-    // 移動系トークンは mp=0 で停止
-    if (mp <= 0) { if (dbg) debugLog(`  [${ship.name}] tok=${tok} → break (mp=${mp})`); break; }
     if (tok === '5') {
-      const n = hexNeighbor(col, row, dir);
-      if (!n) { if (dbg) debugLog(`  [${ship.name}] tok=5 → break (edge)`); break; }
-      if (!inMap(n.col, n.row)) { if (dbg) debugLog(`  [${ship.name}] tok=5 → break (map外)`); break; }
-      // stern 越境チェック
-      const _newStern = (typeof DIR_OPPOSITE !== 'undefined' && typeof hexNeighbor === 'function')
-        ? hexNeighbor(n.col, n.row, DIR_OPPOSITE[dir]) : null;
-      if (_newStern && !inMap(_newStern.col, _newStern.row)) { if (dbg) debugLog(`  [${ship.name}] tok=5 → break (stern map外)`); break; }
-      // 他艦占有チェック（bow と stern 両方）— 同ヘクス進入を完全禁止
-      const _bowKey = `${n.col},${n.row}`;
-      const _sternKey = _newStern ? `${_newStern.col},${_newStern.row}` : null;
-      if (_occupied.has(_bowKey) || (_sternKey && _occupied.has(_sternKey))) {
-        if (dbg) debugLog(`  [${ship.name}] tok=5 → break (占有 bow=${_bowKey} stern=${_sternKey})`);
-        break;
-      }
-      col = n.col; row = n.row;
-      mp--;
-      turnedThisHex = false;
-      if (dbg) debugLog(`  [${ship.name}] tok=5 前進→(${col},${row}) mp=${mp}`);
+      if (!moveCanAdvance(st, ship, state.wind)) break;
+      const n = hexNeighbor(st.col, st.row, st.dir);
+      if (!n || !inMap(n.col, n.row)) break;
+      const _st = hexNeighbor(n.col, n.row, DIR_OPPOSITE[st.dir]);
+      if (_st && !inMap(_st.col, _st.row)) break;
+      moveApplyAdvance(st, n.col, n.row);
+      if (dbg) debugLog(`  [${ship.name}] tok=5 前進→(${st.col},${st.row}) mp=${st.mp}`);
+      path.push({col: st.col, row: st.row, dir: st.dir});
     } else if (tok === '4') {
-      mp--;
-      if (dbg) debugLog(`  [${ship.name}] tok=4 BACK mp=${mp}`);
-    } else if (tok === '6') {
-      const wd = state.wind?.direction;
-      if (wd) {
-        const n = hexNeighbor(col, row, wd);
-        if (n && inMap(n.col, n.row)) { col = n.col; row = n.row; }
-      }
-      if (dbg) debugLog(`  [${ship.name}] tok=6 DRIFT→(${col},${row})`);
+      if (st.mp < 1) break;  // 上級 V B: 帆の裏打ちは移動力1を使ってその場に留まる
+      st.mp -= 1;
+      path.push({col: st.col, row: st.row, dir: st.dir});
     }
-    path.push({col, row, dir});
   }
   return path;
 }

@@ -9,6 +9,16 @@
 //   Gun:     被弾セクションのHit Table番号-1
 //   Hull:    均等に減算
 // ============================================================
+// 接舷隊に使っている乗員セクションの数（接舷隊は番号の小さいセクションから丸ごと作る）
+function boardingSectionsOf(ship) {
+  let left = (ship.obpAssigned || 0) + (ship.dbpAssigned || 0) + (ship.tbpAssigned || 0);
+  let n = 0;
+  for (const v of (ship.crew?.abilities || [])) {
+    if (v > 0 && left >= v) { left -= v; n++; }
+  }
+  return n;
+}
+
 function applyDamageWSM(target, damages, ctx) {
   const applied = [];
   const arc = ctx?.arc;           // firerから見たarc (port/stbd/bow/stern)
@@ -60,8 +70,13 @@ function applyDamageWSM(target, damages, ctx) {
         if (!target.crew || !Array.isArray(target.crew.abilities)) break;
         // 能1（index 0）から消去
         let removed = 0;
-        for (let i = 0; i < target.crew.abilities.length && removed < n; i++) {
-          while (removed < n && target.crew.abilities[i] > 0) {
+        // 上級 VIII B 7: 接舷隊を持つ艦は、さらに乗員のマスを1つ失う
+        const nC = n + (((target.obpAssigned || 0) + (target.dbpAssigned || 0) + (target.tbpAssigned || 0)) > 0 ? 1 : 0);
+        // 基本 IX D 11: 回航員が乗っている艦は、奇数番目を回航員から、偶数番目を捕虜から取る
+        let nHit = nC;
+        if (target.prisoners > 0) { const toPris = Math.min(target.prisoners, Math.floor(nC / 2)); target.prisoners -= toPris; nHit = nC - toPris; }
+        for (let i = 0; i < target.crew.abilities.length && removed < nHit; i++) {
+          while (removed < nHit && target.crew.abilities[i] > 0) {
             target.crew.abilities[i]--;
             removed++;
           }
@@ -87,16 +102,34 @@ function applyDamageWSM(target, damages, ctx) {
             valid.shift();
           }
         }
-        // 右パネル表示用 broadsideGuns も同期（被弾舷から減算）
+        // 上級 VIII A 10: 砲の命中は、撃った艦に近い部分から消す。その舷に残っていなければ反対の舷から
         if (target.broadsideGuns) {
-          const gunSide = hitSide || 'L';
-          const gd = target.broadsideGuns[gunSide];
-          if (gd) {
-            let rem = removed;
-            while (rem > 0 && gd.remain > 0) { gd.remain--; rem--; }
+          const f = ctx?.firer;
+          const facing = f ? getArcToTarget(target, f) : null;
+          let first = facing === 'port' ? 'L' : facing === 'stbd' ? 'R' : hitSide;
+          if (!first) first = (target.broadsideGuns.L?.remain || 0) >= (target.broadsideGuns.R?.remain || 0) ? 'L' : 'R';
+          const order = [first, first === 'L' ? 'R' : 'L'];
+          const tStern = getSternHex(target);
+          const foreFirst = !f || !tStern || hexDist(f.col, f.row, target.col, target.row) <= hexDist(f.col, f.row, tStern.col, tStern.row);
+          let rem = removed;
+          for (const k of order) {
+            const gd = target.broadsideGuns[k];
+            while (gd && rem > 0 && gd.remain > 0) {
+              const pk = foreFirst ? ['foreRemain', 'aftRemain'] : ['aftRemain', 'foreRemain'];
+              const part = (gd[pk[0]] || 0) > 0 ? pk[0] : pk[1];
+              if ((gd[part] || 0) > 0) gd[part]--;
+              gd.remain--; rem--;
+            }
           }
         }
         applied.push(`砲セクション-${removed}`);
+        // 基本 VIII D 3: 余った砲の命中は船体の命中として扱う
+        if (removed < n && target.hull) {
+          const over = n - removed;
+          target.hull.remain = Math.max(0, target.hull.remain - over);
+          applied.push(`余りの砲命中→船体-${over}`);
+          if (target.hull.remain === 0 && !target._hullDestroyedChecked) target._hullDestroyedCheck = true;
+        }
         break;
       }
       case 'crit': {
@@ -105,6 +138,10 @@ function applyDamageWSM(target, damages, ctx) {
         break;
       }
     }
+  }
+  if (applied.length > 0 && typeof state !== 'undefined' && state) {
+    state.damageSeqCounter = (state.damageSeqCounter || 0) + 1;
+    target.damageSeq = state.damageSeqCounter;
   }
   return applied;
 }
@@ -116,41 +153,58 @@ function applyDamageWSM(target, damages, ctx) {
 //   5: 沈没可能性
 //   6: 爆発可能性
 // ============================================================
+// 艦を地図から完全削除（grappledWith もクリア）
+function _removeShipFromMap(ship) {
+  ship.col = -1;
+  if (ship.grappledWith?.length && typeof state !== 'undefined' && state) {
+    const _all = [...(state.jpFleet||[]), ...(state.usFleet||[])];
+    for (const _nm of ship.grappledWith) {
+      const _o = _all.find(x => x.name === _nm);
+      if (_o) _o.grappledWith = (_o.grappledWith||[]).filter(n => n !== ship.name);
+    }
+    ship.grappledWith = [];
+  }
+}
+
 function rollDestroyedHull(ship, log) {
   log = log || [];
   const r = rollD6();
   log.push(`船体破壊判定: 1d6=${r}`);
-  if (r <= 4) {
-    ship.status = 'struck';
-    log.push('🏳 降伏（旗を降ろす）');
-    return { result: 'struck' };
-  } else if (r === 5) {
-    log.push('沈没可能性');
-    // 続く1d6で6なら沈没
-    const r2 = rollD6();
-    if (r2 === 6) {
-      ship.status = 'sunk';
-      log.push(`🌊 沈没確定 (1d6=${r2})`);
-      return { result: 'sunk' };
-    } else {
-      ship.status = 'struck';  // 降伏
-      log.push(`沈没せず→降伏 (1d6=${r2})`);
-      return { result: 'struck' };
-    }
+  // 上級 VIII C: 降伏した艦は盤に残る。沈む艦・爆発する艦は、その後のターンごとの絡み解除フェイズで、6が出た時にそうなる
+  ship.status = 'struck';
+  ship.strikeType = 'hull';
+  ship.capturedBy = ship.side === 'jp' ? 'us' : 'jp';
+  if (r <= 4) { log.push('🏳 降伏（旗を降ろす）'); return { result: 'struck' }; }
+  ship.pendingFate = r === 5 ? 'sink' : 'explode';
+  log.push(r === 5 ? '🏳 降伏。沈みかけている' : '🏳 降伏。爆発しかけている');
+  return { result: 'struck', fate: ship.pendingFate };
+}
+
+// 上級 VIII C 3, 4: 沈みかけ・爆発しかけの艦のダイス（絡み解除フェイズ）
+function rollPendingFate(ship, allShips, log) {
+  const r = rollD6();
+  if (r !== 6) { log.push(`${ship.name}: ${ship.pendingFate === 'sink' ? '沈没' : '爆発'}判定 1d6=${r} まだ浮いている`); return; }
+  if (ship.pendingFate === 'sink') {
+    ship.status = 'sunk';
+    log.push(`🌊 ${ship.name}: 沈没 (1d6=6)`);
   } else {
-    log.push('爆発可能性');
-    const r2 = rollD6();
-    if (r2 === 6) {
-      ship.status = 'exploded';
-      log.push(`💥 爆発 (1d6=${r2})`);
-      // 隣接艦への延焼判定（簡略: 別途実装）
-      return { result: 'exploded' };
-    } else {
-      ship.status = 'struck';
-      log.push(`爆発せず→降伏 (1d6=${r2})`);
-      return { result: 'struck' };
+    ship.status = 'exploded';
+    log.push(`💥 ${ship.name}: 爆発 (1d6=6)`);
+    // 隣のヘクスの艦全部に、索具の欄の命中表10の損害
+    const mine = [{ col: ship.col, row: ship.row }]; const st = getSternHex(ship); if (st) mine.push(st);
+    for (const o of allShips) {
+      if (o === ship || o.col < 0 || o.status === 'sunk' || o.status === 'exploded') continue;
+      const hs = [{ col: o.col, row: o.row }]; const ost = getSternHex(o); if (ost) hs.push(ost);
+      if (!hs.some(h => mine.some(m => hexDist(h.col, h.row, m.col, m.row) === 1))) continue;
+      const die = rollD6();
+      const code = lookupHitTable(10, die, 'rigging');
+      const applied = applyDamageWSM(o, parseDamageCode(code), {});
+      log.push(`  爆発の損害 ${o.name}: 1d6=${die} ${code} → ${applied.join(', ')}`);
+      updateShipStatus(o, log);
     }
   }
+  ship.pendingFate = null;
+  _removeShipFromMap(ship);
 }
 
 // ============================================================
@@ -165,14 +219,6 @@ function checkSurrenderConditions(ship) {
   if (!ship || ship.status !== 'ok') return false;
   // 船体全損
   if (ship.hull && ship.hull.remain === 0) return true;
-  // 乗員半数以下 + 士気低下で降伏
-  if (ship.crew) {
-    const maxCrew = (ship.crew.abilitiesMax||[]).reduce((a,v) => a + (v||0), 0);
-    const curCrew = (ship.crew.abilities||[]).reduce((a,v) => a + (v||0), 0);
-    if (maxCrew > 0 && curCrew / maxCrew <= 0.4 && (ship.crewQuality === 'poor' || ship.crewQuality === 'green')) {
-      return true;
-    }
-  }
   // 火災制御不能で爆発マーカー → 爆発判定（簡略）
   if (ship.fireOutOfControl) return true;
   return false;
@@ -206,7 +252,8 @@ function processFireProgression(ship, crewAssignedToFire, log) {
     const r2 = rollD6();
     if (r2 === 6) {
       ship.status = 'exploded';
-      log.push(`💥 火災制御不能 → 爆発 (1d6=${r2})`);
+      _removeShipFromMap(ship);
+      log.push(`💥 火災制御不能 → 爆発 (1d6=${r2}) → 地図から消去`);
       return { extinguished: false, exploded: true, log };
     }
   }

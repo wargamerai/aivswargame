@@ -13,8 +13,9 @@ function executeWindPhase(wind) {
   wind.turnCounter++;
   const oldWind = JSON.parse(JSON.stringify(wind));
   const wcn = wind.windChangeNumber || 3;
-  if (wind.turnCounter % wcn !== 0) {
-    log.push(`風期: ${wind.turnCounter}ターン目（${wcn}ターンごと判定）`);
+  // 上級 III A 3: 風の変化は3ターンごとに判定する
+  if (wind.turnCounter % 3 !== 0) {
+    log.push(`風期: ${wind.turnCounter}ターン目（3ターンごと判定）`);
     return { changed: false, oldWind, newWind: wind, log };
   }
   const r = rollD6();
@@ -75,12 +76,12 @@ function applyWindDirectionChange(wind, r, log) {
 // 風速変化表（1d6）
 function applyWindVelocityChange(wind, r, log) {
   if (r <= 2) {
-    wind.velocity = Math.max(1, wind.velocity - 1);
+    wind.velocity = Math.max(0, wind.velocity - 1); // 上級 III A 3: 軽風から下がると凪
     log.push(`風速: -1 → ${wind.velocity}`);
   } else if (r <= 4) {
     log.push(`風速: 変化なし (${wind.velocity})`);
   } else {
-    wind.velocity = Math.min(6, wind.velocity + 1);
+    wind.velocity = Math.min(7, wind.velocity + 1); // 上級 III A 3: 暴風からハリケーンになるとゲーム終了
     log.push(`風速: +1 → ${wind.velocity}`);
   }
 }

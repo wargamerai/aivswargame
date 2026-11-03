@@ -125,7 +125,7 @@
       <tr><td><kbd>5</kbd></td><td>Move forward 1 hex.</td></tr>
       <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>Turn to face that direction (8 = north, 9 = north-east, 3 = south-east, 2 = south, 1 = south-west, 7 = north-west). Only one hexside at a time (a direction next to the current heading), at most one turn per hex. A turn uses 1 movement point.</td></tr>
       <tr><td><kbd>4</kbd></td><td>Back (uses 1 movement point; the ship stays).</td></tr>
-      <tr><td><kbd>6</kbd></td><td>Drift 1 hex with the wind (for a ship adrift).</td></tr>
+      <tr><td colspan="2">Drifting is automatic: a ship whose bow hex has not changed for two moves in a row drifts with the wind.</td></tr>
       <tr><td><kbd>0</kbd></td><td>Stop (stay this step).</td></tr>
       <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>Clear the plot of the selected ship.</td></tr>
       <tr><td><span class="btn">Confirm (Enter)</span> / <kbd>Enter</kbd></td><td>Confirm the plot (a green ✓ appears). To change it before execution, press CLR and enter it again.</td></tr>
@@ -217,7 +217,7 @@
       <tr><td><kbd>5</kbd></td><td>1ヘクス前進。</td></tr>
       <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>その方向へ転舵（8＝北、9＝北東、3＝南東、2＝南、1＝南西、7＝北西）。今の向きの隣の方向だけで、1ヘクスで1回まで。転舵1回で移動力を1使います。</td></tr>
       <tr><td><kbd>4</kbd></td><td>バック（移動力を1使い、その場に留まる）。</td></tr>
-      <tr><td><kbd>6</kbd></td><td>風で1ヘクス流される（漂流中の艦用）。</td></tr>
+      <tr><td colspan="2">漂流は自動です。艦首のヘクスが2回続けて変わらない艦は、風下へ流されます。</td></tr>
       <tr><td><kbd>0</kbd></td><td>停止（その回は動かない）。</td></tr>
       <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>選んでいる艦のプロットを消す。</td></tr>
       <tr><td><span class="btn">確定 (Enter)</span> / <kbd>Enter</kbd></td><td>プロットを確定（緑の ✓ が付く）。実行の前なら CLR で消して入れ直せる。</td></tr>
@@ -309,7 +309,7 @@
       <tr><td><kbd>5</kbd></td><td>1 Feld vorwärts.</td></tr>
       <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>In diese Richtung wenden (8 = Nord, 9 = Nordost, 3 = Südost, 2 = Süd, 1 = Südwest, 7 = Nordwest). Nur um eine Feldseite (eine Richtung neben dem aktuellen Kurs), höchstens einmal pro Feld. Eine Wende kostet 1 Bewegungspunkt.</td></tr>
       <tr><td><kbd>4</kbd></td><td>Zurück (kostet 1 Bewegungspunkt; das Schiff bleibt stehen).</td></tr>
-      <tr><td><kbd>6</kbd></td><td>1 Feld mit dem Wind treiben (für ein treibendes Schiff).</td></tr>
+      <tr><td colspan="2">Das Treiben erfolgt automatisch: Ein Schiff, dessen Bugfeld sich zweimal hintereinander nicht ändert, treibt mit dem Wind.</td></tr>
       <tr><td><kbd>0</kbd></td><td>Halt (in diesem Schritt nicht bewegen).</td></tr>
       <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>Den Plan des gewählten Schiffes löschen.</td></tr>
       <tr><td><span class="btn">Bestätigen (Enter)</span> / <kbd>Enter</kbd></td><td>Den Plan bestätigen (ein grünes ✓ erscheint). Vor dem Ausführen mit CLR löschen und neu eingeben.</td></tr>

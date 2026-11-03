@@ -211,9 +211,9 @@ const HIT_TABLES = {
 
 // 弾種射程（最大hex）
 const MUNITION_RANGE = {
-  ROUND_SHOT: 10,  // 通常弾
-  CHAIN_SHOT: 7,   // 鎖弾
-  DOUBLE_SHOT: 5,  // 二重弾
-  GRAPE_SHOT: 5,   // 散弾
+  ROUND_SHOT: 10,  // 球形弾
+  CHAIN_SHOT: 3,   // 鎖弾
+  DOUBLE_SHOT: 1,  // 二重弾
+  GRAPE_SHOT: 1,   // ぶどう弾
   CARRONADE: 2,    // カロネード砲
 };

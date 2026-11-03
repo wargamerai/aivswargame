@@ -74,13 +74,21 @@ function avgPos(ship) {
 // ============================================================
 function isRaking(firer, target) {
   // firerからtargetへの方位
-  const fAvg = avgPos(firer);
-  const bear = bearingToHex(fAvg.col, fAvg.row, target.col, target.row);
-  // targetの艦首方向と一致 → bow rake
-  // targetの艦尾方向と一致 → stern rake
-  if (bear === target.dir) return 'bow_rake';        // targetの艦首側
-  if (bear === DIR_OPPOSITE[target.dir]) return 'stern_rake'; // targetの艦尾側
-  return null;
+  // 基本 VIII C 2: 相手の舷側の範囲の外にいれば縦射
+  // 上級 VIII D: 相手の艦首の真正面・艦尾の真後ろのヘクスにいれば、相手が撃ち返せても縦射
+  const tStern = getSternHex(target);
+  const ahead = hexNeighbor(target.col, target.row, target.dir);
+  const behind = tStern ? hexNeighbor(tStern.col, tStern.row, DIR_OPPOSITE[target.dir]) : null;
+  const fStern = getSternHex(firer);
+  const fHexes = [{ col: firer.col, row: firer.row }]; if (fStern) fHexes.push(fStern);
+  const onHex = h => h && fHexes.some(f => f.col === h.col && f.row === h.row);
+  const rake = onHex(ahead) || onHex(behind) || getArcToTarget(target, firer) === 'none';
+  if (!rake) return null;
+  // 目標の艦尾に近ければ艦尾への縦射、艦首に近ければ艦首への縦射
+  if (onHex(behind)) return 'stern_rake';
+  if (onHex(ahead)) return 'bow_rake';
+  const dist = h => hexDist(firer.col, firer.row, h.col, h.row);
+  return (tStern && dist(tStern) < dist({ col: target.col, row: target.row })) ? 'stern_rake' : 'bow_rake';
 }
 
 // ============================================================
@@ -219,7 +227,9 @@ function calcGunneryModifiers(firer, target, opts) {
     mods.push({label:`拿捕${v}`, v}); total += v;
   } else {
     // Crew Section Loss: 喪失セクション × 砲数帯変動
-    const crewLost = (firer.crew?.abilitiesMax||[]).filter((m, i) => m > 0 && (firer.crew?.abilities||[])[i] === 0).length;
+    // 基本 VIII C 3: 全滅したセクションと、接舷に使ったセクションの数だけ下がる
+    const crewLost = (firer.crew?.abilitiesMax||[]).filter((m, i) => m > 0 && (firer.crew?.abilities||[])[i] === 0).length
+      + boardingSectionsOf(firer);
     if (crewLost > 0) {
       const v = HDT_MOD_TABLE.crewSectLoss[band] * crewLost;
       mods.push({label:`乗員喪失${v}`, v}); total += v;
@@ -242,6 +252,13 @@ function calcGunneryModifiers(firer, target, opts) {
   if (cqv !== 0) {
     mods.push({label:`${cq}${cqv>0?'+':''}${cqv}`, v:cqv}); total += cqv;
   }
+  // 風の効果表の注: 暴風は等級1・4が命中表-2、等級2・3が-1。疾強風は等級5・6が-1
+  const _v = (typeof state !== 'undefined' && state.wind) ? state.wind.velocity : 0;
+  const _c = firer.classNum;
+  let _wm = 0;
+  if (_v === 6) _wm = (_c === 1 || _c === 4) ? -2 : (_c === 2 || _c === 3) ? -1 : 0;
+  else if (_v === 5 && (_c === 5 || _c === 6)) _wm = -1;
+  if (_wm) { mods.push({label:`風${_wm}`, v:_wm}); total += _wm; }
   return { total, mods };
 }
 
@@ -352,9 +369,14 @@ function resolveGunnery(firer, target, arc, ammo, dmgType) {
     return { hit: false, log, miss: 'modifier', table: finalTable, range, rake };
   }
 
-  if (!dmgType) dmgType = (ammo === 'chain') ? 'rigging' : 'hull';
+  if (!dmgType) {
+    if (ammo === 'chain') dmgType = 'rigging';
+    else if (ammo === 'round' && range >= 6) dmgType = 'rigging';  // WSM: 6hex以上で球弾も帆強制
+    else dmgType = 'hull';
+  }
   const adjustedTable = Math.min(10, finalTable);
   let die, code, damages;
+  const extraRolls = [];
   if (ammo === 'grape') {
     // ぶどう弾: ダイスなし、命中No.の値だけ乗員損失
     die = null;
@@ -366,6 +388,21 @@ function resolveGunnery(firer, target, arc, ammo, dmgType) {
     code = lookupHitTable(adjustedTable, die, dmgType);
     log.push(`1d6=${die}, Table#${adjustedTable}(${dmgType}) → "${code}"`);
     damages = parseDamageCode(code);
+    // 上級 I A 2: 表10を超えたら、ダイスを分けて振る（20なら表10を2回、13なら表10と表3）
+    let rest = finalTable - 10;
+    while (rest >= 0 && finalTable > 10) {
+      const t = Math.min(10, rest);
+      const d2 = rollD6();
+      const c2 = lookupHitTable(t, d2, dmgType);
+      log.push(`追加のダイス: 1d6=${d2}, Table#${t}(${dmgType}) → "${c2}"`);
+      extraRolls.push({ table: t, die: d2 });
+      code += ' + ' + c2;
+      damages = damages.concat(parseDamageCode(c2));
+      if (rest <= 10) break;
+      rest -= 10;
+    }
+    // 上級 VIII B 2: 鎖弾の船体と砲の命中は外れ
+    if (ammo === 'chain') damages = damages.filter(d => d.type !== 'H' && d.type !== 'G');
   }
   // Rake時 (R) extras を有効化
   if (rake) {
@@ -376,7 +413,7 @@ function resolveGunnery(firer, target, arc, ammo, dmgType) {
     if (!fullSail) damages.forEach(d => { if (d.extra) d.apply = false; });
   }
 
-  return { hit: true, log, code, damages, table: adjustedTable, die, range, rake };
+  return { hit: true, log, code, damages, table: adjustedTable, die, range, rake, extraRolls };
 }
 
 // ============================================================
