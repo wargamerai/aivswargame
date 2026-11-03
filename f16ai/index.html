@@ -667,6 +667,14 @@ window.COMBAT_CHARTS.RH = {
                     cameraX += shift * hStep;
                     changed = true;
                 }
+                if (u.y <= 3) {
+                    // 上の端も、左の端と同じように広げる（ユーザーの指示 2026-11-03）
+                    let shift = 10;
+                    units.forEach(v => { v.y += shift; if(v.path) v.path.forEach(p => p.y += shift * vStep); });
+                    mapMaxR += shift;
+                    cameraY += shift * vStep;
+                    changed = true;
+                }
                 if (u.y >= mapMaxR - 3) { mapMaxR += 10; changed = true; }
             });
             if (changed) {
@@ -3090,6 +3098,11 @@ window.COMBAT_CHARTS.RH = {
         el.scrollTop = el.scrollHeight;
     };
 })();
+</script>
+<script>
+// ブラウザの「戻る」でゲームから離れないようにする（ユーザーの指示 2026-11-03）
+history.pushState(null, '', location.href);
+window.addEventListener('popstate', () => { history.pushState(null, '', location.href); });
 </script>
 </body>
 </html>

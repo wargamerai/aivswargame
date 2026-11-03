@@ -71,8 +71,9 @@ function setupScenarioUnits(config, createUnit) {
     if (scenarioName === 'フリーシナリオ' && config.blueConfig && config.redConfig) {
         let customUnits = [];
         let baseX = Math.floor(mapMaxC / 2) - 1 + Math.floor(Math.random() * 4);
-        [{cfg: config.blueConfig, team: 'Blue', dir: 8, alt: 25, y: Math.floor(mapMaxR * 0.80)},
-         {cfg: config.redConfig,  team: 'Red',  dir: 2, alt: 20, y: Math.floor(mapMaxR * 0.18)}
+        // 開始距離を約40ヘクスにする（ユーザーの指示 2026-11-03: ミサイルを撃つ距離へ速度を調整する余裕を増やす）
+        [{cfg: config.blueConfig, team: 'Blue', dir: 8, alt: 25, y: Math.floor(mapMaxR * 0.90)},
+         {cfg: config.redConfig,  team: 'Red',  dir: 2, alt: 20, y: Math.floor(mapMaxR * 0.13)}
         ].forEach(function(side) {
             let c = side.cfg;
             for (let i = 0; i < c.count; i++) {
