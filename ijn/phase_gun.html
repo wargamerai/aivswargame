@@ -1472,6 +1472,7 @@ function log(msg) {
   const el = document.getElementById('log');
   el.innerHTML += `<div>${display}</div>`;
   el.scrollTop = el.scrollHeight;
+  parent.postMessage({type:'GAME_LOG', text:display}, '*');
 }
 
 init();

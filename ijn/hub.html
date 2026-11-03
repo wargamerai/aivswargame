@@ -33,7 +33,7 @@ body { background: #0a0a1a; color: #222; font-family: monospace; display: flex; 
 #canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
 
 #right {
-  width: 380px; min-width: 380px;
+  width: 320px; min-width: 320px;
   background: #f0f0f5; border-left: 2px solid #bbc;
   display: flex; flex-direction: column;
 }
@@ -159,6 +159,7 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
   <div id="right">
     <h2 id="frameTitle">サブプログラム</h2>
     <iframe id="subframe" src="about:blank"></iframe>
+    <div id="gameLog" style="flex:0 0 auto;max-height:200px;overflow-y:auto;background:#1a1a24;color:#ccc;font-size:0.82em;font-family:monospace;padding:4px 8px;border-top:1px solid #555;line-height:1.5;display:none;"></div>
   </div>
 </div>
 
@@ -188,6 +189,11 @@ button:disabled { background: #e8e8e8; color: #999; cursor: default; }
 <script>
 // ========== DEBUG LOG ==========
 const _dbgLines = [];
+function gameLog(text) {
+  // ログは非表示（コンソールにのみ出力）
+  console.log('[GAME]', text.replace(/<[^>]*>/g,''));
+}
+
 function dbg(msg) {
   const t = new Date().toLocaleTimeString('ja-JP',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const line = `[${t}] ${msg}`;
@@ -1409,6 +1415,10 @@ window.addEventListener('message', (e) => {
       checkMapBounds();
       checkContact();
       draw();
+      break;
+
+    case 'GAME_LOG':
+      gameLog(msg.text);
       break;
 
     case 'PHASE_DONE': {

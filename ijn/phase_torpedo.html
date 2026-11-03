@@ -103,7 +103,7 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
   <div id="shootInfo">雷撃艦と目標を選んでください</div>
 
   <button id="btnShoot" onclick="doTorpedo()" disabled>🐟 雷撃！</button>
-  <button onclick="donePhase()">フェーズ終了</button>
+  <button onclick="donePhase()">雷撃完了</button>
 </div>
 
 <div id="resultOverlay">
@@ -1199,6 +1199,7 @@ function log(msg) {
   const el = document.getElementById('log');
   el.innerHTML += `<div>${display}</div>`;
   el.scrollTop = el.scrollHeight;
+  parent.postMessage({type:'GAME_LOG', text:display}, '*');
 }
 
 init();

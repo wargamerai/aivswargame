@@ -144,7 +144,7 @@ function startBattle() {
 }
 // 移動と戦場の霧の設定（キャンペーン画面と同じ設定を使う）
 function showBattleOptions() {
-    const on = localStorage.getItem('flagshipMove') === '1';
+    const on = localStorage.getItem('flagshipMove') !== '0'; // 旗艦操作が基本（ユーザーの指示 2026-11-04）
     const m = document.getElementById('btnMoveMode');
     m.textContent = on ? '移動: 旗艦操作' : '移動: 全艦手動';
     m.style.backgroundColor = on ? '#1a2a1a' : '#ddd';
@@ -157,7 +157,7 @@ function showBattleOptions() {
     f.style.color = lv > 0 ? '#8afa8a' : '#555';
 }
 function toggleMoveMode() {
-    localStorage.setItem('flagshipMove', localStorage.getItem('flagshipMove') === '1' ? '0' : '1');
+    localStorage.setItem('flagshipMove', localStorage.getItem('flagshipMove') !== '0' ? '0' : '1');
     showBattleOptions();
 }
 function toggleFog() {

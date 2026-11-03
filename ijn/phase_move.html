@@ -44,6 +44,7 @@ button.undo-btn:hover { background:#ffd8c0; }
 </div>
 <div id="manualControls" style="display:none">
   <button onclick="doUndo()" class="undo-btn" id="btnUndo" disabled>◀ やり直し</button>
+  <button onclick="resetAllMoves()" class="undo-btn" id="btnResetAll">◀◀ 全リセット</button>
   <button onclick="allStraight()" id="btnAllStraight">全艦直進 ▶</button>
   <button onclick="undoAllStraight()" id="btnUndoAll" style="display:none">◀ 全艦直進やり直し</button>
 </div>
@@ -71,6 +72,7 @@ let remainMove = 0;
 let turnedThisHex = false;
 let movedShips = new Set();  // 移動済み艦のインデックス（移動力消費完了）
 let undoStack = [];
+let phaseStartBackup = null;  // フェーズ開始時の全艦状態バックアップ
 let shipStates = {};  // 艦名→{col, row, dir, remainMove, undoStack, turnedThisHex} 一時保存
 
 const COLS = 46;
@@ -247,7 +249,7 @@ function startStraightMode() {
   document.getElementById('btnDone').style.display = 'none';
 
   if (jpMoving) {
-    autoAdvanceIndividual(jpFleet);  // JP: 各艦個別に直進
+    advanceJPFleet();  // JP: 旗艦が進み後続が追随
     // 自動直進した艦をmovedShipsに登録（接触時のdonePhase未移動チェック対策）
     jpFleet.forEach((s, i) => { if (canShipMove(s)) movedShips.add(i); });
   } else {
@@ -366,10 +368,10 @@ function withdrawMove(ship) {
   if (ship.dmgM >= ship.capM / 2) spd = Math.max(1, Math.ceil(spd / 2));  // M損害半分以上なら半速
   let remain = spd;
 
+  // 退却の針路は移動の最初に1度だけ決める（途中で気を変えない）
+  var target = ship.cannotTurn ? ship.dir : getRetreatDir(ship);
+  ship.retreatDir = target;
   while (remain > 0) {
-    // 毎ステップ退却方向を再計算
-    var target = ship.cannotTurn ? ship.dir : getRetreatDir(ship);
-    ship.retreatDir = target;
 
     if (ship.dir !== target && !ship.cannotTurn) {
       ship.dir = turnStep(ship.dir, target);
@@ -387,19 +389,13 @@ function withdrawMove(ship) {
       pdbg(`${ship.name} 自動離脱で離脱ゾーン到達 → 退場`);
       break;
     }
-    if (occupied(next.col, next.row, ship)) {
-      // 船は停止できない → 強制進入+衝突チェック
-      var occ = getOccupant(next.col, next.row, ship);
-      ship.col = next.col;
-      ship.row = next.row;
-      if (occ) collisionCheck(ship, occ);
-      remain--;
-      continue;
+    if (hexBlocked(ship, next.col, next.row)) {
+      // ぶつかる前に避ける。避けられなければ止まる（ぶつからないのが最優先）
+      if (avoidByTurn(ship)) { target = ship.dir; ship.retreatDir = target; continue; }
+      break;
     }
     ship.col = next.col;
     ship.row = next.row;
-    var sunkAt = getSunkShip(next.col, next.row, ship);
-    if (sunkAt) collisionCheck(ship, sunkAt);
     remain--;
   }
   if (ship.col < 0) {
@@ -409,6 +405,15 @@ function withdrawMove(ship) {
 }
 
 // ========== JP: 各艦個別に直進（接触前） ==========
+// 接触前の日本軍の直進。旗艦操作なら列で進む。列に入っていない艦と損傷で追随できない艦だけ個別に進む
+function advanceJPFleet() {
+  if (!isFlagshipMode()) { autoAdvanceIndividual(jpFleet); return; }
+  aiEnsureLeads(jpFleet);
+  const hasLead = s => s.isLead || jpFleet.some(l => l.isLead && l.colIndex === s.colIndex && s.colIndex >= 0 && l.status !== 'sunk' && l.col >= 0 && !l.withdrawing);
+  const alone = jpFleet.filter(s => !s.isLead && (!hasLead(s) || isShipCrippled(s)));
+  autoAdvanceColumn(jpFleet);
+  if (alone.length) autoAdvanceIndividual(alone);
+}
 function autoAdvanceIndividual(fleet) {
   const ships = fleet.filter(s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && getSpeed(s) > 0);
   // 移動順: 同グループ内はリード艦→followOrder順、異グループ間は火力大→速力遅い順
@@ -444,7 +449,7 @@ function autoAdvanceIndividual(fleet) {
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
       // 衝突回避: 最低速度以上なら前方占有時に停止
-      if (step >= minCount && (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship))) break;
+      if (occupied(next.col, next.row, ship) || getSunkShip(next.col, next.row, ship)) break;  // ぶつかるくらいなら最低速度を破って止まる
       ship.col = next.col;
       ship.row = next.row;
       var occ = getOccupant(next.col, next.row, ship);
@@ -480,7 +485,7 @@ function autoAdvanceColumn(fleet) {
       if (!next) break;
       if (next.col < 0 || next.col >= COLS || next.row < 0) break;
       // 衝突回避: 最低速度以上なら前方占有時に停止
-      if (step >= minCount && (occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead))) break;
+      if (occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead)) break;  // ぶつかるくらいなら最低速度を破って止まる
 
       lead.path = lead.path || [];
       lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
@@ -568,6 +573,7 @@ function startAutoUSMove() {
 
 // ===== 米軍戦術AI移動（段階表示版） =====
 function aiUSMoveAnimated() {
+  aiEnsureLeads(usFleet);
   const jpc = jpCenter();
   const jpDir = jpMainDir();
   const sr = state.spotRange || 6;
@@ -582,10 +588,7 @@ function aiUSMoveAnimated() {
       }
     }
   }
-  const leads = usFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
-
-  // 敵(JP)に近い艦(col小=左)から移動
-  leads.sort((a, b) => a.col - b.col);
+  const leads = aiPrepareLeads(usFleet, jpFleet);
 
   // 各リード艦を順番に移動し、間にpushStateで画面更新
   let idx = 0;
@@ -611,205 +614,409 @@ function aiUSMoveAnimated() {
 // 1隻のリード艦を移動する（aiUSMoveから抽出）
 // flankSide: +1=主力側, -1=DD側（反対から挟み撃ち）
 function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
-  const spd = getSpeed(lead);
-  const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
-  const minSpd = getMinSpeed(lead);
-  const minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
-  const isDD = (lead.type === 'DD');
-  const distToJP = hexDist(lead.col, lead.row, jpc.col, jpc.row);
   const preCol = lead.col, preRow = lead.row;
+  aiSteerAndMove(lead, usFleet, jpFleet, sr, !state.jpDetected && !!lead.radar);
+  console.log(`aiUSMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} 針路=${lead.aiCourse} ${lead.aiPattern}`);
+}
 
-  let targetDir;
-  if (isDD) {
-    if (lead.torpedoFired) {
-      targetDir = 6;
-    } else if (distToJP > 8 && flankSide) {
-      // 遠距離: 日本軍進路の反対側に回り込んで挟み撃ち
-      // JP進路の先方を予測してflank側から迎撃
-      const ci = DIR_CW_AI.indexOf(jpDir);
-      const flankDir = flankSide > 0 ? DIR_CW_AI[(ci + 2) % 6] : DIR_CW_AI[(ci + 4) % 6];
-      // JP中心の先方 + flanking offset を目標に
-      let goalCol = jpc.col, goalRow = jpc.row;
-      // JP進路方向に3ヘクス先を予測
-      for (let i = 0; i < 3; i++) {
-        const n = hexNeighbor(goalCol, goalRow, jpDir);
-        if (!n) break; goalCol = n.col; goalRow = n.row;
-      }
-      // flank方向に4ヘクスずらす
-      for (let i = 0; i < 4; i++) {
-        const n = hexNeighbor(goalCol, goalRow, flankDir);
-        if (!n) break; goalCol = n.col; goalRow = n.row;
-      }
-      targetDir = bestDirToward(lead.col, lead.row, goalCol, goalRow);
-    } else {
-      let closestJP = null, closestDist = 999;
-      for (const jp of jpFleet) {
-        if (jp.status === 'sunk' || jp.col < 0) continue;
-        const d = hexDist(lead.col, lead.row, jp.col, jp.row);
-        if (d < closestDist) { closestDist = d; closestJP = jp; }
-      }
-      if (closestJP) {
-        targetDir = bestDirToward(lead.col, lead.row, closestJP.col, closestJP.row);
-      } else {
-        targetDir = lead.dir;
-      }
+// ===== AI の操艦（ユーザーの指示 2026-11-04）=====
+// 基本は近づく。砲戦距離に入ったら旋回して敵に横を向けて走る。距離が開いたら、もう一度敵の方へ旋回する。
+// 損害が大きくなったら逃げる。旋回は衝突を避ける時などを除いて1回。後ろの艦は先頭の航跡をなぞる
+// ぶつからないことが最優先。そのためなら距離の制約も、旋回の回数も、最低速度も破ってよい
+const AI_HOLD_TURNS = 3;     // 旋回のあと、この回数の間は針路を保つ（ぶつかる時と敵が近すぎる時は別）
+const AI_GUN_RANGE = 6;       // 主力艦がここまで近づいたら、敵に横を向ける
+const AI_TORPEDO_RANGE = 4;   // 魚雷の残る駆逐艦はここまで近づく
+const AI_OPEN_MARGIN = 3;     // 距離がこれだけ開いたら、敵の方へ旋回する
+const AI_OPEN_ANGLE = 120;    // 敵が斜め後ろに回ったら（このまま走ると距離が開く）、敵の方へ旋回する
+const AI_FLEE_RATIO = 0.5;    // 艦隊の砲力の残りがこの割合を切ったら、全艦で逃げる
+
+function aiPos(col, row) { return { x: col + ((row & 1) ? 0.5 : 0), y: row * 0.866 }; }
+// 艦の向きと敵の方向の角度（0=敵が真正面、90=真横、180=真後ろ）
+function aiOffAngle(dir, fc, fr, tc, tr) {
+  const a = aiPos(fc, fr), n = hexNeighbor(fc, fr, dir), b = aiPos(n.col, n.row), t = aiPos(tc, tr);
+  const c1 = Math.atan2(b.y - a.y, b.x - a.x), c2 = Math.atan2(t.y - a.y, t.x - a.x);
+  let d = Math.abs(c1 - c2) * 180 / Math.PI;
+  if (d > 180) d = 360 - d;
+  return d;
+}
+function aiTurnGap(a, b) {
+  const d = Math.abs(DIR_CW_AI.indexOf(a) - DIR_CW_AI.indexOf(b));
+  return Math.min(d, 6 - d);
+}
+// そのマスに入れるか（地図の端の手前で止まる）
+function aiHexFree(ship, col, row) {
+  if (col <= JP_WITHDRAW_COL || col >= US_WITHDRAW_COL || row < 0) return false;
+  return !occupied(col, row, ship) && !getSunkShip(col, row, ship);
+}
+// この針路で steps マス先まで、何マス進めるか
+function aiClearRun(ship, dir, steps) {
+  let c = ship.col, r = ship.row, n = 0;
+  for (; n < steps; n++) {
+    const h = hexNeighbor(c, r, dir);
+    if (!h || !aiHexFree(ship, h.col, h.row)) break;
+    c = h.col; r = h.row;
+  }
+  return n;
+}
+// 敵に横を向ける距離（レーダー持ちの米艦が見つかる前は、視認の外で止める）
+function aiNearRange(lead, sr, preContact) {
+  if (preContact) return sr + 1;
+  return lead.type === 'DD' && aiHasTorpedo(lead) ? AI_TORPEDO_RANGE : AI_GUN_RANGE;
+}
+// 艦隊の損害が大きいか。一度逃げると決めたら戻らない。決めた内容は艦隊の最初の艦に書いておく
+function aiFleetFlees(fleet) {
+  const note = fleet[0];
+  if (note.aiFlee) return true;
+  const full = fleet.reduce((n, s) => n + (s.capG || 0), 0);
+  const left = aiLiveLeadsAndFollowers(fleet).reduce((n, s) => n + Math.max(0, (s.capG || 0) - (s.dmgG || 0)), 0);
+  if (full > 0 && left < full * AI_FLEE_RATIO) {
+    note.aiFlee = true;
+    pdbg(`${note.side}: 損害が大きいので全艦で逃げる`);
+  }
+  return !!note.aiFlee;
+}
+function aiLiveLeadsAndFollowers(fleet) { return fleet.filter(s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing); }
+// 「近づく・直進・離れる」のどれか。近づき始めたら、砲戦距離に入るまで変えない
+function aiPattern(lead, fleet, dist, near, off) {
+  if (aiFleetFlees(fleet)) return 'away';
+  if (lead.type === 'DD' && lead.torpedoFired) return 'away';
+  if (dist > near + AI_OPEN_MARGIN) return 'close';
+  if (dist > near && off > AI_OPEN_ANGLE) return 'close';
+  if (lead.aiPattern === 'close' && dist > near) return 'close';
+  return 'keep';
+}
+// 今の向きのままでよければそのまま。変える時は、いちばん少ない旋回で済む針路を選ぶ
+function aiChooseCourse(lead, foe, pattern) {
+  const off = d => aiOffAngle(d, lead.col, lead.row, foe.col, foe.row);
+  const ok = pattern === 'close' ? (d => off(d) <= 75)
+           : pattern === 'away' ? (d => off(d) >= 105)
+           : (d => off(d) >= 55 && off(d) <= 125);   // keep: 舷側を向けている
+  if (ok(lead.dir)) return lead.dir;
+  const ideal = pattern === 'close' ? (lead.type === 'DD' ? 0 : 45) : pattern === 'away' ? 135 : 90;
+  let best = lead.dir, bestScore = 1e9;
+  for (const d of DIR_CW_AI) {
+    if (!ok(d)) continue;
+    const score = aiTurnGap(lead.dir, d) * 100 + Math.abs(off(d) - ideal);
+    if (score < bestScore) { bestScore = score; best = d; }
+  }
+  return best;
+}
+// 旗艦を1隻にするか複数にするかを、状況で決める（ユーザーの指示 2026-11-04）
+//   複数: 魚雷の残る駆逐隊がいて主力もいる時 / 列どうしが離れすぎた時 / 列ごとに相手にする敵が離れている時
+//   1隻: それ以外（接触前・魚雷を撃ち終えた後など）。全部の列が1隻の旗艦と同じ針路で進む
+//   一度決めたら3ターンは変えない。決めた内容は艦隊の最初の艦に書いておく（次の画面にも残る）
+function aiLiveLeads(fleet) { return fleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing); }
+function aiHasTorpedo(s) { return s.torpedo && s.torpedo !== '-' && !s.torpedoFired && !s.cannotTorpedo; }
+function aiNearestFoe(s, enemies) {
+  let foe = null, dist = 999;
+  for (const e of enemies) {
+    if (e.status === 'sunk' || e.col < 0) continue;
+    const d = hexDist(s.col, s.row, e.col, e.row);
+    if (d < dist) { dist = d; foe = e; }
+  }
+  return foe;
+}
+function aiWantsManyFlagships(leads, enemies) {
+  const dds = leads.filter(l => l.type === 'DD'), heavy = leads.filter(l => l.type !== 'DD');
+  if (dds.some(aiHasTorpedo) && heavy.length) return true;
+  for (let i = 0; i < leads.length; i++) for (let j = i + 1; j < leads.length; j++) {
+    if (hexDist(leads[i].col, leads[i].row, leads[j].col, leads[j].row) > 8) return true;
+    const a = aiNearestFoe(leads[i], enemies), b = aiNearestFoe(leads[j], enemies);
+    if (a && b && hexDist(a.col, a.row, b.col, b.row) > 8) return true;
+  }
+  return false;
+}
+// 旗艦（主力で火力の大きい艦）が先に動くように並べる。全体の旗艦を aiCommander に入れる。複数の時は null
+let aiCommander = null;
+function aiPrepareLeads(fleet, enemies) {
+  aiEnsureLeads(fleet);
+  const leads = aiLiveLeads(fleet);
+  aiCommander = null;
+  if (leads.length === 0) return leads;
+  const note = fleet[0], turnNo = state.combatTurn || 1;
+  if (note.aiManyAt == null || turnNo - note.aiManyAt >= 3) {
+    const many = aiWantsManyFlagships(leads, enemies);
+    if (many !== note.aiMany) pdbg(`${note.side}: 旗艦を${many ? '複数' : '1隻'}にする`);
+    note.aiMany = many;
+    note.aiManyAt = turnNo;
+  }
+  const rank = s => (s.type === 'DD' ? 0 : 1000) + (s.atk || 0) * 10 + (s.capG || 0) - (s.dmgG || 0);
+  leads.sort((a, b) => rank(b) - rank(a));
+  if (!note.aiMany && leads.length > 1) aiCommander = leads[0];
+  return leads;
+}
+// 列の旗艦が沈むか離脱するか動けない時は、列の次の艦が継ぐ
+function aiEnsureLeads(fleet) {
+  const live = s => s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && getSpeed(s) > 0;
+  new Set(fleet.filter(s => s.colIndex >= 0).map(s => s.colIndex)).forEach(ci => {
+    const inCol = fleet.filter(s => s.colIndex === ci).sort((a, b) => (a.followOrder || 0) - (b.followOrder || 0));
+    if (inCol.some(s => s.isLead && live(s))) return;
+    const next = inCol.find(live);
+    if (!next) return;
+    inCol.forEach(s => { s.isLead = false; });
+    next.isLead = true;
+  });
+}
+// ===== 旗艦の移動先を選ぶ（ユーザーの指示 2026-11-04）=====
+// 交互移動なので、敵は今いる位置で見る。旗艦の動きは 直進・1回旋回・2回旋回 を全部試し、後続も航跡どおりに進めて比べる
+// 選ぶ順: ぶつからない > 撃てる敵を舷側で捉える艦が多い > 相手の正面に入る艦が多い > 旋回が少ない > 敵に近い
+// 撃てる敵 = 見えていて（視認距離、レーダー艦はレーダーの範囲、火災などで露見）、砲の射程内（phase_gun の canSee と同じ）
+// 旋回は1ターンに駆逐艦2回、その他1回まで。方向は左か右のどちらかだけ。ぶつかるのを避ける時だけは自由
+// 魚雷の残る列は、1〜2ヘクスまで近づくことを先に考える
+const AI_GUN_MAX = 15;        // 砲の射程（phase_gun の getMaxRange と同じ）
+const AI_TORPEDO_CLOSE = 2;   // 魚雷の残る列が狙う距離
+const AI_RADAR_RANGE = (JSON.parse(localStorage.getItem('scenarioRules') || 'null') || {}).radarRange || 20;   // phase_gun と同じ
+function aiArcDelta(fc, fr, tc, tr) {
+  const fa = toAxial(fc, fr), ta = toAxial(tc, tr);
+  const dq = ta.q - fa.q, dr = ta.r - fa.r;
+  return { dq, dr, ds: -dq - dr };
+}
+// 射界の判定は phase_gun と同じ（舷側=火力そのまま、前後=火力1/2）
+function aiIsBroadside(dir, a) {
+  if (dir === 6 || dir === 4) return a.dq * a.ds >= 0;
+  if (dir === 3 || dir === 7) return a.dr * a.ds >= 0;
+  return a.dq * a.dr >= 0;
+}
+function aiIsForward(dir, a) {
+  if (dir === 6) return a.dq > 0;
+  if (dir === 4) return a.dq < 0;
+  if (dir === 3) return a.dr > 0;
+  if (dir === 7) return a.dr < 0;
+  if (dir === 9) return a.ds < 0;
+  if (dir === 1) return a.ds > 0;
+  return true;
+}
+function aiCanHit(radar, col, row, e, d) {
+  if (d > AI_GUN_MAX) return false;
+  if (e.onFire || e.firedGun1 || e.radarDetected) return true;
+  if (d <= (state.spotRange || 0)) return true;
+  return !!radar && d <= AI_RADAR_RANGE;
+}
+function aiColumnFollowers(lead, fleet) {
+  return fleet.filter(s => !s.isLead && s.colIndex === lead.colIndex && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && !isShipCrippled(s))
+    .sort((a, b) => (a.followOrder || 0) - (b.followOrder || 0));
+}
+function aiColumnMoves(lead, fleet) {
+  const slowest = Math.min(getSpeed(lead), ...aiColumnFollowers(lead, fleet).map(getSpeed));
+  return lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(slowest / 2)) : slowest;
+}
+// 旗艦の動きの候補。F=1マス進む、L/R=60度旋回（どちらも移動力1）
+function aiPlanCandidates(moves, maxTurns) {
+  const out = [];
+  const walk = (plan, turns, side) => {
+    if (plan.length === moves) { out.push(plan); return; }
+    walk(plan + 'F', turns, side);
+    if (turns < maxTurns) for (const t of side ? [side] : ['L', 'R']) walk(plan + t, turns + 1, t);
+  };
+  if (moves > 0) walk('', 0, null);
+  return out;
+}
+// 1列を計画どおりに進めた結果。旗艦が進めなくなったら null（他の列は、そこで止まる）
+function aiSimulateColumn(lead, fleet, plan, strict) {
+  const followers = aiColumnFollowers(lead, fleet);
+  const chain = [lead, ...followers].map(s => ({ col: s.col, row: s.row, dir: s.dir, radar: s.radar }));
+  const head = chain[0];
+  for (const a of plan) {
+    if (a === 'L' || a === 'R') {
+      const i = DIR_CW_AI.indexOf(head.dir);
+      head.dir = DIR_CW_AI[(i + (a === 'R' ? 1 : 5)) % 6];
+      continue;
     }
-  } else {
-    // 米軍主力艦の移動戦略
-    const jpAlive = jpFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
-    const usAlive = usFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
-    const jpPower = jpAlive.reduce((s, u) => s + (u.capG - u.dmgG), 0);
-    const usPower = usAlive.reduce((s, u) => s + (u.capG - u.dmgG), 0);
-
-    if (!state.jpDetected && lead.radar) {
-      // === 接触前レーダー射撃フェーズ ===
-      // 日本の索敵距離sr+1の位置に揃えて、レーダーで先制一斉射撃
-      const radarLine = sr + 1;  // JP視認外ギリギリ
-      if (distToJP > radarLine + 2) {
-        // まだ遠い → flank側から接近
-        let goalCol = jpc.col, goalRow = jpc.row;
-        if (flankSide) {
-          const fci = DIR_CW_AI.indexOf(jpDir);
-          const fDir = flankSide > 0 ? DIR_CW_AI[(fci + 2) % 6] : DIR_CW_AI[(fci + 4) % 6];
-          for (let i = 0; i < 3; i++) { const n = hexNeighbor(goalCol, goalRow, fDir); if (!n) break; goalCol = n.col; goalRow = n.row; }
-        }
-        targetDir = bestDirToward(lead.col, lead.row, goalCol, goalRow);
-      } else if (distToJP < radarLine) {
-        // 近すぎ → 離れる（見つかる前に！）
-        targetDir = bestDirAway(lead.col, lead.row, jpc.col, jpc.row);
+    const h = hexNeighbor(head.col, head.row, head.dir);
+    if (!h || !aiHexFree(lead, h.col, h.row)) {
+      if (strict) return null;
+      break;
+    }
+    let prev = { col: head.col, row: head.row, dir: head.dir };
+    head.col = h.col; head.row = h.row;
+    for (let i = 1; i < chain.length; i++) {
+      const me = chain[i], was = { col: me.col, row: me.row, dir: me.dir };
+      if (hexDist(me.col, me.row, prev.col, prev.row) <= 1) {
+        me.col = prev.col; me.row = prev.row; me.dir = prev.dir;
       } else {
-        // 理想位置 → 横方向に展開して複数艦で射線を確保
-        targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row, flankSide||0);
+        const d = bestDirToward(me.col, me.row, prev.col, prev.row), n = hexNeighbor(me.col, me.row, d);
+        if (n) { me.col = n.col; me.row = n.row; me.dir = d; }
       }
-    } else {
-      // === 接触後: 距離10維持でアウトレンジ ===
-      // 日本が接近 → 正面向き → 火力半減、米は横向きで全火力
-      // 戦力比2倍以上なら突撃して仕留める
-      const IDEAL_RANGE = (usPower > jpPower * 2) ? 5 : sr;
-
-      if (distToJP > sr + 3) {
-        // 索敵圏外 → flank側から斜め接近（舷側意識）
-        let goalCol = jpc.col, goalRow = jpc.row;
-        for (let i = 0; i < sr + 2; i++) {
-          const n = hexNeighbor(goalCol, goalRow, jpDir);
-          if (!n) break;
-          goalCol = n.col; goalRow = n.row;
-        }
-        if (flankSide) {
-          const fci = DIR_CW_AI.indexOf(jpDir);
-          const fDir = flankSide > 0 ? DIR_CW_AI[(fci + 2) % 6] : DIR_CW_AI[(fci + 4) % 6];
-          for (let i = 0; i < 3; i++) { const n = hexNeighbor(goalCol, goalRow, fDir); if (!n) break; goalCol = n.col; goalRow = n.row; }
-        }
-        targetDir = bestDirToward(lead.col, lead.row, goalCol, goalRow);
-      } else if (distToJP < IDEAL_RANGE - 2) {
-        // 近すぎ → 横移動しつつ離脱（舷側維持）
-        targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row, flankSide||0);
-      } else {
-        // 理想距離帯 or やや遠い → 横方向に平行移動して全火力維持
-        targetDir = perpDirToJP(jpDir, lead.col, lead.row, jpc.col, jpc.row, flankSide||0);
-      }
+      prev = was;
     }
   }
+  return chain;
+}
+// 計画を点数にする。大きい順に比べる
+function aiPlanScore(chains, enemies, plan, torpedoLead) {
+  let full = 0, front = 0, sum = 0, headDist = 99;
+  chains.forEach((chain, ci) => chain.forEach((p, i) => {
+    let nearest = 999, foe = null, foeDist = 999;
+    for (const e of enemies) {
+      if (e.status === 'sunk' || e.col < 0) continue;
+      const q = hexDist(p.col, p.row, e.col, e.row);
+      if (q < nearest) nearest = q;
+      if (q < foeDist && aiCanHit(p.radar, p.col, p.row, e, q)) { foeDist = q; foe = e; }
+    }
+    if (nearest === 999) return;
+    sum += nearest;
+    if (ci === 0 && i === 0) headDist = nearest;
+    if (!foe) return;   // 撃てない敵は数えない
+    if (aiIsBroadside(p.dir, aiArcDelta(p.col, p.row, foe.col, foe.row))) full++;
+    const back = aiArcDelta(foe.col, foe.row, p.col, p.row);
+    if (!aiIsBroadside(foe.dir, back) && aiIsForward(foe.dir, back)) front++;
+  }));
+  const turns = (plan.match(/[LR]/g) || []).length;
+  const rush = torpedoLead ? -Math.max(headDist, AI_TORPEDO_CLOSE) : 0;
+  return [rush, full, front, -turns, -sum];
+}
+function aiBetter(a, b) {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return false;
+}
+// 一番いい計画を返す。旗艦が1隻の時は、他の列も同じ動きをするものとして数える
+function aiBestPlan(lead, fleet, enemies, moves) {
+  const others = aiCommander === lead ? aiLiveLeads(fleet).filter(l => l !== lead) : [];
+  let best = null, bestScore = null;
+  for (const plan of aiPlanCandidates(moves, lead.type === 'DD' ? 2 : 1)) {
+    const chain = aiSimulateColumn(lead, fleet, plan, true);
+    if (!chain) continue;
+    const chains = [chain, ...others.map(l => aiSimulateColumn(l, fleet, aiPlanForColumn(plan, aiColumnMoves(l, fleet)), false))];
+    const seen = new Set();
+    let clash = false;
+    for (const c of chains) for (const p of c) {
+      const k = p.col + ',' + p.row;
+      if (seen.has(k)) clash = true;
+      seen.add(k);
+    }
+    if (clash) continue;
+    const score = aiPlanScore(chains, enemies, plan, aiHasTorpedo(lead));
+    if (!best || aiBetter(score, bestScore)) { best = plan; bestScore = score; }
+  }
+  return best;
+}
+// 旗艦の動きを、その列の移動力に合わせる
+function aiPlanForColumn(plan, moves) {
+  let p = plan.slice(0, moves);
+  while (p.length < moves) p += 'F';
+  return p;
+}
+// 1隻の先頭艦（と後ろに続く艦）を動かす
+function aiSteerAndMove(lead, fleet, enemies, sr, preContact) {
+  // 列は一番遅い艦に合わせて進む
+  const slowest = Math.min(getSpeed(lead), ...fleet.filter(s => !s.isLead && s.colIndex === lead.colIndex && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && !isShipCrippled(s)).map(getSpeed));
+  const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(slowest / 2)) : slowest;
+  const turnNo = state.combatTurn || 1;
+  let foe = null, dist = 999;
+  for (const e of enemies) {
+    if (e.status === 'sunk' || e.col < 0) continue;
+    const d = hexDist(lead.col, lead.row, e.col, e.row);
+    if (d < dist) { dist = d; foe = e; }
+  }
 
-  targetDir = captainMoveDir(lead, jpFleet, sr, targetDir, e => perpDirToJP(jpDir, lead.col, lead.row, e.col, e.row, flankSide||0), !state.jpDetected && !!lead.radar); // 艦長の性格と距離
-  console.log(`[US-AI] ${lead.name} start=(${lead.col},${lead.row}) dir=${lead.dir} targetDir=${targetDir} spd=${spd} moveCount=${moveCount}`);
+  let course = lead.dir, pattern = 'keep', plan = null;
+  if (aiCommander && aiCommander !== lead && aiCommander.side === lead.side && aiCommander.aiPlan && aiCommander.aiPlanAt === turnNo) {
+    // 旗艦が1隻の時: 他の列は旗艦と同じ動きをする（ぶつかる時だけ下で避ける）
+    plan = aiPlanForColumn(aiCommander.aiPlan, moveCount);
+    if (lead.cannotTurn) plan = plan.replace(/[LR]/g, 'F');
+    pattern = 'plan';
+    lead.aiPattern = pattern;
+  } else if (aiCommander && aiCommander !== lead && aiCommander.side === lead.side) {
+    // 旗艦が1隻の時: 他の列は旗艦と同じ針路で進む（ぶつかる時だけ下で避ける）
+    if (!lead.cannotTurn) course = aiCommander.aiCourse != null ? aiCommander.aiCourse : aiCommander.dir;
+    pattern = aiCommander.aiPattern || 'keep';
+    lead.aiPattern = pattern;
+    lead.aiCourse = course;
+  } else if (foe && !lead.cannotTurn) {
+    const off = aiOffAngle(lead.dir, lead.col, lead.row, foe.col, foe.row);
+    pattern = aiPattern(lead, fleet, dist, aiNearRange(lead, sr, preContact), off);
+    // 見つかる前のレーダー艦と逃げる時以外は、一番多くの艦が横を向ける動きを選ぶ
+    if (!preContact && pattern !== 'away') {
+      plan = aiBestPlan(lead, fleet, enemies, moveCount);
+      lead.aiPlan = plan;
+      lead.aiPlanAt = turnNo;
+      if (plan) pattern = 'plan';
+    }
+    // 動きが変わった時と、近づきたいのに離れている時は待たない
+    const changed = pattern !== lead.aiPattern || (pattern === 'close' && off > 90);
+    lead.aiPattern = pattern;
+    const waited = lead.aiTurnAt == null || turnNo - lead.aiTurnAt >= AI_HOLD_TURNS;
+    // 旋回の途中なら、決めた針路までそのまま回り続ける（途中で気を変えない）
+    if (plan) course = lead.dir;
+    else if (lead.aiCourse != null && lead.aiCourse !== lead.dir) course = lead.aiCourse;
+    else if (waited || changed) course = aiChooseCourse(lead, foe, pattern);
+  }
+
+  // 先の航路が塞がっていたら、早めに少しだけ向きを変えておく（これだけは待たない）
+  const look = moveCount + 2;
+  if (!plan && !lead.cannotTurn && aiClearRun(lead, course, look) < look) {
+    let best = course, bestRun = aiClearRun(lead, course, look), bestGap = 9;
+    for (const d of DIR_CW_AI) {
+      const run = aiClearRun(lead, d, look), gap = aiTurnGap(course, d);
+      if (gap > 2) continue;   // 急に反対へは向かない
+      if (run > bestRun || (run === bestRun && gap < bestGap)) { best = d; bestRun = run; bestGap = gap; }
+    }
+    course = best;
+  }
+  if (!plan) lead.aiCourse = course;
+
   let remain = moveCount;
-  let turned = false;
+  // 旋回は1回の移動で60度を1回だけ。移動力を1使う
+  if (lead.dir !== course && !lead.cannotTurn && remain > 0) {
+    lead.dir = aiTurnStep(lead.dir, course);
+    lead.turnCount = (lead.turnCount || 0) + 1;
+    if (lead.dir === course) lead.aiTurnAt = turnNo;
+    remain--;
+  }
+  let planAt = 0;
   while (remain > 0) {
-    if (lead.dir !== targetDir && !turned && !lead.cannotTurn) {
-      const oldDir = lead.dir;
-      lead.dir = aiTurnStep(lead.dir, targetDir);
-      lead.turnCount = (lead.turnCount || 0) + 1;
-      remain--;
-      turned = true;
-      console.log(`[STEP] ${lead.name}: turn ${oldDir}→${lead.dir} remain=${remain} pos=(${lead.col},${lead.row})`);
-      if (remain <= 0) break;
-    }
-    const next = hexNeighbor(lead.col, lead.row, lead.dir);
-    if (!next) break;
-    if (next.row < 0) break;
-    // マップ端到達 → 退場
-    if (next.col < 0 || next.col >= COLS) {
-      lead.col = -1;
-      lead.status = exitStatus(lead, next.col);
-      lead.withdrawing = true;
-      console.log(`${lead.name} マップ端到達 → 退場`);
-      // 随伴艦も退場
-      const ci = lead.colIndex;
-      const followers = usFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0);
-      for (const f of followers) {
-        f.col = -1;
-        f.status = exitStatus(f, next.col);
-        f.withdrawing = true;
-        console.log(`${f.name} (随伴) → 退場`);
+    if (plan && planAt < plan.length) {
+      const act = plan[planAt++];
+      if (act !== 'F') {
+        const i = DIR_CW_AI.indexOf(lead.dir);
+        lead.dir = DIR_CW_AI[(i + (act === 'R' ? 1 : 5)) % 6];
+        lead.turnCount = (lead.turnCount || 0) + 1;
+        lead.aiCourse = lead.dir;
+        remain--;
+        continue;
       }
-      break;
     }
-
-    // US離脱ゾーン(col >= US_WITHDRAW_COL)に入ったら即離脱
-    if (next.col >= US_WITHDRAW_COL) {
+    let next = hexNeighbor(lead.col, lead.row, lead.dir);
+    if (!next) break;
+    // 地図の端へは、離れる時に、自軍側の端から、第6ターン以降だけ出ていく（それ以外は沈没扱いなので出ない）
+    const ownEdge = lead.side === 'jp' ? next.col <= JP_WITHDRAW_COL : next.col >= US_WITHDRAW_COL;
+    if (ownEdge && pattern === 'away' && turnNo >= 6 && !occupied(next.col, next.row, lead)) {
       lead.col = -1;
       lead.status = exitStatus(lead, next.col);
       lead.withdrawing = true;
-      pdbg(`${lead.name} US離脱ゾーン到達(col=${next.col}) → 退場`);
-      const ci = lead.colIndex;
-      usFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0).forEach(f => {
-        f.col = -1;
-        f.status = exitStatus(f, next.col);
-        f.withdrawing = true;
-        pdbg(`${f.name} (随伴) → 退場`);
+      fleet.filter(s => !s.isLead && s.colIndex === lead.colIndex && s.status !== 'sunk' && s.col >= 0).forEach(f => {
+        f.col = -1; f.status = exitStatus(f, next.col); f.withdrawing = true;
       });
+      pdbg(`${lead.name} 地図の端から退場`);
       break;
     }
-
-    const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
-    if (blocked) {
-      // 回頭可能 → 隣接ヘックスで回避を試みる
+    if (!aiHexFree(lead, next.col, next.row)) {
+      // ぶつかる前に向きを変える。移動力も旋回の回数も問わない（ぶつからないのが最優先）
+      let turned = false;
       if (!lead.cannotTurn) {
-        const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
-        let avoided = false;
-        for (const offset of [1, 5]) {
-          const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
-          const altNext = hexNeighbor(lead.col, lead.row, altDir);
-          if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
-              && !occupied(altNext.col, altNext.row, lead) && !getSunkShip(altNext.col, altNext.row, lead)) {
-            lead.path = lead.path || [];
-            lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-            lead.col = altNext.col;
-            lead.row = altNext.row;
-            console.log(`[STEP] ${lead.name}: avoid (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${altNext.col},${altNext.row}) altDir=${altDir} remain=${remain-1}`);
-            moveFollowers(lead, usFleet);
-            avoided = true;
-            remain--;
+        const i = DIR_CW_AI.indexOf(lead.dir);
+        for (const off of [1, 5, 2, 4]) {
+          const d = DIR_CW_AI[(i + off) % 6], h = hexNeighbor(lead.col, lead.row, d);
+          if (h && aiHexFree(lead, h.col, h.row)) {
+            lead.dir = d; lead.aiCourse = d; lead.aiTurnAt = turnNo;
+            lead.turnCount = (lead.turnCount || 0) + 1;
+            next = h; turned = true;
             break;
           }
         }
-        if (avoided) { turned = false; continue; }
       }
-      // 回避失敗: 最低速度以上なら停止
-      const moved = moveCount - remain;
-      if (moved >= minCount) break;
-      // 最低速度未達 → やむなく突入
+      // 行き場がなければ、最低速度を破ってでも止まる
+      if (!turned) break;
     }
-
     lead.path = lead.path || [];
-    lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
+    lead.path.push({ col: lead.col, row: lead.row, dir: lead.dir });
     lead.col = next.col;
     lead.row = next.row;
-    console.log(`[STEP] ${lead.name}: move (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${next.col},${next.row}) dir=${lead.dir} remain=${remain-1}`);
-    var occAt = getOccupant(next.col, next.row, lead);
-    if (occAt) collisionCheck(lead, occAt);
-    var sunkAt = getSunkShip(next.col, next.row, lead);
-    if (sunkAt) collisionCheck(lead, sunkAt);
-    turned = false;
     remain--;
-    moveFollowers(lead, usFleet);
+    moveFollowers(lead, fleet);
   }
   lead.remainMove = remain;
-  // 随伴艦の残り移動力も更新
-  const ci = lead.colIndex;
-  usFleet.filter(s => !s.isLead && s.colIndex === ci).forEach(f => f.remainMove = remain);
-  console.log(`aiUSMove: ${lead.name}(${lead.type},col${lead.colIndex}): (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount} torpFired=${lead.torpedoFired||false}`);
+  fleet.filter(s => !s.isLead && s.colIndex === lead.colIndex).forEach(f => f.remainMove = remain);
 }
 
 const DIR_CW_AI = [6,3,1,4,7,9];
@@ -933,7 +1140,7 @@ function autoJPMove() {
   if (state.contactMade || state.jpFreeMove) {
     aiJPMoveAnimated();
   } else {
-    autoAdvanceIndividual(jpFleet);
+    advanceJPFleet();
     jpFleet.forEach((s, i) => { if (canShipMove(s)) movedShips.add(i); });
     markSharedHex();
     pushState();
@@ -944,6 +1151,7 @@ function autoJPMove() {
 
 // 日本軍戦術AI移動（段階表示版）
 function aiJPMoveAnimated() {
+  aiEnsureLeads(jpFleet);
   const usc = usCenter();
   const usDir = usMainDir();
   const sr = state.spotRange || 6;
@@ -958,14 +1166,7 @@ function aiJPMoveAnimated() {
       }
     }
   }
-  const leads = jpFleet.filter(s => s.isLead && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing);
-
-  // 前方の艦から先にソート（東向き=col大→小ではなく、敵に近い順）
-  leads.sort((a, b) => {
-    const dA = hexDist(a.col, a.row, usc.col, usc.row);
-    const dB = hexDist(b.col, b.row, usc.col, usc.row);
-    return dA - dB;
-  });
+  const leads = aiPrepareLeads(jpFleet, usFleet);
 
   let idx = 0;
   function moveNext() {
@@ -987,167 +1188,15 @@ function aiJPMoveAnimated() {
 
 // 1隻のJPリード艦を移動する
 function aiJPMoveOneLead(lead, usc, usDir, sr) {
-  const spd = getSpeed(lead);
-  const moveCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(spd/2)) : spd;
-  const minSpd = getMinSpeed(lead);
-  const minCount = lead.dmgM >= lead.capM / 2 ? Math.max(1, Math.ceil(minSpd/2)) : minSpd;
-  const isDD = (lead.type === 'DD');
-  const distToUS = hexDist(lead.col, lead.row, usc.col, usc.row);
   const preCol = lead.col, preRow = lead.row;
-
-  let targetDir;
-  if (isDD) {
-    if (lead.torpedoFired) {
-      // 魚雷発射済み → 退避（西方向）
-      targetDir = 4;
-    } else {
-      // 魚雷未発射 → 最寄りの米艦に接近（雷撃射程3を目指す）
-      let closestUS = null, closestDist = 999;
-      for (const us of usFleet) {
-        if (us.status === 'sunk' || us.col < 0) continue;
-        const d = hexDist(lead.col, lead.row, us.col, us.row);
-        if (d < closestDist) { closestDist = d; closestUS = us; }
-      }
-      if (closestUS) {
-        if (closestDist <= 3) {
-          // 射程内 → 横方向展開して舷側を向ける
-          targetDir = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
-        } else {
-          targetDir = bestDirToward(lead.col, lead.row, closestUS.col, closestUS.row);
-        }
-      } else {
-        targetDir = lead.dir;
-      }
-    }
-  } else {
-    // 日本軍主力艦の移動戦略: 積極的に接近して砲戦距離に持ち込む
-    const jpAlive = jpFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
-    const usAlive = usFleet.filter(s => s.status !== 'sunk' && s.col >= 0);
-    const jpPower = jpAlive.reduce((s, u) => s + (u.capG - u.dmgG), 0);
-    const usPower = usAlive.reduce((s, u) => s + (u.capG - u.dmgG), 0);
-
-    // 日本軍は積極接近: 理想距離5〜7（砲撃有効射程）
-    // 戦力劣勢なら距離8〜10でアウトレンジ
-    const IDEAL_RANGE = (jpPower < usPower * 0.5) ? 10 : 6;
-
-    if (distToUS > IDEAL_RANGE + 3) {
-      // 遠い → 斜め接近（舷側を意識しつつ接近）
-      const direct = bestDirToward(lead.col, lead.row, usc.col, usc.row);
-      const perp = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
-      // 直進と横方向の中間（直進寄り）を選択
-      const di = DIR_CW_AI.indexOf(direct);
-      const pi = DIR_CW_AI.indexOf(perp);
-      const diff = ((pi - di) % 6 + 6) % 6;
-      targetDir = (diff <= 1 || diff >= 5) ? direct : DIR_CW_AI[(di + (diff < 3 ? 1 : 5)) % 6];
-    } else if (distToUS < IDEAL_RANGE - 2) {
-      // 近すぎ → 横移動しつつ離脱（舷側維持）
-      targetDir = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
-    } else {
-      // 理想距離帯 → 横方向に平行移動して全火力維持
-      targetDir = perpDirToUS(usDir, lead.col, lead.row, usc.col, usc.row);
-    }
-  }
-
-  targetDir = captainMoveDir(lead, usFleet, sr, targetDir, e => perpDirToUS(usDir, lead.col, lead.row, e.col, e.row), false); // 艦長の性格と距離
-  console.log(`[JP-AI] ${lead.name} start=(${lead.col},${lead.row}) dir=${lead.dir} targetDir=${targetDir} spd=${spd} moveCount=${moveCount}`);
-  let remain = moveCount;
-  let turned = false;
-  while (remain > 0) {
-    if (lead.dir !== targetDir && !turned && !lead.cannotTurn) {
-      const oldDir = lead.dir;
-      lead.dir = aiTurnStep(lead.dir, targetDir);
-      lead.turnCount = (lead.turnCount || 0) + 1;
-      remain--;
-      turned = true;
-      console.log(`[STEP] ${lead.name}: turn ${oldDir}→${lead.dir} remain=${remain} pos=(${lead.col},${lead.row})`);
-      if (remain <= 0) break;
-    }
-    const next = hexNeighbor(lead.col, lead.row, lead.dir);
-    if (!next) break;
-    if (next.row < 0) break;
-    // マップ端到達 → 退場
-    if (next.col < 0 || next.col >= COLS) {
-      lead.col = -1;
-      lead.status = exitStatus(lead, next.col);
-      lead.withdrawing = true;
-      console.log(`${lead.name} マップ端到達 → 退場`);
-      const ci = lead.colIndex;
-      const followers = jpFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0);
-      for (const f of followers) {
-        f.col = -1;
-        f.status = exitStatus(f, next.col);
-        f.withdrawing = true;
-        console.log(`${f.name} (随伴) → 退場`);
-      }
-      break;
-    }
-
-    // JP離脱ゾーン(col <= JP_WITHDRAW_COL)に入ったら即離脱
-    if (next.col <= JP_WITHDRAW_COL) {
-      lead.col = -1;
-      lead.status = exitStatus(lead, next.col);
-      lead.withdrawing = true;
-      pdbg(`${lead.name} JP離脱ゾーン到達(col=${next.col}) → 退場`);
-      const ci = lead.colIndex;
-      jpFleet.filter(s => !s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0).forEach(f => {
-        f.col = -1;
-        f.status = exitStatus(f, next.col);
-        f.withdrawing = true;
-        pdbg(`${f.name} (随伴) → 退場`);
-      });
-      break;
-    }
-
-    const blocked = occupied(next.col, next.row, lead) || getSunkShip(next.col, next.row, lead);
-    if (blocked) {
-      if (!lead.cannotTurn) {
-        const curDirIdx = DIR_CW_AI.indexOf(lead.dir);
-        let avoided = false;
-        for (const offset of [1, 5]) {
-          const altDir = DIR_CW_AI[(curDirIdx + offset) % 6];
-          const altNext = hexNeighbor(lead.col, lead.row, altDir);
-          if (altNext && altNext.col >= 0 && altNext.col < COLS && altNext.row >= 0
-              && !occupied(altNext.col, altNext.row, lead) && !getSunkShip(altNext.col, altNext.row, lead)) {
-            lead.path = lead.path || [];
-            lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-            lead.col = altNext.col;
-            lead.row = altNext.row;
-            console.log(`[STEP] ${lead.name}: avoid (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${altNext.col},${altNext.row}) altDir=${altDir} remain=${remain-1}`);
-            moveFollowers(lead, jpFleet);
-            avoided = true;
-            remain--;
-            break;
-          }
-        }
-        if (avoided) { turned = false; continue; }
-      }
-      const moved = moveCount - remain;
-      if (moved >= minCount) break;
-    }
-
-    lead.path = lead.path || [];
-    lead.path.push({col: lead.col, row: lead.row, dir: lead.dir});
-    lead.col = next.col;
-    lead.row = next.row;
-    console.log(`[STEP] ${lead.name}: move (${lead.path[lead.path.length-1].col},${lead.path[lead.path.length-1].row})→(${next.col},${next.row}) dir=${lead.dir} remain=${remain-1}`);
-    var occAt = getOccupant(next.col, next.row, lead);
-    if (occAt) collisionCheck(lead, occAt);
-    var sunkAt = getSunkShip(next.col, next.row, lead);
-    if (sunkAt) collisionCheck(lead, sunkAt);
-    turned = false;
-    remain--;
-    moveFollowers(lead, jpFleet);
-  }
-  lead.remainMove = remain;
+  aiSteerAndMove(lead, jpFleet, usFleet, sr, false);
   const ci = lead.colIndex;
-  jpFleet.filter(s => !s.isLead && s.colIndex === ci).forEach(f => f.remainMove = remain);
-  // movedShipsに登録
   const leadIdx = jpFleet.indexOf(lead);
   if (leadIdx >= 0) movedShips.add(leadIdx);
   jpFleet.forEach((s, i) => {
     if (!s.isLead && s.colIndex === ci && s.status !== 'sunk' && s.col >= 0) movedShips.add(i);
   });
-  console.log(`aiJPMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} spd=${spd} moved=${moveCount}`);
+  console.log(`aiJPMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} 針路=${lead.aiCourse} ${lead.aiPattern}`);
 }
 
 // ========== 自由移動モード（接触後・日本軍ターン）==========
@@ -1158,6 +1207,9 @@ function startFreeMode() {
   document.getElementById('keyHint').style.display = 'block';
   document.getElementById('manualControls').style.display = 'block';
   document.getElementById('btnDone').style.display = '';
+
+  // フェーズ開始時の全艦位置をバックアップ（全リセット用）
+  phaseStartBackup = jpFleet.map(s => ({...s, crits: [...(s.crits||[])]}));
 
   // 移動不可の艦を自動スキップ
   jpFleet.forEach((s, i) => {
@@ -1283,6 +1335,44 @@ function undoAllStraight() {
   document.getElementById('btnAllStraight').style.display = '';
   pushState();
   renderList();
+}
+
+function resetAllMoves() {
+  if (!phaseStartBackup) return;
+  // 現在の移動操作を終了
+  moving = null;
+  remainMove = 0;
+  undoStack = [];
+  turnedThisHex = false;
+  shipStates = {};
+  allStraightBackup = null;
+  // 全艦を復元
+  for (let i = 0; i < jpFleet.length; i++) {
+    Object.assign(jpFleet[i], phaseStartBackup[i]);
+  }
+  // movedShipsクリア＋ACTION_UNDO送信
+  const oldMoved = new Set(movedShips);
+  movedShips = new Set();
+  oldMoved.forEach(i => {
+    parent.postMessage({type:'ACTION_UNDO', shipIndex:i}, '*');
+  });
+  // 移動不可の艦を再スキップ
+  jpFleet.forEach((s, i) => {
+    if (!canShipMove(s)) {
+      movedShips.add(i);
+      parent.postMessage({type:'ACTION_DONE', shipIndex:i}, '*');
+    }
+  });
+  flagshipSetup(); // 旗艦操作モードの追随艦を操作済みに戻す
+  document.getElementById('btnUndo').disabled = true;
+  document.getElementById('btnUndoAll').style.display = 'none';
+  document.getElementById('btnAllStraight').style.display = '';
+  setInfo('全艦の移動をリセットしました\n艦をクリックかTabで選択');
+  setMoveBar('');
+  parent.postMessage({type:'HIGHLIGHT', firer:null, target:null}, '*');
+  pushState();
+  renderList();
+  checkAllMoved();
 }
 
 function setInfo(t) { document.getElementById('info').textContent = t; }
@@ -1993,7 +2083,7 @@ function softFinishMove() {
 // US列用の随伴艦追従（USのみ使用）
 // ========== 旗艦操作モード（ユーザーの指示 2026-11-03）==========
 // 旗艦を動かすと同じ列の艦が1ヘクスずつついてくる。追随できない艦は今までどおり個別に動かす
-function isFlagshipMode() { return localStorage.getItem('flagshipMove') === '1'; }
+function isFlagshipMode() { return localStorage.getItem('flagshipMove') !== '0'; } // 旗艦が動いて後続が追随するのが基本（ユーザーの指示 2026-11-04）
 function flagFleet() { return jpFleet; }
 function flagCanLead(s) {
   return canShipMove(s) && !isShipCrippled(s) && s.dmgM < s.capM / 2;
@@ -2129,41 +2219,31 @@ function moveFollowers(lead, fleet, chosen) {
     const fol = chain[i];
     const dist = hexDist(fol.col, fol.row, target.col, target.row);
 
-    fol.path = fol.path || [];
-    fol.path.push({col: fol.col, row: fol.row, dir: fol.dir});
-
-    let newCol, newRow;
-    const dirBefore = fol.dir;
+    let newCol, newRow, newDir = fol.dir;
     if (dist <= 1) {
       newCol = target.col;
       newRow = target.row;
-      if (!fol.cannotTurn) fol.dir = target.dir;
+      newDir = target.dir;
     } else {
       const chaseDir = bestDirToward(fol.col, fol.row, target.col, target.row);
       const next = hexNeighbor(fol.col, fol.row, chaseDir);
       if (next && next.col >= 0 && next.col < COLS && next.row >= 0) {
         newCol = next.col;
         newRow = next.row;
-        if (!fol.cannotTurn) fol.dir = chaseDir;
-      }
-    }
-    if (fol.dir !== dirBefore) fol.turnCount = (fol.turnCount || 0) + 1; // 回頭数記録（砲撃修正用）
-    if (newCol !== undefined) {
-      fol.col = newCol;
-      fol.row = newRow;
-      // 衝突チェック（敵艦・沈没船）
-      var occ = getOccupant(newCol, newRow, fol);
-      if (occ) {
-        pdbg(`随伴艦衝突: ${fol.name} → ${occ.name} at (${newCol},${newRow})`);
-        collisionCheck(fol, occ);
-      }
-      var sunk = getSunkShip(newCol, newRow, fol);
-      if (sunk) {
-        pdbg(`随伴艦衝突(沈没船): ${fol.name} → ${sunk.name} at (${newCol},${newRow})`);
-        collisionCheck(fol, sunk);
+        newDir = chaseDir;
       }
     }
     ahead.path.shift();
+    // 入る先がふさがっていたら、ぶつからずにその場で待つ（次の移動で追いつく）
+    if (newCol === undefined || hexBlocked(fol, newCol, newRow)) continue;
+    fol.path = fol.path || [];
+    fol.path.push({col: fol.col, row: fol.row, dir: fol.dir});
+    if (!fol.cannotTurn && newDir !== fol.dir) {
+      fol.dir = newDir;
+      fol.turnCount = (fol.turnCount || 0) + 1; // 回頭数記録（砲撃修正用）
+    }
+    fol.col = newCol;
+    fol.row = newRow;
   }
   if (chain.length > 1) {
     const last = chain[chain.length - 1];
