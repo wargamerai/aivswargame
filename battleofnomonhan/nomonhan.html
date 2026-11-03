@@ -75,6 +75,8 @@
         <button id="destroy-bridge-btn" class="action-btn" style="background:#ff8c00; display:none;" onclick="destroyBridge()">軍橋を破壊</button>
         <button id="declare-btn" style="display:none;" class="action-btn" onclick="confirmCombination()">この組み合わせを確定</button>
         <button id="cancel-btn" style="display:none;" class="action-btn" onclick="cancelCombination()" style="background:#888;">選択をキャンセル</button>
+        <button id="cancel-moves-btn" class="action-btn" style="display:none; background:#888;" onclick="cancelAllMoves()">移動を全部キャンセル</button>
+        <button id="cancel-combats-btn" class="action-btn" style="display:none; background:#888;" onclick="cancelAllCombats()">組み合わせを全部キャンセル</button>
         <button id="phase-btn" class="action-btn" style="display:none;" onclick="nextPhase()">移動終了（戦闘フェイズへ）</button>
         <button id="step-btn" class="action-btn" style="display:none;" onclick="resumeStep()">▶️ AIを進める</button>
         <button id="auto-btn" class="action-btn" style="display:none;" onclick="switchToAuto()">⏩ 全自動にする</button>
@@ -825,7 +827,7 @@ function changeInitiativeAndTurn() {
 function endGame(msg) {
     gameEnded = true;
     // すべてのボタンを非表示
-    ['phase-btn','declare-btn','cancel-btn','step-btn','auto-btn','destroy-bridge-btn'].forEach(id => {
+    ['phase-btn','declare-btn','cancel-btn','cancel-moves-btn','cancel-combats-btn','step-btn','auto-btn','destroy-bridge-btn'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = 'none';
     });
     // ログ窓を非表示
@@ -848,6 +850,8 @@ function startPlayerPhase(player) {
     // フェーズ切替時に矢印・宣言状態をリセット
     combatArrows = []; declaredCombats = []; currentCombatTargets = []; currentCombatAttackers = [];
     if (checkInstantVictory()) return;
+    moveStartPositions = {};
+    units.forEach(u => { if (u.side === player) moveStartPositions[u.id] = { r: u.r, c: u.c }; });
     currentPhase = player + '_MOVE'; updateUI(); render();
     if (player !== playerSide) {
         scheduleNextAITask(`${player}のAI移動フェイズを開始します`, executeAITurn);
@@ -866,6 +870,12 @@ function updateUI() {
     document.getElementById('vp-label').innerText = `日本 ${jpVP} - ${sovVP} ソ連`;
     declareBtn.style.display = "none"; bridgeBtn.style.display = (playerSide === 'JP' && !militaryBridgeDestroyed && units.some(u => u.side === 'JP' && ((u.r===2&&u.c===7)||(u.r===3&&u.c===8)))) ? "block" : "none";
     let isP = (playerSide && currentPhase.startsWith(playerSide)) || currentPhase === 'WAIT_RETREAT';
+    const inMove = !!playerSide && currentPhase === playerSide + '_MOVE';
+    const inDeclare = !!playerSide && currentPhase === playerSide + '_COMBAT_DECLARE';
+    document.getElementById('cancel-moves-btn').style.display =
+        (inMove && units.some(u => u.side === playerSide && u.acted)) ? 'block' : 'none';
+    document.getElementById('cancel-combats-btn').style.display =
+        (inDeclare && (declaredCombats.length > 0 || currentCombatTargets.length > 0 || currentCombatAttackers.length > 0)) ? 'block' : 'none';
     if(isP) {
         if(currentPhase.includes('_MOVE')) { info.innerText = `第 ${turn}T : 移動`; btn.innerText="移動終了"; btn.style.display="block"; sb.innerText="【入力待ち】移動する味方を選んでください。"; sb.style.background = playerSide==='JP'?'#ffcc00':'#d32f2f'; }
         else if(currentPhase.includes('_COMBAT_DECLARE')) { info.innerText = `第 ${turn}T : 宣言`; btn.innerText="戦闘解決へ"; btn.style.display="block"; sb.innerText="【入力待ち】目標と攻撃する部隊をクリックして確定ボタンを押してください。"; if(currentCombatTargets.length>0 && currentCombatAttackers.length>0) declareBtn.style.display="block"; document.getElementById('cancel-btn').style.display=(currentCombatTargets.length>0||currentCombatAttackers.length>0)?'block':'none'; }
@@ -907,6 +917,26 @@ function nextPhase() {
         currentPhase = playerSide+'_COMBAT_RESOLVE'; combatQueue = [...declaredCombats]; processNextCombat(); return;
     }
     else if(currentPhase.includes('_ADVANCE')) { advancePoints = 0; finishCombatResolution(); return; }
+    updateUI(); render();
+}
+// 移動フェイズ: 全部の駒を、このフェイズの開始位置へ戻す（軍橋の爆破は戻らない）
+let moveStartPositions = {};
+function cancelAllMoves() {
+    if (!playerSide || currentPhase !== playerSide + '_MOVE') return;
+    units.forEach(u => {
+        const p = moveStartPositions[u.id];
+        if (u.side === playerSide && p) { u.r = p.r; u.c = p.c; u.acted = false; }
+    });
+    selectedUnit = null;
+    document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable'));
+    log('↩ 移動を全部キャンセルしました');
+    updateUI(); render();
+}
+// 宣言フェイズ: 確定した組み合わせも、選択中の駒も全部取り消す
+function cancelAllCombats() {
+    if (!playerSide || currentPhase !== playerSide + '_COMBAT_DECLARE') return;
+    declaredCombats = []; currentCombatTargets = []; currentCombatAttackers = [];
+    log('↩ 戦闘の組み合わせを全部キャンセルしました');
     updateUI(); render();
 }
 function cancelCombination() {
