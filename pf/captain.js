@@ -20,6 +20,16 @@ function captainOf(ship) {
     target: ['focus', 'spread', 'sure', 'big'][b],                  // 各25%
   };
 }
+// 受ける損害をどれだけ気にするか（ユーザーの指示 2026-11-04）。戦艦・重巡 0.25〜1、駆逐艦・軽巡 0〜0.5
+// 範囲を3つに分け、慎重は重い方、普通は中、攻撃的は軽い方から選ぶ。移動では旗艦の艦長の値を使う
+function captainRisk(ship) {
+  const seed = (typeof state !== 'undefined' && state && state.captainSeed) || 1;
+  const heavy = ['BB', 'OBB', 'CA'].includes(ship.type);
+  const low = heavy ? 0.25 : 0, high = heavy ? 1 : 0.5;
+  const t = captainOf(ship).temper, band = t === 'aggressive' ? 0 : t === 'normal' ? 1 : 2;
+  const pick = (captainHash(seed + ':r:' + ship.name) % 1000) / 1000;
+  return low + (high - low) * (band + pick) / 3;
+}
 function captainDamageRate(s) {
   const cap = (s.capG || 0) + (s.capM || 0);
   return cap > 0 ? ((s.dmgG || 0) + (s.dmgM || 0)) / cap : 0;

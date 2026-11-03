@@ -100,12 +100,12 @@
 </div>
 
 <div>
-    <button id="btnSortie" onclick="phaseSortie()">1. 索敵＆艦隊編成</button>
+    <button id="btnSortie" onclick="phaseSortie()">1. 出撃編成＆索敵</button>
     <button id="btnCombat" onclick="openBattle()" disabled style="background-color: #cc6600; color:#fff;">2. 戦闘開始</button>
     <button id="btnAutoAI" onclick="openBattleAutoAI()" disabled style="background-color: #006699; color:#fff;">AI観戦</button>
     <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
     <button onclick="resetCampaign()" style="background-color: #cc2200; color:#fff; float:right; font-size:0.9em;">キャンペーンリセット</button>
-    <button id="btnFog" onclick="toggleFog()" style="background-color:#1a2a1a; color:#8afa8a; font-size:0.9em;">戦場の霧: ON</button>
+    <button id="btnFog" onclick="toggleFog()" style="background-color:#1a2a1a; color:#8afa8a; font-size:0.9em;">戦場の霧: OFF</button>
     <button id="btnMoveMode" onclick="toggleMoveMode()" style="font-size:0.9em;">移動: 全艦手動</button>
 </div>
 <script>
@@ -126,16 +126,19 @@ function toggleFog() {
   localStorage.setItem('fogOfWar', next > 0 ? '1' : '0');
   showFogButton(next);
 }
+// 戦場の霧は、毎回オフから始める（ユーザーの指示 2026-11-04）
+localStorage.setItem('fogLevel', '0');
+localStorage.setItem('fogOfWar', '0');
 showFogButton(readFogLevel());
 function showMoveMode() {
-  const on = localStorage.getItem('flagshipMove') === '1';
+  const on = localStorage.getItem('flagshipMove') !== '0'; // 旗艦操作が基本（ユーザーの指示 2026-11-04）
   const btn = document.getElementById('btnMoveMode');
   btn.textContent = on ? '移動: 旗艦操作' : '移動: 全艦手動';
   btn.style.backgroundColor = on ? '#1a2a1a' : '#ddd';
   btn.style.color = on ? '#8afa8a' : '#555';
 }
 function toggleMoveMode() {
-  localStorage.setItem('flagshipMove', localStorage.getItem('flagshipMove') === '1' ? '0' : '1');
+  localStorage.setItem('flagshipMove', localStorage.getItem('flagshipMove') !== '0' ? '0' : '1');
   showMoveMode();
 }
 showMoveMode();
@@ -841,6 +844,7 @@ function exportJson() {
 // --- 戦闘開始 → hub.htmlへ遷移 ---
 function openBattle() {
     localStorage.removeItem('fullAutoAI');
+    localStorage.setItem('usAutoAI', '0');
     exportJson();
     saveCampaignState();
     localStorage.setItem('campaignReady', 'true');
