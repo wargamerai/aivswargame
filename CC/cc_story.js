@@ -1,21 +1,7 @@
 // コルベット・コマンド — 物語の文（小説風の報告）
 // 同じ場面でも毎回違う文になるよう、いくつかの言い方から選ぶ
 'use strict';
-// 同じ文が続かないように、配列ごとに全部出し切るまで同じ文を選ばない
-const ST_bags = new Map();
-const ST_pick = a => {
-  if (!a || !a.length) return '';
-  let bag = ST_bags.get(a);
-  if (!bag || !bag.q.length) {
-    const q = a.map((_, i) => i);
-    for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [q[i], q[j]] = [q[j], q[i]]; }
-    if (bag && q.length > 1 && q[q.length - 1] === bag.last) q.unshift(q.pop());
-    bag = { q, last: bag ? bag.last : -1 };
-    ST_bags.set(a, bag);
-  }
-  bag.last = bag.q.pop();
-  return a[bag.last];
-};
+const ST_pick = a => a[Math.floor(Math.random() * a.length)];
 function ST_fill(t, v) { return t.replace(/\{(\w+)\}/g, (_, k) => (v && v[k] != null ? v[k] : '')); }
 
 // 時刻（昼・夜）
@@ -29,19 +15,19 @@ function ST_time(night, after) {
   const h = ST_pick(hs);
   ST_lastHour = h;
   const m = ST_pick(['00', '10', '20', '30', '40', '50']);
-  if (LANG !== 'ja') return ST_fill(I18N_X('time', '{next}{hh}{m} hours'), { next: next ? I18N_X('nextDay', 'Next day, ') : '', hh: String(h).padStart(2, '0'), m });
+  if (LANG === 'en') return `${next ? 'Next day, ' : ''}${String(h).padStart(2, '0')}${m} hours`;
   return `${next}${h < 12 ? '午前' : '午後'}${h % 12 === 0 && h !== 0 ? 12 : h % 12}時${m === '00' ? '' : m + '分'}`;
 }
 // 輸送船の名前
 const ST_WORDS = ['ヘロン', 'ミード', 'ストーム', 'レインボー', 'ブリーズ', 'ガゼル', 'フロスト', 'シーガル', 'ドーン', 'ハーベスト', 'オリオン', 'トレーダー', 'ライオン', 'ウィンド', 'ハイランド', 'マーチャント', 'アトラス', 'コメット', 'アンバー', 'ヴァリアント', 'ポラリス', 'セレス', 'ハミルトン', 'ケンジントン', 'ボイジャー'];
 const ST_WORDS_EN = ['Heron', 'Mead', 'Storm', 'Rainbow', 'Breeze', 'Gazelle', 'Frost', 'Seagull', 'Dawn', 'Harvest', 'Orion', 'Trader', 'Lion', 'Wind', 'Highland', 'Merchant', 'Atlas', 'Comet', 'Amber', 'Valiant', 'Polaris', 'Ceres', 'Hamilton', 'Kensington', 'Voyager'];
 function ST_shipName(kind) {
-  if (LANG !== 'ja') {
+  if (LANG === 'en') {
     const e = ST_pick(ST_WORDS_EN);
-    if (kind === '弾薬運搬船') return ST_fill(I18N_X('shipAmmo', 'the ammunition ship Empire {e}'), { e });
-    if (kind === 'タンカー') return ST_fill(I18N_X('shipTanker', 'the tanker British {e}'), { e });
-    if (kind === '救難船') return ST_fill(I18N_X('shipRescue', 'the rescue ship {e}'), { e: ST_pick(['Zaamzam', 'Toward', 'Pelican', 'Stockport', 'Gadila']) });
-    return ST_fill(ST_pick(I18N_X('shipCargo', ['the freighter Empire {e}', 'the freighter City of {e}', 'the Norwegian {e}', 'the Greek {e}', 'the freighter {e} Bay'])), { e });
+    if (kind === '弾薬運搬船') return `the ammunition ship Empire ${e}`;
+    if (kind === 'タンカー') return `the tanker British ${e}`;
+    if (kind === '救難船') return `the rescue ship ${ST_pick(['Zaamzam', 'Toward', 'Pelican', 'Stockport', 'Gadila'])}`;
+    return ST_pick([`the freighter Empire ${e}`, `the freighter City of ${e}`, `the Norwegian ${e}`, `the Greek ${e}`, `the freighter ${e} Bay`]);
   }
   const w = ST_pick(ST_WORDS);
   if (kind === '弾薬運搬船') return `弾薬運搬船〈エンパイア・${w}〉`;
@@ -280,21 +266,14 @@ Object.assign(STORY, {
     '老機関長「艦長のせいじゃない。……そう言っても、慰めにはならんか」',
   ],
 });
-// 今の言語の文の入れ物（訳のない文は英語で出す）
-function ST_lookup(k) {
-  const path = k.split('.');
-  const get = base => path.reduce((o, x) => o && o[x], base);
-  if (LANG === 'ja') return get(STORY);
-  if (LANG !== 'en' && typeof CC_I18N !== 'undefined' && CC_I18N.story) { const a = get(CC_I18N.story); if (a && a.length) return a; }
-  return get(STORY_EN);
-}
 function story(k, v) {
-  const arr = ST_lookup(k);
-  // {cap} は艦長の名前（決めていなければ空。「{cap}艦長」は「艦長」になる）。{capt} は各言語の「Captain 名前」
+  const base = (LANG === 'en' && typeof STORY_EN !== 'undefined') ? STORY_EN : STORY;
+  const arr = k.split('.').reduce((o, x) => o && o[x], base);
+  // {cap} は艦長の名前（決めていなければ空。「{cap}艦長」は「艦長」になる）。英語は {capt}（Captain 名前）
   const cap = (typeof S !== 'undefined' && S && S.captain) ? S.captain : '';
-  v = Object.assign({ cap, capt: cap ? ST_fill(I18N_X('captName', 'Captain {n}'), { n: cap }) : I18N_X('captNone', 'Captain') }, v);
+  v = Object.assign({ cap, capt: cap ? 'Captain ' + cap : 'Captain' }, v);
   const out = ST_fill(Array.isArray(arr) ? ST_pick(arr) : (arr || ''), v);
-  return LANG !== 'ja' ? out.charAt(0).toUpperCase() + out.slice(1) : out;
+  return LANG === 'en' ? out.charAt(0).toUpperCase() + out.slice(1) : out;
 }
-function ST_weather(w) { return ST_pick(ST_lookup(['wGood', 'wPoor', 'wFog', 'wStorm'][w])); }
+function ST_weather(w) { const B = (LANG === 'en' && typeof STORY_EN !== 'undefined') ? STORY_EN : STORY; return ST_pick([B.wGood, B.wPoor, B.wFog, B.wStorm][w]); }
 function ST_brg() { return String(Math.floor(Math.random() * 36) * 10).padStart(3, '0'); }

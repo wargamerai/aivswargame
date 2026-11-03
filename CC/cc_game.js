@@ -29,7 +29,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const MONTH_LEN = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 function monthNum(dt) { dt = dt || S.date; return dt.y * 12 + dt.m; }
 function dateBefore(y, m, d) { const t = S.date; return t.y * 10000 + t.m * 100 + t.d < y * 10000 + m * 100 + d; }
-function fmtDate(dt) { dt = dt || S.date; const d = Math.floor(dt.d); return L(`${dt.y}年${dt.m}月${d}日${dt.d - d >= 0.5 ? '（半日）' : ''}`, `${ST_fill(I18N_X('date', '{d} {M} {y}'), { d, M: I18N_X('months', MONTH_EN)[dt.m], y: dt.y, m: dt.m })}${dt.d - d >= 0.5 ? L('', I18N_X('halfDay', ' (half day)')) : ''}`); }
+function fmtDate(dt) { dt = dt || S.date; const d = Math.floor(dt.d); return L(`${dt.y}年${dt.m}月${d}日${dt.d - d >= 0.5 ? '（半日）' : ''}`, `${d} ${MONTH_EN[dt.m]} ${dt.y}${dt.d - d >= 0.5 ? ' (half day)' : ''}`); }
 function advanceDays(n) {
   S.date.d += n;
   while (S.date.d >= MONTH_LEN[S.date.m] + 1) { S.date.d -= MONTH_LEN[S.date.m]; S.date.m++; if (S.date.m > 12) { S.date.m = 1; S.date.y++; } }
@@ -349,11 +349,6 @@ async function playTurn() {
     J(sx, L(`${SECTOR_NAME[sec]}に入る・天候 ${WEATHER[M.weather]}`, `Entered ${SECTOR_NAME[sec]} · weather ${WEATHER[M.weather]}`));
   }
   // 霧／雪の衝突判定（7.3）
-  // 海域と天候で変わる乗員の会話（マスに入るたびに、少しずつ違う話が出る）
-  if (!PORT_POS[to]) {
-    if (Math.random() < 0.7) rep.push(story('talk' + sectorOf(to)));
-    if (Math.random() < 0.35) rep.push(story('talkSky' + M.weather));
-  }
   if (M.weather === 2) await collisionCheck();
   // 3. 機械的な故障（8.0）
   await breakdownCheck();
@@ -628,7 +623,25 @@ async function spotSurfaced(ub, help) {
 
 // 9.4.3 射撃。損害の合計を返す
 // 射撃: 1発ごとに「打ち方よーい」で止め、艦長の号令で撃つ。判定の数字は出さず、撃ったことと結果を文章で見せる
-const gunLine = (kind, k) => story(`gun.${kind}.${k}`);
+const GUN_TEXT = {
+  ready: {
+    g: [['「4インチ砲、打ち方よーい！」', '"4-inch gun, stand by!"'], ['砲術長「4インチ砲、照準よし！ 打ち方よーい！」', 'Gunnery officer: "4-inch gun on target! Stand by!"']],
+    a: [['「対空砲、打ち方よーい！」', '"AA gun, stand by!"'], ['銃座の水兵「対空砲、水平射撃よーい！」', 'AA gunner: "AA gun, level fire, stand by!"']],
+  },
+  fire: {
+    g: [['艦長「撃てーっ！」砲声が艦を震わせた。', 'Captain: "Fire!" The report shakes the ship.'], ['艦長「撃てっ！」4インチ砲が吠えた。', 'Captain: "Shoot!" The 4-inch gun roars.']],
+    a: [['艦長「撃てーっ！」曳光弾が海面を走っていく。', 'Captain: "Fire!" Tracer skims across the water.'], ['艦長「撃てっ！」対空砲が連続して火を噴いた。', 'Captain: "Shoot!" The AA gun hammers away.']],
+  },
+  hit: {
+    g: [['砲弾が司令塔の脇で炸裂した！ 命中！', 'The shell bursts beside the conning tower! A hit!'], ['閃光。U ボートの船体に火花が散った。命中！', 'A flash. Sparks fly from the hull. A hit!']],
+    a: [['曳光弾の列が司令塔を叩いた！ 命中！', 'A line of tracer rakes the conning tower! A hit!'], ['甲板に火花が散る。命中！', 'Sparks dance along the deck. A hit!']],
+  },
+  miss: {
+    g: [['砲弾は U ボートの手前に水柱を立てた。外れ。', 'The shell raises a column of water short of the U-boat. A miss.'], ['水柱は U ボートの向こう側に上がった。外れ。', 'The splash rises beyond the U-boat. A miss.']],
+    a: [['曳光弾は波を切るばかりだ。外れ。', 'The tracer only cuts the waves. A miss.'], ['弾は司令塔の上を飛び越えていった。外れ。', 'The rounds sail over the conning tower. A miss.']],
+  },
+};
+const gunLine = (kind, k) => { const a = GUN_TEXT[kind][k]; const t = a[Math.floor(Math.random() * a.length)]; return L(t[0], t[1]); };
 async function gunfire(ub, n4, nAA) {
   let dmg = 0;
   UI.story(story('gunStart'));
@@ -671,12 +684,12 @@ async function uboatAttack(ub, help) {
   ub.attacksLeft--;
   let toCorvette = false;
   if (help.payback) { toCorvette = true; if (!help.forceAll) help.payback = false; UI.log(L('U ボートはプレイヤーのコルベットを狙う！（14.20/14.8）', 'The U-boat goes for the player\'s corvette! (14.20/14.8)')); }
-  else { await roll(L('U ボートの攻撃目標', 'U-boat target')); const r = d66(); toCorvette = r <= 12; UI.dice(L(`U ボートの攻撃目標 d66＝${r} → <b>${toCorvette ? 'コルベット' : '船団内の1隻'}</b>${S.settings.hideEnemy ? '' : `（残り攻撃 ${ub.attacksLeft}回）`}`, `U-boat target d66=${r} → <b>${toCorvette ? 'the corvette' : 'a ship of the convoy'}</b>${S.settings.hideEnemy ? '' : L('', ` (${ub.attacksLeft} attacks left)`)}`)); }
+  else { await roll(L('U ボートの攻撃目標', 'U-boat target')); const r = d66(); toCorvette = r <= 12; UI.dice(L(`U ボートの攻撃目標 d66＝${r} → <b>${toCorvette ? 'コルベット' : '船団内の1隻'}</b>${S.settings.hideEnemy ? '' : `（残り攻撃 ${ub.attacksLeft}回）`}`, `U-boat target d66=${r} → <b>${toCorvette ? 'the corvette' : 'a ship of the convoy'}</b>${S.settings.hideEnemy ? '' : ` (${ub.attacksLeft} attacks left)`}`)); }
   if (toCorvette) { await torpedo(ub.rng, {}); return; }
   const A = ub.atk + (ub.rng === 'C' ? 1 : 0) + falkeBonus();
   const P = 1 + (ub.rng === 'L' ? 1 : 0);
   const hit = await check(L(`U ボートの雷撃（${RANGE_NAME[ub.rng]}）${falkeBonus() ? '（G7e Falke +2）' : ''}`, `U-boat torpedo attack (${RANGE_NAME[ub.rng]})${falkeBonus() ? ' (G7e Falke +2)' : ''}`), A, P, { theirs: true });
-  if (hit) { await roll(L('喪失トン数', 'tonnage lost')); shipSunk('U ボートの雷撃'); } else { UI.log(L('魚雷は外れた。', 'The torpedo missed.'), 'routine'); UI.story(story('ubMiss')); if (Math.random() < 0.6) UI.story(story('ubMissTalk')); }
+  if (hit) { await roll(L('喪失トン数', 'tonnage lost')); shipSunk('U ボートの雷撃'); } else { UI.log(L('魚雷は外れた。', 'The torpedo missed.'), 'routine'); UI.story(story('ubMiss')); }
   await UI.next();
 }
 // 物語の時刻: 同じ日の前の出来事より後の時刻にする
@@ -696,11 +709,11 @@ function shipSunk(why) {
   M.size = Math.max(0, M.size - 1); M.sunk++; M.tonnage += t.t;
   const ship = ST_shipName(t.kind);
   UI.log(L(`${why}: 輸送船1隻が沈没 — ${t.desc} <b>${t.t.toLocaleString()}トン</b>（喪失 計${M.tonnage.toLocaleString()}トン）`, `${TK(why)}: one merchant ship sunk — ${t.desc} <b>${t.t.toLocaleString()} tons</b> (total lost ${M.tonnage.toLocaleString()} tons)`), 'bad routine');
-  if (why === 'U ボートの雷撃') { UI.story(story('shipHit', { time: clockTime(M.ub ? M.ub.night : Math.random() < 0.6), ship })); if (Math.random() < 0.5) UI.story(story('shipHitTalk', { ship })); }
+  if (why === 'U ボートの雷撃') UI.story(story('shipHit', { time: clockTime(M.ub ? M.ub.night : Math.random() < 0.6), ship }));
   else if (why === '空襲') UI.story(L(`急降下してきた爆撃機の爆弾が、${ship}を直撃した——`, `A diving bomber's bomb struck ${ship} squarely——`));
   else UI.story(L(`落伍していた${ship}の消息は、二度と届かなかった——`, `Of the straggling ${ship}, no word was ever heard again——`));
   UI.big(L(`${ship} 沈没　${t.t.toLocaleString()}トン　（船団の喪失 計${M.tonnage.toLocaleString()}トン・残り${M.size}隻）`, `${ship} sunk　${t.t.toLocaleString()} tons　(convoy losses ${M.tonnage.toLocaleString()} tons · ${M.size} ships left)`), 'bad');
-  J(L(`${ship}、${why === 'U ボートの雷撃' ? '被雷して沈没' : why === '空襲' ? '爆撃を受けて沈没' : '落伍の後、消息を絶つ'}。`, `${ship}: ${why === 'U ボートの雷撃' ? L('', 'torpedoed and sunk') : why === '空襲' ? L('', 'bombed and sunk') : L('', 'straggled and was never heard from again')}.`), L(`喪失 ${t.t.toLocaleString()}トン（計 ${M.tonnage.toLocaleString()}トン）`, `lost ${t.t.toLocaleString()} tons (total ${M.tonnage.toLocaleString()} tons)`));
+  J(L(`${ship}、${why === 'U ボートの雷撃' ? '被雷して沈没' : why === '空襲' ? '爆撃を受けて沈没' : '落伍の後、消息を絶つ'}。`, `${ship}: ${why === 'U ボートの雷撃' ? 'torpedoed and sunk' : why === '空襲' ? 'bombed and sunk' : 'straggled and was never heard from again'}.`), L(`喪失 ${t.t.toLocaleString()}トン（計 ${M.tonnage.toLocaleString()}トン）`, `lost ${t.t.toLocaleString()} tons (total ${M.tonnage.toLocaleString()} tons)`));
 }
 function tonnage() {
   const a = d6(), b = d6();
@@ -731,7 +744,7 @@ async function torpedo(start, opt) {
   M.torp = 'C'; renderStatus();
   const ev = await check(L('魚雷の回避', 'Torpedo evasion'), 4 + evBonus, P, { mine: true });
   M.torp = null;
-  if (ev) { UI.good(L('魚雷を回避した！', 'Torpedo evaded!')); UI.big(story('evadeOk'), 'good'); UI.story(story('evadeTalk')); J(L('本艦に向かう魚雷を回避。', 'Evaded a torpedo aimed at us.'), L('雷撃回避', 'torpedo evaded')); await UI.next(); return; }
+  if (ev) { UI.good(L('魚雷を回避した！', 'Torpedo evaded!')); UI.big(story('evadeOk'), 'good'); J(L('本艦に向かう魚雷を回避。', 'Evaded a torpedo aimed at us.'), L('雷撃回避', 'torpedo evaded')); await UI.next(); return; }
   UI.bad(L('<b>魚雷が命中！</b>', '<b>Torpedo hit!</b>'));
   UI.big(story('hit'), 'bad');
   J(L('本艦、被雷。', 'We have been torpedoed.'), L('被雷', 'torpedoed'));
@@ -742,7 +755,7 @@ async function torpedo(start, opt) {
 async function torpedoHit() {
   await roll(L('被雷の損害', 'torpedo damage'));
   const r = d6(), h = d3(), n = r <= 3 ? 0 : r - 3;
-  UI.dice(L(`被雷損害 1d6＝${r}: 船体損害 1d3＝${h}${n ? `＋${n}区画損害` : ''}`, `Torpedo damage 1d6=${r}: hull damage 1d3=${h}${n ? L('', ` + ${n} section(s) damaged`) : ''}`));
+  UI.dice(L(`被雷損害 1d6＝${r}: 船体損害 1d3＝${h}${n ? `＋${n}区画損害` : ''}`, `Torpedo damage 1d6=${r}: hull damage 1d3=${h}${n ? ` + ${n} section(s) damaged` : ''}`));
   SH().hull += h;
   if (SH().hull >= 3) { SH().hull = 3; await corvetteLost(); return; }
   if (n) await sectionDamage(n);
@@ -795,7 +808,7 @@ async function wolfpack(ub) {
   await roll(L('群狼戦術', 'wolfpack'));
   const r = d6(), mod = -ub.damage + (S.mission.flags.refuel ? 1 : 0), t = r + mod;
   const n = t <= 2 ? 0 : t === 3 ? 1 : t <= 5 ? 2 : 3;
-  UI.dice(L(`群狼戦術 1d6＝${r}${mod ? (mod > 0 ? '＋' : '') + mod : ''} → ${n ? `<b>${n}隻が来援！</b>` : '来援せず'}`, `Wolfpack 1d6=${r}${mod ? (mod > 0 ? '+' : '') + mod : ''} → ${n ? L('', `<b>${n} more U-boat(s) arrive!</b>`) : 'none arrive'}`));
+  UI.dice(L(`群狼戦術 1d6＝${r}${mod ? (mod > 0 ? '＋' : '') + mod : ''} → ${n ? `<b>${n}隻が来援！</b>` : '来援せず'}`, `Wolfpack 1d6=${r}${mod ? (mod > 0 ? '+' : '') + mod : ''} → ${n ? `<b>${n} more U-boat(s) arrive!</b>` : 'none arrive'}`));
   if (n) { UI.big(story('wolf'), 'bad'); J(L('群狼が集結しつつある。', 'A wolfpack is gathering.'), L(`U ボート ${n}隻来援`, `${n} U-boat(s) arrive`)); }
   await UI.next();
   for (let i = 0; i < n; i++) {
@@ -818,7 +831,7 @@ async function depthCharge(ub, weapon, opts, over) {
     if (left <= 0) return null;
     const mx = Math.min(4, left);
     n = await UI.choose(storyOn() ? L(`${isHH ? '水雷長「ヘッジホッグ、何発撃ちますか！」' : story('dcAsk')}（残り${left}発・1発がダイス1個）`, `${isHH ? 'Torpedo officer: "How many Hedgehog bombs, sir?"' : story('dcAsk')} (${left} left · one die per charge)`) : L(`${name}攻撃: ダイスを何個振りますか？（同じ数だけ${name}を使う。残り${left}）`, `${name} attack: how many dice? (uses the same number of ${name}s, ${left} left)`),
-      Array.from({ length: mx }, (_, i) => ({ label: storyOn() ? L(`「${mx - i}発、${isHH ? '撃て' : '投下せよ'}！」`, `"${mx - i}, ${isHH ? L('', 'fire') : L('', 'drop')}!"`) : L(`${mx - i}個`, `${mx - i}`), value: mx - i }))
+      Array.from({ length: mx }, (_, i) => ({ label: storyOn() ? L(`「${mx - i}発、${isHH ? '撃て' : '投下せよ'}！」`, `"${mx - i}, ${isHH ? 'fire' : 'drop'}!"`) : L(`${mx - i}個`, `${mx - i}`), value: mx - i }))
         .concat(isHH ? [] : [{ label: storyOn() ? L('「待て。投下するな」（0発・温存）', '"Hold it. Don\'t drop." (0 · keep them)') : L('0個（投下しない・温存）', '0 (don\'t drop · keep them)'), value: 0, hint: L('外れと同じ扱い。爆発音がないので ASDIC の接触は保たれる', 'Treated as a miss. No explosions, so ASDIC contact is kept') }]));
     if (n === 0) {
       UI.log(L('爆雷を投下しなかった（温存）。外れと同じ扱いで続ける。爆発音がないので ASDIC の接触は保たれる', 'No depth charges dropped (kept). Treated as a miss. No explosions, so ASDIC contact is kept'), 'routine');
@@ -1234,7 +1247,7 @@ function logbookHtml(M, arrival, vp, medals) {
   const strip = t => esc(String(t).replace(/<[^>]+>/g, ''));
   const rows = (M.journal || []).map(e => `<tr><td class="d">${esc(e.date)}</td><td class="t">${esc(e.time)}</td><td>${strip(e.text)}</td><td class="n">${strip(e.note)}</td></tr>`).join('');
   const size0 = M.size + M.sunk;
-  const kills = M.kills.map(k => L(`${k.id}（${{ certain: '撃沈確実', sunk: '撃沈', destroyed: '撃破', shared: '共同撃沈' }[k.kind]}）`, `${k.id} (${L('', { certain: 'certain kill', sunk: 'sunk', destroyed: 'destroyed', shared: 'shared kill' }[k.kind])})`)).join(L('、', ', ')) || L('なし', 'none');
+  const kills = M.kills.map(k => L(`${k.id}（${{ certain: '撃沈確実', sunk: '撃沈', destroyed: '撃破', shared: '共同撃沈' }[k.kind]}）`, `${k.id} (${{ certain: 'certain kill', sunk: 'sunk', destroyed: 'destroyed', shared: 'shared kill' }[k.kind]})`)).join(L('、', ', ')) || L('なし', 'none');
   return L(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>航海日誌 ${esc(SH().name)} 任務${S.camp.missionNo}</title>
 <style>
 body{margin:0;background:#cfc6b0;font:15px/1.7 'Hiragino Mincho ProN','Yu Mincho','Courier New',serif;color:#2a2418}
@@ -1311,10 +1324,10 @@ async function campaignEnd(why) {
       const lost = C.shipsLost.filter(x => x.year === y).length;
       let li = VICTORY_LEVELS.indexOf(victoryLevel(vp)) - lost;
       li = Math.max(0, li);
-      UI.log(L(`${y}年目（${y === 1 ? '1941年6月〜1942年5月' : '1942年6月〜1943年5月'}）: 合計 <b>${vp} VP</b>${lost ? `・乗艦の沈没 ${lost}隻（勝利レベル −${lost}）` : ''} → <b>${VICTORY_LEVELS[li]}</b>`, `Year ${y} (${y === 1 ? 'June 1941 – May 1942' : 'June 1942 – May 1943'}): total <b>${vp} VP</b>${lost ? L('', ` · ${lost} ship(s) of yours sunk (victory level −${lost})`) : ''} → <b>${VICTORY_LEVELS[li]}</b>`));
+      UI.log(L(`${y}年目（${y === 1 ? '1941年6月〜1942年5月' : '1942年6月〜1943年5月'}）: 合計 <b>${vp} VP</b>${lost ? `・乗艦の沈没 ${lost}隻（勝利レベル −${lost}）` : ''} → <b>${VICTORY_LEVELS[li]}</b>`, `Year ${y} (${y === 1 ? 'June 1941 – May 1942' : 'June 1942 – May 1943'}): total <b>${vp} VP</b>${lost ? ` · ${lost} ship(s) of yours sunk (victory level −${lost})` : ''} → <b>${VICTORY_LEVELS[li]}</b>`));
     });
   }
-  UI.log(L(`任務 ${C.missions.length}回・U ボート ${C.kills.length}隻（${C.kills.map(k => k.id + ' ' + { certain: '撃沈確実', sunk: '撃沈', destroyed: '撃破', shared: '共同撃沈' }[k.kind]).join('、') || 'なし'}）`, `${C.missions.length} mission(s) · ${C.kills.length} U-boat(s) (${C.kills.map(k => k.id + ' ' + L('', { certain: 'certain kill', sunk: 'sunk', destroyed: 'destroyed', shared: 'shared kill' }[k.kind])).join(', ') || 'none'})`));
+  UI.log(L(`任務 ${C.missions.length}回・U ボート ${C.kills.length}隻（${C.kills.map(k => k.id + ' ' + { certain: '撃沈確実', sunk: '撃沈', destroyed: '撃破', shared: '共同撃沈' }[k.kind]).join('、') || 'なし'}）`, `${C.missions.length} mission(s) · ${C.kills.length} U-boat(s) (${C.kills.map(k => k.id + ' ' + { certain: 'certain kill', sunk: 'sunk', destroyed: 'destroyed', shared: 'shared kill' }[k.kind]).join(', ') || 'none'})`));
   if (C.medals.length) UI.good(L('受章: ', 'Awards: ') + C.medals.join(' ／ '));
   if (why === 'sunk') UI.bad(L('乗艦の沈没で、ここで終えました。', 'Your ship was sunk; the game ends here.'));
   else if (S.mode === '2y') {
@@ -1387,14 +1400,14 @@ function renderStatus() {
     const sk = k === 'hh' ? L('(爆雷)', '(DC)') : sh.skills[k];
     const df = secDiff(k);
     const short = { watch: L('監視', 'Lookout'), asdic: 'ASDIC', radar: L('レーダー', 'Radar'), hfdf: 'HF-DF', gun4: L('4inch砲', '4in gun'), aa: L('対空砲', 'AA gun'), dc: L('爆雷', 'DC'), hh: L('ヘッジホッグ', 'Hedgehog'), engine: L('機関', 'Engine') }[k];
-    return L(`<span class="chip ${avail ? '' : 'na'}" title="${SECTION_NAME[k]}">${short} ${avail ? `<b>${sk}</b>` + (sh.sick && sh.sick.k === k ? '<small>病</small>' : '') : '未'}${df ? ` <span class="df">困+${df}</span>` : ''}${sh.dmg[k] ? '<span class="dm">損</span>' : ''}${sh.trained[k] || (k === 'dc' && sh.dcKill) ? '<span class="tr">◎</span>' : ''}</span>`, `<span class="chip ${avail ? '' : 'na'}" title="${SECTION_NAME[k]}">${short} ${avail ? `<b>${sk}</b>` + (sh.sick && sh.sick.k === k ? '<small>sick</small>' : '') : 'n/a'}${df ? L('', ` <span class="df">diff+${df}</span>`) : ''}${sh.dmg[k] ? '<span class="dm">dmg</span>' : ''}${sh.trained[k] || (k === 'dc' && sh.dcKill) ? '<span class="tr">◎</span>' : ''}</span>`);
+    return L(`<span class="chip ${avail ? '' : 'na'}" title="${SECTION_NAME[k]}">${short} ${avail ? `<b>${sk}</b>` + (sh.sick && sh.sick.k === k ? '<small>病</small>' : '') : '未'}${df ? ` <span class="df">困+${df}</span>` : ''}${sh.dmg[k] ? '<span class="dm">損</span>' : ''}${sh.trained[k] || (k === 'dc' && sh.dcKill) ? '<span class="tr">◎</span>' : ''}</span>`, `<span class="chip ${avail ? '' : 'na'}" title="${SECTION_NAME[k]}">${short} ${avail ? `<b>${sk}</b>` + (sh.sick && sh.sick.k === k ? '<small>sick</small>' : '') : 'n/a'}${df ? ` <span class="df">diff+${df}</span>` : ''}${sh.dmg[k] ? '<span class="dm">dmg</span>' : ''}${sh.trained[k] || (k === 'dc' && sh.dcKill) ? '<span class="tr">◎</span>' : ''}</span>`);
   }).join('');
   const hull = [0, 1, 2].map(i => `<span class="hb ${i < sh.hull ? 'on' : ''}"></span>`).join('');
   let h = L(`<div class="col ship"><div class="title">${sh.name}${S.captain ? `<small class="cap">　艦長 ${S.captain}</small>` : ''}</div>
     <div class="chips">${chips}</div>
-    <div class="shipline">船体 ${hull}　爆雷 <b>${sh.dcLeft}</b>${sh.equipped.hh ? `　ヘッジホッグ <b>${sh.hhLeft}</b>` : ''}</div></div>`, `<div class="col ship"><div class="title">${sh.name}${S.captain ? `<small class="cap">　${ST_fill(I18N_X('captName', 'Captain {n}'), { n: S.captain })}</small>` : ''}</div>
+    <div class="shipline">船体 ${hull}　爆雷 <b>${sh.dcLeft}</b>${sh.equipped.hh ? `　ヘッジホッグ <b>${sh.hhLeft}</b>` : ''}</div></div>`, `<div class="col ship"><div class="title">${sh.name}${S.captain ? `<small class="cap">　Captain ${S.captain}</small>` : ''}</div>
     <div class="chips">${chips}</div>
-    <div class="shipline">Hull ${hull}　DCs <b>${sh.dcLeft}</b>${sh.equipped.hh ? L('', `　Hedgehog <b>${sh.hhLeft}</b>`) : ''}</div></div>`);
+    <div class="shipline">Hull ${hull}　DCs <b>${sh.dcLeft}</b>${sh.equipped.hh ? `　Hedgehog <b>${sh.hhLeft}</b>` : ''}</div></div>`);
   h += L(`<div class="col info"><div><b>${fmtDate()}</b>　任務 ${C.missionNo}</div>`, `<div class="col info"><div><b>${fmtDate()}</b>　Mission ${C.missionNo}</div>`);
   if (M) {
     h += L(`<div>${M.convoy.speed === 'fast' ? '高速' : '低速'}船団 ${PORT_NAME[M.convoy.from]} → ${PORT_NAME[M.convoy.to]}　命令: ${WA_ROUTES[M.orders].name}</div>
@@ -1411,13 +1424,13 @@ function renderStatus() {
     h += mapHtml();
     if (!M.ub) h += rangeHtml();
   }
-  h += L(`<div class="vp">勝利点: 1年目 ${C.yearVP[1] || 0}${S.mode === '2y' ? '／2年目 ' + (C.yearVP[2] || 0) : ''}　U ボート撃沈 ${C.kills.length}</div></div>`, `<div class="vp">VP: year 1 ${C.yearVP[1] || 0}${S.mode === '2y' ? L('', ' / year 2 ') + (C.yearVP[2] || 0) : ''}　U-boats sunk ${C.kills.length}</div></div>`);
+  h += L(`<div class="vp">勝利点: 1年目 ${C.yearVP[1] || 0}${S.mode === '2y' ? '／2年目 ' + (C.yearVP[2] || 0) : ''}　U ボート撃沈 ${C.kills.length}</div></div>`, `<div class="vp">VP: year 1 ${C.yearVP[1] || 0}${S.mode === '2y' ? ' / year 2 ' + (C.yearVP[2] || 0) : ''}　U-boats sunk ${C.kills.length}</div></div>`);
   if (M && M.ub) {
     const ub = M.ub;
     const hide = S.settings.hideEnemy;
     h += L(`<div class="col ub"><div class="title">U ボート</div>${hide ? '<div>正体不明</div>' : `<div>${ub.type === 7 ? 'VII' : 'IX'}型 ${ub.id}</div><div>攻撃 ${ub.atk}／回避 ${ub.eva}${ub.sieg ? '<small>（ジークリンデ）</small>' : ''}</div>`}
-      <div>距離 <b>${ub.rng ? RANGE_NAME[ub.rng] || ub.rng : '-'}</b>　${ub.surfaced ? '浮上中' : '潜航中'}</div>${hide ? '' : `<div>損害 <b>${ub.damage}</b>　残り攻撃 ${ub.attacksLeft}</div>`}${ub.contact ? '<div class="good">ASDIC 接触中</div>' : ''}${rangeHtml()}</div>`, `<div class="col ub"><div class="title">U-boat</div>${hide ? '<div>Identity unknown</div>' : L('', `<div>Type ${ub.type === 7 ? 'VII' : 'IX'} ${ub.id}</div><div>Attack ${ub.atk} / Evasion ${ub.eva}${ub.sieg ? '<small> (Sieglinde)</small>' : ''}</div>`)}
-      <div>Range <b>${ub.rng ? RANGE_NAME[ub.rng] || ub.rng : '-'}</b>　${ub.surfaced ? 'surfaced' : 'submerged'}</div>${hide ? '' : L('', `<div>Damage <b>${ub.damage}</b>　attacks left ${ub.attacksLeft}</div>`)}${ub.contact ? '<div class="good">ASDIC contact</div>' : ''}${rangeHtml()}</div>`);
+      <div>距離 <b>${ub.rng ? RANGE_NAME[ub.rng] || ub.rng : '-'}</b>　${ub.surfaced ? '浮上中' : '潜航中'}</div>${hide ? '' : `<div>損害 <b>${ub.damage}</b>　残り攻撃 ${ub.attacksLeft}</div>`}${ub.contact ? '<div class="good">ASDIC 接触中</div>' : ''}${rangeHtml()}</div>`, `<div class="col ub"><div class="title">U-boat</div>${hide ? '<div>Identity unknown</div>' : `<div>Type ${ub.type === 7 ? 'VII' : 'IX'} ${ub.id}</div><div>Attack ${ub.atk} / Evasion ${ub.eva}${ub.sieg ? '<small> (Sieglinde)</small>' : ''}</div>`}
+      <div>Range <b>${ub.rng ? RANGE_NAME[ub.rng] || ub.rng : '-'}</b>　${ub.surfaced ? 'surfaced' : 'submerged'}</div>${hide ? '' : `<div>Damage <b>${ub.damage}</b>　attacks left ${ub.attacksLeft}</div>`}${ub.contact ? '<div class="good">ASDIC contact</div>' : ''}${rangeHtml()}</div>`);
   }
   el.innerHTML = h;
 }
@@ -1439,7 +1452,7 @@ function rangeHtml() {
   });
   h += '</div>';
   const now = tp || (ub && ub.rng);
-  if (now && rule[now]) h += L(`<div class="rrule">${RANGE_NAME[now] || '圏外'}: ${rule[now]}${ub ? `　${ub.surfaced ? '▲浮上中' : '▼潜航中'}` : ''}</div>`, `<div class="rrule">${RANGE_NAME[now] || 'Out of range'}: ${rule[now]}${ub ? `　${ub.surfaced ? L('', '▲surfaced') : L('', '▼submerged')}` : ''}</div>`);
+  if (now && rule[now]) h += L(`<div class="rrule">${RANGE_NAME[now] || '圏外'}: ${rule[now]}${ub ? `　${ub.surfaced ? '▲浮上中' : '▼潜航中'}` : ''}</div>`, `<div class="rrule">${RANGE_NAME[now] || 'Out of range'}: ${rule[now]}${ub ? `　${ub.surfaced ? '▲surfaced' : '▼submerged'}` : ''}</div>`);
   return h;
 }
 function mapHtml() {
@@ -1476,19 +1489,7 @@ async function newGame() {
   S = { version: 1, phase: 'new', settings: { step: true, hideDice: true, hideEnemy: true, hideBad: true, autoFile: true, hideRoutine: true, story: true }, logLines: [] };
   $('log').innerHTML = '';
   UI.head(L('コルベット・コマンド　北大西洋船団護送作戦 1941-1943', 'Corvette Command: North Atlantic Convoy Escort 1941-1943'));
-  // 最初の画面: 言語の選択とゲームの説明。次にオプションを決めてからゲームを始める
-  const langBtns = LANGS.map(([c, n]) => `<button class="langbtn${c === LANG ? ' on' : ''}" onclick="setLang('${c}')">${n}</button>`).join('');
-  UI.big(`<div class="langrow">${langBtns}</div>`);
-  [L('ひとりで遊ぶソロプレイ用のキャンペーンゲームです。あなたはフラワー級コルベットの艦長として、大西洋を渡る船団を U ボートから護衛します。', 'This is a campaign game for solo play. You are the captain of a Flower-class corvette, escorting convoys across the Atlantic against the U-boats.'),
-   L('長い航海を重ねるうちに、乗員は腕を上げ、新しい技術も届きます。そうして、より無事な航海ができるようになっていきます。', 'Over long voyages your crew grows more skilled and new technology arrives, and you become able to bring your convoys through safely.'),
-   L('RPG 風に仕上げたので、ルールや知識がなくても楽しめます。', 'It is made in the style of an RPG, so you can enjoy it with no knowledge of the rules or the history.'),
-   L('長い二年間の、航海の連続を楽しんでいただければ幸いです。', 'We hope you enjoy two long years of one voyage after another.'),
-   L('無料での公開を快諾してくれたゲームデザイナーの Alan に感謝します。', 'Our thanks to the game designer, Alan, who readily agreed to let this be published for free.'),
-  ].forEach(t => UI.story(t));
-  await UI.choose('', [{ label: L('▶ 次へ', '▶ Next'), value: 1 }]);
-  await new Promise(resolve => openOptions(resolve));
-  saveLocal();
-  UI.story(L('あなたはフラワー級コルベットの艦長として、大西洋を渡る船団を U ボートから護衛する。', 'You are the captain of a Flower-class corvette, escorting convoys across the Atlantic against the U-boats.'));
+  UI.log(L('あなたはフラワー級コルベットの艦長として、大西洋を渡る船団を U ボートから護衛する。', 'You are the captain of a Flower-class corvette, escorting convoys across the Atlantic against the U-boats.'));
   const mode = await UI.choose(L('遊び方を選んでください', 'Choose how to play'), [
     { label: L('2年間（1941年6月〜1943年5月）', 'Two years (June 1941 – May 1943)'), value: '2y', hint: L('任務を続け、1年ごとに勝利点で勝敗', 'Carry on mission after mission; each year is won or lost on victory points') },
     { label: L('1年間（1941年6月〜1942年5月）', 'One year (June 1941 – May 1942)'), value: '1y' },
@@ -1575,18 +1576,12 @@ function applySettings() {
   document.body.classList.toggle('story-mode', S.settings.story !== false);
   document.body.classList.toggle('hide-routine', !!S.settings.hideRoutine);
 }
-// onStart を渡すと、閉じるボタンが「ゲームスタート」になる（最初の設定の時）
-function openOptions(onStart) {
+function openOptions() {
   if (!S) return;
   let ov = $('optOverlay');
   if (!ov) { ov = document.createElement('div'); ov.id = 'optOverlay'; document.body.appendChild(ov); }
   ov.innerHTML = L(`<div class="optbox"><div class="title">オプション</div>${OPTIONS.map(([k, n, d]) => `<label><input type="checkbox" data-k="${k}" ${((k === 'story' || k === 'autoFile') ? S.settings[k] !== false : S.settings[k]) ? 'checked' : ''}> <b>${n}</b><br><small>${d}</small></label>`).join('')}<small>オフに戻すと、隠していた行も見えるようになります。</small><button onclick="document.getElementById('optOverlay').style.display='none'">閉じる</button></div>`, `<div class="optbox"><div class="title">Options</div>${OPTIONS.map(([k, n, d]) => `<label><input type="checkbox" data-k="${k}" ${((k === 'story' || k === 'autoFile') ? S.settings[k] !== false : S.settings[k]) ? 'checked' : ''}> <b>${n}</b><br><small>${d}</small></label>`).join('')}<small>Turning an option off shows the hidden lines again.</small><button onclick="document.getElementById('optOverlay').style.display='none'">Close</button></div>`);
   ov.querySelectorAll('input').forEach(i => i.onchange = () => { S.settings[i.dataset.k] = i.checked; applySettings(); renderStatus(); saveLocal(); });
-  if (typeof onStart === 'function') {
-    const b = ov.querySelector('.optbox button');
-    b.textContent = L('▶ ゲームスタート', '▶ Start the game');
-    b.onclick = () => { ov.style.display = 'none'; onStart(); };
-  }
   ov.style.display = 'flex';
 }
 // 文字の大きさ（12〜26px）。この人のブラウザに覚えておく
