@@ -5,7 +5,8 @@ const ST = window.StarTrick;
 const $ = id => document.getElementById(id);
 const C = { lang: 'ja', mode: 'classic', diff: 'normal' };
 try {
-  const l = localStorage.getItem('trickLang');
+  const q = new URLSearchParams(location.search).get('lang');
+  const l = (q === 'ja' || q === 'en') ? q : localStorage.getItem('trickLang');
   if (l === 'ja' || l === 'en') C.lang = l;
   else if (!/^ja/i.test(navigator.language || 'ja')) C.lang = 'en';
 } catch (e) { /* 保存できなくても動く */ }
@@ -63,6 +64,7 @@ function drawTitle() {
   $('lDiff').textContent = T('diffLabel');
   $('btnStart').textContent = T('start');
   $('toTop').textContent = T('backTop');
+  $('toTop').setAttribute('href', C.lang === 'en' ? '../en/index.html' : '../index1.html');
   $('lang_ja').classList.toggle('on', C.lang === 'ja');
   $('lang_en').classList.toggle('on', C.lang === 'en');
   $('modeBtns').innerHTML = '';

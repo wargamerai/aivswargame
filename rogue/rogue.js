@@ -8,7 +8,8 @@ const roll = (n, s) => { let t = 0; for (let i = 0; i < n; i++) t += 1 + rnd(s);
 
 let lang = 'ja';
 try {
-  const l = localStorage.getItem('rogueLang');
+  const q = new URLSearchParams(location.search).get('lang');
+  const l = (q === 'ja' || q === 'en') ? q : localStorage.getItem('rogueLang');
   if (l === 'ja' || l === 'en') lang = l;
   else if (!/^ja/i.test(navigator.language || 'ja')) lang = 'en';
 } catch (e) { /* 保存できなくても動く */ }
@@ -1482,6 +1483,7 @@ function drawChrome() {
   $('btnHelp').textContent = T('btnHelp');
   $('sheet').textContent = T('sheet');
   $('toTop').textContent = T('top');
+  $('toTop').setAttribute('href', lang === 'en' ? '../en/index.html' : '../index1.html');
 }
 function setLang(l) {
   lang = l;

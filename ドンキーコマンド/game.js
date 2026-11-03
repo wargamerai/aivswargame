@@ -7,7 +7,8 @@ const d2 = () => d6() + d6();
 const d3x6 = () => d6() + d6() + d6();
 let lang = 'ja';
 try {
-  const l = localStorage.getItem('donkeyLang');
+  const q = new URLSearchParams(location.search).get('lang');
+  const l = (q === 'ja' || q === 'en') ? q : localStorage.getItem('donkeyLang');
   if (l === 'ja' || l === 'en') lang = l;
   else if (!/^ja/i.test(navigator.language || 'ja')) lang = 'en';
 } catch (e) { /* 保存できなくても動く */ }
@@ -96,6 +97,7 @@ function drawSetup() {
   $('sTitle').textContent = T('title');
   $('sSub').textContent = T('sub');
   $('toTop').textContent = T('backTop');
+  $('toTop').setAttribute('href', lang === 'en' ? '../en/index.html' : '../index1.html');
   $('btnRules1').textContent = T('rules');
   $('h0').textContent = T('h0');
   $('diffBtns').innerHTML = '';
