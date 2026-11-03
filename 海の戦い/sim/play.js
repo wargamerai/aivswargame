@@ -31,6 +31,7 @@ const dom = new JSDOM(html, {
   }
 });
 const w = dom.window;
+w.__noAutoResign = true; // 画面なしの対戦は累計POCを別に数えているので、自動の投了はしない
 const G = code => w.eval(code);
 
 if(errors.length){ console.log('読み込みエラー:', errors.join('\n')); }

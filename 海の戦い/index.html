@@ -942,7 +942,7 @@ function renderLocShipList(){
   }
   title.textContent = `${selectedLoc === 'UboatPens' ? 'U-Boat Pens' : locLabel(selectedLoc)} の艦船 (複数選択可)`;
   // 現在ここにいる艦 + このターンここから出た艦（消さない）
-  const ships = SHIPS.filter(s => inSelLoc(s) || (s.movedThisTurn && fromSelLoc(s)));
+  const ships = SHIPS.filter(s => !s.sunk && (inSelLoc(s) || (s.movedThisTurn && fromSelLoc(s))));
   if(!ships.length){
     el.innerHTML = '<div style="padding:6px;color:#aac;font-size:0.8em;">なし</div>';
     return;
@@ -1139,7 +1139,7 @@ function toggleShip(id){
 }
 function selectAllShipsHere(){
   if(!selectedLoc) return;
-  selectedShipIds = SHIPS.filter(s => inSelLoc(s) && !s.failedMove).map(s => s.id);
+  selectedShipIds = SHIPS.filter(s => !s.sunk && inSelLoc(s) && !s.failedMove).map(s => s.id);
   refreshDestAfterSelect();
   renderLocShipList(); renderStatus();
 }
@@ -3745,9 +3745,133 @@ function planAlliedDeployment(aiLog){
   const medOk = s => hop(s, 'Mediterranean') > 0;
   let leftoverMode;
 
+  // POCの予想で残りの艦を配置する: 配置案ごとにドイツ・イタリアの来方を全部試し、
+  // 一番悪い場合のPOC（連合−枢軸）が最もよい案を選ぶ（同じ値ならランダム）
+  //   海域の勝ち負けは戦力で判定（battleGeq）。同じ戦力なら連合が守れたとみる
+  //   バルト海: ドイツ本国の 2-2-5 → 3-5-7 → 4-9-6 の順に1隻（2ターン目はソ連艦がいない）
+  //   Uボート: 対潜ダイス3個で1隻消せるとみて、少ない隻数で支配を消せる海域から順に置くとみる
+  function placeLeftoverByWorstPoc(){
+    const SEA_LIST = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean'];
+    const MAX_PLANS = 5000;
+    // n隻をk か所へ分ける組み合わせ
+    const splits = (n, k) => {
+      if(k === 1) return [[n]];
+      const out = [];
+      for(let i = 0; i <= n; i++) for(const rest of splits(n - i, k - 1)) out.push([i, ...rest]);
+      return out;
+    };
+    // 同じ能力で同じ行き先の艦をまとめ、まとめごとの分け方を作る
+    const toGroups = (ships, optsOf) => {
+      const m = new Map();
+      ships.forEach(s => {
+        const opts = optsOf(s);
+        if(!opts.length) return;
+        const key = [s.type, s.atk, s.def, s.spd, s.air || 0, opts.join('/')].join('|');
+        if(!m.has(key)) m.set(key, { ships: [], opts });
+        m.get(key).ships.push(s);
+      });
+      return [...m.values()].map(g => ({ ...g, ways: splits(g.ships.length, g.opts.length) }));
+    };
+    // i番目の組み合わせを、海域ごとの艦の一覧にする
+    const decode = (groups, index) => {
+      const bySea = {};
+      SEA_LIST.forEach(sea => { bySea[sea] = []; });
+      for(const g of groups){
+        const way = g.ways[index % g.ways.length];
+        index = Math.floor(index / g.ways.length);
+        let used = 0;
+        way.forEach((cnt, i) => {
+          for(let c = 0; c < cnt; c++) bySea[g.opts[i]].push(g.ships[used++]);
+        });
+      }
+      return bySea;
+    };
+    const countOf = groups => groups.reduce((t, g) => t * g.ways.length, 1);
+
+    // バルト海へ行くとみるドイツ艦
+    const balOrder = [[2, 2, 5], [3, 5, 7], [4, 9, 6]];
+    const balCand = axisReady.filter(s => s.location === 'Germany' && s.country === 'DE');
+    let balShip = null;
+    for(const [a, d, v] of balOrder){
+      balShip = balCand.find(s => s.atk === a && s.def === d && s.spd === v);
+      if(balShip) break;
+    }
+    const balticPoc = balShip ? -SEAS.Baltic.axis : 0;
+
+    // ドイツ・イタリアの艦が行ける海域
+    const enemyOpts = s => SEA_LIST.filter(sea => {
+      if(s.refuelTurn === currentTurn - 1 && SEAS[s.location]) return sea !== 'Mediterranean'; // 洋上補給に成功した艦
+      if(sea === 'Mediterranean' && s.country !== 'IT') return false;
+      return (PORT_SEAS[s.location] || []).includes(sea) || reachesSea(s, sea);
+    });
+    const enemyGroups = toGroups(axisReady.filter(s => s !== balShip), enemyOpts);
+    const enemyCount = countOf(enemyGroups);
+    const uboats = SHIPS.filter(s => s.type === 'UBOAT' && s.side === 'axis' && !s.sunk && !s.removed && s.location && (PORTS[s.location] || SEAS[s.location])).length;
+
+    // 残りの艦の行き先: 北海・北大西洋・南大西洋。地中海は南大西洋を連合が支配しているときだけ
+    const medAllowed = seaControl['SouthAtlantic'] === 'allies';
+    const myOpts = s => ['NorthSea', 'NorthAtlantic', 'SouthAtlantic'].filter(sea => hop(s, sea) === 1)
+      .concat(medAllowed && medOk(s) ? ['Mediterranean'] : []);
+    const myGroups = toGroups(freeShips(), myOpts);
+    const planCount = countOf(myGroups);
+    const planIndexes = [];
+    if(planCount <= MAX_PLANS){ for(let i = 0; i < planCount; i++) planIndexes.push(i); }
+    else { for(let i = 0; i < MAX_PLANS; i++) planIndexes.push(Math.floor(Math.random() * planCount)); }
+
+    // 1つの配置案と1つの来方のPOC
+    const scoreOf = (mine, enemy) => {
+      let total = balticPoc;
+      const needs = [];
+      for(const sea of SEA_LIST){
+        const a = mine[sea], x = enemy[sea];
+        if(!a.length && !x.length) continue;
+        if(!x.length || (a.length && battleGeq(a, x))){
+          total += SEAS[sea].allies;
+          const dice = a.reduce((t, s) => t + (s.type === 'CV' ? 3 : 1), 0);
+          needs.push(Math.floor(dice / 3) + 1); // 支配を消すのに必要なUボートの数
+        } else {
+          total -= SEAS[sea].axis;
+        }
+      }
+      let left = uboats;
+      needs.sort((p, q) => p - q).forEach(n => {
+        if(left >= n){ left -= n; total -= 1; }
+      });
+      return total;
+    };
+
+    let best = -Infinity, bestPlans = [];
+    for(const planIndex of planIndexes){
+      const add = decode(myGroups, planIndex);
+      const mine = {};
+      SEA_LIST.forEach(sea => { mine[sea] = [...placed[sea], ...add[sea]]; });
+      mine.Mediterranean.push(...maltaShips);
+      let worst = Infinity;
+      for(let e = 0; e < enemyCount; e++){
+        worst = Math.min(worst, scoreOf(mine, decode(enemyGroups, e)));
+        if(worst < best) break; // これより悪い案は選ばない
+      }
+      if(worst > best){ best = worst; bestPlans = [add]; }
+      else if(worst === best) bestPlans.push(add);
+    }
+    if(bestPlans.length){
+      const chosen = bestPlans[Math.floor(Math.random() * bestPlans.length)];
+      SEA_LIST.forEach(sea => chosen[sea].forEach(s => assign(s, sea)));
+    }
+    freeShips().filter(nsOk).forEach(s => assign(s, 'NorthSea'));
+    return `POCの予想（一番悪い場合 ${best}、配置案 ${planIndexes.length}件、敵の来方 ${enemyCount}通り）`;
+  }
+
   if(currentTurn === 1){
     // ===== ターン1: 北海とバレンツ海に全力（大西洋は考えない） =====
     // 1ターン目は地中海へ送らない（ユーザーの指示 2026-11-03: 空母が減った分、北海・バレンツ海を優先）
+    // ランダムの要素（ユーザーの指示 2026-11-03）: 20%で、4-4-4の戦艦2隻を北大西洋へ（ドイツを悩ませる）
+    if(Math.random() < 0.2){
+      const naBB = freeShips().filter(s => s.country === 'UK' && s.type === 'BB' && s.atk === 4 && s.def === 4 && s.spd === 4 && hop(s, 'NorthAtlantic') === 1)
+        .sort(() => Math.random() - 0.5).slice(0, 2);
+      naBB.forEach(s => assign(s, 'NorthAtlantic'));
+      if(naBB.length) aiLog.push(`ターン1のくじ: ${naBB.map(s => s.name).join('、')} → 北大西洋`);
+    }
     // 空母: 航空攻撃力の大きい順に、バレンツ海・北海へ交互に振り分ける
     let toBarents = true;
     freeShips().filter(s => s.type === 'CV').sort((a, b) => (b.air || 0) - (a.air || 0)).forEach(s => {
@@ -3785,11 +3909,14 @@ function planAlliedDeployment(aiLog){
   } else {
     // ===== ターン2以降: ドイツの戦力に合わせて必要な分だけ置き、残りを広く薄く =====
     // 連合の構え（ターンごとのくじ）: 北海重視 40% / 今まで通り 40% / 大西洋重視 20%
-    const pr = Math.random();
-    posture = pr < 0.4 ? 'ns' : pr < 0.8 ? 'normal' : 'atl';
-    alliedPostureLog.push({ turn: currentTurn, posture });
+    // 2ターン目は構えのくじを使わず、POCの予想で残りの艦を配置する（下の 7b）
+    if(currentTurn !== 2){
+      const pr = Math.random();
+      posture = pr < 0.4 ? 'ns' : pr < 0.8 ? 'normal' : 'atl';
+      alliedPostureLog.push({ turn: currentTurn, posture });
+    }
     // 1) 地中海の増援: 南大西洋を連合が支配していて、地中海が不利なときは、勝てる量まで（強い艦から）
-    if(seaControl['SouthAtlantic'] === 'allies'){
+    if(currentTurn !== 2 && seaControl['SouthAtlantic'] === 'allies'){
       const itFull = italianFullThreat();
       const medWins = () => battleGeq([...maltaShips, ...placed.Mediterranean], itFull)
         && (maltaShips.length + placed.Mediterranean.length) > itFull.length;
@@ -3845,6 +3972,10 @@ function planAlliedDeployment(aiLog){
       if(!cands.length) break;
       assign(cands[0], 'NorthSea');
     }
+    if(currentTurn === 2){
+      // 2ターン目（ユーザーの指示 2026-11-03）: 北海とバレンツ海を固めたあとの残りの艦を、POCの予想で配置する
+      leftoverMode = placeLeftoverByWorstPoc();
+    } else {
     // 7b) 北大西洋・南大西洋: まだ1隻もいなければ、一番弱い艦を1隻（北大西洋は米国艦がいればそれでよい）
     for(const sea of ['NorthAtlantic', 'SouthAtlantic']){
       if(placed[sea].length) continue;
@@ -3885,6 +4016,7 @@ function planAlliedDeployment(aiLog){
       freeShips().filter(s => hop(s, 'SouthAtlantic') === 1).forEach(s => assign(s, 'SouthAtlantic'));
     }
     freeShips().filter(nsOk).forEach(s => assign(s, 'NorthSea'));
+    }
     // 9) 北海の立て直し（ユーザーの指示 2026-11-02）: 北海で負けたあと、北海が手薄なまま（例: 北海に戦艦1・空母1、
     //    バレンツ海に戦艦5）だとイギリスの負けが続く。北海が手薄なら、ターンごとのくじ（50%）で、
     //    バレンツ海から北海へ艦を回し、2つの海域の攻撃力をおおむね半分ずつにする（いつもではない）。
@@ -5293,6 +5425,59 @@ function resignGame(){
   if(typeof showReportSave === 'function') showReportSave();
 }
 
+// 連合AIの投了（ユーザーの指示 2026-11-03）: 今の累計POCと、ドイツの戦力から取れるPOCで、逆転できるかを判定する
+//   ドイツの攻撃力の合計で、イギリスが4海域（北海・バレンツ海・北大西洋・南大西洋）へ均等に置いた戦力を
+//   いくつ上回れるかを数え、枢軸の点の高い海域から取るとみる（艦の数まで）。残りの海域は連合の点
+//   地中海: マルタ側とイタリアの全戦力の比較 / バルト海: ドイツ艦が残っていれば枢軸、いなければソ連艦がいるとき連合
+//   Uボート: 対潜ダイス3個で1隻消せるとみて、連合の海域の支配を消す / 船団: 残っている船団は各+3
+function alliedProjection(pocNow){
+  // 損傷している艦も無傷の攻撃力で数える
+  const alive = SHIPS.filter(s => !s.sunk && !s.removed && s.type !== 'UBOAT' && s.type !== 'CONVOY')
+    .map(s => Object.assign({}, s, { atk: s.atkOrig != null ? s.atkOrig : s.atk }));
+  const atkOf = arr => arr.reduce((t, s) => t + (s.atk || 0) + (s.air || 0), 0);
+  const de = alive.filter(s => s.country === 'DE');
+  const uk = alive.filter(s => s.side === 'allies' && s.country !== 'RU' && s.location !== 'Malta' && s.location !== 'Mediterranean');
+  const G = atkOf(de), B = atkOf(uk);
+  const main = ['NorthSea', 'NorthAtlantic', 'SouthAtlantic', 'Barents'].sort((p, q) => SEAS[q].axis - SEAS[p].axis);
+  // ドイツが取れる海域の数
+  let taken = 0;
+  if(G > 0) taken = B > 0 ? Math.max(0, Math.ceil(G * main.length / B) - 1) : main.length;
+  taken = Math.min(taken, main.length, de.length);
+  if(G > 0 && !B) taken = Math.min(main.length, de.length);
+  let perTurn = 0;
+  main.slice(0, taken).forEach(sea => { perTurn -= SEAS[sea].axis; });
+  const heldSeas = main.slice(taken);
+  heldSeas.forEach(sea => { perTurn += SEAS[sea].allies; });
+  // Uボートで支配を消される海域（連合の艦は4海域へ均等）
+  const uboats = Math.min(SHIPS.filter(s => s.type === 'UBOAT' && s.side === 'axis' && !s.sunk && !s.removed).length, 7);
+  const dicePerSea = uk.reduce((t, s) => t + (s.type === 'CV' ? 3 : 1), 0) / main.length;
+  const needU = Math.floor(dicePerSea / 3) + 1;
+  perTurn -= Math.min(heldSeas.length, Math.floor(uboats / needU));
+  // 地中海
+  const medAllies = alive.filter(s => s.side === 'allies' && (s.location === 'Malta' || s.location === 'Mediterranean'));
+  const it = italianFullThreat().map(s => Object.assign({}, s, { atk: s.atkOrig != null ? s.atkOrig : s.atk }));
+  if(medAllies.length || it.length) perTurn += (medAllies.length && battleGeq(medAllies, it)) ? SEAS.Mediterranean.allies : -SEAS.Mediterranean.axis;
+  // バルト海
+  if(de.length) perTurn -= SEAS.Baltic.axis;
+  else if(alive.some(s => s.country === 'RU')) perTurn += SEAS.Baltic.allies;
+  const turnsLeft = Math.max(0, 8 - currentTurn + 1);
+  const convoys = SHIPS.filter(s => s.type === 'CONVOY' && !s.sunk && !s.removed).length;
+  return { final: pocNow + perTurn * turnsLeft + convoys * 3, perTurn, taken, turnsLeft, convoys };
+}
+function alliedCannotWin(){
+  if(currentTurn > 7) return false; // ターン8での投了は意味がない（ユーザーの指示 2026-11-03）
+  const p = alliedProjection(poc);
+  const axisPerTurn = -p.perTurn; // 枢軸が次のターンに取れそうなPOC（枢軸から見てプラスなら逆転できない）
+  if(axisPerTurn <= 0) return false;
+  return -poc + axisPerTurn * p.turnsLeft >= 10; // 残りターンで累計して枢軸が+10に届くなら投了
+}
+const ALLIED_AUTO_RESIGN = false; // 連合AIの自動の投了は保留（ユーザーの指示 2026-11-03。判定の基準が決まるまで動かさない）
+function alliedResign(){
+  window.gameResigned = { turn: currentTurn, side: 'allies' };
+  alert('イギリスは、これ以上逆転できないと判断して投了しました');
+  if(typeof showReportSave === 'function') showReportSave();
+}
+
 function toggleUnits(){
   document.body.classList.toggle('hide-units');
   const btn = document.getElementById('toggleUnits');
@@ -5916,6 +6101,8 @@ function endTurn(){
   // ターン8終了 → ゲーム終了 → レポートの保存画面（ターン7終了時の currentTurn=8 では表示しない）
   if(wasAtLastTurn && typeof showReportSave === 'function'){
     setTimeout(() => showReportSave(), 200);
+  } else if(ALLIED_AUTO_RESIGN && !wasAtLastTurn && aiSide === 'allies' && !window.gameResigned && !simMode && !window.__noAutoResign && alliedCannotWin()){
+    setTimeout(() => alliedResign(), 200);
   }
 }
 

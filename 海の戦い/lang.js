@@ -79,6 +79,9 @@ const LANG_TERMS = {
   '次: ': 'Next: ',
   '枢軸の投了（ターン': 'Axis resigned (turn ',
   '）— 連合の勝ち': ') — Allied victory',
+  '連合の投了（ターン': 'Allies resigned (turn ',
+  '）— 枢軸の勝ち': ') — Axis victory',
+  'イギリスは、これ以上逆転できないと判断して投了しました': 'Britain has resigned: it can no longer come back',
   // 長い文・決まった言い回し
   'ドイツ軍 航空攻撃：攻撃するエリアを選んでください': 'German air strike: choose an area to attack',
   '枢軸艦の右にあるグループボタンをクリックで割当': 'Click the group button to the right of each Axis ship to assign it',

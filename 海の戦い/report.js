@@ -172,7 +172,7 @@ const D = ${JSON.stringify(data).replace(/</g, '\\u003c')};
 const TX = {
   en: { title:'War at Sea: Game Report', opt:{ ubNoLimit:'No U-boat limit', bismarck7:'Bismarck class Defense 7', usEase:'Easier US entry' }, none:'none',
     sub:(o) => 'Player (Axis) vs AI (Allies). Optional rules: ' + o + '. POC: + favors the Allies, - favors the Axis.',
-    prev:'◀ Prev', next:'Next ▶', summary:'Summary', finalPoc:'Final POC', axisWin:'Axis victory', alWin:'Allied victory', draw:'Draw', resigned:(t) => 'Axis resigned on turn ' + t + ' — Allied victory',
+    prev:'◀ Prev', next:'Next ▶', summary:'Summary', finalPoc:'Final POC', axisWin:'Axis victory', alWin:'Allied victory', draw:'Draw', resigned:(t) => 'Axis resigned on turn ' + t + ' — Allied victory', resignedAllied:(t) => 'Allies resigned on turn ' + t + ' — Axis victory',
     alSunk:(n) => 'Allied ships sunk: ' + n + ' — ', axSunk:(n) => 'Axis ships sunk: ' + n + ' — ', ubLost:'. U-boats lost: ', turn:'Turn', gained:'Gained', total:'Total',
     ctlHead:(n) => 'Turn ' + n + ': Control', lba:'LBA: ', notUsed:'not used', posture:'Allied posture: ', pst:{ ns:'North Sea heavy', normal:'standard', atl:'Atlantic heavy' },
     targeting:'Allied targeting: ', tgt:(p, s) => 'every ship targeted, ' + (p === 'strong' ? 'strong vs strong' : 'strong vs weak') + ', extra fire on ' + (s === 'strong' ? 'strong' : 'weak') + ' ships',
@@ -184,7 +184,7 @@ const TX = {
     lbaTag:(s) => '✈' + s + ' LBA', sep:', ' },
   ja: { title:'海の戦い：ゲームレポート', opt:{ ubNoLimit:'Uボート上限なし', bismarck7:'ビスマルク級 防御7', usEase:'米国投入ダイス緩和' }, none:'なし',
     sub:(o) => 'プレイヤー（枢軸）対 AI（連合）。オプションルール：' + o + '。POCは＋が連合、−が枢軸に有利。',
-    prev:'◀ 前へ', next:'次へ ▶', summary:'総括', finalPoc:'最終POC', axisWin:'枢軸の勝ち', alWin:'連合の勝ち', draw:'引き分け', resigned:(t) => '枢軸の投了（ターン' + t + '）— 連合の勝ち',
+    prev:'◀ 前へ', next:'次へ ▶', summary:'総括', finalPoc:'最終POC', axisWin:'枢軸の勝ち', alWin:'連合の勝ち', draw:'引き分け', resigned:(t) => '枢軸の投了（ターン' + t + '）— 連合の勝ち', resignedAllied:(t) => '連合の投了（ターン' + t + '）— 枢軸の勝ち',
     alSunk:(n) => '連合の撃沈 ' + n + '隻：', axSunk:(n) => '枢軸の撃沈 ' + n + '隻：', ubLost:'　Uボートの喪失 ', turn:'ターン', gained:'獲得', total:'累計',
     ctlHead:(n) => '第' + n + 'ターン　支配', lba:'LBA：', notUsed:'使わず', posture:'連合の構え：', pst:{ ns:'北海重視', normal:'今まで通り', atl:'大西洋重視' },
     targeting:'連合の割り振り：', tgt:(p, s) => '全艦に割り振り、' + (p === 'strong' ? '強い敵に強い艦' : '弱い敵から強い艦') + '、余りは' + (s === 'strong' ? '強い敵へ' : '弱い敵へ'),
@@ -230,7 +230,7 @@ function render(){
   const v = document.getElementById('view');
   if(cur === 'sum' || !D.turns.length){
     cur = 'sum';
-    v.innerHTML = '<h2>' + T().summary + '</h2><div class="card"><div class="poc">' + T().finalPoc + ' ' + sgn(D.finalPoc) + ' (' + (D.resigned ? T().resigned(D.resigned.turn) : D.finalPoc < 0 ? T().axisWin : D.finalPoc > 0 ? T().alWin : T().draw) + ')</div>'
+    v.innerHTML = '<h2>' + T().summary + '</h2><div class="card"><div class="poc">' + T().finalPoc + ' ' + sgn(D.finalPoc) + ' (' + (D.resigned ? (D.resigned.side === 'allies' ? T().resignedAllied(D.resigned.turn) : T().resigned(D.resigned.turn)) : D.finalPoc < 0 ? T().axisWin : D.finalPoc > 0 ? T().alWin : T().draw) + ')</div>'
       + '<p>' + T().alSunk(D.sunk.allies.length) + (list(D.sunk.allies) || T().none) + '</p>'
       + '<p>' + T().axSunk(D.sunk.axis.length) + (list(D.sunk.axis) || T().none) + T().ubLost + D.sunk.ubAxis + '</p>'
       + '<table><tr><th>' + T().turn + '</th><th>' + T().gained + '</th><th>' + T().total + '</th></tr>' + D.turns.map(t => '<tr><td>T' + t.turn + '</td><td>' + sgn(t.gain) + '</td><td>' + sgn(t.total) + '</td></tr>').join('') + '</table></div>';
@@ -298,7 +298,7 @@ function showReportSave(){
     el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:1200;';
     document.body.appendChild(el);
   }
-  const result = window.gameResigned ? `枢軸の投了（ターン${window.gameResigned.turn}）— 連合の勝ち`
+  const result = window.gameResigned ? (window.gameResigned.side === 'allies' ? `連合の投了（ターン${window.gameResigned.turn}）— 枢軸の勝ち` : `枢軸の投了（ターン${window.gameResigned.turn}）— 連合の勝ち`)
     : poc < 0 ? '枢軸の勝ち' : poc > 0 ? '連合の勝ち' : '引き分け';
   el.innerHTML = `<div class="modal-box" style="min-width:320px;text-align:center;">
     <h3>ゲーム終了</h3>
