@@ -1204,6 +1204,7 @@ function updatePhaseBar(currentPh) {
 const SKIP_IF_NO_CONTACT = ['gun1a','gun1b','gun1r','torpedo','gun2a','gun2b','gun2r','repair'];
 
 function loadPhase(phase) {
+  state._lastPhaseDone = null; // 2度押しの防止は同じ画面の中だけ（再読み込みや前のゲームの記録で止めない）
   dbg(`loadPhase(${phase}) — prev=${state.phase}`);
   // 直進移動済みフラグをクリア（二重移動防止用）
   localStorage.removeItem('straightDone_' + phase + '_' + state.combatTurn);
@@ -1658,6 +1659,7 @@ function loadCampaign() {
     const data = JSON.parse(raw);
 
     // ステート完全リセット
+    state._lastPhaseDone = null; // 前のゲームの記録で最初のボタンが無視されないように
     state.combatTurn = 1;
     state.phase = 'init';
     state.initiative = null;

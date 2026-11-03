@@ -87,14 +87,12 @@
         </div>
     </div>
 
-    <div style="text-align:center;margin:15px 0;">
-        <label style="font-size:1.1em;cursor:pointer;color:#ffd700;">
-            <input type="checkbox" id="chkAI" checked style="width:18px;height:18px;vertical-align:middle;margin-right:6px;">
-            AI観戦モード（日本軍もAIが操作）
-        </label>
-    </div>
 
     <div class="btn-area">
+        <div style="margin-bottom:12px;">
+            <button type="button" id="btnMoveMode" onclick="toggleMoveMode()" style="padding:8px 16px;font-size:0.95em;border:1px solid #555;border-radius:4px;cursor:pointer;margin:0 4px;"></button>
+            <button type="button" id="btnFog" onclick="toggleFog()" style="padding:8px 16px;font-size:0.95em;border:1px solid #555;border-radius:4px;cursor:pointer;margin:0 4px;"></button>
+        </div>
         <button class="btn-start" onclick="startBattle()">戦闘開始</button>
         <a href="../index1.html" class="btn-back">トップへ戻る</a>
     </div>
@@ -139,12 +137,38 @@ function startBattle() {
         radarTypes: ['CL'],    // レーダー搭載艦種（通常BB/CA/CL/CLAA）
         jpHandicap: 36         // 日本軍ハンディキャップ（得点に加算）
     }));
-    // AI観戦モード選択
-    const aiOn = document.getElementById('chkAI').checked ? '1' : '0';
-    localStorage.setItem('jpAutoAI', aiOn);
-    localStorage.setItem('fullAutoAI', aiOn);
+    // プレイヤーが操作する（AI観戦はなし）
+    localStorage.setItem('jpAutoAI', '0');
+    localStorage.setItem('fullAutoAI', '0');
     window.location.href = 'hub.html';
 }
+// 移動と戦場の霧の設定（キャンペーン画面と同じ設定を使う）
+function showBattleOptions() {
+    const on = localStorage.getItem('flagshipMove') === '1';
+    const m = document.getElementById('btnMoveMode');
+    m.textContent = on ? '移動: 旗艦操作' : '移動: 全艦手動';
+    m.style.backgroundColor = on ? '#1a2a1a' : '#ddd';
+    m.style.color = on ? '#8afa8a' : '#555';
+    let lv = localStorage.getItem('fogLevel');
+    lv = lv !== null ? (parseInt(lv, 10) || 0) : (localStorage.getItem('fogOfWar') === '1' ? 1 : 0);
+    const f = document.getElementById('btnFog');
+    f.textContent = '戦場の霧: ' + (lv === 2 ? '霧2（味方も不明）' : lv === 1 ? '霧1（敵は不明）' : 'OFF');
+    f.style.backgroundColor = lv > 0 ? '#1a2a1a' : '#ddd';
+    f.style.color = lv > 0 ? '#8afa8a' : '#555';
+}
+function toggleMoveMode() {
+    localStorage.setItem('flagshipMove', localStorage.getItem('flagshipMove') === '1' ? '0' : '1');
+    showBattleOptions();
+}
+function toggleFog() {
+    let lv = localStorage.getItem('fogLevel');
+    lv = lv !== null ? (parseInt(lv, 10) || 0) : (localStorage.getItem('fogOfWar') === '1' ? 1 : 0);
+    const next = (lv + 1) % 3; // OFF → 霧1 → 霧2
+    localStorage.setItem('fogLevel', String(next));
+    localStorage.setItem('fogOfWar', next > 0 ? '1' : '0');
+    showBattleOptions();
+}
+showBattleOptions();
 </script>
 </body>
 </html>
