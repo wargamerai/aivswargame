@@ -146,10 +146,10 @@ async function check(label, A, P, opt) {
   const need = AP_TABLE[P - 1][A - 1];
   await roll(label);
   let r = d66(), ok = r <= need;
-  UI.dice(L(`${label}: A${A}／P${P} → ${need}以下で成功　d66＝${r} → ${ok ? '<b>成功</b>' : '失敗'}`, `${label}: A${A}/P${P} → success on ${need} or less　d66=${r} → ${ok ? '<b>success</b>' : 'failure'}`));
+  if (!opt.quiet) UI.dice(L(`${label}: A${A}／P${P} → ${need}以下で成功　d66＝${r} → ${ok ? '<b>成功</b>' : '失敗'}`, `${label}: A${A}/P${P} → success on ${need} or less　d66=${r} → ${ok ? '<b>success</b>' : 'failure'}`));
   const bad = opt.theirs ? ok : !ok;
   if (bad && (opt.mine || opt.theirs)) {
-    if (await offerReroll(label)) { await roll(label + L('（振り直し）', ' (re-roll)')); r = d66(); ok = r <= need; UI.dice(L(`（振り直し）${label}: d66＝${r} → ${ok ? '<b>成功</b>' : '失敗'}`, `(re-roll) ${label}: d66=${r} → ${ok ? '<b>success</b>' : 'failure'}`)); }
+    if (await offerReroll(label)) { await roll(label + L('（振り直し）', ' (re-roll)')); r = d66(); ok = r <= need; if (!opt.quiet) UI.dice(L(`（振り直し）${label}: d66＝${r} → ${ok ? '<b>成功</b>' : '失敗'}`, `(re-roll) ${label}: d66=${r} → ${ok ? '<b>success</b>' : 'failure'}`)); }
   }
   if (ok && opt.sec) SH().trained[opt.sec] = true;
   return ok;
@@ -535,8 +535,7 @@ async function engage(ub, opts) {
           const dmg = await gunfire(ub, n4, nAA);
           if (dmg >= 3) { const r = await damageOutcome(ub, dmg, 'gun'); if (r !== 'continue') return r; }
           ub.surfaced = false;
-          UI.log(L(`U ボートは急速潜航した（損害${dmg}・9.4.4）`, `The U-boat crash-dived (damage ${dmg}, 9.4.4)`), 'ubdmg');
-          UI.log(L('U ボートは急速潜航した（9.4.4）', 'The U-boat crash-dived (9.4.4)'), 'ubdmg-alt routine');
+          UI.log(L('U ボートは急速潜航した（9.4.4）', 'The U-boat crash-dived (9.4.4)'), 'routine');
           UI.story(story('crashDive'));
         } else {
           UI.log(L('浮上中の U ボートを発見できなかった。U ボートは浮上したまま1回攻撃する。', 'The surfaced U-boat was not sighted. It attacks once while still on the surface.'), 'routine');
@@ -623,29 +622,59 @@ async function spotSurfaced(ub, help) {
 }
 
 // 9.4.3 射撃。損害の合計を返す
+// 射撃: 1発ごとに「打ち方よーい」で止め、艦長の号令で撃つ。判定の数字は出さず、撃ったことと結果を文章で見せる
+const GUN_TEXT = {
+  ready: {
+    g: [['「4インチ砲、打ち方よーい！」', '"4-inch gun, stand by!"'], ['砲術長「4インチ砲、照準よし！ 打ち方よーい！」', 'Gunnery officer: "4-inch gun on target! Stand by!"']],
+    a: [['「対空砲、打ち方よーい！」', '"AA gun, stand by!"'], ['銃座の水兵「対空砲、水平射撃よーい！」', 'AA gunner: "AA gun, level fire, stand by!"']],
+  },
+  fire: {
+    g: [['艦長「撃てーっ！」砲声が艦を震わせた。', 'Captain: "Fire!" The report shakes the ship.'], ['艦長「撃てっ！」4インチ砲が吠えた。', 'Captain: "Shoot!" The 4-inch gun roars.']],
+    a: [['艦長「撃てーっ！」曳光弾が海面を走っていく。', 'Captain: "Fire!" Tracer skims across the water.'], ['艦長「撃てっ！」対空砲が連続して火を噴いた。', 'Captain: "Shoot!" The AA gun hammers away.']],
+  },
+  hit: {
+    g: [['砲弾が司令塔の脇で炸裂した！ 命中！', 'The shell bursts beside the conning tower! A hit!'], ['閃光。U ボートの船体に火花が散った。命中！', 'A flash. Sparks fly from the hull. A hit!']],
+    a: [['曳光弾の列が司令塔を叩いた！ 命中！', 'A line of tracer rakes the conning tower! A hit!'], ['甲板に火花が散る。命中！', 'Sparks dance along the deck. A hit!']],
+  },
+  miss: {
+    g: [['砲弾は U ボートの手前に水柱を立てた。外れ。', 'The shell raises a column of water short of the U-boat. A miss.'], ['水柱は U ボートの向こう側に上がった。外れ。', 'The splash rises beyond the U-boat. A miss.']],
+    a: [['曳光弾は波を切るばかりだ。外れ。', 'The tracer only cuts the waves. A miss.'], ['弾は司令塔の上を飛び越えていった。外れ。', 'The rounds sail over the conning tower. A miss.']],
+  },
+};
+const gunLine = (kind, k) => { const a = GUN_TEXT[kind][k]; const t = a[Math.floor(Math.random() * a.length)]; return L(t[0], t[1]); };
 async function gunfire(ub, n4, nAA) {
   let dmg = 0;
   UI.story(story('gunStart'));
+  const one = async (k, name, label, A, P, sec, dice) => {
+    UI.story(gunLine('ready', k));
+    await UI.choose('', [{ label: L('撃て！', 'Fire!'), value: 1 }]);   // 自動進行の設定でも、ここは必ず止める
+    UI.story(gunLine('fire', k));
+    let h = 0;
+    if (await check(label, A, P, { sec, mine: true, quiet: true })) {
+      h = hitDamage(name, A, ub, dice, true);   // 損害の判定は見せない
+      UI.story(gunLine('hit', k));
+    } else UI.story(gunLine('miss', k));
+    return h;
+  };
   for (let i = 1; i <= n4; i++) {
     const P = ub.eva + (ub.rng === 'L' ? 3 : ub.rng === 'M' ? 2 : 0) + secDiff('gun4');
-    if (await check(L(`4インチ砲 射撃${i}`, `4-inch gun, shot ${i}`), skill('gun4'), P, { sec: 'gun4', mine: true })) { await roll(L('4インチ砲の損害', '4-inch gun damage')); dmg += hitDamage(L('4インチ砲', '4-inch gun'), skill('gun4'), ub, 3); }
+    dmg += await one('g', L('4インチ砲', '4-inch gun'), L(`4インチ砲 射撃${i}`, `4-inch gun, shot ${i}`), skill('gun4'), P, 'gun4', 3);
   }
   for (let i = 1; i <= nAA; i++) {
     const P = ub.eva + (ub.rng === 'M' ? 3 : 0) + secDiff('aa');
-    if (await check(L(`対空砲 射撃${i}`, `AA gun, burst ${i}`), skill('aa'), P, { sec: 'aa', mine: true })) { await roll(L('対空砲の損害', 'AA gun damage')); dmg += hitDamage(L('対空砲', 'AA gun'), skill('aa'), ub, 2); }
+    dmg += await one('a', L('対空砲', 'AA gun'), L(`対空砲 射撃${i}`, `AA gun, burst ${i}`), skill('aa'), P, 'aa', 2);
   }
   ub.damage += dmg;
-  UI.log(L(`射撃による損害: <b>${dmg}</b>（U ボートの損害 計${ub.damage}）`, `Gunfire damage: <b>${dmg}</b> (U-boat damage total ${ub.damage})`), 'ubdmg');
-  UI.log(L('射撃を終えた。U ボートの損害は分からない。', 'Ceased firing. The damage to the U-boat is unknown.'), 'ubdmg-alt');
+  UI.log(L('射撃を終えた。U ボートの損害は分からない。', 'Ceased firing. The damage to the U-boat is unknown.'));
   return dmg;
 }
 // 命中1の損害判定: 目標値 1d6、スキルが回避値以下なら 1・6 は失敗。n 回振って目標値と同じ目ごとに1損害
-function hitDamage(name, sk, ub, n) {
+function hitDamage(name, sk, ub, n, quiet) {
   const target = d6();
-  if (sk <= evaEff(ub) && (target === 1 || target === 6)) { UI.dice(L(`${name}の損害判定: 目標値 ${target} → スキルが回避値以下なので外れ`, `${name} damage roll: target ${target} → miss, skill not above evasion`)); return 0; }
+  if (sk <= evaEff(ub) && (target === 1 || target === 6)) { if (!quiet) UI.dice(L(`${name}の損害判定: 目標値 ${target} → スキルが回避値以下なので外れ`, `${name} damage roll: target ${target} → miss, skill not above evasion`)); return 0; }
   const rs = Array.from({ length: n }, d6);
   const h = rs.filter(x => x === target).length;
-  UI.dice(L(`${name}の損害判定: 目標値 ${target}、1d6×${n}＝${rs.join('・')} → 損害 ${h}`, `${name} damage roll: target ${target}, 1d6×${n}=${rs.join(' · ')} → damage ${h}`));
+  if (!quiet) UI.dice(L(`${name}の損害判定: 目標値 ${target}、1d6×${n}＝${rs.join('・')} → 損害 ${h}`, `${name} damage roll: target ${target}, 1d6×${n}=${rs.join(' · ')} → damage ${h}`));
   return h;
 }
 
