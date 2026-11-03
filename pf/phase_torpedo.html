@@ -114,6 +114,8 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
 
 <div id="log"></div>
 
+<script src="captain.js"></script>
+<script src="fog.js"></script>
 <script>
 // ===== TORPEDO HIT CHART =====
 const HIT_CHART = [
@@ -165,7 +167,7 @@ const DMG_CHART = [
   ['-','-','2M','2MG','4M','4MG','4MG','5MG','6M','7M2G','SINK'],
   ['-','-','2M','2M','4M','4M','3M2G','4MG','5MG','6M2G','7M3G'],
   ['-','-','-','2M','3MG','3MG','3MG','4M','5MG','6MG','7M2G'],
-  ['-','-','-','M','2M','2MG','3M','3MG','4MG','6M2G','6M'],
+  ['-','-','-','M','2M','2MG','3M','3MG','4MG','6M','6M2G'],
 ];
 
 const CRIT_CHART = {
@@ -274,10 +276,9 @@ function getTorpPower(s) {
   return s.torpedo.includes('TT') ? 10 : 6;
 }
 
-// 雷撃射程: 米軍=常に13hex、日本軍=spotRange（revealed/onFireなら13hex）
+// ルール 8-1: 雷撃は視認範囲の艦か火災の艦だけ。13ヘクス以上は不可。レーダー雷撃・発砲目標への雷撃はできない
 function getTorpMaxRange(target, firer) {
-  if (firer && firer.side === 'us') return 13;  // 米軍: レーダーで制限なし
-  return (target.revealed || target.onFire) ? 13 : (state.spotRange || 5);
+  return target.onFire ? 12 : Math.min(12, state.spotRange || 5);
 }
 function getTorpRolls(s) { return s.torpedo === 'TT3' ? 3 : 1; }
 function getDefense(s) { return s.def || 0; }
@@ -319,8 +320,8 @@ function isTorpTargetVisible(target, firerSide) {
     return hexDist(f.col, f.row, target.col, target.row) <= spotR;
   });
   if (inVisual) return true;
-  // 視認距離外でも火災中 or 発砲済み(revealed)なら見える
-  if (target.onFire || target.revealed) return true;
+  // 視認距離外でも火災中なら見える（発砲目標への雷撃はできない）
+  if (target.onFire) return true;
   return false;
 }
 
@@ -427,6 +428,7 @@ function renderCards() {
   let tHtml = '';
   const firerSide = 'us';
   tf.forEach((s, i) => {
+    if (!fogEnemyShown(s)) return;
     let canTarget = s.status !== 'sunk' && s.col >= 0;
     // 魚雷用視認チェック（レーダー不可、火災・発砲炎は可）
     if (canTarget && !isTorpTargetVisible(s, firerSide)) canTarget = false;
@@ -439,8 +441,8 @@ function renderCards() {
     }
     const sel = selectedTarget === i ? ' target-sel' : '';
     const dis = !canTarget ? ' disabled' : '';
-    const fogN = state.fogMode ? (['BB','OBB','CA'].includes(s.type)?'大型':'小型')+((s.side==='jp'?state.jpFleet:state.usFleet).indexOf(s)+1) : s.name;
-    const fogT = state.fogMode ? '?' : s.type;
+    const fogN = fogShort(s);
+    const fogT = fogHidden(s) ? '?' : s.type;
     tHtml += `<div class="card jp${sel}${dis}" onclick="clickTarget(${i})">
       <span class="c-name">${fogN}</span>
       <span class="c-info">${fogT}</span>
@@ -498,11 +500,12 @@ function updateShootInfo() {
 
   const {mod, details} = calcModifiers(firer, target);
   const hitPct = calcTorpHitChance(mod, dist);
-  const infoTN = (state.fogMode && target.side === 'jp') ? (['BB','OBB','CA'].includes(target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(target)+1) : target.name;
+  const infoTN = fogShort(target);
   el.innerHTML = `${firer.name} → ${infoTN} / 距離 ${dist}hex / 修正 ${mod>=0?'+':''}${mod} / <span style="color:#c00;font-weight:bold">命中率 ${hitPct}%</span>`;
   if (details.length > 0) {
     el.innerHTML += `<div class="mod-detail">${details.join(' / ')}</div>`;
   }
+  if (fogHidden(target)) el.innerHTML = `${firer.name} → ${infoTN} / 距離 ${dist}hex`;
   btn.disabled = false;
 }
 
@@ -558,6 +561,7 @@ function applyCritical(target, cd) {
     case 3:
       if (tp==='BB'||tp==='OBB') {
         result.extraG=3; result.extraM=3;
+        target.onFire = true; target.crits.push('火災'); // 表: 3G3M に火災マーカー
         result.text = `${cd}: 弾薬庫被弾 → 大損害(3G3M)`;
         target.crits.push('大損害(3G3M)');
       } else {
@@ -569,6 +573,7 @@ function applyCritical(target, cd) {
     case 4:
       if (tp==='BB'||tp==='OBB'||tp==='CA') {
         result.extraG=3; result.extraM=3;
+        target.onFire = true; target.crits.push('火災'); // 表: 3G3M に火災マーカー
         result.text = `${cd}: 弾薬庫被弾 → 大損害(3G3M)`;
         target.crits.push('大損害(3G3M)');
       } else {
@@ -618,10 +623,12 @@ function applyCritical(target, cd) {
       break;
     case 12:
       if (tp==='BB'||tp==='OBB') {
+        if (target.origSpeed === undefined) target.origSpeed = target.speed; // 修理で戻す速力
         target.speed = Math.ceil((target.speed||4)/2);
         result.text = `${cd}: 機関室被弾 → 速力半減`;
         target.crits.push('速力半減');
       } else {
+        if (target.origSpeed === undefined) target.origSpeed = target.speed; // 修理で戻す速力
         target.speed = 0;
         result.text = `${cd}: 機関室被弾 → 航行不能`;
         target.crits.push('航行不能');
@@ -684,6 +691,7 @@ function doTorpedo() {
   }, '*');
 
   const hitChance = calcTorpHitChance(mod, dist);
+  fogSetTarget(target);
   log(`🐟 ${firer.name} → ${target.name} (距離${dist}, 修正${mod>=0?'+':''}${mod}, 命中率${hitChance}%${nRolls>1?' ×'+nRolls+'回':''})`);
   for (const hr of hitRolls) {
     log(`  ダイス: ${hr.d1}+${hr.d2}=${hr.d1+hr.d2}${mod!==0?` →${hr.dt}`:''}${hr.d1===hr.d2?' [ゾロ目!]':''} → 命中${hr.h}発`);
@@ -698,7 +706,7 @@ function doTorpedo() {
 
   if (totalHits > 0) {
     let fp = totalHits * tp;
-    if (firer.dmgG >= firer.capG/2) fp = Math.ceil(fp/2);
+    if (firer.dmgG >= firer.capG/2 || firer.gunHalved) fp = Math.ceil(fp/2); // 魚雷の半減は1回だけ（ユーザーの指示 2026-11-03）
     const def = getDefense(target);
     const rc = ratioCol(fp, def);
     const ratioLabels = ['1:2','1:1','2:1','3:1','4:1','5:1','6:1','7:1','8:1','9:1','10:1'];
@@ -797,8 +805,8 @@ function applyDamage(ship, g, m) {
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
-  const fogFN = (state.fogMode && r.firer.side === 'jp') ? (['BB','OBB','CA'].includes(r.firer.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.firer)+1) : `${r.firer.name}(${r.firer.type})`;
-  const fogTN = (state.fogMode && r.target.side === 'jp') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
+  const fogFN = fogLabel(r.firer);
+  const fogTN = fogLabel(r.target);
   let html = `
     <div class="r-row"><span class="r-label">雷撃艦</span> <span class="r-value">${fogFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${fogTN}</span></div>
@@ -836,7 +844,7 @@ function showResult(r) {
   if (r.sunk || r.target.status === 'sunk') {
     html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 撃沈！</div>`;
   }
-  body.innerHTML = html;
+  body.innerHTML = fogMaskResult(html, r);
   document.getElementById('resultOverlay').style.display = 'flex';
 }
 
@@ -882,12 +890,14 @@ function autoJPTorpedo(onDone) {
   // 全結果を事前計算
   const results = [];
   for (const firer of jp) {
+    if (captainHoldsFire(firer)) continue; // 艦長の性格: 損害や位置によって雷撃を控える
     // 最寄りの舷側にいるUS艦を選択（広く浅く、損傷大ほど後回し）
     let bestTarget = null, bestScore = 999;
     const allShips = [...jp, ...us];
     for (const t of us) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
+      if (d > captainTorpDist(firer)) continue; // 命中率の高い距離まで魚雷を温存
       if (!checkBroadside(firer, t)) continue;
       if (isLineBlocked(firer, t, allShips)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
@@ -915,7 +925,7 @@ function autoJPTorpedo(onDone) {
 
     if (hits > 0) {
       let fp = hits * tp;
-      if (firer.dmgG >= firer.capG/2) fp = Math.ceil(fp/2);
+      if (firer.dmgG >= firer.capG/2 || firer.gunHalved) fp = Math.ceil(fp/2); // 魚雷の半減は1回だけ（ユーザーの指示 2026-11-03）
       const def = getDefense(bestTarget);
       const rc = ratioCol(fp, def);
       const ratioLabels = ['1:2','1:1','2:1','3:1','4:1','5:1','6:1','7:1','8:1','9:1','10:1'];
@@ -986,6 +996,7 @@ function autoJPTorpedo(onDone) {
     }, '*');
 
     const hitChance = calcTorpHitChance(r.mod, r.dist);
+    fogSetTarget(r.target);
     log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist}, 命中率${hitChance}%)`);
     if (r.hits > 0) {
       log(`  <span class="hit">命中${r.hits}発</span> ${r.dmgText}`);
@@ -1040,11 +1051,13 @@ function autoUSTorpedo(onDone) {
   const results = [];
   const allShips = [...(state.jpFleet||[]), ...(state.usFleet||[])];
   for (const firer of usFirers) {
+    if (captainHoldsFire(firer)) continue; // 艦長の性格: 損害や位置によって雷撃を控える
     // 最寄りの舷側にいるJP艦を選択（広く浅く、損傷大ほど後回し）
     let bestTarget = null, bestScore = 999;
     for (const t of jpTargets) {
       const d = hexDist(firer.col, firer.row, t.col, t.row);
       if (d > getTorpMaxRange(t, firer)) continue;
+      if (d > captainTorpDist(firer)) continue; // 命中率の高い距離まで魚雷を温存
       if (!checkBroadside(firer, t)) continue;
       if (isLineBlocked(firer, t, allShips)) continue;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
@@ -1080,7 +1093,7 @@ function autoUSTorpedo(onDone) {
 
     if (totalHits > 0) {
       let fp = totalHits * tp;
-      if (firer.dmgG >= firer.capG/2) fp = Math.ceil(fp/2);
+      if (firer.dmgG >= firer.capG/2 || firer.gunHalved) fp = Math.ceil(fp/2); // 魚雷の半減は1回だけ（ユーザーの指示 2026-11-03）
       const def = getDefense(bestTarget);
       const rc = ratioCol(fp, def);
       const ratioLabels = ['1:2','1:1','2:1','3:1','4:1','5:1','6:1','7:1','8:1','9:1','10:1'];
@@ -1159,6 +1172,7 @@ function autoUSTorpedo(onDone) {
     }, '*');
 
     const hitChance = calcTorpHitChance(r.mod, r.dist);
+    fogSetTarget(r.target);
     log(`🐟 ${r.firer.name} → ${r.target.name} (距離${r.dist}, 命中率${hitChance}%${r.nRolls>1?' ×'+r.nRolls+'回':''})`);
     if (r.hits > 0) {
       log(`  <span class="hit">命中${r.hits}発</span> ${r.dmgText}`);
@@ -1222,12 +1236,14 @@ function donePhase() {
 }
 
 function log(msg) {
+  const display = fogLogLine(msg);
+  if (display === null) return;
   const el = document.getElementById('log');
   const div = document.createElement('div');
-  div.innerHTML = msg;
+  div.innerHTML = display;
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
-  parent.postMessage({type:'GAME_LOG', text:msg}, '*');
+  parent.postMessage({type:'GAME_LOG', text:display}, '*');
 }
 
 init();

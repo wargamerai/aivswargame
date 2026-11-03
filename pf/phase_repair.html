@@ -35,6 +35,7 @@ button.repair-btn:hover { background:#b8e8b8; }
 
 <div id="log"></div>
 
+<script src="fog.js"></script>
 <script>
 let state = null;
 
@@ -77,14 +78,15 @@ function renderList() {
   // PF: プレイヤー=米軍、敵=日本軍
   const playerSide = 'us';
   for (const s of active) {
+    if (!fogEnemyShown(s)) continue; // 視認の外の敵は修理の表にも出さない
     const isEnemy = fog && s.side !== playerSide;
-    const isOwnNonLead = fog && s.side === playerSide && !s.isLead;
+    const isOwnNonLead = fog && s.side === playerSide && fogHidden(s);
     const repHtml = formatRepairResults(s);
     if (isEnemy) {
-      html += `<tr><td style="color:#999">❓❓❓</td><td>🎌</td><td style="color:#999">❓</td><td>❓</td><td style="color:#999">❓</td><td style="color:#999">❓</td></tr>`;
+      html += `<tr><td style="color:#999">${fogName(s)}</td><td>🎌</td><td style="color:#999">❓</td><td>❓</td><td style="color:#999">❓</td><td style="color:#999">❓</td></tr>`;
     } else if (isOwnNonLead) {
       const sc = statusClass(s.status);
-      html += `<tr><td>${s.name}</td><td>🦅</td><td class="${sc}">❓</td><td>❓</td><td style="color:#999">❓</td><td>${repHtml}</td></tr>`;
+      html += `<tr><td>${s.name}</td><td>🦅</td><td class="${sc}">❓</td><td>❓</td><td style="color:#999">❓</td><td style="color:#999">❓</td></tr>`;
     } else {
       const sc = statusClass(s.status);
       const crits = s.crits || [];
@@ -123,7 +125,6 @@ function clearCritFlag(ship, crit) {
   else if (crit === '回頭不能') ship.cannotTurn = false;
   else if (crit === '雷撃不能') ship.cannotTorpedo = false;
   else if (crit === '射撃指揮所') { ship.critHitMod = 0; }
-  else if (crit === '速力半減' || crit === '航行不能') { delete ship.speed; /* 元の速力に戻す */ }
 }
 
 function repairShip(name) {
@@ -131,6 +132,7 @@ function repairShip(name) {
   const ship = all.find(s=>s.name===name);
   if (!ship || !ship.crits || ship.crits.length===0) return;
 
+  _fogRepairQuiet = fogHidden(ship);
   log(`${name} 修理チェック:`);
   const remaining = [];
   ship.repairResults = [];
@@ -155,6 +157,7 @@ function repairShip(name) {
       remaining.push(crit);
     }
   }
+  const hadSpeedCrit = ship.crits.includes('速力半減') || ship.crits.includes('航行不能');
   ship.crits = remaining;
 
   // ★ フラグ再計算: crits配列の実際の内容に基づいてフラグを正しく設定
@@ -164,13 +167,16 @@ function repairShip(name) {
   ship.cannotTurn = remaining.includes('回頭不能');
   ship.cannotTorpedo = remaining.includes('雷撃不能');
   if (!remaining.includes('射撃指揮所')) ship.critHitMod = 0;
-  if (!remaining.includes('速力半減') && !remaining.includes('航行不能')) delete ship.speed;
+  // 速力の特殊損害がすべて直った時だけ、元の速力に戻す（他の損害の修理では速力を変えない）
+  if (hadSpeedCrit && !remaining.includes('速力半減') && !remaining.includes('航行不能')) {
+    ship.speed = ship.origSpeed !== undefined ? ship.origSpeed : (ship.baseSpd || 4);
+    delete ship.origSpeed;
+  }
 
   // 離脱中の艦が修理で離脱条件を満たさなくなったら離脱解除
   if (ship.withdrawing) {
     const stillNeed = (ship.status === 'heavy') ||
                       remaining.includes('航行不能') ||
-                      remaining.includes('回頭不能') ||
                       remaining.includes('速力半減');
     if (!stillNeed) {
       ship.withdrawing = false;
@@ -187,8 +193,9 @@ function repairAll() {
   const all = [...(state.jpFleet||[]), ...(state.usFleet||[])];
   let anyRepair = false;
   for (const ship of all) {
+    if (ship.status === 'sunk') continue; // 沈んだ艦は修理しない
     if (!ship.crits || ship.crits.length===0) continue;
-    anyRepair = true;
+    if (!fogHidden(ship)) anyRepair = true; // 霧: 敵だけが修理中なら「修理対象なし」と同じに見せる
     repairShip(ship.name);
   }
   if (!anyRepair) log('修理対象なし');
@@ -227,7 +234,9 @@ function exportToCampaign() {
   log('戦闘結果をlocalStorageに保存 (battleResult)');
 }
 
+let _fogRepairQuiet = false; // 霧: 隠す艦の修理の結果はログに出さない
 function log(msg) {
+  if (_fogRepairQuiet && /^(\s+(-|OK|NG)\s|.* 修理チェック|\s+→ .* 離脱解除)/.test(msg)) return;
   const el=document.getElementById('log');
   el.innerHTML+=`<div>${msg}</div>`;
   el.scrollTop=el.scrollHeight;

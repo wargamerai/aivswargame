@@ -52,6 +52,7 @@ button.send:hover { background:#b8e8b8; }
   <button class="send" onclick="sendToCampaign()">キャンペーンに戻る（戦闘終了）</button>
 </div>
 
+<script src="captain.js"></script>
 <script>
 let state = null;
 
@@ -94,6 +95,12 @@ function calcVPDetail(fleet) {
     }
   }
   return { items, total };
+}
+
+// 戦闘が終わったか（全滅・帰投）
+function isCaptainReportTime() {
+  const alive = f => (f || []).some(x => x.status !== 'sunk' && x.status !== 'exited' && x.col >= 0);
+  return !alive(state.jpFleet) || !alive(state.usFleet) || localStorage.getItem('manualBattleEnd') === '1';
 }
 
 function init() {
@@ -196,6 +203,12 @@ function renderReport() {
     html += `<div>任務: <strong>${missionLabel}</strong></div>`;
   }
   html += `</div>`;
+
+  // ── 艦長の性格（戦闘が終わった時だけ見せる）──
+  if (state.combatTurn >= 10 || isCaptainReportTime()) {
+    const row = x => `<div style="font-size:0.85em">${x.side === 'jp' ? '🎌' : '🦅'} ${x.name}: ${CAPTAIN_TEMPER_JP[captainOf(x).temper]}・${CAPTAIN_TARGET_JP[captainOf(x).target]}</div>`;
+    html += `<div id="captainBox" style="background:#f7f4ea;border:1px solid #cba;padding:8px;border-radius:4px;margin:8px 0"><strong>艦長の性格</strong>${[...jp, ...us].map(row).join('')}</div>`;
+  }
 
   // ── 得点内訳 ──
   html += `<div id="scoreBox">`;
@@ -426,6 +439,7 @@ function renderReport() {
     dmgM:   s.dmgM || 0,
     status: s.status,
     speed:  s.speed !== undefined && s.speed !== null ? s.speed : -1,
+    crits:  s.crits || [],
   }));
   localStorage.setItem('battleResult', JSON.stringify(result));
 }
@@ -434,7 +448,7 @@ function sendToCampaign() {
   const raw = localStorage.getItem('battleResult');
   if (!raw) { alert('データなし'); return; }
   const data = JSON.parse(raw);
-  const ships = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status, speed:s.speed}));
+  const ships = data.map(s => ({name:s.name, dmgG:s.dmgG, dmgM:s.dmgM, status:s.status, speed:s.speed, crits:s.crits||[]}));
   const forCampaign = { endTurn: state.combatTurn || 0, ships: ships };
   localStorage.setItem('battleResultForCampaign', JSON.stringify(forCampaign));
   // キャンペーン画面を開く（同じタブで遷移）

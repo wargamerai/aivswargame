@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<!-- アクセス解析（GoatCounter） -->
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
     <meta charset="UTF-8">
     <title>太平洋艦隊 キャンペーン統括システム</title>
     <style>
@@ -104,24 +106,39 @@
     <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
     <button onclick="resetCampaign()" style="background-color: #cc2200; color:#fff; float:right; font-size:0.9em;">キャンペーンリセット</button>
     <button id="btnFog" onclick="toggleFog()" style="background-color:#1a2a1a; color:#8afa8a; font-size:0.9em;">戦場の霧: ON</button>
+    <button id="btnMoveMode" onclick="toggleMoveMode()" style="font-size:0.9em;">移動: 全艦手動</button>
 </div>
 <script>
-function toggleFog() {
-  const cur = localStorage.getItem('fogOfWar') === '1';
-  const next = !cur;
-  localStorage.setItem('fogOfWar', next ? '1' : '0');
-  const btn = document.getElementById('btnFog');
-  btn.textContent = next ? '戦場の霧: ON' : '戦場の霧: OFF';
-  btn.style.backgroundColor = next ? '#1a2a1a' : '#ddd';
-  btn.style.color = next ? '#8afa8a' : '#999';
+function readFogLevel() {
+  const v = localStorage.getItem('fogLevel');
+  if (v !== null) return parseInt(v, 10) || 0;
+  return localStorage.getItem('fogOfWar') === '1' ? 1 : 0;
 }
-(function() {
-  const fog = localStorage.getItem('fogOfWar') === '1';
+function showFogButton(n) {
   const btn = document.getElementById('btnFog');
-  btn.textContent = fog ? '戦場の霧: ON' : '戦場の霧: OFF';
-  btn.style.backgroundColor = fog ? '#1a2a1a' : '#ddd';
-  btn.style.color = fog ? '#8afa8a' : '#999';
-})();
+  btn.textContent = '戦場の霧: ' + (n === 2 ? '霧2（味方も不明）' : n === 1 ? '霧1（敵は不明）' : 'OFF');
+  btn.style.backgroundColor = n > 0 ? '#1a2a1a' : '#ddd';
+  btn.style.color = n > 0 ? '#8afa8a' : '#999';
+}
+function toggleFog() {
+  const next = (readFogLevel() + 1) % 3; // OFF → 霧1 → 霧2
+  localStorage.setItem('fogLevel', String(next));
+  localStorage.setItem('fogOfWar', next > 0 ? '1' : '0');
+  showFogButton(next);
+}
+showFogButton(readFogLevel());
+function showMoveMode() {
+  const on = localStorage.getItem('flagshipMove') === '1';
+  const btn = document.getElementById('btnMoveMode');
+  btn.textContent = on ? '移動: 旗艦操作' : '移動: 全艦手動';
+  btn.style.backgroundColor = on ? '#1a2a1a' : '#ddd';
+  btn.style.color = on ? '#8afa8a' : '#555';
+}
+function toggleMoveMode() {
+  localStorage.setItem('flagshipMove', localStorage.getItem('flagshipMove') === '1' ? '0' : '1');
+  showMoveMode();
+}
+showMoveMode();
 </script>
 
 <!-- 索敵結果パネル -->
@@ -278,8 +295,8 @@ const jpAllShips = [
     { name: '長波', yomi: 'ながなみ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
     { name: '巻波', yomi: 'まきなみ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
     { name: '高波', yomi: 'たかなみ', type: 'DD', atk: 3, def: 2, spd: 6, capG: 4, capM: 4, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
-    { name: '秋月', yomi: 'あきづき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 5, capM: 5, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
-    { name: '照月', yomi: 'てるづき', type: 'DD', atk: 3, def: 2, spd: 6, capG: 5, capM: 5, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 }
+    { name: '秋月', yomi: 'あきづき', type: 'DD', atk: 4, def: 2, spd: 6, capG: 5, capM: 5, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 },
+    { name: '照月', yomi: 'てるづき', type: 'DD', atk: 4, def: 2, spd: 6, capG: 5, capM: 5, vp: 1, dmgG: 0, dmgM: 0, status: 'ok', rest: 0 }
 ];
 
 const usAllShips = [
@@ -525,11 +542,32 @@ function phaseSortie() {
         }
     });
 
-    let ddPool = jpAllShips.filter(s => s.type === 'DD' && s.status !== 'sunk' && s.rest === 0 && s.dmgG === 0 && s.dmgM === 0);
-    sortShips(ddPool, true);
-    for(let i=0; i<Math.min(ddCount, ddPool.length); i++) {
-        currentJpFleet.push(ddPool[i]);
+    // ルール 13-2 (3): 駆逐艦は出撃表の形式から出す。前の形式から出し、足りなければ後ろの形式から。両方で足りなければ、その分は登場しない
+    const DD_FORMS = {
+      吹雪型: ['吹雪', '白雪', '初雪', '綾波', '天霧', '暁', '雷', '電'],
+      朝潮型: ['朝潮', '朝雲'],
+      陽炎型: ['陽炎', '黒潮', '親潮', '雪風', '天津風', '舞風'],
+      白露型: ['白露', '時雨', '村雨', '夕立', '春雨', '五月雨', '海風', '江風', '涼風'],
+      夕雲型: ['夕雲', '長波', '巻波', '高波'],
+      秋月型: ['秋月', '照月'],
+    };
+    const DD_FORMS_BY_ROLL = {
+      2: ['夕雲型', '陽炎型'], 3: ['吹雪型'], 4: ['白露型', '秋月型'], 5: ['吹雪型'],
+      6: ['白露型', '朝潮型'], 7: ['陽炎型', '夕雲型'], 8: ['朝潮型', '陽炎型'], 9: ['白露型'],
+      10: ['陽炎型', '夕雲型'], 11: ['吹雪型'], 12: ['吹雪型'],
+    };
+    const ddForms = DD_FORMS_BY_ROLL[roll] || [];
+    let ddAdded = 0;
+    for (const form of ddForms) {
+      const pool = jpAllShips.filter(s => DD_FORMS[form].includes(s.name) && s.status !== 'sunk' && s.rest === 0 && s.dmgG === 0 && s.dmgM === 0);
+      sortShips(pool, true);
+      for (const s of pool) {
+        if (ddAdded >= ddCount) break;
+        currentJpFleet.push(s);
+        ddAdded++;
+      }
     }
+    logMsg(`駆逐艦: ${ddForms.join('・')}から ${ddAdded}隻（指定 ${ddCount}隻）`);
     currentJpFleet = sortShips(currentJpFleet, true);
 
     logMsg(`日本軍艦隊: ${currentJpFleet.length}隻出撃`);
@@ -740,7 +778,7 @@ function confirmFleet() {
     // ハンディキャップ計算: fee = (capG + capM) × 5 / 2
     let jpFee = fleetFee(currentJpFleet);
     let usFee = fleetFee(currentUsFleet);
-    let jpHandicapAdd = Math.max(0, usFee - jpFee);
+    let jpHandicapAdd = Math.max(0, usFee - jpFee);  // ルール 13-7 (3): 参加料の少ない側がもらう。日本軍は上限なし
     let usHandicapAdd = Math.max(0, jpFee - usFee);
     // ロール別キャップ適用
     if (usHandicapAdd > maxUsHandicap) usHandicapAdd = maxUsHandicap;
@@ -897,6 +935,12 @@ function applyBattleResultData(importData, endTurn) {
             if (ship.status === 'sunk') return;
             const jpData = importData.find(d => d.name === ship.name);
             if (jpData && jpData.col < 0) return;
+            // ルール 13-7 (4) ④: 修理できなかった特殊損害のある艦は対象外（G・M の損害になった大損害・隔壁破壊は特殊損害ではない）
+            const unrepaired = ((jpData && jpData.crits) || []).filter(c => !/^(大損害|轟沈|隔壁破壊)/.test(c));
+            if (unrepaired.length > 0) {
+                logMsg(`  ${ship.name}: 特殊損害（${unrepaired.join('、')}）→ ボーナス対象外`);
+                return;
+            }
             if (ship.status !== 'ok' && ship.status !== 'light') {
                 logMsg(`  ${ship.name}: ${statusLabel(ship.status)} → ボーナス対象外`);
                 return;
@@ -1013,6 +1057,9 @@ function renderBattleHistory() {
             }
         } else {
             html += `<div style="color:#889;font-size:0.85em">戦闘損害なし</div>`;
+        }
+        if (usHandi > 0) {
+            html += `<div style="margin-top:3px;padding:3px;background:#f0f4ff;border:1px solid #8ac;border-radius:2px;font-size:0.85em">⚖ ハンディキャップ <strong>+${usHandi}</strong></div>`;
         }
         html += `<div class="rp-total rp-total-us"><span>米軍 合計</span><span>${usEarned} pt</span></div>`;
         html += `</div>`;

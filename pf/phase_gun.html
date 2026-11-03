@@ -115,6 +115,8 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
 
 <div id="log"></div>
 
+<script src="captain.js"></script>
+<script src="fog.js"></script>
 <script>
 // ===== TABLES =====
 const HIT_CHART = [
@@ -146,15 +148,14 @@ const DMG_CHART = [
   ['GM','3G','3GM','3G2M','4G2M','5G2M','5G2M','5G3M','6G2M','6G3M','5G5M'],
   ['G','2GM','2GM','3GM','3GM','3G3M','4G2M','4G3M','3G4M','6G2M','6G3M'],
   ['G','2G','2GM','3G','3GM','3G2M','3G2M','3G3M','4G3M','4G4M','5G3M'],
-  ['-','G','2G','2GM','2G2M','2G2M','3G2M','3G3M','4G3M','4G4M','3G'],
-  ['-','G','G','2G','2GM','3GM','3GM','3G2M','4G3M','GM','2G'],
-  ['-','-','G','G','2GM','2G','2G','3GM','2G2M','2G','2G'],
-  ['-','-','-','G','2G','2GM','2GM','2GM','2G','GG','2G'],
-  ['-','-','-','-','G','G','2GM','2G','2G','GM','GM'],
-  ['-','-','-','-','G','G','GM','2G','2GM','MG','2G'],
-  ['-','-','-','-','G','G','G','2G','2G','2GM','G'],
-  ['-','-','-','-','G','G','-','-','-','GM','G'],
-  ['-','-','-','-','-','-','-','-','-','-','-'],
+  ['-','G','2G','2GM','3G','2G2M','2G2M','3G2M','3G3M','4G3M','4G4M'],
+  ['-','G','G','2G','2G','GM','2GM','3GM','3GM','3G2M','4G3M'],
+  ['-','-','G','G','2G','2G','2G','2G','2GM','3GM','2G2M'],
+  ['-','-','-','G','G','G','2G','2G','2GM','2GM','2GM'],
+  ['-','-','-','-','G','G','GM','2G','2G','GM','2GM'],
+  ['-','-','-','-','G','G','G','G','2G','GM','2GM'],
+  ['-','-','-','-','-','G','G','G','2G','2G','2GM'],
+  ['-','-','-','-','-','-','-','G','G','G','GM'],
 ];
 const CRIT_CHART = {
   2:'弾薬庫被弾→轟沈',3:'弾薬庫被弾(BB:3G3M/他:轟沈)',4:'弾薬庫被弾(BB+CA:3G3M/他:轟沈)',
@@ -165,12 +166,8 @@ const CRIT_CHART = {
 function parseDmg(str) {
   if (!str || str==='-') return {g:0,m:0};
   let g=0,m=0;
-  const mg = str.match(/(\d+)G/); if(mg) g=parseInt(mg[1]);
-  const mm = str.match(/(\d+)M/); if(mm) m=parseInt(mm[1]);
-  if(str==='GM'||str==='MG') {g=1;m=1;}
-  if(str==='GG') {g=2;}
-  if(str==='G') {g=1;}
-  if(str==='M') {m=1;}
+  const mg = str.match(/(\d*)G/); if(mg) g=parseInt(mg[1])||1; // 2GM は G2 M1
+  const mm = str.match(/(\d*)M/); if(mm) m=parseInt(mm[1])||1;
   return {g,m};
 }
 function ratioCol(fp, def) {
@@ -274,6 +271,7 @@ function applyCritical(target, cd) {
     case 3:
       if (tp === 'BB' || tp === 'OBB') {
         result.extraG = 3; result.extraM = 3;
+        target.onFire = true; target.crits.push('火災'); // 表: 3G3M に火災マーカー
         result.text = `${cd}: 弾薬庫被弾 → 大損害(3G3M)`;
         target.crits.push('大損害(3G3M)');
       } else {
@@ -285,6 +283,7 @@ function applyCritical(target, cd) {
     case 4:
       if (tp === 'BB' || tp === 'OBB' || tp === 'CA') {
         result.extraG = 3; result.extraM = 3;
+        target.onFire = true; target.crits.push('火災'); // 表: 3G3M に火災マーカー
         result.text = `${cd}: 弾薬庫被弾 → 大損害(3G3M)`;
         target.crits.push('大損害(3G3M)');
       } else {
@@ -321,10 +320,12 @@ function applyCritical(target, cd) {
       break;
     case 10:
       if (tp === 'BB' || tp === 'OBB' || tp === 'CA') {
+        if (target.origSpeed === undefined) target.origSpeed = target.speed; // 修理で戻す速力
         target.speed = Math.ceil((target.speed||4)/2);
         result.text = `${cd}: 機関室被弾 → 速力半減`;
         target.crits.push('速力半減');
       } else {
+        if (target.origSpeed === undefined) target.origSpeed = target.speed; // 修理で戻す速力
         target.speed = 0;
         result.text = `${cd}: 機関室被弾 → 航行不能`;
         target.crits.push('航行不能');
@@ -332,16 +333,19 @@ function applyCritical(target, cd) {
       break;
     case 11:
       if (tp === 'BB' || tp === 'OBB') {
+        if (target.origSpeed === undefined) target.origSpeed = target.speed; // 修理で戻す速力
         target.speed = Math.ceil((target.speed||4)/2);
         result.text = `${cd}: 機関室被弾 → 速力半減`;
         target.crits.push('速力半減');
       } else {
+        if (target.origSpeed === undefined) target.origSpeed = target.speed; // 修理で戻す速力
         target.speed = 0;
         result.text = `${cd}: 機関室被弾 → 航行不能`;
         target.crits.push('航行不能');
       }
       break;
     case 12:
+      if (target.origSpeed === undefined) target.origSpeed = target.speed; // 修理で戻す速力
       target.speed = 0;
       result.text = `${cd}: 機関室被弾 → 航行不能`;
       target.crits.push('航行不能');
@@ -361,6 +365,7 @@ function getDefense(s) { return s.def || 0; }
 function canSee(firer, target) {
   if (target.onFire) return true;
   if (target.firedGun1) return true;
+  if (target.radarDetected) return true;
   const d = hexDist(firer.col, firer.row, target.col, target.row);
   if (d <= (state.spotRange || 0)) return true;
   if (firer.radar && d <= RADAR_RANGE) return true;
@@ -369,14 +374,14 @@ function canSee(firer, target) {
 
 // 味方の誰かから見えるか（目標リスト用のフィルタ）
 function isVisibleToJP(usShip) {
-  if (usShip.onFire || usShip.firedGun1 || usShip.revealed) return true;
+  if (usShip.onFire || usShip.firedGun1 || usShip.revealed || usShip.radarDetected) return true;
   return (state.jpFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     return hexDist(usShip.col, usShip.row, f.col, f.row) <= (state.spotRange || 0);
   });
 }
 function isVisibleToUS(jpShip) {
-  if (jpShip.onFire || jpShip.firedGun1 || jpShip.revealed) return true;
+  if (jpShip.onFire || jpShip.firedGun1 || jpShip.revealed || jpShip.radarDetected) return true;
   return (state.usFleet || []).some(f => {
     if (f.status === 'sunk' || f.col < 0) return false;
     const d = hexDist(jpShip.col, jpShip.row, f.col, f.row);
@@ -469,7 +474,7 @@ function setupUSShoot(title) {
 
   firerShips = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
   // 米軍から見える日本艦のみ目標にできる
-  targetShips = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToUS(s));
+  targetShips = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToUS(s) && fogEnemyShown(s));
 
   log(`=== ${title} ===`);
 
@@ -502,7 +507,7 @@ function renderCards() {
     const label = s.sharedHex ? ' [同一ヘクス]' : (firedShips.has(i) ? ' [射撃済]' : (cantFire ? ' [砲撃不能]' : ''));
     return `<div class="card us${sel}${fired}${shared}${cantFire}" onclick="selectFirer(${i})">
       <span class="c-name">${s.name}${label}</span>
-      <span class="c-info">${s.type} 攻:${atk}</span>
+      <span class="c-info">${fogHidden(s) ? s.type : s.type + ' 攻:' + atk}</span>
     </div>`;
   }).join('');
 
@@ -522,8 +527,8 @@ function renderCards() {
         else if (getArcInfo(firer, s).mult === 0) oor = ' disabled';
       }
     }
-    const fogN = state.fogMode ? (['BB','OBB','CA'].includes(s.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(s)+1) : s.name;
-    const fogI = state.fogMode ? '?' : `${s.type} 防:${def}`;
+    const fogN = fogShort(s);
+    const fogI = fogHidden(s) ? '?' : `${s.type} 防:${def}`;
     return `<div class="card jp${sel}${oor}" onclick="selectTarget(${i})">
       <span class="c-name">${fogN}</span>
       <span class="c-info">${fogI}</span>
@@ -582,6 +587,9 @@ function calcModifiers(firer, target, dist) {
   // レーダー射撃 +1（視認距離外かつ火災・発砲で見えていない場合のみ）
   if (firer.radar && dist > (state.spotRange || 5) && !target.onFire && !target.firedGun1 && !target.revealed) { mod += 1; details.push('レーダー+1'); }
 
+  // 発砲目標 +2（視認範囲外で、火災で見えていない場合。ルール 7-2 ⑦）
+  if (dist > (state.spotRange || 5) && !target.onFire && (target.firedGun1 || target.revealed)) { mod += 2; details.push('発砲目標+2'); }
+
   // DD目標 +1
   if (target.type === 'DD') { mod += 1; details.push('DD+1'); }
 
@@ -635,6 +643,7 @@ function updateShootInfo() {
     + `　射界: <b style="color:${arcColor}">${arcLabel}</b>`
     + `　命中率: <b style="color:${pctColor};font-size:1.2em">${hitPct}%</b>`
     + (details.length > 0 ? `<div class="mod-detail">(${details.join(' / ')})</div>` : '');
+  if (fogHidden(target)) el.innerHTML = `距離: <b>${dist}</b>hex　射界: <b style=\"color:${arcColor}\">${arcLabel}</b>`;
 }
 
 // ===== 射撃処理 =====
@@ -659,7 +668,7 @@ function doShoot() {
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
   const body = document.getElementById('resultBody');
   const shootFN = `${firer.name}(${firer.type})`;
-  const shootTN = state.fogMode ? (['BB','OBB','CA'].includes(target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(target)+1) : `${target.name}(${target.type})`;
+  const shootTN = fogLabel(target);
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${shootFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${shootTN}</span></div>
@@ -670,7 +679,7 @@ function doShoot() {
     html += `<div style="color:#aa8;font-size:0.8em;text-align:right">${details.join(' / ')}</div>`;
   }
   html += `<div class="r-row"><span class="r-label">命中率</span> <span class="r-value" style="color:${pctColor};font-size:1.1em;font-weight:bold">${hitPct}%</span></div>`;
-  body.innerHTML = html;
+  body.innerHTML = fogMaskInfo(html, firer, target);
   document.getElementById('resultOverlay').style.display = 'flex';
 
   // ② 「射撃！」ボタンでダイスロール→結果
@@ -792,8 +801,8 @@ function showJPPreview(r) {
   const body = document.getElementById('resultBody');
   const hitPct = calcHitChance(r.mod, r.dist);
   const pctColor = hitPct >= 70 ? '#2a8a2a' : hitPct >= 40 ? '#8a6a00' : '#cc3311';
-  const prevFN = (state.fogMode && r.firer.side === 'jp') ? (['BB','OBB','CA'].includes(r.firer.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.firer)+1) : `${r.firer.name}(${r.firer.type})`;
-  const prevTN = (state.fogMode && r.target.side === 'jp') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
+  const prevFN = fogLabel(r.firer);
+  const prevTN = fogLabel(r.target);
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${prevFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${prevTN}</span></div>
@@ -804,14 +813,14 @@ function showJPPreview(r) {
     html += `<div style="color:#aa8;font-size:0.8em;text-align:right">${r.details.join(' / ')}</div>`;
   }
   html += `<div class="r-row"><span class="r-label">命中率</span> <span class="r-value" style="color:${pctColor};font-size:1.1em;font-weight:bold">${hitPct}%</span></div>`;
-  body.innerHTML = html;
+  body.innerHTML = fogMaskInfo(html, r.firer, r.target);
   document.getElementById('resultOverlay').style.display = 'flex';
 }
 
 function showResult(r) {
   const body = document.getElementById('resultBody');
-  const resFN = (state.fogMode && r.firer.side === 'jp') ? (['BB','OBB','CA'].includes(r.firer.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.firer)+1) : `${r.firer.name}(${r.firer.type})`;
-  const resTN = (state.fogMode && r.target.side === 'jp') ? (['BB','OBB','CA'].includes(r.target.type)?'大型':'小型')+((state.jpFleet||[]).indexOf(r.target)+1) : `${r.target.name}(${r.target.type})`;
+  const resFN = fogLabel(r.firer);
+  const resTN = fogLabel(r.target);
   let html = `
     <div class="r-row"><span class="r-label">射撃艦</span> <span class="r-value">${resFN}</span></div>
     <div class="r-row"><span class="r-label">目標</span> <span class="r-value">${resTN}</span></div>
@@ -845,7 +854,7 @@ function showResult(r) {
   if (r.critSunk) {
     html += `<div style="color:#f44;font-size:1.1em;font-weight:bold;text-align:center;margin-top:4px">💥 轟沈！</div>`;
   }
-  body.innerHTML = html;
+  body.innerHTML = fogMaskResult(html, r);
   document.getElementById('resultOverlay').style.display = 'flex';
 }
 
@@ -878,19 +887,12 @@ function autoUSShoot(title) {
   const assignCount = {};
 
   for (const firer of us) {
-    // 雷撃温存: 魚雷搭載艦がgun1で5hex以内かつ舷側に敵がいれば砲撃スキップ（雷撃優先）
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
-        firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
-      const torpTarget = jp.find(t => {
-        const d = hexDist(firer.col, firer.row, t.col, t.row);
-        if (d > 5) return false;
-        const fa = toAxial(firer.col, firer.row), ta = toAxial(t.col, t.row);
-        return isBroadside(firer.dir, ta.q-fa.q, ta.r-fa.r, -(ta.q-fa.q)-(ta.r-fa.r));
-      });
-      if (torpTarget) {
-        log(`${firer.name}: 雷撃温存（舷側${hexDist(firer.col,firer.row,torpTarget.col,torpTarget.row)}hex）`);
-        continue;
-      }
+    // 艦長の性格: 損害や位置によって砲撃を控える
+    if (captainHoldsFire(firer)) { log(`${firer.name}: 砲撃を控える`); continue; }
+    // 雷撃の温存: 先攻で、このターンに雷撃できるなら、第一砲撃では撃たない（撃つと雷撃できない）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') && captainWantsTorpedo(firer)) {
+      log(`${firer.name}: 雷撃温存`);
+      continue;
     }
 
     // 目標選択: 視認可能かつ射程内で最も近い敵
@@ -904,7 +906,7 @@ function autoUSShoot(title) {
       const arcPenalty = arcInfo.mult < 1 ? 3 : 0;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
       const dmgPenalty = dmgRate * 30;
-      const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty + arcPenalty;
+      const score = captainTargetScore(firer, t, d, assignCount[t.name] || 0, dmgRate, arcPenalty);
       if (score < bestScore) { bestScore = score; bestTarget = t; bestDist = d; }
     }
     if (!bestTarget) continue;
@@ -923,6 +925,9 @@ function autoUSShoot(title) {
     const tc = firer.turnCount || 0;
     if (tc > 0) { mod += tc; details.push(`転舵+${tc}`); }
     if (bestTarget.type === 'DD') { mod += 1; details.push('DD+1'); }
+    if (bestTarget.dmgM >= bestTarget.capM && bestTarget.status !== 'sunk') { mod -= 2; details.push('停止-2'); }
+    else if (bestTarget.dmgM >= bestTarget.capM / 2) { mod -= 1; details.push('半速-1'); }
+    if (bestDist > (state.spotRange || 5) && !bestTarget.onFire && (bestTarget.firedGun1 || bestTarget.revealed)) { mod += 2; details.push('発砲目標+2'); }
     if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
     const prevShots = usShotCount[bestTarget.name] || 0;
     if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
@@ -1091,19 +1096,12 @@ function autoJPShoot(title) {
   const assignCount = {};  // 目標分散用
 
   for (const firer of jp) {
-    // 雷撃温存: 魚雷搭載艦がgun1で5hex以内かつ舷側に敵がいれば砲撃スキップ（雷撃優先）
-    if ((subPhase === 'gun1a' || subPhase === 'gun1b') &&
-        firer.torpedo && firer.torpedo !== '-' && !firer.torpedoFired && !firer.cannotTorpedo) {
-      const torpTarget = us.find(t => {
-        const d = hexDist(firer.col, firer.row, t.col, t.row);
-        if (d > 5) return false;
-        const fa = toAxial(firer.col, firer.row), ta = toAxial(t.col, t.row);
-        return isBroadside(firer.dir, ta.q-fa.q, ta.r-fa.r, -(ta.q-fa.q)-(ta.r-fa.r));
-      });
-      if (torpTarget) {
-        log(`${firer.name}: 雷撃温存（舷側${hexDist(firer.col,firer.row,torpTarget.col,torpTarget.row)}hex）`);
-        continue;
-      }
+    // 艦長の性格: 損害や位置によって砲撃を控える
+    if (captainHoldsFire(firer)) { log(`${firer.name}: 砲撃を控える`); continue; }
+    // 雷撃の温存: 先攻で、このターンに雷撃できるなら、第一砲撃では撃たない（撃つと雷撃できない）
+    if ((subPhase === 'gun1a' || subPhase === 'gun1b') && captainWantsTorpedo(firer)) {
+      log(`${firer.name}: 雷撃温存`);
+      continue;
     }
 
     // 目標選択: 視認可能かつ射程内で最も近い敵
@@ -1117,7 +1115,7 @@ function autoJPShoot(title) {
       const arcPenalty = arcInfo.mult < 1 ? 3 : 0;
       const dmgRate = Math.max(t.dmgG / (t.capG || 1), t.dmgM / (t.capM || 1));
       const dmgPenalty = dmgRate * 30;
-      const score = d + (assignCount[t.name] || 0) * 5 + dmgPenalty + arcPenalty;
+      const score = captainTargetScore(firer, t, d, assignCount[t.name] || 0, dmgRate, arcPenalty);
       if (score < bestScore) { bestScore = score; bestTarget = t; }
     }
     if (!bestTarget) continue;
@@ -1136,6 +1134,9 @@ function autoJPShoot(title) {
     const tc = firer.turnCount || 0;
     if (tc > 0) { mod += tc; details.push(`転舵+${tc}`); }
     if (bestTarget.type === 'DD') { mod += 1; details.push('DD+1'); }
+    if (bestTarget.dmgM >= bestTarget.capM && bestTarget.status !== 'sunk') { mod -= 2; details.push('停止-2'); }
+    else if (bestTarget.dmgM >= bestTarget.capM / 2) { mod -= 1; details.push('半速-1'); }
+    if (bestDist > (state.spotRange || 5) && !bestTarget.onFire && (bestTarget.firedGun1 || bestTarget.revealed)) { mod += 2; details.push('発砲目標+2'); }
     if (firer.critHitMod) { mod += firer.critHitMod; details.push(`指揮所+${firer.critHitMod}`); }
     const prevShots = jpShotCount[bestTarget.name] || 0;
     if (prevShots > 0) { mod += prevShots; details.push(`合同+${prevShots}`); }
@@ -1415,29 +1416,9 @@ function doneSubPhase() {
   parent.postMessage({type:'PHASE_DONE'}, '*');
 }
 
-// 霧用: 直前の射撃の対象側を追跡 ('jp'=敵目標, 'us_lead'=味方旗艦, 'us'=味方非旗艦)
-var _fogLastTarget = '';
-function fogSetTarget(target) {
-  if (!state.fogMode) return;
-  if (target.side === 'jp') { _fogLastTarget = 'jp'; return; }
-  _fogLastTarget = target.isLead ? 'us_lead' : 'us';
-}
 function log(msg) {
-  let display = msg;
-  if (state.fogMode) {
-    const plain = msg.replace(/<[^>]*>/g, '');
-    // PF: 敵=日本軍の全艦名を❓に置換
-    (state.jpFleet||[]).forEach(s => {
-      if (display.includes(s.name)) display = display.replace(new RegExp(s.name, 'g'), '❓');
-    });
-    // 敵目標への射撃結果行を隠す
-    if (plain.match(/^\s*(命中|外れ|損害|クリティカル|→ 損害蓄積|ダイス)/)) {
-      if (_fogLastTarget === 'jp' || _fogLastTarget === 'us') {
-        if (plain.includes('火災')) display = '  ❓: 🔥火災発生';
-        else display = '  ❓❓❓';
-      }
-    }
-  }
+  const display = fogLogLine(msg);
+  if (display === null) return;
   const el = document.getElementById('log');
   const div = document.createElement('div');
   div.innerHTML = display;
