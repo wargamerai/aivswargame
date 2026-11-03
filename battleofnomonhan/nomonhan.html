@@ -187,7 +187,7 @@ let simulationData = { simulationStats: { totalRuns: 0, results: {}, tacticalDat
 
 // ===== Q学習テーブル v2（特徴ベース・ユニット単位） =====
 let qTable = null;
-let useQTable = true;
+let useQTable = false; // Q学習は機能していないので最初はオフ（ユーザーの判断 2026-11-03）。ボタンで読み込める
 let qTableLoading = false;
 let qHitCount = 0;
 let qMissCount = 0;
@@ -522,8 +522,6 @@ let isAutoPlay = false;
 
 window.onload = () => {
     document.getElementById('status-banner').innerText = "【準備完了】モードを選択してください。";
-    // Q学習データを自動読み込み（常時ON）
-    loadQTable(); 
     const modal = document.getElementById('combat-result-modal'); const modalHeader = document.getElementById('modal-header');
     modalHeader.onmousedown = function(e) {
         e.preventDefault();
@@ -654,14 +652,16 @@ function getUnitAt(r, c) { return units.find(u => u.r === r && u.c === c); }
 function isAdjacent(u1, u2) { return getAdjacentCoords(u1.r, u1.c).some(pos => pos.r === u2.r && pos.c === u2.c); }
 function isEnemyZOC(r, c, mySide) { return units.some(e => { if (e.side === mySide) return false; return getAdjacentCoords(e.r, e.c).some(pos => { if (pos.r === r && pos.c === c) { return !(isRiverCross(e.r, e.c, r, c) && !isBridge(e.r, e.c, r, c)); } return false; }); }); }
 
-// ルール[9.0]: 攻撃可能判定（グローバル統一版）
-// 条件: 隣接 AND 川越えなし（橋除く） AND 攻撃側が丘にいない
+// ルール[9.0]: 攻撃できるか。隣接していて、橋のない川越しでない
 function canFight(attacker, defender) {
     if (!isAdjacent(attacker, defender)) return false;
     if (isRiverCross(attacker.r, attacker.c, defender.r, defender.c) &&
         !isBridge(attacker.r, attacker.c, defender.r, defender.c)) return false;
-    if (isHill(attacker.r, attacker.c)) return false;
     return true;
+}
+// ルール[9.0]: 攻撃の義務。丘にいる駒には義務がない（攻撃してもよい）
+function mustFight(attacker, defender) {
+    return canFight(attacker, defender) && !isHill(attacker.r, attacker.c);
 }
 
 function getPathCost(startPos, endPos) {
@@ -683,56 +683,20 @@ function getPathCost(startPos, endPos) {
     return 999;
 }
 
+// ルール[9.0]: 損害1につき1マス退却。ZOCと自軍駒のいるマスには退却できない（通り抜けもない）
+// 軍橋は歩兵／騎兵のみ通過できる（ルール[8.0]）
 function getValidRetreatHexes(u, maxSteps = 1, visitedHexes = null) {
-    const banned = new Set();
-    if (visitedHexes) visitedHexes.forEach(k => banned.add(k));
-
-    // BFS：steps数以内で到達できる退却先を列挙
-    // 味方マスは通過のみ可（目的地にはなれない）
-    // 敵ZOC内は通過も目的地も不可
-    const explored = new Set([`${u.r}-${u.c}`]);
-    let frontier = [{r: u.r, c: u.c, steps: 0}];
-    let destinations = [];
-
-    while (frontier.length > 0) {
-        let curr = frontier.shift();
-        if (curr.steps >= maxSteps) continue;
-        getAdjacentCoords(curr.r, curr.c).forEach(pos => {
-            const key = `${pos.r}-${pos.c}`;
-            if (explored.has(key)) return;
-            if (banned.has(key)) return;
-            if (isImpassable(pos.r, pos.c)) return;
-            if (isRiverCross(curr.r, curr.c, pos.r, pos.c) && !isBridge(curr.r, curr.c, pos.r, pos.c)) return;
-            const unitAt = getUnitAt(pos.r, pos.c);
-            // 敵ユニットのいるマスは不可
-            if (unitAt && unitAt.side !== u.side) return;
-            // ZOC内は目的地にも通過にも不可
-            // ただし出発点自体がZOC内の場合、最初の1歩のみ通過可（目的地不可）
-            const inZOC = isEnemyZOC(pos.r, pos.c, u.side);
-            const isFromStart = (curr.r === u.r && curr.c === u.c);
-            if (inZOC && !isFromStart) { explored.add(key); return; }
-            explored.add(key);
-            // 味方ユニットのいるマスは通過のみ
-            if (unitAt && unitAt.side === u.side) {
-                if (!inZOC) frontier.push({r: pos.r, c: pos.c, steps: curr.steps + 1});
-                return;
-            }
-            // 空きマス
-            if (!inZOC) {
-                // ZOC外のみ目的地かつ通過可
-                destinations.push({r: pos.r, c: pos.c, steps: curr.steps + 1});
-                frontier.push({r: pos.r, c: pos.c, steps: curr.steps + 1});
-            }
-            // ZOC内（出発点からの1歩目のみ）：目的地不可、通過も不可（次の探索しない）
-        });
-    }
-    // 重複除去：同じ座標で最小stepsのものだけ残す
-    const seen = new Map();
-    destinations.forEach(d => {
-        const key = `${d.r}-${d.c}`;
-        if (!seen.has(key) || seen.get(key).steps > d.steps) seen.set(key, d);
+    const destinations = [];
+    getAdjacentCoords(u.r, u.c).forEach(pos => {
+        if (visitedHexes && visitedHexes.has(`${pos.r}-${pos.c}`)) return;
+        if (isImpassable(pos.r, pos.c)) return;
+        if (isRiverCross(u.r, u.c, pos.r, pos.c) && !isBridge(u.r, u.c, pos.r, pos.c)) return;
+        if (u.isTank && isMilitaryBridge(u.r, u.c, pos.r, pos.c)) return;
+        if (getUnitAt(pos.r, pos.c)) return;
+        if (isEnemyZOC(pos.r, pos.c, u.side)) return;
+        destinations.push({ r: pos.r, c: pos.c, steps: 1 });
     });
-    return Array.from(seen.values());
+    return destinations;
 }
 
 function getReachableHexes(u, isAdvance = false) {
@@ -747,7 +711,7 @@ function getReachableHexes(u, isAdvance = false) {
             let moveCost = isAdvance ? 1 : (isHill(pos.r, pos.c) ? 2 : 1);
             if (isRiverCross(curr.r, curr.c, pos.r, pos.c)) {
                 if (!isBridge(curr.r, curr.c, pos.r, pos.c)) moveCost = 20; 
-                if (!isAdvance && u.isTank && isMilitaryBridge(curr.r, curr.c, pos.r, pos.c)) return;
+                if (u.isTank && isMilitaryBridge(curr.r, curr.c, pos.r, pos.c)) return;
             }
             let nextCost = curr.cost + moveCost;
             if (nextCost <= (isAdvance ? advancePoints : u.mov)) {
@@ -756,12 +720,21 @@ function getReachableHexes(u, isAdvance = false) {
                     let unitAtPos = getUnitAt(pos.r, pos.c);
                     if (unitAtPos && unitAtPos.side !== u.side) return; // 敵は通過不可
                     visited.set(key, nextCost); pq.push({ r: pos.r, c: pos.c, cost: nextCost });
-                    if (!unitAtPos && !reachable.some(h => h.r === pos.r && h.c === pos.c)) reachable.push(pos); // 味方がいるヘクスは止まれない
+                    if (!unitAtPos) { // 味方がいるヘクスは止まれない
+                        const known = reachable.find(h => h.r === pos.r && h.c === pos.c);
+                        if (known) known.cost = nextCost; else reachable.push({ r: pos.r, c: pos.c, cost: nextCost });
+                    }
                 }
             }
         });
     }
     return reachable;
+}
+
+// 前進の消費点数: 敵や軍橋を避けた実際の経路で数える
+function advanceCost(u, r, c) {
+    const hex = getReachableHexes(u, true).find(h => h.r === r && h.c === c);
+    return hex ? hex.cost : getPathCost({ r: u.r, c: u.c }, { r, c });
 }
 
 function scheduleNextAITask(msg, taskFn) {
@@ -918,16 +891,16 @@ function nextPhase() {
     selectedUnit = null; document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable', 'selected-target', 'selected-attacker'));
     if(currentPhase.includes('_MOVE')) { currentPhase = playerSide+'_COMBAT_DECLARE'; units.forEach(u=>{if(u.side===playerSide)u.acted=false;}); declaredCombats=[]; currentCombatTargets=[]; currentCombatAttackers=[]; }
     else if(currentPhase.includes('_COMBAT_DECLARE')) {
-        // 丘にいる部隊は攻撃義務なし。グローバルcanFight使用。
+        // 丘にいる部隊は攻撃義務なし
         let myUnits2  = units.filter(u => u.side === playerSide);
         let foeUnits2 = units.filter(u => u.side !== playerSide);
         let missAttackers = myUnits2.filter(me =>
-            foeUnits2.some(f => canFight(me, f)) &&
+            foeUnits2.some(f => mustFight(me, f)) &&
             !declaredCombats.some(c => c.attackers.some(a => a.id === me.id))
         );
         if(missAttackers.length > 0){ alert('【未宣言】' + missAttackers.map(u=>u.label).join(', ') + ' がまだ攻撃宣言していません。'); return; }
         let missTargets = foeUnits2.filter(foe =>
-            myUnits2.some(f => canFight(f, foe)) &&
+            myUnits2.some(f => mustFight(f, foe)) &&
             !declaredCombats.some(c => c.targets.some(t => t.id === foe.id))
         );
         if(missTargets.length > 0){ alert('【未宣言】敵部隊 ' + missTargets.map(u=>u.label).join(', ') + ' への攻撃が宣言されていません。'); return; }
@@ -957,7 +930,11 @@ function confirmCombination() {
 }
 
 function render() {
-    if(isHeadless) return; svg.innerHTML = '';
+    if(isHeadless) return;
+    // 再描画（退却の矢印のアニメなど）で、選択中の候補の表示が消えないようにする
+    const keepMovable = (selectedUnit || (currentPhase === 'WAIT_RETREAT' && pendingUnit))
+        ? new Set(Array.from(document.querySelectorAll('.hex-cell.movable')).map(el => el.id)) : new Set();
+    svg.innerHTML = '';
     // SVG描画時の重なりを制御するため、マップのヘックス→ユニットの順で描画を徹底
     const hexGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const unitGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -967,6 +944,7 @@ function render() {
         const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon"); poly.setAttribute("points", p.join(" "));
         let cls = "hex-cell"; if (isEnemyZOC(r,c,playerSide||'JP')) cls += " zoc-cell";
         if (currentPhase.includes('_COMBAT_DECLARE')) { if (currentCombatTargets.some(u=>u.r===r&&u.c===c)) cls += " selected-target"; if (currentCombatAttackers.some(u=>u.r===r&&u.c===c)) cls += " selected-attacker"; }
+        if (keepMovable.has(`hex-${r}-${c}`)) cls += " movable";
         poly.setAttribute("class", cls); poly.setAttribute("id", `hex-${r}-${c}`); poly.onclick = () => handleHexClick(r,c); 
         hexGroup.appendChild(poly);
     }}
@@ -1029,7 +1007,7 @@ function handleUnitClick(u) {
         selectedUnit = u; document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); getReachableHexes(u,false).forEach(p=>document.getElementById(`hex-${p.r}-${p.c}`).classList.add('movable'));
     } else if(currentPhase===playerSide+'_COMBAT_DECLARE') {
         if(u.side!==playerSide) { if(currentCombatTargets.includes(u)) currentCombatTargets=currentCombatTargets.filter(t=>t!==u); else currentCombatTargets.push(u); }
-        else if(u.side===playerSide && currentCombatTargets.length>0 && !declaredCombats.some(c=>c.attackers.includes(u)) && currentCombatTargets.some(t=>isAdjacent(u,t))) {
+        else if(u.side===playerSide && currentCombatTargets.length>0 && !declaredCombats.some(c=>c.attackers.includes(u)) && currentCombatTargets.some(t=>canFight(u,t))) { // 橋のない川越しには攻撃できない
             if(currentCombatAttackers.includes(u)) currentCombatAttackers=currentCombatAttackers.filter(a=>a!==u); else currentCombatAttackers.push(u);
         } updateUI(); render();
     } else if(currentPhase===playerSide+'_ADVANCE' && u.side===playerSide && advancePoints>0 && advanceEligibleUnits.includes(u)) {
@@ -1040,18 +1018,12 @@ function handleHexClick(r, c) {
     if(gameEnded || !playerSide) return; const targetHex = document.getElementById(`hex-${r}-${c}`); if(!targetHex||!targetHex.classList.contains('movable')) return;
     if(currentPhase===playerSide+'_MOVE' && selectedUnit) { selectedUnit.r=r; selectedUnit.c=c; selectedUnit.acted=true; selectedUnit=null; document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); render(); updateUI(); }
     else if(currentPhase===playerSide+'_ADVANCE' && selectedUnit) {
-        let dist = getPathCost({r:selectedUnit.r,c:selectedUnit.c}, {r,c}); advancePoints -= dist; selectedUnit.r=r; selectedUnit.c=c; selectedUnit=null;
+        let dist = advanceCost(selectedUnit, r, c); advancePoints -= dist; selectedUnit.r=r; selectedUnit.c=c; selectedUnit=null;
         document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); render(); updateUI(); if(advancePoints<=0) finishCombatResolution();
     } else if(currentPhase==='WAIT_RETREAT' && pendingUnit) {
         if (!pendingUnit._retreatVisited) pendingUnit._retreatVisited = new Set();
         pendingUnit._retreatVisited.add(`${pendingUnit.r}-${pendingUnit.c}`);
-        // クリックされたマスのstepsを段階的探索で取得
-        let retreatDest = null;
-        for (let trySteps = pendingDamage; trySteps >= 1 && !retreatDest; trySteps--) {
-            retreatDest = getValidRetreatHexes(pendingUnit, trySteps, pendingUnit._retreatVisited).find(p => p.r===r && p.c===c);
-        }
-        let steps = retreatDest ? retreatDest.steps : 1;
-        log(`🏃 退却DEBUG: pendingDamage=${pendingDamage} retreatDest=${JSON.stringify(retreatDest)} steps=${steps}`);
+        let steps = 1; // ルール[9.0]: 損害1につき1マス
         pendingUnit.r=r; pendingUnit.c=c; pendingDamage -= steps;
         log(`🏃‍♂️ 退却: ${pendingUnit.label} → (${r}-${c}) [${steps}マス]`);
         document.querySelectorAll('.hex-cell').forEach(el=>el.classList.remove('movable')); render(); updateUI();
@@ -1149,7 +1121,7 @@ function applyAIDamageLoop(dmg) {
             log(`🩸 [損耗] ${u.label} は移動不可のため即壊滅！`); continue;
         }
 
-        // 退却中に通過したヘクスのみ禁止（元位置はbannedにしない）
+        // 行って戻る後退は禁止（ユーザーの指示 2026-11-03）。通ったマスと元の位置へは戻れない
         let visitedHexes = new Set();
         let retreated = false;
 
@@ -1193,8 +1165,10 @@ function applyAIDamageLoop(dmg) {
     else { advanceEligibleUnits = []; finishCombatResolution(); }
 }
 
+let pendingDamageRemoved = false; // この戦闘で駒を除去したか
 function startPlayerDamage(dmg) { 
     // 元の位置を保存
+    pendingDamageRemoved = false;
     pendingOrigPos = {};
     pendingDamageTargets.forEach(t => { pendingOrigPos[t.id] = {r: t.r, c: t.c}; });
     // 前進対象を退避（損害処理中に次の戦闘で上書きされるのを防ぐ）
@@ -1208,16 +1182,14 @@ function showDamageModal(uId, dmg) {
     document.getElementById('combat-outcome').innerHTML=html; document.getElementById('combat-actions').innerHTML=""; document.getElementById('combat-result-modal').style.display='block'; updateUI();
 }
 
+let advanceStartPoints = 0;
 function cancelAdvance() {
     // 前進したユニットを全て元位置に戻してやり直し
     advanceEligibleUnits.forEach(u => {
         const orig = advanceOrigPositions[u.id];
         if (orig) { u.r = orig.r; u.c = orig.c; }
     });
-    advancePoints = Object.keys(advanceOrigPositions).length > 0 ? advancePoints : advancePoints; // restore full points
-    // advancePointsを再計算するため、元のdmg値が必要 → combatOutcomeから再取得
-    const span = document.getElementById('combat-outcome')?.innerHTML?.match(/<span[^>]*>(\d+)<\/span>/);
-    if (span) advancePoints = parseInt(span[1]);
+    advancePoints = advanceStartPoints;
     selectedUnit = null;
     document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable'));
     render(); updateUI();
@@ -1227,11 +1199,7 @@ function cancelAdvance() {
 function cancelRetreat() {
     // 退却先選択をキャンセルして損害割振りモーダルに戻る
     if (!pendingUnit) return;
-    // 退却済みの移動を元に戻す
-    const orig = pendingOrigPos[pendingUnit.id];
-    if (orig) { pendingUnit.r = orig.r; pendingUnit.c = orig.c; }
-    pendingUnit._retreatVisited = null;
-    pendingDamage = parseInt(document.getElementById('retreat-cancel-dmg')?.dataset?.dmg || pendingDamage) || pendingDamage;
+    // 1マスずつ退却するので、選ぶ前なら駒は動いていない。損害もそのまま
     currentPhase = playerSide + '_COMBAT_RESOLVE';
     pendingUnit = null;
     document.querySelectorAll('.hex-cell').forEach(el => el.classList.remove('movable'));
@@ -1241,12 +1209,12 @@ function cancelRetreat() {
 function playerChooseStep(uId) {
     let u=units.find(x=>x.id===uId); if(!u) return; u.steps--; pendingDamage--; addVP(currentCombatWinner, u.isTank ? 2 : 1);
     log(`🩸 [損耗] プレイヤーが ${u.label} の損耗を選択 (残り: ${u.steps})`);
-    if(u.steps<=0) { log(`💀 [壊滅] ${u.label} は全滅しました。`); units=units.filter(x=>x.id!==uId); pendingDamageTargets=pendingDamageTargets.filter(x=>x.id!==uId); }
+    if(u.steps<=0) { log(`💀 [壊滅] ${u.label} は全滅しました。`); units=units.filter(x=>x.id!==uId); pendingDamageRemoved=true; pendingDamageTargets=pendingDamageTargets.filter(x=>x.id!==uId); }
     else if(u.steps===1&&u.maxSteps===2) { u.label=u.backLabel; u.atk=u.backAtk; u.def=u.backDef; u.mov=u.backMov; }
     render(); if(pendingDamage>0 && pendingDamageTargets.length>0) showDamageModal(pendingDamageTargets[0].id, pendingDamage);
     else { 
         pendingDamage=0; document.getElementById('combat-result-modal').style.display='none';
-        let anyRetreatedOrRemoved = pendingDamageTargets.some(t => {
+        let anyRetreatedOrRemoved = pendingDamageRemoved || pendingDamageTargets.some(t => {
             let u = units.find(x => x.id === t.id);
             let orig = pendingOrigPos[t.id];
             return !u || (orig && (u.r !== orig.r || u.c !== orig.c));
@@ -1264,12 +1232,11 @@ function playerChooseStep(uId) {
 }
 function playerChooseRetreat(uId) {
     let u=units.find(x=>x.id===uId); if(!u) return; if(u.mov===0){ alert("移動力0は即壊滅します"); u.steps=0; return playerChooseStep(uId); }
-    // visitedHexesを初回のみ初期化（元位置はbannedにしない）
+    // visitedHexesを初回のみ初期化（行って戻る後退は禁止。通ったマスと元の位置へは戻れない）
     if (!u._retreatVisited) {
         u._retreatVisited = new Set();
     }
-    // pendingDamage分先まで探索（1マスでも退却できれば退却可能）
-    let validHexes = getValidRetreatHexes(u, pendingDamage, u._retreatVisited);
+    let validHexes = getValidRetreatHexes(u, 1, u._retreatVisited);
     if(validHexes.length === 0) { alert("退却不可！損耗扱いになります。"); return playerChooseStep(uId); } 
     pendingUnit=u; currentPhase='WAIT_RETREAT'; document.getElementById('combat-result-modal').style.display='none'; 
     validHexes.forEach(p => document.getElementById(`hex-${p.r}-${p.c}`)?.classList.add('movable'));
@@ -1280,9 +1247,11 @@ function triggerAdvancePhase() {
     advanceEligibleUnits = advanceEligibleUnits.filter(u => u.mov > 0);
     
     let s = advanceEligibleUnits.length>0 ? advanceEligibleUnits[0].side : null;
-    if(s===playerSide) { 
+    if(s && s===playerSide) { // 前進できる艦がいない時（観戦モードは playerSide も null）に止まらない
+       
         // 前進開始時に全ユニットの元位置を記録
         advanceOrigPositions = {};
+        advanceStartPoints = advancePoints;
         advanceEligibleUnits.forEach(u => { advanceOrigPositions[u.id] = {r: u.r, c: u.c}; });
         currentPhase=playerSide+'_ADVANCE'; log(`🎌 前進先クリック(残${advancePoints}マス)`); updateUI(); 
     }
@@ -1299,7 +1268,7 @@ function triggerAdvancePhase() {
                 reach.forEach(hex=>{ let score=evaluateHexForAI(u, hex.r, hex.c, u.side, true); if(score>bestS){bestS=score; bestH=hex;} });
                 log(`🔍 [前進DEBUG] bestH=${bestH?bestH.r+'-'+bestH.c:'null'} bestS=${bestS}`);
                 if(bestH && bestS>-150) { 
-                    let d=getPathCost({r:u.r,c:u.c},{r:bestH.r,c:bestH.c}); 
+                    let d=advanceCost(u, bestH.r, bestH.c); 
                     log(`🔍 [前進DEBUG] 移動距離d=${d}`);
                     if (d === 0) { log(`🔍 [前進DEBUG] d=0でbreak`); break; }
                     u.r=bestH.r; u.c=bestH.c; advancePoints-=d; advanced = true;
@@ -1360,6 +1329,71 @@ function countEnemyEscapes(enemy, advancerR, advancerC, advancerSide, advancerUn
     }).length;
 }
 
+// 戦線（ユーザーの指示 2026-11-03）: 日本軍もソ連軍も、川の南では前に出て、斜めに1ヘクスずつ離して並ぶのが大原則
+const LINE_DIAG = [[-2,-1],[-2,1],[2,-1],[2,1]];
+const LINE_BONUS = 150;      // 斜めの相手が1隻いる
+const LINE_BONUS_MORE = 60;  // 2隻目以降
+const LINE_ADJ_PENALTY = 60; // 敵がいないのに味方と隣り合う
+let aiMovedIds = null;       // 移動フェイズ中: すでに位置が決まった艦（まだ動く艦は戦線の相手に数えない）
+function lineAnchor(f) {
+    if (f.mov === 0) return false; // 砲兵は戦線に入らない
+    if (!aiMovedIds) return true;
+    return aiMovedIds.has(f.id) || isEnemyZOC(f.r, f.c, f.side);
+}
+function linePartnerCount(unit, r, c) {
+    return units.filter(f => f.side === unit.side && f.id !== unit.id && f.r >= 3 && lineAnchor(f) &&
+        LINE_DIAG.some(d => r + d[0] === f.r && c + d[1] === f.c)).length;
+}
+function lineScore(unit, r, c, enemyAdjacent) {
+    if (r < 3) return 0;
+    const n = linePartnerCount(unit, r, c);
+    let score = n > 0 ? LINE_BONUS + (n - 1) * LINE_BONUS_MORE : 0;
+    if (!enemyAdjacent) {
+        const adj = units.filter(f => f.side === unit.side && f.id !== unit.id && f.mov > 0 && isAdjacent({ r, c }, f)).length;
+        score -= adj * LINE_ADJ_PENALTY;
+    }
+    return score;
+}
+// 川の北の艦数（ユーザーの指示 2026-11-03）: 必要な数だけ残し、余りは南へ行く
+//   日本軍: 砲兵を狙う1隻 / ソ連軍: 砲兵の護衛1隻、北へ来た日本軍が多ければその数（最大2隻）
+function northQuota(side) {
+    if (side === 'JP') return 1;
+    const jpNorth = units.filter(u => u.side === 'JP' && u.r <= 2).length;
+    return Math.max(1, Math.min(2, jpNorth));
+}
+function northUnits(side) { return units.filter(u => u.side === side && u.r <= 2 && u.mov > 0); }
+// 北に残す艦: 敵の砲兵（日本軍）や自軍の砲兵（ソ連軍）に近い順
+function isNorthSurplus(unit) {
+    if (unit.r > 2 || unit.mov === 0) return false;
+    const art = units.find(u => u.mov === 0 && u.side === 'SOV');
+    const list = northUnits(unit.side).sort((a, b) => art ? getPathCost(a, art) - getPathCost(b, art) || a.id.localeCompare(b.id) : a.id.localeCompare(b.id));
+    return list.findIndex(u => u.id === unit.id) >= northQuota(unit.side);
+}
+// 南へ渡る入口までの距離（戦車は軍橋を渡れない）
+function distToSouth(unit, r, c) {
+    const gates = [{ r: 3, c: 2 }];
+    if (!unit.isTank && !militaryBridgeDestroyed) gates.push({ r: 3, c: 8 });
+    return Math.min(...gates.map(g => getPathCost({ r, c }, g)));
+}
+function northSouthScore(unit, r, c) {
+    if (unit.mov === 0) return 0;
+    if (unit.r <= 2) {
+        if (!isNorthSurplus(unit)) return 0;
+        return r >= 3 ? 400 : -distToSouth(unit, r, c) * 80; // 余りは南へ
+    }
+    // 南の艦: 北が足りていれば渡らない
+    if (r <= 2 && northUnits(unit.side).length >= northQuota(unit.side)) return -400;
+    return 0;
+}
+// 攻撃の的: 弱い敵ほど小さい。砲兵（除去で勝利）と戦車（2点）を優先する
+function targetWeakness(foe) {
+    let w = foe.def * 2 + foe.steps;
+    if (foe.mov === 0) w -= 99;
+    if (foe.isTank) w -= 1;
+    if (isHill(foe.r, foe.c)) w += 3;
+    return w;
+}
+
 // [1] 通常移動評価
 // Q学習による一時的重み調整（executeAITurn/runAITurnSyncから設定）
 let activeQMods = null;
@@ -1399,7 +1433,7 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
     if (minDist === 999) minDist = 0;
     // 未ペアのユニットは接近を重視、ペア済みは陣形維持
     const logicMove = getActiveLogic(side).move;
-    let approachWeight = isNorthAttack ? (logicMove.northApproach ?? 40) : (!isPaired ? (logicMove.southApproach ?? 30) : 5);
+    let approachWeight = isNorthAttack ? (logicMove.northApproach ?? 40) : (logicMove.southApproach ?? 30); // 前に出るのが基本
     if (activeQMods) approachWeight = Math.max(0, approachWeight + activeQMods.approachMod);
     const approachScore = -(minDist * approachWeight);
     if (debugThis) log(`🔬 接近スコア: ${approachScore} (minDist=${minDist}, weight=${approachWeight})`);
@@ -1425,7 +1459,14 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
         if (escapes === 0) score += encircleBonus + (e.isTank ? aiParams.tankPriority : 0);
         else if (escapes === 1) score += Math.round(encircleBonus * 0.5) + (e.isTank ? aiParams.tankPriority : 0);
         const otherFriendsAdj = friends.filter(f => isAdjacent(f, e)).length;
-        score += otherFriendsAdj === 0 ? 60 : 15;
+        if (r >= 3) {
+            // 敵の弱いところへ集中する
+            const friendAtk = friends.filter(f => isAdjacent(f, e)).reduce((t, f) => t + f.atk, 0);
+            score += Math.max(-60, Math.min(90, (unit.atk + friendAtk - e.def) * 20));
+            if (otherFriendsAdj > 0) score += 40;
+        } else {
+            score += otherFriendsAdj === 0 ? 60 : 15;
+        }
     });
 
     // 自分の逃げ場
@@ -1440,7 +1481,8 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
     const diag2Bonus = !isPaired ? 0 : (attackMode ? (logic.move.diag2BonusAttack ?? 60) : (logic.move.diag2BonusPaired ?? 90));
     const diag2Offsets = [[-2,-1],[-2,1],[2,-1],[2,1],[0,-2],[0,2]];
     const diag2Hexes = diag2Offsets.map(d => ({r: r+d[0], c: c+d[1]}));
-    friends.forEach(f => {
+    score += lineScore(unit, r, c, adjEnemies.length > 0);
+    if (r < 3) friends.forEach(f => {
         const isDiag2 = diag2Hexes.some(h => h.r === f.r && h.c === f.c);
         const dist = getPathCost({r,c}, {r:f.r, c:f.c});
         if (isDiag2) {
@@ -1459,7 +1501,7 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
             }
         }
     });
-    if (adjEnemies.length > 0 && adjFriends.length === 0) {
+    if (adjEnemies.length > 0 && adjFriends.length === 0 && linePartnerCount(unit, r, c) === 0) {
         let isolatedPen = aiParams.isolatedPenalty;
         if (activeQMods) isolatedPen = Math.max(0, isolatedPen + activeQMods.isolatedMod);
         if (debugThis) log(`🔬 孤立ペナルティ: ${-isolatedPen}`);
@@ -1468,6 +1510,7 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
 
 
     if (isHill(r, c)) score += 40;
+    score += northSouthScore(unit, r, c);
     if (debugThis) log(`🔬 合計スコア: ${score}`);
     return score;
 }
@@ -1530,9 +1573,9 @@ function evaluateAdvance(unit, r, c) {
 
     // 味方との距離：1ヘクス離れが理想
     const adjFriends = friends.filter(f => isAdjacent({r, c}, f));
-    const nearFriends = friends.filter(f => { const d = getPathCost({r, c}, {r: f.r, c: f.c}); return d === 2; });
     adjFriends.forEach(f => { score -= (f.steps === 1 || f.atk + f.def <= 2) ? 40 : 25; });
-    score += nearFriends.length * 15;
+    score += lineScore(unit, r, c, adjEnemies.length > 0); // 前進でも斜めの戦線を基本にする
+    score += northSouthScore(unit, r, c);
 
     if (isHill(r, c)) score += 30;
     score += aiParams.advanceBonus;
@@ -1606,12 +1649,17 @@ function executeAITurn() {
     movingUnits.sort((a, b) => {
         if (a.id === 'jp1') return -1;
         if (b.id === 'jp1') return 1;
-        if (a.isTank !== b.isTank) return b.isTank ? 1 : -1;
+        // 前にいる艦から決める（後ろの艦が斜めに並ぶ相手になる）
+        const foes = units.filter(e => e.side !== a.side);
+        const front = x => Math.min(...foes.map(e => getPathCost(x, e)));
+        const fa = front(a), fb = front(b);
+        if (fa !== fb) return fa - fb;
         return (b.atk + b.def) - (a.atk + a.def);
     });
+    aiMovedIds = new Set();
 
     movingUnits.forEach(u=>{
-        if(isEnemyZOC(u.r,u.c,u.side)) { log(`🔍 [移動DEBUG] ${u.label} はZOC内のため移動不可`); activeQMods = null; return; }
+        if(isEnemyZOC(u.r,u.c,u.side)) { log(`🔍 [移動DEBUG] ${u.label} はZOC内のため移動不可`); activeQMods = null; aiMovedIds.add(u.id); return; }
 
         // Q学習v2: ユニットごとにQ-actionを取得し重み設定
         const unitQAction = getUnitQAction(u);
@@ -1626,7 +1674,7 @@ function executeAITurn() {
                 destroyBridge();
                 log(`💥 小林が0308に戻り軍橋を破壊！`);
                 u._crossedNorth = false;
-                activeQMods = null;
+                activeQMods = null; aiMovedIds.add(u.id);
                 return;
             }
             // 1ターン目：50%の確率で川を渡って北側へ
@@ -1649,7 +1697,7 @@ function executeAITurn() {
                         log(`🎲 小林が北側への渡河を決断！`);
                         u.r=bestH.r; u.c=bestH.c; render();
                     }
-                    activeQMods = null;
+                    activeQMods = null; aiMovedIds.add(u.id);
                     return;
                 } else {
                     log(`🎲 小林は南側に留まり橋を破壊！`);
@@ -1668,7 +1716,7 @@ function executeAITurn() {
                     log(`💥 小林が0308に戻り軍橋を破壊！`);
                     u._crossedNorth = false;
                     activeQMods = null;
-                    render(); return;
+                    aiMovedIds.add(u.id); render(); return;
                 }
                 let bestH = null; let bestS = -9999;
                 reach.forEach(hex => {
@@ -1676,7 +1724,7 @@ function executeAITurn() {
                     if(score>bestS){bestS=score; bestH=hex;}
                 });
                 if(bestH) { u.r=bestH.r; u.c=bestH.c; render(); }
-                activeQMods = null;
+                activeQMods = null; aiMovedIds.add(u.id);
                 return;
             }
         }
@@ -1726,8 +1774,10 @@ function executeAITurn() {
         });
         log(`🔍 [移動DEBUG] ${u.label} → bestH=${bestH?bestH.r+'-'+bestH.c:'null'} bestS=${bestS}`);
         if(bestH) { u.r=bestH.r; u.c=bestH.c; render(); }
+        aiMovedIds.add(u.id);
         activeQMods = null; // ユニットごとにリセット
     });
+    aiMovedIds = null;
 
     // Q学習重み調整を最終解除（念のため）
     activeQMods = null;
@@ -1738,102 +1788,14 @@ function executeAITurn() {
         let cbs = [];
         let myUnits  = units.filter(u => u.side === currentPlayer);
         let foeUnits = units.filter(u => u.side !== currentPlayer);
-        const hasInitiative = (currentInitiative === currentPlayer);
 
-        // ===== 攻撃義務ペアリング =====
-        // 攻撃可能マップを構築
-        let attackerTargets = new Map();
-        let defenderAttackers = new Map();
-        myUnits.forEach(me => {
-            let foes = foeUnits.filter(f => canFight(me, f));
-            if (foes.length > 0) attackerTargets.set(me.id, foes);
-        });
-        foeUnits.forEach(foe => {
-            let friends = myUnits.filter(me => canFight(me, foe));
-            if (friends.length > 0) defenderAttackers.set(foe.id, friends);
-        });
-
-        // 攻撃義務は必ず守る（予備除外なし）
-
+        // 敵の弱いところへ集中する: 弱い敵から順に、攻撃できる味方を全部当てる（ZOC内の駒は必ず攻撃する）
         let usedAttackers = new Set();
-        let usedDefenders = new Set();
-
-        // 制約伝播: 選択肢が少ない順に処理
-        // 攻撃可能な敵が1体だけの味方を先に確定
-        let keepGoing = true;
-        while (keepGoing) {
-            keepGoing = false;
-            // 未割当の味方を選択肢の少ない順にソート
-            let pending = [...attackerTargets.keys()]
-                .filter(id => !usedAttackers.has(id))
-                .map(id => ({ id, targets: attackerTargets.get(id).filter(f => !usedDefenders.has(f.id)) }))
-                .filter(x => x.targets.length > 0)
-                .sort((a, b) => a.targets.length - b.targets.length);
-
-            if (pending.length === 0) break;
-            let item = pending[0];
-            let me = myUnits.find(u => u.id === item.id);
-
-            // 主導権なし時は弱い敵を優先、主導権あり時は最初の敵
-            let targets = item.targets;
-            let foe = hasInitiative
-                ? targets[0]
-                : targets.reduce((w, e) => (e.atk + e.def < w.atk + w.def ? e : w), targets[0]);
-
-            // 同じ敵を攻撃する他の味方で「他に攻撃先がない」ものを合流させる
-            let alsoAdj = myUnits.filter(f =>
-                f.id !== me.id &&
-                !usedAttackers.has(f.id) &&
-                canFight(f, foe) &&
-                (attackerTargets.get(f.id) || []).filter(e => !usedDefenders.has(e.id) && e.id !== foe.id).length === 0
-            );
-
-            let attackers = [me, ...alsoAdj];
+        [...foeUnits].sort((x, y) => targetWeakness(x) - targetWeakness(y)).forEach(foe => {
+            const attackers = myUnits.filter(me => !usedAttackers.has(me.id) && canFight(me, foe));
+            if (attackers.length === 0) return;
+            attackers.forEach(me => usedAttackers.add(me.id));
             cbs.push({ attackers, targets: [foe] });
-            attackers.forEach(a => usedAttackers.add(a.id));
-            usedDefenders.add(foe.id);
-            keepGoing = true;
-        }
-
-        // 未割当の敵（攻撃義務漏れ補完）
-        foeUnits.filter(f => !usedDefenders.has(f.id) && defenderAttackers.has(f.id)).forEach(foe => {
-            let available = myUnits.filter(me => !usedAttackers.has(me.id) && canFight(me, foe));
-            if (available.length > 0) {
-                cbs.push({ attackers: available, targets: [foe] });
-                available.forEach(a => usedAttackers.add(a.id));
-                usedDefenders.add(foe.id);
-            } else {
-                // 未使用の味方がいない場合：既存戦闘の攻撃者が兼任（合流）
-                // ※ユニットは1回しか攻撃できないのでattackersに追加するだけ（新規戦闘は作らない）
-                for (let cb of cbs) {
-                    let canJoin = cb.attackers.some(a => canFight(a, foe));
-                    if (canJoin) {
-                        cb.targets.push(foe);
-                        usedDefenders.add(foe.id);
-                        break;
-                    }
-                }
-            }
-        });
-
-        // 未割当の味方（まだ攻撃義務がある）を既存戦闘に合流させる
-        // ※新規戦闘は作らない（1ユニット1戦闘の原則）
-        myUnits.filter(me => !usedAttackers.has(me.id) && attackerTargets.has(me.id)).forEach(me => {
-            let targets = (attackerTargets.get(me.id) || []);
-            for (let cb of cbs) {
-                if (targets.some(f => cb.targets.some(t => t.id === f.id))) {
-                    cb.attackers.push(me);
-                    usedAttackers.add(me.id);
-                    return;
-                }
-            }
-            // どこにも合流できない場合のみ新規戦闘（孤立した義務）
-            let foe = targets.find(f => !usedDefenders.has(f.id)) || targets[0];
-            if (foe) {
-                cbs.push({ attackers: [me], targets: [foe] });
-                usedAttackers.add(me.id);
-                usedDefenders.add(foe.id);
-            }
         });
 
         combatQueue = cbs; 
