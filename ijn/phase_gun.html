@@ -92,7 +92,7 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
 <h3 id="phTitle">砲撃フェーズ</h3>
 
 <div id="jpAIBar" style="text-align:right;margin:4px 0;">
-  <label style="font-size:1.15em;cursor:pointer;font-weight:bold;"><input type="checkbox" id="jpAI" onchange="toggleJPAI()" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;"> AI委任</label>
+  <input type="checkbox" id="jpAI" hidden>
 </div>
 <div id="shootUI">
   <div class="section-label">▼ 射撃艦を選択</div>
@@ -1090,6 +1090,29 @@ function autoUSShoot(title) {
     log('射撃可能な艦なし');
     setTimeout(() => doneSubPhase(), 400);
     return;
+  }
+
+  // 待ち伏せ: 日本軍に見つかっていない間は、半数以上が視認距離のすぐ外で舷側を向けるまで撃たない
+  //   ルール: 日本軍は砲撃を受けるか視認するまで直進する。待ちすぎないよう砲撃フェイズ6回まで
+  if (!state.jpDetected) {
+    const sr = state.spotRange || 0;
+    const formed = us.filter(firer => {
+      let foe = null, near = 999;
+      for (const t of jp) {
+        const d = hexDist(firer.col, firer.row, t.col, t.row);
+        if (d < near) { near = d; foe = t; }
+      }
+      return foe && near <= sr + 2 && getArcInfo(firer, foe).mult === 1;
+    }).length;
+    const note = state.usFleet[0], waited = note.aiAmbushWait || 0;
+    if (formed < Math.ceil(us.length / 2) && waited < 6) {
+      note.aiAmbushWait = waited + 1;
+      log(`米軍、待ち伏せの位置へ移動中… 射撃待機（${formed}/${us.length}隻）`);
+      localStorage.setItem('hubState', JSON.stringify(state));
+      parent.postMessage({type:'STATE_UPDATE', usFleet:state.usFleet, jpFleet:state.jpFleet}, '*');
+      setTimeout(() => doneSubPhase(), 400);
+      return;
+    }
   }
 
   // 一斉射撃判定: BB/CA全艦が射程内に入るまで待機

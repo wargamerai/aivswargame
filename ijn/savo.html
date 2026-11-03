@@ -168,6 +168,9 @@ function toggleFog() {
     localStorage.setItem('fogOfWar', next > 0 ? '1' : '0');
     showBattleOptions();
 }
+// 戦場の霧は、毎回オフから始める（ユーザーの指示 2026-11-04）
+localStorage.setItem('fogLevel', '0');
+localStorage.setItem('fogOfWar', '0');
 showBattleOptions();
 </script>
 </body>

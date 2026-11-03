@@ -415,9 +415,12 @@ function extendMapDown() {
 }
 
 function extendMapUp() {
-  // 全艦を MAP_SECTION 行分下にずらす
-  state.jpFleet.forEach(s => { s.row += MAP_SECTION; });
-  state.usFleet.forEach(s => { s.row += MAP_SECTION; });
+  // 全艦を MAP_SECTION 行分下にずらす。移動の軌跡も一緒にずらす（長い線が出ないように）
+  [...state.jpFleet, ...state.usFleet].forEach(s => {
+    s.row += MAP_SECTION;
+    if (s.prevRow !== undefined) s.prevRow += MAP_SECTION;
+    if (s.path) s.path.forEach(p => { p.row += MAP_SECTION; });
+  });
   ROWS += MAP_SECTION;
   initCanvas();
   saveState();
@@ -725,10 +728,12 @@ function renderFleetList() {
   const fogActive = state.fogMode && state.phase !== 'report';
   function critText(s) {
     var parts = [];
-    if (s.cannotFire) parts.push('砲×');
-    if (s.cannotTurn) parts.push('舵×');
-    if (s.cannotTorpedo) parts.push('雷×');
-    if ((s.speed === 0 || s.dmgM >= s.capM) && s.status !== 'sunk') parts.push('停止');
+    if (s.cannotFire) parts.push('砲撃不能');
+    if (s.cannotTurn) parts.push('回頭不能');
+    if (s.cannotTorpedo) parts.push('雷撃不能');
+    if ((s.speed === 0 || s.dmgM >= s.capM) && s.status !== 'sunk') parts.push('航行不能');
+    else if ((s.crits||[]).indexOf('速力半減') >= 0) parts.push('速力半減');
+    if (s.withdrawing) parts.push('離脱中');
     var fc = (s.crits||[]).filter(function(c){return c==='火災';}).length;
     if (fc > 0) parts.push('🔥' + (fc > 1 ? '×'+fc : ''));
     return parts.join(' ');
@@ -1041,27 +1046,30 @@ function drawShip(ship) {
   ctx.restore();
   ctx.globalAlpha = 1.0;
 
-  // クリティカル状態ドット（艦の左上に色付き丸を並べる）
-  var critDots = [];
-  if ((ship.speed === 0 || (ship.dmgM >= ship.capM)) && ship.status !== 'sunk') critDots.push('#111111'); // 航行不能=黒
-  if (ship.cannotTurn)   critDots.push('#ffcc00');  // 回頭不能=黄
-  if (ship.cannotFire)   critDots.push('#ff4444');  // 砲撃不能=赤
-  if (ship.cannotTorpedo) critDots.push('#ff6688'); // 雷撃不能=ピンク
-  if (ship.withdrawing)  critDots.push('#8888ff');  // 離脱中=青
-  if (ship.sharedHex)    critDots.push('#ffff00');  // 同一ヘクス=明黄
-  if (critDots.length > 0 && !fogHidden(ship)) {
-    var dotR = 4;
-    for (var ci = 0; ci < critDots.length; ci++) {
-      var dx = x - drawSz + ci * (dotR * 2 + 2);
-      var dy = y - drawSz - 6;
-      ctx.fillStyle = critDots[ci];
-      ctx.beginPath();
-      ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
+  // 損傷の状態は、色を覚えなくてよいように文字で艦の上に出す（ユーザーの指示 2026-11-04）
+  var critTags = [];
+  if ((ship.speed === 0 || (ship.dmgM >= ship.capM)) && ship.status !== 'sunk') critTags.push(['航行不能', '#111111']);
+  else if ((ship.crits || []).indexOf('速力半減') >= 0) critTags.push(['速力半減', '#aa5500']);
+  if (ship.cannotTurn)    critTags.push(['回頭不能', '#997700']);
+  if (ship.cannotFire)    critTags.push(['砲撃不能', '#cc2222']);
+  if (ship.cannotTorpedo) critTags.push(['雷撃不能', '#bb3366']);
+  if (ship.withdrawing)   critTags.push(['離脱中', '#4444bb']);
+  if (ship.sharedHex)     critTags.push(['同一ヘクス', '#777700']);
+  if (critTags.length > 0 && !fogHidden(ship)) {
+    ctx.save();
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (var ci = 0; ci < critTags.length; ci++) {
+      var tagW = ctx.measureText(critTags[ci][0]).width + 4;
+      var tagX = x - tagW / 2;
+      var tagY = y - drawSz - 8 - ci * 11;
+      ctx.fillStyle = critTags[ci][1];
+      ctx.fillRect(tagX, tagY - 5, tagW, 10);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(critTags[ci][0], tagX + 2, tagY);
     }
+    ctx.restore();
   }
 
   // [デバッグ用] 射界カラー表示
@@ -1404,7 +1412,7 @@ window.addEventListener('message', (e) => {
         // シナリオ特別ルール: 速力制限解放（baseSpd→speed）
         let restored = 0;
         (state.jpFleet||[]).forEach(s => {
-          if (s.baseSpd && s.speed < s.baseSpd) { s.speed = s.baseSpd; restored++; }
+          if (s.baseSpd && s.speed < s.baseSpd && !(s.crits || []).some(c => c === '航行不能' || c === '速力半減')) { s.speed = s.baseSpd; restored++; }
         });
         if (restored > 0) dbg(`速力解放: ${restored}隻の速力を復元`);
       }

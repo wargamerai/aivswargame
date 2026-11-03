@@ -40,7 +40,7 @@ button.undo-btn:hover { background:#ffd8c0; }
 <div id="moveBar"></div>
 
 <div id="jpAIBar" style="text-align:right;margin:4px 0;">
-  <label style="font-size:1.15em;cursor:pointer;font-weight:bold;"><input type="checkbox" id="jpAI" onchange="toggleJPAI()" style="width:18px;height:18px;vertical-align:middle;margin-right:4px;"> AI委任</label>
+  <input type="checkbox" id="jpAI" hidden>
 </div>
 <div id="manualControls" style="display:none">
   <button onclick="doUndo()" class="undo-btn" id="btnUndo" disabled>◀ やり直し</button>
@@ -144,7 +144,7 @@ function init() {
   // シナリオ特別ルール: 敵発見後に速力制限解放（baseSpd→speed）
   if (state.jpFreeMove) {
     jpFleet.forEach(s => {
-      if (s.baseSpd && s.speed < s.baseSpd) {
+      if (s.baseSpd && s.speed < s.baseSpd && !aiEngineHit(s)) {
         pdbg(`速力解放: ${s.name} ${s.speed}→${s.baseSpd}`);
         s.speed = s.baseSpd;
       }
@@ -528,13 +528,13 @@ function checkVisualSpotting() {
   return false;
 }
 
-// レーダー探知（米軍用 — 20hex以内）
+// レーダー探知（米軍用。距離はシナリオの設定。通常20、サボ島沖とルンガ沖は16）
 function checkRadar() {
   for (const us of usFleet) {
     if (us.status === 'sunk' || us.col < 0 || !us.radar) continue;
     for (const jp of jpFleet) {
       if (jp.status === 'sunk' || jp.col < 0) continue;
-      if (hexDist(jp.col, jp.row, us.col, us.row) <= 20) return true;
+      if (hexDist(jp.col, jp.row, us.col, us.row) <= AI_RADAR_RANGE) return true;
     }
   }
   return false;
@@ -615,7 +615,7 @@ function aiUSMoveAnimated() {
 // flankSide: +1=主力側, -1=DD側（反対から挟み撃ち）
 function aiMoveOneLead(lead, jpc, jpDir, sr, flankSide) {
   const preCol = lead.col, preRow = lead.row;
-  aiSteerAndMove(lead, usFleet, jpFleet, sr, !state.jpDetected && !!lead.radar);
+  aiSteerAndMove(lead, usFleet, jpFleet, sr, !state.jpDetected && aiFleetHasRadar(usFleet));
   console.log(`aiUSMove: ${lead.name}: (${preCol},${preRow}) → (${lead.col},${lead.row}) dir=${lead.dir} 針路=${lead.aiCourse} ${lead.aiPattern}`);
 }
 
@@ -679,7 +679,6 @@ function aiLiveLeadsAndFollowers(fleet) { return fleet.filter(s => s.status !== 
 // 「近づく・直進・離れる」のどれか。近づき始めたら、砲戦距離に入るまで変えない
 function aiPattern(lead, fleet, dist, near, off) {
   if (aiFleetFlees(fleet)) return 'away';
-  if (lead.type === 'DD' && lead.torpedoFired) return 'away';
   if (dist > near + AI_OPEN_MARGIN) return 'close';
   if (dist > near && off > AI_OPEN_ANGLE) return 'close';
   if (lead.aiPattern === 'close' && dist > near) return 'close';
@@ -759,12 +758,10 @@ function aiEnsureLeads(fleet) {
 }
 // ===== 旗艦の移動先を選ぶ（ユーザーの指示 2026-11-04）=====
 // 交互移動なので、敵は今いる位置で見る。旗艦の動きは 直進・1回旋回・2回旋回 を全部試し、後続も航跡どおりに進めて比べる
-// 選ぶ順: ぶつからない > 撃てる敵を舷側で捉える艦が多い > 相手の正面に入る艦が多い > 旋回が少ない > 敵に近い
+// 選ぶ順: ぶつからない > 与える損害の見込み − 受ける損害の見込み > 旋回が少ない > 敵に近い
 // 撃てる敵 = 見えていて（視認距離、レーダー艦はレーダーの範囲、火災などで露見）、砲の射程内（phase_gun の canSee と同じ）
 // 旋回は1ターンに駆逐艦2回、その他1回まで。方向は左か右のどちらかだけ。ぶつかるのを避ける時だけは自由
-// 魚雷の残る列は、1〜2ヘクスまで近づくことを先に考える
 const AI_GUN_MAX = 15;        // 砲の射程（phase_gun の getMaxRange と同じ）
-const AI_TORPEDO_CLOSE = 2;   // 魚雷の残る列が狙う距離
 const AI_RADAR_RANGE = (JSON.parse(localStorage.getItem('scenarioRules') || 'null') || {}).radarRange || 20;   // phase_gun と同じ
 function aiArcDelta(fc, fr, tc, tr) {
   const fa = toAxial(fc, fr), ta = toAxial(tc, tr);
@@ -792,6 +789,51 @@ function aiCanHit(radar, col, row, e, d) {
   if (d <= (state.spotRange || 0)) return true;
   return !!radar && d <= AI_RADAR_RANGE;
 }
+// ルール: 1隻が発見すれば艦隊全部の移動制限が解ける。レーダーは艦隊で判定する
+function aiFleetHasRadar(fleet) { return fleet.some(s => s.radar && s.status !== 'sunk' && s.col >= 0); }
+// 日本軍は発見するまで直進するので、次の移動の後の位置がわかる
+function aiStraightNext(enemies, times) {
+  const live = enemies.filter(e => e.status !== 'sunk' && e.col >= 0);
+  const step = live.some(e => e.type === 'OBB') ? 3 : 4;
+  return live.map(e => {
+    let col = e.col, row = e.row;
+    for (let i = 0, n = Math.min(step, getSpeed(e)) * (times || 1); i < n; i++) {
+      const h = hexNeighbor(col, row, e.dir);
+      if (!h || h.col < 0 || h.col >= COLS || h.row < 0) break;
+      col = h.col; row = h.row;
+    }
+    return { col, row, dir: e.dir };
+  });
+}
+// 待ち伏せの点数: 見つからない > 視認距離のすぐ外で舷側を向ける艦が多い > 相手の正面に入る艦が多い（T字） > 目標の距離に近い・旋回が少ない
+function aiAmbushScore(chains, enemies, plan, sr) {
+  const now = enemies.filter(e => e.status !== 'sunk' && e.col >= 0);
+  const next = aiStraightNext(enemies);
+  // 先攻で動いた後は、日本軍が後攻で動き、次のターンも先攻なら2回続けて動く
+  const twice = state.phase === 'move2' ? [] : aiStraightNext(enemies, 2);
+  // 後攻の移動なら、この直後の砲撃は今の位置に撃つ。先攻なら、日本軍の移動の後の位置に撃つ
+  const aim = state.phase === 'move2' ? now : next;
+  const want = sr + 1;
+  let spotted = 0, risk = 0, full = 0, front = 0, gap = 0;
+  for (const chain of chains) for (const p of chain) {
+    if ([...now, ...next].some(e => hexDist(p.col, p.row, e.col, e.row) <= sr)) spotted++;
+    if (twice.some(e => hexDist(p.col, p.row, e.col, e.row) <= sr)) risk++;
+    let foe = null, d = 999;
+    for (const e of aim) {
+      const q = hexDist(p.col, p.row, e.col, e.row);
+      if (q < d) { d = q; foe = e; }
+    }
+    if (!foe) continue;
+    gap += Math.abs(d - want);
+    if (d >= want && d <= want + 1 && aiIsBroadside(p.dir, aiArcDelta(p.col, p.row, foe.col, foe.row))) {
+      full++;
+      const back = aiArcDelta(foe.col, foe.row, p.col, p.row);
+      if (!aiIsBroadside(foe.dir, back) && aiIsForward(foe.dir, back)) front++;
+    }
+  }
+  const turns = (plan.match(/[LR]/g) || []).length;
+  return [-spotted, full, front, -risk, full ? 0 : -gap, -turns, -gap];
+}
 function aiColumnFollowers(lead, fleet) {
   return fleet.filter(s => !s.isLead && s.colIndex === lead.colIndex && s.status !== 'sunk' && s.col >= 0 && !s.withdrawing && !isShipCrippled(s))
     .sort((a, b) => (a.followOrder || 0) - (b.followOrder || 0));
@@ -814,12 +856,16 @@ function aiPlanCandidates(moves, maxTurns) {
 // 1列を計画どおりに進めた結果。旗艦が進めなくなったら null（他の列は、そこで止まる）
 function aiSimulateColumn(lead, fleet, plan, strict) {
   const followers = aiColumnFollowers(lead, fleet);
-  const chain = [lead, ...followers].map(s => ({ col: s.col, row: s.row, dir: s.dir, radar: s.radar }));
+  const chain = [lead, ...followers].map(s => ({ col: s.col, row: s.row, dir: s.dir, radar: s.radar, ship: s, turns: 0 }));
+  return aiAdvanceChain(chain, lead, plan, strict);
+}
+function aiAdvanceChain(chain, lead, plan, strict) {
   const head = chain[0];
   for (const a of plan) {
     if (a === 'L' || a === 'R') {
       const i = DIR_CW_AI.indexOf(head.dir);
       head.dir = DIR_CW_AI[(i + (a === 'R' ? 1 : 5)) % 6];
+      head.turns++;
       continue;
     }
     const h = hexNeighbor(head.col, head.row, head.dir);
@@ -832,6 +878,7 @@ function aiSimulateColumn(lead, fleet, plan, strict) {
     for (let i = 1; i < chain.length; i++) {
       const me = chain[i], was = { col: me.col, row: me.row, dir: me.dir };
       if (hexDist(me.col, me.row, prev.col, prev.row) <= 1) {
+        if (me.dir !== prev.dir) me.turns++;   // 後続も旗艦が曲がった地点で曲がる（回頭の修正がつく）
         me.col = prev.col; me.row = prev.row; me.dir = prev.dir;
       } else {
         const d = bestDirToward(me.col, me.row, prev.col, prev.row), n = hexNeighbor(me.col, me.row, d);
@@ -842,35 +889,192 @@ function aiSimulateColumn(lead, fleet, plan, strict) {
   }
   return chain;
 }
-// 計画を点数にする。大きい順に比べる
-function aiPlanScore(chains, enemies, plan, torpedoLead) {
-  let full = 0, front = 0, sum = 0, headDist = 99;
-  chains.forEach((chain, ci) => chain.forEach((p, i) => {
-    let nearest = 999, foe = null, foeDist = 999;
-    for (const e of enemies) {
-      if (e.status === 'sunk' || e.col < 0) continue;
-      const q = hexDist(p.col, p.row, e.col, e.row);
-      if (q < nearest) nearest = q;
-      if (q < foeDist && aiCanHit(p.radar, p.col, p.row, e, q)) { foeDist = q; foe = e; }
+// ===== 損害の見込み（ユーザーの指示 2026-11-04）=====
+// 「与える損害の見込み − 受ける損害の見込み」で計画を比べる。表と式は phase_gun / phase_torpedo と同じ
+const AI_GUN_HIT = [
+  [9,8,8,7,7,6,6,5,5,4,4],
+  [8,7,7,7,6,5,5,4,4,3,3],
+  [7,6,6,6,5,5,4,3,3,3,3],
+  [6,5,5,5,4,4,3,3,2,2,2],
+  [5,4,4,4,3,3,3,2,2,2,1],
+  [4,4,3,3,3,2,2,2,1,1,1],
+  [4,3,3,2,2,1,1,1,1,1,0],
+  [3,3,2,1,1,1,1,1,1,0,0],
+  [3,2,1,1,1,1,0,0,0,0,0],
+  [2,1,1,1,0,0,0,0,0,0,0],
+  [2,1,1,0,0,0,0,0,0,0,0],
+  [1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0],
+];
+const AI_GUN_DMG = [
+  ['GM','3G','3GM','3G2M','4G2M','5G2M','5G2M','5G3M','6G2M','6G3M','5G5M'],
+  ['G','2GM','2GM','3GM','3GM','3G3M','4G2M','4G3M','3G4M','6G2M','6G3M'],
+  ['G','2G','2GM','3G','3GM','3G2M','3G2M','3G3M','4G3M','4G4M','5G3M'],
+  ['-','G','2G','2GM','3G','2G2M','2G2M','3G2M','3G3M','4G3M','4G4M'],
+  ['-','G','G','2G','2G','GM','2GM','3GM','3GM','3G2M','4G3M'],
+  ['-','-','G','G','2G','2G','2G','2G','2GM','3GM','2G2M'],
+  ['-','-','-','G','G','G','2G','2G','2GM','2GM','2GM'],
+  ['-','-','-','-','G','G','GM','2G','2G','GM','2GM'],
+  ['-','-','-','-','G','G','G','G','2G','GM','2GM'],
+  ['-','-','-','-','-','G','G','G','2G','2G','2GM'],
+  ['-','-','-','-','-','-','-','G','G','G','GM'],
+];
+const AI_TORP_HIT = [
+  [7,6,5,5,4,4,3,2,2,1,1],
+  [6,5,5,4,3,3,2,2,1,1,1],
+  [5,5,4,4,3,2,2,1,1,1,0],
+  [5,4,3,3,2,2,1,1,0,0,0],
+  [4,4,3,3,2,1,1,0,0,0,0],
+  [4,3,3,2,1,1,0,0,0,0,0],
+  [3,3,2,1,1,0,0,0,0,0,0],
+  [3,2,2,1,0,0,0,0,0,0,0],
+  [2,2,1,0,0,0,0,0,0,0,0],
+  [2,1,1,0,0,0,0,0,0,0,0],
+  [1,1,0,0,0,0,0,0,0,0,0],
+  [1,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0],
+];
+const AI_TORP_DMG = [
+  ['4M','5MG','5MG','6MG','6MG','6M2G','6M2G','SINK','SINK','SINK','SINK'],
+  ['3M','4MG','5M','6M','6M','6MG','5M2G','SINK','SINK','SINK','SINK'],
+  ['2M','3MG','4MG','5M','5MG','6M','6MG','7M2G','SINK','SINK','SINK'],
+  ['2M','3M','4M','5M','5M','5MG','6M','8M','SINK','SINK','SINK'],
+  ['-','2M','3MG','4M','4MG','5M','5MG','6MG','7M2G','SINK','SINK'],
+  ['-','2M','3M','3MG','5M','4MG','4M2G','5M2G','7MG','SINK','SINK'],
+  ['-','2M','2M','3M','4MG','5M','5M','5MG','6MG','7M3G','SINK'],
+  ['-','-','2M','2MG','4M','4MG','4MG','5MG','6M','7M2G','SINK'],
+  ['-','-','2M','2M','4M','4M','3M2G','4MG','5MG','6M2G','7M3G'],
+  ['-','-','-','2M','3MG','3MG','3MG','4M','5MG','6MG','7M2G'],
+  ['-','-','-','M','2M','2MG','3M','3MG','4MG','6M','6M2G'],
+];
+const AI_SINK_VALUE = 10;      // 雷撃の SINK を損害いくつと数えるか
+const AI_LOOK_AHEAD = 0.5;       // 次の移動の損得の重さ（ユーザーの指示 2026-11-04）
+const AI_WITHDRAW_VALUE = 0.25; // 離脱中の艦に与える損害の価値（ユーザーの指示 2026-11-04）
+const AI_FLAGSHIP_VALUE = 1.5;  // 旗艦に与える損害の価値（ユーザーの指示 2026-11-04）
+const AI_DICE = [0,0,1,2,3,4,5,6,5,4,3,2,1];
+function aiGunCol(d) { return d<=1?0:d<=2?1:d<=3?2:d<=4?3:d<=5?4:d<=6?5:d<=7?6:d<=8?7:d<=10?8:d<=12?9:10; }
+function aiTorpCol(d) { return d<=1?0:d<=2?1:d<=3?2:d<=4?3:d<=5?4:d<=6?5:d<=7?6:d<=8?7:d<=9?8:d<=10?9:10; }
+function aiDmgPoints(str) {
+  if (!str || str === '-') return 0;
+  if (str === 'SINK') return AI_SINK_VALUE;
+  const g = str.match(/(\d*)G/), m = str.match(/(\d*)M/);
+  return (g ? parseInt(g[1]) || 1 : 0) + (m ? parseInt(m[1]) || 1 : 0);
+}
+const aiValueCache = new Map();
+// 1回撃った時の損害の見込み（G と M の合計）
+function aiExpected(hitChart, dmgChart, col, power, def, mod, halveOnce) {
+  const key = (hitChart === AI_GUN_HIT ? 'g' : 't') + col + '/' + power + '/' + def + '/' + mod + '/' + (halveOnce ? 1 : 0);
+  if (aiValueCache.has(key)) return aiValueCache.get(key);
+  let total = 0;
+  for (let d = 2; d <= 12; d++) {
+    const hits = (hitChart[Math.max(0, Math.min(12, d + mod))] || [])[col] || 0;
+    if (hits <= 0) continue;
+    let fp = hits * power;
+    if (halveOnce) fp = Math.ceil(fp / 2);
+    const r = def > 0 ? fp / def : 10, rc = r < 1 ? 0 : Math.min(10, Math.floor(r));
+    let sum = 0;
+    for (let e = 2; e <= 12; e++) sum += AI_DICE[e] * aiDmgPoints((dmgChart[e - 2] || [])[rc]);
+    total += AI_DICE[d] * sum / 36;
+  }
+  total /= 36;
+  aiValueCache.set(key, total);
+  return total;
+}
+function aiGunPower(s) {
+  if (s.cannotFire || s.dmgG >= s.capG) return 0;
+  let atk = s.atk || 0;
+  if (s.dmgG >= s.capG / 2) atk = Math.ceil(atk / 2);
+  if (s.gunHalved) atk = Math.ceil(atk / 2);
+  return atk;
+}
+function aiTargetMod(t) {
+  let mod = 0;
+  if (t.onFire) mod -= 2;
+  if (t.dmgM >= t.capM && t.status !== 'sunk') mod -= 2;
+  else if (t.dmgM >= t.capM / 2) mod -= 1;
+  if (t.type === 'DD') mod += 1;
+  return mod;
+}
+// firer が (col,row,dir) にいる時、target が (tc,tr) にいるとして、砲撃の見込み
+function aiGunValue(firer, col, row, dir, turns, target, tc, tr) {
+  const power = aiGunPower(firer);
+  if (power <= 0) return 0;
+  const d = hexDist(col, row, tc, tr);
+  if (!aiCanHit(firer.radar, col, row, target, d)) return 0;
+  const a = aiArcDelta(col, row, tc, tr);
+  const eff = aiIsBroadside(dir, a) ? power : Math.ceil(power / 2);
+  const sr = state.spotRange || 5;
+  let mod = aiTargetMod(target) + turns + (firer.critHitMod || 0);
+  if (firer.radar && d > sr && !target.onFire && !target.firedGun1 && !target.revealed) mod += 1;
+  if (d > sr && !target.onFire && (target.firedGun1 || target.revealed)) mod += 2;
+  return aiExpected(AI_GUN_HIT, AI_GUN_DMG, aiGunCol(d), eff, target.def || 0, mod, false);
+}
+// 雷撃の見込み。視認の範囲（火災なら12まで）、舷側からだけ
+// mine=true は AI 自身の雷撃で、艦長が魚雷を温存する距離（captainTorpDist）より遠ければ撃たないとして数える
+function aiTorpValue(firer, col, row, dir, target, tc, tr, targetDir, mine) {
+  if (!aiHasTorpedo(firer) || firer.firedGun1) return 0;
+  const d = hexDist(col, row, tc, tr);
+  if (d > (target.onFire ? 12 : Math.min(12, state.spotRange || 5))) return 0;
+  if (mine && d > captainTorpDist(firer)) return 0;
+  if (!aiIsBroadside(dir, aiArcDelta(col, row, tc, tr))) return 0;
+  // 修正は phase_torpedo の calcModifiers と同じ: 相手の前後から撃つと+2、火災-1、停止-2、半速-1、DD+1、米魚雷+1
+  let mod = aiIsBroadside(targetDir, aiArcDelta(tc, tr, col, row)) ? 0 : 2;
+  if (target.onFire) mod -= 1;
+  if (target.speed === 0 || (target.dmgM >= target.capM && target.status !== 'sunk')) mod -= 2;
+  else if (target.dmgM >= target.capM / 2) mod -= 1;
+  if (target.type === 'DD') mod += 1;
+  if (firer.side === 'us') mod += 1;
+  const power = firer.torpedo === 'TT3' || String(firer.torpedo).includes('TT') ? 10 : 6;
+  const rolls = firer.torpedo === 'TT3' ? 3 : 1;
+  const halve = firer.dmgG >= firer.capG / 2 || firer.gunHalved;
+  return rolls * aiExpected(AI_TORP_HIT, AI_TORP_DMG, aiTorpCol(d), power, target.def || 0, mod, halve);
+}
+// 計画を点数にする。大きい順に比べる: 与える − 受ける×旗艦の艦長の重さ > 旋回が少ない > 敵に近い
+function aiPlanScore(chains, enemies, plan, risk) {
+  const foes = enemies.filter(e => e.status !== 'sunk' && e.col >= 0);
+  const mine = [];
+  chains.forEach(chain => chain.forEach(p => mine.push(p)));
+  // 撃ちすぎは数えない: 目標ごとに残りの耐久を上限にする。余った艦は他の目標を見る
+  // 離脱中の艦を追いかけても得は少ない（見込みを AI_WITHDRAW_VALUE 倍）
+  const left = new Map(foes.map(e => [e, Math.max(0, (e.capG || 0) + (e.capM || 0) - (e.dmgG || 0) - (e.dmgM || 0))]));
+  let give = 0, sum = 0;
+  for (const p of mine) {
+    let best = 0, bestFoe = null, near = 999;
+    for (const e of foes) {
+      near = Math.min(near, hexDist(p.col, p.row, e.col, e.row));
+      const raw = Math.max(
+        aiGunValue(p.ship, p.col, p.row, p.dir, p.turns || 0, e, e.col, e.row),
+        aiTorpValue(p.ship, p.col, p.row, p.dir, e, e.col, e.row, e.dir, true));
+      const v = Math.min(raw * (e.withdrawing ? AI_WITHDRAW_VALUE : e.isLead ? AI_FLAGSHIP_VALUE : 1), left.get(e));
+      if (v > best) { best = v; bestFoe = e; }
     }
-    if (nearest === 999) return;
-    sum += nearest;
-    if (ci === 0 && i === 0) headDist = nearest;
-    if (!foe) return;   // 撃てない敵は数えない
-    if (aiIsBroadside(p.dir, aiArcDelta(p.col, p.row, foe.col, foe.row))) full++;
-    const back = aiArcDelta(foe.col, foe.row, p.col, p.row);
-    if (!aiIsBroadside(foe.dir, back) && aiIsForward(foe.dir, back)) front++;
-  }));
+    if (bestFoe) { give += best; left.set(bestFoe, left.get(bestFoe) - best); }
+    if (near < 999) sum += near;
+  }
+  // 敵は1隻ごとに、一番損害を与えられる相手を撃つとして数える
+  let take = 0;
+  for (const e of foes) {
+    let best = 0;
+    for (const p of mine) {
+      const seen = { speed: p.ship.speed, onFire: p.ship.onFire, firedGun1: p.ship.firedGun1 || p.ship.revealed, radarDetected: p.ship.radarDetected, revealed: p.ship.revealed,
+        def: p.ship.def, type: p.ship.type, dmgM: p.ship.dmgM, capM: p.ship.capM, status: p.ship.status };
+      best = Math.max(best,
+        aiGunValue(e, e.col, e.row, e.dir, 0, seen, p.col, p.row),
+        aiTorpValue(e, e.col, e.row, e.dir, seen, p.col, p.row, p.dir, false));
+    }
+    take += best;
+  }
   const turns = (plan.match(/[LR]/g) || []).length;
-  const rush = torpedoLead ? -Math.max(headDist, AI_TORPEDO_CLOSE) : 0;
-  return [rush, full, front, -turns, -sum];
+  // 与えも受けもしない（互いに撃てない）時は、敵へ近づく
+  const value = Math.round((give - take * risk) * 1000) / 1000;
+  return [value, value === 0 ? -sum : 0, -turns, -sum];
 }
 function aiBetter(a, b) {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i];
   return false;
 }
 // 一番いい計画を返す。旗艦が1隻の時は、他の列も同じ動きをするものとして数える
-function aiBestPlan(lead, fleet, enemies, moves) {
+function aiBestPlan(lead, fleet, enemies, moves, ambushSr) {
   const others = aiCommander === lead ? aiLiveLeads(fleet).filter(l => l !== lead) : [];
   let best = null, bestScore = null;
   for (const plan of aiPlanCandidates(moves, lead.type === 'DD' ? 2 : 1)) {
@@ -885,7 +1089,17 @@ function aiBestPlan(lead, fleet, enemies, moves) {
       seen.add(k);
     }
     if (clash) continue;
-    const score = aiPlanScore(chains, enemies, plan, aiHasTorpedo(lead));
+    let score;
+    if (ambushSr != null) score = aiAmbushScore(chains, enemies, plan, ambushSr);
+    else {
+      score = aiPlanScore(chains, enemies, plan, captainRisk(lead));
+      // 次の移動でもう一度直進した位置の損得も足す。位置についてからでなく、手前で曲がれるように
+      const leads = [lead, ...others];
+      const later = chains.map((c, i) => aiAdvanceChain(c.map(p => ({ ...p, turns: 0 })), leads[i], 'F'.repeat(aiColumnMoves(leads[i], fleet)), false));
+      const sumNow = score[3];
+      const value = Math.round((score[0] + AI_LOOK_AHEAD * aiPlanScore(later, enemies, '', captainRisk(lead))[0]) * 1000) / 1000;
+      score = [value, value === 0 ? sumNow : 0, score[2], sumNow];
+    }
     if (!best || aiBetter(score, bestScore)) { best = plan; bestScore = score; }
   }
   return best;
@@ -925,9 +1139,9 @@ function aiSteerAndMove(lead, fleet, enemies, sr, preContact) {
   } else if (foe && !lead.cannotTurn) {
     const off = aiOffAngle(lead.dir, lead.col, lead.row, foe.col, foe.row);
     pattern = aiPattern(lead, fleet, dist, aiNearRange(lead, sr, preContact), off);
-    // 見つかる前のレーダー艦と逃げる時以外は、一番多くの艦が横を向ける動きを選ぶ
-    if (!preContact && pattern !== 'away') {
-      plan = aiBestPlan(lead, fleet, enemies, moveCount);
+    // 逃げる時以外は、一番多くの艦が横を向ける動きを選ぶ。見つかる前は視認距離のすぐ外で待ち伏せる
+    if (pattern !== 'away') {
+      plan = aiBestPlan(lead, fleet, enemies, moveCount, preContact ? sr : null);
       lead.aiPlan = plan;
       lead.aiPlanAt = turnNo;
       if (plan) pattern = 'plan';
@@ -1395,7 +1609,9 @@ function getShipStatusText(s) {
   if (s.status !== 'ok') parts.push(statusJP(s.status));
   if (getSpeed(s) === 0 && s.status !== 'sunk') parts.push('航行不能');
   if (s.cannotTurn) parts.push('回頭不能');
-  if (s.cannotShoot) parts.push('射撃不能');
+  if ((s.crits || []).includes('速力半減')) parts.push('速力半減');
+  if (s.cannotFire || s.cannotShoot) parts.push('砲撃不能');
+  if (s.cannotTorpedo) parts.push('雷撃不能');
   if (s.withdrawing) parts.push('離脱中');
   return parts.length > 0 ? ` [${parts.join('/')}]` : '';
 }
@@ -1422,6 +1638,7 @@ function renderList() {
     let label = '';
     if (flagLeadOf(s)) label = ' [追随]';
     else if (isFinished) label = ' [済]';
+    else if (isFlagshipMode() && !s.isLead && isMoveable) label = ' [手動]';
     else if (!isMoveable) label = statusText;
 
     html += `<div class="${cls}" onclick="clickShip(${i})">
@@ -2093,14 +2310,30 @@ function flagCanFollow(f, lead) {
   if (!flagCanLead(f)) return false;
   return (f.type === 'OBB') === (lead.type === 'OBB'); // 旧式戦艦は旧式戦艦だけで動く
 }
+// 旗艦から切れ目なく並ぶ艦だけが追随する。切れた艦は自動で手動になり、列の最後尾の隣に戻れば、また追随する
+// 一度の移動の途中で変わらないよう、移動フェーズの最初に決める（ユーザーの指示 2026-11-04）
+let flagLinks = null;
+function flagLinkedFrom(lead) {
+  const chain = [], rest = flagFleet().filter(f => flagCanFollow(f, lead)).sort((a, b) => (a.followOrder || 0) - (b.followOrder || 0));
+  let tail = lead;
+  for (;;) {
+    const ahead = hexNeighbor(tail.col, tail.row, tail.dir);   // 最後尾の真正面の艦は、後ろにつけない
+    const next = rest.find(f => !chain.includes(f) && hexDist(f.col, f.row, tail.col, tail.row) <= 1
+      && !(ahead && ahead.col === f.col && ahead.row === f.row));
+    if (!next) return chain;
+    chain.push(next);
+    tail = next;
+  }
+}
 function followersOf(s) {
   if (!isFlagshipMode() || !s.isLead || !flagFleet().includes(s) || !canShipMove(s)) return [];
-  return flagFleet().filter(f => flagCanFollow(f, s)).sort((a, b) => (a.followOrder || 0) - (b.followOrder || 0));
+  if (flagLinks) return flagLinks.get(s.name) || [];
+  return flagLinkedFrom(s);
 }
 function flagLeadOf(f) {
   if (!isFlagshipMode() || f.isLead) return null;
   const lead = flagFleet().find(s => s.isLead && s.colIndex === f.colIndex && canShipMove(s));
-  return lead && flagCanFollow(f, lead) ? lead : null;
+  return lead && followersOf(lead).includes(f) ? lead : null;
 }
 // 旗艦が沈むか動けない時は、列の次の艦が継ぐ
 function flagEnsureLeads() {
@@ -2119,6 +2352,10 @@ function flagEnsureLeads() {
 function flagshipSetup() {
   if (!isFlagshipMode()) return;
   flagEnsureLeads();
+  flagLinks = null;
+  const links = new Map();
+  flagFleet().filter(s => s.isLead && canShipMove(s)).forEach(l => links.set(l.name, flagLinkedFrom(l)));
+  flagLinks = links;
   flagFleet().forEach((s, i) => {
     if (flagLeadOf(s)) {
       movedShips.add(i);
@@ -2198,6 +2435,8 @@ function flagshipStraightAll() {
   checkAllMoved();
 }
 
+// 機関の損傷（航行不能・速力半減）は、シナリオの速力制限とは別なので戻さない
+function aiEngineHit(s) { return (s.crits || []).some(c => c === '航行不能' || c === '速力半減'); }
 function isShipCrippled(s) {
   // 速力0、大破、回頭不能、砲撃不能、速力半減 → 追従不能・旗艦不適格
   var hasCrit = (s.crits || []).includes('速力半減');

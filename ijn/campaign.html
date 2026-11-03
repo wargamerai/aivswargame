@@ -75,7 +75,7 @@
     <button id="btnAutoAI" onclick="openBattleAutoAI()" disabled style="background-color: #006699; color:#fff;">AI観戦</button>
     <button id="btnNext" onclick="phaseNextTurn()" disabled>3. ドック修理＆次の海戦へ</button>
     <button onclick="resetCampaign()" style="background-color: #cc2200; color:#fff; float:right; font-size:0.9em;">キャンペーンリセット</button>
-    <button id="btnFog" onclick="toggleFog()" style="background-color:#1a2a1a; color:#8afa8a; font-size:0.9em;">戦場の霧: ON</button>
+    <button id="btnFog" onclick="toggleFog()" style="background-color:#1a2a1a; color:#8afa8a; font-size:0.9em;">戦場の霧: OFF</button>
     <button id="btnMoveMode" onclick="toggleMoveMode()" style="font-size:0.9em;">移動: 全艦手動</button>
 </div>
 <script>
@@ -96,6 +96,9 @@ function toggleFog() {
   localStorage.setItem('fogOfWar', next > 0 ? '1' : '0');
   showFogButton(next);
 }
+// 戦場の霧は、毎回オフから始める（ユーザーの指示 2026-11-04）
+localStorage.setItem('fogLevel', '0');
+localStorage.setItem('fogOfWar', '0');
 showFogButton(readFogLevel());
 function showMoveMode() {
   const on = localStorage.getItem('flagshipMove') !== '0'; // 旗艦操作が基本（ユーザーの指示 2026-11-04）
@@ -747,6 +750,7 @@ function exportJson() {
 // --- 戦闘開始 → hub.htmlへ遷移 ---
 function openBattle() {
     localStorage.removeItem('fullAutoAI');
+    localStorage.setItem('jpAutoAI', '0');
     exportJson();
     saveCampaignState();
     localStorage.setItem('campaignReady', 'true');
