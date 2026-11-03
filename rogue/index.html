@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rogue</title>
+<!-- アクセス解析（GoatCounter） -->
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #ddd; font-family: Menlo, 'Courier New', 'MS Gothic', monospace; }
+  #wrap { display: flex; flex-direction: column; align-items: center; padding: 8px; }
+  #msg { width: 80ch; max-width: 100%; height: 1.25em; font-size: var(--fs, 18px); line-height: 1.25; white-space: nowrap; overflow: hidden; }
+  #scr { font: inherit; font-size: var(--fs, 18px); line-height: 1.25; margin: 0; white-space: pre; width: 80ch; overflow-x: auto; max-width: 100%; }
+  #bar { margin-top: 8px; font-size: 12px; color: #777; text-align: center; }
+  #bar button { font: inherit; color: #bbb; background: #111; border: 1px solid #444; padding: 1px 8px; cursor: pointer; margin: 0 2px; }
+  #bar button.on { color: #000; background: #bbb; }
+  a { color: #888; }
+  #sheet { margin: 8px 0 0; width: 80ch; max-width: 100%; color: #9a9; font: inherit; font-size: calc(var(--fs, 18px) - 3px); line-height: 1.35; white-space: pre; overflow-x: auto; border-top: 1px solid #333; padding-top: 6px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="msg"></div>
+  <pre id="scr"></pre>
+  <pre id="sheet"></pre>
+  <div id="bar">
+    <button id="lang_ja">日本語</button><button id="lang_en">English</button>
+    <button id="btnHelp"></button>
+    <button id="zoomOut">A−</button><button id="zoomIn">A＋</button>
+    <span id="hint"></span>
+    <a id="toTop" href="../index1.html"></a>
+  </div>
+</div>
+<script src="text.js"></script>
+<script src="rogue.js"></script>
+</body>
+</html>
