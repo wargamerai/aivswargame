@@ -808,9 +808,9 @@ function checkInstantVictory() {
 
 function checkReinforcements() {
     let spawned = false;
-    if (turn >= 2 && !spawnedReinforcements.turn2JP) { let r = gameData.reinforcements.turn2JP; let p = getUnitAt(r.spawns[0].r, r.spawns[0].c)?r.spawns[1]:r.spawns[0]; if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: 日本軍(${u.label})`); spawnedReinforcements.turn2JP = true; spawned = true; } }
-    if (turn >= 3 && !spawnedReinforcements.turn3SOV) { let r = gameData.reinforcements.turn3SOV; let p = getUnitAt(r.spawns[0].r, r.spawns[0].c)?r.spawns[1]:r.spawns[0]; if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: ソ連軍(${u.label})`); spawnedReinforcements.turn3SOV = true; spawned = true;} }
-    if (turn >= 4 && !spawnedReinforcements.turn4SOV) { let r = gameData.reinforcements.turn4SOV; let p = getUnitAt(r.spawns[0].r, r.spawns[0].c)?r.spawns[1]:r.spawns[0]; if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: ソ連軍(${u.label})`); spawnedReinforcements.turn4SOV = true; spawned = true;} }
+    if (turn >= 2 && !spawnedReinforcements.turn2JP) { let r = gameData.reinforcements.turn2JP; let p = r.spawns.find(h => !getUnitAt(h.r, h.c)); if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: 日本軍(${u.label})`); spawnedReinforcements.turn2JP = true; spawned = true; } }
+    if (turn >= 3 && !spawnedReinforcements.turn3SOV) { let r = gameData.reinforcements.turn3SOV; let p = r.spawns.find(h => !getUnitAt(h.r, h.c)); if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: ソ連軍(${u.label})`); spawnedReinforcements.turn3SOV = true; spawned = true;} }
+    if (turn >= 4 && !spawnedReinforcements.turn4SOV) { let r = gameData.reinforcements.turn4SOV; let p = r.spawns.find(h => !getUnitAt(h.r, h.c)); if(p) { let u=JSON.parse(JSON.stringify(r)); u.r=p.r; u.c=p.c; units.push(u); log(`🔔 増援: ソ連軍(${u.label})`); spawnedReinforcements.turn4SOV = true; spawned = true;} }
     if (spawned) render(); // ★追加: 増援後の確実な再描画
 }
 
@@ -1163,9 +1163,8 @@ function applyAIDamageLoop(dmg) {
             }
             if (destinations.length > 0) {
                 // 退却先をZOCカバレッジで評価して最良のマスを選ぶ
-                destinations.forEach(d => { d.zocScore = evaluateRetreat(u, d.r, d.c, d.steps); });
-                destinations.sort((a, b) => b.zocScore - a.zocScore);
-                let dest = destinations[0];
+                // 退却も組み合わせで比べる（包囲されない > 戦線 ...）（ユーザーの指示 2026-11-04）
+                let dest = aiBestHex(u, destinations).best || destinations[0];
                 let prevR = u.r; let prevC = u.c;
                 visitedHexes.add(`${u.r}-${u.c}`);
                 u.r = dest.r; u.c = dest.c;
@@ -1294,8 +1293,10 @@ function triggerAdvancePhase() {
                 let reach = getReachableHexes(u, true);
                 log(`🔍 [前進DEBUG] ${u.label} advancePoints=${advancePoints} 候補マス数=${reach.length}`);
                 if(reach.length===0) { log(`🔍 [前進DEBUG] 候補なしでbreak`); break; }
-                let bestH=null; let bestS=-9999;
-                reach.forEach(hex=>{ let score=evaluateHexForAI(u, hex.r, hex.c, u.side, true); if(score>bestS){bestS=score; bestH=hex;} });
+                // 前進も組み合わせで比べる。今の場所より良くなる時だけ進む（ユーザーの指示 2026-11-04）
+                const _pick = aiBestHex(u, reach.filter(h => !(h.r === u.r && h.c === u.c)));
+                const _stay = aiBestHex(u, [{ r: u.r, c: u.c }]);
+                let bestH = _pick.best; let bestS = (bestH && (!_stay.bestRank || rankBetter(_pick.bestRank, _stay.bestRank))) ? 1 : -9999;
                 log(`🔍 [前進DEBUG] bestH=${bestH?bestH.r+'-'+bestH.c:'null'} bestS=${bestS}`);
                 if(bestH && bestS>-150) { 
                     let d=advanceCost(u, bestH.r, bestH.c); 
@@ -1361,42 +1362,285 @@ function countEnemyEscapes(enemy, advancerR, advancerC, advancerSide, advancerUn
 
 // 戦線（ユーザーの指示 2026-11-03）: 日本軍もソ連軍も、川の南では前に出て、斜めに1ヘクスずつ離して並ぶのが大原則
 const LINE_DIAG = [[-2,-1],[-2,1],[2,-1],[2,1]];
-const LINE_BONUS = 150;      // 斜めの相手が1隻いる
-const LINE_BONUS_MORE = 60;  // 2隻目以降
-const LINE_ADJ_PENALTY = 60; // 敵がいないのに味方と隣り合う
+// AI の点数（陣営ごと）。AI 同士の対戦で調整する
+const AI_WEIGHTS_BASE = {
+    line: 500, lineMore: 60, adjPenalty: 60,      // 斜めの戦線。移動・前進・退却の後は、集中攻撃より戦線を優先する（ユーザーの指示 2026-11-04）
+    southApproach: 30, northApproach: 40,         // 前に出る
+    multiAdj: 50, encircle: 300, tankPriority: 80, // 隣接と包囲
+    concFactor: 20, concBonus: 40,                // 集中攻撃
+    escape0: 100, escape1: 50, isolated: 80,      // 自分の安全
+    hill: 40, stay: 80, guardNear: 80, guardFar: 40, // 地形、居座り、砲兵の護衛
+    advLine: 500, advTrap: 300, advMulti: 150, advOne: 30, // 戦闘後前進
+    advForward: 40, advSame: 30, advBack: 100, advZoc: 40, advHill: 30, advBase: 80, advAdj: 25, advEscape1: 50,
+    attackAdj: 300, attackOdds: 40,               // 攻撃できる位置
+    surround0: 1500, surround1: 400, surroundNext: 60, // 包囲（戦線より重い）
+    retLine: 80, retZoc: 1, retAdj: 20, retNear: 15, // 後退
+    quotaJP: 1, quotaSOV: 1, northPull: 80,       // 川の北の数
+    crossProb: 0.5,                               // 小林が1ターン目に川を渡る確率
+    targetDef: 2, targetSteps: 1, targetTank: 1,  // 攻撃の的
+};
+// AI 同士の対戦で調整した値
+const AI_WEIGHTS = {
+    JP: Object.assign({}, AI_WEIGHTS_BASE, { escape1: 67, stay: 49, crossProb: 0 }),
+    SOV: Object.assign({}, AI_WEIGHTS_BASE),
+};
+function W(side) { return AI_WEIGHTS[side] || AI_WEIGHTS_BASE; }
 let aiMovedIds = null;       // 移動フェイズ中: すでに位置が決まった艦（まだ動く艦は戦線の相手に数えない）
 function lineAnchor(f) {
     if (f.mov === 0) return false; // 砲兵は戦線に入らない
     if (!aiMovedIds) return true;
     return aiMovedIds.has(f.id) || isEnemyZOC(f.r, f.c, f.side);
 }
-function linePartnerCount(unit, r, c) {
-    return units.filter(f => f.side === unit.side && f.id !== unit.id && f.r >= 3 && lineAnchor(f) &&
-        LINE_DIAG.some(d => r + d[0] === f.r && c + d[1] === f.c)).length;
+// 相手の戦線の向き（ユーザーの指示 2026-11-04）。'up'=右上がり、'down'=右下がり、null=まだ戦線がない
+function lineDirOf(side) {
+    const m = units.filter(u => u.side === side && u.r >= 3 && u.mov > 0);
+    let up = 0, down = 0;
+    m.forEach(a => m.forEach(b => {
+        if (b.r - a.r !== -2) return;
+        if (b.c - a.c === 1) up++;
+        if (b.c - a.c === -1) down++;
+    }));
+    return up > down ? 'up' : down > up ? 'down' : null;
 }
-function lineScore(unit, r, c, enemyAdjacent) {
+// 相手に戦線があれば、同じ向きに並ぶ（向かい合う）。逆向きには並ばない
+function lineOffsets(side) {
+    const dir = lineDirOf(side === 'JP' ? 'SOV' : 'JP');
+    if (dir === 'up') return [[-2, 1], [2, -1]];
+    if (dir === 'down') return [[-2, -1], [2, 1]];
+    return LINE_DIAG;
+}
+function linePartnerCount(unit, r, c) {
+    const off = lineOffsets(unit.side);
+    return units.filter(f => f.side === unit.side && f.id !== unit.id && f.r >= 3 && lineAnchor(f) &&
+        off.some(d => r + d[0] === f.r && c + d[1] === f.c)).length;
+}
+// 包囲されないこと（ユーザーの指示 2026-11-04）。動いた後に、味方の誰かが退路を失わないかを、敵の次の移動まで見て減点する
+//   今退路がない / 1つだけ / 敵が動くと退路がなくなる の3段階。自分自身は重く数える
+let threatCacheKey = '', threatCache = null;
+function enemyThreatHexes(side) {
+    const es = units.filter(e => e.side !== side && e.mov > 0);
+    const key = side + es.map(e => `${e.id}:${e.r},${e.c}`).join('|');
+    if (key === threatCacheKey) return threatCache;
+    const set = new Set();
+    es.forEach(e => {
+        const reach = [{ r: e.r, c: e.c }].concat(getReachableHexes(e) || []);
+        reach.forEach(h => { set.add(`${h.r}-${h.c}`); getAdjacentCoords(h.r, h.c).forEach(a => { if (!(isRiverCross(h.r, h.c, a.r, a.c) && !isBridge(h.r, h.c, a.r, a.c))) set.add(`${a.r}-${a.c}`); }); });
+    });
+    threatCacheKey = key; threatCache = set;
+    return set;
+}
+function escapeHexes(r, c, side) {
+    return getAdjacentCoords(r, c).filter(p => !isImpassable(p.r, p.c) && !getUnitAt(p.r, p.c) && !isEnemyZOC(p.r, p.c, side) && !(isRiverCross(r, c, p.r, p.c) && !isBridge(r, c, p.r, p.c)));
+}
+function surroundPenalty(unit, r, c) {
+    const w = W(unit.side), oldR = unit.r, oldC = unit.c;
+    const threat = enemyThreatHexes(unit.side);
+    unit.r = r; unit.c = c;
+    let pen = 0;
+    units.filter(f => f.side === unit.side && f.mov > 0).forEach(f => {
+        const k = f === unit ? 1 : 0.5;
+        const esc = escapeHexes(f.r, f.c, f.side);
+        if (esc.length === 0) pen += w.surround0 * k;
+        else if (esc.length === 1) pen += w.surround1 * k;
+        if (esc.length > 0 && esc.every(p => threat.has(`${p.r}-${p.c}`))) pen += w.surroundNext * k;
+    });
+    unit.r = oldR; unit.c = oldC;
+    return pen;
+}
+// ===== 全ユニットの組み合わせで陣形を決める（ユーザーの指示 2026-11-04）=====
+// 比べる順: 包囲されない > 戦線が長い > 敵に隣接する艦が多い > 同じ敵に集中する > 退路が多い > 動かない
+// 点数を足さず、上から順に比べる
+function formationCtx(side) {
+    const foes = units.filter(e => e.side !== side);
+    const adj = new Map(), zoc = new Map(), fight = new Map();
+    const adjOf = (r, c) => { const k = r * 100 + c; if (!adj.has(k)) adj.set(k, getAdjacentCoords(r, c).filter(p => !isImpassable(p.r, p.c))); return adj.get(k); };
+    const isZoc = (r, c) => { const k = r * 100 + c; if (!zoc.has(k)) zoc.set(k, isEnemyZOC(r, c, side)); return zoc.get(k); };
+    const foesAt = (r, c) => { const k = r * 100 + c; if (!fight.has(k)) fight.set(k, foes.filter(e => isAdjacent({ r, c }, e) && !(isRiverCross(r, c, e.r, e.c) && !isBridge(r, c, e.r, e.c)))); return fight.get(k); };
+    const foeCell = new Set(foes.map(e => e.r * 100 + e.c));
+    const threat = enemyThreatHexes(side);
+    const dir = lineDirOf(side === 'JP' ? 'SOV' : 'JP');
+    return { side, foes, adjOf, isZoc, foesAt, foeCell, threat, dir };
+}
+function formationRank(ctx, list) {
+    // list: [{u, r, c}] その側の全ユニット
+    const occ = new Set(list.map(x => x.r * 100 + x.c));
+    let s0 = 0, s1 = 0, sNext = 0;
+    for (const x of list) {
+        if (x.u.mov === 0) continue;
+        let n = 0, safe = false;
+        for (const p of ctx.adjOf(x.r, x.c)) {
+            const k = p.r * 100 + p.c;
+            if (occ.has(k) || ctx.foeCell.has(k) || ctx.isZoc(p.r, p.c)) continue;
+            if (isRiverCross(x.r, x.c, p.r, p.c) && !isBridge(x.r, x.c, p.r, p.c)) continue;
+            n++; if (!ctx.threat.has(`${p.r}-${p.c}`)) safe = true;
+        }
+        if (n === 0) s0++; else if (n === 1) s1++;
+        if (n > 0 && !safe) sNext++;
+    }
+    // 戦線: 斜めにつながる一番長い列（相手に戦線があれば、同じ向きだけ）
+    const south = list.filter(x => x.r >= 3 && x.u.mov > 0);
+    const chainOf = dc => {
+        let best = 0; const at = new Set(south.map(x => x.r * 100 + x.c));
+        for (const x of south) {
+            if (at.has((x.r + 2) * 100 + x.c - dc)) continue; // 列の端から数える
+            let n = 1, r = x.r, c = x.c;
+            while (at.has((r - 2) * 100 + c + dc)) { r -= 2; c += dc; n++; }
+            if (n > best) best = n;
+        }
+        return best;
+    };
+    const chain = ctx.dir === 'up' ? chainOf(1) : ctx.dir === 'down' ? chainOf(-1) : Math.max(chainOf(1), chainOf(-1));
+    // 列に入っていない艦を減らす。味方どうしは隣り合わない
+    const at2 = new Set(south.map(x => x.r * 100 + x.c));
+    const dcs = ctx.dir === 'up' ? [1] : ctx.dir === 'down' ? [-1] : (chainOf(1) >= chainOf(-1) ? [1] : [-1]);
+    let linked = 0, touching = 0;
+    for (const x of south) {
+        if (dcs.some(dc => at2.has((x.r - 2) * 100 + x.c + dc) || at2.has((x.r + 2) * 100 + x.c - dc))) linked++;
+        if (ctx.adjOf(x.r, x.c).some(p => at2.has(p.r * 100 + p.c))) touching++;
+    }
+    let adjCount = 0, conc = 0, concAtk = 0;
+    const by = new Map();
+    for (const x of list) {
+        if (x.u.mov === 0) continue;
+        const fs = ctx.foesAt(x.r, x.c);
+        if (fs.length) adjCount++;
+        fs.forEach(e => { const o = by.get(e) || { n: 0, atk: 0 }; o.n++; o.atk += x.u.atk; by.set(e, o); });
+    }
+    by.forEach((o, e) => { if (o.n > conc || (o.n === conc && o.atk - e.def > concAtk)) { conc = o.n; concAtk = o.atk - e.def; } });
+    return [-s0, chain, linked, adjCount, conc, concAtk, -touching, -s1, -sNext];
+}
+function rankBetter(a, b) { for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) return a[i] > b[i]; } return false; }
+// 移動: 動ける南のユニット全部の行き先の組み合わせを調べる
+function aiPlanMoves(moving, side) {
+    const plan = new Map();
+    const ctx = formationCtx(side);
+    // 川の南に敵がいなければ、北の敵へ向かう（誰も動かず同じターンが続かないように）
+    if (!ctx.foes.some(e => e.r >= 3)) {
+        const nearFoe = h => Math.min(...ctx.foes.map(e => getPathCost(h, e)).concat([99]));
+        moving.filter(u => u.mov > 0 && !isEnemyZOC(u.r, u.c, side) && !(u.id === 'jp1' && turn === 1)).forEach(u => {
+            const hexes = (getReachableHexes(u, false) || []).filter(h => !getUnitAt(h.r, h.c) && !isImpassable(h.r, h.c));
+            const north = hexes.filter(h => h.r <= 2).sort((a, b) => nearFoe(a) - nearFoe(b))[0];
+            const toward = hexes.slice().sort((a, b) => distToSouth(u, a.r, a.c) - distToSouth(u, b.r, b.c))[0];
+            const dest = north || (u.r >= 3 && toward && distToSouth(u, toward.r, toward.c) < distToSouth(u, u.r, u.c) ? toward : { r: u.r, c: u.c });
+            u.r = dest.r; u.c = dest.c; plan.set(u.id, dest);
+        });
+        return plan;
+    }
+    const free = moving.filter(u => u.r >= 3 && u.mov > 0 && !isEnemyZOC(u.r, u.c, side) && !(u.id === 'jp1' && turn === 1));
+    const fixed = units.filter(u => u.side === side && !free.includes(u)).map(u => ({ u, r: u.r, c: u.c }));
+    if (!free.length) return plan;
+    const cands = free.map(u => {
+        const seen = new Set(), list = [];
+        [{ r: u.r, c: u.c }].concat(getReachableHexes(u, false) || []).forEach(h => {
+            const k = h.r * 100 + h.c;
+            if (h.r < 3 || seen.has(k) || ctx.foeCell.has(k) || getUnitAt(h.r, h.c) && !free.includes(getUnitAt(h.r, h.c))) return;
+            seen.add(k); list.push({ r: h.r, c: h.c });
+        });
+        const near = h => Math.min(...ctx.foes.filter(e => e.r >= 3).map(e => getPathCost(h, e)).concat([99]));
+        list.forEach(h => { h.d = near(h); });
+        list.sort((a, b) => a.d - b.d);
+        return list.slice(0, free.length >= 5 ? 10 : free.length === 4 ? 14 : 30);
+    });
+    let best = null, bestRank = null, nodes = 0;
+    const cur = [], used = new Set(fixed.map(x => x.r * 100 + x.c));
+    const walk = i => {
+        if (nodes > 150000) return;
+        if (i === free.length) {
+            nodes++;
+            const list = fixed.concat(cur);
+            const rk = formationRank(ctx, list);
+            let move = 0; cur.forEach(x => { if (x.r !== x.u.r || x.c !== x.u.c) move++; });
+            const dist = cur.reduce((t, x) => t + x.d, 0);
+            rk.push(-dist, -move);
+            if (!best || rankBetter(rk, bestRank)) { best = cur.slice(); bestRank = rk; }
+            return;
+        }
+        for (const h of cands[i]) {
+            const k = h.r * 100 + h.c;
+            if (used.has(k)) continue;
+            used.add(k); cur.push({ u: free[i], r: h.r, c: h.c, d: h.d });
+            walk(i + 1);
+            cur.pop(); used.delete(k);
+        }
+    };
+    walk(0);
+    if (best) best.forEach(x => plan.set(x.u.id, { r: x.r, c: x.c }));
+    return plan;
+}
+// ソ連軍の川の北: 日本軍の数+1を保つ（攻撃力4は数えず南へ）
+function aiNorthPlan(moving, side) {
+    const plan = new Map();
+    if (side !== 'SOV') return plan;
+    const canMove = u => u.mov > 0 && !isEnemyZOC(u.r, u.c, side);
+    const jpNorth = units.filter(u => u.side === 'JP' && u.r <= 2);
+    const nearJP = h => Math.min(...jpNorth.map(e => getPathCost(h, e)).concat([99]));
+    const freeHexes = u => (getReachableHexes(u, false) || []).filter(h => !getUnitAt(h.r, h.c) && !isImpassable(h.r, h.c));
+    // 残る艦は北の中でだけ動く（日本軍が北にいれば近づく）
+    moving.filter(u => u.r <= 2 && canMove(u) && !isNorthSurplus(u)).forEach(u => {
+        let best = { r: u.r, c: u.c };
+        freeHexes(u).filter(h => h.r <= 2).forEach(h => { if (nearJP(h) < nearJP(best)) best = h; });
+        u.r = best.r; u.c = best.c; plan.set(u.id, best);
+    });
+    // 余りの艦と攻撃力4の艦は南へ
+    moving.filter(u => u.r <= 2 && canMove(u) && isNorthSurplus(u)).forEach(u => {
+        const hexes = freeHexes(u);
+        const south = hexes.find(h => h.r >= 3);
+        const toward = hexes.slice().sort((a, b) => distToSouth(u, a.r, a.c) - distToSouth(u, b.r, b.c))[0];
+        const dest = south || (toward && distToSouth(u, toward.r, toward.c) < distToSouth(u, u.r, u.c) ? toward : { r: u.r, c: u.c });
+        u.r = dest.r; u.c = dest.c; plan.set(u.id, dest);
+    });
+    // 足りなければ南の艦を北へ（渡河点に近い順）
+    let lack = northQuota('SOV') - northUnits('SOV').filter(u => u.atk < 4).length;
+    const south = moving.filter(u => u.r >= 3 && u.atk < 4 && canMove(u) && !plan.has(u.id))
+        .sort((a, b) => distToSouth(a, a.r, a.c) - distToSouth(b, b.r, b.c) || a.id.localeCompare(b.id));
+    for (const u of south) {
+        if (lack <= 0) break;
+        const hexes = freeHexes(u);
+        const over = hexes.filter(h => h.r <= 2).sort((a, b) => nearJP(a) - nearJP(b))[0];
+        const toward = hexes.slice().sort((a, b) => distToSouth(u, a.r, a.c) - distToSouth(u, b.r, b.c))[0];
+        const dest = over || (toward && distToSouth(u, toward.r, toward.c) < distToSouth(u, u.r, u.c) ? toward : { r: u.r, c: u.c });
+        u.r = dest.r; u.c = dest.c; plan.set(u.id, dest); lack--;
+    }
+    return plan;
+}
+// 戦闘後前進・退却: 動く1隻の行き先を、他はそのままで比べる
+function aiBestHex(u, hexes) {
+    const ctx = formationCtx(u.side);
+    const others = units.filter(f => f.side === u.side && f !== u).map(f => ({ u: f, r: f.r, c: f.c }));
+    let best = null, bestRank = null;
+    hexes.forEach(h => {
+        const o = getUnitAt(h.r, h.c);
+        if ((o && o !== u) || isImpassable(h.r, h.c)) return; // 重ならない
+        const rk = formationRank(ctx, others.concat([{ u, r: h.r, c: h.c }]));
+        if (!best || rankBetter(rk, bestRank)) { best = h; bestRank = rk; }
+    });
+    return { best, bestRank };
+}
+function lineScore(unit, r, c, enemyAdjacent, lineWeight = W(unit.side).line) {
     if (r < 3) return 0;
     const n = linePartnerCount(unit, r, c);
-    let score = n > 0 ? LINE_BONUS + (n - 1) * LINE_BONUS_MORE : 0;
+    const w = W(unit.side);
+    let score = n > 0 ? lineWeight + (n - 1) * w.lineMore : 0;
     if (!enemyAdjacent) {
         const adj = units.filter(f => f.side === unit.side && f.id !== unit.id && f.mov > 0 && isAdjacent({ r, c }, f)).length;
-        score -= adj * LINE_ADJ_PENALTY;
+        score -= adj * w.adjPenalty;
     }
     return score;
 }
 // 川の北の艦数（ユーザーの指示 2026-11-03）: 必要な数だけ残し、余りは南へ行く
-//   日本軍: 砲兵を狙う1隻 / ソ連軍: 砲兵の護衛1隻、北へ来た日本軍が多ければその数（最大2隻）
+//   日本軍: 砲兵を狙う1隻 / ソ連軍: 川の北の日本軍の数＋1（ユーザーの指示 2026-11-04）。攻撃力4の艦は必ず南へ
 function northQuota(side) {
-    if (side === 'JP') return 1;
-    const jpNorth = units.filter(u => u.side === 'JP' && u.r <= 2).length;
-    return Math.max(1, Math.min(2, jpNorth));
+    if (side === 'JP') return W('JP').quotaJP;
+    const jpNorth = units.filter(u => u.side === 'JP' && u.r <= 2 && u.mov > 0).length;
+    return jpNorth + 1;
 }
 function northUnits(side) { return units.filter(u => u.side === side && u.r <= 2 && u.mov > 0); }
 // 北に残す艦: 敵の砲兵（日本軍）や自軍の砲兵（ソ連軍）に近い順
 function isNorthSurplus(unit) {
     if (unit.r > 2 || unit.mov === 0) return false;
+    if (unit.atk >= 4) return true; // 攻撃力4の艦は川の北に残さない
     const art = units.find(u => u.mov === 0 && u.side === 'SOV');
-    const list = northUnits(unit.side).sort((a, b) => art ? getPathCost(a, art) - getPathCost(b, art) || a.id.localeCompare(b.id) : a.id.localeCompare(b.id));
+    const list = northUnits(unit.side).filter(u => u.atk < 4).sort((a, b) => art ? getPathCost(a, art) - getPathCost(b, art) || a.id.localeCompare(b.id) : a.id.localeCompare(b.id));
     return list.findIndex(u => u.id === unit.id) >= northQuota(unit.side);
 }
 // 南へ渡る入口までの距離（戦車は軍橋を渡れない）
@@ -1409,17 +1653,18 @@ function northSouthScore(unit, r, c) {
     if (unit.mov === 0) return 0;
     if (unit.r <= 2) {
         if (!isNorthSurplus(unit)) return 0;
-        return r >= 3 ? 400 : -distToSouth(unit, r, c) * 80; // 余りは南へ
+        return r >= 3 ? 400 : -distToSouth(unit, r, c) * W(unit.side).northPull; // 余りは南へ
     }
     // 南の艦: 北が足りていれば渡らない
     if (r <= 2 && northUnits(unit.side).length >= northQuota(unit.side)) return -400;
     return 0;
 }
 // 攻撃の的: 弱い敵ほど小さい。砲兵（除去で勝利）と戦車（2点）を優先する
-function targetWeakness(foe) {
-    let w = foe.def * 2 + foe.steps;
+function targetWeakness(foe, side = currentPlayer) {
+    const k = W(side);
+    let w = foe.def * k.targetDef + foe.steps * k.targetSteps;
     if (foe.mov === 0) w -= 99;
-    if (foe.isTank) w -= 1;
+    if (foe.isTank) w -= k.targetTank;
     if (isHill(foe.r, foe.c)) w += 3;
     return w;
 }
@@ -1430,6 +1675,7 @@ let activeQMods = null;
 
 function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
     const side = unit.side;
+    const w = W(side);
     const enemies = units.filter(e => e.side !== side);
     const friends = units.filter(f => f.side === side && f.id !== unit.id);
     let score = 0;
@@ -1447,7 +1693,7 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
             const distToArt = getPathCost({r, c}, {r: artillery.r, c: artillery.c});
             if (distToArt === 1) {
                 const isBetween = enemies.some(e => getPathCost({r, c}, {r: e.r, c: e.c}) < getPathCost(artillery, {r: e.r, c: e.c}));
-                const bonus = isBetween ? 80 : 40;
+                const bonus = isBetween ? w.guardNear : w.guardFar;
                 if (debugThis) log(`🔬 砲兵防衛線ボーナス: +${bonus}`);
                 score += bonus;
             }
@@ -1463,7 +1709,7 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
     if (minDist === 999) minDist = 0;
     // 未ペアのユニットは接近を重視、ペア済みは陣形維持
     const logicMove = getActiveLogic(side).move;
-    let approachWeight = isNorthAttack ? (logicMove.northApproach ?? 40) : (logicMove.southApproach ?? 30); // 前に出るのが基本
+    let approachWeight = isNorthAttack ? w.northApproach : w.southApproach; // 前に出るのが基本
     if (activeQMods) approachWeight = Math.max(0, approachWeight + activeQMods.approachMod);
     const approachScore = -(minDist * approachWeight);
     if (debugThis) log(`🔬 接近スコア: ${approachScore} (minDist=${minDist}, weight=${approachWeight})`);
@@ -1475,25 +1721,30 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
     const adjFriends = friends.filter(f => isAdjacent({r, c}, f));
     if (debugThis) log(`🔬 隣接敵=${adjEnemies.length} 隣接味方=${adjFriends.length}`);
 
+    // 攻撃する（ユーザーの指示 2026-11-04）: 隣接すれば必ず撃てるので、攻撃できる位置を高くする
+    if (adjEnemies.length > 0 && r >= 3) {
+        const best = Math.max(...adjEnemies.map(e => unit.atk - e.def));
+        score += w.attackAdj + best * w.attackOdds;
+    }
     // 複数の敵に隣接は危険
     if (adjEnemies.length >= 2) {
         if (debugThis) log(`🔬 複数隣接敵ペナルティ: ${-50 * adjEnemies.length}`);
-        score -= 50 * adjEnemies.length;
+        score -= w.multiAdj * adjEnemies.length;
     }
 
     // 隣接する敵の包囲ボーナス（北側攻撃モードは強化）
     adjEnemies.forEach(e => {
         const escapes = countEnemyEscapes(e, r, c, side, unit);
-        let encircleBonus = isNorthAttack ? aiParams.encircleBonus * 2 : aiParams.encircleBonus;
+        let encircleBonus = isNorthAttack ? w.encircle * 2 : w.encircle;
         if (activeQMods) encircleBonus += activeQMods.encircleMod;
-        if (escapes === 0) score += encircleBonus + (e.isTank ? aiParams.tankPriority : 0);
-        else if (escapes === 1) score += Math.round(encircleBonus * 0.5) + (e.isTank ? aiParams.tankPriority : 0);
+        if (escapes === 0) score += encircleBonus + (e.isTank ? w.tankPriority : 0);
+        else if (escapes === 1) score += Math.round(encircleBonus * 0.5) + (e.isTank ? w.tankPriority : 0);
         const otherFriendsAdj = friends.filter(f => isAdjacent(f, e)).length;
         if (r >= 3) {
             // 敵の弱いところへ集中する
             const friendAtk = friends.filter(f => isAdjacent(f, e)).reduce((t, f) => t + f.atk, 0);
-            score += Math.max(-60, Math.min(90, (unit.atk + friendAtk - e.def) * 20));
-            if (otherFriendsAdj > 0) score += 40;
+            score += Math.max(-3 * w.concFactor, Math.min(4.5 * w.concFactor, (unit.atk + friendAtk - e.def) * w.concFactor));
+            if (otherFriendsAdj > 0) score += w.concBonus;
         } else {
             score += otherFriendsAdj === 0 ? 60 : 15;
         }
@@ -1501,8 +1752,8 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
 
     // 自分の逃げ場
     const myEscapes = countEscapes(r, c, side);
-    if (myEscapes === 0) { if (debugThis) log(`🔬 逃げ場0ペナルティ: -100`); score -= 100; }
-    else if (myEscapes === 1) { if (debugThis) log(`🔬 逃げ場1ペナルティ: -50`); score -= 50; }
+    if (myEscapes === 0) { if (debugThis) log(`🔬 逃げ場0ペナルティ: -100`); score -= w.escape0; }
+    else if (myEscapes === 1) { if (debugThis) log(`🔬 逃げ場1ペナルティ: -50`); score -= w.escape1; }
     if (debugThis) log(`🔬 逃げ場数: ${myEscapes}`);
 
     // 味方との距離優先順位：斜め2ヘクス ＞ 2ヘクス ＞ 隣接(条件次第)
@@ -1512,6 +1763,7 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
     const diag2Offsets = [[-2,-1],[-2,1],[2,-1],[2,1],[0,-2],[0,2]];
     const diag2Hexes = diag2Offsets.map(d => ({r: r+d[0], c: c+d[1]}));
     score += lineScore(unit, r, c, adjEnemies.length > 0);
+    score -= surroundPenalty(unit, r, c);
     if (r < 3) friends.forEach(f => {
         const isDiag2 = diag2Hexes.some(h => h.r === f.r && h.c === f.c);
         const dist = getPathCost({r,c}, {r:f.r, c:f.c});
@@ -1532,14 +1784,14 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
         }
     });
     if (adjEnemies.length > 0 && adjFriends.length === 0 && linePartnerCount(unit, r, c) === 0) {
-        let isolatedPen = aiParams.isolatedPenalty;
+        let isolatedPen = w.isolated;
         if (activeQMods) isolatedPen = Math.max(0, isolatedPen + activeQMods.isolatedMod);
         if (debugThis) log(`🔬 孤立ペナルティ: ${-isolatedPen}`);
         score -= isolatedPen;
     }
 
 
-    if (isHill(r, c)) score += 40;
+    if (isHill(r, c)) score += w.hill;
     score += northSouthScore(unit, r, c);
     if (debugThis) log(`🔬 合計スコア: ${score}`);
     return score;
@@ -1548,6 +1800,7 @@ function evaluateMove(unit, r, c, attackMode = false, isPaired = false) {
 // [2] 戦闘後前進評価
 function evaluateAdvance(unit, r, c) {
     const side = unit.side;
+    const w = W(side);
     const enemies = units.filter(e => e.side !== side);
     const friends = units.filter(f => f.side === side && f.id !== unit.id);
 
@@ -1560,18 +1813,18 @@ function evaluateAdvance(unit, r, c) {
     if (myEscapes === 0) return -999;
 
     let score = 0;
-    if (myEscapes === 1) score -= 50;
+    if (myEscapes === 1) score -= w.advEscape1;
 
     const adjEnemies = enemies.filter(e => isAdjacent({r, c}, e) &&
         !(isRiverCross(r, c, e.r, e.c) && !isBridge(r, c, e.r, e.c)));
 
     // 最優先：敵の退路を0にできる
     const enemiesTrapped = adjEnemies.filter(e => countEnemyEscapes(e, r, c, side, unit) === 0);
-    if (enemiesTrapped.length > 0) score += 300 * enemiesTrapped.length;
+    if (enemiesTrapped.length > 0) score += w.advTrap * enemiesTrapped.length;
 
     // 複数の敵に隣接できる
-    if (adjEnemies.length >= 2) score += 150;
-    else if (adjEnemies.length === 1) score += 30;
+    if (adjEnemies.length >= 2) score += w.advMulti;
+    else if (adjEnemies.length === 1) score += w.advOne;
 
     // 敵が全滅している場合は無条件で前進ボーナス
     if (enemies.length === 0) {
@@ -1583,9 +1836,9 @@ function evaluateAdvance(unit, r, c) {
     if (enemies.length > 0) {
         const distBefore = Math.min(...enemies.map(e => getPathCost({r: unit.r, c: unit.c}, {r: e.r, c: e.c})));
         const distAfter  = Math.min(...enemies.map(e => getPathCost({r, c}, {r: e.r, c: e.c})));
-        if (distAfter < distBefore) score += 40;
-        else if (distAfter === distBefore) score -= 30; // 現状維持もペナルティ
-        else score -= 100; // 敵から離れる後退は強くペナルティ
+        if (distAfter < distBefore) score += w.advForward;
+        else if (distAfter === distBefore) score -= w.advSame; // 現状維持もペナルティ
+        else score -= w.advBack; // 敵から離れる後退は強くペナルティ
     }
 
     // ZOCカバレッジ（敵方向のみ）
@@ -1598,28 +1851,30 @@ function evaluateAdvance(unit, r, c) {
         if (posDist > closestEnemyDist + 1) return;
         const alreadyCovered = friends.some(f => isAdjacent(f, pos) &&
             !(isRiverCross(f.r, f.c, pos.r, pos.c) && !isBridge(f.r, f.c, pos.r, pos.c)));
-        if (!alreadyCovered) score += 40;
+        if (!alreadyCovered) score += w.advZoc;
     });
 
     // 味方との距離：1ヘクス離れが理想
     const adjFriends = friends.filter(f => isAdjacent({r, c}, f));
-    adjFriends.forEach(f => { score -= (f.steps === 1 || f.atk + f.def <= 2) ? 40 : 25; });
-    score += lineScore(unit, r, c, adjEnemies.length > 0); // 前進でも斜めの戦線を基本にする
+    adjFriends.forEach(f => { score -= (f.steps === 1 || f.atk + f.def <= 2) ? w.advAdj * 1.6 : w.advAdj; });
+    score += lineScore(unit, r, c, adjEnemies.length > 0, w.advLine); // 前進でも斜めの戦線を基本にする
+    score -= surroundPenalty(unit, r, c);
     score += northSouthScore(unit, r, c);
 
-    if (isHill(r, c)) score += 30;
-    score += aiParams.advanceBonus;
+    if (isHill(r, c)) score += w.advHill;
+    score += w.advBase;
     return score;
 }
 
 // [3] AI退却先評価（applyAIDamageLoopから呼ばれる）
 function evaluateRetreat(unit, destR, destC, steps) {
     const side = unit.side;
+    const w = W(side);
     const friends = units.filter(f => f.side === side && f.id !== unit.id);
     let score = steps * 10; // より多く下がる方を基本優先
 
     const myUnitCount = units.filter(f => f.side === unit.side).length;
-    const zocWeight = myUnitCount <= 2 ? 80 : myUnitCount <= 3 ? 60 : 40;
+    const zocWeight = (myUnitCount <= 2 ? 80 : myUnitCount <= 3 ? 60 : 40) * w.retZoc;
     // 川南岸（r=4〜6）のZOCカバレッジを重視
     getAdjacentCoords(destR, destC).forEach(pos => {
         if (isImpassable(pos.r, pos.c) || getUnitAt(pos.r, pos.c)) return;
@@ -1632,8 +1887,10 @@ function evaluateRetreat(unit, destR, destC, steps) {
     // 味方から1ヘクス離れを優先
     const adjFriendCount = friends.filter(f => isAdjacent({r: destR, c: destC}, f)).length;
     const oneFriendCount = friends.filter(f => getPathCost({r: destR, c: destC}, {r: f.r, c: f.c}) === 2).length;
-    score -= adjFriendCount * 20;
-    score += oneFriendCount * 15;
+    score -= adjFriendCount * w.retAdj;
+    score += oneFriendCount * w.retNear;
+    score += linePartnerCount(unit, destR, destC) * w.retLine;
+    score -= surroundPenalty(unit, destR, destC);
 
     return score;
 }
@@ -1687,8 +1944,14 @@ function executeAITurn() {
         return (b.atk + b.def) - (a.atk + a.def);
     });
     aiMovedIds = new Set();
+    const aiNorth = aiNorthPlan(movingUnits, currentPlayer); // 川の北の数を先に決める
+    aiNorth.forEach((h, id) => aiMovedIds.add(id));
+    const aiPlan = aiPlanMoves(movingUnits.filter(u => !aiNorth.has(u.id)), currentPlayer); // 全ユニットの組み合わせから陣形を決める
+    aiPlan.forEach((h, id) => { const u = units.find(x => x.id === id); u.r = h.r; u.c = h.c; aiMovedIds.add(id); }); // 先に全部置く（他の艦と重ならないように）
+    render();
 
     movingUnits.forEach(u=>{
+        if (aiPlan.has(u.id) || aiNorth.has(u.id)) { activeQMods = null; return; }
         if(isEnemyZOC(u.r,u.c,u.side)) { log(`🔍 [移動DEBUG] ${u.label} はZOC内のため移動不可`); activeQMods = null; aiMovedIds.add(u.id); return; }
 
         // Q学習v2: ユニットごとにQ-actionを取得し重み設定
@@ -1710,7 +1973,7 @@ function executeAITurn() {
             // 1ターン目：50%の確率で川を渡って北側へ
             if (turn === 1 && !u._northDecided) {
                 u._northDecided = true;
-                if (Math.random() < 0.5) {
+                if (Math.random() < W('JP').crossProb) {
                     // 北側へ渡る：通常評価で北側マスを選ぶ
                     let reach = getReachableHexes(u, false).filter(h => h.r <= 2);
                     reach.push({r:u.r, c:u.c});
@@ -1776,7 +2039,7 @@ function executeAITurn() {
         });
         const isPaired = pairedNow.has(u.id);
         // Q学習v2: retreatモードの場合、現在地ペナルティを逆転（動かないのもOK）
-        const qStayMod = (unitQMods && unitQMods.stayPenalty !== undefined) ? unitQMods.stayPenalty : 80;
+        const qStayMod = (unitQMods && unitQMods.stayPenalty !== undefined) ? unitQMods.stayPenalty : W(u.side).stay;
         reach.forEach(hex => {
             let score = evaluateMove(u, hex.r, hex.c, attackModeMove, isPaired);
             // 現在地にはペナルティ（動かない選択を抑制）- Q学習で調整
