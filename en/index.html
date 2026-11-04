@@ -120,6 +120,40 @@
             text-transform: none;
         }
 
+        .news {
+            text-align: left;
+            margin-bottom: 20px;
+            background-color: #18191a;
+            padding: 16px 20px;
+            border-left: 5px solid var(--accent-red);
+            font-size: 1em;
+            line-height: 1.5;
+        }
+
+        .news h2 {
+            margin: 0 0 8px;
+            color: var(--text-accent);
+            font-size: 1.1em;
+            letter-spacing: 1px;
+        }
+
+        .news h3 {
+            margin: 12px 0 4px;
+            color: var(--text-accent);
+            font-size: 1em;
+        }
+
+        .news ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .container { padding: 16px; width: calc(100% - 32px); box-sizing: border-box; margin: 16px 0; }
+            h1 { font-size: 1.8em; }
+            .theater-btn { font-size: 1.3em; letter-spacing: 1px; }
+        }
+
         .theater-btn.soon,
         .theater-btn.soon:hover,
         .theater-btn.soon:active {
@@ -142,6 +176,25 @@
 <div class="container">
     <h1>Operations HQ</h1>
 
+    <div class="news">
+        <h2>News &amp; Updates</h2>
+        <ul>
+            <li>Corvette Command: 8 languages planned</li>
+            <li>Up Front: Scenario E coming</li>
+            <li>War at Sea: play as Britain and a new AI coming</li>
+            <li>A well-known game is in development and going well</li>
+        </ul>
+        <h3>This Up Front update (AI)</h3>
+        <ul>
+            <li>Every nation now splits into movement groups and a fire group in the center</li>
+            <li>The squad leader and high-morale men go with the movement group</li>
+            <li>Flamethrowers fire first at range 5, and defensive terrain no longer reduces their attack</li>
+            <li>Demolition charges go to eligible men in a movement group, who infiltrate first; pillboxes are targeted first</li>
+            <li>At night the AI puts movement first: fire groups close to range 3, and groups observe only when they intend to attack</li>
+            <li>The AI digs in only when its hand is ready, and otherwise replaces cards</li>
+        </ul>
+    </div>
+
     <div class="briefing-text">
     A collection of wargames you can play in your browser. Select a title to begin.
     </div>
@@ -149,7 +202,7 @@
     <div class="btn-group">
         <div class="theater-btn" style="cursor:default;opacity:.75;" aria-disabled="true">
             Corvette Command
-            <span>Coming Soon</span>
+            <span>Coming Soon — 8 languages planned</span>
         </div>
 
         <!-- ?lang=en: ゲームを英語で開く -->

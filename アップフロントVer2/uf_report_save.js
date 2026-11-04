@@ -395,6 +395,8 @@ function startGameWithSetup() {
   state.player = FACTIONS[playerFaction];
   const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
   // 敵の陣営: キャンペーンで決めた国、それ以外（通常の対戦）は自分以外の国からランダム
+  // シナリオの国の制限（シナリオE）
+  { const _only = setupState.scenario && setupState.scenario.onlyFactions; if (_only) { const _keep = others.filter(f => _only.indexOf(f) >= 0); others.length = 0; _keep.forEach(f => others.push(f)); } }
   const aiKey = (setupState.aiFactionOverride && others.indexOf(setupState.aiFactionOverride) >= 0)
     ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
   state.ai = FACTIONS[aiKey];
@@ -514,16 +516,12 @@ function startGameWithSetup() {
     // AI 側: 攻撃側ならBグループ先頭にのみ付与（setup-screen なし）
     state.groups.ai.forEach(g => g.cards.forEach(c => { delete c.demoCharge; }));
     if (aiRole === 'attacker') {
-      const bGroup = state.groups.ai.find(g => g.name === 'B');
-      if (bGroup && bGroup.cards.length > 0) bGroup.cards[0].demoCharge = true;
+      aiGiveDemoCharge(aiKey);
     }
   } else if (scenario && scenario.id === 'B') {
-    // シナリオB: 各 AI グループの先頭兵士に爆薬を付与
-    state.groups.ai.forEach(grp => {
-      if (grp.cards && grp.cards.length > 0) {
-        grp.cards[0].demoCharge = true;
-      }
-    });
+    // シナリオB: 爆薬は 1つ（ルールの部隊表）
+    state.groups.ai.forEach(g => g.cards.forEach(c => { delete c.demoCharge; }));
+    aiGiveDemoCharge(aiKey);
   }
 
   // 初期兵士数を記録（敗北判定用）
@@ -590,6 +588,20 @@ function makeCardWithMeta(factionKey, num) {
 }
 
 // セットアップのcrewPairs (グループ:番号 形式) からこのグループ分だけ抽出
+/** AI の爆薬: 移動グループ（火炎放射器のいないほうを優先）の、持てる兵（§21.1）のうち士気の一番高い兵に渡す */
+function aiGiveDemoCharge(aiKey) {
+  const R = window.INFANTRY_RULES;
+  const isFlame = c => { const d = R.lookupSoldier(c, aiKey); return !!(d && d.weaponCat && d.weaponCat.indexOf('火炎放射器') === 0); };
+  const man = state.groups.ai.filter(g => g._role === 'maneuver' || g._role === 'assault');
+  const order = man.filter(g => !g.cards.some(isFlame)).concat(man.filter(g => g.cards.some(isFlame)), state.groups.ai);
+  const morale = c => { const d = R.lookupSoldier(c, aiKey); return d ? (parseInt(d.morale, 10) || 0) : 0; };
+  const isLd = c => { const d = R.lookupSoldier(c, aiKey); return !!(d && d.leader && d.leader.trim()); };
+  for (const g of order) {
+    const list = g.cards.filter(c => demoEligible(c, aiKey)).sort((a, b) => (isLd(a) - isLd(b)) || (morale(b) - morale(a)));
+    if (list.length) { list[0].demoCharge = true; return; }
+  }
+}
+
 function extractGroupCrewPairs(groupIdx) {
   const out = {}; // ownerNum → assistantNum
   Object.keys(setupState.crewPairs).forEach(k => {

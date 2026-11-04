@@ -560,23 +560,33 @@
     others.sort((a, b) => b.morale - a.morale).forEach(e => addCard(smallest(), e));
   }
 
-  /** 火力と機動: 真ん中（B）にクルー兵器と助手とライフル兵で約半分、両側（A・C）に残りを小さく。残りが 6人未満なら A だけ */
-  function _formFireMove(enriched, factionKey) {
+  /** 移動と火力（全部の国共通。ユーザーの指示 2026-11-04）
+   *  火力: 真ん中。クルー兵器・副分隊長・士気の低い兵で約半分。止まって撃つ
+   *  移動: 分隊長・火炎放射器・士気の高い兵。火炎放射器と爆薬が両方あれば 2つに分ける（片方がやられても攻撃が続く）
+   *  hasDemo: このシナリオでこの部隊に爆薬があるか。爆薬を持つ兵は uf_report_save.js で移動グループから選ぶ */
+  function _formFireMove(enriched, factionKey, hasDemo) {
     const N = enriched.length;
     const fireSize = Math.min(10, Math.max(3, Math.round(N / 2)));
+    const isSL = e => !!(e.def && e.def.leader === '分隊長');
     const fire = [], pool = enriched.slice();
     const take = e => { pool.splice(pool.indexOf(e), 1); fire.push(e); };
-    pool.filter(e => e.crew).forEach(take);
-    // 助手とライフル兵: 指揮官以外の、モラルの低い兵から（モラルの高い兵は機動へ）
-    pool.filter(e => !e.leader && !e.crew && !e.flame).sort((a, b) => a.morale - b.morale).forEach(e => { if (fire.length < fireSize) take(e); });
+    pool.filter(e => e.crew && !e.flame).forEach(take);
+    // 分隊長以外の指揮官は火力へ（指揮官のいないグループを作らない）。分隊長がいなければ最初の指揮官は移動へ残す
+    const lds = pool.filter(e => e.leader && !isSL(e)).sort((a, b) => b.morale - a.morale);
+    (enriched.some(isSL) ? lds : lds.slice(1)).forEach(take);
+    // 残りは士気の低い兵から（士気の高い兵は撃たれる移動グループへ）
+    pool.filter(e => !e.leader && !e.flame).sort((a, b) => a.morale - b.morale).forEach(e => { if (fire.length < fireSize) take(e); });
     const rest = pool;
-    const nMan = rest.length >= 6 ? 2 : (rest.length > 0 ? 1 : 0);
+    const nMan = rest.length === 0 ? 0 : ((hasDemo && rest.some(e => e.flame) && rest.length >= 4) ? 2 : 1);
     const fireG = _newGroup('B', factionKey); fireG._role = 'fire';
     fire.forEach(e => addCard(fireG, e));
     const man = [];
     for (let k = 0; k < nMan; k++) { const g = _newGroup(k === 0 ? 'A' : 'C', factionKey); g._role = 'maneuver'; man.push(g); }
-    if (man.length) _spread(man, rest);
-    const groups = nMan === 0 ? [Object.assign(fireG, { name: 'A' })] : (nMan === 1 ? [man[0], fireG] : [man[0], fireG, man[1]]);
+    if (man.length) {
+      rest.filter(e => e.flame).forEach(e => addCard(man[0], e));
+      _spread(man, rest.filter(e => !e.flame));
+    }
+    const groups = nMan === 0 ? [fireG] : (nMan === 1 ? [man[0], fireG] : [man[0], fireG, man[1]]);
     groups.forEach((g, i) => { g.name = ['A', 'B', 'C', 'D'][i]; });
     return groups;
   }
@@ -611,9 +621,11 @@
       g0.forEach(g => { g._strategy = 'hold'; g._role = 'hold'; });
       return g0;
     }
-    const strategy = chooseAIStrategy(scenario, enriched, style, factionKey);
+    // 全部の国で移動と火力に分ける（ユーザーの指示 2026-11-04）。5人未満は分けられないので従来の選び方
+    const strategy = enriched.length >= 5 ? 'fireMove' : chooseAIStrategy(scenario, enriched, style, factionKey);
     let groups;
-    if (strategy === 'fireMove') { groups = _formFireMove(enriched, factionKey); _assignCrew(groups, enriched); }
+    const _hasDemo = !!scenario && (scenario.id === 'B' || (scenario.id === 'C' && role === 'attacker'));
+    if (strategy === 'fireMove') { groups = _formFireMove(enriched, factionKey, _hasDemo); _assignCrew(groups, enriched); }
     else if (strategy === 'assault') { groups = _formAssault(enriched, factionKey); _assignCrew(groups, enriched); }
     else groups = _buildGroupsWaveOrSplit(scenario, factionKey, role, strategy);
     groups = groups.filter(g => g.cards.length > 0);

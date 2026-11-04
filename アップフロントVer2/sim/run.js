@@ -34,6 +34,11 @@ async function playOne(gameNo) {
     url: 'file://' + path.join(__dirname, '../index.html') + '?lang=ja',
     beforeParse(w) {
       w.__HEADLESS = true;
+      if (process.env.UF_TRAITS) w.AI_FACTION_TRAITS = JSON.parse(process.env.UF_TRAITS);
+      if (process.env.UF_WEIGHTS) w.UF_CARD_WEIGHTS = JSON.parse(process.env.UF_WEIGHTS);
+      if (process.env.UF_VALUE_FACTION) w.UF_VALUE_FACTION = process.env.UF_VALUE_FACTION;
+      if (process.env.UF_BOTH_AFV) w.UF_BOTH_AFV = true;
+      if (process.env.UF_AFV_POLICY) w.AFV_POLICY = JSON.parse(process.env.UF_AFV_POLICY);
       w.alert = m => { alerts.push(String(m)); };
       w.confirm = () => false;  // 確認は「いいえ」（捕獲しない・参加させない等）
       w.prompt = () => null;
@@ -147,7 +152,7 @@ async function playOne(gameNo) {
   w.eval(`
     (function () {
       const sc = window.SCENARIOS['${SCN}'];
-      const role = sc && sc.asymmetric ? (Math.random() < 0.5 ? 'attacker' : 'defender') : null;
+      const role = sc && sc.asymmetric ? (${JSON.stringify(process.env.UF_ROLE || '')} || (Math.random() < 0.5 ? 'attacker' : 'defender')) : null;
       // 国1 も AI と同じく、先に性格をくじで決めてから作戦を選んでグループを作る
       const style1 = drawAIStyle('${f1}');
       const pg = window.SCENARIO_HELPERS.buildAIGroupsSmart(sc, '${f1}', role, style1);
@@ -164,7 +169,8 @@ async function playOne(gameNo) {
       // プレイヤー側（国1）にも AI と同じクルー割当と性格のくじ
       // 作戦と役割（_strategy / _role）は、カード番号の受け渡しで消えるので付け直す
       (state.groups.player || []).forEach((g, i) => { if (g && pg[i]) { g._strategy = pg[i]._strategy; g._role = pg[i]._role; } });
-      __swap(); initAICrewPairs(); state.aiStyle = style1; __swap();
+      __swap(); initAICrewPairs(); state.aiStyle = ${process.env.UF_STYLE1 ? JSON.stringify(process.env.UF_STYLE1) : 'style1'}; __swap();
+      ${process.env.UF_STYLE2 ? 'state.aiStyle = ' + JSON.stringify(process.env.UF_STYLE2) + ';' : ''}
     })();
   `);
   const st = () => w.state;
@@ -214,6 +220,7 @@ async function playOne(gameNo) {
     endCount: endAlerts.length,
     phase: st().phase,
     acts: w.__acts,
+    afv: w.__afvStats, score: w.__cardScore,
     errors: [...new Set(errors)].slice(0, 3),
   };
   if (REPORT) {
@@ -242,7 +249,10 @@ function buildIndexHtml() {
   const meta = f => { try { const m = fs.readFileSync(path.join(REPORT_DIR, f), 'utf8').match(/<!--META (.*?)-->/); return m ? JSON.parse(m[1]) : null; } catch (e) { return null; } };
   const rowOf = (f, label) => { const m = meta(f) || {};
     return `<tr><td><a href="${encodeURIComponent(f)}">${esc(label)}</a></td><td>${esc(m.scenario ? m.scenario + ': ' + (m.scenarioName || '') : '')}</td><td>${esc(m.p1 && m.p2 ? m.p1 + ' vs ' + m.p2 : '')}</td><td>${esc(m.result || '')}</td></tr>`; };
-  const player = files.filter(f => /^upfront_report_\d{8}_\d{4}\.html$/.test(f)).sort().reverse()
+  // ドイツ軍のキャンペーン（プレイヤー対 AI の一覧とは分ける）
+  const CAMPAIGN_GER = ['upfront_report_20261103_0659.html', 'upfront_report_20261104_1500.html'];
+  const campaign = CAMPAIGN_GER.filter(f => files.indexOf(f) >= 0).map((f, i) => rowOf(f, `Game ${i + 1}`).replace(/(<td>[A-E]: [^<]*)(<\/td>)/, '$1（夜間）$2')); // 2戦とも夜戦
+  const player = files.filter(f => /^upfront_report_\d{8}_\d{4}\.html$/.test(f) && CAMPAIGN_GER.indexOf(f) < 0).sort().reverse()
     .map(f => { const d = f.match(/_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\.html$/); return rowOf(f, d ? `${d[1]}-${d[2]}-${d[3]} ${d[4]}:${d[5]}` : f); });
   const ai = files.filter(f => /^ai_\d+\.html$/.test(f)).sort().reverse().map(f => rowOf(f, 'Game ' + parseInt(f.match(/\d+/)[0], 10)));
   const table = rows => rows.length ? `<table><tr><th>Date / Game</th><th>Scenario</th><th>Nations</th><th>Result</th></tr>${rows.join('')}</table>` : '<div class="empty">No games yet.</div>';
@@ -262,6 +272,8 @@ table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid va
 a{ color:var(--link); } .empty{ color:var(--mute); }
 </style></head><body><div class="wrap">
 <h1>Up Front: Reports</h1>
+<h2>German Campaign</h2>
+<div class="card">${table(campaign)}</div>
 <h2>Player vs AI</h2>
 <div class="card">${table(player)}</div>
 <h2>AI vs AI</h2>
