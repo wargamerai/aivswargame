@@ -658,82 +658,55 @@ var PocPlanner = (function () {
     return { plan, value: 0 };
   }
 
-  // 連合: POC のランキングに戦力をはめて決める（ユーザーの指示 2026-11-05）
-  //   1) そのターンに持てる海域の組み合わせを、POC の点が高い順に並べる（持つ=連合の点、ドイツが取れる=−価値）
-  //   2) 上の組み合わせから艦をはめ、どの海域もドイツ全力の勝率が基準（くじ 52/50/48%）未満なら決める
-  //   3) どれも届かなければ、一番勝率の低い配置にする。余った艦は勝率の一番悪い海域へ
+  // 連合: マスター30。点が一番高い配分を選ぶ（ユーザーの指示 2026-11-05）
+  //   点 = 艦を置いた海域の「値 ×（1 − ドイツの勝率）」の合計
+  //   値は seaWorth、ドイツの勝率は届く艦の攻撃力 ÷ 置いた艦の攻撃力 を 8000 戦の表（win6）で引く
   function planAlliesV4(a) {
     const seas = ['NorthSea', 'Barents', 'SouthAtlantic', 'NorthAtlantic'];
     // 15.5 1ターン目は「前のターン」がないので、イタリアの重巡は地中海を出られない
     const axis = a.axisShips.map(u => ({ s: u.s, opts: u.s.country === 'IT' ? u.opts.filter(o => a.turn > 1 && o === 'SouthAtlantic') : u.opts }));
+    const power = arr => arr.reduce((t, s) => t + pwS(s), 0);
     const reach = {};
-    seas.forEach(sea => { reach[sea] = axis.filter(u => u.opts.includes(sea)).map(u => u.s); });
-    const fixed = {};
-    seas.forEach(sea => { fixed[sea] = (a.fixed[sea] || []).slice(); });
-    const can = sea => fixed[sea].length > 0 || a.ships.some(u => u.opts.includes(sea));
-    const weak = (x, y) => (pwS(x.s) + (x.s.def || 0)) - (pwS(y.s) + (y.s.def || 0));
-    // 組み合わせの点
-    const scoreOf = held => {
-      let v = 0;
-      let free = axis.slice().sort(weak);
-      for (const sea of seas.slice().sort((p, q) => seaWorth(q, fixed[q]) - seaWorth(p, fixed[p]))) {
-        if (held.includes(sea)) { v += a.seas[sea].allies; continue; }
-        const c = free.find(u => u.opts.includes(sea));
-        if (c) { v -= seaWorth(sea, fixed[sea]); free = free.filter(x => x !== c); }
+    seas.forEach(sea => { reach[sea] = power(axis.filter(u => u.opts.includes(sea)).map(u => u.s)); });
+    const by = {};
+    seas.forEach(sea => { by[sea] = (a.fixed[sea] || []).slice(); });
+    const winOf = sea => (!reach[sea] ? 0 : win6(sea, reach[sea] / Math.max(1, power(by[sea]))));
+    const scoreOf = sea => (by[sea].length ? seaWorth(sea, by[sea]) * (1 - winOf(sea)) : 0);
+    const total = () => seas.reduce((t, sea) => t + scoreOf(sea), 0);
+    const plan = {};
+    const units = a.ships.filter(u => seas.some(sea => u.opts.includes(sea))).sort((x, y) => pwS(y.s) - pwS(x.s));
+    // 攻撃力の分け方を全部計算して、点が一番高い分け方を選ぶ
+    const T = power(units.map(u => u.s));
+    const base = {}, table = {};
+    seas.forEach(sea => {
+      base[sea] = power(by[sea]);
+      const fixedShips = by[sea], w = seaWorth(sea, fixedShips);
+      table[sea] = [];
+      for (let x = 0; x <= T; x++) {
+        const pw = base[sea] + x;
+        if (!x && !fixedShips.length) { table[sea][x] = 0; continue; }
+        table[sea][x] = w * (1 - (!reach[sea] ? 0 : win6(sea, reach[sea] / Math.max(1, pw))));
       }
-      return v;
-    };
-    const combos = [];
-    for (let m = 0; m < 16; m++) {
-      const held = seas.filter((_, i) => m & (1 << i));
-      if (held.every(can)) combos.push({ held, v: scoreOf(held) });
+    });
+    let want = null, bestV = -Infinity;
+    for (let n = T; n >= 0; n--) for (let b = T - n; b >= 0; b--) for (let s = T - n - b; s >= 0; s--) {
+      const na = T - n - b - s;
+      const v = table.NorthSea[n] + table.Barents[b] + table.SouthAtlantic[s] + table.NorthAtlantic[na];
+      if (v > bestV + 1e-9) { bestV = v; want = { NorthSea: n, Barents: b, SouthAtlantic: s, NorthAtlantic: na }; }
     }
-    combos.sort((x, y) => y.v - x.v || y.held.length - x.held.length);
-    const th = [0.52, 0.5, 0.48][Math.floor(Math.random() * 3)];
-    const winOf = (sea, al) => (reach[sea].length ? (al.length ? roundStats(sea, al, reach[sea]).w : 1) : 0);
-    const fit = held => {
-      const by = {}, plan = {};
-      held.forEach(sea => { by[sea] = fixed[sea].slice(); });
-      const units = a.ships.slice().sort((x, y) => pwS(y.s) - pwS(x.s));
-      for (const u of units) {
-        const o = held.filter(sea => u.opts.includes(sea));
-        if (!o.length) continue;
-        o.sort((p, q) => winOf(q, by[q]) - winOf(p, by[p]) || seaWorth(q, by[q]) - seaWorth(p, by[p]));
-        by[o[0]].push(u.s); plan[u.s.id] = o[0];
-      }
-      // 1隻動かして、一番悪い海域の勝率が下がるなら動かす
-      const worst = () => held.reduce((t, sea) => Math.max(t, winOf(sea, by[sea])), 0);
-      let cur = worst();
-      for (const u of units) {
-        const from = plan[u.s.id];
-        if (!from) continue;
-        by[from].splice(by[from].indexOf(u.s), 1);
-        let to = from, b = Infinity;
-        for (const sea of held) {
-          if (!u.opts.includes(sea)) continue;
-          by[sea].push(u.s);
-          const v = worst();
-          by[sea].pop();
-          if (v < b - 1e-9 || (v === b && sea === from)) { b = v; to = sea; }
-        }
-        by[to].push(u.s); plan[u.s.id] = to;
-        if (b < cur) cur = b;
-      }
-      return { plan, by, worst: worst() };
-    };
-    let pick = null, low = null;
-    for (const c of combos) {
-      if (!c.held.length) continue;
-      const f = Object.assign(fit(c.held), { c });
-      if (!low || f.worst < low.worst) low = f;
-      if (f.worst < th) { pick = f; break; }
+    // 強い艦から、足りない量が一番多い海域へ置く
+    const left = Object.assign({}, want);
+    for (const u of units) {
+      const can = seas.filter(sea => u.opts.includes(sea));
+      const withWant = can.filter(sea => want[sea] > 0); // 式が0とした海域には置かない
+      const o = (withWant.length ? withWant : can).sort((x, y) => left[y] - left[x]);
+      const sea = o[0];
+      by[sea].push(u.s); plan[u.s.id] = sea; left[sea] -= pwS(u.s);
     }
-    pick = pick || low || { plan: {}, by: {}, worst: 0, c: { held: [], v: 0 } };
-    const plan = pick.plan;
     // 主要な海域に行けない艦（マルタの艦）は地中海へ
     a.ships.forEach(u => { if (!plan[u.s.id] && u.opts.includes('Mediterranean') && !seas.some(s => u.opts.includes(s))) plan[u.s.id] = 'Mediterranean'; });
-    if (typeof window !== 'undefined' && window.__pocTrace) window.__pocTrace.push('T' + a.turn + ' 連合 基準' + th + ' ' + seas.map(sea => `${sea}:${(pick.by[sea] || []).length}隻/攻${(pick.by[sea] || []).reduce((t, s) => t + pwS(s), 0)}${pick.by[sea] ? '(' + Math.round(winOf(sea, pick.by[sea]) * 100) + '%)' : ''}`).join(' ') + ' 点' + pick.c.v);
-    return { plan, value: 0 };
+    if (typeof window !== 'undefined' && window.__pocTrace) window.__pocTrace.push('T' + a.turn + ' 連合 点' + total().toFixed(1) + ' ' + seas.map(sea => `${sea}:${by[sea].length}隻/攻${power(by[sea])}${by[sea].length ? '(' + Math.round(winOf(sea) * 100) + '%)' : ''}`).join(' '));
+    return { plan, value: total() };
   }
 
   // ドイツの作戦（ユーザーの指示 2026-11-05）
