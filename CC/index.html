@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>コルベット・コマンド</title>
+<script src="cc_lang.js"></script>
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <style>
   :root { --bg:#0d1620; --panel:#14212e; --line:#2a3b4d; --txt:#d8e2ec; --mute:#8aa0b5; --acc:#ffcc66; --good:#7ee08a; --bad:#ff8a7a; --dice:#9ec9ff; }
@@ -16,6 +17,7 @@
   #bar .t { color:var(--acc); font-weight:bold; margin-right:auto; }
   #bar button { background:#1e2f40; color:var(--txt); border:1px solid var(--line); border-radius:3px; padding:2px 10px; cursor:pointer; font-size:0.80rem; }
   #bar button:hover { background:#2a4560; }
+  #bar select { background:#1e2f40; color:var(--txt); border:1px solid var(--line); border-radius:3px; padding:2px 4px; font-size:0.80rem; }
   /* 上半分: 船のステータス */
   #status { flex:0 0 var(--top, 46vh); overflow:auto; padding:8px 10px; background:var(--panel); border-bottom:2px solid var(--line); display:flex; gap:14px; flex-wrap:wrap; align-content:flex-start; font-size:0.87rem; }
   #status .col { min-width:15em; }
@@ -102,11 +104,14 @@
   body.hide-bad .ln.badev { display:none; } body.hide-bad .ln.badev-alt { display:block; }
   body.story-mode .ln.ubdmg-alt:not(.story):not(.big), body.story-mode .ln.ubdmg:not(.story):not(.big) { display:none; }
   #optOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:50; }
-  .optbox { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 18px; max-width:420px; width:92%; }
+  .optbox { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 18px 0; max-width:420px; width:92%; max-height:92vh; overflow-y:auto; }
+  .langrow { display:flex; flex-wrap:wrap; gap:6px; }
+  .langbtn { background:#1e2f40; color:var(--txt); border:1px solid var(--line); border-radius:3px; padding:4px 12px; cursor:pointer; font-size:0.93rem; }
+  .langbtn.on { background:var(--acc); color:#000; border-color:var(--acc); }
   .optbox .title { color:var(--acc); font-weight:bold; margin-bottom:8px; }
   .optbox label { display:block; margin:8px 0; cursor:pointer; }
   .optbox small { color:var(--mute); }
-  .optbox button { margin-top:10px; width:100%; padding:6px; background:#1e2f40; color:var(--txt); border:1px solid var(--line); border-radius:4px; cursor:pointer; }
+  .optbox button { position:sticky; bottom:0; margin:10px 0 0; width:100%; padding:10px; background:#27445f; color:var(--txt); border:1px solid var(--line); border-radius:4px; cursor:pointer; font-size:1rem; box-shadow:0 -8px 8px var(--panel); }
   @media (max-width: 600px) { #status { flex-basis:44%; } .col { min-width:0 !important; width:100%; } }
 </style>
 </head>
@@ -121,7 +126,7 @@
   <button onclick="saveFile()">Save</button>
   <button onclick="loadFile()">Load</button>
   <button onclick="restart()" data-en="New game">最初から</button>
-  <button onclick="setLang(LANG === 'en' ? 'ja' : 'en')" title="言語 / Language">日本語 / English</button>
+  <select id="langSel" title="言語 / Language" onchange="setLang(this.value)"></select>
 </div>
 <div id="status"></div>
 <div id="split" title="つまんで上下に動かすと、上の画面の高さを変えられます（ダブルクリックで元に戻す）"><span></span></div>
@@ -129,18 +134,22 @@
   <div id="log"></div>
   <div id="choices"></div>
 </div>
-<script src="cc_lang.js"></script>
 <script src="cc_data.js"></script>
 <script src="cc_story.js"></script>
+<script src="cc_story_more.js"></script>
 <script src="cc_story_en.js"></script>
+<script src="cc_story_more_en.js"></script>
 <script src="cc_game.js"></script>
 <script>
   // 英語の時は、上のボタンなどの文字を英語にする
-  if (LANG === 'en') {
-    document.title = 'Corvette Command';
-    document.querySelectorAll('[data-en]').forEach(e => { e.textContent = e.dataset.en; });
-    document.querySelectorAll('[data-en-title]').forEach(e => { e.title = e.dataset.enTitle; });
+  if (LANG !== 'ja') {
+    document.title = L('', 'Corvette Command');
+    document.querySelectorAll('[data-en]').forEach(e => { e.textContent = L('', e.dataset.en); });
+    document.querySelectorAll('[data-en-title]').forEach(e => { e.title = L('', e.dataset.enTitle); });
   }
+  // 言語の選択
+  const langSel = document.getElementById('langSel');
+  LANGS.forEach(([c, n]) => { const o = document.createElement('option'); o.value = c; o.textContent = n; if (c === LANG) o.selected = true; langSel.appendChild(o); });
   // ブラウザの「戻る」でゲームから離れないようにする（ユーザーの指示 2026-11-03）
   history.pushState(null, '', location.href);
   window.addEventListener('popstate', () => { history.pushState(null, '', location.href); });
