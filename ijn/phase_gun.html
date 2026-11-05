@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="../nv_i18n.js"></script>
+<script src="../nv_lang.js"></script>
 <meta charset="UTF-8">
 <style>
 body { background:#f5f5fa; color:#222; font-family:monospace; padding:12px; font-size:1.05em; }
@@ -104,6 +106,7 @@ button:disabled { background:#e8e8e8; color:#999; cursor:default; }
   <div id="shootInfo">射撃艦と目標を選んでください</div>
 
   <button id="btnShoot" onclick="doShoot()" disabled>射撃！</button>
+  <button id="btnEntrust" onclick="entrustGunTurn()">このフェイズの砲撃はお任せ</button>
   <button onclick="doneSubPhase()" id="btnDone">射撃終了 →</button>
 </div>
 
@@ -400,6 +403,16 @@ function getMaxRange(target, firer) {
 // ===== 初期化 =====
 function isJPAutoAI() { return localStorage.getItem('jpAutoAI') === '1'; }
 
+// このフェイズの砲撃をお任せにする（ユーザーの指示 2026-11-04）。フェイズごとに画面を読み直すので、次のフェイズは手動に戻る
+let gunAutoPhase = false;
+function isGunAutoTurn() { return gunAutoPhase; }
+function entrustGunTurn() {
+  if (firedShips.size > 0) { log('このフェイズは手で撃ち始めたので、お任せにできません'); return; }
+  gunAutoPhase = true;
+  const b = document.getElementById('btnEntrust');
+  if (b) b.disabled = true;
+  autoJPShoot(document.getElementById('phTitle').textContent + '（お任せ）');
+}
 function jpShootOrAuto(title) {
   const isFullAuto = localStorage.getItem('fullAutoAI') === '1';
   // 接触後かつ観戦モードでなければAI委任を自動解除
@@ -408,8 +421,8 @@ function jpShootOrAuto(title) {
     const cb = document.getElementById('jpAI');
     if (cb) cb.checked = false;
   }
-  if (isFullAuto || isJPAutoAI()) {
-    autoJPShoot(title + '（自動）');
+  if (isFullAuto || isJPAutoAI() || isGunAutoTurn()) {
+    autoJPShoot(title + (isGunAutoTurn() ? '（お任せ）' : '（自動）'));
   } else {
     setupJPShoot(title);
   }
@@ -1042,7 +1055,7 @@ function autoJPShoot(title) {
       logEl.appendChild(btn);
       logEl.scrollTop = logEl.scrollHeight;
       // AI委任時は自動確認
-      if (isJPAutoAI()) { setTimeout(() => { if (btn.parentNode) btn.click(); }, 2500); }
+      if (isJPAutoAI() || isGunAutoTurn()) { setTimeout(() => { if (btn.parentNode) btn.click(); }, 2500); }
     }, 600);
   }
 
@@ -1339,7 +1352,7 @@ function autoUSShoot(title) {
       logEl.appendChild(btn);
       logEl.scrollTop = logEl.scrollHeight;
       // AI委任時は自動確認
-      if (isJPAutoAI()) { setTimeout(() => { if (btn.parentNode) btn.click(); }, 2500); }
+      if (isJPAutoAI() || isGunAutoTurn()) { setTimeout(() => { if (btn.parentNode) btn.click(); }, 2500); }
     }, 600);
   }
 

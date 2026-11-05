@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="../nv_i18n.js"></script>
+<script src="../nv_lang.js"></script>
 <meta charset="UTF-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -388,6 +390,7 @@ function extendMapUp() {
     if (s.path) s.path.forEach(p => { p.row += MAP_SECTION; });
   });
   ROWS += MAP_SECTION;
+  panY -= MAP_SECTION * HS * 1.5 * zoomLevel; // 見た目の位置は動かさない
   initCanvas();
   saveState();
   draw();
@@ -1230,6 +1233,7 @@ function loadPhase(phase) {
     if (fresh.usFreeMove)  state.usFreeMove  = true;
     if (fresh.contactMade) state.contactMade = true;
   }
+  checkMapBounds(); // 地図の端に近ければ、画面を切り替える前に足す
   // 移動フェーズ開始時: 現在位置を保存（軌跡線用）
   if (phase === 'move1' || phase === 'move2') {
     [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
@@ -1430,7 +1434,7 @@ window.addEventListener('message', (e) => {
       if (msg.usFreeMove)  { state.usFreeMove  = true; }
       if (msg.contactMade) { state.contactMade = true; }
       saveState();
-      checkMapBounds();
+      // 地図を足すのは画面の切り替えの時だけ（移動の途中で足すと、iframe の持つ位置と食い違って艦がワープする）
       checkContact();
       draw();
       break;

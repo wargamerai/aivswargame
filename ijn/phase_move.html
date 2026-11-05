@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="../nv_i18n.js"></script>
+<script src="../nv_lang.js"></script>
 <meta charset="UTF-8">
 <style>
 body { background:#f5f5fa; color:#222; font-family:monospace; padding:12px; font-size:1.05em; }
@@ -2209,9 +2211,11 @@ function moveForward() {
   if (next.col < 0 || next.col >= COLS || next.row < 0) {
     setInfo('マップ外'); return;
   }
-  // ルール 11: 艦のいるヘクス・沈没船のヘクスには入らない（回頭不能か前方3ヘクスがふさがっている時だけ）
+  // ルール 11 では入れないが、無理をしてでも進みたい時は、警告のうえで入れる（ユーザーの指示 2026-11-04）
   if (hexBlocked(moving, next.col, next.row) && !canForceEntry(moving)) {
-    setInfo(`${moving.name}: 前方のヘクスに艦がいます。回頭して避けてください`); return;
+    if (!confirm(`${moving.name}: 前方のヘクスに艦がいます。\n入ると衝突チェックをします（ダイスで7が出ると衝突）。\nそれでも進みますか？`)) {
+      setInfo(`${moving.name}: 進入をやめました。回頭して避けるか、別の動きを選んでください`); return;
+    }
   }
   saveUndo();
 

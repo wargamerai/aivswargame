@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script src="../nv_i18n.js"></script>
+<script src="../nv_lang.js"></script>
     <meta charset="UTF-8">
     <title>Air Combat Game - 完全統合版</title>
     <style>
@@ -422,6 +424,7 @@
                     もう一度 <strong>Enter</strong> で実行（Esc/BackSpaceで取消）
                 </p>
                 <input type="text" id="command-input" placeholder="例: 5545, 885, 25" autocomplete="off">
+                <div id="plot-status" style="margin-top:6px; font-size:0.85em; line-height:1.5;"></div>
             </div>
 
             <div class="panel-box" style="flex: 1;">
@@ -781,6 +784,7 @@ window.COMBAT_CHARTS.RH = {
             // 高速シミュレーションモードは専用エンジンで処理
             const svg = document.getElementById('game-map');
             const cmdInput = document.getElementById('command-input');
+            if (cmdInput) cmdInput.addEventListener('input', updatePlotStatus);
 
             if (gameConfig && gameConfig.mode === 'WATCH_FAST') {
                 drawMap();
@@ -1194,6 +1198,7 @@ window.COMBAT_CHARTS.RH = {
 
             const startCell = document.getElementById(`cell-${u.startRow}-${u.startCol}`);
             if (startCell) startCell.classList.add('start');
+            updatePlotStatus();
         }
 
         function handleArrowKeys(key) {
@@ -1345,9 +1350,10 @@ window.COMBAT_CHARTS.RH = {
             let maxSpeed = Math.max(...reqSpeeds);
             if (!reqSpeeds.includes(speedCount)) {
                 if (speedCount < minSpeed) {
-                    addLog(`<span class="error-text">❌ 移動力が足りません。（入力: ${speedCount}マス / 要求: ${reqSpeeds.join(' または ')}マス）</span>`);
+                    const shortBy = Math.min(...reqSpeeds.filter(v => v > speedCount)) - speedCount;
+                    addLog(`<span class="error-text">❌ 移動力があと ${shortBy}マス足りません。5 を ${shortBy}回追加してください。（入力: ${speedCount}マス / 必要: ${reqSpeeds.join(' または ')}マス）</span>`);
                 } else if (speedCount > maxSpeed) {
-                    addLog(`<span class="error-text">❌ 移動力が多すぎます。（入力: ${speedCount}マス / 要求: ${reqSpeeds.join(' または ')}マス）</span>`);
+                    addLog(`<span class="error-text">❌ 移動力が ${speedCount - maxSpeed}マス多すぎます。（入力: ${speedCount}マス / 必要: ${reqSpeeds.join(' または ')}マス）</span>`);
                 } else {
                     addLog(`<span class="error-text">❌ 移動力消費が一致しません。（入力: ${speedCount}マス / 要求: ${reqSpeeds.join(' または ')}マス）</span>`);
                 }
@@ -1411,8 +1417,76 @@ window.COMBAT_CHARTS.RH = {
             };
         }
 
+        // プロットの今の状態: 何がいくつ足りないかを入力中に見せる
+        function plotReport(inputStr) {
+            const u = units[activeUnitIndex];
+            const reqSpeeds = parseSpeeds(u.speed);
+            const maxTurns = parseMaxTurns(planeData[u.aircraft].turn[u.cursorRow][u.cursorCol]);
+            const altOptions = parseAltOptions(planeData[u.aircraft].alt[u.cursorRow][u.cursorCol]);
+            const allowedTurn = (u.cursorCol === 0 || u.cursorCol === 1) ? '4' : (u.cursorCol === 3 || u.cursorCol === 4) ? '6' : null;
+            const canLateral = (u.cursorCol === 2) && (u.cursorRow === 2 || u.cursorRow === 3);
+            const canImmelmann = (u.prevRow === 0) && (u.cursorRow === 0) && (u.cursorCol >= 1 && u.cursorCol <= 3);
+            const canSplitS = (u.prevRow === 4) && (u.cursorRow === 4) && (u.cursorCol >= 1 && u.cursorCol <= 3);
+            const count = re => (inputStr.match(re) || []).length;
+            const lines = [];
+            const add = (ok, text) => lines.push({ ok, text });
+
+            // 移動
+            const moved = count(/[513]/g);
+            const speeds = reqSpeeds.join(' か ');
+            if (reqSpeeds.includes(moved)) add(true, `移動 ${moved}マス（必要 ${speeds}）`);
+            else {
+                const bigger = reqSpeeds.filter(v => v > moved);
+                if (bigger.length) add(false, `移動 ${moved}マス → あと ${Math.min(...bigger) - moved}マス足りない（必要 ${speeds}。5 を追加）`);
+                else add(false, `移動 ${moved}マス → ${moved - Math.max(...reqSpeeds)}マス多い（必要 ${speeds}）`);
+            }
+            // 旋回
+            const turns = count(/[46]/g);
+            const turnName = allowedTurn === '4' ? '左 4 のみ' : allowedTurn === '6' ? '右 6 のみ' : '旋回不可';
+            if (allowedTurn === null && turns > 0) add(false, `旋回 ${turns}回 → 今のステータスでは旋回できない`);
+            else if (turns > maxTurns) add(false, `旋回 ${turns}回 → ${turns - maxTurns}回多い（上限 ${maxTurns}回、${turnName}）`);
+            else if (allowedTurn && inputStr.includes(allowedTurn === '4' ? '6' : '4')) add(false, `旋回の向きが違う（${turnName}）`);
+            else add(true, `旋回 ${turns}回（上限 ${maxTurns}回、${turnName}）`);
+            // 旋回の前の直進
+            let steps = u.stepsSinceLastTurn, needStraight = false;
+            for (const c of inputStr) {
+                if (c === '5' || c === '1' || c === '3') steps++;
+                else if (c === '4' || c === '6') { if (steps < 1) needStraight = true; steps = 0; }
+            }
+            if (needStraight) add(false, '旋回の前に、5 で1マス以上の直進が足りない');
+            // 高度
+            const up = count(/8/g), down = count(/2/g);
+            const altText = altOptions.map(v => v > 0 ? '+' + v : (v === 0 ? '±0' : v)).join(' か ');
+            if (up > 0 && down > 0) add(false, '高度: 8 と 2 は同時に使えない');
+            else if (up > 0 || down > 0) {
+                const a = up > 0 ? up : -down;
+                if (altOptions.includes(a)) add(true, `高度 ${a > 0 ? '+' + a : a}（選べる ${altText}）`);
+                else add(false, `高度 ${a > 0 ? '+' + a : a} → 選べない（選べる ${altText}。8 が上、2 が下）`);
+            } else add(true, `高度 ${altOptions[0] > 0 ? '+' + altOptions[0] : (altOptions[0] === 0 || altOptions[0] === undefined ? '±0' : altOptions[0])}（選べる ${altText}）`);
+            // 特殊機動
+            if (/[13]/.test(inputStr) && !canLateral) add(false, 'ラテラルロール(1/3)は水平か降下の直進のステータスだけ');
+            if (inputStr.includes('1') && inputStr.includes('3')) add(false, 'ラテラルロールの左右は混ぜられない');
+            if (inputStr.includes('7') && !canSplitS) add(false, 'スプリットS(7)は降下か急降下の継続が必要');
+            if (inputStr.includes('9') && !canImmelmann) add(false, 'インメルマン(9)は上昇か急上昇の継続が必要');
+            const bad = inputStr.replace(/[1-9]/g, '');
+            if (bad) add(false, `使えない文字 [${bad}]`);
+            return lines;
+        }
+        function updatePlotStatus() {
+            const el = document.getElementById('plot-status');
+            const input = document.getElementById('command-input');
+            if (!el || !input || !units || !units[activeUnitIndex] || !planeData[units[activeUnitIndex].aircraft]) return;
+            el.innerHTML = plotReport(input.value.trim()).map(l =>
+                `<div style="color:${l.ok ? '#2e7d32' : '#c62828'};${l.ok ? '' : 'font-weight:bold;'}">${l.ok ? '✅' : '❌'} ${l.text}</div>`).join('');
+        }
+
         function showPreview() {
             const inputStr = document.getElementById('command-input').value;
+            if (!inputStr) {
+                const need = plotReport('').filter(l => !l.ok).map(l => l.text).join(' / ');
+                addLog(`<span class="error-text">❌ コマンドが未入力です。${need}</span>`);
+                return;
+            }
             let simResult = validateAndSimulate(inputStr);
             if (simResult) {
                 previewState = simResult;
@@ -1444,6 +1518,7 @@ window.COMBAT_CHARTS.RH = {
 
             document.getElementById('command-input').value = '';
             document.getElementById('command-input').classList.remove('preview-mode');
+            updatePlotStatus();
             addLog(`✈️ ${u.id} がコマンド [${previewState.cmdStr}] を実行しました。`);
 
             // 軌跡を記録
