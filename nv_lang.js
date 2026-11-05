@@ -1,7 +1,7 @@
 // F16・連合艦隊・太平洋艦隊の言語切り替え（9言語）
 // ゲームの処理には手を入れず、画面に出た日本語を nv_i18n.js の対訳表で置き換える
 //   - 言語: ?lang= → 保存した言語 → 日本語。フレームの中のページも同じ言語になる
-//   - いちばん外のページの右上に、言語を選ぶ箱を出す
+//   - ゲームの入口では最初に正面で言語を聞く。いちばん外のページの右上にも、切り替えの箱を出す
 (function () {
   const LANGS = { ja: '日本語', en: 'English', fr: 'Français', de: 'Deutsch', it: 'Italiano', es: 'Español', zh: '简体中文', ko: '한국어', ru: 'Русский' };
   let LANG = 'ja';
@@ -66,7 +66,7 @@
   }
   function walk(node) {
     if (node.nodeType === 3) { applyText(node); return; }
-    if (node.nodeType !== 1 || node.tagName === 'SCRIPT' || node.tagName === 'STYLE' || node.id === 'nvLangBox') return;
+    if (node.nodeType !== 1 || node.tagName === 'SCRIPT' || node.tagName === 'STYLE' || node.id === 'nvLangBox' || node.id === 'nvLangAsk') return;
     ATTRS.forEach(a => { if (node.hasAttribute(a)) applyAttr(node, a); });
     if (node.tagName === 'INPUT' && /^(button|submit)$/i.test(node.type) && node.hasAttribute('value')) applyAttr(node, 'value');
     node.childNodes.forEach(walk);
@@ -140,6 +140,38 @@
       document.body.appendChild(box);
     }
     if (LANG !== 'ja') setLang(LANG, true);
+    askLanguage();
+  }
+  // ゲームの入口では、最初に画面の正面で言語を聞く（URL に lang= があるとき、この回で聞いたあとは聞かない）
+  function askLanguage() {
+    if (window.top !== window || !/(f16ai\/scenario|ijn\/savo|ijn\/campaign|pf\/campaign)\.html$/.test(location.pathname)) return;
+    let asked = false;
+    try { asked = !!new URLSearchParams(location.search).get('lang') || sessionStorage.getItem('nvLangAsked') === '1'; } catch (e) { /* no storage */ }
+    if (asked) return;
+    const bg = document.createElement('div');
+    bg.id = 'nvLangAsk';
+    bg.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:16px;font-family:sans-serif;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#1e2733;color:#fff;border:2px solid #6ea8ff;border-radius:10px;padding:24px 28px;text-align:center;max-width:560px;width:100%;box-sizing:border-box;';
+    const h = document.createElement('div');
+    h.textContent = '言語 / Language / Langue / Sprache / Lingua / Idioma / 语言 / 언어 / Язык';
+    h.style.cssText = 'font-size:16px;font-weight:bold;margin-bottom:18px;line-height:1.5;';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;';
+    Object.keys(LANGS).forEach(k => {
+      const b = document.createElement('button');
+      b.textContent = LANGS[k];
+      b.lang = k;
+      b.style.cssText = 'font-size:18px;padding:12px 8px;border-radius:6px;cursor:pointer;color:#fff;background:' + (k === LANG ? '#2f6fd6' : '#33415a') + ';border:1px solid #6ea8ff;';
+      b.onclick = () => {
+        try { sessionStorage.setItem('nvLangAsked', '1'); } catch (e) { /* no storage */ }
+        if (k !== LANG) setLang(k); else { try { localStorage.setItem('nvLang', k); } catch (e) { /* no storage */ } }
+        bg.remove();
+      };
+      row.appendChild(b);
+    });
+    box.appendChild(h); box.appendChild(row); bg.appendChild(box);
+    document.body.appendChild(bg);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
