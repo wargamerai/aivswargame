@@ -1197,3 +1197,20 @@ function toggleLang(){ setLang(LANG === 'en' ? 'ja' : 'en'); }
 }
 
 document.addEventListener('DOMContentLoaded', () => setLang(LANG));
+
+// カウンター: 言語ごとに別の行で数える。言語が決まってから1回だけ送る
+window.goatcounter = window.goatcounter || {};
+window.goatcounter.no_onload = true;
+let langCounted = false;
+function langCount(){
+  if(langCounted) return;
+  langCounted = true;
+  let tries = 0;
+  (function send(){
+    const g = window.goatcounter;
+    if(g && g.count) g.count({ path: location.pathname.replace(/index\.html$/, '') + '?lang=' + LANG });
+    else if(tries++ < 40) setTimeout(send, 500);
+  })();
+}
+// 言語の切り替え以外を最初に押した時点の言語で数える
+document.addEventListener('click', e => { if(!(e.target.closest && e.target.closest('.lang-btn'))) langCount(); }, true);

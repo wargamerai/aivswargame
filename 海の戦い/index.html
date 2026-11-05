@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <title>海の戦い - War at Sea</title>
 <!-- アクセス解析（GoatCounter） -->
-<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script src="lang_i18n.js"></script>
 <script src="lang.js"></script>
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script src="report.js"></script>
 <script>
 // ブラウザの「戻る」でゲームの画面を離れないようにする。離れる・再読み込みするときは確認を出す
@@ -604,6 +604,7 @@ function setOptionRule(el){
 function startWithOptions(){
   lockOptionRules();
   document.getElementById('optionStartModal').style.display = 'none';
+  if(typeof langCount === 'function') langCount();
 }
 function lockOptionRules(){
   if(optionRulesLocked) return;
@@ -6250,6 +6251,7 @@ function applySaveData(data){
   document.querySelectorAll('.optRule').forEach(cb => { cb.checked = !!optionRules[cb.dataset.opt]; });
   lockOptionRules();
   document.getElementById('optionStartModal').style.display = 'none';
+  if(typeof langCount === 'function') langCount();
   // 選択状態を解除して描画し直す
   selectedLoc = null; selectedShipIds = []; selectedDest = null;
   document.getElementById('turnLabel').textContent = currentTurn;

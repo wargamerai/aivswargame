@@ -11,6 +11,21 @@
     else if (LANGS[localStorage.getItem('nvLang')]) LANG = localStorage.getItem('nvLang');
   } catch (e) { /* no storage */ }
 
+  // カウンター: 言語ごとに別の行で数える。言語が決まってから1回だけ送る
+  window.goatcounter = window.goatcounter || {};
+  window.goatcounter.no_onload = true;
+  let counted = false;
+  function count() {
+    if (counted) return;
+    counted = true;
+    let tries = 0;
+    (function send() {
+      const g = window.goatcounter;
+      if (g && g.count) g.count({ path: location.pathname.replace(/index\.html$/, '') + '?lang=' + LANG });
+      else if (tries++ < 40) setTimeout(send, 500);
+    })();
+  }
+
   const JP = /[぀-ヿ㐀-鿿]/;
   const KEYS = Object.keys(window.NV_I18N_KEYS || {}).sort((a, b) => b.length - a.length);
   const RE = KEYS.length ? new RegExp(KEYS.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g') : null;
@@ -144,10 +159,10 @@
   }
   // ゲームの入口では、最初に画面の正面で言語を聞く（URL に lang= があるとき、この回で聞いたあとは聞かない）
   function askLanguage() {
-    if (window.top !== window || !/(f16ai\/scenario|ijn\/savo|ijn\/campaign|pf\/campaign)\.html$/.test(location.pathname)) return;
+    if (window.top !== window || !/(f16ai\/scenario|ijn\/savo|ijn\/campaign|pf\/campaign)\.html$/.test(location.pathname)) { if (window.top === window) count(); return; }
     let asked = false;
     try { asked = !!new URLSearchParams(location.search).get('lang') || sessionStorage.getItem('nvLangAsked') === '1'; } catch (e) { /* no storage */ }
-    if (asked) return;
+    if (asked) { count(); return; }
     const bg = document.createElement('div');
     bg.id = 'nvLangAsk';
     bg.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:16px;font-family:sans-serif;';
@@ -167,6 +182,7 @@
         try { sessionStorage.setItem('nvLangAsked', '1'); } catch (e) { /* no storage */ }
         if (k !== LANG) setLang(k); else { try { localStorage.setItem('nvLang', k); } catch (e) { /* no storage */ } }
         bg.remove();
+        count();
       };
       row.appendChild(b);
     });

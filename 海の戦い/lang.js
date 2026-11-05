@@ -626,3 +626,18 @@ function setLang(lang){
 }
 
 document.addEventListener('DOMContentLoaded', () => setLang(LANG));
+
+// カウンター: 言語ごとに別の行で数える。言語が決まってから1回だけ送る
+window.goatcounter = window.goatcounter || {};
+window.goatcounter.no_onload = true;
+let langCounted = false;
+function langCount(){
+  if(langCounted) return;
+  langCounted = true;
+  let tries = 0;
+  (function send(){
+    const g = window.goatcounter;
+    if(g && g.count) g.count({ path: location.pathname.replace(/index\.html$/, '') + '?lang=' + LANG });
+    else if(tries++ < 40) setTimeout(send, 500);
+  })();
+}
