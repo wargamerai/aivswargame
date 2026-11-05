@@ -78,7 +78,7 @@ function winProb(axisArr, alliedArr, n = 2000){
 
 // イタリアの構え: 対戦の開始時に1回だけくじ（慎重派60% / 積極派40%）。積極派は必ず出撃するターン（1〜4）も決める
 const IT_STYLE = { style: Math.random() < 0.6 ? 'caut' : 'aggr', turn: 1 + Math.floor(Math.random() * 4) };
-const AXIS_PLAN_MODE = 4; // 0=今までの処理 / 1=POC の予想 / 4=公式（planAxisV2）。ユーザーの指示 2026-11-04
+const AXIS_PLAN_MODE = 6; // 0=今までの処理 / 1=POC の予想 / 4=公式（planAxisV2） / 6=作戦（planAxisV6）。ユーザーの指示 2026-11-05
 function axisAiMove(){
   const turn = currentTurn;
   const { axisState, cumPoc, lastTurnGain } = AXIS_AI.read();
@@ -92,8 +92,8 @@ function axisAiMove(){
   // 到達: 1=確実 / 2=2エリア移動（ダイス<速力） / 0=不可
   const reach = (s, sea) => {
     if(s.location === 'France' && turn > 6) return 0; // 2.4 フランスは6ターンの後は使える港でない。戻った艦は出撃できない
-    if(s.refuelTurn === turn - 1 && SEAS[s.location]) return 1; // 洋上補給成功艦はどこでも
-    const adj = PORT_SEAS[s.location] || [];
+    // 洋上補給の成功艦は海から出る。隣は確実、2エリア先はダイス（港からと同じ）
+    const adj = (s.refuelTurn === turn - 1 && SEAS[s.location]) ? (SEA_ADJ[s.location] || []) : (PORT_SEAS[s.location] || []);
     if(adj.includes(sea)) return 1;
     if(adj.some(mid => seaControl[mid] !== 'allies' && (SEA_ADJ[mid] || []).includes(sea))) return 2;
     return 0;
@@ -110,6 +110,7 @@ function axisAiMove(){
         s.failedMove = true;
         const alt = failMovePorts(s, sea, s.location)[0];
         if(alt){ s.location = alt; s.movedThisTurn = true; }
+        else if(SEAS[s.location]) s.location = s.homePort; // 6.4 海には残れない（補給で海から出た艦）
         log.push(`${s.name}: ${sea}へ2エリア移動失敗${alt ? ' → ' + alt : ''}`); ops.failed.push(s.name); return false;
       }
     }
@@ -122,6 +123,7 @@ function axisAiMove(){
   let assaultNow = null; // このターンに突撃する海域
   // POC の予想で配置する（ユーザーの指示 2026-11-03）。連合の配置は見えているので、それに対する一番よい手を探す
   const AX_MODE = (typeof window !== 'undefined' && window.__axisPlanMode !== undefined) ? window.__axisPlanMode : AXIS_PLAN_MODE;
+  let ubPlan = null;
   if(AX_MODE >= 1){
     const seaList = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean', 'Baltic'];
     const movers = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.type !== 'UBOAT' && !s.movedThisTurn && !(s.damage > 0) &&
@@ -152,7 +154,8 @@ function axisAiMove(){
       alliedReinf[t] = SHIPS.filter(s => alive(s) && s.side === 'allies' && s.country === 'UK' && s.type !== 'CONVOY' && s.location === 'T' + t);
     }
     const italyPending = SHIPS.filter(s => alive(s) && s.country === 'IT' && /^T\d/.test(s.location || '')).length;
-    const r = (AX_MODE >= 4 ? PocPlanner.planAxisV2 : AX_MODE >= 3 ? PocPlanner.planAxisSimple : AX_MODE >= 2 ? PocPlanner.planAxisConcentrate : PocPlanner.planAxis)({ turn, seas: SEAS, seaList, ships, allied, fixed, nextReinf, reinf, alliedReinf, italyPending });
+    const r = (AX_MODE >= 6 ? PocPlanner.planAxisV6 : AX_MODE >= 4 ? PocPlanner.planAxisV2 : AX_MODE >= 3 ? PocPlanner.planAxisSimple : AX_MODE >= 2 ? PocPlanner.planAxisConcentrate : PocPlanner.planAxis)({ turn, seas: SEAS, seaList, ships, allied, fixed, nextReinf, reinf, alliedReinf, italyPending, ubs: SHIPS.filter(s => alive(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany').length });
+    ubPlan = r.ubPlan || null;
     if(r.notes) log.push(r.notes.join(' / '));
     ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') move(u.s, sea); });
     log.push(`POCの予想で配置（評価 ${r1(r.value)}）`);
@@ -357,8 +360,8 @@ function axisAiMove(){
       while(queue.length) put(queue.shift(), assaultNow);
     }
     // 毎ターン: 船団の海域 → 連合の支配を打ち消せる海域（安全な順） → 余りは安全な海域へ
-    if(convoyAt) putOver(convoyAt);
-    for(const sea of thin) putOver(sea);
+    if(ubPlan){ for(const sea in ubPlan) for(let i = 0; i < ubPlan[sea] && queue.length; i++) put(queue.shift(), sea); }
+    else { if(convoyAt) putOver(convoyAt); for(const sea of thin) putOver(sea); }
     // 余りは安全な海域で遊ばせず、置いた海域に順番に分けて足す（置いた海域がなければ安全な海域へ）
     const used = Object.keys(SEAS).filter(k => alliedAt(k).length && placed[k].some(s => s.type === 'UBOAT'));
     for(let i = 0; queue.length && used.length; i++) put(queue.shift(), used[i % used.length]);

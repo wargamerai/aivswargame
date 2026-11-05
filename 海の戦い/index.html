@@ -644,6 +644,59 @@ function renderPhaseBar(){
     return `<span class="ph-cell ${cls}">${nm}</span>`;
   }).join('');
 }
+// 2海域移動のダイス: 人が動かす陣営の移動フェイズが終わるときに、宣言した艦をまとめて判定する
+// 洋上補給に成功した艦が行ける海域: 隣か、途中が連合の支配でない2エリア先
+function refuelReaches(s, sea){
+  const adj = SEA_ADJ[s.location] || [];
+  return adj.includes(sea) || adj.some(mid => seaControl[mid] !== 'allies' && (SEA_ADJ[mid] || []).includes(sea));
+}
+function resolveTwoAreaMoves(){
+  const moveEnd = { allies: 2, axis: 3 };
+  const list = SHIPS.filter(s => s.twoAreaPending && phaseIdx >= moveEnd[s.side]);
+  if(!list.length) return;
+  const log = [];
+  for(const s of list){
+    s.twoAreaPending = false;
+    const origin = s.originThisTurn;
+    const dest = s.location;
+    const roll = rollD6();
+    if(roll < s.spd){
+      log.push(`${s.name}: 2海域 ⚂${roll}<${s.spd} 成功 → ${locLabel(dest)}`);
+      continue;
+    }
+    s.location = PORTS[origin] ? origin : (s.homePort || origin); // 6.4 元の港（補給で海から出た艦は母港）
+    s.failedMove = true; // このターンは再配置不可
+    // 目的の海域に隣接する味方の港があれば、元の港の代わりにそこへ入れる
+    for(const p of failMovePorts(s, dest, s.location)){
+      if(confirm(`${s.name}: 2海域移動 ⚂${roll}≥${s.spd} 失敗。\n${PORTS[p].name}に入る（OK）／${locLabel(s.location)}に残る（キャンセル）`)){ s.location = p; break; }
+    }
+    log.push(`${s.name}: 2海域 ⚂${roll}≥${s.spd} 失敗 → ${locLabel(s.location)}へ帰還(配置不可)`);
+  }
+  placeAllShips();
+  renderLocShipList(); renderDestButtons(); renderStatus(); renderSeaResetButtons();
+  document.getElementById('moveStatus').innerHTML = log.join('<br>');
+  alert('2海域移動・ダイス判定\n' + log.join('\n'));
+}
+// 17.2 中立港の残留: 移動が終わったあと（修理フェイズの頭）に、残っている艦1隻につき1POC
+function applyNeutralPenalty(){
+  const log = [];
+  let delta = 0;
+  SHIPS.forEach(s => {
+    if(s.location !== 'Neutral' || s.sunk || s.removed) return;
+    if(s.arrivedNeutralTurn === currentTurn || s.failedMove) return; // このターンに入った艦は免除
+    if(s.side === 'allies'){
+      delta -= 1; // 連合-1POC = カウンタ-1
+      log.push(`${s.name} 中立港残留 → 連合 -1POC`);
+    } else if(s.side === 'axis'){
+      delta += 1; // 枢軸-1POC = カウンタ+1
+      log.push(`${s.name} 中立港残留 → 枢軸 -1POC`);
+    }
+  });
+  if(!log.length) return;
+  poc = Math.max(-10, Math.min(10, poc + delta));
+  updatePOC();
+  alert(log.join('\n'));
+}
 async function advancePhase(){
   if(phaseIdx >= 9) return; // 9 (POC) で止まる、ターン終了ボタンで次ターンへ
   // 枢軸の移動のフェイズで1隻も動かしていなければ、確かめてから進む（移動を忘れたまま進まないように）
@@ -651,6 +704,7 @@ async function advancePhase(){
     const moved = SHIPS.some(s => s.side === 'axis' && s.movedThisTurn);
     if(!moved && !confirm('まだ枢軸の艦を1隻も動かしていません。このまま次のフェイズへ進みますか？')) return;
   }
+  resolveTwoAreaMoves(); // 6.3 / 6.4 2海域移動のダイスは、全艦の移動先を決めたあとにまとめて振る
   lockOptionRules();
   phaseIdx = phaseIdx + 1;
   renderPhaseBar();
@@ -660,6 +714,7 @@ async function advancePhase(){
   } else if(phaseIdx === 3){
     if(humanSide === 'allies') await aiAxisMove(); // 人が連合を持つ時は、ドイツ軍AI（axis_ai.js）が枢軸を動かす
   } else if(phaseIdx === 4){
+    applyNeutralPenalty();
     const log = await executeRepair();
     if(log && log.length){
       alert('修理結果:\n' + log.map(l => l.replace(/<[^>]+>/g,'')).join('\n'));
@@ -853,11 +908,11 @@ async function advancePhase(){
       else                       seaControl[seaKey] = null; // Uボートのみ含む全ての残りケース
     });
     placeControlMarkers();
-    // 地中海の枢軸連続支配: 4ターン連続でターン8初めにイタリア艦隊接収
+    // 15.7 地中海の枢軸連続支配: 4ターン連続で支配すれば、ターン8初めのイタリア艦隊の接収を免れる
     if(seaControl['Mediterranean'] === 'axis') medAxisStreak++;
     else medAxisStreak = 0;
-    if(medAxisStreak >= 4) italySeizurePending = true;
-    console.log(`[地中海] 枢軸連続支配 ${medAxisStreak}ターン${italySeizurePending ? '（ターン8に接収）' : ''}`);
+    if(medAxisStreak >= 4) italyHeldMed4 = true;
+    console.log(`[地中海] 枢軸連続支配 ${medAxisStreak}ターン${italyHeldMed4 ? '（接収なし）' : ''}`);
   } else if(phaseIdx === 9){
     // POC計算: 各海域の支配側に加算
     const pocBefore = poc;
@@ -1059,10 +1114,14 @@ function getValidDests(){
       seas = seas.filter(s => s !== 'Barents');
     }
   }
-  // 16.1 給油成功ドイツ艦は次ターン全海域配置可（海域→海域 直接）
-  if(firstShip && firstShip.refuelTurn === currentTurn - 1){
-    seas = Object.keys(SEAS);
-    seas2 = [];
+  // 16.1 給油成功ドイツ艦は海から出られる。隣の海域はそのまま、2エリア先は 6.2 / 6.4（途中が敵の支配でなく、ダイス判定）
+  if(firstShip && firstShip.refuelTurn === currentTurn - 1 && isSea){
+    seas.forEach(s1 => {
+      if(seaControl[s1] === 'allies') return;
+      (SEA_ADJ[s1] || []).forEach(s2 => {
+        if(s2 !== selectedLoc && !seas.includes(s2) && !seas2.includes(s2)) seas2.push(s2);
+      });
+    });
   }
   // 15.1 ロシア艦はバルト海のみ
   if(firstShip && firstShip.country === 'RU'){
@@ -2067,8 +2126,8 @@ function addDeclared(decl, ship, target, pendDecl){
 }
 // 水上戦闘の1陣営分の宣言。撃たれると宣言された空母（攻撃力1以上）は、判定の前に撃ち返す目標も宣言する
 async function declareSurfaceTargets(shooters, enemySide, seaKey, decl, pendDecl){
-  // 空母は、攻撃を宣言したときだけ撃つ。船団は、攻撃目標になれるラウンド（14.8 の保護が外れた時）だけ撃つ
-  const canFire = ship => !(ship.type === 'CV' && !ship._cvDeclared) && ship.atk !== 0 && (ship.type !== 'CONVOY' || convoyOpenSides[ship.side]);
+  // 空母は、攻撃を宣言したときだけ撃つ。船団は全ラウンド撃てる（14.8 は撃たれる条件だけ。18章の例でも1ラウンド目に撃っている）
+  const canFire = ship => !(ship.type === 'CV' && !ship._cvDeclared) && ship.atk !== 0;
   // 連合AI: 敵の全艦に割り振る計画を先に作る
   const firing = shooters.filter(canFire);
   const aiPlan = (firing.length && firing[0].side === 'allies' && aiSide === 'allies')
@@ -3729,10 +3788,10 @@ function planAlliedDeployment(aiLog){
     (s.country === 'IT' && s.type === 'CA' && seaControl['Mediterranean'] !== 'allies')
   );
   // 海域ごとの大西洋の脅威: このターンにその海域まで来られるドイツ艦だけ
-  //   港から隣（1エリア）か、途中の海域が連合の支配でないときの2エリア移動。洋上補給の成功艦はどこでも
+  //   港から隣（1エリア）か、途中の海域が連合の支配でないときの2エリア移動。洋上補給の成功艦も海から同じ
   //   ドイツ本国の艦は速力7のみ（今までどおり）。イタリアは重巡だけが地中海を通って南大西洋へ
   const reachesSea = (s, sea) => {
-    if(s.refuelTurn === currentTurn - 1 && SEAS[s.location]) return true;
+    if(s.refuelTurn === currentTurn - 1 && SEAS[s.location]) return refuelReaches(s, sea);
     if(SEAS[s.location]) return s.location === sea || (SEA_ADJ[s.location] || []).includes(sea);
     if(s.location === 'Germany' && s.spd < 7) return false;
     if(s.country === 'IT' && (s.type !== 'CA' || sea !== 'SouthAtlantic')) return false;
@@ -3873,7 +3932,7 @@ function planAlliedDeployment(aiLog){
 
     // ドイツ・イタリアの艦が行ける海域
     const enemyOpts = s => SEA_LIST.filter(sea => {
-      if(s.refuelTurn === currentTurn - 1 && SEAS[s.location]) return sea !== 'Mediterranean'; // 洋上補給に成功した艦
+      if(s.refuelTurn === currentTurn - 1 && SEAS[s.location]) return sea !== 'Mediterranean' && refuelReaches(s, sea); // 洋上補給に成功した艦
       if(sea === 'Mediterranean' && s.country !== 'IT') return false;
       return (PORT_SEAS[s.location] || []).includes(sea) || reachesSea(s, sea);
     });
@@ -3994,7 +4053,7 @@ function planAlliedDeployment(aiLog){
     const axisOpts = x => {
       const o = seaList.filter(sea => {
         if(sea === 'Baltic') return x.location === 'Germany';
-        if(x.refuelTurn === currentTurn - 1 && SEAS[x.location]) return sea !== 'Mediterranean';
+        if(x.refuelTurn === currentTurn - 1 && SEAS[x.location]) return sea !== 'Mediterranean' && refuelReaches(x, sea);
         if(sea === 'Mediterranean' && x.country !== 'IT') return false;
         return (PORT_SEAS[x.location] || []).includes(sea) || reachesSea(x, sea);
       });
@@ -5316,7 +5375,9 @@ function executeMove(){
         log.push(`${s.name}: 投入判定⚂${r}=6 成功(永続)`);
       }
     }
-    const origin = s.location;
+    // このターンに一度動かした艦の行き先を変える時は、出発した場所から数える（重ねて動かして2海域先へ行かせない）
+    const origin = s.originThisTurn || s.location;
+    s.twoAreaPending = false;
     const dest = selectedDest;
     // 移動済みフラグ＆起点記憶
     if(!s.originThisTurn) s.originThisTurn = origin;
@@ -5338,21 +5399,10 @@ function executeMove(){
       if(dest === 'Neutral') s.arrivedNeutralTurn = currentTurn;
       log.push(`${s.name}: → ${locLabel(dest)}`);
     } else {
-      // 2海域: ダイス判定 (出目 < 速力 = 成功)
-      const roll = rollD6();
-      const ok = roll < s.spd;
-      if(ok){
-        s.location = dest;
-        log.push(`${s.name}: 2海域 ⚂${roll}<${s.spd} 成功 → ${locLabel(dest)}`);
-      } else {
-        s.location = s.homePort || origin;
-        s.failedMove = true; // このターンは再配置不可
-        // 目的の海域に隣接する味方の港があれば、元の港の代わりにそこへ入れる
-        for(const p of failMovePorts(s, dest, s.location)){
-          if(confirm(`${s.name}: 2海域移動 ⚂${roll}≥${s.spd} 失敗。\n${PORTS[p].name}に入る（OK）／${locLabel(s.location)}に残る（キャンセル）`)){ s.location = p; break; }
-        }
-        log.push(`${s.name}: 2海域 ⚂${roll}≥${s.spd} 失敗 → ${locLabel(s.location)}へ帰還(配置不可)`);
-      }
+      // 2海域: ここでは宣言だけ。ダイスは移動フェイズの終わりにまとめて振る（resolveTwoAreaMoves）
+      s.location = dest;
+      s.twoAreaPending = true;
+      log.push(`${s.name}: 2海域移動 → ${locLabel(dest)}`);
     }
   });
   selectedShipIds = [];
@@ -5371,7 +5421,7 @@ function resetSea(seaKey, side){
   // 指定海域の指定陣営のみ母港に戻す
   const ships = SHIPS.filter(s => s.location === seaKey && s.side === side);
   if(!ships.length) return;
-  ships.forEach(s => { s.location = s.homePort; });
+  ships.forEach(s => { s.location = s.homePort; s.twoAreaPending = false; });
   placeAllShips();
   renderLocShipList(); renderSeaResetButtons(); renderStatus();
 }
@@ -5586,7 +5636,7 @@ let lastTurnPocGain = 0;  // 前のターンに連合が得たPOC（ターン1�
 // 累計のPOC（プラス=連合のリード）。画面なしの対戦（sim/play.js）では置き換える
 function alliedCumPoc(){ return poc; }
 let medAxisStreak = 0;    // 地中海の枢軸連続支配ターン数（7.支配配置で判定）
-let italySeizurePending = false; // 地中海を枢軸が4ターン連続支配 → ターン8初めにイタリア艦隊接収
+let italyHeldMed4 = false; // 15.7 地中海を枢軸が4ターン連続支配した。していなければターン8初めにイタリア艦隊接収
 
 // イタリア艦隊の接収（ターン8初め）: 1・2=連合軍の管理下(マルタへ) / 3・4=解体 / 5・6=ドイツ軍の管理下
 function executeItalySeizure(log){
@@ -5610,7 +5660,6 @@ function executeItalySeizure(log){
     }
   });
   italySurrendered = true;
-  italySeizurePending = false;
   lines.forEach(l => log.push(l));
   if(lines.length) alert('イタリア艦隊の接収:\n' + lines.join('\n'));
 }
@@ -5970,18 +6019,7 @@ function endTurn(){
   let delta = 0;
   // 16. ドイツ艦の給油: phase 8 で自動判定するように移動済み（ここでは何もしない）
 
-  // 17.2 中立港の残留ペナルティ（到着ターン以外、毎ターン1艦1POC損失）
-  SHIPS.forEach(s => {
-    if(s.location !== 'Neutral' || s.sunk || s.removed) return;
-    if(s.arrivedNeutralTurn === currentTurn) return; // 到着ターンは免除
-    if(s.side === 'allies'){
-      delta -= 1; // 連合-1POC = カウンタ-1
-      log.push(`${s.name} 中立港残留 → 連合 -1POC`);
-    } else if(s.side === 'axis'){
-      delta += 1; // 枢軸-1POC = カウンタ+1
-      log.push(`${s.name} 中立港残留 → 枢軸 -1POC`);
-    }
-  });
+  // 17.2 中立港の残留は、修理フェイズの頭で引く（applyNeutralPenalty）
 
   // 14. 船団の上陸（AI判断: 基本ロシアを目指すので英国は上陸しない）
   SHIPS.forEach(s => {
@@ -6092,7 +6130,8 @@ function endTurn(){
   }
   // 6.5) Uボート総数が8以上なら超過分を削除（enterTurnが新しい順）— ターン進行時のみ
   if(currentTurn < 8 || phaseIdx >= 1){
-    const allUboats = SHIPS.filter(s => s.type === 'UBOAT' && !s.sunk && !s.removed);
+    // 8.1 数えるのは到着済みのUボートだけ（ターン表で待っている増援は数えない）
+    const allUboats = SHIPS.filter(s => s.type === 'UBOAT' && !s.sunk && !s.removed && !(s.location && /^T\d/.test(s.location)));
     if(allUboats.length >= 8 && !optionRules.ubNoLimit){
       const sorted = allUboats.slice().sort((a,b) => (b.enterTurn || 0) - (a.enterTurn || 0));
       const excess = allUboats.length - 7;
@@ -6103,8 +6142,8 @@ function endTurn(){
       }
     }
   }
-  // 6.6) イタリア艦隊の接収（ターン8初め、地中海4ターン連続枢軸支配時）
-  if(currentTurn === 8 && !wasAtLastTurn && italySeizurePending && !italySurrendered){
+  // 6.6) 15.7 イタリア艦隊の接収（ターン8初め、地中海を4ターン連続で枢軸が支配していなければ）
+  if(currentTurn === 8 && !wasAtLastTurn && !italyHeldMed4 && !italySurrendered){
     executeItalySeizure(log);
   }
 
@@ -6170,7 +6209,7 @@ function buildSaveData(){
       optionRules: { ...optionRules },
       convoyOpenSides: { ...convoyOpenSides },
       alliedTargetMode, alliedFireStyle: { ...alliedFireStyle },
-      poc, pocAtTurnStart, lastTurnPocGain, medAxisStreak, italySeizurePending,
+      poc, pocAtTurnStart, lastTurnPocGain, medAxisStreak, italyHeldMed4,
       seaControl: { ...seaControl },
       retreatedSeas: [...retreatedSeas],
       combatDone: setsToArr(combatDone),
@@ -6231,7 +6270,7 @@ function applySaveData(data){
   alliedTargetMode = v.alliedTargetMode;
   Object.assign(alliedFireStyle, v.alliedFireStyle);
   poc = v.poc; pocAtTurnStart = v.pocAtTurnStart; lastTurnPocGain = v.lastTurnPocGain;
-  medAxisStreak = v.medAxisStreak; italySeizurePending = v.italySeizurePending;
+  medAxisStreak = v.medAxisStreak; italyHeldMed4 = !!v.italyHeldMed4;
   Object.keys(seaControl).forEach(k => { delete seaControl[k]; });
   Object.assign(seaControl, v.seaControl);
   retreatedSeas.clear(); v.retreatedSeas.forEach(k => retreatedSeas.add(k));

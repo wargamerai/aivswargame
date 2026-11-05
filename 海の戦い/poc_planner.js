@@ -658,6 +658,119 @@ var PocPlanner = (function () {
     return { plan, value: 0 };
   }
 
+  // ドイツの作戦（ユーザーの指示 2026-11-05）
+  const IT6 = { out: false };
+  const IT6_P = { 1: 0.1, 2: 0.1, 3: 0.1, 4: 0.6, 5: 0.6, 6: 0.1, 7: 0.1, 8: 1 };
+  const WIN6 = { NorthSea: [[0.59, 0.18], [0.74, 0.48], [0.89, 0.76], [1.0, 0.87], [1.25, 0.95]], other: [[0.59, 0.21], [0.74, 0.60], [0.89, 0.80], [1.0, 0.90], [1.25, 0.98]] };
+  function win6(sea, r) {
+    const t = WIN6[sea] || WIN6.other;
+    if (r <= t[0][0]) return t[0][1] * r / t[0][0];
+    for (let i = 1; i < t.length; i++) if (r <= t[i][0]) return t[i - 1][1] + (t[i][1] - t[i - 1][1]) * (r - t[i - 1][0]) / (t[i][0] - t[i - 1][0]);
+    return t[t.length - 1][1];
+  }
+  function planAxisV6(a) {
+    const seas = a.seaList, al = sea => a.allied[sea] || [];
+    const fx0 = {}; seas.forEach(sea => { fx0[sea] = ((a.fixed && a.fixed[sea]) || []).slice(); });
+    const fx = sea => fx0[sea];
+    const strength = u => pwS(u.s) + (u.s.def || 0);
+    const sumP = arr => arr.reduce((t, s) => t + pwS(s), 0);
+    let units = a.ships.map(u => ({ s: u.s, opts: u.opts.filter(o => o !== 'port' && !(u.s.country === 'IT' && a.turn === 1 && o === 'SouthAtlantic')) }));
+    const pre = {};
+    const notes = [];
+    const put = (u, sea) => { pre[u.s.id] = sea; fx0[sea].push(u.s); units = units.filter(x => x !== u); };
+    // イタリア: ターンごとのくじ。一度出たら以後も出る
+    if (!IT6.out && Math.random() < IT6_P[a.turn]) { IT6.out = true; notes.push('イタリア出撃開始'); }
+    if (IT6.out) {
+      const it = units.filter(u => u.s.country === 'IT' && u.opts.includes('Mediterranean'));
+      const ca = !al('SouthAtlantic').length && !fx('SouthAtlantic').length ? it.find(u => u.s.type === 'CA' && u.opts.includes('SouthAtlantic')) : null;
+      if (ca && it.length > 1) { put(ca, 'SouthAtlantic'); notes.push('重巡→南大西洋'); }
+      units.filter(u => u.s.country === 'IT' && u.opts.includes('Mediterranean')).forEach(u => put(u, 'Mediterranean'));
+    }
+    const de = () => units.filter(u => u.s.country === 'DE');
+    const main = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic'];
+    const worth = sea => seaWorth(sea, al(sea));
+    const assault = a.turn === 4 || a.turn === 5;
+    let target = null;
+    if (assault) {
+      // 4〜5ターン目の突撃先: 北海とバレンツのうち、一番勝てる海域
+      const winAt = sea => win6(sea, sumP(de().filter(u => u.opts.includes(sea)).map(u => u.s).concat(fx(sea))) / Math.max(1, sumP(al(sea))));
+      const c = ['NorthSea', 'Barents'].filter(sea => al(sea).length && de().some(u => u.opts.includes(sea))).sort((p, q) => winAt(q) - winAt(p));
+      target = c[0] || null;
+    }
+    // ソ連
+    const ru = al('Baltic');
+    const big = () => de().filter(u => u.opts.includes('Baltic') && u.s.type !== 'CV' && (u.s.atk || 0) >= 2);
+    let ubs = a.ubs || 0;
+    const ubForced = {};
+    if (ru.length) {
+      if (assault && target) {
+        const need = ru.length === 1 ? 6 : 10;
+        const b = big().sort((x, y) => (x.s.atk || 0) - (y.s.atk || 0));
+        const min = [];
+        for (const u of b) { if (sumP(min.map(x => x.s)) >= need && min.length >= 2) break; min.push(u); }
+        const all = de().filter(u => u.opts.includes(target)).map(u => u.s);
+        const rest = all.filter(s => !min.some(u => u.s === s));
+        const rA = sumP(all) / Math.max(1, sumP(al(target))), rB = sumP(rest) / Math.max(1, sumP(al(target)));
+        const vA = ubs >= uNeed(ru) ? win6(target, rA) * worth(target) : -1;
+        const vB = sumP(min.map(u => u.s)) >= need ? win6(target, rB) * worth(target) + 1 : -1;
+        if (vB > vA) { min.forEach(u => put(u, 'Baltic')); notes.push(`ソ連${ru.length}:艦で潰す(主力比${rB.toFixed(2)})`); }
+        else if (vA >= 0) { const n = uNeed(ru); ubForced.Baltic = n; ubs -= n; notes.push(`ソ連${ru.length}:Uで消す(主力比${rA.toFixed(2)})`); }
+      } else {
+        big().forEach(u => put(u, 'Baltic'));
+        notes.push(`ソ連${ru.length}:大艦で潰す攻${sumP(fx('Baltic'))}`);
+      }
+    }
+    // 比 0.75 以上の海域（突撃のターン以外）
+    const ratioOf = sea => sumP(de().filter(u => u.opts.includes(sea)).map(u => u.s).concat(fx(sea))) / Math.max(1, sumP(al(sea)));
+    const go = assault ? (target ? [target] : []) : main.filter(sea => al(sea).length && de().some(u => u.opts.includes(sea)) && ratioOf(sea) >= 1).sort((p, q) => worth(q) - worth(p));
+    const noUb = new Set(go);
+    // ランキング: 確実に取れる海域と Uボートで消す海域
+    const combos = [];
+    for (let m = 0; m < (1 << seas.length); m++) {
+      const taken = seas.filter((_, i) => m & (1 << i));
+      let ub = 0, ok = true, d = 0, uk = 0;
+      const ubPlan = {}, needShip = [];
+      for (const sea of taken) {
+        if (al(sea).length) {
+          if (fx(sea).length || noUb.has(sea) || ubForced[sea]) { ok = false; break; }
+          const n = uNeed(al(sea));
+          ub += n; ubPlan[sea] = n;
+        } else {
+          d += a.seas[sea].axis;
+          if (!fx(sea).length) needShip.push(sea);
+        }
+      }
+      if (!ok || ub > ubs) continue;
+      for (const sea of seas) if (al(sea).length && !taken.includes(sea) && !ubForced[sea]) uk += a.seas[sea].allies;
+      let free = units.slice().sort((x, y) => strength(x) - strength(y));
+      const assign = {};
+      needShip.sort((p, q) => free.filter(u => u.opts.includes(p)).length - free.filter(u => u.opts.includes(q)).length);
+      for (const sea of needShip) {
+        const c = free.find(u => u.opts.includes(sea));
+        if (!c) { ok = false; break; }
+        assign[c.s.id] = sea; free = free.filter(x => x !== c);
+      }
+      if (!ok) continue;
+      combos.push({ taken, ub, ubPlan, assign, d, uk, v: d - uk, ships: needShip.length, free });
+    }
+    combos.sort((x, y) => y.v - x.v || x.ub - y.ub || x.ships - y.ships);
+    const pick = combos[0];
+    const plan = Object.assign({}, pre, pick.assign);
+    let free = pick.free.slice();
+    const atk = [];
+    for (const sea of go) {
+      const list = free.filter(u => u.s.country === 'DE' && u.opts.includes(sea));
+      if (!list.length) continue;
+      const r = (sumP(list.map(u => u.s)) + sumP(fx(sea))) / Math.max(1, sumP(al(sea)));
+      if (!assault && r < 1) continue;
+      list.forEach(u => { plan[u.s.id] = sea; });
+      free = free.filter(u => !list.includes(u));
+      atk.push(`${sea}:${list.length}隻/比${r.toFixed(2)}/価${worth(sea)}`);
+    }
+    notes.unshift(`V6 独${pick.d} 英${pick.uk} 確実[${Object.values(pick.assign).join(',')}] U${pick.ub + (ubForced.Baltic || 0)}/${a.ubs || 0}[${Object.keys(pick.ubPlan).concat(Object.keys(ubForced)).join(',')}] 攻[${atk.join(',')}] 残${free.length}`);
+    return { plan, value: 0, notes: [notes.join(' ')], ubPlan: Object.assign({}, pick.ubPlan, ubForced) };
+  }
+
   // ドイツ・イタリアの集中配置: 分けない。勝てる戦力比まで集められる海域へ、価値の高い順に送る
   function planAxisConcentrate(a) {
     const pwS = s => (s.type === 'CV' ? 0 : (s.atk || 0)) + (s.air || 0);
@@ -756,5 +869,5 @@ var PocPlanner = (function () {
     return { plan: out, value: pick.v };
   }
 
-  return { P, cache, outcome, seaValue, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
+  return { P, cache, outcome, seaValue, planAxisV6, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
 })();

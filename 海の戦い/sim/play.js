@@ -139,7 +139,7 @@ w.showAxisReturnUI = async (ships, options) => {
   const turn = G('currentTurn');
   // 損害艦のうち、フランスへ帰れる艦は、フランスの修理枠（3）に入る分だけフランスへ（損害の小さい順）
   const toFrance = new Set();
-  if(!options.autoDefault && G('PORTS').France.available.includes(turn)){
+  if(!options.autoDefault && G('PORTS').France.available.includes(turn) && turn < 6){
     let budget = G('PORTS').France.repair - G('SHIPS').filter(s => s.location === 'France' && !s.sunk && s.damage > 0).reduce((t, s) => t + s.damage, 0);
     list.filter(s => s.country === 'DE' && s.damage > 0 && w.getReturnPorts(s).includes('France'))
       .sort((a, b) => a.damage - b.damage)
@@ -158,7 +158,11 @@ w.showAxisReturnUI = async (ships, options) => {
     let dest;
     if(options.autoDefault) dest = ship.country === 'DE' ? 'Germany' : (ship.country === 'IT' ? 'Italy' : null);
     else dest = toFrance.has(ship.id) ? 'France' : ship.originThisTurn;
-    if(!ports.includes(dest)) dest = ports.includes(ship.homePort) ? ship.homePort : ports[0];
+    if(dest === 'France' && turn === 6) dest = null; // 本番のAIと同じ: 次のターンに除去されるので戻らない
+    if(!ports.includes(dest)){
+      const usable = ports.filter(p => !(p === 'France' && turn === 6));
+      dest = usable.includes(ship.homePort) ? ship.homePort : (usable[0] || ports[0]);
+    }
     if(!dest) dest = ship.homePort;
     ship.location = dest;
     ship.atDock = false;
