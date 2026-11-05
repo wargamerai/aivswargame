@@ -253,7 +253,7 @@ function buildIndexHtml() {
   const CAMPAIGN_GER = ['upfront_report_20261103_0659.html', 'upfront_report_20261104_1500.html'];
   const campaign = CAMPAIGN_GER.filter(f => files.indexOf(f) >= 0).map((f, i) => rowOf(f, `Game ${i + 1}`).replace(/(<td>[A-E]: [^<]*)(<\/td>)/, '$1（夜間）$2')); // 2戦とも夜戦
   const player = files.filter(f => /^upfront_report_\d{8}_\d{4}\.html$/.test(f) && CAMPAIGN_GER.indexOf(f) < 0).sort().reverse()
-    .map(f => { const d = f.match(/_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\.html$/); return rowOf(f, d ? `${d[1]}-${d[2]}-${d[3]} ${d[4]}:${d[5]}` : f); });
+    .map(f => { const d = f.match(/_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})\.html$/); return rowOf(f, d ? `${d[1]}-${d[2]}-${d[3]}` : f); });
   const ai = files.filter(f => /^ai_\d+\.html$/.test(f)).sort().reverse().map(f => rowOf(f, 'Game ' + parseInt(f.match(/\d+/)[0], 10)));
   const table = rows => rows.length ? `<table><tr><th>Date / Game</th><th>Scenario</th><th>Nations</th><th>Result</th></tr>${rows.join('')}</table>` : '<div class="empty">No games yet.</div>';
   return `<!doctype html>
