@@ -542,13 +542,13 @@ function showTerrainDeckGameOver() {
     return;
   }
   // シナリオC・D: 時間切れは防御側の勝ち（防御側は攻守 state.playerRole で決まる）
-  if (state.scenario && (state.scenario.id === 'C' || state.scenario.id === 'D')) {
+  if (state.scenario && (state.scenario.id === 'C' || state.scenario.id === 'D' || state.scenario.id === 'E')) {
     const defSide = state.playerRole === 'defender' ? 'player' : 'ai';
     const defName = defSide === 'player' ? state.player.name : state.ai.name;
     state.phase = 'gameover';
     alert(state.scenario.id === 'C'
       ? `シナリオC 終了：${defName} の勝利！ (防御側がトーチカを守り切った)`
-      : `シナリオD 終了：${defName} の勝利！ (防御側が持ちこたえた)`);
+      : `シナリオ${state.scenario.id} 終了：${defName} の勝利！ (防御側が持ちこたえた)`);
     endCampaignScenario(defSide);
     return;
   }

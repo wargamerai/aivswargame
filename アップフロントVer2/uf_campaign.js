@@ -1068,6 +1068,7 @@ function _resolveFireActionInner() {
   markFiredAt(srcGroup, tgtGroup); // §38.3 観測の修正用
   // ターン累積 FP を加算 (このグループの今ターン射撃合計に追加)
   srcGroup.firedFPThisTurn = (srcGroup.firedFPThisTurn || 0) + needed;
+  if (window.AFV) window.AFV.boxedAfterFire(srcGroup, tgtGroup, needed, baseFP); // §28.7 オープントップへ、同じカードでもう一度
 }
 
 /**

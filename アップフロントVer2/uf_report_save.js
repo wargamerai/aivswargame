@@ -499,29 +499,21 @@ function startGameWithSetup() {
   // AI 初期クルー設定 (needsCrew 全兵士にアシスタント自動割当)
   initAICrewPairs();
 
-  // 爆薬の割当
-  if (scenario && scenario.id === 'C') {
-    // シナリオC: 爆薬は攻撃側のBグループに1つのみ（防御側は無し）
-    // プレイヤー側: setup-screen で爆薬保有兵士を指定済みなら尊重、未指定ならBグループ先頭にフォールバック
-    if (state.playerRole === 'attacker') {
+  // 爆薬の割当: シナリオの部隊表にある側だけが持つ
+  if (scenario && window.SCENARIO_HELPERS) {
+    const H = window.SCENARIO_HELPERS;
+    if (!H.hasDemo(scenario, playerFaction, setupState.role)) {
+      state.groups.player.forEach(g => g.cards.forEach(c => { delete c.demoCharge; }));
+    } else if (scenario.id === 'C') {
+      // シナリオC: 未指定ならBグループ先頭に渡す
       const hasUserDemo = state.groups.player.some(g => g.cards.some(c => c.demoCharge));
       if (!hasUserDemo) {
         const bGroup = state.groups.player.find(g => g.name === 'B');
         if (bGroup && bGroup.cards.length > 0) bGroup.cards[0].demoCharge = true;
       }
-    } else {
-      // プレイヤーが防御側の場合、誤って付与された demoCharge をクリア
-      state.groups.player.forEach(g => g.cards.forEach(c => { delete c.demoCharge; }));
     }
-    // AI 側: 攻撃側ならBグループ先頭にのみ付与（setup-screen なし）
     state.groups.ai.forEach(g => g.cards.forEach(c => { delete c.demoCharge; }));
-    if (aiRole === 'attacker') {
-      aiGiveDemoCharge(aiKey);
-    }
-  } else if (scenario && scenario.id === 'B') {
-    // シナリオB: 爆薬は 1つ（ルールの部隊表）
-    state.groups.ai.forEach(g => g.cards.forEach(c => { delete c.demoCharge; }));
-    aiGiveDemoCharge(aiKey);
+    if (H.hasDemo(scenario, aiKey, aiRole)) aiGiveDemoCharge(aiKey);
   }
 
   // 初期兵士数を記録（敗北判定用）

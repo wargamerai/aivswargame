@@ -634,7 +634,7 @@ function checkScenarioCVictory() {
 function checkScenarioAVictory() {
   if (state.phase === 'gameover') return;
   const sc = state.scenario;
-  if (!sc || sc.id !== 'A') return;
+  if (!sc || (sc.id !== 'A' && sc.id !== 'E')) return; // E も同じ勝利条件（ユーザーの指示 2026-11-04）
   const R = window.INFANTRY_RULES;
   if (!R) return;
   const sides = ['player', 'ai'];

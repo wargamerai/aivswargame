@@ -188,6 +188,13 @@
    * シナリオから 1 陣営の兵士カード番号配列を取り出す。
    * role='attacker'|'defender' を指定すれば非対称シナリオの defenderFactions を参照
    */
+  /** このシナリオで、この国・役割の部隊に爆薬があるか（部隊表の dc: true） */
+  function hasDemo(scenario, factionKey, role) {
+    if (!scenario) return false;
+    const f = (role === 'defender' && scenario.defenderFactions && scenario.defenderFactions[factionKey])
+      || (scenario.factions && scenario.factions[factionKey]);
+    return !!(f && f.dc);
+  }
   function getSoldierNumbers(scenario, factionKey, role) {
     if (!scenario) return [];
     let f;
@@ -624,7 +631,7 @@
     // 全部の国で移動と火力に分ける（ユーザーの指示 2026-11-04）。5人未満は分けられないので従来の選び方
     const strategy = enriched.length >= 5 ? 'fireMove' : chooseAIStrategy(scenario, enriched, style, factionKey);
     let groups;
-    const _hasDemo = !!scenario && (scenario.id === 'B' || (scenario.id === 'C' && role === 'attacker'));
+    const _hasDemo = hasDemo(scenario, factionKey, role);
     if (strategy === 'fireMove') { groups = _formFireMove(enriched, factionKey, _hasDemo); _assignCrew(groups, enriched); }
     else if (strategy === 'assault') { groups = _formAssault(enriched, factionKey); _assignCrew(groups, enriched); }
     else groups = _buildGroupsWaveOrSplit(scenario, factionKey, role, strategy);
@@ -693,6 +700,7 @@
   global.PROMOTION_TABLE = PROMOTION_TABLE;
   global.SCENARIOS = SCENARIOS;
   global.SCENARIO_HELPERS = {
+    hasDemo,
     getSoldierNumbers,
     buildUnitCards,
     distributeIntoGroups,

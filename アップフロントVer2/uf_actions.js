@@ -136,7 +136,8 @@ function updateConfirmBtn() {
   const act = state.selectedAction;
   if (!act) { btn.disabled = true; return; }
   if (act === 'move') {
-    btn.disabled = !(state.selectedHand.size > 0 && state.fireSource);
+    const _g = state.fireSource && state.groups.player[state.fireSource.idx];
+    btn.disabled = !(state.selectedHand.size > 0 && state.fireSource) || !!(_g && (_g._immob || _g._bog || _g._stun)); // §28 AFV の移動不能・スタック・スタン
     return;
   }
   if (act === 'terrain') {
@@ -1219,6 +1220,7 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     if (!state.fireSource || !state.fireTarget || !window.CC_ACTION) return;
     const srcGrp = state.groups.player[state.fireSource.idx];
     const tgtGrp = state.groups.ai[state.fireTarget.idx];
+    if (window.AFV && (window.AFV.isAfvGroup(srcGrp) || window.AFV.isAfvGroup(tgtGrp))) { alert('AFV は侵入しません。AFV への攻撃は右下の「AFV へ肉薄」を使います（§28.8）'); return; }
     // 夜間: 認知 or 照射 されていないターゲットには侵入不可
     if (!isTargetVisibleForPlayer(srcGrp, state.fireTarget.idx, 'ai')) {
       alert('夜間: 認知されていない敵には侵入できません');
@@ -1281,6 +1283,7 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     if (!state.fireSource) return;
     const R = window.INFANTRY_RULES;
     const fromIdx = state.fireSource.idx;
+    if (window.AFV && (window.AFV.isAfvGroup(state.groups.player[fromIdx]) || (state.fireTarget && window.AFV.isAfvGroup(state.groups.player[state.fireTarget.idx])))) { alert('AFV は他のグループと一緒になれません（§28.11）'); return; }
     const srcGrp = state.groups.player[fromIdx];
     if (!R || !srcGrp) return;
     const playerKey = getFactionKey(state.player);

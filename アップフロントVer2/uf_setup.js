@@ -185,6 +185,7 @@ function openSetupScreen(factionKey) {
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
   if (!scenario) { alert('シナリオ未読込'); return; }
+  if (scenario.onlyFactions && scenario.onlyFactions.indexOf(factionKey) < 0) { alert('シナリオEはドイツ・ソ連・アメリカだけです'); return; }
   setupState.faction = factionKey;
   setupState.scenario = scenario;
   setupState.groups = [[], [], [], []];
@@ -205,6 +206,8 @@ function openSetupScreen(factionKey) {
     playerRole = (scenario.attackerRole === 'player') ? 'attacker' : (scenario.attackerRole ? 'defender' : null);
   }
   setupState.role = playerRole;
+  // 爆薬はシナリオの部隊表にあるときだけ持たせられる
+  document.getElementById('setup-demo').style.display = (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.hasDemo(scenario, factionKey, playerRole)) ? '' : 'none';
   // プールに使用兵士全員 (役割に応じて左列/右列)
   const nums = (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.getSoldierNumbers(scenario, factionKey, playerRole)) || [];
   setupState.pool = nums.slice();
@@ -423,6 +426,8 @@ function onSetupCardClick(num, location) {
     if (setupState.demoHolders.has(key)) {
       setupState.demoHolders.delete(key);
     } else {
+      // 爆薬は1分隊に1個（§21.11）。別の兵士を押すと持ち主が替わる
+      setupState.demoHolders.clear();
       setupState.demoHolders.add(key);
     }
     renderSetup();
@@ -586,9 +591,10 @@ function renderSetup() {
   };
 
   document.getElementById('setup-target').textContent = ['A','B','C','D'][setupState.targetGroup];
-  // 開始ボタン: プールが空 かつ 各グループ 2~10
+  // 開始ボタン: プールが空 かつ 各グループ 2~10。車両は1枚で1グループにできる
   const allPlaced = setupState.pool.length === 0;
-  const sizesOk = setupState.groups.every(g => g.length === 0 || (g.length >= 2 && g.length <= 10));
+  const soloVehicle = g => g.length === 1 && !!(getSoldierDef(setupState.faction, g[0]) || {}).afv;
+  const sizesOk = setupState.groups.every(g => g.length === 0 || (g.length >= 2 && g.length <= 10) || soloVehicle(g));
   const nonEmpty = setupState.groups.some(g => g.length > 0);
   document.getElementById('setup-start').disabled = !(allPlaced && sizesOk && nonEmpty);
 }
@@ -729,11 +735,13 @@ function saveRecords() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(campaignRecords)); } catch (e) {}
 }
 
-/** AIの性格のくじ: 'aggr'（攻撃的）/'bal'（バランス）/'def'（防御的）。比率は仮（プレイして見直す） */
+/** AIの性格のくじ: 'aggr'（攻撃的）/'bal'（バランス）/'def'（防御的）の比率（国の個性）。
+ *  AI 対 AI 1800局（2026-11-03）の結果: 攻撃的は全部の国で勝率が低い（33〜48%）。
+ *  ロシア・日本は前に出る国の性格を残しつつ、攻撃的の比率を下げた。ドイツは守りが強く、米英は防御寄り */
 const AI_STYLE_WEIGHTS = {
-  rus: [60, 30, 10], jpn: [60, 30, 10],
-  ger: [25, 50, 25],
-  us:  [10, 30, 60], uk:  [10, 30, 60],
+  rus: [25, 50, 25], jpn: [25, 40, 35],
+  ger: [10, 45, 45],
+  us:  [5, 35, 60], uk:  [10, 50, 40],
 };
 function drawAIStyle(aiKey) {
   const w = AI_STYLE_WEIGHTS[aiKey] || [33, 34, 33];
