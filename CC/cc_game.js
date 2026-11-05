@@ -1483,7 +1483,7 @@ async function newGame() {
    L('長い航海を重ねるうちに、乗員は腕を上げ、新しい技術も届きます。そうして、より無事な航海ができるようになっていきます。', 'Over many voyages, your crew grows more skilled and new technology arrives, so your voyages become safer as you go.'),
    L('RPG 風に仕上げたので、ルールや知識がなくても楽しめます。', 'I gave it the feel of an RPG, so you can enjoy it without knowing the rules or the history.'),
    L('長い二年間の、航海の連続を楽しんでいただければ幸いです。', 'I hope you enjoy two long years of voyage after voyage.'),
-   L('無料での公開を快諾してくれたゲームデザイナーの Alan に感謝します。', 'My thanks to the game\'s designer, Alan, who gladly agreed to its free release, and to Bonsai Games, who gave their permission.'),
+   L('無料での公開を快諾してくれたゲームデザイナーの Alan と、許諾してくれたボンサイ・ゲームズ社に感謝します。', 'My thanks to the game\'s designer, Alan, who gladly agreed to its free release, and to Bonsai Games, who gave their permission.'),
   ].forEach(t => UI.story(t));
   await UI.choose('', [{ label: L('▶ 次へ', '▶ Next'), value: 1 }]);
   await new Promise(resolve => openOptions(resolve));
