@@ -5,12 +5,18 @@
 (function (global) {
   'use strict';
   const U = { ger: 'Ger', us: 'US' };
+  // ドイツの車両はカードどおり #30 SPW 251/1。ゲームの中の番号は 31 なので、画像の道だけ 30 にする
+  if (typeof global.encPath === 'function') {
+    const encOrig = global.encPath;
+    global.encPath = s => encOrig(String(s).replace(/(\/Ger )31([fb]\.gif)$/, '$130$2'));
+  }
   const DEFS = {
     ger: {
-      name: 'SdKfz 231', pt: 267, ot: false,
-      ce: { ovr: 2, ceVal: 9, morale: 5, fp: [2, 3, 4, 5, 6, 7], hit: ['0', '0-1', '0-2', '0-3', '0-4', '0-5'], bog: '5o', bogW: '8', armor: { is: 1, k: 2 }, flank: { is: -1, k: 1 } },
-      bu: { ovr: 1, fp: [2, 3, 3, 4, 4, 5], hit: ['2', '1', '0', '0-1', '0-2', '0-3'], bog: '4c', bogW: '7w', armor: { is: 1, k: 2 }, flank: { is: -1, k: 0 } },
-      effect: { box: 0, unbox: 1 }, x: 'X5-6',
+      // シナリオカードEの #30 SPW 251/1（ゲームの中の番号は他の国と同じ 31 のまま）
+      name: 'SPW 251/1', pt: 202, ot: true,
+      ce: { ovr: 3, ceVal: 9, morale: 5, fp: [8, 9, 10, 11, 12, 13], hit: null, bog: '4c', bogW: '7w', armor: { is: 0, k: 1 }, flank: { is: -1, k: 0 } },
+      bu: { ovr: 3, fp: [8, 9, 10, 11, 12, 13], hit: null, bog: '4c', bogW: '7w', armor: { is: 0, k: 1 }, flank: { is: -1, k: 0 } },
+      effect: null, x: 'X6',
     },
     rus: {
       name: 'M5 Halftrack', pt: 137, ot: true,
@@ -44,11 +50,12 @@
       const list = SC[f]; if (!list || list.some(s => s.num === 31 && s.afv)) continue;
       for (let i = list.length - 1; i >= 0; i--) if (list[i].num === 31 || list[i].num === 131) list.splice(i, 1);
       const dd = DEFS[f], dirP = f === 'ger' ? ['ドイツ', 'Ger'] : f === 'us' ? ['ありか', 'US'] : ['ソ連', 'Rus'];
+      const imgNo = f === 'ger' ? 30 : 31; // カード画像の番号（ドイツは #30）
       const mk = (num, side, back) => ({
         num, rank: 'AFV', name: dd.name + (back ? '（閉鎖）' : ''), ccvFront: '0/0', leader: '', weaponCat: 'AFV', xVal: 'X6', weaponName: 'MG',
         range: side.fp.map(String), rangeData: side.fp.map(v => (typeof parseRangeValue === 'function' ? parseRangeValue(String(v)) : { value: v })),
         needsCrew: false, morale: back ? '' : String(side.morale), pt: String(dd.pt), kiaFront: '99', panic: '99', ccvBack: '0/0', kiaBack: '99', rncRoute: '',
-        imgFront: encodeURI(`upfrontimages/${dirP[0]}/${dirP[1]} 31${back ? 'b' : 'f'}.gif`), imgBack: encodeURI(`upfrontimages/${dirP[0]}/${dirP[1]} 31b.gif`), noteBack: '', afv: true,
+        imgFront: encodeURI(`upfrontimages/${dirP[0]}/${dirP[1]} ${imgNo}${back ? 'b' : 'f'}.gif`), imgBack: encodeURI(`upfrontimages/${dirP[0]}/${dirP[1]} ${imgNo}b.gif`), noteBack: '', afv: true,
       });
       list.push(mk(31, dd.ce, false)); list.push(mk(131, dd.bu, true));
     }
@@ -59,14 +66,15 @@
     id: 'E', name: '機甲偵察', description: '攻撃側に装甲車が1両つく。距離4で、ピン状態でない4枚が身を隠せる地形に入れば勝ち。時間切れは防御側の勝ち。',
     asymmetric: true, attackerRole: 'player',
     factions: {
-      ger: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 31] },
-      us: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 31] },
-      rus: { soldierList: [2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 22, 23, 24, 26, 31], dc: true },
+      // images/シナリオ/Scenario E.gif のとおり（31 はその国の車両）
+      ger: { soldierList: [1, 2, 4, 5, 6, 7, 8, 9, 31] },
+      us: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 31] },
+      rus: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 23, 31] },
     },
     defenderFactions: {
-      ger: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11] },
+      ger: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
       us: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] },
-      rus: { soldierList: [2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 22, 23, 24, 26] },
+      rus: { soldierList: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
     },
     onlyFactions: ['ger', 'rus', 'us'], // ドイツ・ソ連・アメリカだけ（ユーザーの指示 2026-11-04）
     firstPlayer: 'attacker', deckCycles: 3, handLimits: { ger: 5, us: 6, rus: 4, jpn: 4, uk: 5 }, initialTerrain: null,
