@@ -427,5 +427,12 @@
   }
   global.AFV = Object.assign({ isAfvCard, isAfvGroup, afvCard, wire, boxedAfterFire, aiTryGun, aiTryOverrun, aiTryCCAfv, canOverrun, humanPanel, stats, defOf, E, splitAfv }, AFVAPI);
   wire();
+  // シナリオEはまだ公開しない（ユーザーの指示 2026-11-05）。URL に scenarioE=1 を付けたときだけ選べる
+  try {
+    if (global.document && !/[?&]scenarioE=1(&|$)/.test(global.location.search)) {
+      const opt = global.document.querySelector('#scenario-pick option[value="E"]');
+      if (opt) opt.remove();
+    }
+  } catch (e) {}
   setInterval(() => { try { if (global.document && global.state) humanPanel(); } catch (e) {} }, 800);
 })(typeof window !== 'undefined' ? window : this);

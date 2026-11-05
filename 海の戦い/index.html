@@ -6274,5 +6274,16 @@ placeAllShips();
 setPhase('move');
 renderPhaseBar();
 </script>
+<script>
+// 連合軍の担当はまだ公開しない（ユーザーの指示 2026-11-05）。URL に allies=1 を付けたときだけ選べる
+if(!/[?&]allies=1(&|$)/.test(location.search)){
+  const r = document.querySelector('input[name="sidePick"][value="allies"]');
+  if(r && r.closest('label')) r.closest('label').remove();
+  const o = document.querySelector('#humanSideSelect option[value="allies"]');
+  if(o) o.remove();
+  const row = document.getElementById('humanSideSelect');
+  if(row) row.value = 'axis';
+}
+</script>
 </body>
 </html>
