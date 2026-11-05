@@ -3761,7 +3761,7 @@ function medNeverLose(arr){
   return e.ours > 0 && e.ours >= e.theirs * 1.5 && arr.length > it.length;
 }
 // POCの予想の使い方: 0=2ターン目の残りの艦だけ / 1=2ターン目以降の残りの艦 / 2=1＋予想の精度を上げる / 3=2＋北海とバレンツ海も予想で決める
-const ALLIED_PLAN_MODE = 6; // 公式（planAlliesV2）。ユーザーの指示 2026-11-04
+const ALLIED_PLAN_MODE = 8; // 北海とバレンツを固める配置（planAlliesV4）。ユーザーの指示 2026-11-05
 function planAlliedDeployment(aiLog){
   const PLAN_MODE = (typeof window !== 'undefined' && window.__planMode !== undefined) ? window.__planMode : ALLIED_PLAN_MODE;
   let posture = 'normal';
@@ -4061,7 +4061,7 @@ function planAlliedDeployment(aiLog){
     };
     const axisShips = axisReady.map(x => ({ s: x, opts: axisOpts(x) }));
     const ubs = SHIPS.filter(x => x.type === 'UBOAT' && x.side === 'axis' && !x.sunk && !x.removed && x.location && (PORTS[x.location] || SEAS[x.location])).length;
-    const r = (PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
+    const r = (PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
     ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') assign(u.s, sea); });
     leftoverMode = `POCの予想（評価 ${Math.round(r.value * 10) / 10}）`;
   } else if(currentTurn === 1){

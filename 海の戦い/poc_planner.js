@@ -509,7 +509,7 @@ var PocPlanner = (function () {
     const n = (al || []).filter(s => s.type === 'CONVOY').length;
     if (sea === 'NorthSea') return 9;
     if (sea === 'Barents') return 5 + (n ? 6 : 0);
-    if (sea === 'NorthAtlantic') return 3 + (n ? 3 : 0);
+    if (sea === 'NorthAtlantic') return 2 + (n ? 3 : 0);
     if (sea === 'SouthAtlantic') return 3;
     if (sea === 'Mediterranean') return 2;
     if (sea === 'Baltic') return 1;
@@ -655,6 +655,84 @@ var PocPlanner = (function () {
       if (sea) put(u, sea);
     }
     if (typeof window !== 'undefined' && window.__pocTrace) window.__pocTrace.push('T' + a.turn + ' 連合 ' + main.concat(['Mediterranean']).map(sea => `${sea}:${(place[sea] || []).length}隻/攻${(place[sea] || []).reduce((t, s) => t + pwS(s), 0)}`).join(' ') + ' 余' + free.length);
+    return { plan, value: 0 };
+  }
+
+  // 連合: POC のランキングに戦力をはめて決める（ユーザーの指示 2026-11-05）
+  //   1) そのターンに持てる海域の組み合わせを、POC の点が高い順に並べる（持つ=連合の点、ドイツが取れる=−価値）
+  //   2) 上の組み合わせから艦をはめ、どの海域もドイツ全力の勝率が基準（くじ 52/50/48%）未満なら決める
+  //   3) どれも届かなければ、一番勝率の低い配置にする。余った艦は勝率の一番悪い海域へ
+  function planAlliesV4(a) {
+    const seas = ['NorthSea', 'Barents', 'SouthAtlantic', 'NorthAtlantic'];
+    // 15.5 1ターン目は「前のターン」がないので、イタリアの重巡は地中海を出られない
+    const axis = a.axisShips.map(u => ({ s: u.s, opts: u.s.country === 'IT' ? u.opts.filter(o => a.turn > 1 && o === 'SouthAtlantic') : u.opts }));
+    const reach = {};
+    seas.forEach(sea => { reach[sea] = axis.filter(u => u.opts.includes(sea)).map(u => u.s); });
+    const fixed = {};
+    seas.forEach(sea => { fixed[sea] = (a.fixed[sea] || []).slice(); });
+    const can = sea => fixed[sea].length > 0 || a.ships.some(u => u.opts.includes(sea));
+    const weak = (x, y) => (pwS(x.s) + (x.s.def || 0)) - (pwS(y.s) + (y.s.def || 0));
+    // 組み合わせの点
+    const scoreOf = held => {
+      let v = 0;
+      let free = axis.slice().sort(weak);
+      for (const sea of seas.slice().sort((p, q) => seaWorth(q, fixed[q]) - seaWorth(p, fixed[p]))) {
+        if (held.includes(sea)) { v += a.seas[sea].allies; continue; }
+        const c = free.find(u => u.opts.includes(sea));
+        if (c) { v -= seaWorth(sea, fixed[sea]); free = free.filter(x => x !== c); }
+      }
+      return v;
+    };
+    const combos = [];
+    for (let m = 0; m < 16; m++) {
+      const held = seas.filter((_, i) => m & (1 << i));
+      if (held.every(can)) combos.push({ held, v: scoreOf(held) });
+    }
+    combos.sort((x, y) => y.v - x.v || y.held.length - x.held.length);
+    const th = [0.52, 0.5, 0.48][Math.floor(Math.random() * 3)];
+    const winOf = (sea, al) => (reach[sea].length ? (al.length ? roundStats(sea, al, reach[sea]).w : 1) : 0);
+    const fit = held => {
+      const by = {}, plan = {};
+      held.forEach(sea => { by[sea] = fixed[sea].slice(); });
+      const units = a.ships.slice().sort((x, y) => pwS(y.s) - pwS(x.s));
+      for (const u of units) {
+        const o = held.filter(sea => u.opts.includes(sea));
+        if (!o.length) continue;
+        o.sort((p, q) => winOf(q, by[q]) - winOf(p, by[p]) || seaWorth(q, by[q]) - seaWorth(p, by[p]));
+        by[o[0]].push(u.s); plan[u.s.id] = o[0];
+      }
+      // 1隻動かして、一番悪い海域の勝率が下がるなら動かす
+      const worst = () => held.reduce((t, sea) => Math.max(t, winOf(sea, by[sea])), 0);
+      let cur = worst();
+      for (const u of units) {
+        const from = plan[u.s.id];
+        if (!from) continue;
+        by[from].splice(by[from].indexOf(u.s), 1);
+        let to = from, b = Infinity;
+        for (const sea of held) {
+          if (!u.opts.includes(sea)) continue;
+          by[sea].push(u.s);
+          const v = worst();
+          by[sea].pop();
+          if (v < b - 1e-9 || (v === b && sea === from)) { b = v; to = sea; }
+        }
+        by[to].push(u.s); plan[u.s.id] = to;
+        if (b < cur) cur = b;
+      }
+      return { plan, by, worst: worst() };
+    };
+    let pick = null, low = null;
+    for (const c of combos) {
+      if (!c.held.length) continue;
+      const f = Object.assign(fit(c.held), { c });
+      if (!low || f.worst < low.worst) low = f;
+      if (f.worst < th) { pick = f; break; }
+    }
+    pick = pick || low || { plan: {}, by: {}, worst: 0, c: { held: [], v: 0 } };
+    const plan = pick.plan;
+    // 主要な海域に行けない艦（マルタの艦）は地中海へ
+    a.ships.forEach(u => { if (!plan[u.s.id] && u.opts.includes('Mediterranean') && !seas.some(s => u.opts.includes(s))) plan[u.s.id] = 'Mediterranean'; });
+    if (typeof window !== 'undefined' && window.__pocTrace) window.__pocTrace.push('T' + a.turn + ' 連合 基準' + th + ' ' + seas.map(sea => `${sea}:${(pick.by[sea] || []).length}隻/攻${(pick.by[sea] || []).reduce((t, s) => t + pwS(s), 0)}${pick.by[sea] ? '(' + Math.round(winOf(sea, pick.by[sea]) * 100) + '%)' : ''}`).join(' ') + ' 点' + pick.c.v);
     return { plan, value: 0 };
   }
 
@@ -869,5 +947,5 @@ var PocPlanner = (function () {
     return { plan: out, value: pick.v };
   }
 
-  return { P, cache, outcome, seaValue, planAxisV6, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
+  return { P, cache, outcome, seaValue, planAxisV6, planAlliesV4, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
 })();
