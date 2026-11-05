@@ -692,13 +692,16 @@
     });
     pop.appendChild(us);
     const nt = document.createElement('div'); nt.className = 'note';
-    nt.textContent = '選んだ駒を置くエリアを地図で押す。対戦車は敵のいるエリアに置けない。';
+    // 第30軍団の配置は Rommel と Bergeijk だけ。対戦車の文は空挺師団の配置で出す
+    const xxx = p.title === '第30軍団の配置';
+    nt.textContent = xxx ? '① この窓の駒を押して選ぶ ② 地図の Rommel か Bergeijk を押す。Rommel に1駒は残す(空だと補給が切れる)。' : '選んだ駒を置くエリアを地図で押す。対戦車は敵のいるエリアに置けない。';
     pop.appendChild(nt);
     const acts = document.createElement('div'); acts.className = 'acts';
     const a = document.createElement('button'); a.textContent = '全部選ぶ'; a.onclick = () => { UI.sel = new Set(p.units); openSetup(ev); };
     const n = document.createElement('button'); n.textContent = '全部外す'; n.onclick = () => { UI.sel = new Set(); openSetup(ev); };
     acts.append(a, n); pop.appendChild(acts);
-    place({ clientX: 30, clientY: 9999 });
+    // 第30軍団の配置では、地図の下の Rommel と Bergeijk を隠さないように上へ出す
+    place({ clientX: 30, clientY: xxx ? $('bar').getBoundingClientRect().bottom : 9999 });
   }
   // ------- battle window -------
   const dieHtml = (r, a) => `<span class="dice ${r.hit ? 'hit' : 'miss'}" title="攻撃力${a}以下で命中">${r.r}</span>`;

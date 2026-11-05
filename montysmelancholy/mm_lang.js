@@ -125,6 +125,7 @@
     [/(.+) は移動力0・攻撃力0なので、移動も攻撃もしません。/, '$1 has movement 0 and attack 0, so it will not move or attack.'],
     [/(.+) は攻撃力0なので攻撃しません。/, '$1 has attack 0, so it will not attack.'],
     [/攻撃できるのは同じエリアの敵だけ。このエリアに敵はいない。戦車以外は、移動した札では攻撃できない。/, 'Units attack only enemies in the same area, and there are none here. Only tanks can move and attack with the same card.'],
+    [/① この窓の駒を押して選ぶ ② 地図の Rommel か Bergeijk を押す。Rommel に1駒は残す\(空だと補給が切れる\)。/, '1) Click units in this window to select them. 2) Click Rommel or Bergeijk on the map. Keep at least one unit in Rommel (if it is empty, supply is cut).'],
     [/選んだ駒を置くエリアを地図で押す。対戦車は敵のいるエリアに置けない。/, 'Click the area for the selected units. Anti-tank units cannot be placed with enemies.'],
     [/攻撃力(\d+)以下で命中/, 'Hits on $1 or less'],
     [/攻撃力 (\d+)/, 'Attack $1'],
