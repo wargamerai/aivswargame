@@ -120,7 +120,7 @@ function repBuildHtml(){
   if(optionRules.bismarck7) opts.push('bismarck7');
   if(optionRules.usEase) opts.push('usEase');
   const data = { turns: REP.turns, seaName: REP_SEA, finalPoc: poc, opts, resigned: window.gameResigned || null,
-    lang: (typeof LANG !== 'undefined' && LANG === 'en') ? 'en' : 'ja',
+    lang: (typeof LANG !== 'undefined') ? LANG : 'ja',
     sunk: { allies: SHIPS.filter(s => s.side === 'allies' && s.sunk && s.type !== 'UBOAT').map(s => s.name),
             axis: SHIPS.filter(s => s.side === 'axis' && s.sunk && s.type !== 'UBOAT').map(s => s.name),
             ubAxis: SHIPS.filter(s => s.side === 'axis' && s.sunk && s.type === 'UBOAT').length } };
@@ -161,7 +161,7 @@ ul{ margin:2px 0 0; padding-left:18px; } li{ margin:0; }
 table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid var(--line); padding:4px 6px; text-align:left; vertical-align:top; }
 .poc{ font-size:15px; margin-top:8px; }
 </style></head><body><div class="wrap">
-<div class="top"><h1 id="title"></h1><div class="lang"><button id="lEn">English</button> <button id="lJa">日本語</button></div></div>
+<div class="top"><h1 id="title"></h1><div class="lang" id="langs"></div></div>
 <div class="sub" id="sub"></div>
 <div class="nav" id="nav"></div>
 <div id="view"></div>
@@ -196,16 +196,37 @@ const TX = {
     lbaTag:(s) => '✈' + s + 'LBA', sep:'、' }
 };
 // 場所の名前（英語 → 日本語）
+// 日本語と英語のほかは、下の表から作る
+const RI = ${JSON.stringify(window.WAS_REPORT_I18N || {}).replace(/</g, '\\u003c')};
+function mkTx(d){
+  const x = s => (d[s] !== undefined ? d[s] : s);
+  const f = (s, v) => { let o = x(s); for(const k in v) o = o.split('{' + k + '}').join(v[k]); return o; };
+  return { title:x('War at Sea: Game Report'), opt:{ ubNoLimit:x('No U-boat limit'), bismarck7:x('Bismarck class Defense 7'), usEase:x('Easier US entry') }, none:x('none'),
+    sub:(o) => f('Player (Axis) vs AI (Allies). Optional rules: {o}. POC: + favors the Allies, - favors the Axis.', { o }),
+    prev:x('◀ Prev'), next:x('Next ▶'), summary:x('Summary'), finalPoc:x('Final POC'), axisWin:x('Axis victory'), alWin:x('Allied victory'), draw:x('Draw'),
+    resigned:(t) => f('Axis resigned on turn {t} — Allied victory', { t }), resignedAllied:(t) => f('Allies resigned on turn {t} — Axis victory', { t }),
+    alSunk:(n) => f('Allied ships sunk: {n} — ', { n }), axSunk:(n) => f('Axis ships sunk: {n} — ', { n }), ubLost:x('. U-boats lost: '), turn:x('Turn'), gained:x('Gained'), total:x('Total'),
+    ctlHead:(n) => f('Turn {n}: Control', { n }), lba:x('LBA: '), notUsed:x('not used'), posture:x('Allied posture: '), pst:{ ns:x('North Sea heavy'), normal:x('standard'), atl:x('Atlantic heavy') },
+    targeting:x('Allied targeting: '), tgt:(p, s) => f('every ship targeted, {p}, extra fire on {s} ships', { p:x(p === 'strong' ? 'strong vs strong' : 'strong vs weak'), s:x(s === 'strong' ? 'strong' : 'weak') }),
+    convoys:x('Convoys: '), landedIn:(n, p, pts) => f('{n} landed in {p} (Allies +{pts})', { n, p, pts }), pocTurn:x('POC this turn '), pocTotal:x('Total '),
+    move:x('Movement (positions before combat)'), sunk:x('Sunk'), dmg:x('Damaged'), ret:x('Returned'), side:{ allies:x('Allies'), axis:x('Axis') }, unctl:x('Uncontrolled'), noShips:x('No ships'),
+    stayed:x('stayed'), moveFailed:x('move failed'), landed:x('landed'), damage:(v) => f(' (damage {d})', { d:v }), inPort:x('In port (did not sail)'), failed:x('Failed moves'),
+    why:{ 'US entry roll failed':x('US entry roll failed'), '2-area move failed':x('2-area move failed') }, staysIn:(p) => f(' (stays in {p})', { p }),
+    combat:x('Combat results'), noCombat:x('No combat'), loc:x('Location'), cSunk:x('Sunk: '), cDmg:x('Damaged: '), cForced:x('Forced return: '), cRet:x('Retreated: '), noLoss:x('No losses'), port:x(' (port)'),
+    lbaTag:(s) => f('✈{s} LBA', { s }), sep:x(', ') };
+}
+Object.keys(RI).forEach(l => { TX[l] = mkTx(RI[l]); });
+const LANG_NAMES = { ja:'日本語', en:'English', fr:'Français', de:'Deutsch', it:'Italiano', es:'Español', zh:'简体中文', ko:'한국어', ru:'Русский' };
 const LOC_JA = { 'North Atlantic':'北大西洋', 'Barents Sea':'バレンツ海', 'North Sea':'北海', 'Baltic Sea':'バルト海', 'Mediterranean':'地中海', 'South Atlantic':'南大西洋',
   'Germany':'ドイツ', 'France':'フランス', 'Italy':'イタリア', 'Malta':'マルタ', 'Britain':'英国', 'USA':'米国', 'Leningrad':'レニングラード', 'Russia':'ロシア', 'Neutral port':'中立港' };
 let lang = D.lang;
-try { const sv = localStorage.getItem('wasReportLang'); if(sv === 'en' || sv === 'ja') lang = sv; } catch(e){}
+try { const sv = localStorage.getItem('wasReportLang'); if(TX[sv]) lang = sv; } catch(e){}
 const T = () => TX[lang];
-const L = name => lang === 'ja' ? (LOC_JA[name] || name) : name;
+const L = name => lang === 'ja' ? (LOC_JA[name] || name) : lang === 'en' ? name : ((RI[lang] && RI[lang][name]) || (name === 'Britain' ? name : name));
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
 const sgn = n => (n >= 0 ? '+' : '') + n;
 // 戦闘結果の損害の表記「艦名 (damage 2/3)」を言語に合わせる
-const dmgText = x => lang === 'ja' ? String(x).replace(/ \\(damage (.*)\\)$/, '（損害$1）') : x;
+const dmgText = x => lang === 'en' ? x : String(x).replace(/ \\(damage (.*)\\)$/, (m, v) => T().damage(v));
 let cur = 0;
 function side(sd, x, locName, inPort){
   if(!x.ships.length) return '';
@@ -219,8 +240,7 @@ function list(arr, f){ return arr.length ? arr.map(x => esc(f ? f(x) : x)).join(
 function render(){
   document.documentElement.lang = lang;
   document.getElementById('title').textContent = T().title;
-  document.getElementById('lEn').className = lang === 'en' ? 'on' : '';
-  document.getElementById('lJa').className = lang === 'ja' ? 'on' : '';
+  document.querySelectorAll('#langs button').forEach(b => { b.className = b.dataset.l === lang ? 'on' : ''; });
   document.getElementById('sub').textContent = T().sub(D.opts.length ? D.opts.map(o => T().opt[o] || o).join(T().sep) : T().none);
   const nav = document.getElementById('nav');
   nav.innerHTML = '<button id="prev">' + T().prev + '</button>' + D.turns.map((t, i) => '<button data-i="' + i + '" class="' + (i === cur ? 'on' : '') + '">T' + t.turn + '</button>').join('') + '<button data-i="sum" class="' + (cur === 'sum' ? 'on' : '') + '">' + T().summary + '</button><button id="next">' + T().next + '</button>';
@@ -273,8 +293,7 @@ function render(){
   v.innerHTML = h;
 }
 function setLang(l){ lang = l; try { localStorage.setItem('wasReportLang', l); } catch(e){} render(); }
-document.getElementById('lEn').onclick = () => setLang('en');
-document.getElementById('lJa').onclick = () => setLang('ja');
+Object.keys(LANG_NAMES).forEach(l => { const b = document.createElement('button'); b.dataset.l = l; b.textContent = LANG_NAMES[l]; b.onclick = () => setLang(l); document.getElementById('langs').appendChild(b); });
 render();
 <\/script></body></html>`;
 }

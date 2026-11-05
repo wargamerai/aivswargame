@@ -5,6 +5,7 @@
 <title>海の戦い - War at Sea</title>
 <!-- アクセス解析（GoatCounter） -->
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<script src="lang_i18n.js"></script>
 <script src="lang.js"></script>
 <script src="report.js"></script>
 <script>
@@ -311,7 +312,7 @@ body.hide-units .control-marker { display:none; }
   <label style="font-size:0.85em;margin-left:8px;display:none;">プレイ陣営:
     <select id="humanSideSelect" onchange="setHumanSide(this.value)" style="font-size:0.85em;">
       <option value="axis">枢軸</option>
-      <option value="allies" disabled>連合（準備中）</option>
+      <option value="allies">連合</option>
     </select>
   </label>
 </div>
@@ -322,12 +323,23 @@ body.hide-units .control-marker { display:none; }
   <div class="modal-box" style="min-width:320px;">
     <div class="no-lang">
       <h3>言語 / Language</h3>
-      <div style="display:flex;gap:16px;color:#cde;margin:6px 0 12px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px 16px;color:#cde;margin:6px 0 12px;max-width:420px;">
         <label><input type="radio" name="langPick" value="ja" onchange="setLang(this.value)"> 日本語</label>
         <label><input type="radio" name="langPick" value="en" onchange="setLang(this.value)"> English</label>
+        <label><input type="radio" name="langPick" value="fr" onchange="setLang(this.value)"> Français</label>
+        <label><input type="radio" name="langPick" value="de" onchange="setLang(this.value)"> Deutsch</label>
+        <label><input type="radio" name="langPick" value="it" onchange="setLang(this.value)"> Italiano</label>
+        <label><input type="radio" name="langPick" value="es" onchange="setLang(this.value)"> Español</label>
+        <label><input type="radio" name="langPick" value="zh" onchange="setLang(this.value)"> 简体中文</label>
+        <label><input type="radio" name="langPick" value="ko" onchange="setLang(this.value)"> 한국어</label>
+        <label><input type="radio" name="langPick" value="ru" onchange="setLang(this.value)"> Русский</label>
       </div>
     </div>
-    <p style="color:#ffcc44;margin-bottom:10px;">あなたはドイツ軍（枢軸）を担当します。連合軍はAIが動かします。</p>
+    <h3>担当する軍</h3>
+    <div style="display:flex;flex-direction:column;gap:6px;color:#cde;margin:6px 0 12px;">
+      <label><input type="radio" name="sidePick" value="axis" checked onchange="pickHumanSide(this.value)"> ドイツ軍（枢軸）を担当する。連合軍はAIが動かす</label>
+      <label><input type="radio" name="sidePick" value="allies" onchange="pickHumanSide(this.value)"> 連合軍を担当する。ドイツ軍（枢軸）はAIが動かす</label>
+    </div>
     <h3>オプションルール</h3>
     <div style="display:flex;flex-direction:column;gap:8px;color:#cde;margin:8px 0 14px;">
       <label><input type="checkbox" class="optRule" data-opt="ubNoLimit" onchange="setOptionRule(this)"> Uボート上限なし</label>
@@ -464,6 +476,9 @@ body.hide-units .control-marker { display:none; }
 
 <script src="data.js"></script>
 <script src="battle.js"></script>
+<script src="poc_table.js"></script>
+<script src="poc_planner.js"></script>
+<script src="axis_ai.js"></script>
 <script>
 // === 初期配置（ship.location と ship.homePort をセット） ===
 function initShipLocations(){
@@ -562,6 +577,12 @@ let currentTurn = 1;
 let aiMode = false; // AI戦闘実行中は目標選択を自動化
 let humanSide = 'axis'; // 人間プレイヤーの陣営 ('axis' or 'allies')
 let aiSide = 'allies'; // AI 陣営 (humanSide の反対)
+// 立ち上げ画面で担当する軍を選ぶ（ユーザーの指示 2026-11-04）
+function pickHumanSide(side){
+  setHumanSide(side);
+  const sel = document.getElementById('humanSideSelect');
+  if(sel) sel.value = side;
+}
 function setHumanSide(side){
   humanSide = side;
   aiSide = (side === 'axis') ? 'allies' : 'axis';
@@ -634,7 +655,9 @@ async function advancePhase(){
   renderPhaseBar();
   // フェイズ進行時の自動処理
   if(phaseIdx === 2){
-    await aiAlliedMove();
+    if(humanSide === 'axis') await aiAlliedMove(); // 人が連合を持つ時は、人が動かす
+  } else if(phaseIdx === 3){
+    if(humanSide === 'allies') await aiAxisMove(); // 人が連合を持つ時は、ドイツ軍AI（axis_ai.js）が枢軸を動かす
   } else if(phaseIdx === 4){
     const log = await executeRepair();
     if(log && log.length){
@@ -1412,7 +1435,7 @@ function waitForTargetClickIn(side, focusSea, excludeIds, mode){
       s.side === side && !s.sunk && s.location === focusSea && (!excludeIds || !excludeIds.has(s.id)) && s.type !== 'UBOAT' && !s.disabledThisTurn
     );
     if(!candidates.length){ resolve(null); return; }
-    if(aiMode && side === humanSide){
+    if((aiMode && side === humanSide) || (humanSide === 'allies' && side === 'allies')){ // 人が連合の時は、枢軸AIの目標も自動
       // 連合の航空攻撃（空母・LBA）: 大物（攻撃力+防御力が最大）を狙う。5の目で帰還させると影響が大きい
       if(side === 'axis' && (mode === 'air' || mode === 'cv')){
         const val = c => (c.atkOrig || c.atk || 0) + (c.def || 0);
@@ -1818,6 +1841,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
   chooseAlliedFireStyle(seaKey); // 連合AIの割り振り方（この戦闘のあいだ同じ。画面には出さない）
   let cvAsked = false;
   let firstIter = true;
+  let idleRounds = 0, lastRoundState = '';
   while(true){
     const ships = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.type !== 'UBOAT' && !s.returnPending);
     const allies = ships.filter(s => s.side === 'allies');
@@ -1826,6 +1850,17 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
       SHIPS.forEach(s => { delete s._cvDeclared; }); // 戦闘が終わったら空母の扱いに戻す
       alliedTargetMode = 'normal'; // 戦闘の外（航空攻撃など）は今まで通り
       await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 終了 ━`, 1200);
+      return;
+    }
+    // 両軍とも撃てる艦がない（空母と船団だけなど）: 何も起きないラウンドが永久に続くので、ここで終わる。どちらも支配できない
+    //   空母は攻撃を宣言していなければ撃たない。念のため、何も変わらないラウンドが20回続いた時も終わる
+    const stateNow = ships.map(s => `${s.id}:${s.damage || 0}`).join(',');
+    idleRounds = stateNow === lastRoundState ? idleRounds + 1 : 0;
+    lastRoundState = stateNow;
+    if(!ships.some(s => (s.atk || 0) > 0 && (s.type !== 'CV' || s._cvDeclared || firstIter)) || idleRounds >= 20){
+      SHIPS.forEach(s => { delete s._cvDeclared; });
+      alliedTargetMode = 'normal';
+      await flashCombatOverlay(`━ ${SEA_LABEL[seaKey]||seaKey} 海戦 終了（撃てる艦なし）━`, 1200);
       return;
     }
 
@@ -2351,6 +2386,7 @@ function decideRetreatPort(ship){
     if(ship.damage === 0) return 'Germany';
     const inFrance = SHIPS.filter(s => s.country === 'DE' && s.location === 'France').length;
     const inGermany = SHIPS.filter(s => s.country === 'DE' && s.location === 'Germany').length;
+    if(currentTurn >= 6) return 'Germany'; // 6ターンに戻ると次のターンに除去される
     if(inFrance < 3) return 'France';
     if(inGermany < 8) return 'Germany';
     return inFrance <= inGermany ? 'France' : 'Germany';
@@ -2621,8 +2657,37 @@ function getReturnPorts(ship){
 
 // 枢軸艦帰還UI: 縦に艦一覧、各行に到達可能港ボタン＋洋上補給ボタン＋やり直し
 // options.autoDefault: 戦闘フェイズ即時帰還時のみ true（DE/IT 自動コミット＋港にいる艦フィルタ）
+// 人が連合の時の、枢軸AIの帰還先: 洋上補給できるなら補給、それ以外は元の港
+function axisReturnAuto(ships, options){
+  const list = options.autoDefault ? ships.filter(s => s.location && SEAS[s.location]) : ships;
+  const turn = currentTurn;
+  const toFrance = new Set();
+  if(!options.autoDefault && PORTS.France.available.includes(turn) && turn < 6){
+    let budget = PORTS.France.repair - SHIPS.filter(s => s.location === 'France' && !s.sunk && s.damage > 0).reduce((t, s) => t + s.damage, 0);
+    list.filter(s => s.country === 'DE' && s.damage > 0 && getReturnPorts(s).includes('France')).sort((a, b) => a.damage - b.damage)
+      .forEach(s => { if(s.damage <= budget){ toFrance.add(s.id); budget -= s.damage; } });
+  }
+  for(const ship of list){
+    const from = ship.location, ports = getReturnPorts(ship);
+    if(!ship.forcedReturn && ship.country === 'DE' && turn <= 3 && (from === 'NorthAtlantic' || from === 'SouthAtlantic') && !options.autoDefault && !(ship.damage > 0)){
+      if(rollD6() <= 6 - turn){ ship.refuelTurn = turn; ship.atDock = false; continue; }
+      ship.location = 'Neutral'; ship.arrivedNeutralTurn = turn; ship.atDock = false; continue;
+    }
+    let dest = options.autoDefault ? (ship.country === 'DE' ? 'Germany' : ship.country === 'IT' ? 'Italy' : null)
+      : (toFrance.has(ship.id) ? 'France' : ship.originThisTurn);
+    if(dest === 'France' && turn === 6) dest = null; // 次のターンに除去されるのでAIは戻らない
+    if(!ports.includes(dest)){
+      const usable = ports.filter(p => !(p === 'France' && turn === 6));
+      dest = usable.includes(ship.homePort) ? ship.homePort : (usable[0] || ports[0]);
+    }
+    if(!dest) dest = ship.homePort;
+    ship.location = dest; ship.atDock = false;
+    if(dest === 'Neutral') ship.arrivedNeutralTurn = turn;
+  }
+}
 async function showAxisReturnUI(allShips, options){
   options = options || {};
+  if(humanSide === 'allies'){ axisReturnAuto(allShips, options); return; }
   const autoDefault = !!options.autoDefault;
   const ships = autoDefault
     ? allShips.filter(s => s.location && SEAS[s.location]) // 戦闘時のみ港艦フィルタ
@@ -2718,6 +2783,8 @@ async function showAxisReturnUI(allShips, options){
         btn.className = 'ret-btn';
         btn.textContent = PORT_LABEL[p] || p;
         btn.onclick = () => {
+          // 6ターンのフランス: 戻れるが、7ターンの頭に除去される
+          if(p === 'France' && currentTurn === 6 && !confirm(`${ship.name}: フランスへ戻れますが、次のターンの頭に除去されます。戻りますか？`)) return;
           ship.location = p;
           ship.atDock = false;
           if(p === 'Neutral') ship.arrivedNeutralTurn = currentTurn;
@@ -2766,7 +2833,7 @@ async function showAxisReturnUI(allShips, options){
       const defaultPort = autoDefault
         ? (ship.country === 'DE' ? 'Germany' : (ship.country === 'IT' ? 'Italy' : null))
         : (ship.forcedReturn && getReturnPorts(ship).length === 1 ? getReturnPorts(ship)[0] : (ship.originThisTurn || null));
-      if(defaultPort){
+      if(defaultPort && !(defaultPort === 'France' && currentTurn === 6)){ // 6ターンのフランスは警告を出すので自動で選ばない
         const ports = getReturnPorts(ship);
         if(ports.includes(defaultPort)){
           ship.location = defaultPort;
@@ -3252,6 +3319,7 @@ function waitForTargetClick(side, focusSea){
       s.side === side && !s.sunk && s.location === focusSea
     );
     if(!candidates.length){ resolve(null); return; }
+    if(humanSide === 'allies' && side === 'allies'){ resolve(candidates[Math.floor(Math.random() * candidates.length)]); return; } // 枢軸AIの目標
     const handlers = [];
     candidates.forEach(s => {
       const row = ensureCombatRow(s);
@@ -3632,7 +3700,10 @@ function medNeverLose(arr){
   const e = battleEval(arr, it);
   return e.ours > 0 && e.ours >= e.theirs * 1.5 && arr.length > it.length;
 }
+// POCの予想の使い方: 0=2ターン目の残りの艦だけ / 1=2ターン目以降の残りの艦 / 2=1＋予想の精度を上げる / 3=2＋北海とバレンツ海も予想で決める
+const ALLIED_PLAN_MODE = 6; // 公式（planAlliesV2）。ユーザーの指示 2026-11-04
 function planAlliedDeployment(aiLog){
+  const PLAN_MODE = (typeof window !== 'undefined' && window.__planMode !== undefined) ? window.__planMode : ALLIED_PLAN_MODE;
   let posture = 'normal';
   const plan = {}; // shipId → 移動先
   const pw = s => (s.atk || 0) + (s.air || 0); // 攻撃力（空母は航空攻撃力を加算）
@@ -3752,7 +3823,8 @@ function planAlliedDeployment(aiLog){
   //   Uボート: 対潜ダイス3個で1隻消せるとみて、少ない隻数で支配を消せる海域から順に置くとみる
   function placeLeftoverByWorstPoc(){
     const SEA_LIST = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean'];
-    const MAX_PLANS = 5000;
+    const MAX_PLANS = PLAN_MODE >= 1 ? 800 : 5000;
+    const MAX_ENEMY = 200;
     // n隻をk か所へ分ける組み合わせ
     const splits = (n, k) => {
       if(k === 1) return [[n]];
@@ -3811,6 +3883,7 @@ function planAlliedDeployment(aiLog){
     // 残りの艦の行き先: 北海・北大西洋・南大西洋。地中海は南大西洋を連合が支配しているときだけ
     const medAllowed = seaControl['SouthAtlantic'] === 'allies';
     const myOpts = s => ['NorthSea', 'NorthAtlantic', 'SouthAtlantic'].filter(sea => hop(s, sea) === 1)
+      .concat(PLAN_MODE >= 3 && barOk(s) && (hop(s, 'Barents') === 1 || s.spd >= 5) ? ['Barents'] : [])
       .concat(medAllowed && medOk(s) ? ['Mediterranean'] : []);
     const myGroups = toGroups(freeShips(), myOpts);
     const planCount = countOf(myGroups);
@@ -3818,6 +3891,31 @@ function planAlliedDeployment(aiLog){
     if(planCount <= MAX_PLANS){ for(let i = 0; i < planCount; i++) planIndexes.push(i); }
     else { for(let i = 0; i < MAX_PLANS; i++) planIndexes.push(Math.floor(Math.random() * planCount)); }
 
+    // 敵の来方の一覧。多い時は、1つの海域への集中と、ランダムな来方に絞る
+    const enemyPlans = [];
+    if(enemyCount <= MAX_ENEMY){
+      for(let e = 0; e < enemyCount; e++) enemyPlans.push(decode(enemyGroups, e));
+    } else {
+      const shipsE = axisReady.filter(x => x !== balShip);
+      for(const focus of SEA_LIST){
+        const p = {};
+        SEA_LIST.forEach(sea => { p[sea] = []; });
+        shipsE.forEach(x => {
+          const o = enemyOpts(x);
+          if(!o.length) return;
+          p[o.includes(focus) ? focus : o[Math.floor(Math.random() * o.length)]].push(x);
+        });
+        enemyPlans.push(p);
+      }
+      while(enemyPlans.length < MAX_ENEMY) enemyPlans.push(decode(enemyGroups, Math.floor(Math.random() * enemyCount)));
+    }
+    // 船団のPOC: バレンツ海はロシアへ着けば3、北大西洋は英国へ着けば1。海域を失うと失う
+    const convoyValue = sea => {
+      const n = SHIPS.filter(c => c.type === 'CONVOY' && c.location === sea && !c.sunk && !c.removed).length;
+      return n * (sea === 'Barents' ? 3 : sea === 'NorthAtlantic' ? 1 : 0);
+    };
+    const lastTurnNow = currentTurn >= 8;
+    const pwSum = arr => arr.reduce((t, x) => t + pw(x), 0);
     // 1つの配置案と1つの来方のPOC
     const scoreOf = (mine, enemy) => {
       let total = balticPoc;
@@ -3825,12 +3923,21 @@ function planAlliedDeployment(aiLog){
       for(const sea of SEA_LIST){
         const a = mine[sea], x = enemy[sea];
         if(!a.length && !x.length) continue;
-        if(!x.length || (a.length && battleGeq(a, x))){
+        const won = !x.length || (a.length && battleGeq(a, x));
+        if(won){
           total += SEAS[sea].allies;
           const dice = a.reduce((t, s) => t + (s.type === 'CV' ? 3 : 1), 0);
           needs.push(Math.floor(dice / 3) + 1); // 支配を消すのに必要なUボートの数
         } else {
           total -= SEAS[sea].axis;
+        }
+        if(PLAN_MODE >= 2){
+          const cv = convoyValue(sea);
+          if(cv) total += won ? cv : -cv;
+          // 先のターンのための損得: 負ける海域の艦は失い、勝つ海域では相手の艦を沈められる（最後のターンは関係ない）
+          if(!lastTurnNow && x.length && a.length){
+            total += won ? pwSum(x) * 0.04 : -pwSum(a) * 0.04;
+          }
         }
       }
       let left = uboats;
@@ -3846,23 +3953,58 @@ function planAlliedDeployment(aiLog){
       const mine = {};
       SEA_LIST.forEach(sea => { mine[sea] = [...placed[sea], ...add[sea]]; });
       mine.Mediterranean.push(...maltaShips);
-      let worst = Infinity;
-      for(let e = 0; e < enemyCount; e++){
-        worst = Math.min(worst, scoreOf(mine, decode(enemyGroups, e)));
-        if(worst < best) break; // これより悪い案は選ばない
+      let worst = Infinity, sum = 0, cnt = 0;
+      for(const ep of enemyPlans){
+        const v = scoreOf(mine, ep);
+        worst = Math.min(worst, v);
+        sum += v; cnt++;
+        if(PLAN_MODE < 2 && worst < best) break; // これより悪い案は選ばない
+        if(PLAN_MODE >= 2 && worst < best - 3) break;
       }
-      if(worst > best){ best = worst; bestPlans = [add]; }
-      else if(worst === best) bestPlans.push(add);
+      // 一番悪い場合を重く見て、ふつうの場合の出来も少し見る
+      const val = PLAN_MODE >= 2 ? worst * 0.7 + (sum / cnt) * 0.3 : worst;
+      if(val > best + 1e-9){ best = val; bestPlans = [add]; }
+      else if(Math.abs(val - best) <= 1e-9) bestPlans.push(add);
     }
     if(bestPlans.length){
       const chosen = bestPlans[Math.floor(Math.random() * bestPlans.length)];
       SEA_LIST.forEach(sea => chosen[sea].forEach(s => assign(s, sea)));
     }
     freeShips().filter(nsOk).forEach(s => assign(s, 'NorthSea'));
-    return `POCの予想（一番悪い場合 ${best}、配置案 ${planIndexes.length}件、敵の来方 ${enemyCount}通り）`;
+    return `POCの予想（評価 ${Math.round(best * 10) / 10}、配置案 ${planIndexes.length}件、敵の来方 ${enemyPlans.length}通りを試算）`;
   }
 
-  if(currentTurn === 1){
+  if(PLAN_MODE >= 4){
+    // ===== 全ターン: POC の予想で配置（ユーザーの指示 2026-11-03: 1ターン目からすべて）=====
+    const seaList = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean', 'Baltic'];
+    const ships = freeShips().map(x => {
+      const opts = ['NorthSea', 'NorthAtlantic', 'SouthAtlantic', 'Barents', 'Mediterranean']
+        .filter(sea => { const h = hop(x, sea); return h === 1 || (h === 2 && successRate(x) >= 0.6); });
+      return { s: x, opts: [...opts, 'port'] };
+    }).filter(u => u.opts.length > 1);
+    const fixed = {};
+    seaList.forEach(sea => { fixed[sea] = [...placed[sea] || []]; });
+    fixed.Mediterranean.push(...maltaShips);
+    usTry.forEach(x => { fixed.NorthAtlantic.push(x); });
+    SHIPS.forEach(x => {
+      if(x.side === 'allies' && !x.sunk && !x.removed && x.type === 'CONVOY' && SEAS[x.location] && fixed[x.location]) fixed[x.location].push(x);
+      if(x.country === 'RU' && !x.sunk && !x.removed && x.canMoveThisTurn && (x.location === 'Baltic' || PORTS[x.location])) fixed.Baltic.push(x);
+    });
+    const axisOpts = x => {
+      const o = seaList.filter(sea => {
+        if(sea === 'Baltic') return x.location === 'Germany';
+        if(x.refuelTurn === currentTurn - 1 && SEAS[x.location]) return sea !== 'Mediterranean';
+        if(sea === 'Mediterranean' && x.country !== 'IT') return false;
+        return (PORT_SEAS[x.location] || []).includes(sea) || reachesSea(x, sea);
+      });
+      return [...o, 'port'];
+    };
+    const axisShips = axisReady.map(x => ({ s: x, opts: axisOpts(x) }));
+    const ubs = SHIPS.filter(x => x.type === 'UBOAT' && x.side === 'axis' && !x.sunk && !x.removed && x.location && (PORTS[x.location] || SEAS[x.location])).length;
+    const r = (PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
+    ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') assign(u.s, sea); });
+    leftoverMode = `POCの予想（評価 ${Math.round(r.value * 10) / 10}）`;
+  } else if(currentTurn === 1){
     // ===== ターン1: 北海とバレンツ海に全力（大西洋は考えない） =====
     // 1ターン目は地中海へ送らない（ユーザーの指示 2026-11-03: 空母が減った分、北海・バレンツ海を優先）
     // ランダムの要素（ユーザーの指示 2026-11-03）: 20%で、4-4-4の戦艦2隻を北大西洋へ（ドイツを悩ませる）
@@ -3910,7 +4052,7 @@ function planAlliedDeployment(aiLog){
     // ===== ターン2以降: ドイツの戦力に合わせて必要な分だけ置き、残りを広く薄く =====
     // 連合の構え（ターンごとのくじ）: 北海重視 40% / 今まで通り 40% / 大西洋重視 20%
     // 2ターン目は構えのくじを使わず、POCの予想で残りの艦を配置する（下の 7b）
-    if(currentTurn !== 2){
+    if(currentTurn !== 2 && PLAN_MODE === 0){
       const pr = Math.random();
       posture = pr < 0.4 ? 'ns' : pr < 0.8 ? 'normal' : 'atl';
       alliedPostureLog.push({ turn: currentTurn, posture });
@@ -3939,6 +4081,7 @@ function planAlliedDeployment(aiLog){
     });
     // 2b) 参戦した米国艦は北大西洋へ（米国艦は北大西洋にしか行けない）。北大西洋は基本、米国に任せる
     freeShips().filter(s => s.country === 'US' && hop(s, 'NorthAtlantic') === 1).forEach(s => assign(s, 'NorthAtlantic'));
+    if(PLAN_MODE < 3){
     // 3) 北海: 遅い艦を攻撃力の高い順に、ドイツ本国の戦力以上になるまで
     while(!battleGeq(placed.NorthSea, deHome)){
       const cands = freeShips().filter(s => !isFast(s) && nsOk(s)).sort((a, b) => pw(b) - pw(a));
@@ -3972,7 +4115,8 @@ function planAlliedDeployment(aiLog){
       if(!cands.length) break;
       assign(cands[0], 'NorthSea');
     }
-    if(currentTurn === 2){
+    }
+    if(currentTurn === 2 || PLAN_MODE >= 1){
       // 2ターン目（ユーザーの指示 2026-11-03）: 北海とバレンツ海を固めたあとの残りの艦を、POCの予想で配置する
       leftoverMode = placeLeftoverByWorstPoc();
     } else {
@@ -4022,7 +4166,7 @@ function planAlliedDeployment(aiLog){
     //    バレンツ海から北海へ艦を回し、2つの海域の攻撃力をおおむね半分ずつにする（いつもではない）。
     //    バレンツ海に船団がいるターンは、護衛に必要な分（ドイツの脅威以上）はバレンツ海に残す
     const nsWeak = seaControl['NorthSea'] === 'axis' || sumAtk(placed.NorthSea) < sumAtk(placed.Barents) * 0.5;
-    if(nsWeak && placed.Barents.length && Math.random() < 0.5){
+    if(PLAN_MODE === 0 && nsWeak && placed.Barents.length && Math.random() < 0.5){
       let moved = 0;
       while(true){
         const ns = sumAtk(placed.NorthSea), ba = sumAtk(placed.Barents);
@@ -4759,148 +4903,6 @@ async function aiAlliedMove(bbTargetOverride){
 }
 
 // 枢軸軍AI移動 + 修理
-async function aiAxisMove(){
-  const aiLog = [];
-  // 連合艦の海域別 (Uボート除く)
-  const allyShips = {};
-  const allyStr = {}; // 戦力 (atk + def 合計)
-  Object.keys(SEAS).forEach(k => {
-    allyShips[k] = SHIPS.filter(s => s.side === 'allies' && s.location === k && !s.sunk && s.type !== 'UBOAT');
-    allyStr[k] = allyShips[k].reduce((sum, s) => sum + s.atk + s.def, 0);
-  });
-  const convoy = {};
-  Object.keys(SEAS).forEach(k => {
-    convoy[k] = SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && s.location === k && !s.sunk).length;
-  });
-  // 移動可能枢軸艦 (港にいる + 海域に残っている給油成功艦も含む、損傷艦は除外)
-  const movable = SHIPS.filter(s =>
-    s.side === 'axis' && !s.sunk && !s.removed && !s.movedThisTurn && (PORTS[s.location] || SEAS[s.location]) &&
-    !(s.damage > 0) && !(s.location === 'France' && isFranceClosed()) // 2.4 閉じたフランスからは出撃できない
-  );
-  // ドイツ水上艦 / イタリア / Uボート 分類
-  const deShips = movable.filter(s => s.country === 'DE' && s.type !== 'UBOAT');
-  const itShips = movable.filter(s => s.country === 'IT');
-  const uboats = movable.filter(s => s.type === 'UBOAT');
-  // 既配置枢軸戦力 (海域別)
-  const placedStr = {};
-  Object.keys(SEAS).forEach(k => {
-    placedStr[k] = SHIPS.filter(s => s.side === 'axis' && s.location === k && !s.sunk && s.type !== 'UBOAT').reduce((sum, s) => sum + s.atk + s.def, 0);
-  });
-
-  // === ドイツ水上艦配置 ===
-  // 港別の到達可能海域
-  const portToSeas = (port) => PORT_SEAS[port] || [];
-  // 必勝マージン: 連合戦力 + 5
-  const winThreshold = (sea) => allyStr[sea] + 5;
-
-  // 配置優先度を決定
-  // 1. 北海・バルト = 最優先 (必勝戦力まで)
-  // 2. バレンツ・北大西洋・南大西洋 はコンボイ位置で優先決定
-  const priorityList = ['NorthSea', 'Baltic'];
-  // コンボイがいる海域を勝率順 (連合戦力低い順) でリスト化
-  const convoySeas = ['Barents', 'NorthAtlantic', 'SouthAtlantic'].filter(k => convoy[k] > 0);
-  convoySeas.sort((a, b) => allyStr[a] - allyStr[b]); // 連合戦力低い順 = 勝率高い順
-  // コンボイあり海域を優先リストに追加
-  priorityList.push(...convoySeas);
-  // 残りバレンツ (コンボイ無し時) は最後
-  if(!convoy.Barents && !priorityList.includes('Barents')) priorityList.push('Barents');
-
-  // ドイツ艦を BB > BC > PB > CA > CV の順で大型から配置
-  const typeOrder = { BB: 0, BC: 1, PB: 2, CA: 3, CV: 4 };
-  const sortedDe = [...deShips].sort((a, b) => (typeOrder[a.type] ?? 5) - (typeOrder[b.type] ?? 5));
-
-  for(const ship of sortedDe){
-    const reachable = portToSeas(ship.location);
-    // 優先度順で必勝戦力に未達の海域を探す
-    let dest = null;
-    for(const target of priorityList){
-      if(!reachable.includes(target)) continue;
-      if(placedStr[target] < winThreshold(target)){
-        dest = target;
-        break;
-      }
-    }
-    // 優先海域全部が必勝達成済みなら、コンボイ無しバレンツに余裕配置
-    if(!dest && reachable.includes('Barents') && placedStr.Barents < allyStr.Barents + 3){
-      dest = 'Barents';
-    }
-    if(!dest) continue; // 配置先無し → 港待機
-    ship.location = dest;
-    ship.movedThisTurn = true;
-    placedStr[dest] += ship.atk + ship.def;
-    aiLog.push(`${ship.name} → ${SEA_LABEL[dest]}`);
-  }
-
-  // === イタリア配置 ===
-  const itTotalStr = itShips.reduce((sum, s) => sum + s.atk + s.def, 0);
-  const medAllyStr = allyStr.Mediterranean;
-  // 攻撃判定: 1.1倍以上で出撃 / 2.0倍以上で積極攻撃 (CAも南大西洋等へ展開)
-  if(itTotalStr >= medAllyStr * 1.1){
-    const aggressive = itTotalStr >= medAllyStr * 2.0;
-    for(const ship of itShips){
-      if(!portToSeas(ship.location).includes('Mediterranean')) continue;
-      // 積極攻撃: CAは南大西洋の連合艦が弱いなら派遣
-      if(aggressive && ship.type === 'CA' && allyStr.SouthAtlantic < itShips.filter(s => s.type==='CA').reduce((sum, s)=>sum+s.atk+s.def,0)){
-        // CAのみ南大西洋へ
-        ship.location = 'SouthAtlantic';
-        ship.movedThisTurn = true;
-        aiLog.push(`${ship.name} → 南大西洋 (積極攻撃)`);
-        continue;
-      }
-      ship.location = 'Mediterranean';
-      ship.movedThisTurn = true;
-      aiLog.push(`${ship.name} → 地中海 (出撃)`);
-    }
-    if(aggressive) aiLog.push(`イタリア: 積極攻撃モード (戦力${itTotalStr} vs 連合${medAllyStr})`);
-  } else {
-    aiLog.push(`イタリア: 出撃見送り (戦力${itTotalStr} vs 連合${medAllyStr})`);
-  }
-
-  // === Uボート配置 ===
-  const uboatsInPortCount = SHIPS.filter(s => s.type === 'UBOAT' && s.location === 'Germany' && !s.sunk && !s.removed).length;
-  // 連合のASW戦力推定: 連合艦数 (CV/CONVOY=3, 他=1) per sea
-  const aswDice = (sea) => allyShips[sea].reduce((sum, s) => sum + ((s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1), 0);
-  // バレンツ海のコンボイ最優先
-  let uTarget = null;
-  if(convoy.Barents > 0){
-    uTarget = 'Barents';
-  } else if(uboatsInPortCount >= 7){
-    // 7隻溜まったら他のコンボイ海域 or ドイツ攻撃エリア
-    if(convoy.NorthAtlantic > 0) uTarget = 'NorthAtlantic';
-    else if(convoy.SouthAtlantic > 0) uTarget = 'SouthAtlantic';
-    else {
-      // ドイツ艦の集中先を探す
-      const deSeas = ['NorthSea', 'Baltic', 'Barents', 'NorthAtlantic'];
-      const deTarget = deSeas.find(k => placedStr[k] > allyStr[k]);
-      uTarget = deTarget;
-    }
-  }
-  if(uTarget){
-    // ASW期待損失を試算: aswDice * 1/6 = 撃沈期待数
-    const expectedSunk = aswDice(uTarget) / 6;
-    const uboatsAvail = uboats.filter(s => portToSeas(s.location).includes(uTarget));
-    if(uboatsAvail.length > expectedSunk){
-      // 攻撃可能性ある
-      for(const u of uboatsAvail){
-        u.location = uTarget;
-        u.movedThisTurn = true;
-        aiLog.push(`${u.name} → ${SEA_LABEL[uTarget]}`);
-      }
-    } else {
-      aiLog.push(`Uボート: ${SEA_LABEL[uTarget]} 出撃見送り (ASW${aswDice(uTarget)}ダイス)`);
-    }
-  } else {
-    aiLog.push(`Uボート: 温存 (港${uboatsInPortCount}隻)`);
-  }
-
-  // 修理: phase 4 で手動処理（AI自動修理なし）
-
-  placeAllShips();
-  if(!simMode){
-    document.getElementById('moveStatus').innerHTML = aiLog.join('<br>');
-  }
-}
-
 // 枢軸の簡易AI（シミュレーション用）
 function simulateAxisMove(){
   const alliedBalCount = SHIPS.filter(s => s.side === 'allies' && s.location === 'Baltic' && !s.sunk).length;
@@ -5406,7 +5408,7 @@ applyPageZoom();
 
 // 対戦の最初の画面で、今の言語の方を選んだ状態にする（言語はこの画面で選ぶ。ゲーム中の切り替えボタンはない）
 document.addEventListener('DOMContentLoaded', () => {
-  const cur = (typeof LANG !== 'undefined' && LANG === 'en') ? 'en' : 'ja';
+  const cur = (typeof LANG !== 'undefined') ? LANG : 'ja';
   const r = document.querySelector('input[name="langPick"][value="' + cur + '"]');
   if(r) r.checked = true;
 });
@@ -5894,6 +5896,13 @@ function axisAirOptions(){
 
 // ドイツ軍の航空攻撃: 攻撃するエリアを1つの選択画面から選ぶ（終了も可）
 async function selectAxisAirStrike(options){
+  // 人が連合の時は、枢軸AIが目標の多いエリアから使う（ユーザーの指示 2026-11-04）
+  if(humanSide === 'allies'){
+    const count = a => SHIPS.filter(s => s.location === a && !s.sunk && s.side === 'allies' && s.type !== 'UBOAT' && !s.disabledThisTurn).length;
+    options.sort((a, b) => count(b.area) - count(a.area) || (a.cvOnly ? 1 : 0) - (b.cvOnly ? 1 : 0));
+    const o = options[0];
+    return startLbaBombing('axis', o.area, o.cvOnly, o.useCv);
+  }
   await openCombatModal(null, []);
   document.getElementById('combatTitle').textContent = 'ドイツ軍 航空攻撃';
   const choices = options.map(o => ({ label: o.label, value: o, bg: SEA_COLOR[o.area] || '#444' }));
@@ -6071,6 +6080,14 @@ function endTurn(){
   });
   if(usResults.length){
     alert('US 出撃判定:\n' + usResults.join('\n'));
+  }
+  // 6.4) 7ターンの頭: 2.4 フランスは使える港でなくなるので、残っている艦を除去する
+  if(currentTurn === 7 && !wasAtLastTurn){
+    const left = SHIPS.filter(s => s.side === 'axis' && s.location === 'France' && !s.sunk && !s.removed);
+    if(left.length){
+      left.forEach(s => { s.removed = true; s.location = null; log.push(`${s.name}: フランスの港が閉じたため除去`); });
+      if(!simMode) alert('7ターンになり、フランスの港は使えなくなりました。\nフランスにいた艦を除去します:\n' + left.map(s => s.name).join('\n'));
+    }
   }
   // 6.5) Uボート総数が8以上なら超過分を削除（enterTurnが新しい順）— ターン進行時のみ
   if(currentTurn < 8 || phaseIdx >= 1){

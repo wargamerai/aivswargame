@@ -1,4 +1,4 @@
-// 海の戦い - 英語/日本語の切り替え
+// 海の戦い - 言語の切り替え（9言語。英語以外は lang_i18n.js で英語からさらに訳す）
 // ゲームの処理には手を入れず、画面に出た日本語を対訳表で英語に置き換える
 //   - 言語: ?lang=en|ja → 保存した言語 → 日本語
 //   - 英語のとき、文字の変化を見張って置き換える。アラート・確認のダイアログも置き換える
@@ -46,6 +46,9 @@ const LANG_EXACT = {
   '艦と移動先を選択して「実行」': 'Select ships and a destination, then press "Execute"',
   '港湾/海域を選択': 'Select a port or sea area',
   '艦一覧の表示/非表示': 'Show / hide ship list',
+  '担当する軍': 'Your side',
+  'ドイツ軍（枢軸）を担当する。連合軍はAIが動かす': 'Play Germany (Axis). The AI plays the Allies',
+  '連合軍を担当する。ドイツ軍（枢軸）はAIが動かす': 'Play the Allies. The AI plays Germany (Axis)',
   'あなたはドイツ軍（枢軸）を担当します。連合軍はAIが動かします。': 'You play the German (Axis) side. The Allies are controlled by the AI.',
   'ターンごとの移動、戦闘結果、支配、POCのレポートを、このパソコンに保存できます。': 'You can save a report of each turn (movement, combat results, sea control and POC) to this computer.',
   'レポートを保存': 'Save report',
@@ -71,6 +74,51 @@ const LANG_EXACT = {
 
 // 語句の訳（長い語句から順に置き換える）
 const LANG_TERMS = {
+  "まだ枢軸の艦を1隻も動かしていません。このまま次のフェイズへ進みますか？": "You have not moved any Axis ships yet. Go on to the next phase?",
+  "（撃てる艦なし）": " (no ships able to fire)",
+  "目標を1つ戻す": "Undo one target",
+  "POCの予想で配置": "Placed by POC forecast",
+  "POCの予想": "POC forecast",
+  "評価": "rating",
+  "配置案": "plans",
+  "敵の来方": "enemy options",
+  "通りを試算": " cases tested",
+  "のくじ": " lottery",
+  "重視": " focus",
+  "今まで通り": "as before",
+  "北海とバレンツ海を半分ずつ": "half each to North Sea and Barents Sea",
+  "マルタへ戻す": "back to Malta",
+  "イタリア待機": "Italy holds",
+  "待機": "hold",
+  "勝てないので見送り": "skipped: cannot win",
+  "届く艦なし": "no ships in reach",
+  "届く": "in reach",
+  "勝率": "win rate",
+  "ソ連": "USSR",
+  "中立港から出撃": "sortie from neutral port",
+  "最後の突撃": "Last charge",
+  "殴り込み見送り": "Raid skipped",
+  "殴り込み成功": "Raid succeeded",
+  "殴り込み失敗": "Raid failed",
+  "殴り込み": "Raid",
+  "リード": "lead",
+  "確率": "chance",
+  "港で修理": "repair in port",
+  "空いた海域へ出撃": "sortie to empty area",
+  "へ追加": " added",
+  "配置": "placed",
+  "無人": "empty",
+  "点": "pts",
+  "今": "now",
+  "沈没": "sunk",
+  "独": "DE",
+  "失": "lost",
+  "余": "extra",
+  '英': 'UK', '件': ' ',
+  ': フランスへ戻れますが、次のターンの頭に除去されます。戻りますか？': ': You can return to France, but the ship will be removed at the start of next turn. Return?',
+  '7ターンになり、フランスの港は使えなくなりました。': 'It is now turn 7, and the port of France can no longer be used.',
+  'フランスにいた艦を除去します:': 'Ships in France are removed:',
+  ': フランスの港が閉じたため除去': ': removed because the port of France has closed',
   '：攻撃のしかたを選んでください': ': choose how to attack',
   '連合の航空攻撃': 'Allied air strike',
   'ドイツの航空攻撃': 'German air strike',
@@ -436,16 +484,33 @@ const LANG_JP = /[぀-ヿ一-鿿！-｠　-〿]/;
 const LANG_TERM_RE = new RegExp(
   Object.keys(LANG_TERMS).sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
 const langCache = new Map();
+const LANGS = ['ja', 'en', 'fr', 'de', 'it', 'es', 'zh', 'ko', 'ru'];
+// 英語の文をいまの言語へ
+const langX = en => {
+  const d = window.WAS_I18N && window.WAS_I18N[LANG];
+  return d && d[en] !== undefined ? d[en] : en;
+};
+// 訳したあとの文（中国語は漢字を含むので、二度訳さない）
+const langDone = new Set();
+// 日本語の画面でも英語のままの語（英語以外のときは訳す）
+const LANG_LATIN = new Set(['Save', 'Load', 'U-Boat Pens']);
+const langNeeds = s => LANG_JP.test(s) || LANG_LATIN.has(s.trim());
+
+// 語句のつなぎ目に空白を入れるか（中国語は漢字の間に入れない）
+const langEnd = (s, more) => (LANG === 'zh' ? /[A-Za-z0-9)\]⚂]$/ : more ? /[\p{L}\p{N})\]⚂]$/u : /[\p{L}\p{N})]$/u).test(s);
+const langStart = (s, more) => (LANG === 'zh' ? /^[A-Za-z0-9(]/ : more ? /^[\p{L}\p{N}(]/u : /^[\p{L}\p{N}]/u).test(s);
 
 // 日本語の文字列を英語にする
 function langTranslate(s){
-  if(!LANG_JP.test(s)) return s;
+  if(!langNeeds(s) || langDone.has(s)) return s;
   if(langCache.has(s)) return langCache.get(s);
   const lead = s.match(/^\s*/)[0], trail = s.match(/\s*$/)[0];
   const core = s.trim();
   let out;
-  if(LANG_EXACT[core] !== undefined){
-    out = LANG_EXACT[core];
+  if(LANG_LATIN.has(core)){
+    out = langX(core);
+  } else if(LANG_EXACT[core] !== undefined){
+    out = langX(LANG_EXACT[core]);
   } else {
     // 語句を置き換え、英単語どうしや数字と続くところに空白を入れる
     out = '';
@@ -454,30 +519,31 @@ function langTranslate(s){
     while((m = LANG_TERM_RE.exec(core))){
       const raw = core.slice(last, m.index);
       if(raw){
-        if(prevTerm && /[A-Za-z0-9)]$/.test(out) && /^[A-Za-z0-9]/.test(raw)) out += ' ';
+        if(prevTerm && langEnd(out) && langStart(raw)) out += ' ';
         out += raw;
       }
-      const en = LANG_TERMS[m[0]];
-      if(/[A-Za-z0-9)\]⚂]$/.test(out) && /^[A-Za-z0-9(]/.test(en)) out += ' ';
+      const en = langX(LANG_TERMS[m[0]]);
+      if(langEnd(out, true) && langStart(en, true)) out += ' ';
       out += en;
       last = m.index + m[0].length;
       prevTerm = true;
     }
     const rest = core.slice(last);
-    if(rest && prevTerm && /[A-Za-z0-9)]$/.test(out) && /^[A-Za-z0-9]/.test(rest)) out += ' ';
+    if(rest && prevTerm && langEnd(out) && langStart(rest)) out += ' ';
     out += rest;
-    out = out.replace(/([A-Za-z])(⚂|\()/g, '$1 $2').replace(/ {2,}/g, ' ').replace(/ ([,.:;)\]?])/g, '$1').replace(/\( /g, '(').trim();
+    out = out.replace(LANG === 'zh' ? /([A-Za-z])(⚂|\()/g : /(\p{L})(⚂|\()/gu, '$1 $2').replace(/ {2,}/g, ' ').replace(/ ([,.:;)\]?])/g, '$1').replace(/\( /g, '(').trim();
   }
   out = lead + out + trail;
   langCache.set(s, out);
+  langDone.add(out);
   return out;
 }
 
 let LANG = 'ja';
 try {
   const q = new URLSearchParams(location.search).get('lang');
-  if(q === 'en' || q === 'ja'){ LANG = q; localStorage.setItem('wasLang', q); }
-  else if(localStorage.getItem('wasLang') === 'en') LANG = 'en';
+  if(LANGS.includes(q)){ LANG = q; localStorage.setItem('wasLang', q); }
+  else if(LANGS.includes(localStorage.getItem('wasLang'))) LANG = localStorage.getItem('wasLang');
 } catch(e){}
 
 // 文字ごとに元の日本語と英語を覚えておき、切り替えで戻せるようにする
@@ -486,21 +552,21 @@ let langApplying = false;
 function langApplyText(node){
   const v = node.nodeValue;
   const rec = langText.get(node);
-  if(rec && (v === rec.en || v === rec.ja && LANG === 'ja')) return;
-  if(!LANG_JP.test(v)){ if(rec) langText.delete(node); return; }
-  const r = { ja: v, en: langTranslate(v) };
+  if(rec && ((rec.lang === LANG && v === rec.en) || (v === rec.ja && LANG === 'ja'))) return;
+  if(!langNeeds(v)){ if(rec) langText.delete(node); return; }
+  const r = { ja: v, en: langTranslate(v), lang: LANG };
   langText.set(node, r);
-  if(LANG === 'en' && r.en !== v) node.nodeValue = r.en;
+  if(LANG !== 'ja' && r.en !== v) node.nodeValue = r.en;
 }
 function langApplyTitle(el){
   const v = el.getAttribute('title');
   if(v == null) return;
   const rec = langTitle.get(el);
-  if(rec && (v === rec.en || v === rec.ja && LANG === 'ja')) return;
-  if(!LANG_JP.test(v)){ if(rec) langTitle.delete(el); return; }
-  const r = { ja: v, en: langTranslate(v) };
+  if(rec && ((rec.lang === LANG && v === rec.en) || (v === rec.ja && LANG === 'ja'))) return;
+  if(!langNeeds(v)){ if(rec) langTitle.delete(el); return; }
+  const r = { ja: v, en: langTranslate(v), lang: LANG };
   langTitle.set(el, r);
-  if(LANG === 'en' && r.en !== v) el.setAttribute('title', r.en);
+  if(LANG !== 'ja' && r.en !== v) el.setAttribute('title', r.en);
 }
 function langWalk(root, fn){
   if(root.nodeType === 3){ fn.text(root); return; }
@@ -522,7 +588,7 @@ function langRestoreAll(){
   });
 }
 const langObserver = new MutationObserver(muts => {
-  if(LANG !== 'en' || langApplying) return;
+  if(LANG === 'ja' || langApplying) return;
   langApplying = true;
   for(const m of muts){
     if(m.type === 'characterData') langApplyText(m.target);
@@ -534,27 +600,29 @@ const langObserver = new MutationObserver(muts => {
 const langDocTitle = { ja: document.title, en: 'War at Sea' };
 
 function setLang(lang){
+  if(!LANGS.includes(lang)) lang = 'ja';
+  if(LANG !== 'ja') langRestoreAll(); // 別の言語へ移るときは、いったん日本語に戻す
   LANG = lang;
+  langCache.clear(); langDone.clear();
   try { localStorage.setItem('wasLang', lang); } catch(e){}
   document.documentElement.lang = lang;
-  document.title = langDocTitle[lang];
-  if(lang === 'en'){
+  document.title = lang === 'ja' ? langDocTitle.ja : langDocTitle.en;
+  // ページの字は日本語の書体なので、中国語・韓国語・ロシア語は書体を変える
+  document.body.style.fontFamily = { zh: "'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif", ko: "'Apple SD Gothic Neo','Malgun Gothic',sans-serif", ru: "'Helvetica Neue',Arial,sans-serif" }[lang] || '';
+  if(lang !== 'ja'){
     langApplyAll();
     langObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['title'] });
   } else {
     langObserver.disconnect();
     langRestoreAll();
   }
-  const b = document.getElementById('langBtn');
-  if(b) b.textContent = lang === 'en' ? '日本語' : 'EN';
 }
-function toggleLang(){ setLang(LANG === 'en' ? 'ja' : 'en'); }
 
 // アラート・確認のダイアログ
 {
   const a = window.alert.bind(window), c = window.confirm.bind(window);
-  window.alert = msg => a(LANG === 'en' ? langTranslate(String(msg)) : msg);
-  window.confirm = msg => c(LANG === 'en' ? langTranslate(String(msg)) : msg);
+  window.alert = msg => a(LANG !== 'ja' ? langTranslate(String(msg)) : msg);
+  window.confirm = msg => c(LANG !== 'ja' ? langTranslate(String(msg)) : msg);
 }
 
 document.addEventListener('DOMContentLoaded', () => setLang(LANG));
