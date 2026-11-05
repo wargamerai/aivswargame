@@ -160,8 +160,10 @@
   // ゲームの入口では、最初に画面の正面で言語を聞く（URL に lang= があるとき、この回で聞いたあとは聞かない）
   function askLanguage() {
     if (window.top !== window || !/(f16ai\/scenario|ijn\/savo|ijn\/campaign|pf\/campaign)\.html$/.test(location.pathname)) { if (window.top === window) count(); return; }
+    // ゲームの入口ごとに1回聞く（別のゲームへ移ったらまた聞く）
+    const askKey = 'nvLangAsked:' + location.pathname;
     let asked = false;
-    try { asked = !!new URLSearchParams(location.search).get('lang') || sessionStorage.getItem('nvLangAsked') === '1'; } catch (e) { /* no storage */ }
+    try { asked = !!new URLSearchParams(location.search).get('lang') || sessionStorage.getItem(askKey) === '1'; } catch (e) { /* no storage */ }
     if (asked) { count(); return; }
     const bg = document.createElement('div');
     bg.id = 'nvLangAsk';
@@ -179,7 +181,7 @@
       b.lang = k;
       b.style.cssText = 'font-size:18px;padding:12px 8px;border-radius:6px;cursor:pointer;color:#fff;background:' + (k === LANG ? '#2f6fd6' : '#33415a') + ';border:1px solid #6ea8ff;';
       b.onclick = () => {
-        try { sessionStorage.setItem('nvLangAsked', '1'); } catch (e) { /* no storage */ }
+        try { sessionStorage.setItem(askKey, '1'); } catch (e) { /* no storage */ }
         if (k !== LANG) setLang(k); else { try { localStorage.setItem('nvLang', k); } catch (e) { /* no storage */ } }
         bg.remove();
         count();
