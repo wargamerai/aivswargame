@@ -156,8 +156,25 @@
     $('stNo').textContent = `初期配置 ${i + 1}/${STAGES.length}`;
     $('stT').textContent = STAGES[i].title;
     $('stTx').textContent = STAGES[i].text();
+    $('stU').innerHTML = ''; $('stGo').textContent = '配置する';
     $('st').style.display = 'flex';
     return true;
+  }
+  // 架橋部隊は特別な駒なので、登場したときだけ大きく知らせる
+  let bridgeShown = -1;
+  function showBridge() {
+    const p = G.prompt;
+    if (!p || p.kind !== 'rein' || bridgeShown === G.S.cards) return;
+    const id = p.units.find(i => G.UNIT[i].bridge);
+    if (id === undefined) return;
+    bridgeShown = G.S.cards;
+    $('stBig').textContent = ''; $('stBig').style.display = 'none';
+    $('stNo').textContent = '連合軍増援';
+    $('stT').textContent = '架橋部隊が登場';
+    $('stTx').textContent = '架橋部隊が Rommel に来ました。渡河できない駒(戦車など)は、架橋部隊と同じエリアにいて道路がある場合だけ川を渡れます。';
+    $('stU').innerHTML = ''; $('stU').appendChild(tile(G.S.u[id]));
+    $('stGo').textContent = '確認';
+    $('st').style.display = 'flex';
   }
   function openSetupIfNeeded() {
     const p = G.prompt;
@@ -191,6 +208,7 @@
     $('gs').style.display = p && p.kind === 'gamestart' ? 'flex' : 'none';
     if (!p && G.S.over && !UI.restored) showEnd();
     if (showStage()) { focusMap(); return; }
+    showBridge();
     openSetupIfNeeded();
   }
   // scrolls the map to the areas the current prompt is about

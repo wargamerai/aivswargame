@@ -132,6 +132,8 @@ button.go { background:#6a5a1c; border-color:var(--acc); font-weight:bold; }
 #st .no { color:var(--mute); margin:0; }
 #st h1 { margin:2px 0 10px; font-size:clamp(28px,5vw,50px); line-height:1.2; color:var(--acc); }
 #st .tx { margin:0 0 18px; }
+#stU { display:flex; justify-content:center; margin:0 0 18px; }
+#stU:empty { display:none; }
 #st button { font-size:1.2em; height:2.4em; padding:0 22px; }
 #lg { position:fixed; inset:0; z-index:36; display:none; background:rgba(0,0,0,.72); align-items:center; justify-content:center; padding:16px; }
 #lg > div { background:#26291c; border:3px solid var(--acc); border-radius:10px; padding:28px 48px; text-align:center; max-width:calc(100vw - 32px); }
@@ -171,7 +173,7 @@ button.go { background:#6a5a1c; border-color:var(--acc); font-weight:bold; }
 <div id="lg"><div><h1>Monty's Melancholy</h1><p>言語 / Language / Langue / Sprache / Lingua / Idioma / 语言 / 언어 / Язык</p><div id="lgBtns"></div></div></div>
 <div id="end"><div><h1 id="endT"></h1><p id="endW"></p><button class="go" id="endGo">レポートへ</button></div></div>
 <div id="rp"><div id="rpBar"><b>戦闘報告</b><span class="sp"></span><button class="go" id="rpOne">1本もので保存</button><button id="rpBlog">ブログ用に分割</button><button id="rpNew">新しいゲーム</button><button id="rpClose">閉じる</button></div><div id="rpBlogBox"></div><iframe id="rpFrame" title="戦闘報告"></iframe></div>
-<div id="st"><div><p class="big" id="stBig"></p><p class="no" id="stNo"></p><h1 id="stT"></h1><p class="tx" id="stTx"></p><button class="go" id="stGo">配置する</button></div></div>
+<div id="st"><div><p class="big" id="stBig"></p><p class="no" id="stNo"></p><h1 id="stT"></h1><p class="tx" id="stTx"></p><div id="stU"></div><button class="go" id="stGo">配置する</button></div></div>
 <div id="gs"><div><h1>ゲーム開始</h1><p>空挺降下が終わりました。ここから札を1枚ずつめくります。</p><button class="go" id="gsGo">最初の札をめくる</button></div></div>
 <div id="tip"></div>
 <div id="help" onclick="this.style.display='none'"><div>

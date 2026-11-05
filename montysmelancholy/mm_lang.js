@@ -20,6 +20,7 @@
     'この札': 'This card', '山札': 'Deck', '1枚前(判定)': 'Previous card (judge)', '山札の最初': 'First card of the deck',
     '戦闘報告': 'After-Action Report', '地図': 'Map', '札': 'Card', '遊び方': 'How to Play', 'ゲーム開始': 'Game Start',
     'モントゴメリーの憂鬱': "Monty's Melancholy", '配置する': 'Place units', '初期配置を始めます': 'Starting the initial setup',
+    '架橋部隊が登場': 'Bridging unit arrives',
   };
   const P = [
     [/あなたは連合軍です。ドイツ軍はルールどおり自動で動きます。/, 'You play the Allies. The Germans move automatically by the rules.'],
@@ -126,6 +127,7 @@
     [/(.+) は攻撃力0なので攻撃しません。/, '$1 has attack 0, so it will not attack.'],
     [/攻撃できるのは同じエリアの敵だけ。このエリアに敵はいない。戦車以外は、移動した札では攻撃できない。/, 'Units attack only enemies in the same area, and there are none here. Only tanks can move and attack with the same card.'],
     [/① この窓の駒を押して選ぶ ② 地図の Rommel か Bergeijk を押す。Rommel に1駒は残す\(空だと補給が切れる\)。/, '1) Click units in this window to select them. 2) Click Rommel or Bergeijk on the map. Keep at least one unit in Rommel (if it is empty, supply is cut).'],
+    [/架橋部隊が Rommel に来ました。渡河できない駒\(戦車など\)は、架橋部隊と同じエリアにいて道路がある場合だけ川を渡れます。/, 'The bridging unit has arrived at Rommel. Units that cannot cross rivers (such as tanks) can cross only with the bridging unit in the same area and a road.'],
     [/選んだ駒を置くエリアを地図で押す。対戦車は敵のいるエリアに置けない。/, 'Click the area for the selected units. Anti-tank units cannot be placed with enemies.'],
     [/攻撃力(\d+)以下で命中/, 'Hits on $1 or less'],
     [/攻撃力 (\d+)/, 'Attack $1'],
