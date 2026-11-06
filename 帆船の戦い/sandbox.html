@@ -82,6 +82,12 @@ const SCENARIO_LIST = [
   { n:22, title:'Wasp vs Reindeer (1814)',            sides:'米:Wasp / 英:Reindeer' },
   { n:23, title:'Constitution vs Cyane+Levant (1815)',sides:'米:Constitution / 英:Cyane, Levant' },
   { n:25, title:'Trafalgar (1805)',                   sides:'英27隻 / 仏18隻+西15隻' },
+  // ボライソー・シナリオ（The GENERAL 誌「A King's Officer」）
+  { n:101, label:'B-1', title:'No More Pretense (1777)',       sides:'英:Trojan / 仏:Argonaute' },
+  { n:108, label:'B-8', title:'A Tradition of Victory (1782)', sides:'英3隻 / 仏4隻' },
+  { n:109, label:'B-9', title:"In the King's Name (1784)",     sides:'英:Undine / 仏:Argus' },
+  { n:112, label:'B-12', title:'The French Are Out! (1793)',   sides:'英4隻 / 仏6隻' },
+  { n:118, label:'B-18', title:'A Ship of War (1797)',         sides:'英5隻 / 仏8隻+西2隻' },
 ];
 
 function renderScenarios() {
@@ -91,7 +97,7 @@ function renderScenarios() {
     const sides = sc.sides.split(' / ');
     return `
     <div class="scen-btn">
-      <span class="n">シナリオ ${sc.n}</span>
+      <span class="n">${sc.label ? 'ボライソー ' + sc.label : 'シナリオ ' + sc.n}</span>
       <span class="t">${sc.title}</span>
       <span class="sides">${sides.map((sd, i) => `<button class="side-btn" onclick="startScenario(${sc.n}, ${i})">指揮: ${sd}</button>`).join('')}</span>
     </div>`;

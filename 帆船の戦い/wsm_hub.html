@@ -848,6 +848,7 @@ function saveGameToFile() {
         gunneryArrows: state.gunneryArrows,
         damageSeqCounter: state.damageSeqCounter,
         plotExecTurn: state._plotExecTurn,
+        scenarioNo: state.scenarioNo,
       },
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -887,6 +888,7 @@ function loadFromSandbox() {
       if (sv.wind) state.wind = sv.wind;
       if (sv.log) state.log = sv.log;
       if (sv.plotExecTurn != null) state._plotExecTurn = sv.plotExecTurn;
+      if (sv.scenarioNo != null) state.scenarioNo = sv.scenarioNo;
       if (sv.gunneryArrows) state.gunneryArrows = sv.gunneryArrows;
       if (typeof sv.damageSeqCounter === 'number') state.damageSeqCounter = sv.damageSeqCounter;
       console.log(`[RESUME] T${state.turn}/${state.phase} を復元 (saved=${payload.savedAt})`);
@@ -1119,8 +1121,94 @@ const SCENARIOS = {
       {name:'Principe de Asturias',guns:112,cls:'SOL',nr:2,bow:'J3',dir:3,hull:18,qual:'Gr',crew:[6,6,6],gL:12,gR:12,cL:0,cR:0,rig:[9,9,9,0],depth:25,pv:24,ta:2,bs:3,fs:5},
       {name:'San Juan de Nepomuceno',guns:74,cls:'SOL',nr:2,bow:'F1',dir:3,hull:14,qual:'Gr',crew:[5,4,4],gL:8,gR:8,cL:2,cR:2,rig:[7,7,7,0],depth:21,pv:18,ta:2,bs:3,fs:5}
     ]}
-  ]}
+  ]},
+  // ===== ボライソー・シナリオ（The GENERAL 誌「A King's Officer」）。番号 101〜 = B-1〜 =====
+  101: { name:"B-1: No More Pretense (1777)", wind:{direction:3, velocity:3, windChangeNumber:6}, noAnchor:true, startSail:'battle', victoryText:"通常どおり（点数で決める）", sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:"Trojan",guns:80,cls:"SOL",nr:1,bow:"Q5",dir:3,hull:15,qual:"Cr",crew:[4,3,3],gL:10,gR:10,cL:0,cR:0,rig:[7,7,7,0],depth:null,pv:28,ta:1,bs:3,fs:5}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:"Argonaute",guns:74,cls:"SOL",nr:2,bow:"P24",dir:2,hull:14,qual:"Cr",crew:[5,5,4],gL:10,gR:10,cL:0,cR:0,rig:[7,7,7,0],depth:null,pv:29,ta:2,bs:3,fs:5}
+    ]}
+  ]},
+  108: { name:"B-8: A Tradition of Victory (1782)", wind:{direction:6, velocity:3, windChangeNumber:5}, noAnchor:true, startSail:'battle', victoryText:"イギリスは、1隻も失わずにフランスを破れば勝ち。それ以外はフランスの勝ち。Triomphant が戦う前にほかのフランス3隻が失われたら、Triomphant は自動で降伏する", victory: L => (L.enemyAll && L.gb === 0) ? 'gb' : 'fr', onCheck: bolithoTriomphantStrike, sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:"Phalarope",guns:32,cls:"F",nr:3,bow:"T30",dir:1,hull:5,qual:"El",crew:[2,1,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:null,pv:10},
+      {name:"Cassius",guns:74,cls:"SOL",nr:2,bow:"T27",dir:1,hull:12,qual:"Cr",crew:[4,4,4],gL:8,gR:8,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:26,ta:2,bs:3,fs:5},
+      {name:"Volcano",guns:32,cls:"F",nr:3,bow:"V24",dir:1,hull:5,qual:"Cr",crew:[2,1,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:null,pv:10}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:"Ondine",guns:74,cls:"SOL",nr:2,bow:"AA12",dir:5,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:0,cR:0,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Triomphant",guns:80,cls:"SOL",nr:1,bow:"QQ4",dir:5,hull:15,qual:"Av",crew:[6,6,5],gL:11,gR:11,cL:0,cR:0,rig:[7,7,7,0],depth:null,pv:27,ta:1,bs:3,fs:5,rigNow:[7,7,0,0],rigLocked:[2]},
+      {name:"Vaillant",guns:36,cls:"F",nr:3,bow:"EE15",dir:5,hull:7,qual:"Av",crew:[2,2,2],gL:2,gR:2,cL:0,cR:0,rig:[5,5,5,5],depth:null,pv:11},
+      {name:"Griffon",guns:32,cls:"F",nr:3,bow:"HH10",dir:5,hull:6,qual:"Av",crew:[2,2,1],gL:2,gR:2,cL:0,cR:0,rig:[5,5,5,5],depth:null,pv:10}
+    ]}
+  ]},
+  109: { name:"B-9: In the King's Name (1784)", wind:{direction:1, velocity:3, windChangeNumber:5}, noAnchor:true, victoryText:"通常どおり（点数で決める）", sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:"Undine",guns:32,cls:"F",nr:3,bow:"J23",dir:2,hull:5,qual:"El",crew:[2,1,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:null,pv:12}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:"Argus",guns:44,cls:"F",nr:3,bow:"GG23",dir:6,hull:9,qual:"Cr",crew:[3,2,2],gL:3,gR:3,cL:0,cR:0,rig:[5,5,5,5],depth:null,pv:17}
+    ]}
+  ]},
+  112: { name:"B-12: The French Are Out! (1793)", wind:{direction:4, velocity:3, windChangeNumber:6}, noAnchor:true, victoryText:"イギリスが5隻以上破り、失った数が破った数より少なければイギリスの勝ち（全滅したら負け）。1隻も失わずに4隻破れば引き分け。それ以外はフランスの勝ち", victory: L => (L.gbAll ? 'fr' : (L.enemy >= 5 && L.gb < L.enemy) ? 'gb' : (L.enemy >= 4 && L.gb === 0) ? 'draw' : 'fr'), sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:"Zenith",guns:74,cls:"SOL",nr:2,bow:"T22",dir:2,hull:14,qual:"El",crew:[4,4,4],gL:8,gR:8,cL:2,cR:2,rig:[7,7,7,0],depth:null,pv:27,ta:2,bs:3,fs:5,rigNow:[7,7,4,0]},
+      {name:"Hyperion",guns:74,cls:"SOL",nr:2,bow:"O25",dir:2,hull:14,qual:"Cr",crew:[4,4,4],gL:8,gR:8,cL:2,cR:2,rig:[7,7,7,0],depth:null,pv:27,ta:2,bs:3,fs:5},
+      {name:"Tenacious",guns:90,cls:"SOL",nr:1,bow:"L26",dir:2,hull:16,qual:"Cr",crew:[5,5,5],gL:10,gR:10,cL:1,cR:1,rig:[8,8,8,0],depth:null,pv:30,ta:1,bs:3,fs:5},
+      {name:"Harvester",guns:32,cls:"F",nr:3,bow:"F6",dir:2,hull:5,qual:"Cr",crew:[2,1,1],gL:2,gR:2,cL:1,cR:1,rig:[5,5,5,5],depth:null,pv:10}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:"Admirable",guns:74,cls:"SOL",nr:2,bow:"EE13",dir:5,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Orifamme",guns:100,cls:"SOL",nr:1,bow:"HH11",dir:5,hull:18,qual:"Av",crew:[7,6,6],gL:12,gR:12,cL:1,cR:1,rig:[8,8,8,0],depth:null,pv:30,ta:1,bs:3,fs:5},
+      {name:"Carnot",guns:74,cls:"SOL",nr:2,bow:"KK10",dir:5,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Eclatant",guns:74,cls:"SOL",nr:2,bow:"NN6",dir:5,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"St. Philippe",guns:74,cls:"SOL",nr:2,bow:"QQ7",dir:5,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Portefaix",guns:74,cls:"SOL",nr:2,bow:"TT5",dir:5,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5}
+    ]}
+  ]},
+  118: { name:"B-18: A Ship of War (1797)", wind:{direction:4, velocity:3, windChangeNumber:6}, noAnchor:true, victoryText:"イギリスは、2隻以上失わずに4隻破れば勝ち。フランスは、3隻失わずに2隻以上破れば勝ち。相手を全滅させれば勝ち。それ以外は引き分け", victory: L => L.enemyAll ? 'gb' : L.gbAll ? 'fr' : (L.enemy >= 4 && L.gb <= 1) ? 'gb' : (L.gb >= 2 && L.enemy < 3) ? 'fr' : 'draw', sides:[
+    { nation:'GB', label:'British', side:'jp', ships:[
+      {name:"Euryalus",guns:100,cls:"SOL",nr:1,bow:"PP6",dir:5,hull:18,qual:"El",crew:[6,6,5],gL:12,gR:12,cL:2,cR:2,rig:[8,8,8,0],depth:null,pv:35,ta:1,bs:3,fs:5},
+      {name:"Impulsive",guns:64,cls:"SOL",nr:2,bow:"RR5",dir:5,hull:11,qual:"El",crew:[4,3,3],gL:6,gR:6,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:22,ta:2,bs:3,fs:5},
+      {name:"Zeus",guns:74,cls:"SOL",nr:2,bow:"SS11",dir:5,hull:14,qual:"Cr",crew:[4,4,4],gL:8,gR:8,cL:2,cR:2,rig:[7,7,7,0],depth:null,pv:27,ta:2,bs:3,fs:5},
+      {name:"Valorous",guns:74,cls:"SOL",nr:2,bow:"UU10",dir:5,hull:14,qual:"Cr",crew:[4,4,4],gL:8,gR:8,cL:2,cR:2,rig:[7,7,7,0],depth:null,pv:27,ta:2,bs:3,fs:5},
+      {name:"Tanais",guns:74,cls:"SOL",nr:2,bow:"WW9",dir:5,hull:14,qual:"Cr",crew:[4,4,4],gL:8,gR:8,cL:2,cR:2,rig:[7,7,7,0],depth:null,pv:27,ta:2,bs:3,fs:5}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:"Le Glorieux",guns:100,cls:"SOL",nr:1,bow:"T10",dir:3,hull:18,qual:"Av",crew:[7,6,6],gL:12,gR:12,cL:1,cR:1,rig:[8,8,8,0],depth:null,pv:30,ta:1,bs:3,fs:5},
+      {name:"Les Jacquerie",guns:74,cls:"SOL",nr:2,bow:"R9",dir:3,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Apollon",guns:74,cls:"SOL",nr:2,bow:"P8",dir:3,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Fourdroyant",guns:74,cls:"SOL",nr:2,bow:"N7",dir:3,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5}
+    ]},
+    { nation:'ES', label:'Spanish', side:'us', ships:[
+      {name:"Santa Catalina",guns:74,cls:"SOL",nr:2,bow:"L6",dir:3,hull:13,qual:"Gr",crew:[4,4,4],gL:8,gR:8,cL:0,cR:0,rig:[7,7,7,0],depth:null,pv:18,ta:2,bs:3,fs:5},
+      {name:"Girona",guns:74,cls:"SOL",nr:2,bow:"J5",dir:3,hull:13,qual:"Gr",crew:[4,4,4],gL:8,gR:8,cL:0,cR:0,rig:[7,7,7,0],depth:null,pv:18,ta:2,bs:3,fs:5}
+    ]},
+    { nation:'FR', label:'French', side:'us', ships:[
+      {name:"Entreprenant",guns:74,cls:"SOL",nr:2,bow:"H4",dir:3,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Marche",guns:74,cls:"SOL",nr:2,bow:"F3",dir:3,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Nantes",guns:74,cls:"SOL",nr:2,bow:"D2",dir:3,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5},
+      {name:"Boudeuse",guns:74,cls:"SOL",nr:2,bow:"B1",dir:3,hull:14,qual:"Av",crew:[5,5,4],gL:10,gR:10,cL:1,cR:1,rig:[7,7,7,0],depth:null,pv:24,ta:2,bs:3,fs:5}
+    ]}
+  ]},
 };
+
+// ボライソー B-8 特別ルール5: Triomphant が戦う（撃つ）前にほかのフランス3隻が失われたら、Triomphant は自動で降伏する
+function bolithoTriomphantStrike(all) {
+  const t = all.find(s => s.name === 'Triomphant' && s.nation === 'FR');
+  if (!t || t.status !== 'ok' || t._everFired) return;
+  const others = all.filter(s => s.nation === 'FR' && s !== t);
+  if (others.length && others.every(scenarioShipLost)) {
+    t.status = 'struck'; t.strikeType = 'scenario'; t.capturedBy = t.side === 'jp' ? 'us' : 'jp';
+    addLog(`🏴 ${t.name} 降伏（ほかのフランス艦が全部失われたため。シナリオの特別ルール）`);
+  }
+}
+// シナリオの勝利条件で「失った」艦: 降伏・沈没・爆発・拿捕・乗員なし
+function scenarioShipLost(s) {
+  return s.status !== 'ok' || !!s.capturedFlag || !(s.crew?.abilities || [1]).some(v => v > 0);
+}
 
 const QUAL_MAP = {Cr:'crack',Gr:'green',Av:'average',El:'elite',Pr:'poor',CR:'crack',GR:'green',AV:'average',EL:'elite',PR:'poor'};
 const SHOT_TYPES = ['round','chain','double','grape'];
@@ -1156,9 +1244,11 @@ function buildScenarioShip(s, side, nation) {
     battleSailSpeed: s.bs ?? 4, fullSailSpeed: s.fs ?? 6, turningAbility: s.ta ?? 3,
     hull: { max: hullAdj, remain: hullAdj },
     rigging: {
-      sections: (s.rig || []).slice(),
-      sectionsMax: (s.rig || []).slice()
+      sections: (s.rigNow || s.rig || []).slice(),
+      sectionsMax: (s.rig || []).slice(),
+      locked: (s.rigLocked || []).slice() // 直せないセクション（シナリオの特別ルール）
     },
+    origSide: side,
     crew: {
       abilities: (s.crew || []).map(v => v * 2),
       abilitiesMax: (s.crew || []).map(v => v * 2)
@@ -1238,6 +1328,10 @@ function loadScenario(n) {
       turnCounter: 0,
     };
   }
+  state.scenarioNo = n;
+  if (sc.startSail) [...state.jpFleet, ...state.usFleet].forEach(s => { s.sailState = sc.startSail; s.pendingSailMode = sc.startSail; });
+  if (sc.victoryText) addLog(`勝利条件: ${sc.victoryText}`);
+  if (sc.noAnchor) addLog('このシナリオでは投錨できない');
   const windSrc = sc.wind ? 'シナリオ指定' : '艦首方位固定';
   console.log(`[${sc.name}] 風: 方向${state.wind.direction}(${windSrc})/風速${state.wind.velocity}/変化番号${state.wind.windChangeNumber}`);
   return true;
@@ -1700,7 +1794,8 @@ function advancePhase() {
       aiRunAll(state);  // us側（常にAI）
       // AI対AI 時は jp側もAI
       if (state.gameMode && state.gameMode.startsWith('ai-vs-ai') && typeof aiPlotMoves === 'function') {
-        state.jpFleet.forEach(s => { aiPlotMoves(s, state); aiSailDecide(s, state); });
+        if (typeof aiRunJp === 'function') aiRunJp(state);
+        else state.jpFleet.forEach(s => { aiPlotMoves(s, state); aiSailDecide(s, state); });
       }
     }
     isExecuting = false;
@@ -1818,7 +1913,10 @@ async function executeAllGunnery() {
       continue;
     }
     // 1. resolveGunnery でスペック事前計算
-    const result = resolveGunnery(firer, bestTarget, bestArc, ammo);
+    const _aiCtl = firer.side === 'us' || String(state.gameMode || '').startsWith('ai-vs-ai');
+    const _grNow = !!(firer.grappled || (firer.grappledWith?.length) || bestTarget.grappled || (bestTarget.grappledWith?.length));
+    const aiAim = (_aiCtl && firer.aiMode === 'melee' && !_grNow && ammo !== 'grape' && ammo !== 'double') ? 'rigging' : undefined;
+    const result = resolveGunnery(firer, bestTarget, bestArc, ammo, aiAim);
     const isNegative = (result.table !== undefined && result.table < 0) || (!result.hit && result.miss === 'modifier');
     const tableVal = result.table ?? '-';
 
@@ -1854,7 +1952,7 @@ async function executeAllGunnery() {
       else if (ammo === 'grape') { forceDmgType = 'hull'; lockReason = 'ぶどう弾: 船体のみ'; }
       else if (ammo === 'chain') { forceDmgType = 'rigging'; lockReason = '鎖弾: 帆のみ'; }
       else if (ammo === 'round' && bestDist >= 6) { forceDmgType = 'rigging'; lockReason = '球弾 6hex以上: 帆のみ'; }
-      const defaultDmgType = forceDmgType || (ammo === 'chain' ? 'rigging' : 'hull');
+      const defaultDmgType = forceDmgType || (ammo === 'chain' ? 'rigging' : (aiAim || 'hull'));
       const resp = await showGunneryConfirmModal(`砲撃予告: ${firer.name}`, summaryHtml, defaultDmgType, isGrappled, forceDmgType, lockReason);
       if (resp.action === 'cancel') { addLog(`${firer.name}: 砲撃キャンセル`); continue; }
       _shownType = resp.dmgType || _shownType;
@@ -1875,6 +1973,7 @@ async function executeAllGunnery() {
     // 3. 発射確定: 装填要フラグ、初回舷側マーク
     firer['fired' + sideForDirty + 'Dirty'] = true;
     firer._firedThisTurn = true; // 上級 X B: 撃った艦は修理できない
+    firer._everFired = true;
     firer['reloadTurns' + sideForDirty] = (ammo === 'double') ? 2 : 1;
     if (sideForDirty === 'Left') firer.firedInitialL = true;
     else firer.firedInitialR = true;
@@ -2366,7 +2465,7 @@ async function executeUnfoulPhase() {
         const usShip = s.side === 'us' ? s : (b.side === 'us' ? b : null);
         if (jpShip && usShip) {
           const _isJpAi = state.gameMode && String(state.gameMode).startsWith('ai-vs-ai');
-          const doJP = _isJpAi ? true : await showConfirmModal(`${jpShip.name}: ${usShip.name}との鉤縄を解除試行しますか？`);
+          const doJP = _isJpAi ? (jpShip.wantUngrapple !== false) : await showConfirmModal(`${jpShip.name}: ${usShip.name}との鉤縄を解除試行しますか？`);
           if (doJP) {
             const rj = rollUngrappling(jpShip, usShip, { windVelocity: state.wind?.velocity });
             const line = `${jpShip.name} 解除試行${_isJpAi ? '(AI自動)' : ''}: ${rj.log.join(' / ')}`;
@@ -2381,7 +2480,7 @@ async function executeUnfoulPhase() {
           // AI側: wantUngrapple (白兵戦で劣勢判定) の時だけ解除試行
           if (usShip.wantUngrapple) {
             const ru = rollUngrappling(usShip, jpShip, { windVelocity: state.wind?.velocity });
-            const line = `${usShip.name} 解除試行(AI劣勢): ${ru.log.join(' / ')}`;
+            const line = `${usShip.name} 解除試行(AI${usShip.aiMode === 'gun' ? '砲撃側' : '劣勢'}): ${ru.log.join(' / ')}`;
             addLog(line); overlayLines.push(line);
             if (ru.success) {
               jpShip.grappledWith = (jpShip.grappledWith||[]).filter(n => n !== usShip.name);
@@ -2466,10 +2565,12 @@ async function executeGrapplePhase() {
 
   const resultLines = [];
   for (const { jp, us } of pairs) {
-    const choice = await showConfirmModal(`${jp.name}: ${us.name}に鉤縄を仕掛けますか？`);
+    const _jpAi = state.gameMode && String(state.gameMode).startsWith('ai-vs-ai');
+    const choice = _jpAi ? !!jp.wantGrapple : await showConfirmModal(`${jp.name}: ${us.name}に鉤縄を仕掛けますか？`);
     let attacker, defender;
     if (choice) { attacker = jp; defender = us; }
-    else { attacker = us; defender = jp; }
+    else if (us.wantGrapple !== false) { attacker = us; defender = jp; }
+    else { resultLines.push(`${jp.name} ↔ ${us.name}: 鉤縄はかけない`); continue; }
     const r = rollGrappling(attacker, defender, { windVelocity: state.wind?.velocity });
     addLog(`${attacker.name} → ${defender.name} 鉤縄: ${r.log.join(' / ')}`);
     let outcome;
@@ -3318,7 +3419,7 @@ async function executeReloadPhase() {
     s._firedThisTurn = false;
     s._springTurned = false;
     if (!canRepair) continue;
-    const rigMissing = i => (s.rigging?.sectionsMax?.[i] || 0) - (s.rigging?.sections?.[i] || 0);
+    const rigMissing = i => (s.rigging?.locked || []).includes(i) ? 0 : (s.rigging?.sectionsMax?.[i] || 0) - (s.rigging?.sections?.[i] || 0);
     const hullHurt = s.hull && s.hull.remain < s.hull.max;
     const rigHurt = (s.rigging?.sectionsMax || []).some((_, i) => rigMissing(i) > 0);
     const gunSide = ['L', 'R'].find(k => { const g = s.broadsideGuns?.[k]; return g && g.remain < g.max; });
@@ -3426,6 +3527,8 @@ function showSailChoiceModal(ships) {
 }
 function checkGameEnd() {
   if (state.gameEnded) return;
+  const _sc = SCENARIOS[state.scenarioNo];
+  if (_sc?.onCheck) _sc.onCheck([...state.jpFleet, ...state.usFleet]);
   // 基本 XI A 3: 乗員のマスを全部失った艦は戦えない
   const fights = s => s.status === 'ok' && (s.crew?.abilities || [1]).some(v => v > 0);
   const jpAlive = state.jpFleet.filter(fights).length;
@@ -3440,8 +3543,18 @@ function checkGameEnd() {
       return t;
     }, 0);
     const jpScore = scoreOf('jp'), usScore = scoreOf('us');
-    const winner = jpScore > usScore ? '自軍' : usScore > jpScore ? '敵軍' : (jpAlive > usAlive ? '自軍' : usAlive > jpAlive ? '敵軍' : '引き分け');
+    let winner = jpScore > usScore ? '自軍' : usScore > jpScore ? '敵軍' : (jpAlive > usAlive ? '自軍' : usAlive > jpAlive ? '敵軍' : '引き分け');
     addLog(`点数: 自軍 ${jpScore} / 敵軍 ${usScore}`);
+    // シナリオに勝利条件があれば、それで決める（イギリス側の艦の、もとの陣営で数える）
+    if (_sc?.victory) {
+      const gbShips = everyone.filter(s => s.nation === 'GB'), enShips = everyone.filter(s => s.nation !== 'GB');
+      const L = { gb: gbShips.filter(scenarioShipLost).length, enemy: enShips.filter(scenarioShipLost).length };
+      L.gbAll = L.gb === gbShips.length; L.enemyAll = L.enemy === enShips.length;
+      const r = _sc.victory(L);
+      const gbSide = gbShips[0]?.origSide || 'jp';
+      winner = r === 'draw' ? '引き分け' : ((r === 'gb') === (gbSide === 'jp')) ? '自軍' : '敵軍';
+      addLog(`シナリオの勝利条件: イギリスが失った艦 ${L.gb} / 相手が失った艦 ${L.enemy}`);
+    }
     addLog(`=== ゲーム終了: ${winner}勝利 ===`);
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:3000;display:flex;align-items:center;justify-content:center;overflow-y:auto;';
@@ -3754,6 +3867,10 @@ function plotAnchor(action) {
   if (!s) return;
   if (action === 'dropAS' || action === 'dropAB') { s.anchorMode = action === 'dropAS' ? 'AS' : 'AB'; action = 'drop'; }
   else if (action === 'drop') s.anchorMode = 'A';
+  if (action === 'drop' && SCENARIOS[state.scenarioNo]?.noAnchor) {
+    alert('このシナリオでは投錨できません');
+    return;
+  }
   if (action === 'drop' && (s.anchorCableBroken || s.anchorCut)) {
     alert('錨綱が切れているため投錨できません');
     return;
