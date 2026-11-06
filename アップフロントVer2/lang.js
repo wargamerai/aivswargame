@@ -138,6 +138,11 @@ const LANG_EXACT = {
   'セーブファイルを読み込めませんでした': 'Could not read the save file',
   'アップフロントのセーブファイルではありません': 'This is not an Up Front save file',
   'ロードしました': 'Loaded',
+  // シナリオE（2026-11-06）
+  'E: 機甲偵察（AFV、非対称）': 'E: Armored Recon Patrol (AFV, asymmetric)',
+  '機甲偵察': 'Armored Recon Patrol',
+  '攻撃側に装甲車が1両つく。距離4で、ピン状態でない4枚が身を隠せる地形に入れば勝ち。時間切れは防御側の勝ち。': 'The attacker has one armored vehicle. Win by getting 4 unpinned cards into protective terrain at range 4. The defender wins on time.',
+  'シナリオEはドイツ・ソ連・アメリカだけです': 'Scenario E is for Germany, the Soviet Union and the USA only',
 };
 
 // 語句の訳（長い語句から順に置き換える）
@@ -188,6 +193,7 @@ const LANG_TERMS = {
   '枚除去': ' card(s) removed',
   // シナリオの終了
   'シナリオA 勝利！ —': 'Scenario A victory! —',
+  'シナリオE 勝利！ —': 'Scenario E victory! —',
   'シナリオB 終了：引き分け (VP': 'Scenario B over: draw (VP',
   'シナリオB 終了：': 'Scenario B over: ',
   'シナリオC 終了：': 'Scenario C over: ',
@@ -1042,6 +1048,15 @@ const LANG_PATTERNS_SRC = [
   ["AI: 負傷した {0} は爆薬を捨てました（§33.6）", "AI: wounded {0} dropped the Demolition Charge (§33.6)"],
   ["AI: 負傷した {0} は主兵器を捨てて爆薬を残しました（§33.6）", "AI: wounded {0} dropped the primary weapon and kept the Demolition Charge (§33.6)"],
   ["爆薬を持てる兵士がいません（§21.1 小銃・突撃銃・カービン・BAR・短機関銃か非武装で、爆薬を持っていない兵士。負傷兵は主兵器と両方は持てない §33.6）", "No soldier can carry the Demolition Charge (§21.1: unarmed, or armed with a rifle, assault rifle, carbine, BAR or machine pistol, and not already carrying one; a wounded man cannot carry it with a primary weapon §33.6)"],
+  // AFV とシナリオE（2026-11-06）
+  ["ピン状態でない指揮官（SL・ASL）か AFV がいるグループにのみ煙幕を置けます", "Smoke can be placed only on a group with an unpinned leader (SL/ASL) or AFV"],
+  ["{0} が回復しました（回復の強さ {1}）", "{0} rallied (Rally strength {1})"],
+  ["{0} はピンのまま（回復の強さ {1}/3。次の回復カードと合わせられます §28.42）", "{0} stays pinned (Rally {1}/3; later Rally cards add to it §28.42)"],
+  ["主砲が使えなくなった: {0} — {1}", "Main gun out of action: {0} — {1}"],
+  ["AI: {0} の主砲が使えなくなった", "AI: {0}'s main gun is out of action"],
+  ["AI: {0} 回復", "AI: {0} rallied"],
+  ["AI: {0} に回復を積む（{1}/3）", "AI: Rally added to {0} ({1}/3)"],
+  ["シナリオ{0} 勝利！ — {1}（GROUP {2}）", "Scenario {0} victory! — {1} (GROUP {2})"],
 ];
 const LANG_PATTERNS = [];
 LANG_PATTERNS_SRC.forEach(([ja, en]) => {
