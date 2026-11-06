@@ -57,7 +57,7 @@
   ol li, ul li { margin-bottom: 4px; }
   .back { margin-top: 30px; }
   [data-lang] { display: none; }
-  body.en [data-lang="en"], body.ja [data-lang="ja"], body.de [data-lang="de"] { display: block; }
+  body.en [data-lang="en"], body.ja [data-lang="ja"], body.de [data-lang="de"], body.fr [data-lang="fr"], body.es [data-lang="es"] { display: block; }
   @media (max-width: 600px) { .container { padding: 18px 16px; width: auto; margin: 12px 16px; } table { font-size: 0.9em; } }
 </style>
 </head>
@@ -69,6 +69,8 @@
     <button id="btn_ja" onclick="setLang('ja')">日本語</button>
     <button id="btn_en" onclick="setLang('en')">English</button>
     <button id="btn_de" onclick="setLang('de')">Deutsch</button>
+    <button id="btn_fr" onclick="setLang('fr')">Français</button>
+    <button id="btn_es" onclick="setLang('es')">Español</button>
   </div>
 </div>
 
@@ -79,7 +81,7 @@
 
 <h2>1. Starting a game</h2>
 <ol>
-  <li>Choose the language with the <b>🌐</b> buttons at the top of the scenario screen (日本語 / English / Deutsch). The battle screen uses this language, and the choice is remembered.</li>
+  <li>Choose the language with the <b>🌐</b> buttons at the top of the scenario screen (日本語 / English / Deutsch / Français / Español). The battle screen uses this language, and the choice is remembered.</li>
   <li>Choose the <b>Game mode</b>:
     <ul>
       <li><b>Human vs AI</b> — you play.</li>
@@ -171,7 +173,7 @@
 
 <h2>1. ゲームを始める</h2>
 <ol>
-  <li>言語は、シナリオ選択の画面の上にある <b>🌐</b> のボタンで選びます（日本語 / English / Deutsch）。戦闘画面もこの言語で表示され、選んだ言語は覚えておきます。</li>
+  <li>言語は、シナリオ選択の画面の上にある <b>🌐</b> のボタンで選びます（日本語 / English / Deutsch / Français / Español）。戦闘画面もこの言語で表示され、選んだ言語は覚えておきます。</li>
   <li><b>ゲームモード</b> を選びます。
     <ul>
       <li><b>人間対AI</b>：あなたが遊びます。</li>
@@ -263,7 +265,7 @@
 
 <h2>1. Ein Spiel beginnen</h2>
 <ol>
-  <li>Die Sprache wählst du mit den Knöpfen <b>🌐</b> oben im Szenario-Bildschirm (日本語 / English / Deutsch). Der Gefechtsbildschirm erscheint in dieser Sprache, und die Wahl wird gespeichert.</li>
+  <li>Die Sprache wählst du mit den Knöpfen <b>🌐</b> oben im Szenario-Bildschirm (日本語 / English / Deutsch / Français / Español). Der Gefechtsbildschirm erscheint in dieser Sprache, und die Wahl wird gespeichert.</li>
   <li>Wähle den <b>Spielmodus</b>:
     <ul>
       <li><b>Mensch gegen AI</b> — du spielst.</li>
@@ -348,21 +350,206 @@
 <p class="back"><a href="./">← Zurück zum Eingang</a> · <a href="../帆船の戦い/sandbox.html?lang=de">Spielen</a></p>
 </div>
 
+<!-- ===================== Français ===================== -->
+<div data-lang="fr">
+<p>Mode d'emploi du logiciel : les écrans et les commandes de cette version pour navigateur. Ce n'est pas un livret de règles. (Traduction faite par l'IA.)</p>
+<div class="note">Vous commandez le camp affiché comme <b>Votre flotte</b> ; l'IA commande la <b>Flotte ennemie</b>. Le jeu applique les règles (dés, dégâts, vent) pour vous — votre rôle est de donner les ordres de mouvement et de répondre aux fenêtres de dialogue.</div>
+
+<h2>1. Commencer une partie</h2>
+<ol>
+  <li>Choisissez la langue avec les boutons <b>🌐</b> en haut de l'écran des scénarios (日本語 / English / Deutsch / Français / Español). L'écran de bataille utilise cette langue, et le choix est mémorisé.</li>
+  <li>Choisissez le <b>Mode de jeu</b> :
+    <ul>
+      <li><b>Humain contre IA</b> — vous jouez.</li>
+      <li><b>IA contre IA pas à pas</b> — l'IA joue les deux camps ; vous avancez phase par phase.</li>
+      <li><b>IA contre IA observation auto</b> — l'IA joue les deux camps et la partie avance seule.</li>
+    </ul></li>
+  <li>Dans le <b>scénario</b> voulu, appuyez sur <span class="btn">Commandement : …</span> pour le camp que vous commanderez. L'autre camp est joué par l'IA.</li>
+  <li>Pour continuer une partie sauvegardée : sous <span class="btn">💾 Reprendre la sauvegarde</span>, choisissez le fichier, puis appuyez sur <span class="btn">Continuer</span>.</li>
+</ol>
+
+<h2>2. L'écran</h2>
+<table>
+  <tr><th>Zone</th><th>Ce qu'elle montre / fait</th></tr>
+  <tr><td>Barre du haut</td><td>Les phases du tour (A–J, la phase en cours est allumée).</td></tr>
+  <tr><td>Panneau de gauche</td><td><b>Votre flotte</b> et <b>Flotte ennemie</b> : nom, canons, type, qualité de l'équipage, coque et voiles. ★ marque le navire amiral. Cliquez sur un navire pour le sélectionner.</td></tr>
+  <tr><td>Carte</td><td>Cliquez sur un navire pour le sélectionner. Survolez un hexagone pour voir son numéro et sa profondeur (barre du bas).</td></tr>
+  <tr><td>Panneau de droite</td><td><b>Navire sélectionné</b> (tous les détails), <b>Ordre de mouvement</b> (pavé et boutons d'ordre, seulement en phase C), <span class="btn">Phase suivante</span> et <span class="btn">Fin du tour</span> en dessous, et le <b>Journal des actions</b>.</td></tr>
+  <tr><td>Barre du bas</td><td>Messages, la barre de force des deux camps, <span class="btn">Arcs : OFF</span>, <span class="btn">Portée d'attaque : OFF</span>, le vent (direction / force et numéro de changement), le zoom (<span class="btn">−</span> <span class="btn">＋</span>), <span class="btn">💾 Sauvegarder</span> et <span class="btn">← Retour à la préparation</span>.</td></tr>
+</table>
+
+<h2>3. Jouer un tour</h2>
+<p>Appuyez sur <span class="btn">Phase suivante</span> pour passer à la phase suivante. Chaque phase est résolue automatiquement ; quand vous avez une décision à prendre, une fenêtre s'ouvre.</p>
+<table>
+  <tr><th>Phase</th><th>Ce que vous faites</th></tr>
+  <tr><td>A : Vent</td><td>Vérifié automatiquement au début de chaque tour à partir du tour 2 (pas de test au tour 1).</td></tr>
+  <tr><td>B : Dégagement</td><td>Pour un navire emmêlé : <b>Oui</b> / <b>Non</b> — tenter de se dégager ?</td></tr>
+  <tr><td>C : Notation du mouvement</td><td>Donnez l'ordre de mouvement de chacun de vos navires, puis <span class="btn">▶ Exécuter les ordres</span>. Voir la section 4.</td></tr>
+  <tr><td>E : Grappin</td><td>À côté d'un navire ennemi : <b>Oui</b> / <b>Non</b> — lancer les grappins ?</td></tr>
+  <tr><td>F : Préparation à l'abordage</td><td>Pour les navires agrippés : répartissez l'équipage entre <b>Groupe d'abordage (attaque)</b>, <b>Groupe d'abordage (défense)</b> et <b>Groupe du pont supérieur</b>, choisissez la <b>Cible de l'attaque</b>, puis <span class="btn">Confirmer</span>.</td></tr>
+  <tr><td>G : Tir</td><td>Pour chaque bordée qui peut tirer, un <b>Aperçu du tir</b> s'ouvre. Voir la section 5.</td></tr>
+  <tr><td>H : Mêlée</td><td>Résolue automatiquement.</td></tr>
+  <tr><td>I : Rechargement</td><td>Cochez <span class="btn">Charger</span> pour les bordées vides et choisissez le type de projectile ; pour les bordées chargées, choisissez le <b>Projectile suivant</b>. Puis <span class="btn">Confirmer</span>.</td></tr>
+  <tr><td>J : Toutes voiles</td><td>Choisissez voiles de combat ou toutes voiles pour chaque navire, puis <span class="btn">Confirmer</span>. Toutes voiles dehors, les dégâts au gréement dus aux coups sont doublés.</td></tr>
+</table>
+<p>Après J, <span class="btn">Phase suivante</span> commence le tour suivant. (<span class="btn">Fin du tour</span> passe directement au tour suivant et saute les phases restantes ; utilisez normalement <span class="btn">Phase suivante</span>.)</p>
+
+<h2>4. Donner les ordres de mouvement (phase C)</h2>
+<ol>
+  <li>Sélectionnez un de vos navires (cliquez dessus sur la carte ou dans le panneau de gauche).</li>
+  <li>Saisissez les mouvements avec le pavé à droite, ou avec les touches numériques / le pavé numérique :
+    <table>
+      <tr><th>Touche</th><th>Signification</th></tr>
+      <tr><td><kbd>5</kbd></td><td>Avancer d'1 hexagone.</td></tr>
+      <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>Virer pour faire face à cette direction (8 = nord, 9 = nord-est, 3 = sud-est, 2 = sud, 1 = sud-ouest, 7 = nord-ouest). Un seul côté d'hexagone à la fois (une direction voisine du cap actuel), au plus un virage par hexagone. Un virage coûte 1 point de mouvement.</td></tr>
+      <tr><td><kbd>4</kbd></td><td>Reculer (coûte 1 point de mouvement ; le navire reste sur place).</td></tr>
+      <tr><td colspan="2">La dérive est automatique : un navire dont l'hexagone de proue n'a pas changé pendant deux mouvements de suite dérive avec le vent.</td></tr>
+      <tr><td><kbd>0</kbd></td><td>Stop (rester sur place pour ce pas).</td></tr>
+      <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>Effacer l'ordre du navire sélectionné.</td></tr>
+      <tr><td><span class="btn">Confirmer (Entrée)</span> / <kbd>Entrée</kbd></td><td>Confirmer l'ordre (un ✓ vert apparaît). Pour le modifier avant l'exécution, appuyez sur CLR et saisissez-le à nouveau.</td></tr>
+    </table></li>
+  <li>Les hexagones que le navire sélectionné peut atteindre ce tour sont ombrés (bleu pour les vôtres, orange pour ceux de l'ennemi), avec de petits traits montrant les directions qu'il peut y prendre.</li>
+  <li>La route ordonnée est tracée en pointillés jaunes, avec un navire pâle au bout. Les ordres de l'ennemi sont cachés.</li>
+  <li>Ordres donnés avec le mouvement : <span class="btn">Toutes voiles ON</span> / <span class="btn">Toutes voiles OFF</span>, <span class="btn">Ancre</span> / <span class="btn">Lever l'ancre</span> / <span class="btn">Câble d'ancre coupé</span>, <span class="btn">Grappin</span> / <span class="btn">Larguer les grappins</span>.</li>
+  <li>Quand tous vos navires sont confirmés, appuyez sur <span class="btn">▶ Exécuter les ordres</span>. Tous les navires bougent en même temps. Puis appuyez sur <span class="btn">Phase suivante</span>.</li>
+</ol>
+<div class="note">Un navire agrippé ne peut pas recevoir d'ordre, et un navire au mouillage ne bouge pas. Un navire ne peut pas entrer dans un hexagone occupé par un autre navire ; il s'arrête avant.</div>
+
+<h2>5. Tir (phase G)</h2>
+<p>La cible est choisie automatiquement (l'ennemi le plus proche dans l'arc de chaque bordée) et le projectile chargé dans cette bordée est utilisé. La fenêtre <b>Aperçu du tir</b> montre la portée, les modificateurs et la table de tir.</p>
+<ul>
+  <li>Choisissez ce que vous visez : <span class="btn">Coque</span> ou <span class="btn">Voiles</span>. Parfois l'un des deux est bloqué : en mêlée ou à la mitraille, coque seulement ; au boulet ramé, ou au boulet rond à 6 hexagones ou plus, voiles seulement.</li>
+  <li><span class="btn">Tir</span> fait feu ; <span class="btn">Annuler</span> retient cette bordée.</li>
+  <li>Le dé est lancé et le <b>Résultat du tir</b> s'affiche ; appuyez sur <span class="btn">Suivant</span>.</li>
+  <li>Une bordée vide n'affiche que <span class="btn">Passer</span>.</li>
+</ul>
+
+<h2>6. Aides à l'affichage</h2>
+<ul>
+  <li><span class="btn">Arcs : OFF</span> → ON montre les arcs de tir du navire sélectionné.</li>
+  <li><span class="btn">Portée d'attaque : OFF</span> → ON montre les hexagones que le navire sélectionné peut toucher.</li>
+  <li>Zoom avec <span class="btn">−</span> / <span class="btn">＋</span>.</li>
+</ul>
+
+<h2>7. Regarder IA contre IA</h2>
+<p>Dans les modes IA contre IA, la barre du bas a <span class="btn">Auto : OFF</span> (appuyez pour faire avancer les phases automatiquement ; appuyez encore pour arrêter) et <span class="btn">Phase suivante</span> (avancer d'une phase).</p>
+
+<h2>8. Sauvegarder et reprendre</h2>
+<ul>
+  <li><span class="btn">💾 Sauvegarder</span> télécharge la partie dans un fichier (<code>wsm_save_T…json</code>).</li>
+  <li>Pour continuer : sur l'écran des scénarios, choisissez le fichier sous <span class="btn">💾 Reprendre la sauvegarde</span> et appuyez sur <span class="btn">Continuer</span>.</li>
+</ul>
+<p class="back"><a href="./">← Retour à l'entrée</a> · <a href="../帆船の戦い/sandbox.html?lang=fr">Jouer</a></p>
+</div>
+
+<!-- ===================== Español ===================== -->
+<div data-lang="es">
+<p>Cómo usar el programa: las pantallas y los controles de esta versión para navegador. No es un reglamento. (Traducción hecha por la IA.)</p>
+<div class="note">Tú mandas el bando que aparece como <b>Tu flota</b>; la IA manda la <b>Flota enemiga</b>. El juego aplica las reglas (dados, daños, viento) por ti; tu tarea es dar las órdenes de movimiento y responder a las ventanas de diálogo.</div>
+
+<h2>1. Empezar una partida</h2>
+<ol>
+  <li>Elige el idioma con los botones <b>🌐</b> de la parte superior de la pantalla de escenarios (日本語 / English / Deutsch / Français / Español). La pantalla de batalla usa ese idioma, y la elección se recuerda.</li>
+  <li>Elige el <b>Modo de juego</b>:
+    <ul>
+      <li><b>Humano contra IA</b>: juegas tú.</li>
+      <li><b>IA contra IA paso a paso</b>: la IA juega ambos bandos; tú avanzas fase a fase.</li>
+      <li><b>IA contra IA observación automática</b>: la IA juega ambos bandos y la partida avanza sola.</li>
+    </ul></li>
+  <li>En el <b>escenario</b> que quieras, pulsa <span class="btn">Mando: …</span> para el bando que vas a mandar. El otro bando lo juega la IA.</li>
+  <li>Para continuar una partida guardada: en <span class="btn">💾 Continuar partida guardada</span> elige el archivo y pulsa <span class="btn">Continuar</span>.</li>
+</ol>
+
+<h2>2. La pantalla</h2>
+<table>
+  <tr><th>Zona</th><th>Qué muestra / hace</th></tr>
+  <tr><td>Barra superior</td><td>Las fases del turno (A–J; la actual está encendida).</td></tr>
+  <tr><td>Panel izquierdo</td><td><b>Tu flota</b> y <b>Flota enemiga</b>: nombre, cañones, tipo, calidad de la tripulación, casco y velas. ★ marca el buque insignia. Haz clic en un barco para seleccionarlo.</td></tr>
+  <tr><td>Mapa</td><td>Haz clic en un barco para seleccionarlo. Pasa el ratón sobre un hexágono para ver su número y profundidad (barra inferior).</td></tr>
+  <tr><td>Panel derecho</td><td><b>Barco seleccionado</b> (todos los detalles), <b>Orden de movimiento</b> (teclado y botones de órdenes, solo en la fase C), <span class="btn">Siguiente fase</span> y <span class="btn">Fin del turno</span> debajo, y el <b>Registro de acciones</b>.</td></tr>
+  <tr><td>Barra inferior</td><td>Mensajes, la barra de fuerza de ambos bandos, <span class="btn">Arcos: OFF</span>, <span class="btn">Alcance de ataque: OFF</span>, el viento (dirección / fuerza y número de cambio), el zoom (<span class="btn">−</span> <span class="btn">＋</span>), <span class="btn">💾 Guardar</span> y <span class="btn">← Volver a la preparación</span>.</td></tr>
+</table>
+
+<h2>3. Jugar un turno</h2>
+<p>Pulsa <span class="btn">Siguiente fase</span> para pasar a la fase siguiente. Cada fase se resuelve automáticamente; cuando tienes que decidir algo, se abre una ventana.</p>
+<table>
+  <tr><th>Fase</th><th>Qué haces</th></tr>
+  <tr><td>A: Viento</td><td>Se comprueba automáticamente al principio de cada turno desde el turno 2 (no hay prueba en el turno 1).</td></tr>
+  <tr><td>B: Desenganche</td><td>Para un barco enredado: <b>Sí</b> / <b>No</b>, ¿intentar soltarse?</td></tr>
+  <tr><td>C: Notación del movimiento</td><td>Da la orden de movimiento de cada uno de tus barcos y luego <span class="btn">▶ Ejecutar órdenes</span>. Ver la sección 4.</td></tr>
+  <tr><td>E: Garfios</td><td>Junto a un barco enemigo: <b>Sí</b> / <b>No</b>, ¿lanzar los garfios?</td></tr>
+  <tr><td>F: Preparación del abordaje</td><td>Para los barcos enganchados: reparte la tripulación entre <b>Grupo de abordaje (ataque)</b>, <b>Grupo de abordaje (defensa)</b> y <b>Grupo de la cubierta superior</b>, elige el <b>Objetivo del ataque</b> y pulsa <span class="btn">Confirmar</span>.</td></tr>
+  <tr><td>G: Fuego</td><td>Para cada andanada que puede disparar se abre una <b>Vista previa del fuego</b>. Ver la sección 5.</td></tr>
+  <tr><td>H: Cuerpo a cuerpo</td><td>Se resuelve automáticamente.</td></tr>
+  <tr><td>I: Recarga</td><td>Marca <span class="btn">Cargar</span> en las andanadas vacías y elige el tipo de munición; en las andanadas cargadas elige la <b>Siguiente munición</b>. Luego <span class="btn">Confirmar</span>.</td></tr>
+  <tr><td>J: Todo el trapo</td><td>Elige velas de combate o todo el trapo para cada barco y pulsa <span class="btn">Confirmar</span>. Con todo el trapo, los daños al aparejo por impactos se duplican.</td></tr>
+</table>
+<p>Tras la J, <span class="btn">Siguiente fase</span> empieza el turno siguiente. (<span class="btn">Fin del turno</span> salta directamente al turno siguiente y se salta las fases que quedan; normalmente usa <span class="btn">Siguiente fase</span>.)</p>
+
+<h2>4. Dar órdenes de movimiento (fase C)</h2>
+<ol>
+  <li>Selecciona uno de tus barcos (haz clic en él en el mapa o en el panel izquierdo).</li>
+  <li>Introduce los movimientos con el teclado de la derecha, o con las teclas numéricas / el teclado numérico:
+    <table>
+      <tr><th>Tecla</th><th>Significado</th></tr>
+      <tr><td><kbd>5</kbd></td><td>Avanzar 1 hexágono.</td></tr>
+      <tr><td><kbd>7</kbd> <kbd>8</kbd> <kbd>9</kbd> <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>Virar para encarar esa dirección (8 = norte, 9 = noreste, 3 = sureste, 2 = sur, 1 = suroeste, 7 = noroeste). Solo un lado de hexágono cada vez (una dirección vecina al rumbo actual), como máximo un giro por hexágono. Un giro cuesta 1 punto de movimiento.</td></tr>
+      <tr><td><kbd>4</kbd></td><td>Retroceder (cuesta 1 punto de movimiento; el barco se queda).</td></tr>
+      <tr><td colspan="2">La deriva es automática: un barco cuyo hexágono de proa no ha cambiado en dos movimientos seguidos deriva con el viento.</td></tr>
+      <tr><td><kbd>0</kbd></td><td>Parar (quedarse en este paso).</td></tr>
+      <tr><td><span class="btn">CLR</span> / <kbd>C</kbd></td><td>Borrar la orden del barco seleccionado.</td></tr>
+      <tr><td><span class="btn">Confirmar (Intro)</span> / <kbd>Intro</kbd></td><td>Confirmar la orden (aparece un ✓ verde). Para cambiarla antes de ejecutarla, pulsa CLR e introdúcela de nuevo.</td></tr>
+    </table></li>
+  <li>Los hexágonos a los que el barco seleccionado puede llegar este turno aparecen sombreados (azul los tuyos, naranja los del enemigo), con rayitas que muestran las direcciones que puede tomar allí.</li>
+  <li>El rumbo ordenado se dibuja con una línea discontinua amarilla y un barco tenue al final. Las órdenes del enemigo están ocultas.</li>
+  <li>Órdenes que se dan con el movimiento: <span class="btn">Todo el trapo ON</span> / <span class="btn">Todo el trapo OFF</span>, <span class="btn">Ancla</span> / <span class="btn">Levar anclas</span> / <span class="btn">Cable del ancla cortado</span>, <span class="btn">Garfio</span> / <span class="btn">Soltar los garfios</span>.</li>
+  <li>Cuando todos tus barcos estén confirmados, pulsa <span class="btn">▶ Ejecutar órdenes</span>. Todos los barcos se mueven a la vez. Luego pulsa <span class="btn">Siguiente fase</span>.</li>
+</ol>
+<div class="note">Un barco enganchado no puede recibir órdenes, y un barco fondeado no se mueve. Un barco no puede entrar en un hexágono ocupado por otro barco; se detiene antes.</div>
+
+<h2>5. Fuego (fase G)</h2>
+<p>El objetivo se elige automáticamente (el enemigo más cercano en el arco de cada andanada) y se usa la munición cargada en esa andanada. La ventana <b>Vista previa del fuego</b> muestra el alcance, los modificadores y la tabla de impactos.</p>
+<ul>
+  <li>Elige a qué apuntar: <span class="btn">Casco</span> o <span class="btn">Velas</span>. A veces uno está bloqueado: en cuerpo a cuerpo o con metralla, solo casco; con palanqueta, o con bala rasa a 6 hexágonos o más, solo velas.</li>
+  <li><span class="btn">Fuego</span> dispara; <span class="btn">Cancelar</span> retiene esta andanada.</li>
+  <li>Se tira el dado y se muestra el <b>Resultado del fuego</b>; pulsa <span class="btn">Siguiente</span>.</li>
+  <li>Una andanada vacía solo muestra <span class="btn">Saltar</span>.</li>
+</ul>
+
+<h2>6. Ayudas de visualización</h2>
+<ul>
+  <li><span class="btn">Arcos: OFF</span> → ON muestra los arcos de tiro del barco seleccionado.</li>
+  <li><span class="btn">Alcance de ataque: OFF</span> → ON muestra los hexágonos a los que puede impactar el barco seleccionado.</li>
+  <li>Zoom con <span class="btn">−</span> / <span class="btn">＋</span>.</li>
+</ul>
+
+<h2>7. Ver IA contra IA</h2>
+<p>En los modos IA contra IA, la barra inferior tiene <span class="btn">Auto: OFF</span> (púlsalo para que las fases avancen solas; púlsalo otra vez para parar) y <span class="btn">Siguiente fase</span> (avanzar una fase).</p>
+
+<h2>8. Guardar y continuar</h2>
+<ul>
+  <li><span class="btn">💾 Guardar</span> descarga la partida en un archivo (<code>wsm_save_T…json</code>).</li>
+  <li>Para continuar: en la pantalla de escenarios, elige el archivo en <span class="btn">💾 Continuar partida guardada</span> y pulsa <span class="btn">Continuar</span>.</li>
+</ul>
+<p class="back"><a href="./">← Volver a la entrada</a> · <a href="../帆船の戦い/sandbox.html?lang=es">Jugar</a></p>
+</div>
+
 </div>
 <script>
 // 言語の切り替え。ゲームと同じ記憶（wsimLang）を使う
 function setLang(l){
   document.body.className = l;
   document.documentElement.lang = l;
-  ['ja','en','de'].forEach(k => document.getElementById('btn_' + k).classList.toggle('on', k === l));
+  ['ja','en','de','fr','es'].forEach(k => document.getElementById('btn_' + k).classList.toggle('on', k === l));
   try { localStorage.setItem('wsimLang', l); } catch(e){}
 }
 let initLang = 'en';
 let v = null;
 try { v = localStorage.getItem('wsimLang'); } catch(e){}
 const q = new URLSearchParams(location.search).get('lang');
-if (q === 'en' || q === 'ja' || q === 'de') initLang = q;
-else if (v === 'ja' || v === 'de' || v === 'en') initLang = v;
+const OK = ['ja','en','de','fr','es'];
+if (OK.includes(q)) initLang = q;
+else if (OK.includes(v)) initLang = v;
 setLang(initLang);
 </script>
 </body>
