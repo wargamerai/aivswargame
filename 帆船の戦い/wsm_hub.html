@@ -133,7 +133,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
 
 <div id="topbar">
   <h1>⚓ 帆船の戦い</h1>
-  <div id="phaseBar">
+  <div><div id="phaseBar">
     <span class="ph" data-ph="wind"      title="WIND">A:風</span>
     <span class="ph" data-ph="unfoul"    title="UNFOULING">B:絡み解除</span>
     <span class="ph" data-ph="moveNote"  title="MOVEMENT NOTATION">C:移動記入</span>
@@ -143,7 +143,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
     <span class="ph" data-ph="melee"     title="MELEE">H:白兵</span>
     <span class="ph" data-ph="reload"    title="RELOAD">I:装填</span>
     <span class="ph" data-ph="fullSail"  title="FULL SAIL">J:全帆</span>
-  </div>
+  </div><div id="phaseHint" style="color:#ffcc88;font-size:0.9em;margin-top:3px;min-height:1.2em;"></div></div>
 </div>
 
 <!-- AI設定モーダルは wsm_ai_ui.js が動的挿入 -->
@@ -1357,6 +1357,10 @@ function updateWindIndicator() {
   document.querySelectorAll('.ph').forEach(el => {
     el.classList.toggle('active', el.dataset.ph === state.phase);
   });
+  // フェイズの下の簡単な説明（ユーザーの指示 2026-11-06）
+  const PHASE_HINT = { moveNote: '移動したい艦をクリックして、プロットを入力し「確定」を押してください。全艦が終わったら「▶ プロット実行」を押します。' };
+  const hintEl = document.getElementById('phaseHint');
+  if (hintEl) hintEl.textContent = PHASE_HINT[state.phase] || '';
 }
 
 function renderFleetLists() {
@@ -1733,13 +1737,17 @@ async function executeAllGunnery() {
   const ordered = [...jp, ...us];
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let hits = 0, misses = 0;
+  // 砲撃しないときは、理由を画面の真ん中に出す（ユーザーの指示 2026-11-06）
+  const skipNotice = (ship, reason) => showGunneryStageModal(`砲撃しない: ${ship.name}`,
+    `<div style="font-size:1.2em;text-align:center;color:#ffaa66;font-weight:bold;margin:6px 0 10px;">このターンは砲撃しない</div><div style="text-align:center;color:#ddd;">理由: ${reason}</div>`, '次へ');
   for (const firer of ordered) {
     // 乗員全投入で艦運営不可なら砲撃不可
-    if (firer._springTurned || firer.raisingAnchorTurns > 0) { addLog(`${firer.name}: 錨の作業中のため砲撃不可`); continue; } // 上級 V C 4, 6
+    if (firer._springTurned || firer.raisingAnchorTurns > 0) { addLog(`${firer.name}: 錨の作業中のため砲撃不可`); await skipNotice(firer, '錨の作業中'); continue; } // 上級 V C 4, 6
     const crewTotal = (firer.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
     const assigned = (firer.obpAssigned||0) + (firer.dbpAssigned||0) + (firer.tbpAssigned||0);
     if (crewTotal > 0 && assigned >= crewTotal) {
       addLog(`${firer.name}: 乗員全投入のため砲撃不可`);
+      await skipNotice(firer, '乗員を全部、接舷隊・防御隊・回航員に回している');
       continue;
     }
     const enemies = (firer.side === 'jp' ? state.usFleet : state.jpFleet).filter(t => t.col >= 0 && aliveAtStart.has(t.name) && (!t.enterTurn || state.turn >= t.enterTurn));
@@ -1763,8 +1771,10 @@ async function executeAllGunnery() {
       const in10 = cand.filter(c => c.d <= 10);
       if (in10.length === 0 && blockedCount > 0) {
         addLog(`${firer.name}: 射線上に他艦 → 発射不可`);
+        await skipNotice(firer, '射線の上に別の艦がいる');
       } else {
         addLog(`${firer.name}: ${in10.length ? '射程内敵は死角' : '射程内に敵なし'}`);
+        if (in10.length) await skipNotice(firer, '射程内の敵が、舷側の射界の外（死角）にいる');
       }
       continue;
     }
@@ -1803,6 +1813,7 @@ async function executeAllGunnery() {
     // 上級 VIII B 4: 2ターン目以降の白兵戦をしている相手には、ぶどう弾を撃てない
     if (ammo === 'grape' && firer.meleeWith && firer.meleeWith[bestTarget.name] >= 1) {
       addLog(`${firer.name}: 白兵戦中の相手にはぶどう弾を撃てない → スキップ`);
+      await skipNotice(firer, '2ターン目以降の白兵戦の相手には、ぶどう弾を撃てない');
       continue;
     }
     // 1. resolveGunnery でスペック事前計算
@@ -1813,6 +1824,7 @@ async function executeAllGunnery() {
     // AI側: マイナスなら自動スキップ
     if (firer.side !== 'jp' && isNegative) {
       addLog(`${firer.name}: Hit Table ${tableVal} → 自動スキップ（マイナス）`);
+      await skipNotice(firer, `命中表の番号がマイナス（${tableVal}）で、撃っても当たらない`);
       continue;
     }
 
@@ -2754,7 +2766,20 @@ function showBoardPrepModalMulti(ships) {
       bodyHtml += `<tr><td style="padding:4px 8px;border:1px solid #456;">${s.name}</td><td style="padding:4px 8px;border:1px solid #456;text-align:center;">${total}</td><td style="padding:4px 8px;border:1px solid #456;"><input type="number" data-ship="${s.name}" data-key="obp" value="${defObp}" min="0" max="${total}" style="width:60px;background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;"></td><td style="padding:4px 8px;border:1px solid #456;"><input type="number" data-ship="${s.name}" data-key="dbp" value="${defDbp}" min="0" max="${total}" style="width:60px;background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;"></td><td style="padding:4px 8px;border:1px solid #456;"><input type="number" data-ship="${s.name}" data-key="tbp" value="${defTbp}" min="0" max="${total}" style="width:60px;background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;"></td><td style="padding:4px 8px;border:1px solid #456;"><select data-ship="${s.name}" data-key="target" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;">${tgtOpts || '<option value="">(なし)</option>'}</select></td></tr>`;
     }
     bodyHtml += `</table>`;
+    // 乗員を全部回すと、このターン砲撃できない。初めの値は今のまま、注意だけ出して自分で直してもらう（ユーザーの指示 2026-11-06）
+    bodyHtml += `<div id="bpWarn" style="margin-top:8px;color:#ff6666;font-weight:bold;line-height:1.5;"></div>`;
     panel.innerHTML = bodyHtml;
+    const checkAll = () => {
+      const lines = [];
+      for (const s of ships) {
+        const total = (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
+        const v = k => parseInt(panel.querySelector(`input[data-ship="${s.name}"][data-key="${k}"]`)?.value) || 0;
+        if (total > 0 && v('obp') + v('dbp') + v('tbp') >= total) lines.push(`${s.name}: 乗員を全部回しているので、このターンは砲撃できない`);
+      }
+      panel.querySelector('#bpWarn').innerHTML = lines.join('<br>');
+    };
+    panel.querySelectorAll('input[type="number"]').forEach(inp => inp.addEventListener('input', checkAll));
+    checkAll();
     const btn = document.createElement('button');
     btn.textContent = '確定';
     btn.style.cssText = 'margin-top:12px;width:100%;padding:10px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:1.05em;';
@@ -3097,17 +3122,15 @@ function executeMeleePhase() {
         + `<div style="margin-top:6px;font-size:0.9em;"><b>乗員 戦闘前 → 戦闘後</b><br>${[...crewStart].map(([x, v]) => `${x.name}: ${v} → ${crewOf(x)}`).join('<br>')}</div>`
         + `<div style="margin-top:4px;color:${color};font-size:0.9em;">結果: ${outcome}（${why}）</div></div>`;
       overlayLines.push(tableHtml);
-      // アニメーション用: 乗員のバー、ラウンドごとの段、結果
-      const ships = [...attackers, defender];
-      const bid = 'wbm' + (++_wbSeq);
-      _wbStyle();
-      const bars = ships.map(x => barRowHtml(`${x.name}${x === defender ? '（防）' : '（攻）'}`, crewStart.get(x), crewOf(x), (x.crew?.abilitiesMax || []).reduce((t, v) => t + (v || 0), 0), x.name)).join('');
-      const rounds = roundsData.map((r, i) => `<div class="mr" data-i="${i}"><b>ラウンド${r.round}</b><br>`
-        + `<div style="margin-top:4px;">攻撃側 強さ${r.atkStr}（列 ${r.bandA}）: d6=${r.dieA} → ${defender.name} の乗員 −${r.dmgToDef}</div>${meleeColHtml(r.bandA, r.dieA)}`
-        + `<div style="margin-top:4px;">防御側 強さ${r.defStr}（列 ${r.bandD}）: d6=${r.dieD} → ${atkNames} の乗員 −${r.dmgToAtk}</div>${meleeColHtml(r.bandD, r.dieD)}</div>`).join('');
-      animBlocks.push({ bid, rounds: roundsData, html: `<div id="${bid}" style="margin-bottom:14px;text-align:left;"><div style="font-weight:bold;color:#ffcc44;">${atkNames} ⚔ ${defender.name}</div>`
-        + `<div style="color:#aac;font-size:0.9em;margin:4px 0;">${partyLines.join('<br>')}</div>${bars}${rounds}`
-        + `<div class="mr" data-end="1" style="border-color:${color};"><b style="color:${color};font-size:1.2em;">${outcome}</b>（${why}）</div></div>` });
+      // 画面用: 1組ずつ、ラウンドごとに同じ画面で見せる（ユーザーの指示 2026-11-06）
+      animBlocks.push({
+        title: `${atkNames} ⚔ ${defender.name}`, party: partyLines.join('<br>'),
+        ships: [...attackers, defender].map(x => ({ name: x.name, label: `${x.name}${x === defender ? '（防）' : '（攻）'}`, start: crewStart.get(x), max: (x.crew?.abilitiesMax || []).reduce((t, v) => t + (v || 0), 0) })),
+        rounds: roundsData.map(r => ({ crewAfter: r.crewAfter, html: `<b>ラウンド${r.round}</b>`
+          + `<div style="margin-top:6px;">攻撃側 強さ${r.atkStr}（列 ${r.bandA}）: d6=${r.dieA} → ${defender.name} の乗員 −${r.dmgToDef}</div>${meleeColHtml(r.bandA, r.dieA)}`
+          + `<div style="margin-top:6px;">防御側 強さ${r.defStr}（列 ${r.bandD}）: d6=${r.dieD} → ${atkNames} の乗員 −${r.dmgToAtk}</div>${meleeColHtml(r.bandD, r.dieD)}` })),
+        endHtml: `<b style="color:${color};font-size:1.3em;">${outcome}</b><div style="margin-top:4px;">${why}</div>`,
+      });
     }
   }
 
@@ -3122,22 +3145,45 @@ function executeMeleePhase() {
       setTimeout(() => { isExecuting = false; }, 5000);
     }
   } else {
-    // 白兵戦の結果は、ラウンドを1つずつゆっくり見せ、ボタンを押すまで出しておく（ユーザーの指示 2026-11-06）
+    // 白兵戦: 1組ずつ、ラウンドごとに同じ画面で見せる。ボタンを押して進む（自動では進めない。ユーザーの指示 2026-11-06）
     checkSurrenderByDamage();
     isExecuting = true;
-    const p = showGunneryStageModal(PHASE_NAMES_JP['melee'] + ' の結果', animBlocks.map(b => b.html).join('') + `<div id="wbmEnd" style="display:none;">${decidedNote()}</div>`, '次へ');
-    let t = 600;
-    for (const b of animBlocks) {
-      const root = document.getElementById(b.bid);
-      b.rounds.forEach((r, i) => {
-        setTimeout(() => { const el = root && root.querySelector(`.mr[data-i="${i}"]`); if (el) el.classList.add('show'); animateBarsIn(root, 300, r.crewAfter); }, t);
-        t += 2600;
-      });
-      setTimeout(() => { const el = root && root.querySelector('.mr[data-end]'); if (el) el.classList.add('show'); }, t);
-      t += 1200;
-    }
-    setTimeout(() => { const el = document.getElementById('wbmEnd'); if (el) el.style.display = ''; }, t);
-    p.then(() => { isExecuting = false; draw(); });
+    _wbStyle();
+    const steps = [];
+    animBlocks.forEach((b, bi) => { b.rounds.forEach((r, ri) => steps.push({ bi, ri })); steps.push({ bi, end: true }); });
+    const decided = decidedNote();
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:20px 24px;border:2px solid #ffcc44;border-radius:8px;width:min(620px,94vw);';
+    overlay.appendChild(panel);
+    _resultModalsOpen++;
+    document.body.appendChild(overlay);
+    let k = 0;
+    const show = () => {
+      const st = steps[k], b = animBlocks[st.bi];
+      // この段の前の乗員の数（前のラウンドの後。最初のラウンドは戦闘前）
+      const before = {}; b.ships.forEach(x => { before[x.name] = st.ri > 0 ? b.rounds[st.ri - 1].crewAfter[x.name] : st.end && b.rounds.length ? b.rounds[b.rounds.length - 1].crewAfter[x.name] : x.start; });
+      const after = st.end ? before : b.rounds[st.ri].crewAfter;
+      const bars = b.ships.map(x => barRowHtml(x.label, before[x.name], after[x.name], x.max, x.name)).join('');
+      const last = k === steps.length - 1;
+      panel.innerHTML = `<div style="font-size:1.25em;color:#ffcc44;font-weight:bold;border-bottom:1px solid #456;padding-bottom:6px;margin-bottom:8px;">H. 白兵戦${animBlocks.length > 1 ? `（${st.bi + 1}/${animBlocks.length}組）` : ''} — ${b.title}</div>`
+        + `<div style="color:#aac;font-size:0.9em;margin-bottom:6px;">${b.party}</div>`
+        + `<div id="wbmBars">${bars}</div>`
+        + `<div style="margin-top:10px;padding:8px 10px;background:#0a1a2a;border-left:3px solid #ffcc44;min-height:9em;">${st.end ? b.endHtml : b.rounds[st.ri].html}</div>`
+        + (last && decided ? decided : '');
+      const btn = document.createElement('button');
+      btn.textContent = last ? '次へ' : steps[k + 1].end ? '結果を見る' : steps[k + 1].bi !== st.bi ? '次の白兵戦へ' : '次のラウンドへ';
+      btn.style.cssText = 'margin-top:14px;width:100%;padding:10px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:1.05em;';
+      btn.onclick = () => {
+        if (!last) { k++; show(); return; }
+        if (overlay.parentNode) document.body.removeChild(overlay);
+        isExecuting = false; draw(); _resultModalClosed();
+      };
+      panel.appendChild(btn);
+      if (!st.end) animateBarsIn(document.getElementById('wbmBars'), 400);
+    };
+    show();
   }
   checkSurrenderByDamage();
   checkGameEnd();
