@@ -256,6 +256,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
     <button onclick="setZoom(5)" style="background:#234;color:#fff;border:1px solid #456;width:24px;height:22px;border-radius:3px;cursor:pointer;font-weight:bold;">＋</button>
     <span id="zoomLabel">40%</span>
   </label>
+  <button onclick="centerMapView()" title="選んだ艦（選んでいなければ全艦の真ん中）を画面の中央へ" style="background:#2a5a7a;color:#fff;border:1px solid #4a8ab0;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">◎ 中央へ</button>
   <button onclick="saveGameToFile()" style="background:#864;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">💾 保存</button>
   <button class="back" onclick="location.href='sandbox.html'">← 編成へ</button>
 </div>
@@ -1897,7 +1898,8 @@ async function executeAllGunnery() {
     }
 
     // 6. ダイスロール演出
-    await showDiceRollAnimation(result.die);
+    // ぶどう弾はダイスを振らない（命中表の番号の数だけ乗員が減る）ので、ダイスのアニメーションを出さない
+    if (ammo !== 'grape') await showDiceRollAnimation(result.die);
 
     // 7. 結果表示
     const hitLabel = result.hit ? '🎯' : '✗ 外れ';
@@ -1917,9 +1919,12 @@ async function executeAllGunnery() {
       resolveCriticalFromGunnery(firer, bestTarget, result, critLog);
       if (critLog.length) {
         if (isFastAiObserve()) {
-          critText = `<div style="margin-top:4px;color:#ff6666;font-weight:bold;font-size:0.9em;">★CRIT ×${critLog.length}</div>`;
+          const fx = critLog.slice(1).filter(l => !/効果なし|対象外|対象索具なし|無事/.test(l));
+          critText = fx.length ? `<div style="margin-top:4px;color:#ff6666;font-weight:bold;font-size:0.9em;">クリティカル: ${fx.map(l => l.replace(/^💥\s*/, '')).join('、')}</div>` : '';
         } else {
-          critText = `<div style="margin-top:10px;color:#ff6666;font-weight:bold;">★ クリティカル発動</div><div style="color:#ffaaaa;">${critLog.join('<br>')}</div>`;
+          // クリティカルは、効果が出たときだけ「クリティカル: ○○」と出す（ユーザーの指示 2026-11-06）。判定の行は記録の欄だけ
+          const effects = critLog.slice(1).filter(l => !/効果なし|対象外|対象索具なし|無事/.test(l));
+          critText = effects.length ? `<div style="margin-top:10px;padding:6px 10px;background:#2a1414;border-left:3px solid #ff6666;font-size:1.15em;color:#ff6666;font-weight:bold;">クリティカル: ${effects.map(l => l.replace(/^💥\s*/, '')).join('、')}</div>` : '';
         }
         critLog.forEach(l => addLog('  ' + l));
       }
@@ -1933,8 +1938,10 @@ async function executeAllGunnery() {
     const resultHtml = `
       <div style="font-size:1.4em;text-align:center;color:${result.hit?'#88ff88':'#ff8888'};font-weight:bold;margin-bottom:12px;">${hitLabel}</div>
       <div style="line-height:1.6;">
-        <div style="color:#88ccff;">Hit Table: <b style="color:#fff;">#${result.table ?? '-'}</b>　ダイス: <b style="color:#fff;">${result.die ?? '-'}</b></div>
-        <div style="color:#88ccff;">損害コード: <b style="color:#fff;font-family:monospace;">${result.code ?? '-'}</b></div>
+        ${ammo === 'grape'
+          ? `<div style="color:#88ccff;">ぶどう弾: ダイスなし — 表#${result.table ?? '-'} の数だけ乗員が減る（乗員 −${result.table ?? 0}）</div>`
+          : `<div style="color:#88ccff;">Hit Table: <b style="color:#fff;">#${result.table ?? '-'}</b>　ダイス: <b style="color:#fff;">${result.die ?? '-'}</b></div>
+        <div style="color:#88ccff;">損害コード: <b style="color:#fff;font-family:monospace;">${result.code ?? '-'}</b></div>`}
       </div>
       ${result.table != null && result.table >= 0 && ammo !== 'grape' ? hitRowHtml(Math.min(10, result.table), _shownType || 'hull', result.die) : ''}
       ${result.hit ? shipBarsHtml(_barsId, bestTarget, _before, shipSnapshot(bestTarget)) : ''}
@@ -2141,9 +2148,20 @@ function showReloadChoiceModal(ships) {
     const panel = document.createElement('div');
     panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:20px;border:2px solid #ffcc44;border-radius:8px;min-width:540px;max-width:760px;max-height:85vh;overflow-y:auto;';
     let bodyHtml = '<div style="font-size:1.3em;color:#ffcc44;font-weight:bold;margin-bottom:12px;border-bottom:1px solid #456;padding-bottom:6px;">装填 / 次回装填弾種選択</div>';
+    // 装填のきまりを先に説明する（ユーザーの指示 2026-11-06）
+    bodyHtml += `<div style="background:#0f2236;border-left:3px solid #ffcc44;padding:8px 10px;margin-bottom:10px;line-height:1.6;font-size:0.95em;">`
+      + `・撃った舷側は「空」になる。空の舷側は、このフェイズで装填すると次のターンに撃てる<br>`
+      + `・<b>1ターンに装填できるのは、片方の舷側だけ</b>（両方が空なら、2ターンかかる）<br>`
+      + `・<b>二重弾は装填に2ターンかかる</b>。その間、もう一方の舷側は装填できない<br>`
+      + `・装填した艦は、そのターン修理できない。錨の作業中は装填できない`
+      + (ships.some(x => x.nation === 'GB') ? `<br>・イギリスの艦は鎖弾を使えない（球形弾になる）` : '')
+      + `</div>`;
     for (const s of ships) {
       bodyHtml += `<div style="border:1px solid #345;padding:10px;margin-bottom:8px;background:#0a1a2a;border-radius:4px;">`;
       bodyHtml += `<div style="font-weight:bold;color:#88bbff;margin-bottom:6px;">${s.name}</div>`;
+      if (s._reloadedThisTurn && s.loadedShot) bodyHtml += `<div style="color:#88ff88;margin-bottom:4px;">二重弾の装填が、このターンで完了した（このターンはほかの舷側を装填できない）</div>`;
+      else if (s.dsLoading) bodyHtml += `<div style="color:#ffcc88;margin-bottom:4px;">二重弾を装填中（2ターン目に完了）</div>`;
+      if (s._springTurned || s.raisingAnchorTurns > 0) bodyHtml += `<div style="color:#ff8888;margin-bottom:4px;">錨の作業中なので、このターンは装填できない</div>`;
       for (const side of ['L', 'R']) {
         const sideName = side === 'L' ? 'Left' : 'Right';
         const dirtyFlag = 'fired' + sideName + 'Dirty';
@@ -2154,7 +2172,7 @@ function showReloadChoiceModal(ships) {
         bodyHtml += `<span style="color:#aac;min-width:50px;">${side === 'L' ? '左舷' : '右舷'}:</span>`;
         if (isEmpty) {
           bodyHtml += `<span style="color:#ff8888;font-weight:bold;">空</span>`;
-          bodyHtml += `<label><input type="checkbox" data-ship="${s.name}" data-side="${side}" data-action="reload"> 装填する</label>`;
+          bodyHtml += `<label style="font-size:1.15em;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border:1px solid #456;border-radius:4px;background:#13243a;"><input type="checkbox" data-ship="${s.name}" data-side="${side}" data-action="reload" style="width:22px;height:22px;cursor:pointer;"> 装填する</label>`;
           bodyHtml += `<select data-ship="${s.name}" data-side="${side}" data-action="ammo" style="background:#0a1a2a;color:#fff;border:1px solid #456;padding:2px 4px;">`;
           bodyHtml += shotOptionsFor(s).map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
           bodyHtml += `</select>`;
@@ -2165,11 +2183,34 @@ function showReloadChoiceModal(ships) {
           bodyHtml += shotOptionsFor(s).map(t => `<option value="${t}" ${currentPlanned===t?'selected':''}>${SHOT_TYPE_JP[t]}</option>`).join('');
           bodyHtml += `</select>`;
         }
+        bodyHtml += `<span class="rlNote" data-ship="${s.name}" data-side="${side}" style="color:#ffcc88;font-size:0.9em;"></span>`;
         bodyHtml += `</div>`;
       }
       bodyHtml += `</div>`;
     }
     panel.innerHTML = bodyHtml;
+    // 片方の舷側を選んだら、もう一方は選べなくする。二重弾は2ターンかかることを出す
+    const refreshReload = () => {
+      for (const s of ships) {
+        const blocked = s._reloadedThisTurn || s._springTurned || s.raisingAnchorTurns > 0;
+        const ck = side => panel.querySelector(`input[data-ship="${s.name}"][data-side="${side}"][data-action="reload"]`);
+        for (const side of ['L', 'R']) {
+          const c = ck(side), other = ck(side === 'L' ? 'R' : 'L');
+          const note = panel.querySelector(`.rlNote[data-ship="${s.name}"][data-side="${side}"]`);
+          const sel = panel.querySelector(`select[data-ship="${s.name}"][data-side="${side}"][data-action="ammo"]`);
+          if (!c) continue;
+          c.disabled = !!blocked || !!(other && other.checked);
+          if (c.disabled && !blocked) c.checked = false;
+          let t = '';
+          if (blocked) t = 'このターンは装填できない';
+          else if (other && other.checked) t = '1ターンに片方だけ（次のターンに装填）';
+          else if (sel && sel.value === 'double') t = c.checked ? '二重弾: 2ターンかかる（次のターンも続けて装填）' : '二重弾は2ターンかかる';
+          if (note) note.textContent = t;
+        }
+      }
+    };
+    panel.querySelectorAll('input[data-action="reload"], select[data-action="ammo"]').forEach(el => el.addEventListener('change', refreshReload));
+    refreshReload();
     const btn = document.createElement('button');
     btn.textContent = '確定';
     btn.style.cssText = 'margin-top:10px;padding:10px 20px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:1.1em;font-weight:bold;width:100%;';
@@ -2824,8 +2865,8 @@ function _wbStyle() {
   const st = document.createElement('style'); st.id = 'wbStyle';
   st.textContent = `.wb{display:grid;grid-template-columns:7.5em 1fr 9.5em;gap:8px;align-items:center;margin:3px 0;font-size:.92em}
 .wbl{color:#aac}.wbt{position:relative;height:13px;background:#0a1420;border:1px solid #345;border-radius:3px;overflow:hidden}
-.wbg{position:absolute;left:0;top:0;bottom:0;background:#ff3b2f;transition:width .6s ease .5s}
-.wbf{position:absolute;left:0;top:0;bottom:0;background:#5fbf6a;transition:width .7s ease}
+.wbg{position:absolute;left:0;top:0;bottom:0;background:#ff3b2f;transition:width 1.4s ease 1s}
+.wbf{position:absolute;left:0;top:0;bottom:0;background:#5fbf6a;transition:width 1.4s ease}
 .wbn{text-align:right;font-family:monospace}.wbn .hit{color:#ff8866;font-weight:bold}
 .hrt{border-collapse:collapse;margin-top:4px;font-size:.85em;width:100%}.hrt td,.hrt th{border:1px solid #345;padding:2px 4px;text-align:center}
 .hrt th{color:#88ccff;font-weight:normal}.hrt td.on{background:#6a531c;color:#fff;font-weight:bold;outline:2px solid #ffcc44}
@@ -2854,7 +2895,7 @@ function animateBarsIn(root, delay, to) {
     setTimeout(() => { g.style.width = Math.max(0, target / m * 100) + '%'; }, 50);
     if (target === from) return;
     let v = from;
-    const step = () => { if (v > target) { v--; n.textContent = v; setTimeout(step, 110); } else { const d = target - +el.dataset.b; n.innerHTML = `<span class="hit">${target}${d ? `（${d}）` : ''}</span>`; } };
+    const step = () => { if (v > target) { v--; n.textContent = v; setTimeout(step, 300); } else { const d = target - +el.dataset.b; n.innerHTML = `<span class="hit">${target}${d ? `（${d}）` : ''}</span>`; } };
     step();
   });
   if (delay) setTimeout(run, delay); else run();
@@ -3150,7 +3191,7 @@ function executeMeleePhase() {
     isExecuting = true;
     _wbStyle();
     const steps = [];
-    animBlocks.forEach((b, bi) => { b.rounds.forEach((r, ri) => steps.push({ bi, ri })); steps.push({ bi, end: true }); });
+    animBlocks.forEach((b, bi) => { steps.push({ bi, intro: true }); b.rounds.forEach((r, ri) => steps.push({ bi, ri })); steps.push({ bi, end: true }); });
     const decided = decidedNote();
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;display:flex;align-items:center;justify-content:center;';
@@ -3164,16 +3205,16 @@ function executeMeleePhase() {
       const st = steps[k], b = animBlocks[st.bi];
       // この段の前の乗員の数（前のラウンドの後。最初のラウンドは戦闘前）
       const before = {}; b.ships.forEach(x => { before[x.name] = st.ri > 0 ? b.rounds[st.ri - 1].crewAfter[x.name] : st.end && b.rounds.length ? b.rounds[b.rounds.length - 1].crewAfter[x.name] : x.start; });
-      const after = st.end ? before : b.rounds[st.ri].crewAfter;
+      const after = (st.end || st.intro) ? before : b.rounds[st.ri].crewAfter;
       const bars = b.ships.map(x => barRowHtml(x.label, before[x.name], after[x.name], x.max, x.name)).join('');
       const last = k === steps.length - 1;
       panel.innerHTML = `<div style="font-size:1.25em;color:#ffcc44;font-weight:bold;border-bottom:1px solid #456;padding-bottom:6px;margin-bottom:8px;">H. 白兵戦${animBlocks.length > 1 ? `（${st.bi + 1}/${animBlocks.length}組）` : ''} — ${b.title}</div>`
         + `<div style="color:#aac;font-size:0.9em;margin-bottom:6px;">${b.party}</div>`
         + `<div id="wbmBars">${bars}</div>`
-        + `<div style="margin-top:10px;padding:8px 10px;background:#0a1a2a;border-left:3px solid #ffcc44;min-height:9em;">${st.end ? b.endHtml : b.rounds[st.ri].html}</div>`
+        + `<div style="margin-top:10px;padding:8px 10px;background:#0a1a2a;border-left:3px solid #ffcc44;min-height:9em;">${st.intro ? `<b>白兵戦の準備</b><div style="margin-top:6px;">接舷隊と防御隊がそろった。最大3ラウンド戦う。<br>守る側が0になれば拿捕、攻める側が0になれば撃退。</div><div style="margin-top:8px;color:#ffcc88;">「白兵戦を始める」を押すと、ラウンド1が始まる。</div>` : st.end ? b.endHtml : b.rounds[st.ri].html}</div>`
         + (last && decided ? decided : '');
       const btn = document.createElement('button');
-      btn.textContent = last ? '次へ' : steps[k + 1].end ? '結果を見る' : steps[k + 1].bi !== st.bi ? '次の白兵戦へ' : '次のラウンドへ';
+      btn.textContent = last ? '次へ' : st.intro ? '白兵戦を始める' : steps[k + 1].end ? '結果を見る' : steps[k + 1].bi !== st.bi ? '次の白兵戦へ' : '次のラウンドへ';
       btn.style.cssText = 'margin-top:14px;width:100%;padding:10px;background:#4488cc;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold;font-size:1.05em;';
       btn.onclick = () => {
         if (!last) { k++; show(); return; }
@@ -3181,7 +3222,7 @@ function executeMeleePhase() {
         isExecuting = false; draw(); _resultModalClosed();
       };
       panel.appendChild(btn);
-      if (!st.end) animateBarsIn(document.getElementById('wbmBars'), 400);
+      if (!st.end && !st.intro) animateBarsIn(document.getElementById('wbmBars'), 400);
     };
     show();
   }
@@ -3344,7 +3385,7 @@ async function executeFullSailPhase() {
 function showSailChoiceModal(ships) {
   // 高速観戦モード: 現状維持で自動確定
   if (isFastAiObserve()) {
-    return Promise.resolve(ships.map(s => ({ ship: s, sailState: s.sailState || 'battle' })));
+    return Promise.resolve(ships.map(s => ({ ship: s, sailState: s.pendingSailMode || s.sailState || 'battle' })));
   }
   return new Promise(resolve => {
     const overlay = document.createElement('div');
@@ -3353,13 +3394,14 @@ function showSailChoiceModal(ships) {
     panel.style.cssText = 'background:#1a2a3a;color:#fff;padding:20px;border:2px solid #ffcc44;border-radius:8px;min-width:500px;max-width:700px;max-height:85vh;overflow-y:auto;';
     const SAIL_OPTIONS = ['battle', 'full'];
     let bodyHtml = '<div style="font-size:1.3em;color:#ffcc44;font-weight:bold;margin-bottom:8px;border-bottom:1px solid #456;padding-bottom:6px;">帆状態選択</div>';
-    bodyHtml += '<div style="color:#ffaa88;font-size:0.85em;margin-bottom:10px;">※ 全帆（full）では被弾時の索具ダメージが 2 倍になります</div>';
+    bodyHtml += '<div style="color:#ffaa88;font-size:0.85em;margin-bottom:10px;">※ 全帆（full）では被弾時の索具ダメージが 2 倍になります<br>※ ここで決めた帆は、次のターンの移動から効きます</div>';
     for (const s of ships) {
       bodyHtml += `<div style="border:1px solid #345;padding:10px;margin-bottom:8px;background:#0a1a2a;border-radius:4px;">`;
-      bodyHtml += `<div style="font-weight:bold;color:#88bbff;margin-bottom:6px;">${s.name}（現在: ${SAIL_STATE_JP[s.sailState||'battle']||s.sailState}）</div>`;
+      const wantSail = SAIL_OPTIONS.includes(s.pendingSailMode) ? s.pendingSailMode : (s.sailState || 'battle');
+      bodyHtml += `<div style="font-weight:bold;color:#88bbff;margin-bottom:6px;">${s.name}（現在: ${SAIL_STATE_JP[s.sailState||'battle']||s.sailState}）${s.pendingSailMode && s.pendingSailMode !== s.sailState ? `<span style="color:#ffcc88;font-weight:normal;">　移動のときの指示: ${SAIL_STATE_JP[s.pendingSailMode] || s.pendingSailMode}</span>` : ''}</div>`;
       bodyHtml += `<div style="display:flex;gap:16px;">`;
       for (const mode of SAIL_OPTIONS) {
-        const checked = (s.sailState || 'battle') === mode ? 'checked' : '';
+        const checked = wantSail === mode ? 'checked' : '';
         bodyHtml += `<label style="cursor:pointer;"><input type="radio" name="sail_${s.name}" value="${mode}" ${checked}> ${SAIL_STATE_JP[mode]||mode}</label>`;
       }
       bodyHtml += `</div></div>`;
@@ -3594,6 +3636,23 @@ document.getElementById('zoomSlider').addEventListener('input', e => {
   initCanvas();
   draw();
 });
+
+// 地図を画面の中央へ動かす（ユーザーの指示 2026-11-06）: 選んだ艦、選んでいなければ戦っている全艦の真ん中
+function centerMapView() {
+  const ma = document.getElementById('mapArea');
+  if (!ma) return;
+  let x, y;
+  const sel = state.selectedShip;
+  if (sel && sel.col >= 0) ({ x, y } = hexPt(sel.col, sel.row));
+  else {
+    const ships = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok' && s.col >= 0);
+    if (!ships.length) return;
+    const pts = ships.map(s => hexPt(s.col, s.row));
+    x = pts.reduce((t, p) => t + p.x, 0) / pts.length;
+    y = pts.reduce((t, p) => t + p.y, 0) / pts.length;
+  }
+  ma.scrollTo({ left: x * zoomLevel - ma.clientWidth / 2, top: y * zoomLevel - ma.clientHeight / 2, behavior: 'smooth' });
+}
 
 function setZoom(delta) {
   const slider = document.getElementById('zoomSlider');

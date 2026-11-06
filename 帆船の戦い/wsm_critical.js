@@ -172,7 +172,7 @@ function applyCriticalEffect(ctx, result, log) {
     }
 
     case 'magazine': {
-      // 1d6 + 射程 ≤ 4 → 爆発、それ以外は2Hと同じ火災
+      // 1d6 + 射程 ≤ 4 → 爆発、それ以外は何も起きない（wsim_tables.pdf）
       const r = rollD6();
       const v = r + (ctx.range || 0);
       if (v <= 4) {
@@ -189,8 +189,7 @@ function applyCriticalEffect(ctx, result, log) {
         }
         log.push(`💥 弾薬庫爆発！ (1d6=${r}+射程${ctx.range||0}=${v} ≤ 4) → 地図から消去`);
       } else {
-        t.onFire = (t.onFire || 0) + 1;
-        log.push(`弾薬庫発火: 2H相当火災発生 (1d6=${r}+射程${ctx.range||0}=${v} > 4)`);
+        log.push(`弾薬庫は無事 (1d6=${r}+射程${ctx.range||0}=${v} > 4)`);
       }
       break;
     }
@@ -202,7 +201,7 @@ function applyCriticalEffect(ctx, result, log) {
         if (removed > 0) log.push(`近距離縦射: 索具 -${removed}`);
         else log.push('近距離縦射索具喪失: 対象索具なし');
       } else {
-        log.push('近距離縦射索具喪失: 条件未満（rake && range≤3）');
+        log.push('近距離縦射索具喪失: 効果なし（3ヘクス以内の縦射ではない）');
       }
       break;
     }
@@ -224,7 +223,7 @@ function applyCriticalEffect(ctx, result, log) {
         const removed = reduceSections(t.crew?.abilities, 1);
         if (removed > 0) log.push(`近距離縦射: 乗員 -${removed}`);
       } else {
-        log.push('近距離縦射損害2倍: 条件未満');
+        log.push('近距離縦射損害2倍: 効果なし（3ヘクス以内の縦射ではない）');
       }
       break;
     }
