@@ -693,7 +693,7 @@ function applyNeutralPenalty(){
     }
   });
   if(!log.length) return;
-  poc = Math.max(-10, Math.min(10, poc + delta));
+  addPoc(delta);
   updatePOC();
   alert(log.join('\n'));
 }
@@ -924,7 +924,7 @@ async function advancePhase(){
       else if(side === 'allies') { delta += SEAS[seaKey].allies; console.log(`[POC]   ${seaKey} allies支配 → +${SEAS[seaKey].allies}`); }
       else                       { console.log(`[POC]   ${seaKey} 支配なし(${side}) → 0`); }
     });
-    poc = Math.max(-10, Math.min(10, poc + delta));
+    addPoc(delta);
     console.log(`[POC] phase 9 完了: delta=${delta} poc ${pocBefore} → ${poc}`);
     updatePOC();
   }
@@ -1315,6 +1315,7 @@ function renderLbaButtons(){
 
 // 1発の空爆（5=即時帰還, 6=命中→損害ダイス）
 function airFireAt(attacker, target, events){
+  if(target.type === 'CV') target.airHitTurn = currentTurn; // 10.3 このターンの空爆には、沈んでも参加できる
   const r = rollD6();
   let dmgRoll = null;
   if(r === 6){
@@ -1376,7 +1377,8 @@ async function runAirStrike(side, area, lbaUsable, flowLabel, useCv = true){
   // 友軍CV: 同海域のCVのみ（空母は海にいる船のみ攻撃可、港湾攻撃には参加しない）
   let cvs = [];
   if(SEAS[area] && useCv){
-    cvs = SHIPS.filter(s => s.location === area && !s.sunk && s.side === side && s.type === 'CV' && !s.disabledThisTurn);
+    // 10.3 空中戦は同時: 相手の空爆で沈んだり航行不能になったりした空母も、同じターンの空爆は出せる
+    cvs = SHIPS.filter(s => s.location === area && s.side === side && s.type === 'CV' && ((!s.sunk && !s.disabledThisTurn) || s.airHitTurn === currentTurn));
   }
 
   // 空母はLBA同等扱いで攻撃に参加（港湾攻撃には参加しない）
@@ -4830,7 +4832,7 @@ async function aiAlliedMove(bbTargetOverride){
     ship.removed = true;
     ship.movedThisTurn = true;
     convoyOccupied.delete('NorthAtlantic');
-    poc = Math.max(-10, Math.min(10, poc + 1));
+    addPoc(1);
     aiLog.push(`<b>${ship.name}: 損害により England 上陸 +1POC(連合)</b>`);
     if(!simMode){
       placeAllShips();
@@ -5654,6 +5656,10 @@ const seaControl = {}; // seaKey → 'allies' | 'axis' | null
 const retreatedSeas = new Set(); // 12.4 撤退発生海域はPOC獲得不可
 let poc = 0; // -10(枢軸勝利) ... +10(連合勝利)
 let pocAtTurnStart = 0;   // ターン開始時のPOC（前ターンの獲得POC算出用）
+let pocTurnDelta = 0;     // このターンのPOCの増減の合計（打ち切る前）
+// POC を足す: 海域の支配・船団・中立港など、1ターンの増減を全部合わせてから ±10 で打ち切る
+//   （別々に打ち切ると、-10 のときに海域の分の余りが消えてしまう。プレイヤーの報告 2026-11-06）
+function addPoc(d){ pocTurnDelta += d; poc = Math.max(-10, Math.min(10, pocAtTurnStart + pocTurnDelta)); }
 let lastTurnPocGain = 0;  // 前のターンに連合が得たPOC（ターン1は0）。プラス=連合優勢
 // 累計のPOC（プラス=連合のリード）。画面なしの対戦（sim/play.js）では置き換える
 function alliedCumPoc(){ return poc; }
@@ -6056,12 +6062,13 @@ function endTurn(){
     // NA留まり: 次ターンBarentsへ進ませる（英国上陸はしない）
   });
   const pocBeforeEnd = poc;
-  poc = Math.max(-10, Math.min(10, poc + delta));
+  addPoc(delta);
   console.log(`[POC] endTurn delta=${delta} poc ${pocBeforeEnd} → ${poc} (中立港・コンボイ分)`);
   log.push(`POC変動: ${delta>=0?'+':''}${delta} → 累計${poc>=0?'+':''}${poc}`);
   // 前のターンに連合が得たPOC（連合AIの優勢判断に使用）
   lastTurnPocGain = poc - pocAtTurnStart;
   pocAtTurnStart = poc;
+  pocTurnDelta = 0;
   log.push(`このターンの連合獲得POC: ${lastTurnPocGain>=0?'+':''}${lastTurnPocGain}`);
 
   // 3) フラグ解除と船団のターン経過カウント（帰還は phase 8 で完結）
@@ -6231,7 +6238,7 @@ function buildSaveData(){
       optionRules: { ...optionRules },
       convoyOpenSides: { ...convoyOpenSides },
       alliedTargetMode, alliedFireStyle: { ...alliedFireStyle },
-      poc, pocAtTurnStart, lastTurnPocGain, medAxisStreak, italyHeldMed4,
+      poc, pocAtTurnStart, pocTurnDelta, lastTurnPocGain, medAxisStreak, italyHeldMed4,
       seaControl: { ...seaControl },
       retreatedSeas: [...retreatedSeas],
       combatDone: setsToArr(combatDone),
@@ -6291,7 +6298,7 @@ function applySaveData(data){
   Object.assign(convoyOpenSides, v.convoyOpenSides);
   alliedTargetMode = v.alliedTargetMode;
   Object.assign(alliedFireStyle, v.alliedFireStyle);
-  poc = v.poc; pocAtTurnStart = v.pocAtTurnStart; lastTurnPocGain = v.lastTurnPocGain;
+  poc = v.poc; pocAtTurnStart = v.pocAtTurnStart; pocTurnDelta = v.pocTurnDelta || 0; lastTurnPocGain = v.lastTurnPocGain;
   medAxisStreak = v.medAxisStreak; italyHeldMed4 = !!v.italyHeldMed4;
   Object.keys(seaControl).forEach(k => { delete seaControl[k]; });
   Object.assign(seaControl, v.seaControl);
