@@ -2704,6 +2704,12 @@ function getReturnPorts(ship){
     if(!adjacent.includes('Germany')) adjacent.push('Germany');
     if(!adjacent.includes('France')) adjacent.push('France');
   }
+  // 北大西洋のイタリアの重巡（ユーザーの指示 2026-11-06）: フランスが使える間はフランス、8ターン目はイタリア。
+  //   6ターン目にフランスへ戻った艦は、7ターンの頭にフランスが閉じて除去される。7ターン目は戻る港がないので除去（removeStrandedItalians）
+  if(sea === 'NorthAtlantic' && ship.country === 'IT'){
+    if(currentTurn >= 8) return ['Italy'];
+    if(!adjacent.includes('France')) adjacent.push('France');
+  }
   // Mediterranean の英国艦は England 帰還可（マルタの艦はマルタで完結するので除く）
   if(sea === 'Mediterranean' && ship.country === 'UK' && ship.homePort !== 'Malta'){
     if(!adjacent.includes('England')) adjacent.push('England');
@@ -2748,8 +2754,16 @@ function axisReturnAuto(ships, options){
     if(dest === 'Neutral') ship.arrivedNeutralTurn = turn;
   }
 }
+// 北大西洋で戻る港のないイタリアの重巡（7ターン目）は除去する（ユーザーの指示 2026-11-06）
+function removeStrandedItalians(ships){
+  const out = ships.filter(s => s.country === 'IT' && s.location === 'NorthAtlantic' && !s.sunk && !s.removed && !getReturnPorts(s).length);
+  out.forEach(s => { s.removed = true; s.location = null; console.log(`[帰還] ${s.name}: 北大西洋から戻る港がないため除去`); });
+  if(out.length && !simMode) alert('北大西洋から戻れる港がないため、除去します:\n' + out.map(s => s.name).join('\n'));
+  return ships.filter(s => !out.includes(s));
+}
 async function showAxisReturnUI(allShips, options){
   options = options || {};
+  allShips = removeStrandedItalians(allShips);
   if(humanSide === 'allies'){ axisReturnAuto(allShips, options); return; }
   const autoDefault = !!options.autoDefault;
   const ships = autoDefault
@@ -4341,7 +4355,12 @@ async function aiAlliedMove(bbTargetOverride){
     aiLog.push(`<b>${ship.name} → バレンツ海(ロシア向)</b>`);
   }
   // 1b) 船団 USA→NA
-  for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'USA')){
+  // 損傷のない船団を先に出す。損傷のある船団は修理できるまでアメリカで保留（7ターン目だけは、損傷のない船団がいなければ出す）
+  //   （ユーザーの指示 2026-11-06）
+  const _usaConvoys = SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'USA')
+    .filter(s => !(s.damage > 0) || currentTurn >= 7)
+    .sort((a, b) => currentTurn >= 8 ? 0 : (a.damage > 0 ? 1 : 0) - (b.damage > 0 ? 1 : 0)); // 8ターン目は今までどおりデータの順
+  for(const ship of _usaConvoys){
     if(_convoyOccupiedEarly.has('NorthAtlantic')) continue;
     ship.location = 'NorthAtlantic';
     ship.movedThisTurn = true;
