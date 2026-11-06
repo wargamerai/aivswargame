@@ -6,6 +6,11 @@ const DICE_FACE = ['','⚀','⚁','⚂','⚃','⚄','⚅'];
 
 // ダメージ適用
 function applyDamage(target, dmg, events){
+  // テスト用 ?italyGod=1: イタリア艦は損害を受けない（index.html の italyGod）
+  if(typeof italyGod === 'function' && italyGod(target)){
+    if(typeof logCombatLine === 'function') logCombatLine(`${target.name}: 損害なし（テスト: イタリア無敵）`);
+    return;
+  }
   target.damage += dmg;
   if(typeof logCombatLine === 'function') logCombatLine(`${target.name}: 損害+${dmg} (累計${target.damage}/${target.def})`);
   if(target.damage > target.def){
@@ -71,6 +76,8 @@ function surfaceFireOne(att, target, events, pending){
   }
   const damageRolls = [];
   for(let i=0; i<hits; i++) damageRolls.push(rollD6());
+  // テスト用 ?italyGod=1: イタリア艦への命中は損害0、即時帰還もなし（画面の「命中・損害」にも出さない）
+  if(typeof italyGod === 'function' && italyGod(target)){ damageRolls.length = 0; hasDisabled = false; }
 
   const totalDmg = damageRolls.reduce((a,b)=>a+b, 0);
   events.push({

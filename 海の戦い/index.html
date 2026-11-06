@@ -504,6 +504,11 @@ function initShipLocations(){
   SHIPS.filter(s => s.country === 'UK' && !s.enterTurn && s.type === 'BB' && s.spd === 3).forEach(setMalta);
 }
 initShipLocations();
+// テスト用（ユーザーの指示 2026-11-07）: ?italyGod=1 で開くと、イタリア艦は損害も即時帰還も受けない
+//   イタリアを活躍させてイギリスを地中海でわざとピンチにし、イギリスのAIの動きを見るため
+let ITALY_GOD = false;
+try { ITALY_GOD = new URLSearchParams(location.search).get('italyGod') === '1'; } catch(e) {}
+function italyGod(s){ return ITALY_GOD && !!s && s.country === 'IT'; }
 
 // === 左パネル：艦船一覧（陣営別） ===
 function renderSideList(side, elId){
@@ -739,16 +744,14 @@ async function advancePhase(){
     const destOf = new Map();
     for(const s of barUkUs.slice().sort((a, b) => (a.damage || 0) - (b.damage || 0))){
       let dest = 'England';
-      if(russiaOpen && s.country === 'UK'){
-        if(!(s.damage > 0)) dest = 'Russia';
-        else if(s.damage <= russiaBudget){ dest = 'Russia'; russiaBudget -= s.damage; }
-      }
+      // バレンツ海の注記（2026-11-07）: 3ターン目からはイギリス艦は損害があってもすべてロシアへ
+      if(s.country === 'UK') dest = getReturnPorts(s)[0] || dest;
       destOf.set(s, dest);
     }
     // 北海の立て直し（ユーザーの指示 2026-11-02）: 北海が連合の支配でない時は、くじ（50%）で、
     //   バレンツ海から帰る無傷の英国艦の一部をロシアではなく英国本土へ帰し、英国本土とロシアの英国艦の
     //   攻撃力をおおむね半分ずつにする（英国本土の艦は次のターンに北海へ1エリアで出られる）
-    if(russiaOpen && aiSide === 'allies' && seaControl['NorthSea'] !== 'allies' && Math.random() < 0.5){
+    if(false && russiaOpen && aiSide === 'allies' && seaControl['NorthSea'] !== 'allies' && Math.random() < 0.5){ // 注記と合わないので止めた（2026-11-07）
       const pw = x => (x.atk || 0) + (x.air || 0);
       const ukAt = port => SHIPS.filter(x => x.country === 'UK' && !x.sunk && !x.removed && !(x.damage > 0) &&
         (destOf.has(x) ? destOf.get(x) === port : x.location === port)).reduce((t, x) => t + pw(x), 0);
@@ -1318,6 +1321,12 @@ function airFireAt(attacker, target, events){
   if(target.type === 'CV') target.airHitTurn = currentTurn; // 10.3 このターンの空爆には、沈んでも参加できる
   const r = rollD6();
   let dmgRoll = null;
+  if(italyGod(target)){ // テスト用 ?italyGod=1: イタリア艦への空爆は外れ扱い
+    events.push({ type:'fire', attacker: attacker.id, attackerName: attacker.name,
+      target: target.id, targetName: target.name,
+      dice:[{r, dmgRoll:null}], dmgTotal: 0, disabled: false });
+    return;
+  }
   if(r === 6){
     dmgRoll = rollD6();
     events.push({ type:'fire', attacker: attacker.id, attackerName: attacker.name,
@@ -1981,7 +1990,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
     }
     for(const tid of pending.disabled){
       const ship = SHIPS.find(s => s.id === tid);
-      if(!ship || ship.sunk) continue;
+      if(!ship || ship.sunk || italyGod(ship)) continue;
       ship.disabled = true;
       logCombatLine(`${ship.name}: 即時帰還 (砲撃)`);
       applyEvents.push({ type:'disabled', ship: ship.id, name: ship.name });
@@ -2271,7 +2280,7 @@ async function runPursuitRound(pursuit, retreat){
     }
     for(const tid of pending.disabled){
       const ship = SHIPS.find(s => s.id === tid);
-      if(ship && !ship.sunk){
+      if(ship && !ship.sunk && !italyGod(ship)){
         ship.disabled = true;
         logCombatLine(`${ship.name}: 即時帰還 (追撃砲撃)`);
         applyEvents.push({ type:'disabled', ship: ship.id, name: ship.name });
@@ -2699,6 +2708,8 @@ function getReturnPorts(ship){
   if(sea === 'Mediterranean' && ship.side === 'allies' && ship.forcedReturn){
     return PORTS.Malta.available.includes(currentTurn) ? ['Malta'] : [];
   }
+  // バレンツ海の注記（2026-11-07）: イギリス艦は 1〜2ターン目は英国本土、3ターン目からはロシアへ戻る（損害の有無に関係なく全艦）
+  if(sea === 'Barents' && ship.country === 'UK' && ship.type !== 'CONVOY') return currentTurn <= 2 ? ['England'] : ['Russia'];
   let adjacent = Object.keys(PORT_SEAS).filter(p => PORT_SEAS[p].includes(sea));
   // 地図ルール特例
   // NorthAtlantic のドイツ艦は Germany・France 帰還可（特別ルール）
@@ -2801,7 +2812,7 @@ async function showAxisReturnUI(allShips, options){
 
     function buildRow(ship){
       const o = orig.find(x => x.shipId === ship.id);
-      const ports = getReturnPorts(ship);
+      const ports = getReturnPorts(Object.assign({}, ship, { location: o.location })); // 選んだ後でも、元いた海域から戻れる港を出す
       const tr = document.createElement('tr');
       tr.id = `axret-${ship.id}`;
 
@@ -2919,12 +2930,13 @@ async function showAxisReturnUI(allShips, options){
           ship.atDock = false;
           decided.add(ship.id);
           remaining--;
-          // 既存行を再構築（やり直し付きの結果表示状態にする）
+          // 全部の港のボタンを出したまま、選んだ港のボタンを光らせる（2026-11-07）。ほかのボタンを押せば変えられる
           const newTr = buildRow(ship);
-          // 元状態は orig に保持済み、newTr は orig.location を使うので OK
           tr.parentNode.replaceChild(newTr, tr);
-          // 結果表示に差し替え
-          const tdBtnNew = newTr.querySelector('td:last-child');
+          newTr.querySelectorAll('td:last-child .ret-btn').forEach(b => {
+            if(b.textContent === (PORT_LABEL[defaultPort] || defaultPort)){ b.style.background = '#2a7a3a'; b.style.borderColor = '#6c6'; b.title = '選択中'; }
+          });
+          const tdBtnNew = null;
           if(tdBtnNew){
             tdBtnNew.innerHTML = '';
             const span = document.createElement('span');
@@ -3780,7 +3792,7 @@ function medNeverLose(arr){
   return e.ours > 0 && e.ours >= e.theirs * 1.5 && arr.length > it.length;
 }
 // POCの予想の使い方: 0=2ターン目の残りの艦だけ / 1=2ターン目以降の残りの艦 / 2=1＋予想の精度を上げる / 3=2＋北海とバレンツ海も予想で決める
-const ALLIED_PLAN_MODE = 9; // 北海とバレンツを最重要、余りを大西洋、小部隊をばらまかない（planAlliesV5）。ユーザーの指示 2026-11-06。8 はマスター30（planAlliesV4）
+const ALLIED_PLAN_MODE = 10; // FS（planAlliesG。ユーザーの指示 2026-11-07）。9 は 北海とバレンツを最重要、余りを大西洋、小部隊をばらまかない（planAlliesV5）。ユーザーの指示 2026-11-06。8 はマスター30（planAlliesV4）
 function planAlliedDeployment(aiLog){
   const PLAN_MODE = (typeof window !== 'undefined' && window.__planMode !== undefined) ? window.__planMode : ALLIED_PLAN_MODE;
   let posture = 'normal';
@@ -4080,7 +4092,7 @@ function planAlliedDeployment(aiLog){
     };
     const axisShips = axisReady.map(x => ({ s: x, opts: axisOpts(x) }));
     const ubs = SHIPS.filter(x => x.type === 'UBOAT' && x.side === 'axis' && !x.sunk && !x.removed && x.location && (PORTS[x.location] || SEAS[x.location])).length;
-    const r = (PLAN_MODE >= 9 ? PocPlanner.planAlliesV5 : PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
+    const r = (PLAN_MODE >= 10 ? PocPlanner.planAlliesG : PLAN_MODE >= 9 ? PocPlanner.planAlliesV5 : PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
     ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') assign(u.s, sea); });
     leftoverMode = `POCの予想（評価 ${Math.round(r.value * 10) / 10}）`;
   } else if(currentTurn === 1){
@@ -4286,8 +4298,9 @@ function planAlliedDeployment(aiLog){
   const medAtk = medEval.ours;
   const itAtk = medEval.theirs;
   const ratio = itAtk > 0 ? medAtk / itAtk : Infinity;
-  // マルタの艦はいつも地中海へ出撃する（マルタに残っても意味がない）
-  const sortie = true;
+  // マルタの艦は、イタリアが出てこられる戦力の方が上なら出撃せず、マルタに残る（ユーザーの指示 2026-11-07）
+  //   出撃しない時は、本国から地中海へ回す艦も取りやめて北海へ。連続支配3と最後のターンは今までどおり必ず出撃
+  const sortie = streak3 || lastTurn || !(itAtk > medAtk);
   if(!sortie){
     // 出撃しない場合は地中海への増援も取りやめ、北海へ
     const back = placed.Mediterranean.slice();
@@ -4349,6 +4362,16 @@ async function aiAlliedMove(bbTargetOverride){
   });
   // 1a) 船団 NA→バレンツ海（海上2ターン目以降）。損害を受けていてもロシアを目指す
   for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && (s.turnsAtSea||0) >= 1)){
+    // バレンツ海を枢軸に取られている時は、ロシアへ向かわずイギリスへ入れて +1（14.5）。北大西洋を空けて、次の船団を守る（ユーザーの指示 2026-11-07）
+    if(seaControl['Barents'] === 'axis'){
+      ship.location = 'England';
+      ship.removed = true;
+      ship.movedThisTurn = true;
+      _convoyOccupiedEarly.delete('NorthAtlantic');
+      addPoc(1);
+      aiLog.push(`<b>${ship.name}: バレンツ海を取られているので England へ入る +1POC(連合)</b>`);
+      continue;
+    }
     if(_convoyOccupiedEarly.has('Barents')) continue;
     ship.location = 'Barents';
     ship.movedThisTurn = true;
@@ -4426,6 +4449,16 @@ async function aiAlliedMove(bbTargetOverride){
     s.movedThisTurn = true;
     aiLog.push(`${s.name} → ${SEA_LABEL[dest]}`);
   });
+  // 護衛のない船団は出さない（2026-11-07）。7ターン目からは、今出さないと点にならないので単独でも出す
+  if(currentTurn < 7){
+    const escorts = SHIPS.filter(s => s.side === 'allies' && s.location === 'NorthAtlantic' && !s.sunk && !s.removed && s.type !== 'CONVOY');
+    if(!escorts.length){
+      for(const c of _usaConvoys.filter(c => c.location === 'NorthAtlantic')){
+        c.location = 'USA';
+        aiLog.push(`${c.name}: 護衛がないのでアメリカに残る`);
+      }
+    }
+  }
   if(!simMode){
     placeAllShips();
     document.getElementById('aiLog').innerHTML = aiLog.join('<br>');
@@ -5764,7 +5797,7 @@ function placeControlMarkers(){
 // 帰還待ち（撤退・即時帰還・追撃中止）: 海域に残し帰還フェイズで帰還。当ターンの戦闘・支配判定に不参加
 // forced=true はダイス5の強制帰還（南大西洋のドイツ艦は中立港のみ）
 function markReturnPending(ship, forced = false){
-  if(!ship || ship.sunk) return;
+  if(!ship || ship.sunk || italyGod(ship)) return;
   ship.returnPending = true;
   if(forced) ship.forcedReturn = true;
   ship.disabled = false;
