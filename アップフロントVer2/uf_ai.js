@@ -2437,17 +2437,21 @@ async function aiTryRepair() {
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const grp = state.groups.ai[gi];
     if (grp.eliminated) continue;
-    if (R.isInMarsh && R.isInMarsh(grp)) continue;
-    if (R.isInStream && R.isInStream(grp)) continue;
-    if (isMovingIgnoringOverlays(grp)) continue; // §19.3 移動中は修理できない
-    // 移動中（最上がMOVEMENT）はNG
-    const top = grp.terrain && grp.terrain.length > 0 ? grp.terrain[grp.terrain.length - 1] : null;
-    if (top && top.terrain && top.terrain.type === 'MOVEMENT') continue;
-    const broken = grp.cards.filter(c => c.malfunctioned && R.isAlive(c));
+    const broken = grp.cards.filter(c => c.malfunctioned && !c._gunGone && R.isAlive(c));
     if (broken.length === 0) continue;
     const card = broken[0];
     const def = R.lookupSoldier(card, aiKey);
     if (!def) continue;
+    // §19.3 AFV は地形や移動の状態に関係なく修理を試みられる。それ以外は移動中・湿地・河川では修理できない
+    const isAfvRepair = !!def.afv;
+    if (!isAfvRepair) {
+      if (R.isInMarsh && R.isInMarsh(grp)) continue;
+      if (R.isInStream && R.isInStream(grp)) continue;
+      if (isMovingIgnoringOverlays(grp)) continue; // §19.3 移動中は修理できない
+      // 移動中（最上がMOVEMENT）はNG
+      const top = grp.terrain && grp.terrain.length > 0 ? grp.terrain[grp.terrain.length - 1] : null;
+      if (top && top.terrain && top.terrain.type === 'MOVEMENT') continue;
+    }
     // §33.4 負傷兵は修理の前に黒の RNC が必要。赤ならこのターンは修理できず、行動は使う
     if (R.isWoundActive(card)) {
       const wj = drawTerrainCard();
@@ -2464,7 +2468,12 @@ async function aiTryRepair() {
     showJudgeCard(judge);
     if (judge) { checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge); }
     const isBlack = !(judge && judge.terrain && judge.terrain.rncColor === '赤');
-    if (isBlack) {
+    // AFV の主砲: 黒0-6で修理、赤6で取り除き（Ordnance 故障マーカー）
+    const afvRemove = isAfvRepair && !isBlack && (parseInt(judge.terrain.range, 10) || 0) === 6;
+    if (afvRemove) {
+      card._gunGone = true;
+      await showAIAction(`AI: ${def.name} の主砲が使えなくなった`, judge, gi);
+    } else if (isBlack) {
       card.malfunctioned = false;
       await showAIAction(`AI: 修理成功 ${def.name}`, judge, gi);
     } else {

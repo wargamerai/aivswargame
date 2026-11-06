@@ -786,22 +786,25 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     const grp = state.groups.player[state.fireSource.idx];
     const R = window.INFANTRY_RULES;
     if (!R) return;
-    // PIN不可、移動中不可
-    const lastT = grp.terrain.length > 0 ? grp.terrain[grp.terrain.length - 1] : null;
-    const isMoving = lastT && lastT.terrain && lastT.terrain.type === 'MOVEMENT';
-    if (isMoving) { alert('移動中は修理できません'); return; }
-    if (isMovingIgnoringOverlays(grp)) { alert('移動中のグループの兵士は修理できません（§19.3）'); return; }
-    if (R.isInMarsh(grp)) { alert('湿地内では修理できません'); return; }
-    if (R.isInStream(grp)) { alert('河川内では修理できません'); return; }
-    // 故障兵士を探す
+    // 故障兵士を探す（主砲が取り除かれた AFV はもう修理しない）
     const playerKey = getFactionKey(state.player);
-    const broken = grp.cards.map((c, i) => (c.malfunctioned && R.isAlive(c) && !R.isPinned(c)) ? i : -1).filter(i => i >= 0);
+    const broken = grp.cards.map((c, i) => (c.malfunctioned && !c._gunGone && R.isAlive(c) && !R.isPinned(c)) ? i : -1).filter(i => i >= 0);
     if (broken.length === 0) { alert('修理可能な故障武器がありません'); return; }
     // 最初の故障兵士を修理対象
     const ci = broken[0];
     const card = grp.cards[ci];
     const def = R.lookupSoldier(card, playerKey);
     const name = def ? def.name : card.id;
+    // §19.3 AFV は地形や移動の状態に関係なく修理を試みられる。それ以外は移動中・湿地・河川では修理できない
+    const isAfvRepair = !!(def && def.afv);
+    if (!isAfvRepair) {
+      const lastT = grp.terrain.length > 0 ? grp.terrain[grp.terrain.length - 1] : null;
+      const isMoving = lastT && lastT.terrain && lastT.terrain.type === 'MOVEMENT';
+      if (isMoving) { alert('移動中は修理できません'); return; }
+      if (isMovingIgnoringOverlays(grp)) { alert('移動中のグループの兵士は修理できません（§19.3）'); return; }
+      if (R.isInMarsh(grp)) { alert('湿地内では修理できません'); return; }
+      if (R.isInStream(grp)) { alert('河川内では修理できません'); return; }
+    }
     const entry = def ? getRepairEntry(playerKey, def.weaponCat) : null;
     if (!entry) { alert('この武器の修理データがありません'); return; }
     // §33.4 負傷兵は修理の前に黒の RNC が必要。赤ならこのターンは修理できず、行動は使う
@@ -824,7 +827,11 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     const rncColor = judge.terrain.rncColor === '赤' ? '赤' : '黒';
     const repairR = parseRepairRange(entry.repair);
     const destroyR = parseRepairRange(entry.destroy);
-    if (matchesRange(destroyR, rncColor, rncVal)) {
+    if (matchesRange(destroyR, rncColor, rncVal) && isAfvRepair) {
+      // AFV の主砲は取り除き: 主砲は撃てず、OVR は半分のまま（マーカー裏 ORDNANCE INOPERATIVE: OVR Halved）。機関銃の火力は消さない
+      card._gunGone = true;
+      alert(`主砲が使えなくなった: ${name} — ${rncColor}${rncVal}`);
+    } else if (matchesRange(destroyR, rncColor, rncVal)) {
       card.malfunctioned = false;
       card.destroyed = true;
       alert(`武器破壊: ${name} — ${rncColor}${rncVal}`);

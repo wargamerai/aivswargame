@@ -423,6 +423,8 @@ const REPAIR_TABLE = {
     'バズーカ':          { repair: '黒5-6',     destroy: '赤0-6', moralePenalty: -1 }, // BAZ
     '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
     '無線機':            { repair: '黒4-6',     destroy: '赤4-6', moralePenalty: -1 }, // RAD
+    // AFV の主砲: Ordnance 故障マーカー（Repair 0-6 黒字 / Remove 6 赤字）。黒0-6として扱う（ユーザーの指示 2026-11-06）
+    'AFV':               { repair: '黒0-6',     destroy: '赤6',   moralePenalty: 0 },
   },
   rus: {
     'ボルトアクション小銃': { repair: '黒0-6',     destroy: '赤6',   moralePenalty: -1 }, // BAR
@@ -435,6 +437,8 @@ const REPAIR_TABLE = {
     '50mm迫撃砲':        { repair: '黒2-6',     destroy: '赤3-6', moralePenalty: -1 }, // MOR
     '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
     '無線機':            { repair: '黒4-6',     destroy: '赤3-6', moralePenalty: -1 }, // RAD
+    // AFV の主砲: Ordnance 故障マーカー（Repair 0-6 黒字 / Remove 6 赤字）。黒0-6として扱う（ユーザーの指示 2026-11-06）
+    'AFV':               { repair: '黒0-6',     destroy: '赤6',   moralePenalty: 0 },
   },
   ger: {
     'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6',   moralePenalty: -1 }, // BAR
@@ -449,6 +453,8 @@ const REPAIR_TABLE = {
     'パンツァーシュレック': { repair: '黒5-6',     destroy: '赤1-6', moralePenalty: -1 }, // PSK
     '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
     '無線機':            { repair: '黒4-6',     destroy: '赤4-6', moralePenalty: -1 }, // RAD
+    // AFV の主砲: Ordnance 故障マーカー（Repair 0-6 黒字 / Remove 6 赤字）。黒0-6として扱う（ユーザーの指示 2026-11-06）
+    'AFV':               { repair: '黒0-6',     destroy: '赤6',   moralePenalty: 0 },
   },
   jpn: {
     'ボルトアクション小銃': { repair: '黒0-6',     destroy: '赤6',   moralePenalty: -1 }, // BAR
