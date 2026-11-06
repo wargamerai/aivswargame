@@ -709,6 +709,78 @@ var PocPlanner = (function () {
     return { plan, value: total() };
   }
 
+  // 連合: 北海とバレンツを最重要にする配置（ユーザーの指示 2026-11-06。式はこちらで作った）
+  //   1. ドイツは連合の配置を見て、得になる所へ集めたり分けたりする。北海とバレンツについては、
+  //      ドイツの一番よい分け方（両方へ行ける艦をどちらへ何隻）を想定して、取られる点を出す
+  //   2. 大西洋へは余った戦力だけを出す。ドイツの届く艦が全部来たら負けそうな（勝率50%超）小部隊は出さない（無駄な損失を出さない）
+  //   3. 中心の戦力をいくつにするかは、全部の場合を計算して、得点の見込みが一番高いものを選ぶ
+  //      得点の見込み = 艦のいる海域の値の合計 − 2 ×（ドイツに取られる見込みの点）。取られると連合が失い、ドイツが得るので2倍
+  function planAlliesV5(a) {
+    const core = ['NorthSea', 'Barents'], atl = ['SouthAtlantic', 'NorthAtlantic'], seas = core.concat(atl);
+    const axis = a.axisShips.map(u => ({ s: u.s, opts: u.s.country === 'IT' ? u.opts.filter(o => a.turn > 1 && o === 'SouthAtlantic') : u.opts }));
+    const power = arr => arr.reduce((t, s) => t + pwS(s), 0);
+    const reach = {};
+    seas.forEach(sea => { reach[sea] = power(axis.filter(u => u.opts.includes(sea)).map(u => u.s)); });
+    // 北海とバレンツへ行けるドイツの艦: 北海だけ・バレンツだけ・両方
+    const gN = power(axis.filter(u => u.opts.includes('NorthSea') && !u.opts.includes('Barents')).map(u => u.s));
+    const gB = power(axis.filter(u => u.opts.includes('Barents') && !u.opts.includes('NorthSea')).map(u => u.s));
+    const gX = power(axis.filter(u => u.opts.includes('NorthSea') && u.opts.includes('Barents')).map(u => u.s));
+    const fixed = {}, base = {};
+    seas.forEach(sea => { fixed[sea] = (a.fixed[sea] || []).slice(); base[sea] = power(fixed[sea]); });
+    const worth = sea => seaWorth(sea, fixed[sea]);
+    // ドイツの勝率: 連合の艦がいなければ、ドイツが1隻でも来れば取られる
+    const win = (sea, g, al, alShips) => (g <= 0 ? 0 : (al <= 0 && !alShips) ? 1 : win6(sea, g / Math.max(1, al)));
+    // 北海に n、バレンツに b の攻撃力を足したとき、ドイツの一番よい分け方で取られる見込みの点
+    const coreLoss = (n, b) => {
+      const aN = base.NorthSea + n, aB = base.Barents + b, sN = fixed.NorthSea.length + n, sB = fixed.Barents.length + b;
+      let best = 0;
+      for (let x = 0; x <= gX; x++) {
+        const v = worth('NorthSea') * win('NorthSea', gN + x, aN, sN) + worth('Barents') * win('Barents', gB + gX - x, aB, sB);
+        if (v > best) best = v;
+      }
+      return best;
+    };
+    const units = a.ships.filter(u => seas.some(sea => u.opts.includes(sea))).sort((x, y) => pwS(y.s) - pwS(x.s));
+    const T = power(units.map(u => u.s));
+    // 大西洋の1海域に x を出したときの見込み。全部来たら負けそうなら出さない（0）
+    const atlGain = (sea, x) => {
+      const al = base[sea] + x, sh = fixed[sea].length + x;
+      if (!sh) return { v: 0, ok: true };
+      const w = win(sea, reach[sea], al, sh);
+      if (x > 0 && w > 0.5) return { v: -Infinity, ok: false };
+      return { v: worth(sea) - 2 * worth(sea) * w, ok: true };
+    };
+    let want = null, bestV = -Infinity, detail = '';
+    for (let c = T; c >= 0; c--) {
+      // 中心の戦力 c を北海とバレンツに分ける: ドイツに取られる見込みが一番小さい分け方
+      let cn = 0, cl = Infinity;
+      for (let n = c; n >= 0; n--) { const l = coreLoss(n, c - n); if (l < cl - 1e-9) { cl = l; cn = n; } }
+      const coreV = (base.NorthSea + cn > 0 || fixed.NorthSea.length ? worth('NorthSea') : 0) + (base.Barents + c - cn > 0 || fixed.Barents.length ? worth('Barents') : 0) - 2 * cl;
+      // 残り r を大西洋へ: 南だけ・北だけ・両方に分ける・出さない
+      const r = T - c;
+      let av = -Infinity, as = 0;
+      for (let s = 0; s <= r; s++) {
+        const g1 = atlGain('SouthAtlantic', s), g2 = atlGain('NorthAtlantic', r - s);
+        const v = g1.v + g2.v;
+        if (v > av + 1e-9) { av = v; as = s; }
+      }
+      const v = coreV + av;
+      if (v > bestV + 1e-9) { bestV = v; want = { NorthSea: cn, Barents: c - cn, SouthAtlantic: as, NorthAtlantic: r - as }; detail = `中心${c}(取られる見込み${cl.toFixed(1)}) 大西洋${r}`; }
+    }
+    // 強い艦から、足りない量が一番多い海域へ置く。出すと決めた海域へ行けない艦は港に残す
+    const plan = {}, by = {}, left = Object.assign({}, want);
+    seas.forEach(sea => { by[sea] = fixed[sea].slice(); });
+    for (const u of units) {
+      const o = seas.filter(sea => u.opts.includes(sea) && want[sea] > 0).sort((x, y) => left[y] - left[x]);
+      if (!o.length) { plan[u.s.id] = 'port'; continue; }
+      by[o[0]].push(u.s); plan[u.s.id] = o[0]; left[o[0]] -= pwS(u.s);
+    }
+    // 主要な海域に行けない艦（マルタの艦）は地中海へ
+    a.ships.forEach(u => { if (!plan[u.s.id] && u.opts.includes('Mediterranean') && !seas.some(s => u.opts.includes(s))) plan[u.s.id] = 'Mediterranean'; });
+    if (typeof window !== 'undefined' && window.__pocTrace) window.__pocTrace.push('T' + a.turn + ' 連合 見込み' + bestV.toFixed(1) + ' ' + detail + ' ' + seas.map(sea => `${sea}:${by[sea].length}隻/攻${power(by[sea])}(届く${reach[sea]})`).join(' '));
+    return { plan, value: bestV };
+  }
+
   // ドイツの作戦（ユーザーの指示 2026-11-05）
   const IT6 = { out: false };
   const IT6_P = { 1: 0.1, 2: 0.1, 3: 0.1, 4: 0.6, 5: 0.6, 6: 0.1, 7: 0.1, 8: 1 };
@@ -920,5 +992,5 @@ var PocPlanner = (function () {
     return { plan: out, value: pick.v };
   }
 
-  return { P, cache, outcome, seaValue, planAxisV6, planAlliesV4, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
+  return { P, cache, outcome, seaValue, planAxisV6, planAlliesV4, planAlliesV5, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
 })();

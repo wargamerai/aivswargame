@@ -2291,18 +2291,21 @@ async function runPursuitRound(pursuit, retreat){
       await new Promise(r=>setTimeout(r,800));
       break;
     }
-    // 追跡側が AI なら自動継続、人間側のみ確認
+    // 追跡側が人間なら確認。AI は 12.5 のとおりやめられる: 撃てる数（攻撃力の合計）で撤退側より多い間だけ続ける
+    // （18章の例: 撃てる数でもう勝っていないので追撃をやめる。ユーザーの指示 2026-11-06）
     const pursuerSide = pursuit[0]?.side;
-    const cont = (pursuerSide === aiSide) ? true : await chooseInPhaseLabel('追跡を続けますか？', [
+    const shotsOf = arr => arr.reduce((t, s) => t + Math.max(0, s.atk || 0), 0);
+    const aiCont = shotsOf(stillPur) > shotsOf(stillRet);
+    if(pursuerSide === aiSide && !aiCont) logCombatLine(`AI: 撃てる数で勝っていない(${shotsOf(stillPur)}対${shotsOf(stillRet)}) → 追撃をやめる`);
+    const cont = (pursuerSide === aiSide) ? aiCont : await chooseInPhaseLabel('追跡を続けますか？', [
       { label:'追撃を続ける', value:true, bg:'#a55' },
-      { label:'追撃をやめる（母港へ帰還）', value:false, bg:'#666' }
+      { label:'追撃をやめる（この海域に残る）', value:false, bg:'#666' }
     ]);
     if(!cont){
-      // 追撃中止 → 追跡側艦は帰還待ち（帰還フェイズで帰還）
+      // 12.5 追撃をやめた艦はこの海域に残り、POC を取れる（帰還待ちにしない。ユーザーの指示 2026-11-06）
       for(const ship of stillPur){
         if(ship.sunk || ship.removed) continue;
-        markReturnPending(ship);
-        logCombatLine(`${ship.name}: 追撃中止 → 帰還待ち`);
+        logCombatLine(`${ship.name}: 追撃中止 → この海域に残る`);
       }
       break;
     }
@@ -3761,7 +3764,7 @@ function medNeverLose(arr){
   return e.ours > 0 && e.ours >= e.theirs * 1.5 && arr.length > it.length;
 }
 // POCの予想の使い方: 0=2ターン目の残りの艦だけ / 1=2ターン目以降の残りの艦 / 2=1＋予想の精度を上げる / 3=2＋北海とバレンツ海も予想で決める
-const ALLIED_PLAN_MODE = 8; // 北海とバレンツを固める配置（planAlliesV4）。ユーザーの指示 2026-11-05
+const ALLIED_PLAN_MODE = 9; // 北海とバレンツを最重要、余りを大西洋、小部隊をばらまかない（planAlliesV5）。ユーザーの指示 2026-11-06。8 はマスター30（planAlliesV4）
 function planAlliedDeployment(aiLog){
   const PLAN_MODE = (typeof window !== 'undefined' && window.__planMode !== undefined) ? window.__planMode : ALLIED_PLAN_MODE;
   let posture = 'normal';
@@ -4061,7 +4064,7 @@ function planAlliedDeployment(aiLog){
     };
     const axisShips = axisReady.map(x => ({ s: x, opts: axisOpts(x) }));
     const ubs = SHIPS.filter(x => x.type === 'UBOAT' && x.side === 'axis' && !x.sunk && !x.removed && x.location && (PORTS[x.location] || SEAS[x.location])).length;
-    const r = (PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
+    const r = (PLAN_MODE >= 9 ? PocPlanner.planAlliesV5 : PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
     ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') assign(u.s, sea); });
     leftoverMode = `POCの予想（評価 ${Math.round(r.value * 10) / 10}）`;
   } else if(currentTurn === 1){
