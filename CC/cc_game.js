@@ -1161,8 +1161,6 @@ async function missionEnd() {
   C.missions.push({ no: C.missionNo, start: fmtDate(M.start), end: fmtDate(), from: M.convoy.from, to: M.convoy.to, speed: M.convoy.speed, size0: M.size + M.sunk, sunk: M.sunk, tonnage: M.tonnage, vp, kills: M.kills.length, ship: SH().name, year: yi });
   UI.log(L(`<b>この任務の結果</b>: 沈没 ${M.sunk}隻・喪失 <b>${M.tonnage.toLocaleString()}トン</b> → 勝利点 <b>${vp > 0 ? '+' : ''}${vp} VP</b>（${yi}年目の合計 ${C.yearVP[yi]} VP）`, `<b>Mission result</b>: ${M.sunk} ship(s) sunk · <b>${M.tonnage.toLocaleString()} tons</b> lost → <b>${vp > 0 ? '+' : ''}${vp} VP</b> (year ${yi} total ${C.yearVP[yi]} VP)`));
   if (M.kills.length) UI.good(L(`U ボート ${M.kills.length}隻を仕留めた。`, `Accounted for ${M.kills.length} U-boat(s).`));
-  // 航海日誌（Form 33A 風）を作っておく
-  C.lastLog = { name: L(`航海日誌_任務${C.missionNo}_${M.start.y}-${M.start.m}`, `logbook_mission${C.missionNo}_${M.start.y}-${M.start.m}`), html: logbookHtml(M, arrival, vp, C.medals.slice(medals0)) };
   await UI.next();
   // 11.4 乗員の練度向上（3任務ごと）
   if (C.missionNo % 3 === 0) {
@@ -1176,11 +1174,25 @@ async function missionEnd() {
       const base = SH().sick && SH().sick.k === k ? SH().sick.orig : SH().skills[k];
       if (base >= 6) return;
       const r = d6();
-      if (r <= 6 - base) { if (SH().sick && SH().sick.k === k) SH().sick.orig++; else SH().skills[k]++; UI.good(L(`${SECTION_NAME[k]}: 1d6＝${r} → スキル ${base + 1} に上がった`, `${SECTION_NAME[k]}: 1d6=${r} → skill rises to ${base + 1}`)); }
+      if (r <= 6 - base) {
+        if (SH().sick && SH().sick.k === k) SH().sick.orig++; else SH().skills[k]++;
+        J(L('港で乗員の練度向上', 'Crew training in port'), L(`${SECTION_NAME[k]} ${base}→${base + 1}`, `${SECTION_NAME[k]} ${base}→${base + 1}`), L('港', 'Port'));
+        UI.good(L(`${SECTION_NAME[k]}: 1d6＝${r} → スキル ${base + 1} に上がった`, `${SECTION_NAME[k]}: 1d6=${r} → skill rises to ${base + 1}`));
+      }
       else UI.dice(L(`${SECTION_NAME[k]}: 1d6＝${r} → 変わらず`, `${SECTION_NAME[k]}: 1d6=${r} → no change`));
     });
     SH().trained = {}; SH().dcKill = false;
   }
+  // 航海日誌にこの時点のクルー能力を記録する
+  const skillKeys = ['watch', 'asdic', 'radar', 'hfdf', 'gun4', 'aa', 'dc', 'engine'];
+  const crewSkills = skillKeys.map(k => {
+    const sick = SH().sick && SH().sick.k === k;
+    const level = sick ? SH().sick.orig : SH().skills[k];
+    return `${SECTION_NAME[k]} ${level}${sick ? L('（病で一時低下）', ' (temporarily reduced by sickness)') : ''}`;
+  }).join(L('・', ', '));
+  J(L('この任務終了時のクルー能力', 'Crew skills at end of voyage'), crewSkills, L('港', 'Port'));
+  // 練度向上の記録を含めて航海日誌を作る
+  C.lastLog = { name: L(`航海日誌_任務${C.missionNo}_${M.start.y}-${M.start.m}`, `logbook_mission${C.missionNo}_${M.start.y}-${M.start.m}`), html: logbookHtml(M, arrival, vp, C.medals.slice(medals0)) };
   // 11.5 港に滞在する日数
   const marks = Object.keys(SH().dmg).length + SH().hull;
   await roll(L('港に滞在する日数', 'days in port'));
@@ -1234,6 +1246,8 @@ function logbookHtml(M, arrival, vp, medals) {
   const strip = t => esc(String(t).replace(/<[^>]+>/g, ''));
   const rows = (M.journal || []).map(e => `<tr><td class="d">${esc(e.date)}</td><td class="t">${esc(e.time)}</td><td>${strip(e.text)}</td><td class="n">${strip(e.note)}</td></tr>`).join('');
   const size0 = M.size + M.sunk;
+  const yearTotal = S.camp.yearVP[yearIndex(M.start)] || 0;
+  const cumulativeTotal = (S.camp.yearVP[1] || 0) + (S.camp.yearVP[2] || 0);
   const kills = M.kills.map(k => L(`${k.id}（${{ certain: '撃沈確実', sunk: '撃沈', destroyed: '撃破', shared: '共同撃沈' }[k.kind]}）`, `${k.id} (${L('', { certain: 'certain kill', sunk: 'sunk', destroyed: 'destroyed', shared: 'shared kill' }[k.kind])})`)).join(L('、', ', ')) || L('なし', 'none');
   return L(`<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>航海日誌 ${esc(SH().name)} 任務${S.camp.missionNo}</title>
 <style>
@@ -1262,7 +1276,7 @@ th{background:#e6dcc0}td.d{white-space:nowrap;width:9em}td.t{white-space:nowrap;
 <div class="res"><b>任務の結果</b><br>
 輸送船の喪失 ${M.sunk}隻・喪失トン数 <b>${M.tonnage.toLocaleString()}トン</b>・到着 ${M.size}隻<br>
 撃沈した U ボート: ${esc(kills)}<br>
-勝利点 <b>${vp > 0 ? '+' : ''}${vp} VP</b>${medals.length ? '<br>受章: ' + esc(medals.join('／')) : ''}</div>
+勝利点 <b>${vp > 0 ? '+' : ''}${vp} VP</b><br>この年の累計得点 <b>${yearTotal} VP</b>　通算累計 <b>${cumulativeTotal} VP</b>${medals.length ? '<br>受章: ' + esc(medals.join('／')) : ''}</div>
 <div class="sign">${esc(arrival)}　${esc(SH().name)} 艦長　${esc(S.captain || '')}</div>
 </div></body></html>`, `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Logbook ${esc(SH().name)} mission ${S.camp.missionNo}</title>
 <style>
@@ -1291,7 +1305,7 @@ th{background:#e6dcc0}td.d{white-space:nowrap;width:9em}td.t{white-space:nowrap;
 <div class="res"><b>Result of the mission</b><br>
 Merchant ships lost ${M.sunk} · tonnage lost <b>${M.tonnage.toLocaleString()} tons</b> · arrived ${M.size} ships<br>
 U-boats sunk: ${esc(kills)}<br>
-Victory points <b>${vp > 0 ? '+' : ''}${vp} VP</b>${medals.length ? '<br>Awards: ' + esc(medals.join(' / ')) : ''}</div>
+Victory points <b>${vp > 0 ? '+' : ''}${vp} VP</b><br>Year-to-date total <b>${yearTotal} VP</b> · campaign cumulative <b>${cumulativeTotal} VP</b>${medals.length ? '<br>Awards: ' + esc(medals.join(' / ')) : ''}</div>
 <div class="sign">${esc(arrival)}　Captain ${esc(S.captain || '')}, ${esc(SH().name)}</div>
 </div></body></html>`);
 }
@@ -1379,8 +1393,9 @@ async function epilogue() {
 // ===================== ステータス（上半分）=====================
 function renderStatus() {
   const el = $('status');
-  if (!S || !S.ship) { el.innerHTML = L('<div class="title">コルベット・コマンド</div>', '<div class="title">Corvette Command</div>'); return; }
+  if (!S || !S.ship) { el.dataset.weather = 'none'; el.innerHTML = L('<div class="title">コルベット・コマンド</div>', '<div class="title">Corvette Command</div>'); return; }
   const sh = S.ship, M = S.mission, C = S.camp;
+  el.dataset.weather = M ? String(M.weather) : 'none';
   // 能力は小さな札にして横に並べる（文字を大きくしても上の画面に収まるように）
   const chips = ['watch', 'asdic', 'radar', 'hfdf', 'gun4', 'aa', 'dc', 'hh', 'engine'].map(k => {
     const avail = hasSection(k);
@@ -1391,8 +1406,10 @@ function renderStatus() {
   }).join('');
   const hull = [0, 1, 2].map(i => `<span class="hb ${i < sh.hull ? 'on' : ''}"></span>`).join('');
   let h = L(`<div class="col ship"><div class="title">${sh.name}${S.captain ? `<small class="cap">　艦長 ${S.captain}</small>` : ''}</div>
+    <div class="vp">勝利点: 1年目 ${C.yearVP[1] || 0}${S.mode === '2y' ? '／2年目 ' + (C.yearVP[2] || 0) : ''}　U ボート撃沈 ${C.kills.length}</div>
     <div class="chips">${chips}</div>
     <div class="shipline">船体 ${hull}　爆雷 <b>${sh.dcLeft}</b>${sh.equipped.hh ? `　ヘッジホッグ <b>${sh.hhLeft}</b>` : ''}</div></div>`, `<div class="col ship"><div class="title">${sh.name}${S.captain ? `<small class="cap">　${ST_fill(I18N_X('captName', 'Captain {n}'), { n: S.captain })}</small>` : ''}</div>
+    <div class="vp">VP: year 1 ${C.yearVP[1] || 0}${S.mode === '2y' ? L('', ' / year 2 ') + (C.yearVP[2] || 0) : ''}　U-boats sunk ${C.kills.length}</div>
     <div class="chips">${chips}</div>
     <div class="shipline">Hull ${hull}　DCs <b>${sh.dcLeft}</b>${sh.equipped.hh ? L('', `　Hedgehog <b>${sh.hhLeft}</b>`) : ''}</div></div>`);
   h += L(`<div class="col info"><div><b>${fmtDate()}</b>　任務 ${C.missionNo}</div>`, `<div class="col info"><div><b>${fmtDate()}</b>　Mission ${C.missionNo}</div>`);
@@ -1411,7 +1428,7 @@ function renderStatus() {
     h += mapHtml();
     if (!M.ub) h += rangeHtml();
   }
-  h += L(`<div class="vp">勝利点: 1年目 ${C.yearVP[1] || 0}${S.mode === '2y' ? '／2年目 ' + (C.yearVP[2] || 0) : ''}　U ボート撃沈 ${C.kills.length}</div></div>`, `<div class="vp">VP: year 1 ${C.yearVP[1] || 0}${S.mode === '2y' ? L('', ' / year 2 ') + (C.yearVP[2] || 0) : ''}　U-boats sunk ${C.kills.length}</div></div>`);
+  h += '</div>';
   if (M && M.ub) {
     const ub = M.ub;
     const hide = S.settings.hideEnemy;

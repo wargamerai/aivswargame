@@ -112,6 +112,18 @@
   .optbox label { display:block; margin:8px 0; cursor:pointer; }
   .optbox small { color:var(--mute); }
   .optbox button { position:sticky; bottom:0; margin:10px 0 0; width:100%; padding:10px; background:#27445f; color:var(--txt); border:1px solid var(--line); border-radius:4px; cursor:pointer; font-size:1rem; box-shadow:0 -8px 8px var(--panel); }
+  /* 天候ごとの海図風背景 */
+  #status { position:relative; isolation:isolate; }
+  #status > * { position:relative; z-index:1; }
+  #status::before { content:""; position:absolute; z-index:0; pointer-events:none; inset:0 0 auto auto; width:min(44%, 410px); height:100%; min-height:150px; background-repeat:no-repeat; background-position:right 14px top 8px; background-size:contain; opacity:.24; }
+  #status[data-weather="0"] { background:#1b3443; }
+  #status[data-weather="0"]::before { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 220'%3E%3Ccircle cx='315' cy='68' r='28' fill='none' stroke='%23b7a979' stroke-width='4'/%3E%3Cg stroke='%23b7a979' stroke-width='3'%3E%3Cpath d='M315 18v18M315 100v18M265 68h18M347 68h18M280 33l13 13M337 90l13 13M350 33l-13 13M293 90l-13 13'/%3E%3C/g%3E%3Cpath d='M18 144H402M18 166H402M35 185h70m25 0h95m25 0h110' fill='none' stroke='%239eb2bc' stroke-width='3'/%3E%3Cpath d='M210 137l25-32 35 32zM235 105v-34l28 34M235 76h18l-18 15' fill='none' stroke='%239eb2bc' stroke-width='4'/%3E%3C/svg%3E"); }
+  #status[data-weather="1"] { background:#202f39; }
+  #status[data-weather="1"]::before { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 220'%3E%3Cpath d='M37 104l24-27 31-4 20-27 48-2 24 25 35 5 17 30z' fill='none' stroke='%239baeb8' stroke-width='4'/%3E%3Cg stroke='%239baeb8' stroke-width='3'%3E%3Cpath d='M63 125l-20 48m61-48-20 48m61-48-20 48m61-48-20 48m61-48-20 48m61-48-20 48m61-48-20 48'/%3E%3C/g%3E%3Cpath d='M20 191h380M45 202h65m28 0h86m28 0h105' fill='none' stroke='%237f96a2' stroke-width='3'/%3E%3C/svg%3E"); }
+  #status[data-weather="2"] { background:#28343b; }
+  #status[data-weather="2"]::before { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 220'%3E%3Cpath d='M25 87h370M45 109h330M15 132h390M48 157h325' fill='none' stroke='%23a5b3ba' stroke-width='5'/%3E%3Cg stroke='%23a5b3ba' stroke-width='3'%3E%3Cpath d='M92 31v28m-14-14h28m-24-10 20 20m0-20L82 55M210 20v28m-14-14h28m-24-10 20 20m0-20-20 20M328 38v28m-14-14h28m-24-10 20 20m0-20-20 20'/%3E%3C/g%3E%3C/svg%3E"); }
+  #status[data-weather="3"] { background:#152938; }
+  #status[data-weather="3"]::before { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 220'%3E%3Cpath d='M22 91l28-31 37-2 24-28 45 1 25 27 44 3 20 30z' fill='none' stroke='%2395aab5' stroke-width='5'/%3E%3Cpath d='M207 95l-31 48h25l-18 49 55-66h-30l19-31z' fill='none' stroke='%23b7a979' stroke-width='5'/%3E%3Cg stroke='%238da2ad' stroke-width='3'%3E%3Cpath d='M75 113l-20 52m72-52-20 52m72-52-20 52m128-52-20 52m72-52-20 52'/%3E%3C/g%3E%3Cpath d='M20 190h380' fill='none' stroke='%23788e99' stroke-width='3'/%3E%3C/svg%3E"); }
   @media (max-width: 600px) { #status { flex-basis:44%; } .col { min-width:0 !important; width:100%; } }
 </style>
 </head>
