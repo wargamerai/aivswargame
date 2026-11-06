@@ -507,9 +507,9 @@ function smokeBlockReason(grp, side) {
   const hasLeader = R && grp.cards.some(c => {
     if (!R.isAlive(c) || R.isPinned(c)) return false;
     const def = R.lookupSoldier(c, facKey);
-    return !!(def && (def.leader === '分隊長' || def.leader === '副分隊長'));
+    return !!(def && (def.leader === '分隊長' || def.leader === '副分隊長' || def.afv)); // §13.2 ピン状態でない AFV のいるグループにも置ける
   });
-  if (!hasLeader) return 'ピン状態でない指揮官（SL・ASL）がいるグループにのみ煙幕を置けます';
+  if (!hasLeader) return 'ピン状態でない指揮官（SL・ASL）か AFV がいるグループにのみ煙幕を置けます';
   return null;
 }
 

@@ -751,6 +751,29 @@ function drawAIStyle(aiKey) {
   return style;
 }
 
+/** AI の性格をシナリオの勝利条件で決める（ユーザーの指示 2026-11-06）。ごく稀（5%）に違う性格にする。
+ *  違う性格は国の比率（AI_STYLE_WEIGHTS）から、決まった性格を除いて引く。
+ *  A（距離4で地形に入る競争）: バランス / B（時間切れの勝利点）: バランス
+ *  C・D・E の攻撃側（近づいて条件を満たす）: 攻撃的 / 防御側（時間切れで勝つので前に出ない）: 防御的（守備の編成）
+ *  決まりのないシナリオは今までの国の比率のくじ */
+const AI_STYLE_RARE = 0.05;
+function drawAIStyleForScenario(aiKey, scenario, aiRole) {
+  const id = scenario && scenario.id;
+  let base = null;
+  if (id === 'A' || id === 'B') base = 'bal';
+  else if (id === 'C' || id === 'D' || id === 'E') base = aiRole === 'defender' ? 'def' : 'aggr';
+  if (!base) return drawAIStyle(aiKey);
+  let style = base;
+  if (Math.random() < AI_STYLE_RARE) {
+    const w = AI_STYLE_WEIGHTS[aiKey] || [33, 34, 33], names = ['aggr', 'bal', 'def'];
+    const others = names.map((n, i) => ({ n, w: w[i] })).filter(x => x.n !== base);
+    let r = Math.random() * others.reduce((t, x) => t + x.w, 0);
+    style = (others.find(x => (r -= x.w) < 0) || others[0]).n;
+  }
+  try { console.log(`[AI性格] ${aiKey}: シナリオ${id} ${aiRole || ''} → ${style}${style !== base ? '（まれな性格）' : ''}`); } catch (e) {}
+  return style;
+}
+
 /** §42 キャンペーンで変わった能力値を、この戦闘の兵士カードに反映する（lookupSoldier が使う） */
 function applyCampaignStats(facKey) {
   const recs = campaignRecords[facKey] || {};

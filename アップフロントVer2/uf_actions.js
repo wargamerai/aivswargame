@@ -876,6 +876,14 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       alert('ヒーローカード: このプレイヤーターンの間、負傷の効果を止めます（§33.9）');
       playerDidRuleAction = false; // §10.4 ヒーローはアクションに数えない
     } else {
+    // §28.42 ピンの AFV は、回復の強さを合わせて3以上で回復する
+    const _afvR = (typeof window.afvRallyCredit === 'function' && !(state.actedGroups && state.actedGroups.has(state.fireSource.idx) && card.terrain.type !== 'HERO')) ? window.afvRallyCredit(grp, card) : null;
+    if (_afvR) {
+      alert(_afvR.rallied ? `${_afvR.name} が回復しました（回復の強さ ${_afvR.total}）` : `${_afvR.name} はピンのまま（回復の強さ ${_afvR.total}/3。次の回復カードと合わせられます §28.42）`);
+      state.playerHand.splice(cardIdx, 1);
+      pushTerrainToDiscard(card);
+      playerDidRuleAction = card.terrain.type !== 'HERO';
+    } else {
     // RALLY X → X人回復、RALLY ALL → 全員回復、HERO → 1人回復
     const pinnedIdx = grp.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c)) ? i : -1).filter(i => i >= 0);
     let rallyVal = 0;
@@ -938,6 +946,7 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     pushTerrainToDiscard(card);
     // §10.4 ヒーローでの回復はアクションに数えない
     playerDidRuleAction = !isHeroCard;
+    }
     }
   }
 

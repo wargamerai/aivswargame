@@ -123,7 +123,7 @@
     (g.terrain || []).filter(t => t.terrain && t.terrain.type === 'MOVEMENT').forEach(t => { if (typeof pushTerrainToDiscard === 'function') pushTerrainToDiscard(t); });
     g.terrain = (g.terrain || []).filter(t => !(t.terrain && t.terrain.type === 'MOVEMENT'));
   }
-  function stun(g, c) { c.pinned = true; toButton(c, true); g._stun = (g._stun || 0) + 1; log(`AFV ${defOf(c).name} スタン`); if (g._stun >= 3) kill(g, c, 'スタン3回'); }
+  function stun(g, c) { c.pinned = true; toButton(c, true); g._afvRally = 0; g._stun = (g._stun || 0) + 1; log(`AFV ${defOf(c).name} スタン`); if (g._stun >= 3) kill(g, c, 'スタン3回'); }
   function toButton(c, silent) { if (!isButtoned(c) && !defOf(c).ot) { c.id = String(c.id).replace(/31(\s*)$/, '131$1'); c.num = 131; stats.buttoned++; if (!silent) log(`AFV ${defOf(c).name} ハッチを閉じた`); } }
   // 装甲への攻撃（§28.4）。final=最終の攻撃の強さ
   function armorResult(g, c, final, flank) {
@@ -294,6 +294,17 @@
     return false;
   }
   async function aiTryAfvRally() { return false; }
+  // §28.42 ピン（スタン）の AFV の回復: 回復の強さが合わせて3以上で回復。1・2の回復カードは積み立てられる
+  //   （AFV が回復するか、またスタンするか、撃破されるまで残る）。§10.41 ヒーローは1として数える
+  //   全回復のカードは、全員を回復させるカードなのでそのまま回復させる（こちらの判断）
+  global.afvRallyCredit = function (g, rallyCard) {
+    const c = afvCard(g); if (!c || !R().isAlive(c) || !R().isPinned(c)) return null;
+    const t = rallyCard && rallyCard.terrain ? rallyCard.terrain.type : '';
+    const v = t === 'RALLY ALL' ? 3 : t === 'HERO' ? 1 : (parseInt(String(t).replace('RALLY ', ''), 10) || 0);
+    const total = (g._afvRally || 0) + v;
+    if (total >= 3) { R().unpinSoldier(c); g._afvRally = 0; log(`AFV ${defOf(c).name} 回復`); return { rallied: true, total, name: defOf(c).name }; }
+    g._afvRally = total; return { rallied: false, total, name: defOf(c).name };
+  };
   // 歩兵が AFV に肉薄する
   async function aiTryCCAfv() {
     const acted = state.aiActedGroups || new Set(), fired = state.aiFiredGroups || new Set();
@@ -411,9 +422,10 @@
         if (isAfvGroup(g)) {
           const ty = card && card.terrain && card.terrain.type, c = afvCard(g);
           if (ty === 'MARSH' && !g._marshOk) { pushTerrainToDiscard(card); return; } // §28.5 湿地には入らない
+          // §13.35 AFV に鉄条網: ただちにスタックの判定。結果に関係なく鉄条網は捨て札（AFV の射撃に影響しない）
+          if (c && ty === 'WIRE') { checkBog(g, c, null, true); pushTerrainToDiscard(card); return; }
           const r = o(g, card);
           if (c && ['GULLY', 'WOODS', 'STREAM'].includes(ty)) checkBog(g, c);
-          if (c && ty === 'WIRE') { checkBog(g, c, null, true); }
           return r;
         }
         return o(g, card);

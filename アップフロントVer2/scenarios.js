@@ -622,8 +622,9 @@
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
-    // シナリオC の防御側: 「守備」。小分けで作り、全グループが前に出ない（射撃・隠蔽・回復を最優先）
-    if (scenario && scenario.id === 'C' && role === 'defender') {
+    // シナリオC・D・E の防御側（時間切れで勝つ）: 「守備」。小分けで作り、全グループが前に出ない（射撃・隠蔽・回復を最優先）
+    //   ごく稀に違う性格（防御的でない）になったときは、ふつうの編成にする（ユーザーの指示 2026-11-06）
+    if (scenario && role === 'defender' && (scenario.id === 'C' || ((scenario.id === 'D' || scenario.id === 'E') && style === 'def'))) {
       const g0 = _buildGroupsWaveOrSplit(scenario, factionKey, role, 'split').filter(g => g.cards.length > 0);
       g0.forEach(g => { g._strategy = 'hold'; g._role = 'hold'; });
       return g0;

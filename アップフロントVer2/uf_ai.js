@@ -1107,6 +1107,7 @@ function heroCandidates(group, factionKey, distance, opts) {
   if (!R) return [];
   return group.cards
     .filter(c => R.isAlive(c) && !R.isPinned(c) && !c.malfunctioned && !c.destroyed)
+    .filter(c => { const d = R.lookupSoldier(c, factionKey); return !(d && d.afv); }) // §10.41・§10.45 ヒーローは AFV に使えない
     .map(c => ({ card: c, gain: heroGainForSoldier(group, c, factionKey, distance, opts) }))
     .filter(x => x.gain > 0)
     .sort((a, b) => b.gain - a.gain);
@@ -2343,6 +2344,18 @@ async function aiTryRally() {
     const pinnedIdx = g.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c)) ? i : -1).filter(i => i >= 0);
     if (pinnedIdx.length === 0) continue;
     const rallyCard = state.aiHand[rallyIdx];
+    // §28.42 ピンの AFV は、回復の強さを合わせて3以上で回復する
+    const afvR = typeof window.afvRallyCredit === 'function' ? window.afvRallyCredit(g, rallyCard) : null;
+    if (afvR) {
+      state.aiHand.splice(rallyIdx, 1);
+      pushTerrainToDiscard(rallyCard);
+      state.aiHandCount = state.aiHand.length;
+      renderField('ai'); renderHands();
+      await showAIAction(afvR.rallied ? `AI: ${afvR.name} 回復` : `AI: ${afvR.name} に回復を積む（${afvR.total}/3）`, rallyCard, gi);
+      if (rallyCard.terrain.type === 'HERO') return 'hero';
+      acted.add(gi);
+      return true;
+    }
     // RALLY値を取得
     let rallyVal = 0;
     if (rallyCard.terrain.type === 'RALLY ALL') {

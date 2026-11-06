@@ -638,12 +638,17 @@ function checkScenarioAVictory() {
   const R = window.INFANTRY_RULES;
   if (!R) return;
   const sides = ['player', 'ai'];
+  // シナリオE: 1つ以上のグループで合わせて4枚（ルールE）。AFV は数えない（ユーザーの指示 2026-11-06）
+  const isE = sc.id === 'E';
+  const countOf = grp => grp.cards.filter(c => R.isAlive(c) && !R.isPinned(c) && !(isE && isAfvCardForVictory(c))).length;
   for (const side of sides) {
     const ourGroups = state.groups[side].filter(g => !g.eliminated);
+    let eTotal = 0; const eGroups = [];
     for (const grp of ourGroups) {
       if ((grp.distance || 0) < 4) continue;
-      const aliveNotPinned = grp.cards.filter(c => R.isAlive(c) && !R.isPinned(c)).length;
-      if (aliveNotPinned < 4) continue;
+      const aliveNotPinned = countOf(grp);
+      if (!isE && aliveNotPinned < 4) continue;
+      if (isE && aliveNotPinned < 1) continue;
       // 移動中 (MOVEMENT カードが terrain スタックにある) は勝利不成立
       if ((grp.terrain || []).some(c => c && c.terrain && c.terrain.type === 'MOVEMENT')) continue;
       // 地形カード（MOVEMENT 以外）が配置されている必要がある。§16.421 煙幕は永続的でないので数えない
@@ -665,12 +670,23 @@ function checkScenarioAVictory() {
         if (canBeShot) continue;
       }
       if (grp.cards.some(c => c.infiltrating)) continue;
+      if (isE) { eTotal += aliveNotPinned; eGroups.push(grp.name); if (eTotal < 4) continue; }
       state.phase = 'gameover';
       const winnerName = side === 'player' ? state.player.name : state.ai.name;
-      alert(`シナリオA 勝利！ — ${winnerName}（GROUP ${grp.name}）`);
+      alert(`シナリオ${sc.id} 勝利！ — ${winnerName}（GROUP ${isE ? eGroups.join('・') : grp.name}）`);
       endCampaignScenario(side);
       return;
     }
   }
+}
+// シナリオEの勝利条件で AFV のカードを数えないための判定
+function isAfvCardForVictory(c) {
+  const R = window.INFANTRY_RULES;
+  for (const side of ['player', 'ai']) {
+    const who = side === 'player' ? state.player : state.ai;
+    const d = R && who ? R.lookupSoldier(c, getFactionKey(who)) : null;
+    if (d && d.afv && (c.num === 31 || c.num === 131)) return true;
+  }
+  return false;
 }
 
