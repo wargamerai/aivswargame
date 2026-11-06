@@ -423,6 +423,7 @@ function extendMapUp() {
     s.row += MAP_SECTION;
     if (s.prevRow !== undefined) s.prevRow += MAP_SECTION;
     if (s.path) s.path.forEach(p => { p.row += MAP_SECTION; });
+    if (s.trail) s.trail.forEach(p => { p.row += MAP_SECTION; });
   });
   ROWS += MAP_SECTION;
   panY -= MAP_SECTION * HS * 1.5 * zoomLevel; // 見た目の位置は動かさない
@@ -615,22 +616,21 @@ function draw() {
   ctx.fillStyle = '#6666cc';
   ctx.fillText('日本配置線', wLineX, 14);
 
-  // 移動軌跡線（未発見の米軍艦は非表示）
+  // 移動軌跡線: 通ったヘクスを順につなぐ。次にその艦の側が動くまで残す（ユーザーの指示 2026-11-06）
   [...(state.jpFleet||[]), ...(state.usFleet||[])].forEach(s => {
     if (fogIsEnemyHidden(s) && !fogInSight(s)) return;
-    if (s.prevCol !== undefined && s.status !== 'sunk' && s.col >= 0 &&
-        (s.col !== s.prevCol || s.row !== s.prevRow) &&
+    const tr = (s.trail || []).filter(p => p && p.col >= 0);
+    if (tr.length >= 2 && s.status !== 'sunk' && s.col >= 0 &&
         (s.side !== 'us' || s.faceUp || s.revealed)) {
-      const from = hexPt(s.prevCol, s.prevRow);
-      const to = hexPt(s.col, s.row);
+      const pts = tr.map(p => hexPt(p.col, p.row));
       ctx.save();
       ctx.strokeStyle = s.side === 'jp' ? 'rgba(255,100,100,0.6)' : 'rgba(100,100,255,0.6)';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 3]);
-      ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke();
-      // 始点に小さい丸
-      ctx.fillStyle = s.side === 'jp' ? 'rgba(255,100,100,0.4)' : 'rgba(100,100,255,0.4)';
-      ctx.beginPath(); ctx.arc(from.x, from.y, 3, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); pts.slice(1).forEach(q => ctx.lineTo(q.x, q.y)); ctx.stroke();
+      // 通った各ヘクスに小さい丸
+      ctx.fillStyle = s.side === 'jp' ? 'rgba(255,100,100,0.45)' : 'rgba(100,100,255,0.45)';
+      pts.slice(0, -1).forEach(q => { ctx.beginPath(); ctx.arc(q.x, q.y, 3, 0, Math.PI*2); ctx.fill(); });
       ctx.restore();
     }
   });
@@ -1049,6 +1049,26 @@ function drawShip(ship) {
   }
   ctx.restore();
   ctx.globalAlpha = 1.0;
+
+  // 旗艦: ヘクスを金色の太い枠で囲み、旗の印をつける（文字は出さない。ユーザーの指示 2026-11-06）
+  if (ship.isLead && !fogIsEnemyHidden(ship) && ship.status !== 'sunk') {
+    ctx.save();
+    ctx.strokeStyle = '#e0b020';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 3 * i - Math.PI / 6;
+      const px = x + (HS - 2) * Math.cos(a), py = y + (HS - 2) * Math.sin(a);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🚩', x + HS * 0.55, y - HS * 0.5);
+    ctx.restore();
+  }
 
   // 損傷の状態は、色を覚えなくてよいように文字で艦の上に出す（ユーザーの指示 2026-11-04）
   var critTags = [];

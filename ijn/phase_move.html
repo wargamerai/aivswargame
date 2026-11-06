@@ -18,6 +18,8 @@ h3 { color:#1a5a8a; margin-bottom:10px; font-size:1.15em; }
 .card:hover { background:#c8d8f0; border-color:#77a; }
 .card.selected { border-color:#2a8a2a; background:#d0f0d0; font-weight:bold; }
 .card.done { opacity:0.4; cursor:default; }
+.card.lead { border-color:#d4a017; box-shadow:0 0 0 2px #d4a017 inset; }
+.fleet-op { margin-left:6px; padding:1px 8px; font-size:0.85em; background:#2a5a8a; color:#fff; border:1px solid #4a8ac0; border-radius:3px; cursor:pointer; }
 .card.disabled { opacity:0.3; cursor:default; pointer-events:none; }
 .card .c-name { font-weight:bold; }
 .card .c-info { color:#666; font-size:0.88em; }
@@ -49,6 +51,7 @@ button.undo-btn:hover { background:#ffd8c0; }
   <button onclick="resetAllMoves()" class="undo-btn" id="btnResetAll">◀◀ 全リセット</button>
   <button onclick="allStraight()" id="btnAllStraight">全艦直進 ▶</button>
   <button onclick="undoAllStraight()" id="btnUndoAll" style="display:none">◀ 全艦直進やり直し</button>
+  <button onclick="retreatAllFleet()" id="btnRetreatAll" style="background:#6a2a2a;color:#fff;">全軍離脱</button>
 </div>
 
 <div id="shipList"></div>
@@ -163,6 +166,10 @@ function init() {
       s.remainMove = 0;
     }
   });
+
+  // 通ったヘクスを記録する（ユーザーの指示 2026-11-06）。今動く側だけ記録をやり直し、相手側の記録は次に動くまで残す
+  const _trailSide = isJPMoving() ? 'jp' : 'us';
+  [...jpFleet, ...usFleet].forEach(s => trailInit(s, s.side === _trailSide));
 
   console.log(`=== 移動フェーズ開始 (${state.phase}) ターン${state.combatTurn} ===`);
   dumpFleet('JP移動前', jpFleet);
@@ -296,6 +303,8 @@ function autoWithdrawHeavy() {
   // この移動ターンの該当側のみ離脱処理（JP移動ターンならJP艦のみ）
   const jpMoving = isJPMoving();
   const allShips = jpMoving ? jpFleet : usFleet;
+  // AI の艦隊は、味方の半分以上が離脱か沈没したら、残りも全部離脱する（プレイヤーは自分で決める）
+  const fleetRetreat = allShips !== flagFleet() && fleetLostHalf(allShips);
   for (const ship of allShips) {
     if (ship.col < 0 || ship.status === 'sunk') continue;
     // 既に離脱中の艦は自動離脱条件に関係なく退却移動を続ける
@@ -305,13 +314,13 @@ function autoWithdrawHeavy() {
     }
     // 自動離脱は損害で決まる（ターンは関係ない。ユーザーの指示 2026-11-03）: 中破以上、砲撃不能
     //   航行不能=その場で停止 / 回頭不能=直進のみ / 速力半減=手動のまま（どれも離脱しない）
-    //   慎重=損害15%以上 / 普通=中破以上 / 攻撃的=大破のみ（captain.js）
-    const shouldWithdraw = captainShouldWithdraw(ship); // 損害の基準は艦長の性格で変わる
+    //   慎重=50% / 普通=60% / 攻撃的=70% を超えたら、艦長ごとに ±10%（captain.js）
+    const shouldWithdraw = fleetRetreat || captainShouldWithdraw(ship); // 損害の基準は艦長の性格で変わる
     if (!shouldWithdraw) continue;
     // 離脱開始
     ship.withdrawing = true;
     ship.retreatDir = ship.side === 'jp' ? 4 : 6;  // JP=西, US=東
-    const reason = ship.status === 'heavy' ? '大破' : ship.status === 'medium' ? '中破' : '砲撃不能';
+    const reason = fleetRetreat ? '全軍離脱' : ship.cannotFire ? '砲撃不能' : ship.status === 'heavy' ? '大破' : ship.status === 'medium' ? '中破' : '損害';
     setInfo(`${ship.name} ${reason}！ 離脱開始`);
     if (getSpeed(ship) > 0) withdrawMove(ship);
   }
@@ -1631,6 +1640,7 @@ function renderList() {
     const isMoveable = canShipMove(s);
 
     let cls = 'card jp';
+    if (s.isLead) cls += ' lead';
     if (isActive) cls += ' selected';
     else if (isFinished) cls += ' done';
     else if (!isMoveable) cls += ' disabled';
@@ -1644,8 +1654,8 @@ function renderList() {
     else if (!isMoveable) label = statusText;
 
     html += `<div class="${cls}" onclick="clickShip(${i})">
-      <span class="c-name">${s.name}${label}</span>
-      <span class="c-info">${s.type}${spdInfo}${statusText && isMoveable ? statusText : ''}</span>
+      <span class="c-name">${s.isLead ? '★旗艦 ' : ''}${s.name}${label}</span>
+      <span class="c-info">${s.type}${spdInfo}${statusText && isMoveable ? statusText : ''}</span>${fleetOpsHtml(s)}
     </div>`;
   });
 
@@ -1656,7 +1666,7 @@ function renderList() {
     const fogN = fogHidden(s) ? fogName(s) : s.name;
     const fogT = fogHidden(s) ? (s.onFire ? '🔥' : '') : s.type + statusText;
     return `<div class="card us disabled">
-      <span class="c-name">${fogN}</span>
+      <span class="c-name">${!fogHidden(s) && s.isLead ? '★' : ''}${fogN}</span>
       <span class="c-info">${fogT}</span>
     </div>`;
   }).join('');
@@ -1965,8 +1975,8 @@ function collisionApplyDamage(ship, dmg, isDouble) {
   var total = ship.dmgG + ship.dmgM;
   var cap = ship.capG + ship.capM;
   if (ship.dmgM >= ship.capM) { ship.status = 'sunk'; }
-  else if (total >= cap * 0.5) { ship.status = 'heavy'; }
-  else if (total >= cap * 0.25) { ship.status = 'medium'; }
+  else if (total > cap * 0.6) { ship.status = 'heavy'; }
+  else if (total > cap * 0.3) { ship.status = 'medium'; }
   else { ship.status = total > 0 ? 'light' : 'ok'; }
   return {g: totalG, m: totalM, sunk: ship.status === 'sunk', critText: critText};
 }
@@ -2304,6 +2314,122 @@ function softFinishMove() {
 // US列用の随伴艦追従（USのみ使用）
 // ========== 旗艦操作モード（ユーザーの指示 2026-11-03）==========
 // 旗艦を動かすと同じ列の艦が1ヘクスずつついてくる。追随できない艦は今までどおり個別に動かす
+// ===== 通ったヘクスの記録（ユーザーの指示 2026-11-06）=====
+// row を書き換えるたびに今のヘクスを記録する。前に通ったヘクスへ戻ったら（やり直し）、そこまで記録を戻す
+function trailRec(s) {
+  if (!(s.col >= 0) || !(s.row >= 0)) return;
+  const t = s.trail || (s.trail = []);
+  const last = t[t.length - 1];
+  if (last && last.col === s.col && last.row === s.row) return;
+  const k = t.findIndex(p => p.col === s.col && p.row === s.row);
+  if (k >= 0) { t.length = k + 1; return; }
+  t.push({ col: s.col, row: s.row });
+}
+function trailInit(s, reset) {
+  if (reset || !Array.isArray(s.trail)) s.trail = (s.col >= 0 && s.status !== 'sunk') ? [{ col: s.col, row: s.row }] : [];
+  let _row = s.row;
+  Object.defineProperty(s, 'row', { get() { return _row; }, set(v) { _row = v; trailRec(s); }, enumerable: true, configurable: true });
+}
+
+// ===== 艦隊の分割と合流（ユーザーの指示 2026-11-06）=====
+// 分割: 選んだ艦とその後ろの艦が新しい艦隊になり、選んだ艦が旗艦になる。艦隊の旗艦がまだ動いていない時だけ
+// 合流: 分割した艦隊の旗艦が、元の艦隊の最後尾の隣にいれば、元の艦隊に戻る（旗艦は元の艦隊の旗艦1隻）
+function fleetMembers(ci) {
+  return flagFleet().filter(f => f.colIndex === ci && f.status !== 'sunk' && f.col >= 0 && !f.withdrawing)
+    .sort((a, b) => (a.followOrder || 0) - (b.followOrder || 0));
+}
+function fleetLeadUnmoved(ci) {
+  const lead = flagFleet().find(f => f.colIndex === ci && f.isLead);
+  if (!lead) return false;
+  const li = flagFleet().indexOf(lead);
+  return lead !== moving && !movedShips.has(li) && !shipStates[lead.name];
+}
+function canSplitAt(s) {
+  return isFlagshipMode() && !s.isLead && s.colIndex >= 0 && flagCanLead(s) && fleetLeadUnmoved(s.colIndex);
+}
+function mergeTargetOf(s) {
+  if (!isFlagshipMode() || !s.isLead || s.splitFrom == null || s.splitFrom === s.colIndex) return null;
+  const home = fleetMembers(s.splitFrom);
+  const tail = home[home.length - 1];
+  return tail && hexDist(s.col, s.row, tail.col, tail.row) <= 1 ? tail : null;
+}
+function fleetOpsHtml(s) {
+  const n = s.name.replace(/'/g, "\\'");
+  if (canSplitAt(s)) return `<button class="fleet-op" onclick="event.stopPropagation();splitFleetAt('${n}')">ここで分割</button>`;
+  if (mergeTargetOf(s)) return `<button class="fleet-op" onclick="event.stopPropagation();mergeFleet('${n}')">合流</button>`;
+  return '';
+}
+function flagRelink() {
+  flagLinks = null;
+  const links = new Map();
+  flagFleet().filter(l => l.isLead && canShipMove(l)).forEach(l => links.set(l.name, flagLinkedFrom(l)));
+  flagLinks = links;
+}
+function splitFleetAt(name) {
+  const fl = flagFleet();
+  const s = fl.find(f => f.name === name);
+  if (!s || !canSplitAt(s)) return;
+  const oldCi = s.colIndex;
+  const members = fleetMembers(oldCi);
+  const part = members.slice(members.indexOf(s));
+  const newCi = Math.max(...fl.map(f => f.colIndex >= 0 ? f.colIndex : 0)) + 1;
+  part.forEach(f => { f.colIndex = newCi; f.isLead = f === s; f.splitFrom = oldCi; });
+  // 新しい旗艦は、もう一度動かせるようにする
+  const i = fl.indexOf(s);
+  movedShips.delete(i);
+  parent.postMessage({type:'ACTION_UNDO', shipIndex:i}, '*');
+  const spd = getSpeed(s);
+  s.remainMove = s.dmgM >= s.capM / 2 ? Math.max(1, Math.ceil(spd / 2)) : spd;
+  flagRelink();
+  setInfo(`${s.name} を旗艦にして艦隊を分割（${part.length}隻）`);
+  renderList();
+  pushState();
+}
+function mergeFleet(name) {
+  const fl = flagFleet();
+  const s = fl.find(f => f.name === name);
+  if (!s || !mergeTargetOf(s)) return;
+  const homeCi = s.splitFrom, myCi = s.colIndex;
+  const homeLast = Math.max(...fleetMembers(homeCi).map(f => f.followOrder || 0));
+  const part = fl.filter(f => f.colIndex === myCi).sort((a, b) => (a.followOrder || 0) - (b.followOrder || 0));
+  part.forEach((f, k) => { f.colIndex = homeCi; f.isLead = false; f.followOrder = homeLast + 1 + k; delete f.splitFrom; });
+  if (moving && part.includes(moving)) moving = null;
+  flagRelink();
+  // 元の旗艦がまだ動いていなければ、合流した艦はその旗艦についていく
+  const lead = fl.find(f => f.colIndex === homeCi && f.isLead);
+  if (lead && fleetLeadUnmoved(homeCi)) followersOf(lead).forEach(f => {
+    const k = fl.indexOf(f);
+    if (!movedShips.has(k)) { movedShips.add(k); f.remainMove = 0; parent.postMessage({type:'ACTION_DONE', shipIndex:k}, '*'); }
+  });
+  setInfo(`${s.name} の艦隊が合流`);
+  renderList();
+  pushState();
+}
+
+// ===== 全軍離脱（ユーザーの指示 2026-11-06）=====
+// 味方の半分以上が離脱か沈没したか（まだ地図に出ていない艦は数えない）
+function fleetLostHalf(fleet) {
+  const lost = s => s.status === 'sunk' || s.status === 'exited' || s.withdrawing;
+  const appeared = fleet.filter(s => lost(s) || s.col >= 0);
+  return appeared.length > 0 && appeared.filter(lost).length * 2 >= appeared.length;
+}
+// プレイヤーが押す「全軍離脱」。まだ動いていない艦はすぐ退却の移動をする。動いた艦は次の移動から退却する
+function retreatAllFleet() {
+  const fl = flagFleet();
+  fl.forEach((s, i) => {
+    if (s.status === 'sunk' || s.col < 0 || s.withdrawing) return;
+    s.withdrawing = true;
+    if (!movedShips.has(i) && s !== moving && getSpeed(s) > 0) withdrawMove(s);
+    movedShips.add(i);
+    s.remainMove = 0;
+    parent.postMessage({type:'ACTION_DONE', shipIndex:i}, '*');
+  });
+  moving = null;
+  setInfo('全軍離脱');
+  renderList();
+  pushState();
+}
+
 function isFlagshipMode() { return localStorage.getItem('flagshipMove') !== '0'; } // 旗艦が動いて後続が追随するのが基本（ユーザーの指示 2026-11-04）
 function flagFleet() { return jpFleet; }
 function flagCanLead(s) {

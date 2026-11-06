@@ -34,14 +34,17 @@ function captainDamageRate(s) {
   const cap = (s.capG || 0) + (s.capM || 0);
   return cap > 0 ? ((s.dmgG || 0) + (s.dmgM || 0)) / cap : 0;
 }
-// 自動離脱: 砲撃不能はどの性格でも。損害は 慎重=15%以上 / 普通=中破以上 / 攻撃的=大破のみ
+// 自動離脱（ユーザーの指示 2026-11-06）: 砲撃不能はどの性格でも。損害は 慎重=50% / 普通=60% / 攻撃的=70% を超えたら
+// 艦長ごとに ±10% ずれる（艦名から決めるので、ゲームの間は変わらない）
+function captainWithdrawLine(s) {
+  const seed = (typeof state !== 'undefined' && state && state.captainSeed) || 1;
+  const base = { cautious: 0.5, normal: 0.6, aggressive: 0.7 }[captainOf(s).temper] || 0.6;
+  const shift = ((captainHash(seed + ':w:' + s.name) % 2001) / 1000 - 1) * 0.1;
+  return base + shift;
+}
 function captainShouldWithdraw(s) {
   if (s.cannotFire) return true;
-  const t = captainOf(s).temper;
-  if (s.status === 'heavy') return true;
-  if (t === 'aggressive') return false;
-  if (s.status === 'medium') return true;
-  return t === 'cautious' && captainDamageRate(s) >= 0.15;
+  return captainDamageRate(s) > captainWithdrawLine(s);
 }
 function captainEnemies(ship) {
   const list = ship.side === 'jp' ? (state.usFleet || []) : (state.jpFleet || []);

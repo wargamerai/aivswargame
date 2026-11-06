@@ -407,7 +407,7 @@ function isUSAutoAI() { return localStorage.getItem('usAutoAI') === '1'; }
 let gunAutoPhase = false;
 function isGunAutoTurn() { return gunAutoPhase; }
 function entrustGunTurn() {
-  if (firedShips.size > 0) { log('このフェイズは手で撃ち始めたので、お任せにできません'); return; }
+  // 手で撃ったあとでも押せる。まだ撃っていない艦だけをお任せにする（ユーザーの指示 2026-11-06）
   gunAutoPhase = true;
   const b = document.getElementById('btnEntrust');
   if (b) b.disabled = true;
@@ -888,7 +888,8 @@ function autoUSShoot(title) {
   document.getElementById('shootUI').style.display = 'none';
   log(`=== ${title} ===`);
 
-  const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex);
+  const _firedNames = new Set([...firedShips].map(i => (firerShips[i] || {}).name));
+  const us = (state.usFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && getAttack(s) > 0 && !s.sharedHex && !_firedNames.has(s.name));
   const jp = (state.jpFleet||[]).filter(s => s.status !== 'sunk' && s.col >= 0 && isVisibleToUS(s));
 
   if (us.length === 0 || jp.length === 0) {
@@ -1347,8 +1348,8 @@ function resolveDamage(title) {
         if (ship.dmgM >= ship.capM) {
           ship.status = 'sunk';
           log(`<span class="dmg">${ship.name} 沈没！(G${d.g} M${d.m})</span>`);
-        } else if (total >= cap*0.5) { ship.status = 'heavy'; log(`${ship.name}: G${d.g} M${d.m} → 大破`); }
-        else if (total >= cap*0.25) { ship.status = 'medium'; log(`${ship.name}: G${d.g} M${d.m} → 中破`); }
+        } else if (total > cap*0.6) { ship.status = 'heavy'; log(`${ship.name}: G${d.g} M${d.m} → 大破`); }
+        else if (total > cap*0.3) { ship.status = 'medium'; log(`${ship.name}: G${d.g} M${d.m} → 中破`); }
         else { ship.status = total > 0 ? 'light' : 'ok'; log(`${ship.name}: G${d.g} M${d.m} → ${total > 0 ? '小破' : '無傷'}`); }
         if (d.critText) log(`  <span class="crit">⚡ クリティカル: ${d.critText}</span>`);
       }

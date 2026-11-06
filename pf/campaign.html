@@ -1153,10 +1153,10 @@ function applyDamageToShip(ship, addG, addM, isUs) {
         if(isUs) jpScore += ship.capG * ship.vp + ship.capM * ship.vp;
         else usScore += ship.capG * ship.vp + ship.capM * ship.vp;
         logMsg(`${ship.name} 轟沈！`);
-    } else if (ratio >= 0.5) {
+    } else if (ratio > 0.6) {
         ship.status = 'heavy';
         ship.rest = 99;
-    } else if (ratio >= 0.25) {
+    } else if (ratio > 0.3) {
         ship.status = 'medium';
         ship.rest = 2;
     } else if (totalDmg > 0) {
@@ -1347,12 +1347,12 @@ function phaseNextTurn() {
             const totalCap = s.capG + s.capM;
             const totalDmg = s.dmgG + s.dmgM;
             const ratio = totalDmg / totalCap;
-            if (ratio < 0.25) {
+            if (ratio <= 0.3) {
                 // 小破: 1ターンで修理完了
                 s.dmgG = 0; s.dmgM = 0; s.status = 'ok';
                 delete s.speed; delete s.crits; delete s.critHitMod; delete s.onFire;
                 logMsg(`${s.name} の修理完了。`);
-            } else if (ratio < 0.5) {
+            } else if (ratio <= 0.6) {
                 // 中破: ダメージ半減
                 s.dmgG = Math.floor(s.dmgG / 2);
                 s.dmgM = Math.floor(s.dmgM / 2);
