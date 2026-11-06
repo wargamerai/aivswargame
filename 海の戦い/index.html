@@ -502,13 +502,38 @@ function initShipLocations(){
   // === マルタ初期配置: 速力3の戦艦7隻 ===
   const setMalta = s => { s.location = 'Malta'; s.homePort = 'Malta'; };
   SHIPS.filter(s => s.country === 'UK' && !s.enterTurn && s.type === 'BB' && s.spd === 3).forEach(setMalta);
+  // 連合の作戦でマルタの初期配置を変える
+  const op = ALLIED_OPENINGS[alliedOpening];
+  if(op && op.malta){
+    SHIPS.filter(s => s.country === 'UK' && !s.enterTurn).forEach(s => { s.location = 'England'; s.homePort = 'England'; });
+    SHIPS.filter(s => s.country === 'UK' && !s.enterTurn && op.malta.includes(s.name)).forEach(setMalta);
+  }
 }
+// ===== 連合の作戦（ユーザーの指示 2026-11-07。スティーブさんの案と、3600局の試し）=====
+//   ゲームの最初に1つ引き、その局はずっとその作戦。No-Med 70% / B3 15% / M5 15%
+//   NoMed: 地中海を使わない（General 誌の Allied No-Med）。マルタは空、全ターン地中海へ送らない。1ターン目は決め打ち
+//   B3   : 1〜2ターン目はバレンツ海へ出さない。マルタは今のまま
+//   M5   : マルタに速い艦（4-4-7、3-3-6×2、4-4-4×3、1-1-7×6、空母0-2-7）。1ターン目は決め打ち
+const ALLIED_OPENINGS = {
+  NoMed: { weight: 70, noMed: true, malta: [], t1: {
+    Barents: ['Hood','Renown','Repulse','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','Dorsetshire','Exeter','Warspite','ArkRoyal','Courageous'],
+    NorthSea: ['Nelson','Rodney','Valiant','QueenElizabeth','Glorious'],
+    NorthAtlantic: ['Ramillies','Resolution','Revenge','Eagle'],
+    SouthAtlantic: ['Barham','Malaya','RoyalOak','RoyalSovereign'] } },
+  B3: { weight: 15, noBarentsUntil: 3 },
+  M5: { weight: 15, malta: ['Hood','Renown','Repulse','Warspite','Valiant','QueenElizabeth','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','ArkRoyal'], t1: {
+    NorthSea: ['Nelson','Rodney','Ramillies','Dorsetshire','Courageous'],
+    NorthAtlantic: ['Resolution','Revenge','RoyalOak','Glorious'],
+    SouthAtlantic: ['Barham','Malaya','RoyalSovereign','Exeter','Eagle'] } },
+};
+let alliedOpening = (() => {
+  if(typeof window !== 'undefined' && window.__opening && ALLIED_OPENINGS[window.__opening]) return window.__opening; // 画面なしの試し用
+  const keys = Object.keys(ALLIED_OPENINGS);
+  let r = Math.random() * keys.reduce((t, k) => t + ALLIED_OPENINGS[k].weight, 0);
+  for(const k of keys){ if((r -= ALLIED_OPENINGS[k].weight) < 0) return k; }
+  return keys[0];
+})();
 initShipLocations();
-// テスト用（ユーザーの指示 2026-11-07）: ?italyGod=1 で開くと、イタリア艦は損害も即時帰還も受けない
-//   イタリアを活躍させてイギリスを地中海でわざとピンチにし、イギリスのAIの動きを見るため
-let ITALY_GOD = false;
-try { ITALY_GOD = new URLSearchParams(location.search).get('italyGod') === '1'; } catch(e) {}
-function italyGod(s){ return ITALY_GOD && !!s && s.country === 'IT'; }
 
 // === 左パネル：艦船一覧（陣営別） ===
 function renderSideList(side, elId){
@@ -831,10 +856,21 @@ async function advancePhase(){
     const toEngland = new Set();
     {
       const keepMed = SHIPS.filter(s => s.location === 'Malta' && s.side === 'allies' && !s.sunk && !s.removed && !(s.damage > 0));
-      alliesToReturn
-        .filter(s => s.location === 'Mediterranean' && s.country === 'UK' && !(s.damage > 0) && !s.forcedReturn)
-        .sort((a, b) => ((b.atk || 0) + (b.def || 0)) - ((a.atk || 0) + (a.def || 0)))
-        .forEach(s => { if(medNeverLose(keepMed)) toEngland.add(s.id); else keepMed.push(s); });
+      // マルタの艦も特別扱いしない（ユーザーの指示 2026-11-07）: イタリアの全戦力と並ぶ分だけマルタに残し、余りは英国へ。
+      //   遅い艦から残し、速い艦（速力6以上。英国からバレンツ海へ2エリアで届きやすい）を英国へ回す
+      const medBack = alliesToReturn
+        .filter(s => s.location === 'Mediterranean' && s.country === 'UK' && !(s.damage > 0) && !s.forcedReturn);
+      // イタリアがこのターン地中海に出てこず、ドイツが北海かバレンツ海で英国と戦ったら、速い艦はすべて英国へ（次のターンにバレンツ海へ）
+      const italyStayed = !SHIPS.some(x => x.country === 'IT' && x.side === 'axis' && !x.sunk && !x.removed && x.location === 'Mediterranean');
+      const deFoughtNorth = ['NorthSea', 'Barents'].some(sea => SHIPS.some(x => x.country === 'DE' && x.type !== 'UBOAT' && !x.removed && (x.location === sea || x.sunkAt === sea))
+        && SHIPS.some(x => x.country === 'UK' && !x.removed && x.location === sea));
+      const fastHome = aiSide === 'allies' && italyStayed && deFoughtNorth;
+      if(fastHome) console.log('[帰還] イタリアが出てこず北でドイツと戦ったので、地中海の速い艦を英国へ');
+      medBack.sort((a, b) => ((a.spd >= 6) - (b.spd >= 6)) || (((b.atk || 0) + (b.def || 0)) - ((a.atk || 0) + (a.def || 0))))
+        .forEach(s => {
+          if(fastHome && s.spd >= 6) { toEngland.add(s.id); return; }
+          if(battleGeq(keepMed, italianFullThreat()) && keepMed.length) toEngland.add(s.id); else keepMed.push(s);
+        });
       // マルタ艦隊を少しずつ英国へ（ユーザーの指示 2026-11-02）: ターン6以降、北海が手薄な時は、地中海を取られても
       //   北海を取り返した方が割がいいので、1ターンに2隻まで、強い艦から英国へ帰す
       //   北海が手薄: 北海が連合の支配でないか、英国本土の無傷の英国艦（この帰還で英国へ戻る艦を含む）がドイツ本国の艦隊に届かない
@@ -1321,12 +1357,6 @@ function airFireAt(attacker, target, events){
   if(target.type === 'CV') target.airHitTurn = currentTurn; // 10.3 このターンの空爆には、沈んでも参加できる
   const r = rollD6();
   let dmgRoll = null;
-  if(italyGod(target)){ // テスト用 ?italyGod=1: イタリア艦への空爆は外れ扱い
-    events.push({ type:'fire', attacker: attacker.id, attackerName: attacker.name,
-      target: target.id, targetName: target.name,
-      dice:[{r, dmgRoll:null}], dmgTotal: 0, disabled: false });
-    return;
-  }
   if(r === 6){
     dmgRoll = rollD6();
     events.push({ type:'fire', attacker: attacker.id, attackerName: attacker.name,
@@ -1990,7 +2020,7 @@ async function resolveSurfaceCombat(seaKey, modalAlreadyOpen, oneRound = false){
     }
     for(const tid of pending.disabled){
       const ship = SHIPS.find(s => s.id === tid);
-      if(!ship || ship.sunk || italyGod(ship)) continue;
+      if(!ship || ship.sunk) continue;
       ship.disabled = true;
       logCombatLine(`${ship.name}: 即時帰還 (砲撃)`);
       applyEvents.push({ type:'disabled', ship: ship.id, name: ship.name });
@@ -2280,7 +2310,7 @@ async function runPursuitRound(pursuit, retreat){
     }
     for(const tid of pending.disabled){
       const ship = SHIPS.find(s => s.id === tid);
-      if(ship && !ship.sunk && !italyGod(ship)){
+      if(ship && !ship.sunk){
         ship.disabled = true;
         logCombatLine(`${ship.name}: 即時帰還 (追撃砲撃)`);
         applyEvents.push({ type:'disabled', ship: ship.id, name: ship.name });
@@ -2306,8 +2336,9 @@ async function runPursuitRound(pursuit, retreat){
     // （18章の例: 撃てる数でもう勝っていないので追撃をやめる。ユーザーの指示 2026-11-06）
     const pursuerSide = pursuit[0]?.side;
     const shotsOf = arr => arr.reduce((t, s) => t + Math.max(0, s.atk || 0), 0);
-    const aiCont = shotsOf(stillPur) > shotsOf(stillRet);
-    if(pursuerSide === aiSide && !aiCont) logCombatLine(`AI: 撃てる数で勝っていない(${shotsOf(stillPur)}対${shotsOf(stillRet)}) → 追撃をやめる`);
+    // 8割で沈められる敵が残っていれば、損害を気にせず続ける（ユーザーの指示 2026-11-07）
+    const aiCont = shotsOf(stillPur) > shotsOf(stillRet) || canSink80(stillPur.filter(s => s.spd >= newMin), stillRet);
+    if(pursuerSide === aiSide && !aiCont) logCombatLine(`AI: 撃てる数で勝っておらず、8割で沈められる敵もいない(${shotsOf(stillPur)}対${shotsOf(stillRet)}) → 追撃をやめる`);
     const cont = (pursuerSide === aiSide) ? aiCont : await chooseInPhaseLabel('追跡を続けますか？', [
       { label:'追撃を続ける', value:true, bg:'#a55' },
       { label:'追撃をやめる（この海域に残る）', value:false, bg:'#666' }
@@ -2358,23 +2389,72 @@ function chooseAlliedTargetMode(seaKey){
 //   空母（攻撃を宣言していない）と船団は保護があるので、通常の艦に全部割り振ったあと
 let alliedFireStyle = { pair: 'strong', surplus: 'strong' };
 function chooseAlliedFireStyle(seaKey){
-  alliedFireStyle = { pair: Math.random() < 0.5 ? 'strong' : 'weak', surplus: Math.random() < 0.5 ? 'strong' : 'weak' };
-  alliedTargetModeLog.push({ turn: currentTurn, sea: seaKey, mode: `${alliedFireStyle.pair}/${alliedFireStyle.surplus}`, ratio: null });
+  alliedTargetModeLog.push({ turn: currentTurn, sea: seaKey, mode: 'sink80', ratio: null });
+}
+// 8割で沈める（ユーザーの指示 2026-11-07、スティーブさんの案）: 砲撃力1=ダイス1個、6で命中して損害はダイス1個。
+//   SINK80[r] = 損害を r 以上出す確率が8割になる砲撃力
+const SINK80 = (() => {
+  const out = [0];
+  for(let r = 1; r <= 20; r++){
+    let d = [1], n = 0;
+    const pr = () => 1 - d.slice(0, r).reduce((t, x) => t + (x || 0), 0);
+    while(pr() < 0.8 && n < 80){
+      const nd = new Array(d.length + 6).fill(0);
+      d.forEach((p, k) => { if(!p) return; nd[k] += p * 5 / 6; for(let f = 1; f <= 6; f++) nd[k + f] += p / 36; });
+      d = nd; n++;
+    }
+    out[r] = n;
+  }
+  return out;
+})();
+// 沈めるのに残りいくつの損害が要るか（損害が防御力を超えると沈む）
+function sinkLeft(s, pending){
+  const pd = (pending && pending.damage && pending.damage[s.id]) || 0;
+  return Math.max(1, (s.def || 0) - (s.damage || 0) - pd + 1);
+}
+function sinkNeed(s, pending){ return SINK80[Math.min(20, sinkLeft(s, pending))]; }
+// 撃つ艦の中に、8割で沈められる敵が1隻でもいるか
+function canSink80(shooters, enemies){
+  const fp = shooters.filter(s => !s.sunk && !s.returnPending).reduce((t, s) => t + Math.max(0, s.atk || 0), 0);
+  return enemies.some(e => !e.sunk && !e.returnPending && e.type !== 'UBOAT' && sinkNeed(e) <= fp);
 }
 // 射撃する艦ごとの目標を先に決める（射撃艦ID → 目標の艦）
+//   要る砲撃力が少ない（確実に沈められる）敵から順に、8割に届くまで艦を割り当て、届いたら次の敵へ
+//   残りでは8割に届かない艦は、攻撃力の高い敵から順に1隻ずつ別の敵へ（5の目の帰還ねらい。同じ敵に重ねると無駄撃ちになるので分ける）
+//   守られている空母と船団は、通常の艦のあと
 function planAlliedFire(shooters, enemies){
   const val = s => (s.atkOrig || s.atk || 0) + (s.def || 0);
-  const normals = enemies.filter(s => (s.type !== 'CV' || s._cvDeclared) && s.type !== 'CONVOY').sort((a, b) => val(b) - val(a));
+  const byNeed = arr => arr.slice().sort((a, b) => (sinkNeed(a) - sinkNeed(b)) || (val(b) - val(a)));
+  const normals = byNeed(enemies.filter(s => (s.type !== 'CV' || s._cvDeclared) && s.type !== 'CONVOY'));
   const side = enemies.length ? enemies[0].side : null;
-  const later = [...(convoyOpenSides[side] ? enemies.filter(s => s.type === 'CONVOY') : []), ...enemies.filter(s => s.type === 'CV' && !s._cvDeclared)];
-  const sh = shooters.slice().sort((a, b) => (b.atk || 0) - (a.atk || 0));
-  const cover = [...(alliedFireStyle.pair === 'strong' ? normals : normals.slice().reverse()), ...later];
-  const surplusOrder = [...(alliedFireStyle.surplus === 'strong' ? normals : normals.slice().reverse()), ...later];
+  const later = byNeed([...(convoyOpenSides[side] ? enemies.filter(s => s.type === 'CONVOY') : []), ...enemies.filter(s => s.type === 'CV' && !s._cvDeclared)]);
   const plan = new Map();
-  sh.forEach((ship, i) => {
-    if(i < cover.length) plan.set(ship.id, cover[i]);
-    else if(surplusOrder.length) plan.set(ship.id, surplusOrder[(i - cover.length) % surplusOrder.length]);
-  });
+  let free = shooters.filter(s => (s.atk || 0) > 0).sort((a, b) => (b.atk || 0) - (a.atk || 0));
+  const fpOf = arr => arr.reduce((t, s) => t + (s.atk || 0), 0);
+  const done = new Set();
+  for(const t of [...normals, ...later]){
+    if(!free.length) break;
+    const need = sinkNeed(t);
+    if(fpOf(free) < need) break;
+    done.add(t);
+    let got = 0;
+    while(got < need && free.length){
+      // 一番強い艦で足りなければそれを入れ、足りるならちょうど届く一番弱い艦を入れる（無駄撃ちを減らす）
+      const fit = free.slice().reverse().find(x => got + (x.atk || 0) >= need);
+      const x = fit || free[0];
+      plan.set(x.id, t); got += (x.atk || 0);
+      free = free.filter(y => y !== x);
+    }
+  }
+  // 余りは、8割に届かなかった敵へ攻撃力の高い順に1隻ずつ（ユーザーの指示 2026-11-07）。敵より多ければ2巡目
+  //   全部の敵が8割に届いていれば、全部の敵を同じ順で
+  if(free.length){
+    const byAtk = arr => arr.slice().sort((a, b) => ((b.atk || 0) - (a.atk || 0)) || (val(b) - val(a)));
+    let order = byAtk(normals.filter(t => !done.has(t)));
+    if(!order.length) order = byAtk(normals);
+    if(!order.length) order = byAtk(later);
+    free.forEach((x, i) => { if(order.length) plan.set(x.id, order[i % order.length]); });
+  }
   return plan;
 }
 function alliedPickTarget(cands, pending){
@@ -2723,8 +2803,8 @@ function getReturnPorts(ship){
     if(currentTurn >= 8) return ['Italy'];
     if(!adjacent.includes('France')) adjacent.push('France');
   }
-  // Mediterranean の英国艦は England 帰還可（マルタの艦はマルタで完結するので除く）
-  if(sea === 'Mediterranean' && ship.country === 'UK' && ship.homePort !== 'Malta'){
+  // Mediterranean の英国艦は England 帰還可（マルタから出た艦も同じ。ユーザーの指示 2026-11-07）
+  if(sea === 'Mediterranean' && ship.country === 'UK'){
     if(!adjacent.includes('England')) adjacent.push('England');
   }
   return adjacent.filter(p => {
@@ -3234,6 +3314,21 @@ async function tryPursuit(pursuerSide, seaKey, retreatGroups){
       pool = pool.filter(s => s !== keep);
     }
     pool.sort((a, b) => b.spd - a.spd);
+    // 8割で沈められる敵がいるグループを先に追う（損害は気にしない。ユーザーの指示 2026-11-07）
+    //   遅いグループから見る（遅いグループには追いつける艦が多い）。要る砲撃力に届く分だけ、強い艦から付ける
+    for(const grp of groups.slice().reverse()){
+      const can = pool.filter(s => s.spd >= grp.min);
+      const fp = can.reduce((t, s) => t + Math.max(0, s.atk || 0), 0);
+      const tgt = grp.g.filter(e => !e.sunk && !e.returnPending).sort((a, b) => sinkNeed(a) - sinkNeed(b))[0];
+      if(!tgt || sinkNeed(tgt) > fp) continue;
+      const need = sinkNeed(tgt);
+      const use = [];
+      let got = 0;
+      for(const s of can.slice().sort((a, b) => (b.atk || 0) - (a.atk || 0))){ if(got >= need) break; use.push(s); got += (s.atk || 0); }
+      pursuits.push({ pursuers: use, retreaters: grp.g });
+      pool = pool.filter(s => !use.includes(s));
+      groups.splice(groups.indexOf(grp), 1);
+    }
     if(pool.length){
       for(const ship of pool){
         const grp = groups.find(x => x.min <= ship.spd);
@@ -4092,7 +4187,8 @@ function planAlliedDeployment(aiLog){
     };
     const axisShips = axisReady.map(x => ({ s: x, opts: axisOpts(x) }));
     const ubs = SHIPS.filter(x => x.type === 'UBOAT' && x.side === 'axis' && !x.sunk && !x.removed && x.location && (PORTS[x.location] || SEAS[x.location])).length;
-    const r = (PLAN_MODE >= 10 ? PocPlanner.planAlliesG : PLAN_MODE >= 9 ? PocPlanner.planAlliesV5 : PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs });
+    const r = (PLAN_MODE >= 10 ? PocPlanner.planAlliesG : PLAN_MODE >= 9 ? PocPlanner.planAlliesV5 : PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs,
+      noMed: !!(ALLIED_OPENINGS[alliedOpening] || {}).noMed, noBarents: currentTurn < ((ALLIED_OPENINGS[alliedOpening] || {}).noBarentsUntil || 0) });
     ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') assign(u.s, sea); });
     leftoverMode = `POCの予想（評価 ${Math.round(r.value * 10) / 10}）`;
   } else if(currentTurn === 1){
@@ -4331,6 +4427,11 @@ function planAlliedDeployment(aiLog){
     maltaGo = keep;
     if(maltaShips.length > keep.length) aiLog.push(`マルタの余力 ${maltaShips.length - keep.length}隻 → 南大西洋`);
   }
+  // 作戦 No-Med: 地中海へは1隻も送らない（ほかの決まりで地中海に入った艦は北海へ）
+  if((ALLIED_OPENINGS[alliedOpening] || {}).noMed){
+    placed.Mediterranean.slice().forEach(x => { unassign(x); if(nsOk(x)) assign(x, 'NorthSea'); });
+    maltaGo = [];
+  }
   return { plan, maltaSortie: maltaGo };
 }
 
@@ -4361,7 +4462,33 @@ async function aiAlliedMove(bbTargetOverride){
     if(s.type === 'CONVOY' && SEAS[s.location] && !s.sunk && !s.removed) _convoyOccupiedEarly.add(s.location);
   });
   // 1a) 船団 NA→バレンツ海（海上2ターン目以降）。損害を受けていてもロシアを目指す
+  // スティーブさんの案（2026-11-07）: バレンツ海で連合が置ける見込みの戦力がドイツの届く戦力を下回るときは、イギリスに入れて +1。自分から選ぶのは1局に2回まで
+  const barentsWeak = () => {
+    const de = SHIPS.filter(x => x.side === 'axis' && !x.sunk && !x.removed && x.type !== 'UBOAT' && !(x.damage > 0) &&
+      x.location && (PORTS[x.location] || SEAS[x.location]) && (x.location === 'Germany' || (x.country === 'DE' && x.spd >= 7)));
+    if(!de.length) return false;
+    const reach = x => {
+      if(x.country === 'RU') return x.location === 'Russia' && x.canMoveThisTurn;
+      if(x.location === 'Malta' || (x.country === 'US' && currentTurn < 4) || (x.country === 'US' && !x.usEntered)) return false;
+      const adj = PORT_SEAS[x.location] || [];
+      if(adj.includes('Barents')) return true;
+      const two = adj.some(mid => seaControl[mid] !== 'axis' && (SEA_ADJ[mid] || []).includes('Barents'));
+      return two && Math.min(Math.max((x.spd || 0) - 1, 0), 6) / 6 >= 0.6; // 配置の式と同じ: 2エリア移動は成功率6割以上の艦だけ
+    };
+    const al = SHIPS.filter(x => x.side === 'allies' && !x.sunk && !x.removed && x.type !== 'CONVOY' && !(x.damage > 0) && x.location && PORTS[x.location] && reach(x));
+    return !battleGeq(al, de);
+  };
   for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && (s.turnsAtSea||0) >= 1)){
+    if(seaControl['Barents'] !== 'axis' && SHIPS.filter(x => x.englandByChoice).length < 2 && barentsWeak()){
+      ship.location = 'England';
+      ship.removed = true;
+      ship.movedThisTurn = true;
+      ship.englandByChoice = true;
+      _convoyOccupiedEarly.delete('NorthAtlantic');
+      addPoc(1);
+      aiLog.push(`<b>${ship.name}: バレンツ海の連合の戦力がドイツより弱い見込みなので England へ入る +1POC(連合)</b>`);
+      continue;
+    }
     // バレンツ海を枢軸に取られている時は、ロシアへ向かわずイギリスへ入れて +1（14.5）。北大西洋を空けて、次の船団を守る（ユーザーの指示 2026-11-07）
     if(seaControl['Barents'] === 'axis'){
       ship.location = 'England';
@@ -4396,6 +4523,15 @@ async function aiAlliedMove(bbTargetOverride){
 
   // === 新しい配分: 全艦の移動先を先に宣言 → まとめて移動・2エリア移動のダイス判定 ===
   const deploy = planAlliedDeployment(aiLog);
+  {
+    const op = ALLIED_OPENINGS[alliedOpening];
+    aiLog.push(`連合の作戦: ${alliedOpening}`);
+    if(op && op.t1 && currentTurn === 1){
+      for(const id in deploy.plan) delete deploy.plan[id];
+      for(const sea in op.t1) SHIPS.filter(s => s.country === 'UK' && op.t1[sea].includes(s.name) && s.location === 'England' && !s.movedThisTurn).forEach(s => { deploy.plan[s.id] = sea; });
+      deploy.maltaSortie = op.noMed ? [] : SHIPS.filter(s => s.country === 'UK' && s.location === 'Malta' && !s.sunk);
+    }
+  }
   for(const shipId in deploy.plan){
     const ship = SHIPS.find(s => s.id === shipId);
     if(!ship || ship.movedThisTurn) continue;
@@ -5797,7 +5933,7 @@ function placeControlMarkers(){
 // 帰還待ち（撤退・即時帰還・追撃中止）: 海域に残し帰還フェイズで帰還。当ターンの戦闘・支配判定に不参加
 // forced=true はダイス5の強制帰還（南大西洋のドイツ艦は中立港のみ）
 function markReturnPending(ship, forced = false){
-  if(!ship || ship.sunk || italyGod(ship)) return;
+  if(!ship || ship.sunk) return;
   ship.returnPending = true;
   if(forced) ship.forcedReturn = true;
   ship.disabled = false;
@@ -6228,7 +6364,9 @@ function endTurn(){
 function showStack(stackId){
   const st = stacks[stackId];
   if(!st) return;
-  let html = `<h3>${st.label} (${st.ships.length}艦)</h3><div class="modal-grid">`;
+  // スティーブさんの要望（2026-11-07）: 見出しに連合艦の ASW ダイスの合計（空母・船団3個、ほか1個）、閉じるボタンは右上
+  const asw = st.ships.filter(s => s.side === 'allies' && !s.sunk && s.type !== 'UBOAT').reduce((t, s) => t + ((s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1), 0);
+  let html = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><h3 style="margin:0;">${st.label} (${st.ships.length}艦${asw ? ` / ${asw} ASW` : ''})</h3><button class="modal-close" style="margin-top:0;" onclick="closeModal()">閉じる</button></div><div class="modal-grid">`;
   st.ships.forEach(s=>{
     const enter = s.enterTurn ? ` (T${s.enterTurn})` : '';
     let statusHtml = '';
@@ -6244,7 +6382,7 @@ function showStack(stackId){
       </div>
     </div>`;
   });
-  html += `</div><button class="modal-close" onclick="closeModal()">閉じる</button>`;
+  html += `</div>`;
   document.getElementById('modalBox').innerHTML = html;
   document.getElementById('modal').classList.add('show');
 }
@@ -6270,7 +6408,7 @@ function buildSaveData(){
       currentTurn, phaseIdx, humanSide, aiSide, italySurrendered,
       optionRules: { ...optionRules },
       convoyOpenSides: { ...convoyOpenSides },
-      alliedTargetMode, alliedFireStyle: { ...alliedFireStyle },
+      alliedTargetMode, alliedFireStyle: { ...alliedFireStyle }, alliedOpening,
       poc, pocAtTurnStart, pocTurnDelta, lastTurnPocGain, medAxisStreak, italyHeldMed4,
       seaControl: { ...seaControl },
       retreatedSeas: [...retreatedSeas],
@@ -6331,6 +6469,7 @@ function applySaveData(data){
   Object.assign(convoyOpenSides, v.convoyOpenSides);
   alliedTargetMode = v.alliedTargetMode;
   Object.assign(alliedFireStyle, v.alliedFireStyle);
+  if(v.alliedOpening && ALLIED_OPENINGS[v.alliedOpening]) alliedOpening = v.alliedOpening;
   poc = v.poc; pocAtTurnStart = v.pocAtTurnStart; pocTurnDelta = v.pocTurnDelta || 0; lastTurnPocGain = v.lastTurnPocGain;
   medAxisStreak = v.medAxisStreak; italyHeldMed4 = !!v.italyHeldMed4;
   Object.keys(seaControl).forEach(k => { delete seaControl[k]; });

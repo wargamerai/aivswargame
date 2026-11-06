@@ -786,6 +786,8 @@ var PocPlanner = (function () {
   //   2026-11-07: 地中海も配る先に入れ、マルタの艦を先に数えない M2 を初めの値にした（10局ずつの比べで M2 60% / FS 50%）
   function planAlliesG(a) {
     const g = Object.assign({ wN: 1, wB: 1, wS: 1, wNA: 1, convoyB: 1, lossThr: 0.5, swing: 1.5, coreFull: 0, atlReachF: 0.7, atlFrom: 1, atlUntil: 9, minDet: 0, coreThr: 1, coreMin: 0, lossW: 0, med: 1, medArrive: 0.8, medBase: 0, medReachF: 1, medOnlyLose: 0, medSwing: 0, atlMin: 1, coreCap: 1.25, atlSmart: 1 }, (typeof window !== 'undefined' && window.__alliesGenome) || {});
+    if (a.noMed) g.med = 0; // 作戦 No-Med: 地中海は配る先に入れない
+    if (a.noBarents) a = Object.assign({}, a, { ships: a.ships.map(u => ({ s: u.s, opts: u.opts.filter(o => o !== 'Barents') })) }); // 作戦 B3: 1〜2ターン目はバレンツ海へ出さない
     const core = ['NorthSea', 'Barents'], atl = ['SouthAtlantic', 'NorthAtlantic'], seas = core.concat(atl, g.med ? ['Mediterranean'] : []);
     const axis = a.axisShips.map(u => ({ s: u.s, opts: u.s.country === 'IT' ? u.opts.filter(o => a.turn > 1 && o === 'SouthAtlantic') : u.opts }));
     const power = arr => arr.reduce((t, s) => t + pwS(s), 0);
