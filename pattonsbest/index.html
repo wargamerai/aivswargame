@@ -44,6 +44,12 @@ button.go { background:#6a5a1c; border-color:var(--acc); font-weight:bold; }
 #left { position:relative; }
 #pop { display:none; position:absolute; left:10px; right:10px; bottom:12.2em; z-index:20; background:#2b2d1f; border:2px solid var(--acc); border-radius:6px; padding:8px 12px; box-shadow:0 6px 18px rgba(0,0,0,.7); max-height:60%; overflow:auto; }
 #pop h3 { margin:0 0 6px; color:var(--acc); font-size:1em; }
+button.fix { border:2px solid var(--bad); background:#5a2a1f; color:#ffe0d6; font-weight:bold; }
+.fixb { display:inline-block; background:var(--bad); color:#fff; border-radius:8px; padding:0 6px; margin-left:4px; font-weight:bold; }
+#ctip { display:none; position:fixed; z-index:60; pointer-events:none; max-width:min(360px,calc(100vw - 16px)); background:#26291c; border:2px solid var(--acc); border-radius:6px; padding:6px 9px; font-size:.86em; line-height:1.45; box-shadow:0 6px 18px rgba(0,0,0,.7); }
+#ctip b { color:var(--acc); } #ctip .g { color:var(--good); } #ctip .r { color:var(--bad); }
+.minis { display:flex; flex-wrap:wrap; gap:10px; margin:4px 0; } .mini { text-align:center; font-size:.85em; color:var(--mute); }
+.mini svg { display:block; width:min(280px,80vw); height:auto; border:1px solid var(--line); border-radius:4px; background:#111; }
 .popx { float:right; } .popx2 { margin:6px 0; } .popx2 select { min-width:12em; }
 .opts.big { margin:4px 0; }
 .cct { margin-bottom:3px; } .cct b { color:var(--acc); } .rt { color:#fff; background:var(--olive); border-radius:3px; padding:0 4px; font-weight:bold; }
@@ -85,6 +91,7 @@ body.hit #board { animation:hitflash .5s; }
     <div id="board"></div>
     <div id="tank"></div>
     <div id="pop"></div>
+    <div id="ctip"></div>
   </div>
   <div id="right"><div id="logh"></div><div id="log"></div><div id="ops"></div></div>
 </div>

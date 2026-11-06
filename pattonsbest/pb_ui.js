@@ -126,9 +126,12 @@ function renderMap() {
   for (const a of m.areas) {
     const isN = near.includes(a.id), isS = SEL === a.id, isX = a.id === m.exit;
     const txt = a.res ? { L: L('軽', 'L'), M: L('中', 'M'), H: L('重', 'H') }[a.res] : '';
+    // 偵察した区域は、抵抗の色の太い枠と真ん中の大きな文字で示す（ユーザーの指示 2026-11-06）
+    const rc = a.res ? { L: '#fff4a8', M: '#ffb25a', H: '#ff6a4a' }[a.res] : null, scout = rc && !a.us;
     h += `<g ${isN ? `style="cursor:pointer" onclick="SEL=${a.id};render()"` : ''}>
-      <circle cx="${a.x}" cy="${a.y}" r="${isN ? 44 : 34}" fill="${a.us ? 'rgba(40,90,200,.55)' : isN ? 'rgba(255,226,122,.28)' : 'rgba(0,0,0,.01)'}" stroke="${isS ? '#fff' : isX ? '#ff4a3a' : isN ? '#ffe27a' : 'none'}" stroke-width="${isS ? 8 : 5}" ${isX ? 'stroke-dasharray="14 8"' : ''}/>
-      ${txt ? `<text x="${a.x + 26}" y="${a.y - 18}" fill="${{ L: '#fff4a8', M: '#ffb25a', H: '#ff6a4a' }[a.res]}" stroke="#000" stroke-width="1" font-size="34" font-weight="bold">${txt}</text>` : ''}
+      ${scout ? `<circle cx="${a.x}" cy="${a.y}" r="${(isN ? 44 : 34) + 9}" fill="none" stroke="${rc}" stroke-width="10" stroke-opacity=".95"/>` : ''}
+      <circle cx="${a.x}" cy="${a.y}" r="${isN ? 44 : 34}" fill="${a.us ? 'rgba(40,90,200,.55)' : isN ? 'rgba(255,226,122,.28)' : scout ? 'rgba(0,0,0,.45)' : 'rgba(0,0,0,.01)'}" stroke="${isS ? '#fff' : isX ? '#ff4a3a' : isN ? '#ffe27a' : 'none'}" stroke-width="${isS ? 8 : 5}" ${isX ? 'stroke-dasharray="14 8"' : ''}/>
+      ${scout ? `<text x="${a.x}" y="${a.y + 17}" text-anchor="middle" fill="${rc}" stroke="#000" stroke-width="1.5" font-size="50" font-weight="bold">${txt}</text>` : txt ? `<text x="${a.x + 26}" y="${a.y - 18}" fill="${rc}" stroke="#000" stroke-width="1" font-size="34" font-weight="bold">${txt}</text>` : ''}
       ${a.us ? `<text x="${a.x}" y="${a.y + 44}" text-anchor="middle" fill="#fff" stroke="#000" stroke-width=".8" font-size="26" font-weight="bold">US</text>` : ''}
       ${a.art ? `<text x="${a.x - 44}" y="${a.y + 40}" font-size="30">💥</text>` : ''}${a.air ? `<text x="${a.x + 16}" y="${a.y + 40}" font-size="30">✈️</text>` : ''}
       ${a.left && a.left.length ? `<text x="${a.x - 12}" y="${a.y - 24}" font-size="30" fill="#ff5a4a" font-weight="bold">!</text>` : ''}</g>`;
@@ -204,6 +207,119 @@ function crewOptions(p, t) {
   if (m.periscope === false && g.day && g.day.periscopes > 0) O.push(['periscope', L('ペリスコープ交換', 'Replace periscope')]);
   return O;
 }
+// 故障・破損で使えない命令は押せなくする（ユーザーの指示 2026-11-06）
+function ordBlocked(k) {
+  const d = E.G.day; if (!d) return '';
+  const j = d.jam, br = d.broken;
+  if (k === 'fire' || k === 'rotfire') return br.main ? L('主砲破損', 'gun broken') : j.main ? L('主砲故障', 'gun jammed') : br.sight ? L('照準器破損', 'sight broken') : '';
+  if (['coax', 'bow', 'aa', 'sub'].includes(k)) return br[k] ? L('破損', 'broken') : j[k] ? L('故障中', 'jammed') : '';
+  return '';
+}
+// 故障を直す命令は、故障している間だけ目立たせて先頭に出す
+const FIX_OF = { repairaa: 'aa', repairmain: 'main', repair: 'main', repaircoax: 'coax', repairbow: 'bow' };
+const needFix = k => { const d = E.G.day; return !!(d && FIX_OF[k] && d.jam[FIX_OF[k]]); };
+// 命令の説明（数字はエンジンの計算から。命中などは 2D をこの数字以下で出す確率なので、−10 は 10% 下がる）
+function cmdTip(p, k) {
+  const g = E.G, t = E.tank(), R = q => g.crew[q].rating, d = g.day;
+  const up = (s, n) => `<span class="g">${s} +${n}%</span>`, dn = (s, n) => `<span class="r">${s} −${n}%</span>`;
+  const mgMods = () => [L('射手の腕前', 'shooter rating') + ` +${R(p)}%`, L('撃てるのは歩兵・機関銃・トラック・対戦車砲だけ', 'only infantry, MGs, trucks and AT guns'), dn(L('自車が走行中', 'you are moving'), 10), dn(L('目標が森', 'target in woods'), 10), dn(L('対戦車砲・建物', 'AT gun or building'), 15), dn(L('陣地', 'fortification'), 20), L('煙1つごとに命中が半分', 'each smoke halves the chance'), L('2D 98以上で故障', 'jams on 98+')];
+  const fix = w => { const r = w === 'main' ? R('L') + (p === 'G' ? 0 : 0) : R(p); return [L(`修理できる: ${20 + r}%(2D − 腕前 ≤ 20)`, `Repair: ${20 + r}%`), L(`直らず破損: 約${Math.max(3, 10 - r)}%。破損すると今日はもう使えない`, `Breaks for good: about ${Math.max(3, 10 - r)}%`), d && d.jam[w] ? '<span class="r">' + L('今、故障している', 'Jammed now') + '</span>' : L('今は故障していない(押しても何も起きない)', 'Not jammed now (nothing happens)')]; };
+  const smoke = [L('自分の戦車に煙を出す(手榴弾の残り', 'Puts smoke on your tank (grenades left ') + (d ? d.grenades : 0) + ')', L('煙1つごとに、敵の射撃も自分の射撃も命中が半分', 'Each smoke halves enemy and your own fire')];
+  const move = [L('敵との距離や位置が変わる(白ダイス)', 'Range and position to the enemy change (white die)'), up(L('走行中: 敵の自車への命中', 'Moving: enemy fire at you'), 20).replace('+', '−').replace('class="g"', 'class="g"'), dn(L('走行中: 自分の主砲', 'Moving: your main gun'), 25) + (g.gyro ? '' : L('(ジャイロ訓練なしでは撃てない)', ' (cannot fire without gyro)')), dn(L('走行中: 機銃', 'Moving: MGs'), 10), L('パンツァーファウストに狙われやすいが、当たりにくい', 'Panzerfausts attack more often but hit less'), L(`事故: 修正後98-99で履帯切断、100でスタック(操縦手の腕前${R('D')}で有利、ハッチ閉 +5、地面がぬかるむと +3〜+9)`, `Mishap: 98-99 thrown track, 100 bogged (driver rating ${R('D')} helps, hatch shut +5, bad ground +3 to +9)`)];
+  const T = {
+    C: {
+      none: [L('敵を探す。ハッチ開なら全方向。閉なら、展望塔があれば全方向、なければ「見る方向」のセクターだけ', 'Spot. Hatch open: all around. Shut: all around with a cupola, else only the sector you look at')],
+      dirmove: [L(`操縦手の移動の事故の判定を、車長の腕前${R('C')}だけ有利にする`, `Driver mishap roll improved by your rating ${R('C')}`), L('ハッチ閉: 展望塔があれば半分、なければ効果なし', 'Hatch shut: half with a cupola, none without'), L('スタックからの脱出も、ハッチ開なら有利になる', 'Also helps to unbog with the hatch open')],
+      dirfire: [up(L('主砲の命中', 'Main gun to-hit'), R('C')), L('ハッチ開なら、新しい目標への最初の一発の −10% がなくなる', 'Hatch open: removes the −10% for the first shot at a new target'), up(L('同軸・車体機銃で目標を直接撃つとき', 'Coax/bow MG at a target'), R('C'))],
+      aa: [L('ハッチ開が必要', 'Hatch must be open'), L('全セクターへ撃てる', 'Can fire into any sector'), dn(L('前進射撃(区画へ撃つ)', 'Advancing fire (zone)'), 10), up(L('動いている歩兵', 'Moving infantry'), 15)].concat(mgMods()),
+      sub: [L('ハッチ開が必要。近距離だけ', 'Hatch must be open. Close range only'), up(L('前進射撃(区画へ撃つ)', 'Advancing fire (zone)'), 10), up(L('動いている歩兵', 'Moving infantry'), 5)].concat(mgMods()),
+      grenade: smoke,
+      repairaa: fix('aa'),
+    },
+    G: {
+      none: [L('撃たずに、砲塔が向いているセクターを見る', 'Do not fire; watch the sector the turret faces')],
+      fire: [L('砲塔が向いているセクターの目標だけ', 'Only targets in the turret sector'), up(L('砲手の腕前', 'Gunner rating'), R('G')), dn(L('新しい目標への最初の一発', 'First shot at a new target'), 10) + L('(車長がハッチ開で射撃指揮なら無し)', ' (not with commander directing, hatch open)'), up(L('同じ目標の2発目', 'Same target, 2nd shot'), '5/10/15') + L('(近/中/遠)', ' (C/M/L)'), up(L('3発目から', '3rd shot on'), '10/20/30'), dn(L('動いている車両', 'Moving vehicle'), '20/25/25'), dn(L('自車が走行中・旋回した', 'You moved or pivoted'), 25), dn(L('目標が森', 'Target in woods'), '5/10/15'), L('大きい戦車は当たりやすく、小さい車両は当たりにくい', 'Large tanks are easier, small vehicles harder'), L('煙1つごとに命中が半分', 'Each smoke halves the chance'), L('撃つ間は索敵しない。2D 98以上で主砲故障', 'No spotting while firing. Jams on 98+')],
+      rotfire: [L('砲塔を目標へ回してから撃つ', 'Traverse to the target, then fire'), dn(L('回すセクター1つごとに', 'Per sector turned'), 10), L('照準が外れる(同じ目標を続けて撃つ有利がなくなる)', 'Loses the aim on the previous target'), L('ほかの修正は「主砲を撃つ」と同じ', 'Other modifiers as Fire main gun')],
+      rotate: [L('砲塔を選んだセクターへ回す。撃たない', 'Turn the turret; no firing'), L('照準が外れる', 'Loses the aim on the previous target')],
+      coax: [L('砲塔が向いているセクターだけ', 'Turret sector only'), dn(L('前進射撃(区画へ撃つ)', 'Advancing fire (zone)'), 10), up(L('動いている歩兵', 'Moving infantry'), 15)].concat(mgMods()),
+      repair: [L(`装填手の「主砲の修理」に、砲手の腕前${R('G')}を足す`, `Adds gunner rating ${R('G')} to the loader's repair`), L('手伝う間は索敵しない', 'No spotting while helping'), d && d.jam.main ? '<span class="r">' + L('今、主砲が故障している', 'Main gun jammed now') + '</span>' : L('今は故障していない', 'Not jammed now')],
+      grenade: smoke,
+    },
+    L: {
+      load: [L('装填に専念する。この命令の時だけ索敵もできる(主砲を撃ったラウンドは除く)', 'Concentrate on loading; can also spot (not in a round the main gun fired)')],
+      change: [L('込めてある弾を、選んだ弾に替える', 'Swap the loaded round for the one you choose')],
+      restock: [L('即応弾架を残っている弾で埋める', 'Refill the ready rack'), L('即応弾架から取ると、続けて撃てる確率 +10%', 'Firing from the ready rack: +10% rate of fire')],
+      repairmain: (() => { const r = R('L') + (ORD && ORD.G && ORD.G.act === 'repair' && g.crew.G.status === 'ok' ? R('G') : 0); return [L(`修理できる: ${20 + r}%(装填手の腕前${R('L')}${r > R('L') ? ` + 砲手${R('G')}` : ''})`, `Repair: ${20 + r}%`), L('砲手が「主砲の修理を手伝う」と腕前が足される', 'Gunner can assist and add his rating'), L(`直らず破損: 約${Math.max(3, 10 - r)}%`, `Breaks for good: about ${Math.max(3, 10 - r)}%`), d && d.jam.main ? '<span class="r">' + L('今、主砲が故障している', 'Main gun jammed now') + '</span>' : L('今は故障していない', 'Not jammed now')]; })(),
+      repaircoax: fix('coax'),
+      repairaa: fix('aa'),
+      mortar: [L('砲塔が向いているセクターの近距離に煙を出す', 'Smoke at close range in the turret sector'), L('煙1つごとに、敵の射撃も自分の射撃も命中が半分', 'Each smoke halves enemy and your own fire')],
+      sub: [L('ハッチ開が必要。近距離だけ', 'Hatch must be open. Close range only'), up(L('前進射撃(区画へ撃つ)', 'Advancing fire (zone)'), 10)].concat(mgMods()),
+      aa: [L('ハッチ開が必要', 'Hatch must be open'), dn(L('前進射撃(区画へ撃つ)', 'Advancing fire (zone)'), 10)].concat(mgMods()),
+    },
+    D: {
+      stop: [L('動かない。走行中の修正がつかない', 'Stay put; no moving modifiers')],
+      fwd: move,
+      fwdHD: [L(`前進と同じ。さらに事故の判定が修正後20以下なら車体隠蔽(約${Math.max(0, 20 + R('D'))}%)`, `As Forward; hull down on 20 or less (about ${Math.max(0, 20 + R('D'))}%)`), L('車体隠蔽: 敵弾の命中箇所が6-10なら外れ(半分を防ぐ)。パンツァーファウストも同じ。車体機銃は撃てない', 'Hull down: hits on location 6-10 miss (half). Same for Panzerfausts. Bow MG cannot fire')].concat(move),
+      rev: move,
+      revHD: [L(`後退と同じ。さらに事故の判定が修正後10以下なら車体隠蔽(約${Math.max(0, 10 + R('D'))}%)`, `As Reverse; hull down on 10 or less (about ${Math.max(0, 10 + R('D'))}%)`), L('車体隠蔽: 敵弾の命中箇所が6-10なら外れ(半分を防ぐ)。パンツァーファウストも同じ。車体機銃は撃てない', 'Hull down: hits on location 6-10 miss (half). Same for Panzerfausts. Bow MG cannot fire')].concat(move),
+      pivot: [L('車体を選んだセクターへ向ける', 'Turn the hull to the chosen sector'), L('車体隠蔽が外れる', 'Lose hull down'), dn(L('このラウンドの主砲の命中', 'Main gun this round'), 25), g.gyro ? '' : L('照準が外れる(ジャイロ訓練なし)', 'Loses the aim (no gyro)')].filter(Boolean),
+    },
+    A: {
+      none: [L('敵を探す。ハッチ閉なら車体の正面だけ、開なら真後ろ以外', 'Spot. Hatch shut: hull front only; open: all but the rear')],
+      bow: [L('車体が向いているセクターだけ。車体隠蔽中は撃てない', 'Hull front sector only. Not while hull down'), dn(L('前進射撃(区画へ撃つ)', 'Advancing fire (zone)'), 10), up(L('動いている歩兵', 'Moving infantry'), 10)].concat(mgMods()),
+      pass: [up(L('続けて撃てる確率(即応弾架を使わない時)', 'Rate of fire (not using the ready rack)'), R('A'))],
+      repairbow: fix('bow'),
+      swap: [L('負傷者の席へ移る。丸1ラウンドかかる', 'Move to a wounded man\'s post; takes a full round'), L('操縦手以外の席では腕前が半分', 'Half rating except at the driver\'s post')],
+    },
+  };
+  let lines = (T[p] && T[p][k]) || null;
+  if (k === 'periscope') lines = [L(`予備のペリスコープと交換する(残り${d ? d.periscopes : 0})`, `Replace with a spare (left ${d ? d.periscopes : 0})`), L('壊れたままだと、ハッチ閉では索敵できない', 'Without one you cannot spot with the hatch shut')];
+  if (!lines) return '';
+  const name = (crewOptions(p, t).find(o => o[0] === k) || [])[1] || '';
+  const blk = ordBlocked(k);
+  return `<b>${name}</b>${blk ? ` <span class="r">(${blk}: ${L('使えない', 'unavailable')})</span>` : ''}<br>` + lines.map(s => '・' + s).join('<br>');
+}
+function placeCtip(ev) {
+  const tp = $('ctip'), r = tp.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > window.innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > window.innerHeight - 8) y = ev.clientY - r.height - 14;
+  tp.style.left = Math.max(8, x) + 'px'; tp.style.top = Math.max(8, y) + 'px';
+}
+document.addEventListener('mouseover', ev => {
+  const tp = $('ctip'); if (!tp) return;
+  const el = ev.target.closest && ev.target.closest('[data-tip]');
+  const s = el ? cmdTip(...el.dataset.tip.split(':')) : '';
+  if (!s) { tp.style.display = 'none'; return; }
+  tp.innerHTML = s; tp.style.display = 'block'; placeCtip(ev);
+});
+document.addEventListener('mousemove', ev => { const tp = $('ctip'); if (tp && tp.style.display === 'block') placeCtip(ev); });
+document.addEventListener('click', () => { const tp = $('ctip'); if (tp) tp.style.display = 'none'; });
+// 戦闘地図の縮小版（ユーザーの指示 2026-11-06）: 区画かセクターを押して選ぶ
+function miniMap(title, mode, isOn, onClick, canUse) {
+  const b = E.G.bb;
+  let h = `<image href="img/battle.jpg" width="${BW}" height="${BH}"/>`;
+  b.units.forEach(u => { const [x, y] = bbPos(sectorIdx(u.sector), u.range, 0); h += `<circle cx="${x}" cy="${y}" r="16" fill="#e8705a" stroke="#000" stroke-width="3"/>`; });
+  if (mode === 'zone') PB.SECTORS.forEach((s, i) => [0, 1, 2].forEach(r => {
+    const [x, y] = bbPos(i, r, 0), on = isOn(s, r), ok = canUse(s, r);
+    h += `<circle cx="${x}" cy="${y}" r="44" fill="${on ? 'rgba(255,255,255,.4)' : ok ? 'rgba(255,226,122,.22)' : 'rgba(0,0,0,.55)'}" stroke="${on ? '#fff' : ok ? '#ffe27a' : '#555'}" stroke-width="${on ? 12 : 5}" ${ok ? `style="cursor:pointer" onclick="${onClick(s, r)}"` : ''}/>`;
+  }));
+  else PB.SECTORS.forEach((s, i) => {
+    const [x, y] = bbPos(i, 1, 0), on = isOn(i);
+    h += `<g style="cursor:pointer" onclick="${onClick(i)}"><circle cx="${x}" cy="${y}" r="78" fill="${on ? 'rgba(255,255,255,.4)' : 'rgba(255,226,122,.22)'}" stroke="${on ? '#fff' : '#ffe27a'}" stroke-width="${on ? 12 : 5}"/><text x="${x}" y="${y + 18}" text-anchor="middle" font-size="54" font-weight="bold" fill="#fff" stroke="#000" stroke-width="2">${PB.SECTOR_NAME[s]}</text></g>`;
+  });
+  h += `<g transform="translate(${BCX},${BCY}) rotate(${60 * b.facing})"><rect x="-26" y="-40" width="52" height="76" rx="6" fill="#5c6b35" stroke="#111" stroke-width="3"/></g><g transform="translate(${BCX},${BCY}) rotate(${60 * b.turret})"><circle r="19" fill="#39431f" stroke="#111" stroke-width="3"/><rect x="-4" y="-64" width="8" height="52" fill="#111"/></g>`;
+  return `<div class="mini">${title}<svg viewBox="0 0 ${BW} ${BH}">${h}</svg></div>`;
+}
+// 前進射撃で撃てる区画（エンジンと同じ判定）
+function zoneOk(kind, s, r) {
+  const b = E.G.bb, w = E.G.day.w;
+  if ((w.fog || w.fall) && r > 0) return false;
+  if (PB.MG[kind][r] < 0) return false;
+  if (kind === 'coax') return s === PB.SECTORS[b.turret];
+  if (kind === 'bow') return !b.hull && sectorIdx(s) === b.facing;
+  return true;
+}
 const sectorOpts = cur => PB.SECTORS.map((s, i) => `<option value="${i}" ${cur === i ? 'selected' : ''}>${L('セクター', 'Sector ')}${PB.SECTOR_NAME[s]}</option>`).join('');
 function targetSelect(p) {
   const b = E.G.bb, tg = b.units.filter(u => u.spot === 'spotted');
@@ -232,7 +348,7 @@ function renderTank() {
     const hasHatch = p !== 'G' && (p !== 'L' || t.loaderHatch);
     const on = hasHatch && b ? (battle ? ORD.hatch[p] : b.hatch[p]) : false;
     const can = battle && !st;
-    h += `<div class="cc ${st ? 'hurt' : ''} ${POP === p ? 'sel' : ''} ${can ? 'click' : ''}" ${can ? `onclick="POP=POP==='${p}'?null:'${p}';render()"` : ''}><div class="cct"><b>${POSN()[p]}</b> <span class="rt">${m.rating}</span> ${esc(m.name)}</div>`;
+    h += `<div class="cc ${st ? 'hurt' : ''} ${POP === p ? 'sel' : ''} ${can ? 'click' : ''}" ${can ? `onclick="POP=POP==='${p}'?null:'${p}';render()"` : ''}><div class="cct"><b>${POSN()[p]}</b> <span class="rt">${m.rating}</span> ${esc(m.name)}${can && crewOptions(p, t).some(o => needFix(o[0])) ? `<span class="fixb" title="${L('修理できる', 'Can repair')}">!</span>` : ''}</div>`;
     h += `<div class="ccact ${st ? 'bad' : ''}">${st || (battle ? esc(ACT_NAME(p, t)) : '')}${m.periscope === false ? ` <span class="bad">${L('鏡破損', 'no scope')}</span>` : ''}</div>`;
     if (hasHatch && b && (battle || prep)) h += `<button class="hbtn ${on ? 'open' : ''}" onclick="event.stopPropagation();toggleHatch('${p}')">${L('ハッチ', 'Hatch')} ${on ? L('開', 'open') : L('閉', 'shut')}</button>`;
     h += `</div>`;
@@ -265,15 +381,20 @@ function renderPop(battle, prep, t, b, ammo) {
   if (POP === 'AM' && battle) {
     h = `${close}<h3>${L('次に込める弾', 'Next round')}</h3><div class="opts big">${avail.map(a => `<button class="${ORD.reload === a ? 'on' : ''}" onclick="ORD.reload='${a}';render()">${a} ${ammo[a]}</button>`).join('')}</div><div class="opts big"><button class="${ORD.useRack ? 'on' : ''}" onclick="ORD.useRack=!ORD.useRack;render()">${L('即応弾架から取る(発射速度が上がる)', 'From the ready rack')}</button></div>`;
   } else if (POP === 'PR' && prep) {
-    h = `${close}<h3>${L('戦闘前の準備', 'Prepare for battle')}</h3><div>${L('込める弾', 'Gun load')}</div><div class="opts big">${avail.map(a => `<button class="${b.load === a ? 'on' : ''}" onclick="setPrepLoad('${a}')">${a}</button>`).join('')}</div><label>${L('車体の向き', 'Facing')} <select onchange="E.G.bb.facing=+this.value;render()">${sectorOpts(b.facing)}</select></label> <label>${L('砲塔の向き', 'Turret')} <select onchange="E.G.bb.turret=+this.value;render()">${sectorOpts(b.turret)}</select></label>`;
+    h = `${close}<h3>${L('戦闘前の準備', 'Prepare for battle')}</h3><div>${L('込める弾', 'Gun load')}</div><div class="opts big">${avail.map(a => `<button class="${b.load === a ? 'on' : ''}" onclick="setPrepLoad('${a}')">${a}</button>`).join('')}</div><label>${L('車体の向き', 'Facing')} <select onchange="E.G.bb.facing=+this.value;render()">${sectorOpts(b.facing)}</select></label> <label>${L('砲塔の向き', 'Turret')} <select onchange="E.G.bb.turret=+this.value;render()">${sectorOpts(b.turret)}</select></label><div class="minis">${miniMap(L('車体の向き', 'Facing'), 'sec', i => i === b.facing, i => `E.G.bb.facing=${i};render()`)}${miniMap(L('砲塔の向き', 'Turret'), 'sec', i => i === b.turret, i => `E.G.bb.turret=${i};render()`)}</div>`;
   } else if (battle && g.crew[POP]) {
     const p = POP, m = g.crew[p], act = ORD[p].act;
     h = `${close}<h3>${POSN()[p]} ${esc(m.name)} (${L('腕前', 'rating')}${m.rating})</h3><div class="opts big">`;
-    for (const o of crewOptions(p, t)) h += `<button class="${act === o[0] ? 'on' : ''}" onclick="pickOrd('${p}','${o[0]}')">${o[1]}</button>`;
+    const all = crewOptions(p, t);
+    for (const o of all.filter(o => needFix(o[0])).concat(all.filter(o => !needFix(o[0])))) {
+      const blk = ordBlocked(o[0]), fx = needFix(o[0]);
+      h += `<button class="${act === o[0] ? 'on' : ''} ${fx ? 'fix' : ''}" ${blk ? 'disabled' : ''} data-tip="${p}:${o[0]}" onclick="pickOrd('${p}','${o[0]}')">${fx ? '⚠ ' + L('故障中→', 'Jammed → ') : ''}${o[1]}${blk ? `(${blk})` : ''}</button>`;
+    }
     h += `</div>`;
-    if ((act === 'rotate' && p === 'G') || (p === 'D' && act === 'pivot')) { const cur = p === 'G' ? (ORD.G.to != null ? ORD.G.to : b.turret) : (ORD.D.to != null ? ORD.D.to : b.facing); h += `<div class="popx2">${L('どのセクターへ', 'To sector')} <select onchange="setTo('${p}',this.value)">${sectorOpts(cur)}</select></div>`; }
+    if ((act === 'rotate' && p === 'G') || (p === 'D' && act === 'pivot')) { const cur = p === 'G' ? (ORD.G.to != null ? ORD.G.to : b.turret) : (ORD.D.to != null ? ORD.D.to : b.facing); h += `<div class="popx2">${L('どのセクターへ', 'To sector')} <select onchange="setTo('${p}',this.value)">${sectorOpts(cur)}</select></div>` + `<div class="minis">${miniMap('', 'sec', i => i === cur, i => `setTo('${p}',${i})`)}</div>`; }
     if (['fire', 'rotfire', 'coax', 'bow', 'aa', 'sub'].includes(act)) {
       h += `<div class="popx2">${L('目標', 'Target')} ${targetSelect(p)}</div>`;
+      if (['coax', 'bow', 'aa', 'sub'].includes(act)) h += `<div class="minis">${miniMap(L('前進射撃: 撃つ区画を押す(灰色は撃てない)', 'Advancing fire: click a zone (grey = cannot)'), 'zone', (s, r) => ORD[p].target === `z:${s}:${r}`, (s, r) => `setTarget('${p}','z:${s}:${r}')`, (s, r) => zoneOk(act, s, r))}</div>`;
       if (p === 'G' && typeof ORD.G.target === 'number') {
         const u = b.units.find(x => x.id === ORD.G.target);
         if (u && !['LW', 'MG', 'AT'].includes(u.cls)) h += `<label><input type="checkbox" ${ORD.G.track ? 'checked' : ''} onchange="ORD.G.track=this.checked;render()"> ${L('履帯を狙う', 'Aim for track')}</label>`;
@@ -282,7 +403,7 @@ function renderPop(battle, prep, t, b, ammo) {
     }
     if (p === 'L' && act === 'change') { if (!ORD.L.ammo) ORD.L.ammo = avail[0]; h += `<div class="opts big">${avail.map(a => `<button class="${ORD.L.ammo === a ? 'on' : ''}" onclick="setAmmoCh('${a}');render()">${a}</button>`).join('')}</div>`; }
     if (p === 'A' && act === 'swap') { const list = ['C', 'G', 'L', 'D'].filter(q => g.crew[q].status !== 'ok'); if (!ORD.A.to) ORD.A.to = list[0]; h += `<div class="opts big">${list.map(q => `<button class="${ORD.A.to === q ? 'on' : ''}" onclick="ORD.A.to='${q}';render()">${POSN()[q]}</button>`).join('')}</div>`; }
-    const looksAt = q => `<div class="popx2">${L('見る方向', 'Looks')} <select onchange="E.G.bb.${q === 'L' ? 'loaderLook' : 'cmdLook'}=PB.SECTORS[+this.value];render()">${sectorOpts(PB.SECTORS.indexOf(b[q === 'L' ? 'loaderLook' : 'cmdLook'] || PB.SECTORS[b.turret]))}</select></div>`;
+    const looksAt = q => { const key = q === 'L' ? 'loaderLook' : 'cmdLook', cur = PB.SECTORS.indexOf(b[key] || PB.SECTORS[b.turret]); return `<div class="popx2">${L('見る方向', 'Looks')} <select onchange="E.G.bb.${key}=PB.SECTORS[+this.value];render()">${sectorOpts(cur)}</select></div><div class="minis">${miniMap('', 'sec', i => i === cur, i => `E.G.bb.${key}=PB.SECTORS[${i}];render()`)}</div>`; };
     if (p === 'L' && !ORD.hatch.L) h += looksAt('L');
     if (p === 'C' && !ORD.hatch.C && !t.cupola) h += looksAt('C');
   } else { POP = null; el.style.display = 'none'; return; }
