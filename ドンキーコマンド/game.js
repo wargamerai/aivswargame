@@ -5,16 +5,23 @@ const $ = id => document.getElementById(id);
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const d2 = () => d6() + d6();
 const d3x6 = () => d6() + d6() + d6();
+// 8つの言語（ユーザーの指示 2026-11-06）。訳が抜けている言葉は英語で出す
+const DC_LANGS = [['ja', '日本語'], ['en', 'English'], ['es', 'Español'], ['de', 'Deutsch'], ['fr', 'Français'], ['it', 'Italiano'], ['zh', '中文'], ['ko', '한국어']];
+const dcLangOk = l => DC_LANGS.some(x => x[0] === l) && !!(window.DC_TEXT && window.DC_TEXT[l]);
 let lang = 'ja';
 try {
   const q = new URLSearchParams(location.search).get('lang');
-  const l = (q === 'ja' || q === 'en') ? q : localStorage.getItem('donkeyLang');
-  if (l === 'ja' || l === 'en') lang = l;
-  else if (!/^ja/i.test(navigator.language || 'ja')) lang = 'en';
+  const l = dcLangOk(q) ? q : localStorage.getItem('donkeyLang');
+  if (dcLangOk(l)) lang = l;
+  else {
+    const nav = String(navigator.language || 'ja').slice(0, 2).toLowerCase();
+    lang = dcLangOk(nav) ? nav : 'en';
+  }
 } catch (e) { /* 保存できなくても動く */ }
 
 function T(k, p) {
   let s = window.DC_TEXT[lang][k];
+  if (s === undefined) s = window.DC_TEXT.en[k];
   if (s === undefined) return k;
   if (p) for (const n in p) s = s.split('{' + n + '}').join(p[n]);
   return s;
@@ -97,7 +104,7 @@ function drawSetup() {
   $('sTitle').textContent = T('title');
   $('sSub').textContent = T('sub');
   $('toTop').textContent = T('backTop');
-  $('toTop').setAttribute('href', lang === 'en' ? '../en/index.html' : '../index1.html');
+  $('toTop').setAttribute('href', lang === 'ja' ? '../index1.html' : '../en/index.html');
   $('btnRules1').textContent = T('rules');
   $('h0').textContent = T('h0');
   $('diffBtns').innerHTML = '';
@@ -117,8 +124,14 @@ function drawSetup() {
   $('lMain').textContent = T('lMain');
   $('btnAuto').textContent = T('auto');
   $('autoNote').textContent = T('autoNote');
-  $('lang_ja').disabled = lang === 'ja';
-  $('lang_en').disabled = lang === 'en';
+  $('langBtns').innerHTML = '';
+  DC_LANGS.forEach(([code, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.disabled = lang === code;
+    b.onclick = () => setLang(code);
+    $('langBtns').appendChild(b);
+  });
   if (!ch) { $('abil').innerHTML = ''; return; }
   let h = '<table class="stat">';
   ['end', 'str', 'luck', 'know', 'reac', 'acc'].forEach(a => {
@@ -790,7 +803,7 @@ function drawMap() {
     if (c && c.room) {
       const name = T('r_' + c.room);
       const fs = Math.max(8, Z * 0.16);
-      s += '<text x="' + (X + Z / 2) + '" y="' + (Y + fs + 3) + '" text-anchor="middle" font-size="' + fs + '" fill="#fc8">' + name.slice(0, lang === 'ja' ? 5 : 8) + '</text>';
+      s += '<text x="' + (X + Z / 2) + '" y="' + (Y + fs + 3) + '" text-anchor="middle" font-size="' + fs + '" fill="#fc8">' + name.slice(0, (lang === 'ja' || lang === 'zh' || lang === 'ko') ? 5 : 8) + '</text>';
       if (c.done) s += '<text x="' + (X + Z - 4) + '" y="' + (Y + Z - 4) + '" text-anchor="end" font-size="' + (fs * 1.1) + '" fill="#7c7">✓</text>';
     }
     if (c && c.enemies > 0) {
@@ -817,7 +830,8 @@ function drawGame() {
   document.title = T('title');
   $('turnLab').textContent = T('diff_' + diffKey) + '  ' + T('turn', { t: G.turn, v: G.vp, k: G.kills });
   $('legend').textContent = T('legend');
-  $('langBtn').textContent = T('langOther');
+  if (!$('langSel').options.length) DC_LANGS.forEach(([code, label]) => $('langSel').add(new Option(label, code)));
+  $('langSel').value = lang;
   $('btnRules2').textContent = T('rules');
   $('hMove').textContent = T('hMove');
   $('hPhase').textContent = T('hPhase');
@@ -1018,9 +1032,7 @@ function setLang(l) {
   drawSetup();
   if (G) { drawGame(); if (G.combat) drawCombat(); }
 }
-$('lang_ja').onclick = () => setLang('ja');
-$('lang_en').onclick = () => setLang('en');
-$('langBtn').onclick = () => setLang(lang === 'ja' ? 'en' : 'ja');
+$('langSel').onchange = () => setLang($('langSel').value);
 $('btnRoll').onclick = () => { rollCharacter(); drawSetup(); };
 $('btnAuto').onclick = () => { autoEquip(); drawEquipPick(); };
 $('btnStart').onclick = startGame;

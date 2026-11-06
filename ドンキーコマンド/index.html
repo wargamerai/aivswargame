@@ -82,7 +82,7 @@
   <div id="setupHead">
     <div><h1 id="sTitle"></h1><div class="dim" id="sSub"></div></div>
     <div>
-      <button id="lang_ja">日本語</button><button id="lang_en">English</button>
+      <span id="langBtns"></span>
       <button id="btnRules1"></button>
       <a id="toTop" href="../index1.html"></a>
     </div>
@@ -99,7 +99,7 @@
   <div id="mapSide">
     <div id="mapTools">
       <span id="turnLab"></span>
-      <span><button id="btnZm">−</button><button id="btnZp">＋</button><button id="langBtn"></button><button id="btnRules2"></button></span>
+      <span><button id="btnZm">−</button><button id="btnZp">＋</button><select id="langSel" style="font:inherit"></select><button id="btnRules2"></button></span>
     </div>
     <div id="mapWrap"><div id="map"></div></div>
     <div class="dim" id="legend" style="margin-top:4px"></div>
@@ -136,6 +136,7 @@
 </div>
 
 <script src="i18n.js"></script>
+<script src="i18n_more.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
