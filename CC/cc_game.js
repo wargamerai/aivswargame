@@ -307,7 +307,12 @@ async function playTurn() {
   // 1. 移動
   const dist = distances();
   const here = dist[M.pos];
-  const opts = neighbors(M.pos).filter(n => dist[n] === here - 1 && (!PORT_POS[n] || n === M.convoy.to));
+  // カナダ水域とエア・ギャップは自由に動ける（2.1.1。遠回りも可。ユーザーの指示 2026-11-07）。矢印の航路の上と、航路への出入りは目的地へ近づく向きだけ
+  const route = routeOf();
+  const onArrow = k => k === 'ON' || route.includes(k);
+  const opts = neighbors(M.pos).filter(n => dist[n] != null && (!PORT_POS[n] || n === M.convoy.to) &&
+    ((onArrow(M.pos) || onArrow(n)) ? dist[n] === here - 1 : true))
+    .sort((a, b) => dist[a] - dist[b]);
   const short = n => (PORT_POS[n] ? PORT_NAME[n] : (c => `${'ABCD'[c.r]}${c.c}`)(cellAt(n)));
   const choices = opts.map(n => ({ label: storyOn() ? L(`「${short(n)}へ向かえ」　${placeName(n)}`, `"Make for ${short(n)}."　${placeName(n)}`) : placeName(n), value: n, hint: n === M.convoy.to ? L('目的地', 'destination') : (M.revealed[n] ? L(`判明: ${evName(M.events[n])}`, `known: ${evName(M.events[n])}`) : L(`目的地まで${dist[n]}`, `${dist[n]} to the destination`)) }));
   // 上の地図にも、行き先のマスに選択肢の番号を出す
@@ -317,6 +322,7 @@ async function playTurn() {
   finally { M.moveOpts = null; }
   const prevSector = sectorOf(M.pos);
   M.pos = to;
+  M.breakoffAt = null;
   const days = (M.convoy.speed === 'fast' ? 1 : 1.5) + (M.weather === 3 ? 0.5 : 0);
   advanceDays(days);
   const rep = [];   // このターンの部下の報告（まとめて1つの段落にする）
@@ -597,6 +603,7 @@ async function engage(ub, opts) {
         if (SH().dcLeft <= 0) { UI.bad(L('爆雷が残っていない！', 'No depth charges left!')); phase = await lostContact(ub, opts); if (phase === 'end') return 'withdrew'; continue; }
         const r = await depthCharge(ub, 'dc', opts);
         if (r === 'hold') continue; // 0発（温存）: 外れと同じく 9.6.1 に戻る。接触は保ったまま（次の探知に +3）
+        if (r === 'breakoff') continue; // 爆雷を投げない（自動で0個）。この海域ではずっと0個。U ボートの判定は続く
         ub.contact = false; // 爆雷攻撃で ASDIC の接触は途切れる
         if (r !== 'continue') return r;
         await UI.next();
@@ -813,13 +820,25 @@ async function depthCharge(ub, weapon, opts, over) {
   const name = isHH ? L('ヘッジホッグ', 'Hedgehog') : L('爆雷', 'Depth charge');
   const ammoKey = isHH ? 'hhLeft' : 'dcLeft';
   let n = 4;
+  // この海域で「爆雷は投げない」を選んでいれば、聞かずに0個（温存）にする（ユーザーの指示 2026-11-07）
+  if (!over.free && !isHH && S.mission.breakoffAt && S.mission.breakoffAt === S.mission.pos) {
+    UI.log(L('爆雷は投下しない（この海域では温存。自動で0個）', 'No depth charges dropped (kept for this square, automatically 0)'), 'routine');
+    return 'hold';
+  }
   if (!over.free) {
     const left = SH()[ammoKey];
     if (left <= 0) return null;
     const mx = Math.min(4, left);
     n = await UI.choose(storyOn() ? L(`${isHH ? '水雷長「ヘッジホッグ、何発撃ちますか！」' : story('dcAsk')}（残り${left}発・1発がダイス1個）`, `${isHH ? 'Torpedo officer: "How many Hedgehog bombs, sir?"' : story('dcAsk')} (${left} left · one die per charge)`) : L(`${name}攻撃: ダイスを何個振りますか？（同じ数だけ${name}を使う。残り${left}）`, `${name} attack: how many dice? (uses the same number of ${name}s, ${left} left)`),
       Array.from({ length: mx }, (_, i) => ({ label: storyOn() ? L(`「${mx - i}発、${isHH ? '撃て' : '投下せよ'}！」`, `"${mx - i}, ${isHH ? L('', 'fire') : L('', 'drop')}!"`) : L(`${mx - i}個`, `${mx - i}`), value: mx - i }))
-        .concat(isHH ? [] : [{ label: storyOn() ? L('「待て。投下するな」（0発・温存）', '"Hold it. Don\'t drop." (0 · keep them)') : L('0個（投下しない・温存）', '0 (don\'t drop · keep them)'), value: 0, hint: L('外れと同じ扱い。爆発音がないので ASDIC の接触は保たれる', 'Treated as a miss. No explosions, so ASDIC contact is kept') }]));
+        .concat(isHH ? [] : [{ label: storyOn() ? L('「待て。投下するな」（0発・温存）', '"Hold it. Don\'t drop." (0 · keep them)') : L('0個（投下しない・温存）', '0 (don\'t drop · keep them)'), value: 0, hint: L('外れと同じ扱い。爆発音がないので ASDIC の接触は保たれる', 'Treated as a miss. No explosions, so ASDIC contact is kept') },
+          { label: storyOn() ? L('「この海域では爆雷を落とすな」（ずっと0発）', '"No depth charges in these waters." (always 0)') : L('この海域ではずっと0個（自動）', 'Always 0 in this square (automatic)'), value: -1, hint: L('この海域にいる間は、聞かずに0個（温存）を選ぶ。U ボートの判定はそのまま続く。次の海域ではまた聞く', 'While in this square, 0 (keep them) is chosen without asking. The U-boat\'s rolls go on as usual. You are asked again in the next square') }]));
+    if (n === -1) {
+      S.mission.breakoffAt = S.mission.pos;
+      UI.log(L('この海域では爆雷を投下しない（ずっと0個・温存）。外れと同じ扱いで続ける', 'No depth charges in this square (always 0, kept). Treated as a miss'), 'routine');
+      UI.story(L('「この海域では爆雷を落とすな」——爆雷は、次の戦いのために残しておく。', '"No depth charges in these waters."——The charges are saved for the next fight.'));
+      return 'breakoff';
+    }
     if (n === 0) {
       UI.log(L('爆雷を投下しなかった（温存）。外れと同じ扱いで続ける。爆発音がないので ASDIC の接触は保たれる', 'No depth charges dropped (kept). Treated as a miss. No explosions, so ASDIC contact is kept'), 'routine');
       UI.story(ST_pick([L('水雷長「投下待て！」——艦尾の爆雷が、レールの上で止まった。ASDIC の音だけが規則正しく響く。', 'Torpedo officer: "Hold the drop!"——The charges stop on the stern rails. Only the ASDIC keeps its steady rhythm.'), L('「まだだ。落とすな」——爆雷は温存した。ピーン……という音が、敵の位置をつかんだまま離さない。', '"Not yet. Don\'t drop."——The charges are held back. The ping keeps its grip on the enemy\'s position.')]));
