@@ -304,6 +304,11 @@ function miniMap(title, mode, isOn, onClick, canUse) {
     const [x, y] = bbPos(i, r, 0), on = isOn(s, r), ok = canUse(s, r);
     h += `<circle cx="${x}" cy="${y}" r="44" fill="${on ? 'rgba(255,255,255,.4)' : ok ? 'rgba(255,226,122,.22)' : 'rgba(0,0,0,.55)'}" stroke="${on ? '#fff' : ok ? '#ffe27a' : '#555'}" stroke-width="${on ? 12 : 5}" ${ok ? `style="cursor:pointer" onclick="${onClick(s, r)}"` : ''}/>`;
   }));
+  // 前進射撃の地図にもセクター名を出す（「中」の丸の上。押すのは丸のまま。ユーザーの指示 2026-11-07）
+  if (mode === 'zone') PB.SECTORS.forEach((s, i) => {
+    const [x, y] = bbPos(i, 1, 0);
+    h += `<text x="${x}" y="${y + 16}" text-anchor="middle" font-size="46" font-weight="bold" fill="#fff" stroke="#000" stroke-width="2" style="pointer-events:none">${PB.SECTOR_NAME[s]}</text>`;
+  });
   else PB.SECTORS.forEach((s, i) => {
     const [x, y] = bbPos(i, 1, 0), on = isOn(i);
     h += `<g style="cursor:pointer" onclick="${onClick(i)}"><circle cx="${x}" cy="${y}" r="78" fill="${on ? 'rgba(255,255,255,.4)' : 'rgba(255,226,122,.22)'}" stroke="${on ? '#fff' : '#ffe27a'}" stroke-width="${on ? 12 : 5}"/><text x="${x}" y="${y + 18}" text-anchor="middle" font-size="54" font-weight="bold" fill="#fff" stroke="#000" stroke-width="2">${PB.SECTOR_NAME[s]}</text></g>`;
@@ -407,6 +412,8 @@ function renderPop(battle, prep, t, b, ammo) {
     if (p === 'L' && !ORD.hatch.L) h += looksAt('L');
     if (p === 'C' && !ORD.hatch.C && !t.cupola) h += looksAt('C');
   } else { POP = null; el.style.display = 'none'; return; }
+  // 下に「決定」ボタン（右上の × まで行かなくても閉じられる。ユーザーの指示 2026-11-07）
+  h += `<div style="text-align:right;margin-top:8px"><button class="go" style="min-width:8em" onclick="POP=null;render()">${L('決定', 'OK')}</button></div>`;
   el.innerHTML = h; el.style.display = 'block';
 }
 // 追加の選択がいらない命令は、押したら閉じる
@@ -498,7 +505,17 @@ function loadGo() {
   E.setLoad({ vol: +$('lV').value || 0, ap: +$('lA').value || 0, wp: $('lW') ? +$('lW').value || 0 : 0, rack });
   closeOver();
 }
-function doOp(k) { const s = SEL; play(() => { if (k === 'check') return E.opCheck(s); if (k === 'art') return E.opArt(s); if (k === 'air') return E.opAir(s); return E.opResupply(); }, afterAct); }
+// 偵察・砲兵・航空のあとも、まだ移動の場面でその区域が隣なら選んだままにする（すぐ「進入」を押せる。ユーザーの指示 2026-11-07）
+function doOp(k) {
+  const s = SEL;
+  play(() => { if (k === 'check') return E.opCheck(s); if (k === 'art') return E.opArt(s); if (k === 'air') return E.opAir(s); return E.opResupply(); }, r => {
+    afterAct(r);
+    const g = E.G;
+    if (k === 'res' || s == null || g.phase !== 'move' || !g.day || !g.day.map) return;
+    const d = g.day, cur = d.map.areas[d.map.cur];
+    if (d.advChoice ? d.advChoice.includes(s) : E.neighbors(cur).some(a => a.id === s)) { SEL = s; render(); }
+  });
+}
 function doEndDay() { if (!confirm(L('今日の作戦を切り上げますか？', 'End today\'s operation?'))) return; play(() => E.debrief(), afterAct); }
 function doCa() { play(() => E.caTick(), afterAct); }
 function doRound() { POP = null; const o = ORD || {}; play(() => E.resolveRound(o), afterAct); }

@@ -2426,7 +2426,10 @@ function canSinkLine(shooters, enemies){
 //   守られている空母と船団は、通常の艦のあと
 function planAlliedFire(shooters, enemies){
   const val = s => (s.atkOrig || s.atk || 0) + (s.def || 0);
-  const byNeed = arr => arr.slice().sort((a, b) => (sinkNeed(a) - sinkNeed(b)) || (val(b) - val(a)));
+  // 1〜4ターンはドイツ艦を先に（損害のないドイツ艦は砲撃 +1 で一番危ない。スティーブさんの意見、ユーザーの指示 2026-11-07）。5ターンからは国に関係なく沈めやすい順
+  const deFirst = typeof currentTurn !== 'undefined' && currentTurn <= 4;
+  const deRank = s => (deFirst && s.country !== 'DE') ? 1 : 0;
+  const byNeed = arr => arr.slice().sort((a, b) => (deRank(a) - deRank(b)) || (sinkNeed(a) - sinkNeed(b)) || (val(b) - val(a)));
   const normals = byNeed(enemies.filter(s => (s.type !== 'CV' || s._cvDeclared) && s.type !== 'CONVOY'));
   const side = enemies.length ? enemies[0].side : null;
   const later = byNeed([...(convoyOpenSides[side] ? enemies.filter(s => s.type === 'CONVOY') : []), ...enemies.filter(s => s.type === 'CV' && !s._cvDeclared)]);
