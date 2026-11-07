@@ -1197,6 +1197,13 @@ function getValidDests(){
     seas = seas.filter(s => s !== 'SouthAtlantic');
     seas2 = seas2.filter(s => s !== 'SouthAtlantic');
   }
+  // 15.5・15.6 イタリアの重巡が出られるのは、地中海・南大西洋・北大西洋と、イタリア・フランス・中立港だけ（チャックさんの報告 2026-11-08）
+  if(firstShip && firstShip.country === 'IT' && firstShip.type === 'CA'){
+    const okSea = ['Mediterranean', 'SouthAtlantic', 'NorthAtlantic'];
+    seas = seas.filter(s => okSea.includes(s));
+    seas2 = seas2.filter(s => okSea.includes(s));
+    ports = ports.filter(p => ['Italy', 'France', 'Neutral'].includes(p));
+  }
   // 14.1 同一海域に既に船団があれば船団は移動不可
   if(firstShip && firstShip.type === 'CONVOY'){
     seas = seas.filter(seaKey => {
@@ -2809,6 +2816,8 @@ function getReturnPorts(ship){
   const sea = ship.location;
   if(!SEAS[sea]) return [];
   // 南大西洋のドイツ艦特例: 強制帰還(ダイス5)=中立のみ、それ以外は損害に関係なく France(使用可能時)・中立から選択
+  // 17.1 南大西洋で航行不能になったイタリア艦も中立港だけ（チャックさんの報告 2026-11-08）
+  if(sea === 'SouthAtlantic' && ship.country === 'IT' && ship.forcedReturn) return ['Neutral'];
   if(sea === 'SouthAtlantic' && ship.country === 'DE'){
     if(ship.forcedReturn) return ['Neutral'];
     const franceUsable = PORTS.France.available.includes(currentTurn);
