@@ -294,7 +294,7 @@ body.hide-units .control-marker { display:none; }
   </label>
   <div id="phaseBar" style="display:flex;gap:2px;flex-wrap:wrap;font-size:0.7em;margin-left:8px;"></div>
   <button class="zbtn" onclick="if(!resignedGuard()) advancePhase()" style="width:auto;padding:0 8px;font-size:0.8em;">次フェイズ▶</button>
-  <button class="zbtn" onclick="if(!resignedGuard()) endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;">ターン終了</button>
+  <button id="endTurnBtn" class="zbtn" onclick="if(!resignedGuard() && phaseIdx >= 9) endTurn()" style="width:auto;padding:0 12px;background:#883;font-weight:bold;" title="POC のフェイズまで進むと押せます">ターン終了</button>
   <button class="zbtn" onclick="saveGameToFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#365;" title="ここまでの状態をファイルに保存する">Save</button>
   <button class="zbtn" onclick="pickLoadFile()" style="width:auto;padding:0 8px;font-size:0.8em;background:#356;" title="セーブファイルを読み込んで続きから遊ぶ">Load</button>
   <input type="file" id="loadFileInput" accept=".json,application/json" style="display:none;" onchange="loadGameFromFile(this)">
@@ -674,6 +674,9 @@ function renderPhaseBar(){
     else if(id < phaseIdx) cls = 'done';
     return `<span class="ph-cell ${cls}">${nm}</span>`;
   }).join('');
+  // ターン終了は、最後のフェイズ（POC）まで来るまで押せない（海域の支配と POC を飛ばさないため。チャックさんの報告、ユーザーの指示 2026-11-07）
+  const eb = document.getElementById('endTurnBtn');
+  if(eb){ const ok = phaseIdx >= 9; eb.disabled = !ok; eb.style.opacity = ok ? '' : '0.4'; eb.style.cursor = ok ? 'pointer' : 'not-allowed'; }
 }
 // 2海域移動のダイス: 人が動かす陣営の移動フェイズが終わるときに、宣言した艦をまとめて判定する
 // 洋上補給に成功した艦が行ける海域: 隣か、途中が連合の支配でない2エリア先
