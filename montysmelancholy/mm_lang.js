@@ -158,7 +158,7 @@
     '連合軍の勝利': 'Allied Victory', '連合軍の敗北': 'Allied Defeat', 'ゲーム終了': 'Game over', '架橋': 'Bridge', '戦車': 'Tank', '渡河可': 'River crossing', '司令部': 'HQ', '対戦車': 'Anti-tank', '防御態勢': 'Defensive', '補給切れ': 'Out of supply',
     '除去された駒': 'Eliminated units', '縮小': 'Zoom −', '拡大': 'Zoom +', '文字−': 'Text −', '文字+': 'Text +', '新しいゲーム': 'New Game', 'レポートへ': 'To the Report', 'レポートを見る': 'View Report',
     '1本もので保存': 'Save as one file', 'ブログ用に分割': 'Split for a blog', '本文をコピー': 'Copy text', 'コピーしました': 'Copied', '本文を保存': 'Save text', '地図の画像を保存': 'Save map image',
-    '最初の札をめくる': 'Turn the first card', '次の札をめくる': 'Turn the next card', '駒を選ぶ': 'Select units', '移動をやめる': 'Stop Moving', '1つ戻す': 'Undo', '全部リセット': 'Reset All', '全部選ぶ': 'Select All', '全部外す': 'Clear All',
+    '最初の札をめくる': 'Turn the first card', '次の札をめくる': 'Turn the next card', '駒を選ぶ': 'Select units', '移動をやめる': 'Stop Moving', '1つ戻す': 'Undo', '全部リセット': 'Reset All', '全部選ぶ': 'Select All', '行動値分選ぶ': 'Select by Action Value', '消耗している駒を選ぶ': 'Select Depleted', '全部外す': 'Clear All',
     '今回は降下しない': 'Do not drop now', '移動+攻撃': 'Move + Attack', '命令を消す': 'Remove orders', 'やり直す': 'Start Over', '選び直す': 'Choose Again', 'このまま置く': 'Place Anyway', 'この命令を消す': 'Remove this order',
     '駒はない。': 'No units.', '連合軍': 'Allies', 'ドイツ軍': 'Germans', '攻撃': 'attack', '防御': 'defense', '効果なし': 'no effect', '除去': 'eliminated', '消耗': 'depleted', '退却': 'retreat', '回復': 'recover', '移動': 'move',
   };

@@ -654,6 +654,14 @@
       const b = (t, en, f) => { const x = document.createElement('button'); x.textContent = t; x.disabled = !en; x.onclick = f; acts.appendChild(x); };
       const allElig = al.filter(s => elig.has(s.id) && !UI.orders.some(o => o.id === s.id));
       b('全部選ぶ', allElig.length > 0, () => { allElig.forEach(s => UI.sel.add(s.id)); openArea(id, ev); renderMap(); });
+      const room = p.val - usedVal() - [...UI.sel].filter(i => !UI.orders.some(o => o.id === i)).length;
+      const strong = allElig.filter(s => !s.back && !UI.sel.has(s.id))
+        .map((s, k) => ({ s, k }))
+        .sort((x, y) => (G.UNIT[y.s.id].a - G.UNIT[x.s.id].a) || (G.UNIT[y.s.id].d - G.UNIT[x.s.id].d) || (x.k - y.k))
+        .map(x => x.s);
+      b('行動値分選ぶ', room > 0 && strong.length > 0, () => { strong.slice(0, room).forEach(s => UI.sel.add(s.id)); openArea(id, ev); renderMap(); });
+      const worn = allElig.filter(s => s.back);
+      b('消耗している駒を選ぶ', worn.length > 0, () => { worn.forEach(s => UI.sel.add(s.id)); openArea(id, ev); renderMap(); });
       const mv = sel.filter(s => !s.back && G.UNIT[s.id].m > 0);
       const atk = sel.filter(s => !s.back && G.UNIT[s.id].a > 0);
       const rec = sel.filter(s => s.back);
