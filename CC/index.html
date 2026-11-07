@@ -12,7 +12,7 @@
   html { font-size: var(--fs, 15px); }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--txt); }
   body { font: 1rem/1.6 'Hiragino Kaku Gothic ProN','Hiragino Sans',Meiryo,sans-serif; }
-  body { display:flex; flex-direction:column; height:100vh; }
+  body { display:flex; flex-direction:column; height:100vh; height:100dvh; }
   #bar { flex:0 0 auto; display:flex; gap:6px; align-items:center; padding:4px 10px; background:#0a1118; border-bottom:1px solid var(--line); font-size:0.87rem; flex-wrap:wrap; }
   #bar .t { color:var(--acc); font-weight:bold; margin-right:auto; }
   #bar button { background:#1e2f40; color:var(--txt); border:1px solid var(--line); border-radius:3px; padding:2px 10px; cursor:pointer; font-size:0.80rem; }
@@ -104,7 +104,7 @@
   body.hide-bad .ln.badev { display:none; } body.hide-bad .ln.badev-alt { display:block; }
   body.story-mode .ln.ubdmg-alt:not(.story):not(.big), body.story-mode .ln.ubdmg:not(.story):not(.big) { display:none; }
   #optOverlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center; z-index:50; }
-  .optbox { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 18px 0; max-width:420px; width:92%; max-height:92vh; overflow-y:auto; }
+  .optbox { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:14px 18px 0; max-width:420px; width:92%; max-height:92vh; max-height:92dvh; overflow-y:auto; }
   .langrow { display:flex; flex-wrap:wrap; gap:6px; }
   .langbtn { background:#1e2f40; color:var(--txt); border:1px solid var(--line); border-radius:3px; padding:4px 12px; cursor:pointer; font-size:0.93rem; }
   .langbtn.on { background:var(--acc); color:#000; border-color:var(--acc); }
@@ -125,6 +125,8 @@
   #status[data-weather="3"] { background:#152938; }
   #status[data-weather="3"]::before { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 420 220'%3E%3Cpath d='M22 91l28-31 37-2 24-28 45 1 25 27 44 3 20 30z' fill='none' stroke='%2395aab5' stroke-width='5'/%3E%3Cpath d='M207 95l-31 48h25l-18 49 55-66h-30l19-31z' fill='none' stroke='%23b7a979' stroke-width='5'/%3E%3Cg stroke='%238da2ad' stroke-width='3'%3E%3Cpath d='M75 113l-20 52m72-52-20 52m72-52-20 52m128-52-20 52m72-52-20 52'/%3E%3C/g%3E%3Cpath d='M20 190h380' fill='none' stroke='%23788e99' stroke-width='3'/%3E%3C/svg%3E"); }
   @media (max-width: 600px) { #status { flex-basis:44%; } .col { min-width:0 !important; width:100%; } }
+  /* スマホ（縦持ち・横持ち）は、ステータス → 船団と地図 → Uボート を縦1列に */
+  @media (max-width: 600px), (pointer: coarse) and (max-height: 500px) { #status .col, #status .col.ship, #status .col.info, #status .col.ub { flex:0 0 100%; min-width:0 !important; width:100%; } }
 </style>
 </head>
 <body>
