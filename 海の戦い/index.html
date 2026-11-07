@@ -938,6 +938,7 @@ async function advancePhase(){
     if(axisToReturn.length){
       await showAxisReturnUI(axisToReturn);
     }
+    convoyPutIn();
     // 帰還完了: 帰還待ちマークを外す
     SHIPS.forEach(s => { s.returnPending = false; s.forcedReturn = false; });
     placeAllShips();
@@ -974,6 +975,12 @@ async function advancePhase(){
       else if(side === 'allies') { delta += SEAS[seaKey].allies; console.log(`[POC]   ${seaKey} allies支配 → +${SEAS[seaKey].allies}`); }
       else                       { console.log(`[POC]   ${seaKey} 支配なし(${side}) → 0`); }
     });
+    // 5.8 船団の POC も、海域の支配と一緒に付ける（帰還のフェイズで入港した船団。チャックさんの報告 2026-11-07）
+    if(convoyPocPending){
+      delta += convoyPocPending;
+      convoyPocLog.forEach(t => { console.log('[POC]   ' + t); if(!simMode && typeof announceBig === 'function') announceBig(t); });
+      convoyPocPending = 0; convoyPocLog = [];
+    }
     addPoc(delta);
     console.log(`[POC] phase 9 完了: delta=${delta} poc ${pocBefore} → ${poc}`);
     updatePOC();
@@ -1333,7 +1340,8 @@ function renderLbaButtons(){
     const enemyName = side==='allies' ? 'axis' : 'allies';
     // CV所在海域も対象に追加（空母のみ攻撃用）
     const cvSeas = new Set();
-    SHIPS.filter(s => s.side === side && !s.sunk && s.type === 'CV' && !s.disabledThisTurn && s.location && SEAS[s.location]).forEach(s => cvSeas.add(s.location));
+    // 10.3 空中戦は同時: このターンに空爆を受けた空母（沈んだ・即時帰還も）も選べる（チャックさんの報告 2026-11-07）
+    SHIPS.filter(s => s.side === side && s.type === 'CV' && ((!s.sunk && !s.disabledThisTurn) || s.airHitTurn === currentTurn) && s.location && SEAS[s.location]).forEach(s => cvSeas.add(s.location));
     // LBA使用済みなら CV所在海域のみ表示
     const candidateAreas = lbaUsed[side]
       ? [...cvSeas]
@@ -4486,43 +4494,8 @@ async function aiAlliedMove(bbTargetOverride){
     if(s.type === 'CONVOY' && SEAS[s.location] && !s.sunk && !s.removed) _convoyOccupiedEarly.add(s.location);
   });
   // 1a) 船団 NA→バレンツ海（海上2ターン目以降）。損害を受けていてもロシアを目指す
-  // スティーブさんの案（2026-11-07）: バレンツ海で連合が置ける見込みの戦力がドイツの届く戦力を下回るときは、イギリスに入れて +1。自分から選ぶのは1局に2回まで
-  const barentsWeak = () => {
-    const de = SHIPS.filter(x => x.side === 'axis' && !x.sunk && !x.removed && x.type !== 'UBOAT' && !(x.damage > 0) &&
-      x.location && (PORTS[x.location] || SEAS[x.location]) && (x.location === 'Germany' || (x.country === 'DE' && x.spd >= 7)));
-    if(!de.length) return false;
-    const reach = x => {
-      if(x.country === 'RU') return x.location === 'Russia' && x.canMoveThisTurn;
-      if(x.location === 'Malta' || (x.country === 'US' && currentTurn < 4) || (x.country === 'US' && !x.usEntered)) return false;
-      const adj = PORT_SEAS[x.location] || [];
-      if(adj.includes('Barents')) return true;
-      const two = adj.some(mid => seaControl[mid] !== 'axis' && (SEA_ADJ[mid] || []).includes('Barents'));
-      return two && Math.min(Math.max((x.spd || 0) - 1, 0), 6) / 6 >= 0.6; // 配置の式と同じ: 2エリア移動は成功率6割以上の艦だけ
-    };
-    const al = SHIPS.filter(x => x.side === 'allies' && !x.sunk && !x.removed && x.type !== 'CONVOY' && !(x.damage > 0) && x.location && PORTS[x.location] && reach(x));
-    return !battleGeq(al, de);
-  };
+  //   イギリスへ入れるかは、前のターンの帰還のフェイズで決めている（convoyPutIn。チャックさんの報告 2026-11-07）
   for(const ship of SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && s.location === 'NorthAtlantic' && (s.turnsAtSea||0) >= 1)){
-    if(seaControl['Barents'] !== 'axis' && SHIPS.filter(x => x.englandByChoice).length < 2 && barentsWeak()){
-      ship.location = 'England';
-      ship.removed = true;
-      ship.movedThisTurn = true;
-      ship.englandByChoice = true;
-      _convoyOccupiedEarly.delete('NorthAtlantic');
-      addPoc(1);
-      aiLog.push(`<b>${ship.name}: バレンツ海の連合の戦力がドイツより弱い見込みなので England へ入る +1POC(連合)</b>`);
-      continue;
-    }
-    // バレンツ海を枢軸に取られている時は、ロシアへ向かわずイギリスへ入れて +1（14.5）。北大西洋を空けて、次の船団を守る（ユーザーの指示 2026-11-07）
-    if(seaControl['Barents'] === 'axis'){
-      ship.location = 'England';
-      ship.removed = true;
-      ship.movedThisTurn = true;
-      _convoyOccupiedEarly.delete('NorthAtlantic');
-      addPoc(1);
-      aiLog.push(`<b>${ship.name}: バレンツ海を取られているので England へ入る +1POC(連合)</b>`);
-      continue;
-    }
     if(_convoyOccupiedEarly.has('Barents')) continue;
     ship.location = 'Barents';
     ship.movedThisTurn = true;
@@ -5870,6 +5843,45 @@ function addPoc(d){ pocTurnDelta += d; poc = Math.max(-10, Math.min(10, pocAtTur
 let lastTurnPocGain = 0;  // 前のターンに連合が得たPOC（ターン1は0）。プラス=連合優勢
 // 累計のPOC（プラス=連合のリード）。画面なしの対戦（sim/play.js）では置き換える
 function alliedCumPoc(){ return poc; }
+// 船団の入港（帰還のフェイズ 5.7）。POC は POC のフェイズ（5.8）で海域と一緒に付ける（チャックさんの報告 2026-11-07）
+//   14.4 バレンツ海で1ターンを生き延びた船団はロシアへ（+3）
+//   14.5 北大西洋で1ターンを過ごした船団はイギリスへ入れる（+1）。連合AIは、バレンツ海が枢軸の支配の時と、
+//        バレンツ海の連合の戦力がドイツより弱い見込みの時（自分から選ぶのは1局に2回まで）に入れる
+let convoyPocPending = 0, convoyPocLog = [];
+function convoyBarentsWeak(){
+  const de = SHIPS.filter(x => x.side === 'axis' && !x.sunk && !x.removed && x.type !== 'UBOAT' && !(x.damage > 0) &&
+    x.location && (PORTS[x.location] || SEAS[x.location]) && (x.location === 'Germany' || (x.country === 'DE' && x.spd >= 7)));
+  if(!de.length) return false;
+  const next = currentTurn + 1;
+  const reach = x => {
+    if(x.country === 'RU') return false; // 次のターンに出港できるかは分からないので数えない
+    if(x.location === 'Malta' || (x.country === 'US' && next < 4) || (x.country === 'US' && !x.usEntered)) return false;
+    const adj = PORT_SEAS[x.location] || [];
+    if(adj.includes('Barents')) return true;
+    const two = adj.some(mid => seaControl[mid] !== 'axis' && (SEA_ADJ[mid] || []).includes('Barents'));
+    return two && Math.min(Math.max((x.spd || 0) - 1, 0), 6) / 6 >= 0.6; // 配置の式と同じ: 2エリア移動は成功率6割以上の艦だけ
+  };
+  const al = SHIPS.filter(x => x.side === 'allies' && !x.sunk && !x.removed && x.type !== 'CONVOY' && !(x.damage > 0) && x.location && PORTS[x.location] && reach(x));
+  return !battleGeq(al, de);
+}
+function convoyPutIn(){
+  convoyPocPending = 0; convoyPocLog = [];
+  SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && s.location === 'Barents').forEach(s => {
+    s.removed = true; s.location = 'Russia'; s.landed = true; s.atDock = false;
+    convoyPocPending += 3;
+    convoyPocLog.push(`船団 ${s.name} ロシア上陸 +3POC(連合)`);
+  });
+  if(aiSide !== 'allies') return;
+  SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && s.location === 'NorthAtlantic').forEach(s => {
+    const lost = seaControl['Barents'] === 'axis';
+    const weak = !lost && SHIPS.filter(x => x.englandByChoice).length < 2 && convoyBarentsWeak();
+    if(!lost && !weak) return;
+    if(weak) s.englandByChoice = true;
+    s.removed = true; s.location = 'England'; s.atDock = false;
+    convoyPocPending += 1;
+    convoyPocLog.push(`船団 ${s.name}: ${lost ? 'バレンツ海を取られているので' : 'バレンツ海の連合の戦力がドイツより弱い見込みなので'} England へ入る +1POC(連合)`);
+  });
+}
 let medAxisStreak = 0;    // 地中海の枢軸連続支配ターン数（7.支配配置で判定）
 let italyHeldMed4 = false; // 15.7 地中海を枢軸が4ターン連続支配した。していなければターン8初めにイタリア艦隊接収
 
@@ -6107,7 +6119,7 @@ let axisLbaChecked = false; // 互換のため残す（使わない）
 let combatArea = null;      // 今、戦闘を解決しているエリア
 const _shipsAt = (area, pred) => SHIPS.filter(s => s.location === area && !s.sunk && pred(s));
 const airTargetsAt = (area, enemy) => _shipsAt(area, s => s.side === enemy && s.type !== 'UBOAT' && !s.disabledThisTurn).length;
-const cvAt = (area, side) => !!SEAS[area] && _shipsAt(area, s => s.side === side && s.type === 'CV' && !s.disabledThisTurn).length > 0;
+const cvAt = (area, side) => !!SEAS[area] && SHIPS.some(s => s.location === area && s.side === side && s.type === 'CV' && ((!s.sunk && !s.disabledThisTurn) || s.airHitTurn === currentTurn)); // 10.3
 const combatAreaLabel = a => SEA_LABEL[a] || PORT_LABEL[a] || a;
 // 連合AIの LBA を使うエリア: まだ戦闘を済ませていないエリアのうち、地中海に枢軸艦がいれば地中海、いなければ攻撃できる枢軸艦が一番多いエリア
 function alliedLbaArea(){
@@ -6196,7 +6208,7 @@ function axisAirOptions(){
   ).length;
   // 未攻撃の空母がいる海域
   const hasCv = area => SEAS[area] && !combatDone.axisAir.has(area) && SHIPS.some(s =>
-    s.location === area && !s.sunk && s.side === 'axis' && s.type === 'CV' && !s.disabledThisTurn
+    s.location === area && s.side === 'axis' && s.type === 'CV' && ((!s.sunk && !s.disabledThisTurn) || s.airHitTurn === currentTurn) // 10.3
   );
   const label = a => SEA_LABEL[a] || PORT_LABEL[a] || a;
   const opts = [];
@@ -6483,7 +6495,7 @@ function buildSaveData(){
       optionRules: { ...optionRules },
       convoyOpenSides: { ...convoyOpenSides },
       alliedTargetMode, alliedFireStyle: { ...alliedFireStyle }, alliedOpening,
-      poc, pocAtTurnStart, pocTurnDelta, lastTurnPocGain, medAxisStreak, italyHeldMed4,
+      poc, pocAtTurnStart, pocTurnDelta, lastTurnPocGain, medAxisStreak, italyHeldMed4, convoyPocPending, convoyPocLog,
       seaControl: { ...seaControl },
       retreatedSeas: [...retreatedSeas],
       combatDone: setsToArr(combatDone),
@@ -6546,6 +6558,7 @@ function applySaveData(data){
   if(v.alliedOpening && ALLIED_OPENINGS[v.alliedOpening]) alliedOpening = v.alliedOpening;
   poc = v.poc; pocAtTurnStart = v.pocAtTurnStart; pocTurnDelta = v.pocTurnDelta || 0; lastTurnPocGain = v.lastTurnPocGain;
   medAxisStreak = v.medAxisStreak; italyHeldMed4 = !!v.italyHeldMed4;
+  convoyPocPending = v.convoyPocPending || 0; convoyPocLog = v.convoyPocLog || [];
   Object.keys(seaControl).forEach(k => { delete seaControl[k]; });
   Object.assign(seaControl, v.seaControl);
   retreatedSeas.clear(); v.retreatedSeas.forEach(k => retreatedSeas.add(k));
