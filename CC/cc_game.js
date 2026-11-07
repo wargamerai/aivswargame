@@ -183,9 +183,11 @@ function sectorOf(k) {
 }
 function routeOf() { const M = S.mission; return WA_ROUTES[M.orders][M.convoy.speed].map(([r, c]) => key(r, c)); }
 function isWaRouteCell(k) { if (PORT_POS[k]) return false; const t = cellAt(k).t; return t === 'W'; }
+// 普通に動けるマス。ウェスタン・アプローチのマスも、自分の割り当て航路の矢印でなければ普通のマス（ユーザーの指示 2026-11-07）
 function freeCell(r, c) {
   const t = MAP_ROWS[r] && MAP_ROWS[r][c];
-  if (!t || t === 'HX' || t === 'SC' || t === 'ON' || t === 'W') return false;
+  if (!t || t === 'HX' || t === 'SC' || t === 'ON') return false;
+  if (t === 'W' && routeOf().includes(key(r, c))) return false;
   return true;
 }
 // 隣のマス（高速は縦横斜め、低速は縦横）。ウェスタン・アプローチは割り当て航路だけ
@@ -208,7 +210,7 @@ function neighbors(k) {
     const t = MAP_ROWS[r] && MAP_ROWS[r][c];
     if (!t) return;
     if (t === 'HX' || t === 'SC') out.push(t);
-    else if (t === 'W') { if (key(r, c) === route[0]) out.push(key(r, c)); }
+    else if (t === 'W' && route.includes(key(r, c))) { if (key(r, c) === route[0]) out.push(key(r, c)); } // 自分の航路の矢印へは起点からだけ入る
     else if (t !== 'ON') out.push(key(r, c));
   });
   return out;
