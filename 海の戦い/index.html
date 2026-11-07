@@ -106,6 +106,8 @@ body.was-zoomed { zoom: var(--was-zoom); height: calc(100vh / var(--was-zoom)); 
 }
 body.hide-units .tt-ship { display:none; }
 body.hide-units .control-marker { display:none; }
+body.hide-units .force-label { display:none; }
+.force-label { position:absolute; transform:translate(-50%,0); pointer-events:none; z-index:5; background:rgba(0,0,0,0.6); border-radius:4px; padding:1px 6px; font-weight:bold; font-size:0.85em; white-space:pre; line-height:1.3; }
 
 .control-marker {
   position:absolute;
@@ -335,8 +337,9 @@ body.hide-units .control-marker { display:none; }
         <label><input type="radio" name="langPick" value="ru" onchange="setLang(this.value)"> Русский</label>
       </div>
     </div>
-    <h3>担当する軍</h3>
-    <div style="display:flex;flex-direction:column;gap:6px;color:#cde;margin:6px 0 12px;">
+    <!-- 担当する軍の選択は、連合軍を担当する方がまだできていないので隠す（ユーザーの指示 2026-11-07）。ドイツ軍（枢軸）を担当のまま -->
+    <h3 style="display:none;">担当する軍</h3>
+    <div style="display:none;flex-direction:column;gap:6px;color:#cde;margin:6px 0 12px;">
       <label><input type="radio" name="sidePick" value="axis" checked onchange="pickHumanSide(this.value)"> ドイツ軍（枢軸）を担当する。連合軍はAIが動かす</label>
       <label><input type="radio" name="sidePick" value="allies" onchange="pickHumanSide(this.value)"> 連合軍を担当する。ドイツ軍（枢軸）はAIが動かす</label>
     </div>
@@ -2228,6 +2231,11 @@ async function declareCarrierAttacks(seaKey){
 // 宣言どおりにダイスを振る（損害は pending に保留し、あとで同時に適用）
 async function resolveDeclaredFire(decl, pending){
   for(const d of decl){
+    // 目標が保留中の損害だけで撃沈確定なら、振っても結果は変わらないので飛ばす（ユーザーの指示 2026-11-07）
+    if(pending && d.target && ((d.target.damage || 0) + (pending.damage[d.target.id] || 0)) > d.target.def){
+      if(typeof logCombatLine === 'function') logCombatLine(`${d.ship.name} → ${d.target.name}: 撃沈確定のため省略`);
+      continue;
+    }
     highlightShip(d.ship.id, 'firing');
     const fireEvents = [];
     surfaceFireOne(d.ship, d.target, fireEvents, pending);
@@ -2490,12 +2498,14 @@ function alliedPickTarget(cands, pending){
 }
 
 // 人間が目標を選んでいる間、上の案内に「目標を1つ戻す」ボタンを出す。押されたら 'UNDO' で返す
-function addUndoTargetButton(onUndo){
+function addUndoTargetButton(onUndo, disabled){
   const phaseEl = document.getElementById('phaseLabel');
   const b = document.createElement('button');
   b.textContent = '目標を1つ戻す';
   b.style.cssText = 'margin-left:10px;background:#664;color:#fff;border:1px solid #997;padding:2px 10px;border-radius:3px;cursor:pointer;font-size:0.9em;';
-  b.onclick = e => { e.stopPropagation(); onUndo(); };
+  // 1隻目から出す。戻す目標がない時は押せない（ユーザーの指示 2026-11-07）
+  if(disabled){ b.disabled = true; b.style.opacity = '0.4'; b.style.cursor = 'not-allowed'; }
+  b.onclick = e => { e.stopPropagation(); if(!b.disabled) onUndo(); };
   phaseEl.appendChild(b);
 }
 function waitForTargetClickFromList(targetList, attacker, pending, opts){
@@ -2524,7 +2534,7 @@ function waitForTargetClickFromList(targetList, attacker, pending, opts){
       handlers[s.id] = onClick;
       row.addEventListener('click', onClick);
     });
-    if(opts && opts.undo) addUndoTargetButton(() => { cleanup(); resolve('UNDO'); });
+    if(opts && 'undo' in opts) addUndoTargetButton(() => { cleanup(); resolve('UNDO'); }, !opts.undo);
   });
 }
 
@@ -2633,7 +2643,7 @@ function waitForSurfaceTarget(side, focusSea, attacker, pending, opts){
       handlers[s.id] = onClick;
       row.addEventListener('click', onClick);
     });
-    if(opts && opts.undo) addUndoTargetButton(() => { cleanup(); resolve('UNDO'); });
+    if(opts && 'undo' in opts) addUndoTargetButton(() => { cleanup(); resolve('UNDO'); }, !opts.undo);
   });
 }
 
@@ -5921,8 +5931,44 @@ function placeAllShips(){
     const w = isTrack ? COUNTER_W : PORT_COUNTER_W;
     placeStack(key, key === 'Germany:uboat' ? 'Uボート基地' : locLabel(ship0.location), byKey[key], c.x, c.y, w);
   }
+  placeForceLabels();
 }
 
+// 各海域の戦力の数字を、支配マーカーのすぐ下に出す（ユーザーの指示 2026-11-07）
+//   攻=水上艦（空母と U ボート以外。船団を含む）の攻撃力 / 空=空母の航空攻撃力 / ASW=対潜ダイス（空母・船団3、ほか1）/ U=U ボートの隻数
+//   帰還待ちの艦は戦闘に出ないので数えない
+function placeForceLabels(){
+  const inner = document.getElementById('mapInner');
+  if(!inner) return;
+  inner.querySelectorAll('.force-label').forEach(e => e.remove());
+  Object.keys(SEAS).forEach(sea => {
+    const here = SHIPS.filter(x => x.location === sea && !x.sunk && !x.removed && !x.returnPending);
+    if(!here.length) return;
+    const c = SEA_CONTROL_COORDS[sea] || SEA_COORDS[sea];
+    if(!c) return;
+    const line = side => {
+      const a = here.filter(x => x.side === side);
+      if(!a.length) return '';
+      const atk = a.filter(x => x.type !== 'CV' && x.type !== 'UBOAT').reduce((t, x) => t + Math.max(0, x.atk || 0), 0);
+      const air = a.filter(x => x.type === 'CV').reduce((t, x) => t + (x.air || 0), 0);
+      const parts = [`攻 ${atk}`];
+      if(air) parts.push(`空 ${air}`);
+      if(side === 'allies') parts.push(`ASW ${a.filter(x => x.type !== 'UBOAT').reduce((t, x) => t + ((x.type === 'CV' || x.type === 'CONVOY') ? 3 : 1), 0)}`);
+      const ub = a.filter(x => x.type === 'UBOAT').length;
+      if(ub) parts.push(`U ${ub}`);
+      const name = side === 'allies' ? '連合' : '枢軸';
+      return `<div style="color:${side === 'allies' ? '#9cf' : '#f99'}">${name} ${parts.join('  ')}</div>`;
+    };
+    const h = line('allies') + line('axis');
+    if(!h) return;
+    const div = document.createElement('div');
+    div.className = 'force-label';
+    div.style.left = c.x + '%';
+    div.style.top = (c.y + 3.2) + '%';
+    div.innerHTML = h;
+    inner.appendChild(div);
+  });
+}
 function placeControlMarkers(){
   const inner = document.getElementById('mapInner');
   inner.querySelectorAll('.control-marker').forEach(e => e.remove());

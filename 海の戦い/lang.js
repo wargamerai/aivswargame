@@ -460,6 +460,8 @@ const LANG_TERMS = {
   '先': 'to',
   '回': ' times',
   '攻': 'Atk ',
+  '空': 'Air ',
+  '撃沈確定のため省略': 'skipped (already sunk)',
   '残': 'now ',
   '港': ' port',
   '発': ' dice',
