@@ -679,11 +679,12 @@
   }
 
   /**
-   * §8.5 河川上に地形カードを置けるか（渡河成功＋移動1枚＝合計2枚以上の移動が必要）
+   * §8.53 河川上に地形カードを置けるか: 渡河に成功していればよい（渡河カードの次は、移動カードでも地形カードでもよい）
+   *   （ユーザーの指示 2026-11-07。前は渡河成功＋移動1枚＝合計2枚を求めていた）
    */
   function canPlaceTerrainOnStream(group) {
     if (!isInStream(group)) return true;
-    return streamMoveCount(group) >= 2;
+    return streamMoveCount(group) >= 1;
   }
 
   // ===== §8.6-8.8 建物・森林・繁み ===================================

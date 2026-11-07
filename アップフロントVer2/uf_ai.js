@@ -231,6 +231,7 @@ async function aiTurn() {
       afvOverrun: async () => window.AFV ? window.AFV.aiTryOverrun() : false, afvGun: async () => window.AFV ? window.AFV.aiTryGun() : false, afvCC: async () => window.AFV ? window.AFV.aiTryCCAfv() : false,
       fireAny: aiTryFireAny, flank: aiTryFlankEncircle, smoke: aiTryPlaceOwnSmoke, move: aiTryMove, trench: aiTryTrench,
       guard: aiTryGuardChange, heroWound: aiTryHeroWound, shift: aiTryGroupShift, uninfiltrate: aiTryUninfiltrate,
+      streamExit: aiTryStreamExit,
     };
     const ORDER = {
       // 攻撃的: 白兵戦・侵入・射撃・前進を先に
@@ -266,6 +267,11 @@ async function aiTurn() {
     {
       const _at = orderNow.indexOf('ccRetreat') + 1;
       orderNow = [...orderNow.slice(0, _at), 'flameFire', 'demoInfil', ...orderNow.slice(_at)];
+    }
+    // 渡河したグループは、何より先に河川から出す（地形カード → 平地 → 移動カード。ユーザーの指示 2026-11-07）
+    {
+      const _at = orderNow.indexOf('ccRetreat') + 1;
+      orderNow = [...orderNow.slice(0, _at), 'streamExit', ...orderNow.slice(_at)];
     }
     let safety = 30;
     outer: while (safety-- > 0) {
@@ -482,7 +488,7 @@ function aiDiscardChooser() {
   // 鉄条網・地雷原・未渡河の河川にいるグループがあれば、移動カードは要る
   //   前進したいグループ（移動グループ）がある間も、移動カードは残す
   const needMoveCards = !!R_d && state.groups.ai.some((g, i) => g && !g.eliminated && g.cards.some(c => R_d.isAlive(c))
-    && (R_d.hasTerrainType(g, 'WIRE') || R_d.hasTerrainType(g, 'MINEFIELD') || (R_d.isInStream(g) && !R_d.hasCrossedStream(g)) || aiGroupWantsAdvance(g, i)));
+    && (R_d.hasTerrainType(g, 'WIRE') || R_d.hasTerrainType(g, 'MINEFIELD') || R_d.isInStream(g) || aiGroupWantsAdvance(g, i))); // 渡河したあとも河川から出るまで残す（2026-11-07）
   // 残すカード: 撃てる状態=射撃・隠蔽、まだ撃てない状態=移動・地形
   const _hold = state.groups.ai.some(g => g && g._role === 'hold');
   // 夜間に近づいている途中は、移動カードも残す（ユーザーの指示 2026-11-03）
@@ -1532,6 +1538,25 @@ async function aiTryRemoveWire() {
   return false;
 }
 
+// §8.53 渡河に成功して河川の中で移動中のグループを、河川から出す（ユーザーの指示 2026-11-07）
+//   地形カードがあれば置く（地形に入る）。なければ平地として使えるカード。それもなければ移動カードでもう1枚進む
+async function aiTryStreamExit() {
+  const R = window.INFANTRY_RULES;
+  if (!R || !R.isInStream || !R.hasCrossedStream) return false;
+  const acted = state.aiActedGroups || new Set();
+  const fired = state.aiFiredGroups || new Set();
+  for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    const g = state.groups.ai[gi];
+    if (!g || g.eliminated || acted.has(gi) || fired.has(gi)) continue;
+    if (!R.isInStream(g) || !R.hasCrossedStream(g)) continue;
+    if (g.cards.some(c => R.isPinned(c))) continue;
+    if (await aiTryPlaceOwnTerrain(gi)) return true;
+    if (await aiTryPlaceOwnPlain(gi)) return true;
+    return await aiTryMove(); // 移動カードでもう1枚進む（aiTryMove は河川のグループを先に選ぶ）
+  }
+  return false;
+}
+
 async function aiTryCrossStream() {
   const R = window.INFANTRY_RULES;
   if (!R) return false;
@@ -1779,6 +1804,14 @@ async function aiTryMove() {
     const g = state.groups.ai[i];
     if (R.isInStream(g) && !R.hasCrossedStream(g)) { bestIdx = i; moveMode = 'lateral'; break; }
   }
+  // 1b. 渡河したグループは、もう1枚移動カードを出して河川から進む（§8.53。ユーザーの指示 2026-11-07）
+  if (bestIdx < 0) {
+    for (let i = 0; i < state.groups.ai.length; i++) {
+      if (isSkipped(i)) continue;
+      const g = state.groups.ai[i];
+      if (R.isInStream(g) && R.hasCrossedStream(g)) { bestIdx = i; moveMode = 'advance'; break; }
+    }
+  }
   // 2. 湿地/涸れ谷の1枚目: 横移動強制（移動カード0枚の場合のみ）
   if (bestIdx < 0) {
     for (let i = 0; i < state.groups.ai.length; i++) {
@@ -1928,7 +1961,7 @@ async function aiTryMineRemove() {
   return false;
 }
 
-async function aiTryPlaceOwnTerrain() {
+async function aiTryPlaceOwnTerrain(onlyGi) {
   const R = window.INFANTRY_RULES;
   const SH = window.SCENARIO_HELPERS;
   const goodTerrain = ['WOODS','BUILDINGS','BRUSH','HILL','WALL','GULLY'];
@@ -1941,12 +1974,13 @@ async function aiTryPlaceOwnTerrain() {
   let targetGi = -1;
   // 最上が MOVEMENT のグループに地形を置く
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    if (onlyGi != null && gi !== onlyGi) continue;
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const g = state.groups.ai[gi];
     if (g.terrain.length === 0) continue;
     const top = topIgnoringSmoke(g); // §13.23 移動カード上の煙幕は妨げにならない
     if (!top || !top.terrain || top.terrain.type !== 'MOVEMENT') continue;
-    // §8.22/8.42/8.5 涸れ谷・湿地・河川は移動2枚必要
+    // §8.22/8.42 涸れ谷・湿地は移動2枚必要。§8.53 河川は渡河に成功していればよい
     if (R.canPlaceTerrainOnMarsh && !R.canPlaceTerrainOnMarsh(g)) continue;
     if (R.canPlaceTerrainOnGully && !R.canPlaceTerrainOnGully(g)) continue;
     if (R.canPlaceTerrainOnStream && !R.canPlaceTerrainOnStream(g)) continue;
@@ -1973,7 +2007,7 @@ async function aiTryPlaceOwnTerrain() {
 }
 
 // 地形以外の手札（移動・射撃カード以外）を平地として移動中の自グループに置く（§13.5 煙幕・鉄条網は残す）
-async function aiTryPlaceOwnPlain() {
+async function aiTryPlaceOwnPlain(onlyGi) {
   const R = window.INFANTRY_RULES;
   const pIdx = state.aiHand.findIndex(c => isPlainUseCard(c)
     && c.terrain.type !== 'MOVEMENT' && String(c.terrain.type).indexOf('FIRE') !== 0);
@@ -1981,6 +2015,7 @@ async function aiTryPlaceOwnPlain() {
   const acted = state.aiActedGroups || new Set();
   let targetGi = -1;
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
+    if (onlyGi != null && gi !== onlyGi) continue;
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const g = state.groups.ai[gi];
     if (!g || g.eliminated || !isMovingIgnoringOverlays(g)) continue;

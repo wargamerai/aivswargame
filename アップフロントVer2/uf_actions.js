@@ -530,7 +530,7 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       const R_p = window.INFANTRY_RULES;
       if (R_p && !R_p.canPlaceTerrainOnMarsh(pGrp)) { alert('湿地に地形カードを置くには移動カード2枚が必要です'); return; }
       if (R_p && R_p.canPlaceTerrainOnGully && !R_p.canPlaceTerrainOnGully(pGrp)) { alert('涸れ谷に地形カードを置くには移動カードが必要です'); return; }
-      if (R_p && R_p.canPlaceTerrainOnStream && !R_p.canPlaceTerrainOnStream(pGrp)) { alert('河川に地形カードを置くには渡河成功＋移動カード合計2枚が必要です'); return; }
+      if (R_p && R_p.canPlaceTerrainOnStream && !R_p.canPlaceTerrainOnStream(pGrp)) { alert('河川に地形カードを置くには、先に渡河を成功させる必要があります'); return; }
       const escapeP = processMinefieldEscape(pGrp, 'player');
       state.playerHand.splice(cardIdx, 1);
       if (!escapeP.ok) {
@@ -591,7 +591,7 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       return;
     }
     if (R && !_isArtificial && R.canPlaceTerrainOnStream && !R.canPlaceTerrainOnStream(grp)) {
-      alert('河川に地形カードを置くには渡河成功＋移動カード合計2枚が必要です');
+      alert('河川に地形カードを置くには、先に渡河を成功させる必要があります');
       return;
     }
     // §38.7 夜間、後退中の相手に地形カードを置くには、そのグループの観測が必要
