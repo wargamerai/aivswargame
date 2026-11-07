@@ -521,13 +521,13 @@ function initShipLocations(){
 //   M5   : マルタに速い艦（4-4-7、3-3-6×2、4-4-4×3、1-1-7×6、空母0-2-7）。1ターン目は決め打ち。
 //          地中海を強く取る作戦なので、地中海の艦隊は英国へ帰さず、多少不利でも毎ターン出撃する（holdMed。ユーザーの指示 2026-11-07）
 const ALLIED_OPENINGS = {
-  NoMed: { weight: 70, noMed: true, malta: [], t1: {
+  NoMed: { weight: 100, noMed: true, malta: [], t1: {
     Barents: ['Hood','Renown','Repulse','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','Dorsetshire','Exeter','Warspite','ArkRoyal','Courageous'],
     NorthSea: ['Nelson','Rodney','Valiant','QueenElizabeth','Glorious'],
     NorthAtlantic: ['Ramillies','Resolution','Revenge','Eagle'],
     SouthAtlantic: ['Barham','Malaya','RoyalOak','RoyalSovereign'] } },
-  B3: { weight: 15, noBarentsUntil: 3 },
-  M5: { weight: 15, holdMed: true, malta: ['Hood','Renown','Repulse','Warspite','Valiant','QueenElizabeth','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','ArkRoyal'], t1: {
+  B3: { weight: 0, noBarentsUntil: 3 }, // くじは保留（ユーザーの指示 2026-11-07: すべて地中海放棄で統一）
+  M5: { weight: 0, holdMed: true, malta: ['Hood','Renown','Repulse','Warspite','Valiant','QueenElizabeth','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','ArkRoyal'], t1: {
     NorthSea: ['Nelson','Rodney','Ramillies','Dorsetshire','Courageous'],
     NorthAtlantic: ['Resolution','Revenge','RoyalOak','Glorious'],
     SouthAtlantic: ['Barham','Malaya','RoyalSovereign','Exeter','Eagle'] } },
@@ -4217,10 +4217,118 @@ function planAlliedDeployment(aiLog){
     };
     const axisShips = axisReady.map(x => ({ s: x, opts: axisOpts(x) }));
     const ubs = SHIPS.filter(x => x.type === 'UBOAT' && x.side === 'axis' && !x.sunk && !x.removed && x.location && (PORTS[x.location] || SEAS[x.location])).length;
-    const r = (PLAN_MODE >= 10 ? PocPlanner.planAlliesG : PLAN_MODE >= 9 ? PocPlanner.planAlliesV5 : PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs,
-      noMed: !!(ALLIED_OPENINGS[alliedOpening] || {}).noMed, noBarents: currentTurn < ((ALLIED_OPENINGS[alliedOpening] || {}).noBarentsUntil || 0) });
-    ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') assign(u.s, sea); });
-    leftoverMode = `POCの予想（評価 ${Math.round(r.value * 10) / 10}）`;
+    if((ALLIED_OPENINGS[alliedOpening] || {}).noMed && currentTurn >= 2){
+      // ===== 地中海放棄: 北海・バレンツ海・南大西洋の3海域を死守する配置（ユーザーの指示 2026-11-07）=====
+      //   1) 英国の艦を、戦艦（巡洋戦艦を含む）・空母・重巡ごとに3海域へ均等に割る。端数は南大西洋
+      //   2) 各海域の最低限: 戦艦の数は、来られる敵の戦艦（ポケット戦艦は数えない）と同数以上。攻撃力の合計は、来られる敵と同じ以上
+      //      足りない海域には、ほかの海域の、抜いても最低限を割らない艦を回す
+      //   3) 敵より多すぎる海域（戦艦が、来られる敵の戦艦の数と艦の数のどちらよりも多い）から、余った戦艦を、
+      //      敵に対する上回り方（攻撃力の比）が一番小さい海域へ回す
+      //   2エリア移動のダイスは、ルールどおり振る（失敗した艦はそのまま。埋め合わせはしない）
+      const SEA3 = ['NorthSea', 'Barents', 'SouthAtlantic'];
+      const isBB = x => x.type === 'BB' || x.type === 'BC';
+      const atkOf = arr => arr.reduce((t, x) => t + (x.type === 'CV' ? 0 : (x.atk || 0)), 0);
+      const enemy = {};
+      // 損害を受けたドイツ艦も、修理せずに出撃できるので数える。攻撃力は今の値（防御力いっぱいまで損害を受けた艦は1）（ユーザーの指示 2026-11-07）
+      const axisAll = SHIPS.filter(x => x.side === 'axis' && !x.sunk && !x.removed && x.type !== 'UBOAT' &&
+        x.location && (PORTS[x.location] || SEAS[x.location]) && !(x.location === 'France' && isFranceClosed()))
+        .map(x => ({ s: x, opts: axisOpts(x) }));
+      SEA3.forEach(sea => {
+        const e = axisAll.filter(u => u.opts.includes(sea)).map(u => u.s);
+        enemy[sea] = { bb: e.filter(x => (x.type === 'BB' || x.type === 'BC')).length, n: e.length, atk: atkOf(e) };
+      });
+      const reach3 = x => SEA3.filter(sea => hop(x, sea) > 0);
+      const mine = freeShips().filter(x => x.country !== 'US' && reach3(x).length);
+      freeShips().filter(x => x.country === 'US' && hop(x, 'NorthAtlantic') > 0).forEach(x => assign(x, 'NorthAtlantic')); // 米国艦は北大西洋（船団の護衛）
+      const at = {}; SEA3.forEach(sea => { at[sea] = []; });
+      // 1) 種類ごとに均等（端数は南大西洋）。英国本土の艦とロシアの港のイギリス艦を合わせて数える（ユーザーの指示 2026-11-07）
+      //   バレンツ海の分: ロシアの港の艦から（遅い艦から）。足りなければ英国本土の艦（速い艦から）
+      //   ロシアの港の艦がバレンツ海の分より多ければ、余りは北海へ（2エリア移動。速力7の艦から回すので、ダイスで欠けにくい）
+      //   北海の分: その余りを数えたうえで、英国本土の艦（1エリアで必ず入る）で埋める。南大西洋: 残りの英国本土の艦
+      const inRussia = x => x.location === 'Russia';
+      const groups = [mine.filter(isBB), mine.filter(x => x.type === 'CV'), mine.filter(x => !isBB(x) && x.type !== 'CV')];
+      for(const g of groups){
+        const base = Math.floor(g.length / 3);
+        const rus = g.filter(inRussia).sort((a, b) => (a.spd || 0) - (b.spd || 0));
+        let home = g.filter(x => !inRussia(x)).sort((a, b) => (b.spd || 0) - (a.spd || 0));
+        const bar = rus.splice(0, base);
+        while(bar.length < base){
+          const k = home.findIndex(x => reach3(x).includes('Barents'));
+          if(k < 0) break;
+          bar.push(home[k]); home.splice(k, 1);
+        }
+        bar.forEach(x => at.Barents.push(x));
+        const extra = rus.sort((a, b) => (b.spd || 0) - (a.spd || 0));
+        extra.forEach(x => at[reach3(x).includes('NorthSea') ? 'NorthSea' : 'Barents'].push(x));
+        let nsNeed = base - extra.filter(x => reach3(x).includes('NorthSea')).length;
+        while(nsNeed > 0){
+          const k = home.findIndex(x => hop(x, 'NorthSea') === 1);
+          if(k < 0) break;
+          at.NorthSea.push(home[k]); home.splice(k, 1); nsNeed--;
+        }
+        home.forEach(x => { const o = reach3(x); at[o.includes('SouthAtlantic') ? 'SouthAtlantic' : (o.includes('NorthSea') ? 'NorthSea' : o[0])].push(x); });
+      }
+      // 北海の最低限は、確実に入る艦（1エリアで入る艦と、2エリア移動のダイスに必ず勝つ速力7の艦）だけで数える（ユーザーの指示 2026-11-07）
+      //   ほかの海域は、割り振った艦をそのまま数える
+      const sure = (sea, arr) => (arr || at[sea]).filter(x => sea !== 'NorthSea' || hop(x, sea) === 1 || (x.spd || 0) >= 7);
+      const okMin = sea => sure(sea).filter(isBB).length >= enemy[sea].bb && atkOf(sure(sea)) >= enemy[sea].atk;
+      const moveOne = (x, from, to) => { at[from] = at[from].filter(y => y !== x); at[to].push(x); };
+      // 2) 最低限に足りない海域へ回す
+      for(let guard = 0; guard < 40; guard++){
+        const need = SEA3.find(sea => !okMin(sea));
+        if(!need) break;
+        const wantBB = sure(need).filter(isBB).length < enemy[need].bb;
+        let moved = false;
+        for(const from of SEA3.filter(sea => sea !== need && okMin(sea))){
+          const cand = at[from].filter(x => (wantBB ? isBB(x) : x.type !== 'CV') && reach3(x).includes(need))
+            .filter(x => { const left = sure(from, at[from].filter(y => y !== x)); return left.filter(isBB).length >= enemy[from].bb && atkOf(left) >= enemy[from].atk; })
+            .sort((a, b) => ((hop(a, need) === 1 ? 0 : 1) - (hop(b, need) === 1 ? 0 : 1)) || ((b.atk || 0) - (a.atk || 0))); // 1エリアで確実に入る艦を先に
+          if(cand.length){ moveOne(cand[0], from, need); moved = true; break; }
+        }
+        if(!moved) break;
+      }
+      // 3) 多すぎる海域の戦艦を、上回り方が一番小さい海域へ
+      const ratio = sea => enemy[sea].atk > 0 ? atkOf(sure(sea)) / enemy[sea].atk : Infinity;
+      for(let guard = 0; guard < 40; guard++){
+        let moved = false;
+        for(const from of SEA3){
+          const keep = Math.max(enemy[from].bb, enemy[from].n);
+          const bbs = at[from].filter(isBB);
+          if(bbs.length <= keep) continue;
+          const to = SEA3.filter(sea => sea !== from && enemy[sea].atk > 0).sort((a, b) => ratio(a) - ratio(b))[0];
+          if(!to || ratio(to) >= ratio(from)) continue;
+          const x = bbs.filter(y => reach3(y).includes(to)).filter(y => atkOf(sure(from, at[from].filter(z => z !== y))) >= enemy[from].atk)
+            .sort((a, b) => ((hop(a, to) === 1 ? 0 : 1) - (hop(b, to) === 1 ? 0 : 1)) || ((b.spd || 0) - (a.spd || 0)))[0]; // 1エリアで確実に入る艦を先に
+          if(!x) continue;
+          moveOne(x, from, to); moved = true; break;
+        }
+        if(!moved) break;
+      }
+      // 4) 3海域を決め終えた時点で、まだ多すぎる海域に余っている戦艦は北大西洋へ（ユーザーの指示 2026-11-07）
+      at.NorthAtlantic = [];
+      for(const from of SEA3){
+        const keep = Math.max(enemy[from].bb, enemy[from].n);
+        for(const x of at[from].filter(isBB).filter(y => hop(y, 'NorthAtlantic') > 0).sort((a, b) => (a.atk || 0) - (b.atk || 0))){
+          if(at[from].filter(isBB).length <= keep) break;
+          if(atkOf(sure(from, at[from].filter(y => y !== x))) < enemy[from].atk) continue;
+          moveOne(x, from, 'NorthAtlantic');
+        }
+      }
+      // 5) 北大西洋には空母を最低1隻（U ボートの攻撃が大きいので。ユーザーの指示 2026-11-07）。南大西洋の分から、いなければ北海かバレンツ海の多い方から
+      if(!at.NorthAtlantic.some(x => x.type === 'CV')){
+        const donor = ['SouthAtlantic', ...['NorthSea', 'Barents'].sort((a, b) => at[b].filter(x => x.type === 'CV').length - at[a].filter(x => x.type === 'CV').length)]
+          .find(sea => at[sea].some(x => x.type === 'CV' && hop(x, 'NorthAtlantic') > 0));
+        if(donor){ const cv = at[donor].find(x => x.type === 'CV' && hop(x, 'NorthAtlantic') > 0); moveOne(cv, donor, 'NorthAtlantic'); }
+      }
+      [...SEA3, 'NorthAtlantic'].forEach(sea => at[sea].forEach(x => assign(x, sea)));
+      const cnt = sea => `${SEA_LABEL[sea]} 戦艦${at[sea].filter(isBB).length}・空母${at[sea].filter(x => x.type === 'CV').length}・重巡${at[sea].filter(x => !isBB(x) && x.type !== 'CV').length} 攻${atkOf(at[sea])}${enemy[sea] ? `（敵 戦艦${enemy[sea].bb}・攻${enemy[sea].atk}）` : ''}`;
+      leftoverMode = '地中海放棄の3海域配置: ' + [...SEA3, 'NorthAtlantic'].map(cnt).join(' / ');
+    } else {
+      const r = (PLAN_MODE >= 10 ? PocPlanner.planAlliesG : PLAN_MODE >= 9 ? PocPlanner.planAlliesV5 : PLAN_MODE >= 8 ? PocPlanner.planAlliesV4 : PLAN_MODE >= 6 ? PocPlanner.planAlliesV2 : PLAN_MODE >= 5 ? PocPlanner.planAlliesSimple : PocPlanner.planAllies)({ turn: currentTurn, seas: SEAS, seaList, ships, fixed, axisShips, axisFixed: {}, ubs,
+        noMed: !!(ALLIED_OPENINGS[alliedOpening] || {}).noMed, noBarents: currentTurn < ((ALLIED_OPENINGS[alliedOpening] || {}).noBarentsUntil || 0) });
+      ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') assign(u.s, sea); });
+      leftoverMode = `POCの予想（評価 ${Math.round(r.value * 10) / 10}）`;
+    }
   } else if(currentTurn === 1){
     // ===== ターン1: 北海とバレンツ海に全力（大西洋は考えない） =====
     // 1ターン目は地中海へ送らない（ユーザーの指示 2026-11-03: 空母が減った分、北海・バレンツ海を優先）
