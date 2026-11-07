@@ -513,7 +513,8 @@ function initShipLocations(){
 //   ゲームの最初に1つ引き、その局はずっとその作戦。No-Med 70% / B3 15% / M5 15%
 //   NoMed: 地中海を使わない（General 誌の Allied No-Med）。マルタは空、全ターン地中海へ送らない。1ターン目は決め打ち
 //   B3   : 1〜2ターン目はバレンツ海へ出さない。マルタは今のまま
-//   M5   : マルタに速い艦（4-4-7、3-3-6×2、4-4-4×3、1-1-7×6、空母0-2-7）。1ターン目は決め打ち
+//   M5   : マルタに速い艦（4-4-7、3-3-6×2、4-4-4×3、1-1-7×6、空母0-2-7）。1ターン目は決め打ち。
+//          地中海を強く取る作戦なので、地中海の艦隊は英国へ帰さず、多少不利でも毎ターン出撃する（holdMed。ユーザーの指示 2026-11-07）
 const ALLIED_OPENINGS = {
   NoMed: { weight: 70, noMed: true, malta: [], t1: {
     Barents: ['Hood','Renown','Repulse','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','Dorsetshire','Exeter','Warspite','ArkRoyal','Courageous'],
@@ -521,7 +522,7 @@ const ALLIED_OPENINGS = {
     NorthAtlantic: ['Ramillies','Resolution','Revenge','Eagle'],
     SouthAtlantic: ['Barham','Malaya','RoyalOak','RoyalSovereign'] } },
   B3: { weight: 15, noBarentsUntil: 3 },
-  M5: { weight: 15, malta: ['Hood','Renown','Repulse','Warspite','Valiant','QueenElizabeth','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','ArkRoyal'], t1: {
+  M5: { weight: 15, holdMed: true, malta: ['Hood','Renown','Repulse','Warspite','Valiant','QueenElizabeth','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','ArkRoyal'], t1: {
     NorthSea: ['Nelson','Rodney','Ramillies','Dorsetshire','Courageous'],
     NorthAtlantic: ['Resolution','Revenge','RoyalOak','Glorious'],
     SouthAtlantic: ['Barham','Malaya','RoyalSovereign','Exeter','Eagle'] } },
@@ -866,8 +867,10 @@ async function advancePhase(){
         && SHIPS.some(x => x.country === 'UK' && !x.removed && x.location === sea));
       const fastHome = aiSide === 'allies' && italyStayed && deFoughtNorth;
       if(fastHome) console.log('[帰還] イタリアが出てこず北でドイツと戦ったので、地中海の速い艦を英国へ');
+      const holdMed = aiSide === 'allies' && !!(ALLIED_OPENINGS[alliedOpening] || {}).holdMed; // 作戦 M5: 地中海の艦隊は動かさない
       medBack.sort((a, b) => ((a.spd >= 6) - (b.spd >= 6)) || (((b.atk || 0) + (b.def || 0)) - ((a.atk || 0) + (a.def || 0))))
         .forEach(s => {
+          if(holdMed) { keepMed.push(s); return; }
           if(fastHome && s.spd >= 6) { toEngland.add(s.id); return; }
           if(battleGeq(keepMed, italianFullThreat()) && keepMed.length) toEngland.add(s.id); else keepMed.push(s);
         });
@@ -878,7 +881,7 @@ async function advancePhase(){
       const engNow = SHIPS.filter(x => x.side === 'allies' && x.country === 'UK' && !x.sunk && !x.removed && !(x.damage > 0) &&
         (x.location === 'England' || toEngland.has(x.id) || (barUkUs.includes(x) && x.location === 'England')));
       const nsThin = seaControl['NorthSea'] !== 'allies' || !battleGeq(engNow, deHomeNow);
-      if(aiSide === 'allies' && currentTurn >= 6 && nsThin){
+      if(aiSide === 'allies' && currentTurn >= 6 && nsThin && !holdMed){
         const back = keepMed.filter(x => x.location === 'Mediterranean' && !toEngland.has(x.id))
           .sort((x, y) => ((y.atk || 0) + (y.def || 0)) - ((x.atk || 0) + (x.def || 0))).slice(0, 2);
         back.forEach(x => { toEngland.add(x.id); x.fromMalta = true; }); // 余力ができたらマルタへ戻す印
@@ -4400,7 +4403,9 @@ function planAlliedDeployment(aiLog){
   const ratio = itAtk > 0 ? medAtk / itAtk : Infinity;
   // マルタの艦は、イタリアが出てこられる戦力の方が上なら出撃せず、マルタに残る（ユーザーの指示 2026-11-07）
   //   出撃しない時は、本国から地中海へ回す艦も取りやめて北海へ。連続支配3と最後のターンは今までどおり必ず出撃
-  const sortie = streak3 || lastTurn || !(itAtk > medAtk);
+  // 作戦 M5: 地中海に居続ける。多少不利でも出撃し、明らかに戦力が落ちた時（イタリアの7割未満）だけ出撃しない（ユーザーの指示 2026-11-07）
+  const holdMed = !!(ALLIED_OPENINGS[alliedOpening] || {}).holdMed;
+  const sortie = streak3 || lastTurn || (holdMed ? medAtk >= itAtk * 0.7 : !(itAtk > medAtk));
   if(!sortie){
     // 出撃しない場合は地中海への増援も取りやめ、北海へ
     const back = placed.Mediterranean.slice();
@@ -4421,7 +4426,7 @@ function planAlliedDeployment(aiLog){
     const keep = [];
     const medWins = () => medNeverLose([...keep, ...placed.Mediterranean]);
     for(const s of maltaShips.slice().sort((a, b) => pw(b) - pw(a))){
-      if(medWins() && !(s.damage > 0) && s.spd >= 7 && hop(s, 'SouthAtlantic') > 0){
+      if(!holdMed && medWins() && !(s.damage > 0) && s.spd >= 7 && hop(s, 'SouthAtlantic') > 0){
         plan[s.id] = 'SouthAtlantic';
         placed.SouthAtlantic.push(s);
       } else {
