@@ -107,6 +107,7 @@ body.was-zoomed { zoom: var(--was-zoom); height: calc(100vh / var(--was-zoom)); 
 body.hide-units .tt-ship { display:none; }
 body.hide-units .control-marker { display:none; }
 body.hide-units .force-label { display:none; }
+body.hide-force .force-label { display:none; }
 .force-label { position:absolute; transform:translate(-50%,0); pointer-events:none; z-index:5; background:rgba(0,0,0,0.6); border-radius:4px; padding:1px 6px; font-weight:bold; font-size:0.85em; white-space:pre; line-height:1.3; }
 
 .control-marker {
@@ -310,6 +311,7 @@ body.hide-units .force-label { display:none; }
     <span id="zoomLabel">70%</span>
   </label>
   <button class="zbtn" id="toggleUnits" onclick="toggleUnits()" style="width:auto;padding:0 10px;font-size:0.85em;">駒表示</button>
+  <button class="zbtn" id="toggleForce" onclick="toggleForce()" style="width:auto;padding:0 10px;font-size:0.85em;" title="各海域の戦力の数字（攻・空・ASW・U）を出す／消す">戦力表示</button>
   <button class="zbtn" onclick="showCombatLog()" style="width:auto;padding:0 10px;font-size:0.85em;background:#557;display:none;">戦闘ログ</button>
   <label style="font-size:0.85em;margin-left:8px;display:none;">プレイ陣営:
     <select id="humanSideSelect" onchange="setHumanSide(this.value)" style="font-size:0.85em;">
@@ -5751,6 +5753,20 @@ function toggleUnits(){
   const btn = document.getElementById('toggleUnits');
   btn.textContent = document.body.classList.contains('hide-units') ? '駒非表示' : '駒表示';
 }
+
+// 各海域の戦力の数字の出す／消す（下の駒が見えない時のため。ユーザーの指示 2026-11-07）。選んだ方を覚えておく
+function toggleForce(){
+  document.body.classList.toggle('hide-force');
+  const off = document.body.classList.contains('hide-force');
+  document.getElementById('toggleForce').textContent = off ? '戦力非表示' : '戦力表示';
+  try { localStorage.setItem('wasHideForce', off ? '1' : '0'); } catch(e){}
+}
+try {
+  if(localStorage.getItem('wasHideForce') === '1'){
+    document.body.classList.add('hide-force');
+    const b = document.getElementById('toggleForce'); if(b) b.textContent = '戦力非表示';
+  }
+} catch(e){}
 
 // === 艦船配置 ===
 // 座標は駒の中心。スタックは右斜め上にカスケード。クリックで拡大。
