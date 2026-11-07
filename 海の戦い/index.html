@@ -2336,9 +2336,9 @@ async function runPursuitRound(pursuit, retreat){
     // （18章の例: 撃てる数でもう勝っていないので追撃をやめる。ユーザーの指示 2026-11-06）
     const pursuerSide = pursuit[0]?.side;
     const shotsOf = arr => arr.reduce((t, s) => t + Math.max(0, s.atk || 0), 0);
-    // 8割で沈められる敵が残っていれば、損害を気にせず続ける（ユーザーの指示 2026-11-07）
-    const aiCont = shotsOf(stillPur) > shotsOf(stillRet) || canSink80(stillPur.filter(s => s.spd >= newMin), stillRet);
-    if(pursuerSide === aiSide && !aiCont) logCombatLine(`AI: 撃てる数で勝っておらず、8割で沈められる敵もいない(${shotsOf(stillPur)}対${shotsOf(stillRet)}) → 追撃をやめる`);
+    // 線（SINK_LINE）を超えて沈められる敵が残っていれば、損害を気にせず続ける（ユーザーの指示 2026-11-07）
+    const aiCont = shotsOf(stillPur) > shotsOf(stillRet) || canSinkLine(stillPur.filter(s => s.spd >= newMin), stillRet);
+    if(pursuerSide === aiSide && !aiCont) logCombatLine(`AI: 撃てる数で勝っておらず、沈められる見込みの敵もいない(${shotsOf(stillPur)}対${shotsOf(stillRet)}) → 追撃をやめる`);
     const cont = (pursuerSide === aiSide) ? aiCont : await chooseInPhaseLabel('追跡を続けますか？', [
       { label:'追撃を続ける', value:true, bg:'#a55' },
       { label:'追撃をやめる（この海域に残る）', value:false, bg:'#666' }
@@ -2391,14 +2391,16 @@ let alliedFireStyle = { pair: 'strong', surplus: 'strong' };
 function chooseAlliedFireStyle(seaKey){
   alliedTargetModeLog.push({ turn: currentTurn, sea: seaKey, mode: 'sink80', ratio: null });
 }
-// 8割で沈める（ユーザーの指示 2026-11-07、スティーブさんの案）: 砲撃力1=ダイス1個、6で命中して損害はダイス1個。
-//   SINK80[r] = 損害を r 以上出す確率が8割になる砲撃力
-const SINK80 = (() => {
+// 沈める見込みの線（ユーザーの指示 2026-11-07）。最初は8割、スティーブさんの報告のあと 45%（攻撃力4の艦1隻でイタリア CA を沈める見込み）に下げた。
+//   スティーブさんの返事しだいで変えるかもしれない。砲撃力1=ダイス1個、6で命中して損害はダイス1個。
+//   SINK_TAB[r] = 損害を r 以上出す確率が SINK_LINE になる砲撃力
+const SINK_LINE = 0.45;
+const SINK_TAB = (() => {
   const out = [0];
   for(let r = 1; r <= 20; r++){
     let d = [1], n = 0;
     const pr = () => 1 - d.slice(0, r).reduce((t, x) => t + (x || 0), 0);
-    while(pr() < 0.8 && n < 80){
+    while(pr() < SINK_LINE && n < 80){
       const nd = new Array(d.length + 6).fill(0);
       d.forEach((p, k) => { if(!p) return; nd[k] += p * 5 / 6; for(let f = 1; f <= 6; f++) nd[k + f] += p / 36; });
       d = nd; n++;
@@ -2412,15 +2414,15 @@ function sinkLeft(s, pending){
   const pd = (pending && pending.damage && pending.damage[s.id]) || 0;
   return Math.max(1, (s.def || 0) - (s.damage || 0) - pd + 1);
 }
-function sinkNeed(s, pending){ return SINK80[Math.min(20, sinkLeft(s, pending))]; }
-// 撃つ艦の中に、8割で沈められる敵が1隻でもいるか
-function canSink80(shooters, enemies){
+function sinkNeed(s, pending){ return SINK_TAB[Math.min(20, sinkLeft(s, pending))]; }
+// 撃つ艦の中に、線（SINK_LINE）を超えて沈められる敵が1隻でもいるか
+function canSinkLine(shooters, enemies){
   const fp = shooters.filter(s => !s.sunk && !s.returnPending).reduce((t, s) => t + Math.max(0, s.atk || 0), 0);
   return enemies.some(e => !e.sunk && !e.returnPending && e.type !== 'UBOAT' && sinkNeed(e) <= fp);
 }
 // 射撃する艦ごとの目標を先に決める（射撃艦ID → 目標の艦）
-//   要る砲撃力が少ない（確実に沈められる）敵から順に、8割に届くまで艦を割り当て、届いたら次の敵へ
-//   残りでは8割に届かない艦は、攻撃力の高い敵から順に1隻ずつ別の敵へ（5の目の帰還ねらい。同じ敵に重ねると無駄撃ちになるので分ける）
+//   要る砲撃力が少ない（沈めやすい）敵から順に、線（SINK_LINE）に届くまで艦を割り当て、届いたら次の敵へ
+//   線に届かない余りは、残りの中で一番沈めやすい敵から順に1隻ずつ別の敵へ（同じ敵に重ねると無駄撃ちになるので分ける）
 //   守られている空母と船団は、通常の艦のあと
 function planAlliedFire(shooters, enemies){
   const val = s => (s.atkOrig || s.atk || 0) + (s.def || 0);
@@ -2446,13 +2448,12 @@ function planAlliedFire(shooters, enemies){
       free = free.filter(y => y !== x);
     }
   }
-  // 余りは、8割に届かなかった敵へ攻撃力の高い順に1隻ずつ（ユーザーの指示 2026-11-07）。敵より多ければ2巡目
-  //   全部の敵が8割に届いていれば、全部の敵を同じ順で
+  // 余りは、線に届かなかった敵へ、一番沈めやすい敵から順に1隻ずつ（ユーザーの指示 2026-11-07。攻撃力の高い敵へ向けるのはやめた）。敵より多ければ2巡目
+  //   全部の敵が線に届いていれば、全部の敵を同じ順で
   if(free.length){
-    const byAtk = arr => arr.slice().sort((a, b) => ((b.atk || 0) - (a.atk || 0)) || (val(b) - val(a)));
-    let order = byAtk(normals.filter(t => !done.has(t)));
-    if(!order.length) order = byAtk(normals);
-    if(!order.length) order = byAtk(later);
+    let order = normals.filter(t => !done.has(t));
+    if(!order.length) order = normals.slice();
+    if(!order.length) order = later.slice();
     free.forEach((x, i) => { if(order.length) plan.set(x.id, order[i % order.length]); });
   }
   return plan;
@@ -3314,7 +3315,7 @@ async function tryPursuit(pursuerSide, seaKey, retreatGroups){
       pool = pool.filter(s => s !== keep);
     }
     pool.sort((a, b) => b.spd - a.spd);
-    // 8割で沈められる敵がいるグループを先に追う（損害は気にしない。ユーザーの指示 2026-11-07）
+    // 線（SINK_LINE）を超えて沈められる敵がいるグループを先に追う（損害は気にしない。ユーザーの指示 2026-11-07）
     //   遅いグループから見る（遅いグループには追いつける艦が多い）。要る砲撃力に届く分だけ、強い艦から付ける
     for(const grp of groups.slice().reverse()){
       const can = pool.filter(s => s.spd >= grp.min);
