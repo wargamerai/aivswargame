@@ -438,7 +438,7 @@ function startGameWithSetup() {
   // 非対称シナリオでは、プレイヤーの役割と逆の役割を AI に割当
   const aiRole = setupState.role === 'attacker' ? 'defender' : (setupState.role === 'defender' ? 'attacker' : undefined);
   // シナリオの勝利条件で性格を決める（ユーザーの指示 2026-11-06）
-  state.aiStyle = drawAIStyleForScenario(aiKey, scenario, aiRole);
+  state.aiStyle = null; // 性格はなくした（2026-11-08 ユーザーの指示。チャートの AI に入れ替えたため）
 
   // AI は賢い編成 (リーダー分散 + クルー指定)
   state.groups.ai = (window.SCENARIO_HELPERS && scenario)

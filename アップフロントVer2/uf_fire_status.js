@@ -569,27 +569,30 @@ function checkScenarioDVictory() {
   if (!sc || sc.id !== 'D') return;
   const R = window.INFANTRY_RULES;
   if (!R) return;
+  // テスト用（2026-11-08）: 攻撃側を役割で決める（元は「プレイヤー＝攻撃側」の決め打ち）
+  const _atk = state.playerRole === 'defender' ? 'ai' : 'player', _def = _atk === 'player' ? 'ai' : 'player';
+  const _atkName = _atk === 'player' ? state.player.name : state.ai.name;
   // 条件A
-  for (const grp of state.groups.player) {
+  for (const grp of state.groups[_atk]) {
     if (grp.eliminated) continue;
     if ((grp.distance || 0) < 5) continue;
     const aliveNotPinned = grp.cards.filter(c => R.isAlive(c) && !R.isPinned(c)).length;
     if (aliveNotPinned < 5) continue;
     state.phase = 'gameover';
-    alert(`シナリオD 終了：${state.player.name} の勝利！ (GROUP ${grp.name} が距離5に5人到達)`);
-    endCampaignScenario('player');
+    alert(`シナリオD 終了：${_atkName} の勝利！ (GROUP ${grp.name} が距離5に5人到達)`);
+    endCampaignScenario(_atk);
     return;
   }
   // 条件B
-  const aiEliminated = state.groups.ai.some(g => g.eliminated);
+  const aiEliminated = state.groups[_def].some(g => g.eliminated);
   if (aiEliminated) {
     let playerLoss = 0, aiLoss = 0;
-    state.groups.player.forEach(g => g.cards.forEach(c => { if (c.killed || c.routed) playerLoss++; }));
-    state.groups.ai.forEach(g => g.cards.forEach(c => { if (c.killed || c.routed) aiLoss++; }));
+    state.groups[_atk].forEach(g => g.cards.forEach(c => { if (c.killed || c.routed) playerLoss++; }));
+    state.groups[_def].forEach(g => g.cards.forEach(c => { if (c.killed || c.routed) aiLoss++; }));
     if (playerLoss < aiLoss) {
       state.phase = 'gameover';
-      alert(`シナリオD 終了：${state.player.name} の勝利！ (敵グループ消滅 & 損害優位 ${playerLoss}<${aiLoss})`);
-      endCampaignScenario('player');
+      alert(`シナリオD 終了：${_atkName} の勝利！ (敵グループ消滅 & 損害優位 ${playerLoss}<${aiLoss})`);
+      endCampaignScenario(_atk);
       return;
     }
   }

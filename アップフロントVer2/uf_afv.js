@@ -183,7 +183,7 @@
   // ===== オーバーラン（§29）=====
   function canOverrun(g) {
     if (!isAfvGroup(g) || g.eliminated || g._immob || g._bog || g._stun) return false;
-    const c = afvCard(g); return !!c && R().isAlive(c) && !R().isPinned(c) && !c.malfunctioned && !c.destroyed;
+    const c = afvCard(g); return !!c && R().isAlive(c) && !R().isPinned(c) && (global.__inChart || !c.malfunctioned) && !c.destroyed; // §29.11 チャートでは、主砲の故障は OVR 半分（機関銃は動く）
   }
   function overrunTargets(g, gi, enemySide) {
     const out = [];
@@ -254,13 +254,26 @@
     const t = (afvG.terrain || [])[(afvG.terrain || []).length - 1], ty = t && t.terrain && t.terrain.type;
     if (ty === 'BUILDINGS') m += 3; if (ty === 'WOODS' || ty === 'WALL' || ty === 'GULLY') m += 2; if (ty === 'BRUSH') m += 1;
     if (!isButtoned(c) && !dd.ot) m -= 1; if (isButtoned(c)) m += 1; m += ckMod(c); if (afvG._immob || afvG._bog) m += 2; if (dd.ot) m += 3;
-    if (attacker.demo) { m += 4; attacker.demo = false; }
+    if (attacker.demo || attacker.demoCharge) { m += 4; attacker.demo = false; attacker.demoCharge = false; } // §28.81 爆薬 +4、使ったら取り除く（印は demoCharge）
     if (m >= 7) { kill(afvG, c, '白兵戦'); return { ok: true, res: 'KILL' }; }
     if (m === 6) { immobilize(afvG, c); return { ok: true, res: 'IMMOB' }; }
     if (m <= 0) { Rr.killSoldier(attacker); return { ok: true, res: 'ATTACKER_KIA' }; }
     return { ok: true, res: 'NONE' };
   }
   // ===== AI の判断 =====
+  // スタックの脱出（人の uiUnbog と同じ: 移動カードを1枚出して RNC、赤でなければ脱出）
+  async function aiTryUnbog() {
+    const acted = state.aiActedGroups || new Set();
+    const gi = state.groups.ai.findIndex((g, i) => g && !g.eliminated && isAfvGroup(g) && g._bog && !acted.has(i)); if (gi < 0) return false;
+    const mi = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT'); if (mi < 0) return false;
+    const g = state.groups.ai[gi];
+    pushTerrainToDiscard(state.aiHand.splice(mi, 1)[0]); state.aiHandCount = state.aiHand.length;
+    const j = draw(); const ok = !!(j && j.terrain.rncColor !== '赤'); if (ok) g._bog = false;
+    acted.add(gi);
+    if (typeof renderField === 'function') { renderField('ai'); renderHands && renderHands(); }
+    if (typeof showAIAction === 'function') await showAIAction(ok ? 'AI: スタック脱出成功' : 'AI: スタック脱出失敗', null, gi);
+    return true;
+  }
   async function aiTryGun() {
     const a = gunTargets('ai', 'player'); if (!a.length) return false;
     const fi = state.aiHand.findIndex(c => c && c.terrain && String(c.terrain.type).indexOf('FIRE') === 0);
@@ -282,8 +295,17 @@
     for (let gi = 0; gi < state.groups.ai.length; gi++) {
       const g = state.groups.ai[gi];
       if (acted.has(gi) || fired.has(gi) || !canOverrun(g)) continue;
-      const c = overrunTargets(g, gi, 'player').map(x => ({ ...x, men: x.t.cards.filter(m => R().isAlive(m)).length, tem: R().calcTerrainMod(x.t.terrain, false, {}) || 0 }))
-        .filter(x => x.men >= POL.overrunMinMen && x.tem >= -POL.overrunMaxTem - 1).sort((p, q) => (q.men + q.tem) - (p.men + p.tem));
+      let c = overrunTargets(g, gi, 'player').map(x => ({ ...x, men: x.t.cards.filter(m => R().isAlive(m)).length, tem: R().calcTerrainMod(x.t.terrain, false, {}) || 0 }));
+      if (global.__inChart) {
+        // チャート（2026-11-08 ユーザーの指示: ルールどおり）: 人数・地形で止めない。相手は当たりやすい方（1人あたりのピン以上の見込み）、同じなら人数の多い方
+        const ac = afvCard(g), sv = sideOf(ac); const ovr = ac.malfunctioned ? Math.floor(sv.ovr / 2) : Math.max(0, sv.ovr - ckMod(ac));
+        const ABS = [43, 37, 28, 22, 16, 10, 6], SG = { '-6': 3, '-5': 5, '-4': 8, '-3': 11, '-2': 14, '-1': 19, '0': 43, '1': 18, '2': 14, '3': 11, '4': 8, '5': 5, '6': 3 };
+        const pGE = need => Object.keys(SG).reduce((t, k) => t + (+k >= need ? SG[k] : 0), 0) / 162;
+        const prob = x => { const mv = isMoving(x.t) ? 1 : 0; const men = x.t.cards.filter(m => R().isAlive(m)); if (!men.length) return 0;
+          return men.reduce((t, m) => { const d = R().lookupSoldier(m, key) || {}; const th = R().isPinned(m) ? (parseInt(d.panic, 10) || 99) : (parseInt(d.morale, 10) || 99);
+            return t + ABS.reduce((u, n, a) => u + (n / 162) * pGE(th - (ovr + a + x.tem + mv)), 0); }, 0) / men.length; };
+        c = c.map(x => ({ ...x, p: prob(x) })).sort((p, q) => (q.p - p.p) || (q.men - p.men));
+      } else c = c.filter(x => x.men >= POL.overrunMinMen && x.tem >= -POL.overrunMaxTem - 1).sort((p, q) => (q.men + q.tem) - (p.men + p.tem));
       if (!c.length) continue;
       const mv = state.aiHand.splice(mi, 1)[0]; state.aiHandCount = state.aiHand.length;
       overrun(g, c[0].t, mv, key, 'ai'); acted.add(gi);
@@ -310,6 +332,33 @@
     const acted = state.aiActedGroups || new Set(), fired = state.aiFiredGroups || new Set();
     for (let gi = 0; gi < state.groups.ai.length; gi++) {
       const g = state.groups.ai[gi]; if (!g || g.eliminated || isAfvGroup(g) || acted.has(gi) || fired.has(gi)) continue;
+      if (global.__inChart) {
+        // チャート（2026-11-08 ユーザーの指示: ルールどおり）: §20.1 真正面か隣の AFV。§28.8 武器を持つ兵だけ。爆薬の兵を先に（§28.81 +4）
+        //   §20.21/20.22 侵入には移動カード（捨て札の山へ。捨て札に数えない）か士気チェック（RNC < 士気）。移動カードがあれば移動カードを使う
+        const aKey = getFactionKey(state.ai);
+        const tg = (state.groups.player || []).map((t, ti) => ({ t, ti })).filter(x => isAfvGroup(x.t) && !x.t.eliminated && Math.abs(x.ti - gi) <= 1 && R().relativeRange(g.distance, x.t.distance) === 5);
+        if (!tg.length) continue;
+        const modOf = t => { const ac = afvCard(t), dd = defOf(ac); let m = 0; const top = (t.terrain || [])[(t.terrain || []).length - 1], ty = top && top.terrain && top.terrain.type;
+          if (ty === 'BUILDINGS') m += 3; if (ty === 'WOODS' || ty === 'WALL' || ty === 'GULLY') m += 2; if (ty === 'BRUSH') m += 1;
+          if (!isButtoned(ac) && !dd.ot) m -= 1; if (isButtoned(ac)) m += 1; m += ckMod(ac); if (t._immob || t._bog) m += 2; if (dd.ot) m += 3; return m; };
+        tg.sort((a, b) => (modOf(b.t) - modOf(a.t)) || (Math.abs(a.ti - gi) - Math.abs(b.ti - gi)));
+        const tgt = tg[0].t;
+        const armed = g.cards.filter(m => { if (!R().isAlive(m) || R().isPinned(m) || m.destroyed) return false; const d = R().lookupSoldier(m, aKey); return !!(d && d.weaponCat && d.weaponCat !== '非武装') || !!m.acquiredWeapon || !!m.demoCharge; })
+          .sort((a, b) => ((b.demoCharge ? 1 : 0) - (a.demoCharge ? 1 : 0)));
+        const man = armed[0]; if (!man) continue;
+        const mi = state.aiHand.findIndex(x => x && x.terrain && x.terrain.type === 'MOVEMENT');
+        acted.add(gi);
+        if (mi >= 0) { pushTerrainToDiscard(state.aiHand.splice(mi, 1)[0]); state.aiHandCount = state.aiHand.length; }
+        else {
+          const j = draw(); const rn = j ? (parseInt(j.terrain.range, 10) || 0) : 99; const d = R().lookupSoldier(man, aKey) || {};
+          if (j && typeof pushTerrainToDiscard === 'function') pushTerrainToDiscard(j);
+          if (!(rn < (parseInt(d.morale, 10) || 0))) { R().pinSoldier(man); if (typeof showAIAction === 'function') await showAIAction('AI: AFV に肉薄（士気チェック失敗でピン）', null, gi); return true; }
+        }
+        ccAttack(man, g, tgt, 'ai');
+        if (typeof renderField === 'function') { renderField('ai'); renderField('player'); }
+        if (typeof showAIAction === 'function') await showAIAction('AI: AFV に肉薄', null, gi);
+        return true;
+      }
       const tgt = (state.groups.player || []).find((t, ti) => isAfvGroup(t) && !t.eliminated && Math.abs(ti - gi) <= 0 && R().relativeRange(g.distance, t.distance) === 5);
       if (!tgt) continue;
       const man = g.cards.find(m => R().isAlive(m) && !R().isPinned(m)); if (!man) continue;
@@ -445,7 +494,7 @@
     }
     if (global.CARD_SCORE && global.CARD_SCORE.wire) global.CARD_SCORE.wire();
   }
-  global.AFV = Object.assign({ isAfvCard, isAfvGroup, afvCard, wire, boxedAfterFire, aiTryGun, aiTryOverrun, aiTryCCAfv, canOverrun, humanPanel, stats, defOf, E, splitAfv }, AFVAPI);
+  global.AFV = Object.assign({ isAfvCard, isAfvGroup, afvCard, wire, boxedAfterFire, aiTryGun, aiTryOverrun, aiTryCCAfv, aiTryUnbog, canOverrun, humanPanel, stats, defOf, E, splitAfv }, AFVAPI);
   wire();
   // シナリオEは公開した（ユーザーの指示 2026-11-06）。以前の scenarioE=1 の制限は外した
   setInterval(() => { try { if (global.document && global.state) humanPanel(); } catch (e) {} }, 800);

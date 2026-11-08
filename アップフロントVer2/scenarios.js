@@ -619,9 +619,69 @@
 
   /** AI のグループを作る（作戦を選び、各グループに役割 _role と作戦 _strategy を付ける）。style: AI の性格 */
   function buildAIGroupsSmart(scenario, factionKey, role, style) {
+    const _g = buildAIGroupsSmart0(scenario, factionKey, role, style);
+    return _pillboxFix(scenario, role, _g, factionKey);
+  }
+  // テスト用（2026-11-08）: §23.3 トーチカ（C の守備側の B）は3人まで、迫撃砲・擲弾筒・バズーカ・パンツァーシュレックは入れない
+  function _pillboxFix(scenario, role, groups, factionKey) {
+    if (!scenario || scenario.id !== 'C' || role !== 'defender' || !groups || !groups.length) return groups;
+    const B = groups.find(g => g.name === 'B'); if (!B) return groups;
+    const others = groups.filter(g => g !== B);
+    const defOf = c => getSoldierDefByNum(factionKey, c.num);
+    const bad = c => { const d = defOf(c); return d && /迫撃砲|擲弾筒|バズーカ|パンツァーシュレック/.test(d.weaponCat || ''); };
+    const crewW = c => { const d = defOf(c); return !!(d && isCrewWeaponDef(d)); };
+    const ok = B.cards.filter(c => !bad(c));
+    // 残す3人: クルー兵器（機関銃）→ 指揮官 → 士気の高い兵
+    ok.sort((a, b) => (crewW(b) - crewW(a)) || (isLeaderDef(defOf(b)) - isLeaderDef(defOf(a))) || ((parseInt((defOf(b) || {}).morale, 10) || 0) - (parseInt((defOf(a) || {}).morale, 10) || 0)));
+    const keep = ok.slice(0, 3);
+    const out = B.cards.filter(c => keep.indexOf(c) < 0);
+    if (!out.length) return groups;
+    let tgt = others;
+    if (!tgt.length) { const ng = _newGroup(groups.some(g => g.name === 'A') ? 'C' : 'A', factionKey); ng._role = B._role; ng._strategy = B._strategy; groups.push(ng); tgt = [ng]; }
+    B.cards = keep; B.crewPairs = {};
+    out.forEach(c => { const t = tgt.reduce((a, b) => (b.cards.length < a.cards.length ? b : a)); t.cards.push(c); t.crewPairs = {}; });
+    window.__pillboxFixed = (window.__pillboxFixed || 0) + 1;
+    return groups;
+  }
+  // テスト用（2026-11-08）: グループの人数を決め打ち（シナリオ A）。A=前に出るグループ（指揮官・士気の高い兵）、残りは火力（クルー兵器を先に）
+  function _forcedSplit(enriched, factionKey, sizes) {
+    const gs = sizes.map((n, i) => { const g = _newGroup(['A', 'B', 'C', 'D'][i], factionKey); g._role = i === 0 ? 'maneuver' : 'fire'; g._strategy = 'forced'; return g; });
+    const pool = enriched.slice();
+    const takeTo = (g, e) => { pool.splice(pool.indexOf(e), 1); addCard(g, e); };
+    const room = g => sizes[gs.indexOf(g)] - g.cards.length;
+    if (gs.length === 1) { pool.slice().forEach(e => takeTo(gs[0], e)); return gs; }
+    const sup = gs.slice(1);
+    const roomiest = () => sup.filter(g => room(g) > 0).sort((a, b) => room(b) - room(a))[0] || gs.filter(g => room(g) > 0)[0];
+    // 支援の各グループに指揮官を1人ずつ（2人目以降の指揮官）、クルー兵器は支援へ
+    const lds = pool.filter(e => e.leader).sort((a, b) => b.morale - a.morale);
+    if (lds.length) takeTo(gs[0], lds[0]);
+    lds.slice(1).forEach((e, k) => { const g = sup[k] && room(sup[k]) > 0 ? sup[k] : roomiest(); if (g) takeTo(g, e); });
+    pool.filter(e => e.crew).forEach(e => { const g = roomiest(); if (g) takeTo(g, e); });
+    // A には士気の高い兵から
+    pool.slice().sort((a, b) => b.morale - a.morale).forEach(e => { if (room(gs[0]) > 0) takeTo(gs[0], e); });
+    pool.slice().forEach(e => { const g = roomiest(); if (g) takeTo(g, e); });
+    _assignCrew(gs, enriched);
+    return gs.filter(g => g.cards.length);
+  }
+  function buildAIGroupsSmart0(scenario, factionKey, role, style) {
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
+    const _isChart = typeof window !== 'undefined' && window.__chartAI && (window.__chartNat === 'all' || factionKey === (window.__chartNat || 'us'));
+    const _splitA = _isChart && window.__splitA ? (typeof window.__splitA === 'object' ? window.__splitA[factionKey] : window.__splitA) : null;
+    const _defAdv = _isChart && window.__defAdv && role === 'defender' && (window.__defAdv !== 'D' || (scenario && scenario.id === 'D'));
+    if (_splitA && !(scenario && scenario.id === 'C' && role === 'defender')) { const k = Math.min(enriched.length, +_splitA); const sz = enriched.length - k >= 2 ? [k, enriched.length - k] : [enriched.length]; return _forcedSplit(enriched, factionKey, sz); }
+    if (_isChart && window.__pillboxFixed3 && scenario && scenario.id === 'C' && role === 'defender') {
+      const fix = { ger: [3, 10, 23], us: [1, 3, 4], rus: [2, 4, 24], jpn: [4, 21, 27], uk: [1, 5, 12] }[factionKey] || [];
+      const gA = _newGroup('A', factionKey), gB = _newGroup('B', factionKey); gA._role = 'hold'; gB._role = 'hold'; gA._strategy = gB._strategy = 'hold';
+      enriched.forEach(e => addCard(fix.indexOf(e.num) >= 0 ? gB : gA, e));
+      _assignCrew([gA, gB], enriched);
+      return [gA, gB].filter(g => g.cards.length);
+    }
+    if (_isChart && window.__forceSplit) { const sz = String(window.__forceSplit).split(',').map(Number); if (sz.reduce((a, b) => a + b, 0) === enriched.length) return _forcedSplit(enriched, factionKey, sz); window.__forceSplitBad = enriched.length; }
+    // テスト用（2026-11-08）: 守備側も前進の表で戦う。グループはふつうの作り方（守備の小分けにしない）
+    if (_defAdv) style = style === 'def' ? 'bal' : style;
+    if (_defAdv) { const strategy = enriched.length >= 5 ? 'fireMove' : chooseAIStrategy(scenario, enriched, style, factionKey); let groups; const _hasDemo = hasDemo(scenario, factionKey, role); if (strategy === 'fireMove') { groups = _formFireMove(enriched, factionKey, _hasDemo); _assignCrew(groups, enriched); } else if (strategy === 'assault') { groups = _formAssault(enriched, factionKey); _assignCrew(groups, enriched); } else groups = _buildGroupsWaveOrSplit(scenario, factionKey, role, strategy); groups = groups.filter(g => g.cards.length > 0); groups.forEach(g => { g._strategy = strategy; }); return groups; }
     // シナリオC・D・E の防御側（時間切れで勝つ）: 「守備」。小分けで作り、全グループが前に出ない（射撃・隠蔽・回復を最優先）
     //   ごく稀に違う性格（防御的でない）になったときは、ふつうの編成にする（ユーザーの指示 2026-11-06）
     if (scenario && role === 'defender' && (scenario.id === 'C' || ((scenario.id === 'D' || scenario.id === 'E') && style === 'def'))) {
