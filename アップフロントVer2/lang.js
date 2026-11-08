@@ -484,6 +484,12 @@ const LANG_TERMS = {
   'AI: 地形配置': 'AI: terrain',
   'AI: 白兵戦': 'AI: Close Combat',
   'AI: 侵入': 'AI: Infiltrate',
+  "AI: AFV に肉薄": "AI: Close assault on AFV",
+  "AI: AFV に肉薄（士気チェック失敗でピン）": "AI: Close assault on AFV (morale check failed, pinned)",
+  "AI: スタック脱出成功": "AI: AFV freed from bog",
+  "AI: スタック脱出失敗": "AI: AFV still bogged",
+  "AI: オーバーラン": "AI: Overrun",
+  "AI: AFV 主砲": "AI: AFV main gun",
   'AI: 捨て札': 'AI: discard',
   'AI: 射撃': 'AI: Fire',
   'AI: 移動': 'AI: Movement',
@@ -1071,11 +1077,17 @@ LANG_PATTERNS_SRC.forEach(([ja, en]) => {
 });
 LANG_PATTERNS.sort((a, b) => b.lit - a.lit); // 決まった文字の多い（具体的な）型から先に試す
 // 文の型に当てはまれば英語にする（当てはまらなければ null）
+// 英語の文をいまの言語へ（イタリア語は uf_i18n.js の表。2026-11-08）
+const LANGS = ['ja', 'en', 'it'];
+const langX = en => {
+  if(LANG === 'it'){ const d = window.UF_I18N && window.UF_I18N.it; if(d && d[en] !== undefined) return d[en]; }
+  return en;
+};
 function langMatchPattern(core){
   for (const p of LANG_PATTERNS) {
     const m = core.match(p.re);
     if (!m) continue;
-    let out = p.en;
+    let out = langX(p.en);
     p.keys.forEach((k, i) => { out = out.split('{' + k + '}').join(langTranslate(m[i + 1])); });
     return out;
   }
@@ -1098,7 +1110,7 @@ function langTranslate(s){
     // 複数行のメッセージは 1行ずつ訳す
     out = core.split('\n').map(l => langTranslate(l)).join('\n');
   } else if(LANG_EXACT[core] !== undefined){
-    out = LANG_EXACT[core];
+    out = langX(LANG_EXACT[core]);
   } else if((pm = langMatchPattern(core)) !== null){
     out = pm;
   } else {
@@ -1109,17 +1121,17 @@ function langTranslate(s){
     while((m = LANG_TERM_RE.exec(core))){
       const raw = core.slice(last, m.index);
       if(raw){
-        if(prevTerm && /[A-Za-z0-9)]$/.test(out) && /^[A-Za-z0-9]/.test(raw)) out += ' ';
+        if(prevTerm && /[A-Za-z0-9À-ÿ)]$/.test(out) && /^[A-Za-z0-9À-ÿ]/.test(raw)) out += ' ';
         out += raw;
       }
-      const en = LANG_TERMS[m[0]];
-      if(/[A-Za-z0-9)\]]$/.test(out) && /^[A-Za-z0-9(]/.test(en)) out += ' ';
+      const en = langX(LANG_TERMS[m[0]]);
+      if(/[A-Za-z0-9À-ÿ)\]]$/.test(out) && /^[A-Za-z0-9À-ÿ(]/.test(en)) out += ' ';
       out += en;
       last = m.index + m[0].length;
       prevTerm = true;
     }
     const rest = core.slice(last);
-    if(rest && prevTerm && /[A-Za-z0-9)]$/.test(out) && /^[A-Za-z0-9]/.test(rest)) out += ' ';
+    if(rest && prevTerm && /[A-Za-z0-9À-ÿ)]$/.test(out) && /^[A-Za-z0-9À-ÿ]/.test(rest)) out += ' ';
     out += rest;
     out = out.replace(/ {2,}/g, ' ').replace(/ ([,.:;)\]?!])/g, '$1').replace(/\( /g, '(').trim();
   }
@@ -1131,8 +1143,8 @@ function langTranslate(s){
 let LANG = 'ja';
 try {
   const q = new URLSearchParams(location.search).get('lang');
-  if(q === 'en' || q === 'ja'){ LANG = q; localStorage.setItem('ufLang', q); }
-  else if(localStorage.getItem('ufLang') === 'en') LANG = 'en';
+  if(LANGS.includes(q)){ LANG = q; localStorage.setItem('ufLang', q); }
+  else if(LANGS.includes(localStorage.getItem('ufLang'))) LANG = localStorage.getItem('ufLang');
 } catch(e){}
 
 // 文字ごとに元の日本語と英語を覚えておき、切り替えで戻せるようにする
@@ -1142,21 +1154,21 @@ function langApplyText(node){
   if(node.parentNode && node.parentNode.classList && node.parentNode.classList.contains('lang-btn')) return; // 切り替えボタン自身は訳さない
   const v = node.nodeValue;
   const rec = langText.get(node);
-  if(rec && (v === rec.en || v === rec.ja && LANG === 'ja')) return;
+  if(rec && ((rec.lang === LANG && v === rec.en) || (v === rec.ja && LANG === 'ja'))) return;
   if(!LANG_JP.test(v)){ if(rec) langText.delete(node); return; }
-  const r = { ja: v, en: langTranslate(v) };
+  const r = { ja: v, en: langTranslate(v), lang: LANG };
   langText.set(node, r);
-  if(LANG === 'en' && r.en !== v) node.nodeValue = r.en;
+  if(LANG !== 'ja' && r.en !== v) node.nodeValue = r.en;
 }
 function langApplyTitle(el){
   const v = el.getAttribute('title');
   if(v == null) return;
   const rec = langTitle.get(el);
-  if(rec && (v === rec.en || v === rec.ja && LANG === 'ja')) return;
+  if(rec && ((rec.lang === LANG && v === rec.en) || (v === rec.ja && LANG === 'ja'))) return;
   if(!LANG_JP.test(v)){ if(rec) langTitle.delete(el); return; }
-  const r = { ja: v, en: langTranslate(v) };
+  const r = { ja: v, en: langTranslate(v), lang: LANG };
   langTitle.set(el, r);
-  if(LANG === 'en' && r.en !== v) el.setAttribute('title', r.en);
+  if(LANG !== 'ja' && r.en !== v) el.setAttribute('title', r.en);
 }
 function langWalk(root, fn){
   if(root.nodeType === 3){ fn.text(root); return; }
@@ -1177,7 +1189,7 @@ function langRestoreAll(){
   });
 }
 const langObserver = new MutationObserver(muts => {
-  if(LANG !== 'en' || langApplying) return;
+  if(LANG === 'ja' || langApplying) return;
   langApplying = true;
   for(const m of muts){
     if(m.type === 'characterData') langApplyText(m.target);
@@ -1188,27 +1200,30 @@ const langObserver = new MutationObserver(muts => {
 });
 
 function setLang(lang){
+  if(!LANGS.includes(lang)) lang = 'ja';
+  if(LANG !== 'ja' && LANG !== lang){ langObserver.disconnect(); langRestoreAll(); } // 別の言語へ移るときは、いったん日本語に戻す
   LANG = lang;
+  langCache.clear();
   try { localStorage.setItem('ufLang', lang); } catch(e){}
   document.documentElement.lang = lang;
-  if(lang === 'en'){
+  if(lang !== 'ja'){
     langApplyAll();
     langObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['title'] });
   } else {
     langObserver.disconnect();
     langRestoreAll();
   }
-  // 切り替えボタン（各画面にある）: 今の言語ではない方を表示
-  document.querySelectorAll('.lang-btn').forEach(b => { b.textContent = lang === 'en' ? '🌐 日本語' : '🌐 English'; });
+  // 切り替えボタン（各画面にある）: 押すと次の言語へ（日本語 → English → Italiano → 日本語）。ボタンには次の言語を出す
+  document.querySelectorAll('.lang-btn').forEach(b => { b.textContent = { ja: '🌐 English', en: '🌐 Italiano', it: '🌐 日本語' }[lang]; });
 }
-function toggleLang(){ setLang(LANG === 'en' ? 'ja' : 'en'); }
+function toggleLang(){ setLang({ ja: 'en', en: 'it', it: 'ja' }[LANG] || 'ja'); }
 
 // アラート・確認・入力のダイアログ
 {
   const a = window.alert.bind(window), c = window.confirm.bind(window), p = window.prompt.bind(window);
-  window.alert = msg => a(LANG === 'en' ? langTranslate(String(msg)) : msg);
-  window.confirm = msg => c(LANG === 'en' ? langTranslate(String(msg)) : msg);
-  window.prompt = (msg, def) => p(LANG === 'en' ? langTranslate(String(msg)) : msg, def);
+  window.alert = msg => a(LANG !== 'ja' ? langTranslate(String(msg)) : msg);
+  window.confirm = msg => c(LANG !== 'ja' ? langTranslate(String(msg)) : msg);
+  window.prompt = (msg, def) => p(LANG !== 'ja' ? langTranslate(String(msg)) : msg, def);
 }
 
 document.addEventListener('DOMContentLoaded', () => setLang(LANG));

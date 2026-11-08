@@ -83,7 +83,7 @@ function _ufCasualties(side) {
   return out;
 }
 function ufBuildReportHtml() {
-  const en = (typeof LANG !== 'undefined' && LANG === 'en' && typeof langTranslate === 'function');
+  const en = (typeof LANG !== 'undefined' && LANG !== 'ja' && typeof langTranslate === 'function'); // 英語・イタリア語
   const L = t => en ? langTranslate(String(t)) : String(t);
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   const sc = state.scenario;
