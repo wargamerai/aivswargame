@@ -351,7 +351,13 @@ body.hide-force .force-label { display:none; }
       <label><input type="checkbox" class="optRule" data-opt="bismarck7" onchange="setOptionRule(this)"> ビスマルク級 防御7</label>
       <label><input type="checkbox" class="optRule" data-opt="usEase" onchange="setOptionRule(this)"> 米国投入ダイス緩和</label>
     </div>
+    <!-- ドイツ艦の編成（ハンデ用。スティーブさんの提案 2026-11-08）: 外した艦はゲームに出ない -->
+    <div id="oobPanel" style="display:none;color:#cde;margin:0 0 12px;">
+      <div style="font-size:13px;margin-bottom:6px;">ゲームに出す艦にチェックを入れてください。外した艦は、ゲームに出ません（ハンデ用）。Uボートは外せません。</div>
+      <div id="oobList" style="display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow-y:auto;"></div>
+    </div>
     <button class="locBtn" style="background:#2266cc;padding:6px 18px;" onclick="startWithOptions()">ゲーム開始</button>
+    <button class="locBtn" style="background:#456;padding:6px 18px;margin-left:8px;" onclick="toggleOobPanel()">ドイツ艦の編成</button>
     <button class="locBtn" style="background:#356;padding:6px 18px;margin-left:8px;" onclick="pickLoadFile()">セーブから再開</button>
   </div>
 </div>
@@ -555,7 +561,8 @@ function renderSideList(side, elId){
       const enter = s.enterTurn ? ` (T${s.enterTurn})` : '';
       const cls = s.sunk ? ' sunk' : '';
       let status = '';
-      if(s.sunk) status = ' <span style="color:#ff4444;font-weight:bold;">[撃沈]</span>';
+      if(s.oobRemoved) status = ' <span style="color:#889;">[不参加]</span>';
+      else if(s.sunk) status = ' <span style="color:#ff4444;font-weight:bold;">[撃沈]</span>';
       else if(s.landed) status = ` <span style="color:#8cf;">[上陸]</span>`;
       else if(s.damage > 0) status = ` <span style="color:#fa8;">[損害${s.damage}]</span>`;
       html += `<div class="ship-entry${cls}">
@@ -637,7 +644,33 @@ function setOptionRule(el){
   }
 }
 // 立ち上げ画面の「ゲーム開始」: オプションを確定して閉じる
+// 日本語の文を、いまの言語へ（lang.js がなければそのまま）
+function wasL(t){ return (typeof LANG !== 'undefined' && LANG !== 'ja' && typeof langTranslate === 'function') ? langTranslate(t) : t; }
+// ドイツ艦の編成（ハンデ用）: 水上艦だけ。最初は全部「出す」にチェック
+function toggleOobPanel(){
+  const p = document.getElementById('oobPanel'), list = document.getElementById('oobList');
+  if(!list.dataset.built){
+    list.dataset.built = '1';
+    SHIPS.filter(s => s.country === 'DE' && s.type !== 'UBOAT').forEach(s => {
+      const lab = document.createElement('label');
+      lab.innerHTML = `<input type="checkbox" class="oobPick" data-id="${s.id}" checked> ${s.name}${s.enterTurn ? ' (T' + s.enterTurn + ')' : ''} — ${s.atk}-${s.def}-${s.spd} ${s.type}`;
+      list.appendChild(lab);
+    });
+  }
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+// ゲーム開始時に、チェックを外した艦をゲームから外す
+function applyOob(){
+  document.querySelectorAll('.oobPick').forEach(cb => {
+    cb.disabled = true;
+    if(cb.checked) return;
+    const s = SHIPS.find(x => x.id === cb.dataset.id);
+    if(s){ s.removed = true; s.oobRemoved = true; s.location = null; }
+  });
+  placeAllShips();
+}
 function startWithOptions(){
+  applyOob();
   lockOptionRules();
   document.getElementById('optionStartModal').style.display = 'none';
   if(typeof langCount === 'function') langCount();
@@ -739,6 +772,11 @@ function applyNeutralPenalty(){
 async function advancePhase(){
   if(phaseIdx >= 9) return; // 9 (POC) で止まる、ターン終了ボタンで次ターンへ
   // 枢軸の移動のフェイズで1隻も動かしていなければ、確かめてから進む（移動を忘れたまま進まないように）
+  // 8ターン目に港に残っている枢軸の艦があれば、確かめてから進む（スティーブさんの提案 2026-11-08）
+  if(phaseIdx === 3 && humanSide === 'axis' && !simMode && currentTurn >= 8){
+    const inPort = SHIPS.filter(s => s.side === 'axis' && !s.sunk && !s.removed && s.type !== 'UBOAT' && PORTS[s.location]);
+    if(inPort.length && !confirm(wasL('最後のターン（8ターン）です。港に残っている枢軸の艦があります:') + '\n' + inPort.map(s => s.name).join(', ') + '\n' + wasL('全部の艦を海に出さなくてよいですか？'))) return;
+  }
   if(phaseIdx === 3 && humanSide === 'axis' && !simMode){
     const moved = SHIPS.some(s => s.side === 'axis' && s.movedThisTurn);
     if(!moved && !confirm('まだ枢軸の艦を1隻も動かしていません。このまま次のフェイズへ進みますか？')) return;
@@ -754,6 +792,8 @@ async function advancePhase(){
     if(humanSide === 'allies') await aiAxisMove(); // 人が連合を持つ時は、ドイツ軍AI（axis_ai.js）が枢軸を動かす
   } else if(phaseIdx === 4){
     applyNeutralPenalty();
+    // 8ターン目は最後のターンなので修理はしない（スティーブさんの提案 2026-11-08）
+    if(currentTurn >= 8){ alert(wasL('最後のターン（8ターン）のため、修理はありません')); return; }
     const log = await executeRepair();
     if(log && log.length){
       alert('修理結果:\n' + log.map(l => l.replace(/<[^>]+>/g,'')).join('\n'));
