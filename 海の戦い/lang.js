@@ -649,7 +649,7 @@ function langCount(){
   let tries = 0;
   (function send(){
     const g = window.goatcounter;
-    if(g && g.count) g.count({ path: location.pathname.replace(/index\.html$/, '') + '?lang=' + LANG });
+    if(g && g.count) g.count({ path: decodeURI(location.pathname).replace(/index\.html$/, '') + '?lang=' + LANG });
     else if(tries++ < 40) setTimeout(send, 500);
   })();
 }
