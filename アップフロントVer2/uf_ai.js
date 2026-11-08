@@ -3169,7 +3169,7 @@ document.getElementById('deck-draw').addEventListener('click', () => {
 
 // ===== コマンドチャートどおりの AI（ユーザーのチャート 2026-11-07）。行ごとに何回使われたかを数える =====
 // 本番の設定（2026-11-08 ユーザーの指示で全部の国をチャートに入れ替え）。sim/run.js は自分で上書きする
-if (window.__chartAI === undefined) Object.assign(window, { __chartAI: true, __chartNat: 'all', __fire1: true, __gerExtra: true, __nightMove: true, __pillboxFixed3: true, __splitA: { ger: 4, us: 4, rus: 4, jpn: 5, uk: 5 }, __defAdv: 'D' });
+if (window.__chartAI === undefined) Object.assign(window, { __chartAI: true, __chartNat: 'all', __fire1: true, __gerExtra: true, __nightMove: true, __pillboxFixed3: true, __splitA: { ger: 4, us: 4, rus: 4, jpn: 5, uk: 5 }, __defAdv: 'D', __cDefAdv: true });
 function chartDefAdv() { return window.__defAdv === 'D' ? !!(state.scenario && state.scenario.id === 'D' && state.aiRole === 'defender') : !!window.__defAdv; }
 async function chartTurn(nat) {
   const R = window.INFANTRY_RULES;
@@ -3227,6 +3227,32 @@ async function chartTurn0(nat) {
     const cand = mine().filter(x => isMovingTop(x.g) && rangeOf(x.g) <= 3).sort((a, b) => mor(b.g) - mor(a.g));
     return cand.length ? cand[0].i : -1;
   };
+  // C の守備（試し 2026-11-08）: 守りのある地形（修正がマイナス）にいない、トーチカでないグループ
+  const protectiveNow = g => (R.calcTerrainMod(g.terrain || [], false, {}) || 0) < 0 && !isMovingTop(g);
+  const cDefMovable = () => new Set(mine().filter(x => !hasPillbox(x.g) && !protectiveNow(x.g)).map(x => x.i));
+  // 相対距離4になったグループ（トーチカでない）は後退する。移動カード1枚で距離チットを1つ戻す
+  const chartCDefRetreat = async () => {
+    const mi = hand().findIndex(c => c && c.terrain && c.terrain.type === 'MOVEMENT'); if (mi < 0) return false;
+    const acted = state.aiActedGroups || new Set(), fired = state.aiFiredGroups || new Set();
+    for (const x of mine()) {
+      const g = x.g, gi = x.i;
+      if (acted.has(gi) || fired.has(gi) || hasPillbox(g)) continue;
+      if (rangeOf(g) < 4) continue;
+      if (g.cards.some(c => R.isAlive(c) && R.isPinned(c))) continue;
+      if (R.hasTerrainType && (R.hasTerrainType(g, 'WIRE') || R.hasTerrainType(g, 'MINEFIELD'))) continue;
+      if ((R.isInStream && R.isInStream(g)) || (R.isInGully && R.isInGully(g) && R.gullyMoveCount && R.gullyMoveCount(g) === 0) || (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0)) continue;
+      const card = hand()[mi]; const nd = g.distance - 1;
+      const es = enemies(); if (es.length && Math.min(...es.map(e => nd + (e.distance || 0))) < 0) continue;
+      if (nd < 0 && !(card.terrain && card.terrain.rncColor === '赤')) continue;
+      g.distance = nd; card._moveMode = 'retreat'; pushTerrainWithFaction(g, card);
+      state.aiHand.splice(mi, 1); state.aiHandCount = state.aiHand.length;
+      if (window.CC_ACTION && window.CC_ACTION.clearInfiltration) window.CC_ACTION.clearInfiltration(g, 'move');
+      acted.add(gi); renderField('ai'); renderHands();
+      await showAIAction(`AI: 後退 — GROUP ${g.name}（相対距離4・C の守備）`, card, gi);
+      return true;
+    }
+    return false;
+  };
   // 待機の表: 手札の地形のほうが、今の地形より修正がよいグループ（修正の向きは建物の修正の符号で決める）
   const betterTerrainGroups = () => {
     const GOOD = ['WOODS','BUILDINGS','BRUSH','HILL','WALL','GULLY'];
@@ -3278,7 +3304,7 @@ async function chartTurn0(nat) {
     ['侵入解除', [aiTryUninfiltrate]],
     ['AFVへの侵入→肉薄', [async () => window.AFV ? window.AFV.aiTryCCAfv() : false]], // チャートの待機24行目（2026-11-08 前進の表と同じ形に分けた）
     ['対人への侵入', [() => aiTryInfiltrate({ noAfv: true }), () => aiTryInfiltrate({ demoOnly: true, noAfv: true }), aiTryCC]],
-    /* チャートの待機25行目（2026-11-08 ユーザーが「今より」を外した） */ ['移動+効果のある地形→横移動', [async () => goodTerrain() ? aiTryMove({ lateral: true }) : false, async () => window.AFV ? window.AFV.aiTryOverrun() : false, aiTryFlankEncircle]],
+    /* チャートの待機25行目（2026-11-08 ユーザーが「今より」を外した）。C の守備（試し）: 守りのある地形にいるグループは動かない。相対距離4なら後退、そうでなければ前進 */ ['移動+効果のある地形→横移動', [async () => { if (window.__cDefAdv && state.scenario && state.scenario.id === 'C') { if (await chartCDefRetreat()) return true; const o = cDefMovable(); return (goodTerrain() && o.size) ? aiTryMove({ only: o }) : false; } return goodTerrain() ? aiTryMove({ lateral: true }) : false; }, async () => window.AFV ? window.AFV.aiTryOverrun() : false, aiTryFlankEncircle]],
     ['修理', [aiTryRepair]],
     ['夜:射撃/索敵/照明弾', [nightOnly(aiTryFireLit), nightOnly(aiTryFireAny), nightOnly(aiTryScout), nightOnly(aiTryFlare)]],
     ['相手が移動中なら撃つ', [aiTryFireMovingEnemy]],
