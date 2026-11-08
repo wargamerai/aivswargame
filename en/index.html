@@ -238,6 +238,17 @@
                     <li>New "Edit German ships" button on the start screen: uncheck German surface ships to leave them out of the game (a handicap, for example the Graf Zeppelin). All ships are checked by default. U-boats cannot be removed</li>
                 </ul>
             </li>
+            <li>War at Sea: the Allied AI fleet deployment has been rebuilt
+                <ul>
+                    <li>For each sea area, the AI adds up the German surface ships that can reach it this turn (based on current sea control), plus 5. If Italian 1-1-7 cruisers can also come, their strength +2 is added. It sends at least that much to the Barents Sea, North Sea, South Atlantic and North Atlantic, in that order, and splits the rest evenly</li>
+                    <li>Fast ships go to the Barents Sea first; slow ships go to the North Sea and the Atlantic</li>
+                    <li>No Allied ships in the North Atlantic on turns 1 and 2. From turn 4, the US ships' strength is counted for the North Atlantic</li>
+                    <li>British ships in Russia are now used too, and can move through the Barents Sea to the North Sea or North Atlantic</li>
+                    <li>The Mediterranean is used only when the Soviet fleet sails and no convoy is at sea. British ships always return to England from the Mediterranean</li>
+                    <li>Allied land based air attacks now target Italian 1-1-7 cruisers first, then German 1-2-7 cruisers, then the weakest ship in an area with at least 3 Axis ships</li>
+                    <li>Allied surface fire now targets German ships before Italian ships in every turn</li>
+                </ul>
+            </li>
         </ul>
     </div>
 
