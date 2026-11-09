@@ -103,7 +103,7 @@ document.addEventListener('keydown', e => {
 });
 
 // 物語で報告している時は部下の言葉、そうでなければ説明の言葉を使う
-const storyOn = () => !S || !S.settings || S.settings.story !== false;
+const storyOn = () => true; // 物語の文はいつも出す（オプションを「全部見せる」1つにまとめた 2026-11-09）
 const say = (plain, kind, v) => (storyOn() ? story(kind, v) : plain);
 
 // ===================== 航海日誌 =====================
@@ -1511,7 +1511,7 @@ function mapHtml() {
 
 // ===================== 始め方 =====================
 async function newGame() {
-  S = { version: 1, phase: 'new', settings: { step: true, hideDice: true, hideEnemy: true, hideBad: true, autoFile: true, hideRoutine: true, story: true }, logLines: [] };
+  S = { version: 1, phase: 'new', settings: { step: true, showAll: false, hideEnemy: true, hideBad: true, autoFile: true }, logLines: [] };
   $('log').innerHTML = '';
   UI.head(L('コルベット・コマンド　北大西洋船団護送作戦 1941-1943', 'Corvette Command: North Atlantic Convoy Escort 1941-1943'));
   // 最初の画面: 言語の選択とゲームの説明。次にオプションを決めてからゲームを始める
@@ -1598,20 +1598,21 @@ function restart() { if (confirm(L('今のゲームを消して、最初から�
 // オプション（判定の数字・U ボートへの損害・不利なイベントを隠す）
 const OPTIONS = [
   ['rollDice', L('ダイスを自分で振る', 'Roll the dice yourself'), L('判定のたびに「🎲 ダイスを振る」ボタンが出て、押すと振る（押す回数がかなり増える）', 'A "🎲 Roll the dice" button appears for each check; press it to roll (many more clicks)')],
-  ['hideDice', L('判定の数字を隠す', 'Hide the dice'), L('青い行（A/P・出目）を出さず、結果の文だけにする', 'Don\'t show the blue lines (A/P and rolls), just the results')],
+  ['showAll', L('判定と処理を全部見せる', 'Show everything'), L('物語の文に加えて、判定の数字（A/P・出目）と細かい処理の行（移動・距離の変化・修理など）も全部出す', 'Besides the story, show every check (A/P and rolls) and every routine line (moves, range changes, repairs and so on)')],
   ['hideEnemy', L('U ボートの情報を隠す', 'Hide U-boat information'), L('型・攻撃値・回避値・艦長の性格・与えた損害・残りの攻撃回数を隠す。撃沈・撃破した時に正体が分かる（判定の数字も隠すと、回避値も分からなくなる）', 'Hide the type, attack, evasion, commander\'s character, damage dealt and attacks left. You learn who she was when you sink or destroy her (with the dice hidden too, even the evasion stays unknown)')],
   ['hideBad', L('あとで効くイベントを伏せる', 'Hide delayed events'), L('空襲・借りは返す・洋上補給・サンダーランド機・援護の護衛艦は効果が出るまで、幸運・ラム酒・巧みな操艦は使える時が来るまで、内容を伏せる', 'Air raid, Payback, Refuelling, Sunderland and Escort support stay hidden until they take effect; Luck, Rum and Skilled shiphandling until they can be used')],
   ['autoFile', L('航海ごとにファイルを保存', 'Save files after each voyage'), L('航海が終わるたびに、セーブファイルと航海日誌を自動でダウンロードする', 'Download the save file and the logbook automatically after every voyage')],
-  ['hideRoutine', L('細かい処理の行を隠す', 'Hide routine lines'), L('移動・故障なし・イベントなし・衝突なし・距離の変化・魚雷の外れ・修理など、物語の文で分かる行を隠す（大事な結果は隠さない）', 'Hide moves, no breakdown, no event, no collision, range changes, torpedo misses, repairs and other lines the story already tells (important results stay)')],
-  ['story', L('物語で報告', 'Story mode'), L('小説風の文と部下のセリフだけで報告する（判定や結果の行は出さない。数字は上のステータスで分かる）', 'Report only in narrative and the officers\' words (no check or result lines; the numbers are in the status panel above)')],
 ];
 function applySettings() {
   if (!S || !S.settings) return;
-  document.body.classList.toggle('hide-dice', !!S.settings.hideDice);
+  // 「全部見せる」: オフ＝物語の文だけ、オン＝物語の文＋判定の数字＋細かい処理の行（2026-11-09）
+  const all = !!S.settings.showAll;
+  document.body.classList.toggle('show-all', all);
+  document.body.classList.toggle('hide-dice', !all);
   document.body.classList.toggle('hide-enemy', !!S.settings.hideEnemy);
   document.body.classList.toggle('hide-bad', !!S.settings.hideBad);
-  document.body.classList.toggle('story-mode', S.settings.story !== false);
-  document.body.classList.toggle('hide-routine', !!S.settings.hideRoutine);
+  document.body.classList.toggle('story-mode', !all);
+  document.body.classList.toggle('hide-routine', !all);
 }
 // onStart を渡すと、閉じるボタンが「ゲームスタート」になる（最初の設定の時）
 function openOptions(onStart) {
@@ -1670,7 +1671,7 @@ window.addEventListener('DOMContentLoaded', () => {
     UI.log(L('— 保存したところから続けます —', '— Continuing from the saved game —'), 'head');
   }
   if (S) $('stepBtn').textContent = S.settings.step ? L('1手ずつ: ON', 'Step by step: ON') : L('1手ずつ: OFF', 'Step by step: OFF');
-  if (!S) S = { version: 1, phase: 'new', settings: { step: true, hideDice: true, hideEnemy: true, hideBad: true, autoFile: true, hideRoutine: true, story: true }, logLines: [] };
+  if (!S) S = { version: 1, phase: 'new', settings: { step: true, showAll: false, hideEnemy: true, hideBad: true, autoFile: true }, logLines: [] };
   applySettings();
   fontSize(0);
   initSplit();

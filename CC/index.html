@@ -95,6 +95,8 @@
   body:not(.story-mode) .ln.story, body:not(.story-mode) .ln.big { display:none; }
   body.story-mode .ln:not(.story):not(.big):not(.head):not(.you) { display:none !important; }
   body.story-mode .ln.head { font-size:0.87rem; }
+  /* 全部見せる: 物語の文と判定・処理の行を両方出す */
+  body.show-all .ln.story, body.show-all .ln.big { display:block; }
   /* オプション: 隠す行 */
   body.hide-dice .ln.dice { display:none; }
   body.hide-routine .ln.routine { display:none !important; }
