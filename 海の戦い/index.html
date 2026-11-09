@@ -977,6 +977,7 @@ async function advancePhase(){
       } else {
         ship.location = ports.includes(ship.homePort) ? ship.homePort : ports[0];
       }
+      if(ship.location === 'Neutral') ship.arrivedNeutralTurn = currentTurn;
       ship.atDock = false;
     }
     // 枢軸艦は新UIで個別選択（港 or 洋上補給）
@@ -2867,7 +2868,8 @@ function getReturnPorts(ship){
   if(!SEAS[sea]) return [];
   // 南大西洋のドイツ艦特例: 強制帰還(ダイス5)=中立のみ、それ以外は損害に関係なく France(使用可能時)・中立から選択
   // 17.1 南大西洋で航行不能になったイタリア艦も中立港だけ（チャックさんの報告 2026-11-08）
-  if(sea === 'SouthAtlantic' && ship.country === 'IT' && ship.forcedReturn) return ['Neutral'];
+  // 17.1 は全部の艦。イギリス艦も南大西洋で戦闘不能になったら中立港（チャックさんの報告 2026-11-09）
+  if(sea === 'SouthAtlantic' && ship.forcedReturn) return ['Neutral'];
   if(sea === 'SouthAtlantic' && ship.country === 'DE'){
     if(ship.forcedReturn) return ['Neutral'];
     const franceUsable = PORTS.France.available.includes(currentTurn);
@@ -3068,6 +3070,7 @@ async function showAxisReturnUI(allShips, options){
           const maxRoll = 6 - currentTurn;
           const r = rollD6();
           if(r <= maxRoll){
+            ship.location = o.location; // 元の港が先に選ばれていても、海に残す（チャックさんの報告 2026-11-09）
             ship.refuelTurn = currentTurn;
             ship.atDock = false;
             commit(`補給⚂${r}≤${maxRoll} 成功 → 海上残留`);
@@ -4851,6 +4854,12 @@ async function aiAlliedMove(bbTargetOverride){
     s.movedThisTurn = true;
     aiLog.push(`${s.name}: マルタ → 地中海`);
   }
+  // 17.2 中立港にいる連合の艦は、次のターンに南大西洋へ出る（残ると1隻1POC）。出られる海域は南大西洋だけ（チャックさんの報告 2026-11-09）
+  SHIPS.filter(s => s.side === 'allies' && s.location === 'Neutral' && !s.sunk && !s.removed && !s.movedThisTurn).forEach(s => {
+    s.location = 'SouthAtlantic';
+    s.movedThisTurn = true;
+    aiLog.push(`${s.name}: 中立港 → 南大西洋`);
+  });
   // 母港固定艦: レニングラード → バルト海、ロシア → バレンツ海（ロシア艦は出港判定成功時のみ）
   SHIPS.filter(s =>
     s.side === 'allies' && !s.sunk && !s.removed && !s.movedThisTurn && !(s.damage > 0) &&

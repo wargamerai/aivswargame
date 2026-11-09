@@ -10,7 +10,28 @@
 const REP_SEA = { NorthAtlantic:'North Atlantic', Barents:'Barents Sea', NorthSea:'North Sea', Baltic:'Baltic Sea', Mediterranean:'Mediterranean', SouthAtlantic:'South Atlantic' };
 const REP_LOC = { ...REP_SEA, Germany:'Germany', France:'France', Italy:'Italy', Malta:'Malta', England:'Britain', USA:'USA', Leningrad:'Leningrad', Russia:'Russia', Neutral:'Neutral port' };
 const REP_PORTS = ['England', 'Malta', 'USA', 'Russia', 'Leningrad', 'Germany', 'France', 'Italy', 'Neutral'];
-const REP = { turns: [], start: null, before: null, combat: null, lba: {} };
+const REP = { turns: [], start: null, before: null, combat: null, lba: {}, shots: [], sea: null };
+// 検証用: 戦闘の1発ごとの記録（だれが・どれを・出目・命中・損害）。レポートの画面には出さず、データ（D.turns[].log）にだけ入れる 2026-11-09
+function repShot(e){
+  if(!e || !e.type || (typeof simMode !== 'undefined' && simMode)) return; // AIの読みの試算は記録しない
+  if(e.type === 'phase'){ if(e.sea) REP.sea = e.sea; REP.shots.push({ k: 'phase', sea: e.sea || REP.sea, ph: e.phase || e.label || '' }); return; }
+  const ship = id => (typeof SHIPS !== 'undefined') ? SHIPS.find(s => s.id === id) : null;
+  const a = ship(e.attacker), tg = ship(e.target), x = ship(e.ship);
+  const base = { k: e.type, sea: REP.sea };
+  if(e.type === 'fire_volley'){
+    REP.shots.push({ ...base, a: e.attackerName, as: a && a.side, t: e.targetName, tdmg: tg ? tg.damage || 0 : null,
+      r: e.dice.map(d => d.eff !== d.r ? d.r + '+1' : d.r), hits: e.hits, dis: e.hasDisabled, dr: e.damageRolls, dmg: e.dmgTotal });
+  } else if(e.type === 'fire'){
+    REP.shots.push({ ...base, a: e.attackerName, as: a && a.side, at: a && a.type, t: e.targetName,
+      r: (e.dice || []).map(d => d.r), dr: (e.dice || []).map(d => d.dmgRoll).filter(v => v != null), dis: !!e.disabled, dmg: e.dmgTotal || 0 });
+  } else if(e.type === 'asw_ship'){
+    REP.shots.push({ ...base, a: e.name, as: x && x.side, r: e.dice });
+  } else if(e.type === 'asw_summary'){
+    REP.shots.push({ ...base, sunk: e.sunk, disabled: e.disabled });
+  } else if(['sunk', 'damage', 'return_disabled', 'uboat_disabled', 'disabled'].includes(e.type)){
+    REP.shots.push({ ...base, n: e.name, s: x && x.side, d: e.damage, def: e.def });
+  }
+}
 
 function repSnap(){
   const m = {};
@@ -80,7 +101,7 @@ function repTurnData(turn, ctl, gain, total){
   const targeting = (typeof alliedTargetModeLog !== 'undefined' ? alliedTargetModeLog : []).filter(x => x.turn === turn)
     .map(x => ({ sea: REP_LOC[x.sea] || x.sea, mode: x.mode, ratio: isFinite(x.ratio) ? x.ratio : null }));
   const pst = (typeof alliedPostureLog !== 'undefined' ? alliedPostureLog : []).find(x => x.turn === turn);
-  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys, targeting, posture: pst ? pst.posture : null };
+  return { turn, seas, ports, failed, combat, ctl, gain, total, lba, convoys, targeting, posture: pst ? pst.posture : null, log: REP.shots.slice() };
 }
 
 // ---------- 呼び出しの前後で記録を取る ----------
@@ -103,9 +124,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if(REP.before && !REP.combat) REP.combat = repSummarize(REP.before, repSnap());
     const r = origEnd.apply(this, arguments);
     if(!REP.turns.some(t => t.turn === turn)) REP.turns.push(repTurnData(turn, ctl, lastTurnPocGain, poc));
-    REP.start = null; REP.before = null; REP.combat = null;
+    REP.start = null; REP.before = null; REP.combat = null; REP.shots = []; REP.sea = null;
     return r;
   };
+  const origOne = window.playOneEvent;
+  if(typeof origOne === 'function') window.playOneEvent = function(e){ try{ repShot(e); }catch(_){} return origOne.apply(this, arguments); };
   const origAir = window.runAirStrike;
   window.runAirStrike = function(side, area, lbaUsable){
     if(lbaUsable) (REP.lba[currentTurn] = REP.lba[currentTurn] || []).push({ side, area });
