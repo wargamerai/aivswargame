@@ -143,6 +143,7 @@ function repBuildHtml(){
   if(optionRules.bismarck7) opts.push('bismarck7');
   if(optionRules.usEase) opts.push('usEase');
   const data = { turns: REP.turns, seaName: REP_SEA, finalPoc: poc, opts, resigned: window.gameResigned || null,
+    gameId: (typeof wasGameId !== 'undefined') ? wasGameId : null, playLog: (typeof wasPlayLogGet === 'function') ? wasPlayLogGet() : [], // セーブ・ロードの記録（画面には出さない）
     lang: (typeof LANG !== 'undefined') ? LANG : 'ja',
     sunk: { allies: SHIPS.filter(s => s.side === 'allies' && s.sunk && s.type !== 'UBOAT').map(s => s.name),
             axis: SHIPS.filter(s => s.side === 'axis' && s.sunk && s.type !== 'UBOAT').map(s => s.name),

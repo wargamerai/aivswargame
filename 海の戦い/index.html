@@ -6788,6 +6788,10 @@ function closeModal(){
 // === 途中セーブ・ロード（ファイルに書き出し、ファイルから読み込む） ===
 // 戦闘フェイズ（6）は戦闘が画面の連続で進むため、セーブはそれ以外のフェイズで行う
 const SAVE_VERSION = 1;
+// セーブとロードの記録（チート対策 2026-11-09）。ゲームごとの番号で、ブラウザの中に残す。ロードしても消さない。レポートのデータ（D.playLog）に入る（画面には出さない）
+let wasGameId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+function wasPlayLogGet(){ try { return JSON.parse(localStorage.getItem('wasPlayLog:' + wasGameId) || '[]'); } catch(e){ return []; } }
+function wasPlayLogAdd(entry){ try { const a = wasPlayLogGet(); a.push(entry); localStorage.setItem('wasPlayLog:' + wasGameId, JSON.stringify(a)); } catch(e){} }
 function saveBlockedReason(){
   if(phaseIdx === 6) return '戦闘フェイズ中はセーブできません。戦闘が終わって次のフェイズに進んでからセーブしてください';
   if(document.querySelector('#modal.show, #combatModal.show, #axisReturnModal.show, #axisRepairModal.show, #combatLogModal.show')) return '画面を閉じてからセーブしてください';
@@ -6812,7 +6816,8 @@ function buildSaveData(){
       axisLbaChecked,
       pendingAxisDisabledForUI: pendingAxisDisabledForUI.map(s => s && s.id ? s.id : s),
       combatLog, alliedTargetModeLog, alliedPostureLog,
-      gameResigned: window.gameResigned || null
+      gameResigned: window.gameResigned || null,
+      gameId: wasGameId
     },
     rep: (typeof REP !== 'undefined') ? REP : null
   };
@@ -6822,6 +6827,8 @@ function saveGameToFile(){
   const why = saveBlockedReason();
   if(why){ alert(why); return; }
   const data = buildSaveData();
+  wasPlayLogAdd({ k: 'save', at: data.savedAt, turn: currentTurn, phase: phaseIdx });
+  data.playLog = wasPlayLogGet(); // セーブファイルにも記録を入れる（別のブラウザで続けても記録がつながる）
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const d = new Date(), p = n => String(n).padStart(2, '0');
   const ts = `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
@@ -6850,6 +6857,7 @@ function loadGameFromFile(inp){
 }
 function applySaveData(data){
   const v = data.vars;
+  const before = { id: wasGameId, turn: currentTurn, phase: phaseIdx }; // 読む前の状態（記録用）
   // 艦: id で対応する艦の中身を入れ替える
   data.ships.forEach(saved => {
     const s = SHIPS.find(x => x.id === saved.id);
@@ -6883,6 +6891,16 @@ function applySaveData(data){
     Object.keys(REP).forEach(k => { delete REP[k]; });
     Object.assign(REP, data.rep);
   }
+  // ロードの記録: セーブのゲーム番号で続ける（古いセーブは番号がないので、セーブした時刻で作る）
+  wasGameId = v.gameId || ('old-' + String(data.savedAt || '').replace(/[^0-9]/g, ''));
+  try {
+    const have = wasPlayLogGet(), seen = new Set(have.map(x => JSON.stringify(x)));
+    (Array.isArray(data.playLog) ? data.playLog : []).forEach(x => { if(!seen.has(JSON.stringify(x))){ have.push(x); seen.add(JSON.stringify(x)); } });
+    have.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    localStorage.setItem('wasPlayLog:' + wasGameId, JSON.stringify(have));
+  } catch(e){}
+  wasPlayLogAdd({ k: 'load', at: new Date().toISOString(), savedAt: data.savedAt || null, toTurn: currentTurn, toPhase: phaseIdx,
+    fromTurn: before.turn, fromPhase: before.phase, sameGame: before.id === wasGameId });
   // オプションルールは確定済みとして固定
   document.querySelectorAll('.optRule').forEach(cb => { cb.checked = !!optionRules[cb.dataset.opt]; });
   lockOptionRules();
