@@ -3615,8 +3615,11 @@ function executeMeleePhase() {
       addLog(`  攻撃目標未設定の艦のみ`);
       continue;
     }
-    for (const [defName, attackers] of pairings) {
+    for (const [defName, attackers0] of pairings) {
       const defender = shipByName[defName];
+      // 前の組の白兵戦で乗員を失い、接舷隊が残っていない艦は斬り込まない
+      const attackers = attackers0.filter(a => Math.min(Math.max(0, a.obpAssigned || 0), availSections(a)) > 0);
+      if (!attackers.length) continue;
       const atkNames = attackers.map(a => a.name).join('+');
       addLog(`【攻撃】${atkNames} → ${defender.name}`);
       const roundsData = [];
