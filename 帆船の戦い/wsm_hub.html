@@ -259,6 +259,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
   </label>
   <button onclick="centerMapView()" title="選んだ艦（選んでいなければ全艦の真ん中）を画面の中央へ" style="background:#2a5a7a;color:#fff;border:1px solid #4a8ab0;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">◎ 中央へ</button>
   <button onclick="saveGameToFile()" style="background:#864;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">💾 保存</button>
+  <button onclick="downloadBattleLog()" title="ここまでの戦闘報告をファイルに書き出す。不具合のときはこのファイルを送ってください" style="background:#456;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">📜 レポート作成</button>
   <button class="back" onclick="location.href='sandbox.html'">← 編成へ</button>
 </div>
 
@@ -866,6 +867,354 @@ function saveGameToFile() {
   } catch (e) {
     console.error('saveGameToFile failed:', e);
     alert('保存に失敗しました: ' + e.message);
+  }
+}
+
+// レポートの地図: 両軍の通った道すじ（ターンごとの点線）、砲撃の矢印（番号つき）、白兵戦・降伏・沈没・拿捕の印
+//   ゲームの地図の絵を下に敷く。ローカルのファイル（file://）で絵が使えない時は、海の色と六角の線で描く
+function blMapImage(numbered) {
+  const ev = _bl.ev || [];
+  const all = [...state.jpFleet, ...state.usFleet];
+  const COL = { GB: '#c62828', FR: '#1e4fbf', US: '#1565c0', ES: '#1f6b2a', NL: '#e07b00' };
+  const colorOf = name => { const s = all.find(x => x.name === name); return s ? (COL[s.nation] || (s.origSide === 'jp' ? '#1a2840' : '#c62828')) : '#333'; };
+  // 範囲: 撃ち合いや白兵戦があった所だけを切り出す（無ければ、全部の道すじ）
+  const hot = [];
+  ev.forEach(e => {
+    if (e.type === 'move' || e.type === 'path') return;
+    if (e.type === 'fire' && e.from) hot.push(hexPt(e.from[0], e.from[1]));
+    if (e.type === 'fire' && e.to) hot.push(hexPt(e.to[0], e.to[1]));
+    if (e.at) { hot.push(hexPt(e.at[0], e.at[1])); if (e.at.length > 2) hot.push(hexPt(e.at[2], e.at[3])); }
+  });
+  if (hot.length) all.forEach(s => { if (s.col >= 0 && s.status !== 'sunk' && s.status !== 'exploded') hot.push(hexPt(s.col, s.row)); });
+  const pts = hot.length ? hot : [];
+  if (!pts.length) {
+    ev.forEach(e => { if (e.steps) e.steps.forEach(p => pts.push(hexPt(p[0], p[1]))); });
+    all.forEach(s => { if (s.col >= 0) pts.push(hexPt(s.col, s.row)); });
+  }
+  if (!pts.length) return null;
+  const m = HEX_SIZE * 2.5;
+  let x0 = Math.min(...pts.map(p => p.x)) - m, x1 = Math.max(...pts.map(p => p.x)) + m;
+  let y0 = Math.min(...pts.map(p => p.y)) - m, y1 = Math.max(...pts.map(p => p.y)) + m;
+  // 縦横の比を地図らしく（横長すぎ・縦長すぎを防ぐ）
+  // 小さすぎると矢印と番号が重なるので、六角 12 個ぶんの幅はとる
+  const minW = HEX_SIZE * 1.5 * 12;
+  if (x1 - x0 < minW) { const d = (minW - (x1 - x0)) / 2; x0 -= d; x1 += d; }
+  const w0 = x1 - x0, h0 = y1 - y0;
+  if (w0 < h0 * 1.2) { const d = (h0 * 1.2 - w0) / 2; x0 -= d; x1 += d; }
+  else if (h0 < w0 * 0.55) { const d = (w0 * 0.55 - h0) / 2; y0 -= d; y1 += d; }
+  // 地図の絵の外には出さない
+  if (typeof mapImgLoaded !== 'undefined' && mapImgLoaded) {
+    const mx0 = PAD, mx1 = PAD + mapImg.naturalWidth, my0 = PAD, my1 = PAD + mapImg.naturalHeight;
+    if (x1 > mx1) { x0 -= x1 - mx1; x1 = mx1; } if (x0 < mx0) { x1 += mx0 - x0; x0 = mx0; } x1 = Math.min(x1, mx1);
+    if (y1 > my1) { y0 -= y1 - my1; y1 = my1; } if (y0 < my0) { y1 += my0 - y0; y0 = my0; } y1 = Math.min(y1, my1);
+  }
+  const OUT = 1400, sc = OUT / (x1 - x0);
+  const cv = document.createElement('canvas');
+  cv.width = OUT; cv.height = Math.round((y1 - y0) * sc);
+  const draw = withImage => {
+    const g = cv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#9fc3d6'; g.fillRect(0, 0, cv.width, cv.height);
+    g.setTransform(sc, 0, 0, sc, -x0 * sc, -y0 * sc);
+    if (withImage && typeof mapImgLoaded !== 'undefined' && mapImgLoaded) g.drawImage(mapImg, PAD, PAD, mapImg.naturalWidth, mapImg.naturalHeight);
+    else {
+      g.strokeStyle = 'rgba(40,70,90,0.35)'; g.lineWidth = 1 / sc;
+      for (let c = 0; c < MAP_CONFIG.cols; c++) for (let r = 0; r < MAP_CONFIG.rows; r++) {
+        const p = hexPt(c, r); if (p.x < x0 - HEX_SIZE || p.x > x1 + HEX_SIZE || p.y < y0 - HEX_SIZE || p.y > y1 + HEX_SIZE) continue;
+        const cs = hexCorners(p.x, p.y); g.beginPath(); cs.forEach((q, i) => i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y)); g.closePath(); g.stroke();
+      }
+    }
+    const px = v => v / sc; // 出力の画素 → 地図の座標
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    // 道すじ
+    ev.filter(e => e.type === 'path').forEach(e => {
+      const c = colorOf(e.ship); const P = e.steps.map(p => hexPt(p[0], p[1]));
+      g.strokeStyle = c; g.lineWidth = px(3); g.setLineDash([px(9), px(5)]);
+      g.beginPath(); P.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.stroke(); g.setLineDash([]);
+      g.fillStyle = c; P.slice(1).forEach(p => { g.beginPath(); g.arc(p.x, p.y, px(3), 0, 7); g.fill(); });
+      const mid = P[Math.floor(P.length / 2)];
+      g.font = `bold ${px(15)}px sans-serif`; g.lineWidth = px(4); g.strokeStyle = '#fff'; g.strokeText('T' + e.turn, mid.x + px(6), mid.y - px(6)); g.fillText('T' + e.turn, mid.x + px(6), mid.y - px(6));
+    });
+    // 砲撃の矢印
+    ev.filter(e => e.type === 'fire' && e.from && e.to).forEach(e => {
+      const a = hexPt(e.from[0], e.from[1]), b = hexPt(e.to[0], e.to[1]);
+      const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+      const bx = b.x - ux * px(10), by = b.y - uy * px(10), h = px(16);
+      g.strokeStyle = e.hit ? '#e65100' : '#666'; g.fillStyle = g.strokeStyle; g.lineWidth = px(e.hit ? 4 : 2.5);
+      if (!e.hit) g.setLineDash([px(6), px(4)]);
+      g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(bx - ux * h * 0.8, by - uy * h * 0.8); g.stroke(); g.setLineDash([]);
+      g.beginPath(); g.moveTo(bx, by); g.lineTo(bx - ux * h - uy * h * 0.5, by - uy * h + ux * h * 0.5); g.lineTo(bx - ux * h + uy * h * 0.5, by - uy * h - ux * h * 0.5); g.closePath(); g.fill();
+      if (numbered && e.no) {
+        const mx = a.x + dx * 0.45, my = a.y + dy * 0.45;
+        g.beginPath(); g.arc(mx, my, px(12), 0, 7); g.fillStyle = '#fff'; g.fill(); g.lineWidth = px(2); g.strokeStyle = '#333'; g.stroke();
+        g.fillStyle = '#222'; g.font = `bold ${px(13)}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(e.no), mx, my);
+        g.textAlign = 'start'; g.textBaseline = 'alphabetic';
+      }
+    });
+    // 印（白兵戦・降伏・沈没・爆発・拿捕）
+    const mark = (p, txt, no) => {
+      g.font = `${px(30)}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(255,255,255,0.85)'; g.beginPath(); g.arc(p.x, p.y, px(20), 0, 7); g.fill();
+      g.fillStyle = '#000'; g.fillText(txt, p.x, p.y);
+      if (no) { g.font = `bold ${px(13)}px sans-serif`; g.fillStyle = '#222'; g.fillText(String(no), p.x + px(20), p.y - px(18)); }
+      g.textAlign = 'start'; g.textBaseline = 'alphabetic';
+    };
+    ev.forEach(e => {
+      if (!e.at) return;
+      const p = hexPt(e.at[0], e.at[1]);
+      if (e.type === 'board') mark(p, '⚔', numbered ? e.no : null);
+      else if (e.type === 'captured') mark(p, '🏴');
+      else if (e.type === 'struck') mark(p, '🏳');
+      else if (e.type === 'status' && e.status === 'sunk') mark(p, '🌊');
+      else if (e.type === 'status' && e.status === 'exploded') mark(p, '🔥');
+    });
+    // いまの艦の位置と名前
+    all.forEach(s => {
+      if (s.col < 0 || s.status === 'sunk' || s.status === 'exploded') return;
+      const b = hexPt(s.col, s.row), st = (typeof getSternHex === 'function') ? getSternHex(s) : null, t2 = st ? hexPt(st.col, st.row) : b;
+      g.strokeStyle = '#111'; g.lineWidth = px(12); g.beginPath(); g.moveTo(t2.x, t2.y); g.lineTo(b.x, b.y); g.stroke();
+      g.strokeStyle = colorOf(s.name); g.lineWidth = px(9); g.beginPath(); g.moveTo(t2.x, t2.y); g.lineTo(b.x, b.y); g.stroke();
+      g.font = `bold ${px(16)}px sans-serif`; g.lineWidth = px(4); g.strokeStyle = '#fff';
+      g.strokeText(s.name, b.x + px(10), b.y + px(18)); g.fillStyle = '#111'; g.fillText(s.name, b.x + px(10), b.y + px(18));
+    });
+  };
+  try { draw(true); return cv.toDataURL('image/jpeg', 0.85); }
+  catch (e) { draw(false); try { return cv.toDataURL('image/jpeg', 0.85); } catch (e2) { return null; } }
+}
+
+// 戦闘レポートの文（日本語・英語・ドイツ語・フランス語・スペイン語）。ドイツ語・フランス語・スペイン語は AI の訳
+const BL_TXT = {
+  ja: {
+    title: '戦闘報告', recorded: '記録日時: ', victoryCond: '勝利条件: ', you: '（あなた）', ai: ' (AI)',
+    nat: { GB: 'イギリス', FR: 'フランス', US: 'アメリカ', ES: 'スペイン', NL: 'オランダ' },
+    qual: { elite: '精鋭', crack: '熟練', average: '普通', green: '新兵', poor: '劣悪' },
+    arc: { port: '左舷', stbd: '右舷' }, ammo: { round: '球形弾', double: '二重装填', chain: '鎖弾', grape: 'ぶどう弾' },
+    sternRake: '、艦尾への縦射', bowRake: '、艦首への縦射', hit: '命中', miss: '外れ',
+    fire: (a, b, arc, d, ammo, rake, res) => `💥 ${a} が ${b} に${arc}の舷側砲撃（${d}ヘクス、${ammo}${rake}）— ${res}`,
+    grappleOk: (a, b) => `⚓ ${a} が ${b} に鉤縄をかけた`, grappleNg: (a, b) => `${a} は ${b} に鉤縄を投げたが、かからなかった`,
+    board: (a, b) => `⚔ ${a} が ${b} に斬り込んだ`, repelled: a => `🛡 ${a} は斬り込みを撃退した`, captured: (a, b) => `🏴 ${a} は ${b} に拿捕された`,
+    struck: a => `🏳 ${a} が旗を降ろした（降伏）`, sunk: a => `🌊 ${a} が沈んだ`, exploded: a => `🔥 ${a} が爆発した`,
+    wind: w => `🌬 風が変わった: ${w}`, over: '🏁 戦闘終了', turn: n => `${n}ターン目`,
+    win: s => `${s}の勝利`, draw: '引き分け', points: (a, b) => `　点数 ${a} 対 ${b}`, atTurn: n => `（${n}ターン目）`, inProgress: n => `戦闘中（${n}ターン目）`,
+    head: ['艦名', '砲', '乗員の質', '船体', '索具', '乗員', '砲撃', '命中', '縦射した', '縦射された', '結末'],
+    fate: { ok: '健在', struck: '降伏', sunk: '沈没', exploded: '爆発', captured: '拿捕' }, taken: '（拿捕された）',
+    legend: '点線: 各艦の通った道すじ（T＝ターン）　矢印: 砲撃（橙＝命中、灰の点線＝外れ）　⚔ 白兵戦　🏳 降伏　🏴 拿捕　🌊 沈没　🔥 爆発',
+    gunnery: '砲撃と白兵戦', none: 'まだ砲撃も白兵戦もありません', final: '最終結果',
+    dev: '開発者向けの記録（不具合を送るときは、このファイルをそのまま送ってください）',
+  },
+  en: {
+    title: 'ACTION REPORT', recorded: 'Recorded: ', victoryCond: 'Victory conditions: ', you: ' (you)', ai: ' (AI)',
+    nat: { GB: 'British', FR: 'French', US: 'American', ES: 'Spanish', NL: 'Dutch' },
+    qual: { elite: 'Elite', crack: 'Crack', average: 'Average', green: 'Green', poor: 'Poor' },
+    arc: { port: 'port', stbd: 'starboard' }, ammo: { round: 'round shot', double: 'double shot', chain: 'chain shot', grape: 'grapeshot' },
+    sternRake: ', raking her stern', bowRake: ', raking her bow', hit: 'hit', miss: 'missed',
+    fire: (a, b, arc, d, ammo, rake, res) => `💥 ${a} fired a ${arc} broadside at ${b} (${d} hex${d > 1 ? 'es' : ''}, ${ammo}${rake}) — ${res}`,
+    grappleOk: (a, b) => `⚓ ${a} grappled ${b}`, grappleNg: (a, b) => `${a} threw grapples at ${b} but they did not hold`,
+    board: (a, b) => `⚔ ${a} boarded ${b}`, repelled: a => `🛡 ${a} beat off the boarders`, captured: (a, b) => `🏴 ${a} was taken by ${b}`,
+    struck: a => `🏳 ${a} struck her colours`, sunk: a => `🌊 ${a} sank`, exploded: a => `🔥 ${a} blew up`,
+    wind: w => `🌬 The wind changed: ${w}`, over: '🏁 The battle is over', turn: n => `Turn ${n}`,
+    win: s => `Victory: ${s}`, draw: 'Draw', points: (a, b) => ` — points ${a} to ${b}`, atTurn: n => ` (turn ${n})`, inProgress: n => `Battle in progress (turn ${n})`,
+    head: ['Ship', 'Guns', 'Crew', 'Hull', 'Rigging', 'Men', 'Broadsides', 'Hits', 'Rakes given', 'Raked', 'Fate'],
+    fate: { ok: 'afloat', struck: 'struck', sunk: 'sunk', exploded: 'blew up', captured: 'captured' }, taken: ' (taken)',
+    legend: "Dotted lines: each ship's track (T = turn)   Arrows: broadsides (orange = hit, grey dashed = miss)   ⚔ boarding   🏳 struck   🏴 taken   🌊 sunk   🔥 blew up",
+    gunnery: 'Gunnery and boarding', none: 'No gunnery or boarding yet', final: 'Final result',
+    dev: 'Records for the developer (to report a bug, just send this whole file)',
+  },
+  de: {
+    title: 'GEFECHTSBERICHT', recorded: 'Aufgezeichnet: ', victoryCond: 'Siegbedingungen: ', you: ' (Sie)', ai: ' (KI)',
+    nat: { GB: 'Briten', FR: 'Franzosen', US: 'Amerikaner', ES: 'Spanier', NL: 'Niederländer' },
+    qual: { elite: 'Elite', crack: 'Erfahren', average: 'Durchschnitt', green: 'Unerfahren', poor: 'Schlecht' },
+    arc: { port: 'Backbord', stbd: 'Steuerbord' }, ammo: { round: 'Rundkugeln', double: 'Doppelladung', chain: 'Kettenkugeln', grape: 'Kartätschen' },
+    sternRake: ', Heckbreitseite (Längsfeuer)', bowRake: ', Bugbreitseite (Längsfeuer)', hit: 'Treffer', miss: 'verfehlt',
+    fire: (a, b, arc, d, ammo, rake, res) => `💥 ${a} feuerte eine ${arc}-Breitseite auf ${b} (${d} Hex, ${ammo}${rake}) — ${res}`,
+    grappleOk: (a, b) => `⚓ ${a} enterte ${b} mit Enterhaken an`, grappleNg: (a, b) => `${a} warf Enterhaken nach ${b}, doch sie hielten nicht`,
+    board: (a, b) => `⚔ ${a} enterte ${b}`, repelled: a => `🛡 ${a} schlug die Enterer zurück`, captured: (a, b) => `🏴 ${a} wurde von ${b} genommen`,
+    struck: a => `🏳 ${a} strich die Flagge`, sunk: a => `🌊 ${a} sank`, exploded: a => `🔥 ${a} flog in die Luft`,
+    wind: w => `🌬 Der Wind drehte: ${w}`, over: '🏁 Das Gefecht ist vorbei', turn: n => `Runde ${n}`,
+    win: s => `Sieg: ${s}`, draw: 'Unentschieden', points: (a, b) => ` — Punkte ${a} zu ${b}`, atTurn: n => ` (Runde ${n})`, inProgress: n => `Gefecht läuft (Runde ${n})`,
+    head: ['Schiff', 'Kanonen', 'Besatzung', 'Rumpf', 'Takelage', 'Männer', 'Breitseiten', 'Treffer', 'Längsfeuer gegeben', 'Längsfeuer erhalten', 'Schicksal'],
+    fate: { ok: 'schwimmt', struck: 'Flagge gestrichen', sunk: 'gesunken', exploded: 'explodiert', captured: 'genommen' }, taken: ' (genommen)',
+    legend: 'Gestrichelte Linien: Kurs jedes Schiffes (T = Runde)   Pfeile: Breitseiten (orange = Treffer, grau gestrichelt = verfehlt)   ⚔ Entern   🏳 Flagge gestrichen   🏴 genommen   🌊 gesunken   🔥 explodiert',
+    gunnery: 'Geschützfeuer und Entern', none: 'Noch kein Geschützfeuer und kein Entern', final: 'Endergebnis',
+    dev: 'Aufzeichnungen für den Entwickler (bei einem Fehler einfach diese ganze Datei schicken)',
+  },
+  fr: {
+    title: 'RAPPORT DE COMBAT', recorded: 'Enregistré : ', victoryCond: 'Conditions de victoire : ', you: ' (vous)', ai: ' (IA)',
+    nat: { GB: 'Britanniques', FR: 'Français', US: 'Américains', ES: 'Espagnols', NL: 'Hollandais' },
+    qual: { elite: 'Élite', crack: 'Aguerri', average: 'Moyen', green: 'Novice', poor: 'Médiocre' },
+    arc: { port: 'bâbord', stbd: 'tribord' }, ammo: { round: 'boulets ronds', double: 'double charge', chain: 'boulets ramés', grape: 'mitraille' },
+    sternRake: ', en enfilade par la poupe', bowRake: ', en enfilade par la proue', hit: 'touché', miss: 'manqué',
+    fire: (a, b, arc, d, ammo, rake, res) => `💥 ${a} a tiré une bordée ${arc} sur ${b} (${d} hex, ${ammo}${rake}) — ${res}`,
+    grappleOk: (a, b) => `⚓ ${a} a grappiné ${b}`, grappleNg: (a, b) => `${a} a lancé les grappins sur ${b}, sans succès`,
+    board: (a, b) => `⚔ ${a} a abordé ${b}`, repelled: a => `🛡 ${a} a repoussé l'abordage`, captured: (a, b) => `🏴 ${a} a été pris par ${b}`,
+    struck: a => `🏳 ${a} a amené son pavillon`, sunk: a => `🌊 ${a} a coulé`, exploded: a => `🔥 ${a} a explosé`,
+    wind: w => `🌬 Le vent a tourné : ${w}`, over: '🏁 Le combat est terminé', turn: n => `Tour ${n}`,
+    win: s => `Victoire : ${s}`, draw: 'Match nul', points: (a, b) => ` — points ${a} à ${b}`, atTurn: n => ` (tour ${n})`, inProgress: n => `Combat en cours (tour ${n})`,
+    head: ['Navire', 'Canons', 'Équipage', 'Coque', 'Gréement', 'Hommes', 'Bordées', 'Touchés', 'Enfilades données', 'Enfilades reçues', 'Sort'],
+    fate: { ok: 'à flot', struck: 'pavillon amené', sunk: 'coulé', exploded: 'explosé', captured: 'pris' }, taken: ' (pris)',
+    legend: 'Pointillés : route de chaque navire (T = tour)   Flèches : bordées (orange = touché, gris pointillé = manqué)   ⚔ abordage   🏳 pavillon amené   🏴 pris   🌊 coulé   🔥 explosé',
+    gunnery: 'Canonnade et abordages', none: 'Pas encore de canonnade ni d\'abordage', final: 'Résultat final',
+    dev: 'Données pour le développeur (pour signaler un bug, envoyez simplement ce fichier entier)',
+  },
+  es: {
+    title: 'INFORME DE COMBATE', recorded: 'Registrado: ', victoryCond: 'Condiciones de victoria: ', you: ' (usted)', ai: ' (IA)',
+    nat: { GB: 'Británicos', FR: 'Franceses', US: 'Estadounidenses', ES: 'Españoles', NL: 'Holandeses' },
+    qual: { elite: 'Élite', crack: 'Veterana', average: 'Normal', green: 'Novata', poor: 'Mala' },
+    arc: { port: 'babor', stbd: 'estribor' }, ammo: { round: 'bala rasa', double: 'doble carga', chain: 'palanqueta', grape: 'metralla' },
+    sternRake: ', enfilando la popa', bowRake: ', enfilando la proa', hit: 'impacto', miss: 'fallo',
+    fire: (a, b, arc, d, ammo, rake, res) => `💥 ${a} disparó una andanada de ${arc} contra ${b} (${d} hex, ${ammo}${rake}) — ${res}`,
+    grappleOk: (a, b) => `⚓ ${a} aferró a ${b} con los garfios`, grappleNg: (a, b) => `${a} lanzó garfios a ${b}, pero no agarraron`,
+    board: (a, b) => `⚔ ${a} abordó a ${b}`, repelled: a => `🛡 ${a} rechazó el abordaje`, captured: (a, b) => `🏴 ${a} fue apresado por ${b}`,
+    struck: a => `🏳 ${a} arrió la bandera`, sunk: a => `🌊 ${a} se hundió`, exploded: a => `🔥 ${a} voló por los aires`,
+    wind: w => `🌬 El viento cambió: ${w}`, over: '🏁 El combate ha terminado', turn: n => `Turno ${n}`,
+    win: s => `Victoria: ${s}`, draw: 'Empate', points: (a, b) => ` — puntos ${a} a ${b}`, atTurn: n => ` (turno ${n})`, inProgress: n => `Combate en curso (turno ${n})`,
+    head: ['Buque', 'Cañones', 'Tripulación', 'Casco', 'Aparejo', 'Hombres', 'Andanadas', 'Impactos', 'Enfiladas dadas', 'Enfiladas recibidas', 'Destino'],
+    fate: { ok: 'a flote', struck: 'bandera arriada', sunk: 'hundido', exploded: 'voló', captured: 'apresado' }, taken: ' (apresado)',
+    legend: 'Líneas de puntos: derrota de cada buque (T = turno)   Flechas: andanadas (naranja = impacto, gris discontinuo = fallo)   ⚔ abordaje   🏳 bandera arriada   🏴 apresado   🌊 hundido   🔥 voló',
+    gunnery: 'Cañoneo y abordajes', none: 'Todavía no hay cañoneo ni abordajes', final: 'Resultado final',
+    dev: 'Datos para el desarrollador (para informar de un error, envíe este archivo completo)',
+  },
+};
+
+// 戦闘レポートの書き出し（上: 地図、下: 砲撃と白兵戦の結果、最終結果。いちばん下に開発用の記録とセーブデータ）
+function downloadBattleLog() {
+  try {
+    let lang = 'ja'; try { lang = (typeof LANG !== 'undefined' && LANG) || 'ja'; } catch (e) {}
+    const X = BL_TXT[lang] || BL_TXT.en;
+    const J = lang === 'ja';
+    // ゲームが出す日本語（損害・風・勝利条件）は lang.js の表で訳す
+    const tr = s => (!J && typeof langTranslate === 'function') ? langTranslate(String(s), lang) : String(s);
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const all = [...state.jpFleet, ...state.usFleet];
+    const sc = (typeof SCENARIOS !== 'undefined' && SCENARIOS[state.scenarioNo]) || null;
+    const sideShips = side => all.filter(s => (s.origSide || s.side) === side);
+    const sideName = side => { const s = sideShips(side)[0]; return s ? (X.nat[s.nation] || s.nation) : side; };
+    const human = (state.gameMode || 'human-vs-ai') === 'human-vs-ai';
+    const sideLabel = side => sideName(side) + (human && side === 'jp' ? X.you : X.ai);
+    const nm = s => `<b>${esc(s)}</b>`;
+    const ev = _bl.ev || [];
+
+    // 艦ごとの集計
+    const st = {};
+    all.forEach(s => { st[s.name] = { shots: 0, hits: 0, rakes: 0, raked: 0 }; });
+    ev.filter(e => e.type === 'fire').forEach(e => {
+      if (st[e.ship]) { st[e.ship].shots++; if (e.hit) st[e.ship].hits++; if (e.rake) st[e.ship].rakes++; }
+      if (st[e.target] && e.rake) st[e.target].raked++;
+    });
+
+    // 結果
+    let result;
+    if (_bl.end) {
+      const w = _bl.end.winner;
+      const wSide = w === '自軍' ? 'jp' : w === '敵軍' ? 'us' : null;
+      result = (wSide ? X.win(sideLabel(wSide)) : X.draw) + (_bl.score ? X.points(_bl.score[0], _bl.score[1]) : '') + X.atTurn(_bl.end.turn);
+    } else {
+      result = X.inProgress(state.turn);
+    }
+
+    // 出来事を文にする（砲撃と斬り込みに、地図と同じ番号）
+    let _no = 0; ev.forEach(e => { if (e.type === 'fire' || e.type === 'board') e.no = ++_no; });
+    const circ = n => n <= 20 ? '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳'[n - 1] : `(${n})`;
+    const line = e => {
+      switch (e.type) {
+        case 'fire': {
+          const rake = e.rake === 'stern_rake' ? X.sternRake : e.rake === 'bow_rake' ? X.bowRake : '';
+          const res = e.hit ? (e.dmg && e.dmg.length ? `${X.hit} — ${esc(tr(e.dmg.join(J ? '、' : ', ')))}` : X.hit) : X.miss;
+          return X.fire(nm(e.ship), nm(e.target), X.arc[e.arc] || e.arc, e.dist, X.ammo[e.ammo] || e.ammo || '', rake, res);
+        }
+        case 'grapple': return e.ok ? X.grappleOk(nm(e.ship), nm(e.target)) : X.grappleNg(nm(e.ship), nm(e.target));
+        case 'board': return X.board(nm(e.ship), nm(e.target));
+        case 'repelled': return X.repelled(nm(e.ship));
+        case 'captured': return X.captured(nm(e.ship), esc(e.by));
+        case 'struck': return X.struck(nm(e.ship));
+        case 'status': return e.status === 'sunk' ? X.sunk(nm(e.ship)) : e.status === 'exploded' ? X.exploded(nm(e.ship)) : '';
+        case 'wind': return X.wind(esc(tr(e.text)));
+        case 'end': return X.over;
+      }
+      return '';
+    };
+    const turns = {};
+    const endIdx = ev.findIndex(e => e.type === 'end');
+    (endIdx >= 0 ? ev.slice(0, endIdx + 1) : ev).forEach(e => {
+      let s = line(e);
+      if (s) { if (e.no) s = `<span class="no">${circ(e.no)}</span> ` + s; (turns[e.turn] = turns[e.turn] || []).push(s); }
+    });
+    // 風の変化だけのターンは載せない
+    const timeline = Object.keys(turns).map(Number).sort((a, b) => a - b)
+      .filter(n => turns[n].some(s => !s.startsWith('🌬')))
+      .map(n => `<div class="turn"><div class="tn">${esc(X.turn(n))}</div><ul>${turns[n].map(s => `<li>${s}</li>`).join('')}</ul></div>`).join('');
+
+    // 艦の表
+    const sum = a => (a || []).reduce((x, v) => x + (v || 0), 0);
+    const fate = s => (X.fate[s.status] || s.status) + ((s.origSide && s.side !== s.origSide) ? X.taken : '');
+    const shipRows = side => sideShips(side).map(s => {
+      const k = st[s.name] || {};
+      return `<tr><td>${nm(s.name)}</td><td>${s.guns || ''}</td><td>${esc(X.qual[s.crewQuality] || s.crewQuality || '')}</td>`
+        + `<td>${s.hull ? `${s.hull.remain}/${s.hull.max}` : ''}</td><td>${s.rigging ? `${sum(s.rigging.sections)}/${sum(s.rigging.sectionsMax)}` : ''}</td>`
+        + `<td>${s.crew ? `${sum(s.crew.abilities)}/${sum(s.crew.abilitiesMax)}` : ''}</td>`
+        + `<td>${k.shots || 0}</td><td>${k.hits || 0}</td><td>${k.rakes || 0}</td><td>${k.raked || 0}</td><td>${esc(fate(s))}</td></tr>`;
+    }).join('');
+    const head = '<tr>' + X.head.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>';
+
+    // 開発用（折りたたみ）
+    const save = {
+      _wsmSave: true, version: 1, savedAt: new Date().toISOString(), gameMode: state.gameMode,
+      state: { phase: state.phase, turn: state.turn, jpFleet: state.jpFleet, usFleet: state.usFleet, wind: state.wind, log: state.log,
+        gunneryArrows: state.gunneryArrows, damageSeqCounter: state.damageSeqCounter, plotExecTurn: state._plotExecTurn, scenarioNo: state.scenarioNo },
+    };
+    const pre = (title, lines) => `<h3>${title}</h3><pre>${esc((lines || []).join('\n')) || '-'}</pre>`;
+    const dev = `<details><summary>${esc(X.dev)}</summary>
+<p>Scenario ${esc(state.scenarioNo)} / Mode ${esc(state.gameMode)} / Turn ${state.turn} / Phase ${esc(state.phase)} / plotExecTurn ${esc(state._plotExecTurn)} / Lang ${esc(lang)}<br>${esc(new Date().toString())}<br>${esc(navigator.userAgent)}</p>
+${pre('Errors / エラー', _bl.errors)}
+${pre('Sequence of play / 手番の動き', _bl.trace)}
+${pre('Action log / 行動ログ', state.log)}
+${pre('Debug log / デバッグログ', _bl.debug)}
+<h3>Save data / セーブデータ</h3>
+<script type="application/json" id="wsmSave">${JSON.stringify(save).replace(/</g, '\\u003c')}<\/script>
+</details>`;
+
+    const title = sc ? sc.name : 'Wooden Ships & Iron Men';
+    let mapUrl = null; try { mapUrl = blMapImage(true); } catch (e) { _bl.errors.push('map: ' + e.message); }
+    const locale = { ja: 'ja-JP', en: 'en-GB', de: 'de-DE', fr: 'fr-FR', es: 'es-ES' }[lang] || 'en-GB';
+    const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${esc(X.title)} — ${esc(title)}</title>
+<style>
+body{margin:0;background:#cfc6b0;font:15px/1.7 'Hiragino Mincho ProN','Yu Mincho',Georgia,serif;color:#2a2418}
+.page{max-width:920px;margin:20px auto;background:#f4ecd8;padding:28px 34px;box-shadow:0 4px 18px rgba(0,0,0,.35);border:1px solid #b9ad8f}
+h1{font-size:24px;letter-spacing:2px;margin:0;border-bottom:3px double #6b5d3e;padding-bottom:6px}
+.sub{margin:6px 0 14px;color:#5a4a2a}
+.res{margin:12px 0 18px;border:2px solid #6b5d3e;padding:10px 14px;font-size:19px;font-weight:bold;text-align:center;background:#efe3c4}
+h2{font-size:17px;margin:22px 0 6px;color:#5a3a1a;border-bottom:1px solid #8a7b5a}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:6px}th,td{border:1px solid #8a7b5a;padding:3px 6px;text-align:center}th{background:#e6dcc0}td:first-child{text-align:left}
+.map{margin:10px 0 4px}.map img{width:100%;border:2px solid #6b5d3e;display:block}.leg{font-size:12px;color:#5a4a2a;margin-top:3px}
+h3{font-size:15px;margin:14px 0 4px;color:#5a3a1a}.no{font-weight:bold;color:#b33}
+.turn{margin:6px 0 10px}.tn{font-weight:bold;color:#5a3a1a}.turn ul{margin:2px 0 0;padding-left:22px}.turn li{margin:1px 0}
+details{margin-top:26px;font:12px/1.5 Menlo,Consolas,monospace;color:#333}summary{cursor:pointer;color:#5a3a1a;font:14px Georgia,serif}
+pre{white-space:pre-wrap;background:#fff;border:1px solid #ccc;padding:6px;max-height:400px;overflow:auto}
+@media(max-width:600px){.page{margin:8px;padding:14px}table{font-size:12px}}
+</style></head><body><div class="page">
+<h1>${esc(X.title)}</h1>
+<div class="sub">${esc(title)}${sc && sc.victoryText ? '<br>' + esc(X.victoryCond + tr(sc.victoryText)) : ''}<br>${esc(X.recorded)}${esc(new Date().toLocaleString(locale))}</div>
+${mapUrl ? `<div class="map"><img src="${mapUrl}" alt=""><div class="leg">${esc(X.legend)}</div></div>` : ''}
+<h2>${esc(X.gunnery)}</h2>
+${timeline || `<p>${esc(X.none)}</p>`}
+<h2>${esc(X.final)}</h2>
+<div class="res">${esc(result)}</div>
+<h3>${esc(sideLabel('jp'))}</h3><table>${head}${shipRows('jp')}</table>
+<h3>${esc(sideLabel('us'))}</h3><table>${head}${shipRows('us')}</table>
+${dev}
+</div></body></html>`;
+
+    const blob = new Blob([html], { type: 'text/html' });
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.href = URL.createObjectURL(blob);
+    a.download = `wsim_report_Sc${state.scenarioNo || ''}_T${state.turn}_${ts}.html`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) {
+    console.error('downloadBattleLog failed:', e);
+    alert('レポートの書き出しに失敗しました: ' + e.message);
   }
 }
 
@@ -1666,6 +2015,7 @@ function renderShipDetail() {
 
 function addLog(msg) {
   state.log.push(msg);
+  try { blOnLog(msg); } catch (e) {}
   const el = document.getElementById('actionLog');
   const d = document.createElement('div');
   d.className = 'log-line';
@@ -1673,7 +2023,61 @@ function addLog(msg) {
   el.appendChild(d);
   el.scrollTop = el.scrollHeight;
 }
+// 戦闘ログ用の記録（デバッグログ・手番の動き・エラー）。書き出しは downloadBattleLog()
+const _bl = { debug: [], trace: [], errors: [] };
+function _blTime() { const d = new Date(); return d.toTimeString().slice(0, 8); }
+function blTrace(msg) {
+  _bl.trace.push(`${_blTime()} T${state.turn}/${state.phase} ${msg}`);
+  if (_bl.trace.length > 20000) _bl.trace.splice(0, 5000);
+}
+// レポート用の出来事（ターン・フェイズつき）。addLog の文と、砲撃の結果から作る
+_bl.ev = []; _bl.prev = {};
+function blEvent(type, data) {
+  const e = Object.assign({ type, turn: state.turn, phase: state.phase }, data);
+  if (!e.at && e.ship && type !== 'path' && type !== 'fire' && type !== 'move') {
+    const s = [...state.jpFleet, ...state.usFleet].find(x => x.name === e.ship);
+    const o = e.target && [...state.jpFleet, ...state.usFleet].find(x => x.name === e.target);
+    if (s && s.col >= 0) e.at = (type === 'board' && o && o.col >= 0) ? [s.col, s.row, o.col, o.row] : [s.col, s.row];
+  }
+  _bl.ev.push(e);
+}
+function blOnLog(msg) {
+  let m;
+  if ((m = msg.match(/^\s*\[(.+?)\] 現在位置: \((-?\d+),(-?\d+)\)dir(\d+)/))) {
+    (_bl.start = _bl.start || {})[m[1]] = [+m[2], +m[3], +m[4]];
+  } else if ((m = msg.match(/^\s*\[(.+?)\] \((-?\d+),(-?\d+)\)dir(\d+) → \((-?\d+),(-?\d+)\)dir(\d+)$/))) {
+    const from = (_bl.start && _bl.start[m[1]]) || [+m[2], +m[3], +m[4]];
+    blEvent('move', { ship: m[1], from, to: [+m[5], +m[6], +m[7]] });
+  } else if ((m = msg.match(/^(.+?) → (.+?) 鉤縄: (.*)$/))) {
+    blEvent('grapple', { ship: m[1], target: m[2], ok: /成立/.test(m[3]) && !/失敗/.test(m[3]) });
+  } else if ((m = msg.match(/^🏴 (.+?) 拿捕（(.+?)(?:による| の回航員が乗り込んだ)）/))) {
+    blEvent('captured', { ship: m[1], by: m[2] });
+  } else if ((m = msg.match(/^(.+?): 撃退成功$/))) {
+    blEvent('repelled', { ship: m[1] });
+  } else if ((m = msg.match(/^【攻撃】(.+?) → (.+)$/))) {
+    blEvent('board', { ship: m[1], target: m[2] });
+  } else if ((m = msg.match(/^🏴 (.+?) 降伏/))) {
+    blEvent('struck', { ship: m[1] });
+  } else if ((m = msg.match(/^点数: 自軍 (\d+) \/ 敵軍 (\d+)/))) {
+    _bl.score = [+m[1], +m[2]];
+  } else if ((m = msg.match(/^=== ゲーム終了: (.+?)勝利 ===$/))) {
+    blEvent('end', { winner: m[1] }); _bl.end = { winner: m[1], turn: state.turn };
+    if (!_bl.autoDone) { _bl.autoDone = true; setTimeout(() => { try { downloadBattleLog(); } catch (e) {} }, 1500); } // ゲームが終わったら自動でレポートを書き出す
+  } else if ((m = msg.match(/^風: (風向|風力)[:：]\s*(.+)$/))) {
+    if (!/変化なし/.test(m[2])) blEvent('wind', { text: m[1] + ': ' + m[2] });
+  }
+  // 艦の状態の変化（沈没・爆発）
+  for (const s of [...state.jpFleet, ...state.usFleet]) {
+    const p = _bl.prev[s.name];
+    if (p && p !== s.status && (s.status === 'sunk' || s.status === 'exploded')) blEvent('status', { ship: s.name, status: s.status });
+    _bl.prev[s.name] = s.status;
+  }
+}
+window.addEventListener('error', e => { _bl.errors.push(`${_blTime()} T${state.turn}/${state.phase} ${e.message} @${(e.filename||'').split('/').pop()}:${e.lineno}`); });
+window.addEventListener('unhandledrejection', e => { _bl.errors.push(`${_blTime()} T${state.turn}/${state.phase} (promise) ${e.reason && (e.reason.stack || e.reason.message) || e.reason}`); });
 function debugLog(msg) {
+  _bl.debug.push(`${_blTime()} T${state.turn}/${state.phase} ${msg}`);
+  if (_bl.debug.length > 20000) _bl.debug.splice(0, 5000);
   const el = document.getElementById('debugLog');
   if (!el) { console.log(msg); return; }
   const d = document.createElement('div');
@@ -1761,6 +2165,7 @@ function humanMovableShips() {
     && !s.anchored && (!s.enterTurn || state.turn >= s.enterTurn));
 }
 function advancePhase() {
+  blTrace(`advancePhase 呼出 isExecuting=${isExecuting} plotExecTurn=${state._plotExecTurn}`);
   if (moveNotExecuted()) {
     alert('移動のプロットがまだ実行されていません。各艦の移動を入力し、「プロット実行」を押してから次のフェイズへ進んでください。');
     return;
@@ -1984,6 +2389,7 @@ async function executeAllGunnery() {
     // 4. マイナス時は弾道・ダイス省略、結果モーダルのみ
     if (isNegative) {
       addLog(`${firer.name} → ${bestTarget.name} (${bestArc}, ${bestDist}hex) 外れ`);
+      try { blEvent('fire', { ship: firer.name, target: bestTarget.name, arc: bestArc, dist: bestDist, ammo, rake: (typeof isRaking === 'function' ? isRaking(firer, bestTarget) : null), hit: false, dmg: [], from: [firer.col, firer.row], to: [bestTarget.col, bestTarget.row] }); } catch (e) {}
       misses++;
       const resultHtml = `
         <div style="font-size:1.4em;text-align:center;color:#ff8888;font-weight:bold;margin-bottom:12px;">✗ 外れ（命中表マイナス）</div>
@@ -2050,6 +2456,7 @@ async function executeAllGunnery() {
       ${decidedNote()}
     `;
     addLog(`${firer.name} → ${bestTarget.name} (${bestArc}, ${bestDist}hex) ${hitLabel.replace(/[🎯✗]/g,'').trim()}`);
+    try { blEvent('fire', { ship: firer.name, target: bestTarget.name, arc: bestArc, dist: bestDist, ammo, rake: result.rake || null, hit: !!result.hit, dmg: appliedArr.slice(), from: [firer.col, firer.row], to: [bestTarget.col, bestTarget.row] }); } catch (e) {}
     if (appliedArr.length) addLog('  損害: ' + appliedArr.join(', '));
     const _p = showGunneryStageModal(`砲撃結果: ${firer.name}`, resultHtml, '次へ');
     animateBarsIn(document.getElementById(_barsId), isFastAiObserve() ? 0 : 500);
@@ -4288,6 +4695,7 @@ function drawMoveRange(ship) {
 let isExecuting = false;
 function executeAllPlots() {
   debugLog(`[DEBUG executeAllPlots] 呼出 isExecuting=${isExecuting}`);
+  blTrace(`executeAllPlots 呼出 isExecuting=${isExecuting} plotExecTurn=${state._plotExecTurn} plots=${[...state.jpFleet, ...state.usFleet].map(s => s.name + ':' + (s.plottedMoves || []).join('')).join(',')}`);
   if (isExecuting) return;
   // 人間対AI: 動かせる自軍の艦が全部「確定」してからでないと実行しない（複数の艦の入れ間違いを防ぐ）
   if ((state.gameMode || 'human-vs-ai') === 'human-vs-ai' && state.phase === 'moveNote') {
@@ -4386,6 +4794,7 @@ function executeAllPlots() {
       isExecuting = false;
       state._plotExecTurn = state.turn; // このターンの移動を実行した
       executeMoveAftermath();
+      try { paths.forEach(p => { if (p.path && p.path.length) blEvent('path', { ship: p.ship.name, steps: p.path.map(x => [x.col, x.row, x.dir]).concat([[p.ship.col, p.ship.row, p.ship.dir]]) }); }); } catch (e) {}
       addLog('=== プロット実行完了 ===');
       setInfo('プロット実行完了');
       draw();
