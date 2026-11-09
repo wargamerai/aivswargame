@@ -408,6 +408,8 @@ function enumeratePlots(ship, state, target, blockedHexes) {
       const iNow = order.indexOf(st.dir);
       for (const delta of [1, 5]) {
         const newDir = order[(iNow + delta) % 6];
+        const newStern = hexNeighbor(st.col, st.row, DIR_OPPOSITE[newDir]);
+        if (newStern && (!inMap(newStern.col, newStern.row) || blocked.has(`${newStern.col},${newStern.row}`))) continue; // 艦尾が他の艦や地図の外に振れる旋回はしない
         const c = { ...st }; moveApplyTurn(c, ship, wind, newDir);
         moves.push(String(newDir));
         dfs(c, moves, depth + 1);
