@@ -34,16 +34,28 @@ const newMan = () => { const used = typeof G !== 'undefined' && G && G.crew ? Ob
 let G = null;
 let LOG = () => {};
 function setLogger(f) { LOG = f; }
-function say(text, cls) { LOG(text, cls || ''); }
+let SAYN = 0; // ログに出した行の数（こちらの行動ごとに止めるのに使う）
+function say(text, cls) { if (cls !== 'judge') SAYN++; LOG(text, cls || ''); }
+// こちらの行動の1つが終わったら、何か出ていれば一度止める（ユーザーの指示 2026-11-08）
+// 車長の短い返事（止まるボタンの文字。セリフのやり取りにする。ユーザーの指示 2026-11-08）
+const ack = () => pick([L('了解', 'Roger'), L('分かった', 'Got it'), L('よし', 'Right'), L('続けろ', 'Carry on')]);
+function stepDone(n0) { if (SAYN !== n0 && SAYN !== LASTPAUSE && G.phase === 'battle') PAUSE(ack()); }
 // 判定の前で止まる（画面が車長の確認を待つ）。text=止まる時のセリフ、label=ボタンの言葉
 let PAUSE = () => {};
-function setPause(f) { PAUSE = f; }
+let LASTPAUSE = -1; // 最後に止めたときのログの行の数（同じところで2回止めない）
+function setPause(f) { PAUSE = label => { LASTPAUSE = SAYN; f(label); }; }
 function stop(text, label, cls) { if (text) say(text, cls); PAUSE(label || L('続けろ', 'Go on')); }
 const crewN = p => (G.crew[p] && G.crew[p].name) || '';
 const alive = p => G.crew[p] && G.crew[p].status === 'ok';
 const unitName = u => { const t = u.type || u.shown; const d = PB.UNIT[t]; return d ? L(d.name, d.en) : t; };
-const unitLabel = u => u.identified === false ? L('未確認の', 'Unidentified ') + unitName(u) : unitName(u);
+// 種類が分からない敵は、戦車・自走砲・対戦車砲のどれかだけを言う（型まで言うと分かってしまう。ユーザーの指示 2026-11-08）
+const unitLabel = u => u.identified === false ? L('種類の分からない', 'Unidentified ') + ({ TANK: L('戦車', 'tank'), SPG: L('自走砲', 'SPG'), AT: L('対戦車砲', 'AT gun') }[u.cls] || unitName(u)) : unitName(u);
 const sectorIdx = s => PB.SECTORS.indexOf(s);
+// 地図から消えた敵の記録（地図に、元の場所の薄い駒と矢印・×を出すため。ユーザーの指示 2026-11-08）
+const goneRec = (u, how) => ({ id: u.id, s: u.sector, r: u.range, spot: u.spot, name: unitLabel(u), type: u.type, shown: u.shown, cls: u.cls, identified: u.identified, how, killed: how !== 'out' });
+function markGone(u, how) { const b = G.bb; if (b) b.gone = (b.gone || []).concat([goneRec(u, how)]); }
+// 見つけていない敵は、地図と同じ番号（?5 など）を付ける
+const tagOf = u => (u && u.spot !== 'spotted' ? `(?${u.id})` : '');
 const rangeName = r => [L('近距離', 'close'), L('中距離', 'medium'), L('遠距離', 'long')][r];
 const sectorName = s => L('セクター', 'sector ') + PB.SECTOR_NAME[s];
 
@@ -224,8 +236,19 @@ function weatherHour() {
 }
 const dayDone = () => G.day.time >= G.day.set;
 function opCheck(id) { const d = G.day, a = d.map.areas[id]; if (d.freeCheck) d.freeCheck = false; else spend(15); a.res = rollResistance(a); say(L(`斥候の報告: 前方の区域の抵抗は${{ L: '軽', M: '中', H: '重' }[a.res]}。`, `Scouts report ${{ L: 'light', M: 'medium', H: 'heavy' }[a.res]} resistance ahead.`)); return dayEndCheck(); }
-function opArt(id) { spend(15); const a = G.day.map.areas[id]; if (d10(L('砲兵の到着(1-7)', 'Artillery arrives (1-7)')) <= 7) { a.art++; say(L('砲兵が目標を了解した。その区域に入ると支援射撃が来る。', 'Artillery acknowledges. Fire falls when you enter.'), 'good'); } else say(L('砲兵は他の任務で手が回らない。', 'Artillery is tied up elsewhere.')); return dayEndCheck(); }
-function opAir(id) { const w = G.day.w; if (w.overcast || w.fog || w.fall) { say(L('この天候では航空支援は飛べない。', 'No air support in this weather.')); return null; } spend(30); const a = G.day.map.areas[id]; if (d10(L('航空攻撃の到着(1-4)', 'Air strike arrives (1-4)')) <= 4) { a.air++; say(L('P-47が上空に入った。', 'P-47s check in overhead.'), 'good'); } else say(L('航空支援は来なかった。', 'No air support available.')); return dayEndCheck(); }
+// 支援砲撃の結果は、ボタンで一度止めて見せる（ユーザーの指示 2026-11-08）
+function opArt(id) { spend(15); const a = G.day.map.areas[id]; const r = d10(L('砲兵の到着(1-7)', 'Artillery arrives (1-7)')); const cn = G.crew.C.name, w = crewN('L') || crewN('A');
+  // 頼んだ結果は無線のやり取りのセリフで出す。ダイスの目は出さない（判定の記録には残る。ユーザーの指示 2026-11-08）
+  if (r <= 7) { a.art++; stop(pick([L(`${w}「${cn}隊長、砲兵から返答です。支援射撃の要請、了解とのこと！」`, `${w}: "Sergeant ${cn}, artillery acknowledges. Fire mission approved!"`), L(`${w}「隊長、砲兵が目標を了解しました。その区域に入ったら撃ってくれます！」`, `${w}: "Sarge, the guns have the target. They'll fire when we go in!"`)]), L('よし', 'Good'), 'good'); }
+  else stop(pick([L(`${w}「${cn}隊長、砲兵は他の任務で手が回らないそうです」`, `${w}: "Sergeant ${cn}, the guns are busy elsewhere."`), L(`${w}「だめです、隊長。砲兵の支援は出せないとのことです」`, `${w}: "No luck, Sarge. No artillery for us."`)]), L('仕方ない', 'Can\'t be helped'));
+  return dayEndCheck(); }
+// 航空支援の結果も、ボタンで一度止めて見せる（ユーザーの指示 2026-11-08）
+function opAir(id) { const w0 = G.day.w, cn = G.crew.C.name, w = crewN('L') || crewN('A');
+  if (w0.overcast || w0.fog || w0.fall) { stop(L(`${w}「${cn}隊長、この天気では飛行機は飛べないそうです」`, `${w}: "Sergeant ${cn}, no planes in this weather."`), L('そうか', 'I see')); return null; }
+  spend(30); const a = G.day.map.areas[id]; const r = d10(L('航空攻撃の到着(1-4)', 'Air strike arrives (1-4)'));
+  if (r <= 4) { a.air++; stop(pick([L(`${w}「${cn}隊長、航空支援の要請が受理されました！ P-47が上空に入ります！」`, `${w}: "Sergeant ${cn}, air support approved! P-47s are on their way!"`), L(`${w}「隊長、P-47が来てくれます！ その区域に入ったら仕掛けてくれます！」`, `${w}: "Sarge, the Jugs are coming! They'll hit the area when we go in!"`)]), L('よし', 'Good'), 'good'); }
+  else stop(pick([L(`${w}「${cn}隊長、航空支援は出せないそうです」`, `${w}: "Sergeant ${cn}, no air support available."`), L(`${w}「だめです、隊長。飛行機は他へ回されています」`, `${w}: "No good, Sarge. The planes are busy elsewhere."`)]), L('仕方ない', 'Can\'t be helped'));
+  return dayEndCheck(); }
 function opResupply() { spend(60); if (d10(L('補給(1-7)', 'Resupply (1-7)')) <= 7) { const t = tank(); const d = G.day; const sum = d.ammo.HE + d.ammo.AP + d.ammo.WP; const need = Math.max(0, t.rounds - sum); d.ammo.HE += Math.round(need * .55); d.ammo.AP += need - Math.round(need * .55); restockRack(); say(L(`補給が届いた。主砲弾${need}発を積み込む。`, `Resupply arrives: ${need} rounds taken aboard.`), 'good'); } else say(L('補給車は来なかった。', 'The supply trucks never came.')); return dayEndCheck(); }
 function dayEndCheck() { if (dayDone()) { say(L('日が暮れた。', 'Night falls.')); return debrief(); } return null; }
 function enterTime(a, b) {
@@ -333,6 +356,16 @@ function startBattle(area, advZones) {
   say(L(`敵だ！ ${areaName(area)}で戦闘開始。`, `Contact! Battle in ${areaName(area)}.`), 'head');
   for (let i = 0; i < n; i++) placeUnit(activate(), area);
   area.left.forEach(u => { u.spot = 'none'; b.units.push(u); u.id = ++b.seq; }); area.left = [];
+  // 敵の配置を地図で確かめてから、支援や待ち伏せへ進む（ユーザーの指示 2026-11-08）
+  // 敵の配置は地図で分かるので、乗員のセリフだけにする。ボタンは車長の返事（ユーザーの指示 2026-11-08）
+  if (b.units.length) { const cn = G.crew.C.name;
+    const lines = [
+      [L(`${crewN('A')}「敵です、${cn}隊長！」`, `${crewN('A')}: "Enemy, Sergeant ${cn}!"`), L('確認した', 'I see them')],
+      [L(`${crewN('D')}「前方に敵、${cn}隊長！」`, `${crewN('D')}: "Enemy ahead, Sergeant ${cn}!"`), L('見えている', 'Got them')],
+      [L(`${crewN('G')}「${cn}隊長、敵がいます！」`, `${crewN('G')}: "Sergeant ${cn}, enemy out there!"`), L('確認した。落ち着いていけ', 'Seen. Stay calm')],
+      [L(`${crewN('L')}「隊長、外に何かいます！」`, `${crewN('L')}: "Sarge, something's out there!"`), L('分かっている', 'I know')],
+    ];
+    const [t, btn] = pick(lines); stop(t, btn); }
   say(pick([L(`${G.crew.A.name}「ちくしょう、撃ってきやがる！」`, `${G.crew.A.name}: "Damn, they're shooting!"`), L('砲塔に機関銃弾が当たって乾いた音を立てた。', 'MG rounds rattle off the turret.'), L('歩兵が一斉に溝へ飛び込んだ。', 'The infantry dives for the ditches.')]));
   // 砲兵・航空支援・前進射撃（4.64）
   for (let i = 0; i < area.art; i++) friendlyAll(0, 'art', L('支援砲撃が着弾した。', 'Supporting fire lands.'));
@@ -345,8 +378,10 @@ function startBattle(area, advZones) {
     say(L('敵はこちらに気づいていない。待ち伏せだ！ 先に撃てるぞ。', 'They haven\'t seen you. Ambush: you get the first shots.'), 'good');
     b.freeRound = true;
   }
+  // 待ち伏せで敵が動いた跡も矢印で出す（ユーザーの指示 2026-11-08）
+  b.units.forEach(u => { u._from = { s: u.sector, r: u.range }; });
   if (amb <= 7 && d.sc !== 'C' && b.units.length) {
-    stop(pick([L('閃光！ 敵に先に撃たれた！ 待ち伏せだ！', 'A flash! They fired first! Ambush!'), L(`${crewN('A')}「待ち伏せだ！ 全方位から来るぞ！」`, `${crewN('A')}: "Ambush! They're all around us!"`)]), L('伏せろ！', 'Button up!'), 'bad');
+    stop(pick([L('閃光！ 敵に先に撃たれた！ 待ち伏せだ！', 'A flash! They fired first! Ambush!'), L(`${crewN('A')}「待ち伏せだ！ 敵が来るぞ！」`, `${crewN('A')}: "Ambush! Here they come!"`)]), L('伏せろ！', 'Button up!'), 'bad');
     enemyPhase(true);
     if (!G.bb.ended && G.phase === 'battle') randomEvent();
   }
@@ -359,7 +394,7 @@ function advancingFire(zones) {
   for (const key of Object.keys(zones)) {
     const n = zones[key]; if (!n) continue;
     const [sec, r] = key.split(':');
-    for (let i = 0; i < n; i++) for (const u of b.units.filter(x => x.sector === sec && x.range === +r)) { if (friendlyRoll(u, 0, 'adv')) { b.units = b.units.filter(x => x !== u); k++; } }
+    for (let i = 0; i < n; i++) for (const u of b.units.filter(x => x.sector === sec && x.range === +r)) { if (friendlyRoll(u, 0, 'adv')) { markGone(u, 'out'); b.units = b.units.filter(x => x !== u); k++; } }
   }
   if (k) say(L(`前進射撃で敵${k}隊が退いた。`, `Advancing fire drives off ${k} enemy units.`), 'good');
 }
@@ -388,12 +423,33 @@ function friendlyRoll(u, mod, why) {
 }
 function friendlyAll(mod, why, msg) {
   const b = G.bb; if (msg && b.units.length) say(msg);
+  const had = b.units.length; let kills = 0;
+  // 支援砲撃・航空攻撃は、敵1隊ずつは書かず、部下の報告で結果だけ言う。撃破は地図の×で見せる（ユーザーの指示 2026-11-08）
+  const sup = why === 'art' || why === 'air', supName = why === 'art' ? L('砲撃', 'the barrage') : L('航空攻撃', 'the air strike');
+  const cn = G.crew.C.name, who = pick(['A', 'G', 'L', 'D'].filter(q => G.crew[q] && G.crew[q].status === 'ok')) || 'A';
+  if (sup && !had) stop(L(`${crewN(who)}「${cn}隊長、${supName}が来ましたが、敵の姿はありません」`, `${crewN(who)}: "Sergeant ${cn}, ${supName} came in, but there's no enemy."`), L('そうか', 'I see'));
   for (const u of b.units.slice()) if (friendlyRoll(u, mod, why)) {
-    say(L(`味方が${unitLabel(u)}を撃破（${sectorName(u.sector)}・${rangeName(u.range)}）。`, `Friendly forces knock out ${unitLabel(u)} (${sectorName(u.sector)}, ${rangeName(u.range)}).`));
+    kills++;
+    if (!sup) say(L(`味方が${unitLabel(u)}${tagOf(u)}を撃破（${sectorName(u.sector)}・${rangeName(u.range)}）。`, `Friendly forces knock out ${unitLabel(u)}${tagOf(u)} (${sectorName(u.sector)}, ${rangeName(u.range)}).`));
+    markGone(u, 'ko');
     if (why !== 'adv') { const dd = G.day, tt = u.type || u.shown; dd.vpFriend += vpOf(u); dd.fko[tt] = (dd.fko[tt] || 0) + 1; if (u.terr === 'fort') dd.fortF++; }
     b.units = b.units.filter(x => x !== u);
     if (b.acq && b.acq.id === u.id) b.acq = null;
   }
+  if (sup && had) {
+    const left = b.units.length;
+    const hit = [
+      [L(`${crewN(who)}「${cn}隊長、${supName}で敵${kills}隊が吹き飛びました！」`, `${crewN(who)}: "Sergeant ${cn}, ${supName} took out ${kills} of them!"`), L('よし', 'Good')],
+      [L(`${crewN(who)}「命中です、隊長！ 敵${kills}隊が沈黙！」`, `${crewN(who)}: "Direct hit, Sarge! ${kills} silenced!"`), L('よくやった', 'Well done')],
+    ];
+    const miss = [
+      [L(`${crewN(who)}「${cn}隊長、${supName}は外れました。敵はまだいます」`, `${crewN(who)}: "Sergeant ${cn}, ${supName} missed. They're still there."`), L('仕方ない', 'Can\'t be helped')],
+      [L(`${crewN(who)}「だめです、隊長。土煙だけです」`, `${crewN(who)}: "No good, Sarge. Just dirt."`), L('次で仕留める', 'We\'ll get them')],
+    ];
+    const [t, btn] = pick(kills ? hit : miss);
+    stop(t + (kills && left ? L(`（残り${left}隊）`, ` (${left} left)`) : ''), btn, kills ? 'good' : '');
+  }
+  if (why === 'friend' && kills) stop(L(`${crewN(who)}「隊長、味方が敵を${kills}隊仕留めました！」`, `${crewN(who)}: "Sarge, our boys got ${kills} of them!"`), L('よし', 'Good'), 'good');
 }
 const vpOf = u => { const t = u.type || u.shown; const d = PB.UNIT[t]; return (d ? d.vp : 1) + (u.terr === 'fort' ? 2 : 0); };
 // ===== 煙 =====
@@ -481,6 +537,11 @@ function gunCall(u, amm) {
 }
 function spotText(p, m, u) {
   const dir = sectorClock(u.sector);
+  // 種類が分からない敵は、見間違えるかもしれない名前で「〜か？」と言う。種類が分かったら、違えば「いや、〜だ！」と言い直す（ユーザーの指示 2026-11-08）
+  if (u.identified === false) { const g = unitName(u); u.guess = u.shown; return pick([
+    L(`${m.name}「${dir}方向、${rangeName(u.range)}に${g}……か？」`, `${m.name}: "${dir}, ${rangeName(u.range)}... a ${g}?"`),
+    L(`「いたぞ！ ${dir}、${g}らしい」`, `"There! ${dir}, looks like a ${g}."`),
+  ]); }
   return pick([
     L(`${m.name}「${dir}方向、${rangeName(u.range)}に${unitLabel(u)}！」`, `${m.name}: "${unitLabel(u)}, ${dir}, ${rangeName(u.range)}!"`),
     L(`${POS_NAME[p]()}が${dir}の${unitLabel(u)}を発見。`, `${POS_NAME[p]()} spots ${unitLabel(u)} at ${dir}.`),
@@ -489,9 +550,12 @@ function spotText(p, m, u) {
 }
 function sectorClock(s) { const off = (sectorIdx(s) - G.bb.facing + 6) % 6; return [L('正面', 'front'), L('右前', 'right front'), L('右後', 'right rear'), L('真後ろ', 'rear'), L('左後', 'left rear'), L('左前', 'left front')][off]; }
 function identify(u, p, m) {
+  const guess = u.guess || null;
   u.type = identifyType(u); u.shown = u.type; u.identified = true;
-  const n = unitName(u);
-  say(L(`${m.name}「確認！ ${n}だ！」`, `${m.name}: "Confirmed! ${n}!"`), u.type.startsWith('PzVI') ? 'bad' : '');
+  const n = unitName(u), gn = guess && PB.UNIT[guess] ? L(PB.UNIT[guess].name, PB.UNIT[guess].en) : null;
+  if (gn && guess !== u.type) say(L(`${m.name}「確認した、いや、${n}だ！」`, `${m.name}: "Confirmed... no, it's a ${n}!"`), u.type.startsWith('PzVI') ? 'bad' : '');
+  else if (gn) say(L(`${m.name}「確認した、${n}だ！」`, `${m.name}: "Confirmed, a ${n}!"`), u.type.startsWith('PzVI') ? 'bad' : '');
+  else say(L(`${m.name}「確認！ ${n}だ！」`, `${m.name}: "Confirmed! ${n}!"`), u.type.startsWith('PzVI') ? 'bad' : '');
 }
 function beginRound() {
   const b = G.bb;
@@ -635,6 +699,7 @@ function knockOut(u, by) {
     d.vpTank += vp; G.totalVP += vp; d.ko[t] = (d.ko[t] || 0) + 1; if (u.terr === 'fort') d.fortT++; G.kills[t] = (G.kills[t] || 0) + 1;
     say(pick([L(`${unitLabel(u)}を撃破！ 勝利点+${vp}。`, `${unitLabel(u)} knocked out! +${vp} VP.`), L(`やった！ ${unitLabel(u)}が炎を上げた。勝利点+${vp}。`, `Got him! ${unitLabel(u)} is burning. +${vp} VP.`), L(`${G.crew.G.name}「命中、撃破！」 ${unitLabel(u)}は沈黙した。勝利点+${vp}。`, `${G.crew.G.name}: "Target destroyed!" ${unitLabel(u)} goes silent. +${vp} VP.`)]), 'good');
   }
+  markGone(u, 'ko');
   b.units = b.units.filter(x => x !== u);
   if (b.acq && b.acq.id === u.id) b.acq = null;
 }
@@ -668,7 +733,7 @@ function fireMG(kind, u, p, opts) {
   if (w.fog || w.fall) { if (u.range > 0) return false; }
   stop(pick([L(`「${unitLabel(u)}をなぎ払え！」`, `"Hose down ${unitLabel(u)}!"`), L(`機銃の銃口が${unitLabel(u)}へ向いた。`, `The MG swings onto ${unitLabel(u)}.`)]), L('撃て', 'Fire'));
   const raw = rr100();
-  if (raw >= 98) { J(L(`機銃の故障の判定(98以上で故障): 2D = ${raw}`, `MG jam: ${raw}`)); d.jam[kind] = true; say(L(`${{ bow: '車体', coax: '同軸', aa: '対空' }[kind]}機関銃が故障した。`, `${kind.toUpperCase()} MG jammed.`), 'bad'); return false; }
+  if (raw >= 98) { J(L(`機銃の故障の判定(98以上で故障): 2D = ${raw}`, `MG jam: ${raw}`)); d.jam[kind] = true; stop(L(`${crewN(p)}「隊長、${{ bow: '車体', coax: '同軸', aa: '対空', sub: '短' }[kind]}機関銃が故障しました！」`, `${crewN(p)}: "Sarge, the ${kind.toUpperCase()} MG jammed!"`), L('直せ', 'Fix it'), 'bad'); return false; }
   let base = PB.MG[kind][u.range];
   if (base < 0) return false;
   for (let i = 0; i < smokeBetween(u); i++) base = Math.floor(base / 2);
@@ -684,8 +749,9 @@ function fireMG(kind, u, p, opts) {
   if (u.terr === 'fort') m += 20;
   const name = { bow: L('車体機銃', 'Bow MG'), coax: L('同軸機銃', 'Coax MG'), aa: L('.50口径機銃', '.50 cal'), sub: L('短機関銃', 'Sub MG') }[kind];
   J(L(`${WEAPON_WORD(kind)}で${unitLabel(u)}を倒せるか: 2D = ${raw} ${sg(m)} = ${raw + m}、必要 ${base} 以下 → ${raw <= 3 || raw + m <= base ? '撃破' : 'なし'}`, `MG (${kind})→${unitLabel(u)}: ${raw} ${sg(m)} = ${raw + m}, need ${base}`));
-  if (raw <= 3 || raw + m <= base) { say(L(`${name}が${unitLabel(u)}をなぎ払った。`, `${name} cuts down ${unitLabel(u)}.`)); knockOut(u, 'you'); return true; }
-  say(L(`${name}で${unitLabel(u)}を撃つ — 効果なし。`, `${name} on ${unitLabel(u)} — no effect.`));
+  // 機関銃の結果で一度止める（ユーザーの指示 2026-11-08）
+  if (raw <= 3 || raw + m <= base) { stop(pick([L(`${crewN(p)}「やりました！ ${unitLabel(u)}を片付けました！」`, `${crewN(p)}: "Got 'em! ${unitLabel(u)} is down!"`), L(`${crewN(p)}「${unitLabel(u)}、沈黙！」`, `${crewN(p)}: "${unitLabel(u)} silenced!"`)]), pick([L('よくやった', 'Well done'), L('いいぞ', 'Nice')]), 'good'); knockOut(u, 'you'); return true; }
+  stop(pick([L(`${crewN(p)}「だめです、${unitLabel(u)}には効きません！」`, `${crewN(p)}: "No good, ${unitLabel(u)} is still there!"`), L(`${crewN(p)}「外れました！」`, `${crewN(p)}: "Missed!"`)]), pick([L('撃ち続けろ', 'Keep firing'), L('次は当てろ', 'Hit it next time')]));
   return false;
 }
 // ===== 乗員の行動（4.74）=====
@@ -709,7 +775,7 @@ function shiftUnits(dirSign, cat) {
       recheckFacing(u); u.spot = u.spot === 'hidden' ? 'none' : u.spot;
     } else if (cat === 'C') recheckFacing(u);
   }
-  if (leavers.length) { b.units = b.units.filter(u => !leavers.includes(u)); b.offBoard = (b.offBoard || []).concat(leavers); }
+  if (leavers.length) { b.gone = (b.gone || []).concat(leavers.map(u => goneRec(u, 'out'))); b.units = b.units.filter(u => !leavers.includes(u)); b.offBoard = (b.offBoard || []).concat(leavers); }
 }
 // Q&A: 戦車の移動で煙も敵と同じようにずれる。戦車の上の煙は真後ろの近距離へ
 function shiftSmoke(dirSign, cat) {
@@ -814,6 +880,10 @@ function resolveRound(o) {
   const b = G.bb, d = G.day;
   if (G.phase !== 'battle') return;
   b.lastOrders = o;
+  // 敵の動いた跡（地図に矢印と×を出す。次のラウンドの命令を実行するまで残す。ユーザーの指示 2026-11-08）
+  // 1つ前のラウンドの跡は、薄くしてもう1ラウンド残す（ユーザーの指示 2026-11-08: すぐ消えると分からない）
+  b.prevTrails = b.units.filter(u => u._from && (u._from.s !== u.sector || u._from.r !== u.range)).map(u => ({ s1: u._from.s, r1: u._from.r, s2: u.sector, r2: u.range, u: { id: u.id, spot: u.spot, type: u.type, shown: u.shown, cls: u.cls, identified: u.identified } })); b.prevGone = b.gone || [];
+  b.units.forEach(u => { u._from = { s: u.sector, r: u.range }; }); b.gone = [];
   const cmdDirMove = o.C && o.C.act === 'dirmove' && G.crew.C.status === 'ok';
   const cmdDirFire = o.C && o.C.act === 'dirfire' && G.crew.C.status === 'ok';
   b.pivoted = false; b.fired = false;
@@ -824,8 +894,10 @@ function resolveRound(o) {
   b.useRack = !!o.useRack;
   // 1) 移動
   if (o.D && o.D.act === 'pivot') b.pivotTo = o.D.to;
+  let n0 = SAYN;
   doDriver(o.D ? o.D.act : 'stop', cmdDirMove);
   if (G.phase !== 'battle') return afterBattle();
+  stepDone(n0); n0 = SAYN;
   // 2) 主砲
   const g = o.G || {}, gm = G.crew.G;
   const mainOk = !d.jam.main && !d.broken.main && !d.broken.sight && b.load;
@@ -847,17 +919,21 @@ function resolveRound(o) {
   } else if (gm.status === 'ok' && g.act === 'coax') {
     if (!d.jam.coax) mgOrder('coax', g, 'G', cmdDirFire, z => z[0] === PB.SECTORS[b.turret]);
   }
+  stepDone(n0); n0 = SAYN;
   // 3) 機関銃（目標か、前進射撃のゾーン）
   const a = o.A || {};
   if (G.crew.A.status === 'ok' && a.act === 'bow' && !d.jam.bow && !b.hull) mgOrder('bow', a, 'A', cmdDirFire, z => sectorIdx(z[0]) === b.facing);
+  stepDone(n0); n0 = SAYN;
   const c = o.C || {};
   if (G.crew.C.status === 'ok' && c.act === 'aa' && b.hatch.C && !d.jam.aa && !d.broken.aa) mgOrder('aa', c, 'C', false, () => true);
   if (G.crew.C.status === 'ok' && c.act === 'sub' && b.hatch.C) mgOrder('sub', c, 'C', false, () => true);
+  stepDone(n0); n0 = SAYN;
   // 4) その他
   const l = o.L || {};
   if (G.crew.L.status === 'ok') {
     if (l.act === 'aa' && tank().loaderAA && b.hatch.L && !d.jam.aa && !d.broken.aa) mgOrder('aa', l, 'L', false, () => true);
     if (l.act === 'sub' && tank().turret !== 'A' && b.hatch.L) mgOrder('sub', l, 'L', false, () => true);
+    stepDone(n0); n0 = SAYN;
     if (l.act === 'repairaa' && tank().loaderAA) tryRepair('aa', G.crew.L.rating);
     if (l.act === 'repairmain') tryRepair('main', G.crew.L.rating + (g.act === 'repair' && gm.status === 'ok' ? gm.rating : 0));
     if (l.act === 'repaircoax') tryRepair('coax', G.crew.L.rating);
@@ -865,6 +941,7 @@ function resolveRound(o) {
     if (l.act === 'change' && l.ammo && d.ammo[l.ammo] > 0) { b.load = l.ammo; say(L(`弾を${l.ammo}に替えた。`, `Round changed to ${l.ammo}.`)); }
     if (l.act === 'restock') { restockRack(); say(L('即応弾架に補充した。', 'Ready rack restocked.')); }
     if (!b.load && !d.jam.main) b.load = d.ammo[b.reload] > 0 ? b.reload : (['HE', 'AP', 'WP', 'HCBI', 'HVAP'].find(x => d.ammo[x] > 0) || null);
+    stepDone(n0); n0 = SAYN;
   }
   if (a.act === 'repairbow' && G.crew.A.status === 'ok') tryRepair('bow', G.crew.A.rating);
   if (c.act === 'repairaa' && G.crew.C.status === 'ok') tryRepair('aa', G.crew.C.rating);
@@ -872,9 +949,12 @@ function resolveRound(o) {
   for (const p of POS) { const oo = o[p]; if (oo && oo.act === 'periscope' && G.crew[p].status === 'ok' && G.crew[p].periscope === false && d.periscopes > 0) { d.periscopes--; G.crew[p].periscope = true; say(L(`${POS_NAME[p]()}がペリスコープを交換した。`, `${POS_NAME[p]()} replaces the periscope.`)); } }
   // 19.22 副操縦手が負傷者の席へ移る（丸1ラウンド。操縦手以外の席では腕前が半分）
   if (a.act === 'swap' && G.crew.A.status === 'ok' && a.to && G.crew[a.to].status !== 'ok' && a.to !== 'A') swapAssistant(a.to);
+  stepDone(n0); n0 = SAYN;
   if (((c.act === 'grenade') || g.act === 'grenade') && d.grenades > 0) { d.grenades--; b.smokeOnTank += 2; say(L('発煙手榴弾を投げた。', 'Smoke grenade thrown.')); }
+  stepDone(n0); n0 = SAYN;
   // 気絶の回復
   POS.forEach(p => { if (G.crew[p].status === 'uncon' && d10(L(`${G.crew[p].name}の意識(1-5回復)`, `${G.crew[p].name} recovers (1-5)`)) <= 5) { G.crew[p].status = 'ok'; say(L(`${G.crew[p].name}が意識を取り戻した。`, `${G.crew[p].name} comes to.`), 'good'); } });
+  stepDone(n0);
   if (checkBattleEnd()) return afterBattle();
   // 5) 敵（20.43 反撃で待ち伏せた最初のラウンドは動かない）
   if (b.freeRound) b.freeRound = false; else enemyPhase(false);
@@ -903,6 +983,8 @@ function tryRepair(what, rating) {
 // ===== 敵の行動（13.0）=====
 function enemyPhase(ambush) {
   const b = G.bb, d = G.day;
+  // 敵の番は、始めと、敵が1隊動くたびに一度止める（ユーザーの指示 2026-11-08）
+  if (b.units.length) { const w0 = pick(['A', 'G', 'L', 'D'].filter(q => G.crew[q] && G.crew[q].status === 'ok')) || 'A'; stop(pick([L(`${crewN(w0)}「隊長、敵が動きます！」`, `${crewN(w0)}: "Sarge, they're moving!"`), L(`${crewN(w0)}「敵に動きあり！」`, `${crewN(w0)}: "Movement out there!"`)]), pick([L('目を離すな', 'Keep your eyes on them'), L('よく見ておけ', 'Watch them')])); }
   for (const u of b.units.slice()) {
     if (G.phase !== 'battle' || !b.units.includes(u)) continue;
     const key = u.cls === 'AT' ? 'AT' : ['TANK', 'SPG'].includes(u.cls) ? 'veh' : ['LW', 'MG'].includes(u.cls) ? 'inf' : 'lt';
@@ -920,7 +1002,7 @@ function enemyPhase(ambush) {
     if (act === 'leadcoll') act = d.lead ? 'coll' : 'none'; // 会戦: MG/LW の 96-100 は先頭戦車のみ
     if (u.cls === 'TRUCK' && (act === 'inf' || act === 'coll')) act = 'none';
     if (act === 'none') { u.moving = false; continue; } // 4.75 何もしない・射撃なら移動マーカーを外す
-    if ('FLRB'.includes(act)) { enemyMove(u, act); if (b.units.includes(u)) checkAdvMG(u); continue; }
+    if ('FLRB'.includes(act)) { enemyMove(u, act); if (b.units.includes(u)) { say(L(`${unitLabel(u)}${tagOf(u)}が${sectorName(u.sector)}・${rangeName(u.range)}へ動いた。`, `${unitLabel(u)}${tagOf(u)} moves to ${sectorName(u.sector)}, ${rangeName(u.range)}.`)); checkAdvMG(u); } PAUSE(ack()); continue; }
     u.moving = false;
     u.firedLast = true;
     if (u.spot === 'none' && u.identified === false) { /* 発砲で見つかりやすくなる */ }
@@ -928,6 +1010,7 @@ function enemyPhase(ambush) {
     else if (act === 'any') enemyFireTank(u);
     else if (act === 'coll') { say(L(`${unitLabel(u)}の銃弾が車体をたたく。`, `${unitLabel(u)} rakes the hull.`)); collateral(); }
     else if (act === 'you') { if (u.cls === 'TANK' || u.cls === 'SPG' || u.cls === 'AT') fireAtYou(u); else collateral(); }
+    PAUSE(ack());
   }
 }
 function loseArea(a) { const d = G.day; if (a.id === d.map.exit) { d.vpLost += 10; d.lostEx++; } else { d.vpLost += 1; d.lostN++; } }
@@ -938,7 +1021,8 @@ function enemyMove(u, dir) {
     if (u.range < 2) u.range++;
     else {
       if (['1', '2', '3'].includes(u.sector)) { const a = G.day.map.areas[G.day.map.prev]; if (a) { a.left.push(u); if (a.us) loseArea(a); a.us = false; } }
-      say(L(`${unitLabel(u)}は戦場から退いた。`, `${unitLabel(u)} withdraws from the field.`));
+      say(L(`${unitLabel(u)}${tagOf(u)}は戦場から退いた。`, `${unitLabel(u)}${tagOf(u)} withdraws from the field.`));
+      markGone(u, 'out');
       b.units = b.units.filter(x => x !== u); if (b.acq && b.acq.id === u.id) b.acq = null; return;
     }
   }
@@ -948,7 +1032,7 @@ function enemyMove(u, dir) {
   if (u.spot !== 'none') u.spot = 'none';
   setFacingTerrain(u); u.moving = true;
   if (b.acq && b.acq.id === u.id && dir !== 'B') b.acq = null;
-  if (u.spot === 'none' && u.range === 0) say(L(`${unitLabel(u)}が近くへ動いた。`, `${unitLabel(u)} moves in close.`));
+  // 動いた先は、敵の番のほうで1行にまとめて出す（2行出ないように。2026-11-08）
 }
 function enemyFireInf(u) {
   const d = G.day, tbl = PB.EFIRE[d.sc === 'C' ? 'C' : 'AB'];
@@ -1089,6 +1173,7 @@ function commanderDown() { /* 戦闘の後で判定する */ }
 function randomEvent() {
   const b = G.bb, d = G.day;
   const re = rr100(); const e = rowOf(PB.EVENTS[d.sc], re);
+  const mv0 = b.moving;
   J(L(`ランダムイベント: 2D = ${re} → ${EVENT_WORD(e)}`, `Random event: ${re} → ${EVENT_WORD(e)}`));
   if (e === 'time') { spend(15); }
   else if (e === 'fart') friendlyAll(0, 'art', L('味方の砲兵が敵陣を耕している。', 'Friendly artillery works over the enemy line.'));
@@ -1100,6 +1185,8 @@ function randomEvent() {
   else if (e === 'rein') { const n = d.sc === 'A' ? 1 : 2; let k = 0; const a = { type: b.area }; for (let i = 0; i < n; i++) { const nu = placeUnit(activate(), a); if (nu) { k++; checkAdvMG(nu); } } if (k) say(L(`敵の増援が${k}隊現れた。`, `${k} enemy reinforcements appear.`), 'bad'); }
   else if (e === 'eadv') { const cand = PB.SECTORS.filter(s => b.us[s] && b.units.some(u => Math.abs(sectorIdx(u.sector) - sectorIdx(s)) % 5 <= 1)); if (cand.length) { delete b.us[pick(cand)]; say(L('味方が後退した。', 'Friendly forces fall back.'), 'bad'); } }
   else if (e === 'flank') friendlyAll(-10, 'friend', L('味方が側面へ回り込んだ。', 'Friendly forces work around the flank.'));
+  // 出来事で何か起きたら一度止める（ユーザーの指示 2026-11-08）
+  if (['eart', 'pf', 'har', 'fadv', 'rein', 'eadv'].includes(e) || (e === 'mine' && mv0)) PAUSE(ack());
 }
 function panzerfaust() {
   const b = G.bb, d = G.day;

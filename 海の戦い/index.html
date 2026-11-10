@@ -340,11 +340,13 @@ body.hide-force .force-label { display:none; }
       </div>
     </div>
     <!-- 担当する軍の選択は、連合軍を担当する方がまだできていないので隠す（ユーザーの指示 2026-11-07）。ドイツ軍（枢軸）を担当のまま -->
-    <h3 style="display:none;">担当する軍</h3>
-    <div style="display:none;flex-direction:column;gap:6px;color:#cde;margin:6px 0 12px;">
+    <!-- 試しに連合軍を担当するときは、アドレスの最後に ?allies を付けると出る（ユーザーの指示 2026-11-10） -->
+    <h3 class="sidePickTest" style="display:none;">担当する軍</h3>
+    <div class="sidePickTest" style="display:none;flex-direction:column;gap:6px;color:#cde;margin:6px 0 12px;">
       <label><input type="radio" name="sidePick" value="axis" checked onchange="pickHumanSide(this.value)"> ドイツ軍（枢軸）を担当する。連合軍はAIが動かす</label>
       <label><input type="radio" name="sidePick" value="allies" onchange="pickHumanSide(this.value)"> 連合軍を担当する。ドイツ軍（枢軸）はAIが動かす</label>
     </div>
+    <script>if(/[?&]allies\b/.test(location.search))document.querySelectorAll('.sidePickTest').forEach((el,i)=>{el.style.display=i?'flex':'block'});</script>
     <h3>オプションルール</h3>
     <div style="display:flex;flex-direction:column;gap:8px;color:#cde;margin:8px 0 14px;">
       <label><input type="checkbox" class="optRule" data-opt="ubNoLimit" onchange="setOptionRule(this)"> Uボート上限なし</label>

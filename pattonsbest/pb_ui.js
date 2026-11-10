@@ -17,7 +17,7 @@ function keepJudge() { try { if (JUDGELOG.length > 60000) JUDGELOG = JUDGELOG.sl
 function showLine(t, c) { if (c === 'judge') { JUDGELOG.push(t); return; } if (c === 'date' || c === 'head' || c === 'evening') JUDGELOG.push(t); if (c === 'bad') flash('hit'); ALLLOG.push({ t, c }); if (c === 'date') DAYSTART = ALLLOG.length - 1; const d = document.createElement('div'); d.textContent = t; if (c) d.className = c; const el = $('log'); el.insertBefore(d, $('lb') || $('lbplay') || null); while (el.childNodes.length > 5000) el.removeChild(el.firstChild); el.scrollTop = el.scrollHeight; }
 // ログの中に出す操作（続ける、弾薬、夕方の報告など。ユーザーの指示 2026-11-04）
 function inlineBox(html) { const old = $('lb'); if (old) old.remove(); const d = document.createElement('div'); d.id = 'lb'; d.className = 'logbox'; d.innerHTML = html; const el = $('log'); el.insertBefore(d, $('lbplay') || null); el.scrollTop = el.scrollHeight; }
-function renderPlayBtn() { const old = $('lbplay'); if (old) old.remove(); if (!PLAY) return; const d = document.createElement('div'); d.id = 'lbplay'; d.className = 'logbox'; d.innerHTML = `<button class="go" onclick="stepPlay()">${esc(PLAY.label || L('続ける', 'Go on'))}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`; const el = $('log'); el.appendChild(d); el.scrollTop = el.scrollHeight; }
+function renderPlayBtn() { const old = $('lbplay'); if (old) old.remove(); if (!PLAY) return; const d = document.createElement('div'); d.id = 'lbplay'; d.className = 'logbox'; d.innerHTML = `<button class="go" onclick="stepPlay()">${esc(PLAY.label || L('続ける', 'Go on'))}</button>`; const el = $('log'); el.appendChild(d); el.scrollTop = el.scrollHeight; }
 var BUF = null, PLAY = null, AUTO = false;
 E.setLogger((t, c) => { if (BUF) BUF.push({ t, c }); else showLine(t, c); });
 E.setPause(label => { if (BUF) BUF.push({ pause: label, snap: JSON.stringify(E.G) }); });
@@ -66,7 +66,7 @@ function judgeBox() {
   const j = $('jlist'); j.scrollTop = j.scrollHeight;
 }
 function saveJudge() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JUDGELOG.join('\n')], { type: 'text/plain' })); a.download = 'pattons_best_dice.txt'; a.click(); }
-function renderLogHead() { $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> <button onclick="saveLog()">${L('ログ保存', 'Save log')}</button> <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button>`; }
+function renderLogHead() { $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> <button onclick="saveLog()">${L('ログ保存', 'Save log')}</button> <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`; } // 自動で進めるは、ログの見出しへ（ユーザーの指示 2026-11-08）
 // ===== 開始の画面 =====
 function startScreen() {
   const has = (() => { try { return !!localStorage.getItem('pb_save'); } catch (e) { return false; } })();
@@ -130,6 +130,7 @@ function renderMap() {
     const rc = a.res ? { L: '#fff4a8', M: '#ffb25a', H: '#ff6a4a' }[a.res] : null, scout = rc && !a.us;
     h += `<g ${isN ? `style="cursor:pointer" onclick="SEL=${a.id};render()"` : ''}>
       ${scout ? `<circle cx="${a.x}" cy="${a.y}" r="${(isN ? 44 : 34) + 9}" fill="none" stroke="${rc}" stroke-width="10" stroke-opacity=".95"/>` : ''}
+      ${isX ? `<circle cx="${a.x}" cy="${a.y}" r="${(isN ? 44 : 34) + (scout ? 22 : 10)}" fill="none" stroke="#ff2a1a" stroke-width="12"/>` : ''}<!-- 目標の区域は太い赤の縁（ユーザーの指示 2026-11-10） -->
       <circle cx="${a.x}" cy="${a.y}" r="${isN ? 44 : 34}" fill="${a.us ? 'rgba(40,90,200,.55)' : isN ? 'rgba(255,226,122,.28)' : scout ? 'rgba(0,0,0,.45)' : 'rgba(0,0,0,.01)'}" stroke="${isS ? '#fff' : isX ? '#ff4a3a' : isN ? '#ffe27a' : 'none'}" stroke-width="${isS ? 8 : 5}" ${isX ? 'stroke-dasharray="14 8"' : ''}/>
       ${scout ? `<text x="${a.x}" y="${a.y + 17}" text-anchor="middle" fill="${rc}" stroke="#000" stroke-width="1.5" font-size="50" font-weight="bold">${txt}</text>` : txt ? `<text x="${a.x + 26}" y="${a.y - 18}" fill="${rc}" stroke="#000" stroke-width="1" font-size="34" font-weight="bold">${txt}</text>` : ''}
       ${a.us ? `<text x="${a.x}" y="${a.y + 44}" text-anchor="middle" fill="#fff" stroke="#000" stroke-width=".8" font-size="26" font-weight="bold">US</text>` : ''}
@@ -144,16 +145,43 @@ const BCX = 694, BCY = 787, BW = 1400, BH = Math.round(1400 * 1744 / 1945);
 const SEC_ANG = i => -90 + 60 * i;
 const SEC_R = [[230, 400, 570], [230, 410, 575], [205, 370, 520], [140, 272, 390], [205, 370, 520], [230, 410, 575]]; // セクターごとの 近/中/遠 の半径（盤の形に合わせる）
 function bbPos(i, r, off) { const a = (SEC_ANG(i) + off) * Math.PI / 180, k = SEC_R[i][r]; return [BCX + k * Math.cos(a), BCY + k * Math.sin(a)]; }
+const UNIT_IMG = new Set(['PzIV', 'PzV', 'PzVIe', 'PzVIb', 'StuG', 'MarderII', 'MarderIII', 'JgdIV', 'Jgd38', 'SPW', 'PSW', 'TRUCK', 'LW', 'MG', '50L', '75L', '88LL', 'TANK_B', 'SPG_B', 'AT_B', 'hidden']);
 function renderBattle() {
   const g = E.G, b = g.bb;
   let h = `<image href="img/battle.jpg" width="${BW}" height="${BH}"/>`;
   if (!b) { $('board').innerHTML = `<svg viewBox="0 0 ${BW} ${BH}">${h}</svg>`; return; }
   PB.SECTORS.forEach((s, i) => {
-    if (b.us[s]) { const [x, y] = bbPos(i, 0, 0); h += `<text x="${x}" y="${y - 58}" text-anchor="middle" fill="#123a8c" font-size="28" font-weight="bold">US</text>`; }
-    for (let r = 0; r < 3; r++) { const n = Math.ceil((b.smoke[`${s}:${r}`] || 0) / 2); if (n) { const [x, y] = bbPos(i, r, 18); h += `<circle cx="${x}" cy="${y}" r="${30 + n * 8}" fill="#e6e6e6" opacity=".62"/><text x="${x}" y="${y + 8}" text-anchor="middle" font-size="24" fill="#333">${L('煙', 'smk')}${n}</text>`; } }
+    if (b.us[s]) { const [x, y] = bbPos(i, 0, 0); h += `<image href="img/us_control.png" x="${x - 34}" y="${y - 130}" width="68" height="68" data-uimg="img/us_control.png" data-uname="${esc(L('味方が押さえているセクター', 'Sector held by friendly forces'))}"><title>${L('味方が押さえているセクター', 'Sector held by friendly forces')}</title></image>`; } // ゲームの US Control のマーカー（ユーザーの指示 2026-11-08）
+    // 煙はゲームの煙のマーカーの絵で大きく出す（数が多いほど x2・x3。消えかけは薄い面。ユーザーの指示 2026-11-08）
+    for (let r = 0; r < 3; r++) { const v = b.smoke[`${s}:${r}`] || 0, n = Math.min(3, Math.ceil(v / 2)); if (n) { const [x, y] = bbPos(i, r, 0); h += `<image href="img/s/${n}${v % 2 ? 'f' : ''}.png" x="${x - 75}" y="${y - 75}" width="150" height="150" opacity=".92" data-uimg="img/s/${n}${v % 2 ? 'f' : ''}.png" data-uname="${esc(L('煙', 'Smoke'))} ${n}"><title>${L('煙', 'Smoke')} ${n}</title></image>`; } }
   });
+  if (b.smokeOnTank) { const v = b.smokeOnTank, n = Math.min(3, Math.ceil(v / 2)); h += `<image href="img/s/${n}${v % 2 ? 'f' : ''}.png" x="${BCX + 40}" y="${BCY - 150}" width="110" height="110" opacity=".92"><title>${L('自車に煙', 'Smoke on tank')}</title></image>`; }
+  // 自分の戦車は前の絵のまま（駒の絵だと砲身が見づらい。ユーザーの指示 2026-11-08）
   h += `<g transform="translate(${BCX},${BCY}) rotate(${60 * b.facing})"><rect x="-26" y="-40" width="52" height="76" rx="6" fill="${b.hull ? '#3f6e32' : '#5c6b35'}" stroke="#111" stroke-width="3"/><polygon points="0,-58 -13,-40 13,-40" fill="#111"/></g>`;
   h += `<g transform="translate(${BCX},${BCY}) rotate(${60 * b.turret})"><circle r="19" fill="#39431f" stroke="#111" stroke-width="3"/><rect x="-4" y="-64" width="8" height="52" fill="#111"/></g>`;
+  // 敵の動き（ユーザーの指示 2026-11-08）: 元の場所に薄い駒を残し、今の場所へ白い矢印。
+  //   地図の外へ出た敵は、外へ向かう矢印と「地図の外へ」。撃破された敵は、薄い駒に×。今のラウンドは濃く、1つ前は薄く
+  h += `<defs><marker id="arw" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#fff" stroke="#000" stroke-width="1.2"/></marker></defs>`;
+  const P = (s0, r0) => bbPos(PB.SECTORS.indexOf(s0), r0, 0);
+  // 矢印の先が行き先の駒に隠れないように、駒の手前（80）で止める。矢じりは大きめ
+  const line = (x1, y1, x2, y2, op, short) => { const dx = x2 - x1, dy = y2 - y1, k = Math.hypot(dx, dy) || 1, cut = short === false ? 0 : Math.min(80, k * .45); x2 -= dx / k * cut; y2 -= dy / k * cut;
+    return `<g opacity="${op}" style="pointer-events:none"><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#000" stroke-width="16" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#fff" stroke-width="9" stroke-linecap="round" marker-end="url(#arw)"/></g>`; };
+  const ghost = (g0, x, y, op) => {
+    const key = g0.identified === false ? g0.cls + '_B' : (g0.type || g0.shown);
+    if (key && UNIT_IMG.has(key)) return `<g opacity="${op}" style="pointer-events:none"><rect x="${x - 44}" y="${y - 44}" width="88" height="88" rx="6" fill="#000"/><image href="img/u/${key}.png" x="${x - 40}" y="${y - 40}" width="80" height="80"/></g>`;
+    return `<g opacity="${op}" style="pointer-events:none"><rect x="${x - 60}" y="${y - 32}" width="120" height="64" rx="8" fill="#3d3d33" stroke="#111" stroke-width="3"/><text x="${x}" y="${y + 11}" text-anchor="middle" fill="#fff" font-size="32" font-weight="bold">?${g0.id}</text></g>`;
+  };
+  const goneMark = (gg, op) => {
+    const [x, y] = P(gg.s, gg.r); let t = ghost(gg, x, y, op * .55);
+    if (gg.how === 'out') { const dx = x - BCX, dy = y - BCY, k = Math.hypot(dx, dy) || 1; const x2 = x + dx / k * 230, y2 = y + dy / k * 230;
+      t += line(x, y, x2, y2, op, false) + `<text x="${x2}" y="${y2 + 50}" text-anchor="middle" font-size="30" font-weight="bold" fill="#fff" stroke="#000" stroke-width="2" opacity="${op}" style="pointer-events:none">${L('地図の外へ', 'off the map')}</text>`; }
+    else t += `<text x="${x}" y="${y + 34}" text-anchor="middle" font-size="110" font-weight="bold" fill="#fff" stroke="#000" stroke-width="4" opacity="${op}" style="pointer-events:none">×</text>`;
+    return t;
+  };
+  (b.prevTrails || []).forEach(t => { const [x1, y1] = P(t.s1, t.r1), [x2, y2] = P(t.s2, t.r2); h += ghost(t.u || {}, x1, y1, .18) + line(x1, y1, x2, y2, .35); });
+  (b.prevGone || []).forEach(gg => { h += goneMark(gg, .4); });
+  b.units.forEach(u => { const f = u._from; if (!f || (f.s === u.sector && f.r === u.range)) return; const [x1, y1] = P(f.s, f.r), [x2, y2] = P(u.sector, u.range); h += ghost(u, x1, y1, .4) + line(x1, y1, x2, y2, .95); });
+  (b.gone || []).forEach(gg => { h += goneMark(gg, .95); });
   const groups = {};
   b.units.forEach(u => { (groups[`${u.sector}:${u.range}`] = groups[`${u.sector}:${u.range}`] || []).push(u); });
   const sel = ORD && ORD.G && ORD.G.target;
@@ -167,9 +195,18 @@ function renderBattle() {
       const name = u.identified === false ? { TANK: L('戦車?', 'Tank?'), SPG: L('自走砲?', 'SPG?'), AT: L('対戦車砲?', 'AT gun?') }[u.cls] : { PzIV: L('IV号', 'Pz IV'), PzV: L('パンター', 'Panther'), PzVIe: L('ティーガー', 'Tiger'), PzVIb: L('王虎', 'K.Tiger'), StuG: 'StuG', MarderII: 'Marder II', MarderIII: 'Marder III', JgdIV: 'JgdPz IV', Jgd38: 'Hetzer', SPW: 'SPW', PSW: 'PSW', TRUCK: L('トラック', 'Truck'), LW: L('歩兵', 'Inf'), MG: 'MG', '50L': '5cm AT', '75L': '7.5cm AT', '88LL': '8.8cm AT' }[u.type || u.shown];
       const face = ['LW', 'MG', 'AT'].includes(u.cls) ? '' : [L('正面', 'front'), L('側面', 'side'), L('背面', 'rear')][u.facing];
       const ter = { hull: L('隠', 'HD'), woods: L('森', 'wds'), building: L('建', 'bld'), fort: L('陣', 'fort'), open: '' }[u.terr] || '';
-      h += `<g style="cursor:pointer" onclick="pickTarget(${u.id})"><rect x="${x - 88}" y="${y - 46}" width="176" height="92" rx="8" fill="${col}" stroke="${sel === u.id ? '#ffd84a' : (b.acq && b.acq.id === u.id ? '#fff' : '#111')}" stroke-width="${sel === u.id ? 7 : 3}"/>
-      <text x="${x}" y="${y - 4}" text-anchor="middle" fill="#fff" font-size="36" font-weight="bold">${seen ? esc(name || '') : '?'}</text>
-      <text x="${x}" y="${y + 33}" text-anchor="middle" fill="#ffe9b0" font-size="30">${seen ? `${face} ${ter}${u.moving ? L(' 動', ' mv') : ''}` : (hid ? L('隠蔽', 'hidden') : '')}</text>${b.enemyAcq && b.enemyAcq[u.id] ? `<rect x="${x + 28}" y="${y - 76}" width="70" height="36" rx="4" fill="#d80000"/><text x="${x + 63}" y="${y - 49}" text-anchor="middle" fill="#fff" font-size="28" font-weight="bold">${L('照準', 'AIM')}</text>` : ''}</g>`;
+      // 敵はすべてゲームの駒の絵で出す（ボードゲームと同じ。種類が分からない間は仮の駒）。見つけた敵には「Spotted」、隠れた敵には「Hidden」のマーカー（ユーザーの指示 2026-11-08）
+      // 駒はいつも出す（ルール 17.15: 未発見でも駒は盤にある。種類が分からない間は仮の駒）。見え方は枠の色で分ける（ユーザーの指示 2026-11-08）
+      //   黒=未発見、灰の点線=隠れ（動くまで探せない）、緑=発見。選んだ目標は黄色、照準を合わせた敵は赤
+      const img = u.identified === false ? (u.cls + '_B') : (u.type || u.shown);
+      const bd = sel === u.id ? '#ffd84a' : (b.acq && b.acq.id === u.id ? '#e8312a' : seen ? '#2ecc40' : hid ? '#9a9a9a' : '#000'), sub = `${face} ${ter}${u.moving ? L(' 動', ' mv') : ''}`.trim();
+      // 敵の向き: 絵の上が車両の前。正面=こちらの戦車へ、側面=90度、背面=反対へ（歩兵・機関銃班・対戦車砲は回さない）
+      const rot = ['LW', 'MG', 'AT'].includes(u.cls) ? 0 : Math.atan2(BCX - x, -(BCY - (y - 12))) * 180 / Math.PI + [0, 90, 180][u.facing || 0];
+      const terr = ['woods', 'building', 'fort', 'hull'].includes(u.terr) ? u.terr : null;
+      if (terr) h += `<image href="img/u/t_${terr}.png" x="${x - 74}" y="${y - 44}" width="104" height="104" style="pointer-events:none"/>`;
+      h += `<g style="cursor:pointer" onclick="pickTarget(${u.id})" ${terr ? `data-uimg2="img/u/t_${terr}.png" data-uname2="${esc(ter)}"` : ''} data-uimg="img/u/${UNIT_IMG.has(img) ? img : 'hidden'}.png" data-uname="${esc(name || '')} — ${seen ? L('発見', 'spotted') : hid ? L('隠れている（動くまで探せない）', 'hidden (cannot be spotted until it moves)') : L('未発見', 'not spotted')}"><g transform="rotate(${rot.toFixed(1)} ${x} ${y - 12})"><rect x="${x - 56}" y="${y - 68}" width="112" height="112" rx="6" fill="#000" stroke="${bd}" stroke-width="${sel === u.id ? 12 : 9}" ${hid && sel !== u.id ? 'stroke-dasharray="16 10"' : ''}/><image href="img/u/${UNIT_IMG.has(img) ? img : 'hidden'}.png" x="${x - 50}" y="${y - 62}" width="100" height="100" opacity="${hid ? .6 : 1}"><title>${esc(name || '')}</title></image></g>`
+        // 地形のマーカーは、駒の下に重ねて置く（駒の左下から少しはみ出す）。マウスを乗せると、駒と地形の両方を大きく出す（ユーザーの指示 2026-11-08）
+        + `${b.enemyAcq && b.enemyAcq[u.id] ? `<rect x="${x - 98}" y="${y - 90}" width="70" height="36" rx="4" fill="#d80000"/><text x="${x - 63}" y="${y - 63}" text-anchor="middle" fill="#fff" font-size="28" font-weight="bold">${L('照準', 'AIM')}</text>` : ''}</g>`;
     });
   }
   $('board').innerHTML = `<svg viewBox="0 0 ${BW} ${BH}" preserveAspectRatio="xMidYMid meet">${h}</svg>`;
@@ -295,11 +332,17 @@ document.addEventListener('mouseover', ev => {
 });
 document.addEventListener('mousemove', ev => { const tp = $('ctip'); if (tp && tp.style.display === 'block') placeCtip(ev); });
 document.addEventListener('click', () => { const tp = $('ctip'); if (tp) tp.style.display = 'none'; });
+// 戦闘地図の駒や印にマウスを乗せると、絵を大きく出す（ユーザーの指示 2026-11-08）
+document.addEventListener('mouseover', ev => { const tp = $('utip'); if (!tp) return; const el = ev.target.closest && ev.target.closest('[data-uimg]'); if (!el) { tp.style.display = 'none'; return; }
+  tp.innerHTML = `<img src="${el.dataset.uimg}" alt="">${el.dataset.uname || ''}` + (el.dataset.uimg2 ? `<img src="${el.dataset.uimg2}" alt="" style="width:110px;height:110px;margin-top:6px">${el.dataset.uname2 || ''}` : ''); tp.style.display = 'block'; placeUtip(ev); });
+document.addEventListener('mousemove', ev => { const tp = $('utip'); if (tp && tp.style.display === 'block') placeUtip(ev); });
+function placeUtip(ev) { const tp = $('utip'), w = tp.offsetWidth, hh = tp.offsetHeight; let x = ev.clientX + 18, y = ev.clientY + 18; if (x + w > innerWidth - 8) x = ev.clientX - w - 18; if (y + hh > innerHeight - 8) y = innerHeight - hh - 8; tp.style.left = Math.max(8, x) + 'px'; tp.style.top = Math.max(8, y) + 'px'; }
 // 戦闘地図の縮小版（ユーザーの指示 2026-11-06）: 区画かセクターを押して選ぶ
 function miniMap(title, mode, isOn, onClick, canUse) {
   const b = E.G.bb;
   let h = `<image href="img/battle.jpg" width="${BW}" height="${BH}"/>`;
-  b.units.forEach(u => { const [x, y] = bbPos(sectorIdx(u.sector), u.range, 0); h += `<circle cx="${x}" cy="${y}" r="16" fill="#e8705a" stroke="#000" stroke-width="3"/>`; });
+  { const cnt = {}; b.units.forEach(u => { const k = u.sector + ':' + u.range, j = cnt[k] = (cnt[k] || 0) + 1; const [x, y] = bbPos(sectorIdx(u.sector), u.range, (j - 1) * 14 - 7);
+    h += `<circle cx="${x}" cy="${y}" r="26" fill="#e8705a" stroke="#000" stroke-width="3"/><text x="${x}" y="${y + 11}" text-anchor="middle" font-size="30" font-weight="bold" fill="#000" style="pointer-events:none">${u.spot === 'spotted' ? '!' : u.id}</text>`; }); }
   if (mode === 'zone') PB.SECTORS.forEach((s, i) => [0, 1, 2].forEach(r => {
     const [x, y] = bbPos(i, r, 0), on = isOn(s, r), ok = canUse(s, r);
     h += `<circle cx="${x}" cy="${y}" r="44" fill="${on ? 'rgba(255,255,255,.4)' : ok ? 'rgba(255,226,122,.22)' : 'rgba(0,0,0,.55)'}" stroke="${on ? '#fff' : ok ? '#ffe27a' : '#555'}" stroke-width="${on ? 12 : 5}" ${ok ? `style="cursor:pointer" onclick="${onClick(s, r)}"` : ''}/>`;
@@ -325,13 +368,18 @@ function zoneOk(kind, s, r) {
   if (kind === 'bow') return !b.hull && sectorIdx(s) === b.facing;
   return true;
 }
+// 見つけていない敵の呼び名（地図と目標の一覧で同じ番号。ユーザーの指示 2026-11-08）
+const unTag = u => (u.spot === 'hidden' ? L('隠蔽', 'Hidden ') : L('未確認', 'Unknown ')) + u.id;
+const zoneWho = (s, r) => E.G.bb.units.filter(u => u.sector === s && u.range === r).map(u => u.spot === 'spotted' ? uName(u) : unTag(u)).join('・');
 const sectorOpts = cur => PB.SECTORS.map((s, i) => `<option value="${i}" ${cur === i ? 'selected' : ''}>${L('セクター', 'Sector ')}${PB.SECTOR_NAME[s]}</option>`).join('');
 function targetSelect(p) {
-  const b = E.G.bb, tg = b.units.filter(u => u.spot === 'spotted');
+  const b = E.G.bb, mgAct = ['coax', 'bow', 'aa', 'sub'].includes(ORD[p].act);
+  // 機関銃は、撃てる向き・距離の敵だけを出す（同軸=砲塔の向き、車体=車体の向き。ユーザーの指示 2026-11-08）
+  const tg = b.units.filter(u => u.spot === 'spotted' && (!mgAct || zoneOk(ORD[p].act, u.sector, u.range)));
   let o = `<option value="">${L('目標を選ぶ', 'choose target')}</option>` + tg.map(u => `<option value="${u.id}" ${ORD[p].target === u.id ? 'selected' : ''}>${esc(uName(u))} ${PB.SECTOR_NAME[u.sector]}/${[L('近', 'C'), L('中', 'M'), L('遠', 'L')][u.range]}</option>`).join('');
   if (['coax', 'bow', 'aa', 'sub'].includes(ORD[p].act)) {
     o += `<optgroup label="${L('前進射撃（ゾーンへ撃つ）', 'Advancing fire (zone)')}">`;
-    PB.SECTORS.forEach(s => [0, 1, 2].forEach(r => { const v = `z:${s}:${r}`; o += `<option value="${v}" ${ORD[p].target === v ? 'selected' : ''}>${PB.SECTOR_NAME[s]}/${[L('近', 'C'), L('中', 'M'), L('遠', 'L')][r]}</option>`; }));
+    PB.SECTORS.forEach(s => [0, 1, 2].forEach(r => { if (!zoneOk(ORD[p].act, s, r)) return; const v = `z:${s}:${r}`, who = zoneWho(s, r); o += `<option value="${v}" ${ORD[p].target === v ? 'selected' : ''}>${PB.SECTOR_NAME[s]}/${[L('近', 'C'), L('中', 'M'), L('遠', 'L')][r]}${who ? ' — ' + esc(who) : ''}</option>`; }));
     o += `</optgroup>`;
   }
   return `<select onchange="setTarget('${p}',this.value)">${o}</select>`;
@@ -389,14 +437,14 @@ function renderPop(battle, prep, t, b, ammo) {
     h = `${close}<h3>${L('戦闘前の準備', 'Prepare for battle')}</h3><div>${L('込める弾', 'Gun load')}</div><div class="opts big">${avail.map(a => `<button class="${b.load === a ? 'on' : ''}" onclick="setPrepLoad('${a}')">${a}</button>`).join('')}</div><label>${L('車体の向き', 'Facing')} <select onchange="E.G.bb.facing=+this.value;render()">${sectorOpts(b.facing)}</select></label> <label>${L('砲塔の向き', 'Turret')} <select onchange="E.G.bb.turret=+this.value;render()">${sectorOpts(b.turret)}</select></label><div class="minis">${miniMap(L('車体の向き', 'Facing'), 'sec', i => i === b.facing, i => `E.G.bb.facing=${i};render()`)}${miniMap(L('砲塔の向き', 'Turret'), 'sec', i => i === b.turret, i => `E.G.bb.turret=${i};render()`)}</div>`;
   } else if (battle && g.crew[POP]) {
     const p = POP, m = g.crew[p], act = ORD[p].act;
-    h = `${close}<h3>${POSN()[p]} ${esc(m.name)} (${L('腕前', 'rating')}${m.rating})</h3><div class="opts big">`;
+    h = `${close}<h3>${POSN()[p]} ${esc(m.name)} (${L('腕前', 'rating')}${m.rating})</h3>` + (p === 'G' || p === 'L' ? `<div class="chips" style="margin:0 0 6px"><span class="chip ${b.load ? 'good' : 'bad'}">${L('装填中の弾', 'Loaded')}: ${b.load || L('なし', 'none')}</span></div>` : '') + `<div class="opts big">`; // 砲手と装填手の窓に、いま込めている弾を出す（ユーザーの指示 2026-11-10）
     const all = crewOptions(p, t);
     for (const o of all.filter(o => needFix(o[0])).concat(all.filter(o => !needFix(o[0])))) {
       const blk = ordBlocked(o[0]), fx = needFix(o[0]);
       h += `<button class="${act === o[0] ? 'on' : ''} ${fx ? 'fix' : ''}" ${blk ? 'disabled' : ''} data-tip="${p}:${o[0]}" onclick="pickOrd('${p}','${o[0]}')">${fx ? '⚠ ' + L('故障中→', 'Jammed → ') : ''}${o[1]}${blk ? `(${blk})` : ''}</button>`;
     }
     h += `</div>`;
-    if ((act === 'rotate' && p === 'G') || (p === 'D' && act === 'pivot')) { const cur = p === 'G' ? (ORD.G.to != null ? ORD.G.to : b.turret) : (ORD.D.to != null ? ORD.D.to : b.facing); h += `<div class="popx2">${L('どのセクターへ', 'To sector')} <select onchange="setTo('${p}',this.value)">${sectorOpts(cur)}</select></div>` + `<div class="minis">${miniMap('', 'sec', i => i === cur, i => `setTo('${p}',${i})`)}</div>`; }
+    if ((act === 'rotate' && p === 'G') || (p === 'D' && act === 'pivot')) { const cur = p === 'G' ? (ORD.G.to != null ? ORD.G.to : b.turret) : (ORD.D.to != null ? ORD.D.to : b.facing); h += `<div class="popx2" style="display:flex;align-items:center;gap:10px"><button onclick="setTo('${p}',${(cur + 5) % 6})">◀ ${L('左へ', 'Left')}</button><b style="min-width:3.5em;text-align:center;font-size:1.2em">${PB.SECTOR_NAME[PB.SECTORS[cur]]}</b><button onclick="setTo('${p}',${(cur + 1) % 6})">${L('右へ', 'Right')} ▶</button></div>`; } // 地図は出さず、左右で1セクターずつ回す（ユーザーの指示 2026-11-10）
     if (['fire', 'rotfire', 'coax', 'bow', 'aa', 'sub'].includes(act)) {
       h += `<div class="popx2">${L('目標', 'Target')} ${targetSelect(p)}</div>`;
       if (['coax', 'bow', 'aa', 'sub'].includes(act)) h += `<div class="minis">${miniMap(L('前進射撃: 撃つ区画を押す(灰色は撃てない)', 'Advancing fire: click a zone (grey = cannot)'), 'zone', (s, r) => ORD[p].target === `z:${s}:${r}`, (s, r) => `setTarget('${p}','z:${s}:${r}')`, (s, r) => zoneOk(act, s, r))}</div>`;
@@ -448,7 +496,7 @@ function renderOps() {
   } else if (g.phase === 'ca') {
     h = `<span class="small wide">${L('陣地で敵を待つ（車体隠蔽）', 'Waiting hull down for the enemy')}</span><button class="go" onclick="doCa()">${L('15分待つ', 'Wait 15 min')}</button> <button onclick="doOp('res')">${L('補給 60分', 'Resupply 60m')}</button>`;
   } else if (g.phase === 'battle') {
-    h = `<span class="small wide">${L('敵を押すと主砲の目標と弾が自動で入ります', 'Click an enemy: target and ammo are set for you')}</span><button class="go wide" onclick="doRound()">${L('命令を実行', 'Execute orders')}</button>`;
+    h = `<span class="small wide">${L('敵を押すと主砲の目標と弾が自動で入ります', 'Click an enemy: target and ammo are set for you')}</span><button class="go wide" onclick="doRound()">${L('「かかれ！」（命令を実行）', '"Go!" (execute orders)')}</button>`;
   } else if (g.phase === 'over') { h = ''; }
   $('ops').innerHTML = h;
 }
@@ -469,17 +517,46 @@ function doEnter() {
   if (a) return advBox(s, noTime);
   play(() => E.opEnter(s, false, null, noTime), afterAct);
 }
-// 22.12 前進射撃のマーカーを置く
+// 22.12 前進射撃のマーカーを置く（地図の上で置く。ユーザーの指示 2026-11-08）
+//   区画の丸を押すと1個置く（重ねて置ける）。右クリックで1個減らす。置けない区画は灰色
+var ADVZ = null, ADVLOG = [], ADVN = 0, ADVARG = null;
+const ADV_OK = ['45:0', '45:1', '45:2', '68:0', '68:1', '910:0', '910:1', '910:2'];
 function advBox(s, noTime) {
-  const n = E.advMarkers(), Z = [['45', 0], ['45', 1], ['45', 2], ['68', 0], ['68', 1], ['910', 0], ['910', 1], ['910', 2]];
-  const def = { '45:0': 2, '68:0': 2, '910:0': 2 };
-  inlineBox(`<h2>${L('前進射撃のマーカー', 'Advancing fire markers')}</h2><p>${L(`最大${n}個。セクター1、2、3と、セクター6-8の遠距離には置けません。同じゾーンに複数置けます。`, `Up to ${n}. Not in sectors 1, 2, 3 or the long range of sector 6-8. You may stack them.`)}</p>
-  <div class="grid">${Z.map(([z, r]) => `<label>${PB.SECTOR_NAME[z]} ${[L('近', 'close'), L('中', 'med'), L('遠', 'long')][r]} <input type="number" min="0" max="6" value="${n ? (def[z + ':' + r] || 0) : 0}" data-z="${z}:${r}" style="width:3.5em"></label>`).join('')}</div>
-  <p><button class="go" onclick="advGo(${s},${noTime})">${L('進入する', 'Enter')}</button> <button onclick="closeOver()">${L('戻る', 'Back')}</button></p>`);
+  ADVN = E.advMarkers(); ADVARG = [s, noTime]; ADVLOG = [];
+  ADVZ = {};
+  // 最初の置き方: セクター4-5・6-8・9-10 の近距離に2個ずつ（今までと同じ）
+  ['45:0', '68:0', '910:0'].forEach(k => { let left = ADVN - advSum(); if (left > 0) { ADVZ[k] = Math.min(2, left); } });
+  advDraw();
 }
-function advGo(s, noTime) {
-  const n = E.advMarkers(); const z = {}; let left = n;
-  document.querySelectorAll('#lb input[data-z]').forEach(i => { const v = Math.max(0, Math.min(left, +i.value || 0)); if (v) { z[i.dataset.z] = v; left -= v; } });
+function advSum() { return Object.values(ADVZ || {}).reduce((t, v) => t + v, 0); }
+function advAdd(k, d) {
+  if (d > 0 && advSum() >= ADVN) return;
+  if (d < 0 && !(ADVZ[k] > 0)) return;
+  ADVZ[k] = (ADVZ[k] || 0) + d; if (!ADVZ[k]) delete ADVZ[k];
+  if (d > 0) ADVLOG.push(k);
+  advDraw();
+}
+function advUndo() { const k = ADVLOG.pop(); if (k && ADVZ[k]) { ADVZ[k]--; if (!ADVZ[k]) delete ADVZ[k]; } advDraw(); }
+function advClear() { ADVZ = {}; ADVLOG = []; advDraw(); }
+function advDraw() {
+  let h = `<image href="img/battle.jpg" width="${BW}" height="${BH}"/>`;
+  PB.SECTORS.forEach((sec, i) => [0, 1, 2].forEach(r => {
+    const k = sec + ':' + r, ok = ADV_OK.includes(k), n = ADVZ[k] || 0, [x, y] = bbPos(i, r, 0);
+    h += `<g ${ok ? `style="cursor:pointer" onclick="advAdd('${k}',1)" oncontextmenu="event.preventDefault();advAdd('${k}',-1)"` : ''}><circle cx="${x}" cy="${y}" r="44" fill="${n ? 'rgba(255,255,255,.45)' : ok ? 'rgba(255,226,122,.22)' : 'rgba(0,0,0,.55)'}" stroke="${n ? '#fff' : ok ? '#ffe27a' : '#555'}" stroke-width="${n ? 12 : 5}"/>`
+      + (n ? `<text x="${x}" y="${y + 20}" text-anchor="middle" font-size="58" font-weight="bold" fill="#c00" stroke="#fff" stroke-width="3" style="pointer-events:none">${n}</text>` : '') + '</g>';
+  }));
+  PB.SECTORS.forEach((sec, i) => { const [x, y] = bbPos(i, 2, 0); h += `<text x="${x}" y="${y - 52}" text-anchor="middle" font-size="44" font-weight="bold" fill="#fff" stroke="#000" stroke-width="2" style="pointer-events:none">${PB.SECTOR_NAME[sec]}</text>`; });
+  h += `<g transform="translate(${BCX},${BCY})"><rect x="-26" y="-40" width="52" height="76" rx="6" fill="#5c6b35" stroke="#111" stroke-width="3"/><circle r="19" fill="#39431f" stroke="#111" stroke-width="3"/></g>`;
+  const left = ADVN - advSum();
+  inlineBox(`<h2>${L('前進射撃のマーカー', 'Advancing fire markers')}</h2>
+  <p>${L(`地図の丸を押すと、そこにマーカーを1個置きます（同じ丸に重ねて置けます）。右クリックで1個減らします。灰色の丸には置けません。内側から近・中・遠です。`, `Click a circle on the map to place one marker there (you may stack them). Right-click to remove one. Grey circles cannot be used. From the inside: close, medium, long.`)}</p>
+  <p><b>${L(`残り ${left} 個`, `${left} left`)}</b>（${L(`全部で ${ADVN} 個`, `${ADVN} in all`)}）</p>
+  <div class="mini"><svg viewBox="0 0 ${BW} ${BH}" style="width:min(480px,90vw)">${h}</svg></div>
+  <p><button onclick="advUndo()">${L('1個戻す', 'Undo one')}</button> <button onclick="advClear()">${L('全部やり直す', 'Clear all')}</button></p>
+  <p><button class="go" onclick="advGo()">${L('進入する', 'Enter')}</button> <button onclick="closeOver()">${L('戻る', 'Back')}</button></p>`);
+}
+function advGo() {
+  const [s, noTime] = ADVARG; const z = Object.assign({}, ADVZ);
   closeOver();
   play(() => E.opEnter(s, true, z, noTime), afterAct);
 }
