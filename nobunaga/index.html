@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#18221e">
+  <meta name="description" content="孤高の信長：一五七〇 一人用Webゲーム試作">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <title>孤高の信長：一五七〇</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">1570</span><div><h1>孤高の信長</h1><p>一五七〇 · ひとり用キャンペーン</p></div></div>
+  </header>
+  <section id="startScreen" class="start-screen">
+    <div class="start-card panel">
+      <div class="start-emblem">1570</div><p class="eyebrow">一人用キャンペーン</p><h2>孤高の信長</h2>
+      <p class="start-intro">①使う追加ルールにチェック（すべて任意）<br>②下のボタンで開始<br>③ゲーム画面で信長側の武将を選びます<br><small>チェックなしのままでも始められます。</small></p>
+      <fieldset class="start-options"><legend>選択ルール</legend>
+        <label class="option-row"><input id="optionFirstCard" type="checkbox"><span><b>最初の状況カードを選ぶ</b><small>最初に引くカードをプレーヤーが指定します。</small></span></label>
+        <label class="option-row"><input id="optionCaptureDefeat" type="checkbox"><span><b>敗北条件を「支配」にする</b><small>山城・西美濃への侵入ではなく、反信長側の支配で敗北します。</small></span></label>
+        <label class="option-row"><input id="optionLeaderInjury" type="checkbox"><span><b>信長側武将の負傷</b><small>武将が損害で補充プールへ戻る際、参戦トラックを進めます。</small></span></label>
+        <label class="option-row"><input id="optionUnitStats" type="checkbox"><span><b>地図に能力値・駒数を表示</b><small>初期設定は非表示です。地図を広く見たいときに。</small></span></label>
+        <label id="firstCardChoice" class="first-card-choice" hidden>最初の状況カード<select id="firstCardSelect"></select></label>
+      </fieldset>
+      <div class="language-choice"><span>言語</span><div><button class="language-button active" type="button" aria-pressed="true">日本語</button><button class="language-button" type="button" disabled aria-label="英語表示は準備中">English · 準備中</button></div></div>
+      <div class="start-actions"><button id="continueGame" class="quiet" hidden>続きから</button><button id="startGame" class="primary">スタート</button></div>
+      <p class="language-note">現在の画面表示は日本語です。英語表示は今後追加できるよう、切替欄を用意しています。</p>
+    </div>
+  </section>
+  <main class="app-shell" hidden>
+    <section class="board-panel panel">
+      <div class="board-head" aria-label="ゲーム操作"><div class="strategy-summary"><h2 id="phaseTitle">信長の戦略値を計算中</h2></div><div class="commander-summary"><span class="eyebrow">武将</span><h2 id="commandTitle">未選択</h2></div><div class="map-zoom" aria-label="地図の表示設定"><button id="unitToggle" class="quiet" type="button" aria-pressed="false">駒を隠す</button><button id="mapZoomOut" type="button" aria-label="地図を縮小">−</button><b id="mapZoomLevel">100%</b><button id="mapZoomIn" type="button" aria-label="地図を拡大">＋</button></div><div class="map-navigation-actions"><div class="board-tabs" role="tablist" aria-label="表示切り替え"><button type="button" class="board-tab active" id="mapTab" role="tab" aria-selected="true" aria-controls="mapPanel">地図</button><button type="button" class="board-tab" id="situationTab" role="tab" aria-selected="false" aria-controls="situationPanel">戦況</button></div><button id="endTurn" class="primary draw-card-button">状況カードを引く</button><button id="reportButton" type="button" class="quiet report-button" title="ここまでの経過をレポートにして保存">📜 レポート作成</button></div><div class="top-actions toolbar-extra"><button id="newGame" class="quiet" type="button">新しいゲーム</button><button id="helpBtn" class="quiet" type="button">遊び方</button></div></div>
+      <div id="situationPanel" role="tabpanel" aria-labelledby="situationTab" hidden>
+      <section class="panel status-panel">
+        <div class="section-title"><div><span class="eyebrow">あなたの勢力</span><h2>信長側</h2></div><span class="strategy"><span id="strategy">0</span><small>戦略値</small></span></div>
+        <div class="meter-row"><span>支配拠点</span><b id="baseCount">0</b><span class="meter"><i id="baseMeter"></i></span></div>
+        <div class="faction-list" id="factionList"></div>
+      <div class="pool-row" aria-label="補充プール駒数">
+        <div class="pool-counter"><span>信長側</span><div class="pool-adjust"><button type="button" data-pool="playerPool" data-delta="-1" aria-label="信長側プールを1減らす">−</button><b id="playerPool">0</b><button type="button" data-pool="playerPool" data-delta="1" aria-label="信長側プールを1増やす">＋</button></div><small>補充プール</small></div>
+        <span class="divider"></span>
+        <div class="pool-counter"><span>反信長</span><div class="pool-adjust"><button type="button" data-pool="enemyPool" data-delta="-1" aria-label="反信長側プールを1減らす">−</button><b id="enemyPool">0</b><button type="button" data-pool="enemyPool" data-delta="1" aria-label="反信長側プールを1増やす">＋</button></div><small>補充プール</small></div>
+      </div>
+      </section>
+      <details class="panel inventory-panel"><summary><span><span class="eyebrow">ユニット情報</span><b>能力値と駒数</b></span><span class="summary-mark">＋</span></summary><div id="unitCatalog" class="unit-catalog"></div></details>
+</div>
+      <section id="trackDashboard" class="track-dashboard always-on" aria-label="戦略値と参戦状況"></section>
+      <div id="mapPanel" role="tabpanel" aria-labelledby="mapTab">
+      <div class="map-tools"><span class="map-scroll-hint">地図上でマウスホイールを回すとページを縦にスクロール · 横移動は地図上</span></div>
+      <div class="map-viewport" aria-label="スクロールできる地図" tabindex="0"><div id="board" class="board" aria-label="エリアマップ">
+        <img class="board-background-map" src="assets/maps/white-map.png" alt="孤高の信長 白地図">
+        <svg id="territoryShapes" class="territory-shapes" viewBox="0 0 4153 2923" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <img class="map-detail-overlay" src="assets/maps/map-details.png" alt="">
+        <svg class="area-shapes" viewBox="0 0 900 620" preserveAspectRatio="none" aria-hidden="true">
+          <defs><clipPath id="landAreaClip"><path d="M0 270 C28 250 67 231 108 220 C143 211 162 235 190 220 C218 205 239 188 265 190 C293 192 310 218 339 201 C365 185 382 169 405 170 C423 170 425 137 450 131 C473 125 486 146 503 130 C522 111 524 88 546 84 C568 80 576 105 597 94 C619 82 628 71 650 75 C675 79 682 45 710 46 C737 47 745 60 765 55 C791 48 802 23 830 30 C859 37 873 56 900 65 L900 115 C885 149 871 174 875 199 C879 223 860 243 865 264 C871 287 845 303 850 325 C855 349 832 369 838 390 C845 414 826 434 833 455 C840 477 821 495 826 515 C806 530 790 538 772 530 C753 522 750 502 730 504 C710 506 704 522 684 511 C664 500 655 486 635 493 C612 500 606 522 584 518 C562 514 554 502 537 511 C526 520 535 548 530 570 C525 592 508 592 500 574 C492 557 500 534 483 522 C466 510 447 512 430 498 C410 481 410 463 389 462 C365 461 357 485 337 487 C315 490 304 473 285 472 C260 470 250 487 229 486 C207 485 194 470 174 471 C151 472 140 484 119 480 C94 476 81 459 59 461 C40 463 20 450 0 435 Z"/><path d="M70 525 C95 510 124 514 151 519 C178 525 204 510 229 516 C255 522 283 535 292 550 C297 566 276 575 254 577 C231 580 218 593 194 590 C168 587 149 575 128 575 C103 575 83 560 70 546 Z"/><path d="M306 507 C320 490 343 489 359 500 C376 511 376 528 358 540 C341 549 319 540 309 526 Z"/></clipPath></defs>
+          <path class="land-fill" d="M0 270 C28 250 67 231 108 220 C143 211 162 235 190 220 C218 205 239 188 265 190 C293 192 310 218 339 201 C365 185 382 169 405 170 C423 170 425 137 450 131 C473 125 486 146 503 130 C522 111 524 88 546 84 C568 80 576 105 597 94 C619 82 628 71 650 75 C675 79 682 45 710 46 C737 47 745 60 765 55 C791 48 802 23 830 30 C859 37 873 56 900 65 L900 115 C885 149 871 174 875 199 C879 223 860 243 865 264 C871 287 845 303 850 325 C855 349 832 369 838 390 C845 414 826 434 833 455 C840 477 821 495 826 515 C806 530 790 538 772 530 C753 522 750 502 730 504 C710 506 704 522 684 511 C664 500 655 486 635 493 C612 500 606 522 584 518 C562 514 554 502 537 511 C526 520 535 548 530 570 C525 592 508 592 500 574 C492 557 500 534 483 522 C466 510 447 512 430 498 C410 481 410 463 389 462 C365 461 357 485 337 487 C315 490 304 473 285 472 C260 470 250 487 229 486 C207 485 194 470 174 471 C151 472 140 484 119 480 C94 476 81 459 59 461 C40 463 20 450 0 435 Z"/><path class="land-fill island-fill" d="M70 525 C95 510 124 514 151 519 C178 525 204 510 229 516 C255 522 283 535 292 550 C297 566 276 575 254 577 C231 580 218 593 194 590 C168 587 149 575 128 575 C103 575 83 560 70 546 Z"/><path class="land-fill island-fill" d="M306 507 C320 490 343 489 359 500 C376 511 376 528 358 540 C341 549 319 540 309 526 Z"/>
+          <g id="regionShapes" clip-path="url(#landAreaClip)"></g>
+          <path class="coastline" d="M0 270 C28 250 67 231 108 220 C143 211 162 235 190 220 C218 205 239 188 265 190 C293 192 310 218 339 201 C365 185 382 169 405 170 C423 170 425 137 450 131 C473 125 486 146 503 130 C522 111 524 88 546 84 C568 80 576 105 597 94 C619 82 628 71 650 75 C675 79 682 45 710 46 C737 47 745 60 765 55 C791 48 802 23 830 30 C859 37 873 56 900 65 L900 115 C885 149 871 174 875 199 C879 223 860 243 865 264 C871 287 845 303 850 325 C855 349 832 369 838 390 C845 414 826 434 833 455 C840 477 821 495 826 515 C806 530 790 538 772 530 C753 522 750 502 730 504 C710 506 704 522 684 511 C664 500 655 486 635 493 C612 500 606 522 584 518 C562 514 554 502 537 511 C526 520 535 548 530 570 C525 592 508 592 500 574 C492 557 500 534 483 522 C466 510 447 512 430 498 C410 481 410 463 389 462 C365 461 357 485 337 487 C315 490 304 473 285 472 C260 470 250 487 229 486 C207 485 194 470 174 471 C151 472 140 484 119 480 C94 476 81 459 59 461 C40 463 20 450 0 435 Z"/><path class="coastline island-coast" d="M70 525 C95 510 124 514 151 519 C178 525 204 510 229 516 C255 522 283 535 292 550 C297 566 276 575 254 577 C231 580 218 593 194 590 C168 587 149 575 128 575 C103 575 83 560 70 546 Z"/><path class="coastline island-coast" d="M306 507 C320 490 343 489 359 500 C376 511 376 528 358 540 C341 549 319 540 309 526 Z"/>
+          <text class="sea-label" x="360" y="78">日本海</text><text class="sea-label" x="798" y="592">太平洋</text><text class="sea-label" x="280" y="508">瀬戸内海</text>
+        </svg>
+        <svg id="roads" class="roads" viewBox="0 0 900 620" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div id="areaNodes" class="area-nodes"></div><section id="mapActionStrip" class="map-action-strip" hidden><p id="commandHint" class="muted"></p><div id="selectedStack" class="selected-stack" aria-live="polite"></div><div id="commandButtons" class="command-buttons"></div><div id="commandExtra" class="command-extra"></div></section>
+        <div class="board-stamp">1570<br><small>中国・近畿・東海</small></div>
+      </div></div>
+      <div class="map-legend"><span><i class="dot player"></i>信長側</span><span><i class="dot enemy"></i>反信長</span><span><i class="dot neutral"></i>中立</span><span><i class="dot base"></i>拠点</span></div>
+      </div>
+      <div class="board-foot"><span id="selectionHint">エリアを選んで軍勢を確認</span></div>
+    </section>
+    <section class="panel map-card-area"><div class="map-card-header"><div><span class="eyebrow">状況札</span><h2>山札と引いたカード</h2></div><span id="deckCount" class="deck-count">山札 16枚</span></div><div class="map-card-content"><div id="lastCard" class="card-preview"><img class="card-art card-back-art" tabindex="0" src="assets/cards/back.jpg" alt="状況札の裏面"><p>札を引くと、指定武将が行動します。</p></div></div><h3 class="log-title">行動記録（新しい順）</h3><div id="log" class="log" aria-live="polite"></div></section>
+  </main>
+  <dialog id="battleDialog" class="battle-dialog"><div class="battle-sheet"><span class="eyebrow">戦闘判定</span><h2 id="battleTitle"></h2><div class="battle-forces"><section class="battle-side"><h3 id="battleAttackerSide">攻撃側</h3><div id="battleAttackers" class="battle-force-list"></div></section><div class="battle-center"><small>攻撃ダイス</small><div id="battleDice" class="battle-dice"></div><b id="battleHitCount">判定中…</b></div><section class="battle-side"><h3 id="battleDefenderSide">防御側</h3><div id="battleDefenders" class="battle-force-list"></div></section></div><p id="battleSummary" class="battle-summary">ダイスを振っています…</p><button id="battleContinue" class="primary" disabled>判定中…</button></div></dialog>
+  <div id="actionAnnouncement" class="action-announcement" hidden role="status" aria-live="polite"></div>
+  <div id="trackAnnouncement" class="track-announcement" hidden role="status" aria-live="polite"><small>参戦マーカー移動</small><strong id="trackAnnounceName"></strong><div><span id="trackAnnounceFrom"></span><b>→</b><span id="trackAnnounceTo"></span></div></div>
+  <dialog id="retainerSetupDialog" class="retainer-setup-dialog"><div class="retainer-setup-sheet"><span class="eyebrow">ゲーム開始前の配置</span><h2>織田家臣を配置</h2><p>4人を1人ずつ、指定された4つのエリアに配置してください。別の場所への配置や、同じ武将の重複はできません。</p><div class="retainer-placement-list"><label><span>山城</span><select data-retainer-site="yamashiro" aria-label="山城に配置する武将"></select></label><label><span>南近江</span><select data-retainer-site="minamikinki" aria-label="南近江に配置する武将"></select></label><label><span>南伊勢</span><select data-retainer-site="minamise" aria-label="南伊勢に配置する武将"></select></label><label><span>尾張</span><select data-retainer-site="owari" aria-label="尾張に配置する武将"></select></label></div><p id="retainerSetupHint" class="retainer-setup-hint" aria-live="polite">4人全員を別々のエリアに割り当ててください。</p><div class="retainer-setup-actions"><button id="retainerRandomize" class="primary" type="button">おまかせ配置</button><button id="retainerSetupConfirm" class="quiet" type="button" disabled>手動配置を確定</button></div></div></dialog>
+  <dialog id="firstDrawDialog" class="first-draw-dialog"><div class="first-draw-sheet"><span class="eyebrow">第1巡</span><h2>配置完了</h2><p>確認するとゲームを開始し、1枚目の状況カードを引きます。</p><div class="first-draw-actions"><button id="firstDrawConfirm" class="primary" type="button">確認してカードを引く</button></div></div></dialog>
+  <dialog id="cardRevealDialog" class="card-reveal-dialog"><div class="card-reveal-sheet"><button id="cardRevealClose" class="card-reveal-x" type="button" aria-label="カードをパス">×</button><div class="card-reveal-art" id="cardRevealArt"></div><div class="card-reveal-copy"><span id="cardControlLabel" class="eyebrow">引いた状況カード</span><h2 id="cardRevealTitle"></h2><p id="cardRevealText"></p><div class="card-reveal-actions"><button id="cardRevealPass" class="quiet" type="button">パス（何もしない）</button><button id="cardRevealContinue" class="primary" type="button">プレイ</button></div></div></div></dialog>
+  <dialog id="resolutionDialog" class="resolution-dialog"><div class="resolution-sheet"><span id="resolutionEyebrow" class="eyebrow">カード処理結果</span><h2 id="resolutionCardName"></h2><ul id="resolutionEntries" class="resolution-entries"></ul><button id="resolutionConfirm" class="primary" type="button">確認して次へ</button></div></dialog>
+  <dialog id="helpDialog"><div class="dialog-head"><h2>遊び方</h2><button id="closeHelp" aria-label="閉じる">×</button></div><div class="dialog-body"><p>状況カードを引きます。織田側カードはプレイヤーが行動を選び、反信長側カードは自動処理します。処理結果の「確認して次へ」を押すまで、次のカードには進みません。</p><ol><li>武将を選び、「行軍」「攻撃」「補充」などを押します。</li><li>行軍可能なエリアと街路が表示されます。目的地をクリックすると移動し、敵がいれば戦闘します。</li><li>途中でやめるときは「取消」。行動後に「終了・次のカードへ」を押して次の札を引きます。</li></ol><p class="notice">追記されたルールの勝敗条件と参戦チャートを反映しています。地図は位置関係が分かる簡略図で、正式な初期配置と拠点数は調整中です。</p></div></dialog>
+  <div id="hoverPreview" class="hover-preview" hidden aria-hidden="true"></div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="game-data.js"></script>
+  <script src="territory-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

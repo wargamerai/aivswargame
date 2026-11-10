@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#212b27">
+  <meta name="description" content="孤高の曹操 建安元年の一人用ボードゲーム">
+  <title>孤高の曹操 建安元年</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="data.js"></script>
+  <script defer src="game.js"></script>
+  <script defer src="ui.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="identity">
+      <span class="seal" aria-hidden="true">曹</span>
+      <div><h1>孤高の曹操</h1><p>建安元年</p></div>
+    </div>
+    <div class="top-actions">
+      <button type="button" id="helpButton" class="ghost">遊び方</button>
+      <button type="button" id="resetButton" class="ghost" hidden>新しいゲーム</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="start" class="start-shell" aria-labelledby="startTitle">
+      <form id="setupForm" class="setup-panel">
+        <header class="setup-heading">
+          <p class="kicker">一人用キャンペーン</p>
+          <h2 id="startTitle">曹操軍の初期配置</h2>
+          <p class="muted">武将を選び、地図上の配置枠を押すと武将が入れ替わります。</p>
+        </header>
+        <section class="setup-roster-panel" aria-labelledby="setupRosterTitle">
+          <h3 id="setupRosterTitle">1. 武将を選ぶ</h3>
+          <div id="setupRoster" class="setup-roster"></div>
+        </section>
+        <section class="setup-map-panel" aria-labelledby="setupMapTitle">
+          <h3 id="setupMapTitle">2. 地図で配置先を選ぶ</h3>
+          <p id="setupSelection" class="setup-selection" role="status">武将を選んでください。</p>
+          <div class="setup-map">
+            <img src="assets/board.jpg" alt="曹操軍の初期配置マップ">
+            <div id="setupSlots"></div>
+          </div>
+        </section>
+        <div class="setup-footer">
+          <fieldset>
+            <legend>選択ルール</legend>
+            <label><input name="captureOnly" type="checkbox"> 許都を支配されたときに敗北</label>
+            <label><input name="leaderDeath" type="checkbox"> 曹操軍将軍の死亡</label>
+            <label><input name="fastBattle" type="checkbox"> 簡易戦闘結果表を使う</label>
+          </fieldset>
+          <div class="button-row">
+            <button type="submit" class="primary">配置を確定して開始</button>
+            <button type="button" id="resume" hidden>続きから</button>
+          </div>
+          <p id="setupError" class="notice" role="status"></p>
+        </div>
+      </form>
+    </section>
+
+    <section id="game" class="game-shell" hidden>
+      <div class="toolbar">
+        <div class="toolbar-status">
+          <span id="turnCount" class="tag"></span>
+          <strong id="controlCount"></strong>
+          <span id="deckCount" class="muted"></span>
+        </div>
+        <div class="button-row">
+          <button type="button" id="draw" class="primary">天命札を引く</button>
+          <button type="button" id="finishDisband" class="primary" hidden>解散せずに進む</button>
+        </div>
+      </div>
+      <div class="play-layout">
+        <div class="board-column">
+          <section id="mapPanel" class="panel">
+            <div class="map-tools">
+              <span id="mapHint">拠点を選ぶと駒の内訳を表示します。</span>
+              <div class="button-row">
+                <button type="button" id="zoomOut" aria-label="地図を縮小">−</button>
+                <button type="button" id="zoomReset" aria-label="地図を全体表示">全体</button>
+                <button type="button" id="zoomIn" aria-label="地図を拡大">＋</button>
+                <button type="button" id="centerMap">許都</button>
+              </div>
+            </div>
+            <section id="marchPanel" class="march-panel" aria-label="行軍の編成" hidden></section>
+            <div id="movementBanner" class="movement-banner" hidden>
+              <div role="status"><strong id="movementTitle"></strong><p id="movementRoute"></p></div>
+              <div class="button-row">
+                <button type="button" id="cancelMovement" hidden>移動を取り消す</button>
+                <button type="button" class="primary" id="confirmMovement">移動を確認</button>
+              </div>
+            </div>
+            <div id="viewport" class="map-viewport" tabindex="0" aria-label="地図">
+              <div id="board" class="board">
+                <img class="map-image" src="assets/board.jpg" alt="主要街道と間道が記された原盤面">
+                <svg class="routes" viewBox="0 0 1342 1888" aria-hidden="true"><defs>
+                <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="70" markerHeight="70" viewBox="0 0 70 70" refX="67" refY="35" orient="auto">
+                  <path d="M3 3 L67 35 L3 67 Z" fill="#c5221f" stroke="#fff9e5" stroke-width="4" stroke-linejoin="round"/>
+                  </marker>
+                </defs><g id="route"></g></svg>
+                <div id="areaNodes"></div><div id="mapTracks" aria-hidden="true"></div>
+              </div>
+            </div>
+            <p class="map-legend"><span>外枠＝拠点を支配する勢力</span><span>各列＝将軍名と軍勢駒の数</span></p>
+          </section>
+
+          <section id="statusPanel" class="panel status-panel" aria-labelledby="statusTitle">
+            <h2 id="statusTitle">参戦と補充</h2>
+            <div id="factions" class="factions"></div>
+            <h2>将軍の所在</h2>
+            <div id="roster" class="roster"></div>
+          </section>
+        </div>
+
+        <aside class="sidebar" aria-label="ゲームの操作と記録">
+          <section id="actionPanel" class="panel action-panel" aria-live="polite"></section>
+          <section class="panel card-panel">
+            <div class="section-heading"><h2>天命札</h2><span id="discardCount" class="muted"></span></div>
+            <button id="lastCard" class="card-button" type="button" aria-label="天命札を拡大"></button>
+          </section>
+          <section class="panel log-panel">
+            <h2>行動記録</h2>
+            <ol id="log"></ol>
+          </section>
+        </aside>
+      </div>
+      <section class="panel used-cards-panel" aria-labelledby="usedCardsTitle">
+        <h2 id="usedCardsTitle">使った天命札</h2>
+        <div id="usedCards" class="used-card-strip"></div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="gameDialog" aria-labelledby="dialogTitle"><div id="dialogBody"></div></dialog>
+  <dialog id="helpDialog" aria-labelledby="helpTitle">
+    <div class="dialog-content">
+      <p class="kicker">建安元年</p><h2 id="helpTitle">遊び方</h2>
+      <ol class="help-list">
+        <li>初期配置を確定し、最初の天命札を選ぶか、山札から引きます。</li>
+        <li>曹操側の札では将軍を選び、行軍・戦闘・補充・何もしないのいずれかを実行します。</li>
+        <li>反曹操側は札に従って自動で行軍・戦闘・補充します。戦闘で損害を受けた駒は自動で除去します。</li>
+        <li>結果を確認すると次の札を引けます。地図の拠点を押すと駒を確認できます。</li>
+      </ol>
+      <p>全17エリアの支配で勝利。曹操の除去、または反曹操側の許都進入で敗北します。</p>
+      <p class="muted">ゲームデザイン　呼拉中村<br>イラスト　松田大秀</p>
+      <button type="button" id="helpClose" class="primary">閉じる</button>
+    </div>
+  </dialog>
+</body>
+</html>

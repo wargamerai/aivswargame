@@ -1,0 +1,785 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap');
+:root{color-scheme:light;--ink:#202820;--muted:#788077;--paper:#f4f2eb;--panel:#fffefa;--line:#e6e3d9;--green:#304b3d;--green2:#54745d;--red:#a34536;--gold:#c79c4b;--shadow:0 8px 28px #23301d0c}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:'Zen Kaku Gothic New',system-ui,sans-serif;font-size:14px}.topbar{height:76px;padding:0 max(22px,calc((100vw - 1440px)/2));display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #dfddd3;background:#faf9f4}.brand{display:flex;align-items:center;gap:12px}.crest{width:40px;height:40px;border:1px solid #ab8751;border-radius:50%;display:grid;place-items:center;color:#87652e;font-family:'Noto Serif JP',serif;font-size:21px}.brand h1,.brand p,.board-head h2,.section-title h2{margin:0}.brand h1{font:700 20px 'Noto Serif JP',serif;letter-spacing:.04em}.brand p{font-size:11px;color:var(--muted);margin-top:2px}.top-actions{display:flex;gap:8px}.quiet{border:1px solid var(--line);background:transparent;border-radius:9px;color:#4f5a51;padding:9px 13px;font:500 12px inherit;cursor:pointer}.quiet:hover{background:#eeede5}.app-shell{max-width:1440px;margin:22px auto;padding:0 22px;display:grid;grid-template-columns:minmax(0,1.65fr) minmax(330px,.8fr);gap:18px;align-items:start}.panel{background:var(--panel);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow)}.board-panel{padding:20px}.board-head,.section-title{display:flex;align-items:center;justify-content:space-between}.eyebrow{font-size:10px;color:#879087;text-transform:uppercase;letter-spacing:.14em;font-weight:700}.board-head h2,.section-title h2{font:600 17px 'Noto Serif JP',serif;margin-top:3px}.badge,.deck-count{font-size:11px;background:#f0eee5;border-radius:99px;padding:6px 10px;color:#647065}.board{margin-top:15px;position:relative;width:100%;aspect-ratio:900/620;border-radius:12px;overflow:hidden;background:radial-gradient(ellipse at 25% 35%,#e2e5d7,#d8dfd2 55%,#d2dbcf);border:1px solid #c9d4c8;isolation:isolate}.board:before{content:'';position:absolute;inset:0;background-image:linear-gradient(125deg,transparent 48%,#ffffff26 49%,transparent 50%),radial-gradient(ellipse at 68% 18%,#ffffff5c,transparent 35%),repeating-linear-gradient(38deg,transparent 0 38px,#7b8b6a0b 39px 40px);z-index:-1}.roads{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}.road{stroke:#a1906b;stroke-width:2.4;stroke-dasharray:3 4;opacity:.8}.area-nodes{position:absolute;inset:0}.area-node{position:absolute;transform:translate(-50%,-50%);min-width:76px;max-width:115px;padding:5px 7px 7px;border:1px solid #a8b2a1;border-radius:10px;background:#f7f7eced;box-shadow:0 3px 8px #20301d22;text-align:center;cursor:pointer;transition:transform .15s,box-shadow .15s}.area-node:hover{transform:translate(-50%,-52%);box-shadow:0 6px 16px #20301d30}.area-node.selected{outline:3px solid #c99c4b;z-index:3}.area-node.is-base:after{content:'◆';position:absolute;top:-8px;right:-5px;color:#bc9042;font-size:12px}.area-node .area-name{display:block;font-size:11px;font-weight:700;white-space:nowrap}.area-node .forces{display:flex;justify-content:center;gap:4px;margin-top:5px;flex-wrap:wrap}.force{display:grid;place-items:center;min-width:21px;height:20px;padding:0 4px;border-radius:5px;color:white;font-weight:700;font-size:10px;box-shadow:0 1px 2px #16201635}.force.player{background:var(--green)}.force.enemy{background:var(--red)}.force.neutral{background:#73818a}.force.leader{border:1px solid #fff8}.force-count{font-size:8px;opacity:.85;margin-left:2px}.board-stamp{position:absolute;right:15px;bottom:12px;text-align:center;color:#75816c;font:700 18px 'Noto Serif JP',serif;opacity:.55;pointer-events:none}.board-stamp small{font:500 9px 'Zen Kaku Gothic New',sans-serif}.map-legend{display:flex;gap:17px;padding:12px 2px 5px;color:#6b746b;font-size:10px;flex-wrap:wrap}.map-legend span{display:flex;align-items:center;gap:5px}.dot{width:9px;height:9px;border-radius:50%;display:inline-block}.dot.player{background:var(--green)}.dot.enemy{background:var(--red)}.dot.neutral{background:#73818a}.dot.base{background:var(--gold);transform:rotate(45deg);border-radius:1px}.board-foot{border-top:1px solid var(--line);padding-top:13px;margin-top:6px;display:flex;align-items:center;justify-content:space-between;gap:12px;color:#788077;font-size:11px}.primary{background:var(--green);color:#fff;border:0;border-radius:9px;padding:11px 16px;font:700 12px 'Zen Kaku Gothic New',sans-serif;cursor:pointer}.primary:hover{background:#223b2f}.primary:disabled{opacity:.45;cursor:not-allowed}.primary.small{padding:10px 13px}.side-column{display:grid;gap:14px}.status-panel,.action-panel,.event-panel{padding:18px}.strategy{width:53px;height:53px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;background:#e8eee5;color:#314b3a}.strategy span{font:700 20px 'Noto Serif JP',serif;line-height:1}.strategy small{font-size:8px;margin-top:3px}.meter-row{display:flex;align-items:center;gap:9px;margin:16px 0 12px;font-size:11px;color:#727c72}.meter-row b{color:var(--ink)}.meter{height:5px;flex:1;background:#e9e9df;border-radius:5px;overflow:hidden}.meter i{display:block;height:100%;background:var(--gold);width:0;transition:width .25s}.faction-list{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.faction{background:#f7f6ef;border-radius:8px;padding:8px 9px}.faction small{color:#82897f;font-size:9px}.faction b{display:block;margin-top:2px;font-size:11px}.pool-row{margin-top:12px;border-top:1px solid var(--line);padding-top:11px;display:flex;align-items:center;gap:7px;font-size:9px;color:#7c847b}.pool-row b{color:#303c32;font-size:12px}.divider{height:14px;width:1px;background:var(--line);margin:0 4px}.muted{color:#879087;font-size:11px;line-height:1.7;margin:10px 0}.command-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.command-buttons button,.command-extra button{background:#f4f3ec;border:1px solid #e6e3d8;border-radius:8px;padding:9px 8px;font:700 11px 'Zen Kaku Gothic New',sans-serif;color:#34443a;cursor:pointer}.command-buttons button:hover,.command-extra button:hover{background:#e9eee7;border-color:#cbd8ca}.command-buttons button:disabled{opacity:.4;cursor:not-allowed}.command-buttons .active{background:#e4ece3;border-color:#81967f}.command-extra{margin-top:9px}.command-extra select,.command-extra input{width:100%;margin:5px 0;padding:9px;border:1px solid var(--line);border-radius:8px;background:#fffefa;color:var(--ink);font:12px inherit}.command-extra .confirm{width:100%;background:var(--green);color:white;border:0}.card-preview{display:flex;align-items:center;gap:12px;margin:12px 0}.card-back{width:48px;height:64px;border-radius:7px;border:1px solid #b89a61;background:#efe7d3;color:#907440;font:700 13px 'Noto Serif JP',serif;display:grid;place-content:center;text-align:center;line-height:1.2;box-shadow:2px 3px 0 #d7ccb2}.card-preview p{font-size:11px;color:#737c72;line-height:1.55}.drawn-card{width:48px;height:64px;border-radius:7px;background:#f6f2e7;border:1px solid #d8c9a5;display:grid;place-items:center;text-align:center;color:#554a35;font:700 10px 'Noto Serif JP',serif;padding:3px}.log{max-height:190px;overflow:auto;border-top:1px solid var(--line);padding-top:8px}.log-entry{font-size:10px;color:#6f796f;line-height:1.5;padding:4px 0;border-bottom:1px dashed #eeece4}.log-entry:first-child{color:#364a3b;font-weight:600}.toast{position:fixed;bottom:20px;left:50%;transform:translate(-50%,20px);background:#263a2d;color:#fff;border-radius:9px;padding:10px 15px;opacity:0;pointer-events:none;transition:.2s;z-index:9;font-size:12px}.toast.show{opacity:1;transform:translate(-50%,0)}dialog{border:1px solid var(--line);border-radius:15px;max-width:480px;width:calc(100% - 28px);padding:0;box-shadow:0 20px 80px #14201744;color:var(--ink)}dialog::backdrop{background:#1c261e88}.dialog-head{padding:17px 20px;display:flex;justify-content:space-between;border-bottom:1px solid var(--line)}.dialog-head h2{font:600 17px 'Noto Serif JP',serif;margin:0}.dialog-head button{border:0;background:none;font-size:23px;cursor:pointer}.dialog-body{padding:18px 21px;line-height:1.8;font-size:13px}.dialog-body li{margin:5px 0}.notice{padding:10px;background:#f7f1df;border-radius:8px;color:#77673f;font-size:11px}
+@media(max-width:880px){.app-shell{grid-template-columns:1fr;max-width:760px}.side-column{grid-template-columns:1fr 1fr}.event-panel{grid-column:1/-1}.board-panel{padding:15px}.area-node{min-width:65px;padding:4px 5px 6px}.area-node .area-name{font-size:10px}}
+.map-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-1;opacity:.84}
+.unit-image{width:15px;height:15px;object-fit:cover;border-radius:2px;margin-right:2px;vertical-align:middle}
+.counter{position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:'Zen Kaku Gothic New',sans-serif;box-shadow:0 2px 5px #14201830}.leader-counter{width:41px;height:43px;flex-direction:column;gap:0;border-radius:7px;border:1px solid color-mix(in srgb,var(--tone) 65%,#fff);background:linear-gradient(155deg,#fffefa 0 47%,color-mix(in srgb,var(--tone) 12%,#fffefa) 48%);color:#25312b}.leader-counter:before{content:'';position:absolute;left:3px;top:4px;bottom:4px;width:3px;border-radius:4px;background:var(--tone)}.leader-counter strong{font-size:8px;line-height:1.1;max-width:36px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.counter-power{position:absolute;right:2px;top:2px;width:14px;height:14px;display:grid;place-items:center;border-radius:50%;background:var(--tone);color:#fff;font-size:8px;line-height:1}.counter-units{position:absolute;right:2px;bottom:2px;padding:0 2px;border-radius:3px;background:#29332d;color:white;font-size:7px;line-height:1.3}.leader-counter.enemy{background:linear-gradient(155deg,#fffefa 0 47%,#f6e8e4 48%)}.leader-counter.neutral{background:linear-gradient(155deg,#fffefa 0 47%,#e9edef 48%)}.troop-counter{min-width:34px;height:21px;gap:2px;padding:0 4px;border-radius:5px;border:1px solid color-mix(in srgb,var(--tone) 45%,#fff);background:color-mix(in srgb,var(--tone) 12%,#fff);color:#28332d;font-size:7px;line-height:1}.troop-counter b{color:var(--tone);font-size:8px}.troop-counter.enemy{background:#f8eeea}.troop-counter.neutral{background:#eef0f1}.area-node{min-width:79px;max-width:128px;padding:6px}.area-node .forces{align-items:center;gap:3px}.area-nodes{overflow:hidden}.inventory-panel{padding:0 16px 14px}.inventory-panel summary{display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer;padding:15px 0}.inventory-panel summary::-webkit-details-marker{display:none}.inventory-panel summary span:first-child{display:grid;gap:2px}.inventory-panel summary b{font:600 14px 'Noto Serif JP',serif}.summary-mark{font-size:20px;color:#728075}.inventory-panel[open] .summary-mark{transform:rotate(45deg)}.unit-catalog h3{margin:15px 0 7px;font:700 10px 'Zen Kaku Gothic New',sans-serif;color:#8b9188;letter-spacing:.08em}.inventory-row{display:flex;align-items:center;gap:7px;padding:6px 1px;border-bottom:1px solid #efeee8;font-size:10px}.unit-role{display:flex;align-items:center;gap:6px;flex:1}.inventory-row b{font-size:9px;color:#445349;white-space:nowrap}.inventory-row small{color:#818a80;font-size:8px;white-space:nowrap}.role-icon{font-style:normal;width:20px;height:20px;display:grid;place-items:center;border-radius:5px;color:white;font-size:9px}.leader-icon{background:#3d5948}.troop-icon{background:#ba8b38}.inventory-note{font-size:9px;color:#8c9289;margin:10px 0 0}
+.card-art{width:72px;height:108px;object-fit:cover;border-radius:7px;border:1px solid #d8c9a5;flex-shrink:0}
+.card-back-art{width:72px;height:108px;object-fit:cover;object-position:center;border-radius:7px;box-shadow:0 3px 9px #24201835}
+.brand-mark{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(145deg,#496650,#283e31);color:#f4ead2;font:700 12px 'Zen Kaku Gothic New',sans-serif;letter-spacing:.08em;box-shadow:inset 0 0 0 1px #ffffff2e,0 3px 8px #20301d22}
+@media(max-width:560px){.topbar{height:66px;padding:0 14px}.brand h1{font-size:17px}.brand p{font-size:9px}.crest{width:35px;height:35px}.quiet{padding:8px;font-size:10px}.app-shell{padding:0 10px;margin:10px auto;gap:10px}.board-panel{padding:12px}.board-head h2{font-size:14px}.board{aspect-ratio:1/1;overflow:hidden}.area-node{min-width:55px;max-width:83px;padding:3px 2px 4px;border-radius:7px}.area-node .area-name{font-size:8px}.leader-counter{width:31px;height:34px;border-radius:5px}.leader-counter strong{font-size:6px;max-width:28px}.counter-power{width:11px;height:11px;font-size:7px;right:1px;top:1px}.counter-units{font-size:6px}.troop-counter{min-width:29px;height:17px;font-size:6px;padding:0 2px}.troop-counter b{font-size:7px}.area-node .forces{gap:2px;margin-top:3px}.map-legend{gap:10px;font-size:9px}.board-foot{font-size:9px}.primary.small{font-size:10px;padding:9px}.side-column{grid-template-columns:1fr}.event-panel{grid-column:auto}.status-panel,.action-panel,.event-panel{padding:14px}.faction-list{grid-template-columns:repeat(3,1fr)}.pool-row{font-size:8px}.board-stamp{font-size:14px}}
+@media(max-width:560px){.brand-mark{width:35px;height:35px;font-size:10px}}
+.board{background:radial-gradient(ellipse at 45% 45%,#e8f0ef,#d9e6e7 72%,#d1e0e2);border-color:#cbd9d8}
+.board:before{background-image:radial-gradient(ellipse at 50% 45%,#ffffff2e,transparent 55%),repeating-linear-gradient(30deg,transparent 0 46px,#708f8b0a 47px 48px)}
+.japan-backdrop{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1}
+.island-shadow{fill:#8b9e8a35;transform:translate(0,6px)}
+.island-main,.peninsula,.islet{fill:#f2eedf;stroke:#b9b89f;stroke-width:3;stroke-linejoin:round}
+.peninsula,.islet{stroke-width:2.5}
+.japan-backdrop text{fill:#80928f;font:italic 16px 'Noto Serif JP',serif;letter-spacing:.12em;opacity:.8}
+.area-shapes{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.region-shape{stroke:#a68b68;stroke-width:2.8;stroke-linejoin:round;opacity:.82;transition:fill .25s ease}
+.region-shape.control-player{fill:#b9d0b8}
+.region-shape.control-enemy{fill:#dcb0a6}
+.region-shape.control-neutral{fill:#d5dcd8}
+.roads{z-index:1}
+.road{stroke:#917a59;stroke-width:3;stroke-dasharray:0;opacity:.7}
+.area-nodes{z-index:2}
+.board-stamp{z-index:3}
+.track-dashboard{display:grid;grid-template-columns:minmax(95px,.55fr) minmax(0,2fr);gap:12px;margin:14px 0 2px;padding:12px;border:1px solid #e4e5dc;border-radius:11px;background:#f8f8f2}
+.strategy-digital{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100%;border-right:1px solid #e3e4db;color:#637165}
+.strategy-digital span{font-size:10px;font-weight:700;letter-spacing:.08em}
+.strategy-digital strong{font:700 30px 'Noto Serif JP',serif;color:#365443;line-height:1.1;margin:3px 0}
+.strategy-digital small{font-size:9px;color:#899287}
+.track-groups{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;min-width:0}
+.track-group h3{margin:0 0 5px;font-size:9px;color:#828a7f;letter-spacing:.06em}
+.track-row{display:grid;grid-template-columns:62px minmax(0,1fr);align-items:center;gap:5px;margin:4px 0}
+.track-name{font-size:9px;font-weight:700;white-space:nowrap;color:#414d43}
+.digital-steps{display:flex;min-width:0;gap:2px}
+.track-step{flex:1;min-width:0;padding:4px 2px;border:1px solid #d8ded6;border-radius:5px;background:#fffefa;color:#8b9488;font:500 8px 'Zen Kaku Gothic New',sans-serif;white-space:nowrap;cursor:pointer}
+.track-step.passed{background:#e6eee7;border-color:#c6d7c9;color:#55745b}
+.track-step.current{background:#3d624b;border-color:#3d624b;color:white;font-weight:700;box-shadow:0 1px 3px #243a2e2e}
+.retainer-group{grid-column:1/-1}
+.retainer-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.retainer-track{display:flex;align-items:center;justify-content:space-between;gap:3px;padding:3px 5px;border:1px solid #e4e5dc;border-radius:6px;background:#fffefa;color:#424e43;font-size:8px}
+.retainer-track>span{font-weight:700;white-space:nowrap}
+.retainer-track button,.pool-adjust button{width:21px;height:21px;padding:0;border:1px solid #dce1d9;border-radius:5px;background:#f6f7f2;color:#46614d;font-size:14px;line-height:1;cursor:pointer}
+.retainer-track b{font:700 10px 'Zen Kaku Gothic New',sans-serif;color:#4d6853;white-space:nowrap}
+.retainer-track b small{font-size:8px;color:#9aa197}
+.area-node{border-color:#bdc7bb;background:#f9f8efed;box-shadow:0 3px 8px #25352a26}
+.area-node.control-player{border-color:#729277;background:#e2eddfed}
+.area-node.control-enemy{border-color:#c17c6d;background:#f4e3dded}
+.area-node.control-neutral{border-color:#aab3b0;background:#edf0edec}
+.area-node.is-base .area-name:after{content:' ◆';font-size:7px;color:#b88638}
+.area-node.selected{outline:2px solid #d49a39;outline-offset:2px}
+.empty-force{font-size:8px;color:#9ba297}
+.map-legend .dot.player{background:#64876a}.map-legend .dot.enemy{background:#bd6858}.map-legend .dot.neutral{background:#a5afac}
+.pool-row{display:flex;align-items:stretch;justify-content:space-around;gap:10px;margin-top:12px;border-top:1px solid var(--line);padding-top:11px}
+.pool-counter{flex:1;display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:8px;max-width:190px}
+.pool-counter>span{font-size:10px;color:#758074;font-weight:700;white-space:nowrap}
+.pool-counter>small{grid-column:1/-1;margin-top:1px;font-size:8px;color:#99a096;text-align:center}
+.pool-adjust{display:flex;align-items:center;justify-content:center;gap:7px}
+.pool-adjust b{min-width:24px;text-align:center;color:#304a38;font:700 18px 'Noto Serif JP',serif}
+.pool-adjust button{width:25px;height:25px;background:#f6f7f2}
+.pool-row .divider{align-self:center;height:35px}
+@media(max-width:900px){.track-dashboard{grid-template-columns:1fr}.strategy-digital{flex-direction:row;gap:9px;justify-content:flex-start;border-right:0;border-bottom:1px solid #e3e4db;padding:0 0 8px}.strategy-digital strong{font-size:22px;margin:0}.track-groups{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.track-dashboard{padding:10px;gap:8px}.track-groups{grid-template-columns:1fr;gap:8px}.retainer-group{grid-column:auto}.retainer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.track-row{grid-template-columns:66px minmax(0,1fr)}.track-step{font-size:7px;padding:5px 1px}.area-node{min-width:55px;max-width:84px;padding:4px 3px 5px}.area-node .area-name{font-size:8px}.area-node .forces{flex-wrap:wrap}.pool-counter{gap:4px}.pool-counter>span{font-size:9px}.pool-row{gap:6px}.pool-adjust{gap:4px}}
+/* 元盤面の地域配置を示す簡略戦況図 */
+.board{background-color:#e8eff0;background-image:radial-gradient(ellipse at 50% 48%,#ffffff99 0 1px,transparent 2px),linear-gradient(145deg,#e4eceb,#dce7e5);background-size:19px 19px,100% 100%;}
+.board:before{background-image:linear-gradient(125deg,transparent 48%,#ffffff35 49%,transparent 50%),repeating-linear-gradient(38deg,transparent 0 38px,#718b850b 39px 40px)}
+.area-shapes{display:none}
+.area-node{min-width:64px;max-width:104px;padding:4px 5px 6px;border-radius:9px}
+.area-node .area-name{font-size:10px}
+
+.road{stroke:#b8463c;stroke-width:4;opacity:.82}
+.board-stamp{display:none}
+
+/* 開始時の設定 */
+.app-shell[hidden],.start-screen[hidden]{display:none}
+.start-screen{min-height:calc(100vh - 76px);padding:32px 18px 48px;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 20%,#e8e8dd,#f4f2eb 62%)}
+.start-card{width:min(100%,620px);padding:30px clamp(18px,5vw,38px);text-align:center}
+.start-emblem{width:64px;height:64px;margin:0 auto 10px;border:1px solid #bd9653;border-radius:50%;display:grid;place-items:center;color:#9b773e;font:700 19px 'Noto Serif JP',serif;letter-spacing:.05em}
+.start-card>.eyebrow{margin:0;color:#8b7957}
+.start-card h2{margin:3px 0 0;font:600 28px 'Noto Serif JP',serif;letter-spacing:.08em}
+.start-intro{margin:8px 0 20px;color:#727a70;font-size:12px}
+.start-options{margin:0;text-align:left;border:1px solid #e5e1d4;border-radius:11px;padding:12px 14px 14px;background:#faf9f4}
+.start-options legend{padding:0 7px;color:#6c7668;font-size:11px;font-weight:700;letter-spacing:.05em}
+.option-row{display:flex;align-items:flex-start;gap:10px;padding:10px 2px;border-bottom:1px solid #ebe8df;cursor:pointer}
+.option-row:last-of-type{border-bottom:0}
+.option-row input{accent-color:#49654e;margin:3px 0 0;width:16px;height:16px;flex:none}
+.option-row span{display:grid;gap:3px}
+.option-row b{font-size:12px;color:#333e34}
+.option-row small{color:#81887e;font-size:10px;line-height:1.55}
+.first-card-choice{display:grid;gap:5px;padding:7px 0 2px;color:#586458;font-size:10px}
+.first-card-choice select{padding:8px;border:1px solid #ddd9cc;border-radius:7px;background:white;color:#313a32;font:inherit}
+.language-choice{display:flex;align-items:center;justify-content:space-between;margin:16px 2px;color:#737d72;font-size:11px}
+.language-choice>div{display:flex;gap:6px}
+.language-button{padding:7px 11px;border:1px solid #deded4;border-radius:7px;background:#f8f7f2;color:#727a71;font:600 10px inherit}
+.language-button.active{border-color:#55735a;background:#e8eee6;color:#37513b}
+.language-button:disabled{opacity:.56}
+.start-actions{display:flex;justify-content:center;gap:9px;margin-top:14px}
+.start-actions .primary{min-height:42px;padding:0 22px}
+.language-note{margin:13px 0 0;color:#93978e;font-size:9px}
+/* 領国を海岸線・境界線付きで塗り分ける簡略地図 */
+.area-shapes{display:block}
+.land-fill{fill:#e8e3d2;stroke:none}
+.region-shape{stroke:#697262;stroke-width:2.1;stroke-linejoin:round;opacity:.7}
+.region-shape.control-player{fill:#99bc96}
+.region-shape.control-enemy{fill:#d59788}
+.region-shape.control-neutral{fill:#cbd3ca}
+.coastline{fill:none;stroke:#647d7e;stroke-width:5;stroke-linejoin:round;stroke-linecap:round;pointer-events:none}
+.sea-label{fill:#668184;font:italic 15px 'Noto Serif JP',serif;letter-spacing:.12em;opacity:.8}
+@media(max-width:560px){.start-screen{min-height:calc(100vh - 64px);padding:18px 12px 30px}.start-card{padding:24px 16px}.start-card h2{font-size:24px}.start-emblem{width:54px;height:54px}.language-note{font-size:8px}}
+.region-shape{stroke:#665f50;stroke-width:2.4;opacity:.78}
+.sea-label{paint-order:stroke;stroke:#e6eff0;stroke-width:3px;stroke-linejoin:round}
+.map-scroll-hint{margin:12px 2px 5px;color:#7e887d;font-size:10px}
+.map-viewport{width:100%;max-height:min(72vh,760px);overflow:auto;overscroll-behavior:contain;border:1px solid #cad7d3;border-radius:13px;background:#e4edef;scrollbar-color:#879b8b #e5e9e3;scrollbar-width:thin;touch-action:pan-x pan-y}
+.map-viewport:focus-visible{outline:2px solid #c79c4b;outline-offset:2px}
+.map-viewport .board{width:1260px;height:868px;min-width:1260px;max-width:none;aspect-ratio:auto;margin:0;border:0;border-radius:12px}
+.map-viewport .area-node{min-width:78px;max-width:128px;padding:6px 7px 8px;border-radius:10px}
+.map-viewport .area-node .area-name{font-size:11px}
+@media(max-width:1100px){.map-viewport{max-height:66vh}.map-viewport .board{width:1160px;height:799px;min-width:1160px}}
+@media(max-width:560px){.map-scroll-hint{font-size:9px}.map-viewport{max-height:62vh}.map-viewport .board{width:1080px;height:744px;min-width:1080px}.map-viewport .area-node{min-width:64px;max-width:102px;padding:5px 5px 6px}.map-viewport .area-node .area-name{font-size:9px}}
+
+/* 読みやすさと地図操作 */
+body{font-size:16px}
+.brand h1{font-size:22px}.brand p{font-size:13px}.quiet{font-size:13px}
+.eyebrow{font-size:11px}.board-head h2,.section-title h2{font-size:19px}
+.map-legend{font-size:12px}.area-node .area-name{font-size:12px}
+.counter strong,.troop-counter>span{font-size:11px}.counter-power{font-size:10px}.counter-units{font-size:9px}
+.meter-row,.faction small,.faction b,.muted,.command-buttons button,.command-extra button,.command-extra label{font-size:13px}
+.inventory-row{font-size:13px}.inventory-row small{font-size:11px}
+.track-group h3{font-size:11px}.track-name{font-size:11px}.track-step{font-size:9px}.track-caption{font-size:10px}
+.pool-counter>span{font-size:11px}.pool-counter>small{font-size:9px}
+.map-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 2px 6px}
+.map-scroll-hint{margin:0;font-size:11px}
+.map-zoom{display:flex;align-items:center;gap:5px;flex:none}
+.map-zoom button{min-width:34px;height:32px;padding:0 8px;border:1px solid #d9ded6;border-radius:7px;background:#fafaf5;color:#3f5945;font:700 16px 'Zen Kaku Gothic New',sans-serif;cursor:pointer}
+.map-zoom button:hover{background:#e9eee7}.map-zoom #mapZoomReset{font-size:11px;font-weight:600}.map-zoom b{min-width:42px;text-align:center;font-size:11px;color:#576658}
+.map-viewport .area-node{transform:translate(-50%,-50%) scale(var(--map-zoom,1))}
+.map-viewport .area-node:hover{transform:translate(-50%,-52%) scale(var(--map-zoom,1))}
+@media(max-width:560px){body{font-size:15px}.brand h1{font-size:19px}.brand p{font-size:11px}.map-tools{align-items:flex-start;flex-direction:column}.map-zoom button{height:36px}.area-node .area-name{font-size:10px}}
+.board-tabs{display:flex;gap:6px;margin:13px 0 8px;padding-bottom:7px;border-bottom:1px solid #e6e4db}
+.board-tab{min-width:84px;padding:8px 14px;border:1px solid #dfe2d9;border-radius:8px;background:#f7f7f1;color:#778174;font:600 13px 'Zen Kaku Gothic New',sans-serif;cursor:pointer}
+.board-tab.active{border-color:#526e56;background:#e7eee5;color:#35523b;box-shadow:0 1px 3px #283d2d16}
+#situationPanel[hidden],#mapPanel[hidden]{display:none}
+/* 読み取りやすい文字と拡大プレビュー */
+body{font-size:17px}
+.topbar{min-height:82px}.brand h1{font-size:23px}.brand p{font-size:14px}
+.eyebrow{font-size:12px}.board-head h2,.section-title h2{font-size:20px}
+.board-tab{font-size:14px}.area-node .area-name{font-size:13px}
+.map-legend{font-size:13px}.map-scroll-hint{font-size:12px}
+.track-group h3{font-size:13px}.track-name{font-size:12px}.track-step{font-size:11px;padding:6px 3px}.track-caption{font-size:12px}
+.meter-row,.faction small,.faction b,.muted,.command-buttons button,.command-extra button,.command-extra label{font-size:14px}
+.inventory-row{font-size:14px}.inventory-row small{font-size:12px}
+.pool-counter>span{font-size:12px}.pool-counter>small{font-size:10px}
+.card-preview p,.log-entry{font-size:13px}.deck-count{font-size:12px}
+.option-row b{font-size:13px}.option-row small{font-size:12px}.start-intro{font-size:14px}
+.hover-preview{position:fixed;z-index:10000;pointer-events:none;left:0;top:0;padding:8px;border:1px solid #d5d4c7;border-radius:12px;background:#fffef8;box-shadow:0 12px 35px #15201942;color:#28342b}
+.hover-preview[hidden]{display:none}
+.hover-preview.unit-preview{min-width:205px}
+.zoom-counter{display:grid;justify-items:center;gap:6px;min-width:190px;min-height:176px;padding:17px 14px;border:3px solid #fff;border-radius:14px;background:var(--tone);box-shadow:inset 0 0 0 1px #39423336;color:white;text-align:center;text-shadow:0 1px 2px #0005}
+.zoom-counter small{font-size:12px;opacity:.9}.zoom-counter span{font-size:12px;letter-spacing:.12em}.zoom-counter strong{font:700 23px 'Noto Serif JP',serif}.zoom-counter b{font-size:14px}
+.card-preview-zoom{display:grid;justify-items:center;gap:7px;max-width:min(340px,82vw);padding:10px}.card-preview-zoom strong{font-size:13px}.card-preview-zoom img{display:block;width:auto;height:auto;max-width:min(320px,78vw);max-height:72vh;object-fit:contain;border-radius:7px}
+@media(max-width:560px){body{font-size:16px}.brand h1{font-size:20px}.brand p{font-size:12px}.area-node .area-name{font-size:11px}.track-step{font-size:10px}.hover-preview.unit-preview{min-width:170px}.zoom-counter{min-width:158px;min-height:150px;padding:13px}.zoom-counter strong{font-size:20px}}
+.counter.card-target{position:relative;z-index:8;outline:4px solid #f7c84b;outline-offset:3px;box-shadow:0 0 0 7px #f5c94e85,0 0 24px 7px #ffdc728a;animation:cardTargetGlow 1.3s ease-in-out infinite alternate}
+.counter.card-target:after{content:'カード指定';position:absolute;right:-7px;top:-18px;padding:2px 5px;border:1px solid #9b7621;border-radius:5px;background:#fff4c9;color:#5d4818;font:700 10px 'Zen Kaku Gothic New',sans-serif;white-space:nowrap;text-shadow:none}
+@keyframes cardTargetGlow{from{outline-color:#eab83d;box-shadow:0 0 0 5px #f5c94e55,0 0 12px 3px #ffdc7260}to{outline-color:#ffe27d;box-shadow:0 0 0 8px #f5c94e99,0 0 25px 8px #ffdc72a0}}
+.area-node.move-available{z-index:5;outline:3px solid #209b8d;outline-offset:4px;box-shadow:0 0 0 7px #35c2aa55,0 0 20px #16988780}
+.area-node.move-available:before{content:'行軍可能';position:absolute;left:50%;top:-20px;transform:translateX(-50%);padding:2px 6px;border-radius:5px;background:#147b70;color:white;font:700 10px 'Zen Kaku Gothic New',sans-serif;white-space:nowrap}
+.road.range-road{stroke:#168f84;stroke-width:5;opacity:1;stroke-dasharray:7 5}
+.card-reveal-dialog{width:min(94vw,980px);max-width:none;max-height:94vh;padding:0;border:0;border-radius:18px;background:transparent;color:#263228;overflow:visible}
+.card-reveal-dialog::backdrop{background:#101915c9;backdrop-filter:blur(4px)}
+.card-reveal-sheet{position:relative;display:grid;grid-template-columns:minmax(250px,.9fr) minmax(280px,1fr);align-items:center;gap:28px;padding:28px;border:1px solid #e2dfd3;border-radius:18px;background:#fbfaf4;box-shadow:0 24px 80px #0006}
+.card-reveal-x{position:absolute;right:12px;top:10px;width:38px;height:38px;border:1px solid #e0ded4;border-radius:50%;background:#fffefa;color:#536052;font-size:23px;cursor:pointer}
+.card-reveal-art{display:grid;place-items:center;min-height:300px;padding:8px;border-radius:12px;background:#efede4}
+.card-reveal-art img{display:block;max-width:100%;width:auto;height:auto;max-height:72vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 24px #26322425}
+.card-placeholder{display:grid;place-items:center;width:100%;min-height:320px;border-radius:10px;background:linear-gradient(145deg,#536f55,#182e25);color:#f8f1db;font:700 26px 'Noto Serif JP',serif}
+.card-reveal-copy{padding:20px 16px 20px 0}.card-reveal-copy .eyebrow{color:#927440}.card-reveal-copy h2{margin:8px 0 12px;font:700 26px 'Noto Serif JP',serif}.card-reveal-copy p{margin:0 0 24px;color:#586258;font-size:17px;line-height:1.8}.card-reveal-copy .primary{min-height:48px;padding:0 22px;font-size:15px}
+@media(max-width:650px){.card-reveal-dialog{width:calc(100vw - 20px);max-height:94vh}.card-reveal-sheet{grid-template-columns:1fr;gap:12px;padding:18px 15px 16px;max-height:92vh;overflow:auto}.card-reveal-art{min-height:0;padding:6px}.card-reveal-art img{max-height:48vh;max-width:70vw}.card-placeholder{min-height:180px}.card-reveal-copy{padding:4px 5px 5px}.card-reveal-copy h2{font-size:22px;margin:3px 0 7px}.card-reveal-copy p{font-size:15px;line-height:1.6;margin-bottom:14px}.card-reveal-x{right:7px;top:7px;width:34px;height:34px}.counter.card-target:after{font-size:9px}}
+/* 軍勢の数量が見て分かる斜め重ね */
+.map-viewport .leader-counter,.map-viewport .troop-counter{width:max(64px,var(--pile-width));min-width:max(64px,var(--pile-width));height:56px;position:relative;overflow:visible;display:block;border-radius:8px;background:#f5f3e9;color:#26312a;box-shadow:0 3px 8px #18281e35}
+.map-viewport .leader-counter{border:2px solid var(--tone)}
+.map-viewport .troop-counter{border:2px solid var(--tone)}
+.unit-pile{position:absolute;left:5px;bottom:4px;width:var(--pile-width);height:27px;pointer-events:none}
+.unit-pile-piece{position:absolute;display:block;width:20px;height:25px;border:2px solid color-mix(in srgb,var(--tone) 85%,#26312b);border-radius:4px;background:linear-gradient(145deg,#fffefa 0 28%,var(--tone) 30% 100%);box-shadow:0 2px 3px #17251d55;transform:rotate(-11deg)}
+.map-viewport .leader-counter strong,.map-viewport .troop-counter>span{position:absolute;z-index:30;left:7px;right:20px;top:5px;text-align:left;font-size:10px;line-height:1.2;color:#26312a;text-shadow:0 1px 0 #fff}
+.map-viewport .counter-power{z-index:31;right:3px;top:3px;width:17px;height:17px;font-size:10px}
+.map-viewport .counter-units{z-index:32;right:3px;bottom:3px;font-size:9px;padding:1px 3px}
+.map-viewport .troop-counter b{position:absolute;z-index:32;right:3px;bottom:3px;padding:1px 3px;border-radius:4px;background:#fffefa;color:#27352c;font-size:10px}
+/* 領域色を反信長勢力ごとに分ける */
+.region-shape.faction-takeda{fill:#c46a57}
+.region-shape.faction-asai{fill:#6385bd}
+.region-shape.faction-asakura{fill:#5e9b70}
+.region-shape.faction-ikko{fill:#9c5e83}
+.region-shape.faction-miyoshi{fill:#9770b5}
+.region-shape.faction-mori{fill:#849143}
+.region-shape.faction-ukita{fill:#c68a47}
+.region-shape.faction-uesugi{fill:#367da3}
+.region-shape.faction-rebel{fill:#a14d9a}
+/* 行動・合戦・参戦マーカーの見える通知 */
+.action-announcement{position:fixed;z-index:9990;top:94px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;max-width:min(92vw,720px);padding:13px 20px;border:1px solid #e4d59f;border-radius:12px;background:#fff9e4;color:#29342b;box-shadow:0 10px 36px #13221855;font-size:15px}
+.action-announcement[hidden],.track-announcement[hidden]{display:none}
+.action-announcement b{color:#815b18;white-space:nowrap}.action-announcement span{line-height:1.5}
+.action-announcement.announce-in{animation:announceIn .25s ease-out}
+@keyframes announceIn{from{opacity:0;transform:translate(-50%,-10px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+.battle-dialog{width:min(96vw,1080px);max-width:none;max-height:94vh;padding:0;border:0;border-radius:18px;background:transparent;color:#243129;overflow:visible}
+.battle-dialog::backdrop{background:#0d1714c9;backdrop-filter:blur(5px)}
+.battle-sheet{max-height:92vh;overflow:auto;padding:24px;border:1px solid #d8d6ca;border-radius:18px;background:#f8f7f0;box-shadow:0 25px 80px #0007;text-align:center}
+.battle-sheet>.eyebrow{color:#9a6e31}.battle-sheet h2{margin:5px 0 16px;font:700 26px 'Noto Serif JP',serif}
+.battle-forces{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,.55fr) minmax(0,1fr);align-items:stretch;gap:12px}
+.battle-side{min-width:0;padding:12px;border:1px solid #deddd2;border-radius:12px;background:#fffefa}
+.battle-side h3{margin:0 0 8px;font-size:14px;color:#48564a}.battle-force-list{display:grid;align-content:start;gap:7px;max-height:37vh;overflow:auto}
+.battle-force{padding:7px;border:1px solid #dfe3dc;border-left:4px solid var(--tone,#667);border-radius:8px;background:#f6f7f2;text-align:left}
+.battle-force.player{--tone:#3b7555}.battle-force.enemy{--tone:#ad5147}.battle-force.neutral{--tone:#78818a}
+.battle-force-head{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:12px}.battle-force-head small{color:#778177;font-size:10px;white-space:nowrap}
+.battle-token-pile{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+.battle-token{position:relative;display:grid;place-items:center;width:30px;height:34px;border:2px solid var(--tone,#657);border-radius:5px;background:linear-gradient(145deg,#fff 0 27%,var(--tone,#657) 28% 100%);box-shadow:0 1px 3px #18231d42;color:#fff;font-size:11px;font-weight:800}
+.battle-token.leader-token{background:linear-gradient(145deg,#fff 0 27%,#bf973c 28% 100%);border-color:#9c7625}
+.battle-token.casualty:after{content:'×';position:absolute;inset:-3px;display:grid;place-items:center;border-radius:4px;background:#a9232ed9;color:white;font-size:28px;font-weight:900;text-shadow:0 1px 3px #0008}
+.battle-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px;border:1px solid #e1d8c2;border-radius:12px;background:linear-gradient(145deg,#fffaf0,#eee8d8)}
+.battle-center small{font-size:11px;color:#7b704f}.battle-dice{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;min-height:42px}
+.battle-die{display:grid;place-items:center;width:34px;height:34px;border:1px solid #aaa799;border-radius:8px;background:#fff;color:#313a32;box-shadow:0 2px 5px #1b261e2b;font:800 17px 'Zen Kaku Gothic New',sans-serif}
+.battle-die.hit{border:2px solid #ad3b32;background:#c44e41;color:white;box-shadow:0 0 0 3px #ce645339}
+.battle-die.rolling{animation:diceRoll .18s linear infinite alternate}
+@keyframes diceRoll{from{transform:rotate(-12deg) translateY(-2px)}to{transform:rotate(12deg) translateY(2px)}}
+.battle-center>b{color:#455347;font-size:13px}.battle-summary{margin:14px 0;color:#48534a;font-size:15px}.battle-sheet>.primary{min-height:44px;padding:0 24px;font-size:14px}.battle-sheet>.primary:disabled{opacity:.55}
+.track-announcement{position:fixed;z-index:9992;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:8px;min-width:280px;padding:23px 32px;border:2px solid #d7b864;border-radius:18px;background:#fff9e8;color:#29362c;box-shadow:0 16px 55px #0b17105c;text-align:center}
+.track-announcement small{font-size:12px;color:#8a6d2d;letter-spacing:.12em}.track-announcement strong{font:700 23px 'Noto Serif JP',serif}.track-announcement>div{display:flex;align-items:center;gap:14px}.track-announcement>div span{min-width:92px;padding:8px 10px;border:1px solid #d8d4c6;border-radius:9px;background:#f4f2e9;font-size:15px;font-weight:700}.track-announcement>div span:last-child{border-color:#c39a36;background:#f9e9b5;color:#684b14}.track-announcement>div b{font-size:22px;color:#a77c23}
+.track-announcement.track-pop{animation:trackPop 1.5s cubic-bezier(.16,.85,.3,1) both}
+@keyframes trackPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.35)}18%{opacity:1;transform:translate(-50%,-50%) scale(1.12)}38%{transform:translate(-50%,-50%) scale(.96)}55%,90%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(.9)}}
+.track-step.flash-from{animation:trackFrom .7s ease-out}
+.track-step.flash-to{z-index:5;position:relative;animation:trackStepAdvance 1.35s cubic-bezier(.16,.85,.3,1) both}
+@keyframes trackFrom{0%,100%{filter:none}45%{background:#fff0c2;transform:scale(1.16)}}
+@keyframes trackStepAdvance{0%{transform:scale(.8);background:#fff4cf;color:#654d17}35%{transform:scale(1.45);background:#edca69;color:#49340b;box-shadow:0 0 0 6px #e5c45d55}75%{transform:scale(1.15)}100%{transform:scale(1);background:#3d624b;color:white}}
+@media(max-width:650px){.action-announcement{top:72px;gap:7px;padding:10px 12px;font-size:13px}.battle-dialog{width:calc(100vw - 16px)}.battle-sheet{padding:14px 10px;max-height:92vh}.battle-sheet h2{font-size:21px}.battle-forces{grid-template-columns:minmax(0,1fr) minmax(100px,.6fr) minmax(0,1fr);gap:5px}.battle-side{padding:7px}.battle-side h3{font-size:11px}.battle-force{padding:5px}.battle-force-head{font-size:10px}.battle-force-head small{font-size:9px}.battle-token{width:25px;height:30px;font-size:9px}.battle-die{width:27px;height:27px;font-size:14px}.battle-center{padding:5px;gap:7px}.battle-summary{font-size:13px}.track-announcement{min-width:250px;padding:19px 22px}.track-announcement strong{font-size:20px}.track-announcement>div span{min-width:78px;font-size:13px}}
+/* 高く右上へ聳える軍勢スタック */
+.map-viewport .leader-counter,.map-viewport .troop-counter{isolation:isolate}
+.unit-pile{left:4px;bottom:3px;height:32px;z-index:20}
+.unit-pile-piece{width:23px;height:30px;border-width:2px;border-radius:4px;transform:rotate(-18deg);transform-origin:50% 85%;box-shadow:0 4px 6px #101a1870,2px 1px 0 #fff8;filter:saturate(1.12)}
+.unit-pile-piece:after{content:'';position:absolute;inset:3px;border:1px solid #ffffff70;border-radius:2px}
+.map-viewport .leader-counter strong,.map-viewport .troop-counter>span{z-index:40}
+.map-viewport .counter-power,.map-viewport .counter-units,.map-viewport .troop-counter>b{z-index:41}
+/* 駒は縦長で直立。各駒を右上へ段々に重ねる */
+.unit-pile-piece{width:22px;height:34px;border:2px solid var(--tone);border-radius:3px;background:color-mix(in srgb,var(--tone) 13%,#fffdf4);box-shadow:2px 3px 5px #15201870;transform:none;transform-origin:center;filter:none}
+.unit-pile-piece:before{content:'';position:absolute;left:2px;top:2px;bottom:2px;width:4px;border-radius:1px;background:var(--tone)}
+.unit-pile-piece:after{content:'';position:absolute;left:8px;right:2px;top:3px;bottom:3px;border:1px solid color-mix(in srgb,var(--tone) 38%,#fff);border-radius:1px}
+/* 正方形の駒を傾けず、右上へ積む */
+.unit-pile-piece{width:24px;height:24px;border:2px solid var(--tone);border-radius:2px;background:color-mix(in srgb,var(--tone) 16%,#fffdf4);box-shadow:2px 3px 5px #15201870;transform:translate(0,0)!important}
+.unit-pile-piece:before{left:2px;top:2px;bottom:2px;width:4px}
+.unit-pile-piece:after{left:8px;right:2px;top:3px;bottom:3px;border:1px solid color-mix(in srgb,var(--tone) 38%,#fff)}
+/* 武将・部隊名は駒の下に置き、名前と駒の重なりを避ける */
+.force-stack{display:inline-flex;flex-direction:column;align-items:center;justify-content:flex-start;min-width:60px;max-width:100%;vertical-align:top}
+.force-stack .counter{align-self:center}
+.force-name{display:block;position:relative;z-index:42;max-width:90px;margin-top:3px;padding:1px 3px;border-radius:3px;background:#fffefa;color:#263229;font-size:9px;font-weight:700;line-height:1.15;text-align:center;overflow-wrap:anywhere;text-shadow:none;box-shadow:0 1px 2px #17231c30}
+.counter-power,.counter-units{display:none!important}
+#areaNodes.stats-visible .counter-power,#areaNodes.stats-visible .counter-units{display:grid!important}
+@media(max-width:650px){.force-stack{min-width:48px}.force-name{max-width:72px;font-size:8px}}
+/* 提供された盤面をゲーム地図として使用 */
+.board{aspect-ratio:4153/2923;background:#eaf3f8;border-color:#cbd9d8}
+.board-background-map{position:absolute;inset:0;z-index:0;width:100%;height:100%;object-fit:fill;pointer-events:none}
+.board>.area-shapes,.board>.roads,.board>.board-stamp{display:none}
+#areaNodes{z-index:2}
+/* 盤面内の地名・境界・街道は画像をそのまま見せる */
+.board .area-node{min-width:0;max-width:none;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.board .area-node .area-name,.board .area-node .empty-force{display:none}
+.board .area-node .forces{margin:0;gap:0;overflow:visible}
+.board .area-node.selected{outline:3px solid #e4aa39;outline-offset:3px;border-radius:7px}
+.board .area-node.move-available{outline:3px solid #168f84;outline-offset:3px;border-radius:7px}
+.board .area-node.move-available:before{top:-21px}
+/* 道筋は地図画像を使い、ゲーム中の移動矢印だけ重ねる */
+.board>.roads{display:block;z-index:1;pointer-events:none}
+.board>.roads .road{display:none}
+/* 盤面を横幅いっぱいにし、武将コマンドを地図の上、山札を下に配置 */
+.app-shell{display:block;width:min(100%,1900px);max-width:1900px;margin:10px auto;padding:0 18px}
+.board-panel{padding:14px}
+.map-command-row{display:grid;grid-template-columns:minmax(170px,.8fr) minmax(220px,1.2fr) minmax(0,1fr) auto;align-items:center;gap:12px;margin:10px 0 12px;padding:10px 12px;border:1px solid #e3e2d8;border-radius:12px;background:#f7f7f1}
+.map-command-copy h2{margin:2px 0 0;font:700 17px 'Noto Serif JP',serif}
+.map-command-copy .muted{margin:2px 0 0;font-size:10px;line-height:1.45}
+.map-command-row .command-buttons{grid-template-columns:repeat(2,minmax(76px,1fr));gap:5px}
+.map-command-row .command-buttons button{padding:7px 6px;font-size:10px}
+.map-command-row .command-extra{margin:0}
+.draw-card-button{min-width:148px;white-space:nowrap}
+.board-foot{margin-top:4px}
+.map-viewport{max-height:min(80vh,1050px)}
+.map-card-area{margin-top:12px;padding:12px 16px}
+.map-card-header{display:flex;align-items:center;justify-content:space-between}
+.map-card-header h2{margin:2px 0 0;font:600 16px 'Noto Serif JP',serif}
+.map-card-content{display:grid;grid-template-columns:minmax(220px,.7fr) minmax(0,2fr);gap:18px;align-items:start}
+.map-card-content .card-preview{margin:8px 0 0}
+.map-card-content .log{max-height:150px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:20px}
+.map-viewport .leader-counter,.map-viewport .troop-counter{width:46px!important;min-width:46px!important;height:46px!important;padding:0!important;border:0!important;border-radius:50%!important;background:transparent!important;box-shadow:none!important}
+.map-viewport .leader-counter:before{display:none!important}
+.map-viewport .force-name{max-width:96px;background:transparent;box-shadow:none;text-shadow:0 0 2px #fff,0 0 4px #fff,1px 1px #fff,-1px -1px #fff;font-size:10px}
+.map-viewport .unit-pile{left:50%;bottom:0;transform:translateX(-50%)}
+@media(max-width:760px){.app-shell{padding:0 8px;margin:6px auto}.board-panel{padding:9px}.map-command-row{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:9px}.map-command-copy{grid-column:1/-1}.map-command-copy h2{font-size:15px}.map-command-row .command-buttons{grid-column:1/-1;grid-row:2;grid-template-columns:repeat(4,minmax(0,1fr))}.map-command-row .command-extra{grid-column:1/-1;grid-row:3}.draw-card-button{grid-column:2;grid-row:1;min-width:0;padding:9px 11px}.map-viewport{max-height:74vh}.map-viewport .board{width:1080px;height:auto;min-width:1080px;aspect-ratio:4153/2923}.map-card-content{grid-template-columns:1fr}.map-card-content .log{grid-template-columns:1fr;max-height:190px}.map-card-area{padding:11px}.board-head h2{font-size:13px}}
+@media(min-width:761px){.map-viewport .board{width:100%;height:auto;min-width:0;aspect-ratio:4153/2923}}
+body:has(.app-shell:not([hidden])) .topbar{height:46px;min-height:46px;justify-content:flex-end}
+body:has(.app-shell:not([hidden])) .topbar .brand{display:none}
+.board .area-node.selected,.board .area-node.move-available{outline:0!important}
+.board .area-node.selected:after,.board .area-node.move-available:after{content:'';position:absolute;z-index:1;left:50%;top:50%;width:52px;height:52px;transform:translate(-50%,-50%);border:3px solid #b8923e;border-radius:50%;pointer-events:none;box-shadow:0 0 0 3px #fff9}
+.board .area-node.move-available:after{border-color:#168f84;box-shadow:0 0 0 3px #ffffffb0}
+/* 支配状態に応じ、地図画像にある実際の国境内を勢力色で塗る */
+.board>.territory-shapes{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;pointer-events:none}
+.territory-region{stroke:none!important;opacity:1!important;fill-opacity:.31;transition:fill .25s ease,fill-opacity .25s ease}
+/* 部隊スタックの最下段を元地図の丸の中心に合わせる */
+.map-viewport .unit-pile{left:calc(50% - 12px)!important;transform:none!important}
+.map-viewport .forces{position:relative;display:block;width:46px;height:46px;margin:0 auto;overflow:visible}
+.map-viewport .force-stack{position:absolute;left:0;top:0;min-width:46px;width:46px}
+.map-viewport .force-stack:nth-child(2){left:5px;top:-5px}
+.map-viewport .force-stack:nth-child(3){left:10px;top:-10px}
+/* 同じエリアの複数部隊は横に広げず、拠点の丸から縦に並べる */
+.map-viewport .force-stack{left:0;top:calc(var(--force-index,0)*58px);min-width:46px;width:46px}
+.map-viewport .force-stack:nth-child(2){left:0;top:58px}
+.map-viewport .force-stack:nth-child(3){left:0;top:116px}
+/* 勢力ごとの地図色: 織田・同盟勢は赤系、反織田勢は青系、中立は白 */
+.territory-region.faction-oda{fill:#c43d3d}
+.territory-region.faction-tokugawa{fill:#dc6654}
+.territory-region.faction-matsunaga{fill:#a94748}
+.territory-region.faction-takeda{fill:#3159a6}
+.territory-region.faction-asai{fill:#426fc0}
+.territory-region.faction-asakura{fill:#6388d2}
+.territory-region.faction-ikko{fill:#304b91}
+.territory-region.faction-miyoshi{fill:#5878bd}
+.territory-region.faction-mori{fill:#285f9e}
+.territory-region.faction-ukita{fill:#4381c2}
+.territory-region.faction-uesugi{fill:#236ea9}
+.territory-region.faction-rebel{fill:#263d80}
+.territory-region.faction-neutral{fill:#fff}
+/* 地図だけを見たいときは駒を隠す */
+#areaNodes.units-hidden .force-stack{display:none!important}
+#areaNodes.units-hidden .area-node.selected:after,
+#areaNodes.units-hidden .area-node.move-available:after,
+#areaNodes.units-hidden .area-node.move-available:before{display:none!important}
+#unitToggle{min-width:86px;font-size:11px;font-weight:700}
+.map-legend .dot.player{background:#c43d3d}
+.map-legend .dot.enemy{background:#3159a6}
+.map-legend .dot.neutral{background:#fff;border:1px solid #9ba29c}
+/* 地図の支配色は大名ごとに判別しやすくする。駒の色とは別設定。 */
+.territory-region{fill-opacity:.43}
+.territory-region.faction-oda{fill:#c62828}
+.territory-region.faction-tokugawa{fill:#e05a42}
+.territory-region.faction-matsunaga{fill:#8f303b}
+.territory-region.faction-takeda{fill:#294f9c}
+.territory-region.faction-asai{fill:#4169bd}
+.territory-region.faction-asakura{fill:#527fae}
+.territory-region.faction-ikko{fill:#283e77}
+.territory-region.faction-miyoshi{fill:#6956a5}
+.territory-region.faction-mori{fill:#26758a}
+.territory-region.faction-ukita{fill:#4b82c3}
+.territory-region.faction-uesugi{fill:#245c8d}
+.territory-region.faction-rebel{fill:#4b4a91}
+.territory-region.faction-neutral{fill:#fff;fill-opacity:.08}
+.territory-region.faction-enemy{fill:#3159a6}
+/* 元地図の赤い丸・四角が拠点を示すため、重複する菱形印は出さない */
+.board .area-node.is-base:not(.selected):not(.move-available):after{display:none!important;content:none!important}
+/* 領土は支配陣営ごとに統一し、国境の内側へ向かって濃さが消える縁取りを重ねる */
+.territory-group{--territory-color:#fff;--territory-edge:#68727c}
+.territory-group.faction-player{--territory-color:#d9363e;--territory-edge:#b52d35}
+.territory-group.faction-enemy{--territory-color:#3b70b6;--territory-edge:#2c5b99}
+.territory-group.faction-neutral{--territory-color:#fff;--territory-edge:#b8c0c7}
+.territory-region{fill:var(--territory-color)!important;fill-opacity:.34!important}
+.territory-group.faction-neutral .territory-region{fill-opacity:.06!important}
+.territory-edge-soft,.territory-edge{fill:none!important;pointer-events:none}
+.territory-edge-soft{stroke:var(--territory-edge);stroke-width:18px;opacity:.2;filter:url(#territoryEdgeBlur)}
+.territory-edge{stroke:var(--territory-edge);stroke-width:3px;opacity:.08}
+/* 駒は領土の支配色から独立させ、大名ごとに濃く判別できる色にする */
+.map-viewport .unit-pile-piece{background:var(--tone)!important;border:2px solid #fff!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--tone) 88%,#111),2px 3px 5px #17251d70!important}
+.map-viewport .unit-pile-piece:before{background:#fff!important;opacity:.92}
+.map-viewport .unit-pile-piece:after{border:1px solid #ffffffb8!important}
+.board>.map-detail-overlay{position:absolute;inset:0;z-index:2;width:100%;height:100%;object-fit:fill;pointer-events:none}
+.board>#areaNodes{z-index:3}
+
+/* 海と琵琶湖は淡い青、海岸線沿いから水面へ薄く消す */
+.territory-region{fill-opacity:.24!important}
+.territory-group.faction-player .territory-region{fill:#e5484e!important}
+.territory-group.faction-enemy .territory-region{fill:#528cda!important}
+.territory-group.faction-neutral .territory-region{fill:#fff!important;fill-opacity:.04!important}
+.territory-edge-soft{stroke-width:46px;opacity:.44;filter:url(#territoryEdgeBlur)}
+.territory-edge{stroke-width:3px;opacity:.025}
+.map-viewport .force-name{display:none!important}
+/* 開始ボタンは常に濃い赤地に白文字でコントラストを確保 */
+#startGame{background:#9a3f2f!important;color:#fff!important;border:1px solid #7a3024!important;font-weight:800;box-shadow:0 3px 0 #5e2419,0 5px 12px #46181824}
+#startGame:hover{background:#843426!important;color:#fff!important}
+#startGame:focus-visible{outline:3px solid #b8923e;outline-offset:3px}
+
+/* 縦スクロールはページに一本化し、地図枠の中では横移動だけにする */
+.map-viewport{overflow-x:auto!important;overflow-y:hidden!important;max-height:none!important}
+
+/* 駒の拡大表示にも国名・軍勢名・能力・駒数を載せず、図柄だけ見せる */
+.hover-preview.unit-preview{min-width:0;padding:8px}
+.zoom-counter{display:grid;place-items:center;min-width:128px;min-height:128px;padding:8px;border:1px solid #d8ddd5;border-radius:12px;background:#fff}
+.zoom-counter .preview-token{position:relative!important;width:112px!important;height:112px!important;min-width:112px!important;max-width:none!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible!important;color:transparent!important}
+.zoom-counter .preview-token:before{display:none!important}
+.zoom-counter .preview-token .unit-pile{left:50%;bottom:8px;transform:translateX(-50%) scale(2);transform-origin:bottom center}
+.zoom-counter .preview-token .unit-image{position:absolute;left:50%;top:5px;width:48px;height:48px;margin:0;transform:translateX(-50%);object-fit:cover}
+.zoom-counter .preview-token .counter-power,.zoom-counter .preview-token .counter-units{display:none!important}
+
+.start-intro{line-height:1.9!important}
+.start-intro small{display:inline-block;margin-top:4px;color:#727a70;font-size:11px}
+#startGame{padding-inline:25px;min-width:240px}
+/* 武将情報と行動ボタンを一列にまとめ、地図の表示面積を広げる */
+.map-command-row{grid-template-columns:minmax(0,1fr) auto auto auto;gap:7px;margin:6px 0 8px;padding:6px 9px;border-radius:9px}
+.map-command-copy{min-width:0}
+.map-command-copy .eyebrow{font-size:9px}
+.map-command-copy h2{font-size:14px;line-height:1.2}
+.map-command-copy .muted{max-width:100%;margin:1px 0 0;font-size:9px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.map-command-row #commandButtons:empty,.map-command-row #commandExtra:empty{display:none}
+.map-command-row .command-buttons{display:flex;flex-wrap:nowrap;gap:4px}
+.map-command-row .command-buttons button{padding:6px 8px;font-size:10px;white-space:nowrap}
+.map-command-row .command-extra{max-width:180px}
+.map-command-row .draw-card-button{min-width:126px;padding:7px 10px;font-size:10px}
+.map-command-row #endTurn{background:#9a3f2f;color:#fff;border:1px solid #7a3024;box-shadow:0 2px 0 #5e2419}
+.map-command-row #endTurn:hover{background:#843426}
+.board-tabs{gap:5px;margin:6px 0;padding-bottom:6px}
+.board-tab{min-width:68px;padding:6px 12px;font-size:11px}
+.map-tools{gap:7px;margin:5px 2px 5px}
+.map-scroll-hint{font-size:10px;line-height:1.3}
+.map-zoom{gap:4px}
+.map-zoom button{height:29px;min-width:30px}
+@media(max-width:760px){.map-command-row{grid-template-columns:minmax(0,1fr) auto;gap:5px;padding:6px 8px}.map-command-copy{grid-column:auto}.map-command-row .command-buttons{grid-column:1/-1;grid-row:2;display:flex;flex-wrap:wrap}.map-command-row .command-extra{grid-column:1/-1;grid-row:3;max-width:none}.map-command-row .draw-card-button{grid-column:2;grid-row:1;min-width:118px}.map-command-copy .muted{max-width:44vw}}
+/* 山札を左に置き、引いたカードを古い順に横並びで残す */
+.map-card-content{grid-template-columns:minmax(0,1.2fr) minmax(240px,1fr);gap:14px}
+.card-preview.card-history{display:flex;align-items:flex-start;gap:12px;min-width:0;margin:8px 0 0}
+.draw-pile{flex:0 0 72px;display:grid;justify-items:center;gap:4px}
+.deck-back-button{display:grid;justify-items:center;gap:3px;width:72px;padding:0;border:0;background:transparent;color:#39473d;font:700 9px 'Zen Kaku Gothic New',sans-serif;cursor:pointer}
+.deck-back-button:disabled{opacity:.55;cursor:default}
+.deck-back-button .card-back-art{display:block;width:64px;height:94px;object-fit:cover;border:1px solid #a9905d;border-radius:6px;box-shadow:0 2px 6px #24201835;transition:transform .15s}
+.deck-back-button:not(:disabled):hover .card-back-art{transform:translateY(-3px)}
+.draw-pile>small{font-size:9px;color:#747e73;white-space:nowrap}
+.drawn-history{flex:1;min-width:0;overflow:hidden}
+.drawn-card-strip{display:flex;align-items:flex-start;gap:6px;min-height:100px;margin-top:5px;padding:2px 2px 7px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:#9da99a #eef0e9}
+.drawn-card-thumb{position:relative;display:block;flex:0 0 56px;width:56px}
+.drawn-card-thumb .card-art{display:block;width:54px;height:80px;object-fit:cover;border:1px solid #d5c9aa;border-radius:5px;box-shadow:0 2px 5px #1c261e25}
+.drawn-card-thumb>small{position:absolute;left:3px;top:3px;padding:1px 3px;border-radius:3px;background:#1e2a25c9;color:white;font-size:8px}
+.drawn-card-fallback{min-height:78px;padding:5px;background:#f6f2e7;border:1px solid #d5c9aa;border-radius:5px;font-size:9px}
+.empty-history{align-self:center;color:#8a9186;font-size:10px;white-space:nowrap}
+.history-detail{padding-top:5px;border-top:1px solid #e9e7df;color:#586258;font-size:9px;line-height:1.4}
+.history-detail b{color:#34443a}
+.history-detail p{margin:2px 0 0;max-height:42px;overflow:auto}
+@media(max-width:760px){.map-card-content{grid-template-columns:minmax(0,1fr);gap:10px}.card-preview.card-history{gap:8px}.draw-pile{flex-basis:68px}.drawn-card-strip{min-height:90px}.drawn-card-thumb{flex-basis:50px;width:50px}.drawn-card-thumb .card-art{width:48px;height:72px}}
+
+.card-reveal-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.card-reveal-actions .primary,.card-reveal-actions .quiet{min-height:44px;padding:0 20px;font-size:14px}
+.card-reveal-actions .primary{background:#9a3f2f;color:#fff;border:1px solid #7a3024;box-shadow:0 2px 0 #5e2419}
+.card-reveal-actions .primary:hover{background:#843426}
+@media(max-width:650px){.card-reveal-actions{justify-content:stretch}.card-reveal-actions button{flex:1}}
+
+.card-reveal-dialog::backdrop{background:#10191566;backdrop-filter:blur(2px)}
+/* 戦略情報・選択武将・巡数・地図操作を上端の一列に集約 */
+.board-head{display:flex;align-items:center;gap:12px;min-height:44px;margin:0 0 7px;white-space:nowrap}
+.strategy-summary{flex:0 1 205px;min-width:160px}
+.strategy-summary h2{font-size:15px;line-height:1.25}
+.commander-summary{display:grid;grid-template-columns:minmax(0,1fr);align-content:center;gap:0;flex:1 1 200px;min-width:130px;max-width:360px;overflow:hidden}
+.commander-summary .eyebrow{font-size:8px;line-height:1.2}
+.commander-summary h2{margin:1px 0 0;font:700 13px 'Noto Serif JP',serif;line-height:1.25;overflow:hidden;text-overflow:ellipsis}
+.commander-summary .muted{margin:1px 0 0;font-size:9px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.board-head #turnBadge{flex:0 0 auto;margin-left:auto;white-space:nowrap;padding:5px 8px;font-size:10px}
+.board-head .map-zoom{display:flex;align-items:center;flex:0 0 auto;gap:4px;margin:0}
+.board-head .map-zoom button{height:28px;min-width:28px;padding:0 7px;font-size:13px}
+.board-head .map-zoom #unitToggle{min-width:76px;font-size:10px}
+.board-head .map-zoom b{min-width:36px;text-align:center;font-size:10px}
+.map-command-row{display:flex;align-items:center;gap:6px;min-height:36px;margin:0 0 6px;padding:4px 7px;border-radius:8px}
+.map-command-row #commandButtons{display:flex;align-items:center;flex-wrap:nowrap;gap:4px}
+.map-command-row #commandExtra{flex:1 1 auto;min-width:0}
+.map-command-row #endTurn{margin-left:auto}
+.map-tools{margin:3px 2px 4px}
+.map-tools .map-scroll-hint{font-size:9px}
+@media(max-width:900px){.board-head{gap:7px}.strategy-summary{flex-basis:170px;min-width:140px}.commander-summary{min-width:120px}.board-head .map-zoom{gap:2px}.board-head .map-zoom #unitToggle{min-width:66px;padding:0 4px}}
+@media(max-width:760px){.board-head{flex-wrap:wrap;white-space:normal}.strategy-summary{flex:1 1 42%}.commander-summary{flex:1 1 42%;max-width:none}.board-head #turnBadge{margin-left:auto}.board-head .map-zoom{flex:1 1 100%;justify-content:flex-end}.map-command-row{flex-wrap:wrap}.map-command-row #commandExtra{flex-basis:100%}}
+.map-command-row{display:flex;align-items:center;flex-wrap:nowrap}
+.map-command-row #commandExtra{flex:1 1 auto;min-width:0}
+.map-navigation-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-left:auto}
+.map-navigation-actions .board-tabs{display:flex;align-items:center;gap:4px;margin:0;padding:0;border:0}
+.map-navigation-actions .board-tab{min-width:62px;padding:6px 10px;font-size:10px;line-height:1.2}
+.map-navigation-actions #endTurn{margin-left:0;min-width:138px;white-space:nowrap}
+@media(max-width:760px){.map-command-row{flex-wrap:wrap}.map-navigation-actions{margin-left:auto}.map-command-row #commandExtra{flex-basis:100%}}
+
+/* 地図下は左寄せのカード履歴だけを表示 */
+.map-card-area{width:min(100%,760px);margin:8px auto 0 0;padding:8px 10px}
+.map-card-content{display:block;min-width:0}
+.map-card-content #log{display:none!important}
+.map-card-content .card-preview.card-history{margin:5px 0 0}
+.map-legend,.board-foot{display:none!important}
+/* 上部情報は各項目のラベルも含めて横一列にする */
+.board-head{display:flex!important;flex-wrap:nowrap!important;align-items:center;gap:8px;min-height:34px;overflow-x:auto;overflow-y:hidden;white-space:nowrap}
+.strategy-summary{display:flex;align-items:center;gap:5px;flex:0 0 auto;min-width:0}
+.strategy-summary>.eyebrow{font-size:8px}
+.strategy-summary h2{margin:0;font-size:12px;line-height:1.15}
+.commander-summary{display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;max-width:none;overflow:hidden}
+.commander-summary>.eyebrow{flex:0 0 auto;font-size:8px}
+.commander-summary h2{flex:0 0 auto;max-width:120px;margin:0;font-size:12px;line-height:1.15}
+.commander-summary .muted{flex:1 1 auto;min-width:30px;margin:0;font-size:9px;line-height:1.15}
+.board-head #turnBadge{margin-left:0}
+.board-head .map-zoom{flex:0 0 auto}
+/* すべての地図操作を一つの横長ツールバーに集約 */
+.board-head{display:flex!important;flex-flow:row nowrap!important;align-items:center;justify-content:flex-start!important;gap:6px!important;width:100%;min-height:38px;margin:0 0 8px;overflow-x:auto;overflow-y:hidden;white-space:nowrap;scrollbar-width:thin}
+.strategy-summary{display:flex;align-items:center;gap:4px;flex:0 0 auto;max-width:185px}
+.strategy-summary>.eyebrow,.commander-summary>.eyebrow{font-size:8px;white-space:nowrap}
+.strategy-summary h2{margin:0;font-size:11px;white-space:nowrap}
+.commander-summary{display:flex;align-items:center;gap:4px;flex:0 0 auto;max-width:160px;min-width:105px;overflow:hidden}
+.commander-summary h2{max-width:95px;margin:0;font-size:11px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.commander-summary .muted{display:none!important}
+.board-head #turnBadge{flex:0 0 auto;margin:0;padding:4px 6px;font-size:9px}
+.board-head .map-zoom{display:flex;align-items:center;gap:3px;flex:0 0 auto;margin:0}
+.board-head .map-zoom button{height:27px;min-width:26px;padding:0 5px;font-size:12px}
+.board-head .map-zoom #unitToggle{min-width:67px;font-size:9px}
+.board-head .map-zoom b{min-width:31px;font-size:9px;text-align:center}
+.board-head #commandButtons:empty,.board-head #commandExtra:empty{display:none}
+.board-head #commandButtons{display:flex;flex:0 0 auto;align-items:center;flex-wrap:nowrap;gap:3px}
+.board-head #commandButtons button{padding:5px 6px;font-size:9px;white-space:nowrap}
+.board-head #commandExtra{display:flex;flex:0 0 auto;align-items:center;gap:4px;max-width:155px;overflow:hidden}
+.board-head #commandExtra p{display:none}
+.board-head #commandExtra label{display:flex;align-items:center;gap:3px;font-size:9px;white-space:nowrap}
+.board-head #commandExtra input,.board-head #commandExtra select{width:54px;margin:0;padding:4px;font-size:10px}
+.board-head .map-navigation-actions{display:flex;align-items:center;gap:5px;flex:0 0 auto;margin:0 0 0 auto}
+.board-head .map-navigation-actions .board-tabs{display:flex;align-items:center;gap:3px;margin:0;padding:0;border:0}
+.board-head .map-navigation-actions .board-tab{min-width:49px;padding:5px 7px;font-size:9px;line-height:1.1}
+.board-head .map-navigation-actions #endTurn{min-width:112px;margin:0;padding:6px 8px;font-size:9px;white-space:nowrap}
+@media(max-width:760px){.board-head{flex-wrap:nowrap!important}.board-head .map-navigation-actions{margin-left:auto}}
+
+/* ゲーム中は新ゲーム・遊び方も統合ツールバーへ */
+body:has(.app-shell:not([hidden])) .topbar{display:none!important}
+.board-head .toolbar-extra{display:flex;align-items:center;gap:3px;flex:0 0 auto;margin:0}
+.board-head .toolbar-extra .quiet{height:27px;padding:0 7px;font-size:9px;white-space:nowrap}
+/* エリア選択時だけ、ユニット名・能力・駒数と行動ボタンを表示 */
+#mapActionStrip[hidden]{display:none!important}
+.map-action-strip{display:flex;align-items:center;gap:8px;min-height:36px;margin:0 0 7px;padding:5px 8px;border:1px solid #dedfd6;border-radius:8px;background:#f7f7f1}
+.map-action-strip .muted{flex:0 0 auto;margin:0;color:#46554a;font-size:10px;line-height:1.25;white-space:nowrap}
+.map-action-strip .command-buttons{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.map-action-strip .command-buttons button,.map-action-strip .command-extra button{padding:6px 9px;font-size:10px;white-space:nowrap}
+.map-action-strip .command-extra{display:flex;align-items:center;gap:6px;flex:1;min-width:0;margin:0}
+.map-action-strip .command-extra p{margin:0;font-size:9px;line-height:1.3}
+.map-action-strip .command-extra label{font-size:9px;white-space:nowrap}
+.map-action-strip .command-extra input,.map-action-strip .command-extra select{width:70px;margin:0;padding:5px}
+#areaNodes .area-node.selected .force-name{display:block!important;max-width:104px;margin-top:4px;padding:2px 4px;border:1px solid #d9dfd4;border-radius:4px;background:#fffefa;color:#1e2922;font-size:10px;font-weight:800;line-height:1.2;white-space:nowrap;box-shadow:0 1px 3px #1e292233}
+#areaNodes .area-node.selected .counter-power,#areaNodes .area-node.selected .counter-units{display:grid!important;z-index:60;padding:2px 4px;border:1px solid #fff;border-radius:5px;background:#1e2922;color:#fff;font-size:10px;font-weight:800;line-height:1.1;box-shadow:0 1px 4px #0006}
+#areaNodes .area-node.selected .counter-power{width:auto;height:auto;min-width:20px;top:-4px;right:-6px}
+#areaNodes .area-node.selected .counter-units{right:-8px;bottom:-4px}
+.board .area-node.card-target-area:before,.board .area-node.card-target-area:after{display:none!important;content:none!important}
+.counter.card-target:after{display:none!important}
+@keyframes cardAreaPulse{from{opacity:.68;transform:translate(-50%,-50%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1.04)}}
+
+.first-draw-dialog{width:min(92vw,440px);border:1px solid #e3dfd3;border-radius:14px;background:#fbfaf4}
+.first-draw-sheet{padding:24px;text-align:center}
+.first-draw-sheet h2{margin:6px 0;font:700 20px 'Noto Serif JP',serif}
+.first-draw-sheet p{margin:8px 0 18px;color:#5d695f;font-size:13px}
+.first-draw-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.first-draw-actions button{min-height:40px;padding:0 15px}
+.first-draw-actions .primary{background:#9a3f2f;color:#fff}
+.card-reveal-dialog{width:min(90vw,820px)}
+.card-reveal-sheet{grid-template-columns:minmax(220px,.78fr) minmax(260px,1fr);gap:20px;padding:22px}
+.card-reveal-art{min-height:240px}
+.card-reveal-art img{max-height:58vh;max-width:340px}
+@media(max-width:650px){.card-reveal-dialog{width:calc(100vw - 20px)}.card-reveal-sheet{grid-template-columns:1fr;gap:12px;padding:18px 15px 16px}.card-reveal-art{min-height:0}.card-reveal-art img{max-height:42vh;max-width:68vw}}
+
+.resolution-dialog{width:min(92vw,620px);max-width:620px;border:1px solid #ddd8c9;border-radius:16px;background:#fbfaf4;color:var(--ink);padding:0}.resolution-dialog::backdrop{background:#18231dcc;backdrop-filter:blur(3px)}.resolution-sheet{padding:25px 28px 23px}.resolution-sheet h2{margin:7px 0 14px;font:700 24px 'Noto Serif JP',serif}.resolution-entries{margin:0 0 20px;padding:14px 16px 14px 34px;max-height:min(48vh,420px);overflow:auto;border:1px solid #e8e3d6;border-radius:10px;background:#fffefa}.resolution-entries li{padding:4px 0;line-height:1.7;color:#39463b}.resolution-sheet>.primary{min-height:46px;min-width:180px;background:#9a3f2f;color:white;box-shadow:0 2px 0 #5e2419}.resolution-sheet>.primary:hover{background:#843426}
+
+.retainer-setup-dialog{width:min(92vw,560px);max-width:560px;border:1px solid #ded9ca;border-radius:16px;background:#fbfaf4;color:var(--ink);padding:0}.retainer-setup-dialog::backdrop{background:#18231dcc;backdrop-filter:blur(3px)}.retainer-setup-sheet{padding:24px 28px}.retainer-setup-sheet h2{margin:7px 0 8px;font:700 24px 'Noto Serif JP',serif}.retainer-setup-sheet>p{color:#59645a;font-size:13px;line-height:1.65}.retainer-placement-list{display:grid;gap:8px;margin:17px 0}.retainer-placement-list label{display:grid;grid-template-columns:90px 1fr;align-items:center;gap:12px;padding:10px 12px;border:1px solid #e5e0d3;border-radius:10px;background:#fffefa}.retainer-placement-list label span{font-weight:700}.retainer-placement-list select{width:100%;padding:10px;border:1px solid #d9d5ca;border-radius:8px;background:white;color:#27352c;font:inherit}.retainer-setup-hint{min-height:22px;margin:0 0 12px;color:#657264;font-size:12px}.retainer-setup-hint.error{color:#a13a32;font-weight:700}.retainer-setup-sheet>.primary{min-height:46px;min-width:160px;background:#9a3f2f;color:white;box-shadow:0 2px 0 #5e2419}.retainer-setup-sheet>.primary:disabled{opacity:.45;box-shadow:none}
+
+.retainer-setup-actions{display:flex;gap:9px;flex-wrap:wrap}.retainer-setup-actions button{min-height:46px;padding:0 18px}.retainer-setup-actions .primary{background:#9a3f2f;color:white;box-shadow:0 2px 0 #5e2419}.retainer-setup-actions .primary:hover{background:#843426}.retainer-setup-actions .quiet:disabled{opacity:.4}
+
+/* エリア選択は場所の形そのものを反転。四角い拠点記号や枠は重ねない */
+.territory-highlight-layer{pointer-events:none}.territory-highlight-underlay,.territory-highlight-overlay{fill:none!important;stroke-linejoin:round!important;stroke-linecap:round!important;vector-effect:non-scaling-stroke!important;transform-box:fill-box;transform-origin:center;animation:territoryLift 1s ease-in-out infinite alternate}.territory-highlight-underlay{stroke:#171a18!important;stroke-width:13px!important}.territory-highlight-overlay{stroke:#ffda16!important;stroke-width:7px!important;filter:drop-shadow(0 5px 3px #1119)}@keyframes territoryLift{from{transform:translateY(0) scale(1)}to{transform:translateY(-4px) scale(1.035)}}
+.board .area-node.selected:not(.card-target-area):after{display:none!important;content:none!important}
+.board .area-node.is-base:after{display:none!important;content:none!important}
+
+/* 武将名と能力・駒数を常時、横並びで表示 */
+.map-viewport .force-name{display:inline!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;color:#18251d!important;font-size:11px!important;font-weight:800!important;line-height:1.2!important;white-space:nowrap!important;box-shadow:none!important;text-shadow:0 0 2px #fff,0 0 5px #fff,1px 1px #fff,-1px -1px #fff!important}
+.force-label{position:relative;z-index:42;display:flex;align-items:baseline;justify-content:center;gap:4px;max-width:150px;margin-top:2px;padding:1px 4px;border-radius:3px;background:#ffffffdb;color:#18251d;white-space:nowrap;box-shadow:0 1px 2px #17231c30}
+.force-stats{font-size:9px;font-weight:700;line-height:1.2;color:#26372b;white-space:nowrap;text-shadow:0 0 2px #fff}
+.counter-power,.counter-units{display:none!important}
+@media(max-width:650px){.force-label{gap:2px;padding:1px 2px}.map-viewport .force-name{font-size:9px!important}.force-stats{font-size:8px}}
+
+/* エリアを選ぶと部隊内訳と実行ボタンを表示 */
+.map-action-strip{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:6px 10px;padding:7px 9px}
+.map-action-strip>#commandHint{grid-column:1/-1;white-space:normal;line-height:1.4}
+.map-action-strip>.selected-stack{grid-column:1;grid-row:2;display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-width:0;max-height:64px;overflow:auto}
+.selected-force{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border:1px solid #cfd5cb;border-radius:6px;background:#fffefa;color:#25352a;font-size:10px;white-space:nowrap}
+.selected-force b{font-size:10px}.selected-force small{font-size:9px;color:#59675b}.selected-force.player{border-color:#d94b43}.selected-force.enemy{border-color:#5683c0}.selected-force.neutral{border-color:#aeb7bb}.selected-force.empty{color:#7c847b}
+.map-action-strip>#commandButtons{grid-column:2;grid-row:2;display:flex;align-items:center;flex-wrap:nowrap;gap:5px}
+.map-action-strip>#commandExtra{grid-column:3;grid-row:2;display:flex;align-items:center;gap:6px}
+.map-action-strip #commandButtons button{min-height:31px;padding:5px 11px;border:1px solid #b9c5b9;border-radius:6px;background:#fffefa;color:#283a2e;font-weight:800;white-space:nowrap}
+.map-action-strip #commandButtons button:hover:not(:disabled){background:#edf2e8;border-color:#809783}.map-action-strip #commandButtons button:disabled{opacity:.45}
+.map-action-strip #commandButtons #confirmMove,.map-action-strip #commandButtons #confirmReinforce{background:#d93632;color:#fff;border-color:#bd2925}
+.board .area-node.move-destination-choice:after{width:64px;height:64px;border:6px solid #ffd51c;box-shadow:0 0 0 4px #161a18,0 0 22px 8px #ffdf59c9;animation:chosenDestinationPulse .7s ease-in-out infinite alternate}
+@keyframes chosenDestinationPulse{from{transform:translate(-50%,-50%) scale(.94)}to{transform:translate(-50%,-50%) scale(1.09)}}
+.board .roads .move-arrow{fill:none;stroke:#f2c500;stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 0 2px #111)}.board .roads .move-arrow.active{stroke-dasharray:1200;stroke-dashoffset:1200;animation:moveArrowDraw .72s ease-out forwards}
+.board .roads .move-arrow.player-arrow{stroke:#c9a24a}.board .roads .move-arrow.enemy-arrow{stroke:#a3483a}
+@keyframes moveArrowDraw{to{stroke-dashoffset:0}}
+.board .area-node.move-destination .force-stack{animation:stackArrive .6s cubic-bezier(.2,.8,.2,1) both}
+@keyframes stackArrive{from{transform:translate(-20px,-10px) scale(.76);opacity:.35}to{transform:translate(0,0) scale(1);opacity:1}}
+@media(max-width:760px){.map-action-strip{grid-template-columns:1fr;gap:5px}.map-action-strip>#commandHint,.map-action-strip>.selected-stack,.map-action-strip>#commandButtons,.map-action-strip>#commandExtra{grid-column:1;grid-row:auto}.map-action-strip>#commandButtons{flex-wrap:wrap}.map-action-strip>.selected-stack{max-height:78px}}
+
+/* 地図上の国境内をどこからでも選べるクリック領域 */
+.board>.territory-shapes{pointer-events:auto!important}.territory-hit-layer{pointer-events:auto}.territory-hit{fill:transparent;stroke:none;pointer-events:fill;cursor:pointer}
+
+/* 行動パネルは地図の上に浮かべ、ページの高さを変えない */
+#board>#mapActionStrip.map-action-strip{position:absolute;top:0;left:0;transform:none;z-index:30;width:min(320px,calc(100% - 16px));max-height:min(360px,48vh);overflow:auto;margin:0;padding:8px 10px;grid-template-columns:minmax(0,1fr);gap:5px;border:1px solid #66705a;border-radius:10px;background:#fffef4ed;backdrop-filter:blur(7px);box-shadow:0 5px 20px #17201855}
+#board>#mapActionStrip>#commandHint,#board>#mapActionStrip>.selected-stack,#board>#mapActionStrip>#commandButtons,#board>#mapActionStrip>#commandExtra{grid-column:1;grid-row:auto}
+#board>#mapActionStrip>#commandHint{margin:0;white-space:normal;font-size:18px;line-height:1.35}
+#board>#mapActionStrip>.selected-stack{max-height:110px;overflow:auto;flex-wrap:wrap;gap:6px}
+#board>#mapActionStrip>#commandButtons{display:flex;flex-wrap:wrap;gap:6px}
+#board>#mapActionStrip>#commandExtra{display:flex;flex-wrap:wrap;gap:8px;min-height:0;max-width:none;font-size:17px}#board>#mapActionStrip>#commandExtra input{width:88px;height:40px;font-size:17px}
+@media(max-width:700px){#board>#mapActionStrip.map-action-strip{width:min(320px,calc(100% - 16px));max-height:min(360px,48vh);padding:8px}.selected-force{font-size:18px}}
+
+/* 操作パネルは必要な幅に抑え、文字とボタンを大きく表示 */
+#board>#mapActionStrip .selected-force{gap:7px;padding:6px 8px;font-size:18px;line-height:1.25}#board>#mapActionStrip .selected-force b{font-size:18px}#board>#mapActionStrip .selected-force small{font-size:16px}#board>#mapActionStrip #commandButtons button{min-height:42px;padding:7px 13px;font-size:18px;line-height:1.15}#board>#mapActionStrip #commandExtra label{font-size:17px}#board>#mapActionStrip #commandExtra input{width:86px;min-height:40px;padding:5px 7px;font-size:17px}
+
+#board>#mapActionStrip>#commandButtons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:7px}#board>#mapActionStrip>#commandButtons button{width:100%;min-width:0}#board>#mapActionStrip>#commandButtons #skipCardAction{grid-column:1/-1}
+
+/* ===== 渋い配色（和の色）2026-11-09 ===== */
+:root{--ink:#2b2622;--muted:#7a7266;--paper:#ece4d2;--panel:#f7f1e3;--line:#dcd1bb;--green:#3d4a3f;--green2:#5e6b55;--red:#9a3f2f;--gold:#a8853f;--shadow:0 8px 26px #2a201410}
+body{background:#ece4d2}
+.topbar{background:#f3ecdc;border-bottom-color:#d8ccb3}
+.panel{background:#f7f1e3;border-color:#dcd1bb}
+.board{background:#e9e0cb!important;border-color:#c9bc9f}
+/* 地図: 白い陸を生成りの紙の色に、海の青を落ち着いた藍鼠に */
+
+.map-detail-overlay{filter:saturate(.7) sepia(.15)}
+/* 領土の色: 信長側は弁柄、反信長は藍、中立は色なし */
+.territory-group.faction-player{--territory-color:#a8432f;--territory-edge:#7e2f22}
+.territory-group.faction-enemy{--territory-color:#2f4f6f;--territory-edge:#23384f}
+.territory-group.faction-neutral{--territory-color:#efe7d5;--territory-edge:#a99d84}
+.territory-region{fill-opacity:.26!important}
+.territory-group.faction-player .territory-region{fill:#a8432f!important;fill-opacity:.34!important}
+.territory-group.faction-enemy .territory-region{fill:#2b4a7e!important;fill-opacity:.46!important}
+.territory-group.faction-neutral .territory-region{fill:#efe7d5!important;fill-opacity:.0!important}
+.territory-edge-soft{opacity:.32}
+.map-legend .dot.player{background:#a8432f}
+.map-legend .dot.enemy{background:#2f4f6f}
+.primary{background:var(--green)}
+.primary:hover{background:#2c362e}
+/* 選んだ国・カードの武将の国の縁: 黄色 → 金茶 */
+.territory-highlight-overlay{stroke:#d4a93c!important}
+.territory-highlight-underlay{stroke:#2b2622!important}
+/* 塗りは薄く、国境の内側に色の帯（縁取り）をつける 2026-11-09 */
+.territory-group.faction-player .territory-region{fill-opacity:.16!important}
+.territory-group.faction-enemy .territory-region{fill-opacity:.20!important}
+.territory-group.faction-player .territory-edge-soft{stroke:#a8432f!important;stroke-width:44px!important;opacity:.62!important}
+.territory-group.faction-enemy .territory-edge-soft{stroke:#2b4a7e!important;stroke-width:44px!important;opacity:.62!important}
+.territory-group.faction-neutral .territory-edge-soft{opacity:.18!important}
+/* ボタンは文字に合わせた大きさにする（横に伸ばさない）2026-11-09 */
+.resolution-sheet>.primary,.retainer-setup-sheet>.primary,.retainer-setup-actions .primary,.card-reveal-actions .primary,.first-draw-actions .primary{min-width:0!important;width:auto!important;padding:9px 20px!important}
+.map-navigation-actions #endTurn,.board-head .map-navigation-actions #endTurn{min-width:0!important;width:auto!important;padding:6px 14px!important}
+.map-command-row .draw-card-button{min-width:0!important}
+#board>#mapActionStrip.map-action-strip{width:max-content!important;max-width:340px}
+#board>#mapActionStrip>#commandButtons button{width:auto!important;min-width:0!important}
+/* 浮いている窓は、文字の所をつかんで動かせる 2026-11-09 */
+#board>#mapActionStrip.map-action-strip{cursor:grab;touch-action:none}
+#board>#mapActionStrip.map-action-strip.dragging{cursor:grabbing;opacity:.92}
+#board>#mapActionStrip.map-action-strip button,#board>#mapActionStrip.map-action-strip input,#board>#mapActionStrip.map-action-strip select{cursor:pointer;touch-action:manipulation}
+#board>#mapActionStrip.map-action-strip:before{content:'⠿';position:absolute;right:6px;top:3px;font-size:12px;color:#a99d84;pointer-events:none}
+/* 結果・敵の行動の窓は、中の文字の長さに合わせて縮める 2026-11-09 */
+.resolution-dialog{width:fit-content!important;min-width:min(92vw,300px);max-width:min(92vw,620px)!important}
+.first-draw-dialog,.retainer-setup-dialog{width:fit-content!important;min-width:min(92vw,300px);max-width:min(92vw,560px)!important}
+/* 敵の行動の窓: 地図を暗くせず、国にかからない所に小さく浮かべる。戻る・進む・確定 2026-11-09 */
+.resolution-dialog.floating{position:fixed;inset:auto;margin:0;z-index:60;box-shadow:0 10px 30px #2a201440;max-width:min(92vw,420px)!important;min-width:260px}
+.resolution-dialog.floating .resolution-sheet{padding:12px 14px!important;gap:6px}
+.resolution-dialog.floating h2{font-size:17px!important;margin:2px 0 4px!important}
+.resolution-dialog.floating .resolution-entries{margin:0 0 8px!important;padding:8px 10px 8px 26px!important;font-size:13px}
+.resolution-nav{display:flex;gap:6px;margin:0 0 6px}
+.resolution-nav button{padding:6px 12px;font-size:12px}
+.resolution-nav button:disabled{opacity:.4;cursor:not-allowed}
+.resolution-dialog.floating #resolutionConfirm{min-height:0!important;padding:7px 14px!important;font-size:12px}
+/* 損害の割り振りの窓 2026-11-09 */
+.casualty-dialog .cas-rows{display:grid;gap:6px;margin:8px 0}
+.casualty-dialog .cas-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#fffdf6}
+.casualty-dialog .cas-row input{width:64px;padding:4px}
+.casualty-dialog .cas-left{color:#9a3f2f;font-size:12px;margin:2px 0 8px}
+/* 戦況: 織田家臣の反逆判定の欄がつぶれないように 2026-11-09 */
+.oda-track .track-row{display:block!important}
+.oda-track .digital-steps{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.oda-track .digital-steps .track-step{min-width:0;width:auto}
+/* 駒の拡大: 名前・能力・駒数 */
+.zoom-counter .zoom-caption{display:grid;gap:2px;text-align:center;margin-top:6px}
+.zoom-counter .zoom-caption strong{font-size:20px;line-height:1.2}
+.zoom-counter .zoom-caption span{font-size:15px;opacity:.95}
+/* 浮かぶ窓は横長にして、地図をかくしにくく 2026-11-09 */
+#board>#mapActionStrip.map-action-strip{width:auto!important;max-width:min(860px,calc(100% - 20px))!important;max-height:none!important;display:flex!important;flex-wrap:wrap;align-items:center;gap:6px 10px!important;padding:6px 26px 6px 10px!important}
+#board>#mapActionStrip>#commandHint{flex:1 1 220px;margin:0!important;font-size:12px!important;line-height:1.35}
+#board>#mapActionStrip>.selected-stack{flex:0 1 auto;max-height:none!important}
+#board>#mapActionStrip>#commandButtons{display:flex!important;flex-wrap:nowrap!important;gap:5px!important;width:auto!important}
+#board>#mapActionStrip>#commandExtra{display:flex!important;flex-wrap:nowrap!important;font-size:13px!important}
+#board>#mapActionStrip>#commandExtra input{height:30px!important;font-size:14px!important;width:64px!important}
+.resolution-dialog.floating{max-width:min(94vw,900px)!important;width:auto!important}
+.resolution-dialog.floating .resolution-sheet{display:flex!important;flex-wrap:wrap;align-items:center;gap:4px 12px!important;padding:8px 12px!important}
+.resolution-dialog.floating .resolution-sheet>.eyebrow{flex:1 0 100%}
+.resolution-dialog.floating h2{margin:0!important;font-size:16px!important;white-space:nowrap}
+.resolution-dialog.floating .resolution-entries{flex:1 1 260px;margin:0!important;padding:4px 8px 4px 22px!important}
+.resolution-dialog.floating .resolution-nav{margin:0!important}
+/* 戦略値と参戦トラックは、いつも地図の上に出す 2026-11-09 */
+.track-dashboard.always-on{margin:0 0 8px}
+.pool-left{font-size:12px;color:#7a7266;white-space:nowrap}
+/* 文字を少し大きく（ゲーム全体）2026-11-09。地図そのもの（位置の計算がある所）は拡大しない */
+.topbar,.start-card,.board-head,.track-dashboard,.status-panel,.inventory-panel,.map-card-area,.map-tools,dialog:not(.floating){zoom:1.15}
+.resolution-dialog.floating{font-size:115%}
+.toast,#actionAnnouncement{font-size:115%}
+#board>#mapActionStrip.map-action-strip{font-size:115%}
+#board>#mapActionStrip.map-action-strip button{font-size:14px!important;padding:7px 12px!important}
+#board>#mapActionStrip>#commandHint{font-size:14px!important}
+.map-viewport .force-name{font-size:12px!important}
+/* 引いたカードの窓を少し小さく 2026-11-09 */
+.card-reveal-dialog{zoom:1!important;width:min(90vw,700px)!important}
+.card-reveal-art{min-height:0!important}
+.card-reveal-art img{max-height:52vh!important}
+.card-reveal-copy p{font-size:16px!important}
+/* 行動のボタンは海に埋め込む（浮かぶ窓の枠・影をなくし、少し小さく）2026-11-09 */
+#board>#mapActionStrip.map-action-strip{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;cursor:default!important;gap:4px 8px!important}
+#board>#mapActionStrip.map-action-strip:before{display:none!important}
+#board>#mapActionStrip>#commandHint{font-size:12px!important;color:#3d4f53!important;flex-basis:100%!important;text-shadow:0 0 3px #e3ece9,0 0 3px #e3ece9}
+#board>#mapActionStrip.map-action-strip button{font-size:12px!important;padding:4px 10px!important;min-height:0!important;background:#f6f1e4ee!important;border:1px solid #9fb2ae!important;border-radius:6px!important;box-shadow:0 1px 2px #2a3a3a22!important}
+#board>#mapActionStrip.map-action-strip button:disabled{opacity:.45}
+#board>#mapActionStrip>.selected-stack .selected-force{font-size:12px!important;padding:2px 8px!important;background:#f6f1e4ee!important}
+#board>#mapActionStrip>#commandExtra{font-size:12px!important;color:#3d4f53}
+#board>#mapActionStrip>#commandExtra input{height:26px!important;width:56px!important;font-size:13px!important}
+/* 海に埋め込むのはボタンだけ。武将の札は出さない。説明が空なら行もなくす */
+#board>#mapActionStrip>.selected-stack{display:none!important}
+#board>#mapActionStrip>#commandHint:empty{display:none!important}
+/* 駒の拡大の名前・能力: 白い文字が見えないので、明るい地に濃い文字 2026-11-09 */
+.zoom-counter .zoom-caption{background:#f7f1e3;color:#2b2622!important;text-shadow:none!important;border-radius:8px;padding:6px 10px;box-shadow:0 1px 3px #0003}
+.zoom-counter .zoom-caption strong,.zoom-counter .zoom-caption span{color:#2b2622!important;text-shadow:none!important}
+/* 海の上のボタン: 文字は濃く。確定のボタンは弁柄の地に白い文字 2026-11-09 */
+#board>#mapActionStrip.map-action-strip button{color:#2b2622!important}
+#board>#mapActionStrip.map-action-strip #confirmReinforce,#board>#mapActionStrip.map-action-strip #confirmMove,#board>#mapActionStrip.map-action-strip #confirmDisband,#board>#mapActionStrip.map-action-strip #confirmAttack{background:#9a3f2f!important;color:#fff!important;border-color:#7a3024!important}
+#board>#mapActionStrip.map-action-strip button:disabled{background:#e9e4d6ee!important;color:#8a8478!important}
+/* 同じエリアの別の軍（織田と松永など）も、見た目は重ねて出す。名前の札は下に縦に並べる 2026-11-09 */
+.map-viewport .force-stack{left:calc(var(--force-index,0)*9px)!important;top:calc(var(--force-index,0)*-7px)!important}
+.map-viewport .force-stack .force-label{position:absolute!important;left:calc(var(--force-index,0)*-9px);top:calc(52px + var(--force-index,0)*25px)!important;margin:0!important}
+/* 駒の下の札は名前だけ、小さく（能力・駒数は開始時の選択ルールで「表示」にしたときだけ）2026-11-09 */
+.map-viewport .force-name{font-size:9px!important;font-weight:700!important}
+#areaNodes:not(.stats-visible) .force-stats{display:none!important}
+.map-viewport .force-label{padding:0 3px!important;gap:2px!important;line-height:1.25!important}
+.map-viewport .force-stack .force-label{top:calc(50px + var(--force-index,0)*15px)!important}
+/* 戦闘まわりの確定ボタン: 弁柄の地に白い文字。押せないときは灰色の地に濃い文字 2026-11-09 */
+#battleContinue,.casualty-dialog .primary,#resolutionConfirm,#cardRevealContinue{background:#9a3f2f!important;color:#fff!important;border:1px solid #7a3024!important;opacity:1!important}
+#battleContinue:disabled,.casualty-dialog .primary:disabled,#resolutionConfirm:disabled,#cardRevealContinue:disabled{background:#d9d0bd!important;color:#5a5248!important;border-color:#b9ad8f!important}
+/* 行動記録を出す（新しい順）2026-11-09 */
+.map-card-area .log-title{margin:12px 0 4px;font:700 13px 'Noto Serif JP',serif;color:#5a3a1a}
+.map-card-area #log{display:block!important;max-height:220px;overflow:auto}
+.map-card-area #log .log-entry{font-size:12px;color:#3d3a33;padding:3px 0}
+/* 駒は丸数字で出す（軍勢の駒数。武将がいる山は二重の輪）2026-11-09 */
+.map-viewport .leader-counter,.map-viewport .troop-counter{width:26px!important;min-width:26px!important;height:26px!important;border-radius:50%!important;background:var(--tone)!important;border:2px solid #fff!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--tone) 80%,#000),0 1px 3px #0004!important;display:grid!important;place-items:center!important;overflow:visible!important}
+.map-viewport .leader-counter{box-shadow:0 0 0 2px var(--tone),0 0 0 4px #fff,0 1px 4px #0005!important}
+.map-viewport .count-badge{color:#fff;font:800 13px/1 'Zen Kaku Gothic New',sans-serif;text-shadow:0 1px 1px #0006}
+.map-viewport .unit-pile,.map-viewport .unit-image{display:none!important}
+.map-viewport .force-stack{width:26px!important;min-width:26px!important;left:calc(var(--force-index,0)*30px)!important;top:0!important}
+.map-viewport .force-stack .force-label{left:50%!important;transform:translateX(-50%);top:30px!important}
+.map-viewport .troop-counter .count-badge,.map-viewport .leader-counter .count-badge{color:#fff!important;background:none!important;border:0!important;box-shadow:none!important;font-size:13px!important;width:auto!important;height:auto!important;padding:0!important}
+/* 丸は国の印の真ん中に。2つ以上なら真ん中から左右に並べる 2026-11-09 */
+.map-viewport .area-node .forces{display:flex!important;justify-content:center!important;align-items:flex-start!important;gap:4px!important;position:relative!important}
+.map-viewport .force-stack{position:relative!important;left:auto!important;top:auto!important}
+.map-viewport .area-node .forces{flex-wrap:nowrap!important;width:max-content!important;max-width:none!important;left:50%!important;transform:translateX(-50%)!important}
+/* 敵の行動・カードの効果の窓は、横長をやめて小さな四角に 2026-11-09 */
+.resolution-dialog.floating{width:300px!important;max-width:min(92vw,320px)!important;min-width:0!important}
+.resolution-dialog.floating .resolution-sheet{display:grid!important;grid-template-columns:1fr!important;gap:6px!important;padding:10px 12px!important}
+.resolution-dialog.floating .resolution-sheet>.eyebrow{font-size:11px!important}
+.resolution-dialog.floating h2{white-space:normal!important;font-size:16px!important}
+.resolution-dialog.floating .resolution-entries{margin:0!important;padding:6px 8px 6px 20px!important;font-size:13px!important}
+.resolution-dialog.floating .resolution-nav{display:flex!important;gap:6px!important}
+.resolution-dialog.floating .resolution-nav button{flex:1 1 0;padding:6px 8px!important;font-size:12px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.resolution-dialog.floating #resolutionConfirm{width:100%!important;padding:7px 10px!important;font-size:13px!important}
+.resolution-entries .next-step{color:#7a7266;list-style:none;margin-left:-14px;font-size:12px}
+/* 名前が長いとき（武将が何人もいるとき）は2行まで折り返す */
+.map-viewport .force-name{white-space:normal!important;max-width:84px!important;text-align:center;display:block!important}
+.map-viewport .force-stack .force-label{width:max-content!important;max-width:110px!important}
+.map-viewport .force-name{white-space:nowrap!important;max-width:none!important}
+/* エリアを押したときの勢力の窓 2026-11-09 */
+.area-info{position:absolute;z-index:70;background:#fbf7ec;border:1px solid #c9bc9f;border-radius:10px;box-shadow:0 6px 18px #2a201433;padding:8px 10px;font-size:13px;color:#2b2622;min-width:220px}
+.area-info b{font:700 15px 'Noto Serif JP',serif}.area-info small{color:#7a7266;margin-left:6px}
+.area-info table{border-collapse:collapse;margin-top:6px;width:100%}.area-info td{padding:3px 6px;border-top:1px solid #e6dcc6;white-space:nowrap}
+.area-info td i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:middle}
+/* 3勢力以上の四角 2026-11-09 */
+.counter.mixed-counter{width:28px;height:28px;border-radius:4px;background:#4a4038;border:2px solid #f3ecdc;box-shadow:0 0 0 1px #4a4038;display:grid;place-items:center;color:#fff}
+.counter.mixed-counter .count-badge{position:static;font-size:13px;color:#fff;background:none;border:0}
+.area-info .area-pick{padding:2px 8px;font-size:11px;border-radius:4px;border:1px solid #7a3024;background:#9a3f2f;color:#fff;cursor:pointer}
+.area-info .area-pick.on{background:#f3ecdc;color:#7a3024}
+/* 丸・四角の数字を真ん中に 2026-11-09 */
+.map-viewport .troop-counter,.map-viewport .leader-counter,.map-viewport .mixed-counter{position:relative!important}
+.map-viewport .troop-counter .count-badge,.map-viewport .leader-counter .count-badge,.map-viewport .mixed-counter .count-badge{position:absolute!important;inset:0!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:center!important;transform:none!important;line-height:1!important;text-align:center!important}
+/* 敵味方の混在: 斜線で分けた四角（左上=信長側、右下=反信長）2026-11-09 */
+.map-viewport .force-stack:has(.split-counter){width:36px!important;min-width:36px!important}
+.map-viewport .counter.split-counter{position:relative!important;width:36px;height:36px;border-radius:4px;border:2px solid #f3ecdc;box-shadow:0 0 0 1px #3b332c;background:linear-gradient(to bottom right,#a8432f 0 49%,#f3ecdc 49% 51%,#2f4f6f 51% 100%);display:block}
+.map-viewport .split-counter .split-num{position:absolute;color:#fff;font:800 12px/1 'Zen Kaku Gothic New',sans-serif;text-shadow:0 1px 1px #0008}
+.map-viewport .split-counter .split-num.player{left:4px;top:4px}
+.map-viewport .split-counter .split-num.enemy{right:4px;bottom:4px}
+.map-viewport .split-counter~.force-label{top:40px!important}
