@@ -50,6 +50,7 @@
   #board img.map { display: block; user-select: none; -webkit-user-drag: none; }
   #overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
   #units { position: absolute; left: 0; top: 0; }
+  #units[hidden] { display: none; }
   .unit { position: absolute; width: 40px; height: 40px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0,0,0,.8); cursor: pointer; }
   .unit img { width: 40px; height: 40px; display: block; border-radius: 3px; }
   .unit.sel { outline: 3px solid #ffeb3b; outline-offset: 1px; z-index: 6 !important; }
@@ -180,12 +181,13 @@
     <span id="dokusoOnlineTaskDetail"></span>
   </div>
   <span>拡大: <button onclick="zoomBy(-0.1)">−</button> <span id="zoomLbl">100%</span> <button onclick="zoomBy(0.1)">＋</button></span>
+  <button id="toggleUnits" type="button" aria-controls="units" onclick="toggleMapUnits()">駒を隠す</button>
   <span class="chip" id="turnInfo">-</span>
   <span class="chip" id="phaseInfo">-</span>
   <span id="turnBtns">
     <button id="btnUndoMove" onclick="undoMoveBtn()" hidden disabled>1手戻す</button>
     <button id="btnEndMove" onclick="endMoveBtn()">移動終了</button>
-    <button id="btnEndCombat" onclick="endCombatBtn()">戦闘終了</button>
+    <button id="btnEndCombat" onclick="combatPhaseBtn()">戦闘終了</button>
     <button id="btnAiNext" onclick="aiMoveNext()" style="display:none">次へ進む</button>
   </span>
   <span id="jumpBtns">
@@ -276,7 +278,7 @@ function showHelp(fromStart) {
     <h3>地図の見方</h3>
     <ul>
       <li>ヘクスをクリックすると、右の欄の「選んだヘクス」に、そのヘクスの駒が全部大きく出ます（敵の駒も見られます）。</li>
-      <li>都市・大都市は枠の色が支配: 赤＝ソ連、黒＝ドイツ、灰色＝ドイツの支配だが道路が西につながらず得点にならない。駒が通過すると、その場で色と点数が変わります。</li>
+      <li>外枠は大都市が赤、都市がオレンジです。内枠は支配を示します。赤はソ連、黒はドイツ、灰色はドイツが支配していて西への道路が通じず得点にならない都市です。</li>
       <li>ソ連の駒は最初「U」（戦闘力が分からない面）。戦闘の組み合わせを宣言すると裏返って戦闘力が分かります。</li>
       <li>駒が動いた道筋は矢印で出ます（ドイツは黒、ソ連は赤）。その移動フェイズが終わると消えます。</li>
     </ul>
@@ -290,7 +292,7 @@ function showHelp(fromStart) {
     <ul>
       <li>第1ターンのドイツ軍は、他の味方軍の配置エリアには入れません。自分のエリアから出て国境を越える移動は可能です。第2ターンからはこの制限はありません。</li>
       <li>自分の駒のヘクスをクリック → 緑のヘクスをクリックで移動。オレンジは敵に隣接するヘクスで、入るとそこで止まります。</li>
-      <li>重なっている駒は、クリックするとまとめて選ばれ、まとめて動きます（移動開始の時にいっしょにいた駒）。</li>
+      <li>同じヘクスにいてまだ動ける味方の駒は、通常クリックでまとめて選びます。途中で合流した駒もまとめて動けます。</li>
       <li>1個だけ動かす時は <b>Shift＋クリック</b> で重なりを左右に開いて、動かす駒をクリック。右の「選んだヘクス」の「これだけ動かす」でも選べます。地図の別の所をクリックすると閉じます。</li>
       <li>駒の左下の目印: 青い「移」＝動かした（まだ動ける）、灰色の「済」＝移動を終えた（暗くなります）。目印のない駒はまだ動かしていません。</li>
       <li>移動可能な味方のヘクスをクリックすると、そこへ重ねて移動します。別の駒を選び直す時はShift＋クリック。同じ駒をもう一度クリックすると選択をやめます。Esc キーでもやめられます。</li>
@@ -399,11 +401,11 @@ async function loadGameFile(input) {
 }
 
 function restoreGame(data) {
-  let save, nextGame;
+  let save, nextGame, savedUI;
   try {
     save = JSON.parse(data);
     if (save?.version !== 1 || !Object.hasOwn(D.PHASE_NAME, save.state?.phase) ||
-        !Array.isArray(save.state.units) || !save.ctrl || !save.ui ||
+        !Array.isArray(save.state.units) || !save.ctrl ||
         !Array.isArray(save.trails) || !Number.isFinite(save.zoom) || !Array.isArray(save.scroll)) throw new Error('Invalid save');
     if (save.ctrl.ger !== LOCAL_CONTROLS.ger || save.ctrl.sov !== LOCAL_CONTROLS.sov) {
       alert('この対戦モードのセーブデータは現在読み込めません。');
@@ -412,14 +414,24 @@ function restoreGame(data) {
     nextGame = new D.Game(MD, DOKUSO_UNIT_IMAGES);
     for (const key of SAVE_FIELDS) if (Object.hasOwn(save.state, key)) nextGame[key] = save.state[key];
     nextGame.sovInitialAdjacentInfantry = new Set(save.state.sovInitialAdjacentInfantry);
-    if (save.ui.adv?.paths) save.ui.adv.paths = new Map(save.ui.adv.paths);
+    savedUI = { ...save.ui };
+    if (savedUI.adv?.review) savedUI.adv.paths = new Map(savedUI.adv.paths);
   } catch {
     alert('保存した対局を読み込めませんでした。');
     return;
   }
+  savedUI.aiSetupReview = nextGame.phase === 'setup_sov' && (savedUI.aiSetupReview || nextGame.setupDone('sov'));
+  savedUI.aiMoveDone = nextGame.phase === 'sov_move' && !!savedUI.aiMoveDone;
+  if (!savedUI.aiMoveDone || !nextGame.moveState?.[savedUI.moveEdit?.id]) savedUI.moveEdit = null;
+  const retreating = savedUI.mode === 'retreat' && savedUI.retreatUnit &&
+    nextGame.pending?.retreat?.[0]?.unit === savedUI.retreatUnit && nextGame.retreatOptions(savedUI.retreatUnit).length;
+  const advancing = savedUI.mode === 'advance' && nextGame.pending?.advance && Array.isArray(savedUI.adv?.sel);
+  if (!retreating) savedUI.retreatUnit = null;
+  if (!advancing) savedUI.adv = null;
+  if (!retreating && !advancing) savedUI.mode = null;
   ctrl = LOCAL_CONTROLS;
   zoom = save.zoom;
-  installGame(nextGame, save.ui, save.trails);
+  installGame(nextGame, savedUI, save.trails);
   applyZoom();
   if (ui.mode) render();
   else drive();
@@ -438,8 +450,8 @@ function drive() {
   render();
   if (ui.aiSetupReview || ui.aiMoveDone) return;
   if (game.phase === 'over') { showEnd(); return; }
-  if (game.combatQueue && (game.pending || game.combatQueue.length)) { stepResolve(); return; }
   const side = game.activeSide();
+  if (game.combatQueue && (game.pending || game.combatQueue.length || ctrl[side] === 'ai')) { stepResolve(); return; }
   if (ctrl[side] !== 'ai' || aiBusy) return;
   aiBusy = true;
   if (game.phase === 'setup_' + side) {
@@ -516,7 +528,7 @@ function stepResolve() {
   ui.mode = null;
   const side = game.combatSide();
   if (side && ctrl[side] === 'ai') { game.endPhase(); later(drive, 250); }
-  else render();
+  render();
 }
 
 // ===== 戦闘の札（攻撃側・防御側・比・サイコロ・結果） =====
@@ -624,6 +636,12 @@ function setSideOpen(open) {
   try { localStorage.setItem('dokusoSideOpen', open ? '1' : '0'); } catch (e) {}
 }
 function toggleSide() { setSideOpen(document.getElementById('side').classList.contains('closed')); }
+function toggleMapUnits() {
+  const layer = document.getElementById('units');
+  layer.hidden = !layer.hidden;
+  document.getElementById('toggleUnits').textContent = layer.hidden ? '駒を表示' : '駒を隠す';
+  if (layer.hidden) hideHover();
+}
 (function () { let v = '1'; try { v = localStorage.getItem('dokusoSideOpen') || '1'; } catch (e) {} setSideOpen(v !== '0'); })();
 
 // ===== 上の帯の操作ボタン（その時に使うボタンだけ） =====
@@ -672,13 +690,17 @@ function renderTopActions() {
   }
   if (ph === side + '_combat' && !game.combatQueue) {
     if (ui.pick.length) b('選んだ駒を外す', () => { ui.pick = []; render(); });
-    b('判定する', () => { ui.pick = []; game.startResolve(); render(); stepResolve(); }, 'go', !game.declared.length);
   }
 }
 
 // ===== 上の帯の「移動終了」「戦闘終了」 =====
 function humanTurnSide() { if (isDokusoOnline() && !dokusoOnlineMyTurn()) return null; const sd = game && game.activeSide(); return (sd && ctrl[sd] === 'human' && !ui.mode) ? sd : null; }
 function canEndMove() { const sd = humanTurnSide(); return !!sd && game.phase === sd + '_move'; }
+function canStartCombatResolution() {
+  const side = humanTurnSide();
+  return !isDokusoOnline() && !!side && game.combatSide() === side &&
+    !game.combatQueue && game.declared.length > 0;
+}
 function canEndCombat() {
   const sd = humanTurnSide();
   if (!sd || game.phase !== sd + '_combat') return false;
@@ -698,8 +720,15 @@ function endMoveBtn() {
   if (!r.ok) ui.msg = r.reason; else { ui.msg = ''; ui.moveSel = []; ui.hex = null; ui.fanHex = null; }
   render(); drive();
 }
-function endCombatBtn() {
+function combatPhaseBtn() {
   if (isDokusoOnline()) { void dokusoOnlineSend('endPhase'); return; }
+  if (canStartCombatResolution()) {
+    if (!game.startResolve()) return;
+    Object.assign(ui, { pick: [], fanHex: null, msg: '' });
+    render();
+    stepResolve();
+    return;
+  }
   if (!canEndCombat()) return;
   ui.pick = []; ui.lastResult = null; ui.fanHex = null;
   const r = game.endPhase(); ui.msg = r.ok ? '' : r.reason; ui.hex = null;
@@ -810,7 +839,9 @@ function updateTopButtons() {
   const undo = document.getElementById('btnUndoMove');
   undo.hidden = em.disabled;
   undo.disabled = undo.hidden || !game.canUndo();
-  ec.disabled = !canEndCombat();
+  const readyToResolve = canStartCombatResolution();
+  ec.textContent = readyToResolve ? '判定する' : '戦闘終了';
+  ec.disabled = !readyToResolve && !canEndCombat();
 }
 
 // ===== 地図の座標 =====
@@ -895,16 +926,16 @@ function fillHex(h, color, r) { hexPath(h, r); ctx.fillStyle = color; ctx.fill()
 function strokeHex(h, color, w, r) { hexPath(h, r); ctx.strokeStyle = color; ctx.lineWidth = w || 3; ctx.stroke(); }
 function drawOverlay() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // 都市・大都市の枠: ソ連の支配＝赤、ドイツの支配＝黒（道路が西につながらず得点にならない時は灰色）
+  // 外枠は都市の種類、内枠と記号は支配を示す。
   for (const [h, sd] of Object.entries(game.control)) {
     const col = sd === 'ger' ? (game.cityScore(h).cut ? '#9e9e9e' : '#111') : '#e53935';
+    const cityColor = game.map.facility(h) === 'bc' ? '#ff4141' : '#ff9f35';
     strokeHex(h, 'rgba(255,255,255,.85)', 9, 0.95);
-    strokeHex(h, col, 6, 0.95);
-  }
-  for (const [h, sd] of Object.entries(game.control)) {
+    strokeHex(h, cityColor, 5, 0.95);
+    strokeHex(h, col, 3, 0.75);
     const c = game.map.center(h);
     ctx.beginPath(); ctx.arc(c.x - 22, c.y - 20, 8, 0, Math.PI * 2);
-    ctx.fillStyle = sd === 'ger' ? (game.cityScore(h).cut ? '#777' : '#222') : '#c62828'; ctx.fill();
+    ctx.fillStyle = col; ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(sd === 'ger' ? '✠' : '★', c.x - 22, c.y - 20);
@@ -1190,11 +1221,11 @@ function movePanel(side) {
 }
 function combatPanel(side) {
   if (!game.combatQueue) {
-    if (!ui.pick.length) step('攻撃に使う自分の駒をクリックしてください（重なっている駒はまとめて選ばれます）。<br>重なりを分けたい時は <b>Shift＋クリック</b> で左右に開いて、1個ずつクリック。<br>攻撃しないなら上の「戦闘終了」。');
+    if (!ui.pick.length) step('攻撃に使う自分の駒をクリックしてください（重なっている駒はまとめて選ばれます）。<br>重なりを分けたい時は <b>Shift＋クリック</b> で左右に開いて、1個ずつクリック。' +
+      (game.declared.length ? '' : '<br>攻撃しないなら上の「戦闘終了」。'));
     else step(`攻撃に使う駒 <b>${ui.pick.length}個</b>。攻撃する敵のヘクス（赤く塗った所）をクリックしてください。`, 'big');
     if (game.declared.length) {
       add('<h3>宣言した組み合わせ</h3>');
-      step('宣言した戦闘があるので、「判定する」まで「戦闘終了」は押せません（やめる時は宣言を取り消す）。');
       game.declared.forEach((d, i) => {
         const pv = game.previewOdds(d.attackers, d.hex, false);
         const row = add(`<div class="decl"><span>${d.hex} へ ${d.attackers.length}個 ${pv.unknown ? '（比はソ連の戦闘力が分かってから）' : `攻${pv.att} 対 防${pv.def} → ${pv.odds.replace(':', '対')}`}</span></div>`);
@@ -1226,11 +1257,10 @@ function hexInspector() {
   const moving = human && !ui.mode && ph === side + '_move';
   const movable = moving ? list.filter(u => u.side === side && game.canMove(u)) : [];
   if (movable.length >= 2) {
-    // まとめて動かせる組（移動開始時にいっしょにいた駒）
-    const grp = [movable[0], ...game.stackMates(movable[0])];
-    const selNow = moveUnits().map(u => u.id).sort().join();
-    if (grp.length >= 2) btn(`まとめて動かす（${grp.length}個）`, () => { ui.moveSel = grp.map(u => u.id); ui.msg = ''; render(); }, selNow === grp.map(u => u.id).sort().join() ? 'go' : '');
-    else add('<div class="group-h">このヘクスの駒は移動開始の時に別々のヘクスにいたので、1個ずつ動かします。</div>');
+    const ids = movable.map(u => u.id);
+    const selected = moveUnits();
+    const allSelected = selected.length === ids.length && selected.every(u => ids.includes(u.id));
+    btn(`まとめて動かす（${ids.length}個）`, () => { ui.moveSel = ids; ui.fanHex = null; ui.msg = ''; render(); }, allSelected ? 'go' : '');
   }
   for (const u of list) {
     const ms = game.moveState && game.moveState[u.id];
@@ -1462,7 +1492,7 @@ function onUnitClick(u, inTray, shift) {
   if (single && human && !ui.mode && u.side === side) {
     if (game.phase === side + '_move') {
       // 開いた駒の1個だけを動かす駒にする（敵に隣接して止まった駒はオーバーラン用に選ぶ）
-      if (game.canMove(u) || game.overrunTargets(u).length) { ui.moveSel = [u.id]; ui.msg = ''; }
+      if (game.canMove(u) || game.overrunTargets(u).length) { ui.moveSel = [u.id]; ui.fanHex = null; ui.msg = ''; }
       else ui.msg = 'この駒はもう動けません。';
       ui.hex = u.hex; render(); return;
     }
@@ -1536,7 +1566,9 @@ function onHexClick(h, clickedUnit) {
       ui.hex = h; ui.fanHex = null; render(); return;
     }
     ui.hex = h;
-    ui.moveSel = sameStack ? [] : defaultMoveSel(h, side);
+    const group = defaultMoveSel(h, side);
+    const sameSelection = sameStack && mv.length === group.length && mv.every(u => group.includes(u.id));
+    ui.moveSel = sameSelection ? [] : group;
     render(); return;
   }
   if (ph.endsWith('_combat') && !game.combatQueue) {

@@ -97,7 +97,7 @@
       }
       case 'setupClear': if (!setup) return false; for (const u of g.setupUnits(side)) g.unplace(u); return true;
       case 'finishSetup': return setup && g.finishSetup(side);
-      case 'moveGroup': return move && ids(a[0], D.STACK_MAX) && hex(a[1]) && g.moveGroup(a[0].map(unit), a[1]);
+      case 'moveGroup': return move && ids(a[0], g.sideUnits(side).length) && hex(a[1]) && g.moveGroup(a[0].map(unit), a[1]);
       case 'overrun': return move && side === 'ger' && unit(a[0])?.side === side && hex(a[1]) && g.overrun(unit(a[0]), a[1]);
       case 'undo': {
         if (move) return g.undo();

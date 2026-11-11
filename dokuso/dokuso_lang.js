@@ -99,6 +99,8 @@ dokusoTranslationRows(`
 点|points|points|Punkte|punti|puntos|分|점|очков
 都市|City|Ville|Stadt|Città|Ciudad|城市|도시|Город
 大都市|Major city|Grande ville|Großstadt|Grande città|Ciudad grande|大城市|대도시|Крупный город
+駒を隠す|Hide units|Masquer les unités|Einheiten ausblenden|Nascondi le unità|Ocultar unidades|隐藏单位|부대 숨기기|Скрыть части
+駒を表示|Show units|Afficher les unités|Einheiten anzeigen|Mostra le unità|Mostrar unidades|显示单位|부대 표시|Показать части
 街|Town|Bourg|Ort|Paese|Villa|城镇|마을|Городок
 突破|Breakthrough|Percée|Durchbruch|Sfondamento|Ruptura|突破|돌파|Прорыв
 ドイツ軍の壊滅|German losses|Pertes allemandes|Deutsche Verluste|Perdite tedesche|Bajas alemanas|德军损失|독일군 손실|Потери Германии

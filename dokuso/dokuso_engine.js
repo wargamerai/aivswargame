@@ -394,14 +394,10 @@
     }
     canMove(u) { const ms = this.moveState && this.moveState[u.id]; return !!(ms && u.alive && u.hex && !ms.stopped && ms.mp > 0 && this.phase === u.side + '_move'); }
     moveUnit(u, h) { return this.moveGroup([u], h); }
-    // 移動開始の時に同じヘクスにいる駒（またはいっしょに動いてきた駒）は、まとめて動ける
+    // 同じヘクスにいて、まだ動ける味方の駒はまとめて移動できる。
     stackMates(u) {
-      const ms = this.moveState && this.moveState[u.id];
-      if (!ms || !this.canMove(u)) return [];
-      return this.unitsAt(u.hex).filter(v => v !== u && v.side === u.side && this.canMove(v) && (() => {
-        const m2 = this.moveState[v.id];
-        return (!ms.moved && !m2.moved && ms.start === u.hex && m2.start === u.hex) || (ms.group && ms.group === m2.group);
-      })());
+      if (!this.canMove(u)) return [];
+      return this.unitsAt(u.hex).filter(v => v !== u && v.side === u.side && this.canMove(v));
     }
     // ===== 移動の取り消し（同じ移動フェイズの中だけ） =====
     _snap() {
