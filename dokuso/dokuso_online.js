@@ -326,10 +326,8 @@ function dokusoApplyView(data, seat, room, result, resultAlreadyShown = false) {
   if (focus) { ui.hex = focus; ui.fanHex = null; ui.moveSel = []; ui.pick = []; }
   renderLog();
   ctrl = { sov: seat === 'sov' ? 'human' : 'remote', ger: seat === 'ger' ? 'human' : 'remote' };
-  document.getElementById('saveBtn').disabled = true;
   document.getElementById('saveFileBtn').disabled = true;
   document.getElementById('loadFileBtn').disabled = true;
-  document.getElementById('loadBtn').disabled = true;
   languageSelect.disabled = true; // A room keeps its creation language.
   document.getElementById('dokusoRoomMenu').hidden = false;
   dokusoOnlineDrive();
@@ -446,7 +444,6 @@ function dokusoLeaveRoom() {
   game = null; runToken++; hideCombatCard(); hideBanner();
   languageSelect.disabled = false;
   document.getElementById('dokusoRoomMenu').hidden = true;
-  document.getElementById('loadBtn').disabled = !hasSave();
   document.getElementById('loadFileBtn').disabled = false;
   document.getElementById('saveStatus').textContent = '';
   dokusoLobbyRoom = null;

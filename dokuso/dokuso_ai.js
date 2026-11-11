@@ -163,8 +163,38 @@
       }
     }
   }
+  // 第1ターンのソ連軍初期配置。セーブから駒の位置だけを採用する。
+  const SOVIET_SETUP_HEXES = {
+    s46: '1707', s47: '1604', s48: '1709',
+    s49: '1408', s50: '0909', s51: '0811', s52: '1110', s53: '1109',
+    s54: '1309', s55: '1410', s56: '1310', s57: '1310',
+    s58: '1019', s59: '0715', s60: '0613', s61: '0917', s62: '0921',
+    s63: '0915', s64: '0915', s65: '1119', s66: '1119',
+    s67: '1125', s68: '1023', s69: '1129', s70: '1031',
+    s71: '1226', s72: '1227', s73: '1227',
+    s74: '3619', s75: '3514', s76: '3619', s77: '3416',
+    s78: '3518', s79: '3613', s80: '3518',
+    s81: '1810', s82: '1315', s83: '2804', s84: '2821',
+    s85: '1810', s86: '1315', s87: '2804', s88: '2821',
+    s89: '3625', s90: '3716', s91: '3625', s92: '3716',
+  };
+  function setupSovietPreset(game) {
+    if (game.turn !== 1 || game.phase !== 'setup_sov') return false;
+    const units = game.setupUnits('sov');
+    if (units.length !== Object.keys(SOVIET_SETUP_HEXES).length) return false;
+    const preview = Object.create(game);
+    preview.units = game.units.map(unit => Object.hasOwn(SOVIET_SETUP_HEXES, unit.id)
+      ? { ...unit, hex: SOVIET_SETUP_HEXES[unit.id] } : unit);
+    if (!preview.setupUnits('sov').every(unit => preview.canPlace(unit, SOVIET_SETUP_HEXES[unit.id]))) return false;
+
+    const moved = units.filter(unit => unit.hex !== SOVIET_SETUP_HEXES[unit.id]);
+    for (const unit of moved) if (unit.hex) game.unplace(unit);
+    for (const unit of moved) game.place(unit, SOVIET_SETUP_HEXES[unit.id]);
+    return true;
+  }
   function setup(game, side) {
     if (side === 'sov') {
+      if (setupSovietPreset(game)) return;
       // 置き場所の限られる都市を先に（増援1の場所に大都市3716が含まれるため）
       const city = game.setupAreas('sov').find(a => a.key === 'city');
       setupGeneric(game, side, [city]);

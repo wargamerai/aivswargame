@@ -200,8 +200,6 @@
 <div id="bottom">
   <span class="chip"><span class="ger">ドイツ <b id="scGer">0</b></span> ／ <span class="sov">ソ連 <b id="scSov">0</b></span></span>
   <button class="help" onclick="showHelp()">遊び方</button>
-  <button id="saveBtn" onclick="saveGame()" disabled>セーブ</button>
-  <button id="loadBtn" onclick="loadGame()" disabled>ロード</button>
   <button id="saveFileBtn" onclick="saveGameFile()" disabled>ファイルに保存</button>
   <button id="loadFileBtn" onclick="openGameFile()">ファイルを読み込む</button>
   <input id="saveFileInput" type="file" accept=".json,application/json" onchange="loadGameFile(this)" hidden>
@@ -254,7 +252,6 @@ const ui = { hex: null, moveSel: [], pick: [], setupSel: null, mode: null, retre
 let aiBusy = false, runToken = 0;
 let trails = []; // 移動の経路の矢印 { side, path:[from, ..., to] }
 
-const SAVE_KEY = 'dokusoSave.v1';
 const SAVE_FIELDS = ['turn', 'phase', 'units', 'control', 'breakScore', 'log', 'declared',
   'pending', 'combatQueue', 'moveState', 'undoStack', '_grp', 'winner', 'sovReinf'];
 const INITIAL_UI = { ...ui, aiMoveDone: false, aiSetupReview: false, setupArea: null, fanHex: null, moveEdit: null };
@@ -268,8 +265,8 @@ function showStart() {
     <label class="mode-disabled"><input type="radio" name="mode" value="sov" disabled> 人間（ソ連） 対 AI（ドイツ）</label>
     <label class="mode-disabled"><input type="radio" name="mode" value="ai" disabled> AI 対 AI（観戦）</label>
     <label class="mode-disabled"><input type="radio" name="mode" value="hh" disabled> 人間 対 人間（1つの画面で交代）</label>
-    <button onclick="showDokusoOnline()" ${window.DOKUSO_ONLINE_CONFIG?.enabled ? '' : 'disabled'}>オンライン対戦</button><br>
-    <button onclick="startGame()">ゲーム開始</button> <button onclick="loadGame()" ${hasSave() ? '' : 'disabled'}>ロード</button> <button onclick="openGameFile()">ファイルを読み込む</button> <button style="background:#2a5a8a;border-color:#5a9ad0" onclick="showHelp(true)">遊び方を見る</button>`;
+    <button type="button" disabled>オンライン対戦</button><br>
+    <button onclick="startGame()">ゲーム開始</button> <button onclick="openGameFile()">ファイルを読み込む</button> <button style="background:#2a5a8a;border-color:#5a9ad0" onclick="showHelp(true)">遊び方を見る</button>`;
   document.getElementById('modal').style.display = 'flex';
 }
 function showHelp(fromStart) {
@@ -287,7 +284,7 @@ function showHelp(fromStart) {
     <ul>
       <li>画面下の未配置の駒をクリック → 地図の水色のヘクスをクリックで置きます。置けるヘクスなら駒の上もクリックできます。1ヘクスに2個まで。</li>
       <li>置いた駒を戻すには、そのヘクスをクリックして「選んだヘクス」の「取り外す」を押します。</li>
-      <li>「お任せ配置」で、残りの駒をAIが置きます。</li>
+      <li>「お任せ配置」を押すと、ソ連軍は初期配置に戻り、ドイツ軍は残りの駒をAIが置きます。</li>
     </ul>
     <h3>移動</h3>
     <ul>
@@ -305,8 +302,8 @@ function showHelp(fromStart) {
       <li>ソ連軍AIの移動確認では、駒をクリック →「この駒の移動を修正」→ 行き先 →「修正を確定」。選んだ駒だけが変わります。「修正を中止」か Esc で元の案に戻れます。</li>
     </ul>
     ${window.DOKUSO_ONLINE_CONFIG?.enabled ? '<h3>オンライン対戦</h3><p>部屋を作り、8桁の部屋番号を相手に伝えてください。作成者がソ連、参加者がドイツです。参加前に同じ言語を選びます。手番の人だけが操作でき、退却先は各陣営が選びます。戦闘のダイスは作成者の画面で1回だけ振り、結果を共有します。双方ともページを開いたままにしてください。断線後は同じブラウザと部屋番号で再接続できます。部屋の有効期限は48時間です。「接続」→「この端末で退出」は部屋を残し、「部屋を閉じる」は対局を終了します。オンライン中は本体のセーブ・ロードを使いません。</p>' : ''}
-    <h3>セーブとロード</h3>
-    <p>画面下の「セーブ」で現在の対局をこのブラウザに1件保存します。「ロード」で保存した対局の続きから遊べます。「ファイルに保存」「ファイルを読み込む」で、対局をJSONファイルとして持ち運べます。</p>
+    <h3>対局ファイル</h3>
+    <p>画面下の「ファイルに保存」で、現在の対局をJSONファイルとしてダウンロードします。「ファイルを読み込む」でその対局を再開できます。</p>
     <h3>戦闘</h3>
     <ul>
       <li>攻撃に使う自分の駒をクリック（重なっている駒はまとめて選ばれます）。重なりを分ける時は <b>Shift＋クリック</b> で左右に開いて1個ずつクリック（上は右の敵、下は左の敵のように分けられます）。</li>
@@ -338,7 +335,6 @@ function installGame(nextGame, savedUI, savedTrails = []) {
   hideHover();
   Object.assign(ui, INITIAL_UI, { moveSel: [], pick: [] }, savedUI);
   document.getElementById('modal').style.display = 'none';
-  document.getElementById('saveBtn').disabled = false;
   document.getElementById('saveFileBtn').disabled = false;
   document.getElementById('loadFileBtn').disabled = false;
   document.getElementById('saveStatus').textContent = '';
@@ -364,11 +360,6 @@ function installGame(nextGame, savedUI, savedTrails = []) {
   renderLog();
 }
 
-function hasSave() {
-  try { return !!localStorage.getItem(SAVE_KEY); }
-  catch { return false; }
-}
-
 function serializeGame() {
   const view = document.getElementById('mapWrap');
   const state = Object.fromEntries(SAVE_FIELDS.map(key => [key, game[key]]));
@@ -379,18 +370,6 @@ function serializeGame() {
     version: 1, state, ui: savedUI, ctrl, trails, zoom,
     scroll: [view.scrollLeft, view.scrollTop],
   });
-}
-
-function saveGame() {
-  if (isDokusoOnline() || !game) return;
-  const status = document.getElementById('saveStatus');
-  try {
-    localStorage.setItem(SAVE_KEY, serializeGame());
-    document.getElementById('loadBtn').disabled = false;
-    status.textContent = '保存しました';
-  } catch {
-    status.textContent = '保存できませんでした';
-  }
 }
 
 function saveGameFile() {
@@ -417,12 +396,6 @@ async function loadGameFile(input) {
   } catch {
     alert('保存した対局を読み込めませんでした。');
   }
-}
-
-function loadGame() {
-  if (isDokusoOnline()) return;
-  try { restoreGame(localStorage.getItem(SAVE_KEY)); }
-  catch { alert('保存した対局を読み込めませんでした。'); }
 }
 
 function restoreGame(data) {
@@ -1594,7 +1567,6 @@ function addLogLine(e) {
 function renderLog() { document.getElementById('log').innerHTML = ''; for (const e of game.log) addLogLine(e); }
 
 if (mapImg.complete && mapImg.naturalWidth) setupBoard(); else mapImg.addEventListener('load', setupBoard);
-document.getElementById('loadBtn').disabled = !hasSave();
 showStart();
 
 // Shift＋クリックで文字が範囲選択されて画面が青くなるのを防ぐ
