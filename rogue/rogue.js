@@ -6,13 +6,13 @@ const W = 80, H = 22;
 const rnd = n => (n <= 0 ? 0 : Math.floor(Math.random() * n));
 const roll = (n, s) => { let t = 0; for (let i = 0; i < n; i++) t += 1 + rnd(s); return t; };
 
-let lang = 'ja';
-try {
-  const q = new URLSearchParams(location.search).get('lang');
-  const l = (q === 'ja' || q === 'en') ? q : localStorage.getItem('rogueLang');
-  if (l === 'ja' || l === 'en') lang = l;
-  else if (!/^ja/i.test(navigator.language || 'ja')) lang = 'en';
-} catch (e) { /* 保存できなくても動く */ }
+const languages = Object.keys(ROGUE_LANGUAGES);
+const requestedLanguage = new URLSearchParams(location.search).get('lang');
+let savedLanguage;
+try { savedLanguage = localStorage.getItem('rogueLang'); } catch (e) { /* 保存できなくても動く */ }
+const preferredLanguage = (navigator.language || 'ja').split('-')[0].toLowerCase();
+let lang = languages.includes(requestedLanguage) ? requestedLanguage : languages.includes(savedLanguage) ? savedLanguage :
+  languages.includes(preferredLanguage) ? preferredLanguage : 'en';
 function T(k, p) {
   let s = window.ROGUE_TEXT[lang][k];
   if (s === undefined) return k;
@@ -20,6 +20,11 @@ function T(k, p) {
   return s;
 }
 const NM = window.ROGUE_NAMES;
+function localizedName(group, key) {
+  if (lang === 'en') return key;
+  if (lang === 'ja') return NM[group][key] || key;
+  return ROGUE_LOCAL_NAMES[lang][group][key] || key;
+}
 
 // ===== 元のゲームの表（extern.c） =====
 const MON = {
@@ -84,7 +89,7 @@ function newGame() {
   P.armor = armor;
   msgQueue = []; curMsg = ''; mode = 'play'; pendingFn = null; overlay = null; runDir = null; gameOver = false;
   newLevel();
-  msg(T('welcome'));
+  say('welcome');
   draw();
 }
 
@@ -276,6 +281,32 @@ function makeItem() {
 }
 
 function itemName(it) {
+  if (lang !== 'ja' && lang !== 'en') {
+    const count = it.count > 1 ? it.count + ' × ' : '';
+    if (it.type === 'amulet') return T('amulet');
+    if (it.type === 'food') return count + T(it.which === 'fruit' ? 'fruit' : 'foodName');
+    if (it.type === 'weapon') {
+      const plus = it.known ? (it.hplus >= 0 ? '+' : '') + it.hplus + ',' + (it.dplus >= 0 ? '+' : '') + it.dplus + ' ' : '';
+      return count + plus + localizedName('weapon', it.which);
+    }
+    if (it.type === 'armor') {
+      const bonus = ACLASS[it.which] - it.ac;
+      const plus = it.known ? (bonus >= 0 ? '+' : '') + bonus + ' ' : '';
+      return plus + localizedName('armor', it.which) + (it.known ? ' [' + (10 - it.ac) + ']' : '');
+    }
+    const kind = T('kind_' + it.type);
+    const identified = known[it.type][it.which];
+    let name;
+    if (identified) name = T('itemKnown', { kind, name: localizedName(it.type, it.which) });
+    else if (it.type === 'scroll') name = T('itemTitled', { name: itemNames.scroll[it.which] });
+    else {
+      const group = { potion: 'colors', ring: 'stones', stick: 'woods' }[it.type];
+      name = T('itemUnknown', { kind, name: localizedName(group, itemNames[it.type][it.which][0]) });
+    }
+    const plus = it.type === 'ring' && it.known && it.plus ? (it.plus > 0 ? '+' : '') + it.plus + ' ' : '';
+    const charges = it.type === 'stick' && it.known && identified ? ' [' + it.charges + ']' : '';
+    return count + plus + name + charges;
+  }
   const ja = lang === 'ja';
   const cnt = it.count > 1 ? it.count + ' ' : (ja ? '' : 'a ');
   const trans = (tbl, k) => (ja ? tbl[k] : k);
@@ -322,7 +353,7 @@ function itemName(it) {
 }
 const monName = m => {
   const n = m.name;
-  return lang === 'ja' ? (NM.monsters[n] || n) : n;
+  return localizedName('monsters', n);
 };
 
 function addToPack(it) {
@@ -396,7 +427,7 @@ function checkLevel() {
     P.maxhp += add;
     P.hp += add;
     P.lvl = n;
-    msg(T('levelUp', { n }));
+    say('levelUp', { n });
   }
 }
 function killMon(m) {
@@ -436,18 +467,34 @@ function updateSeen() {
 }
 
 // ===== 表示 =====
-function msg(s) { if (s) msgQueue.push(s); }
+function messageValue(value) {
+  if (typeof value === 'function') return value();
+  if (value?.item) return itemName(value.item);
+  if (value?.monster) return localizedName('monsters', value.monster);
+  if (value?.text) return T(value.text);
+  if (value?.stick) return localizedName('stick', value.stick);
+  return value;
+}
+function say(key, params = {}) {
+  msg(() => T(key, Object.fromEntries(Object.entries(params).map(([k, v]) => [k, messageValue(v)]))));
+}
+function msg(value) { if (value) msgQueue.push(value); }
 function pumpMsg() {
   if (!msgQueue.length) return false;
-  let line = msgQueue.shift();
-  while (msgQueue.length && (line + '. ' + msgQueue[0]).length < (lang === 'ja' ? 56 : 68)) line += (lang === 'ja' ? '。' : '. ') + msgQueue.shift();
-  curMsg = line + (msgQueue.length ? ' ' + T('more') : '');
+  const messages = [msgQueue.shift()];
+  const separator = () => lang === 'ja' || lang === 'zh' ? '。' : '. ';
+  const line = () => messages.map(messageValue).join(separator());
+  while (msgQueue.length && (line() + separator() + messageValue(msgQueue[0])).length < (/^(ja|zh|ko)$/.test(lang) ? 42 : 68)) {
+    messages.push(msgQueue.shift());
+  }
+  const more = msgQueue.length > 0;
+  curMsg = () => line() + (more ? ' ' + T('more') : '');
   return msgQueue.length > 0;
 }
 function draw() {
   if (overlay) {
     $('msg').textContent = '';
-    $('scr').textContent = overlay;
+    $('scr').textContent = typeof overlay === 'function' ? overlay() : overlay;
     return;
   }
   const rows = [];
@@ -481,7 +528,8 @@ function draw() {
   rows[P.y][P.x] = '@';
   const stat = T('status', { l: P.depth, g: P.gold, h: P.hp, m: P.maxhp, s: curStr(), ms: P.maxstr, a: armDisplay(), e: P.lvl, x: P.exp })
     + (P.food <= FAINT ? '  ' + T('faint') : P.food <= WEAK ? '  ' + T('weak') : P.food <= HUNGER ? '  ' + T('hungry') : '');
-  $('msg').textContent = curMsg;
+  $('msg').textContent = messageValue(curMsg);
+  $('msg').title = messageValue(curMsg);
   $('scr').textContent = rows.map(r => r.join('')).join('\n') + '\n' + stat;
 }
 
@@ -506,11 +554,11 @@ function endTurn() {
 }
 
 function daemons() {
-  if (P.blind > 0 && --P.blind === 0) msg(T('blindEnd'));
-  if (P.conf > 0 && --P.conf === 0) msg(T('confEnd'));
-  if (P.haste > 0 && --P.haste === 0) msg(T('hasteEnd'));
-  if (P.lev > 0 && --P.lev === 0) msg(T('levEnd'));
-  if (P.hall > 0 && --P.hall === 0) msg(T('hallEnd'));
+  if (P.blind > 0 && --P.blind === 0) say('blindEnd');
+  if (P.conf > 0 && --P.conf === 0) say('confEnd');
+  if (P.haste > 0 && --P.haste === 0) say('hasteEnd');
+  if (P.lev > 0 && --P.lev === 0) say('levEnd');
+  if (P.hall > 0 && --P.hall === 0) say('hallEnd');
   if (P.seeInv > 0) P.seeInv--;
   if (P.bear > 0) P.bear--;
   // 回復（doctor）
@@ -527,10 +575,10 @@ function daemons() {
   P.rings.forEach(r => { if (r) eat += (r.which === 'slow digestion' ? 0 : 0.2); });
   if (hasRing('slow digestion') && P.turn % 2 === 0) eat = 0;
   P.food -= eat;
-  if (before > HUNGER && P.food <= HUNGER) msg(T('hungryMsg'));
-  else if (before > WEAK && P.food <= WEAK) msg(T('weakMsg'));
-  if (P.food <= FAINT && P.food > 0 && rnd(5) === 0) { msg(T('faintMsg')); P.sleep += rnd(8) + 4; }
-  if (P.food <= 0) { die(T('hunger')); return; }
+  if (before > HUNGER && P.food <= HUNGER) say('hungryMsg');
+  else if (before > WEAK && P.food <= WEAK) say('weakMsg');
+  if (P.food <= FAINT && P.food > 0 && rnd(5) === 0) { say('faintMsg'); P.sleep += rnd(8) + 4; }
+  if (P.food <= 0) { die({ text: 'hunger' }); return; }
   // うろつく怪物
   if (rnd(70) === 0 && L.mons.length < 25) wanderMon();
   // 指輪
@@ -604,8 +652,8 @@ function monsterMove(m) {
   if (m.confused > 0) m.confused--;
   // ドラゴンの炎
   if (m.ch === 'D' && !m.cancel && dist2(m.x, m.y, P.x, P.y) <= 36 && canSee(m.x, m.y) && inLine(m) && rnd(5) === 0) {
-    msg(T('breath', { m: monName(m) }));
-    hurt(roll(6, 6), monName(m));
+    say('breath', { m: { monster: m.name } });
+    hurt(roll(6, 6), { monster: m.name });
     return;
   }
   if (!erratic && dist2(m.x, m.y, P.x, P.y) <= 2 && canStep(m.x, m.y, P.x, P.y)) {
@@ -630,7 +678,7 @@ function monsterMove(m) {
   if (m.disguise && dist2(m.x, m.y, P.x, P.y) <= 2) m.disguise = null;
   if (m.ch === 'M' && !m.cancel && monVisible(m) && P.conf <= 0 && rnd(3) === 0) {
     P.conf = rnd(20) + 10;
-    msg(T('confuse', { m: monName(m) }));
+    say('confuse', { m: { monster: m.name } });
   }
 }
 function inLine(m) {
@@ -649,13 +697,13 @@ function monAttack(m) {
   const under = itemAt(P.x, P.y);
   if (under && under.type === 'scroll' && under.which === 'scare monster') { m.flee = 5; return; }
   if (!monsterSwing(m)) {
-    msg(T('missYou', { m: monName(m) }));
+    say('missYou', { m: { monster: m.name } });
     return;
   }
   let dmg = rollDmg(m.dmg);
   if (m.ch === 'F') { m.fung = (m.fung || 0) + 1; dmg = m.fung; }
-  msg(T('hitYou', { m: monName(m) }));
-  hurt(dmg, monName(m));
+  say('hitYou', { m: { monster: m.name } });
+  hurt(dmg, { monster: m.name });
   if (gameOver || m.cancel) return;
   specialHit(m);
 }
@@ -663,16 +711,16 @@ function specialHit(m) {
   switch (m.ch) {
     case 'A':
       if (!P.armor) break;
-      if (hasRing('maintain armor') || P.armor.protected) msg(T('rustSafe'));
-      else if (P.armor.ac < 9) { P.armor.ac++; msg(T('rust')); }
+      if (hasRing('maintain armor') || P.armor.protected) say('rustSafe');
+      else if (P.armor.ac < 9) { P.armor.ac++; say('rust'); }
       break;
     case 'I':
-      if (rnd(3) === 0) { P.sleep += rnd(5) + 2; msg(T('frozen', { m: monName(m) })); }
+      if (rnd(3) === 0) { P.sleep += rnd(5) + 2; say('frozen', { m: { monster: m.name } }); }
       break;
     case 'R':
       if (rnd(5) === 0) {
-        if (hasRing('sustain strength')) msg(T('strSafe'));
-        else { P.str = Math.max(3, P.str - 1); msg(T('str')); }
+        if (hasRing('sustain strength')) say('strSafe');
+        else { P.str = Math.max(3, P.str - 1); say('str'); }
       }
       break;
     case 'W':
@@ -683,7 +731,7 @@ function specialHit(m) {
           const lose = roll(1, 10);
           P.maxhp = Math.max(1, P.maxhp - lose);
           P.hp = Math.max(1, Math.min(P.hp, P.maxhp));
-          msg(T('drain'));
+          say('drain');
         }
       }
       break;
@@ -691,13 +739,13 @@ function specialHit(m) {
       if (rnd(100) < 30) {
         P.maxhp = Math.max(1, P.maxhp - 1 - rnd(3));
         P.hp = Math.min(P.hp, P.maxhp);
-        msg(T('drain'));
+        say('drain');
       }
       break;
     case 'L':
       if (P.gold > 0) {
         P.gold = Math.max(0, P.gold - (rnd(50 + 10 * P.depth) + 10));
-        msg(T('stolen'));
+        say('stolen');
         L.mons = L.mons.filter(q => q !== m);
       }
       break;
@@ -705,7 +753,7 @@ function specialHit(m) {
       const opts = P.pack.filter(i => i !== P.weapon && i !== P.armor && P.rings.indexOf(i) < 0 && i.type !== 'amulet');
       if (opts.length) {
         const it = opts[rnd(opts.length)];
-        msg(T('nymph', { i: itemName(it) }));
+        say('nymph', { i: { item: { ...it } } });
         if (it.count > 1 && it.type !== 'weapon') it.count--;
         else P.pack.splice(P.pack.indexOf(it), 1);
         L.mons = L.mons.filter(q => q !== m);
@@ -713,7 +761,7 @@ function specialHit(m) {
       break;
     }
     case 'F':
-      if (P.held !== m) { P.held = m; msg(T('held', { m: monName(m) })); }
+      if (P.held !== m) { P.held = m; say('held', { m: { monster: m.name } }); }
       break;
     default:
   }
@@ -723,29 +771,31 @@ function die(by) {
   if (gameOver) return;
   gameOver = true;
   P.hp = Math.min(P.hp, 0);
-  const center = (s, w) => {
-    const pad = Math.max(0, Math.floor((w - s.length) / 2));
-    return ' '.repeat(pad) + s;
+  overlay = () => {
+    const center = (s, w) => {
+      const pad = Math.max(0, Math.floor((w - s.length) / 2));
+      return ' '.repeat(pad) + s;
+    };
+    const w = 22;
+    const lines = [
+      '', '', '',
+      '                  __________',
+      '                 /          \\',
+      '                /    REST    \\',
+      '               /      IN      \\',
+      '              /     PEACE      \\',
+      '             /                  \\',
+    ];
+    [lang !== 'en' ? T('rip') : '', T('ripKilled', { m: messageValue(by) }), T('ripOn', { l: P.depth }), T('ripGold', { g: P.gold })].forEach(s => {
+      if (s) lines.push('             |' + center(s, w).padEnd(lang === 'ja' ? 14 : 20) + '|');
+    });
+    lines.push('             |                    |');
+    lines.push('            *|     *  *  *        |*');
+    lines.push('    ________)/\\\\_//(\\/(/\\)/\\//\\/|_)_______');
+    lines.push('');
+    lines.push('    ' + T('again'));
+    return lines.join('\n');
   };
-  const w = 22;
-  const lines = [
-    '', '', '',
-    '                  __________',
-    '                 /          \\',
-    '                /    REST    \\',
-    '               /      IN      \\',
-    '              /     PEACE      \\',
-    '             /                  \\',
-  ];
-  [lang === 'ja' ? T('rip') : '', T('ripKilled', { m: by }), T('ripOn', { l: P.depth }), T('ripGold', { g: P.gold })].forEach(s => {
-    if (s) lines.push('             |' + center(s, w).padEnd(lang === 'ja' ? 14 : 20) + '|');
-  });
-  lines.push('             |                    |');
-  lines.push('            *|     *  *  *        |*');
-  lines.push('    ________)/\\\\_//(\\/(/\\)/\\//\\/|_)_______');
-  lines.push('');
-  lines.push('    ' + T('again'));
-  overlay = lines.join('\n');
   mode = 'dead';
 }
 
@@ -763,7 +813,7 @@ function search(quiet) {
     if (L.t[y][x] === 'S' && rnd(5) === 0) {
       L.t[y][x] = '+';
       L.seen[y][x] = true;
-      msg(T('foundDoor'));
+      say('foundDoor');
     }
     const tr = L.traps[x + ',' + y];
     if (tr && !tr.found && rnd(4) === 0) tr.found = true;
@@ -775,25 +825,25 @@ function pickup() {
   if (!it) return;
   if (it.type === 'gold') {
     P.gold += it.count;
-    msg(T('gold', { n: it.count }));
+    say('gold', { n: it.count });
     L.items.splice(L.items.indexOf(it), 1);
     return;
   }
-  if (P.lev > 0) { msg(T('seeHere', { i: itemName(it) })); return; }
+  if (P.lev > 0) { say('seeHere', { i: { item: { ...it } } }); return; }
   // 恐怖の巻物は拾うと塵になる（5.4と同じく2回目）
   if (it.type === 'scroll' && it.which === 'scare monster' && it.touched) {
     L.items.splice(L.items.indexOf(it), 1);
-    msg(T('s_scare'));
+    say('s_scare');
     return;
   }
   if (it.type === 'scroll' && it.which === 'scare monster') it.touched = true;
   L.items.splice(L.items.indexOf(it), 1);
   const res = addToPack(it);
-  if (res) msg(T('got', { i: itemName(res), k: letter(P.pack.indexOf(res)) }));
+  if (res) say('got', { i: { item: { ...res } }, k: letter(P.pack.indexOf(res)) });
   else {
     it.x = P.x; it.y = P.y;
     L.items.push(it);
-    msg(T('packFull'));
+    say('packFull');
   }
 }
 function trapAt() {
@@ -803,27 +853,27 @@ function trapAt() {
   t.found = true;
   switch (t.kind) {
     case 'door':
-      msg(T('trap_door'));
+      say('trap_door');
       P.depth++;
       P.maxDepth = Math.max(P.maxDepth, P.depth);
       newLevel();
       break;
     case 'arrow':
-      if (rnd(20) + 1 >= (20 - P.lvl - 1) - playerAC()) { msg(T('trap_arrow')); hurt(roll(1, 6), T('trap')); } else msg(T('trap_arrowMiss'));
+      if (rnd(20) + 1 >= (20 - P.lvl - 1) - playerAC()) { say('trap_arrow'); hurt(roll(1, 6), { text: 'trap' }); } else say('trap_arrowMiss');
       break;
-    case 'sleep': P.sleep += rnd(5) + 4; msg(T('trap_sleep')); break;
-    case 'bear': P.bear = rnd(3) + 2; msg(T('trap_bear')); break;
-    case 'tele': msg(T('trap_tele')); teleportPlayer(); break;
+    case 'sleep': P.sleep += rnd(5) + 4; say('trap_sleep'); break;
+    case 'bear': P.bear = rnd(3) + 2; say('trap_bear'); break;
+    case 'tele': say('trap_tele'); teleportPlayer(); break;
     case 'dart':
       if (rnd(20) + 1 >= (20 - P.lvl + 1) - playerAC()) {
-        msg(T('trap_dart'));
-        hurt(roll(1, 4), T('trap'));
+        say('trap_dart');
+        hurt(roll(1, 4), { text: 'trap' });
         if (!gameOver && !hasRing('sustain strength')) P.str = Math.max(3, P.str - 1);
-      } else msg(T('trap_dartMiss'));
+      } else say('trap_dartMiss');
       break;
     case 'rust':
-      msg(T('trap_rust'));
-      if (P.armor && !hasRing('maintain armor') && !P.armor.protected && P.armor.ac < 9) { P.armor.ac++; msg(T('rust')); }
+      say('trap_rust');
+      if (P.armor && !hasRing('maintain armor') && !P.armor.protected && P.armor.ac < 9) { P.armor.ac++; say('rust'); }
       break;
     default:
   }
@@ -838,8 +888,8 @@ function attack(m) {
     dmg = Math.max(1, dmg);
     m.hp -= dmg;
     if (P.glow) { P.glow = false; m.confused = rnd(20) + 5; }
-    if (m.hp <= 0) { msg(T('youKill', { m: monName(m) })); killMon(m); } else msg(T('youHit', { m: monName(m) }));
-  } else msg(T('youMiss', { m: monName(m) }));
+    if (m.hp <= 0) { say('youKill', { m: { monster: m.name } }); killMon(m); } else say('youHit', { m: { monster: m.name } });
+  } else say('youMiss', { m: { monster: m.name } });
 }
 function tryMove(dx, dy) {
   if (P.conf > 0 && rnd(5) !== 0) {
@@ -849,8 +899,8 @@ function tryMove(dx, dy) {
   const nx = P.x + dx, ny = P.y + dy;
   const m = monAt(nx, ny);
   if (m && canStep(P.x, P.y, nx, ny)) { attack(m); return 'acted'; }
-  if (P.held) { msg(T('stuckMsg')); return 'acted'; }
-  if (P.bear > 0) { msg(T('trap_bear')); return 'acted'; }
+  if (P.held) { say('stuckMsg'); return 'acted'; }
+  if (P.bear > 0) { say('trap_bear'); return 'acted'; }
   if (!canStep(P.x, P.y, nx, ny)) return 'blocked';
   P.x = nx; P.y = ny;
   const depth = P.depth;
@@ -865,26 +915,27 @@ function usable(types) {
 }
 function chooseItem(types, verb, fn) {
   const list = usable(types);
-  if (!list.length) { msg(T('noItem')); pumpMsg(); draw(); return; }
+  if (!list.length) { say('noItem'); pumpMsg(); draw(); return; }
   mode = 'choose';
   pendingFn = { types, verb, fn };
-  showList(types);
-  overlay = T('prompt', { v: T(verb) }) + '\n' + overlay.split('\n').slice(1).join('\n');
+  showList(types, verb);
   draw();
 }
-function showList(types) {
-  const list = types ? usable(types) : P.pack.map((it, i) => ({ it, i }));
-  const lines = [T('invTitle'), ''];
-  list.forEach(o => {
-    let s = letter(o.i) + ') ' + itemName(o.it);
-    if (o.it === P.weapon) s += ' (' + T('inHand') + ')';
-    if (o.it === P.armor) s += ' (' + T('onBody') + ')';
-    if (P.rings[0] === o.it) s += ' (' + T('leftHand') + ')';
-    if (P.rings[1] === o.it) s += ' (' + T('rightHand') + ')';
-    lines.push(s);
-  });
-  if (!list.length) lines.push(T('invEmpty'));
-  overlay = lines.join('\n');
+function showList(types, verb) {
+  overlay = () => {
+    const list = types ? usable(types) : P.pack.map((it, i) => ({ it, i }));
+    const lines = [verb ? T('prompt', { v: T(verb) }) : T('invTitle'), ''];
+    list.forEach(o => {
+      let s = letter(o.i) + ') ' + itemName(o.it);
+      if (o.it === P.weapon) s += ' (' + T('inHand') + ')';
+      if (o.it === P.armor) s += ' (' + T('onBody') + ')';
+      if (P.rings[0] === o.it) s += ' (' + T('leftHand') + ')';
+      if (P.rings[1] === o.it) s += ' (' + T('rightHand') + ')';
+      lines.push(s);
+    });
+    if (!list.length) lines.push(T('invEmpty'));
+    return lines.join('\n');
+  };
 }
 function consume(it) {
   if (it.count > 1) it.count--;
@@ -899,44 +950,44 @@ function quaff(it) {
   const nm = it.which;
   consume(it);
   switch (nm) {
-    case 'confusion': P.conf = rnd(20) + 20; msg(T('p_conf')); break;
-    case 'hallucination': P.hall = rnd(200) + 200; msg(T('p_hall')); break;
+    case 'confusion': P.conf = rnd(20) + 20; say('p_conf'); break;
+    case 'hallucination': P.hall = rnd(200) + 200; say('p_hall'); break;
     case 'poison':
-      if (hasRing('sustain strength')) msg(T('strSafe'));
-      else { P.str = Math.max(3, P.str - (rnd(3) + 1)); msg(T('p_poison')); }
+      if (hasRing('sustain strength')) say('strSafe');
+      else { P.str = Math.max(3, P.str - (rnd(3) + 1)); say('p_poison'); }
       break;
-    case 'gain strength': P.str++; P.maxstr = Math.max(P.maxstr, P.str); msg(T('p_str')); break;
-    case 'see invisible': P.seeInv = 300; msg(T('p_see')); break;
+    case 'gain strength': P.str++; P.maxstr = Math.max(P.maxstr, P.str); say('p_str'); break;
+    case 'see invisible': P.seeInv = 300; say('p_see'); break;
     case 'healing':
       P.hp += roll(P.lvl, 4);
       if (P.hp > P.maxhp) { P.maxhp++; P.hp = P.maxhp; }
       if (P.blind > 0) P.blind = 1;
-      msg(T('p_heal'));
+      say('p_heal');
       break;
     case 'monster detection':
-      if (L.mons.length) { L.mons.forEach(m => { m.detected = true; }); msg(T('p_mdet')); } else msg(T('p_mdetNo'));
+      if (L.mons.length) { L.mons.forEach(m => { m.detected = true; }); say('p_mdet'); } else say('p_mdetNo');
       break;
     case 'magic detection':
       if (L.items.some(i => i.type !== 'gold' && i.type !== 'food')) {
         L.items.forEach(i => { if (i.type !== 'gold' && i.type !== 'food') i.detected = true; });
-        msg(T('p_odet'));
-      } else msg(T('p_mdetNo'));
+        say('p_odet');
+      } else say('p_mdetNo');
       break;
     case 'raise level':
       P.exp = P.lvl <= E_LEVELS.length ? E_LEVELS[P.lvl - 1] : P.exp;
       checkLevel();
-      msg(T('p_raise'));
+      say('p_raise');
       break;
     case 'extra healing':
       P.hp += roll(P.lvl, 8);
       if (P.hp > P.maxhp) { P.maxhp += P.hp > P.maxhp + 5 ? 2 : 1; P.hp = P.maxhp; }
       if (P.blind > 0) P.blind = 1;
-      msg(T('p_xheal'));
+      say('p_xheal');
       break;
-    case 'haste self': P.haste = rnd(10) + 15; msg(T('p_haste')); break;
-    case 'restore strength': P.str = Math.max(P.str, P.maxstr); msg(T('p_restore')); break;
-    case 'blindness': P.blind = rnd(100) + 200; msg(T('p_blind')); break;
-    case 'levitation': P.lev = rnd(30) + 40; msg(T('p_lev')); break;
+    case 'haste self': P.haste = rnd(10) + 15; say('p_haste'); break;
+    case 'restore strength': P.str = Math.max(P.str, P.maxstr); say('p_restore'); break;
+    case 'blindness': P.blind = rnd(100) + 200; say('p_blind'); break;
+    case 'levitation': P.lev = rnd(30) + 40; say('p_lev'); break;
     default:
   }
 }
@@ -944,35 +995,35 @@ function identify(types, it) {
   if (!it) return;
   if (known[it.type]) known[it.type][it.which] = true;
   it.known = true;
-  msg(itemName(it));
+  msg({ item: { ...it } });
 }
 function readScroll(it) {
-  if (P.blind > 0) { msg(T('blindNoRead')); return false; }
+  if (P.blind > 0) { say('blindNoRead'); return false; }
   known.scroll[it.which] = true;
   const nm = it.which;
   consume(it);
   const idPick = types => {
     const list = usable(types);
-    if (!list.length) { msg(T('s_id')); return; }
+    if (!list.length) { say('s_id'); return; }
     const first = list.find(o => !(known[o.it.type] && known[o.it.type][o.it.which] && o.it.known));
     identify(types, (first || list[0]).it);
   };
   switch (nm) {
-    case 'monster confusion': P.glow = true; msg(T('s_conf')); break;
+    case 'monster confusion': P.glow = true; say('s_conf'); break;
     case 'magic mapping':
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (L.t[y][x] !== ' ') {
         if (L.t[y][x] === 'S') L.t[y][x] = '+';
         L.seen[y][x] = true;
       }
-      msg(T('s_map'));
+      say('s_map');
       break;
     case 'hold monster':
       L.mons.forEach(m => { if (dist2(m.x, m.y, P.x, P.y) <= 8) { m.held = rnd(10) + 10; m.awake = true; } });
-      msg(T('s_hold'));
+      say('s_hold');
       break;
-    case 'sleep': P.sleep += rnd(5) + 4; msg(T('s_sleep')); break;
+    case 'sleep': P.sleep += rnd(5) + 4; say('s_sleep'); break;
     case 'enchant armor':
-      if (P.armor) { P.armor.ac--; P.armor.cursed = false; msg(T('s_earm')); } else msg(T('s_noArm'));
+      if (P.armor) { P.armor.ac--; P.armor.cursed = false; say('s_earm'); } else say('s_noArm');
       break;
     case 'identify potion': idPick(['potion']); break;
     case 'identify scroll': idPick(['scroll']); break;
@@ -981,18 +1032,18 @@ function readScroll(it) {
     case 'identify ring, wand or staff': idPick(['ring', 'stick']); break;
     case 'scare monster':
       L.mons.forEach(m => { if (canSee(m.x, m.y)) { m.flee = 20; m.awake = true; } });
-      msg(T('s_scare'));
+      say('s_scare');
       break;
     case 'food detection':
-      if (L.items.some(i => i.type === 'food')) { L.items.forEach(i => { if (i.type === 'food') i.detected = true; }); msg(T('s_food')); } else msg(T('s_foodNo'));
+      if (L.items.some(i => i.type === 'food')) { L.items.forEach(i => { if (i.type === 'food') i.detected = true; }); say('s_food'); } else say('s_foodNo');
       break;
-    case 'teleportation': teleportPlayer(); msg(T('s_tele')); break;
+    case 'teleportation': teleportPlayer(); say('s_tele'); break;
     case 'enchant weapon':
       if (P.weapon) {
         if (rnd(2)) P.weapon.hplus++; else P.weapon.dplus++;
         P.weapon.cursed = false;
-        msg(T('s_eweap'));
-      } else msg(T('s_noWeap'));
+        say('s_eweap');
+      } else say('s_noWeap');
       break;
     case 'create monster': {
       const cand = [];
@@ -1001,16 +1052,16 @@ function readScroll(it) {
         if (passable(x, y) && !monAt(x, y)) cand.push([x, y]);
       }
       if (cand.length) { const c = cand[rnd(cand.length)]; spawnMon(randMon(false), c[0], c[1], true); }
-      msg(T('s_create'));
+      say('s_create');
       break;
     }
     case 'remove curse':
       [P.weapon, P.armor, P.rings[0], P.rings[1]].forEach(i => { if (i) i.cursed = false; });
-      msg(T('s_curse'));
+      say('s_curse');
       break;
-    case 'aggravate monsters': L.mons.forEach(m => { m.awake = true; }); msg(T('s_agg')); break;
+    case 'aggravate monsters': L.mons.forEach(m => { m.awake = true; }); say('s_agg'); break;
     case 'protect armor':
-      if (P.armor) { P.armor.protected = true; msg(T('s_prot')); } else msg(T('s_noArm'));
+      if (P.armor) { P.armor.protected = true; say('s_prot'); } else say('s_noArm');
       break;
     default:
   }
@@ -1020,40 +1071,40 @@ function eat(it) {
   const fruit = it.which === 'fruit';
   consume(it);
   P.food = Math.min(FOOD_MAX, Math.max(P.food, 0) + 1100 + rnd(400));
-  if (fruit) msg(T('yum', { f: T('fruit') }));
-  else msg(rnd(100) > 70 ? T('yuk') : T('yum', { f: lang === 'ja' ? '食料' : 'food' }));
+  if (fruit) say('yum', { f: { text: 'fruit' } });
+  else say(rnd(100) > 70 ? 'yuk' : 'yum', { f: { text: 'food' } });
 }
 function wield(it) {
-  if (P.weapon && P.weapon.cursed) { msg(T('cursed')); return false; }
+  if (P.weapon && P.weapon.cursed) { say('cursed'); return false; }
   P.weapon = it;
-  msg(T('wielding', { i: itemName(it) }));
+  say('wielding', { i: { item: { ...it } } });
   return true;
 }
 function wear(it) {
-  if (P.armor) { msg(T('alreadyArmor')); return false; }
+  if (P.armor) { say('alreadyArmor'); return false; }
   P.armor = it;
   it.known = true;
-  msg(T('wearing', { i: itemName(it) }));
+  say('wearing', { i: { item: { ...it } } });
   P.sleep += 2;
   return true;
 }
 function putOn(it) {
   if (P.rings.indexOf(it) >= 0) return false;
   const slot = P.rings[0] ? (P.rings[1] ? -1 : 1) : 0;
-  if (slot < 0) { msg(T('twoRings')); return false; }
+  if (slot < 0) { say('twoRings'); return false; }
   P.rings[slot] = it;
   if (it.which === 'add strength' || it.which === 'protection' || it.which === 'dexterity' || it.which === 'increase damage' || it.which === 'see invisible' || it.which === 'aggravate monster') {
     known.ring[it.which] = true;
     it.known = true;
   }
-  msg(T('ringOn', { i: itemName(it) }));
+  say('ringOn', { i: { item: { ...it } } });
   return true;
 }
 function dropItem(it) {
-  if (it === P.armor) { msg(T('alreadyArmor')); return false; }
-  if (it === P.weapon && it.cursed) { msg(T('cursed')); return false; }
-  if (P.rings.indexOf(it) >= 0) { msg(T('cursed')); return false; }
-  if (itemAt(P.x, P.y) || L.t[P.y][P.x] !== '.') { msg(T('noRoom')); return false; }
+  if (it === P.armor) { say('alreadyArmor'); return false; }
+  if (it === P.weapon && it.cursed) { say('cursed'); return false; }
+  if (P.rings.indexOf(it) >= 0) { say('cursed'); return false; }
+  if (itemAt(P.x, P.y) || L.t[P.y][P.x] !== '.') { say('noRoom'); return false; }
   if (it.type === 'amulet') P.hasAmulet = false;
   const piece = Object.assign({}, it);
   piece.x = P.x; piece.y = P.y;
@@ -1062,7 +1113,7 @@ function dropItem(it) {
     if (P.weapon === it) P.weapon = null;
   }
   L.items.push(piece);
-  msg(T('dropped', { i: itemName(piece) }));
+  say('dropped', { i: { item: { ...piece } } });
   return true;
 }
 
@@ -1080,8 +1131,8 @@ function ray(dx, dy, maxLen) {
   return { m: null, x: last[0], y: last[1] };
 }
 function throwItem(it, dx, dy) {
-  if (it === P.armor || P.rings.indexOf(it) >= 0) { msg(T('cursed')); return false; }
-  if (it === P.weapon && it.cursed) { msg(T('cursed')); return false; }
+  if (it === P.armor || P.rings.indexOf(it) >= 0) { say('cursed'); return false; }
+  if (it === P.weapon && it.cursed) { say('cursed'); return false; }
   const one = Object.assign({}, it, { count: 1 });
   if (it.count > 1) it.count--;
   else { P.pack.splice(P.pack.indexOf(it), 1); if (P.weapon === it) P.weapon = null; }
@@ -1099,69 +1150,69 @@ function throwItem(it, dx, dy) {
     if (playerSwing(m, hplus)) {
       const dmg = Math.max(1, rollDmg(dmgStr) * mult + (one.dplus || 0) + ringVal('increase damage'));
       m.hp -= dmg;
-      if (m.hp <= 0) { msg(T('youKill', { m: monName(m) })); killMon(m); } else msg(T('thrownHit', { i: itemName(one), m: monName(m) }));
+      if (m.hp <= 0) { say('youKill', { m: { monster: m.name } }); killMon(m); } else say('thrownHit', { i: { item: { ...one } }, m: { monster: m.name } });
       return true;
     }
-    msg(T('thrownMiss', { i: itemName(one), m: monName(m) }));
+    say('thrownMiss', { i: { item: { ...one } }, m: { monster: m.name } });
   }
   if (!itemAt(r.x, r.y) && L.t[r.y][r.x] === '.') { one.x = r.x; one.y = r.y; L.items.push(one); }
   return true;
 }
 function zap(it, dx, dy) {
-  if (it.charges <= 0) { msg(T('z_noCharge')); return true; }
+  if (it.charges <= 0) { say('z_noCharge'); return true; }
   it.charges--;
   known.stick[it.which] = true;
   const n = it.which;
   if (n === 'light') {
     const r = roomAt(P.x, P.y);
-    if (r) { r.dark = false; updateSeen(); msg(T('z_lightRoom')); } else msg(T('z_light'));
+    if (r) { r.dark = false; updateSeen(); say('z_lightRoom'); } else say('z_light');
     return true;
   }
   if (n === 'drain life') {
     const list = L.mons.filter(m => canSee(m.x, m.y));
-    if (P.hp < 2 || !list.length) { msg(T('z_drainNo')); return true; }
+    if (P.hp < 2 || !list.length) { say('z_drainNo'); return true; }
     P.hp = Math.ceil(P.hp / 2);
     const dmg = Math.floor(P.hp / list.length);
-    list.forEach(m => { m.hp -= dmg; m.awake = true; if (m.hp <= 0) { msg(T('youKill', { m: monName(m) })); killMon(m); } });
-    msg(T('z_drain'));
+    list.forEach(m => { m.hp -= dmg; m.awake = true; if (m.hp <= 0) { say('youKill', { m: { monster: m.name } }); killMon(m); } });
+    say('z_drain');
     return true;
   }
-  if (n === 'nothing') { msg(T('nothing')); return true; }
+  if (n === 'nothing') { say('nothing'); return true; }
   const hit = ray(dx, dy, 20);
   const m = hit.m;
   if (['lightning', 'fire', 'cold', 'magic missile'].indexOf(n) >= 0) {
-    const bolt = lang === 'ja' ? NM.stick[n] : n;
-    if (!m) { msg(T('z_none')); return true; }
+    const bolt = localizedName('stick', n);
+    if (!m) { say('z_none'); return true; }
     m.awake = true;
     const dmg = n === 'magic missile' ? roll(1, 4) : roll(6, 6);
     const needRoll = n === 'magic missile' || playerSwing(m, 0);
     if (needRoll) {
       m.hp -= dmg;
-      msg(T('z_bolt', { b: bolt, m: monName(m) }));
-      if (m.hp <= 0) { msg(T('youKill', { m: monName(m) })); killMon(m); }
-    } else msg(T('z_boltMiss', { b: bolt, m: monName(m) }));
+      say('z_bolt', { b: { stick: n }, m: { monster: m.name } });
+      if (m.hp <= 0) { say('youKill', { m: { monster: m.name } }); killMon(m); }
+    } else say('z_boltMiss', { b: { stick: n }, m: { monster: m.name } });
     return true;
   }
-  if (!m) { msg(T('nothing')); return true; }
+  if (!m) { say('nothing'); return true; }
   m.awake = true;
   m.disguise = null;
   switch (n) {
-    case 'invisibility': m.invis = true; msg(T('z_invis', { m: monName(m) })); break;
+    case 'invisibility': m.invis = true; say('z_invis', { m: { monster: m.name } }); break;
     case 'polymorph': {
       const c = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[rnd(26)];
       const oldx = m.x, oldy = m.y;
       L.mons = L.mons.filter(q => q !== m);
       const nm = spawnMon(c, oldx, oldy, true);
       nm.disguise = null;
-      msg(T('z_poly', { m: monName(m) }));
+      say('z_poly', { m: { monster: m.name } });
       break;
     }
-    case 'haste monster': m.haste = true; m.slow = false; msg(T('z_haste', { m: monName(m) })); break;
-    case 'slow monster': m.slow = true; m.haste = false; msg(T('z_slow', { m: monName(m) })); break;
+    case 'haste monster': m.haste = true; m.slow = false; say('z_haste', { m: { monster: m.name } }); break;
+    case 'slow monster': m.slow = true; m.haste = false; say('z_slow', { m: { monster: m.name } }); break;
     case 'teleport away': {
       const p = emptyFloor();
       m.x = p[0]; m.y = p[1];
-      msg(T('z_tele', { m: monName(m) }));
+      say('z_tele', { m: { monster: m.name } });
       break;
     }
     case 'teleport to': {
@@ -1172,7 +1223,7 @@ function zap(it, dx, dy) {
     case 'cancellation':
       m.cancel = true;
       m.invis = false;
-      msg(T('z_cancel', { m: monName(m) }));
+      say('z_cancel', { m: { monster: m.name } });
       break;
     default:
   }
@@ -1180,15 +1231,15 @@ function zap(it, dx, dy) {
 }
 
 function goDown() {
-  if (L.t[P.y][P.x] !== '%') { msg(T('noStairs')); return false; }
+  if (L.t[P.y][P.x] !== '%') { say('noStairs'); return false; }
   P.depth++;
   P.maxDepth = Math.max(P.maxDepth, P.depth);
   newLevel();
   return true;
 }
 function goUp() {
-  if (L.t[P.y][P.x] !== '%') { msg(T('noUp')); return false; }
-  if (!P.hasAmulet) { msg(T('needAmulet')); return false; }
+  if (L.t[P.y][P.x] !== '%') { say('noUp'); return false; }
+  if (!P.hasAmulet) { say('needAmulet'); return false; }
   P.depth--;
   if (P.depth <= 0) { win(); return true; }
   newLevel();
@@ -1196,7 +1247,7 @@ function goUp() {
 }
 function win() {
   gameOver = true;
-  overlay = '\n\n\n    ' + T('win') + '\n\n    ' + T('winScore', { g: P.gold });
+  overlay = () => '\n\n\n    ' + T('win') + '\n\n    ' + T('winScore', { g: P.gold });
   mode = 'dead';
 }
 
@@ -1235,7 +1286,7 @@ function runStep(dx, dy) {
 }
 
 function askDir(fn) {
-  curMsg = T('dirPrompt');
+  curMsg = () => T('dirPrompt');
   mode = 'dir';
   pendingFn = fn;
   draw();
@@ -1268,7 +1319,7 @@ function numKey(n) {
   handle(NUM_PLAY[n]);
 }
 function pickKey() {
-  if (!itemAt(P.x, P.y)) { msg(T('nothingHere')); pumpMsg(); draw(); return; }
+  if (!itemAt(P.x, P.y)) { say('nothingHere'); pumpMsg(); draw(); return; }
   const lev = P.lev;
   P.lev = 0;      // 自分で拾う時は浮いていても拾える
   pickup();
@@ -1276,6 +1327,7 @@ function pickKey() {
   acted();
 }
 function onKey(e) {
+  if (e.target?.closest?.('button, a, input, select, textarea')) return;
   const k0 = e.key;
   if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'NumLock'].indexOf(k0) >= 0) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1389,7 +1441,7 @@ function handle(key) {
     return;
   }
   if (mode === 'quit') {
-    if (key === 'y' || key === 'Y') { die(T('ripQuit')); draw(); return; }
+    if (key === 'y' || key === 'Y') { die({ text: 'ripQuit' }); draw(); return; }
     mode = 'play';
     curMsg = '';
     draw();
@@ -1438,25 +1490,25 @@ function handle(key) {
     case '>': if (goDown()) acted(); else { pumpMsg(); draw(); } break;
     case '<': if (goUp()) { if (!gameOver) acted(); else draw(); } else { pumpMsg(); draw(); } break;
     case 'i': showList(null); draw(); break;
-    case '?': overlay = T('help'); draw(); break;
+    case '?': overlay = () => T('help'); draw(); break;
     case 'q': chooseItem(['potion'], 'v_quaff', it => { quaff(it); return true; }); break;
     case 'r': chooseItem(['scroll'], 'v_read', it => readScroll(it)); break;
     case 'e': chooseItem(['food'], 'v_eat', it => { eat(it); return true; }); break;
     case 'w': chooseItem(['weapon'], 'v_wield', it => wield(it)); break;
     case 'W': chooseItem(['armor'], 'v_wear', it => wear(it)); break;
     case 'T':
-      if (!P.armor) { msg(T('noArmor')); pumpMsg(); draw(); }
-      else if (P.armor.cursed) { msg(T('cursed')); pumpMsg(); draw(); }
-      else { msg(T('armorOff', { i: itemName(P.armor) })); P.armor = null; acted(); }
+      if (!P.armor) { say('noArmor'); pumpMsg(); draw(); }
+      else if (P.armor.cursed) { say('cursed'); pumpMsg(); draw(); }
+      else { say('armorOff', { i: { item: { ...P.armor } } }); P.armor = null; acted(); }
       break;
     case 'P': chooseItem(['ring'], 'v_put', it => putOn(it)); break;
     case 'R': {
       const worn = P.rings.filter(Boolean);
-      if (!worn.length) { msg(T('noRing')); pumpMsg(); draw(); break; }
+      if (!worn.length) { say('noRing'); pumpMsg(); draw(); break; }
       const it = worn[worn.length - 1];
-      if (it.cursed) { msg(T('cursed')); pumpMsg(); draw(); break; }
+      if (it.cursed) { say('cursed'); pumpMsg(); draw(); break; }
       P.rings[P.rings.indexOf(it)] = null;
-      msg(T('ringOff', { i: itemName(it) }));
+      say('ringOff', { i: { item: { ...it } } });
       acted();
       break;
     }
@@ -1467,7 +1519,7 @@ function handle(key) {
       askDir((dx, dy) => zap(it, dx, dy));
       return 'wait';
     }); break;
-    case 'Q': curMsg = T('quit'); mode = 'quit'; draw(); break;
+    case 'Q': curMsg = () => T('quit'); mode = 'quit'; draw(); break;
     default: draw();
   }
 }
@@ -1477,19 +1529,24 @@ window.addEventListener('keydown', onKey);
 // ===== 言語 =====
 function drawChrome() {
   document.documentElement.lang = lang;
-  $('lang_ja').classList.toggle('on', lang === 'ja');
-  $('lang_en').classList.toggle('on', lang === 'en');
+  for (const code of languages) {
+    $('lang_' + code).classList.toggle('on', lang === code);
+    $('lang_' + code).setAttribute('aria-pressed', String(lang === code));
+  }
   $('hint').textContent = T('hint');
   $('btnHelp').textContent = T('btnHelp');
   $('sheet').textContent = T('sheet');
   $('toTop').textContent = T('top');
-  $('toTop').setAttribute('href', lang === 'en' ? '../en/index.html' : '../index1.html');
+  $('toTop').setAttribute('href', lang === 'ja' ? '../index1.html' : '../en/index.html');
 }
 function setLang(l) {
+  if (!languages.includes(l)) return;
+  if (pendArrow) { clearTimeout(pendArrow.t); pendArrow = null; }
   lang = l;
   try { localStorage.setItem('rogueLang', l); } catch (e) { /* 無視 */ }
   drawChrome();
-  if (!gameOver) draw();
+  if (mode === 'menu') drawMenu();
+  else draw();
   $('lang_' + l).blur();
 }
 // ズーム
@@ -1505,11 +1562,18 @@ applyZoom();
 $('btnHelp').onclick = () => {
   $('btnHelp').blur();
   if (mode === 'dead') return;
-  overlay = T('help');
+  overlay = () => T('help');
   draw();
 };
-$('lang_ja').onclick = () => setLang('ja');
-$('lang_en').onclick = () => setLang('en');
+for (const [code, label] of Object.entries(ROGUE_LANGUAGES)) {
+  const button = document.createElement('button');
+  button.id = 'lang_' + code;
+  button.type = 'button';
+  button.lang = code;
+  button.textContent = label;
+  button.onclick = () => setLang(code);
+  $('languages').appendChild(button);
+}
 
 // ===== ブラウザの戻るを無効にする =====
 history.pushState({ rogue: 1 }, '', location.href);

@@ -72,6 +72,8 @@ html { overflow:hidden; background:#0a1a2a; }
 }
 #rightPane h3 { color:#88ccff; margin-bottom:6px; font-size:0.95em; }
 #shipDetail { background:#0a1a2a; padding:8px; border-radius:4px; margin-bottom:6px; }
+#plotPanel[inert] { opacity:0.45; }
+#plotDisplay { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .stat-row { display:flex; justify-content:space-between; padding:2px 0; font-size:0.85em; }
 .stat-row .lbl { color:#aac; }
 .stat-row .val { color:#fff; font-weight:bold; }
@@ -164,7 +166,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
     <h3>選択艦</h3>
     <div id="shipDetail">艦を選択</div>
     <h3 id="plotHeader">移動プロット</h3>
-    <div id="plotPanel" style="background:#0a1a2a;padding:8px;border-radius:4px;margin-bottom:6px;">
+    <div id="plotPanel" inert style="background:#0a1a2a;padding:8px;border-radius:4px;margin-bottom:6px;">
       <div id="plotDisplay" style="background:#000;color:#0f8;padding:4px 8px;border-radius:3px;font-family:monospace;min-height:24px;margin-bottom:6px;">-</div>
       <div id="numpad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;">
         <button class="np" onclick="plotKey('7')">7<small>↖NW</small></button>
@@ -199,9 +201,10 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
     </div>
     <!-- フェイズを進めるボタン（どのフェイズでも出す。移動記入の時はプロット実行のすぐ下） -->
     <div id="phaseButtons" style="margin-bottom:8px;">
-      <button class="np" onclick="advancePhase()" style="width:100%;background:#335577;margin-top:4px;font-weight:bold;">次のフェイズ</button>
-      <button class="np" onclick="endTurn()" style="width:100%;background:#884444;margin-top:4px;">ターン終了</button>
+      <button id="btnAdvancePhase" class="np" onclick="advancePhase()" style="width:100%;background:#335577;margin-top:4px;font-weight:bold;">次のフェイズ</button>
+      <button id="btnEndTurn" disabled class="np" onclick="endTurn()" style="width:100%;background:#884444;margin-top:4px;">ターン終了</button>
     </div>
+    <div id="plotReadyStatus" role="status" style="min-height:2.4em;color:#8fc;"></div>
     <h3>行動ログ</h3>
     <div id="actionLog"></div>
   </div>
@@ -628,6 +631,7 @@ function draw() {
   // プロット予測線（移動実行中は表示しない）
   if (typeof drawPlotPreview === 'function' && !isExecuting) drawPlotPreview();
 
+  drawPlotDoneMarks();
   ctx.restore();
 
   updateWindIndicator();
@@ -851,6 +855,8 @@ function saveGameToFile() {
         damageSeqCounter: state.damageSeqCounter,
         plotExecTurn: state._plotExecTurn,
         scenarioNo: state.scenarioNo,
+        plotSide: state.plotSide,
+        plotReady: state.plotReady,
       },
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1239,6 +1245,8 @@ function loadFromSandbox() {
       if (sv.log) state.log = sv.log;
       if (sv.plotExecTurn != null) state._plotExecTurn = sv.plotExecTurn;
       if (sv.scenarioNo != null) state.scenarioNo = sv.scenarioNo;
+      state.plotSide = sv.plotSide || 'jp';
+      state.plotReady = sv.plotReady || { jp: false, us: false };
       if (sv.gunneryArrows) state.gunneryArrows = sv.gunneryArrows;
       if (typeof sv.damageSeqCounter === 'number') state.damageSeqCounter = sv.damageSeqCounter;
       console.log(`[RESUME] T${state.turn}/${state.phase} を復元 (saved=${payload.savedAt})`);
@@ -1869,14 +1877,46 @@ function scrollPanelToSelected() {
   if (sel) sel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
+function isHumanMatch() { return state.gameMode === 'human-vs-human'; }
+function isHumanShip(ship) {
+  return isHumanMatch() || (ship.side === 'jp' && !String(state.gameMode || '').startsWith('ai-vs-ai'));
+}
+function plotShips(side) {
+  return (side === 'jp' ? state.jpFleet : state.usFleet).filter(s =>
+    s.status === 'ok' && s.col >= 0 && (!s.enterTurn || state.turn >= s.enterTurn));
+}
+function canPlotShip(ship) {
+  return canInputPlot() && ship && ship.status === 'ok' && ship.col >= 0 &&
+    (!ship.enterTurn || state.turn >= ship.enterTurn) &&
+    ship.side === (isHumanMatch() ? state.plotSide || 'jp' : 'jp') &&
+    !(isHumanMatch() && state.plotReady?.[ship.side]);
+}
+function updatePlotReadyStatus() {
+  const target = document.getElementById('plotReadyStatus');
+  const summary = side => {
+    const ships = plotShips(side);
+    const ready = ships.filter(s => s.plotDone).length;
+    return (side === 'jp' ? '青側' : '赤側') + ': ' + ready + '/' + ships.length +
+      (state.plotReady?.[side] ? ' 提出済み' : ' 確定');
+  };
+  const active = state.phase === 'moveNote' && state._plotExecTurn !== state.turn;
+  target.textContent = active ? (isHumanMatch() ? summary('jp') + ' ／ ' + summary('us') : summary('jp')) : '';
+}
+function updatePhaseButtons() {
+  const busy = phaseBusy || isExecuting || state.gameEnded;
+  document.getElementById('btnEndTurn').disabled = busy || state.phase !== 'fullSail';
+  document.getElementById('btnAdvancePhase').disabled = !!busy;
+}
 function updatePlotDisplay() {
   const el = document.getElementById('plotDisplay');
   if (!el) return;
-  const s = state.selectedShip;
-  if (!s) { el.textContent = '-'; return; }
-  const moves = (s.plottedMoves || []);
-  const done = s.plotDone ? ' ✓' : '';
-  el.textContent = (moves.length === 0 ? '(なし)' : moves.join(' ')) + done;
+  const selected = state.selectedShip;
+  const s = selected && selected.side === (isHumanMatch() ? state.plotSide || 'jp' : 'jp') ? selected : null;
+  const moves = s?.plottedMoves || [];
+  const done = s?.plotDone ? ' ✓' : '';
+  const label = s ? (moves.length ? moves.join(' ') : '(なし)') + done : '-';
+  el.textContent = label;
+  el.title = label;
 }
 
 function renderShipCardHtml(s) {
@@ -1931,15 +1971,14 @@ function renderShipCardHtml(s) {
 }
 
 function renderShipDetail() {
+  updatePlotVisibility();
+  updatePlotReadyStatus();
+  updatePhaseButtons();
   updatePlotDisplay();
   const el = document.getElementById('shipDetail');
   // 高速観戦モード: 左パネル=FR、右パネル=GB、プロット/ログを非表示
   if (typeof isFastAiObserve === 'function' && isFastAiObserve()) {
-    const plotHeader = document.getElementById('plotHeader');
-    const plotPanel = document.getElementById('plotPanel');
     const actionLog = document.getElementById('actionLog');
-    if (plotHeader) plotHeader.style.display = 'none';
-    if (plotPanel) plotPanel.style.display = 'none';
     if (actionLog) actionLog.style.display = 'none';
     document.querySelectorAll('#rightPane h3').forEach(h => {
       const ht = (typeof langOriginal === 'function') ? langOriginal(h) : h.textContent;
@@ -2143,28 +2182,30 @@ const PHASE_NAMES_JP = {
   reload:    'I. 装填',
   fullSail:  'J. 全帆',
 };
+let phaseBusy = false;
+function canInputPlot() {
+  return !isFastAiObserve() && state.phase === 'moveNote' && state._plotExecTurn !== state.turn &&
+    !isExecuting && !phaseBusy && !state.gameEnded;
+}
 function updatePlotVisibility() {
-  const show = state.phase === 'moveNote';
-  const header = document.getElementById('plotHeader');
+  const observing = isFastAiObserve();
+  document.getElementById('plotHeader').hidden = observing;
   const panel = document.getElementById('plotPanel');
-  const bottom = document.getElementById('plotBottomButtons');
-  if (header) header.style.display = show ? '' : 'none';
-  if (panel) panel.style.display = show ? '' : 'none';
-  if (bottom) bottom.style.display = show ? '' : 'none';
+  panel.hidden = observing;
+  // 入力できないフェイズも高さを保ち、下の進行ボタンを動かさない。
+  panel.inert = !canInputPlot();
 }
 // 人間対AI の C:移動記入 で、まだプロットを実行していなければ次のフェイズへ進ませない
 //   （動かせる自軍の艦が1隻もない時は止めない）
 function moveNotExecuted() {
-  if ((state.gameMode || 'human-vs-ai') !== 'human-vs-ai') return false;
+  if (String(state.gameMode || '').startsWith('ai-vs-ai')) return false;
   if (state.phase !== 'moveNote' || state._plotExecTurn === state.turn) return false;
-  return humanMovableShips().length > 0;
+  return (isHumanMatch() ? [...plotShips('jp'), ...plotShips('us')] : humanMovableShips()).length > 0;
 }
 // 人間対AI で、このターン動かせる自軍の艦（鉤縄でつながっていない・錨泊していない・登場済み）
-function humanMovableShips() {
-  return state.jpFleet.filter(s => s.status === 'ok' && s.col >= 0 && !(s.grappledWith && s.grappledWith.length)
-    && !s.anchored && (!s.enterTurn || state.turn >= s.enterTurn));
-}
-function advancePhase() {
+function humanMovableShips() { return plotShips('jp'); }
+async function advancePhase() {
+  if (phaseBusy || isExecuting) return;
   if (state.gameEnded) {
     try { if (typeof autoAdvanceTimer !== 'undefined' && autoAdvanceTimer) { clearInterval(autoAdvanceTimer); autoAdvanceTimer = null; updateAutoButton(); } } catch (e) {}
     setInfo('ゲームは終了しました');
@@ -2175,57 +2216,66 @@ function advancePhase() {
     alert('移動のプロットがまだ実行されていません。各艦の移動を入力し、「プロット実行」を押してから次のフェイズへ進んでください。');
     return;
   }
-  const i = PHASE_ORDER.indexOf(state.phase);
-  if (i < 0 || i === PHASE_ORDER.length - 1) {
-    // 一周完了 → ターン繰上 + 増援処理
-    state.turn++;
-    processReinforcements(state.turn);
-    addLog(`=== ターン ${state.turn} ===`);
-    state.phase = PHASE_ORDER[0];
-  } else {
-    state.phase = PHASE_ORDER[i + 1];
-  }
-  setInfo(`フェイズ: ${state.phase}`);
-  updatePlotVisibility();
-  if (state.phase === 'grapple' || state.phase === 'reload' || state.phase === 'fullSail') {
-    // grapple/reload/fullSail はオーバーレイ表示スキップ
-    const el = document.getElementById('phaseOverlay');
-    if (el) el.classList.remove('show');
-    clearTimeout(_overlayTimer);
-  } else {
-    showPhaseOverlay(PHASE_NAMES_JP[state.phase] || state.phase, '', null, 1500);
-  }
-  // C. 移動記入に入ったら全艦プロットをクリア、AI自動プロット
-  if (state.phase === 'moveNote') {
-    [...state.jpFleet, ...state.usFleet].forEach(s => {
-      s.plottedMoves = [];
-      s.plotDone = false;
-    });
-    if (typeof aiRunAll === 'function') {
-      aiRunAll(state);  // us側（常にAI）
-      // AI対AI 時は jp側もAI
-      if (state.gameMode && state.gameMode.startsWith('ai-vs-ai') && typeof aiPlotMoves === 'function') {
-        if (typeof aiRunJp === 'function') aiRunJp(state);
-        else state.jpFleet.forEach(s => { aiPlotMoves(s, state); aiSailDecide(s, state); });
+  phaseBusy = true;
+  updatePhaseButtons();
+  try {
+    const i = PHASE_ORDER.indexOf(state.phase);
+    if (i < 0 || i === PHASE_ORDER.length - 1) {
+      // 一周完了 → ターン繰上 + 増援処理
+      state.turn++;
+      processReinforcements(state.turn);
+      addLog(`=== ターン ${state.turn} ===`);
+      state.phase = PHASE_ORDER[0];
+    } else {
+      state.phase = PHASE_ORDER[i + 1];
+    }
+    setInfo(`フェイズ: ${state.phase}`);
+    updatePlotVisibility();
+    if (state.phase === 'grapple' || state.phase === 'reload' || state.phase === 'fullSail') {
+      // grapple/reload/fullSail はオーバーレイ表示スキップ
+      const el = document.getElementById('phaseOverlay');
+      if (el) el.classList.remove('show');
+      clearTimeout(_overlayTimer);
+    } else {
+      showPhaseOverlay(PHASE_NAMES_JP[state.phase] || state.phase, '', null, 1500);
+    }
+    // C. 移動記入に入ったら全艦プロットをクリア、AI自動プロット
+    if (state.phase === 'moveNote') {
+      [...state.jpFleet, ...state.usFleet].forEach(s => {
+        s.plottedMoves = [];
+        s.plotDone = false;
+      });
+      state.plotReady = { jp: false, us: false };
+      state.plotSide = 'jp';
+      if (!isHumanMatch() && typeof aiRunAll === 'function') {
+        aiRunAll(state);  // us側（常にAI）
+        // AI対AI 時は jp側もAI
+        if (state.gameMode && state.gameMode.startsWith('ai-vs-ai') && typeof aiPlotMoves === 'function') {
+          if (typeof aiRunJp === 'function') aiRunJp(state);
+          else state.jpFleet.forEach(s => { aiPlotMoves(s, state); aiSailDecide(s, state); });
+        }
+      }
+      isExecuting = false;
+      // AI対AI時は自動的に全プロット確定＆実行
+      if (state.gameMode && state.gameMode.startsWith('ai-vs-ai')) {
+        [...state.jpFleet, ...state.usFleet].forEach(s => { if ((s.plottedMoves||[]).length > 0) s.plotDone = true; });
+        if (typeof executeAllPlots === 'function') executeAllPlots();
       }
     }
-    isExecuting = false;
-    // AI対AI時は自動的に全プロット確定＆実行
-    if (state.gameMode && state.gameMode.startsWith('ai-vs-ai')) {
-      [...state.jpFleet, ...state.usFleet].forEach(s => { if ((s.plottedMoves||[]).length > 0) s.plotDone = true; });
-      if (typeof executeAllPlots === 'function') executeAllPlots();
-    }
+    draw();
+    // 各フェイズの自動処理
+    if (state.phase === 'wind') runWindPhase();
+    if (state.phase === 'unfoul') await executeUnfoulPhase();
+    if (state.phase === 'grapple') await executeGrapplePhase();
+    if (state.phase === 'boardPrep') await executeBoardPrepPhase();
+    if (state.phase === 'combat') await executeAllGunnery();
+    if (state.phase === 'melee') executeMeleePhase();
+    if (state.phase === 'reload') await executeReloadPhase();
+    if (state.phase === 'fullSail') await executeFullSailPhase();
+  } finally {
+    phaseBusy = false;
+    draw();
   }
-  draw();
-  // 各フェイズの自動処理
-  if (state.phase === 'wind') runWindPhase();
-  if (state.phase === 'unfoul') executeUnfoulPhase();
-  if (state.phase === 'grapple') executeGrapplePhase();
-  if (state.phase === 'boardPrep') executeBoardPrepPhase();
-  if (state.phase === 'combat') executeAllGunnery();
-  if (state.phase === 'melee') executeMeleePhase();
-  if (state.phase === 'reload') executeReloadPhase();
-  if (state.phase === 'fullSail') executeFullSailPhase();
 }
 
 // ============================================================
@@ -2305,7 +2355,7 @@ async function executeAllGunnery() {
     const isEmpty = !!firer['fired' + sideForDirty + 'Dirty'];
     if (isEmpty) {
       const sideLabel = sideForDirty === 'Left' ? '左舷' : '右舷';
-      if (firer.side === 'jp') {
+      if (firer.side === 'jp' || isHumanMatch()) {
         const emptyHtml = `
           <div style="font-size:1.3em;text-align:center;color:#ff8888;font-weight:bold;margin-bottom:10px;">${sideLabel}: 空 / 発射不可</div>
           <div style="color:#aac;text-align:center;">装填フェイズで装填してください</div>
@@ -2324,7 +2374,7 @@ async function executeAllGunnery() {
       continue;
     }
     // 1. resolveGunnery でスペック事前計算
-    const _aiCtl = firer.side === 'us' || String(state.gameMode || '').startsWith('ai-vs-ai');
+    const _aiCtl = !isHumanShip(firer);
     const _grNow = !!(firer.grappled || (firer.grappledWith?.length) || bestTarget.grappled || (bestTarget.grappledWith?.length));
     const aiAim = (_aiCtl && firer.aiMode === 'melee' && !_grNow && ammo !== 'grape' && ammo !== 'double') ? 'rigging' : undefined;
     const result = resolveGunnery(firer, bestTarget, bestArc, ammo, aiAim);
@@ -2332,7 +2382,7 @@ async function executeAllGunnery() {
     const tableVal = result.table ?? '-';
 
     // AI側: マイナスなら自動スキップ
-    if (firer.side !== 'jp' && isNegative) {
+    if (!isHumanMatch() && firer.side !== 'jp' && isNegative) {
       addLog(`${firer.name}: Hit Table ${tableVal} → 自動スキップ（マイナス）`);
       await skipNotice(firer, `命中表の番号がマイナス（${tableVal}）で、撃っても当たらない`);
       continue;
@@ -2355,7 +2405,7 @@ async function executeAllGunnery() {
     `;
     let _shownType = null;
     { const tl = (result.log || []).map(l => l.match(/Table#\d+\((hull|rigging)\)/)).find(Boolean); if (tl) _shownType = tl[1]; }
-    if (firer.side === 'jp') {
+    if (firer.side === 'jp' || isHumanMatch()) {
       const isGrappled = !!(firer.grappled || (firer.grappledWith?.length) || bestTarget.grappled || (bestTarget.grappledWith?.length));
       // 状況別の目標部位固定: 白兵戦>grape>chain>距離6以上round
       let forceDmgType = null, lockReason = '';
@@ -2891,7 +2941,7 @@ async function executeUnfoulPhase() {
             }
           }
           // AI側: wantUngrapple (白兵戦で劣勢判定) の時だけ解除試行
-          if (usShip.wantUngrapple) {
+          if (isHumanMatch() ? await showConfirmModal(usShip.name + ': ' + jpShip.name + 'との鉤縄を解除試行しますか？') : usShip.wantUngrapple) {
             const ru = rollUngrappling(usShip, jpShip, { windVelocity: state.wind?.velocity });
             const line = `${usShip.name} 解除試行(AI${usShip.aiMode === 'gun' ? '砲撃側' : '劣勢'}): ${ru.log.join(' / ')}`;
             addLog(line); overlayLines.push(line);
@@ -2982,7 +3032,7 @@ async function executeGrapplePhase() {
     const choice = _jpAi ? !!jp.wantGrapple : await showConfirmModal(`${jp.name}: ${us.name}に鉤縄を仕掛けますか？`);
     let attacker, defender;
     if (choice) { attacker = jp; defender = us; }
-    else if (us.wantGrapple !== false) { attacker = us; defender = jp; }
+    else if (isHumanMatch() ? await showConfirmModal(us.name + ': ' + jp.name + 'に鉤縄を仕掛けますか？') : us.wantGrapple !== false) { attacker = us; defender = jp; }
     else { resultLines.push(`${jp.name} ↔ ${us.name}: 鉤縄はかけない`); continue; }
     const r = rollGrappling(attacker, defender, { windVelocity: state.wind?.velocity });
     addLog(`${attacker.name} → ${defender.name} 鉤縄: ${r.log.join(' / ')}`);
@@ -3170,7 +3220,7 @@ async function executeBoardPrepPhase() {
 
   // jp艦の鉤縄艦をまとめて一括入力（AI 対 AI のときは jp 側も下で自動に決める）
   const _jpIsAi = String(state.gameMode || '').startsWith('ai-vs-ai');
-  const jpGrappled = _jpIsAi ? [] : allShips.filter(s => s.side === 'jp' && s.grappledWith?.length > 0);
+  const jpGrappled = _jpIsAi ? [] : allShips.filter(s => isHumanShip(s) && s.grappledWith?.length > 0);
   if (jpGrappled.length > 0) {
     const choices = await showBoardPrepModalMulti(jpGrappled);
     for (const c of choices) {
@@ -3191,7 +3241,7 @@ async function executeBoardPrepPhase() {
       if (!sh.some(a => th.some(b => hexDist(a.col, a.row, b.col, b.row) === 1))) continue;
       const sec = (s.crew?.abilities || []).find(v => v > 0) || 0;
       if (!sec || (s.crew.abilities.filter(v => v > 0).length < 2)) continue; // 自分の艦を動かす乗員を残す
-      const go = (s.side === 'jp' && state.gameMode === 'human-vs-ai') ? await showConfirmModal(`${s.name}: 降伏した ${t.name} に回航員（乗員 ${sec}）を送りますか？`) : true;
+      const go = isHumanShip(s) ? await showConfirmModal(`${s.name}: 降伏した ${t.name} に回航員（乗員 ${sec}）を送りますか？`) : true;
       if (!go) continue;
       s.obpAssigned = sec;
       capturePrize(t, [s]);
@@ -3205,7 +3255,7 @@ async function executeBoardPrepPhase() {
     let hasGrapple = false;
     if (s.grappledWith && s.grappledWith.length > 0) {
       hasGrapple = true;
-      if (s.side === 'us' || _jpIsAi) {
+      if (!isHumanShip(s)) {
         // AI の艦: 自動編成（半分ずつ、砲撃用に1区画残す）+ 攻撃目標は鎖内の最初の敵
         const total = (s.crew?.abilities||[]).reduce((a,v) => a + (v||0), 0);
         const reserved = total >= 2 ? 1 : 0;  // 砲撃用に1区画残す
@@ -3809,7 +3859,7 @@ async function executeReloadPhase() {
   }
 
   // プレイヤー側（jp）: 装填選択モーダル（必ず表示）
-  const jpShips = allShips.filter(s => s.side === 'jp');
+  const jpShips = allShips.filter(s => s.side === 'jp' || isHumanMatch());
   if (jpShips.length > 0) {
     const choices = await showReloadChoiceModal(jpShips);
     for (const ch of choices) {
@@ -3822,7 +3872,7 @@ async function executeReloadPhase() {
   }
 
   // AI側（us）: 空の舷を1つ装填（弾種は plannedShot または round）
-  const usShips = allShips.filter(s => s.side === 'us');
+  const usShips = allShips.filter(s => s.side === 'us' && !isHumanMatch());
   for (const s of usShips) {
     for (const side of ['L', 'R']) reloadOne(s, side, s.plannedShot[side] || 'round');
   }
@@ -3872,7 +3922,7 @@ async function executeFullSailPhase() {
   const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok');
 
   // プレイヤー側（jp）: 帆状態選択モーダル（必ず表示）
-  const jpShips = allShips.filter(s => s.side === 'jp');
+  const jpShips = allShips.filter(s => s.side === 'jp' || isHumanMatch());
   if (jpShips.length > 0) {
     const choices = await showSailChoiceModal(jpShips);
     for (const ch of choices) {
@@ -3886,7 +3936,7 @@ async function executeFullSailPhase() {
   }
 
   // AI側（us）: 従来通り pendingSailMode を反映
-  const usShips = allShips.filter(s => s.side === 'us');
+  const usShips = allShips.filter(s => s.side === 'us' && !isHumanMatch());
   for (const s of usShips) {
     debugLog(`[DEBUG fullSail] ${s.name} sailState=${s.sailState} pending=${s.pendingSailMode}`);
     if (s.pendingSailMode) {
@@ -4120,15 +4170,10 @@ function processReinforcements(turn) {
 }
 
 function endTurn() {
-  checkGameEnd();
-  if (state.gameEnded) return;
-  state.turn++;
-  state.phase = 'wind';
-  processReinforcements(state.turn);
-  setInfo(`ターン ${state.turn}`);
-  addLog(`=== ターン ${state.turn} ===`);
-  draw();
+  if (state.phase !== 'fullSail' || phaseBusy || isExecuting || state.gameEnded) return;
+  return advancePhase();
 }
+
 </script>
 
 <!-- WSMロジックモジュール -->
@@ -4249,6 +4294,7 @@ canvas.addEventListener('click', e => {
 function plotKey(key) {
   if (state.phase === 'moveNote' && state._plotExecTurn === state.turn) { setInfo('このターンの移動はもう実行しました'); return; }
   const s = state.selectedShip;
+  if (!canPlotShip(s)) return;
   if (!s) { debugLog(`[DEBUG plotKey] key=${key} 艦未選択`); setInfo('艦を選択してください'); return; }
   if (s.col < 0) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} 未配置`); setInfo('未配置の艦'); return; }
   if (s.grappledWith?.length > 0) { debugLog(`[DEBUG plotKey] key=${key} ${s.name} 鉤縄接続中`); setInfo(`${s.name}: 鉤縄接続中 - 移動プロット不可`); return; }
@@ -4263,6 +4309,7 @@ function plotKey(key) {
 
 function clearPlot() {
   const s = state.selectedShip;
+  if (!canPlotShip(s)) return;
   if (!s) return;
   s.plottedMoves = [];
   s.plotDone = false;
@@ -4274,6 +4321,7 @@ function clearPlot() {
 // 帆切替指示 (満帆帆走期で反映)
 function plotSailChange(target) {
   const s = state.selectedShip;
+  if (!canPlotShip(s)) return;
   if (!s) return;
   s.pendingSailMode = target;
   addLog(`${s.name} 帆指示: ${target === 'full' ? '全帆ON' : '全帆OFF'}`);
@@ -4284,6 +4332,7 @@ function plotSailChange(target) {
 // action: 'drop' | 'raise' | 'cut'
 function plotAnchor(action) {
   const s = state.selectedShip;
+  if (!canPlotShip(s)) return;
   if (!s) return;
   if (action === 'dropAS' || action === 'dropAB') { s.anchorMode = action === 'dropAS' ? 'AS' : 'AB'; action = 'drop'; }
   else if (action === 'drop') s.anchorMode = 'A';
@@ -4305,6 +4354,7 @@ function plotAnchor(action) {
 // action: 'attach' | 'detach'
 function plotGrapple(action) {
   const s = state.selectedShip;
+  if (!canPlotShip(s)) return;
   if (!s) return;
   s.plannedGrapple = action;
   addLog(`${s.name} 鉤縄指示: ${action === 'attach' ? '鉤かけ' : '鉤はずし'}`);
@@ -4313,14 +4363,16 @@ function plotGrapple(action) {
 
 function donePlot() {
   const s = state.selectedShip;
+  if (!canPlotShip(s)) return;
   if (!s) return;
+  if (!s.plottedMoves?.length) s.plottedMoves = ['0'];
   s.plotDone = true;
-  addLog(`${s.name} プロット確定: ${(s.plottedMoves||[]).join(' ') || '(空)'}`);
+  addLog(isHumanMatch() ? s.name + ' プロット確定' : `${s.name} プロット確定: ${(s.plottedMoves||[]).join(' ') || '(空)'}`);
   draw();
 }
 
 document.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (!canInputPlot() || e.target.closest?.('button, input, select, textarea, [contenteditable]')) return;
   const k = e.key;
   // テンキー/数字行の両方に対応: e.codeがNumpad*かDigit*でも拾う
   let digit = null;
@@ -4584,9 +4636,26 @@ function drawArcsForShipLegacy(ship) {
   }
 }
 
+function drawPlotDoneMarks() {
+  if (state.phase !== 'moveNote' || state._plotExecTurn === state.turn || isExecuting) return;
+  ctx.save();
+  ctx.fillStyle = '#6f8';
+  ctx.font = 'bold ' + Math.round(HEX_SIZE * 0.45) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const ship of [...state.jpFleet, ...state.usFleet]) {
+    if (!ship.plotDone || ship.col < 0 || ship.status !== 'ok') continue;
+    if (!isHumanMatch() && ship.side !== 'jp') continue;
+    const point = hexPt(ship.col, ship.row);
+    ctx.fillText('✓', point.x + HEX_SIZE * 0.65, point.y - HEX_SIZE * 0.5);
+  }
+  ctx.restore();
+}
+
 function drawPlotPreview() {
   // プレイヤー側（jp）のみプロット表示。敵（us）の未来位置は隠す
-  for (const s of state.jpFleet) {
+  for (const s of (isHumanMatch() && state.plotSide === 'us' ? state.usFleet : state.jpFleet)) {
+    if (isHumanMatch() && state.plotReady?.[s.side]) continue;
     if (!s.plottedMoves || s.plottedMoves.length === 0) continue;
     if (s.col < 0) continue;
     const path = simulatePlot(s);
@@ -4708,7 +4777,7 @@ let isExecuting = false;
 function executeAllPlots() {
   debugLog(`[DEBUG executeAllPlots] 呼出 isExecuting=${isExecuting}`);
   blTrace(`executeAllPlots 呼出 isExecuting=${isExecuting} plotExecTurn=${state._plotExecTurn} plots=${[...state.jpFleet, ...state.usFleet].map(s => s.name + ':' + (s.plottedMoves || []).join('')).join(',')}`);
-  if (isExecuting) return;
+  if (isExecuting || state.phase !== 'moveNote') return;
   if (state.gameEnded) return;
   // 移動の実行は1ターンに1回だけ。2回目を許すと、AI の艦は止まったまま自分の艦だけが何度も動けてしまう（2026-11-09 アンドリューさんの報告）
   if (state.phase === 'moveNote' && state._plotExecTurn === state.turn) {
@@ -4716,18 +4785,32 @@ function executeAllPlots() {
     return;
   }
   // 人間対AI: 動かせる自軍の艦が全部「確定」してからでないと実行しない（複数の艦の入れ間違いを防ぐ）
-  if ((state.gameMode || 'human-vs-ai') === 'human-vs-ai' && state.phase === 'moveNote') {
-    const notDone = humanMovableShips().filter(s => !s.plotDone);
+  if (!String(state.gameMode || '').startsWith('ai-vs-ai')) {
+    const side = isHumanMatch() ? state.plotSide || 'jp' : 'jp';
+    const notDone = plotShips(side).filter(s => !s.plotDone);
     if (notDone.length) {
       alert('まだ確定していない艦があります。各艦のプロットを入力して「確定」を押してから、プロット実行を押してください：' + notDone.map(s => s.name).join('、'));
       if (!state.selectedShip || state.selectedShip.plotDone) { state.selectedShip = notDone[0]; draw(); }
       return;
     }
   }
-  const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.col >= 0 && (s.plottedMoves||[]).length > 0);
+  if (isHumanMatch()) {
+    state.plotReady = state.plotReady || { jp: false, us: false };
+    state.plotReady[state.plotSide || 'jp'] = true;
+    if (!state.plotReady.jp || !state.plotReady.us) {
+      state.plotSide = state.plotReady.jp ? 'us' : 'jp';
+      state.selectedShip = null;
+      draw();
+      showGunneryStageModal('プレイヤー交代', '赤側のプレイヤーに交代してください。相手の入力内容は移動実行まで隠れています。', '入力を始める');
+      return;
+    }
+  }
+  const allShips = [...state.jpFleet, ...state.usFleet].filter(s => s.status === 'ok' && s.col >= 0 && (s.plottedMoves||[]).length > 0);
   debugLog(`[DEBUG executeAllPlots] allShips=${allShips.length}件 ${allShips.map(s=>s.name+':'+(s.plottedMoves||[]).join('')).join(', ')}`);
   if (allShips.length === 0) { setInfo('プロット済みの艦がありません'); return; }
   isExecuting = true;
+  updatePlotVisibility();
+  updatePhaseButtons();
   setInfo('プロット実行中...');
 
   // 各艦の経路を事前計算
@@ -4811,7 +4894,7 @@ function executeAllPlots() {
       });
       isExecuting = false;
       state._plotExecTurn = state.turn; // このターンの移動を実行した
-      try { ['plotPanel', 'plotBottomButtons'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; }); } catch (e) {}
+      updatePlotVisibility();
       executeMoveAftermath();
       try { paths.forEach(p => { if (p.path && p.path.length) blEvent('path', { ship: p.ship.name, steps: p.path.map(x => [x.col, x.row, x.dir]).concat([[p.ship.col, p.ship.row, p.ship.dir]]) }); }); } catch (e) {}
       addLog('=== プロット実行完了 ===');
@@ -5201,6 +5284,7 @@ window.addEventListener('beforeunload', (e) => {
 // ゲームモード制御
 const GAME_MODE_JP = {
   'human-vs-ai':'人間対AI',
+  'human-vs-human':'人間対人間（交代）',
   'ai-vs-ai-step':'AI対AI(ステップ)',
   'ai-vs-ai-auto':'AI対AI(オート)',
 };
@@ -5214,7 +5298,7 @@ function applyGameModeUI() {
   const btnAuto = document.getElementById('btnToggleAuto');
   const btnNext = document.getElementById('btnNextPhase');
   if (btnAuto && btnNext) {
-    if (mode === 'human-vs-ai') {
+    if (mode === 'human-vs-ai' || mode === 'human-vs-human') {
       btnAuto.style.display = 'none';
       btnNext.style.display = 'none';
     } else if (mode === 'ai-vs-ai-step') {

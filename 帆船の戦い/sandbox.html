@@ -39,6 +39,7 @@
   <h3 style="color:#ffcc88;margin:0 0 8px 0;">ゲームモード</h3>
   <div style="display:flex;flex-direction:column;gap:6px;">
     <label style="cursor:pointer;"><input type="radio" name="gameMode" value="human-vs-ai" checked> 人間対AI（自軍=人間、敵軍=AI）</label>
+    <label style="cursor:pointer;"><input type="radio" name="gameMode" value="human-vs-human"> 人間対人間（同じ画面で交代）</label>
     <label style="cursor:pointer;"><input type="radio" name="gameMode" value="ai-vs-ai-step"> AI対AI ステップ確認（フェイズ毎に停止）</label>
     <label style="cursor:pointer;"><input type="radio" name="gameMode" value="ai-vs-ai-auto"> AI対AI オート観戦（自動進行）</label>
   </div>
@@ -116,7 +117,7 @@ function startScenario(n, sideIdx) {
   localStorage.setItem('campaignReady', 'true');
   localStorage.setItem('scenarioMode', 'scenario');
   localStorage.setItem('scenarioRules', JSON.stringify({ jpHandicap: 0 }));
-  localStorage.setItem('jpAutoAI', mode === 'human-vs-ai' ? '0' : '1');
+  localStorage.setItem('jpAutoAI', mode.startsWith('ai-vs-ai') ? '1' : '0');
   localStorage.setItem('fullAutoAI', mode === 'ai-vs-ai-auto' ? '1' : '0');
   window.location.href = 'wsm_hub.html';
 }
@@ -140,7 +141,7 @@ function resumeFromFile() {
       localStorage.setItem('campaignReady', 'true');
       localStorage.setItem('scenarioMode', 'scenario');
       localStorage.setItem('scenarioRules', JSON.stringify({ jpHandicap: 0 }));
-      localStorage.setItem('jpAutoAI', mode === 'human-vs-ai' ? '0' : '1');
+      localStorage.setItem('jpAutoAI', mode.startsWith('ai-vs-ai') ? '1' : '0');
       localStorage.setItem('fullAutoAI', mode === 'ai-vs-ai-auto' ? '1' : '0');
       status.textContent = `読込OK (T${payload.state.turn}/${payload.state.phase}) → 遷移します`;
       status.style.color = '#8f8';

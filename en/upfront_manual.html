@@ -55,7 +55,7 @@
   ol li, ul li { margin-bottom: 4px; }
   .back { margin-top: 30px; }
   [data-lang] { display: none; }
-  body.en [data-lang="en"], body.ja [data-lang="ja"] { display: block; }
+  body.en [data-lang="en"], body.ja [data-lang="ja"], body.it [data-lang="it"] { display: block; }
   @media (max-width: 600px) { .container { padding: 18px 16px; width: auto; margin: 12px 16px; } table { font-size: 0.9em; } }
 </style>
 </head>
@@ -67,6 +67,7 @@
   <div class="lang">
     <button id="btnEn" onclick="setLang('en')">English</button>
     <button id="btnJa" onclick="setLang('ja')">日本語</button>
+    <button id="btnIt" onclick="setLang('it')">Italiano</button>
   </div>
 </div>
 
@@ -160,6 +161,98 @@ You play one nation against the AI. If a button is refused, the game tells you w
 </ul>
 
 <p class="back"><a href="./">← Back to Operations HQ</a></p>
+</div>
+
+<!-- ===================== Italiano ===================== -->
+<div data-lang="it">
+<p>Questa guida spiega le schermate e le operazioni più comuni della versione per browser. Per le regole di gioco, consulta il regolamento di Up Front. I numeri preceduti da § nei messaggi rimandano alle relative sezioni.</p>
+
+<div class="note">
+Comandi una nazione contro l’IA. Se un’operazione non è consentita, il gioco indica il motivo, di solito citando la regola.
+</div>
+
+<h2>1. Iniziare una partita</h2>
+<ol>
+  <li>Per selezionare l’italiano, premi il pulsante 🌐 fino a visualizzare <span class="btn">🌐 Italiano</span>, poi premilo di nuovo.</li>
+  <li>Scegli lo <b>scenario</b> (A–D) e il <b>momento della giornata</b> (giorno o notte). Negli scenari asimmetrici (C e D) scegli anche chi gioca per primo.</li>
+  <li>Seleziona la <b>nazione</b> che vuoi comandare. Quella avversaria viene scelta a caso.</li>
+  <li><b>Organizza la squadra</b>. Fai clic sulla carta di un soldato e poi sul gruppo (A–D) a cui vuoi assegnarlo. Assegna tutti i soldati.
+    <ul>
+      <li><span class="btn">Assegna serventi</span> affianca un assistente a chi usa un’arma di squadra, per esempio una mitragliatrice.</li>
+      <li><span class="btn">Esplosivo</span> assegna le cariche da demolizione negli scenari che le prevedono.</li>
+      <li><span class="btn">Azzera</span> riporta tutti i soldati tra quelli da assegnare. <span class="btn">Per morale ↓</span> li ordina per morale.</li>
+    </ul>
+  </li>
+  <li>Premi <span class="btn">Inizia la partita</span>.</li>
+  <li><b>Terreno iniziale</b>. Le due parti si alternano. Seleziona una carta Terreno dalla mano e poi uno dei tuoi gruppi. Quando hai finito, premi <span class="btn">Fine schieramento</span>.</li>
+</ol>
+
+<h2>2. La schermata</h2>
+<table>
+  <tr><th>Area</th><th>Contenuto</th></tr>
+  <tr><td>Barra superiore</td><td>La mano avversaria, con le carte coperte, e il numero di carte.</td></tr>
+  <tr><td>Gruppi tuoi e avversari</td><td>Ogni riquadro mostra il nome del gruppo, la sua potenza di fuoco contro ciascun gruppo nemico (per esempio <code>A/3 B/5</code>), il segnalino di distanza, le carte dei soldati, il terreno e l’azione in corso. Fai clic sul gruppo per ingrandire le carte e fai clic di nuovo per chiuderle.</td></tr>
+  <tr><td>Barra inferiore</td><td>La tua mano. Passa il puntatore su una carta per ingrandirla.</td></tr>
+  <tr><td>Pannello destro</td><td>Condizioni di vittoria, punti e perdite. Seguono le tre colonne di comandi, il mazzo, gli scarti e lo spazio <b>RNC</b>, i pulsanti per salvare e caricare e, in fondo, <span class="btn">Arrenditi</span>.</td></tr>
+</table>
+
+<h2>3. Il tuo turno</h2>
+<ul>
+  <li>Ogni gruppo può compiere <b>una sola azione</b> per turno, come sparare, muoversi o riorganizzarsi. Un gruppo che ha già agito non può essere scelto di nuovo.</li>
+  <li>Gli scarti dipendono dalla nazione:
+    <table>
+      <tr><th>Nazione</th><th>Scarti</th></tr>
+      <tr><td>Germania</td><td>Una carta, anche dopo aver compiuto azioni.</td></tr>
+      <tr><td>Stati Uniti, Gran Bretagna, Giappone</td><td>Fino a due carte, solo in un turno senza azioni.</td></tr>
+      <tr><td>Unione Sovietica</td><td>Qualsiasi numero di carte, solo in un turno senza azioni.</td></tr>
+    </table>
+    Giocare una carta Terreno su un <b>gruppo nemico</b> o usare un <b>Cecchino</b> conta come scarto.
+  </li>
+  <li>Quando hai finito, premi <span class="btn">Fine</span>. La mano si reintegra automaticamente. Se l’avversario ha passato il turno senza fare nulla, devi compiere un’azione o scartare prima di concludere.</li>
+</ul>
+
+<h2>4. Operazioni comuni</h2>
+<p>Di solito si procede così: scegli il comando → seleziona le carte dalla mano → scegli il tuo gruppo → se necessario, scegli il bersaglio → premi <span class="btn">Conferma</span>. Per il fuoco e gli attacchi col mortaio, fai clic sullo spazio <b>RNC</b> quando si illumina di verde per pescare la carta che risolve l’attacco.</p>
+<table>
+  <tr><th>Operazione</th><th>Come si fa</th></tr>
+  <tr><td><b>Sparare</b></td><td><span class="btn">Fuoco</span> → carte Fuoco → tuo gruppo → gruppo nemico → spazio <b>RNC</b> verde. Leggi il risultato, poi premi OK.</td></tr>
+  <tr><td><b>Muoversi</b></td><td><span class="btn">Movimento</span> → una carta Movimento → tuo gruppo → <span class="btn">Conferma</span> → <span class="btn">▲ Avanzata</span>, <span class="btn">◀▶ Laterale</span> o <span class="btn">▼ Ritirata</span>. Il gruppo rimane in movimento finché non riceve una carta Terreno.</td></tr>
+  <tr><td><b>Posare un terreno</b></td><td><span class="btn">Terreno</span> → carta Terreno → gruppo → <span class="btn">Conferma</span>.<br>Su <b>un tuo gruppo in movimento</b> conta come azione e conclude il movimento. Su <b>un gruppo nemico in movimento</b> conta come scarto. L’IA può rifiutare usando una carta Movimento.</td></tr>
+  <tr><td><b>Riorganizzare</b></td><td><span class="btn">Riorganizzazione</span> → carta Riorganizzazione o Eroe → tuo gruppo → <span class="btn">Conferma</span>. I soldati inchiodati si riprendono.</td></tr>
+  <tr><td><b>Scartare</b></td><td>Seleziona le carte dalla mano → <span class="btn">Scarti</span>.</td></tr>
+  <tr><td><b>Usare un cecchino</b></td><td><span class="btn">Cecchino</span> → carta Cecchino → gruppo nemico → <span class="btn">Conferma</span>. Il valore RPC determina quale soldato viene colpito.</td></tr>
+  <tr><td><b>Eroe in attacco</b></td><td>Seleziona la carta Eroe insieme alle carte Fuoco e scegli un soldato. La sua potenza di fuoco raddoppia per questo turno, o triplica con un secondo Eroe. Il bonus non si applica ai mortai.</td></tr>
+  <tr><td><b>Infiltrazione e corpo a corpo</b></td><td>Seleziona il comando di infiltrazione → tuo gruppo → gruppo nemico → <span class="btn">Conferma</span>. L’infiltrazione è possibile solo a <b>distanza relativa 5</b> contro il gruppo direttamente di fronte o quello accanto. Usa <span class="btn">Corpo a corpo</span> contro un gruppo in cui i tuoi soldati si sono infiltrati.</td></tr>
+  <tr><td><b>Trasferire soldati</b></td><td><span class="btn">Trasferimento</span> → una carta Movimento per soldato → gruppo di partenza ed eventuale gruppo adiacente → <span class="btn">Conferma</span> → scegli i soldati. Il gruppo vicino deve trovarsi alla stessa distanza. In un turno successivo, seleziona il gruppo di destinazione e premi <span class="btn">Ricevi trasferimento</span>.</td></tr>
+  <tr><td><b>Riparare un’arma</b></td><td><span class="btn">Riparazione</span> → tuo gruppo → <span class="btn">Conferma</span>. Si pesca una RNC. L’arma può essere riparata, rimanere guasta o essere distrutta. Consulta il retro del segnalino dell’arma.</td></tr>
+</table>
+
+<h2>5. Durante il turno avversario</h2>
+<p>Il gioco può chiederti di scegliere:</p>
+<ul>
+  <li><b>Terreno sul tuo gruppo in movimento</b>. Premi <span class="btn">Accetta</span> oppure <span class="btn">Rifiuta (movimento laterale)</span> usando una carta Movimento.</li>
+  <li><b>Occultamento</b>. Decidi se giocare una carta Occultamento contro il fuoco nemico.</li>
+  <li><b>Eroe</b>. Puoi riorganizzare un soldato inchiodato del gruppo sotto tiro.</li>
+</ul>
+
+<h2>6. Indicatori sulle carte</h2>
+<table>
+  <tr><th>Indicatore</th><th>Significato</th></tr>
+  <tr><td><span class="mk" style="background:#fa6">主</span> / <span class="mk" style="background:#6af">副</span></td><td>Addetto all’arma di squadra / assistente.</td></tr>
+  <tr><td><span class="mk" style="background:#f44;color:#fff">侵</span></td><td>Infiltrato.</td></tr>
+  <tr><td><span class="mk" style="background:#e65100;color:#fff">負</span></td><td>Ferito (potenza di fuoco dimezzata).</td></tr>
+  <tr><td><span class="mk" style="background:#888;color:#fff">故</span> / <span class="mk" style="background:#c33;color:#fff">破</span></td><td>Arma guasta / distrutta.</td></tr>
+  <tr><td><span class="mk" style="background:#795548;color:#fff">捕1</span></td><td>Sorveglia prigionieri. I prigionieri compaiono in un riquadro nel gruppo.</td></tr>
+</table>
+
+<h2>7. Salvataggio, resa e resoconti</h2>
+<ul>
+  <li>Puoi scaricare un file di salvataggio durante il tuo turno, tra un’azione e l’altra. Il comando di caricamento apre il file e si trova anche nella schermata iniziale.</li>
+  <li><span class="btn">Arrenditi</span> chiude la partita con una sconfitta.</li>
+  <li>A fine partita puoi salvare un <b>resoconto della battaglia</b>. Quelli pubblicati si trovano nella pagina <a href="../アップフロントVer2/reports/">Up Front Battle Reports</a>.</li>
+</ul>
+
+<p class="back"><a href="./">← Torna al quartier generale</a></p>
 </div>
 
 <!-- ===================== 日本語 ===================== -->
@@ -256,18 +349,25 @@ You play one nation against the AI. If a button is refused, the game tells you w
 </div>
 <script>
 // 言語の切り替え。ゲームと同じく、選んだ言語を覚える
+const manualLanguages = ['en', 'ja', 'it'];
 function setLang(l){
   document.body.className = l;
   document.documentElement.lang = l;
-  document.getElementById('btnEn').classList.toggle('on', l === 'en');
-  document.getElementById('btnJa').classList.toggle('on', l === 'ja');
+  for (const code of manualLanguages) {
+    const button = document.getElementById('btn' + code[0].toUpperCase() + code[1]);
+    button.classList.toggle('on', l === code);
+    button.setAttribute('aria-pressed', String(l === code));
+  }
   try { localStorage.setItem('ufLang', l); } catch(e){}
 }
 let initLang = 'en';
 try {
   const q = new URLSearchParams(location.search).get('lang');
-  if(q === 'en' || q === 'ja') initLang = q;
-  else if(localStorage.getItem('ufLang') === 'ja') initLang = 'ja';
+  if (manualLanguages.includes(q)) initLang = q;
+  else {
+    const saved = localStorage.getItem('ufLang');
+    if (manualLanguages.includes(saved)) initLang = saved;
+  }
 } catch(e){}
 setLang(initLang);
 </script>
