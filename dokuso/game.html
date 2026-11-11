@@ -1610,8 +1610,10 @@ document.addEventListener('keydown', e => {
   if (ui.moveSel.length || ui.pick.length || ui.fanHex) { ui.moveSel = []; ui.pick = []; ui.fanHex = null; ui.msg = ''; render(); }
 });
 // ブラウザの戻るを無効にする
-history.pushState({ dokuso: 1 }, '', location.href);
-window.addEventListener('popstate', () => { history.pushState({ dokuso: 1 }, '', location.href); });
+if (location.protocol !== 'file:') {
+  history.pushState({ dokuso: 1 }, '', location.href);
+  window.addEventListener('popstate', () => { history.pushState({ dokuso: 1 }, '', location.href); });
+}
 window.addEventListener('beforeunload', e => { if (game && game.phase !== 'over') { e.preventDefault(); e.returnValue = ''; } });
 </script>
 <script src="dokuso_lang.js"></script>
