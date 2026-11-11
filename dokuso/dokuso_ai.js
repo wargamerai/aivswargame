@@ -924,6 +924,38 @@
   }
 
   // ===== 戦闘の組み合わせ =====
+  function sovietAttackersWithRetreat(game, available, odds) {
+    const slots = new Map();
+    const assigned = new Map();
+    // 攻撃側退却は1ヘクス。全員分の空き枠を確保し、同じ枠を重複して数えない。
+    function assignRetreat(unit, checked) {
+      for (const slot of slots.get(unit)) {
+        if (checked.has(slot)) continue;
+        checked.add(slot);
+        const other = assigned.get(slot);
+        if (!other || assignRetreat(other, checked)) {
+          assigned.set(slot, unit);
+          return true;
+        }
+      }
+      return false;
+    }
+    const attackers = [];
+    for (const unit of available) {
+      if (isCity(game, unit.hex)) continue;
+      const destinations = game.retreatOptions(unit.id, 1);
+      slots.set(unit, destinations.flatMap(hex => {
+        const capacity = D.STACK_MAX - game.friendCount(hex, unit.side);
+        return Array.from({ length: capacity }, (_, i) => hex + ':' + i);
+      }));
+      if (assignRetreat(unit, new Set())) {
+        attackers.push(unit);
+        if (odds(attackers) >= 3) break;
+      }
+    }
+    return attackers;
+  }
+
   function planCombats(game, side) {
     const out = [];
     const used = new Set();
@@ -951,7 +983,7 @@
       return Number(stalledCities.some(city => game.map.dist(t.h, city.h) <= 3));
     };
     targets.sort((a, b) => priority(b) - priority(a) || b.value - a.value);
-    // ソ連: 戦わずに逃げるのが基本。戦車だけのヘクスは推定2対1、ほかは推定3対1の時だけ攻撃
+    // ソ連: 通常は推定3対1。都市の外で全員が退却できる組は推定2対1から攻撃する。
     const lonely = side === 'sov' ? new Set(lonelyArmor(game).map(t => t.h)) : new Set();
     for (const t of targets) {
       const avail = t.atk.filter(u => !used.has(u.id)).sort((a, b) => {
@@ -960,8 +992,7 @@
       });
       if (!avail.length) continue;
       const odds = list => { const mult = game.defMult(t.h, [...new Set(list.map(u => u.hex))]); const att = list.reduce((s, u) => s + (side === 'sov' ? qStr(game, u, 0.25) : u.str), 0); const def = t.defEst * mult; return def <= 0 ? 99 : att / def; };
-      // ソ連: 前に出てきた戦車だけのヘクスは 1対2 以上で反撃（サイコロ6の相打ちで戦車を道連れにできる）
-      const minimum = lonely.has(t.h) ? 2 : 3;
+      let minimum = 3;
       const okFor = list => odds(list) >= (side === 'ger' ? germanAttackMinimum(game, t.h, list) : minimum);
       const cityAttack = side === 'ger' && isCity(game, t.h);
       let pick = [];
@@ -970,11 +1001,15 @@
         for (const u of avail) {
           pick.push(u);
           // 余力があれば5対1まで集める。4対1の相打ちによる自軍損失を減らす。
-          if (side === 'ger' ? odds(pick) >= 5 : odds(pick) >= minimum + 1) break;
+          if (odds(pick) >= (side === 'ger' ? 5 : lonely.has(t.h) ? 3 : 4)) break;
         }
       }
       // 戦車を含む組で4対1に届かなければ、歩兵だけで3対1になるかを確認する。
       if (side === 'ger' && !okFor(pick)) pick = avail.filter(u => u.type !== 'tank');
+      if (side === 'sov' && !okFor(pick)) {
+        minimum = 2;
+        pick = sovietAttackersWithRetreat(game, avail, odds);
+      }
       if (!pick.length || !okFor(pick)) continue;
       if (side === 'sov' && !lonely.has(t.h)) {
         const targetOdds = Math.min(odds(pick), minimum + 1) - 0.5;

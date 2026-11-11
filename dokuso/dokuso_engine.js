@@ -642,20 +642,19 @@
       if (!p.retreat.length && !p.advance) this.pending = null;
     }
     // 退却: 敵のヘクスや敵に隣接するヘクスには入れない。なければ壊滅
-    retreatOptions(uid) {
+    retreatOptions(uid, distance = this.pending?.retreat.find(t => t.unit === uid)?.dist) {
       const u = this.unit(uid);
-      const x = this.pending && this.pending.retreat.find(t => t.unit === uid);
-      if (!u || !x) return [];
+      if (!u || !distance) return [];
       const side = u.side;
       const okStep = h => this.map.passable(h) && !this.enemyAt(h, side) && !this.adjEnemy(h, side);
       let frontier = [u.hex];
       const seen = new Set([u.hex]);
-      for (let s = 0; s < x.dist; s++) {
+      for (let s = 0; s < distance; s++) {
         const next = [];
         for (const h of frontier) for (const n of this.map.neighbors(h)) if (!seen.has(n) && okStep(n)) { seen.add(n); next.push(n); }
         frontier = next;
       }
-      return frontier.filter(h => this.map.dist(h, u.hex) === x.dist && this.friendCount(h, side) < STACK_MAX);
+      return frontier.filter(h => this.map.dist(h, u.hex) === distance && this.friendCount(h, side) < STACK_MAX);
     }
     retreatPath(uid, to) {
       const u = this.unit(uid);

@@ -130,6 +130,7 @@
   #modal h2 { margin: 0 0 12px; color: #f0d070; }
   #modal h3 { margin: 14px 0 4px; color: #9fd3ff; font-size: 15px; }
   #modal label { display: block; margin: 6px 0; cursor: pointer; }
+  #modal .mode-detail { display: block; margin-inline-start: 1.6em; color: #c9d1dd; font-size: .85rem; }
   #modal button { background: #2e6b3a; color: #fff; border: 1px solid #5aa86a; border-radius: 4px; padding: 8px 18px; font-size: 15px; cursor: pointer; margin-top: 10px; }
   #modal .mode-disabled, #modal button:disabled { opacity: .55; filter: grayscale(1); cursor: default; }
   #modal .warn { color: #ffcc80; font-size: 12px; margin-top: 10px; line-height: 1.5; }
@@ -245,9 +246,13 @@ const MD = { GRID_PARAMS, TERRAIN_MAP, FACILITY_MAP, TAG_MAP, ROAD_MAP, RIVER_MA
 const D = DOKUSO, AI = DOKUSO_AI;
 const SIDE = D.SIDE_NAME;
 const TERRAIN_NAME = { p: '平地', w: '林', f: '森', r: '荒地', m: '湿地', lake: '湖' };
-const LOCAL_CONTROLS = Object.freeze({ ger: 'human', sov: 'ai' });
+const LOCAL_CONTROLS = {
+  assisted: Object.freeze({ ger: 'human', sov: 'ai' }),
+  manual: Object.freeze({ ger: 'human', sov: 'human' }),
+  ai: Object.freeze({ ger: 'ai', sov: 'ai' }),
+};
 let game = null;
-let ctrl = LOCAL_CONTROLS;
+let ctrl = LOCAL_CONTROLS.assisted;
 let zoom = 1;
 // hex: 選んだヘクス / moveSel: 動かす駒 / pick: 攻撃に使う駒 / setupSel: 配置する駒
 const ui = { hex: null, moveSel: [], pick: [], setupSel: null, mode: null, retreatUnit: null, adv: null, msg: '', lastResult: null };
@@ -263,10 +268,14 @@ function showStart() {
   document.getElementById('modalBox').innerHTML = `
     <h2>独ソ電撃戦</h2>
     <div>対戦の形を選んでください</div>
-    <label><input type="radio" name="mode" value="ger" checked> 人間（ドイツ） 対 AI（ソ連）</label>
+    <label><input type="radio" name="mode" value="assisted" checked> ドイツ軍（人間）・対戦補助あり
+      <small class="mode-detail">AIがソ連軍の移動・戦闘を簡易的に進めます。その後人間が修正を加えられます。</small>
+    </label>
+    <label><input type="radio" name="mode" value="manual"> ドイツ軍（人間）・対戦補助なし
+      <small class="mode-detail">両軍の配置・移動・戦闘を自分で操作します。</small>
+    </label>
+    <label><input type="radio" name="mode" value="ai"> AI 対 AI（観戦）</label>
     <label class="mode-disabled"><input type="radio" name="mode" value="sov" disabled> 人間（ソ連） 対 AI（ドイツ）</label>
-    <label class="mode-disabled"><input type="radio" name="mode" value="ai" disabled> AI 対 AI（観戦）</label>
-    <label class="mode-disabled"><input type="radio" name="mode" value="hh" disabled> 人間 対 人間（1つの画面で交代）</label>
     <button type="button" disabled>オンライン対戦</button><br>
     <button onclick="startGame()">ゲーム開始</button> <button onclick="openGameFile()">ファイルを読み込む</button> <button style="background:#2a5a8a;border-color:#5a9ad0" onclick="showHelp(true)">遊び方を見る</button>`;
   document.getElementById('modal').style.display = 'flex';
@@ -275,6 +284,7 @@ function showHelp(fromStart) {
   document.getElementById('modalBox').innerHTML = `
     <h2>遊び方</h2>
     <div>右の欄のいちばん上に「今やること」が出ます。迷ったらそこを見てください。</div>
+    <p>対戦補助ありではソ連軍の移動と戦闘をAIが担当します。対戦補助なしでは両軍を自分で操作します。</p>
     <h3>地図の見方</h3>
     <ul>
       <li>ヘクスをクリックすると、右の欄の「選んだヘクス」に、そのヘクスの駒が全部大きく出ます（敵の駒も見られます）。</li>
@@ -286,7 +296,7 @@ function showHelp(fromStart) {
     <ul>
       <li>画面下の未配置の駒をクリック → 地図の水色のヘクスをクリックで置きます。置けるヘクスなら駒の上もクリックできます。1ヘクスに2個まで。</li>
       <li>置いた駒を戻すには、そのヘクスをクリックして「選んだヘクス」の「取り外す」を押します。</li>
-      <li>「お任せ配置」を押すと、ソ連軍は初期配置に戻り、ドイツ軍は残りの駒をAIが置きます。</li>
+      <li>対戦補助ありの「お任せ配置」では、ソ連軍は初期配置に戻り、ドイツ軍は残りの駒をAIが置きます。</li>
     </ul>
     <h3>移動</h3>
     <ul>
@@ -321,8 +331,9 @@ function showHelp(fromStart) {
   document.getElementById('modal').style.display = 'flex';
 }
 function startGame() {
-  if (!document.querySelector('input[name=mode][value=ger]:checked:not(:disabled)')) return;
-  ctrl = LOCAL_CONTROLS;
+  const mode = document.querySelector('input[name=mode]:checked:not(:disabled)')?.value;
+  if (!Object.hasOwn(LOCAL_CONTROLS, mode)) return;
+  ctrl = LOCAL_CONTROLS[mode];
   installGame(new D.Game(MD, DOKUSO_UNIT_IMAGES));
   game.addLog('ゲーム開始。ソ連が先に配置します（ソ連も自分の駒の戦闘力は分かりません）', 'phase');
   later(showPhaseBanner, 50);
@@ -401,13 +412,14 @@ async function loadGameFile(input) {
 }
 
 function restoreGame(data) {
-  let save, nextGame, savedUI;
+  let save, nextGame, savedUI, savedControls;
   try {
     save = JSON.parse(data);
     if (save?.version !== 1 || !Object.hasOwn(D.PHASE_NAME, save.state?.phase) ||
         !Array.isArray(save.state.units) || !save.ctrl ||
         !Array.isArray(save.trails) || !Number.isFinite(save.zoom) || !Array.isArray(save.scroll)) throw new Error('Invalid save');
-    if (save.ctrl.ger !== LOCAL_CONTROLS.ger || save.ctrl.sov !== LOCAL_CONTROLS.sov) {
+    savedControls = Object.values(LOCAL_CONTROLS).find(mode => mode.ger === save.ctrl.ger && mode.sov === save.ctrl.sov);
+    if (!savedControls) {
       alert('この対戦モードのセーブデータは現在読み込めません。');
       return;
     }
@@ -420,16 +432,19 @@ function restoreGame(data) {
     alert('保存した対局を読み込めませんでした。');
     return;
   }
-  savedUI.aiSetupReview = nextGame.phase === 'setup_sov' && (savedUI.aiSetupReview || nextGame.setupDone('sov'));
-  savedUI.aiMoveDone = nextGame.phase === 'sov_move' && !!savedUI.aiMoveDone;
+  const assisted = savedControls === LOCAL_CONTROLS.assisted;
+  savedUI.aiSetupReview = assisted && nextGame.phase === 'setup_sov' && (savedUI.aiSetupReview || nextGame.setupDone('sov'));
+  savedUI.aiMoveDone = assisted && nextGame.phase === 'sov_move' && !!savedUI.aiMoveDone;
   if (!savedUI.aiMoveDone || !nextGame.moveState?.[savedUI.moveEdit?.id]) savedUI.moveEdit = null;
   const retreating = savedUI.mode === 'retreat' && savedUI.retreatUnit &&
+    savedControls[nextGame.unit(savedUI.retreatUnit)?.side] === 'human' &&
     nextGame.pending?.retreat?.[0]?.unit === savedUI.retreatUnit && nextGame.retreatOptions(savedUI.retreatUnit).length;
-  const advancing = savedUI.mode === 'advance' && nextGame.pending?.advance && Array.isArray(savedUI.adv?.sel);
+  const advancing = savedUI.mode === 'advance' && nextGame.pending?.advance && Array.isArray(savedUI.adv?.sel) &&
+    (savedUI.adv.review ? assisted : savedControls[nextGame.combatSide()] === 'human');
   if (!retreating) savedUI.retreatUnit = null;
   if (!advancing) savedUI.adv = null;
   if (!retreating && !advancing) savedUI.mode = null;
-  ctrl = LOCAL_CONTROLS;
+  ctrl = savedControls;
   zoom = save.zoom;
   installGame(nextGame, savedUI, save.trails);
   applyZoom();
@@ -664,7 +679,7 @@ function renderTopActions() {
   }
   if (ui.mode || (!human && !reviewingSovietMove() && !canEditSetup())) return;
   if (ph.startsWith('setup')) {
-    b('お任せ配置', () => { AI.setup(game, side); ui.setupSel = null; render(); });
+    if (ctrl === LOCAL_CONTROLS.assisted) b('お任せ配置', () => { AI.setup(game, side); ui.setupSel = null; render(); });
     b('すべて取り外す', () => { for (const u of game.setupUnits(side)) game.unplace(u); ui.setupSel = null; render(); });
     b('配置完了', () => {
       if (!game.finishSetup(side)) return;
