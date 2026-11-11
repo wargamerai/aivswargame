@@ -200,6 +200,7 @@ async function dokusoFirebase() {
   return dokusoSdkPromise;
 }
 function showDokusoOnline() {
+  if (!window.DOKUSO_ONLINE_CONFIG?.enabled) return;
   if (isDokusoOnline()) { document.getElementById('modal').style.display = 'none'; return; }
   const box = document.getElementById('modalBox');
   box.innerHTML = `<h2>オンライン対戦</h2><p>部屋を作った人がソ連、参加した人がドイツです。</p>
@@ -213,7 +214,6 @@ function showDokusoOnline() {
   document.getElementById('dokusoJoin').onclick = () => void dokusoConnect(false);
   document.getElementById('dokusoBack').onclick = () => { if (!dokusoConnecting) showStart(); };
   document.getElementById('modal').style.display = 'flex';
-  if (!window.DOKUSO_ONLINE_CONFIG?.enabled) document.getElementById('dokusoConnectStatus').textContent = dokusoOnlineText(new Error('disabled'));
 }
 async function dokusoConnect(create) {
   if (dokusoConnecting) return;
