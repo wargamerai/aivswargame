@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>激突！バルジ突破作戦</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="map-data.js"></script>
+  <script defer src="data.js"></script>
+  <script defer src="rules.js"></script>
+  <script defer src="ai.js"></script>
+  <script defer src="app.js"></script>
+  <script defer src="../game-analytics.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div>
+      <h1>激突！バルジ突破作戦</h1>
+      <p><span id="game-mode"></span>
+        <span class="event-status" id="vt-status" title="連合軍が砲兵支援を使う戦闘で、ドイツ軍の損害が1点増えます。" hidden>VT信管解禁 有効（終局まで）</span>
+        <span class="event-status" id="bodenplatte-status" hidden></span>
+        <span class="event-status" id="greif-status" hidden></span>
+        <span class="event-status" id="nordwind-status" title="通常増援より先に「パットンの救援」が発生した場合は、その増援を取り消します。" hidden>ノルトヴィント作戦（次の米軍増援を延期）</span>
+      </p>
+    </div>
+    <div class="header-actions">
+      <button id="open-help" type="button">遊び方</button>
+      <button id="save-game-file" type="button">ファイルに保存</button>
+      <button id="load-game-file" type="button">ファイルを読み込む</button>
+      <input id="game-file" type="file" accept=".json,application/json" hidden>
+      <button id="new-game" type="button">新しい対局</button>
+    </div>
+  </header>
+  <main class="game">
+    <div id="setup-chits" class="chit-tray" aria-label="未配置の初期支援チット" hidden></div>
+    <div id="support-chits" class="chit-tray" aria-label="引いたチットと手元のダミー" hidden></div>
+    <section class="map-panel" aria-label="ゲーム盤">
+      <div class="map-toolbar">
+        <div class="map-controls">
+          <label for="zoom">地図の拡大</label>
+          <input type="range" id="zoom" min="40" max="160" step="5" value="85">
+          <output id="zoom-value" for="zoom">85%</output>
+          <button id="focus-map" type="button">選択・戦闘地点へ</button>
+          <button id="toggle-road-data" type="button" aria-controls="road-data" aria-pressed="false" hidden>道路データを表示</button>
+          <button id="toggle-river-data" type="button" aria-controls="board" aria-pressed="false" hidden>河川データを表示</button>
+          <button id="toggle-terrain-data" type="button" aria-controls="board" aria-pressed="false" hidden>尾根・森林データを表示</button>
+        </div>
+        <span id="coordinates">ヘクスを指すと座標を表示</span>
+      </div>
+      <div id="phase-announcement" class="phase-announcement" role="status" aria-atomic="true" hidden>
+        <span id="announced-turn"></span>
+        <strong id="announced-phase"></strong>
+      </div>
+      <div id="map-scroll" tabindex="0">
+        <span id="map-coordinate" aria-hidden="true" hidden></span>
+        <svg id="board" viewBox="0 0 1888 1333" role="group" aria-label="バルジの地図">
+          <defs>
+            <marker id="move-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="13" markerHeight="13" markerUnits="userSpaceOnUse" orient="auto">
+              <path d="M0 0 L12 6 L0 12 Z" fill="#c21c29"/>
+            </marker>
+          </defs>
+          <image href="assets/map.jpg" width="1888" height="1333"/>
+          <g id="hexes"></g>
+          <g id="road-data" aria-hidden="true" hidden></g>
+          <g id="routes" aria-hidden="true"></g>
+          <g id="marks" aria-hidden="true"></g>
+          <g id="counters"></g>
+        </svg>
+      </div>
+      <button id="toggle-command" class="command-toggle" type="button" aria-controls="command-panel"
+        aria-expanded="true" aria-label="右パネルを隠す" title="右パネルを隠す">▶</button>
+      <div class="map-legend"><span class="key legal">移動・配置可能</span><span class="key stop">進入で停止</span><span class="key planned">移動案</span><span class="key target">攻撃・戦闘地点</span></div>
+    </section>
+    <aside id="command-panel" class="command" aria-label="対局操作">
+      <div class="phase">
+        <div class="phase-meta"><span id="turn"></span><span id="actor"></span></div>
+        <h2 id="phase-title"></h2>
+        <p id="phase-detail"></p>
+      </div>
+      <div id="stack-overview" class="stack-overview" hidden>
+        <div class="stack-heading">
+          <strong id="stack-title"></strong>
+          <button id="close-stack-overview" type="button" aria-label="駒の内訳を閉じる">閉じる</button>
+        </div>
+        <div id="stack-pieces" class="stack-pieces"></div>
+      </div>
+      <div class="command-scroll">
+        <p id="message" role="status" aria-live="polite" hidden></p>
+        <div id="battle-result" aria-live="polite"></div>
+        <div id="panel"></div>
+        <details id="history">
+          <summary>対局の記録</summary>
+          <ol id="log"></ol>
+        </details>
+      </div>
+      <section id="unit-info" aria-label="選択した駒の内訳" hidden></section>
+      <div id="actions" class="actions"></div>
+    </aside>
+  </main>
+  <aside id="chit-detail" class="chit-detail" aria-labelledby="chit-detail-name" hidden>
+    <div class="chit-detail-heading">
+      <img id="chit-detail-image" alt="">
+      <div>
+        <h2 id="chit-detail-name"></h2>
+        <p id="chit-detail-timing"></p>
+      </div>
+      <button id="close-chit-detail" type="button">閉じる</button>
+    </div>
+    <ul id="chit-detail-effects"></ul>
+    <p id="chit-detail-note" class="hint" hidden></p>
+  </aside>
+  <dialog id="transport-dialog" aria-labelledby="transport-title" aria-describedby="transport-warning">
+    <form method="dialog">
+      <h2 id="transport-title">輸送能力を超えます</h2>
+      <p id="transport-warning"></p>
+      <div class="header-actions">
+        <button value="cancel" autofocus>戻る</button>
+        <button class="primary" value="place">このまま配置</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="battle-overview" aria-labelledby="battle-overview-title">
+    <div class="dialog-title">
+      <h2 id="battle-overview-title"></h2>
+      <form method="dialog"><button>地図に戻る</button></form>
+    </div>
+    <div id="battle-overview-content" aria-live="polite"></div>
+    <div id="battle-overview-actions" class="battle-overview-actions"></div>
+  </dialog>
+  <dialog id="help">
+    <div class="dialog-title"><h2>遊び方</h2><form method="dialog"><button>閉じる</button></form></div>
+    <p>同じ端末でドイツ軍と連合軍を交代で操作します。画面に表示された陣営のプレイヤーが操作してください。</p>
+    <dl>
+      <dt>駒と支援チット</dt>
+      <dd>支援チットは駒の下に重なっています。駒にマウスを乗せると右パネルに内訳が表示され、クリックすると右パネル下部に拡大表示されます。相手の未公開チットは裏向きで表示します。</dd>
+      <dt>移動</dt>
+      <dd>駒を選び、色の付いたヘクスを選びます。「経路を採用」で案に加えます。案の一覧から各部隊の移動を変更・取消できます。「移動を確定」でまとめて進めます。</dd>
+      <dt>増援</dt>
+      <dd>補給源ヘクスに増援を置くたびに、その部隊の輸送能力と同じ枚数を引き、支援チットをその部隊に配属します。イベントチットを引いた場合は、その場で処理します。</dd>
+      <dt>ZOC（支配地域）</dt>
+      <dd>森林河川を含む河川ヘクスではZOCを失います。都市河川ヘクス（例 2207）ではZOCが隣接ヘクスに及びます。</dd>
+      <dt>攻撃・反撃</dt>
+      <dd>味方の駒を複数選んでから、隣接する敵の駒を選びます。「攻撃案を確定」すると今回の攻撃先が強調されます。オーバービューで操作する陣営を切り替え、両軍が使う支援チットを選んだら公開します。チットの効果を確認して判定し、結果を見てから損害を適用します。</dd>
+      <dt>戦闘後前進</dt>
+      <dd>敵のいなくなったヘクスに、混乱していない参加部隊を1個前進させられます。</dd>
+      <dt>勝利</dt>
+      <dd>ドイツ軍はリエージュ、ユイ、ナミュール、ディナンのいずれかを占領すると即時勝利。第10ターン終了時はバストーニュかヴェルヴィエの支配、または連絡線の通じる20都市の支配が勝利条件です。この20都市には、開始時からドイツ軍が支配するジークフリード線東側の都市も含めます。連合軍はこれを阻止するか、ドイツ軍の補給源を6か所以上支配します。</dd>
+    </dl>
+    <p class="muted">確定済みの盤面はブラウザに保存します。地形・道路に推定データを使っています。浸透移動やパイパー連隊の移動中戦闘など、一部の特殊効果は試作の範囲外です。</p>
+    <details><summary>原本の戦闘結果表</summary><img class="crt" src="assets/crt.png" alt="戦闘結果表"></details>
+  </dialog>
+  <dialog id="start-dialog" aria-labelledby="start-title">
+    <h2 id="start-title">対戦方式を選択</h2>
+    <p id="start-replace-note" hidden>新しい対局を始めると、現在の対局の保存内容を置き換えます。</p>
+    <div class="game-mode-options">
+      <button type="button" id="start-local" class="primary" autofocus>人間対人間</button>
+      <button type="button" disabled>オンライン対戦（利用できません）</button>
+      <button type="button" disabled>人間対AI（利用できません）</button>
+    </div>
+    <p id="start-error" class="battle-error" role="alert" hidden></p>
+    <div class="header-actions">
+      <button type="button" id="start-load-file">ファイルを読み込む</button>
+      <form method="dialog" id="start-back" hidden><button>戻る</button></form>
+    </div>
+  </dialog>
+</body>
+</html>
