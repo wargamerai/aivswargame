@@ -924,7 +924,7 @@
   }
 
   // ===== 戦闘の組み合わせ =====
-  function sovietAttackersWithRetreat(game, available, odds) {
+  function sovietAttackersWithRetreat(game, available, odds, targetOdds) {
     const slots = new Map();
     const assigned = new Map();
     // 攻撃側退却は1ヘクス。全員分の空き枠を確保し、同じ枠を重複して数えない。
@@ -942,7 +942,6 @@
     }
     const attackers = [];
     for (const unit of available) {
-      if (isCity(game, unit.hex)) continue;
       const destinations = game.retreatOptions(unit.id, 1);
       slots.set(unit, destinations.flatMap(hex => {
         const capacity = D.STACK_MAX - game.friendCount(hex, unit.side);
@@ -950,7 +949,7 @@
       }));
       if (assignRetreat(unit, new Set())) {
         attackers.push(unit);
-        if (odds(attackers) >= 3) break;
+        if (odds(attackers) >= targetOdds) break;
       }
     }
     return attackers;
@@ -983,7 +982,7 @@
       return Number(stalledCities.some(city => game.map.dist(t.h, city.h) <= 3));
     };
     targets.sort((a, b) => priority(b) - priority(a) || b.value - a.value);
-    // ソ連: 通常は推定3対1。都市の外で全員が退却できる組は推定2対1から攻撃する。
+    // ソ連: 全員が退却できる組のみ攻撃。通常は推定3対1、都市の外なら推定2対1から。
     const lonely = side === 'sov' ? new Set(lonelyArmor(game).map(t => t.h)) : new Set();
     for (const t of targets) {
       const avail = t.atk.filter(u => !used.has(u.id)).sort((a, b) => {
@@ -996,20 +995,23 @@
       const okFor = list => odds(list) >= (side === 'ger' ? germanAttackMinimum(game, t.h, list) : minimum);
       const cityAttack = side === 'ger' && isCity(game, t.h);
       let pick = [];
-      if (cityAttack) pick = avail;
+      if (side === 'sov') {
+        pick = sovietAttackersWithRetreat(game, avail, odds, lonely.has(t.h) ? 3 : 4);
+        if (!okFor(pick)) {
+          minimum = 2;
+          const outsideCities = avail.filter(unit => !isCity(game, unit.hex));
+          pick = sovietAttackersWithRetreat(game, outsideCities, odds, 3);
+        }
+      } else if (cityAttack) pick = avail;
       else {
         for (const u of avail) {
           pick.push(u);
           // 余力があれば5対1まで集める。4対1の相打ちによる自軍損失を減らす。
-          if (odds(pick) >= (side === 'ger' ? 5 : lonely.has(t.h) ? 3 : 4)) break;
+          if (odds(pick) >= 5) break;
         }
       }
       // 戦車を含む組で4対1に届かなければ、歩兵だけで3対1になるかを確認する。
       if (side === 'ger' && !okFor(pick)) pick = avail.filter(u => u.type !== 'tank');
-      if (side === 'sov' && !okFor(pick)) {
-        minimum = 2;
-        pick = sovietAttackersWithRetreat(game, avail, odds);
-      }
       if (!pick.length || !okFor(pick)) continue;
       if (side === 'sov' && !lonely.has(t.h)) {
         const targetOdds = Math.min(odds(pick), minimum + 1) - 0.5;
