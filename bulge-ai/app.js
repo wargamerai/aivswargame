@@ -1162,7 +1162,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return;
     }
     panel.append(element('p', '太枠が今回の攻撃先です。同じ色のヘクスがこの戦闘に参加します。', 'hint'));
-    actions.append(button('戦闘のオーバービューを開く', () => {
+    actions.append(button('戦闘結果へ', () => {
       const dialog = byId('battle-overview');
       renderBattleOverview();
       dialog.showModal();
