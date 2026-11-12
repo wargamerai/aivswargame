@@ -2095,7 +2095,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   byId('focus-map').addEventListener('click', focusMap);
   const returnMoveButton = button('この部隊を元に戻す', returnSelectedMove, {id: 'return-move', primary: true});
   returnMoveButton.hidden = true;
-  byId('focus-map').after(returnMoveButton);
+  byId('actions').before(returnMoveButton);
   const cavalryLegend = element('span', '騎兵連隊のZOC（赤い破線）');
   cavalryLegend.hidden = true;
   byId('movement-support-legend').textContent = 'チットを使うと到達可能';
@@ -2186,7 +2186,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   });
   const movementHelp = [...byId('help').querySelectorAll('dt')].find(term => term.textContent === '移動');
   if (movementHelp?.nextElementSibling) movementHelp.nextElementSibling.textContent =
-    '駒をクリックし、色の付いた移動先をクリックします。移動済みの駒はクリックすると経路が出ます。地図の上の「この部隊を元に戻す」で置き直せます。「移動を確定」でフェイズを進めます。輸送力を超える場合は確定前に警告が出ます。';
+    '駒をクリックし、色の付いた移動先をクリックします。移動済みの駒はクリックすると経路が出ます。右パネルの「この部隊を元に戻す」で置き直せます。「移動を確定」でフェイズを進めます。輸送力を超える場合は確定前に警告が出ます。';
   const orderHelp = [...byId('help').querySelectorAll('dt')].find(term => term.textContent === '移動予約・死守命令');
   if (orderHelp?.nextElementSibling) orderHelp.nextElementSibling.prepend('連合軍だけが使えます。');
   byId('start-local').textContent = 'ドイツ軍を操作（連合軍はAI補助）';
