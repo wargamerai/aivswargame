@@ -1193,7 +1193,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       draft.append(button('選択解除', () => { attackers.clear(); attackEdit = null; message = null; render(); }));
       panel.append(draft);
     }
-    panel.append(element('h3', `${allied ? '連合軍AIの' : ''}${kind}案 ${attackPlan.length}件`));
+    if (attackPlan.length || !allied)
+      panel.append(element('h3', `${allied ? '連合軍AIの' : ''}${kind}案 ${attackPlan.length}件`));
     panel.append(element('p', `このフェイズの${kind}の組み合わせをすべて指定してから、まとめて確定します。`, 'hint'));
     const orders = element('ol', null, 'orders');
     attackPlan.forEach((order, index) => {
@@ -1950,18 +1951,58 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     tray.scrollLeft = scroll;
   }
 
-  function announcePhase(turnLabel, phaseLabel, side) {
-    const key = `${state.turn}/${state.turnSide}/${state.phase}/${side}/${phaseLabel}`;
-    if (key === announcedPhase?.key) return;
+  function aiPhaseOverview(phase) {
+    if (!isAI() || orderDraft) return null;
+    if (planning() && !attackPlan.length && !attackers.size && attackEdit == null) {
+      const kind = R.phaseNames[phase];
+      return {
+        message: '連合軍の' + kind + 'はありません',
+        nextLabel: kind + 'せず次へ',
+        next: () => step({type: 'attacks', attacks: []}),
+      };
+    }
+    if (moving() && !projection.state.trails.length && !selected) {
+      const kind = R.phaseNames[phase];
+      return {
+        message: '連合軍の' + kind + 'はありません',
+        nextLabel: '次のフェイズへ',
+        next: () => step({type: 'moves', moves: [], pausedReservations: [...pausedReservations]}),
+      };
+    }
+    return null;
+  }
+
+  function announcePhase(turnLabel, phaseLabel, side, overview) {
+    const key = [state.turn, state.turnSide, state.phase, side, phaseLabel].join('/');
+    const overviewChanged = Boolean(overview) !== Boolean(announcedPhase?.overview);
+    const phaseChanged = key !== announcedPhase?.key;
+    if (!phaseChanged && !overviewChanged) return;
     const turnChanged = Boolean(announcedPhase && announcedPhase.turn !== state.turn);
-    announcedPhase = {key, turn: state.turn};
+    const dismissed = !phaseChanged && announcedPhase.dismissed;
+    announcedPhase = {key, turn: state.turn, overview, dismissed};
     const banner = byId('phase-announcement');
-    banner.classList.toggle('turn-change', turnChanged);
-    byId('announced-turn').textContent = turnLabel;
-    byId('announced-phase').textContent = side ? `${R.sideName(side)} · ${phaseLabel}` : phaseLabel;
-    banner.hidden = false;
+    const controls = byId('phase-overview-actions');
     window.clearTimeout(announcementTimer);
-    announcementTimer = window.setTimeout(() => { banner.hidden = true; }, turnChanged ? 3600 : 2400);
+    banner.classList.toggle('turn-change', turnChanged);
+    banner.classList.toggle('ai-overview', Boolean(overview));
+    byId('announced-turn').textContent = turnLabel;
+    byId('announced-phase').textContent = overview?.message ??
+      (side ? R.sideName(side) + ' · ' + phaseLabel : phaseLabel);
+    controls.replaceChildren();
+    controls.hidden = !overview;
+    if (overview) {
+      controls.append(
+        button('地図を確認', () => {
+          announcedPhase.dismissed = true;
+          banner.hidden = true;
+        }),
+        button(overview.nextLabel, overview.next, {primary: true}),
+      );
+      banner.hidden = dismissed;
+    } else {
+      banner.hidden = !phaseChanged;
+      announcementTimer = window.setTimeout(() => { banner.hidden = true; }, turnChanged ? 3600 : 2400);
+    }
   }
 
   function render() {
@@ -2039,7 +2080,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     actor.textContent = side ? R.sideName(side) : '対局終了';
     actor.classList.toggle('allied', side === 'allied');
     byId('phase-title').textContent = phaseLabel;
-    announcePhase(turnLabel, phaseLabel, side);
+    announcePhase(turnLabel, phaseLabel, side, aiPhaseOverview(phase));
     const reinforcementKind = D.supply[state.turnSide][state.supplySelection]?.[1];
     const reinforcementNotice = reinforcementKind && ['reentry', 'recovery', 'support', 'event', 'move'].includes(phase)
       ? `${reinforcementKind === 'special' ? '特別増援' : '増援'}を選択済み：このターンの通常移動後に登場します。` : '';
@@ -2059,12 +2100,13 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       : reentryPractice ? '再登場できる部隊と配置先を確認します。'
       : supplyPractice ? '補給チットを選び、ポイントと増援の有無を確認します。'
       : moving()
-      ? isAI() && phase === 'reaction' && !projection.state.trails.length
-        ? '連合軍の対応移動はありません。'
-        : isAI() ? '赤い矢印は連合軍の移動経路です。駒をクリックして行き先を変えられます。'
-          : '駒をクリックし、地図で移動先を選びます。'
+      ? isAI() && projection.state.trails.length
+        ? '赤い矢印は連合軍の移動経路です。駒をクリックして行き先を変えられます。'
+        : '駒をクリックし、地図で移動先を選びます。'
       : planning()
-        ? isAI() ? '連合軍の戦闘案です。対象と参加部隊を確認し、必要なら変更・取消してから確定してください。' : '味方の駒を選んでから、隣接する敵の駒を選びます。'
+        ? isAI() && attackPlan.length
+          ? '対象と参加部隊を確認し、必要なら変更・取消してから確定してください。'
+          : '味方の駒を選んでから、隣接する敵の駒を選びます。'
         : guidance[phase] ?? `${R.sideName(state.turnSide)}プレーヤーターン`;
     if (reinforcementNotice) byId('phase-detail').append(' ', reinforcementNotice);
     const status = byId('message');

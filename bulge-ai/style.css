@@ -68,6 +68,14 @@ ul, ol { padding-left: 1.35rem; }
 .phase-announcement strong { display: block; font-size: clamp(1.3rem, 3.3vw, 2.3rem); line-height: 1.25; }
 .phase-announcement.turn-change { top: 50%; transform: translate(-50%, -50%); padding: 1rem 1.5rem; }
 .phase-announcement.turn-change span { font-size: clamp(2.4rem, 6vw, 4.8rem); font-weight: 800; line-height: 1.15; }
+.phase-announcement.ai-overview {
+  top: 50%; transform: translate(-50%, -50%); padding: 1rem 1.4rem; pointer-events: auto;
+}
+.phase-announcement.ai-overview strong { font-size: clamp(1.65rem, 4.5vw, 3rem); }
+#phase-overview-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
+#phase-overview-actions button { font-size: clamp(1rem, 2vw, 1.25rem); font-weight: 700; }
+#phase-overview-actions button.primary { color: #273524; background: #ffe592; border-color: #ffe592; }
+#phase-overview-actions button.primary:hover { background: #fff0b8; }
 .map-toolbar, .map-legend {
   flex: none;
   display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: .45rem .8rem;
