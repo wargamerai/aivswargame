@@ -297,7 +297,7 @@ const BulgeAI = (() => {
         const compare=germanMobility(state);
         const before=compare(state).reach;
         const places=R.placements(state,unit.id);
-        let bestHex, bestScore=-Infinity;
+        let bestHex, bestScore=-Infinity, bestClosure=0;
         let fallback, fallbackScore=-Infinity;
         for (const hex of places) {
           const near=nearest(hex,opponents);
@@ -317,9 +317,12 @@ const BulgeAI = (() => {
             fallback=hex;
             fallbackScore=safetyScore;
           }
-          if (!unsafe && !R.river(hex) && score>bestScore) {
+          // Ignore differences of one or two hexes when choosing where to close the front.
+          const closure=Math.floor(Math.max(0,change.closed-change.opened)/3);
+          if (!unsafe && !R.river(hex) && (closure>bestClosure || (closure===bestClosure && score>bestScore))) {
             bestHex=hex;
             bestScore=score;
+            bestClosure=closure;
           }
         }
         const hex=bestHex ?? fallback;

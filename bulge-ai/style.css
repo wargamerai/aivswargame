@@ -36,6 +36,7 @@ ul, ol { padding-left: 1.35rem; }
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .masthead h1 { font-size: clamp(1rem, 2.5vw, 1.45rem); letter-spacing: .035em; }
+.game-version { margin-inline-start: .35em; color: #ffe592; font-size: .75em; white-space: nowrap; }
 .masthead p { font-size: .8rem; color: #dee5d3; margin-top: .2rem; }
 .event-status { display: inline-block; color: #ffe592; margin-inline-start: .45rem; font-weight: 700; }
 .header-actions { display: flex; justify-content: end; flex-wrap: wrap; gap: .45rem; font-size: .82rem; }

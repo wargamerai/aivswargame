@@ -147,19 +147,21 @@ const BulgeRules = (() => {
     else state.units.push(marker);
     moveControl(state,side,hex);
   }
-  function initialGermanAttackers(state, defenders) {
+  function germanAttackOptions(state, defenders) {
     const board={...state,phase:'move',turnSide:'german'};
     const attackOptions=new Map(defenders.map(unit=>[unit.hex,[]]));
     for (const unit of onMap(state,'german').filter(unit=>!unit.disrupted && !unit.marker)) {
       const positions=new Set([unit.hex]);
-      for (const mode of ['normal','mechanized'])
-        for (const hex of movementOptions(board,unit.id,{mode}).keys()) positions.add(hex);
+      for (const support of [null,...moveChits(unit)]) {
+        for (const mode of unit.mechanized ? ['normal','mechanized'] : ['normal'])
+          for (const hex of movementOptions(board,unit.id,{mode,support}).keys()) positions.add(hex);
+      }
       for (const [hex, attackers] of attackOptions) {
         const adjacent=neighbors(hex).filter(from=>positions.has(from));
         if (!adjacent.length) continue;
         attackers.push({
           strength:unit.attack,
-          armor:unit.mechanized && adjacent.some(from=>!attackSupportRestricted({...unit,hex:from},hex,[],false)),
+          tankSupport:adjacent.some(from=>!attackSupportRestricted({...unit,hex:from},hex,[],false)),
         });
       }
     }
@@ -167,31 +169,34 @@ const BulgeRules = (() => {
   }
   function autoAlliedSetup(state) {
     const units=onMap(state,'allied').filter(unit=>!unit.marker);
-    const attackOptions=initialGermanAttackers(state,units);
+    const attackOptions=germanAttackOptions(state,units);
     const attached=new Set(units.flatMap(unit=>unit.support));
     state.hand=state.hand.filter(id=>!attached.has(id));
-    const strength=unit=>attackOptions.get(unit.hex).reduce((sum,enemy)=>sum+enemy.strength,0);
-    const threatened=units.filter(unit=>strength(unit)>=2*unit.defense);
+    const pressure=unit=>attackOptions.get(unit.hex).reduce((sum,enemy)=>sum+enemy.strength,0)/unit.defense;
+    const threatened=units.filter(unit=>pressure(unit)>=2).sort((a,b)=>pressure(b)-pressure(a)).slice(0,3);
+    const combatCount=unit=>possibleSupport(unit,true).filter(id=>chit(id).kind!=='dummy').length;
     for (const id of state.hand.slice()) {
       const card=chit(id);
       let candidates=threatened.length ? threatened : units;
-      if (card.kind==='fort') candidates=units.filter(unit=>unit.id==='a135' || unit.id==='a61');
-      const count=unit=>unit.support.filter(chip=>chit(chip).kind!=='dummy').length;
+      if (card.kind==='fort') {
+        const openingFort=units.filter(unit=>unit.id==='a135' || unit.id==='a61');
+        if (openingFort.length) candidates=openingFort;
+      }
+      if (card.at) {
+        const exposed=candidates.filter(unit=>attackOptions.get(unit.hex).some(enemy=>enemy.tankSupport));
+        if (exposed.length) candidates=exposed;
+      }
       if (card.kind!=='dummy') {
-        const available=candidates.filter(unit=>count(unit)<3);
+        const available=candidates.filter(unit=>combatCount(unit)<3);
         if (available.length) candidates=available;
       }
       if (card.kind==='artillery') {
         const withoutArtillery=candidates.filter(unit=>!unit.support.some(chip=>chit(chip).kind==='artillery'));
         if (withoutArtillery.length) candidates=withoutArtillery;
       }
-      const score=unit=>{
-        const armor=attackOptions.get(unit.hex).some(enemy=>enemy.armor);
-        const defended=count(unit);
-        if (card.kind==='dummy') return strength(unit)*0.2-unit.support.length*2;
-        const armorBonus=(card.at || card.kind==='fort') && armor ? 7 : 0;
-        return Math.min(18,strength(unit))+armorBonus-defended*5;
-      };
+      const score=unit=>card.kind==='dummy'
+        ? Math.min(pressure(unit),6)-unit.support.filter(chip=>chit(chip).kind==='dummy').length*3
+        : pressure(unit)*3-combatCount(unit)*4;
       const target=candidates.slice().sort((a,b)=>score(b)-score(a))[0];
       if (target) assignInitialSupport(state,target,id);
     }
@@ -663,9 +668,9 @@ const BulgeRules = (() => {
       const eligible=unfortified.length ? unfortified : targets;
       const exposed=eligible.filter(unit=>tankReach.has(unit.hex));
       const candidates=exposed.length ? exposed : eligible;
-      const weights=candidates.map(({hex,support,transport})=>Math.max(1,
-        5+Number(city(hex))*3+Number(important(hex))*3+Math.max(0,roadDegree(hex)-2)*3+
-        Math.min(4,threat(hex))-Math.max(0,support.length+1-transport)*3));
+      const weights=candidates.map(({hex,support})=>Math.max(1,
+        4+Number(city(hex))*3+Number(important(hex))*3+Math.min(roadDegree(hex),3)*2+
+        Math.min(6,threat(hex))-support.filter(chip=>chit(chip).kind!=='dummy').length));
       const seed=(Math.imul(state.seed,0x9e3779b1)^Math.imul(state.turn+state.revision,0x85ebca6b))>>>0;
       // Sample independently of the game's dice and draw sequence.
       let pick=roll({seed:seed||1},weights.reduce((sum,weight)=>sum+weight,0));
@@ -688,11 +693,22 @@ const BulgeRules = (() => {
       }
       return benefit*3;
     }
+    const combatCard=possibleSupport({support:[id]},true).length>0 && card.kind!=='dummy';
+    const attacks=combatCard ? germanAttackOptions(state,targets) : null;
     function score(unit) {
       const {hex,support}=unit;
       const danger=threat(hex);
       const capacity=Math.max(0,support.length+1-unit.transport);
       let value=holding(hex)+danger-capacity*9-support.length*2;
+      if (combatCard) {
+        const options=attacks.get(hex);
+        const strength=options.reduce((sum,enemy)=>sum+enemy.strength,0);
+        const alreadyAssigned=possibleSupport(unit,true).filter(chip=>chit(chip).kind!=='dummy').length;
+        const carryPenalty=state.turn<=4 && strength>=unit.defense ? 3 : 9;
+        value=holding(hex)+danger+Math.min(strength,15)*2-capacity*carryPenalty-alreadyAssigned*5;
+        if (alreadyAssigned>=3) value-=24;
+        if (card.at && !options.some(enemy=>enemy.tankSupport)) value-=18;
+      }
       if (id.startsWith('a-nuts:')) value+=hex==='1716'?120:important(hex)?65:city(hex)?16:0;
       if (card.kind==='artillery' || card.at) {
         value+=danger;
