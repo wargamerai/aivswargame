@@ -46,7 +46,7 @@
   let state = adminPractice ? practiceAdministration() : battlePractice ? practiceBattle() : load();
   let practiceEvent = 'all';
   let practiceEventSide = 'german';
-  let movePlan, attackPlan, undo, selected, inspected, moveMode, moveSupport, lastMoved;
+  let movePlan, attackPlan, pausedReservations, selected, inspected, moveMode, moveSupport;
   let moveRepair = false;
   let orderDraft = null;
   const movementOrderName = type => type === 'hold' ? '死守命令' : '移動予約';
@@ -203,7 +203,8 @@
   }
 
   function saveGameFile() {
-    const data = {format: 'bulge-ai-save', version: 1, state, movePlan, attackPlan, supportChoices, artilleryDie, recoveryOrders, preferDefenderLoss};
+    const data = {format: 'bulge-ai-save', version: 1, state, movePlan, attackPlan, supportChoices, artilleryDie,
+      recoveryOrders, preferDefenderLoss, pausedReservations: [...pausedReservations]};
     const url = URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'application/json'}));
     const link = element('a');
     link.href = url;
@@ -231,7 +232,12 @@
       if (board.units.some(unit => unit.movementOrder &&
           (!unit.hex || unit.marker || !unit.movement || !['reserve', 'hold'].includes(unit.movementOrder.type) ||
            !R.canOrderDestination(board, unit, unit.movementOrder.target)))) throw Error('Invalid movement reservation');
-      if (['move', 'reaction', 'highbeam'].includes(board.phase) && R.previewMoves(board, saved.movePlan).rejected.length)
+      const paused = saved.pausedReservations ?? [];
+      if (!Array.isArray(paused) || paused.some(id => board.phase !== 'move' ||
+          R.unitById(board, id)?.side !== R.actor(board) || !R.unitById(board, id)?.movementOrder))
+        throw Error('Invalid paused reservations');
+      if (['move', 'reaction', 'highbeam'].includes(board.phase) &&
+          R.previewMoves(board, saved.movePlan, new Set(paused)).rejected.length)
         throw Error('Invalid movement orders');
       if (['attack', 'counter'].includes(board.phase) && !R.validateAttacks(board, saved.attackPlan))
         throw Error('Invalid attack orders');
@@ -258,8 +264,9 @@
     prepare();
     let rejectedMoves = 0;
     if (state.phase === phase) {
-      if (moving() && (saved.movePlan.length || !isAI())) {
-        const checked = R.previewMoves(state, saved.movePlan);
+      if (moving() && (saved.movePlan.length || saved.pausedReservations?.length || !isAI())) {
+        pausedReservations = new Set(saved.pausedReservations ?? []);
+        const checked = R.previewMoves(state, saved.movePlan, pausedReservations);
         movePlan = checked.valid;
         rejectedMoves = checked.rejected.length;
       }
@@ -480,11 +487,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return;
     }
     if (command.type === 'movement-order') {
-      const checked = R.previewMoves(state, movePlan.filter(order => order.unit !== command.unit));
+      pausedReservations.delete(command.unit);
+      const checked = R.previewMoves(state, movePlan.filter(order => order.unit !== command.unit), pausedReservations);
       movePlan = checked.valid;
-      undo = [];
       orderDraft = null;
-      selected = null; lastMoved = null;
+      selected = null;
       const text = command.order ? `${nameOf(command.unit)}：${movementOrderName(command.order.type)}を設定しました。`
         : `${nameOf(command.unit)}：命令を解除しました。`;
       note(checked.rejected.length ? `${text} 実行できなくなった移動案を${checked.rejected.length}件取り消しました。` : text);
@@ -492,7 +499,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     }
     if (command.type === 'ration' || command.type === 'remove-dummy') {
       if (moving()) {
-        const revised = R.previewMoves(state, movePlan);
+        const revised = R.previewMoves(state, movePlan, pausedReservations);
         movePlan = revised.valid;
       }
       note(command.type === 'ration' ? `${nameOf(command.unit)}の混乱を回復しました。` : 'ダミーを手元に戻しました。');
@@ -528,8 +535,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function prepare(automate = true) {
-    movePlan = []; attackPlan = []; undo = []; attackers = new Set(); orderDraft = null;
-    lastMoved = null;
+    movePlan = []; attackPlan = []; pausedReservations = new Set(); attackers = new Set(); orderDraft = null;
     reviewedAttack = null;
     recoveryOrders = [];
     reentryHex = null;
@@ -587,21 +593,30 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     render();
   }
 
-  function changeMoves(next, moved = null) {
-    undo.push(movePlan);
-    const checked = R.previewMoves(state, next);
-    movePlan = checked.valid;
-    lastMoved = moved;
-    message = checked.rejected.length
-      ? {text: `移動先がふさがるなどして、ほかの移動を${checked.rejected.length}件取り消しました。`, error: false}
-      : null;
+  function returnSelectedMove() {
+    const trail = projection.state.trails.find(entry => entry.id === selected);
+    if (!moving() || !trail) return;
+    const remaining = movePlan.filter(order => order.unit !== trail.id);
+    const paused = new Set(pausedReservations);
+    if (trail.reserved) paused.add(trail.id);
+    const revised = R.previewMoves(state, remaining, paused);
+    const affected = R.onMap(projection.state, R.actor(state)).find(unit =>
+      unit.id !== trail.id && R.unitById(revised.state, unit.id).hex !== unit.hex);
+    if (affected)
+      return note(`${affected.name}の移動に影響します。先にその部隊の移動を戻すか、予約を解除してください。`, true);
+    movePlan = revised.valid;
+    pausedReservations = paused;
+    message = null;
     render();
   }
 
   function moveSelectedTo(hex) {
     const order = {unit: selected, to: hex, mode: moveMode, support: moveSupport || null, repairBridge: moveRepair};
+    const checked = R.previewMoves(state, [...movePlan, order], pausedReservations);
+    if (checked.rejected.length) return note('このヘクスには移動できません。', true);
+    movePlan = checked.valid;
     selected = null;
-    changeMoves([...movePlan, order], order.unit);
+    render();
   }
 
   function editAttack(index) {
@@ -636,7 +651,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
 
   function startMovementOrder(unit, type) {
     orderDraft = {unit: unit.id, type, target: unit.movementOrder?.target ?? null};
-    selected = null; lastMoved = null;
+    selected = null;
     note(`${movementOrderName(type)}の目的地を地図で選んでください。`);
   }
 
@@ -666,9 +681,14 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (state.phase === 'reentry' && unit.hex && (selected || R.city(unit.hex))) return chooseReentryHex(unit.hex);
     if ((hasPendingEvent() || state.phase === 'reinforce') && legalHexes.has(unit.hex))
       return chooseHex(unit.hex);
-    if (moving() && unit.side === R.actor(state)) {
-      if (!unit.marker) return chooseMover(id);
-      if (range.has(unit.hex)) return chooseHex(unit.hex);
+    if (moving()) {
+      if (unit.side === R.actor(state)) {
+        if (!unit.marker) return chooseMover(id);
+        if (range.has(unit.hex)) return chooseHex(unit.hex);
+      }
+      selected = null;
+      render();
+      return;
     }
     if (planning() && unit.side !== R.actor(state)) return chooseTarget(unit.hex);
     if (planning() && unit.side === R.actor(state) && !unit.disrupted && !unit.marker) {
@@ -856,13 +876,14 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         const classes = ['counter'];
         if (state.phase === 'recovery' && unit.side === R.actor(state) && unit.disrupted && !unit.marker)
           classes.push('recovery-target');
+        const moved = movingIds.has(unit.id);
+        if (moved) classes.push('planned');
         if (unit.id === selected || attackers.has(unit.id)) classes.push('selected');
-        else if (movingIds.has(unit.id)) classes.push('planned');
         else if (fightingIds.has(unit.id)) classes.push('attack-ordered');
         const support = supportPieces(unit);
         const order = committedOrders.get(unit.id);
         const orderMark = order && (order.type === 'hold' && hex === order.target ? '死守' : '予約');
-        const label = `${R.sideName(unit.side)} ${unit.name} ${hex}${unit.disrupted ? ' 混乱' : ''} 支援 ${support.length}枚${orderMark ? ' ' + orderMark : ''}`;
+        const label = `${R.sideName(unit.side)} ${unit.name} ${hex}${moved ? ' 移動済み' : ''}${unit.disrupted ? ' 混乱' : ''} 支援 ${support.length}枚${orderMark ? ' ' + orderMark : ''}`;
         const node = svg('g', {class: classes.join(' '), tabindex: 0, role: 'button',
           'aria-label': label, 'data-unit': unit.id});
         const offset = Math.min(5, 13 / Math.max(1, support.length));
@@ -1016,7 +1037,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (orderDraft?.target && draftUnit.hex !== orderDraft.target)
       drawPath([draftUnit.hex, orderDraft.target], 'reserved order-draft');
     if (moving() && !orderDraft) {
-      const trail = projection.state.trails.find(trail => trail.id === (selected ?? lastMoved));
+      const trail = projection.state.trails.find(trail => trail.id === selected);
       if (trail) drawPath(trail.path, 'reviewed');
     }
     const occupied = new Set(R.onMap(projection.state).map(unit => unit.hex));
@@ -1052,7 +1073,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const eventTarget = hasPendingEvent()
       ? [...legalHexes].sort((a, b) => R.distance(a, startingHex) - R.distance(b, startingHex))[0] : null;
     center(battle ?? recovery ?? eventTarget ?? reentryHex ?? orderDraft?.target ?? reviewedAttack ??
-      R.unitById(projection.state, selected ?? lastMoved)?.hex ?? attackPlan[0]?.target ??
+      R.unitById(projection.state, selected)?.hex ?? attackPlan[0]?.target ??
       movePlan[0]?.to ?? startingHex);
   }
 
@@ -1060,12 +1081,9 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const allied = isAI();
     if (selected) {
       const unit = R.unitById(projection.state, selected);
-      const moved = movePlan.some(order => order.unit === selected);
+      const moved = projection.state.trails.some(trail => trail.id === selected);
       panel.append(element('h3', `${unit.name} · ${unit.hex}`));
-      if (moved) {
-        panel.append(button('移動前のヘクスに戻す', () =>
-          changeMoves(movePlan.filter(order => order.unit !== selected)), {primary: true, id: 'return-move'}));
-      } else if (!unit.movementOrder && !unit.disrupted) {
+      if (!moved && !unit.movementOrder && !unit.disrupted) {
         const controls = element('div', null, 'controls');
         if (unit.mechanized) {
           controls.append(selectBox('移動方式', [['normal','通常'],['mechanized','機械化（道路）']], moveMode, value => {
@@ -1097,12 +1115,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
             : 'この条件で移動できるヘクスはありません。', 'hint'));
       }
     }
-    if (undo.length) actions.append(button('直前の移動操作を取り消す', () => {
-      movePlan = R.previewMoves(state, undo.pop()).valid;
-      selected = null; lastMoved = null; message = null; render();
-    }, {id: 'undo-move'}));
-    actions.append(button(allied ? '連合軍の移動を確定' : '移動を確定',
-      () => step({type: 'moves', moves: movePlan}), {primary: true, disabled: Boolean(orderDraft), id: 'confirm-moves'}));
+    const confirmLabel = allied && state.phase === 'reaction' && !projection.state.trails.length
+      ? '対応移動なしで進む' : allied ? '連合軍の移動を確定' : '移動を確定';
+    actions.append(button(confirmLabel,
+      () => step({type: 'moves', moves: movePlan, pausedReservations: [...pausedReservations]}),
+      {primary: true, disabled: Boolean(orderDraft), id: 'confirm-moves'}));
   }
 
   function renderAttacks(panel, actions) {
@@ -1641,7 +1658,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     panel.hidden = !unit;
     if (!unit) return;
     if (moving() && unit.side === R.actor(state) && !unit.marker) {
-      if ((selected === unit.id && !movePlan.some(order => order.unit === unit.id)) || orderDraft?.unit === unit.id)
+      if ((selected === unit.id && !projection.state.trails.some(trail => trail.id === unit.id)) || orderDraft?.unit === unit.id)
         renderMovementOrder(panel, R.unitById(state, unit.id));
       const ration = unit.support.find(id => R.chit(id).kind === 'ration');
       if (unit.side === 'german' && unit.disrupted && ration)
@@ -1881,12 +1898,14 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function render() {
-    projection = moving() ? R.previewMoves(state, movePlan) : {state};
+    projection = moving() ? R.previewMoves(state, movePlan, pausedReservations) : {state};
+    const selectedMoved = moving() && projection.state.trails.some(trail => trail.id === selected);
+    returnMoveButton.hidden = !selectedMoved || countersHidden;
     if (state.phase === 'recovery' && recoveryOrders.length) {
       projection.state = {...state, units: state.units.map(unit =>
         recoveryOrders.includes(unit.id) ? {...unit, disrupted: false} : unit)};
     }
-    const moveBase = moving() && selected && !movePlan.some(order => order.unit === selected) ? projection.state : null;
+    const moveBase = moving() && selected && !selectedMoved ? projection.state : null;
     range = moveBase
       ? R.movementOptions(moveBase, selected, {mode: moveMode, support: moveSupport || null, repairBridge: moveRepair})
       : new Map();
@@ -1953,8 +1972,10 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       : reentryPractice ? '再登場できる部隊と配置先を確認します。'
       : supplyPractice ? '補給チットを選び、ポイントと増援の有無を確認します。'
       : moving()
-      ? isAI() ? '移動を直す駒をクリックし、元のヘクスに戻してから行き先を選びます。'
-        : '駒をクリックし、地図で移動先を選びます。'
+      ? isAI() && phase === 'reaction' && !projection.state.trails.length
+        ? '連合軍の対応移動はありません。'
+        : isAI() ? '移動済みの駒をクリックすると経路を確認できます。'
+          : '駒をクリックし、地図で移動先を選びます。'
       : planning()
         ? isAI() ? '連合軍の戦闘案です。対象と参加部隊を確認し、必要なら変更・取消してから確定してください。' : '味方の駒を選んでから、隣接する敵の駒を選びます。'
         : guidance[phase] ?? `${R.sideName(state.turnSide)}プレーヤーターン`;
@@ -2021,6 +2042,9 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     viewport.scrollTop = y*scale - viewport.clientHeight/2;
   });
   byId('focus-map').addEventListener('click', focusMap);
+  const returnMoveButton = button('この部隊を元に戻す', returnSelectedMove, {id: 'return-move', primary: true});
+  returnMoveButton.hidden = true;
+  byId('focus-map').after(returnMoveButton);
   const cavalryLegend = element('span', '騎兵連隊のZOC（赤い破線）');
   cavalryLegend.hidden = true;
   byId('movement-support-legend').textContent = 'チットを使うと到達可能';
@@ -2032,6 +2056,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     byId('hexes').style.opacity = countersHidden ? '0' : '';
     cavalryLegend.hidden = countersHidden || !byId('routes').querySelector('polygon');
     if (countersHidden) hideStack();
+    returnMoveButton.hidden = countersHidden || !moving() ||
+      !projection.state.trails.some(trail => trail.id === selected);
     toggleCounters.setAttribute('aria-pressed', String(countersHidden));
     toggleCounters.textContent = countersHidden ? '駒を表示' : '駒を隠す';
   }, {id: 'toggle-counters', pressed: false});
@@ -2109,7 +2135,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   });
   const movementHelp = [...byId('help').querySelectorAll('dt')].find(term => term.textContent === '移動');
   if (movementHelp?.nextElementSibling) movementHelp.nextElementSibling.textContent =
-    '駒をクリックし、色の付いた移動先をクリックします。移動済みの駒は「移動前のヘクスに戻す」で置き直せます。「移動を確定」でフェイズを進めます。輸送力を超える場合は確定前に警告が出ます。';
+    '駒をクリックし、色の付いた移動先をクリックします。移動済みの駒はクリックすると経路が出ます。地図の上の「この部隊を元に戻す」で置き直せます。「移動を確定」でフェイズを進めます。輸送力を超える場合は確定前に警告が出ます。';
   const orderHelp = [...byId('help').querySelectorAll('dt')].find(term => term.textContent === '移動予約・死守命令');
   if (orderHelp?.nextElementSibling) orderHelp.nextElementSibling.prepend('連合軍だけが使えます。');
   byId('start-local').textContent = 'ドイツ軍を操作（連合軍はAI補助）';

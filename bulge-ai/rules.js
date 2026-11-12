@@ -367,7 +367,7 @@ const BulgeRules = (() => {
     }
     return best;
   }
-  function followMovementOrders(state, used) {
+  function followMovementOrders(state, used, pausedReservations) {
     if (state.phase !== 'move' || actor(state)!=='allied') return;
     for (const unit of onMap(state,'allied')) {
       const order = unit.movementOrder;
@@ -377,7 +377,7 @@ const BulgeRules = (() => {
         log(state, `${unit.name}：${order.target} が敵軍の支配下に入ったため、命令を解除しました。`);
         continue;
       }
-      if (unit.hex === order.target) continue;
+      if (unit.hex === order.target || pausedReservations.has(unit.id)) continue;
       const route = reservedRoute(state, unit);
       if (!route) continue;
       move(state, unit, route, true);
@@ -388,10 +388,10 @@ const BulgeRules = (() => {
       }
     }
   }
-  function previewMoves(state, actions) {
+  function previewMoves(state, actions, pausedReservations = new Set()) {
     const preview = copy(state), valid = [], rejected = [], used = new Set();
     preview.trails = [];
-    followMovementOrders(preview, used);
+    followMovementOrders(preview, used, pausedReservations);
     for (const action of actions) {
       const route = !used.has(action.unit) && movementOptions(preview, action.unit, action).get(action.to);
       if (!route) { rejected.push(action); continue; }
@@ -1224,7 +1224,10 @@ const BulgeRules = (() => {
       }
       case 'moves': {
         if (!['move','reaction','highbeam'].includes(phase) || !Array.isArray(action.moves)) return false;
-        const result=previewMoves(state,action.moves);
+        const paused=action.pausedReservations ?? [];
+        if (!Array.isArray(paused) || paused.some(id=>phase!=='move' ||
+            unitById(state,id)?.side!==side || !unitById(state,id)?.movementOrder)) return false;
+        const result=previewMoves(state,action.moves,new Set(paused));
         if (result.rejected.length) throw Error('移動案に実行できない移動があります。');
         Object.assign(state,result.state);
         for (const trail of state.trails) {

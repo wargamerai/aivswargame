@@ -157,6 +157,7 @@ input[type="range"] { width: 85px; accent-color: var(--green); }
 .counter .rim { fill: #fff5dd; stroke: #433e31; stroke-width: 2; }
 .counter-support rect { fill: #fff5dd; stroke: #433e31; stroke-width: 1.3; }
 .counter.planned .rim { stroke: #196483; stroke-width: 3.5; stroke-dasharray: 4 2; }
+.counter.planned > image { filter: brightness(.58); }
 .counter.selected .rim, .counter:focus-visible .rim { stroke: #ffd451; stroke-width: 4; stroke-dasharray: none; }
 .counter.attack-ordered .rim { stroke: #935800; stroke-width: 3; }
 .counter.recovery-target .rim { stroke: #ffe23e; stroke-width: 6; filter: drop-shadow(0 0 3px #2e2609); }
