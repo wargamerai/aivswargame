@@ -177,12 +177,17 @@ input[type="range"] { width: 85px; accent-color: var(--green); }
 .stack-pieces figure { width: 62px; margin: 0; text-align: center; }
 .stack-pieces img { display: block; width: 48px; height: 48px; margin: 0 auto .2rem; border: 1px solid #827e6c; }
 .stack-pieces figcaption { font-size: .7rem; line-height: 1.3; overflow-wrap: anywhere; }
-.phase { flex: none; background: #ecefe3; padding: 13px 15px; border-bottom: 1px solid var(--line); }
-.phase-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .82rem; }
-#turn { font-size: 1.02rem; font-weight: 700; }
-#actor { color: #fff; background: #474d4b; padding: .16rem .48rem; border-radius: 4px; }
-#actor.allied { background: #3c5840; }
-.phase h2 { font-size: 1.4rem; margin: .35rem 0 .2rem; }
+.phase-status {
+  flex: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: .2rem .65rem;
+  background: #273524; color: #fff9e9; padding: .45rem .75rem;
+  font-size: clamp(1.2rem, 2.4vw, 1.7rem); line-height: 1.25;
+}
+#turn { color: #ffe592; font-weight: 700; }
+#actor { background: #474d4b; padding: .08rem .38rem; border-radius: 4px; }
+#actor.allied { background: #416748; }
+#phase-title { font-size: inherit; overflow-wrap: anywhere; }
+.phase-guidance { flex: none; background: #ecefe3; padding: .55rem .8rem; border-bottom: 1px solid var(--line); }
+.phase-guidance:has(#phase-detail:empty) { display: none; }
 #phase-detail, .hint, .muted { font-size: .83rem; color: var(--ink-light); line-height: 1.52; }
 .command-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px 14px; font-size: .86rem; }
 #message { background: #e7eddc; border-radius: 4px; padding: .55rem .7rem; margin-bottom: .65rem; line-height: 1.5; }
@@ -203,6 +208,7 @@ input[type="range"] { width: 85px; accent-color: var(--green); }
 .recovery-cost { margin-bottom: .5rem; }
 .actions { flex: none; display: grid; gap: .4rem; padding: 11px 14px; border-top: 1px solid var(--line); }
 .actions:empty { display: none; }
+#return-move { flex: none; margin: .4rem 14px 0; }
 .support-warning {
   padding: .45rem .55rem; border-radius: 4px; background: #fff0cd; color: #684200;
   font-size: .85rem; line-height: 1.45;

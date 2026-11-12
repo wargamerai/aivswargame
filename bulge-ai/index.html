@@ -35,6 +35,11 @@
     <div id="setup-chits" class="chit-tray" aria-label="未配置の初期支援チット" hidden></div>
     <div id="support-chits" class="chit-tray" aria-label="引いたチットと手元のダミー" hidden></div>
     <section class="map-panel" aria-label="ゲーム盤">
+      <div class="phase-status" aria-label="現在のフェイズ">
+        <span id="turn"></span>
+        <strong id="actor"></strong>
+        <h2 id="phase-title"></h2>
+      </div>
       <div class="map-toolbar">
         <div class="map-controls">
           <label for="zoom">地図の拡大</label>
@@ -75,9 +80,7 @@
       <div class="map-legend"><span class="key legal">移動・配置可能</span><span class="key stop">進入で停止</span><span id="movement-support-legend" class="key support-movement" hidden>移動支援で有利</span><span class="key planned">移動案</span><span class="key reserved">予約・死守先</span><span class="key target">攻撃・戦闘地点</span></div>
     </section>
     <aside id="command-panel" class="command" aria-label="対局操作">
-      <div class="phase">
-        <div class="phase-meta"><span id="turn"></span><span id="actor"></span></div>
-        <h2 id="phase-title"></h2>
+      <div class="phase-guidance">
         <p id="phase-detail"></p>
       </div>
       <div id="stack-overview" class="stack-overview" hidden>

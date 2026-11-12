@@ -1079,8 +1079,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (orderDraft?.target && draftUnit.hex !== orderDraft.target)
       drawPath([draftUnit.hex, orderDraft.target], 'reserved order-draft');
     if (moving() && !orderDraft) {
-      const trail = projection.state.trails.find(trail => trail.id === selected);
-      if (trail) drawPath(trail.path, 'reviewed');
+      if (selected) {
+        const trail = projection.state.trails.find(trail => trail.id === selected);
+        if (trail) drawPath(trail.path, 'reviewed');
+      } else if (isAI()) {
+        for (const trail of projection.state.trails) drawPath(trail.path, 'candidate');
+      }
     }
     const occupied = new Set(R.onMap(projection.state).map(unit => unit.hex));
     for (const [hex, bridge] of Object.entries(state.bridges)) {
@@ -1997,8 +2001,15 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     byId('nordwind-status').hidden = !nordwind;
     const turnLabel = battlePractice ? '練習戦闘 · 保存なし'
       : adminPractice ? `第${state.turn}ターン · 練習` : `第 ${state.turn} ターン`;
-    const phaseLabel = supplyPractice ? R.phaseNames.supply
-      : phase === 'over' ? `${R.sideName(state.winner)}の勝利` : R.phaseNames[phase];
+    let phaseLabel = R.phaseNames[phase];
+    if (phase === 'resolve' || phase === 'advance') {
+      const origin = R.phaseNames[state.combat.from];
+      if (origin) phaseLabel = origin + 'の' + phaseLabel;
+    } else if (phase === 'reinforce' && hasPendingEvent()) {
+      phaseLabel = '増援登場（イベント処理）';
+    } else if (phase === 'over') {
+      phaseLabel = R.sideName(state.winner) + 'の勝利';
+    }
     byId('turn').textContent = turnLabel;
     const actor = byId('actor');
     actor.textContent = side ? R.sideName(side) : '対局終了';
@@ -2026,7 +2037,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       : moving()
       ? isAI() && phase === 'reaction' && !projection.state.trails.length
         ? '連合軍の対応移動はありません。'
-        : isAI() ? '移動済みの駒をクリックすると経路を確認できます。'
+        : isAI() ? '赤い矢印は連合軍の移動経路です。駒をクリックすると、その部隊の経路を確認できます。'
           : '駒をクリックし、地図で移動先を選びます。'
       : planning()
         ? isAI() ? '連合軍の戦闘案です。対象と参加部隊を確認し、必要なら変更・取消してから確定してください。' : '味方の駒を選んでから、隣接する敵の駒を選びます。'
