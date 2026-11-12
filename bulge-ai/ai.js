@@ -39,87 +39,140 @@ const BulgeAI = (() => {
       danger*(early ? 1.65 : 1.25) - Number(zones.has(hex))*2 -
       Math.max(0,pressure-unit.defense)*0.9;
   }
+  function defensiveTerrain(hex) {
+    if (R.ridge(hex)) return 2;
+    return R.neighbors(hex).some(next=>R.riverTerrain(next)) ? 1 : 0;
+  }
   function germanReach(board, unit) {
-    const hexes=new Set(R.movementOptions(board,unit.id).keys());
-    if (unit.mechanized)
-      for (const hex of R.movementOptions(board,unit.id,{mode:'mechanized'}).keys()) hexes.add(hex);
+    const hexes=new Set();
+    for (const support of [null,...R.moveChits(unit)]) {
+      for (const mode of unit.mechanized ? ['normal','mechanized'] : ['normal']) {
+        for (const hex of R.movementOptions(board,unit.id,{mode,support}).keys()) hexes.add(hex);
+      }
+    }
     return hexes;
   }
-  function reactionRisk(state, unit, opponents) {
+  function germanMobility(state) {
     const german={...state,phase:'move',turnSide:'german'};
-    const threats=opponents.filter(enemy=>!enemy.disrupted && enemy.movement && !enemy.marker);
-    const reach=new Map(threats.map(enemy=>[enemy.id,germanReach(german,enemy)]));
-    const before=new Set([...reach.values()].flatMap(options=>[...options]));
-    return to=>{
-      const revised={...unit,hex:to};
-      const affected=[unit.hex,to,...R.unitZoc(unit),...R.unitZoc(revised)];
-      const changesControl=(R.city(to)||R.source('allied',to)||R.source('german',to)) && state.control[to]!=='allied';
-      const board={...german,units:german.units.map(other=>other.id===unit.id?revised:other),
-        control:changesControl?{...german.control,[to]:'allied'}:german.control};
+    const threats=R.onMap(state,'german').filter(unit=>!unit.disrupted && unit.movement && !unit.marker);
+    const allies=new Map(R.onMap(state,'allied').map(unit=>[unit.id,unit]));
+    const supplyBefore=R.lines(german,'german',true);
+    const reach=threats.map(unit=>germanReach(german,unit));
+    const before=new Set(reach.flatMap(options=>[...options]));
+    return board=>{
+      const moved=R.onMap(board,'allied').filter(unit=>allies.get(unit.id)?.hex!==unit.hex);
+      if (!moved.length) return {closed:0,opened:0,widens:false};
+      const affected=new Set();
+      for (const unit of moved) {
+        affected.add(unit.hex);
+        for (const hex of R.unitZoc(unit)) affected.add(hex);
+        const old=allies.get(unit.id);
+        if (old) {
+          affected.add(old.hex);
+          for (const hex of R.unitZoc(old)) affected.add(hex);
+        }
+      }
+      const affectedHexes=[...affected];
+      const germanAfter={...board,phase:'move',turnSide:'german'};
+      const supplyAfter=R.lines(germanAfter,'german',true);
       const after=new Set();
       let widestOpening=0;
-      for (const enemy of threats) {
-        const old=reach.get(enemy.id);
-        const nearby=affected.some(hex=>distance(hex,enemy.hex)<=(enemy.mechanized?10:enemy.movement));
-        const options=nearby || (changesControl && enemy.mechanized) ? germanReach(board,enemy) : old;
-        if (options!==old) widestOpening=Math.max(widestOpening,options.size-old.size);
+      for (const [index,unit] of threats.entries()) {
+        const old=reach[index];
+        const nearby=affectedHexes.some(hex=>distance(hex,unit.hex)<=(unit.mechanized?10:unit.movement));
+        const supplyChanged=unit.mechanized && supplyBefore.has(unit.hex)!==supplyAfter.has(unit.hex);
+        const options=nearby || supplyChanged ? germanReach(germanAfter,unit) : old;
+        widestOpening=Math.max(widestOpening,options.size-old.size);
         for (const hex of options) after.add(hex);
       }
       const opened=[...after].filter(hex=>!before.has(hex));
       const closed=[...before].filter(hex=>!after.has(hex));
-      const opensObjective=opened.some(hex=>strongholds.includes(hex)||D.victoryCities.includes(hex));
-      const widens=opensObjective || widestOpening>=6 ||
+      const widens=opened.some(hex=>objectives.has(hex)) || widestOpening>=6 ||
         (opened.length>=4 && opened.length-closed.length>=3);
-      return {widens, score:closed.length*0.5-opened.length*0.85};
+      return {closed:closed.length,opened:opened.length,widens};
     };
+  }
+  function mobilityScore(change) {
+    return change.closed*1.5-change.opened*2;
+  }
+  function futureDefense(state) {
+    const board=R.upcomingAlliedReinforcements(state);
+    if (!board) return {board:state, orders:[]};
+    const orders=reinforcements(board);
+    return {board:R.previewReinforcements(board,orders).state, orders};
   }
   function moves(state) {
     if (R.actor(state)!=='allied' || !['move','reaction','highbeam'].includes(state.phase)) return [];
     const opponents=R.onMap(state,'german');
     if (!opponents.length) return [];
-    const units=R.onMap(state,'allied').filter(u=>!u.disrupted&&u.movement&&!u.movementOrder&&!strongholds.includes(u.hex))
+    const units=R.onMap(state,'allied').filter(unit=>!unit.disrupted && unit.movement &&
+      !unit.movementOrder && !strongholds.includes(unit.hex) && !R.ridge(unit.hex))
       .sort((a,b)=>nearest(a.hex,opponents)-nearest(b.hex,opponents)||b.attack-a.attack);
-    let plan=[], preview=R.previewMoves(state,[]).state;
+    const plan=[];
+    let preview=R.previewMoves(state,[]).state;
     for (const original of units) {
       const unit=R.unitById(preview,original.id);
       const supply=R.lines(preview,'allied',true);
       const zones=R.zoc(preview,'allied');
       const distanceBefore=nearest(unit.hex,opponents);
-      let value=moveScore(preview,unit,unit.hex,opponents,supply,zones)+0.75, best=null;
-      const reactions=new Map();
       const supports=[null,...R.moveChits(unit)];
+      const candidates=new Map();
       for (const mode of ['normal','mechanized']) for (const support of supports) {
         for (const route of R.movementOptions(preview,unit.id,{mode,support}).values()) {
+          const hex=route.hex;
+          if (R.river(hex)) continue;
+          const from=route.path.at(-2) ?? unit.hex;
+          const roadEntry=roadNeighbors.get(from)?.includes(hex) && !preview.bridges[from] && !preview.bridges[hex];
+          if (unit.support.length && R.ridge(hex) && !roadEntry) continue;
           const spent=Number(Boolean(support&&R.chit(support).discard))*0.9;
           const lost=route.lost ? unit.support.filter(id=>R.chit(id).kind!=='dummy').length*1.15 : 0;
           const excess=route.excess.filter(id=>R.chit(id).kind!=='dummy').length*0.8;
-          const distanceAfter=nearest(route.hex,opponents);
-          const approachesFront=distanceAfter<distanceBefore && distanceAfter<=3;
-          const usefulPosition=defensivePosition(preview,route.hex)>defensivePosition(preview,unit.hex) &&
-            supply.has(route.hex) && !zones.has(route.hex);
-          if (state.turn<=4 && approachesFront && !usefulPosition) continue;
-          const westward=R.map.get(unit.hex).col-R.map.get(route.hex).col;
+          const distanceAfter=nearest(hex,opponents);
+          const westward=R.map.get(unit.hex).col-R.map.get(hex).col;
           const retreat=state.turn<=4 && distanceBefore<=3 && distanceAfter>distanceBefore
             ? Math.min(2,Math.max(0,westward))*0.4 : 0;
-          const score=moveScore(preview,unit,route.hex,opponents,supply,zones)+retreat-
+          const score=moveScore(preview,unit,hex,opponents,supply,zones)+retreat+
+            (defensiveTerrain(hex)-defensiveTerrain(unit.hex))*1.25-
             Math.max(lost,excess)-spent-route.cost*0.045;
-          const order={unit:unit.id,to:route.hex,mode,support};
-          if (state.phase==='reaction') {
-            if (score>(reactions.get(route.hex)?.score ?? -Infinity)) reactions.set(route.hex,{order,score});
-          } else if (score>value) {
-            best=order; value=score;
-          }
+          if (score>(candidates.get(hex)?.score ?? -Infinity))
+            candidates.set(hex,{order:{unit:unit.id,to:hex,mode,support},path:route.path,score});
         }
       }
-      if (reactions.size) {
-        const risk=reactionRisk(preview,unit,opponents);
-        // Compare a short list of promising hexes, including alternatives when a move opens a gap.
-        const candidates=[...reactions.values()].sort((a,b)=>b.score-a.score).slice(0,12);
-        for (const {order,score} of candidates) {
-          const change=risk(order.to);
-          if (change.widens || score+change.score<=value) continue;
+      if (!candidates.size) continue;
+
+      const currentMobility=germanMobility(preview);
+      const forecast=futureDefense(preview);
+      const forecastMobility=forecast.orders.length ? germanMobility(forecast.board) : null;
+      let value=moveScore(preview,unit,unit.hex,opponents,supply,zones)+0.75;
+      let best=null;
+      for (const {order,path,score} of candidates.values()) {
+        const hex=order.to;
+        const relocated={...unit,hex};
+        const control={...preview.control};
+        for (const step of path) {
+          if (R.city(step)||R.source('allied',step)||R.source('german',step)) control[step]='allied';
+        }
+        const board={...preview,control,units:preview.units.map(other=>other.id===unit.id ? relocated : other)};
+        const immediate=currentMobility(board);
+        if (state.phase==='reaction' && immediate.widens) continue;
+        const usefulPosition=defensivePosition(preview,hex)>defensivePosition(preview,unit.hex) &&
+          supply.has(hex) && !zones.has(hex);
+        const near=nearest(hex,opponents);
+        let combinedChange=immediate;
+        let reduction=mobilityScore(immediate);
+        if (forecastMobility) {
+          const arrival=R.upcomingAlliedReinforcements(board);
+          const trial=R.previewReinforcements(arrival,forecast.orders);
+          const combined=trial.rejected.length || R.eligiblePlacements(trial.state).length
+            ? R.previewReinforcements(arrival,reinforcements(arrival,trial.valid)).state : trial.state;
+          combinedChange=forecastMobility(combined);
+          reduction=mobilityScore(combinedChange)+reduction*0.25;
+        }
+        if (state.turn<=4 && near<distanceBefore && near<=3 &&
+            !usefulPosition && combinedChange.closed-combinedChange.opened<4) continue;
+        if (score+reduction>value) {
           best=order;
-          value=score+change.score;
+          value=score+reduction;
         }
       }
       if (best) {
@@ -222,15 +275,24 @@ const BulgeAI = (() => {
         const unit=special || eligible[0];
         if (!unit) return {type:'next',side};
         const zones=R.zoc(state,side);
-        const score=hex=>{
+        const compare=germanMobility(state);
+        let bestHex, bestScore=-Infinity;
+        for (const hex of R.placements(state,unit.id)) {
+          if (R.river(hex)) continue;
           const near=nearest(hex,opponents);
           const safeDistance=state.phase==='reentry' || state.turn<=4 ? 4 : 3;
-          const exposure=Math.max(0,safeDistance-near)*2.7 + Number(zones.has(hex))*6;
+          const exposure=Math.max(0,safeDistance-near)*2.7+Number(zones.has(hex))*6;
           const depthPenalty=Math.max(0,near-safeDistance-2)*0.45;
           const sourceBonus=state.phase==='reinforce' && R.source(side,hex) ? 0.8 : 0;
-          return defensivePosition(state,hex)+sourceBonus-exposure-depthPenalty;
-        };
-        const hex=R.placements(state,unit.id).slice().sort((a,b)=>score(b)-score(a))[0];
+          const board={...state,units:state.units.map(other=>other.id===unit.id ? {...unit,hex} : other)};
+          const score=defensivePosition(state,hex)+defensiveTerrain(hex)*1.25+sourceBonus-
+            exposure-depthPenalty+mobilityScore(compare(board));
+          if (score>bestScore) {
+            bestHex=hex;
+            bestScore=score;
+          }
+        }
+        const hex=bestHex ?? R.placements(state,unit.id)[0];
         return {type:'place',unit:unit.id,hex,side};
       }
       case 'recovery': {

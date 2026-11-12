@@ -150,7 +150,9 @@ const BulgeRules = (() => {
   function autoAlliedSetup(state) {
     const list = onMap(state,'allied').filter(u => !u.marker);
     for (const id of state.hand.slice()) {
-      const target = alliedSupportTarget(state,id,list);
+      const initialFortUnits = chit(id).kind==='fort'
+        ? list.filter(unit=>unit.id==='a135' || unit.id==='a61') : list;
+      const target = alliedSupportTarget(state,id,initialFortUnits);
       if (!target) continue;
       assignInitialSupport(state,target,id);
     }
@@ -691,6 +693,13 @@ const BulgeRules = (() => {
       log(state,`パットンの救援：${callReinforcementGroup(state,side)}`);
       state.flags.patton=false;
     }
+  }
+  function upcomingAlliedReinforcements(state) {
+    if (state.phase!=='move' || state.turnSide!=='allied' || state.turn===1) return null;
+    const board=copy(state);
+    board.phase='reinforce';
+    gainReinforcements(board);
+    return board.reinforceGroups.length ? board : null;
   }
   function begin(state, phase) {
     state.phase=phase;
@@ -1339,7 +1348,7 @@ const BulgeRules = (() => {
   }
   return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest, unitZoc,
     onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, transportableSupport, movementOptions, previewMoves, canOrderUnit, canOrderDestination, offRoadForest, roadLinks,
-    placements, eligiblePlacements, previewReinforcements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
+    placements, eligiblePlacements, previewReinforcements, upcomingAlliedReinforcements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
     eventOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
     battleInfo, possibleSupport, defaultSupport, combatProfile, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured };
 })();
