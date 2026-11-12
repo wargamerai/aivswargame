@@ -867,9 +867,38 @@ const BulgeRules = (() => {
   function damageFor(result) {
     return { attacker:Number(/A(\d)/.exec(result)?.[1] || 0), defender:Number(/D(\d)/.exec(result)?.[1] || 0) };
   }
+  function combatDamage(profile, result) {
+    const {attackGroup,defendGroup,vt}=profile;
+    const side=profile.attackers[0].side;
+    const attackCards=attackGroup.flatMap(entry=>entry.cards.map(chit));
+    const defendCards=defendGroup.flatMap(entry=>entry.cards.map(chit));
+    const total=(cards,key)=>cards.reduce((sum,card)=>sum+(card[key]||0),0);
+    const damage=damageFor(result);
+    return {
+      attackDamage:Math.max(0,damage.attacker-total(attackCards,'absorb')+total(defendCards,'inflict'))+
+        Number(vt&&side==='german'),
+      defendDamage:Math.max(0,damage.defender-total(defendCards,'absorb')+total(attackCards,'inflict'))+
+        Number(vt&&side==='allied'),
+    };
+  }
+  function decisiveAttack(profile, die) {
+    const result=D.crt[Math.min(6,die+profile.dieAdd)-1][profile.col];
+    const {attackDamage,defendDamage}=combatDamage(profile,result);
+    const tanks=entry=>entry.cards.filter(id=>chit(id).kind==='tank').length;
+    if (profile.attackGroup.some(entry=>attackDamage>tanks(entry))) return false;
+    if (profile.defenders.filter(unit=>!unit.marker).length>1) return false;
+    const steps=profile.defendGroup.reduce((sum,entry)=>{
+      const unit=typeof entry.unit==='string' ? profile.defenders.find(defender=>defender.id===entry.unit) : entry.unit;
+      return sum+(unit.marker || unit.disrupted ? 1 : 2)+tanks(entry);
+    },0);
+    return defendDamage>=steps;
+  }
   function suggestedDie(profile) {
     if (!profile?.artillerySide) return null;
     const attacking=profile.artillerySide===profile.attackers[0].side;
+    if (attacking && profile.artillerySide==='allied') {
+      for (let die=1;die<=6;die++) if (decisiveAttack(profile,die)) return die;
+    }
     let best=1, value=-Infinity;
     for (let die=1;die<=6;die++) {
       const result=damageFor(D.crt[Math.min(6,die+profile.dieAdd)-1][profile.col]);
@@ -941,16 +970,9 @@ const BulgeRules = (() => {
     const info=battleInfo(state);
     const {target}=info, {col,base,artillerySide,vt,shotDown}=revealed;
     const {die,adjusted,result}=rolled;
-    const damage=damageFor(result);
     const hydrate=group=>group.map(({unit,cards})=>({unit:unitById(state,unit),cards}));
     const attackGroup=hydrate(revealed.attackGroup), defendGroup=hydrate(revealed.defendGroup);
-    const attackCards=attackGroup.flatMap(e=>e.cards.map(chit));
-    const defendCards=defendGroup.flatMap(e=>e.cards.map(chit));
-    const total=(cards,key)=>cards.reduce((sum,c)=>sum+(c[key]||0),0);
-    const attackDamage=Math.max(0,damage.attacker-total(attackCards,'absorb')+total(defendCards,'inflict'))+
-      Number(vt&&state.combat.side==='german');
-    const defendDamage=Math.max(0,damage.defender-total(defendCards,'absorb')+total(attackCards,'inflict'))+
-      Number(vt&&state.combat.side==='allied');
+    const {attackDamage,defendDamage}=combatDamage({...info,attackGroup,defendGroup,vt},result);
     const outcomes=[];
     let remainingDefense=defendDamage;
     const stacked=defendGroup.find(e=>e.unit.marker);
@@ -1291,5 +1313,5 @@ const BulgeRules = (() => {
     onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, transportableSupport, movementOptions, previewMoves, canOrderUnit, canOrderDestination, offRoadForest, roadLinks,
     placements, eligiblePlacements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
     eventOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
-    battleInfo, possibleSupport, defaultSupport, combatProfile, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured };
+    battleInfo, possibleSupport, defaultSupport, combatProfile, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured };
 })();

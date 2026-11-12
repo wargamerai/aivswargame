@@ -98,6 +98,44 @@ const BulgeAI = (() => {
     }
     return plan;
   }
+  function* defensiveSupport(cards, start=0, selected=[], hasArtillery=false) {
+    yield selected;
+    if (selected.length===3) return;
+    for (let index=start;index<cards.length;index++) {
+      const id=cards[index];
+      const artillery=R.chit(id).kind==='artillery';
+      if (artillery && hasArtillery) continue;
+      yield* defensiveSupport(cards,index+1,[...selected,id],hasArtillery||artillery);
+    }
+  }
+  function winsAgainstDefense(state, choices, targets=[], checked=new Set()) {
+    // The same set of tanks removed by German AT gives the same remaining support.
+    const key=targets.slice().sort().join(',');
+    if (checked.has(key)) return true;
+    checked.add(key);
+    const profile=R.combatProfile(state,choices,targets);
+    if (profile.nextAT)
+      return profile.nextAT.every(({id})=>winsAgainstDefense(state,choices,[...targets,id],checked));
+    if (profile.artillerySide==='allied') return R.decisiveAttack(profile,R.suggestedDie(profile));
+    // Every face is possible with either a random roll or German artillery.
+    return D.crt.every((_,index)=>R.decisiveAttack(profile,index+1));
+  }
+  function guaranteedAttack(state, target, attackers) {
+    const board={...state,phase:'resolve',combat:{side:'allied',queue:[{target,attackers}],total:1}};
+    const info=R.battleInfo(board);
+    const defaults=R.defaultSupport(info);
+    const choices=Object.fromEntries(attackers.map(id=>[id,defaults[id]]));
+    const combatKinds=['tank','artillery','damage','dice'];
+    if (!Object.values(choices).some(ids=>ids.some(id=>combatKinds.includes(R.chit(id).kind)))) return false;
+    const defender=info.defenders.find(unit=>!unit.marker);
+    const cards=defender ? R.possibleSupport(defender,true).filter(id=>
+      !['dummy','engineer'].includes(R.chit(id).kind)) : [];
+    for (const selected of defensiveSupport(cards)) {
+      const response=defender ? {...choices,[defender.id]:selected} : choices;
+      if (!winsAgainstDefense(board,response)) return false;
+    }
+    return true;
+  }
   function attacks(state) {
     if (R.actor(state)!=='allied' || !['attack','counter'].includes(state.phase)) return [];
     const targets=[...new Set(R.onMap(state,'german').map(u=>u.hex))];
@@ -105,25 +143,19 @@ const BulgeAI = (() => {
     for (;;) {
       let best=null;
       for (const target of targets) {
-        if (planned.some(b=>b.target===target)) continue;
-        const attackers=R.battleCandidates(state,target).filter(u=>!used.has(u.id));
-        if (!attackers.length) continue;
-        const defense=R.at(state,target).filter(u=>u.side==='german').reduce((sum,u)=>sum+u.defense,0);
-        const strength=attackers.reduce((sum,u)=>sum+u.attack,0);
-        const column=R.ratioColumn(strength,defense);
-        // Leave low-odds combats alone. Compare expected losses for the whole group.
-        const score=D.crt.reduce((sum,row)=>{
-          const result=row[column];
-          const loss=Number(/A(\d)/.exec(result)?.[1]||0)*attackers.length;
-          const inflicted=Number(/D(\d)/.exec(result)?.[1]||0);
-          return sum+inflicted*1.45-loss;
-        },0)/6 + Number(R.city(target))*0.23;
-        if (column>=2 && score>0.05 && (!best||score>best.score)) best={ target, attackers, score };
+        if (planned.some(order=>order.target===target)) continue;
+        const units=R.battleCandidates(state,target).filter(unit=>!used.has(unit.id));
+        if (!units.length) continue;
+        const attackers=units.map(unit=>unit.id);
+        if (!guaranteedAttack(state,target,attackers)) continue;
+        const defense=R.at(state,target).filter(unit=>unit.side==='german').reduce((sum,unit)=>sum+unit.defense,0);
+        const strength=units.reduce((sum,unit)=>sum+unit.attack,0);
+        const score=strength/defense+Number(R.city(target))*0.23;
+        if (!best || score>best.score) best={target,attackers,score};
       }
       if (!best) break;
-      const ids=best.attackers.map(u=>u.id);
-      for (const id of ids) used.add(id);
-      planned.push({target:best.target,attackers:ids});
+      for (const id of best.attackers) used.add(id);
+      planned.push({target:best.target,attackers:best.attackers});
     }
     return planned;
   }

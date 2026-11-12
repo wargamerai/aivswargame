@@ -928,7 +928,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       : reviewedAttack ? attackPlan.filter(order => order.target === reviewedAttack) : attackPlan;
     const targets = new Set(visibleAttacks.map(order => order.target));
     if (focus) targets.add(focus);
-    if (state.lastBattle && !focus) targets.add(state.lastBattle.target);
     if (planning() && attackers.size && attackEdit == null) {
       for (const hex of new Set(R.onMap(state, R.enemy(R.actor(state))).map(u => u.hex))) {
         const candidates = R.battleCandidates(state, hex).map(unit => unit.id);
@@ -1051,7 +1050,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       ? [...legalHexes].sort((a, b) => R.distance(a, startingHex) - R.distance(b, startingHex))[0] : null;
     center(battle ?? recovery ?? eventTarget ?? reentryHex ?? orderDraft?.target ?? reviewedAttack ??
       R.unitById(projection.state, selected ?? lastMoved)?.hex ?? attackPlan[0]?.target ??
-      movePlan[0]?.to ?? state.lastBattle?.target ?? startingHex);
+      movePlan[0]?.to ?? startingHex);
   }
 
   function renderMovement(panel, actions) {
@@ -1743,7 +1742,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   function renderResult() {
     const panel = byId('battle-result');
     panel.replaceChildren();
-    if (state.lastBattle) panel.append(battleResultCard(state.lastBattle));
+    if (state.phase === 'resolve' && state.combat.lossesApplied && state.lastBattle)
+      panel.append(battleResultCard(state.lastBattle));
   }
 
   function trayChit(id, action, {label = R.chit(id).label, pressed} = {}) {
