@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const fields = ['turn', 'phase', 'units', 'control', 'breakScore', 'log', 'declared',
-    'pending', 'combatQueue', 'moveState', 'undoStack', '_grp', 'winner', 'sovReinf'];
+    'pending', 'combatQueue', 'moveState', 'undoStack', '_grp', 'winner', 'sovReinf', 'turnReports'];
   const clone = value => JSON.parse(JSON.stringify(value));
   function actor(g) {
     return g.pending?.retreat.length ? g.unit(g.pending.retreat[0].unit).side : g.activeSide();

@@ -81,13 +81,16 @@ function stopDokusoDiceAnimation() {
 function showDokusoFinalDie(result) {
   stopDokusoDiceAnimation();
   const die = document.getElementById('dokusoOnlineDie');
+  die.hidden = !!result.zeroDefense;
   die.textContent = `${DICE[result.die] || ''} ${result.die}`.trim();
   die.setAttribute('aria-label', `ダイス ${result.die}`);
   die.removeAttribute('aria-hidden');
-  document.getElementById('dokusoOnlineResultDetail').textContent = `${D.RESULT_NAME[result.result]}（${result.result}）`;
+  const detail = result.zeroDefense ? ZERO_DEFENSE_TEXT + ' ／ ' : '';
+  document.getElementById('dokusoOnlineResultDetail').textContent = `${detail}${D.RESULT_NAME[result.result]}（${result.result}）`;
 }
 function animateDokusoOnlineDie(result, revealBoard) {
   const die = document.getElementById('dokusoOnlineDie');
+  die.hidden = false;
   const finish = () => {
     showDokusoFinalDie(result);
     dokusoDiceTimer = setTimeout(revealBoard, 250);
@@ -269,7 +272,7 @@ function dokusoReceiveView(data, seat) {
   const room = DOKUSO_NET_CORE.unpack(D, MD, DOKUSO_UNIT_IMAGES, data.public);
   const first = dokusoSeenView === null;
   const result = room.result && (first || JSON.stringify(ui.lastResult) !== JSON.stringify(room.result)) ? room.result : null;
-  if (!result || first) {
+  if (!result || first || result.zeroDefense) {
     dokusoApplyView(data, seat, room, result);
     return;
   }
@@ -331,7 +334,8 @@ function dokusoApplyView(data, seat, room, result, resultAlreadyShown = false) {
   languageSelect.disabled = true; // A room keeps its creation language.
   document.getElementById('dokusoRoomMenu').hidden = false;
   dokusoOnlineDrive();
-  if (transition) showDokusoOnlinePhase(transition.phase, transition.turn);
+  if (game.phase === 'over' && (first || phaseChanged)) showEnd();
+  else if (transition) showDokusoOnlinePhase(transition.phase, transition.turn);
   if (result && !resultAlreadyShown) {
     showDokusoOnlineResult(result);
     showDokusoFinalDie(result);

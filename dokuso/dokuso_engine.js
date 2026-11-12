@@ -118,6 +118,7 @@
       this.control = {};          // 都市・大都市 → 'sov' | 'ger'（一度もドイツに支配されていない都市はソ連）
       this.breakScore = 0;
       this.log = [];
+      this.turnReports = {};
       this.listeners = [];
       this.declared = [];         // 戦闘の組み合わせ
       this.pending = null;        // 判定中の戦闘の処理待ち（退却・前進の選択）
@@ -227,7 +228,13 @@
       if (this.enemyAt(h, u.side)) return false;
       return this.units.filter(v => v.alive && v.hex === h && v.side === u.side && v !== u).length < STACK_MAX;
     }
-    place(u, h) { if (!this.canPlace(u, h)) return false; u.hex = h; this.emit({ type: 'change' }); return true; }
+    place(u, h) {
+      if (!this.canPlace(u, h)) return false;
+      u.hex = h;
+      if (u.side === 'ger') this._cancelHoldOrdersAt(h);
+      this.emit({ type: 'change' });
+      return true;
+    }
     unplace(u) { if (this.phase !== 'setup_' + u.side) return false; u.hex = null; this.emit({ type: 'change' }); return true; }
     setupUnits(side) { return this.units.filter(u => u.side === side && u.area !== 'reinf'); }
     setupDone(side) { return this.setupUnits(side).every(u => u.hex); }
@@ -289,6 +296,7 @@
       }
       this.addLog(`ターン${this.turn} ${PHASE_NAME[p]}`, 'phase');
       this.emit({ type: 'phase' });
+      if (p === 'sov_move') for (const u of this.onMap('sov')) if (u.holdTarget) this.moveOnHoldOrder(u);
     }
     _sovReinforce() {
       const uid = this.sovReinf[this.turn];
@@ -306,7 +314,15 @@
         const side = this.phase.slice(0, 3);
         const over = this.overStacked(side);
         if (over.length) return { ok: false, reason: `ヘクス ${over.join(', ')} に${STACK_MAX + 1}個以上重なっています（移動の終了時は${STACK_MAX}個まで）` };
-        if (side === 'ger') this._checkBreakthrough();
+        if (side === 'ger') {
+          this._checkBreakthrough();
+          const moves = [];
+          for (const u of this.onMap('ger')) {
+            const from = this.moveState[u.id]?.start;
+            if (from && from !== u.hex) moves.push({ area: u.area, from, to: u.hex });
+          }
+          this.turnReports[this.turn] = { moves };
+        }
         this._enterPhase(side + '_combat');
         return { ok: true };
       }
@@ -314,8 +330,12 @@
         if (this.combatQueue && (this.combatQueue.length || this.pending)) return { ok: false, reason: '戦闘の判定が終わっていません' };
         if (this.declared.length && !this.combatQueue) return { ok: false, reason: '宣言した戦闘を判定してください' };
         if (this.phase === 'sov_combat') this._enterPhase('ger_move');
-        else if (this.turn >= LAST_TURN) this._gameOver();
-        else { this.turn++; this._enterPhase('sov_move'); }
+        else {
+          const score = this.scores();
+          this.turnReports[this.turn] = { ...this.turnReports[this.turn], score: { ger: score.ger, sov: score.sov } };
+          if (this.turn >= LAST_TURN) this._gameOver(score);
+          else { this.turn++; this._enterPhase('sov_move'); }
+        }
         return { ok: true };
       }
       return { ok: false, reason: 'このフェイズは終了できません' };
@@ -336,11 +356,14 @@
     reachable(u) { return this.reachableGroup([u]); }
     // スタックでまとめて動く時は、残り移動力のいちばん少ない駒に合わせる
     reachableGroup(units) {
-      const out = new Map();
-      if (!units.length) return out;
-      const u = units[0];
-      if (!units.every(v => this.canMove(v) && v.hex === u.hex)) return out;
-      const ms = { mp: Math.min(...units.map(v => this.moveState[v.id].mp)) };
+      if (!units.length || !units.every(v => this.canMove(v) && v.hex === units[0].hex)) return new Map();
+      return this._movementRange(units, Math.min(...units.map(v => this.moveState[v.id].mp)));
+    }
+    previewMove(u) {
+      return u?.alive && u.hex ? this._movementRange([u], u.mov) : new Map();
+    }
+    _movementRange(units, mp) {
+      const out = new Map(), u = units[0];
       const side = u.side, start = u.hex;
       // 第1ターンは他の味方軍の配置エリアへ入れない。
       // 自分のエリアから出て国境を越える移動は通常どおり可能。
@@ -360,7 +383,7 @@
           if (friendlyAreas?.has(n) && ownAreas.some(area => !area.has(n))) continue;
           if (this.enemyAt(n, side)) continue;
           const c = cost + this.moveCost(h, n);
-          if (c > ms.mp) continue;
+          if (c > mp) continue;
           if (adjH && this.adjEnemy(n, side)) continue; // 隣接→隣接は禁止
           if (!best.has(n) || c < best.get(n)) { best.set(n, c); prev.set(n, h); q.push([c, n]); }
         }
@@ -374,7 +397,7 @@
     }
     revisionTargets(u) {
       const original = this.moveState?.[u.id];
-      if (this.phase !== 'sov_move' || u.side !== 'sov' || !u.alive || !original?.start) return new Map();
+      if (this.phase !== 'sov_move' || u.side !== 'sov' || !u.alive || u.holdTarget || !original?.start) return new Map();
       const current = u.hex;
       const from = original.start;
       u.hex = from;
@@ -392,7 +415,72 @@
         this.moveState[u.id] = original;
       }
     }
-    canMove(u) { const ms = this.moveState && this.moveState[u.id]; return !!(ms && u.alive && u.hex && !ms.stopped && ms.mp > 0 && this.phase === u.side + '_move'); }
+    _canSpendMovement(u) {
+      const ms = this.moveState?.[u.id];
+      return !!(ms && u.alive && u.hex && !ms.stopped && ms.mp > 0 && this.phase === u.side + '_move');
+    }
+    canMove(u) { return !u.holdTarget && this._canSpendMovement(u); }
+
+    canSetHoldTarget(u, h) {
+      return u?.side === 'sov' && u.alive && !!u.hex && this.map.passable(h) &&
+        this.control[h] !== 'ger' && !this.enemyAt(h, 'sov');
+    }
+    setHoldTarget(u, h) {
+      if (u?.side !== 'sov' || !u.alive || !u.hex) return false;
+      if (h != null && !this.canSetHoldTarget(u, h)) return false;
+      u.holdRevision = (u.holdRevision ?? 0) + 1;
+      if (h == null) { delete u.holdTarget; return true; }
+      u.holdTarget = h;
+      this.moveOnHoldOrder(u);
+      return true;
+    }
+    holdOrders() {
+      return this.onMap('sov').filter(u => u.holdTarget).map(u => [u.id, u.holdTarget, u.holdRevision ?? 0]);
+    }
+    restoreHoldOrders(orders) {
+      // ドイツ軍の移動を戻しても、そのあとに人間が変更・解除した命令は維持する。
+      for (const [id, target, revision = 0] of orders || []) {
+        const u = this.unit(id);
+        if (u && (u.holdRevision ?? 0) === revision) u.holdTarget = target;
+      }
+    }
+    _cancelHoldOrdersAt(h) {
+      for (const u of this.units) if (u.alive && u.holdTarget === h) {
+        delete u.holdTarget;
+        this.addLog(`${this.unitName(u)}（目的地 ${h}）の死守命令を解除`);
+      }
+    }
+    moveOnHoldOrder(u) {
+      const target = u.holdTarget;
+      if (!target) return false;
+      if (!this.canSetHoldTarget(u, target)) { this._cancelHoldOrdersAt(target); return false; }
+      if (u.hex === target || !this._canSpendMovement(u)) return false;
+
+      const reachable = this._movementRange([u], this.moveState[u.id].mp);
+      for (const hex of reachable.keys()) if (this.friendCount(hex, u.side) >= STACK_MAX) reachable.delete(hex);
+      if (!reachable.size) return false;
+      // 目的地から逆向きに探索し、今ターンに止まれる駒の位置を選ぶ。
+      const enemy = new Set(this.onMap('ger').map(v => v.hex));
+      const zoc = new Set([...enemy].flatMap(h => this.map.neighbors(h)));
+      const best = new Map([[target, 0]]), queue = [[0, target]];
+      let stop = null, stopCost = Infinity;
+      while (queue.length) {
+        queue.sort((a, b) => b[0] - a[0]);
+        const [cost, h] = queue.pop();
+        if (cost !== best.get(h)) continue;
+        if (cost > stopCost) return this._moveGroup([u], stop, reachable.get(stop));
+        if (h === u.hex) break;
+        if (!stop && reachable.has(h)) { stop = h; stopCost = cost; }
+        for (const from of this.map.neighbors(h)) {
+          if (enemy.has(from) || !this.map.passable(from) || (zoc.has(from) && zoc.has(h))) continue;
+          const step = this.moveCost(from, h), next = cost + step;
+          if (step > u.mov || next >= (best.get(from) ?? Infinity)) continue;
+          best.set(from, next);
+          queue.push([next, from]);
+        }
+      }
+      return false;
+    }
     moveUnit(u, h) { return this.moveGroup([u], h); }
     // 同じヘクスにいて、まだ動ける味方の駒はまとめて移動できる。
     stackMates(u) {
@@ -406,6 +494,7 @@
         units: this.units.map(u => ({ id: u.id, hex: u.hex, alive: u.alive, revealed: u.revealed, broke: u.broke })),
         ms: JSON.parse(JSON.stringify(this.moveState)), control: Object.assign({}, this.control),
         logLen: this.log.length, breakScore: this.breakScore, grp: this._grp,
+        holdOrders: this.phase === 'ger_move' ? this.holdOrders() : undefined,
       });
     }
     canUndo() { return !!(this.undoStack && this.undoStack.length) && (this.phase === 'ger_move' || this.phase === 'sov_move'); }
@@ -413,7 +502,13 @@
       if (!this.canUndo()) return false;
       const s = this.undoStack.pop();
       for (const x of s.units) { const u = this.unit(x.id); u.hex = x.hex; u.alive = x.alive; u.revealed = x.revealed; u.broke = x.broke; }
+      this.restoreHoldOrders(s.holdOrders);
       this.moveState = s.ms; this.control = s.control; this.log.length = s.logLen; this.breakScore = s.breakScore; this._grp = s.grp;
+      if (this.phase === 'ger_move') {
+        for (const [, h] of this.holdOrders()) {
+          if (this.control[h] === 'ger' || this.enemyAt(h, 'sov')) this._cancelHoldOrdersAt(h);
+        }
+      }
       this.emit({ type: 'undo' });
       return true;
     }
@@ -422,6 +517,9 @@
       if (units.length > 1 && !units.slice(1).every(v => this.stackMates(units[0]).includes(v))) return false;
       const r = this.reachableGroup(units).get(h);
       if (!r) return false;
+      return this._moveGroup(units, h, r);
+    }
+    _moveGroup(units, h, r) {
       this._snap();
       const gid = 'm' + (this._grp = (this._grp || 0) + 1);
       for (const u of units) {
@@ -441,6 +539,7 @@
         this.control[h] = u.side;
         this.addLog(`${SIDE_NAME[u.side]}が${FAC_NAME[this.map.facility(h)]}（${h}）を支配`, 'control');
       }
+      if (u.side === 'ger') this._cancelHoldOrdersAt(h);
     }
 
     // ===== オーバーラン（ドイツのみ。移動の途中で敵に隣接し、10倍以上なら除去して移動を続ける）
@@ -556,7 +655,11 @@
       if (this.combatQueue || !this.combatSide()) return false;
       const side = this.combatSide();
       for (const d of this.declared) {
-        const all = [...d.attackers.map(id => this.unit(id)), ...this.unitsAt(d.hex).filter(v => v.side !== side)];
+        const defenders = this.unitsAt(d.hex).filter(u => u.side !== side);
+        if (defenders.length && defenders.every(u => u.side === 'sov' && u.str === 0)) {
+          d.zeroDefenders = defenders.map(u => u.id);
+        }
+        const all = [...d.attackers.map(id => this.unit(id)), ...defenders];
         for (const u of all) if (u.side === 'sov' && !u.revealed) { u.revealed = true; this.emit({ type: 'reveal', unit: u.id }); }
       }
       if (this.declared.length) this.addLog(`戦闘の組み合わせ ${this.declared.length}件。ソ連の戦闘力が判明`, 'combat');
@@ -573,29 +676,26 @@
       const atk = d.attackers.map(id => this.unit(id)).filter(u => u.alive && u.hex);
       const def = this.unitsAt(d.hex).filter(v => v.side !== side);
       const no = this.declared.length - this.combatQueue.length + 1;
-      if (!atk.length || !def.length) return { hex: d.hex, skip: true, no, total: this.declared.length };
+      const zeroDefense = !def.length && !!d.zeroDefenders?.length;
+      if (!atk.length || (!def.length && !zeroDefense)) return { hex: d.hex, skip: true, no, total: this.declared.length };
       const mult = this.defMult(d.hex, [...new Set(atk.map(u => u.hex))]);
       const att = atk.reduce((s, u) => s + u.str, 0), dfn = def.reduce((s, u) => s + u.str, 0) * mult;
-      return { hex: d.hex, attackers: atk.map(u => u.id), defenders: def.map(u => u.id), att, def: dfn, mult, odds: this.oddsOf(att, dfn), side, no, total: this.declared.length };
+      return { hex: d.hex, attackers: atk.map(u => u.id), defenders: zeroDefense ? d.zeroDefenders : def.map(u => u.id),
+        att, def: dfn, mult, odds: this.oddsOf(att, dfn), side, no, total: this.declared.length, zeroDefense };
     }
     // 次の戦闘を判定。結果に退却・前進の選択が残る時は pending に入る
     resolveNext() {
-      if (!this.combatQueue || this.pending) return null;
-      if (!this.combatQueue.length) return null;
-      const i = this.combatQueue.shift();
-      const d = this.declared[i];
-      const side = this.combatSide();
-      const atk = d.attackers.map(id => this.unit(id)).filter(u => u.alive && u.hex);
-      const def = this.unitsAt(d.hex).filter(v => v.side !== side);
-      if (!atk.length || !def.length) { this.addLog(`戦闘（${d.hex}）: 相手がいないため取りやめ`); this.emit({ type: 'change' }); return { skipped: true, hex: d.hex }; }
-      const mult = this.defMult(d.hex, [...new Set(atk.map(u => u.hex))]);
-      const att = atk.reduce((s, u) => s + u.str, 0);
-      const dfn = def.reduce((s, u) => s + u.str, 0) * mult;
-      const odds = this.oddsOf(att, dfn);
-      const die = this.roll();
-      const res = odds === '7:1' ? 'DE' : odds === '1:4' ? 'AE' : CRT[odds][die - 1];
-      const r = { hex: d.hex, attackers: atk.map(u => u.id), defenders: def.map(u => u.id), att, def: dfn, mult, odds, die, result: res, side };
-      this.addLog(`戦闘 ${d.hex}: 攻撃${att} 対 防御${dfn}（×${mult}）→ ${odds.replace(':', '対')}、ダイス${die} → ${res}（${RESULT_NAME[res]}）`, 'combat');
+      const info = this.peekNext();
+      if (!info) return null;
+      this.combatQueue.shift();
+      const { hex, attackers, defenders, att, def: dfn, mult, odds, side, zeroDefense } = info;
+      if (info.skip) { this.addLog(`戦闘（${hex}）: 相手がいないため取りやめ`); this.emit({ type: 'change' }); return { skipped: true, hex }; }
+      const atk = attackers.map(id => this.unit(id)), def = defenders.map(id => this.unit(id));
+      const die = zeroDefense ? null : this.roll();
+      const res = zeroDefense || odds === '7:1' ? 'DE' : odds === '1:4' ? 'AE' : CRT[odds][die - 1];
+      const r = { hex, attackers, defenders, att, def: dfn, mult, odds, die, result: res, side, zeroDefense };
+      const detail = zeroDefense ? '守備隊の戦闘力は0' : `攻撃${att} 対 防御${dfn}（×${mult}）→ ${odds.replace(':', '対')}、ダイス${die}`;
+      this.addLog(`戦闘 ${hex}: ${detail} → ${res}（${RESULT_NAME[res]}）`, 'combat');
       this.pending = { r, retreat: [], advance: null };
       if (res === 'AE') for (const u of atk) this._kill(u, '攻撃側全滅');
       else if (res === 'AR') this.pending.retreat = atk.map(u => ({ unit: u.id, dist: 1 }));
@@ -635,7 +735,7 @@
       const p = this.pending;
       p.retreat = p.retreat.filter(x => this.unit(x.unit).alive);
       if (!p.retreat.length && p.advanceAfter && !p.advance) {
-        const atk = p.r.attackers.map(id => this.unit(id)).filter(u => u.alive && u.hex);
+        const atk = p.r.attackers.map(id => this.unit(id)).filter(u => u.alive && u.hex && !u.holdTarget);
         if (atk.length && !this.unitsAt(p.r.hex).length) p.advance = { hex: p.r.hex, units: atk.map(u => u.id) };
         p.advanceAfter = false; // 前進の機会は1回だけ
       }
@@ -694,7 +794,7 @@
     advanceState(uid) { const p = this.pending; return (p && p.advance && p.advance.done && p.advance.done[uid]) || null; }
     advanceTargets(uid) {
       const p = this.pending, u = this.unit(uid);
-      if (!p || !p.advance || !u || !u.alive || !p.advance.units.includes(uid)) return [];
+      if (!p || !p.advance || !u || !u.alive || u.holdTarget || !p.advance.units.includes(uid)) return [];
       const H = p.advance.hex, st = this.advanceState(uid);
       if (!st) return this.friendCount(H, u.side) < STACK_MAX ? [H] : [];
       if (st === 'in' && u.mov >= 8 && u.hex === H) return this.advanceExtraOptions(uid);
@@ -762,9 +862,8 @@
       const kills = this.units.filter(u => u.side === 'ger' && !u.alive).reduce((t, u) => t + KILL_POINTS[u.type], 0);
       return { ger: gerCities + this.breakScore, gerCities, gerBreak: this.breakScore, sov: sovCities + kills, sovCities, sovKills: kills, cutCities: cut };
     }
-    _gameOver() {
+    _gameOver(s = this.scores()) {
       this.phase = 'over';
-      const s = this.scores();
       this.winner = s.ger > s.sov ? 'ger' : s.sov > s.ger ? 'sov' : 'draw';
       this.addLog(`ゲーム終了: ドイツ ${s.ger}点（都市${s.gerCities}＋突破${s.gerBreak}） 対 ソ連 ${s.sov}点（都市${s.sovCities}＋壊滅${s.sovKills}） → ${this.winner === 'draw' ? '引き分け' : SIDE_NAME[this.winner] + 'の勝ち'}`, 'score');
       this.emit({ type: 'phase' });

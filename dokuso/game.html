@@ -26,6 +26,9 @@
   #jumpBtns button { background: var(--map-river); border-color: #9fb7bf; }
   #jumpBtns button:disabled { background: var(--map-chip); border-color: var(--map-border); color: #c6c7b9; cursor: default; }
   #turnBtns button:disabled { background: var(--map-chip); border-color: var(--map-border); color: #c6c7b9; font-weight: normal; cursor: default; }
+  #reportControls:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  #reportControls select { color: var(--map-ink); background: var(--map-chip); border: 1px solid #9a9d85; border-radius: 4px; padding: 3px 5px; }
+  #reportMapStatus { font-size: 12px; color: var(--map-cream); white-space: normal; }
   #bottom button.help { background: var(--map-river); border-color: #9fb7bf; font-weight: bold; }
   #main { position: relative; grid-row: 2; min-width: 0; min-height: 0; display: flex; }
   #bottom { grid-row: 3; min-height: 36px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; padding: 5px 12px; background: var(--map-olive); border-top: 1px solid var(--map-border); white-space: nowrap; }
@@ -35,6 +38,7 @@
   #bottom button:disabled { opacity: .4; cursor: default; }
   #bottom b.flash { animation: scoreFlash 1.2s ease-out; }
   #actBtns, #turnBtns, #jumpBtns { display: flex; flex-wrap: wrap; gap: 4px 6px; max-width: 100%; }
+  #turnBtns[hidden], #jumpBtns[hidden] { display: none; }
   #actBtns button { background: var(--map-button); }
   #actBtns button.go { background: var(--map-green); border-color: #8ca88c; font-weight: bold; }
   #actBtns button.warn { background: #713d34; border-color: #b98470; }
@@ -67,6 +71,7 @@
   .unit .mk { position: absolute; left: -5px; bottom: -5px; font-size: 10px; font-weight: bold; color: #fff; padding: 0 3px; border-radius: 3px; border: 1px solid #fff; line-height: 14px; }
   .unit .mk.moving { background: #1e88e5; }
   .unit .mk.done { background: #616161; }
+  .unit .mk.hold { background: #8a2734; }
   .row .mk { font-size: 11px; font-weight: bold; color: #fff; padding: 0 4px; border-radius: 3px; margin-left: 4px; }
   .row .mk.moving { background: #1e88e5; } .row .mk.done { background: #616161; } .row .mk.fresh { background: #2e7d32; }
   .row button.on { background: #2e6b3a; border-color: #8bc34a; font-weight: bold; }
@@ -135,6 +140,17 @@
   #modal .mode-disabled, #modal button:disabled { opacity: .55; filter: grayscale(1); cursor: default; }
   #modal .warn { color: #ffcc80; font-size: 12px; margin-top: 10px; line-height: 1.5; }
   #modal ul { margin: 4px 0; padding-left: 20px; }
+  #modal .box:has(.game-report) { padding: 14px 18px; }
+  #modal .game-report h2 { margin-bottom: 5px; }
+  .game-report { user-select: text; line-height: 1.4; }
+  .game-report .outcome { font-size: 21px; font-weight: bold; color: #f0d070; margin: 0; }
+  .game-report .report-table { width: 100%; border-collapse: collapse; }
+  .game-report th, .game-report td { padding: 4px 8px; border-bottom: 1px solid #414956; vertical-align: top; }
+  .game-report thead { background: #343b46; }
+  .game-report th[scope=row] { text-align: left; white-space: nowrap; }
+  .game-report .score { text-align: center; font-variant-numeric: tabular-nums; }
+  #modal .report-table button { margin: 0; padding: 2px 8px; font-size: 12px; white-space: nowrap; }
+  .game-report .report-note { color: #c7cdd6; font-size: 12px; margin: 7px 0 0; }
   #phaseBanner { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 95; display: none; text-align: center; padding: 18px 40px; border-radius: 12px; box-shadow: 0 6px 30px rgba(0,0,0,.85); cursor: pointer; transition: opacity .35s; }
   #phaseBanner .t1 { font-size: 18px; color: #eee; }
   #phaseBanner .t2 { font-size: 34px; font-weight: bold; margin: 4px 0; color: #fff; }
@@ -194,6 +210,12 @@
   <span id="jumpBtns">
     <button id="btnJumpMove" onclick="jumpNext('move')">未移動へ</button>
     <button id="btnJumpAtk" onclick="jumpNext('atk')">未攻撃へ</button>
+  </span>
+  <span id="reportControls" hidden>
+    <button type="button" onclick="showEnd()">対局レポート</button>
+    <label for="reportTurn">ドイツ軍の移動</label>
+    <select id="reportTurn" onchange="showReportMap(Number(this.value))"></select>
+    <span id="reportMapStatus" role="status"></span>
   </span>
   <div id="topActions">
     <span id="actBtns"></span>
@@ -260,8 +282,8 @@ let aiBusy = false, runToken = 0;
 let trails = []; // 移動の経路の矢印 { side, path:[from, ..., to] }
 
 const SAVE_FIELDS = ['turn', 'phase', 'units', 'control', 'breakScore', 'log', 'declared',
-  'pending', 'combatQueue', 'moveState', 'undoStack', '_grp', 'winner', 'sovReinf'];
-const INITIAL_UI = { ...ui, aiMoveDone: false, aiSetupReview: false, setupArea: null, fanHex: null, moveEdit: null };
+  'pending', 'combatQueue', 'moveState', 'undoStack', '_grp', 'winner', 'sovReinf', 'turnReports'];
+const INITIAL_UI = { ...ui, aiMoveDone: false, aiSetupReview: false, setupArea: null, fanHex: null, moveEdit: null, holdPick: null, germanPreview: null, reportTurn: null };
 
 // ===== 開始画面・遊び方 =====
 function showStart() {
@@ -312,6 +334,11 @@ function showHelp(fromStart) {
       <li>上の「未移動へ」を押すたびに、まだ動かしていない駒のヘクスへ地図が移ります（見落とし防止）。</li>
       <li>終わったら上の「移動終了」。</li>
       <li>ソ連軍AIの移動確認では、駒をクリック →「この駒の移動を修正」→ 行き先 →「修正を確定」。選んだ駒だけが変わります。「修正を中止」か Esc で元の案に戻れます。</li>
+      <li>ソ連軍AIの移動確認で駒を選び、「移動前のヘクスに戻す」を押すと、すぐ元の位置に戻ります。続けて右パネルから死守命令を出せます。</li>
+      <li>ソ連の手番では、ドイツ軍の駒をクリックすると青い枠でその駒の移動範囲を表示します。</li>
+      <li>対戦補助あり・なしのどちらでも、ソ連軍の駒をクリック → 右の「選んだヘクス」で「死守命令を出す」→ 地図で目的地をクリック。ドイツ軍の手番でも指定できます。右の欄が閉じている時は、地図の右端の三角で開きます。</li>
+      <li>地図に出る黄色い矢印で目的地を確認し、右の「確定」を押すと命令が有効になります。</li>
+      <li>ソ連軍の移動フェイズに目的地へ自動で向かい、到着したらその場を守ります。現在地を指定すればその場を守ります。命令は右の「死守命令を解除」で取り消せます。ドイツ軍が目的地に入るか支配した場合も解除されます。</li>
     </ul>
     ${window.DOKUSO_ONLINE_CONFIG?.enabled ? '<h3>オンライン対戦</h3><p>部屋を作り、8桁の部屋番号を相手に伝えてください。作成者がソ連、参加者がドイツです。参加前に同じ言語を選びます。手番の人だけが操作でき、退却先は各陣営が選びます。戦闘のダイスは作成者の画面で1回だけ振り、結果を共有します。双方ともページを開いたままにしてください。断線後は同じブラウザと部屋番号で再接続できます。部屋の有効期限は48時間です。「接続」→「この端末で退出」は部屋を残し、「部屋を閉じる」は対局を終了します。オンライン中は本体のセーブ・ロードを使いません。</p>' : ''}
     <h3>対局ファイル</h3>
@@ -320,7 +347,7 @@ function showHelp(fromStart) {
     <ul>
       <li>攻撃に使う自分の駒をクリック（重なっている駒はまとめて選ばれます）。重なりを分ける時は <b>Shift＋クリック</b> で左右に開いて1個ずつクリック（上は右の敵、下は左の敵のように分けられます）。</li>
       <li>攻撃する敵のヘクス（赤く塗られた所）をクリックすると、組み合わせが宣言されます。</li>
-      <li>戦闘力0の駒は、表になった時点で除去されます。</li>
+      <li>戦闘力0の駒は、表になった時点で除去されます。守備隊が全て戦闘力0なら、攻撃側はダイスを振らずに勝利し、戦闘後前進できます。</li>
       <li>全部宣言したら「判定する」。地図がその場所へ動き、左上の札で、ソ連の駒を裏返す → 戦闘力と比 → その比の戦闘結果の一覧 → サイコロ、の順に1つずつ判定します。「次へ」で次の戦闘へ。</li>
       <li>退却先は紫のヘクスをクリック。</li>
       <li>戦闘後前進は移動と同じ操作です。前進させる駒をクリック（重なりはまとめて、Shift＋クリックで1個ずつ）→ 敵のいたヘクス（緑の太枠）をクリック。移動力8以上の駒は続けてもう1ヘクス（緑）をクリックできます。終わったら「前進を終える」。</li>
@@ -368,7 +395,7 @@ function installGame(nextGame, savedUI, savedTrails = []) {
       }
     }
     // 移動フェイズが終わったら（次のフェイズに移ったら）矢印を消す
-    if (ev.type === 'phase') { trails = []; showPhaseBanner(); }
+    if (ev.type === 'phase') { trails = []; ui.holdPick = null; ui.germanPreview = null; showPhaseBanner(); }
   });
   renderLog();
 }
@@ -426,8 +453,14 @@ function restoreGame(data) {
     nextGame = new D.Game(MD, DOKUSO_UNIT_IMAGES);
     for (const key of SAVE_FIELDS) if (Object.hasOwn(save.state, key)) nextGame[key] = save.state[key];
     nextGame.sovInitialAdjacentInfantry = new Set(save.state.sovInitialAdjacentInfantry);
+    restoreZeroDefenders(nextGame);
     savedUI = { ...save.ui };
-    if (savedUI.adv?.review) savedUI.adv.paths = new Map(savedUI.adv.paths);
+    if (savedUI.adv && nextGame.pending?.advance) {
+      const snapshot = savedUI.adv.origin
+        ? { paths: new Map(savedUI.adv.paths) }
+        : advanceSnapshot(nextGame);
+      Object.assign(savedUI.adv, snapshot);
+    }
   } catch {
     alert('保存した対局を読み込めませんでした。');
     return;
@@ -435,7 +468,9 @@ function restoreGame(data) {
   const assisted = savedControls === LOCAL_CONTROLS.assisted;
   savedUI.aiSetupReview = assisted && nextGame.phase === 'setup_sov' && (savedUI.aiSetupReview || nextGame.setupDone('sov'));
   savedUI.aiMoveDone = assisted && nextGame.phase === 'sov_move' && !!savedUI.aiMoveDone;
-  if (!savedUI.aiMoveDone || !nextGame.moveState?.[savedUI.moveEdit?.id]) savedUI.moveEdit = null;
+  if (!savedUI.aiMoveDone || !nextGame.moveState?.[savedUI.moveEdit?.id] || nextGame.unit(savedUI.moveEdit?.id)?.holdTarget) savedUI.moveEdit = null;
+  savedUI.holdPick = null;
+  savedUI.germanPreview = null;
   const retreating = savedUI.mode === 'retreat' && savedUI.retreatUnit &&
     savedControls[nextGame.unit(savedUI.retreatUnit)?.side] === 'human' &&
     nextGame.pending?.retreat?.[0]?.unit === savedUI.retreatUnit && nextGame.retreatOptions(savedUI.retreatUnit).length;
@@ -453,6 +488,19 @@ function restoreGame(data) {
   const view = document.getElementById('mapWrap');
   [view.scrollLeft, view.scrollTop] = save.scroll;
   document.getElementById('saveStatus').textContent = '保存した対局を読み込みました';
+}
+
+function restoreZeroDefenders(game) {
+  if (game.phase !== 'ger_combat' || !game.combatQueue?.length) return;
+  // 更新前に判定を始めて保存した対局では、まだ判定していない戦闘の守備隊を除去ログから戻す。
+  const losses = new Set(game.log.filter(e => e.kind === 'loss' && e.turn === game.turn && e.phase === game.phase).map(e => e.text));
+  for (const index of game.combatQueue) {
+    const attack = game.declared[index];
+    if (attack.zeroDefenders || game.enemyAt(attack.hex, 'ger')) continue;
+    const removed = game.units.filter(u => u.side === 'sov' && !u.alive && u.str === 0 && u.hex === attack.hex &&
+      u.killedTurn === game.turn && losses.has(`${game.unitName(u)}（${attack.hex}）が除去されました（戦闘力0）`));
+    if (removed.length) attack.zeroDefenders = removed.map(u => u.id);
+  }
 }
 
 const AI_DELAY = 900;
@@ -552,6 +600,7 @@ const RESULT_EXPL = {
   AE: '攻撃した駒が全部除去されます', AR: '攻撃した駒が1ヘクス退却します', DR: '防御側が2ヘクス退却します。攻撃側は戦闘後前進できます',
   DE: '防御側が全部除去されます。攻撃側は戦闘後前進できます', EX: '駒の戦闘力（地形の倍率はかけない）の少ない側が全滅し、多い側もその数字以上の駒を失います', C: '何も起こりません',
 };
+const ZERO_DEFENSE_TEXT = '守備隊の戦闘力は0';
 const anyHuman = () => ctrl.ger === 'human' || ctrl.sov === 'human';
 let cardBusy = false;
 function showCombatCard(info) {
@@ -585,16 +634,14 @@ function showCombatCard(info) {
   if (hasSov) steps.push(() => { card.querySelectorAll('img.ccU').forEach(im => { const u = game.unit(im.dataset.id); im.src = encodeURI(unitImg(u)); im.title = game.unitName(u); }); $('ccStage').textContent = ''; });
   // 2) 戦闘力と比
   steps.push(() => { $('ccStr').style.display = 'block'; });
-  steps.push(() => { $('ccOdds').style.display = 'block'; });
-  // 3) 戦闘結果の一覧
-  steps.push(() => { $('ccTable').style.display = 'table'; $('ccStage').textContent = fixed ? '比が大きく（小さく）、結果は決まっています' : 'サイコロを振ります…'; });
+  if (!info.zeroDefense) {
+    steps.push(() => { $('ccOdds').style.display = 'block'; });
+    steps.push(() => { $('ccTable').style.display = 'table'; $('ccStage').textContent = fixed ? '比が大きく（小さく）、結果は決まっています' : 'サイコロを振ります…'; });
+  }
   // 4) サイコロを振って判定
   steps.push(() => {
-    const dEl = $('ccDice'); dEl.style.display = 'block'; dEl.classList.add('roll');
-    let k = 0;
-    const spin = setInterval(() => { dEl.textContent = DICE[1 + (k++ % 6)]; }, 70);
-    setTimeout(() => {
-      clearInterval(spin);
+    const dEl = $('ccDice');
+    const resolve = () => {
       if (tk !== runToken) return;
       const r = game.resolveNext();
       if (!r) { cardBusy = false; return; }
@@ -604,14 +651,19 @@ function showCombatCard(info) {
       $('ccStage').textContent = '';
       if (!fixed) { const tr = card.querySelector(`#ccTable tr[data-d="${r.die}"]`); if (tr) tr.className = 'hit'; }
       $('ccRes').textContent = `${fixed ? '' : 'ダイス ' + r.die + ' → '}${D.RESULT_NAME[r.result]}`;
-      $('ccExpl').textContent = RESULT_EXPL[r.result] || '';
+      $('ccExpl').textContent = info.zeroDefense ? ZERO_DEFENSE_TEXT + '。' + RESULT_EXPL.DE : RESULT_EXPL[r.result] || '';
       render();
       if (anyHuman()) {
         const b = document.createElement('button'); b.textContent = '次へ';
         b.onclick = () => { b.disabled = true; hideCombatCard(); stepResolve(); };
         $('ccBtn').appendChild(b);
       } else later(() => { hideCombatCard(); stepResolve(); }, AI_DELAY * 3);
-    }, fixed ? 200 : Math.max(700, gap + 200));
+    };
+    if (info.zeroDefense) { resolve(); return; }
+    dEl.style.display = 'block'; dEl.classList.add('roll');
+    let k = 0;
+    const spin = setInterval(() => { dEl.textContent = DICE[1 + (k++ % 6)]; }, 70);
+    setTimeout(() => { clearInterval(spin); resolve(); }, fixed ? 200 : Math.max(700, gap + 200));
   });
   let n = 0;
   const next = () => { if (tk !== runToken) return; steps[n++](); if (n < steps.length) setTimeout(next, gap); };
@@ -666,14 +718,12 @@ function renderTopActions() {
   box.innerHTML = '';
   const message = document.getElementById('actionMsg');
   message.textContent = ui.msg ? ui.msg.replace(/<[^>]+>/g, '') : '';
-  if (!game) return;
+  if (!game || ui.holdPick) return;
   const b = (label, fn, cls, dis) => { const e = document.createElement('button'); e.textContent = label; if (cls) e.className = cls; if (dis) e.disabled = true; e.onclick = fn; box.appendChild(e); };
   const side = game.activeSide(), ph = game.phase, human = side && ctrl[side] === 'human';
   if (ui.mode === 'advance') {
-    if (ui.adv.review) {
-      b('前進を取り消す', () => restoreAdvance(false), '', !ui.adv.paths.size);
-      b('AI案に戻す', () => restoreAdvance(true));
-    }
+    b('戦闘後前進をやり直す', () => restoreAdvance(false), '', !ui.adv.paths.size);
+    if (ui.adv.review) b('AI案に戻す', () => restoreAdvance(true));
     b(ui.adv.review ? '前進を確定' : '前進を終える', finishAdvance, 'go');
     return;
   }
@@ -691,11 +741,16 @@ function renderTopActions() {
   if (ph === side + '_move') {
     if (reviewingSovietMove()) {
       if (ui.moveEdit) {
-        b('修正を確定', confirmSovietMoveEdit, 'go', !ui.moveEdit.target);
+        const unit = game.unit(ui.moveEdit.id);
+        b('修正を確定', () => applySovietMoveEdit(unit, ui.moveEdit.target), 'go', !ui.moveEdit.target);
         b('修正を中止', cancelSovietMoveEdit);
       } else {
         const unit = game.unit(ui.moveSel[0]);
-        if (unit?.side === 'sov') b('この駒の移動を修正', () => beginSovietMoveEdit(unit), 'go');
+        const state = unit && game.moveState[unit.id];
+        if (unit?.side === 'sov' && !unit.holdTarget && state?.start) {
+          if (state.moved) b('移動前のヘクスに戻す', () => returnSovietMoveToStart(unit), '', !game.revisionTargets(unit).has(state.start));
+          b('この駒の移動を修正', () => beginSovietMoveEdit(unit), 'go');
+        }
       }
       return;
     }
@@ -709,7 +764,7 @@ function renderTopActions() {
 }
 
 // ===== 上の帯の「移動終了」「戦闘終了」 =====
-function humanTurnSide() { if (isDokusoOnline() && !dokusoOnlineMyTurn()) return null; const sd = game && game.activeSide(); return (sd && ctrl[sd] === 'human' && !ui.mode) ? sd : null; }
+function humanTurnSide() { if (isDokusoOnline() && !dokusoOnlineMyTurn()) return null; const sd = game && game.activeSide(); return (sd && ctrl[sd] === 'human' && !ui.mode && !ui.holdPick) ? sd : null; }
 function canEndMove() { const sd = humanTurnSide(); return !!sd && game.phase === sd + '_move'; }
 function canStartCombatResolution() {
   const side = humanTurnSide();
@@ -780,10 +835,11 @@ function reviewingSovietMove() {
 
 // 確定するまでは盤面を変えず、駒の移動開始地点から行き先を選び直す。
 function beginSovietMoveEdit(unit) {
-  if (!reviewingSovietMove() || ui.moveEdit || unit.side !== 'sov') return;
+  if (!reviewingSovietMove() || ui.moveEdit || unit.side !== 'sov' || unit.holdTarget || ui.holdPick) return;
   const from = game.moveState[unit.id]?.start;
   if (!from) return;
   ui.moveEdit = { id: unit.id, target: null };
+  ui.germanPreview = null;
   ui.hex = from;
   ui.moveSel = [unit.id];
   ui.fanHex = null;
@@ -798,13 +854,16 @@ function cancelSovietMoveEdit() {
   ui.msg = '';
   render();
 }
-function confirmSovietMoveEdit() {
-  const { id, target } = ui.moveEdit;
-  const u = game.unit(id);
+function returnSovietMoveToStart(unit) {
+  const from = game.moveState[unit.id].start;
+  if (applySovietMoveEdit(unit, from)) scrollToHex(from);
+}
+function applySovietMoveEdit(u, target) {
+  const id = u.id;
   const state = game.moveState[id];
   const from = state.start;
   const route = game.revisionTargets(u).get(target);
-  if (!route) return;
+  if (!route) return false;
   const initial = game.undoStack[0]?.control || { ...game.control };
   const seq = Math.max(0, ...trails.map(t => t.seq)) + 1;
   trails = trails.map(t => ({ ...t, units: t.units.filter(unit => unit !== id) })).filter(t => t.units.length);
@@ -828,13 +887,16 @@ function confirmSovietMoveEdit() {
   renderLog();
   ui.moveEdit = null;
   ui.hex = target;
+  ui.moveSel = [id];
+  ui.fanHex = null;
   ui.msg = '';
   render();
+  return true;
 }
 
 // AI の移動を確認・修正したら、戦闘へ進める。
 function aiMoveNext() {
-  if (!ui.aiMoveDone || ui.moveEdit) return;
+  if (!ui.aiMoveDone || ui.moveEdit || ui.holdPick) return;
   const r = game.endPhase();
   if (!r.ok) { ui.msg = r.reason; render(); return; }
   Object.assign(ui, { aiMoveDone: false, moveSel: [], hex: null, fanHex: null, msg: '' });
@@ -843,7 +905,7 @@ function aiMoveNext() {
 function updateTopButtons() {
   const next = document.getElementById('btnAiNext');
   next.style.display = ui.aiMoveDone ? '' : 'none';
-  next.disabled = !!ui.moveEdit;
+  next.disabled = !!(ui.moveEdit || ui.holdPick);
   next.textContent = reviewingSovietMove() ? '移動を確定して戦闘へ' : '次へ進む';
   const jm = document.getElementById('btnJumpMove'), ja = document.getElementById('btnJumpAtk');
   const nm = jumpUnits('move').units.length, na = jumpUnits('atk').units.length; // ボタンの数は駒の数
@@ -882,11 +944,18 @@ function applyZoom() {
 // そのヘクスが地図の真ん中に来るように動かす
 function scrollToHex(h) {
   if (!game || !h) return;
-  const c = game.map.center(h), wrap = document.getElementById('mapWrap');
-  const left = c.x * zoom - wrap.clientWidth / 2, top = c.y * zoom - wrap.clientHeight / 2;
+  scrollToMapPoint(game.map.center(h));
+}
+function scrollToMapPoint({ x, y }) {
+  const wrap = document.getElementById('mapWrap');
+  const left = x * zoom - wrap.clientWidth / 2, top = y * zoom - wrap.clientHeight / 2;
   try { wrap.scrollTo({ left, top, behavior: 'smooth' }); } catch (e) { wrap.scrollLeft = left; wrap.scrollTop = top; }
 }
-function zoomBy(d) { zoom = Math.max(0.3, Math.min(1.6, Math.round((zoom + d) * 10) / 10)); applyZoom(); }
+function zoomBy(d) {
+  const minimum = game?.phase === 'over' ? 0.1 : 0.3;
+  zoom = Math.max(minimum, Math.min(1.6, Math.round((zoom + d) * 10) / 10));
+  applyZoom();
+}
 function hexAt(x, y) {
   if (!game) return null;
   let best = null, bd = 1e9;
@@ -920,6 +989,7 @@ function render() {
   renderSetupTray();
   updateTopButtons();
   renderTopActions();
+  updateReportControls();
 }
 // 点数（変わった時は黄色く光らせる）
 function setScore(id, v) {
@@ -991,6 +1061,12 @@ function drawOverlay() {
     for (const h of advExtraHexes()) fillHex(h, 'rgba(129,199,132,.5)');
   }
   if (ui.lastResult && game.combatQueue && !dokusoDeferredView) strokeHex(ui.lastResult.hex, '#ffeb3b', 5);
+  const german = inspectedGermanUnit();
+  if (german) {
+    for (const h of game.previewMove(german).keys()) strokeHex(h, '#38bdf8', 3, 0.9);
+    strokeHex(german.hex, '#38bdf8', 5, 0.96);
+  }
+  if (ph !== 'over') drawHoldOrders();
   if (ui.hex) strokeHex(ui.hex, '#ffffff', 2.5, 0.96);
   const retreatHex = game.unit(ui.retreatUnit)?.hex;
   if (retreatHex) {
@@ -1004,30 +1080,77 @@ function drawTrails() {
   const edit = ui.moveEdit;
   const preview = edit?.target && game.revisionTargets(game.unit(edit.id)).get(edit.target);
   if (preview) advancePaths.push({ side: 'sov', edited: true, path: [game.moveState[edit.id].start, ...preview.path] });
-  for (const t of [...trails, ...advancePaths]) {
-    const pts = t.path.map(h => game.map.center(h));
-    if (pts.length < 2) continue;
-    const color = t.edited ? '#ffdf43' : t.side === 'ger' ? 'rgba(20,20,20,.85)' : 'rgba(211,47,47,.9)';
-    ctx.save();
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = t.edited ? '#5a430b' : 'rgba(255,255,255,.75)'; ctx.lineWidth = 9;
-    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke();
-    ctx.strokeStyle = color; ctx.lineWidth = 5;
-    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke();
-    // 矢じり
-    const a = pts[pts.length - 2], b = pts[pts.length - 1];
-    const ang = Math.atan2(b.y - a.y, b.x - a.x), L = 20;
-    const tip = { x: b.x - Math.cos(ang) * 14, y: b.y - Math.sin(ang) * 14 };
-    ctx.fillStyle = color; ctx.strokeStyle = t.edited ? '#5a430b' : 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(tip.x, tip.y);
-    ctx.lineTo(tip.x - L * Math.cos(ang - 0.45), tip.y - L * Math.sin(ang - 0.45));
-    ctx.lineTo(tip.x - L * Math.cos(ang + 0.45), tip.y - L * Math.sin(ang + 0.45));
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    // 出発点の丸
-    ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 6, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); ctx.stroke();
-    ctx.restore();
+  const paths = game.phase === 'over' ? reportArrows(ui.reportTurn).map(points => ({ points })) : [...trails, ...advancePaths];
+  for (const t of paths) {
+    if (t.points) {
+      drawPathArrow(t.points, { color: '#ad202c', width: 11, haloWidth: 18, headLength: 32, endInset: 22, startRadius: 9, headWidth: 3 });
+    } else {
+      const color = t.edited ? '#ffdf43' : t.side === 'ger' ? 'rgba(20,20,20,.85)' : 'rgba(211,47,47,.9)';
+      drawPathArrow(t.path.map(h => game.map.center(h)), { color, outline: t.edited ? '#5a430b' : undefined });
+    }
   }
+}
+function drawHoldOrders() {
+  const draft = ui.holdPick;
+  for (const unit of game.onMap('sov')) {
+    if (!unit.holdTarget || (draft?.target && draft.unit === unit.id)) continue;
+    const selected = draft ? draft.unit === unit.id : ui.hex === unit.hex;
+    if (selected || unit.hex !== unit.holdTarget) drawHoldArrow(unit, unit.holdTarget, selected ? 1 : 0.65);
+  }
+  if (draft?.target) drawHoldArrow(game.unit(draft.unit), draft.target);
+}
+function drawHoldArrow(unit, target, opacity = 1) {
+  if (!unit?.hex) return;
+  const color = '#ffdf56', outline = '#352610';
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  strokeHex(target, outline, 9, 0.83);
+  strokeHex(target, color, 5, 0.83);
+  if (unit.hex !== target) {
+    const points = [game.map.center(unit.hex), game.map.center(target)];
+    drawPathArrow(points, { color, outline, width: 8, headLength: 28, endInset: 22, headWidth: 3, dash: [15, 16] });
+  }
+  ctx.restore();
+}
+function drawPathArrow(points, {
+  color, outline = 'rgba(255,255,255,.85)', width = 5, haloWidth = width + 4,
+  headLength = 20, endInset = 14, startRadius = 6, headWidth = 2, dash = [],
+}) {
+  if (points.length < 2) return;
+  const start = points[0], before = points[points.length - 2], end = points[points.length - 1];
+  const dx = end.x - before.x, dy = end.y - before.y;
+  const angle = Math.atan2(dy, dx);
+  const inset = Math.min(endInset, Math.hypot(dx, dy) / 3);
+  const tip = { x: end.x - Math.cos(angle) * inset, y: end.y - Math.sin(angle) * inset };
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.setLineDash(dash);
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  for (const p of points.slice(1)) ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = haloWidth;
+  ctx.stroke();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = headWidth;
+  ctx.beginPath();
+  ctx.moveTo(tip.x, tip.y);
+  ctx.lineTo(tip.x - headLength * Math.cos(angle - 0.45), tip.y - headLength * Math.sin(angle - 0.45));
+  ctx.lineTo(tip.x - headLength * Math.cos(angle + 0.45), tip.y - headLength * Math.sin(angle + 0.45));
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(start.x, start.y, startRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 function unitImg(u) { return (u.side === 'sov' && u.revealed) ? (u.backImg || u.img) : u.img; }
 function unitEl(u, inTray, count) {
@@ -1054,7 +1177,12 @@ function unitEl(u, inTray, count) {
     el.appendChild(mark);
   }
   const ms = game.moveState && game.moveState[u.id];
-  if (!inTray && ms && game.phase === u.side + '_move') {
+  if (!inTray && u.holdTarget) {
+    const mark = document.createElement('span');
+    mark.className = 'mk hold';
+    mark.textContent = u.hex === u.holdTarget ? '死守' : '予約';
+    el.appendChild(mark);
+  } else if (!inTray && ms && game.phase === u.side + '_move') {
     const done = ms.stopped || ms.mp <= 0;
     if (done) el.classList.add('done');
     if (done || ms.moved) { const mk = document.createElement('span'); mk.className = 'mk ' + (done ? 'done' : 'moving'); mk.textContent = done ? '済' : '移'; el.appendChild(mk); }
@@ -1131,12 +1259,27 @@ function drawPanel() {
   const human = ctrl[side] === 'human';
   add(`<h2>${D.PHASE_NAME[ph]}${side ? `（${SIDE[side]}・${human ? '人間' : 'AI'}）` : ''}</h2>`);
   if (ui.msg) step(ui.msg, 'warn');
-  if (ui.lastResult && ph.endsWith('_combat')) { const r = ui.lastResult; add(`<div class="res">戦闘 ${r.hex}: 攻撃 ${r.att} 対 防御 ${r.def}（地形×${r.mult}）<br>比 ${r.odds.replace(':', '対')}、ダイス ${r.die} → <b>${D.RESULT_NAME[r.result]}</b>（${r.result}）</div>`); }
+  if (ui.holdPick) {
+    const target = ui.holdPick.target;
+    const currentHex = game.unit(ui.holdPick.unit)?.hex;
+    const prompt = !target ? '地図で死守するヘクスをクリックしてください。' : target === currentHex
+      ? '現在地を守ります。「確定」を押してください。' : '矢印の先を確認して「確定」を押してください。';
+    step(prompt, 'big');
+    btn('確定', confirmHoldPick, 'go', !target);
+    btn('目的地の指定を中止', cancelHoldPick);
+    return;
+  }
+  if (inspectedGermanUnit()) step('青い枠：ドイツ軍の移動範囲');
+  if (ui.lastResult && ph.endsWith('_combat')) {
+    const r = ui.lastResult;
+    const detail = r.zeroDefense ? ZERO_DEFENSE_TEXT : `比 ${r.odds.replace(':', '対')}、ダイス ${r.die}`;
+    add(`<div class="res">戦闘 ${r.hex}: 攻撃 ${r.att} 対 防御 ${r.def}（地形×${r.mult}）<br>${detail} → <b>${D.RESULT_NAME[r.result]}</b>（${r.result}）</div>`);
+  }
   if (ui.mode === 'retreat') { retreatPanel(); hexInspector(); return; }
   if (ui.mode === 'advance') { advancePanel(); return; }
   if (!human && ui.aiMoveDone) {
     if (reviewingSovietMove()) {
-      step('ソ連軍AIの移動を確認できます。駒を選んで「この駒の移動を修正」→ 行き先をクリック →「修正を確定」。選んだ駒だけが変わります。', 'big');
+      if (!ui.moveEdit) step('駒を選ぶと、移動前のヘクスに戻したり、行き先を修正したりできます。', 'big');
       btn('移動を確定して戦闘へ', aiMoveNext, 'go', !!ui.moveEdit);
     } else {
       step(`${SIDE[side]}（AI）の移動が終わりました。矢印で動きを確認してから、上の「次へ進む」を押してください（${SIDE[side]}の戦闘に進みます）。`, 'big');
@@ -1282,6 +1425,7 @@ function hexInspector() {
     let status = '';
     if (ms && ph === u.side + '_move') status = ms.stopped ? '敵に隣接して停止' : `残り移動力 ${ms.mp}`;
     if (ph === u.side + '_combat' && game.usedAttackers().has(u.id)) status = '攻撃に使用';
+    if (u.holdTarget) status = `${u.hex === u.holdTarget ? '死守中' : '死守の目的地'} ${u.holdTarget}`;
     const own = human && u.side === side && !ui.mode;
     let check = '';
     let mark = '';
@@ -1289,11 +1433,20 @@ function hexInspector() {
 
     const on = ph.endsWith('_move') ? ui.moveSel.includes(u.id) : ui.pick.includes(u.id);
     const row = add(`<div class="row ${own && on ? 'on' : ''} ${ui.retreatUnit === u.id ? 'retreating' : ''}"><img src="${encodeURI(unitImg(u))}"><div class="nm"><b>${game.unitName(u)}</b>${mark}${u.label ? '<br>' + u.label : ''}${status ? '<br>' + status : ''}</div><div>${check}</div></div>`).firstChild;
-    if (reviewingSovietMove() && !ui.moveEdit && u.side === side && game.moveState[u.id]) {
-      const undo = document.createElement('button');
-      undo.textContent = 'この駒の移動を修正';
-      undo.onclick = e => { e.stopPropagation(); beginSovietMoveEdit(u); };
-      row.appendChild(undo);
+    if (reviewingSovietMove() && !ui.moveEdit && u.side === side && !u.holdTarget && ms?.start) {
+      const actions = document.createElement('div');
+      if (ms.moved) {
+        const undo = document.createElement('button');
+        undo.textContent = '移動前のヘクスに戻す';
+        undo.disabled = !game.revisionTargets(u).has(ms.start);
+        undo.onclick = e => { e.stopPropagation(); returnSovietMoveToStart(u); };
+        actions.appendChild(undo);
+      }
+      const edit = document.createElement('button');
+      edit.textContent = 'この駒の移動を修正';
+      edit.onclick = e => { e.stopPropagation(); beginSovietMoveEdit(u); };
+      actions.appendChild(edit);
+      row.querySelector('.nm').appendChild(actions);
     }
     if (moving && u.side === side && game.canMove(u)) {
       const only = moveUnits().length === 1 && moveUnits()[0] === u;
@@ -1319,19 +1472,134 @@ function hexInspector() {
       remove.onclick = e => { e.stopPropagation(); if (isDokusoOnline()) { void dokusoOnlineSend('unplace', [u.id]); return; } if (game.unplace(u)) selectSetupUnit(u); };
       row.appendChild(remove);
     }
+    if (u.side === 'sov' && !isDokusoOnline() && anyHuman() && ph !== 'over' && !ui.mode && !ui.moveEdit &&
+        !aiBusy && !cardBusy && (!game.combatQueue || game.combatFinished())) {
+      const actions = document.createElement('div');
+      const assign = document.createElement('button');
+      assign.className = 'go';
+      assign.textContent = u.holdTarget ? '目的地を変更' : '死守命令を出す';
+      assign.onclick = e => {
+        e.stopPropagation();
+        ui.holdPick = { unit: u.id, target: null };
+        ui.germanPreview = null;
+        ui.moveSel = [];
+        ui.msg = '';
+        render();
+      };
+      actions.appendChild(assign);
+      if (u.holdTarget) {
+        const release = document.createElement('button');
+        release.textContent = '死守命令を解除';
+        release.onclick = e => { e.stopPropagation(); game.setHoldTarget(u, null); render(); };
+        actions.appendChild(release);
+      }
+      row.querySelector('.nm').appendChild(actions);
+    }
   }
 }
+function winnerText() {
+  return game.winner === 'draw' ? '引き分け' : SIDE[game.winner] + 'の勝ち';
+}
+function finalScoreDetails(s) {
+  return `ドイツ ${s.ger}点（都市 ${s.gerCities}・突破 ${s.gerBreak}）<br>ソ連 ${s.sov}点（都市 ${s.sovCities}・ドイツ軍の壊滅 ${s.sovKills}）${s.cutCities.length ? `<br>道路が西につながらず得点にならない都市: ${s.cutCities.join(', ')}` : ''}`;
+}
 function scoreBox() {
-  const s = game.scores();
-  const w = game.winner === 'draw' ? '引き分け' : SIDE[game.winner] + 'の勝ち';
-  add(`<div class="res">ドイツ ${s.ger}点（都市 ${s.gerCities}・突破 ${s.gerBreak}）<br>ソ連 ${s.sov}点（都市 ${s.sovCities}・ドイツ軍の壊滅 ${s.sovKills}）${s.cutCities.length ? `<br>道路が西につながらず得点にならない都市: ${s.cutCities.join(', ')}` : ''}<br><b>${w}</b></div>`);
+  add(`<div class="res">${finalScoreDetails(game.scores())}<br><b>${winnerText()}</b></div>`);
+}
+
+// ===== 対局終了後のレポートと移動の概略 =====
+function reportArrows(turn) {
+  const groups = new Map();
+  const moves = game.turnReports?.[turn]?.moves;
+  if (!Array.isArray(moves)) return [];
+  for (const move of moves) {
+    const { area, from, to } = move || {};
+    if (!game.map.playable.has(from) || !game.map.playable.has(to)) continue;
+    const a = game.map.center(from), b = game.map.center(to);
+    const dx = b.x - a.x, dy = b.y - a.y;
+    // 同じ初期配置の部隊を、大まかに同じ方向へ進んだ駒ごとにまとめる。
+    const direction = Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'e' : 'w') : (dy >= 0 ? 's' : 'n');
+    const key = area + direction;
+    if (!groups.has(key)) groups.set(key, { from: { x: 0, y: 0 }, to: { x: 0, y: 0 }, count: 0 });
+    const group = groups.get(key);
+    group.from.x += a.x; group.from.y += a.y;
+    group.to.x += b.x; group.to.y += b.y;
+    group.count++;
+  }
+  return [...groups.values()].map(({ from, to, count }) => [from, to].map(p => ({ x: p.x / count, y: p.y / count })));
+}
+function updateReportControls() {
+  const controls = document.getElementById('reportControls');
+  controls.hidden = game.phase !== 'over';
+  document.getElementById('turnBtns').hidden = !controls.hidden;
+  document.getElementById('jumpBtns').hidden = !controls.hidden;
+  if (controls.hidden) return;
+  const select = document.getElementById('reportTurn');
+  if (select.options.length !== game.turn + 1) {
+    select.replaceChildren(new Option('矢印を隠す', '0'));
+    for (let turn = 1; turn <= game.turn; turn++) select.add(new Option(`ターン ${turn}`, turn));
+  }
+  select.value = ui.reportTurn || 0;
+  const moves = game.turnReports?.[ui.reportTurn]?.moves;
+  document.getElementById('reportMapStatus').textContent = !ui.reportTurn ? '' : !Array.isArray(moves) ? '移動記録なし' : !moves.length ? '移動なし' : '赤い矢印は移動の概略';
+}
+function showReportMap(turn) {
+  if (game?.phase !== 'over') return;
+  if (turn == null) {
+    turn = ui.reportTurn ?? game.turn;
+    if (ui.reportTurn == null) while (turn > 1 && !game.turnReports?.[turn]?.moves?.length) turn--;
+  }
+  ui.reportTurn = turn;
+  document.getElementById('modal').style.display = 'none';
+  const points = reportArrows(turn).flat();
+  if (points.length) {
+    const xs = points.map(p => p.x), ys = points.map(p => p.y);
+    const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
+    const wrap = document.getElementById('mapWrap');
+    if (wrap.clientWidth && wrap.clientHeight) {
+      const fit = Math.min(wrap.clientWidth / (right - left + 160), wrap.clientHeight / (bottom - top + 160));
+      zoom = Math.min(zoom, Math.max(0.1, Math.floor(fit * 100) / 100));
+      applyZoom();
+    }
+    scrollToMapPoint({ x: (left + right) / 2, y: (top + bottom) / 2 });
+  }
+  render();
 }
 function showEnd() {
-  render();
-  const s = game.scores();
-  const w = game.winner === 'draw' ? '引き分け' : SIDE[game.winner] + 'の勝ち';
-  document.getElementById('modalBox').innerHTML = `<h2>ゲーム終了</h2><div>ドイツ ${s.ger}点（都市 ${s.gerCities}・突破 ${s.gerBreak}）<br>ソ連 ${s.sov}点（都市 ${s.sovCities}・ドイツ軍の壊滅 ${s.sovKills}）${s.cutCities.length ? `<br>道路が西につながらず得点にならない都市: ${s.cutCities.join(', ')}` : ''}</div><h2 style="margin-top:12px;">${w}</h2><button onclick="document.getElementById('modal').style.display='none'">地図を見る</button> <button onclick="showStart()">もう一度</button>`;
+  if (game?.phase !== 'over') return;
+  const score = game.scores();
+  const captures = new Map();
+  for (const entry of game.log) {
+    const match = entry.kind === 'control' && /^(ドイツ|ソ連)が(大都市|都市)（(\d{4})）を支配$/.exec(entry.text);
+    if (!match) continue;
+    if (!captures.has(entry.turn)) captures.set(entry.turn, []);
+    captures.get(entry.turn).push(`${match[2]}（${match[3]}）　${match[1]}軍が占領`);
+  }
+  const rows = [];
+  let missingScores = false;
+  for (let turn = 1; turn <= game.turn; turn++) {
+    const record = game.turnReports?.[turn];
+    const tally = turn === game.turn ? score : record?.score;
+    const recorded = Number.isFinite(tally?.ger) && Number.isFinite(tally?.sov);
+    if (!recorded) missingScores = true;
+    const cityText = captures.get(turn)?.join('<br>') || '支配の変化なし';
+    const mapButton = record?.moves?.length ? `<button type="button" onclick="showReportMap(${turn})">地図を見る</button>` : '';
+    rows.push(`<tr><th scope="row">${turn}</th><td class="score">${recorded ? tally.ger : '—'}</td><td class="score">${recorded ? tally.sov : '—'}</td><td>${cityText}</td><td>${mapButton}</td></tr>`);
+  }
+  const box = document.getElementById('modalBox');
+  box.innerHTML = `<section class="game-report">
+    <h2>対局レポート</h2>
+    <p class="outcome">${winnerText()}</p>
+    <div class="res">${finalScoreDetails(score)}</div>
+    <h3>ターン終了時の得点と都市の占領</h3>
+    <table class="report-table"><thead><tr><th scope="col">ターン</th><th scope="col">ドイツ</th><th scope="col">ソ連</th><th scope="col">大都市・都市</th><th scope="col">移動</th></tr></thead>
+    <tbody>${rows.join('')}</tbody></table>
+    ${missingScores ? '<p class="report-note">— はそのターンの得点記録がありません。</p>' : ''}
+    <button type="button" onclick="showReportMap()">地図を見る</button>
+    ${isDokusoOnline() ? '' : '<button type="button" onclick="showStart()">もう一度</button>'}
+    </section>`;
   document.getElementById('modal').style.display = 'flex';
+  box.scrollTop = 0;
 }
 
 // ===== 移動の選択 =====
@@ -1354,20 +1622,25 @@ function defaultMoveSel(h, side) {
 function doOverrun(u, h) { if (isDokusoOnline()) { void dokusoOnlineSend('overrun', [u.id, h]); return; } game.overrun(u, h); ui.msg = ''; render(); }
 
 // ===== 戦闘後前進（人間）: 移動と同じく地図で操作する =====
+function advanceSnapshot(game) {
+  const advance = game.pending.advance;
+  return {
+    origin: advance.units.map(id => [id, game.unit(id).hex]),
+    control: { ...game.control },
+    holdOrders: game.combatSide() === 'ger' ? game.holdOrders() : undefined,
+    done: advance.done && { ...advance.done },
+    logLen: game.log.length,
+    paths: new Map(),
+  };
+}
+
 function openAdvance(review) {
   const advance = game.pending.advance;
   ui.mode = 'advance';
   ui.msg = '';
-  ui.adv = { sel: [], review };
+  ui.adv = { sel: [], review, ...advanceSnapshot(game) };
   if (review) {
-    Object.assign(ui.adv, {
-      plan: AI.chooseAdvance(game),
-      origin: advance.units.map(id => [id, game.unit(id).hex]),
-      control: { ...game.control },
-      done: advance.done && { ...advance.done },
-      logLen: game.log.length,
-      paths: new Map(),
-    });
+    ui.adv.plan = AI.chooseAdvance(game);
     restoreAdvance(true);
     return;
   }
@@ -1388,19 +1661,20 @@ function previewAdvanceStep(id, hex) {
   const unit = game.unit(id);
   const from = unit.hex;
   if (!game.advanceStep(id, hex)) return false;
-  if (ui.adv.review) {
-    const path = ui.adv.paths.get(id) || [from];
-    path.push(hex);
-    ui.adv.paths.set(id, path);
-  }
+  const path = ui.adv.paths.get(id) || [from];
+  path.push(hex);
+  ui.adv.paths.set(id, path);
   return true;
 }
 
 function restoreAdvance(usePlan) {
   const a = ui.adv;
-  if (!a?.review || !game.pending?.advance) return;
-  for (const [id, hex] of a.origin) game.unit(id).hex = hex;
+  if (!a?.paths || !game.pending?.advance) return;
+  for (const [id, hex] of a.origin) {
+    if (a.paths.has(id)) game.unit(id).hex = hex;
+  }
   game.control = { ...a.control };
+  game.restoreHoldOrders(a.holdOrders);
   game.pending.advance.done = a.done && { ...a.done };
   game.log.length = a.logLen;
   a.paths.clear();
@@ -1434,7 +1708,7 @@ function advancePanel() {
   const sel = a.sel.map(id => game.unit(id)).filter(Boolean);
   if (a.review) {
     const proposed = a.paths.size ? [...a.paths].map(([id, path]) => `${game.unitName(game.unit(id))}（${path.join(' → ')}）`).join('、') : '前進なし';
-    step(`<b>ソ連軍AIの戦闘後前進を確認</b><br>現在の案: ${proposed}<br>変更する場合は上の「前進を取り消す」で駒を元に戻し、盤面で前進を選び直せます。「前進を確定」で続行します。`, 'big');
+    step(`<b>ソ連軍AIの戦闘後前進を確認</b><br>現在の案: ${proposed}<br>変更する場合は上の「戦闘後前進をやり直す」で駒を元に戻し、盤面で前進を選び直せます。「前進を確定」で続行します。`, 'big');
   }
   step(`<b>戦闘後前進</b><br>前進させる駒をクリック（重なりはまとめて、Shift＋クリックで1個ずつ）→ 緑のヘクスをクリック。<br>1歩目は敵のいたヘクス（緑の太枠）。移動力8以上の駒は続けてもう1ヘクス進めます。`, 'big');
   add(`<div class="group-h">選んでいる駒: ${sel.length ? sel.map(u => game.unitName(u)).join('、') : 'なし'}</div>`);
@@ -1457,7 +1731,6 @@ function advanceClick(h) {
     // 進んだ駒がまだ進めるなら、そのまま選んでおく
     a.sel = a.sel.filter(id => game.advanceTargets(id).length);
     const left = advEligible();
-    if (!left.length && !a.review) { finishAdvance(); return; }
     if (!a.sel.length && left.length) { const nx = left.filter(v => v.hex === left[0].hex); a.sel = nx.map(v => v.id); }
     render(); return;
   }
@@ -1479,6 +1752,13 @@ function finishAdvance() {
 function onUnitClick(u, inTray, shift) {
   if (isDokusoOnline() && !dokusoOnlineMyTurn()) { ui.hex = u.hex; render(); return; }
   if (inTray) { if (canEditSetup()) selectSetupUnit(u); return; }
+  if (ui.holdPick) { onHexClick(u.hex, u); return; }
+  if (!isDokusoOnline() && game.phase === 'setup_ger' && u.side === 'sov') {
+    ui.hex = u.hex;
+    ui.msg = '';
+    render();
+    return;
+  }
   const stackN = game.unitsAt(u.hex).length;
   if (shift && stackN > 1 && ui.fanHex !== u.hex) { ui.fanHex = u.hex; ui.hex = u.hex; render(); return; }
   const single = ui.fanHex === u.hex && stackN > 1;
@@ -1528,9 +1808,38 @@ function declarableHexes() {
   const enemy = [...new Set(game.onMap(game.enemyOf(side)).map(u => u.hex))];
   return enemy.filter(h => game.canDeclare(ui.pick, h));
 }
+function inspectedGermanUnit() {
+  if (ui.mode || ui.moveEdit || !['sov_move', 'sov_combat'].includes(game.phase)) return null;
+  const u = game.unit(ui.germanPreview);
+  return u?.alive && u.hex === ui.hex ? u : null;
+}
+function cancelHoldPick() {
+  ui.holdPick = null;
+  ui.msg = '';
+  render();
+}
+function confirmHoldPick() {
+  const pick = ui.holdPick;
+  if (!pick?.target) return;
+  const unit = game.unit(pick.unit);
+  if (!game.setHoldTarget(unit, pick.target)) {
+    onHexClick(pick.target);
+    return;
+  }
+  ui.hex = unit.hex;
+  cancelHoldPick();
+}
 function onHexClick(h, clickedUnit) {
   if (isDokusoOnline() && !dokusoOnlineMyTurn()) { ui.hex = h; render(); return; }
   const ph = game.phase, side = game.activeSide(), human = side && ctrl[side] === 'human';
+  if (ui.holdPick) {
+    const valid = game.canSetHoldTarget(game.unit(ui.holdPick.unit), h);
+    ui.holdPick.target = valid ? h : null;
+    ui.msg = valid ? '' : '通行できる、ドイツ軍のいないソ連側のヘクスを選んでください。';
+    render();
+    return;
+  }
+  ui.germanPreview = clickedUnit?.side === 'ger' ? clickedUnit.id : null;
   if (ui.fanHex && ui.fanHex !== h) ui.fanHex = null;
   if (ui.mode === 'retreat') {
     if (game.retreatOptions(ui.retreatUnit).includes(h)) {
@@ -1621,6 +1930,8 @@ document.addEventListener('mousedown', e => { if (e.shiftKey) e.preventDefault()
 // Esc で駒の選択をやめる
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || !game) return;
+  if (ui.holdPick) { cancelHoldPick(); return; }
+  if (inspectedGermanUnit()) { ui.germanPreview = null; render(); return; }
   if (ui.moveEdit) { cancelSovietMoveEdit(); return; }
   if (ui.moveSel.length || ui.pick.length || ui.fanHex) { ui.moveSel = []; ui.pick = []; ui.fanHex = null; ui.msg = ''; render(); }
 });
