@@ -334,8 +334,7 @@ function dokusoApplyView(data, seat, room, result, resultAlreadyShown = false) {
   languageSelect.disabled = true; // A room keeps its creation language.
   document.getElementById('dokusoRoomMenu').hidden = false;
   dokusoOnlineDrive();
-  if (game.phase === 'over' && (first || phaseChanged)) showEnd();
-  else if (transition) showDokusoOnlinePhase(transition.phase, transition.turn);
+  if (transition && game.phase !== 'over') showDokusoOnlinePhase(transition.phase, transition.turn);
   if (result && !resultAlreadyShown) {
     showDokusoOnlineResult(result);
     showDokusoFinalDie(result);
