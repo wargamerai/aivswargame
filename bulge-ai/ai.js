@@ -61,7 +61,7 @@ const BulgeAI = (() => {
     const before=new Set(reach.flatMap(options=>[...options]));
     return board=>{
       const moved=R.onMap(board,'allied').filter(unit=>allies.get(unit.id)?.hex!==unit.hex);
-      if (!moved.length) return {closed:0,opened:0,widens:false};
+      if (!moved.length) return {closed:0,opened:0,widens:false,reach:before};
       const affected=new Set();
       for (const unit of moved) {
         affected.add(unit.hex);
@@ -87,13 +87,26 @@ const BulgeAI = (() => {
       }
       const opened=[...after].filter(hex=>!before.has(hex));
       const closed=[...before].filter(hex=>!after.has(hex));
-      const widens=opened.some(hex=>objectives.has(hex)) || widestOpening>=6 ||
-        (opened.length>=4 && opened.length-closed.length>=3);
-      return {closed:closed.length,opened:opened.length,widens};
+      const widens=opened.length>=3 && (opened.some(hex=>objectives.has(hex)) || widestOpening>=6 ||
+        opened.length-closed.length>=5);
+      return {closed:closed.length,opened:opened.length,widens,reach:after};
     };
   }
-  function mobilityScore(change) {
-    return change.closed*1.5-change.opened*2;
+  function mobilityScore({closed,opened}) {
+    return Math.max(0,closed-2)*0.65-Math.max(0,opened-2)*1.1;
+  }
+  function retreatRoutes(hex, opponents, supply, zones, germanReach) {
+    return R.neighbors(hex).filter(next=>supply.has(next) && !zones.has(next) &&
+      !opponents.some(enemy=>enemy.hex===next) &&
+      (R.map.get(next).col<R.map.get(hex).col || !germanReach.has(next)));
+  }
+  function frontGap(board, unit, hex, opponents, before, after) {
+    const allies=R.onMap(board,'allied').filter(other=>other.id!==unit.id);
+    const alliedZones=new Set(allies.flatMap(R.unitZoc));
+    const nextZones=R.unitZoc({...unit,hex});
+    const covered=nextZones.filter(next=>before.has(next) && !after.has(next) && !alliedZones.has(next)).length;
+    const friendlyLine=allies.some(other=>distance(hex,other.hex)<=3 && R.unitZoc(other).some(next=>nextZones.includes(next)));
+    return Math.max(0,covered-2)*0.55 + (friendlyLine && nearest(hex,opponents)<=6 ? 1.2 : 0);
   }
   function futureDefense(state) {
     const board=R.upcomingAlliedReinforcements(state);
@@ -141,6 +154,7 @@ const BulgeAI = (() => {
       if (!candidates.size) continue;
 
       const currentMobility=germanMobility(preview);
+      const originalReach=currentMobility(preview).reach;
       const forecast=futureDefense(preview);
       const forecastMobility=forecast.orders.length ? germanMobility(forecast.board) : null;
       let value=moveScore(preview,unit,unit.hex,opponents,supply,zones)+0.75;
@@ -155,9 +169,12 @@ const BulgeAI = (() => {
         const board={...preview,control,units:preview.units.map(other=>other.id===unit.id ? relocated : other)};
         const immediate=currentMobility(board);
         if (state.phase==='reaction' && immediate.widens) continue;
+        const near=nearest(hex,opponents);
+        const exits=retreatRoutes(hex,opponents,supply,zones,immediate.reach);
+        if (near<=4 && (!exits.length || (zones.has(hex) && !R.city(hex) && !R.ridge(hex) && exits.length<2)))
+          continue;
         const usefulPosition=defensivePosition(preview,hex)>defensivePosition(preview,unit.hex) &&
           supply.has(hex) && !zones.has(hex);
-        const near=nearest(hex,opponents);
         let combinedChange=immediate;
         let reduction=mobilityScore(immediate);
         if (forecastMobility) {
@@ -170,9 +187,10 @@ const BulgeAI = (() => {
         }
         if (state.turn<=4 && near<distanceBefore && near<=3 &&
             !usefulPosition && combinedChange.closed-combinedChange.opened<4) continue;
-        if (score+reduction>value) {
+        const line=frontGap(preview,unit,hex,opponents,originalReach,immediate.reach);
+        if (score+reduction+line>value) {
           best=order;
-          value=score+reduction;
+          value=score+reduction+line;
         }
       }
       if (best) {
@@ -275,24 +293,36 @@ const BulgeAI = (() => {
         const unit=special || eligible[0];
         if (!unit) return {type:'next',side};
         const zones=R.zoc(state,side);
+        const supply=R.lines(state,side,true);
         const compare=germanMobility(state);
+        const before=compare(state).reach;
+        const places=R.placements(state,unit.id);
         let bestHex, bestScore=-Infinity;
-        for (const hex of R.placements(state,unit.id)) {
-          if (R.river(hex)) continue;
+        let fallback, fallbackScore=-Infinity;
+        for (const hex of places) {
           const near=nearest(hex,opponents);
-          const safeDistance=state.phase==='reentry' || state.turn<=4 ? 4 : 3;
-          const exposure=Math.max(0,safeDistance-near)*2.7+Number(zones.has(hex))*6;
-          const depthPenalty=Math.max(0,near-safeDistance-2)*0.45;
-          const sourceBonus=state.phase==='reinforce' && R.source(side,hex) ? 0.8 : 0;
           const board={...state,units:state.units.map(other=>other.id===unit.id ? {...unit,hex} : other)};
-          const score=defensivePosition(state,hex)+defensiveTerrain(hex)*1.25+sourceBonus-
-            exposure-depthPenalty+mobilityScore(compare(board));
-          if (score>bestScore) {
+          const change=compare(board);
+          const exits=retreatRoutes(hex,opponents,supply,zones,change.reach);
+          const unsafe=zones.has(hex) || (near<=5 && (!exits.length ||
+            (!R.city(hex) && !R.ridge(hex) && exits.length<2)));
+          const onFront=before.has(hex) || R.neighbors(hex).some(next=>before.has(next));
+          const distancePenalty=Math.abs(near-4)*1.5;
+          const sourceBonus=state.phase==='reinforce' && R.source(side,hex) ? 0.6 : 0;
+          const score=defensivePosition(state,hex)+defensiveTerrain(hex)*1.25+sourceBonus+
+            Number(onFront)*4+Math.min(exits.length,2)*0.5+mobilityScore(change)+
+            frontGap(state,unit,hex,opponents,before,change.reach)-distancePenalty;
+          const safetyScore=score-Number(unsafe)*20-Number(R.river(hex))*5;
+          if (safetyScore>fallbackScore) {
+            fallback=hex;
+            fallbackScore=safetyScore;
+          }
+          if (!unsafe && !R.river(hex) && score>bestScore) {
             bestHex=hex;
             bestScore=score;
           }
         }
-        const hex=bestHex ?? R.placements(state,unit.id)[0];
+        const hex=bestHex ?? fallback;
         return {type:'place',unit:unit.id,hex,side};
       }
       case 'recovery': {

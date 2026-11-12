@@ -147,14 +147,53 @@ const BulgeRules = (() => {
     else state.units.push(marker);
     moveControl(state,side,hex);
   }
+  function initialGermanAttackers(state, defenders) {
+    const board={...state,phase:'move',turnSide:'german'};
+    const attackOptions=new Map(defenders.map(unit=>[unit.hex,[]]));
+    for (const unit of onMap(state,'german').filter(unit=>!unit.disrupted && !unit.marker)) {
+      const positions=new Set([unit.hex]);
+      for (const mode of ['normal','mechanized'])
+        for (const hex of movementOptions(board,unit.id,{mode}).keys()) positions.add(hex);
+      for (const [hex, attackers] of attackOptions) {
+        const adjacent=neighbors(hex).filter(from=>positions.has(from));
+        if (!adjacent.length) continue;
+        attackers.push({
+          strength:unit.attack,
+          armor:unit.mechanized && adjacent.some(from=>!attackSupportRestricted({...unit,hex:from},hex,[],false)),
+        });
+      }
+    }
+    return attackOptions;
+  }
   function autoAlliedSetup(state) {
-    const list = onMap(state,'allied').filter(u => !u.marker);
+    const units=onMap(state,'allied').filter(unit=>!unit.marker);
+    const attackOptions=initialGermanAttackers(state,units);
+    const attached=new Set(units.flatMap(unit=>unit.support));
+    state.hand=state.hand.filter(id=>!attached.has(id));
+    const strength=unit=>attackOptions.get(unit.hex).reduce((sum,enemy)=>sum+enemy.strength,0);
+    const threatened=units.filter(unit=>strength(unit)>=2*unit.defense);
     for (const id of state.hand.slice()) {
-      const initialFortUnits = chit(id).kind==='fort'
-        ? list.filter(unit=>unit.id==='a135' || unit.id==='a61') : list;
-      const target = alliedSupportTarget(state,id,initialFortUnits);
-      if (!target) continue;
-      assignInitialSupport(state,target,id);
+      const card=chit(id);
+      let candidates=threatened.length ? threatened : units;
+      if (card.kind==='fort') candidates=units.filter(unit=>unit.id==='a135' || unit.id==='a61');
+      const count=unit=>unit.support.filter(chip=>chit(chip).kind!=='dummy').length;
+      if (card.kind!=='dummy') {
+        const available=candidates.filter(unit=>count(unit)<3);
+        if (available.length) candidates=available;
+      }
+      if (card.kind==='artillery') {
+        const withoutArtillery=candidates.filter(unit=>!unit.support.some(chip=>chit(chip).kind==='artillery'));
+        if (withoutArtillery.length) candidates=withoutArtillery;
+      }
+      const score=unit=>{
+        const armor=attackOptions.get(unit.hex).some(enemy=>enemy.armor);
+        const defended=count(unit);
+        if (card.kind==='dummy') return strength(unit)*0.2-unit.support.length*2;
+        const armorBonus=(card.at || card.kind==='fort') && armor ? 7 : 0;
+        return Math.min(18,strength(unit))+armorBonus-defended*5;
+      };
+      const target=candidates.slice().sort((a,b)=>score(b)-score(a))[0];
+      if (target) assignInitialSupport(state,target,id);
     }
   }
   function assignInitialSupport(state, unit, id) {

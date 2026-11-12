@@ -632,10 +632,24 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     render();
   }
 
+  function moveBaseForSelection() {
+    if (!moving() || !selected) return null;
+    const index = movePlan.findIndex(order => order.unit === selected);
+    if (index >= 0)
+      return R.previewMoves(state, movePlan.slice(0, index), pausedReservations).state;
+    if (projection.state.trails.some(trail => trail.id === selected)) return null;
+    return projection.state;
+  }
+
   function moveSelectedTo(hex) {
     const order = {unit: selected, to: hex, mode: moveMode, support: moveSupport || null, repairBridge: moveRepair};
-    const checked = R.previewMoves(state, [...movePlan, order], pausedReservations);
-    if (checked.rejected.length) return note('このヘクスには移動できません。', true);
+    const index = movePlan.findIndex(move => move.unit === selected);
+    const revised = movePlan.slice();
+    if (index < 0) revised.push(order);
+    else revised[index] = order;
+    const checked = R.previewMoves(state, revised, pausedReservations);
+    if (checked.rejected.length)
+      return note('この移動先では、ほかの部隊の移動が成立しません。別の移動先を選んでください。', true);
     movePlan = checked.valid;
     selected = null;
     render();
@@ -765,7 +779,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return step({type: 'event', chit: card, hex, effect: eventEffect});
     }
     if (state.phase === 'reentry' && (selected || R.city(hex))) return chooseReentryHex(hex);
-    if (state.phase === 'reinforce' && legalHexes.has(hex) && selected)
+    if (state.phase === 'reinforce' && selected && !hasPendingEvent())
       return placeReinforcement(selected, hex);
     const occupant = R.at(projection.state, hex)[0];
     if (occupant) return chooseUnit(occupant.id);
@@ -1127,9 +1141,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const allied = isAI();
     if (selected) {
       const unit = R.unitById(projection.state, selected);
-      const moved = projection.state.trails.some(trail => trail.id === selected);
       panel.append(element('h3', `${unit.name} · ${unit.hex}`));
-      if (!moved && !unit.movementOrder && !unit.disrupted) {
+      if (moveBaseForSelection() && !unit.movementOrder && !unit.disrupted) {
         const controls = element('div', null, 'controls');
         if (unit.mechanized) {
           controls.append(selectBox('移動方式', [['normal','通常'],['mechanized','機械化（道路）']], moveMode, value => {
@@ -1138,7 +1151,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
           }));
         }
         const publicSupport = R.unitById(state, unit.id).usedSupport;
-        const chits = R.moveChits(unit).filter(id => !allied || id === moveSupport || publicSupport.includes(id));
+        const originalUnit = R.unitById(state, unit.id);
+        const chits = R.moveChits(originalUnit).filter(id => !allied || id === moveSupport || publicSupport.includes(id));
         if (chits.length) {
           const choices = [['','なし']];
           for (const id of chits) {
@@ -1959,10 +1973,20 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       projection.state = {...state, units: state.units.map(unit =>
         recoveryOrders.includes(unit.id) ? {...unit, disrupted: false} : unit)};
     }
-    const moveBase = moving() && selected && !selectedMoved ? projection.state : null;
+    const moveBase = moveBaseForSelection();
     range = moveBase
       ? R.movementOptions(moveBase, selected, {mode: moveMode, support: moveSupport || null, repairBridge: moveRepair})
       : new Map();
+    if (selectedMoved && range.size) {
+      const index = movePlan.findIndex(order => order.unit === selected);
+      if (index >= 0 && index < movePlan.length - 1) {
+        for (const hex of range.keys()) {
+          const revised = movePlan.slice();
+          revised[index] = {unit: selected, to: hex, mode: moveMode, support: moveSupport || null, repairBridge: moveRepair};
+          if (R.previewMoves(state, revised, pausedReservations).rejected.length) range.delete(hex);
+        }
+      }
+    }
     const assistedHexes = new Set();
     if (range.size && moveSupport && !moveRepair) {
       const normal = R.movementOptions(moveBase, selected, {mode: 'normal'});
@@ -2037,7 +2061,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       : moving()
       ? isAI() && phase === 'reaction' && !projection.state.trails.length
         ? '連合軍の対応移動はありません。'
-        : isAI() ? '赤い矢印は連合軍の移動経路です。駒をクリックすると、その部隊の経路を確認できます。'
+        : isAI() ? '赤い矢印は連合軍の移動経路です。駒をクリックして行き先を変えられます。'
           : '駒をクリックし、地図で移動先を選びます。'
       : planning()
         ? isAI() ? '連合軍の戦闘案です。対象と参加部隊を確認し、必要なら変更・取消してから確定してください。' : '味方の駒を選んでから、隣接する敵の駒を選びます。'
