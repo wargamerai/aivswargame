@@ -2021,7 +2021,7 @@ async def async_main():
                 else:
                     choice = await safe_input("陣営を選ぶ", [("1", "ドイツ軍"), ("2", "連合軍")], view="faction")
                     if choice == '1': p1_faction, p2_faction, p2_ai = "ドイツ軍", "連合軍", True
-                    else: p1_faction, p2_faction, p1_ai = "連合軍", "ドイツ軍", True
+                    else: p1_faction, p2_faction, p2_ai = "連合軍", "ドイツ軍", True
                 game = Game(df=df, p1_faction=p1_faction, p2_faction=p2_faction, p1_ai=p1_ai, p2_ai=p2_ai)
                 await game.setup_game()
                 winner = await game.play()
