@@ -24,6 +24,7 @@
   ];
   const supportChitType = 'application/x-bulge-support-chit';
   const eventChitType = 'application/x-bulge-event-chit';
+  const reinforcementType = 'application/x-bulge-reinforcement';
   const unitCounterSize = 43;
   const chitsByImage = new Map(Object.entries(D.chits).map(([id, chit]) => [`assets/marker-${chit.image}.jpg`, id]));
   const moving = () => ['move', 'reaction', 'highbeam'].includes(state.phase);
@@ -31,6 +32,8 @@
   const isLocal = () => state.mode === 'local';
   const isAI = () => !isLocal() && !eventPractice && R.actor(state) === 'allied';
   const hasPendingEvent = () => !supportPractice && ['event', 'reinforce'].includes(state.phase) && state.events.length > 0;
+  const waitingReinforcements = () => state.units.filter(unit => unit.side === R.actor(state) &&
+    unit.status === 'reserve' && state.reinforceGroups.includes(unit.group));
   const eventChits = side => Object.keys(D.chits)
     .filter(id => id.startsWith(side[0] + '-') && D.chits[id].kind === 'event').map(id => id + ':1');
   const nameOf = id => R.unitById(state, id)?.name ?? id;
@@ -661,7 +664,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return;
     }
     if (state.phase === 'reentry' && unit.hex && (selected || R.city(unit.hex))) return chooseReentryHex(unit.hex);
-    if (hasPendingEvent() && legalHexes.has(unit.hex))
+    if ((hasPendingEvent() || state.phase === 'reinforce') && legalHexes.has(unit.hex))
       return chooseHex(unit.hex);
     if (moving() && unit.side === R.actor(state)) {
       if (!unit.marker) return chooseMover(id);
@@ -1508,37 +1511,34 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return;
     }
     let blocked = false;
-    const controls = element('div', null, 'controls');
-    if (['reentry','reinforce'].includes(state.phase)) {
+    if (state.phase === 'reinforce') {
+      const waiting = waitingReinforcements();
+      blocked = waiting.some(unit => R.placements(state, unit.id).length);
+      if (waiting.length && !blocked)
+        panel.append(element('p', '連絡線の通じる空き都市・補給源など、配置条件を満たすヘクスがありません。', 'hint'));
+    }
+    if (state.phase === 'reentry') {
       const units = R.eligiblePlacements(state);
-      blocked = units.length > 0;
-      if (state.phase === 'reentry' && reentryNotice) {
+      if (reentryNotice) {
         const reason = element('p', reentryNotice, 'result');
         reason.setAttribute('role', 'status');
         panel.append(reason);
       }
-      const waiting = state.phase === 'reinforce' && state.units.filter(unit =>
-        unit.side === side && unit.status === 'reserve' && state.reinforceGroups.includes(unit.group));
-      if (waiting?.length) panel.append(element('p',
-        `増援 ${[...new Set(waiting.map(unit => unit.group))].join('・')}：未配置 ${waiting.length}部隊`, 'result'));
-      panel.append(element('p', blocked ? '部隊を選んでから、地図上の色が付いたヘクスを選びます。'
-        : waiting?.length ? '連絡線の通じる空き都市・補給源など、配置条件を満たすヘクスがありません。'
-          : '今のフェイズで配置できる部隊はありません。', 'hint'));
-      if (blocked && state.phase === 'reinforce')
-        panel.append(element('p', '補給源ヘクスに増援を置くと、その部隊の輸送能力と同じ枚数を引き、支援チットをその部隊に配属します。', 'hint'));
-      for (const unit of units) controls.append(tileButton(unit.name, picture(unit), () => {
-        selected = unit.id; inspected = unit.id; reentryHex = null; reentryNotice = ''; message = null; render();
-        center([...legalHexes][0]);
-      }, selected === unit.id));
-      if (state.phase === 'reentry' && blocked) {
+      panel.append(element('p', units.length ? '部隊を選んでから、地図上の色が付いたヘクスを選びます。' :
+        '今のフェイズで配置できる部隊はありません。', 'hint'));
+      if (units.length) {
+        const controls = element('div', null, 'controls');
+        for (const unit of units) controls.append(tileButton(unit.name, picture(unit), () => {
+          selected = unit.id; inspected = unit.id; reentryHex = null; reentryNotice = ''; message = null; render();
+          center([...legalHexes][0]);
+        }, selected === unit.id));
         if (reentryHex) panel.append(element('p', `配置予定 ${location(reentryHex)}`, 'compact'));
-        if (controls.childElementCount) panel.append(controls);
+        panel.append(controls);
         actions.append(button('再登場を確定', () => step({type: 'place', unit: selected, hex: reentryHex}),
           {primary: true, disabled: !reentryHex, id: 'confirm-reentry'}));
         return;
       }
     }
-    if (!controls.parentNode && controls.childElementCount) panel.append(controls);
     actions.append(button('次のフェイズへ', () => step({type: 'next'}), {primary: true, disabled: blocked, id: 'next-phase'}));
   }
 
@@ -1804,8 +1804,37 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const scroll = tray.scrollLeft;
     tray.replaceChildren();
     const events = hasPendingEvent();
-    tray.hidden = state.phase !== 'support' && !events;
+    const reinforcements = state.phase === 'reinforce' && !events;
+    tray.hidden = state.phase !== 'support' && !events && !reinforcements;
     if (tray.hidden) return;
+    if (reinforcements) {
+      tray.setAttribute('aria-label', '未配置の増援');
+      for (const unit of waitingReinforcements()) {
+        const places = R.placements(state, unit.id);
+        const tile = tileButton('', picture(unit), () => {
+          selected = selected === unit.id ? null : unit.id;
+          message = null;
+          render();
+          tray.scrollLeft = scroll;
+          tray.querySelector(`[data-reinforcement="${unit.id}"]`)?.focus({preventScroll: true});
+          if (selected) center([...legalHexes][0]);
+        }, selected === unit.id);
+        const label = `${unit.group} ${unit.name}${places.length ? '' : '（配置先なし）'}`;
+        tile.title = label;
+        tile.setAttribute('aria-label', label);
+        tile.dataset.reinforcement = unit.id;
+        tile.querySelector('img').draggable = false;
+        tile.disabled = !places.length;
+        tile.draggable = !tile.disabled;
+        tile.addEventListener('dragstart', event => {
+          event.dataTransfer.setData(reinforcementType, unit.id);
+          event.dataTransfer.effectAllowed = 'move';
+        });
+        tray.append(tile);
+      }
+      tray.scrollLeft = scroll;
+      return;
+    }
     const showDummies = supportPractice || R.actor(state) === 'allied';
     tray.setAttribute('aria-label', events ? '未処理のイベントチット'
       : showDummies ? '引いたチットと手元のダミー' : '引いたチット');
@@ -1917,6 +1946,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       supply:'残りの補給チットから1枚選びます。',
       support:'地図の上のチットを選び、配属先の部隊をクリックします。',
       event:hasPendingEvent() ? '地図の上のイベントチットを選び、効果を適用します。' : '処理待ちのイベントはありません。',
+      reinforce:'',
     };
     byId('phase-detail').textContent = recoveryPractice && phase !== 'recovery' ? '混乱回復の練習はここまでです。'
       : supportPractice && phase !== 'support' ? '支援チット取得の練習はここまでです。'
@@ -1954,17 +1984,27 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   byId('board').addEventListener('dragover', event => {
-    if (countersHidden || !hasPendingEvent() || !event.dataTransfer.types.includes(eventChitType)) return;
+    if (countersHidden) return;
+    const type = hasPendingEvent() ? eventChitType : state.phase === 'reinforce' ? reinforcementType : null;
+    if (!type || !event.dataTransfer.types.includes(type)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   });
   byId('board').addEventListener('drop', event => {
-    if (countersHidden || !hasPendingEvent()) return;
+    if (countersHidden) return;
+    const destination = event.target.closest('[data-hex], [data-unit]');
+    const hex = destination?.dataset.hex ?? R.unitById(state, destination?.dataset.unit)?.hex;
+    if (state.phase === 'reinforce' && !hasPendingEvent()) {
+      const unit = event.dataTransfer.getData(reinforcementType);
+      if (!unit) return;
+      event.preventDefault();
+      if (!R.placements(state, unit).includes(hex)) return note('このヘクスには増援を配置できません。', true);
+      return step({type: 'place', unit, hex});
+    }
+    if (!hasPendingEvent()) return;
     const id = event.dataTransfer.getData(eventChitType);
     if (!state.events.includes(id)) return;
     event.preventDefault();
-    const destination = event.target.closest('[data-hex], [data-unit]');
-    const hex = destination?.dataset.hex ?? R.unitById(state, destination?.dataset.unit)?.hex;
     if (!R.eventOptions(state, id).includes(hex)) return note('このヘクスにはイベントを適用できません。', true);
     step({type: 'event', chit: id, hex, effect: card === id ? eventEffect : 'disrupt'});
   });
