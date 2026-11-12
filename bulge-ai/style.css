@@ -1,8 +1,9 @@
 :root {
   color-scheme: light;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
-  color: #232c23;
+  color: var(--ink);
   background: #e4e5da;
+  --ink: #232c23;
   --paper: #f9f8f0;
   --line: #cdd0c0;
   --ink-light: #54604f;
@@ -17,7 +18,7 @@ body {
 }
 button, select, input { font: inherit; }
 button, select {
-  color: inherit; background: #fffef8; border: 1px solid #a9b09f;
+  color: var(--ink); background: #fffef8; border: 1px solid #a9b09f;
   border-radius: 5px; padding: .42rem .65rem;
 }
 button { cursor: pointer; }
@@ -69,13 +70,20 @@ ul, ol { padding-left: 1.35rem; }
 .phase-announcement.turn-change { top: 50%; transform: translate(-50%, -50%); padding: 1rem 1.5rem; }
 .phase-announcement.turn-change span { font-size: clamp(2.4rem, 6vw, 4.8rem); font-weight: 800; line-height: 1.15; }
 .phase-announcement.ai-overview {
-  top: 50%; transform: translate(-50%, -50%); padding: 1rem 1.4rem; pointer-events: auto;
+  top: 50%; transform: translate(-50%, -50%); padding: 1rem 1.4rem;
+  background: #253321; pointer-events: auto;
 }
 .phase-announcement.ai-overview strong { font-size: clamp(1.65rem, 4.5vw, 3rem); }
 #phase-overview-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
-#phase-overview-actions button { font-size: clamp(1rem, 2vw, 1.25rem); font-weight: 700; }
+#phase-overview-actions button {
+  min-height: 44px; padding: .5rem .9rem;
+  color: #fff9e9; background: #34472e; border-color: #a6b398;
+  font-size: clamp(1rem, 2vw, 1.25rem); font-weight: 700;
+}
+#phase-overview-actions button:hover:not(:disabled) { background: #495e40; }
 #phase-overview-actions button.primary { color: #273524; background: #ffe592; border-color: #ffe592; }
-#phase-overview-actions button.primary:hover { background: #fff0b8; }
+#phase-overview-actions button.primary:hover:not(:disabled) { background: #fff0b8; }
+#phase-overview-actions button:focus-visible { outline-color: #fff9e9; }
 .map-toolbar, .map-legend {
   flex: none;
   display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: .45rem .8rem;
