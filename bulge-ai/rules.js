@@ -259,8 +259,8 @@ const BulgeRules = (() => {
     return carried.sort((a,b) => priority(a) - priority(b)).slice(0, excess);
   }
   function canOrderUnit(state, unit) {
-    return ['move', 'reaction', 'highbeam'].includes(state.phase) &&
-      Boolean(unit?.hex && unit.movement && !unit.marker);
+    return actor(state)==='allied' && ['move', 'reaction', 'highbeam'].includes(state.phase) &&
+      Boolean(unit?.side==='allied' && unit.hex && unit.movement && !unit.marker);
   }
   function canOrderDestination(state, unit, hex) {
     return map.has(hex) && !blockedHex(unit.side, hex) && state.control[hex] !== enemy(unit.side) &&
@@ -268,7 +268,7 @@ const BulgeRules = (() => {
   }
   function movementOptions(state, id, options) {
     const unit = unitById(state, id);
-    return unit?.movementOrder ? new Map() : movementRoutes(state, unit, options);
+    return unit?.side==='allied' && unit.movementOrder ? new Map() : movementRoutes(state, unit, options);
   }
   function movementRoutes(state, unit, { mode='normal', support=null, repairBridge=false } = {}) {
     const id = unit?.id;
@@ -285,7 +285,7 @@ const BulgeRules = (() => {
     const effect = repairBridge ? null : chit(support)?.move;
     const zones = zoc(state,side);
     const ignoreZoc = effect === 'ignoreZoc';
-    if (state.phase === 'reaction' && zones.has(unit.hex) && !ignoreZoc && effect !== 'reaction') return out;
+    if (state.phase === 'reaction' && zones.has(unit.hex) && effect !== 'reaction') return out;
     const mechanized = mode === 'mechanized';
     if (mechanized && (!unit.mechanized || ['ignoreZoc','terrain'].includes(effect) ||
         !lines(state,side,true).has(unit.hex) || !neighbors(unit.hex).some(h=>isRoad(state,unit.hex,h)))) return out;
@@ -368,8 +368,8 @@ const BulgeRules = (() => {
     return best;
   }
   function followMovementOrders(state, used) {
-    if (state.phase !== 'move') return;
-    for (const unit of onMap(state, actor(state))) {
+    if (state.phase !== 'move' || actor(state)!=='allied') return;
+    for (const unit of onMap(state,'allied')) {
       const order = unit.movementOrder;
       if (!order) continue;
       if (!canOrderDestination(state, unit, order.target)) {

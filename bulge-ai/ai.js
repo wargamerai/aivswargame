@@ -19,6 +19,40 @@ const BulgeAI = (() => {
       Number(R.ridge(hex))*0.6 + Math.min(supports,2)*0.45 -
       Math.max(0,pressure-unit.defense)*0.6 - Number(R.river(hex))*0.65;
   }
+  function germanReach(board, unit) {
+    const hexes=new Set(R.movementOptions(board,unit.id).keys());
+    if (unit.mechanized)
+      for (const hex of R.movementOptions(board,unit.id,{mode:'mechanized'}).keys()) hexes.add(hex);
+    return hexes;
+  }
+  function reactionRisk(state, unit, opponents) {
+    const german={...state,phase:'move',turnSide:'german'};
+    const threats=opponents.filter(enemy=>!enemy.disrupted && enemy.movement && !enemy.marker);
+    const reach=new Map(threats.map(enemy=>[enemy.id,germanReach(german,enemy)]));
+    const before=new Set([...reach.values()].flatMap(options=>[...options]));
+    return to=>{
+      const revised={...unit,hex:to};
+      const affected=[unit.hex,to,...R.unitZoc(unit),...R.unitZoc(revised)];
+      const changesControl=(R.city(to)||R.source('allied',to)||R.source('german',to)) && state.control[to]!=='allied';
+      const board={...german,units:german.units.map(other=>other.id===unit.id?revised:other),
+        control:changesControl?{...german.control,[to]:'allied'}:german.control};
+      const after=new Set();
+      let widestOpening=0;
+      for (const enemy of threats) {
+        const old=reach.get(enemy.id);
+        const nearby=affected.some(hex=>distance(hex,enemy.hex)<=(enemy.mechanized?10:enemy.movement));
+        const options=nearby || (changesControl && enemy.mechanized) ? germanReach(board,enemy) : old;
+        if (options!==old) widestOpening=Math.max(widestOpening,options.size-old.size);
+        for (const hex of options) after.add(hex);
+      }
+      const opened=[...after].filter(hex=>!before.has(hex));
+      const closed=[...before].filter(hex=>!after.has(hex));
+      const opensObjective=opened.some(hex=>strongholds.includes(hex)||D.victoryCities.includes(hex));
+      const widens=opensObjective || widestOpening>=6 ||
+        (opened.length>=4 && opened.length-closed.length>=3);
+      return {widens, score:closed.length*0.5-opened.length*0.85};
+    };
+  }
   function moves(state) {
     if (R.actor(state)!=='allied' || !['move','reaction','highbeam'].includes(state.phase)) return [];
     const opponents=R.onMap(state,'german');
@@ -30,6 +64,7 @@ const BulgeAI = (() => {
       const unit=R.unitById(preview,original.id);
       const supply=R.lines(preview,'allied',true);
       let value=moveScore(preview,unit,unit.hex,opponents,supply)+0.55, best=null;
+      const reactions=new Map();
       const supports=[null,...R.moveChits(unit)];
       for (const mode of ['normal','mechanized']) for (const support of supports) {
         for (const route of R.movementOptions(preview,unit.id,{mode,support}).values()) {
@@ -37,9 +72,23 @@ const BulgeAI = (() => {
           const lost=route.lost ? unit.support.filter(id=>R.chit(id).kind!=='dummy').length*1.15 : 0;
           const excess=route.excess.filter(id=>R.chit(id).kind!=='dummy').length*0.8;
           const score=moveScore(preview,unit,route.hex,opponents,supply)-Math.max(lost,excess)-spent-route.cost*0.045;
-          if (score>value) {
-            best={unit:unit.id,to:route.hex,mode,support}; value=score;
+          const order={unit:unit.id,to:route.hex,mode,support};
+          if (state.phase==='reaction') {
+            if (score>(reactions.get(route.hex)?.score ?? -Infinity)) reactions.set(route.hex,{order,score});
+          } else if (score>value) {
+            best=order; value=score;
           }
+        }
+      }
+      if (reactions.size) {
+        const risk=reactionRisk(preview,unit,opponents);
+        // Compare a short list of promising hexes, including alternatives when a move opens a gap.
+        const candidates=[...reactions.values()].sort((a,b)=>b.score-a.score).slice(0,12);
+        for (const {order,score} of candidates) {
+          const change=risk(order.to);
+          if (change.widens || score+change.score<=value) continue;
+          best=order;
+          value=score+change.score;
         }
       }
       if (best) {
