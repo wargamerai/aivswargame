@@ -242,16 +242,22 @@
     document.querySelector('.game').hidden = false;
     const phase = state.phase;
     prepare();
+    let rejectedMoves = 0;
     if (state.phase === phase) {
-      if (saved.movePlan.length || !isAI()) movePlan = saved.movePlan;
-      if (saved.attackPlan.length || !isAI()) attackPlan = saved.attackPlan;
+      if (moving() && (saved.movePlan.length || !isAI())) {
+        const checked = R.previewMoves(state, saved.movePlan);
+        movePlan = checked.valid;
+        rejectedMoves = checked.rejected.length;
+      }
+      if (planning() && (saved.attackPlan.length || !isAI())) attackPlan = saved.attackPlan;
       supportChoices = {...supportChoices, ...battleChoicesFor(saved.supportChoices ?? {}, 'german')};
     }
     artilleryDie = saved.artilleryDie ?? null;
     recoveryOrders = saved.recoveryOrders ?? [];
     preferDefenderLoss = saved.preferDefenderLoss === true;
     save();
-    note('対局ファイルを読み込みました。');
+    note(rejectedMoves ? `対局ファイルを読み込みました。現在の盤面で無効になった移動案を${rejectedMoves}件取り消しました。`
+      : '対局ファイルを読み込みました。');
     focusMap();
   }
 
@@ -487,7 +493,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         : pending ? 'ここまでの配置を確定しました。残りは続けて配置できます。' : '配置を確定しました。');
     }
     if (before.phase === state.phase && ['place', 'assign', 'event', 'recover-batch', 'undo-recovery',
-        'undo-setup', 'auto-allied-setup', 'place-setup-bridge', 'hold-capture', 'release-capture'].includes(command.type)) {
+        'undo-setup', 'hold-capture', 'release-capture'].includes(command.type)) {
       selected = null;
       recoveryOrders = [];
       reentryHex = null;
@@ -495,8 +501,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       card = null;
       eventEffect = 'disrupt';
       const resultMessage = command.type === 'event' ? state.log.at(-1).text
-        : command.type === 'place-setup-bridge' ? `橋梁爆破を ${location(command.hex)} に配置しました。`
-        : command.type === 'auto-allied-setup' ? '連合軍の支援チットをお任せで配置しました。'
         : command.type === 'recover-batch' ? `${command.units.length}個の部隊の回復を確定しました。`
         : command.type === 'undo-recovery' ? '直前の回復を取り消しました。' : null;
       message = resultMessage ? {text: resultMessage, error: false} : null;
@@ -521,19 +525,16 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     selected = null; inspected = null; route = null; card = null; eventEffect = 'disrupt';
     moveMode = 'normal'; moveSupport = ''; moveRepair = false; attackEdit = null; message = null;
     const beforeAdmin = state;
+    if (!practice && state.turn === 1 && ['setup', 'move'].includes(state.phase)) {
+      const corrected = R.apply(state, {type: 'correct-initial-bridge', side: R.actor(state)});
+      if (corrected.ok) state = corrected.state;
+    }
     if (automate && isAI() && state.phase === 'setup') {
       const migrate = action => {
         const result = R.apply(state, {...action, side: 'allied'});
         if (result.ok) state = result.state;
       };
       if (state.hand.length) migrate({type: 'auto-allied-setup'});
-      const bridge = R.setupBridge(state);
-      if (bridge && !bridge.hex && bridge.options.length) {
-        const armor = R.onMap(state, 'german').filter(unit => unit.mechanized);
-        const nearest = hex => Math.min(...armor.map(unit => R.distance(unit.hex, hex)));
-        const hex = bridge.options.slice().sort((a, b) => nearest(a) - nearest(b))[0];
-        migrate({type: 'place-setup-bridge', hex});
-      }
       migrate({type: 'confirm-setup'});
       migrate({type: 'finish-setup'});
     }
@@ -659,8 +660,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     render();
   }
 
-  const selectingSetupBridge = () => card && R.setupBridge(state)?.id === card;
-
   function chooseUnit(id) {
     if (orderDraft) return chooseOrderTarget(R.unitById(projection.state, id).hex);
     const unit = R.unitById(state, id);
@@ -674,7 +673,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return;
     }
     if (state.phase === 'reentry' && unit.hex && (selected || R.city(unit.hex))) return chooseReentryHex(unit.hex);
-    if (selectingSetupBridge() || (hasPendingEvent() && legalHexes.has(unit.hex)))
+    if (hasPendingEvent() && legalHexes.has(unit.hex))
       return chooseHex(unit.hex);
     if (moving() && unit.side === R.actor(state) && !unit.marker) return chooseMover(id);
     if (planning() && unit.side !== R.actor(state)) return chooseTarget(unit.hex);
@@ -706,10 +705,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return;
     }
     if (planning() && R.battleCandidates(state, hex).length) return chooseTarget(hex);
-    if (selectingSetupBridge()) {
-      if (!legalHexes.has(hex)) return note('連合軍の連絡線が通る道路付き河川ヘクスを選んでください。', true);
-      return step({type: 'place-setup-bridge', hex});
-    }
     if (hasPendingEvent() && legalHexes.has(hex)) {
       return step({type: 'event', chit: card, hex, effect: eventEffect});
     }
@@ -1854,20 +1849,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     tray.hidden = state.phase !== 'setup';
     if (tray.hidden) return;
     const side = R.actor(state);
-    const bridge = R.setupBridge(state);
     const required = R.setupPlacementRequired(state);
     const ready = state.setupConfirmed && !required;
     tray.setAttribute('aria-label', `${R.sideName(side)}の初期配置チット`);
-    if (bridge && side === 'allied') appendAssignableChit(tray, bridge.id, eventChitType);
-    for (const id of state.hand) appendAssignableChit(tray, id);
+    for (const id of state.hand)
+      if (side !== 'german' || R.chit(id).kind !== 'dummy') appendAssignableChit(tray, id);
     tray.scrollLeft = scroll;
-    if (side === 'allied' && state.hand.length)
-      actions.append(button('連合軍チットをお任せで配置', () => step({type: 'auto-allied-setup'})));
-    if (bridge?.hex && side === 'german') actions.append(button('橋梁爆破の位置を変更', () => {
-      card = card === bridge.id ? null : bridge.id;
-      render();
-      if (card) center(bridge.hex);
-    }, {pressed: card === bridge.id, id: 'adjust-setup-bridge'}));
     actions.append(
       button(required ? 'ここまでの配置を確定' : '配置を確定', () => step({type: 'confirm-setup'}),
         {primary: !state.setupConfirmed, disabled: Boolean(state.setupConfirmed), id: 'confirm-setup'}),
@@ -1884,7 +1871,9 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const events = hasPendingEvent();
     tray.hidden = state.phase !== 'support' && !events;
     if (tray.hidden) return;
-    tray.setAttribute('aria-label', events ? '未処理のイベントチット' : '引いたチットと手元のダミー');
+    const showDummies = supportPractice || R.actor(state) === 'allied';
+    tray.setAttribute('aria-label', events ? '未処理のイベントチット'
+      : showDummies ? '引いたチットと手元のダミー' : '引いたチット');
     if (events) {
       for (const id of state.events)
         appendAssignableChit(tray, id, R.eventOptions(state, id).length ? eventChitType : null);
@@ -1903,7 +1892,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         tray.append(figure);
       }
     }
-    for (const id of R.dummyReserve(state, R.actor(state))) appendAssignableChit(tray, id);
+    if (showDummies)
+      for (const id of R.dummyReserve(state, R.actor(state))) appendAssignableChit(tray, id);
     for (const id of state.captureHold ?? []) {
       const label = `${R.chit(id).label}の保留を解除`;
       const tile = trayChit(id, () => step({type: 'release-capture', chit: id}), {label});
@@ -1955,11 +1945,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       legalHexes = new Set(R.placements(state, selected));
     else if (state.phase === 'support' && card)
       legalHexes = new Set(R.supportTargets(state).map(unit => unit.hex));
-    else if (state.phase === 'setup' && card) {
-      const bridge = R.setupBridge(state);
-      legalHexes = new Set(bridge?.id === card ? bridge.options.filter(hex => hex !== bridge.hex)
-        : R.onMap(state, R.actor(state)).filter(unit => !unit.marker).map(unit => unit.hex));
-    }
+    else if (state.phase === 'setup' && card)
+      legalHexes = new Set(R.onMap(state, R.actor(state)).filter(unit => !unit.marker).map(unit => unit.hex));
 
     const phase = state.phase;
     const side = R.actor(state);
@@ -1990,12 +1977,9 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const reinforcementNotice = reinforcementKind && ['reentry', 'recovery', 'support', 'event', 'move'].includes(phase)
       ? `${reinforcementKind === 'special' ? '特別増援' : '増援'}を選択済み：このターンの通常移動後に登場します。` : '';
     const guidance = {
-      setup: state.pendingSetupBridge
-        ? '連合軍の支援チットはお任せで配置済みです。地図の上の橋梁爆破チットを選び、色の付いた河川ヘクスに置いてください。'
-        : selectingSetupBridge() ? '橋梁爆破の新しい位置を、色の付いた河川ヘクスから選んでください。'
-        : R.setupPlacementRequired(state)
-          ? '地図の上の支援チットと駒を順にクリックするか、チットを駒にドラッグします。ダミーは残せます。'
-          : '必須チットの配置が済みました。配置を確定してから次へ進めます。',
+      setup: R.setupPlacementRequired(state)
+        ? '地図の上の支援チットと駒を順にクリックするか、チットを駒にドラッグします。'
+        : '必須チットの配置が済みました。配置を確定してから次へ進めます。',
       resolve:'両軍の支援チットを確認して戦闘を判定します。',
       advance:'戦闘後前進を選ぶと、この戦闘が終了します。',
       supply:'残りの補給チットから1枚選びます。',
@@ -2037,25 +2021,17 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   byId('board').addEventListener('dragover', event => {
-    if (countersHidden || (!hasPendingEvent() && !R.setupBridge(state)) ||
-        !event.dataTransfer.types.includes(eventChitType)) return;
+    if (countersHidden || !hasPendingEvent() || !event.dataTransfer.types.includes(eventChitType)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   });
   byId('board').addEventListener('drop', event => {
-    if (countersHidden) return;
+    if (countersHidden || !hasPendingEvent()) return;
     const id = event.dataTransfer.getData(eventChitType);
-    const bridge = R.setupBridge(state);
-    const placingBridge = bridge?.id === id;
-    if (!placingBridge && (!hasPendingEvent() || !state.events.includes(id))) return;
+    if (!state.events.includes(id)) return;
     event.preventDefault();
     const destination = event.target.closest('[data-hex], [data-unit]');
     const hex = destination?.dataset.hex ?? R.unitById(state, destination?.dataset.unit)?.hex;
-    if (placingBridge) {
-      if (hex === bridge.hex) return;
-      if (!bridge.options.includes(hex)) return note('連合軍の連絡線が通る道路付き河川ヘクスを選んでください。', true);
-      return step({type: 'place-setup-bridge', hex});
-    }
     if (!R.eventOptions(state, id).includes(hex)) return note('このヘクスにはイベントを適用できません。', true);
     step({type: 'event', chit: id, hex, effect: card === id ? eventEffect : 'disrupt'});
   });

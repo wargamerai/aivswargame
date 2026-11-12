@@ -161,18 +161,23 @@ const BulgeRules = (() => {
     state.setupOrders.push({unit:unit.id,chit:id});
     state.setupConfirmed=false;
   }
-  function setupBridge(state) {
-    if (state.phase!=='setup') return null;
-    const [hex, id] = Object.entries(state.bridges)[0] ?? [];
-    const card = id ?? state.pendingSetupBridge;
-    if (!card) return null;
-    // Test the crossing with its bridge intact, including when moving a placed marker.
-    const board = hex ? {...state, bridges:{...state.bridges}} : state;
-    if (hex) delete board.bridges[hex];
-    return {id:card, hex, options:eventOptions(board,card)};
-  }
+  const initialBridgeHex='2618';
   function setupPlacementRequired(state) {
-    return state.hand.some(id=>chit(id).kind!=='dummy') || Boolean(state.pendingSetupBridge);
+    return state.hand.some(id=>chit(id).kind!=='dummy');
+  }
+  function correctInitialBridge(state) {
+    if (state.turn!==1 || !['setup','move'].includes(state.phase)) return false;
+    const oldHex=Object.keys(state.bridges).find(hex=>['1814','2415'].includes(hex) &&
+      state.bridges[hex]==='a-bridge:1');
+    const id=oldHex ? state.bridges[oldHex] : state.pendingSetupBridge;
+    if (!id || state.bridges[initialBridgeHex]) return false;
+    const board={...state, bridges:{...state.bridges}};
+    if (oldHex) delete board.bridges[oldHex];
+    if (!eventOptions(board,id).includes(initialBridgeHex)) return false;
+    state.bridges={...board.bridges,[initialBridgeHex]:id};
+    delete state.pendingSetupBridge;
+    log(state,`橋梁爆破の初期位置を ${initialBridgeHex} に修正しました。`);
+    return true;
   }
   const initialSupport = {
     allied: ['a-fort','a-destroyer','a-arty','a-arty','a-tank','a-tank',...Array(6).fill('a-dummy')],
@@ -217,20 +222,9 @@ const BulgeRules = (() => {
       }
     }
     const bridge = state.cups.allied.find(id => id.startsWith('a-bridge:'));
-    if (mode==='local') state.pendingSetupBridge=take(state,'allied',bridge);
-    else {
-      const crossings=eventOptions(state,bridge);
-      const armor=onMap(state,'german').filter(unit=>unit.mechanized);
-      const score=hex=>{
-        const distanceToArmor=Math.min(...armor.map(unit=>distance(hex,unit.hex)));
-        const roads=neighbors(hex).filter(next=>isRoad(state,hex,next)).length;
-        return -distanceToArmor*3+roads;
-      };
-      const bridgeHex=crossings.sort((a,b)=>score(b)-score(a))[0];
-      if (bridgeHex) {
-        state.bridges[bridgeHex]=take(state,'allied',bridge);
-        log(state,`連合軍AI：橋梁爆破を ${bridgeHex} に配置しました。`);
-      }
+    if (eventOptions(state,bridge).includes(initialBridgeHex)) {
+      state.bridges[initialBridgeHex]=take(state,'allied',bridge);
+      log(state,`橋梁爆破を ${initialBridgeHex} に配置しました。`);
     }
     const cavalry = state.cups.allied.find(id => id.startsWith('a-cavalry:'));
     const cavalryHex = eventOptions(state,cavalry).find(h => h === '2709') ?? eventOptions(state,cavalry)[0];
@@ -1123,24 +1117,12 @@ const BulgeRules = (() => {
         if (phase!=='setup' || side!=='allied' || !state.hand.length) return false;
         autoAlliedSetup(state);
         return true;
-      case 'place-setup-bridge': {
-        const bridge=setupBridge(state);
-        if (!bridge?.options.includes(action.hex) || action.hex===bridge.hex) return false;
-        if (bridge.hex) delete state.bridges[bridge.hex];
-        state.bridges[action.hex]=bridge.id;
-        delete state.pendingSetupBridge;
-        state.setupOrders.push({chit:bridge.id, hex:action.hex, from:bridge.hex});
-        state.setupConfirmed=false;
-        return true;
-      }
+      case 'correct-initial-bridge':
+        return correctInitialBridge(state);
       case 'undo-setup': {
         if (phase!=='setup' || !state.setupOrders.length) return false;
         const order=state.setupOrders.pop();
-        if (order.hex) {
-          delete state.bridges[order.hex];
-          if (order.from) state.bridges[order.from]=order.chit;
-          else state.pendingSetupBridge=order.chit;
-        } else {
+        if (order.unit) {
           const target=unitById(state,order.unit);
           target.support=target.support.filter(id=>id!==order.chit);
           state.hand.unshift(order.chit);
@@ -1308,6 +1290,6 @@ const BulgeRules = (() => {
   return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest, unitZoc,
     onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, transportableSupport, movementOptions, previewMoves, canOrderUnit, canOrderDestination, offRoadForest, roadLinks,
     placements, eligiblePlacements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
-    eventOptions, setupBridge, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
+    eventOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
     battleInfo, possibleSupport, defaultSupport, combatProfile, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured };
 })();
