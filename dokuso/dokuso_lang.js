@@ -243,6 +243,8 @@ dokusoTranslationRows(`
 結果は決まっています|Result is automatic|Résultat automatique|Ergebnis steht fest|Risultato automatico|Resultado automático|结果已确定|결과는 정해져 있습니다|Результат предопределён
 サイコロを振ります|Rolling the die|Lancer du dé|Würfeln|Lancio del dado|Tirando el dado|正在掷骰子|주사위를 굴립니다|Бросок кубика
 裏返す前|before reveal|avant révélation|vor dem Aufdecken|prima della rivelazione|antes de revelar|翻开前|공개 전|до раскрытия
+戦闘結果表|Combat results table|Table des résultats de combat|Kampfergebnistabelle|Tabella dei risultati di combattimento|Tabla de resultados de combate|战斗结果表|전투 결과표|Таблица результатов боя
+ダイス不要|No die roll|Sans jet de dé|Kein Würfelwurf|Nessun tiro di dado|Sin tirada de dado|无需掷骰|주사위 굴림 없음|Без броска кубика
 比が大きく|High odds|Rapport élevé|Hohes Verhältnis|Rapporto alto|Proporción alta|比值很高|전력비가 높음|Высокое соотношение
 小さく|low|faible|niedrig|basso|baja|很低|낮음|низкое
 以上|or more|ou plus|oder mehr|o più|o más|以上|이상|и выше

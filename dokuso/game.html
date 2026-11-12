@@ -198,7 +198,9 @@
   @keyframes shake { 0% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } 100% { transform: rotate(-12deg); } }
   #combatCard table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 3px; font-size: 11px; }
   #combatCard th, #combatCard td { padding: 1px; border: 1px solid #454c57; text-align: center; overflow-wrap: anywhere; }
+  #combatCard caption { color: #f0d070; text-align: left; font-size: 12px; font-weight: bold; padding-bottom: 2px; }
   #combatCard th { font-size: 15px; font-weight: normal; }
+  #combatCard .crt-code { display: block; font-size: 12px; }
   #combatCard .hit { background: #8a6d00; color: #fff; font-weight: bold; }
   #combatCard .resolution { display: flex; align-items: center; gap: 7px; min-width: 0; }
   #combatCard .resolution:not(:has(.dice:not([hidden]), .result:not(:empty), button)) { display: none; }
@@ -643,18 +645,21 @@ function showCombatCard(info) {
   const hasSov = [...info.attackers, ...info.defenders].some(id => game.unit(id).side === 'sov');
   const oddsTxt = info.odds === '7:1' ? '7対1以上' : info.odds === '1:4' ? '1対4以下' : info.odds.replace(':', '対');
   const fixed = info.odds === '7:1' || info.odds === '1:4';
-  const col = fixed ? [] : D.CRT[info.odds];
-  const table = !info.zeroDefense && !fixed ? `<table id="ccTable" hidden>
-    <thead><tr>${col.map((_, k) => `<th scope="col" data-d="${k + 1}">${DICE[k + 1]}</th>`).join('')}</tr></thead>
-    <tbody><tr>${col.map((r, k) => `<td data-d="${k + 1}" title="${r}">${D.RESULT_NAME[r]}</td>`).join('')}</tr></tbody>
-    </table>` : '';
+  const resultCell = result => `<strong class="crt-code">${result}</strong>${D.RESULT_NAME[result]}`;
+  const col = fixed ? Array(6).fill(info.odds === '7:1' ? 'DE' : 'AE') : D.CRT[info.odds];
+  const table = `<table id="ccTable" hidden>
+    <caption>戦闘結果表 · ${info.zeroDefense ? ZERO_DEFENSE_TEXT : oddsTxt}</caption>
+    ${info.zeroDefense
+      ? `<tbody><tr><td>${resultCell('DE')}</td></tr></tbody>`
+      : `<thead><tr>${col.map((_, k) => `<th scope="col" data-d="${k + 1}" aria-label="${k + 1}">${DICE[k + 1]}</th>`).join('')}</tr></thead>
+        <tbody><tr>${col.map((result, k) => `<td data-d="${k + 1}">${resultCell(result)}</td>`).join('')}</tr></tbody>`}
+    </table>`;
   card.innerHTML = `<h4>戦闘 ${info.no} / ${info.total}（${info.hex}）</h4>
     <div class="participants">
       <div><div class="side">攻撃: ${aSide}</div><div class="imgs">${imgs(info.attackers, 'ccU')}</div></div>
       <div><div class="side">防御: ${dSide}</div><div class="imgs">${imgs(info.defenders, 'ccU')}</div></div>
     </div>
-    <div class="odds-line"><span id="ccStr" hidden>攻撃 <b>${info.att}</b> 対 防御 <b>${info.def / info.mult}</b> × 地形 ${info.mult} ＝ <b>${info.def}</b></span>
-    <span id="ccOdds" hidden>比 <b>${oddsTxt}</b></span></div>
+    <div class="odds-line"><span id="ccStr" hidden>攻撃 <b>${info.att}</b> 対 防御 <b>${info.def / info.mult}</b> × 地形 ${info.mult} ＝ <b>${info.def}</b></span></div>
     ${table}
     <div id="ccStage" class="expl">${hasSov ? 'ソ連の駒を裏返します…' : ''}</div>
     <div class="resolution"><div class="dice" id="ccDice" hidden>⚀</div><div class="result" id="ccRes"></div><div id="ccBtn"></div></div>
@@ -668,10 +673,10 @@ function showCombatCard(info) {
   if (hasSov) steps.push(() => { card.querySelectorAll('img.ccU').forEach(im => { const u = game.unit(im.dataset.id); im.src = encodeURI(unitImg(u)); im.title = game.unitName(u); }); $('ccStage').textContent = ''; });
   // 2) 戦闘力と比
   steps.push(() => { $('ccStr').hidden = false; });
-  if (!info.zeroDefense) {
-    steps.push(() => { $('ccOdds').hidden = false; });
-    if (!fixed) steps.push(() => { $('ccTable').hidden = false; $('ccStage').textContent = 'サイコロを振ります…'; });
-  }
+  steps.push(() => {
+    $('ccTable').hidden = false;
+    $('ccStage').textContent = info.zeroDefense || fixed ? 'ダイス不要' : 'サイコロを振ります…';
+  });
   // 4) サイコロを振って判定
   steps.push(() => {
     const dEl = $('ccDice');
@@ -682,8 +687,10 @@ function showCombatCard(info) {
       ui.lastResult = r;
       dEl.classList.remove('roll');
       dEl.textContent = fixed ? '－' : DICE[r.die];
-      $('ccStage').textContent = '';
-      for (const cell of card.querySelectorAll(`#ccTable [data-d="${r.die}"]`)) cell.classList.add('hit');
+      if (!info.zeroDefense && !fixed) {
+        $('ccStage').textContent = '';
+        for (const cell of card.querySelectorAll(`#ccTable [data-d="${r.die}"]`)) cell.classList.add('hit');
+      }
       $('ccRes').textContent = D.RESULT_NAME[r.result];
       $('ccExpl').textContent = info.zeroDefense ? ZERO_DEFENSE_TEXT + '。' + RESULT_EXPL.DE : RESULT_EXPL[r.result] || '';
       render();
