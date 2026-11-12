@@ -565,6 +565,22 @@ const BulgeRules = (() => {
   function eligiblePlacements(state) {
     return state.units.filter(unit => placements(state,unit.id).length);
   }
+  function placeUnit(state, id, hex) {
+    if (!placements(state,id).includes(hex)) return null;
+    const unit=unitById(state,id);
+    unit.hex=hex;
+    unit.status='map';
+    unit.disrupted=state.phase==='reentry';
+    return unit;
+  }
+  function previewReinforcements(state, orders) {
+    const board=copy(state), valid=[], rejected=[];
+    for (const order of orders) {
+      if (board.phase==='reinforce' && order && placeUnit(board,order.unit,order.hex)) valid.push(order);
+      else rejected.push(order);
+    }
+    return {state:board,valid,rejected};
+  }
   function supportTargets(state) {
     const side=actor(state), network=lines(state,side,true);
     return onMap(state,side).filter(u => !u.marker && (network.has(u.hex) ||
@@ -1084,12 +1100,21 @@ const BulgeRules = (() => {
         nextPhase(state);
         return true;
       case 'place': {
-        if (!placements(state,action.unit).includes(action.hex)) return false;
-        unit.hex=action.hex; unit.status='map'; unit.disrupted=phase==='reentry';
+        if (!placeUnit(state,action.unit,action.hex)) return false;
         if (phase==='reinforce' && source(side,unit.hex)) drawChits(state,side,unit.transport,unit);
         if (phase==='reinforce' && side==='allied' && state.flags.highbeam && unit.group!=='RS' &&
             (!state.highbeamUnits.length || unitById(state,state.highbeamUnits[0]).group===unit.group)) state.highbeamUnits.push(unit.id);
         log(state,`${unit.name} を ${unit.hex} に${phase==='reentry'?'再配置':'配置'}。`);
+        return true;
+      }
+      case 'place-reinforcements': {
+        const orders=action.placements;
+        if (phase!=='reinforce' || !Array.isArray(orders) || !orders.length ||
+            previewReinforcements(state,orders).rejected.length) return false;
+        for (const order of orders) {
+          if (!execute(state,{type:'place',unit:order.unit,hex:order.hex})) return false;
+          if (state.events.length) break;
+        }
         return true;
       }
       case 'recover':
@@ -1314,7 +1339,7 @@ const BulgeRules = (() => {
   }
   return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest, unitZoc,
     onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, transportableSupport, movementOptions, previewMoves, canOrderUnit, canOrderDestination, offRoadForest, roadLinks,
-    placements, eligiblePlacements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
+    placements, eligiblePlacements, previewReinforcements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
     eventOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
     battleInfo, possibleSupport, defaultSupport, combatProfile, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured };
 })();

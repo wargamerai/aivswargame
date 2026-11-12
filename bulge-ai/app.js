@@ -32,8 +32,9 @@
   const isLocal = () => state.mode === 'local';
   const isAI = () => !isLocal() && !eventPractice && R.actor(state) === 'allied';
   const hasPendingEvent = () => !supportPractice && ['event', 'reinforce'].includes(state.phase) && state.events.length > 0;
-  const waitingReinforcements = () => state.units.filter(unit => unit.side === R.actor(state) &&
-    unit.status === 'reserve' && state.reinforceGroups.includes(unit.group));
+  const draftingReinforcements = () => state.phase === 'reinforce' && isAI() && !state.events.length;
+  const waitingReinforcements = board => board.units.filter(unit => unit.side === R.actor(board) &&
+    unit.status === 'reserve' && board.reinforceGroups.includes(unit.group));
   const eventChits = side => Object.keys(D.chits)
     .filter(id => id.startsWith(side[0] + '-') && D.chits[id].kind === 'event').map(id => id + ':1');
   const nameOf = id => R.unitById(state, id)?.name ?? id;
@@ -46,7 +47,7 @@
   let state = adminPractice ? practiceAdministration() : battlePractice ? practiceBattle() : load();
   let practiceEvent = 'all';
   let practiceEventSide = 'german';
-  let movePlan, attackPlan, pausedReservations, selected, inspected, moveMode, moveSupport;
+  let movePlan, attackPlan, reinforcementPlan, pausedReservations, selected, inspected, moveMode, moveSupport;
   let moveRepair = false;
   let orderDraft = null;
   const movementOrderName = type => type === 'hold' ? '死守命令' : '移動予約';
@@ -204,7 +205,7 @@
 
   function saveGameFile() {
     const data = {format: 'bulge-ai-save', version: 1, state, movePlan, attackPlan, supportChoices, artilleryDie,
-      recoveryOrders, preferDefenderLoss, pausedReservations: [...pausedReservations]};
+      reinforcementPlan, recoveryOrders, preferDefenderLoss, pausedReservations: [...pausedReservations]};
     const url = URL.createObjectURL(new Blob([JSON.stringify(data)], {type: 'application/json'}));
     const link = element('a');
     link.href = url;
@@ -241,6 +242,10 @@
         throw Error('Invalid movement orders');
       if (['attack', 'counter'].includes(board.phase) && !R.validateAttacks(board, saved.attackPlan))
         throw Error('Invalid attack orders');
+      const reinforcements = saved.reinforcementPlan ?? [];
+      if (!Array.isArray(reinforcements) || (reinforcements.length && (board.phase !== 'reinforce' ||
+          R.previewReinforcements({...board, events: []}, reinforcements).rejected.length)))
+        throw Error('Invalid reinforcement placements');
       const recoveries = saved.recoveryOrders ?? [];
       if (!Array.isArray(recoveries) || (recoveries.length &&
           !R.apply(board, {type: 'recover-batch', side: R.actor(board), units: recoveries}).ok))
@@ -258,6 +263,7 @@
       return;
     }
     state = saved.state;
+    announcedPhase = null;
     if (byId('start-dialog').open) byId('start-dialog').close();
     document.querySelector('.game').hidden = false;
     const phase = state.phase;
@@ -271,6 +277,8 @@
         rejectedMoves = checked.rejected.length;
       }
       if (planning() && (saved.attackPlan.length || !isAI())) attackPlan = saved.attackPlan;
+      if (state.phase === 'reinforce' && isAI() && Array.isArray(saved.reinforcementPlan))
+        reinforcementPlan = saved.reinforcementPlan;
       supportChoices = {...supportChoices, ...battleChoicesFor(saved.supportChoices ?? {}, 'german')};
     }
     artilleryDie = saved.artilleryDie ?? null;
@@ -512,6 +520,18 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       return note(command.type === 'undo-support' ? '直前の操作を取り消しました。'
         : pending ? 'ここまでの配置を確定しました。残りは続けて配置できます。' : '配置を確定しました。');
     }
+    if (state.phase === 'reinforce' && isAI() && ['event', 'place-reinforcements'].includes(command.type)) {
+      reinforcementPlan = reinforcementPlan.filter(order => R.unitById(state, order.unit)?.status === 'reserve');
+      if (!state.events.length) reinforcementPlan = AI.reinforcements(state, reinforcementPlan);
+      selected = null;
+      inspected = null;
+      card = null;
+      eventEffect = 'disrupt';
+      message = command.type === 'event' ? {text: state.log.at(-1).text, error: false} : null;
+      render();
+      if (draftingReinforcements() && reinforcementPlan.length) focusMap();
+      return;
+    }
     if (before.phase === state.phase && ['place', 'assign', 'event', 'recover-batch', 'undo-recovery',
         'undo-setup', 'hold-capture', 'release-capture'].includes(command.type)) {
       selected = null;
@@ -535,7 +555,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function prepare(automate = true) {
-    movePlan = []; attackPlan = []; pausedReservations = new Set(); attackers = new Set(); orderDraft = null;
+    movePlan = []; attackPlan = []; reinforcementPlan = []; pausedReservations = new Set();
+    attackers = new Set(); orderDraft = null;
     reviewedAttack = null;
     recoveryOrders = [];
     reentryHex = null;
@@ -571,6 +592,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (state !== beforeAdmin) save();
     if (automate && isAI() && moving()) movePlan = AI.moves(state);
     if (automate && isAI() && planning()) attackPlan = AI.attacks(state);
+    if (automate && draftingReinforcements()) reinforcementPlan = AI.reinforcements(state);
     supportChoices = battleChoicesFor(R.defaultSupport(R.battleInfo(state)), 'allied');
     artilleryDie = null;
     preferDefenderLoss = false;
@@ -666,8 +688,32 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     render();
   }
 
+  function reinforcementPlaces(id) {
+    if (!draftingReinforcements()) return R.placements(state, id);
+    const otherPlacements = reinforcementPlan.filter(order => order.unit !== id);
+    return R.placements(R.previewReinforcements(state, otherPlacements).state, id);
+  }
+
+  function placeReinforcement(id, hex) {
+    if (!reinforcementPlaces(id).includes(hex)) return note('このヘクスには増援を配置できません。', true);
+    if (!draftingReinforcements()) return step({type: 'place', unit: id, hex});
+    const index = reinforcementPlan.findIndex(order => order.unit === id);
+    const order = {unit: id, hex};
+    if (index < 0) reinforcementPlan.push(order);
+    else reinforcementPlan[index] = order;
+    selected = null;
+    message = null;
+    render();
+  }
+
   function chooseUnit(id) {
     if (orderDraft) return chooseOrderTarget(R.unitById(projection.state, id).hex);
+    if (draftingReinforcements() && reinforcementPlan.some(order => order.unit === id)) {
+      selected = selected === id ? null : id;
+      message = null;
+      render();
+      return;
+    }
     const unit = R.unitById(state, id);
     inspected = id;
     message = null;
@@ -720,7 +766,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     }
     if (state.phase === 'reentry' && (selected || R.city(hex))) return chooseReentryHex(hex);
     if (state.phase === 'reinforce' && legalHexes.has(hex) && selected)
-      return step({type: 'place', unit: selected, hex});
+      return placeReinforcement(selected, hex);
     const occupant = R.at(projection.state, hex)[0];
     if (occupant) return chooseUnit(occupant.id);
     if (moving() && selected) note('このヘクスは選択中の部隊の移動範囲外です。', true);
@@ -843,6 +889,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     else hideStack();
     const pieces = document.createDocumentFragment();
     const movingIds = new Set(moving() ? projection.state.trails.map(trail => trail.id) : []);
+    const reinforcingIds = new Set(draftingReinforcements() ? reinforcementPlan.map(order => order.unit) : []);
     const committedOrders = new Map(R.onMap(state).filter(unit => unit.movementOrder)
       .map(unit => [unit.id, unit.movementOrder]));
     const fightingIds = new Set(attackPlan.flatMap(order => order.attackers));
@@ -877,13 +924,15 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         if (state.phase === 'recovery' && unit.side === R.actor(state) && unit.disrupted && !unit.marker)
           classes.push('recovery-target');
         const moved = movingIds.has(unit.id);
+        const reinforcing = reinforcingIds.has(unit.id);
         if (moved) classes.push('planned');
+        if (reinforcing) classes.push('reinforcement-draft');
         if (unit.id === selected || attackers.has(unit.id)) classes.push('selected');
         else if (fightingIds.has(unit.id)) classes.push('attack-ordered');
         const support = supportPieces(unit);
         const order = committedOrders.get(unit.id);
         const orderMark = order && (order.type === 'hold' && hex === order.target ? '死守' : '予約');
-        const label = `${R.sideName(unit.side)} ${unit.name} ${hex}${moved ? ' 移動済み' : ''}${unit.disrupted ? ' 混乱' : ''} 支援 ${support.length}枚${orderMark ? ' ' + orderMark : ''}`;
+        const label = `${R.sideName(unit.side)} ${unit.name} ${hex}${reinforcing ? ' 増援の配置案' : ''}${moved ? ' 移動済み' : ''}${unit.disrupted ? ' 混乱' : ''} 支援 ${support.length}枚${orderMark ? ' ' + orderMark : ''}`;
         const node = svg('g', {class: classes.join(' '), tabindex: 0, role: 'button',
           'aria-label': label, 'data-unit': unit.id});
         const offset = Math.min(5, 13 / Math.max(1, support.length));
@@ -948,24 +997,17 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const battle = state.phase === 'resolve' ? R.battleInfo(state) : null;
     const focus = state.phase === 'advance' ? state.combat.advance.hex : battle?.target;
     const visibleAttacks = attackEdit != null ? [attackPlan[attackEdit]]
-      : attackers.size ? []
       : reviewedAttack ? attackPlan.filter(order => order.target === reviewedAttack) : attackPlan;
     const targets = new Set(visibleAttacks.map(order => order.target));
     if (focus) targets.add(focus);
-    if (planning() && attackers.size && attackEdit == null) {
-      for (const hex of new Set(R.onMap(state, R.enemy(R.actor(state))).map(u => u.hex))) {
-        const candidates = R.battleCandidates(state, hex).map(unit => unit.id);
-        if ([...attackers].every(id => candidates.includes(id))) targets.add(hex);
-      }
-    }
     const groups = visibleAttacks.map(order => ({
       targets: [order.target],
       attackers: order.attackers,
     }));
-    if (battle || attackers.size || focus) {
+    if (focus) {
       groups.splice(0, groups.length, {
         targets: [...targets],
-        attackers: battle ? battle.attackers.map(unit => unit.id) : [...attackers],
+        attackers: battle ? battle.attackers.map(unit => unit.id) : [],
       });
     }
     if (battlePractice && battle && state.combat.from === 'attack') {
@@ -976,7 +1018,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       })));
       for (const target of queued) targets.add(target);
     }
-    const participants = new Set();
+    const participants = new Set([...attackers].map(id => R.unitById(state, id).hex));
     const battleColors = new Map();
     for (const group of groups) {
       const origins = group.attackers.map(id => R.unitById(state, id).hex).filter(Boolean);
@@ -1074,7 +1116,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       ? [...legalHexes].sort((a, b) => R.distance(a, startingHex) - R.distance(b, startingHex))[0] : null;
     center(battle ?? recovery ?? eventTarget ?? reentryHex ?? orderDraft?.target ?? reviewedAttack ??
       R.unitById(projection.state, selected)?.hex ?? attackPlan[0]?.target ??
-      movePlan[0]?.to ?? startingHex);
+      movePlan[0]?.to ?? (draftingReinforcements() ? reinforcementPlan[0]?.hex : null) ?? startingHex);
   }
 
   function renderMovement(panel, actions) {
@@ -1529,7 +1571,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     }
     let blocked = false;
     if (state.phase === 'reinforce') {
-      const waiting = waitingReinforcements();
+      if (draftingReinforcements() && reinforcementPlan.length) {
+        actions.append(button('増援の配置を確定', () => step({type: 'place-reinforcements', placements: reinforcementPlan}),
+          {primary: true, id: 'confirm-reinforcements'}));
+        return;
+      }
+      const waiting = waitingReinforcements(state);
       blocked = waiting.some(unit => R.placements(state, unit.id).length);
       if (waiting.length && !blocked)
         panel.append(element('p', '連絡線の通じる空き都市・補給源など、配置条件を満たすヘクスがありません。', 'hint'));
@@ -1826,8 +1873,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (tray.hidden) return;
     if (reinforcements) {
       tray.setAttribute('aria-label', '未配置の増援');
-      for (const unit of waitingReinforcements()) {
-        const places = R.placements(state, unit.id);
+      for (const unit of waitingReinforcements(projection.state)) {
+        const places = reinforcementPlaces(unit.id);
         const tile = tileButton('', picture(unit), () => {
           selected = selected === unit.id ? null : unit.id;
           message = null;
@@ -1887,18 +1934,21 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
 
   function announcePhase(turnLabel, phaseLabel, side) {
     const key = `${state.turn}/${state.turnSide}/${state.phase}/${side}/${phaseLabel}`;
-    if (key === announcedPhase) return;
-    announcedPhase = key;
+    if (key === announcedPhase?.key) return;
+    const turnChanged = Boolean(announcedPhase && announcedPhase.turn !== state.turn);
+    announcedPhase = {key, turn: state.turn};
     const banner = byId('phase-announcement');
+    banner.classList.toggle('turn-change', turnChanged);
     byId('announced-turn').textContent = turnLabel;
     byId('announced-phase').textContent = side ? `${R.sideName(side)} · ${phaseLabel}` : phaseLabel;
     banner.hidden = false;
     window.clearTimeout(announcementTimer);
-    announcementTimer = window.setTimeout(() => { banner.hidden = true; }, 2400);
+    announcementTimer = window.setTimeout(() => { banner.hidden = true; }, turnChanged ? 3600 : 2400);
   }
 
   function render() {
-    projection = moving() ? R.previewMoves(state, movePlan, pausedReservations) : {state};
+    projection = moving() ? R.previewMoves(state, movePlan, pausedReservations)
+      : draftingReinforcements() ? R.previewReinforcements(state, reinforcementPlan) : {state};
     const selectedMoved = moving() && projection.state.trails.some(trail => trail.id === selected);
     returnMoveButton.hidden = !selectedMoved || countersHidden;
     if (state.phase === 'recovery' && recoveryOrders.length) {
@@ -1921,7 +1971,9 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (hasPendingEvent()) {
       if (card) legalHexes = new Set(R.eventOptions(state, card));
     }
-    else if (['reentry','reinforce'].includes(state.phase) && selected)
+    else if (state.phase === 'reinforce' && selected)
+      legalHexes = new Set(reinforcementPlaces(selected));
+    else if (state.phase === 'reentry' && selected)
       legalHexes = new Set(R.placements(state, selected));
     else if (state.phase === 'support' && card)
       legalHexes = new Set(R.supportTargets(state).map(unit => unit.hex));
@@ -1965,7 +2017,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       supply:'残りの補給チットから1枚選びます。',
       support:'地図の上のチットを選び、配属先の部隊をクリックします。',
       event:hasPendingEvent() ? '地図の上のイベントチットを選び、効果を適用します。' : '処理待ちのイベントはありません。',
-      reinforce:'',
+      reinforce: draftingReinforcements() && reinforcementPlan.length ? '枠付きの増援をクリックすると配置先を変更できます。' : '',
     };
     byId('phase-detail').textContent = recoveryPractice && phase !== 'recovery' ? '混乱回復の練習はここまでです。'
       : supportPractice && phase !== 'support' ? '支援チット取得の練習はここまでです。'
@@ -2014,13 +2066,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   byId('board').addEventListener('drop', event => {
     if (countersHidden) return;
     const destination = event.target.closest('[data-hex], [data-unit]');
-    const hex = destination?.dataset.hex ?? R.unitById(state, destination?.dataset.unit)?.hex;
+    const hex = destination?.dataset.hex ?? R.unitById(projection.state, destination?.dataset.unit)?.hex;
     if (state.phase === 'reinforce' && !hasPendingEvent()) {
       const unit = event.dataTransfer.getData(reinforcementType);
       if (!unit) return;
       event.preventDefault();
-      if (!R.placements(state, unit).includes(hex)) return note('このヘクスには増援を配置できません。', true);
-      return step({type: 'place', unit, hex});
+      return placeReinforcement(unit, hex);
     }
     if (!hasPendingEvent()) return;
     const id = event.dataTransfer.getData(eventChitType);

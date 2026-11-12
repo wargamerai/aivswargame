@@ -186,7 +186,9 @@ const BulgeAI = (() => {
       }
       case 'reentry':
       case 'reinforce': {
-        const unit=R.eligiblePlacements(state)[0];
+        const eligible=R.eligiblePlacements(state);
+        const special=state.phase==='reinforce' && eligible.find(unit=>unit.group==='RS');
+        const unit=special || eligible[0];
         if (!unit) return {type:'next',side};
         const zones=R.zoc(state,side);
         const score=h=>Math.abs(nearest(h,opponents)-2)+Number(zones.has(h))*4-
@@ -213,5 +215,18 @@ const BulgeAI = (() => {
       default: return null;
     }
   }
-  return {moves,attacks,administration,distance};
+  function reinforcements(state, existing=[]) {
+    if (R.actor(state)!=='allied' || state.phase!=='reinforce' || state.events.length) return [];
+    const checked=R.previewReinforcements(state,existing);
+    const plan=checked.valid;
+    let board=checked.state;
+    for (;;) {
+      const action=administration(board);
+      if (action.type!=='place') return plan;
+      const order={unit:action.unit,hex:action.hex};
+      plan.push(order);
+      board=R.previewReinforcements(board,[order]).state;
+    }
+  }
+  return {moves,attacks,reinforcements,administration,distance};
 })();
