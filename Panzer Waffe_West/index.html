@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="west.css">
+    <title>対AI Panzer Waffe 西部戦線1944 ©IED 2026</title>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    
+    <style>
+        /* ---- 戦場（カード風）---- */
+        .pw { white-space: normal; font-family: 'Hiragino Kaku Gothic ProN','Hiragino Sans',Meiryo,sans-serif; color:#e6e1d3; font-size:13px; line-height:1.35; }
+        .side { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; padding:4px 8px; border-radius:4px; margin:2px 0; }
+        .side.de { background:#2b2f33; border-left:4px solid #9aa3ab; }
+        .side.us { background:#2c3122; border-left:4px solid #8f9b5a; }
+        .side .fn { font-weight:bold; font-size:14px; color:#fff; }
+        .side .sub { color:#a9a491; }
+        .hq b { color:#ffd666; font-size:15px; }
+        .hqbar { display:inline-flex; gap:1px; vertical-align:middle; margin-left:4px; }
+        .hqbar i { width:5px; height:11px; background:#3a3a3a; display:inline-block; }
+        .hqbar i.on { background:#d9b44a; }
+        .evc { background:#7a2420; color:#ffe1dc; border-radius:3px; padding:0 6px; font-size:12px; }
+        .field { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; margin:4px 0; }
+        .lane { display:flex; flex-direction:column; gap:3px; background:#1a1c17; border:1px solid #3a3d33; border-radius:5px; padding:4px; min-width:0; }
+        .plt { min-height:62px; }
+        .ph { display:flex; flex-wrap:wrap; gap:3px 6px; align-items:center; font-size:12px; color:#c9c3ad; margin-bottom:2px; }
+        .ph b { color:#fff; }
+        .cnt { color:#8d8875; }
+        .bd { border-radius:3px; padding:0 5px; font-size:11px; }
+        .bd.adv { background:#b5651d; color:#fff; font-weight:bold; }
+        .bd.att { background:#3d4f6b; color:#dfe8ff; }
+        .bd.nofire { background:#555; color:#ddd; }
+        .cards, .hand { display:flex; flex-wrap:wrap; gap:3px; }
+        .empty { color:#666; font-size:12px; padding:6px 2px; }
+        .terrain { display:flex; justify-content:space-between; align-items:center; gap:4px; padding:3px 6px; border-radius:3px; background:#2a2b24; border:1px dashed #4b4d40; font-size:12px; }
+        .terrain.has { background:#3b3420; border:1px solid #a88a3a; }
+        .terrain .tn { font-weight:bold; color:#e9d9a6; text-align:center; flex:1; }
+        .terrain .mod { color:#8fd18f; min-width:3.5em; font-size:11px; }
+        .terrain .mod:last-child { text-align:right; }
+        /* カード */
+        .pc { position:relative; width:74px; min-height:58px; border-radius:4px; padding:3px 4px 2px; background:#d8d2bd; color:#1d1d1d; border:1px solid #000; box-shadow:0 1px 2px rgba(0,0,0,.6); display:flex; flex-direction:column; justify-content:space-between; cursor:default; }
+        .pc.de.tank { background:linear-gradient(#c9ccce,#a9aeb2); }
+        .pc.us.tank { background:linear-gradient(#cdd2a8,#a7ae78); }
+        .pc.act { background:linear-gradient(#d9c7a1,#bfa877); }
+        .pc.react { background:linear-gradient(#c5d2df,#9fb2c6); }
+        .pc.terr { background:linear-gradient(#c8d6a6,#9eb173); }
+        .pc.evt { background:linear-gradient(#e2b3a8,#c0857a); }
+        .pc.down { opacity:.75; outline:2px dashed #777; }
+        .pc .nm { font-weight:bold; font-size:12px; line-height:1.2; word-break:break-all; }
+        .pc .ty { font-size:10px; color:#333; }
+        .pc .st { display:flex; gap:3px; align-items:center; }
+        .pc .atk { background:#8b1d1d; color:#fff; font-weight:bold; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:12px; }
+        .pc .def { background:#1d3d6b; color:#fff; font-weight:bold; border-radius:3px; padding:0 4px; font-size:12px; }
+        .pc .ic { display:flex; gap:2px; flex-wrap:wrap; min-height:14px; }
+        .ti { font-size:10px; font-weight:bold; border-radius:2px; padding:0 2px; color:#fff; }
+        .t-heavy { background:#5a2d82; } .t-long { background:#1f6f5c; } .t-slope { background:#7a5a12; } .t-mob { background:#0f5d8f; } .t-fixed { background:#555; }
+        .fd { font-size:10px; background:#333; color:#fff; border-radius:2px; padding:0 3px; }
+        .pc.back { background:repeating-linear-gradient(45deg,#3b4a2f,#3b4a2f 6px,#33402a 6px,#33402a 12px); border-color:#1c2416; align-items:center; justify-content:center; }
+        .pc.back .bk { color:#a9b88f; font-size:22px; font-weight:bold; }
+        .pc .no { position:absolute; top:-6px; left:-6px; background:#ffd666; color:#000; font-weight:bold; border-radius:50%; width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; border:1px solid #000; }
+        .pc .cost { position:absolute; top:2px; right:3px; font-size:10px; color:#444; }
+        .hand .pc { width:96px; min-height:62px; }
+        .handh { color:#ffd666; font-size:12px; margin:6px 0 4px; }
+        .hand { padding:6px 0 0 6px; }
+        .hand .pc .nm { padding-left:10px; padding-right:12px; }
+        .plt.foe .ph b { color:#ff9f8f; } .plt.me .ph b { color:#9fd0ff; }
+        @media (max-width: 600px) { .pc { width:60px; } .hand .pc { width:84px; } }
+    </style>
+</head>
+<body>
+
+<header class="masthead"><strong>Panzer Waffe</strong><span>西部戦線 1944</span></header>
+<main class="game-layout">
+    <section id="fixed-dashboard" aria-label="盤面">
+        <figure class="cover">
+            <img src="sherman.jpg" alt="バストーニュ近郊のシャーマンと乗員">
+            <figcaption>バストーニュ、1944年12月</figcaption>
+        </figure>
+    </section>
+    <aside class="controls">
+        <section id="choice-panel" data-view="start" aria-live="polite">
+            <h1 id="choice-title">起動中…</h1>
+            <div id="choices"></div>
+        </section>
+        <details class="journal">
+            <summary>戦況</summary>
+            <div id="scroll-log"><div id="output-area" role="log"></div></div>
+        </details>
+    </aside>
+</main>
+<footer class="photo-credits">
+    <a href="https://commons.wikimedia.org/wiki/File:1944_Cobra_King_first_in_Bastogne.jpg">Cobra King · U.S. Army</a>
+    <a href="https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_101I-494-3376-05A,_Villers-Bocage,_zerst%C3%B6rter_Panzer_VI_(Tiger_I).jpg">Tiger I · Bundesarchiv, Bild 101I-494-3376-05A / Zwirner</a>
+    <a href="https://creativecommons.org/licenses/by-sa/3.0/de/">CC BY-SA 3.0 DE</a>
+</footer>
+<script src="west.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="../firebase_config.js"></script>
+<py-config>
+    packages = ["pandas"]
+    [[fetch]]
+    files = ["main.py", "cards_west.csv", "decks_west.json"]
+</py-config>
+
+<script type="py">
+    import js
+    import main 
+    try:
+        main.main()
+    except Exception as e:
+        js.console.error(f"実行エラーが発生しました: {e}")
+</script>
+
+</body>
+</html>
