@@ -180,22 +180,32 @@
   #hoverBox .hb { display: inline-block; vertical-align: top; text-align: center; margin: 0 3px; width: 124px; font-size: 11px; line-height: 1.35; color: #e8e8e8; }
   #hoverBox .hb img { width: 120px; height: 120px; border-radius: 5px; display: block; margin: 0 auto 3px; border: 2px solid transparent; }
   #hoverBox .hb.cur img { border-color: #ffeb3b; }
-  #combatCard { position: absolute; top: 10px; left: 12px; z-index: 50; background: rgba(30,33,40,.96); border: 2px solid #f0d070; border-radius: 8px; padding: 10px 14px; width: 330px; box-shadow: 0 4px 16px rgba(0,0,0,.7); display: none; line-height: 1.5; }
-  #combatCard h4 { margin: 0 0 6px; color: #f0d070; font-size: 15px; }
-  #combatCard .side { font-size: 12px; color: #ccd; margin-top: 4px; }
-  #combatCard .imgs { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0; }
-  #combatCard .imgs img { width: 40px; height: 40px; border-radius: 3px; }
-  #combatCard .odds { font-size: 14px; margin-top: 6px; }
-  #combatCard .dice { font-size: 54px; line-height: 1; text-align: center; margin: 4px 0; color: #fff; }
+  #combatCard {
+    position: absolute; top: 8px; left: 8px; z-index: 50; display: none;
+    width: min(410px, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto;
+    background: rgba(30,33,40,.97); border: 2px solid #f0d070; border-radius: 8px;
+    padding: 7px 9px; box-shadow: 0 4px 16px rgba(0,0,0,.7); line-height: 1.3;
+  }
+  #combatCard h4 { margin: 0 0 4px; color: #f0d070; font-size: 14px; }
+  #combatCard .participants { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #combatCard .participants > div { background: #2c313a; border-radius: 4px; padding: 3px 5px; }
+  #combatCard .side { font-size: 11px; color: #ccd; }
+  #combatCard .imgs { display: flex; gap: 3px; overflow-x: auto; margin-top: 2px; }
+  #combatCard .imgs img { flex: 0 0 29px; width: 29px; height: 29px; border-radius: 2px; }
+  #combatCard .odds-line { display: flex; flex-wrap: wrap; gap: 2px 9px; margin-top: 3px; font-size: 12px; }
+  #combatCard .dice { font-size: 31px; line-height: 1; color: #fff; }
   #combatCard .dice.roll { animation: shake .12s infinite; color: #ffeb3b; }
   @keyframes shake { 0% { transform: rotate(-12deg); } 50% { transform: rotate(12deg); } 100% { transform: rotate(-12deg); } }
-  #combatCard table { width: 100%; border-collapse: collapse; margin: 6px 0 2px; font-size: 12px; }
-  #combatCard td { padding: 1px 6px; border-bottom: 1px solid #3a3f48; }
-  #combatCard td:first-child { width: 28px; font-size: 18px; text-align: center; }
-  #combatCard tr.hit td { background: #8a6d00; color: #fff; font-weight: bold; }
-  #combatCard .result { font-size: 15px; font-weight: bold; text-align: center; color: #ffd180; min-height: 22px; }
-  #combatCard .expl { font-size: 12px; color: #ccd; text-align: center; }
-  #combatCard button { display: block; margin: 8px auto 0; background: #2e6b3a; color: #fff; border: 1px solid #5aa86a; border-radius: 4px; padding: 7px 26px; font-size: 15px; font-weight: bold; cursor: pointer; }
+  #combatCard table { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 3px; font-size: 11px; }
+  #combatCard th, #combatCard td { padding: 1px; border: 1px solid #454c57; text-align: center; overflow-wrap: anywhere; }
+  #combatCard th { font-size: 15px; font-weight: normal; }
+  #combatCard .hit { background: #8a6d00; color: #fff; font-weight: bold; }
+  #combatCard .resolution { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  #combatCard .resolution:not(:has(.dice:not([hidden]), .result:not(:empty), button)) { display: none; }
+  #combatCard .result { flex: 1; font-size: 13px; font-weight: bold; color: #ffd180; }
+  #combatCard .expl { font-size: 11px; color: #ccd; margin-top: 3px; }
+  #combatCard .expl:empty { display: none; }
+  #combatCard button { background: #2e6b3a; color: #fff; border: 1px solid #5aa86a; border-radius: 4px; padding: 5px 14px; font-size: 13px; font-weight: bold; white-space: nowrap; cursor: pointer; }
   .res { font-size: 13px; background: #2c313a; border-left: 4px solid #f0d070; padding: 6px 8px; margin: 6px 0; line-height: 1.5; }
   #panel .res { background: #eee6cf; border-left-color: #a48749; }
 </style>
@@ -633,15 +643,22 @@ function showCombatCard(info) {
   const hasSov = [...info.attackers, ...info.defenders].some(id => game.unit(id).side === 'sov');
   const oddsTxt = info.odds === '7:1' ? '7対1以上' : info.odds === '1:4' ? '1対4以下' : info.odds.replace(':', '対');
   const fixed = info.odds === '7:1' || info.odds === '1:4';
-  const col = fixed ? Array(6).fill(info.odds === '7:1' ? 'DE' : 'AE') : D.CRT[info.odds];
+  const col = fixed ? [] : D.CRT[info.odds];
+  const table = !info.zeroDefense && !fixed ? `<table id="ccTable" hidden>
+    <thead><tr>${col.map((_, k) => `<th scope="col" data-d="${k + 1}">${DICE[k + 1]}</th>`).join('')}</tr></thead>
+    <tbody><tr>${col.map((r, k) => `<td data-d="${k + 1}" title="${r}">${D.RESULT_NAME[r]}</td>`).join('')}</tr></tbody>
+    </table>` : '';
   card.innerHTML = `<h4>戦闘 ${info.no} / ${info.total}（${info.hex}）</h4>
-    <div class="side">攻撃: ${aSide}</div><div class="imgs">${imgs(info.attackers, 'ccU')}</div>
-    <div class="side">防御: ${dSide}</div><div class="imgs">${imgs(info.defenders, 'ccU')}</div>
+    <div class="participants">
+      <div><div class="side">攻撃: ${aSide}</div><div class="imgs">${imgs(info.attackers, 'ccU')}</div></div>
+      <div><div class="side">防御: ${dSide}</div><div class="imgs">${imgs(info.defenders, 'ccU')}</div></div>
+    </div>
+    <div class="odds-line"><span id="ccStr" hidden>攻撃 <b>${info.att}</b> 対 防御 <b>${info.def / info.mult}</b> × 地形 ${info.mult} ＝ <b>${info.def}</b></span>
+    <span id="ccOdds" hidden>比 <b>${oddsTxt}</b></span></div>
+    ${table}
     <div id="ccStage" class="expl">${hasSov ? 'ソ連の駒を裏返します…' : ''}</div>
-    <div id="ccStr" class="odds" style="display:none">攻撃 <b>${info.att}</b> 対 防御 <b>${info.def / info.mult}</b> × 地形 ${info.mult} ＝ <b>${info.def}</b></div>
-    <div id="ccOdds" class="odds" style="display:none">比 <b>${oddsTxt}</b></div>
-    <table id="ccTable" style="display:none">${col.map((r, k) => `<tr data-d="${k + 1}"><td>${fixed ? '−' : DICE[k + 1]}</td><td>${D.RESULT_NAME[r]}（${r}）</td></tr>`).join('')}</table>
-    <div class="dice" id="ccDice" style="display:none">⚀</div><div class="result" id="ccRes"></div><div class="expl" id="ccExpl"></div><div id="ccBtn"></div>`;
+    <div class="resolution"><div class="dice" id="ccDice" hidden>⚀</div><div class="result" id="ccRes"></div><div id="ccBtn"></div></div>
+    <div class="expl" id="ccExpl"></div>`;
   card.style.display = 'block';
   const tk = runToken;
   const gap = AI_DELAY;
@@ -650,10 +667,10 @@ function showCombatCard(info) {
   // 1) 裏返す（ソ連の駒の裏＝戦闘力の面を見せる）
   if (hasSov) steps.push(() => { card.querySelectorAll('img.ccU').forEach(im => { const u = game.unit(im.dataset.id); im.src = encodeURI(unitImg(u)); im.title = game.unitName(u); }); $('ccStage').textContent = ''; });
   // 2) 戦闘力と比
-  steps.push(() => { $('ccStr').style.display = 'block'; });
+  steps.push(() => { $('ccStr').hidden = false; });
   if (!info.zeroDefense) {
-    steps.push(() => { $('ccOdds').style.display = 'block'; });
-    steps.push(() => { $('ccTable').style.display = 'table'; $('ccStage').textContent = fixed ? '比が大きく（小さく）、結果は決まっています' : 'サイコロを振ります…'; });
+    steps.push(() => { $('ccOdds').hidden = false; });
+    if (!fixed) steps.push(() => { $('ccTable').hidden = false; $('ccStage').textContent = 'サイコロを振ります…'; });
   }
   // 4) サイコロを振って判定
   steps.push(() => {
@@ -666,8 +683,8 @@ function showCombatCard(info) {
       dEl.classList.remove('roll');
       dEl.textContent = fixed ? '－' : DICE[r.die];
       $('ccStage').textContent = '';
-      if (!fixed) { const tr = card.querySelector(`#ccTable tr[data-d="${r.die}"]`); if (tr) tr.className = 'hit'; }
-      $('ccRes').textContent = `${fixed ? '' : 'ダイス ' + r.die + ' → '}${D.RESULT_NAME[r.result]}`;
+      for (const cell of card.querySelectorAll(`#ccTable [data-d="${r.die}"]`)) cell.classList.add('hit');
+      $('ccRes').textContent = D.RESULT_NAME[r.result];
       $('ccExpl').textContent = info.zeroDefense ? ZERO_DEFENSE_TEXT + '。' + RESULT_EXPL.DE : RESULT_EXPL[r.result] || '';
       render();
       if (anyHuman()) {
@@ -676,11 +693,11 @@ function showCombatCard(info) {
         $('ccBtn').appendChild(b);
       } else later(() => { hideCombatCard(); stepResolve(); }, AI_DELAY * 3);
     };
-    if (info.zeroDefense) { resolve(); return; }
-    dEl.style.display = 'block'; dEl.classList.add('roll');
+    if (info.zeroDefense || fixed) { resolve(); return; }
+    dEl.hidden = false; dEl.classList.add('roll');
     let k = 0;
     const spin = setInterval(() => { dEl.textContent = DICE[1 + (k++ % 6)]; }, 70);
-    setTimeout(() => { clearInterval(spin); resolve(); }, fixed ? 200 : Math.max(700, gap + 200));
+    setTimeout(() => { clearInterval(spin); resolve(); }, Math.max(700, gap + 200));
   });
   let n = 0;
   const next = () => { if (tk !== runToken) return; steps[n++](); if (n < steps.length) setTimeout(next, gap); };
@@ -1008,7 +1025,10 @@ function render() {
   updateTopButtons();
   renderTopActions();
   updateReportControls();
-  if (game.phase === 'over' && !endReportShown) showEnd();
+  if (game.phase === 'over' && !endReportShown) {
+    showEnd();
+    downloadEndReport();
+  }
 }
 // 点数（変わった時は黄色く光らせる）
 function setScore(id, v) {
@@ -1586,8 +1606,7 @@ function showReportMap(turn) {
   }
   render();
 }
-function showEnd() {
-  if (game?.phase !== 'over') return;
+function endReportHtml(movementCell) {
   const score = game.scores();
   const captures = new Map();
   for (const entry of game.log) {
@@ -1604,12 +1623,10 @@ function showEnd() {
     const recorded = Number.isFinite(tally?.ger) && Number.isFinite(tally?.sov);
     if (!recorded) missingScores = true;
     const cityText = captures.get(turn)?.join('<br>') || '支配の変化なし';
-    const mapButton = record?.moves?.length ? `<button type="button" onclick="showReportMap(${turn})">地図を見る</button>` : '';
+    const mapButton = movementCell(turn);
     rows.push(`<tr><th scope="row">${turn}</th><td class="score">${recorded ? tally.ger : '—'}</td><td class="score">${recorded ? tally.sov : '—'}</td><td>${cityText}</td><td>${mapButton}</td></tr>`);
   }
-  const box = document.getElementById('modalBox');
-  delete box.dataset.onlineLobbyCode;
-  box.innerHTML = `<section class="game-report">
+  return `<section class="game-report">
     <h2>対局レポート</h2>
     <p class="outcome">${winnerText()}</p>
     <div class="res">${finalScoreDetails(score)}</div>
@@ -1617,12 +1634,99 @@ function showEnd() {
     <table class="report-table"><thead><tr><th scope="col">ターン</th><th scope="col">ドイツ</th><th scope="col">ソ連</th><th scope="col">大都市・都市</th><th scope="col">移動</th></tr></thead>
     <tbody>${rows.join('')}</tbody></table>
     ${missingScores ? '<p class="report-note">— はそのターンの得点記録がありません。</p>' : ''}
+    </section>`;
+}
+function showEnd() {
+  if (game?.phase !== 'over') return;
+  const box = document.getElementById('modalBox');
+  delete box.dataset.onlineLobbyCode;
+  box.innerHTML = endReportHtml(turn => game.turnReports?.[turn]?.moves?.length
+    ? `<button type="button" onclick="showReportMap(${turn})">地図を見る</button>` : '');
+  box.querySelector('.game-report').insertAdjacentHTML('beforeend', `
+    <button type="button" onclick="downloadEndReport()">HTMLをダウンロード</button>
     <button type="button" onclick="showReportMap()">地図を見る</button>
     ${isDokusoOnline() ? '' : '<button type="button" onclick="showStart()">もう一度</button>'}
-    </section>`;
+  `);
   document.getElementById('modal').style.display = 'flex';
   box.scrollTop = 0;
   endReportShown = true;
+}
+
+function endReportFile() {
+  const maps = new Map();
+  for (let turn = 1; turn <= game.turn; turn++) {
+    const arrows = reportArrows(turn);
+    if (arrows.length) maps.set(turn, arrows);
+  }
+
+  const content = document.createElement('main');
+  content.innerHTML = endReportHtml(turn => maps.has(turn)
+    ? `<a href="#turn-map-${turn}">地図を見る</a>` : '');
+  const width = mapImg.naturalWidth || canvas.width;
+  const height = mapImg.naturalHeight || canvas.height;
+  let background = '';
+  if (maps.size && mapImg.naturalWidth) {
+    try {
+      const map = document.createElement('canvas');
+      map.width = width; map.height = height;
+      map.getContext('2d').drawImage(mapImg, 0, 0);
+      background = `background-image: url("${map.toDataURL('image/jpeg', 0.85)}");`;
+    } catch (error) {
+      console.warn('Could not include the map image in the game report', error);
+    }
+  }
+
+  if (maps.size) {
+    const figures = [...maps].map(([turn, arrows]) => {
+      const lines = arrows.map(([from, to]) => `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" marker-end="url(#arrow-${turn})"/>`).join('');
+      return `<figure id="turn-map-${turn}">
+        <figcaption>ターン ${turn}</figcaption>
+        <svg class="report-map" viewBox="0 0 ${width} ${height}" role="img" aria-label="ドイツ軍の移動">
+          <defs><marker id="arrow-${turn}" markerWidth="3.5" markerHeight="3.5" refX="3" refY="1.75" orient="auto">
+            <path d="M0 0 L3.5 1.75 L0 3.5 Z" fill="#ad202c"/>
+          </marker></defs>
+          <g fill="none" stroke="#ad202c" stroke-width="12" stroke-linecap="round">${lines}</g>
+        </svg>
+      </figure>`;
+    }).join('');
+    content.insertAdjacentHTML('beforeend', `<section><h2>ドイツ軍の移動</h2><p>赤い矢印は移動の概略</p>${figures}</section>`);
+  }
+
+  dokusoLocalizeDOM(content);
+  const title = document.createElement('title');
+  title.textContent = dokusoTranslate('独ソ電撃戦 · 対局レポート');
+  return `<!doctype html>
+<html lang="${document.documentElement.lang}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+${title.outerHTML}
+<style>
+  body { max-width: 58rem; margin: 2rem auto; padding: 0 1rem; background: #f4f2e8; color: #253528; font: 15px/1.5 system-ui, sans-serif; }
+  h2, h3, figcaption { color: #365543; }
+  .outcome { font-size: 1.25rem; font-weight: bold; }
+  .res { background: #e3e8db; border-left: 4px solid #698069; padding: .6rem .9rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: .4rem; border-bottom: 1px solid #aeb7a7; }
+  thead { background: #dbe3d4; }
+  .score { text-align: center; }
+  figure { margin: 1.2rem 0; break-inside: avoid; }
+  figcaption { font-weight: bold; margin-bottom: .4rem; }
+  .report-map { display: block; width: 100%; background: #d4e2d0 center / 100% 100% no-repeat; ${background} }
+  a { color: #285368; }
+</style></head>
+<body>${content.outerHTML}</body>
+</html>`;
+}
+function downloadEndReport() {
+  if (game?.phase !== 'over') return;
+  const date = new Date().toISOString().slice(0, 19).replace(/T|:/g, '-');
+  const url = URL.createObjectURL(new Blob([endReportFile()], {type: 'text/html;charset=utf-8'}));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `dokuso-report-${date}.html`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 // ===== 移動の選択 =====

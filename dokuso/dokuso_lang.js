@@ -531,6 +531,7 @@ dokusoTranslationRows(`
 
 dokusoTranslationRows(`
 対局レポート|Game report|Rapport de partie|Partiebericht|Resoconto della partita|Informe de la partida|对局报告|대국 보고서|Отчёт о партии
+HTMLをダウンロード|Download HTML|Télécharger le HTML|HTML herunterladen|Scarica HTML|Descargar HTML|下载 HTML|HTML 다운로드|Скачать HTML
 ドイツ軍の移動|German movement|Déplacements allemands|Deutsche Bewegungen|Movimenti tedeschi|Movimientos alemanes|德军移动|독일군 이동|Движение немецких войск
 矢印を隠す|Hide arrows|Masquer les flèches|Pfeile ausblenden|Nascondi le frecce|Ocultar flechas|隐藏箭头|화살표 숨기기|Скрыть стрелки
 移動記録なし|No movement record|Aucun relevé de déplacement|Keine Bewegungsdaten|Movimenti non registrati|Sin registro de movimientos|无移动记录|이동 기록 없음|Нет записи о движении
