@@ -58,6 +58,9 @@
             <marker id="move-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="13" markerHeight="13" markerUnits="userSpaceOnUse" orient="auto">
               <path d="M0 0 L12 6 L0 12 Z" fill="#c21c29"/>
             </marker>
+            <marker id="reservation-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="13" markerHeight="13" markerUnits="userSpaceOnUse" orient="auto">
+              <path d="M0 0 L12 6 L0 12 Z" fill="#6a3194"/>
+            </marker>
           </defs>
           <image href="assets/map.jpg" width="1888" height="1333"/>
           <g id="hexes"></g>
@@ -69,7 +72,7 @@
       </div>
       <button id="toggle-command" class="command-toggle" type="button" aria-controls="command-panel"
         aria-expanded="true" aria-label="右パネルを隠す" title="右パネルを隠す">▶</button>
-      <div class="map-legend"><span class="key legal">移動・配置可能</span><span class="key stop">進入で停止</span><span class="key planned">移動案</span><span class="key target">攻撃・戦闘地点</span></div>
+      <div class="map-legend"><span class="key legal">移動・配置可能</span><span class="key stop">進入で停止</span><span id="movement-support-legend" class="key support-movement" hidden>移動支援で有利</span><span class="key planned">移動案</span><span class="key reserved">予約・死守先</span><span class="key target">攻撃・戦闘地点</span></div>
     </section>
     <aside id="command-panel" class="command" aria-label="対局操作">
       <div class="phase">
@@ -115,7 +118,7 @@
       <p id="transport-warning"></p>
       <div class="header-actions">
         <button value="cancel" autofocus>戻る</button>
-        <button class="primary" value="place">このまま配置</button>
+        <button id="transport-confirm" class="primary" value="proceed">このまま配置</button>
       </div>
     </form>
   </dialog>
@@ -134,7 +137,7 @@
       <dt>駒と支援チット</dt>
       <dd>支援チットは駒の下に重なっています。駒にマウスを乗せると右パネルに内訳が表示され、クリックすると右パネル下部に拡大表示されます。相手の未公開チットは裏向きで表示します。</dd>
       <dt>移動</dt>
-      <dd>駒を選び、色の付いたヘクスを選びます。「経路を採用」で案に加えます。案の一覧から各部隊の移動を変更・取消できます。「移動を確定」でまとめて進めます。</dd>
+      <dd>駒を選び、色の付いたヘクスを選びます。「経路を採用」で案に加えます。案の一覧から各部隊の移動を変更・取消できます。「移動を確定」でまとめて進めます。輸送力を超える場合は警告が出ます。「返却して移動」を選ぶと、AIが表示した超過分の支援チットを返却して移動します。</dd>
       <dt>増援</dt>
       <dd>補給源ヘクスに増援を置くたびに、その部隊の輸送能力と同じ枚数を引き、支援チットをその部隊に配属します。イベントチットを引いた場合は、その場で処理します。</dd>
       <dt>ZOC（支配地域）</dt>
@@ -143,6 +146,8 @@
       <dd>味方の駒を複数選んでから、隣接する敵の駒を選びます。「攻撃案を確定」すると今回の攻撃先が強調されます。オーバービューで操作する陣営を切り替え、両軍が使う支援チットを選んだら公開します。チットの効果を確認して判定し、結果を見てから損害を適用します。</dd>
       <dt>戦闘後前進</dt>
       <dd>敵のいなくなったヘクスに、混乱していない参加部隊を1個前進させられます。</dd>
+      <dt>移動予約・死守命令</dt>
+      <dd>移動フェイズに駒を選び、右パネルで「移動予約」または「死守命令」を選びます。地図で目的地を指定して「命令を確定」を押すと、紫の破線で行き先を表示します。自軍の通常移動で目的地に向かい、そのターンで届かなければ次回の通常移動に持ち越します。移動予約は到着で終了し、死守命令は到着したヘクスに留まります。現在地を死守先に指定することもできます。敵が目的地に進入すると解除され、右パネルからも解除できます。</dd>
       <dt>勝利</dt>
       <dd>ドイツ軍はリエージュ、ユイ、ナミュール、ディナンのいずれかを占領すると即時勝利。第10ターン終了時はバストーニュかヴェルヴィエの支配、または連絡線の通じる20都市の支配が勝利条件です。この20都市には、開始時からドイツ軍が支配するジークフリード線東側の都市も含めます。連合軍はこれを阻止するか、ドイツ軍の補給源を6か所以上支配します。</dd>
     </dl>

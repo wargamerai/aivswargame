@@ -105,14 +105,19 @@ const BulgeRules = (() => {
     for (const id of unit.support.slice()) drop(state,unit,id);
   }
   function moveControl(state, side, hex) {
+    for (const unit of state.units) {
+      if (unit.side === side || unit.movementOrder?.target !== hex) continue;
+      delete unit.movementOrder;
+      log(state, `${unit.name}：敵軍が ${hex} に進入したため、移動予約・死守命令を解除しました。`);
+    }
     if (city(hex) || source('german',hex) || source('allied',hex)) state.control[hex] = side;
   }
+  function unitZoc(unit) {
+    if (!unit.hex || (river(unit.hex) && chit(unit.marker)?.event!=='cavalry')) return [];
+    return neighbors(unit.hex);
+  }
   function zoc(state, side) {
-    const result = new Set();
-    for (const unit of onMap(state,enemy(side))) {
-      if (!river(unit.hex)) for (const h of neighbors(unit.hex)) result.add(h);
-    }
-    return result;
+    return new Set(onMap(state,enemy(side)).flatMap(unitZoc));
   }
   function lines(state, side, forSupply = false) {
     const enemies = new Set(onMap(state,enemy(side)).map(u => u.hex));
@@ -142,13 +147,32 @@ const BulgeRules = (() => {
     else state.units.push(marker);
     moveControl(state,side,hex);
   }
-  function seedAlliedSupport(state, keys) {
+  function autoAlliedSetup(state) {
     const list = onMap(state,'allied').filter(u => !u.marker);
-    for (const key of keys) {
-      const id = state.cups.allied.find(id => id.startsWith(key+':'));
-      const target = id && alliedSupportTarget(state,id,list);
-      if (target) target.support.push(take(state,'allied',id));
+    for (const id of state.hand.slice()) {
+      const target = alliedSupportTarget(state,id,list);
+      if (!target) continue;
+      assignInitialSupport(state,target,id);
     }
+  }
+  function assignInitialSupport(state, unit, id) {
+    unit.support.push(id);
+    state.hand=state.hand.filter(chip=>chip!==id);
+    state.setupOrders.push({unit:unit.id,chit:id});
+    state.setupConfirmed=false;
+  }
+  function setupBridge(state) {
+    if (state.phase!=='setup') return null;
+    const [hex, id] = Object.entries(state.bridges)[0] ?? [];
+    const card = id ?? state.pendingSetupBridge;
+    if (!card) return null;
+    // Test the crossing with its bridge intact, including when moving a placed marker.
+    const board = hex ? {...state, bridges:{...state.bridges}} : state;
+    if (hex) delete board.bridges[hex];
+    return {id:card, hex, options:eventOptions(board,card)};
+  }
+  function setupPlacementRequired(state) {
+    return state.hand.some(id=>chit(id).kind!=='dummy') || Boolean(state.pendingSetupBridge);
   }
   const initialSupport = {
     allied: ['a-fort','a-destroyer','a-arty','a-arty','a-tank','a-tank',...Array(6).fill('a-dummy')],
@@ -158,6 +182,7 @@ const BulgeRules = (() => {
   function startSetup(state, side) {
     state.turnSide=side;
     state.setupOrders=[];
+    state.setupConfirmed=false;
     state.hand=initialSupport[side].map(key=>take(state,side,state.cups[side].find(id=>id.startsWith(key+':'))));
     log(state,`${sideName(side)}の初期支援チットを配置してください。`);
   }
@@ -192,16 +217,28 @@ const BulgeRules = (() => {
       }
     }
     const bridge = state.cups.allied.find(id => id.startsWith('a-bridge:'));
-    const bridgeHex = eventOptions(state,bridge).find(h => h === '1814') ?? eventOptions(state,bridge)[0];
-    if (bridgeHex) state.bridges[bridgeHex] = take(state,'allied',bridge);
+    if (mode==='local') state.pendingSetupBridge=take(state,'allied',bridge);
+    else {
+      const crossings=eventOptions(state,bridge);
+      const armor=onMap(state,'german').filter(unit=>unit.mechanized);
+      const score=hex=>{
+        const distanceToArmor=Math.min(...armor.map(unit=>distance(hex,unit.hex)));
+        const roads=neighbors(hex).filter(next=>isRoad(state,hex,next)).length;
+        return -distanceToArmor*3+roads;
+      };
+      const bridgeHex=crossings.sort((a,b)=>score(b)-score(a))[0];
+      if (bridgeHex) {
+        state.bridges[bridgeHex]=take(state,'allied',bridge);
+        log(state,`連合軍AI：橋梁爆破を ${bridgeHex} に配置しました。`);
+      }
+    }
     const cavalry = state.cups.allied.find(id => id.startsWith('a-cavalry:'));
     const cavalryHex = eventOptions(state,cavalry).find(h => h === '2709') ?? eventOptions(state,cavalry)[0];
     if (cavalryHex) placeMarker(state,take(state,'allied',cavalry),'allied',cavalryHex);
-    if (mode==='local') startSetup(state,'allied');
-    else {
-      seedAlliedSupport(state,initialSupport.allied);
-      startSetup(state,'german');
-    }
+    startSetup(state,'allied');
+    autoAlliedSetup(state);
+    // The default mode is used by the practice boards.
+    if (mode!=='local') startSetup(state,'german');
     return state;
   }
   function moveChits(unit) {
@@ -212,12 +249,36 @@ const BulgeRules = (() => {
   }
   function excessSupport(unit, support) {
     if (chit(support)?.move === 'carry') return [];
-    const priority = id => id === support ? 20 :
-      chit(id).kind === 'dummy' ? 0 : 2 + (chit(id).shift ?? 0) + Number(Boolean(chit(id).at));
-    return transportableSupport(unit).sort((a,b) => priority(b)-priority(a)).slice(unit.transport);
+    const priority = id => {
+      if (id === support) return Infinity;
+      const card = chit(id);
+      if (card.kind === 'dummy') return 0;
+      if (card.kind === 'special') return 1;
+      if (card.kind === 'ration') return unit.disrupted ? 9 : 3;
+      return 3 + Number(card.kind === 'tank' || card.kind === 'artillery') +
+        Number(card.kind === 'fort' || card.move === 'carry') * 2 +
+        (card.shift ?? 0) + Number(Boolean(card.at)) + Number(Boolean(card.denyAT)) +
+        (card.absorb ?? 0) + (card.inflict ?? 0) + (card.dieAdd ?? 0);
+    };
+    const carried = transportableSupport(unit);
+    const excess = Math.max(0, carried.length - unit.transport);
+    return carried.sort((a,b) => priority(a) - priority(b)).slice(0, excess);
   }
-  function movementOptions(state, id, { mode='normal', support=null, repairBridge=false } = {}) {
-    const unit = unitById(state,id), side = actor(state);
+  function canOrderUnit(state, unit) {
+    return ['move', 'reaction', 'highbeam'].includes(state.phase) &&
+      Boolean(unit?.hex && unit.movement && !unit.marker);
+  }
+  function canOrderDestination(state, unit, hex) {
+    return map.has(hex) && !blockedHex(unit.side, hex) && state.control[hex] !== enemy(unit.side) &&
+      !at(state, hex).some(occupant => occupant.side !== unit.side);
+  }
+  function movementOptions(state, id, options) {
+    const unit = unitById(state, id);
+    return unit?.movementOrder ? new Map() : movementRoutes(state, unit, options);
+  }
+  function movementRoutes(state, unit, { mode='normal', support=null, repairBridge=false } = {}) {
+    const id = unit?.id;
+    const side = actor(state);
     const out = new Map();
     if (!unit?.hex || unit.side !== side || unit.disrupted || !unit.movement ||
         !['move','reaction','highbeam'].includes(state.phase)) return out;
@@ -235,7 +296,7 @@ const BulgeRules = (() => {
     if (mechanized && (!unit.mechanized || ['ignoreZoc','terrain'].includes(effect) ||
         !lines(state,side,true).has(unit.hex) || !neighbors(unit.hex).some(h=>isRoad(state,unit.hex,h)))) return out;
     const max = mechanized ? 10 : unit.movement;
-    const occupied = new Map(onMap(state).filter(u=>u.id!==id).map(u=>[u.hex,u.side]));
+    const enemies = new Set(onMap(state,enemy(side)).map(u=>u.hex));
     const stopOccupied = new Set(onMap(state,side).filter(u=>u.id!==id && !u.marker).map(u=>u.hex));
     const excess = excessSupport(unit,support);
     if (repairBridge && excess.includes(support)) return out;
@@ -244,7 +305,7 @@ const BulgeRules = (() => {
     for (const current of queue) {
       if (current.cost >= max) continue;
       for (const hex of neighbors(current.hex)) {
-        if (hex === unit.hex || occupied.get(hex) === enemy(side) || blockedHex(side,hex)) continue;
+        if (hex === unit.hex || enemies.has(hex) || blockedHex(side,hex)) continue;
         const road = isRoad(state,current.hex,hex);
         if (mechanized && !road) continue;
         const inZone = !ignoreZoc && zones.has(hex);
@@ -266,10 +327,8 @@ const BulgeRules = (() => {
     }
     return out;
   }
-  function move(state, action) {
-    const route = movementOptions(state,action.unit,action).get(action.to);
-    if (!route) return null;
-    const unit = unitById(state,action.unit), from = unit.hex;
+  function move(state, unit, route, reserved = false) {
+    const from = unit.hex;
     const path = [from,...route.path];
     const forestEntries = path.slice(1).filter((hex,index)=>offRoadForest(state,path[index],hex));
     for (const h of route.path) moveControl(state,unit.side,h);
@@ -280,15 +339,69 @@ const BulgeRules = (() => {
     else if (route.support && chit(route.support).discard) drop(state,unit,route.support);
     else if (route.support && !unit.usedSupport.includes(route.support)) unit.usedSupport.push(route.support);
     const trail = { id:unit.id, side:unit.side, path, forestEntries, cost:route.cost,
-      lost:route.lost, excess:route.excess, mode:route.mode, repairBridge:route.repairBridge };
+      lost:route.lost, excess:route.excess, mode:route.mode, repairBridge:route.repairBridge, reserved };
     state.trails.push(trail);
     return trail;
+  }
+  function reservedRoute(state, unit) {
+    const {target} = unit.movementOrder;
+    const routes = movementRoutes(state, unit);
+    if (!routes.size) return null;
+    if (routes.has(target)) return routes.get(target);
+
+    // Estimate the remaining distance from each legal stop this turn.
+    const enemies = new Set(onMap(state, enemy(unit.side)).map(other => other.hex));
+    const zones = zoc(state, unit.side);
+    const costs = new Map([[target, 0]]);
+    const queue = [target];
+    for (const hex of queue) {
+      for (const from of neighbors(hex)) {
+        if (costs.has(from) || enemies.has(from) || blockedHex(unit.side, from) ||
+            (zones.has(from) && zones.has(hex))) continue;
+        costs.set(from, costs.get(hex) + 1);
+        queue.push(from);
+      }
+    }
+    let best = null;
+    let remaining = costs.get(unit.hex) ?? Infinity;
+    for (const route of routes.values()) {
+      const cost = costs.get(route.hex) ?? Infinity;
+      if (cost < remaining || (best && cost === remaining && best.lost && !route.lost)) {
+        best = route;
+        remaining = cost;
+      }
+    }
+    return best;
+  }
+  function followMovementOrders(state, used) {
+    if (state.phase !== 'move') return;
+    for (const unit of onMap(state, actor(state))) {
+      const order = unit.movementOrder;
+      if (!order) continue;
+      if (!canOrderDestination(state, unit, order.target)) {
+        delete unit.movementOrder;
+        log(state, `${unit.name}：${order.target} が敵軍の支配下に入ったため、命令を解除しました。`);
+        continue;
+      }
+      if (unit.hex === order.target) continue;
+      const route = reservedRoute(state, unit);
+      if (!route) continue;
+      move(state, unit, route, true);
+      used.add(unit.id);
+      if (unit.hex === order.target) {
+        if (order.type === 'reserve') delete unit.movementOrder;
+        log(state, `${unit.name} が ${order.target} に到着。${order.type === 'hold' ? '死守に入ります。' : '移動予約を完了しました。'}`);
+      }
+    }
   }
   function previewMoves(state, actions) {
     const preview = copy(state), valid = [], rejected = [], used = new Set();
     preview.trails = [];
+    followMovementOrders(preview, used);
     for (const action of actions) {
-      if (used.has(action.unit) || !move(preview,action)) { rejected.push(action); continue; }
+      const route = !used.has(action.unit) && movementOptions(preview, action.unit, action).get(action.to);
+      if (!route) { rejected.push(action); continue; }
+      move(preview, unitById(preview, action.unit), route);
       used.add(action.unit); valid.push(action);
     }
     return { state:preview, valid, rejected };
@@ -328,6 +441,7 @@ const BulgeRules = (() => {
   function remove(state, unit) {
     dropAll(state,unit);
     unit.hex = null;
+    delete unit.movementOrder;
     unit.status = unit.marker ? 'spent' : 'removed';
     unit.returnTurn = state.turn+2;
     if (unit.marker && unit.side === 'allied') returnChit(state,unit.marker);
@@ -772,7 +886,7 @@ const BulgeRules = (() => {
   }
   function applyDamage(state, entry, damage) {
     // Only tanks that took part in this battle can absorb damage.
-    const unit=entry.unit, usedTanks=entry.cards.filter(id=>chit(id).kind==='tank');
+    const unit=entry.unit, usedTanks=entry.cards.filter(id=>chit(id).kind==='tank' && unit.support.includes(id));
     const assignedDamage=damage;
     const absorbed=[];
     while (damage>0 && usedTanks.length) {
@@ -780,13 +894,15 @@ const BulgeRules = (() => {
       absorbed.push(id);
       drop(state,unit,id); damage--;
     }
-    let effect=null;
+    let effect=null, returnedUnused=0;
     while (damage>0 && unit.hex) {
-      if (unit.disrupted || unit.marker) { remove(state,unit); effect='removed'; }
-      else { unit.disrupted=true; effect='disrupted'; }
+      if (unit.disrupted || unit.marker) {
+        returnedUnused=unit.support.filter(id=>!entry.cards.includes(id)).length;
+        remove(state,unit); effect='removed';
+      } else { unit.disrupted=true; effect='disrupted'; }
       damage--;
     }
-    return {unit:unit.id, damage:assignedDamage, absorbed, effect};
+    return {unit:unit.id, damage:assignedDamage, absorbed, effect, returnedUnused};
   }
   function revealBattle(state, choices, atTargets = null) {
     const profile=combatProfile(state,choices,atTargets);
@@ -879,7 +995,7 @@ const BulgeRules = (() => {
     if (at(state,target).length || blockedHex(state.combat.side,target)) return [];
     return attackers.filter(id=>{
       const unit=unitById(state,id);
-      return unit.hex&&!unit.disrupted;
+      return unit.hex&&!unit.disrupted&&!unit.movementOrder;
     });
   }
   function continueBattle(state) {
@@ -907,7 +1023,8 @@ const BulgeRules = (() => {
       finishBattle(state);
       return true;
     }
-    // Keep the single-command path available to existing callers.
+    // Legacy callers must explicitly declare their support before a one-step roll.
+    if (!choices) return false;
     return revealBattle(state,choices) && rollRevealedBattle(state,chosenDie) &&
       applyBattleLosses(state) && continueBattle(state);
   }
@@ -989,9 +1106,7 @@ const BulgeRules = (() => {
       case 'assign': {
         if (phase==='setup') {
           if (!state.hand.includes(action.chit) || !unit?.hex || unit.marker || unit.side!==side) return false;
-          unit.support.push(action.chit);
-          state.hand=state.hand.filter(id=>id!==action.chit);
-          state.setupOrders.push({unit:unit.id,chit:action.chit});
+          assignInitialSupport(state,unit,action.chit);
           return true;
         }
         if (phase!=='support' || !hasSupportInHand(state,side,action.chit) || !supportTargets(state).includes(unit)) return false;
@@ -1004,14 +1119,39 @@ const BulgeRules = (() => {
         drop(state,unit,id);
         return true;
       }
+      case 'auto-allied-setup':
+        if (phase!=='setup' || side!=='allied' || !state.hand.length) return false;
+        autoAlliedSetup(state);
+        return true;
+      case 'place-setup-bridge': {
+        const bridge=setupBridge(state);
+        if (!bridge?.options.includes(action.hex) || action.hex===bridge.hex) return false;
+        if (bridge.hex) delete state.bridges[bridge.hex];
+        state.bridges[action.hex]=bridge.id;
+        delete state.pendingSetupBridge;
+        state.setupOrders.push({chit:bridge.id, hex:action.hex, from:bridge.hex});
+        state.setupConfirmed=false;
+        return true;
+      }
       case 'undo-setup': {
         if (phase!=='setup' || !state.setupOrders.length) return false;
         const order=state.setupOrders.pop();
-        const target=unitById(state,order.unit);
-        target.support=target.support.filter(id=>id!==order.chit);
-        state.hand.unshift(order.chit);
+        if (order.hex) {
+          delete state.bridges[order.hex];
+          if (order.from) state.bridges[order.from]=order.chit;
+          else state.pendingSetupBridge=order.chit;
+        } else {
+          const target=unitById(state,order.unit);
+          target.support=target.support.filter(id=>id!==order.chit);
+          state.hand.unshift(order.chit);
+        }
+        state.setupConfirmed=false;
         return true;
       }
+      case 'confirm-setup':
+        if (phase!=='setup' || state.setupConfirmed) return false;
+        state.setupConfirmed=true;
+        return true;
       case 'hold-capture': {
         if (!canHoldCapturedSupport(state) || !hasSupportInHand(state,side,action.chit)) return false;
         state.hand=state.hand.filter(id=>id!==action.chit);
@@ -1026,7 +1166,6 @@ const BulgeRules = (() => {
       }
       case 'confirm-support':
         if (phase!=='support') return false;
-        if (supportPlacementStatus(state).required) throw Error('支援チットをすべて配属してください。');
         if (state.supportConfirmed) return false;
         state.supportConfirmed=true;
         return true;
@@ -1041,12 +1180,14 @@ const BulgeRules = (() => {
         return true;
       }
       case 'finish-setup':
-        if (phase!=='setup' || state.hand.length) return false;
+        if (phase!=='setup' || !state.setupConfirmed || setupPlacementRequired(state)) return false;
+        state.hand=[];
         if (side==='allied') {
           startSetup(state,'german');
           return true;
         }
         delete state.setupOrders;
+        delete state.setupConfirmed;
         begin(state,'move');
         return true;
       case 'ration': {
@@ -1061,6 +1202,22 @@ const BulgeRules = (() => {
         if (!['event','reinforce'].includes(phase) || !state.events.includes(action.chit)) return false;
         if (!resolveEvent(state,action.chit,action.hex,action.effect)) return false;
         state.events.splice(state.events.indexOf(action.chit),1); return true;
+      case 'movement-order': {
+        if (!canOrderUnit(state, unit)) return false;
+        if (action.order === null) {
+          if (!unit.movementOrder) return false;
+          delete unit.movementOrder;
+          log(state, `${unit.name} の移動予約・死守命令を解除しました。`);
+          return true;
+        }
+        const {type, target} = action.order ?? {};
+        if (!['reserve', 'hold'].includes(type) || !canOrderDestination(state, unit, target) ||
+            (type === 'reserve' && target === unit.hex)) return false;
+        unit.movementOrder = {type, target};
+        const label = type === 'hold' ? '死守命令' : '移動予約';
+        log(state, `${unit.name} に ${target} への${label}を設定しました。`);
+        return true;
+      }
       case 'moves': {
         if (!['move','reaction','highbeam'].includes(phase) || !Array.isArray(action.moves)) return false;
         const result=previewMoves(state,action.moves);
@@ -1068,7 +1225,11 @@ const BulgeRules = (() => {
         Object.assign(state,result.state);
         for (const trail of state.trails) {
           const destination=trail.path.at(-1);
-          log(state,`${unitById(state,trail.id).name} ${trail.path[0]} → ${destination}`);
+          const unit = unitById(state, trail.id);
+          log(state,`${unit.name} ${trail.path[0]} → ${destination}`);
+          if (trail.excess.length) {
+            log(state, `${unit.name}：輸送力超過のため ${trail.excess.map(id => chit(id).label).join('、')} を返却。`);
+          }
           if (trail.repairBridge) {
             returnChit(state,state.bridges[destination]);
             delete state.bridges[destination];
@@ -1116,9 +1277,9 @@ const BulgeRules = (() => {
       case 'continue-battle':
         return phase==='resolve' && continueBattle(state);
       case 'roll':
-        return phase==='resolve' && rollBattle(state,action.support ?? defaultSupport(battleInfo(state)),action.die);
+        return phase==='resolve' && rollBattle(state,action.support,action.die);
       case 'advance': {
-        if (phase!=='advance' || (action.unit && !state.combat.advance.ids.includes(action.unit))) return false;
+        if (phase!=='advance' || (action.unit && (!state.combat.advance.ids.includes(action.unit) || unit?.movementOrder))) return false;
         if (action.unit) {
           unit.hex=state.combat.advance.hex; moveControl(state,side,unit.hex);
           log(state,`${unit.name} が ${unit.hex} へ戦闘後前進。`);
@@ -1144,9 +1305,9 @@ const BulgeRules = (() => {
         return false;
     }
   }
-  return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest,
-    onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, transportableSupport, movementOptions, previewMoves, offRoadForest, roadLinks,
+  return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest, unitZoc,
+    onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, transportableSupport, movementOptions, previewMoves, canOrderUnit, canOrderDestination, offRoadForest, roadLinks,
     placements, eligiblePlacements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
-    eventOptions, canHoldCapturedSupport, battleCandidates, validateAttacks,
+    eventOptions, setupBridge, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
     battleInfo, possibleSupport, defaultSupport, combatProfile, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured };
 })();

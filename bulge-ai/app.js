@@ -45,17 +45,18 @@
   let practiceEventSide = 'german';
   let movePlan, attackPlan, undo, selected, inspected, moveMode, moveSupport, route;
   let moveRepair = false;
+  let orderDraft = null;
+  const movementOrderName = type => type === 'hold' ? '死守命令' : '移動予約';
   let recoveryOrders = [];
   let reentryHex = null;
   let reentryNotice = '';
   let mapInspection = null;
+  let countersHidden = false;
   let reviewedMove, reviewedAttack, diceAnimating = false;
   let announcedPhase, announcementTimer;
   let overviewUnit = null;
   let detailSource = null;
   let attackers, attackEdit, supportChoices, artilleryDie, card, eventEffect, message;
-  let battleSupportSide;
-  let editAlliedSupport = false;
   let preferDefenderLoss = false;
   let projection, range, legalHexes;
   const polygons = new Map();
@@ -64,7 +65,7 @@
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey));
       if (saved?.version === 1 && Array.isArray(saved.units) && Object.hasOwn(R.phaseNames, saved.phase))
-        return {...saved, mode: 'local'};
+        return {...saved, mode: 'ai'};
     } catch { /* A fresh game also works when browser storage is disabled. */ }
     return null;
   }
@@ -213,6 +214,9 @@
           !Array.isArray(board.units) || !Array.isArray(board.log) || !Array.isArray(board.hand) ||
           !Array.isArray(board.events) || !board.flags || !board.cups || !board.bridges ||
           !Array.isArray(saved.movePlan) || !Array.isArray(saved.attackPlan)) throw Error('Invalid save');
+      if (board.units.some(unit => unit.movementOrder &&
+          (!unit.hex || unit.marker || !unit.movement || !['reserve', 'hold'].includes(unit.movementOrder.type) ||
+           !R.canOrderDestination(board, unit, unit.movementOrder.target)))) throw Error('Invalid movement reservation');
       if (['move', 'reaction', 'highbeam'].includes(board.phase) && R.previewMoves(board, saved.movePlan).rejected.length)
         throw Error('Invalid movement orders');
       if (['attack', 'counter'].includes(board.phase) && !R.validateAttacks(board, saved.attackPlan))
@@ -233,13 +237,16 @@
       byId('start-error').hidden = false;
       return;
     }
-    state = {...saved.state, mode: 'local'};
+    state = {...saved.state, mode: 'ai'};
     if (byId('start-dialog').open) byId('start-dialog').close();
     document.querySelector('.game').hidden = false;
-    prepare(false);
-    movePlan = saved.movePlan;
-    attackPlan = saved.attackPlan;
-    supportChoices = saved.supportChoices ?? supportChoices;
+    const phase = state.phase;
+    prepare();
+    if (state.phase === phase) {
+      if (saved.movePlan.length || !isAI()) movePlan = saved.movePlan;
+      if (saved.attackPlan.length || !isAI()) attackPlan = saved.attackPlan;
+      supportChoices = {...supportChoices, ...battleChoicesFor(saved.supportChoices ?? {}, 'german')};
+    }
     artilleryDie = saved.artilleryDie ?? null;
     recoveryOrders = saved.recoveryOrders ?? [];
     preferDefenderLoss = saved.preferDefenderLoss === true;
@@ -392,6 +399,18 @@
     render();
   }
 
+  function confirmTransport(text, label, proceed) {
+    const dialog = byId('transport-dialog');
+    if (dialog.open) return;
+    byId('transport-warning').textContent = text;
+    byId('transport-confirm').textContent = label;
+    dialog.returnValue = 'cancel';
+    dialog.addEventListener('close', () => {
+      if (dialog.returnValue === 'proceed') proceed();
+    }, {once: true});
+    dialog.showModal();
+  }
+
   function step(command) {
     const before = state;
     const result = R.apply(state, {...command, side: R.actor(state), revision: state.revision});
@@ -407,16 +426,23 @@
     if (recipient) {
       const load = R.transportableSupport(recipient).length;
       if (load > recipient.transport) {
-        const dialog = byId('transport-dialog');
-        if (dialog.open) return;
-        byId('transport-warning').textContent =
-          `${recipient.name} の輸送能力は${recipient.transport}枚です。配置するとチットが${load}枚になり、${load - recipient.transport}枚超過します。`;
-        dialog.returnValue = 'cancel';
-        dialog.addEventListener('close', () => {
-          if (dialog.returnValue === 'place' && state === before) completeStep(command, result.state);
-        }, {once: true});
-        dialog.showModal();
-        return;
+        return confirmTransport(
+          `${recipient.name} の輸送能力は${recipient.transport}枚です。配置するとチットが${load}枚になり、${load - recipient.transport}枚超過します。`,
+          'このまま配置', () => { if (state === before) completeStep(command, result.state); });
+      }
+    }
+    if (command.type === 'moves') {
+      const overloads = projection.state.trails.filter(trail => trail.excess.length);
+      if (overloads.length) {
+        const warnings = overloads.map(trail => {
+          const unit = R.unitById(before, trail.id);
+          const chits = unit.side === 'allied' ? '' : trail.excess.map(id => R.chit(id).label).join('、');
+          const loss = trail.lost ? '\nこの経路では、地形の効果で残りの支援チットも失います。' : '';
+          return `${unit.name}（輸送力${unit.transport}枚）
+AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
+        });
+        return confirmTransport(warnings.join('\n\n'), '返却して移動',
+          () => { if (state === before) completeStep(command, result.state); });
       }
     }
     completeStep(command, result.state);
@@ -433,6 +459,17 @@
       byId('battle-overview').scrollTop = 0;
       return;
     }
+    if (command.type === 'movement-order') {
+      const checked = R.previewMoves(state, movePlan.filter(order => order.unit !== command.unit));
+      movePlan = checked.valid;
+      undo = [];
+      orderDraft = null;
+      selected = null; route = null; reviewedMove = null;
+      const text = command.order ? `${nameOf(command.unit)}：${movementOrderName(command.order.type)}を設定しました。`
+        : `${nameOf(command.unit)}：命令を解除しました。`;
+      note(checked.rejected.length ? `${text} 実行できなくなった移動案を${checked.rejected.length}件取り消しました。` : text);
+      return;
+    }
     if (command.type === 'ration' || command.type === 'remove-dummy') {
       if (moving()) {
         const revised = R.previewMoves(state, movePlan);
@@ -442,11 +479,15 @@
       note(command.type === 'ration' ? `${nameOf(command.unit)}の混乱を回復しました。` : 'ダミーを手元に戻しました。');
       return;
     }
-    if (command.type === 'confirm-support' || command.type === 'undo-support') {
+    if (['confirm-setup', 'confirm-support', 'undo-support'].includes(command.type)) {
       card = null;
-      return note(command.type === 'confirm-support' ? '配置を確定しました。' : '直前の操作を取り消しました。');
+      const pending = command.type === 'confirm-setup' ? R.setupPlacementRequired(state)
+        : R.supportPlacementStatus(state).required;
+      return note(command.type === 'undo-support' ? '直前の操作を取り消しました。'
+        : pending ? 'ここまでの配置を確定しました。残りは続けて配置できます。' : '配置を確定しました。');
     }
-    if (before.phase === state.phase && ['place', 'assign', 'event', 'recover-batch', 'undo-recovery', 'undo-setup', 'hold-capture', 'release-capture'].includes(command.type)) {
+    if (before.phase === state.phase && ['place', 'assign', 'event', 'recover-batch', 'undo-recovery',
+        'undo-setup', 'auto-allied-setup', 'place-setup-bridge', 'hold-capture', 'release-capture'].includes(command.type)) {
       selected = null;
       recoveryOrders = [];
       reentryHex = null;
@@ -454,6 +495,8 @@
       card = null;
       eventEffect = 'disrupt';
       const resultMessage = command.type === 'event' ? state.log.at(-1).text
+        : command.type === 'place-setup-bridge' ? `橋梁爆破を ${location(command.hex)} に配置しました。`
+        : command.type === 'auto-allied-setup' ? '連合軍の支援チットをお任せで配置しました。'
         : command.type === 'recover-batch' ? `${command.units.length}個の部隊の回復を確定しました。`
         : command.type === 'undo-recovery' ? '直前の回復を取り消しました。' : null;
       message = resultMessage ? {text: resultMessage, error: false} : null;
@@ -468,7 +511,7 @@
   }
 
   function prepare(automate = true) {
-    movePlan = []; attackPlan = []; undo = []; attackers = new Set();
+    movePlan = []; attackPlan = []; undo = []; attackers = new Set(); orderDraft = null;
     reviewedMove = null;
     reviewedAttack = null;
     recoveryOrders = [];
@@ -478,7 +521,24 @@
     selected = null; inspected = null; route = null; card = null; eventEffect = 'disrupt';
     moveMode = 'normal'; moveSupport = ''; moveRepair = false; attackEdit = null; message = null;
     const beforeAdmin = state;
-    for (let i = 0; automate && isAI() && i < 150; i++) {
+    if (automate && isAI() && state.phase === 'setup') {
+      const migrate = action => {
+        const result = R.apply(state, {...action, side: 'allied'});
+        if (result.ok) state = result.state;
+      };
+      if (state.hand.length) migrate({type: 'auto-allied-setup'});
+      const bridge = R.setupBridge(state);
+      if (bridge && !bridge.hex && bridge.options.length) {
+        const armor = R.onMap(state, 'german').filter(unit => unit.mechanized);
+        const nearest = hex => Math.min(...armor.map(unit => R.distance(unit.hex, hex)));
+        const hex = bridge.options.slice().sort((a, b) => nearest(a) - nearest(b))[0];
+        migrate({type: 'place-setup-bridge', hex});
+      }
+      migrate({type: 'confirm-setup'});
+      migrate({type: 'finish-setup'});
+    }
+    const automatedPhases = ['support', 'move', 'reaction', 'attack', 'counter'];
+    for (let i = 0; automate && isAI() && automatedPhases.includes(state.phase) && i < 150; i++) {
       const action = AI.administration(state);
       if (!action) break;
       const result = R.apply(state, {...action, revision: state.revision});
@@ -491,10 +551,7 @@
     if (state !== beforeAdmin) save();
     if (automate && isAI() && moving()) movePlan = AI.moves(state);
     if (automate && isAI() && planning()) attackPlan = AI.attacks(state);
-    supportChoices = isLocal() ? {} : Object.fromEntries(Object.entries(R.defaultSupport(R.battleInfo(state)))
-      .filter(([id]) => R.unitById(state,id).side === 'allied'));
-    battleSupportSide = R.actor(state);
-    editAlliedSupport = false;
+    supportChoices = battleChoicesFor(R.defaultSupport(R.battleInfo(state)), 'allied');
     artilleryDie = null;
     preferDefenderLoss = false;
     if (state.phase === 'advance') {
@@ -505,6 +562,12 @@
   }
 
   function chooseMover(id) {
+    orderDraft = null;
+    if (R.unitById(state, id)?.movementOrder) {
+      inspected = id; selected = null; reviewedMove = null; route = null;
+      render();
+      return;
+    }
     reviewedMove = null;
     selected = id;
     inspected = id;
@@ -579,7 +642,27 @@
     note(`${location(hex)}への攻撃案を更新しました。`);
   }
 
+  function startMovementOrder(unit, type) {
+    orderDraft = {unit: unit.id, type, target: unit.movementOrder?.target ?? null};
+    selected = null; reviewedMove = null; route = null;
+    note(`${movementOrderName(type)}の目的地を地図で選んでください。`);
+  }
+
+  function chooseOrderTarget(hex) {
+    const unit = R.unitById(state, orderDraft.unit);
+    if (!R.canOrderDestination(state, unit, hex))
+      return note('敵軍がいるヘクスや敵軍支配下など、進入できないヘクスには命令を出せません。', true);
+    if (orderDraft.type === 'reserve' && hex === unit.hex)
+      return note('その場に留まらせるには「死守命令」を選んでください。', true);
+    orderDraft.target = hex;
+    message = null;
+    render();
+  }
+
+  const selectingSetupBridge = () => card && R.setupBridge(state)?.id === card;
+
   function chooseUnit(id) {
+    if (orderDraft) return chooseOrderTarget(R.unitById(projection.state, id).hex);
     const unit = R.unitById(state, id);
     inspected = id;
     message = null;
@@ -591,7 +674,7 @@
       return;
     }
     if (state.phase === 'reentry' && unit.hex && (selected || R.city(unit.hex))) return chooseReentryHex(unit.hex);
-    if (hasPendingEvent() && legalHexes.has(unit.hex))
+    if (selectingSetupBridge() || (hasPendingEvent() && legalHexes.has(unit.hex)))
       return chooseHex(unit.hex);
     if (moving() && unit.side === R.actor(state) && !unit.marker) return chooseMover(id);
     if (planning() && unit.side !== R.actor(state)) return chooseTarget(unit.hex);
@@ -615,6 +698,7 @@
   }
 
   function chooseHex(hex) {
+    if (orderDraft) return chooseOrderTarget(hex);
     message = null;
     if (moving() && range.has(hex)) {
       route = range.get(hex);
@@ -622,6 +706,10 @@
       return;
     }
     if (planning() && R.battleCandidates(state, hex).length) return chooseTarget(hex);
+    if (selectingSetupBridge()) {
+      if (!legalHexes.has(hex)) return note('連合軍の連絡線が通る道路付き河川ヘクスを選んでください。', true);
+      return step({type: 'place-setup-bridge', hex});
+    }
     if (hasPendingEvent() && legalHexes.has(hex)) {
       return step({type: 'event', chit: card, hex, effect: eventEffect});
     }
@@ -679,7 +767,7 @@
       else if (R.forest(id)) polygon.setAttribute('data-relief', 'forest');
       polygon.addEventListener('pointerenter', () => showCoordinates(id));
       wireSvg(polygon, () => {
-        if (!mapInspection) chooseHex(id);
+        if (!mapInspection && !countersHidden) chooseHex(id);
       });
       byId('hexes').append(polygon);
       polygons.set(id, polygon);
@@ -695,10 +783,9 @@
   }
 
   function supportPieces(unit) {
-    const side = R.actor(state);
-    const hidden = isLocal() ? state.phase === 'resolve' || (side && unit.side !== side)
-      : unit.side === 'allied' && !(supportPractice && side === 'allied');
-    return unit.support.map(id => hidden && !unit.usedSupport.includes(id)
+    const hidden = unit.side === 'allied' && !(supportPractice && R.actor(state) === 'allied');
+    const used = R.unitById(state, unit.id)?.usedSupport ?? [];
+    return unit.support.map(id => hidden && !used.includes(id)
       ? {src: 'assets/allied-support-back.jpg', label: '裏向きの支援チット'}
       : {src: R.chitImage(id), label: R.chit(id).label});
   }
@@ -747,10 +834,12 @@
 
   function drawCounters() {
     const hovered = R.unitById(projection.state, overviewUnit);
-    if (hovered?.hex) showStack(hovered, supportPieces(hovered));
+    if (!countersHidden && hovered?.hex) showStack(hovered, supportPieces(hovered));
     else hideStack();
     const pieces = document.createDocumentFragment();
-    const movingIds = new Set(movePlan.map(order => order.unit));
+    const movingIds = new Set(moving() ? projection.state.trails.map(trail => trail.id) : []);
+    const committedOrders = new Map(R.onMap(state).filter(unit => unit.movementOrder)
+      .map(unit => [unit.id, unit.movementOrder]));
     const fightingIds = new Set(attackPlan.flatMap(order => order.attackers));
     const supportTargets = state.phase === 'support' ? new Set(R.supportTargets(state).map(unit => unit.id)) : null;
     const occupied = new Map();
@@ -786,7 +875,9 @@
         else if (movingIds.has(unit.id)) classes.push('planned');
         else if (fightingIds.has(unit.id)) classes.push('attack-ordered');
         const support = supportPieces(unit);
-        const label = `${R.sideName(unit.side)} ${unit.name} ${hex}${unit.disrupted ? ' 混乱' : ''} 支援 ${support.length}枚`;
+        const order = committedOrders.get(unit.id);
+        const orderMark = order && (order.type === 'hold' && hex === order.target ? '死守' : '予約');
+        const label = `${R.sideName(unit.side)} ${unit.name} ${hex}${unit.disrupted ? ' 混乱' : ''} 支援 ${support.length}枚${orderMark ? ' ' + orderMark : ''}`;
         const node = svg('g', {class: classes.join(' '), tabindex: 0, role: 'button',
           'aria-label': label, 'data-unit': unit.id});
         const offset = Math.min(5, 13 / Math.max(1, support.length));
@@ -800,6 +891,11 @@
         }
         node.append(svg('rect', {class: 'rim', x: left-1, y: top-1, width: size+2, height: size+2, rx: 2}),
           svg('image', {href: picture(unit), x: left, y: top, width: size, height: size}));
+        if (orderMark) {
+          const badge = svg('text', {x: left + size/2, y: top - 2, class: 'order-label'});
+          badge.textContent = orderMark;
+          node.append(badge);
+        }
         if (unit.marker) addChitTooltip(node, picture(unit));
         if (unit.disrupted && !counterArt(unit).back) {
           const label = svg('text', {x: left+size-2, y: top+size+2});
@@ -842,7 +938,7 @@
     byId('routes').append(svg('polyline', {class: `route ${style}`, points: points.join(' ')}));
   }
 
-  function drawMap() {
+  function drawMap(moveBase, assistedHexes) {
     const battle = state.phase === 'resolve' ? R.battleInfo(state) : null;
     const focus = state.phase === 'advance' ? state.combat.advance.hex : battle?.target;
     const visibleAttacks = attackEdit != null ? [attackPlan[attackEdit]]
@@ -886,7 +982,6 @@
       for (const hex of hexes) battleColors.set(hex, color);
       for (const hex of origins) participants.add(hex);
     }
-    const moveBase = moving() && selected ? getMoveBase() : null;
     const origin = moveBase ? R.unitById(moveBase, selected).hex : null;
     const forestEntries = new Set();
     if (moving() && !reviewedMove) {
@@ -900,13 +995,17 @@
           if (R.offRoadForest(moveBase, path[index], hex)) forestEntries.add(hex);
       }
     }
+    const draftUnit = R.unitById(state, orderDraft?.unit);
     for (const [hex, polygon] of polygons) {
+      const orderTarget = draftUnit && R.canOrderDestination(state, draftUnit, hex) &&
+        (orderDraft.type === 'hold' || hex !== draftUnit.hex);
       const styles = ['hex'];
       const option = range.get(hex);
       if (option || legalHexes.has(hex)) styles.push(option?.stopped ? 'stop' : 'legal');
       const previous = option?.path.at(-2) ?? origin;
       if (forestEntries.has(hex) || (option && R.offRoadForest(moveBase, previous, hex)))
         styles.push('off-road-forest');
+      if (assistedHexes.has(hex)) styles.push('support-movement');
       if (targets.has(hex)) styles.push('target');
       if (focus === hex) styles.push('active-battle');
       if (participants.has(hex)) styles.push('attacker');
@@ -915,13 +1014,14 @@
         polygon.style.setProperty('--battle-hue', battleColors.get(hex));
       } else polygon.style.removeProperty('--battle-hue');
       if (origin === hex) styles.push('origin');
-      if (route?.hex === hex || reentryHex === hex) styles.push('chosen');
+      if (route?.hex === hex || reentryHex === hex || orderDraft?.target === hex) styles.push('chosen');
       polygon.setAttribute('class', styles.join(' '));
-      if (option || legalHexes.has(hex) || (planning() && targets.has(hex)) ||
+      if (option || orderTarget || legalHexes.has(hex) || (planning() && targets.has(hex)) ||
           (state.phase === 'reentry' && R.city(hex))) {
         polygon.setAttribute('tabindex', '0');
         polygon.setAttribute('role', 'button');
-        polygon.setAttribute('aria-label', location(hex));
+        polygon.setAttribute('aria-label', assistedHexes.has(hex)
+          ? `${location(hex)} · 移動支援の効果あり` : location(hex));
       } else {
         polygon.removeAttribute('tabindex');
         polygon.removeAttribute('role');
@@ -930,9 +1030,26 @@
     }
     byId('routes').replaceChildren();
     byId('marks').replaceChildren();
+    const cavalryZone = moving() && R.actor(state) === 'german'
+      ? new Set(R.onMap(projection.state, 'allied')
+        .filter(unit => R.chit(unit.marker)?.event === 'cavalry').flatMap(R.unitZoc)) : new Set();
+    cavalryLegend.hidden = !cavalryZone.size || countersHidden;
+    for (const hex of cavalryZone) {
+      byId('routes').append(svg('polygon', {points: polygons.get(hex).getAttribute('points'),
+        fill: 'none', stroke: '#951d39', 'stroke-width': 3, 'stroke-dasharray': '7 4', 'pointer-events': 'none'}));
+    }
+    for (const unit of R.onMap(state)) {
+      const order = unit.movementOrder;
+      if (!order || (orderDraft?.unit === unit.id && orderDraft.target)) continue;
+      const origin = R.unitById(projection.state, unit.id).hex;
+      if (origin !== order.target) drawPath([origin, order.target], 'reserved');
+    }
+    if (orderDraft?.target && draftUnit.hex !== orderDraft.target)
+      drawPath([draftUnit.hex, orderDraft.target], 'reserved order-draft');
     if (moving()) {
       for (const trail of projection.state.trails) {
-        if (reviewedMove) {
+        if (trail.reserved && trail.id !== reviewedMove) drawPath(trail.path, '');
+        else if (reviewedMove) {
           if (trail.id === reviewedMove) drawPath(trail.path, 'reviewed');
         } else if (!route || trail.id !== selected) drawPath(trail.path, '');
       }
@@ -967,11 +1084,11 @@
     const battle = state.phase === 'advance' ? state.combat.advance.hex : R.battleInfo(state)?.target;
     const recovery = state.phase === 'recovery'
       ? R.onMap(projection.state, R.actor(state)).find(unit => unit.disrupted && !unit.marker)?.hex : null;
-    const reviewed = movePlan.find(order => order.unit === reviewedMove);
+    const reviewed = moving() ? projection.state.trails.find(trail => trail.id === reviewedMove) : null;
     const startingHex = eventPractice ? '2009' : '2509';
     const eventTarget = hasPendingEvent()
       ? [...legalHexes].sort((a, b) => R.distance(a, startingHex) - R.distance(b, startingHex))[0] : null;
-    center(battle ?? recovery ?? eventTarget ?? reentryHex ?? reviewed?.to ?? reviewedAttack ??
+    center(battle ?? recovery ?? eventTarget ?? reentryHex ?? orderDraft?.target ?? reviewed?.path.at(-1) ?? reviewedAttack ??
       R.unitById(state, selected)?.hex ?? route?.hex ?? attackPlan[0]?.target ??
       movePlan[0]?.to ?? state.lastBattle?.target ?? startingHex);
   }
@@ -986,13 +1103,15 @@
         if (value === 'mechanized' && moveRepair) { moveRepair = false; moveSupport = ''; }
         moveMode = value; route = null; render();
       }));
-      const chits = R.moveChits(unit);
+      const chits = R.moveChits(unit).filter(id => !allied || id === moveSupport || unit.usedSupport.includes(id));
       if (chits.length) {
         const choices = [['','なし']];
         for (const id of chits) {
           const definition = R.chit(id);
-          choices.push([id, definition.move === 'river' ? `${definition.label}（渡河支援）` : definition.label]);
-          if (definition.move === 'river' && moveMode === 'normal' && state.phase !== 'highbeam')
+          const hidden = allied && !R.unitById(state, unit.id).usedSupport.includes(id);
+          choices.push([id, hidden ? 'AIが選んだ移動支援'
+            : definition.move === 'river' ? `${definition.label}（渡河支援）` : definition.label]);
+          if (!hidden && definition.move === 'river' && moveMode === 'normal' && state.phase !== 'highbeam')
             choices.push([`${id}|repair`, `${definition.label}（橋梁修復）`]);
         }
         controls.append(selectBox('移動支援', choices, moveRepair ? `${moveSupport}|repair` : moveSupport, value => {
@@ -1009,13 +1128,28 @@
       panel.append(element('p', `${route.path.join(' → ')}（${route.cost}点）${route.lost ? ' · 支援喪失' : ''}`, 'compact'),
         button('経路を採用', adoptRoute, {primary: true, id: 'adopt-route'}));
       if (route.repairBridge) panel.append(element('p', '移動を確定すると、工兵をカップに戻して橋梁を修復します。', 'hint'));
-      if (route.excess.length && !route.lost) panel.append(element('p', `輸送上限のため返却する支援 ${route.excess.map(id => R.chit(id).label).join('、')}`, 'hint'));
+      if (route.excess.length && !route.lost) panel.append(element('p',
+        `輸送上限のため返却する支援 ${allied ? route.excess.length + '枚' : route.excess.map(id => R.chit(id).label).join('、')}`, 'hint'));
     }
-    panel.append(element('h3', `${allied ? '連合軍AIの移動案' : '移動案'} ${movePlan.length}件`));
-    if (!movePlan.length) panel.append(element('p', '移動させる部隊がなければ、そのまま確定できます。', 'hint'));
+    const reserved = projection.state.trails.filter(trail => trail.reserved);
+    const count = movePlan.length + reserved.length;
+    panel.append(element('h3', `${allied ? '連合軍AIの移動案' : '移動案'} ${count}件`));
+    if (!count) panel.append(element('p', '移動させる部隊がなければ、そのまま確定できます。', 'hint'));
     const orders = element('ul', null, 'orders');
-    movePlan.forEach((order, index) => {
-      const trail = projection.state.trails[index];
+    for (const trail of reserved) {
+      const row = element('li', null, 'order');
+      const review = button(`${nameOf(trail.id)}（予約）`, () => {
+        reviewedMove = trail.id;
+        selected = null; route = null; inspected = trail.id; message = null;
+        render();
+        center(trail.path.at(-1));
+      }, {pressed: reviewedMove === trail.id});
+      review.append(element('small', `${trail.path[0]} → ${trail.path.at(-1)} · ${trail.cost}点${trail.lost ? ' · 支援喪失' : ''}`));
+      row.append(review);
+      orders.append(row);
+    }
+    movePlan.forEach(order => {
+      const trail = projection.state.trails.find(entry => entry.id === order.unit);
       const row = element('li', null, 'order');
       const review = button(nameOf(order.unit), () => {
         reviewedMove = reviewedMove === order.unit ? null : order.unit;
@@ -1034,7 +1168,7 @@
     panel.append(orders);
     const tools = element('div', null, 'controls');
     tools.append(button('直前の編集を戻す', () => {
-      movePlan = undo.pop();
+      movePlan = R.previewMoves(state, undo.pop()).valid;
       reviewedMove = null;
       selected = null; route = null; message = null; render();
     }, {disabled: !undo.length}));
@@ -1045,9 +1179,9 @@
       selected = null; changeMoves(AI.moves(state)); focusMap();
     }));
     panel.append(tools);
-    const confirm = allied ? (movePlan.length ? `連合軍の移動を確定（${movePlan.length}件）` : '連合軍は移動せず進む') : '移動を確定';
+    const confirm = allied ? (count ? `連合軍の移動を確定（${count}件）` : '連合軍は移動せず進む') : '移動を確定';
     actions.append(button(confirm, () => step({type: 'moves', moves: movePlan}),
-      {primary: true, disabled: Boolean(route), id: 'confirm-moves'}));
+      {primary: true, disabled: Boolean(route || orderDraft), id: 'confirm-moves'}));
   }
 
   function renderAttacks(panel, actions) {
@@ -1062,7 +1196,7 @@
       panel.append(draft);
     }
     panel.append(element('h3', `${allied ? '連合軍AIの' : ''}${kind}案 ${attackPlan.length}件`));
-    if (!attackPlan.length) panel.append(element('p', `${kind}しない場合は、そのまま進めます。`, 'hint'));
+    panel.append(element('p', `このフェイズの${kind}の組み合わせをすべて指定してから、まとめて確定します。`, 'hint'));
     const orders = element('ol', null, 'orders');
     attackPlan.forEach((order, index) => {
       const row = element('li', null, 'order');
@@ -1084,8 +1218,8 @@
       attackPlan = AI.attacks(state); reviewedAttack = null; attackEdit = null;
       attackers.clear(); message = null; render(); focusMap();
     }));
-    const confirm = allied ? (attackPlan.length ? `連合軍の${kind}案を確定（${attackPlan.length}件）` : `連合軍は${kind}せず進む`)
-      : `${kind}案を確定`;
+    const confirm = attackPlan.length ? `${kind}をすべて確定して判定へ（${attackPlan.length}件）`
+      : `${kind}せず次へ`;
     actions.append(button(confirm, () => step({type: 'attacks', attacks: attackPlan}),
       {primary: true, disabled: attackers.size > 0 || attackEdit != null, id: 'confirm-attacks'}));
   }
@@ -1118,7 +1252,7 @@
 
   function battleChoicesFor(choices, side) {
     return Object.fromEntries(Object.entries(choices)
-      .filter(([id]) => R.unitById(state, id).side === side));
+      .filter(([id]) => R.unitById(state, id)?.side === side));
   }
 
   function setBattleChit(unit, id) {
@@ -1159,15 +1293,8 @@
         chips.append(figure);
       }
       if (!chips.childElementCount) card.append(element('p', '使用チットなし', 'hint'));
-    } else if (isLocal() && unit.side !== battleSupportSide) {
-      card.append(element('p', '支援チットは伏せられています。', 'hint'));
-    } else if (!isLocal() && unit.side === 'allied' && !editAlliedSupport) {
-      const chosen = supportChoices[unit.id] ?? [];
-      for (const id of chosen) {
-        const image = unit.usedSupport.includes(id) ? R.chitImage(id) : 'assets/allied-support-back.jpg';
-        chips.append(stackFigure({src: image, label: '使用予定'}));
-      }
-      if (!chosen.length) card.append(element('p', '使用チットなし', 'hint'));
+    } else if (unit.side === 'allied') {
+      card.append(element('p', '使用するチットはAIが選びます。公開までは伏せられています。', 'hint'));
     } else {
       const chosen = supportChoices[unit.id] ?? [];
       const available = R.possibleSupport(unit, defensive);
@@ -1276,36 +1403,14 @@
     const summary = element('p', `戦闘力 攻撃 ${info.attack} ／ 防御 ${info.defense}`, 'compact');
     content.append(summary);
     const armies = element('div', null, 'battle-armies');
-    if (!shown && isLocal()) {
-      const other = R.enemy(battleSupportSide);
-      const handoff = element('div', null, 'controls');
-      handoff.append(element('span', `${R.sideName(battleSupportSide)}のチットを選択中`),
-        button(`${R.sideName(other)}のチットを選ぶ`, () => {
-          closeChitDetail();
-          battleSupportSide = other;
-          renderBattleOverview();
-          byId('battle-switch-side').focus();
-        }, {id: 'battle-switch-side'}));
-      content.append(handoff);
-    } else if (!shown && isAI()) {
-      content.append(button(editAlliedSupport ? '連合軍チットを伏せる' : '連合軍の使用チットを確認・変更', () => {
-        editAlliedSupport = !editAlliedSupport;
-        renderBattleOverview();
-        byId('edit-allied-support').focus();
-      }, {id: 'edit-allied-support', pressed: editAlliedSupport}));
-    }
-    const drafts = shown ? {} : isLocal() ? {
-      [battleSupportSide]: R.combatProfile(state, battleChoicesFor(supportChoices, battleSupportSide)),
-    } : {
-      german: R.combatProfile(state, battleChoicesFor(supportChoices, 'german')),
-      allied: editAlliedSupport ? R.combatProfile(state, battleChoicesFor(supportChoices, 'allied')) : null,
-    };
+    const germanDraft = shown ? null : R.combatProfile(state, battleChoicesFor(supportChoices, 'german'));
     for (const [label, units, defensive] of [['攻撃側', info.attackers, false], ['防御側', info.defenders, true]]) {
       const group = element('section', null, defensive ? 'battle-defense' : 'battle-attack');
       group.append(element('h3', `${label} · ${R.sideName(units[0].side)}`));
       for (const unit of units) {
         const entry = (defensive ? shown?.defendGroup : shown?.attackGroup)?.find(value => value.unit === unit.id);
-        const restricted = drafts[unit.side]?.attackGroup.some(value => value.unit.id === unit.id && value.supportRestricted);
+        const restricted = unit.side === 'german' &&
+          germanDraft?.attackGroup.some(value => value.unit.id === unit.id && value.supportRestricted);
         group.append(battleUnitCard(unit, defensive, entry, shown, restricted, units.length > 1));
       }
       armies.append(group);
@@ -1320,7 +1425,9 @@
       return;
     }
     if (!revealed) {
-      controls.append(button('選択を確定してチットを公開', () => step({type: 'reveal-battle', support: supportChoices}),
+      const count = Object.values(battleChoicesFor(supportChoices, 'german')).reduce((sum, ids) => sum + ids.length, 0);
+      controls.append(button(`確定して公開（ドイツ軍：${count ? count + '枚使用' : '使用なし'}）`,
+        () => step({type: 'reveal-battle', support: supportChoices}),
         {primary: true, id: 'reveal-battle'}));
       return;
     }
@@ -1330,8 +1437,10 @@
       element('p', `基本 ${D.crtColumns[revealed.base]} → 支援適用後 ${D.crtColumns[revealed.col]}`));
     if (revealed.dieAdd) overview.append(element('p', `出目に +${revealed.dieAdd}（上限6）`));
     if (revealed.deniedAT) overview.append(element('p', 'バルクマン軍曹により連合軍の対戦車火力は無効です。'));
-    const die = artilleryDie ?? (!isLocal() && revealed.artillerySide === 'allied' ? R.suggestedDie({...info, ...revealed}) : null);
-    if (revealed.artillerySide) {
+    const alliedArtillery = revealed.artillerySide === 'allied';
+    const die = alliedArtillery ? R.suggestedDie({...info, ...revealed}) : artilleryDie;
+    if (alliedArtillery) overview.append(element('p', `連合軍の砲兵支援：AIが出目 ${die} を選択`));
+    if (revealed.artillerySide && !alliedArtillery) {
       const choices = D.crt.map((_, index) => {
         const face = index + 1;
         const adjusted = Math.min(6, face + revealed.dieAdd);
@@ -1416,13 +1525,14 @@
     const ready = state.supportConfirmed && !required;
     if (remaining) {
       const instruction = required
-        ? canHold ? '配属するか、物資捕獲用に保留してください。' : 'すべて配属してから確定してください。'
+        ? canHold ? '次のフェイズに進む前に、配属するか物資捕獲用に保留してください。'
+          : '次のフェイズに進む前に、残りを配属してください。'
         : '配属先がないため、次のフェイズへ進むとカップに戻ります。';
       actions.append(element('p', `未配属の支援チットが${remaining}枚あります。${instruction}`, 'support-warning'));
     }
     actions.append(
-      button('配置を確定', () => step({type: 'confirm-support'}),
-        {primary: !ready, disabled: required || ready, id: 'confirm-support'}),
+      button(required ? 'ここまでの配置を確定' : '配置を確定', () => step({type: 'confirm-support'}),
+        {primary: !state.supportConfirmed, disabled: Boolean(state.supportConfirmed), id: 'confirm-support'}),
       button('直前の操作を取り消す', () => step({type: 'undo-support'}),
         {disabled: !state.supportUndo?.length, id: 'undo-support'}),
       button('次のフェイズへ', () => step({type: 'next'}),
@@ -1440,7 +1550,7 @@
       for (const index of state.stock[side]) {
         const [points, kind] = D.supply[side][index];
         const li = element('li', null, 'order');
-        li.append(button(`${points} ポイント${kind ? ' · ' + kinds[kind] : ''}`,
+        li.append(button(`${points} ポイント${kind ? ' · ' + kinds[kind] + '（移動後に登場）' : ''}`,
           () => step({type: 'supply', index})));
         options.append(li);
       }
@@ -1449,7 +1559,9 @@
     }
     if (hasPendingEvent()) {
       if (!card) {
-        panel.append(element('p', '地図の上から処理するイベントチットを選びます。', 'hint'));
+        panel.append(element('p', state.phase === 'reinforce'
+          ? '地図の上のイベントチットを処理すると、残りの増援を配置できます。'
+          : '地図の上から処理するイベントチットを選びます。', 'hint'));
         return;
       }
       const definition = R.chit(card);
@@ -1487,8 +1599,13 @@
         reason.setAttribute('role', 'status');
         panel.append(reason);
       }
-      panel.append(element('p', blocked ? '部隊を選んでから、地図上の色が付いたヘクスを選びます。' :
-        '今のフェイズで配置できる部隊はありません。', 'hint'));
+      const waiting = state.phase === 'reinforce' && state.units.filter(unit =>
+        unit.side === side && unit.status === 'reserve' && state.reinforceGroups.includes(unit.group));
+      if (waiting?.length) panel.append(element('p',
+        `増援 ${[...new Set(waiting.map(unit => unit.group))].join('・')}：未配置 ${waiting.length}部隊`, 'result'));
+      panel.append(element('p', blocked ? '部隊を選んでから、地図上の色が付いたヘクスを選びます。'
+        : waiting?.length ? '連絡線の通じる空き都市・補給源など、配置条件を満たすヘクスがありません。'
+          : '今のフェイズで配置できる部隊はありません。', 'hint'));
       if (blocked && state.phase === 'reinforce')
         panel.append(element('p', '補給源ヘクスに増援を置くと、その部隊の輸送能力と同じ枚数を引き、支援チットをその部隊に配属します。', 'hint'));
       for (const unit of units) controls.append(tileButton(unit.name, picture(unit), () => {
@@ -1575,6 +1692,29 @@
     actions.append(button('別の補給チットを試す', () => restartPractice(side), {primary: true}));
   }
 
+  function renderMovementOrder(panel, unit) {
+    const order = unit.movementOrder;
+    if (order) {
+      const status = unit.hex === order.target ? '死守中' : movementOrderName(order.type);
+      panel.append(element('p', `${status} · ${location(order.target)}`, 'compact'));
+    }
+    if (!R.canOrderUnit(state, unit)) return;
+    const controls = element('div', null, 'controls');
+    if (orderDraft?.unit === unit.id) {
+      const {type, target} = orderDraft;
+      panel.append(element('p', `${movementOrderName(type)} · ${target ? location(target) : '地図で目的地を選択'}`, 'hint'));
+      controls.append(button('命令を確定', () => step({type: 'movement-order', unit: unit.id, order: {type, target}}),
+        {primary: true, disabled: !target || !R.canOrderDestination(state, unit, target) ||
+          (type === 'reserve' && target === unit.hex)}));
+      controls.append(button('選択を取消', () => { orderDraft = null; message = null; render(); }));
+    } else {
+      controls.append(button(order?.type === 'reserve' ? '予約先を変更' : '移動予約', () => startMovementOrder(unit, 'reserve')),
+        button(order?.type === 'hold' ? '死守先を変更' : '死守命令', () => startMovementOrder(unit, 'hold')));
+      if (order) controls.append(button('命令を解除', () => step({type: 'movement-order', unit: unit.id, order: null})));
+    }
+    panel.append(controls);
+  }
+
   function renderInspection() {
     const panel = byId('unit-info');
     panel.replaceChildren();
@@ -1587,11 +1727,13 @@
       element('p', `${unit.hex ?? unit.group ?? ''} · ${unit.disrupted ? '混乱' : '通常'} · 戦闘力 ${unit.attack}`, 'hint'));
     const gallery = element('div', null, 'stack-pieces');
     gallery.append(...unitStackFigures(unit, supportPieces(unit)));
-    panel.append(stats, gallery);
+    panel.append(stats);
+    renderMovementOrder(panel, R.unitById(state, unit.id));
+    panel.append(gallery);
     const ration = unit.support.find(id => R.chit(id).kind === 'ration');
-    if ((moving() || planning()) && unit.side === R.actor(state) && unit.disrupted && ration)
+    if ((moving() || planning()) && unit.side === 'german' && unit.side === R.actor(state) && unit.disrupted && ration)
       panel.append(button('Kレーションで回復', () => step({type: 'ration', unit: unit.id, chit: ration})));
-    if (R.removableDummy(state, R.unitById(state, inspected)))
+    if ((unit.side === 'german' || supportPractice) && R.removableDummy(state, R.unitById(state, inspected)))
       panel.append(button('ダミーを1枚手元に戻す', () => step({type: 'remove-dummy', unit: unit.id})));
   }
 
@@ -1653,10 +1795,11 @@
     const effects = element('ul', null, 'combat-effects');
     for (const {unit, id} of shotDown ?? [])
       effects.append(element('li', `${nameOf(unit)} · ${R.chit(id).label}を対戦車火力で喪失`));
-    for (const {unit, damage, absorbed, effect} of outcomes ?? []) {
+    for (const {unit, damage, absorbed, effect, returnedUnused} of outcomes ?? []) {
       const changes = damage ? [`損害${damage}`] : [];
       if (absorbed.length) changes.push(`${absorbed.map(id => R.chit(id).label).join('・')}で${absorbed.length}点吸収`);
       if (effect) changes.push(effect === 'removed' ? '除去' : '残った損害で混乱（駒を裏返す）');
+      if (returnedUnused) changes.push(`部隊除去に伴い未使用チット${returnedUnused}枚を回収`);
       if (changes.length) effects.append(element('li', `${nameOf(unit)} · ${changes.join('、')}`));
     }
     if (effects.childElementCount) {
@@ -1711,13 +1854,26 @@
     tray.hidden = state.phase !== 'setup';
     if (tray.hidden) return;
     const side = R.actor(state);
-    tray.setAttribute('aria-label', `${R.sideName(side)}の未配置の初期支援チット`);
+    const bridge = R.setupBridge(state);
+    const required = R.setupPlacementRequired(state);
+    const ready = state.setupConfirmed && !required;
+    tray.setAttribute('aria-label', `${R.sideName(side)}の初期配置チット`);
+    if (bridge && side === 'allied') appendAssignableChit(tray, bridge.id, eventChitType);
     for (const id of state.hand) appendAssignableChit(tray, id);
     tray.scrollLeft = scroll;
+    if (side === 'allied' && state.hand.length)
+      actions.append(button('連合軍チットをお任せで配置', () => step({type: 'auto-allied-setup'})));
+    if (bridge?.hex && side === 'german') actions.append(button('橋梁爆破の位置を変更', () => {
+      card = card === bridge.id ? null : bridge.id;
+      render();
+      if (card) center(bridge.hex);
+    }, {pressed: card === bridge.id, id: 'adjust-setup-bridge'}));
     actions.append(
+      button(required ? 'ここまでの配置を確定' : '配置を確定', () => step({type: 'confirm-setup'}),
+        {primary: !state.setupConfirmed, disabled: Boolean(state.setupConfirmed), id: 'confirm-setup'}),
       button('直前の配置を取り消す', () => step({type: 'undo-setup'}), {disabled: !state.setupOrders.length}),
-      button(side === 'allied' ? '配置を確定してドイツ軍へ' : '配置を確定して移動へ',
-        () => step({type: 'finish-setup'}), {primary: true, disabled: state.hand.length > 0}),
+      button(side === 'allied' ? 'ドイツ軍の初期配置へ' : '移動フェイズへ',
+        () => step({type: 'finish-setup'}), {primary: ready, disabled: !ready, id: 'finish-setup'}),
     );
   }
 
@@ -1776,9 +1932,21 @@
       projection.state = {...state, units: state.units.map(unit =>
         recoveryOrders.includes(unit.id) ? {...unit, disrupted: false} : unit)};
     }
-    range = moving() && selected
-      ? R.movementOptions(getMoveBase(), selected, {mode: moveMode, support: moveSupport || null, repairBridge: moveRepair})
+    const moveBase = moving() && selected ? getMoveBase() : null;
+    range = moveBase
+      ? R.movementOptions(moveBase, selected, {mode: moveMode, support: moveSupport || null, repairBridge: moveRepair})
       : new Map();
+    const assistedHexes = new Set();
+    if (range.size && moveSupport && !moveRepair) {
+      const ordinary = R.movementOptions(moveBase, selected, {mode: moveMode});
+      for (const [hex, assisted] of range) {
+        const base = ordinary.get(hex);
+        if (!base || assisted.cost < base.cost || (base.stopped && !assisted.stopped) || (base.lost && !assisted.lost)) {
+          assistedHexes.add(hex);
+        }
+      }
+    }
+    byId('movement-support-legend').hidden = !assistedHexes.size;
     legalHexes = new Set();
     if (hasPendingEvent()) {
       if (card) legalHexes = new Set(R.eventOptions(state, card));
@@ -1787,12 +1955,15 @@
       legalHexes = new Set(R.placements(state, selected));
     else if (state.phase === 'support' && card)
       legalHexes = new Set(R.supportTargets(state).map(unit => unit.hex));
-    else if (state.phase === 'setup' && card)
-      legalHexes = new Set(R.onMap(state, R.actor(state)).filter(unit => !unit.marker).map(unit => unit.hex));
+    else if (state.phase === 'setup' && card) {
+      const bridge = R.setupBridge(state);
+      legalHexes = new Set(bridge?.id === card ? bridge.options.filter(hex => hex !== bridge.hex)
+        : R.onMap(state, R.actor(state)).filter(unit => !unit.marker).map(unit => unit.hex));
+    }
 
     const phase = state.phase;
     const side = R.actor(state);
-    byId('game-mode').textContent = isLocal() ? '人間対人間' : '練習';
+    byId('game-mode').textContent = practice ? '練習' : 'ドイツ軍：人間／連合軍：AI補助';
     const {vt, groundedFrom, groundedUntil, greif, nordwind} = state.flags;
     byId('vt-status').hidden = !vt;
     const bodenplatteStatus = byId('bodenplatte-status');
@@ -1815,11 +1986,16 @@
     actor.classList.toggle('allied', side === 'allied');
     byId('phase-title').textContent = phaseLabel;
     announcePhase(turnLabel, phaseLabel, side);
+    const reinforcementKind = D.supply[state.turnSide][state.supplySelection]?.[1];
+    const reinforcementNotice = reinforcementKind && ['reentry', 'recovery', 'support', 'event', 'move'].includes(phase)
+      ? `${reinforcementKind === 'special' ? '特別増援' : '増援'}を選択済み：このターンの通常移動後に登場します。` : '';
     const guidance = {
-      setup: state.hand.length
-        ? `残り ${state.hand.length}枚。地図の上のチットと駒を順にクリックするか、チットを駒にドラッグします。`
-        : side === 'allied' ? '配置を確定するとドイツ軍の初期配置へ進みます。'
-          : '配置を確定するとドイツ軍の移動を開始します。',
+      setup: state.pendingSetupBridge
+        ? '連合軍の支援チットはお任せで配置済みです。地図の上の橋梁爆破チットを選び、色の付いた河川ヘクスに置いてください。'
+        : selectingSetupBridge() ? '橋梁爆破の新しい位置を、色の付いた河川ヘクスから選んでください。'
+        : R.setupPlacementRequired(state)
+          ? '地図の上の支援チットと駒を順にクリックするか、チットを駒にドラッグします。ダミーは残せます。'
+          : '必須チットの配置が済みました。配置を確定してから次へ進めます。',
       resolve:'両軍の支援チットを確認して戦闘を判定します。',
       advance:'戦闘後前進を選ぶと、この戦闘が終了します。',
       supply:'残りの補給チットから1枚選びます。',
@@ -1835,11 +2011,13 @@
       : planning()
         ? isAI() ? '連合軍の戦闘案です。対象と参加部隊を確認し、必要なら変更・取消してから確定してください。' : '味方の駒を選んでから、隣接する敵の駒を選びます。'
         : guidance[phase] ?? `${R.sideName(state.turnSide)}プレーヤーターン`;
+    if (reinforcementNotice) byId('phase-detail').append(' ', reinforcementNotice);
     const status = byId('message');
     status.hidden = !message;
     status.textContent = message?.text ?? '';
     status.classList.toggle('error', Boolean(message?.error));
     const panel = byId('panel'), actions = byId('actions');
+    panel.inert = Boolean(orderDraft);
     panel.replaceChildren();
     actions.replaceChildren();
     renderSetup(actions);
@@ -1855,21 +2033,29 @@
     if (phase === 'resolve' && byId('battle-overview').open) renderBattleOverview();
     renderInspection();
     byId('log').replaceChildren(...state.log.slice(-30).reverse().map(entry => element('li', `第${entry.turn}ターン · ${entry.text}`)));
-    drawMap();
+    drawMap(moveBase, assistedHexes);
   }
 
   byId('board').addEventListener('dragover', event => {
-    if (!hasPendingEvent() || !event.dataTransfer.types.includes(eventChitType)) return;
+    if (countersHidden || (!hasPendingEvent() && !R.setupBridge(state)) ||
+        !event.dataTransfer.types.includes(eventChitType)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   });
   byId('board').addEventListener('drop', event => {
-    if (!hasPendingEvent()) return;
+    if (countersHidden) return;
     const id = event.dataTransfer.getData(eventChitType);
-    if (!state.events.includes(id)) return;
+    const bridge = R.setupBridge(state);
+    const placingBridge = bridge?.id === id;
+    if (!placingBridge && (!hasPendingEvent() || !state.events.includes(id))) return;
     event.preventDefault();
     const destination = event.target.closest('[data-hex], [data-unit]');
     const hex = destination?.dataset.hex ?? R.unitById(state, destination?.dataset.unit)?.hex;
+    if (placingBridge) {
+      if (hex === bridge.hex) return;
+      if (!bridge.options.includes(hex)) return note('連合軍の連絡線が通る道路付き河川ヘクスを選んでください。', true);
+      return step({type: 'place-setup-bridge', hex});
+    }
     if (!R.eventOptions(state, id).includes(hex)) return note('このヘクスにはイベントを適用できません。', true);
     step({type: 'event', chit: id, hex, effect: card === id ? eventEffect : 'disrupt'});
   });
@@ -1886,6 +2072,21 @@
     viewport.scrollTop = y*scale - viewport.clientHeight/2;
   });
   byId('focus-map').addEventListener('click', focusMap);
+  const cavalryLegend = element('span', '騎兵連隊のZOC（赤い破線）');
+  cavalryLegend.hidden = true;
+  document.querySelector('.map-legend').append(cavalryLegend);
+  const toggleCounters = button('駒を隠す', () => {
+    countersHidden = !countersHidden;
+    for (const id of ['counters', 'marks', 'routes'])
+      byId(id).style.display = countersHidden ? 'none' : '';
+    byId('hexes').style.opacity = countersHidden ? '0' : '';
+    cavalryLegend.hidden = countersHidden || !byId('routes').querySelector('polygon');
+    if (countersHidden) hideStack();
+    toggleCounters.setAttribute('aria-pressed', String(countersHidden));
+    toggleCounters.textContent = countersHidden ? '駒を表示' : '駒を隠す';
+  }, {id: 'toggle-counters', pressed: false});
+  toggleCounters.setAttribute('aria-controls', 'counters marks routes');
+  byId('focus-map').after(toggleCounters);
   byId('toggle-command').addEventListener('click', event => {
     const panel = byId('command-panel');
     panel.hidden = !panel.hidden;
@@ -1956,8 +2157,10 @@
   byId('start-dialog').addEventListener('cancel', event => {
     if (!state) event.preventDefault();
   });
+  byId('start-local').textContent = 'ドイツ軍を操作（連合軍はAI補助）';
+  byId('start-local').parentElement.querySelector('button:last-child').hidden = true;
   byId('start-local').addEventListener('click', () => {
-    state = fresh('local');
+    state = fresh('ai');
     announcedPhase = null;
     byId('start-dialog').close();
     document.querySelector('.game').hidden = false;

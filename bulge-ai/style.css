@@ -130,7 +130,9 @@ input[type="range"] { width: 85px; accent-color: var(--green); }
 }
 .key.legal::before { color: #247253; background: #9ed5b4; }
 .key.stop::before { color: #975e00; background: #ffdd83; }
+.key.support-movement::before { color: #a0001b; background: #ee3347; }
 .key.planned::before { color: #c21c29; background: #c21c29; }
+.key.reserved::before { color: #6a3194; border: 2px dashed currentColor; }
 .key.target::before { color: #453f34; border-width: 2px; }
 .hex { fill: transparent; stroke: transparent; cursor: crosshair; }
 .hex.legal { fill: #72e09e82; stroke: #155f40; stroke-width: 2; }
@@ -138,6 +140,7 @@ input[type="range"] { width: 85px; accent-color: var(--green); }
 .hex.target { fill: #ffc25099; stroke: #875100; stroke-width: 3; }
 .hex.attacker { fill: #78bde49e; stroke: #1f597c; stroke-width: 3; }
 .hex.off-road-forest { fill: #ed263394; stroke: #a50d1d; stroke-width: 3; }
+.hex.support-movement { fill: #e5233bbd; stroke: #8c001b; stroke-width: 4; }
 .hex.origin { stroke: #136683; stroke-width: 3; stroke-dasharray: 5 3; }
 .hex.chosen, .hex:focus-visible, .hex:hover { stroke: #fffdf0; stroke-width: 3; outline: none; }
 .hex.battle-group { fill: hsl(var(--battle-hue) 75% 58% / .66); stroke: hsl(var(--battle-hue) 75% 30%); stroke-width: 3; }
@@ -147,6 +150,8 @@ input[type="range"] { width: 85px; accent-color: var(--green); }
 .route { fill: none; stroke: #c21c29; stroke-width: 3.3; stroke-linejoin: round; marker-end: url(#move-arrow); }
 .route.candidate { stroke-width: 5; }
 .route.reviewed { stroke-width: 7; }
+.route.reserved { stroke: #6a3194; stroke-width: 4; stroke-dasharray: 9 5; marker-end: url(#reservation-arrow); }
+.route.order-draft { stroke-width: 6; }
 .counter { cursor: pointer; }
 .counter:focus-visible { outline: none; }
 .counter .rim { fill: #fff5dd; stroke: #433e31; stroke-width: 2; }
@@ -202,6 +207,7 @@ button.primary { background: var(--green); border-color: var(--green); color: wh
 button.primary:hover:not(:disabled) { background: #465f3f; }
 .controls { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; margin: .5rem 0; }
 .controls label { display: flex; align-items: center; gap: .35rem; }
+.counter .order-label { stroke: #482064; stroke-width: 3.5; paint-order: stroke; }
 .orders { list-style: none; padding: 0; margin: .5rem 0; display: grid; gap: .36rem; }
 .order { display: flex; gap: .35rem; align-items: stretch; }
 .order button:first-child { flex: 1; text-align: start; }
@@ -290,3 +296,5 @@ dialog dd { margin-left: 0; }
 }
 #artillery-die { margin: .4rem; max-width: 100%; }
 .battle-overview-actions { flex-wrap: wrap; gap: .4rem; }
+
+#transport-warning { white-space: pre-line; }

@@ -23,9 +23,9 @@ const BulgeAI = (() => {
     if (R.actor(state)!=='allied' || !['move','reaction','highbeam'].includes(state.phase)) return [];
     const opponents=R.onMap(state,'german');
     if (!opponents.length) return [];
-    const units=R.onMap(state,'allied').filter(u=>!u.disrupted&&u.movement&&!strongholds.includes(u.hex))
+    const units=R.onMap(state,'allied').filter(u=>!u.disrupted&&u.movement&&!u.movementOrder&&!strongholds.includes(u.hex))
       .sort((a,b)=>nearest(a.hex,opponents)-nearest(b.hex,opponents)||b.attack-a.attack);
-    let plan=[], preview=state;
+    let plan=[], preview=R.previewMoves(state,[]).state;
     for (const original of units) {
       const unit=R.unitById(preview,original.id);
       const supply=R.lines(preview,'allied',true);
