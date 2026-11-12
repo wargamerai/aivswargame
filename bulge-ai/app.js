@@ -978,18 +978,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       for (const hex of origins) participants.add(hex);
     }
     const origin = moveBase ? R.unitById(moveBase, selected).hex : null;
-    const forestEntries = new Set();
-    if (moving() && !reviewedMove) {
-      for (const trail of projection.state.trails) {
-        if (!route || trail.id !== selected)
-          for (const hex of trail.forestEntries ?? []) forestEntries.add(hex);
-      }
-      if (route && origin) {
-        const path = [origin, ...route.path];
-        for (const [index, hex] of route.path.entries())
-          if (R.offRoadForest(moveBase, path[index], hex)) forestEntries.add(hex);
-      }
-    }
     const draftUnit = R.unitById(state, orderDraft?.unit);
     for (const [hex, polygon] of polygons) {
       const orderTarget = draftUnit && R.canOrderDestination(state, draftUnit, hex) &&
@@ -997,9 +985,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       const styles = ['hex'];
       const option = range.get(hex);
       if (option || legalHexes.has(hex)) styles.push(option?.stopped ? 'stop' : 'legal');
-      const previous = option?.path.at(-2) ?? origin;
-      if (forestEntries.has(hex) || (option && R.offRoadForest(moveBase, previous, hex)))
-        styles.push('off-road-forest');
       if (assistedHexes.has(hex)) styles.push('support-movement');
       if (targets.has(hex)) styles.push('target');
       if (focus === hex) styles.push('active-battle');
@@ -1016,7 +1001,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         polygon.setAttribute('tabindex', '0');
         polygon.setAttribute('role', 'button');
         polygon.setAttribute('aria-label', assistedHexes.has(hex)
-          ? `${location(hex)} · 移動支援の効果あり` : location(hex));
+          ? `${location(hex)} · チットを使うと到達可能` : location(hex));
       } else {
         polygon.removeAttribute('tabindex');
         polygon.removeAttribute('role');
@@ -1928,13 +1913,10 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       : new Map();
     const assistedHexes = new Set();
     if (range.size && moveSupport && !moveRepair) {
-      const ordinary = R.movementOptions(moveBase, selected, {mode: moveMode});
-      for (const [hex, assisted] of range) {
-        const base = ordinary.get(hex);
-        if (!base || assisted.cost < base.cost || (base.stopped && !assisted.stopped) || (base.lost && !assisted.lost)) {
-          assistedHexes.add(hex);
-        }
-      }
+      const normal = R.movementOptions(moveBase, selected, {mode: 'normal'});
+      const mechanized = R.movementOptions(moveBase, selected, {mode: 'mechanized'});
+      for (const hex of range.keys())
+        if (!normal.has(hex) && !mechanized.has(hex)) assistedHexes.add(hex);
     }
     byId('movement-support-legend').hidden = !assistedHexes.size;
     legalHexes = new Set();
@@ -2050,6 +2032,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   byId('focus-map').addEventListener('click', focusMap);
   const cavalryLegend = element('span', '騎兵連隊のZOC（赤い破線）');
   cavalryLegend.hidden = true;
+  byId('movement-support-legend').textContent = 'チットを使うと到達可能';
   document.querySelector('.map-legend').append(cavalryLegend);
   const toggleCounters = button('駒を隠す', () => {
     countersHidden = !countersHidden;
