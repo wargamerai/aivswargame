@@ -8,14 +8,18 @@
     <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
     <style>
         :root {
-            --bg-color: #151617;
-            --panel-bg: #2b2d30;
-            --text-main: #d0d3d4;
-            --text-accent: #ffffff;
-            --btn-bg: #1e2022;
-            --btn-hover: #3a3c40;
-            --border-color: #0a0a0b;
-            --accent-red: #8b0000;
+            --bg-color: #788161;
+            --panel-bg: #d5d8be;
+            --paper: #efefdf;
+            --text-main: #252d1e;
+            --text-accent: #334028;
+            --text-muted: #475234;
+            --btn-bg: #4e5a3a;
+            --btn-hover: #3f4c30;
+            --btn-ink: #fffdf0;
+            --btn-detail: #e3e9d3;
+            --border-color: #606c4d;
+            --accent-olive: #6c7954;
         }
 
         body {
@@ -30,29 +34,28 @@
             min-height: 100vh;
             background-image: repeating-linear-gradient(
                 45deg,
-                rgba(0, 0, 0, 0.2) 0px,
-                rgba(0, 0, 0, 0.2) 2px,
-                transparent 2px,
+                rgba(255, 255, 255, 0.045) 0px,
+                rgba(255, 255, 255, 0.045) 1px,
+                transparent 1px,
                 transparent 4px
             );
         }
 
         .container {
             background-color: var(--panel-bg);
-            border: 4px solid var(--border-color);
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             padding: 40px;
             width: 90%;
             max-width: 900px;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 0, 0, 0.6);
+            box-shadow: 0 8px 24px rgba(39, 48, 30, 0.22);
         }
 
         h1 {
             color: var(--text-accent);
             font-size: 2.5em;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
             letter-spacing: 3px;
         }
 
@@ -60,12 +63,27 @@
             text-align: left;
             margin-bottom: 40px;
             line-height: 1.6;
-            background-color: #18191a;
+            background-color: var(--paper);
             padding: 20px;
-            border-left: 5px solid #5a5d60;
+            border-left: 5px solid var(--accent-olive);
             font-family: monospace;
             font-size: 1.4em;
-            color: #b0b5b9;
+            color: var(--text-main);
+        }
+
+        .author-note,
+        .site-note {
+            color: var(--text-muted);
+        }
+
+        .author-note {
+            margin: 0 0 12px;
+            font-style: italic;
+        }
+
+        .site-note a,
+        .news a {
+            color: var(--text-accent);
         }
 
         .btn-group {
@@ -80,14 +98,14 @@
             box-sizing: border-box;
             text-decoration: none;
             background-color: var(--btn-bg);
-            color: var(--text-main);
+            color: var(--btn-ink);
             padding: 15px 30px;
             font-size: 1.8em;
             font-weight: bold;
             border: 2px solid var(--border-color);
             border-radius: 2px;
             transition: all 0.2s ease-in-out;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.6);
+            box-shadow: 0 2px 4px rgba(39, 48, 30, 0.20);
             text-transform: uppercase;
             letter-spacing: 2px;
             position: relative;
@@ -100,21 +118,25 @@
         .theater-btn:hover {
             background-color: var(--btn-hover);
             transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.8);
-            color: var(--text-accent);
-            border-left: 6px solid var(--accent-red);
+            box-shadow: 0 4px 8px rgba(39, 48, 30, 0.25);
+            color: var(--btn-ink);
+        }
+
+        .theater-btn:focus-visible {
+            outline: 3px solid var(--text-accent);
+            outline-offset: 3px;
         }
 
         .theater-btn:active {
             transform: translateY(2px);
-            box-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            box-shadow: 0 1px 2px rgba(39, 48, 30, 0.25);
         }
 
         .theater-btn span {
             display: block;
             font-size: 0.5em;
             font-weight: normal;
-            color: #7b8084;
+            color: var(--btn-detail);
             margin-top: 5px;
             letter-spacing: 1px;
             text-transform: none;
@@ -123,9 +145,9 @@
         .news {
             text-align: left;
             margin-bottom: 20px;
-            background-color: #18191a;
+            background-color: var(--paper);
             padding: 16px 20px;
-            border-left: 5px solid var(--accent-red);
+            border-left: 5px solid var(--accent-olive);
             font-size: 1em;
             line-height: 1.5;
         }
@@ -157,16 +179,16 @@
         .theater-btn.soon,
         .theater-btn.soon:hover,
         .theater-btn.soon:active {
-            background-color: var(--text-main);
-            color: var(--btn-bg);
+            background-color: var(--panel-bg);
+            color: var(--text-muted);
             border: 2px solid var(--border-color);
             transform: none;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.6);
+            box-shadow: 0 2px 4px rgba(39, 48, 30, 0.20);
             cursor: not-allowed;
         }
 
         .theater-btn.soon span {
-            color: #5a5d60;
+            color: var(--text-muted);
         }
 
         .theater-btn .flags {
@@ -189,13 +211,13 @@
 <div class="container">
     <h1>Operations HQ</h1>
     <!-- 作者の一言（毎日変えるかも） -->
-    <p class="author-note" style="margin:0 0 12px;color:#c9a96e;font-style:italic;">When I was a kid, the photo of Avalon Hill’s <em>Afrika Korps</em> in the catalog stuck with me. I remember how surprised I was when I unfolded the actual map and saw how wide it was…</p>
+    <p class="author-note">When I was a kid, the photo of Avalon Hill’s <em>Afrika Korps</em> in the catalog stuck with me. I remember how surprised I was when I unfolded the actual map and saw how wide it was…</p>
 
     <div class="briefing-text">
     A collection of wargames you can play in your browser. Select a title to begin.
     </div>
-    <p style="margin:0 0 16px;color:#c9a96e;">Note: AI tuning and bug fixing are not finished. The new features are at a playable level for now.<br>You may run into bugs. If you find one, please let us know: <a href="mailto:gbgty203@yahoo.co.jp" style="color:#e0b354;">gbgty203@yahoo.co.jp</a></p>
-    <p style="margin:-8px 0 16px;color:#c9a96e;">About me: I'm a 60-year-old wargamer in Japan. I have no one to play against, so I made this site to play the wargames I miss, at least against an AI. I made it public in case there are other gamers like me somewhere in the world.</p>
+    <p class="site-note" style="margin:0 0 16px;">Note: AI tuning and bug fixing are not finished. The new features are at a playable level for now.<br>You may run into bugs. If you find one, please let us know: <a href="mailto:gbgty203@yahoo.co.jp">gbgty203@yahoo.co.jp</a></p>
+    <p class="site-note" style="margin:-8px 0 16px;">About me: I'm a 60-year-old wargamer in Japan. I have no one to play against, so I made this site to play the wargames I miss, at least against an AI. I made it public in case there are other gamers like me somewhere in the world.</p>
 
     <!-- 今日のお知らせ（ボタンの上）。翌日になったら下の News & Updates へ移す -->
     <div class="news" style="margin:0 0 16px;">
@@ -318,7 +340,7 @@
                         <ol>
                             <li>Right after the bug happens, press "📜 Report" in the bar at the bottom of the battle screen (next to "💾 Save")</li>
                             <li>Your browser saves a file named like <code>wsim_report_Sc10_T9_….html</code> to your Downloads folder</li>
-                            <li>Attach that file to an email to <a href="mailto:gbgty203@yahoo.co.jp" style="color:#e0b354;">gbgty203@yahoo.co.jp</a> and tell us briefly what went wrong</li>
+                            <li>Attach that file to an email to <a href="mailto:gbgty203@yahoo.co.jp">gbgty203@yahoo.co.jp</a> and tell us briefly what went wrong</li>
                         </ol>
                         Please press the button before reloading the page; reloading clears part of the records</li>
                     <li>Reports you send us will be published on the new "Wooden Ships &amp; Iron Men Battle Reports" page, so everyone can see them. If you do not want your report published, please say so in your email</li>
