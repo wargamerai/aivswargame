@@ -110,8 +110,9 @@ const BulgeAI = (() => {
     const before=new Set(reach.flatMap(options=>[...options]));
     return board=>{
       const moved=R.onMap(board,'allied').filter(unit=>allies.get(unit.id)?.hex!==unit.hex);
-      if (!moved.length) return {closed:0,opened:0,widens:false,reach:before};
-      const affected=new Set();
+      const removed=[...allies.values()].filter(unit=>!R.unitById(board,unit.id)?.hex);
+      if (!moved.length && !removed.length) return {closed:0,opened:0,widens:false,reach:before};
+      const affected=R.unitCoverage(removed);
       for (const unit of moved) {
         affected.add(unit.hex);
         for (const hex of R.unitZoc(unit)) affected.add(hex);
@@ -141,9 +142,13 @@ const BulgeAI = (() => {
       return {closed:closed.length,opened:opened.length,widens,reach:after};
     };
   }
-  function deployedStrength(state, side) {
-    return R.onMap(state,side).filter(unit=>!unit.marker).reduce((total,unit)=>
-      total + Number(!unit.disrupted) + unit.support.filter(id=>R.chit(id).kind!=='dummy').length,0);
+  const realSupportCount=unit=>unit.support.filter(id=>R.chit(id).kind!=='dummy').length;
+  function hasOffensiveAdvantage(state) {
+    const allied=R.onMap(state,'allied').filter(unit=>!unit.marker);
+    const german=R.onMap(state,'german').filter(unit=>!unit.marker);
+    const ready=units=>units.filter(unit=>!unit.disrupted).length;
+    const support=units=>units.reduce((total,unit)=>total+realSupportCount(unit),0);
+    return ready(allied)>ready(german) && support(allied)>support(german);
   }
   function projectedGermanCoverage(coverage, reach) {
     const projected=new Set(coverage);
@@ -211,6 +216,8 @@ const BulgeAI = (() => {
     const opponents=R.onMap(state,'german');
     if (!opponents.length) return [];
     const opponentHexes=new Set(opponents.map(unit=>unit.hex));
+    const defending=state.turn>=2 && !hasOffensiveAdvantage(state);
+    const contactPenalty=hex=>defending ? -Number(R.neighbors(hex).some(next=>opponentHexes.has(next))) : 0;
     const coverage=R.unitCoverage(opponents);
     const plan=[];
     let preview=R.previewMoves(state,[]).state;
@@ -227,7 +234,9 @@ const BulgeAI = (() => {
       const currentMobility=plan.length ? germanMobility(preview) : initialMobility;
       const current=currentMobility(preview);
       const currentRisk=encirclementRisk(unit.hex,coverage,current.reach);
-      if (!currentRisk && holdsDefensiveLine(preview,unit,current.reach,coverage)) continue;
+      if (defending && (strongholds.includes(unit.hex) || (preview.depot && unit.hex===D.depotHex))) continue;
+      const currentContact=contactPenalty(unit.hex);
+      if (!currentRisk && !currentContact && holdsDefensiveLine(preview,unit,current.reach,coverage)) continue;
       const supports=[null,...R.moveChits(unit)];
       const candidates=new Map();
       for (const mode of ['normal','mechanized']) for (const support of supports) {
@@ -258,6 +267,7 @@ const BulgeAI = (() => {
       const nuts=unit.support.find(id=>id.startsWith('a-nuts:'));
       let value=defensePriority(preview,current,{board:forecast?.board ?? preview,reach:forecastBefore.reach},
         coverage,affectsGermanAdvance(unit,current.reach,coverage),holdScore,spacing,forecastBefore.reach);
+      value.splice(1,0,currentContact);
       const previousBlockade=R.unitCoverage(R.onMap(preview,'allied'));
       const hasSupport=unit.support.some(id=>R.chit(id).kind!=='dummy');
       let best=null;
@@ -270,6 +280,12 @@ const BulgeAI = (() => {
         }
         const board={...preview,control,units:preview.units.map(other=>other.id===unit.id ? relocated : other)};
         const immediate=currentMobility(board);
+        if (defending) {
+          const afterSupply=R.lines(board,'allied',true);
+          if (R.onMap(preview,'allied').some(other=>!other.marker && supply.has(other.hex) &&
+              !afterSupply.has(other.id===unit.id ? hex : other.hex))) continue;
+          if (immediate.widens && encirclementRisk(hex,coverage,immediate.reach)>=currentRisk) continue;
+        }
         const risk=encirclementRisk(hex,coverage,immediate.reach);
         if (risk>currentRisk || (risk===2 && currentRisk===2)) continue;
         const exposesAlly=R.onMap(preview,'allied').some(other=>!other.marker && other.id!==unit.id &&
@@ -286,7 +302,7 @@ const BulgeAI = (() => {
         const tactical=score+mobilityScore(immediate)*0.25+
           frontGap(preview,unit,hex,current.reach,immediate.reach);
         let opportunity=false;
-        if (hasSupport && risk===0) {
+        if (!defending && hasSupport && risk===0) {
           opportunity=completesEncirclement(board,opponents,previousBlockade,relocated);
           if (!opportunity && R.neighbors(hex).some(next=>opponentHexes.has(next))) {
             const after=R.previewMoves(state,[...plan,order]).state;
@@ -295,6 +311,7 @@ const BulgeAI = (() => {
         }
         const relevant=opportunity || immediate.closed>0 || affectsGermanAdvance(relocated,current.reach,coverage);
         const candidate=defensePriority(board,immediate,{board:projected,reach:change.reach},coverage,relevant,tactical,spacing,forecastBefore.reach);
+        candidate.splice(1,0,contactPenalty(hex));
         if (betterDefense(candidate,value)) {
           best=order;
           value=candidate;
@@ -374,16 +391,31 @@ const BulgeAI = (() => {
   }
   function attacks(state) {
     if (R.actor(state)!=='allied' || !['attack','counter'].includes(state.phase)) return [];
+    if (state.turn>=2 && !hasOffensiveAdvantage(state)) return [];
+    const supply=R.lines(state,'allied',true);
+    const coverage=R.unitCoverage(R.onMap(state,'german'));
     const targets=[...new Set(R.onMap(state,'german').map(u=>u.hex))];
     const used=new Set(), planned=[];
+    const mobility=state.turn>=2 ? germanMobility(state) : null;
+    const supplied=R.onMap(state,'allied').filter(unit=>!unit.marker && supply.has(unit.hex));
+    function preservesLine(attackers) {
+      if (!mobility) return true;
+      const committed=new Set([...used,...attackers]);
+      const reserveBoard={...state,units:state.units.map(unit=>committed.has(unit.id)
+        ? {...unit,hex:null} : unit)};
+      const remainingSupply=R.lines(reserveBoard,'allied',true);
+      return !mobility(reserveBoard).widens && supplied.every(unit=>
+        committed.has(unit.id) || remainingSupply.has(unit.hex));
+    }
     for (;;) {
       let best=null;
       for (const target of targets) {
         if (planned.some(order=>order.target===target)) continue;
-        const units=R.battleCandidates(state,target).filter(unit=>!used.has(unit.id));
+        const units=R.battleCandidates(state,target).filter(unit=>!used.has(unit.id) && (state.turn<2 ||
+          (supply.has(unit.hex) && !R.isEncircled(unit.hex,coverage))));
         if (!units.length) continue;
         const attackers=units.map(unit=>unit.id);
-        if (!guaranteedAttack(state,target,attackers)) continue;
+        if (!guaranteedAttack(state,target,attackers) || !preservesLine(attackers)) continue;
         const defense=R.at(state,target).filter(unit=>unit.side==='german').reduce((sum,unit)=>sum+unit.defense,0);
         const strength=units.reduce((sum,unit)=>sum+unit.attack,0);
         const score=strength/defense+Number(R.city(target))*0.23;
@@ -434,7 +466,7 @@ const BulgeAI = (() => {
         const before=compare(state).reach;
         const places=R.placements(state,unit.id);
         const spacing=frontStage(state,before,coverage,eligible.length);
-        const balance=deployedStrength(state,'allied')-deployedStrength(state,'german');
+        const offensive=hasOffensiveAdvantage(state);
         const germanUnits=opponents.filter(enemy=>!enemy.marker);
         let bestHex, bestValue;
         for (const hex of places) {
@@ -457,11 +489,11 @@ const BulgeAI = (() => {
             const secureLine=roads.has(hex) || R.neighbors(hex).some(next=>roads.has(next));
             const threatenedWithEncirclement=R.isEncircled(hex,threatened);
             const enemyDistance=nearest(hex,germanUnits);
-            const posture=Math.sign(balance)*Number(enemyDistance===1);
-            const reachPriority=balance<0 ? 0 : Number(withinOneMove);
+            const posture=(offensive ? 1 : -1)*Number(enemyDistance===1);
+            const reachPriority=offensive ? Number(withinOneMove) : 0;
             value=[-Number(risk===2),-Number(threatenedWithEncirclement),-Number(!secureLine),
               posture,reachPriority,Number(relevant),
-              balance<0 || relevant ? 0 : -enemyDistance,defense,-Number(R.river(hex)),score];
+              !offensive || relevant ? 0 : -enemyDistance,defense,-Number(R.river(hex)),score];
           }
           if (!bestValue || betterDefense(value,bestValue)) {
             bestHex=hex;
@@ -480,12 +512,27 @@ const BulgeAI = (() => {
         if (state.supportConfirmed && !R.supportPlacementStatus(state).required) return {type:'next',side};
         const order={fort:8,ration:7,artillery:5,tank:4,engineer:3,movement:3};
         const priority=id=>id.startsWith('a-nuts:') ? 10 : R.chit(id).at ? 6 : order[R.chit(id).kind] ?? 2;
-        const id=state.hand.filter(id=>R.chit(id).kind!=='dummy').sort((a,b)=>priority(b)-priority(a))[0]
-          ?? R.dummyReserve(state,side)[0];
-        if (!id) return {type:'confirm-support',side};
         const recipients=R.supportTargets(state);
-        const unit=(id.startsWith('a-nuts:') && nutsRecipient(state,id,recipients)) ||
-          R.alliedSupportTarget(state,id,recipients);
+        const dummy=R.dummyReserve(state,side)[0];
+        const bastogne=recipients.find(unit=>unit.hex==='1716' &&
+          !unit.support.some(chip=>R.chit(chip).kind==='dummy'));
+        if (state.turn>=2 && dummy && bastogne) return {type:'assign',unit:bastogne.id,chit:dummy,side};
+        const id=state.hand.filter(id=>R.chit(id).kind!=='dummy').sort((a,b)=>priority(b)-priority(a))[0] ?? dummy;
+        if (!id) return {type:'confirm-support',side};
+        let candidates=recipients;
+        if (state.turn>=2 && R.chit(id).kind!=='dummy' && recipients.length) {
+          const coverage=R.unitCoverage(opponents);
+          const reach=germanMobility(state)(state).reach;
+          const frontline=recipients.filter(unit=>affectsGermanAdvance(unit,reach,coverage));
+          const available=frontline.length ? frontline : recipients;
+          const rationTargets=R.chit(id).kind==='ration' ? recipients.filter(unit=>unit.disrupted &&
+            !unit.support.some(chip=>R.chit(chip).kind==='ration')) : [];
+          const pool=rationTargets.length ? rationTargets : available;
+          const fewest=Math.min(...pool.map(realSupportCount));
+          candidates=pool.filter(unit=>realSupportCount(unit)===fewest);
+        }
+        const unit=(id.startsWith('a-nuts:') && hasOffensiveAdvantage(state) && nutsRecipient(state,id,candidates)) ||
+          R.alliedSupportTarget(state,id,candidates);
         return unit ? {type:'assign',unit:unit.id,chit:id,side} : {type:'confirm-support',side};
       }
       case 'event': return {type:'next',side};
