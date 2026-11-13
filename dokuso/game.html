@@ -300,6 +300,7 @@ const LOCAL_CONTROLS = {
   assisted: Object.freeze({ ger: 'human', sov: 'ai' }),
   manual: Object.freeze({ ger: 'human', sov: 'human' }),
   ai: Object.freeze({ ger: 'ai', sov: 'ai' }),
+  sov: Object.freeze({ ger: 'ai', sov: 'human' }),
 };
 let game = null;
 let ctrl = LOCAL_CONTROLS.assisted;
@@ -326,7 +327,7 @@ function showStart() {
       <small class="mode-detail">両軍の配置・移動・戦闘を自分で操作します。</small>
     </label>
     <label><input type="radio" name="mode" value="ai"> AI 対 AI（観戦）</label>
-    <label class="mode-disabled"><input type="radio" name="mode" value="sov" disabled> 人間（ソ連） 対 AI（ドイツ）</label>
+    <label><input type="radio" name="mode" value="sov"> 人間（ソ連） 対 AI（ドイツ）</label>
     <button type="button" disabled>オンライン対戦</button><br>
     <button onclick="startGame()">ゲーム開始</button> <button onclick="openGameFile()">ファイルを読み込む</button> <button style="background:#2a5a8a;border-color:#5a9ad0" onclick="showHelp(true)">遊び方を見る</button>`;
   document.getElementById('modal').style.display = 'flex';
@@ -351,7 +352,7 @@ function showHelp(fromStart) {
     </ul>
     <h3>移動</h3>
     <ul>
-      <li>第1ターンのドイツ軍は、他の味方軍の配置エリアには入れません。自分のエリアから出て国境を越える移動は可能です。第2ターンからはこの制限はありません。</li>
+      <li>配置エリアの指定は初期配置に適用します。移動フェイズでは通常の移動ルールに従ってエリア間を移動できます。</li>
       <li>自分の駒のヘクスをクリック → 緑のヘクスをクリックで移動。オレンジは敵に隣接するヘクスで、入るとそこで止まります。</li>
       <li>同じヘクスにいてまだ動ける味方の駒は、通常クリックでまとめて選びます。途中で合流した駒もまとめて動けます。</li>
       <li>1個だけ動かす時は <b>Shift＋クリック</b> で重なりを左右に開いて、動かす駒をクリック。右の「選んだヘクス」の「これだけ動かす」でも選べます。地図の別の所をクリックすると閉じます。</li>

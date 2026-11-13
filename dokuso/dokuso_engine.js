@@ -365,11 +365,6 @@
     _movementRange(units, mp) {
       const out = new Map(), u = units[0];
       const side = u.side, start = u.hex;
-      // 第1ターンは他の味方軍の配置エリアへ入れない。
-      // 自分のエリアから出て国境を越える移動は通常どおり可能。
-      const ownAreas = side === 'ger' && this.turn === 1
-        ? units.map(v => new Set(this.areaHexes(v.area))) : [];
-      const friendlyAreas = ownAreas.length ? new Set(this.gerEntryHexes) : null;
       const best = new Map([[start, 0]]);
       const prev = new Map();
       const q = [[0, start]];
@@ -380,7 +375,6 @@
         const adjH = this.adjEnemy(h, side);
         if (h !== start && adjH) continue; // 敵に隣接したヘクスでは止まる
         for (const n of this.map.neighbors(h)) {
-          if (friendlyAreas?.has(n) && ownAreas.some(area => !area.has(n))) continue;
           if (this.enemyAt(n, side)) continue;
           const c = cost + this.moveCost(h, n);
           if (c > mp) continue;
@@ -586,16 +580,26 @@
     }
 
     // ===== 突破（ドイツの戦車・自動車化歩兵が燃料集積所へ。道路で地図左へ繋がり、その道路に敵がいない・隣接していない）
-    breakthroughPathOK(depot) {
-      const ok = h => !this.enemyAt(h, 'ger') && !this.adjEnemy(h, 'ger');
-      if (!this.map.hasRoad(depot)) return false;
-      const seen = new Set([depot]), st = [depot];
-      while (st.length) {
-        const h = st.pop();
-        if (this.map.parse(h).c + 1 <= WEST_ROAD_COL) return true;
-        for (const n of this.map.neighbors(h)) if (!seen.has(n) && this.map.road(h, n) && ok(n)) { seen.add(n); st.push(n); }
+    breakthroughPathOK(depot) { return this.breakthroughRoute(depot).length > 0; }
+
+    breakthroughRoute(depot, allowBlocked = false) {
+      const ok = h => allowBlocked || (!this.enemyAt(h, 'ger') && !this.adjEnemy(h, 'ger'));
+      if (!this.map.hasRoad(depot)) return [];
+      const previous = new Map([[depot, null]]);
+      const queue = [depot];
+      for (const h of queue) {
+        if (this.map.parse(h).c + 1 <= WEST_ROAD_COL) {
+          const route = [];
+          for (let step = h; step; step = previous.get(step)) route.push(step);
+          return route.reverse();
+        }
+        for (const n of this.map.neighbors(h)) {
+          if (previous.has(n) || !this.map.road(h, n) || !ok(n)) continue;
+          previous.set(n, h);
+          queue.push(n);
+        }
       }
-      return false;
+      return [];
     }
     _checkBreakthrough() {
       for (const h of (this.map.tags.fuel || [])) {
@@ -716,10 +720,10 @@
       this.emit({ type: 'combat', result: r });
       return r;
     }
-    _loseAtLeast(units, n) {
+    exchangeLosses(units, n) {
       // 印刷された戦闘力の合計が n 以上になる最小の組み合わせ（足りなければ全部）
       const alive = units.filter(u => u.alive);
-      if (n <= 0) return;
+      if (n <= 0) return [];
       let best = null;
       const k = alive.length;
       for (let mask = 1; mask < (1 << k); mask++) {
@@ -729,7 +733,10 @@
         const val = pick.reduce((t, u) => t + u.str * 10 + (KILL_POINTS[u.type] || 0), 0);
         if (!best || s < best.s || (s === best.s && val < best.val)) best = { pick, s, val };
       }
-      for (const u of (best ? best.pick : alive)) this._kill(u, '相打ち');
+      return best ? best.pick : alive;
+    }
+    _loseAtLeast(units, n) {
+      for (const u of this.exchangeLosses(units, n)) this._kill(u, '相打ち');
     }
     _afterResult() {
       const p = this.pending;
