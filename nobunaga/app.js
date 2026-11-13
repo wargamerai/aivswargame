@@ -239,9 +239,15 @@
     const own=reg.forces.find(f=>f.side==='player'&&f.leader);state.selectedLeader=own?.leader||null;
     $('#selectionHint').textContent=`${areaBy(id).name}を選択中 · ${reg.forces.length?reg.forces.map(f=>(f.leader||f.army)+' '+f.count+'駒').join(' / '):'部隊なし'}`;render()
   }
+  function odaTroopsCoverDeparture(region, army) {
+    return ['徳川軍','松永軍'].includes(army) &&
+      region.forces.some(force=>force.side==='player' && force.army==='織田軍' && force.count>0);
+  }
   function beginMode(mode){
     const here=getLeader(state.selectedLeader);if(!here||here.force.side!=='player'){toast('信長側の武将がいるエリアを選んでください');return}
-    state.mode=mode;state.actionHighlights=[];state.moveDestination=null;state.moveSource=here.area;state.moveCount=Math.max(1,here.force.count-1);state.reinforceCount=null;
+    state.mode=mode;state.actionHighlights=[];state.moveDestination=null;state.moveSource=here.area;state.moveCount=odaTroopsCoverDeparture(state.areas[here.area],here.force.army)
+      ? state.areas[here.area].forces.filter(force=>force.side==='player' && force.army===here.force.army).reduce((total,force)=>total+force.count,0)
+      : Math.max(1,here.force.count-1);state.reinforceCount=null;
     if(mode==='move'){state.actionHighlights=legalMoves(here.area,here.force);setBoardView('map');toast('移動先を地図で選んでください（やめるときは Esc キー）')}
     render()
   }
@@ -252,7 +258,8 @@
     const remainAfter=reg.forces.filter(f=>f.side==='player').reduce((s,f)=>s+pieces(f),0)-amount-1-companions.length;
     const homeArmy=reg.forces.filter(f=>f.side==='player'&&armyHomes(f.army).has(here.area)).map(f=>f.army);
     const homeLeft=army=>reg.forces.filter(f=>f.side==='player'&&f.army===army).reduce((s,f)=>s+pieces(f),0)-(army===here.force.army?amount+1:0)-reg.forces.filter(f=>companions.includes(f.leader)&&f.army===army).length;
-    if(amount>troops){toast('その数の軍勢はいません');return}if(remainAfter<1){toast('出発エリアに自勢力の駒を1つは残してください（7.1(2)）');return}if(homeArmy.some(a=>homeLeft(a)<1)){toast('本領の軍の駒を1つは残してください（7.1(2)）');return}
+    if(amount>troops){toast('その数の軍勢はいません');return}if(remainAfter<1){toast('出発エリアに自勢力の駒を1つは残してください（7.1(2)）');return}if(homeArmy.some(army=>homeLeft(army)<1 &&
+      !(army===here.force.army && odaTroopsCoverDeparture(reg,army)))){toast('本領の軍の駒を1つは残してください（7.1(2)）');return}
     clearTimeout(movementTimer);movementPlan={from:here.area,to,leader:state.selectedLeader,count:amount,side:here.force.side,companions};state.lastMove={...movementPlan};state.mode='moveAnimating';state.actionHighlights=[];state.moveDestination=null;render();
     movementTimer=setTimeout(()=>{const plan=movementPlan;movementPlan=null;movementTimer=null;if(plan)move(plan.from,plan.to,plan.leader,plan.count,plan.companions)},760)}
   function bindConfirm(fn){const el=$('#confirmAction');if(el)el.addEventListener('click',fn)}
