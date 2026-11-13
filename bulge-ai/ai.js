@@ -420,8 +420,11 @@ const BulgeAI = (() => {
           const score=terrainScore+Math.min(exits.length,2)*0.5+mobilityScore(change)+
             frontGap(state,unit,hex,before,change.reach);
           const alliedRisk=alliedEncirclementRisk(board,coverage,change.reach);
-          const value=[-Number(risk===2),frontDefenseScore(board,before,coverage,spacing,alliedRisk),
-            Number(relevant),-Number(R.river(hex)),score];
+          const defense=frontDefenseScore(board,before,coverage,spacing,alliedRisk);
+          const value=state.phase==='reinforce'
+            ? [-Number(risk===2),Number(relevant),
+              relevant ? 0 : -nearest(hex,opponents),defense,-Number(R.river(hex)),score]
+            : [-Number(risk===2),defense,Number(relevant),-Number(R.river(hex)),score];
           if (!bestValue || betterDefense(value,bestValue)) {
             bestHex=hex;
             bestValue=value;
