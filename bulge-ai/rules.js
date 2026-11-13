@@ -116,6 +116,13 @@ const BulgeRules = (() => {
     if (!unit.hex || (river(unit.hex) && chit(unit.marker)?.event!=='cavalry')) return [];
     return neighbors(unit.hex);
   }
+  function unitCoverage(units) {
+    return new Set(units.flatMap(unit=>[unit.hex,...unitZoc(unit)]));
+  }
+  function isEncircled(hex, coverage) {
+    const adjacent=neighbors(hex);
+    return adjacent.length===6 && adjacent.every(next=>coverage.has(next));
+  }
   function zoc(state, side) {
     return new Set(onMap(state,enemy(side)).flatMap(unitZoc));
   }
@@ -167,37 +174,37 @@ const BulgeRules = (() => {
     }
     return attackOptions;
   }
+  function openingSupportTerrain(hex) {
+    if (ridge(hex)) return 4;
+    if (city(hex)) return 2;
+    if (forest(hex)) return 1;
+    return river(hex) ? 3 : 0;
+  }
   function autoAlliedSetup(state) {
     const units=onMap(state,'allied').filter(unit=>!unit.marker);
     const attackOptions=germanAttackOptions(state,units);
     const attached=new Set(units.flatMap(unit=>unit.support));
     state.hand=state.hand.filter(id=>!attached.has(id));
     const pressure=unit=>attackOptions.get(unit.hex).reduce((sum,enemy)=>sum+enemy.strength,0)/unit.defense;
-    const threatened=units.filter(unit=>pressure(unit)>=2).sort((a,b)=>pressure(b)-pressure(a)).slice(0,3);
-    const combatCount=unit=>possibleSupport(unit,true).filter(id=>chit(id).kind!=='dummy').length;
-    for (const id of state.hand.slice()) {
+    const realCount=unit=>unit.support.filter(id=>chit(id).kind!=='dummy').length;
+    const assignmentRound=unit=>{
+      const assigned=realCount(unit);
+      return openingSupportTerrain(unit.hex)===0 && assigned<2 ? 0 : assigned+1;
+    };
+    const terrainPriority=(a,b)=>openingSupportTerrain(a.hex)-openingSupportTerrain(b.hex);
+    const dummies=state.hand.filter(id=>chit(id).kind==='dummy');
+    for (const id of state.hand.filter(id=>chit(id).kind!=='dummy')) {
       const card=chit(id);
-      let candidates=threatened.length ? threatened : units;
-      if (card.kind==='fort') {
-        const openingFort=units.filter(unit=>unit.id==='a135' || unit.id==='a61');
-        if (openingFort.length) candidates=openingFort;
-      }
-      if (card.at) {
-        const exposed=candidates.filter(unit=>attackOptions.get(unit.hex).some(enemy=>enemy.tankSupport));
-        if (exposed.length) candidates=exposed;
-      }
-      if (card.kind!=='dummy') {
-        const available=candidates.filter(unit=>combatCount(unit)<3);
-        if (available.length) candidates=available;
-      }
-      if (card.kind==='artillery') {
-        const withoutArtillery=candidates.filter(unit=>!unit.support.some(chip=>chit(chip).kind==='artillery'));
-        if (withoutArtillery.length) candidates=withoutArtillery;
-      }
-      const score=unit=>card.kind==='dummy'
-        ? Math.min(pressure(unit),6)-unit.support.filter(chip=>chit(chip).kind==='dummy').length*3
-        : pressure(unit)*3-combatCount(unit)*4;
-      const target=candidates.slice().sort((a,b)=>score(b)-score(a))[0];
+      const openingFort=card.kind==='fort' ? units.filter(unit=>unit.id==='a135' || unit.id==='a61') : [];
+      const candidates=openingFort.length ? openingFort : units;
+      const tankThreat=unit=>attackOptions.get(unit.hex).some(enemy=>enemy.tankSupport);
+      const target=candidates.slice().sort((a,b)=>assignmentRound(a)-assignmentRound(b) ||
+        terrainPriority(a,b) || realCount(a)-realCount(b) ||
+        (card.at ? Number(tankThreat(b))-Number(tankThreat(a)) : 0) || pressure(b)-pressure(a))[0];
+      if (target) assignInitialSupport(state,target,id);
+    }
+    for (const id of dummies) {
+      const target=units.slice().sort((a,b)=>a.support.length-b.support.length || pressure(b)-pressure(a))[0];
       if (target) assignInitialSupport(state,target,id);
     }
   }
@@ -208,11 +215,19 @@ const BulgeRules = (() => {
     state.setupConfirmed=false;
   }
   const initialBridgeHex='2618';
+  function setupBridgeOptions(state) {
+    if (state.turn!==1 || state.phase!=='setup') return [];
+    const bridges={...state.bridges};
+    const current=Object.keys(bridges).find(hex=>bridges[hex]==='a-bridge:1');
+    if (!current) return [];
+    delete bridges[current];
+    return eventOptions({...state,bridges},'a-bridge:1').filter(hex=>hex!==current && !bridges[hex]);
+  }
   function setupPlacementRequired(state) {
     return state.hand.some(id=>chit(id).kind!=='dummy');
   }
   function correctInitialBridge(state) {
-    if (state.turn!==1 || !['setup','move'].includes(state.phase)) return false;
+    if (state.setupBridgeEdited || state.turn!==1 || !['setup','move'].includes(state.phase)) return false;
     const oldHex=Object.keys(state.bridges).find(hex=>['1814','2415'].includes(hex) &&
       state.bridges[hex]==='a-bridge:1');
     const id=oldHex ? state.bridges[oldHex] : state.pendingSetupBridge;
@@ -282,7 +297,35 @@ const BulgeRules = (() => {
     return state;
   }
   function moveChits(unit) {
-    return unit.support.filter(id => chit(id)?.move);
+    return unit.support.filter(id => {
+      const effect=chit(id)?.move;
+      return effect && (effect!=='ignoreZoc' || !unit.usedSupport.includes(id));
+    });
+  }
+  function canDeclareInfiltration(state, unit, support) {
+    return ['move','reaction'].includes(state.phase) && actor(state)==='german' &&
+      unit?.side==='german' && unit.hex && unit.movement && !unit.disrupted &&
+      (!state.peiper || (state.peiper.stage==='done' && state.peiper.unit!==unit.id &&
+        !state.trails.some(trail=>trail.id===unit.id))) &&
+      !state.infiltration?.[unit.id] && unit.support.includes(support) && chit(support)?.move==='infiltrate' &&
+      (state.phase!=='reaction' || !zoc(state,'german').has(unit.hex));
+  }
+  function canUsePeiper(state, unit) {
+    return !state.peiper && ['move','reaction'].includes(state.phase) && actor(state)==='german' &&
+      unit?.side==='german' && unit.hex && unit.movement && !unit.disrupted &&
+      unit.support.some(id=>id.startsWith('g-peiper:')) && !state.infiltration?.[unit.id] &&
+      !state.trails.some(trail=>trail.id===unit.id);
+  }
+  function peiperTargets(state, id) {
+    const unit=unitById(state,id);
+    return neighbors(unit?.hex).filter(hex=>at(state,hex).some(other=>other.side==='allied'));
+  }
+  function peiperRoutes(state, id) {
+    const unit=unitById(state,id);
+    if (state.peiper?.unit===id && state.peiper.stage==='second') return movementRoutes(state,unit,{},2);
+    if (!canUsePeiper(state,unit) || (state.phase==='reaction' && peiperTargets(state,id).length)) return new Map();
+    const support=unit.support.find(chip=>chip.startsWith('g-peiper:'));
+    return movementRoutes(state,unit,{support},1);
   }
   function transportableSupport(unit) {
     return unit.support.filter(id => id !== unit.fortified);
@@ -316,7 +359,7 @@ const BulgeRules = (() => {
     const unit = unitById(state, id);
     return unit?.side==='allied' && unit.movementOrder ? new Map() : movementRoutes(state, unit, options);
   }
-  function movementRoutes(state, unit, { mode='normal', support=null, repairBridge=false } = {}) {
+  function movementRoutes(state, unit, { mode='normal', support=null, repairBridge=false } = {}, peiperLeg=0) {
     const id = unit?.id;
     const side = actor(state);
     const out = new Map();
@@ -325,17 +368,21 @@ const BulgeRules = (() => {
     if (state.phase === 'highbeam' && !state.highbeamUnits.includes(id)) return out;
     if (unit.group === 'RS' && !state.flags.monty) return out;
     if (state.phase === 'reaction' && side === 'allied' && state.flags.greif === state.turn) return out;
-    if (!['normal','mechanized'].includes(mode) || (support && !moveChits(unit).includes(support))) return out;
+    if (!['normal','mechanized'].includes(mode) || (!peiperLeg && support && !moveChits(unit).includes(support))) return out;
     if (repairBridge && (!['move','reaction'].includes(state.phase) || mode!=='normal' ||
         chit(support)?.move!=='river')) return out;
     const effect = repairBridge ? null : chit(support)?.move;
+    const infiltration = state.infiltration?.[id];
+    const infiltrating = effect === 'infiltrate';
+    if (infiltrating && (!infiltration || infiltration.chit !== support)) return out;
+    if (infiltration && (!infiltrating || infiltration.die === 6)) return out;
     const zones = zoc(state,side);
-    const ignoreZoc = effect === 'ignoreZoc';
-    if (state.phase === 'reaction' && zones.has(unit.hex) && effect !== 'reaction') return out;
+    const ignoreZoc = infiltrating || effect === 'ignoreZoc';
+    if (state.phase === 'reaction' && zones.has(unit.hex) && effect !== 'reaction' && peiperLeg!==2) return out;
     const mechanized = mode === 'mechanized';
-    if (mechanized && (!unit.mechanized || ['ignoreZoc','terrain'].includes(effect) ||
+    if (mechanized && (!unit.mechanized || ['ignoreZoc','terrain','infiltrate'].includes(effect) ||
         !lines(state,side,true).has(unit.hex) || !neighbors(unit.hex).some(h=>isRoad(state,unit.hex,h)))) return out;
-    const max = mechanized ? 10 : unit.movement;
+    const max = peiperLeg ? 5 : infiltrating ? infiltration.die : mechanized ? 10 : unit.movement;
     const enemies = new Set(onMap(state,enemy(side)).map(u=>u.hex));
     const stopOccupied = new Set(onMap(state,side).filter(u=>u.id!==id && !u.marker).map(u=>u.hex));
     const excess = excessSupport(unit,support);
@@ -350,7 +397,7 @@ const BulgeRules = (() => {
         if (mechanized && !road) continue;
         const inZone = !ignoreZoc && zones.has(hex);
         if (inZone && current.hex === unit.hex && zones.has(unit.hex)) continue;
-        const terrainIgnored = road || effect === 'terrain';
+        const terrainIgnored = road || infiltrating || effect === 'terrain';
         const loseSupport = !terrainIgnored && effect !== 'carry' && (forest(hex)||ridge(hex));
         const stopTerrain = Boolean(state.bridges[hex]) ||
           (!terrainIgnored && (ridge(hex) || (river(hex) && effect!=='river')));
@@ -373,6 +420,12 @@ const BulgeRules = (() => {
     const forestEntries = path.slice(1).filter((hex,index)=>offRoadForest(state,path[index],hex));
     for (const h of route.path) moveControl(state,unit.side,h);
     unit.hex = route.hex;
+    if (chit(route.support)?.move==='reaction') {
+      const observed=new Set([...neighbors(from),...neighbors(unit.hex)]);
+      for (const opponent of onMap(state,enemy(unit.side))) {
+        if (observed.has(opponent.hex)) opponent.usedSupport=[...new Set([...opponent.usedSupport,...opponent.support])];
+      }
+    }
     if (unit.fortified) drop(state,unit,unit.fortified);
     for (const id of route.excess) drop(state,unit,id);
     if (route.lost) dropAll(state,unit);
@@ -436,7 +489,11 @@ const BulgeRules = (() => {
   }
   function previewMoves(state, actions, pausedReservations = new Set()) {
     const preview = copy(state), valid = [], rejected = [], used = new Set();
-    preview.trails = [];
+    if (state.peiper) {
+      for (const trail of preview.trails) used.add(trail.id);
+      used.add(state.peiper.unit);
+      if (state.peiper.stage!=='done') return {state:preview,valid,rejected:actions.slice()};
+    } else preview.trails = [];
     followMovementOrders(preview, used, pausedReservations);
     for (const action of actions) {
       const route = !used.has(action.unit) && movementOptions(preview, action.unit, action).get(action.to);
@@ -666,8 +723,13 @@ const BulgeRules = (() => {
     if (card.kind==='fort') {
       const unfortified=targets.filter(unit=>!unit.support.some(chip=>chit(chip).kind==='fort'));
       const eligible=unfortified.length ? unfortified : targets;
-      const exposed=eligible.filter(unit=>tankReach.has(unit.hex));
-      const candidates=exposed.length ? exposed : eligible;
+      const staying=eligible.filter(({hex,movementOrder})=>!movementOrder || movementOrder.target===hex);
+      const available=staying.length ? staying : eligible;
+      const positionsToHold=available.filter(({hex,movementOrder})=>important(hex) || hex==='2410' ||
+        (state.depot && hex===D.depotHex) || movementOrder?.type==='hold' && movementOrder.target===hex);
+      const defensiveSites=positionsToHold.length ? positionsToHold : available;
+      const exposed=defensiveSites.filter(unit=>tankReach.has(unit.hex));
+      const candidates=exposed.length ? exposed : defensiveSites;
       const weights=candidates.map(({hex,support})=>Math.max(1,
         4+Number(city(hex))*3+Number(important(hex))*3+Math.min(roadDegree(hex),3)*2+
         Math.min(6,threat(hex))-support.filter(chip=>chit(chip).kind!=='dummy').length));
@@ -677,21 +739,34 @@ const BulgeRules = (() => {
       return candidates.find((_,index)=>(pick-=weights[index])<0);
     }
     function mobilityValue(unit) {
-      if (unit.disrupted || finalVictoryCities.includes(unit.hex)) return -8;
+      if (unit.disrupted || finalVictoryCities.includes(unit.hex) || unit.hex==='2410')
+        return {benefit:-8, surrounded:0};
       const phase=card.move==='reaction' ? 'reaction' : 'move';
       const board={...state,phase,turnSide:phase==='reaction'?'german':'allied'};
       const candidate={...unit,support:[...unit.support,id]};
       const withCard={...board,units:board.units.map(current=>current.id===unit.id?candidate:current)};
-      const ordinary=movementOptions(board,unit.id);
-      const assisted=movementOptions(withCard,unit.id,{support:id});
-      let benefit=0;
-      for (const route of assisted.values()) {
-        const base=ordinary.get(route.hex);
-        if (!base || route.cost<base.cost || (base.lost && !route.lost)) {
-          benefit=Math.max(benefit,siteValue(route.hex)+Math.min(5,threat(route.hex)));
+      const modes=unit.mechanized ? ['normal','mechanized'] : ['normal'];
+      const ordinary=new Set(modes.flatMap(mode=>[...movementOptions(board,unit.id,{mode}).keys()]));
+      const ordinaryRoutes=movementOptions(board,unit.id);
+      const allies=onMap(state,'allied');
+      const alliesOther=allies.filter(other=>other.id!==unit.id);
+      const blocked=unitCoverage(alliesOther);
+      const currentlyBlocked=new Set([...blocked,unit.hex,...unitZoc(unit)]);
+      const enemies=onMap(state,'german').filter(enemy=>!enemy.marker &&
+        !isEncircled(enemy.hex,currentlyBlocked));
+      let benefit=0, surrounded=0;
+      for (const mode of modes) {
+        for (const route of movementOptions(withCard,unit.id,{mode,support:id}).values()) {
+          const base=ordinaryRoutes.get(route.hex);
+          if (!ordinary.has(route.hex) || (base && (route.cost<base.cost || (base.lost && !route.lost))))
+            benefit=Math.max(benefit,siteValue(route.hex)+Math.min(5,threat(route.hex)));
+          if (ordinary.has(route.hex)) continue;
+          const covered=new Set([...blocked,route.hex,...unitZoc({...unit,hex:route.hex})]);
+          const closes=enemies.filter(enemy=>isEncircled(enemy.hex,covered)).length;
+          surrounded=Math.max(surrounded,closes);
         }
       }
-      return benefit*3;
+      return {benefit:benefit*3, surrounded};
     }
     const combatCard=possibleSupport({support:[id]},true).length>0 && card.kind!=='dummy';
     const attacks=combatCard ? germanAttackOptions(state,targets) : null;
@@ -709,7 +784,7 @@ const BulgeRules = (() => {
         if (alreadyAssigned>=3) value-=24;
         if (card.at && !options.some(enemy=>enemy.tankSupport)) value-=18;
       }
-      if (id.startsWith('a-nuts:')) value+=hex==='1716'?120:important(hex)?65:city(hex)?16:0;
+      if (id.startsWith('a-nuts:')) value+=important(hex)?65:city(hex)?16:0;
       if (card.kind==='artillery' || card.at) {
         value+=danger;
         if (card.at && ridge(hex)) value-=10;
@@ -719,11 +794,12 @@ const BulgeRules = (() => {
         if (unit.disrupted) value+=100;
         if (support.some(chip=>chit(chip).kind==='ration')) value-=110;
       }
-      if (card.move) value=mobilityValue(unit)+danger*.4-capacity*9-support.length*2;
+      const mobility=card.move ? mobilityValue(unit) : null;
+      if (mobility) value=mobility.benefit+danger*.4-capacity*9-support.length*2;
       if (card.kind==='dummy') value=danger-capacity*12-support.length*5;
-      return value;
+      return {unit,value,surrounded:mobility?.surrounded ?? 0};
     }
-    return targets.map(unit=>({unit,value:score(unit)})).sort((a,b)=>b.value-a.value)[0].unit;
+    return targets.map(score).sort((a,b)=>b.surrounded-a.surrounded||b.value-a.value)[0].unit;
   }
   function callReinforcementGroup(state, side) {
     const group = 'R'+(state.groups[side]+1);
@@ -758,6 +834,9 @@ const BulgeRules = (() => {
   }
   function begin(state, phase) {
     state.phase=phase;
+    delete state.phaseActions;
+    delete state.infiltration;
+    delete state.peiper;
     delete state.recoveryUndo;
     delete state.supportDraw;
     delete state.supportUndo;
@@ -779,6 +858,11 @@ const BulgeRules = (() => {
       state.events=[];
     }
     log(state,`${sideName(actor(state))}の${phaseNames[phase]}フェイズ。`);
+  }
+  function germanCityCounts(state) {
+    const controlled=Object.keys(state.control).filter(hex=>state.control[hex]==='german' && city(hex));
+    const connected=lines(state,'german');
+    return {controlled:controlled.length, connected:controlled.filter(hex=>connected.has(hex)).length};
   }
   function germanCaptured(state) {
     return D.sources.german.filter(h=>state.control[h]==='allied').length;
@@ -802,7 +886,7 @@ const BulgeRules = (() => {
     if (germanCaptured(state)>=6) { endGame(state,'allied','ドイツ軍補給源を6か所以上支配しました。'); return; }
     if (state.turn===10) {
       // Starting German cities and captured cities use the same control and connection checks.
-      const cities=[...lines(state,'german')].filter(h=>city(h) && state.control[h]==='german').length;
+      const {connected:cities}=germanCityCounts(state);
       const goal=finalVictoryCities.find(h=>state.control[h]==='german');
       if (goal || cities>=20) endGame(state,'german',goal ? `${D.cities[goal]}を支配しました。` : `連絡線の通じる都市を${cities}か所支配しました。`);
       else endGame(state,'allied','最終ターンのドイツ軍勝利条件を阻止しました。');
@@ -877,7 +961,7 @@ const BulgeRules = (() => {
       for (const u of units) {
         const available=possibleSupport(u,defensive).filter(id=>chit(id).kind!=='dummy');
         const priorities={fort:9,engineer:6,artillery:5,tank:4,damage:3,dice:2};
-        const rank=id=>defensive && id.startsWith('a-nuts:') ? 10 : priorities[chit(id).kind];
+        const rank=id=>id.startsWith('a-nuts:') ? 10 : priorities[chit(id).kind];
         available.sort((a,b)=>rank(b)-rank(a));
         const selected=result[u.id]=[];
         for (const id of available) {
@@ -961,6 +1045,12 @@ const BulgeRules = (() => {
         Number(vt&&side==='allied'),
     };
   }
+  function inflictsUnitDamage(profile, die) {
+    const result=D.crt[Math.min(6,die+profile.dieAdd)-1][profile.col];
+    const {defendDamage}=combatDamage(profile,result);
+    const armor=profile.defendGroup.reduce((sum,entry)=>sum+entry.cards.filter(id=>chit(id).kind==='tank').length,0);
+    return defendDamage>armor;
+  }
   function decisiveAttack(profile, die) {
     const result=D.crt[Math.min(6,die+profile.dieAdd)-1][profile.col];
     const {attackDamage,defendDamage}=combatDamage(profile,result);
@@ -1023,6 +1113,10 @@ const BulgeRules = (() => {
     for (const {unit,id} of [...shotDown,...dummies]) drop(state,unitById(state,unit),id);
     for (const entry of [...attackGroup,...defendGroup]) {
       const unit=unitById(state,entry.unit);
+      for (const id of entry.declared) {
+        if (chit(id).move==='ignoreZoc' && unit.support.includes(id) && !unit.usedSupport.includes(id))
+          unit.usedSupport.push(id);
+      }
       for (const id of entry.cards) {
         if (chit(id).kind==='fort') unit.fortified=id;
         if (!unit.usedSupport.includes(id)) unit.usedSupport.push(id);
@@ -1128,7 +1222,53 @@ const BulgeRules = (() => {
     if (state.combat.queue.length) { state.phase='resolve'; return; }
     const from=state.combat.from;
     state.combat=null;
+    if (state.peiper?.stage==='combat') {
+      const {unit:id, reactionAdjacent, initialZoc}=state.peiper;
+      const unit=unitById(state,id);
+      const cleared=initialZoc.some(enemyId=>!unitById(state,enemyId)?.hex);
+      state.peiper.stage=unit.hex && !unit.disrupted && (!reactionAdjacent || cleared) ? 'second' : 'done';
+      state.phase=from;
+      return;
+    }
     nextPhase(state,from);
+  }
+
+  function recordMoves(state, firstTrail=0) {
+    for (const trail of state.trails.slice(firstTrail)) {
+      const destination=trail.path.at(-1);
+      const unit=unitById(state,trail.id);
+      log(state,`${unit.name} ${trail.path[0]} → ${destination}`);
+      if (trail.excess.length) {
+        log(state,`${unit.name}：輸送力超過のため ${trail.excess.map(id=>chit(id).label).join('、')} を返却。`);
+      }
+      if (trail.repairBridge) {
+        returnChit(state,state.bridges[destination]);
+        delete state.bridges[destination];
+        log(state,`${destination} の橋梁を修復しました。`);
+      }
+    }
+  }
+
+  function startPeiper(state, action) {
+    if (!Array.isArray(action.moves)) return false;
+    const prior=previewMoves(state,action.moves);
+    const unit=unitById(prior.state,action.unit);
+    if (prior.rejected.length || !canUsePeiper(prior.state,unit)) return false;
+    const reactionAdjacent=state.phase==='reaction' && peiperTargets(prior.state,unit.id).length>0;
+    if (reactionAdjacent !== (action.to==null)) return false;
+    const initialZoc=onMap(prior.state,'allied').filter(enemy=>unitZoc(enemy).includes(unit.hex)).map(enemy=>enemy.id);
+    const route=reactionAdjacent ? null : peiperRoutes(prior.state,unit.id).get(action.to);
+    if (!reactionAdjacent && !route) return false;
+    if (route) move(prior.state,unit,route);
+    const chip=unit.support.find(id=>id.startsWith('g-peiper:'));
+    const mayAttack=chip && peiperTargets(prior.state,unit.id).length;
+    if (chip && !unit.usedSupport.includes(chip)) unit.usedSupport.push(chip);
+    prior.state.peiper={unit:unit.id,stage:mayAttack?'attack':'done',reactionAdjacent,initialZoc};
+    Object.assign(state,prior.state);
+    recordMoves(state);
+    log(state,`${unit.name} がパイパー連隊の移動特典を使用しました。`);
+    checkGermanSuddenDeath(state);
+    return true;
   }
 
   // Commands are atomic. A rejected command never mutates the supplied state.
@@ -1168,6 +1308,7 @@ const BulgeRules = (() => {
         if (phase==='reinforce' && source(side,unit.hex)) drawChits(state,side,unit.transport,unit);
         if (phase==='reinforce' && side==='allied' && state.flags.highbeam && unit.group!=='RS' &&
             (!state.highbeamUnits.length || unitById(state,state.highbeamUnits[0]).group===unit.group)) state.highbeamUnits.push(unit.id);
+        state.phaseActions=(state.phaseActions ?? 0)+1;
         log(state,`${unit.name} を ${unit.hex} に${phase==='reentry'?'再配置':'配置'}。`);
         return true;
       }
@@ -1230,6 +1371,15 @@ const BulgeRules = (() => {
         return true;
       case 'correct-initial-bridge':
         return correctInitialBridge(state);
+      case 'relocate-setup-bridge': {
+        if (!setupBridgeOptions(state).includes(action.hex)) return false;
+        const current=Object.keys(state.bridges).find(hex=>state.bridges[hex]==='a-bridge:1');
+        delete state.bridges[current];
+        state.bridges[action.hex]='a-bridge:1';
+        state.setupBridgeEdited=true;
+        log(state,`橋梁爆破の初期位置を ${action.hex} に変更しました。`);
+        return true;
+      }
       case 'undo-setup': {
         if (phase!=='setup' || !state.setupOrders.length) return false;
         const order=state.setupOrders.pop();
@@ -1294,7 +1444,9 @@ const BulgeRules = (() => {
       case 'event':
         if (!['event','reinforce'].includes(phase) || !state.events.includes(action.chit)) return false;
         if (!resolveEvent(state,action.chit,action.hex,action.effect)) return false;
-        state.events.splice(state.events.indexOf(action.chit),1); return true;
+        state.events.splice(state.events.indexOf(action.chit),1);
+        state.phaseActions=(state.phaseActions ?? 0)+1;
+        return true;
       case 'movement-order': {
         if (!canOrderUnit(state, unit)) return false;
         if (action.order === null) {
@@ -1311,26 +1463,54 @@ const BulgeRules = (() => {
         log(state, `${unit.name} に ${target} への${label}を設定しました。`);
         return true;
       }
+      case 'declare-infiltration': {
+        if (!canDeclareInfiltration(state,unit,action.chit)) return false;
+        const die=roll(state,6)+1;
+        (state.infiltration ??= {})[unit.id]={chit:action.chit,die};
+        if (die===6) drop(state,unit,action.chit);
+        log(state,`${unit.name}：浸透移動の出目 ${die}。${die===6 ? '浸透失敗、移動なし。' : `移動力 ${die}。`}`);
+        return true;
+      }
+      case 'start-peiper': return startPeiper(state,action);
+      case 'peiper-attack': {
+        if (!['move','reaction'].includes(phase) || state.peiper?.stage!=='attack' ||
+            !peiperTargets(state,state.peiper.unit).includes(action.target)) return false;
+        state.combat={side,from:phase,queue:[{target:action.target,attackers:[state.peiper.unit]}],total:1,advance:null};
+        state.lastBattle=null;
+        state.peiper.stage='combat';
+        state.phase='resolve';
+        return true;
+      }
+      case 'peiper-remobilize': {
+        if (!['move','reaction'].includes(phase) || state.peiper?.stage!=='second' ||
+            action.unit!==state.peiper.unit) return false;
+        const route=peiperRoutes(state,action.unit).get(action.to);
+        if (!route) return false;
+        const firstTrail=state.trails.length;
+        move(state,unit,route);
+        state.peiper.stage='done';
+        recordMoves(state,firstTrail);
+        checkGermanSuddenDeath(state);
+        return true;
+      }
+      case 'finish-peiper':
+        if (!['move','reaction'].includes(phase) || !['attack','second'].includes(state.peiper?.stage)) return false;
+        state.peiper.stage='done';
+        return true;
       case 'moves': {
-        if (!['move','reaction','highbeam'].includes(phase) || !Array.isArray(action.moves)) return false;
+        if (!['move','reaction','highbeam'].includes(phase) || !Array.isArray(action.moves) ||
+            (state.peiper && state.peiper.stage!=='done')) return false;
         const paused=action.pausedReservations ?? [];
         if (!Array.isArray(paused) || paused.some(id=>phase!=='move' ||
             unitById(state,id)?.side!==side || !unitById(state,id)?.movementOrder)) return false;
         const result=previewMoves(state,action.moves,new Set(paused));
         if (result.rejected.length) throw Error('移動案に実行できない移動があります。');
+        const firstTrail=state.peiper ? state.trails.length : 0;
         Object.assign(state,result.state);
-        for (const trail of state.trails) {
-          const destination=trail.path.at(-1);
-          const unit = unitById(state, trail.id);
-          log(state,`${unit.name} ${trail.path[0]} → ${destination}`);
-          if (trail.excess.length) {
-            log(state, `${unit.name}：輸送力超過のため ${trail.excess.map(id => chit(id).label).join('、')} を返却。`);
-          }
-          if (trail.repairBridge) {
-            returnChit(state,state.bridges[destination]);
-            delete state.bridges[destination];
-            log(state,`${destination} の橋梁を修復しました。`);
-          }
+        recordMoves(state,firstTrail);
+        for (const [id, {chit: support}] of Object.entries(state.infiltration ?? {})) {
+          const infiltrator=unitById(state,id);
+          if (infiltrator) drop(state,infiltrator,support);
         }
         if (phase==='highbeam') state.flags.highbeam=false;
         nextPhase(state); return true;
@@ -1402,8 +1582,9 @@ const BulgeRules = (() => {
     }
   }
   return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest, unitZoc,
-    onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, transportableSupport, movementOptions, previewMoves, canOrderUnit, canOrderDestination, offRoadForest, roadLinks,
+    unitCoverage, isEncircled,
+    onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, canDeclareInfiltration, canUsePeiper, peiperTargets, peiperRoutes, transportableSupport, movementOptions, previewMoves, canOrderUnit, canOrderDestination, offRoadForest, roadLinks,
     placements, eligiblePlacements, previewReinforcements, upcomingAlliedReinforcements, supportTargets, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
-    eventOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
-    battleInfo, possibleSupport, defaultSupport, combatProfile, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured };
+    eventOptions, setupBridgeOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
+    battleInfo, possibleSupport, defaultSupport, combatProfile, inflictsUnitDamage, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured, germanCityCounts };
 })();

@@ -33,6 +33,7 @@
   const isAI = () => !isLocal() && !eventPractice && R.actor(state) === 'allied';
   const hasPendingEvent = () => !supportPractice && ['event', 'reinforce'].includes(state.phase) && state.events.length > 0;
   const assigningSupport = () => ['setup', 'support'].includes(state.phase);
+  const reviewingAlliedSupport = () => state.phase === 'support' && !adminPractice && isAI() && state.supportConfirmed;
   const draftingReinforcements = () => state.phase === 'reinforce' && isAI() && !state.events.length;
   const waitingReinforcements = board => board.units.filter(unit => unit.side === R.actor(board) &&
     unit.status === 'reserve' && board.reinforceGroups.includes(unit.group));
@@ -50,6 +51,8 @@
   let practiceEventSide = 'german';
   let movePlan, attackPlan, reinforcementPlan, pausedReservations, selected, inspected, moveSupport;
   let moveRepair = false;
+  let peiperDraft = false;
+  let editingSetupBridge = false;
   let orderDraft = null;
   const movementOrderName = type => type === 'hold' ? '死守命令' : '移動予約';
   let recoveryOrders = [];
@@ -62,6 +65,17 @@
   let overviewUnit = null;
   let detailSource = null;
   let attackers, attackEdit, supportChoices, artilleryDie, card, eventEffect, message;
+  let eventDraft = null;
+  function proposeEvent(id) {
+    eventDraft = null;
+    if (!isAI() || !hasPendingEvent()) return;
+    const proposal = AI.administration(id ? {...state, events: [id]} : state);
+    if (proposal?.type !== 'event') return;
+    card = proposal.chit;
+    eventDraft = proposal.hex ?? null;
+    eventEffect = eventDraft && R.chit(card).event === 'air' &&
+      R.at(state, eventDraft).some(unit => unit.side === 'german' && !unit.marker && unit.disrupted) ? 'pile' : 'disrupt';
+  }
   let preferDefenderLoss = false;
   let projection, range, legalHexes;
   const polygons = new Map();
@@ -73,7 +87,9 @@
       delete revised.movementOrder;
       return revised;
     });
-    return {...board, units, mode: 'ai'};
+    const control = {...board.control};
+    control['2319'] ??= R.at(board, '2319')[0]?.side ?? 'allied';
+    return {...board, units, control, mode: 'ai'};
   }
 
   function load() {
@@ -366,9 +382,11 @@
       terrain:'森林・河川・尾根の移動制限と、河川・尾根・要塞による戦闘制限を無視',
       carry:'移動中の輸送制限を緩和',
       reaction:'敵ZOC内から対応移動できる',
-      ignoreZoc:'移動中に敵ZOCを無視',
+      ignoreZoc:'公開前の1回だけ、移動中に敵ZOCを無視',
+      infiltrate:'1〜5なら出目の移動力で敵ZOCと地形効果を無視。6なら移動失敗',
     }[chit.move];
     if (movement) effects.push(movement);
+    if (chit.label === 'パイパー連隊') effects.push('移動力5で移動し、単独攻撃後に再移動できる');
     if (chit.discard) effects.push('使い捨て');
     const description = [...effects, 'Shift＋クリックで詳しい説明'].join('。') + '。';
     setChitTooltip(node, `${chit.label} — ${description}`);
@@ -393,7 +411,7 @@
     if (detail.parentElement !== host) host.append(detail);
     byId('chit-detail-image').src = src;
     byId('chit-detail-name').textContent = chit.label;
-    byId('chit-detail-timing').textContent = `${timing}${chit.discard || id === 'g-infiltrate' ? ' · 使い捨て' : ''}`;
+    byId('chit-detail-timing').textContent = `${timing}${chit.discard ? ' · 使い捨て' : ''}`;
     byId('chit-detail-effects').replaceChildren(...effects.map(effect => element('li', effect)));
     const note = byId('chit-detail-note');
     note.textContent = specific?.note ?? '';
@@ -435,11 +453,8 @@
     render();
   }
 
-  function confirmTransport(text, label, proceed) {
-    const dialog = byId('transport-dialog');
+  function confirmAction(dialog, proceed) {
     if (dialog.open) return;
-    byId('transport-warning').textContent = text;
-    byId('transport-confirm').textContent = label;
     dialog.returnValue = 'cancel';
     dialog.addEventListener('close', () => {
       if (dialog.returnValue === 'proceed') proceed();
@@ -447,10 +462,64 @@
     dialog.showModal();
   }
 
-  function step(command) {
+  function confirmTransport(text, label, proceed) {
+    byId('transport-warning').textContent = text;
+    byId('transport-confirm').textContent = label;
+    confirmAction(byId('transport-dialog'), proceed);
+  }
+
+  function hasPhaseActions(board) {
+    switch (board.phase) {
+      case 'setup': return Boolean(board.setupOrders?.length);
+      case 'support': return Boolean(board.supportUndo?.length);
+      case 'recovery': return Boolean(board.recoveryUndo?.length);
+      default: return Boolean(board.phaseActions);
+    }
+  }
+
+  function skipsEmptyPhase(command, before) {
+    switch (command.type) {
+      case 'moves': return !projection.state.trails.length && !before.peiper;
+      case 'attacks': return !command.attacks.length;
+      case 'advance': return !command.unit;
+      case 'next':
+      case 'finish-setup': return !hasPhaseActions(before);
+      case 'roll': {
+        const battle = R.battleInfo(before);
+        return Boolean(battle && (!battle.attackers.length || !battle.defenders.length));
+      }
+      default: return false;
+    }
+  }
+
+  function emptyPhaseTitle(board) {
+    const side = R.actor(board);
+    if (board.phase === 'recovery') {
+      if (!R.onMap(board, side).some(unit => unit.disrupted && !unit.marker))
+        return '回復させる部隊がありません';
+      if (board.supplyPoints < 3) return '回復に必要な補給ポイントが足りません';
+      return '回復させる部隊を選んでいません';
+    }
+    if (board.phase === 'reentry') {
+      const waiting = board.units.some(unit => unit.side === side && unit.status === 'removed' &&
+        unit.returnTurn <= board.turn);
+      return waiting ? '再登場できる配置先がありません' : '今ターン再登場できる部隊がありません';
+    }
+    return `${R.phaseNames[board.phase]}が0件です`;
+  }
+
+  function step(command, {emptyPhaseConfirmed = false} = {}) {
+    if (byId('turn-start-dialog').open) return;
     const before = state;
     const result = R.apply(state, {...command, side: R.actor(state), revision: state.revision});
     if (!result.ok) return note(result.error, true);
+
+    if (!emptyPhaseConfirmed && skipsEmptyPhase(command, before)) {
+      byId('empty-phase-title').textContent = emptyPhaseTitle(before);
+      return confirmAction(byId('empty-phase-dialog'), () => {
+        if (state === before) completeStep(command, result.state);
+      });
+    }
 
     let recipient;
     if (command.type === 'assign') {
@@ -467,8 +536,10 @@
           'このまま配置', () => { if (state === before) completeStep(command, result.state); });
       }
     }
-    if (command.type === 'moves') {
-      const overloads = projection.state.trails.filter(trail => trail.excess.length);
+    if (['moves', 'start-peiper', 'peiper-remobilize'].includes(command.type)) {
+      const committed = before.peiper ? before.trails.length : 0;
+      const trails = command.type === 'moves' ? projection.state.trails : result.state.trails;
+      const overloads = trails.slice(committed).filter(trail => trail.excess.length);
       if (overloads.length) {
         const warnings = overloads.map(trail => {
           const unit = R.unitById(before, trail.id);
@@ -493,6 +564,14 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       message = null;
       render();
       byId('battle-overview').scrollTop = 0;
+      return;
+    }
+    if (command.type === 'declare-infiltration') {
+      peiperDraft = false;
+      moveSupport = command.chit;
+      moveRepair = false;
+      message = null;
+      render();
       return;
     }
     if (command.type === 'movement-order') {
@@ -529,6 +608,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       card = null;
       eventEffect = 'disrupt';
       message = command.type === 'event' ? {text: state.log.at(-1).text, error: false} : null;
+      proposeEvent();
       render();
       if (draftingReinforcements() && reinforcementPlan.length) focusMap();
       return;
@@ -545,6 +625,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         : command.type === 'recover-batch' ? `${command.units.length}個の部隊の回復を確定しました。`
         : command.type === 'undo-recovery' ? '直前の回復を取り消しました。' : null;
       message = resultMessage ? {text: resultMessage, error: false} : null;
+      if (command.type === 'event') proposeEvent();
       render();
       return;
     }
@@ -553,9 +634,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     render();
     if (resultHex) center(resultHex);
     else focusMap();
+    if (!practice && state.turn !== before.turn) showTurnStart();
   }
 
   function prepare(automate = true) {
+    editingSetupBridge = false;
     movePlan = []; attackPlan = []; reinforcementPlan = []; pausedReservations = new Set();
     attackers = new Set(); orderDraft = null;
     reviewedAttack = null;
@@ -565,6 +648,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     overviewUnit = null;
     selected = null; inspected = null; card = null; eventEffect = 'disrupt';
     moveSupport = ''; moveRepair = false; attackEdit = null; message = null;
+    peiperDraft = false;
     const beforeAdmin = state;
     if (!practice && state.turn === 1 && ['setup', 'move'].includes(state.phase)) {
       const corrected = R.apply(state, {type: 'correct-initial-bridge', side: R.actor(state)});
@@ -582,7 +666,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const automatedPhases = ['support', 'move', 'reaction', 'attack', 'counter'];
     for (let i = 0; automate && isAI() && automatedPhases.includes(state.phase) && i < 150; i++) {
       const action = AI.administration(state);
-      if (!action) break;
+      if (!action || action.type === 'next') break;
       const result = R.apply(state, {...action, revision: state.revision});
       if (!result.ok) {
         message = {text: '連合軍の準備を手動で進めてください。' + result.error, error: true};
@@ -594,6 +678,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (automate && isAI() && moving()) movePlan = AI.moves(state);
     if (automate && isAI() && planning()) attackPlan = AI.attacks(state);
     if (automate && draftingReinforcements()) reinforcementPlan = AI.reinforcements(state);
+    proposeEvent();
+    if (moving() && ['attack', 'second'].includes(state.peiper?.stage)) {
+      selected = state.peiper.unit;
+      inspected = selected;
+    }
     supportChoices = battleChoicesFor(R.defaultSupport(R.battleInfo(state)), 'allied');
     artilleryDie = null;
     preferDefenderLoss = false;
@@ -605,6 +694,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function clearMapSelection() {
+    peiperDraft = false;
     selected = null;
     inspected = null;
     card = null;
@@ -621,11 +711,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
 
   function chooseMover(id) {
     if (selected === id) return clearMapSelection();
+    peiperDraft = false;
     orderDraft = null;
     selected = id;
     inspected = id;
     const existing = movePlan.find(order => order.unit === id);
-    moveSupport = existing?.support ?? '';
+    moveSupport = state.infiltration?.[id]?.chit ?? existing?.support ?? '';
     moveRepair = Boolean(existing?.repairBridge);
     message = null;
     render();
@@ -633,7 +724,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
 
   function returnSelectedMove() {
     const trail = projection.state.trails.find(entry => entry.id === selected);
-    if (!moving() || !trail) return;
+    if (!moving() || !trail || state.peiper && state.trails.some(entry => entry.id === selected)) return;
     const remaining = movePlan.filter(order => order.unit !== trail.id);
     const paused = new Set(pausedReservations);
     if (trail.reserved) paused.add(trail.id);
@@ -650,6 +741,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
 
   function moveBaseForSelection() {
     if (!moving() || !selected) return null;
+    if (state.peiper?.stage === 'attack') return null;
+    if (state.peiper?.stage === 'second') return state.peiper.unit === selected ? state : null;
     const index = movePlan.findIndex(order => order.unit === selected);
     if (index >= 0)
       return R.previewMoves(state, movePlan.slice(0, index), pausedReservations).state;
@@ -669,6 +762,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   function movementRange(board) {
     const destinations = new Map();
     if (!board) return destinations;
+    if (peiperDraft || state.peiper?.stage === 'second') return R.peiperRoutes(board, selected);
     const index = movePlan.findIndex(order => order.unit === selected);
     const hasLaterMoves = index >= 0 && index < movePlan.length - 1;
     for (const mode of ['normal', 'mechanized']) {
@@ -686,6 +780,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function moveSelectedTo(hex) {
+    if (peiperDraft) return step({type: 'start-peiper', unit: selected, to: hex, moves: movePlan});
+    if (state.peiper?.stage === 'second') return step({type: 'peiper-remobilize', unit: selected, to: hex});
     const index = movePlan.findIndex(move => move.unit === selected);
     const checked = R.previewMoves(state, movementPlanWith(range.get(hex), index), pausedReservations);
     if (checked.rejected.length)
@@ -785,9 +881,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function chooseUnit(id) {
+    if (editingSetupBridge) return chooseHex(R.unitById(state,id).hex);
     if (orderDraft) return chooseOrderTarget(R.unitById(projection.state, id).hex);
     const clicked = R.unitById(projection.state, id);
     const unit = R.unitById(state, id);
+    if (moving() && state.peiper?.stage === 'attack' && legalHexes.has(unit.hex)) return chooseHex(unit.hex);
+    if (moving() && state.peiper?.stage === 'second' && range.has(unit.hex)) return chooseHex(unit.hex);
     if (draftingReinforcements() && reinforcementPlan.some(order => order.unit === id)) {
       if (selected === id) return clearMapSelection();
       selected = id;
@@ -840,11 +939,18 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function chooseHex(hex) {
+    if (editingSetupBridge) {
+      if (legalHexes.has(hex)) step({type: 'relocate-setup-bridge', hex});
+      return;
+    }
     if (orderDraft) return chooseOrderTarget(hex);
     message = null;
+    if (moving() && state.peiper?.stage === 'attack' && legalHexes.has(hex))
+      return step({type: 'peiper-attack', target: hex});
     if (moving() && range.has(hex)) return moveSelectedTo(hex);
     if (planning() && R.battleCandidates(state, hex).length) return chooseTarget(hex);
     if (hasPendingEvent() && legalHexes.has(hex)) {
+      if (isAI()) { eventDraft = hex; return render(); }
       return step({type: 'event', chit: card, hex, effect: eventEffect});
     }
     if (state.phase === 'reentry' && (selected || R.city(hex))) return chooseReentryHex(hex);
@@ -898,6 +1004,9 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       }).join(' ');
       const polygon = svg('polygon', {class: 'hex', points: corners, 'data-hex': id});
       if (R.riverTerrain(id)) polygon.setAttribute('data-river', R.city(id) ? 'city' : 'river');
+      if (D.victoryCities.includes(id)) polygon.dataset.city = 'sudden';
+      else if (R.finalVictoryCities.includes(id)) polygon.dataset.city = 'final';
+      else if (R.city(id)) polygon.dataset.city = 'counted';
       if (R.ridge(id)) polygon.setAttribute('data-relief', 'ridge');
       else if (R.forest(id)) polygon.setAttribute('data-relief', 'forest');
       polygon.addEventListener('pointerenter', () => showCoordinates(id));
@@ -976,19 +1085,14 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     for (const [hex, stack] of occupied) {
       const {x, y} = R.map.get(hex);
       const markerStack = stack.length === 2 && Boolean(stack[0].marker) !== Boolean(stack[1].marker);
-      const haite = stack.find(unit => R.chit(unit.marker)?.event === 'haite');
-      const haiteStack = markerStack && haite;
-      const counters = haiteStack ? [haite, stack.find(unit => !unit.marker)] : stack;
+      const counters = markerStack ? [stack.find(unit => unit.marker), stack.find(unit => !unit.marker)] : stack;
       for (const [index, unit] of counters.entries()) {
-        const size = !unit.marker || unit === haite ? unitCounterSize : markerStack ? 22 : 27;
+        const size = unitCounterSize;
         let left = x - size/2;
         let top = y - size/2;
-        if (haiteStack) {
+        if (markerStack) {
           left += unit.marker ? 13 : -8;
           top += unit.marker ? -12 : 6;
-        } else if (markerStack) {
-          left += unit.marker ? 23 : -11.5;
-          if (unit.marker) top += 14;
         } else if (stack.length > 1) {
           left += index ? 14 : -7;
           if (index) top += 12;
@@ -1047,12 +1151,25 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     byId('routes').append(svg('polyline', {class: `route ${style}`, points: points.join(' ')}));
   }
 
+  function alliedSupportPlacements() {
+    if (!reviewingAlliedSupport()) return new Set();
+    const hexes = new Set();
+    for (const {unit: previous} of state.supportUndo ?? []) {
+      if (!previous) continue;
+      const unit = R.unitById(state, previous.id);
+      if (unit?.hex && unit.support.some(id => !previous.support.includes(id))) hexes.add(unit.hex);
+    }
+    return hexes;
+  }
+
   function drawMap(moveBase, assistedHexes) {
+    const supportPlacements = alliedSupportPlacements();
     const battle = state.phase === 'resolve' ? R.battleInfo(state) : null;
     const focus = state.phase === 'advance' ? state.combat.advance.hex : battle?.target;
     const visibleAttacks = attackEdit != null ? [attackPlan[attackEdit]]
       : reviewedAttack ? attackPlan.filter(order => order.target === reviewedAttack) : attackPlan;
     const targets = new Set(visibleAttacks.map(order => order.target));
+    if (moving() && state.peiper?.stage === 'attack') for (const hex of legalHexes) targets.add(hex);
     if (focus) targets.add(focus);
     const groups = visibleAttacks.map(order => ({
       targets: [order.target],
@@ -1092,6 +1209,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       const option = range.get(hex);
       if (option || legalHexes.has(hex)) styles.push(option?.stopped ? 'stop' : 'legal');
       if (assistedHexes.has(hex)) styles.push('support-movement');
+      if (supportPlacements.has(hex)) styles.push('support-placement');
       if (targets.has(hex)) styles.push('target');
       if (focus === hex) styles.push('active-battle');
       if (participants.has(hex)) styles.push('attacker');
@@ -1100,7 +1218,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         polygon.style.setProperty('--battle-hue', battleColors.get(hex));
       } else polygon.style.removeProperty('--battle-hue');
       if (origin === hex) styles.push('origin');
-      if (reentryHex === hex || orderDraft?.target === hex) styles.push('chosen');
+      if (reentryHex === hex || orderDraft?.target === hex || (hasPendingEvent() && isAI() && eventDraft === hex)) styles.push('chosen');
       polygon.setAttribute('class', styles.join(' '));
       if (option || orderTarget || legalHexes.has(hex) || (planning() && targets.has(hex)) ||
           (state.phase === 'reentry' && R.city(hex))) {
@@ -1134,8 +1252,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       drawPath([draftUnit.hex, orderDraft.target], 'reserved order-draft');
     if (moving() && !orderDraft) {
       if (selected) {
-        const trail = projection.state.trails.find(trail => trail.id === selected);
-        if (trail) drawPath(trail.path, 'reviewed');
+        for (const trail of projection.state.trails.filter(trail => trail.id === selected)) drawPath(trail.path, 'reviewed');
       } else if (isAI()) {
         for (const trail of projection.state.trails) drawPath(trail.path, 'candidate');
       }
@@ -1149,8 +1266,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         width: unitCounterSize, height: unitCounterSize}));
     }
     if (state.depot) {
-      const {x, y} = R.map.get(D.depotHex);
-      byId('marks').append(svg('image', {href: R.chitImage('g-depot:1'), x: x+10, y: y-24, width: 25, height: 25}));
+      const hex = D.depotHex;
+      const {x, y} = R.map.get(hex);
+      const offset = occupied.has(hex) ? 20 : 0;
+      byId('marks').append(svg('image', {href: R.chitImage('g-depot:1'), 'data-depot': hex,
+        x: x - unitCounterSize/2 + offset, y: y - unitCounterSize/2 - offset,
+        width: unitCounterSize, height: unitCounterSize}));
     }
     drawCounters();
   }
@@ -1174,19 +1295,63 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       ? [...legalHexes].sort((a, b) => R.distance(a, startingHex) - R.distance(b, startingHex))[0] : null;
     center(battle ?? recovery ?? eventTarget ?? reentryHex ?? orderDraft?.target ?? reviewedAttack ??
       R.unitById(projection.state, selected)?.hex ?? attackPlan[0]?.target ??
-      movePlan[0]?.to ?? (draftingReinforcements() ? reinforcementPlan[0]?.hex : null) ?? startingHex);
+      movePlan[0]?.to ?? (draftingReinforcements() ? reinforcementPlan[0]?.hex : null) ??
+      alliedSupportPlacements().values().next().value ?? startingHex);
   }
 
   function renderMovement(panel, actions, moveBase) {
     const allied = isAI();
+    const peiper = state.peiper;
+    if (['attack', 'second'].includes(peiper?.stage)) {
+      const attacking = peiper.stage === 'attack';
+      const unit = R.unitById(state, peiper.unit);
+      panel.append(element('h3', `パイパー連隊 · ${unit.name}`));
+      const instruction = attacking ? '攻撃する敵の駒をクリックしてください。'
+        : range.size ? '色の付いたヘクスをクリックして、移動力5で再移動します。'
+          : '移動先を表示するには、パイパー連隊を配属した駒を選んでください。';
+      panel.append(element('p', instruction, 'hint'));
+      actions.append(button(attacking ? '単独攻撃を行わない' : '再移動を行わない',
+        () => step({type: 'finish-peiper'}), {id: 'finish-peiper'}));
+      return;
+    }
     if (selected) {
       const unit = R.unitById(projection.state, selected);
       panel.append(element('h3', `${unit.name} · ${unit.hex}`));
-      if (moveBase && !unit.movementOrder && !unit.disrupted) {
+      const infiltration = state.infiltration?.[unit.id];
+      if (infiltration) {
+        const outcome = infiltration.die === 6 ? '移動できません。チットを消費しました。'
+          : `移動力 ${infiltration.die}。敵ZOCと地形効果を無視します。`;
+        const result = element('p', null, 'result');
+        result.append(element('strong', `浸透移動の出目 ${infiltration.die}`), document.createElement('br'), outcome);
+        result.setAttribute('role', 'status');
+        panel.append(result);
+        if (infiltration.die < 6 && moveBase)
+          panel.append(element('p', range.size ? '色の付いた移動先をクリックしてください。'
+            : '移動できるヘクスはありません。', 'hint'));
+      }
+      if (moveBase && !unit.movementOrder && !unit.disrupted && !infiltration) {
         const controls = element('div', null, 'controls');
         const publicSupport = R.unitById(state, unit.id).usedSupport;
         const originalUnit = R.unitById(state, unit.id);
-        const chits = R.moveChits(originalUnit).filter(id => !allied || id === moveSupport || publicSupport.includes(id));
+        if (R.canUsePeiper(projection.state, unit)) {
+          const adjacent = state.phase === 'reaction' && R.peiperTargets(projection.state, unit.id).length;
+          const label = adjacent ? 'パイパー連隊で単独攻撃' : 'パイパー連隊で移動';
+          controls.append(button(label, () => {
+            if (adjacent) return step({type: 'start-peiper', unit: unit.id, moves: movePlan});
+            peiperDraft = !peiperDraft;
+            moveSupport = ''; moveRepair = false;
+            render();
+          }, {id: 'start-peiper', pressed: peiperDraft}));
+          if (peiperDraft) panel.append(element('p', '移動力5。移動先をクリックすると、ここまでの移動も確定します。', 'hint'));
+        }
+        const chits = R.moveChits(originalUnit).filter(id => R.chit(id).move !== 'infiltrate' &&
+          (!allied || id === moveSupport || publicSupport.includes(id)));
+        const infiltrationChit = originalUnit.support.find(id => R.canDeclareInfiltration(state, originalUnit, id));
+        if (infiltrationChit && !movePlan.some(order => order.unit === unit.id)) {
+          controls.append(button('浸透移動を宣言してダイスを振る',
+            () => step({type: 'declare-infiltration', unit: unit.id, chit: infiltrationChit}),
+            {id: 'declare-infiltration'}));
+        }
         if (chits.length) {
           const choices = [['','なし']];
           for (const id of chits) {
@@ -1199,6 +1364,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
           }
           controls.append(selectBox('移動支援', choices, moveRepair ? `${moveSupport}|repair` : moveSupport, value => {
             const [id, repair] = value.split('|');
+            peiperDraft = false;
             moveSupport = id; moveRepair = Boolean(repair); render();
           }));
         }
@@ -1213,7 +1379,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       ? '対応移動なしで進む' : allied ? '連合軍の移動を確定' : '移動を確定';
     actions.append(button(confirmLabel,
       () => step({type: 'moves', moves: movePlan, pausedReservations: [...pausedReservations]}),
-      {primary: true, disabled: Boolean(orderDraft), id: 'confirm-moves'}));
+      {primary: true, disabled: Boolean(orderDraft) || peiperDraft, id: 'confirm-moves'}));
   }
 
   function renderAttacks(panel, actions) {
@@ -1252,7 +1418,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       attackers.clear(); message = null; render(); focusMap();
     }));
     const confirm = attackPlan.length ? `${kind}をすべて確定して判定へ（${attackPlan.length}件）`
-      : `${kind}せず次へ`;
+      : `${kind}を確定（0件）`;
     actions.append(button(confirm, () => step({type: 'attacks', attacks: attackPlan}),
       {primary: true, disabled: attackers.size > 0 || attackEdit != null, id: 'confirm-attacks'}));
   }
@@ -1288,16 +1454,38 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       .filter(([id]) => R.unitById(state, id)?.side === side));
   }
 
-  function setBattleChit(unit, id) {
+  function setBattleChit(unit, id, tile) {
     const current = supportChoices[unit.id] ?? [];
-    const next = current.includes(id) ? current.filter(chit => chit !== id) : [...current, id];
+    const adding = !current.includes(id);
+    const next = adding ? [...current, id] : current.filter(chit => chit !== id);
     const revised = {...supportChoices, [unit.id]: next};
-    try { R.combatProfile(state, battleChoicesFor(revised, unit.side)); }
-    catch (error) { return note(error.message, true); }
+    const sideChoices = battleChoicesFor(revised, unit.side);
+    let warning = '';
+    if (adding && R.chit(id).kind === 'artillery') {
+      const {attackers, defenders} = R.battleInfo(state);
+      const participants = attackers[0].side === unit.side ? attackers : defenders;
+      const artillery = participants.flatMap(member => sideChoices[member.id] ?? [])
+        .filter(chit => R.chit(chit).kind === 'artillery');
+      if (artillery.length > 1)
+        warning = '砲兵支援は陣営ごとに1枚までです。変更するには、先に選んだ砲兵支援を解除してください。';
+    }
+    const dialog = byId('battle-overview');
+    if (!warning) {
+      try { R.combatProfile(state, sideChoices); }
+      catch (error) { warning = error.message; }
+    }
+    if (warning) {
+      dialog.querySelector('.battle-unit .battle-error')?.remove();
+      const alert = element('p', warning, 'battle-error');
+      alert.setAttribute('role', 'alert');
+      tile.closest('.battle-chips').after(alert);
+      alert.scrollIntoView?.({block: 'nearest'});
+      return;
+    }
     supportChoices = revised;
     message = null;
     renderBattleOverview();
-    byId('battle-overview').querySelector(`[data-battle-chit="${id}"]`)?.focus();
+    dialog.querySelector(`[data-battle-chit="${id}"]`)?.focus();
   }
 
   function battleUnitCard(unit, defensive, entry, revealed, restricted, stacked) {
@@ -1316,6 +1504,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (unit.marker) return card;
 
     const chips = element('div', null, 'battle-chips');
+    const hiddenChit = () => stackFigure({src: 'assets/allied-support-back.jpg', label: '裏向きの支援チット'});
     if (revealed) {
       for (const id of entry.declared) {
         const status = revealed.shotDown.some(removed => removed.id === id) ? 'ATで除去'
@@ -1325,9 +1514,13 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         if (status !== '有効') figure.classList.add('inactive-chit');
         chips.append(figure);
       }
-      if (!chips.childElementCount) card.append(element('p', '使用チットなし', 'hint'));
+      if (!entry.declared.length) card.append(element('p', '使用チットなし', 'hint'));
+      if (unit.side === 'allied') {
+        for (const id of unit.support.filter(id => !entry.declared.includes(id))) chips.append(hiddenChit());
+      }
     } else if (unit.side === 'allied') {
-      card.append(element('p', '使用するチットはAIが選びます。公開までは伏せられています。', 'hint'));
+      card.append(element('p', `支援チット ${unit.support.length}枚`, 'hint'));
+      for (let i = 0; i < unit.support.length; i++) chips.append(hiddenChit());
     } else {
       const chosen = supportChoices[unit.id] ?? [];
       const available = R.possibleSupport(unit, defensive);
@@ -1338,7 +1531,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       for (const id of available) {
         const active = chosen.includes(id);
         const tile = tileButton(`${R.chit(id).label} · ${active ? '使用' : '使わない'}`,
-          R.chitImage(id), () => setBattleChit(unit, id), active);
+          R.chitImage(id), event => setBattleChit(unit, id, event.currentTarget), active);
         tile.dataset.battleChit = id;
         tile.disabled = !active && !legal.includes(id);
         chips.append(tile);
@@ -1551,6 +1744,13 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function renderSupport(panel, actions) {
+    if (reviewingAlliedSupport()) {
+      const empty = !hasPhaseActions(state);
+      const label = empty ? '配属なしで進む' : '配置を確認して次へ';
+      actions.append(button(label, () => step({type: 'next'}, {emptyPhaseConfirmed: empty}),
+        {primary: true, id: 'next-phase'}));
+      return;
+    }
     const canHold = R.canHoldCapturedSupport(state);
     if (card && canHold)
       panel.append(button('物資捕獲用に保留', () => step({type: 'hold-capture', chit: card}), {id: 'hold-capture'}));
@@ -1618,7 +1818,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
           value => { eventEffect = value; render(); }));
         panel.append(controls);
       }
-      if (legalHexes.size) panel.append(element('p', '色が付いたヘクスをクリックするか、チットをそこへドラッグします。', 'hint'));
+      if (isAI()) {
+        if (legalHexes.size) panel.append(element('p', `${location(eventDraft)}。変更する場合は別の候補ヘクスをクリックしてください。`, 'hint'));
+        actions.append(button('イベントを確定', () => step({type: 'event', chit: card, hex: eventDraft, effect: eventEffect}),
+          {primary: true, id: 'resolve-event'}));
+      }
+      else if (legalHexes.size) panel.append(element('p', '色が付いたヘクスをクリックするか、チットをそこへドラッグします。', 'hint'));
       else actions.append(button('イベントを処理', () => step({type: 'event', chit: card}), {primary: true, id: 'resolve-event'}));
       return;
     }
@@ -1861,8 +2066,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   function appendAssignableChit(tray, id, dragType = supportChitType) {
     const event = hasPendingEvent();
     const tile = trayChit(id, () => {
-      card = card === id ? null : id;
-      if (event) eventEffect = 'disrupt';
+      if (event && isAI()) proposeEvent(id);
+      else {
+        card = card === id ? null : id;
+        if (event) eventEffect = 'disrupt';
+      }
       message = null;
       const scroll = tray.scrollLeft;
       render();
@@ -1893,6 +2101,13 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     for (const id of state.hand)
       if (side !== 'german' || R.chit(id).kind !== 'dummy') appendAssignableChit(tray, id);
     tray.scrollLeft = scroll;
+    if (R.setupBridgeOptions(state).length) {
+      actions.append(button(editingSetupBridge ? '橋の訂正を取り消す' : '橋の位置を訂正', () => {
+        editingSetupBridge = !editingSetupBridge;
+        card = null;
+        render();
+      }, {id: 'edit-setup-bridge', pressed: editingSetupBridge}));
+    }
     actions.append(
       button(required ? 'ここまでの配置を確定' : '配置を確定', () => step({type: 'confirm-setup'}),
         {primary: !state.setupConfirmed, disabled: Boolean(state.setupConfirmed), id: 'confirm-setup'}),
@@ -1908,7 +2123,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     tray.replaceChildren();
     const events = hasPendingEvent();
     const reinforcements = state.phase === 'reinforce' && !events;
-    tray.hidden = state.phase !== 'support' && !events && !reinforcements;
+    tray.hidden = reviewingAlliedSupport() || (state.phase !== 'support' && !events && !reinforcements);
     if (tray.hidden) return;
     if (reinforcements) {
       tray.setAttribute('aria-label', '未配置の増援');
@@ -1978,16 +2193,17 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       const kind = R.phaseNames[phase];
       return {
         message: '連合軍の' + kind + 'はありません',
-        nextLabel: kind + 'せず次へ',
-        next: () => step({type: 'attacks', attacks: []}),
+        nextLabel: `${kind}を確定（0件）`,
+        next: () => step({type: 'attacks', attacks: []}, {emptyPhaseConfirmed: true}),
       };
     }
-    if (moving() && !projection.state.trails.length && !selected) {
+    if (moving() && phase !== 'reaction' && !projection.state.trails.length && !selected) {
       const kind = R.phaseNames[phase];
       return {
         message: '連合軍の' + kind + 'はありません',
-        nextLabel: '次のフェイズへ',
-        next: () => step({type: 'moves', moves: [], pausedReservations: [...pausedReservations]}),
+        nextLabel: `${kind}なしで進む`,
+        next: () => step({type: 'moves', moves: [], pausedReservations: [...pausedReservations]},
+          {emptyPhaseConfirmed: true}),
       };
     }
     return null;
@@ -1998,13 +2214,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const overviewChanged = Boolean(overview) !== Boolean(announcedPhase?.overview);
     const phaseChanged = key !== announcedPhase?.key;
     if (!phaseChanged && !overviewChanged) return;
-    const turnChanged = Boolean(announcedPhase && announcedPhase.turn !== state.turn);
     const dismissed = !phaseChanged && announcedPhase.dismissed;
-    announcedPhase = {key, turn: state.turn, overview, dismissed};
+    announcedPhase = {key, overview, dismissed};
     const banner = byId('phase-announcement');
     const controls = byId('phase-overview-actions');
     window.clearTimeout(announcementTimer);
-    banner.classList.toggle('turn-change', turnChanged);
     banner.classList.toggle('ai-overview', Boolean(overview));
     byId('announced-turn').textContent = turnLabel;
     byId('announced-phase').textContent = overview?.message ??
@@ -2022,15 +2236,22 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       banner.hidden = dismissed;
     } else {
       banner.hidden = !phaseChanged;
-      announcementTimer = window.setTimeout(() => { banner.hidden = true; }, turnChanged ? 3600 : 2400);
+      announcementTimer = window.setTimeout(() => { banner.hidden = true; }, 2400);
     }
+  }
+
+  function showTurnStart() {
+    const dialog = byId('turn-start-dialog');
+    byId('turn-start-title').textContent = `第 ${state.turn} ターン 開始`;
+    if (!dialog.open) dialog.showModal();
   }
 
   function render() {
     projection = moving() ? R.previewMoves(state, movePlan, pausedReservations)
       : draftingReinforcements() ? R.previewReinforcements(state, reinforcementPlan) : {state};
     const selectedMoved = moving() && projection.state.trails.some(trail => trail.id === selected);
-    returnMoveButton.hidden = !selectedMoved || countersHidden;
+    const committedMove = state.peiper && state.trails.some(trail => trail.id === selected);
+    returnMoveButton.hidden = !selectedMoved || committedMove || countersHidden;
     if (state.phase === 'recovery' && recoveryOrders.length) {
       projection.state = {...state, units: state.units.map(unit =>
         recoveryOrders.includes(unit.id) ? {...unit, disrupted: false} : unit)};
@@ -2039,14 +2260,19 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     range = movementRange(moveBase);
     const assistedHexes = new Set();
     if (range.size && moveSupport && !moveRepair) {
-      const normal = R.movementOptions(moveBase, selected, {mode: 'normal'});
-      const mechanized = R.movementOptions(moveBase, selected, {mode: 'mechanized'});
+      const baseline = moveBase.infiltration?.[selected] ? {...moveBase, infiltration: undefined} : moveBase;
+      const normal = R.movementOptions(baseline, selected, {mode: 'normal'});
+      const mechanized = R.movementOptions(baseline, selected, {mode: 'mechanized'});
       for (const hex of range.keys())
         if (!normal.has(hex) && !mechanized.has(hex)) assistedHexes.add(hex);
     }
     byId('movement-support-legend').hidden = !assistedHexes.size;
     legalHexes = new Set();
-    if (hasPendingEvent()) {
+    if (editingSetupBridge)
+      legalHexes = new Set(R.setupBridgeOptions(state));
+    else if (moving() && state.peiper?.stage === 'attack')
+      legalHexes = new Set(R.peiperTargets(state, state.peiper.unit));
+    else if (hasPendingEvent()) {
       if (card) legalHexes = new Set(R.eventOptions(state, card));
     }
     else if (state.phase === 'reinforce' && selected)
@@ -2058,19 +2284,29 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
 
     const phase = state.phase;
     const side = R.actor(state);
-    byId('game-mode').textContent = practice ? '練習' : 'ドイツ軍：人間／連合軍：AI補助';
-    const {vt, groundedFrom, groundedUntil, greif, nordwind} = state.flags;
-    byId('vt-status').hidden = !vt;
-    const bodenplatteStatus = byId('bodenplatte-status');
-    bodenplatteStatus.hidden = !(groundedFrom > 0 && state.turn <= groundedUntil);
-    if (!bodenplatteStatus.hidden) {
-      const timing = state.turn < groundedFrom ? '予定' : '有効';
-      bodenplatteStatus.textContent = `ボーデンプラッテ作戦 ${timing}（第${groundedFrom}・${groundedUntil}ターンの連合軍空軍支援を無効）`;
+    const {vt, monty, patton, highbeam, groundedFrom, groundedUntil, greif, nordwind} = state.flags;
+    const {controlled, connected} = R.germanCityCounts(state);
+    byId('german-city-count').textContent = `ドイツ軍支配都市 ${controlled}　連絡線あり ${connected} / 20`;
+    const activeEvents = byId('active-events');
+    const effects = [
+      [vt, 'a-vt:1', '終局まで'],
+      [monty, 'a-monty:1'],
+      [patton, 'a-patton:1'],
+      [highbeam, 'a-highbeam:1'],
+      [groundedFrom > 0 && state.turn <= groundedUntil, 'g-bodenplatte:1',
+        `第${groundedFrom}・${groundedUntil}ターン${state.turn < groundedFrom ? 'に発動予定' : 'に有効'}`],
+      [greif === state.turn && state.turnSide === 'german', 'g-greif:1'],
+      [nordwind, 'g-nordwind:1', '次の米軍増援まで'],
+    ];
+    activeEvents.replaceChildren();
+    for (const [active, id, timing] of effects) {
+      if (!active) continue;
+      const label = R.chit(id).label;
+      const tile = stackFigure({src: R.chitImage(id), label});
+      if (timing) tile.querySelector('figcaption').append(document.createElement('br'), timing);
+      activeEvents.append(tile);
     }
-    const greifStatus = byId('greif-status');
-    greifStatus.hidden = greif !== state.turn || state.turnSide !== 'german';
-    if (!greifStatus.hidden) greifStatus.textContent = `グライフ作戦（第${greif}ターンの連合軍対応移動を中止）`;
-    byId('nordwind-status').hidden = !nordwind;
+    activeEvents.hidden = !activeEvents.childElementCount;
     const turnLabel = battlePractice ? '練習戦闘 · 保存なし'
       : adminPractice ? `第${state.turn}ターン · 練習` : `第 ${state.turn} ターン`;
     let phaseLabel = R.phaseNames[phase];
@@ -2098,7 +2334,10 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       resolve:'両軍の支援チットを確認して戦闘を判定します。',
       advance:'戦闘後前進を選ぶと、この戦闘が終了します。',
       supply:'残りの補給チットから1枚選びます。',
-      support:'地図の上のチットを選び、配属先の部隊をクリックします。',
+      support:reviewingAlliedSupport()
+        ? (alliedSupportPlacements().size ? '連合軍の配属先は青緑の太枠です。駒をクリックすると枚数を確認できます。'
+          : '連合軍の支援チットの配属はありません。')
+        : '地図の上のチットを選び、配属先の部隊をクリックします。',
       event:hasPendingEvent() ? '地図の上のイベントチットを選び、効果を適用します。' : '処理待ちのイベントはありません。',
       reinforce: draftingReinforcements() && reinforcementPlan.length ? '枠付きの増援をクリックすると配置先を変更できます。' : '',
     };
@@ -2115,7 +2354,12 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
           ? '対象と参加部隊を確認し、必要なら変更・取消してから確定してください。'
           : '味方の駒を選んでから、隣接する敵の駒を選びます。'
         : guidance[phase] ?? `${R.sideName(state.turnSide)}プレーヤーターン`;
+    if (moving() && state.peiper?.stage === 'attack')
+      byId('phase-detail').textContent = 'パイパー連隊の単独攻撃。隣接する敵を選びます。';
+    else if (moving() && state.peiper?.stage === 'second')
+      byId('phase-detail').textContent = 'パイパー連隊の再移動。移動力は5です。';
     if (reinforcementNotice) byId('phase-detail').append(' ', reinforcementNotice);
+    if (editingSetupBridge) byId('phase-detail').textContent = '色の付いたヘクスをクリックして、橋の位置を訂正します。';
     const status = byId('message');
     status.hidden = !message;
     status.textContent = message?.text ?? '';
@@ -2169,6 +2413,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (!state.events.includes(id)) return;
     event.preventDefault();
     if (!R.eventOptions(state, id).includes(hex)) return note('このヘクスにはイベントを適用できません。', true);
+    if (isAI()) {
+      if (card !== id) proposeEvent(id);
+      eventDraft = hex;
+      return render();
+    }
     step({type: 'event', chit: id, hex, effect: card === id ? eventEffect : 'disrupt'});
   });
 
@@ -2183,7 +2432,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     viewport.scrollLeft = x*scale - viewport.clientWidth/2;
     viewport.scrollTop = y*scale - viewport.clientHeight/2;
   });
-  byId('focus-map').addEventListener('click', focusMap);
   const returnMoveButton = button('この部隊を元に戻す', returnSelectedMove, {id: 'return-move', primary: true});
   returnMoveButton.hidden = true;
   byId('actions').before(returnMoveButton);
@@ -2204,7 +2452,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     toggleCounters.textContent = countersHidden ? '駒を表示' : '駒を隠す';
   }, {id: 'toggle-counters', pressed: false});
   toggleCounters.setAttribute('aria-controls', 'counters marks routes');
-  byId('focus-map').after(toggleCounters);
+  byId('zoom-value').after(toggleCounters);
   byId('toggle-command').addEventListener('click', event => {
     const panel = byId('command-panel');
     panel.hidden = !panel.hidden;
@@ -2228,20 +2476,22 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   });
   byId('hexes').addEventListener('pointerleave', () => { mapCoordinate.hidden = true; });
   const inspections = [
+    {mode: 'city', label: '勝利条件の都市', toggle: byId('toggle-city-data')},
     {mode: 'road', label: '道路', toggle: byId('toggle-road-data')},
     {mode: 'river', label: '河川', toggle: byId('toggle-river-data')},
     {mode: 'terrain', label: '尾根・森林', toggle: byId('toggle-terrain-data')},
   ];
   for (const {mode, toggle} of inspections) {
-    toggle.hidden = query.get('inspect') !== 'map';
+    toggle.hidden = mode !== 'city' && query.get('inspect') !== 'map';
     toggle.addEventListener('click', () => {
       mapInspection = mapInspection === mode ? null : mode;
       for (const option of inspections) {
         const active = mapInspection === option.mode;
-        byId('board').classList.toggle(`${option.mode}s-visible`, active);
+        byId('board').classList.toggle(`${option.mode === 'city' ? 'cities' : option.mode + 's'}-visible`, active);
         option.toggle.setAttribute('aria-pressed', String(active));
-        option.toggle.textContent = `${option.label}データを${active ? '隠す' : '表示'}`;
+        option.toggle.textContent = `${option.label}${option.mode === 'city' ? '' : 'データ'}を${active ? '隠す' : '表示'}`;
       }
+      byId('victory-city-legend').hidden = mapInspection !== 'city';
       byId('road-data').toggleAttribute('hidden', mapInspection !== 'road');
       mapCoordinate.hidden = true;
     });
@@ -2249,7 +2499,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   byId('close-stack-overview').addEventListener('click', hideStack);
   byId('close-chit-detail').addEventListener('click', closeChitDetail);
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || byId('transport-dialog').open) return;
+    if (event.key !== 'Escape' || byId('transport-dialog').open || byId('empty-phase-dialog').open) return;
     if (!byId('chit-detail').hidden) {
       event.preventDefault();
       return closeChitDetail();
@@ -2279,6 +2529,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     byId('start-error').hidden = true;
     byId('game-file').click();
   });
+  byId('turn-start-dialog').addEventListener('cancel', event => event.preventDefault());
   byId('start-dialog').addEventListener('cancel', event => {
     if (!state) event.preventDefault();
   });
@@ -2303,6 +2554,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     prepare();
     render();
     focusMap();
+    showTurnStart();
   });
 
   function restartPractice(side, event = 'all') {

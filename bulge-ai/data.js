@@ -43,7 +43,7 @@ const germanChits = {
   'g-halftrack': marker('ハーフトラック','movement',299,4,{ move: 'carry' }),
   'g-recon': marker('索敵大隊','movement',335,3,{ move: 'reaction', discard: true }),
   'g-goliath': marker('第301ゴリアテ大隊','engineer',336,1,{ breakFort: true, discard: true }),
-  'g-infiltrate': marker('浸透移動','special',337,2),
+  'g-infiltrate': marker('浸透移動','special',337,2,{ move: 'infiltrate', discard: true }),
   'g-nuts': marker('俺のケツを舐めろ','damage',339,1,{ absorb: 2, inflict: 2, discard: true }),
   'g-cross': marker('騎士十字章','damage',340,1,{ absorb: 1, inflict: 1, discard: true }),
   'g-dummy': marker('ダミー','dummy',374,6),
@@ -94,9 +94,8 @@ const reconGuide = {
   when: movementChitTiming,
   effects: [
     '対応移動では、敵のZOC（支配地域）内にいる部隊が対応移動を開始できる。',
-    '移動の開始時や終了時に隣接する敵部隊の支援チットを公開する。',
+    '移動支援に選ぶと、出発時と到着時に隣接する敵部隊の支援チットを公開する。',
   ],
-  note: '隣接部隊のチットを公開する効果は、現在のゲームでは未実装。',
 };
 const chitGuide = {
   tank: {
@@ -129,13 +128,18 @@ const chitGuide = {
   'a-arty': {effects: ['VT信管解禁後はドイツ軍の損害を1点増やす。両軍の砲兵で出目の操作が相殺されても、追加損害は適用する。']},
   'g-trojan': {
     when: `${combatChitTiming}、${movementChitTiming}`,
-    effects: ['移動支援として公開したフェイズ中は、敵ZOCに入っても停止せず進める。ルール上、この移動特典は公開前の1回限り。'],
-    note: '現在のゲームでは移動特典の再使用制限は未実装。',
+    effects: [
+      '公開前に一度だけ、敵ZOCに入っても停止せず進める。機械化移動との併用は不可。',
+      '移動・戦闘・敵の偵察で公開された後は、戦車系チットとして使える。',
+    ],
   },
   'g-peiper': {
     when: `${combatChitTiming}、${movementChitTiming}`,
-    effects: ['移動力5で移動した後、隣接する敵を単独で攻撃できる。戦闘後も通常状態なら、さらに移動力5で移動できる。対応移動の開始時に敵と隣接していれば、最初の移動を省く。'],
-    note: '移動中の攻撃と再移動は、現在のゲームでは未実装。',
+    effects: [
+      '移動力5で移動した直後、配属先の部隊だけで隣接する敵を攻撃できる。戦闘後も通常状態なら、さらに移動力5で移動できる。機械化移動との併用は不可。',
+      '対応移動の開始時に敵と隣接していれば、最初の移動を省いて単独攻撃する。ZOCを及ぼしていた敵を除去し、通常状態なら再移動できる。',
+      '移動・対応移動の後の攻撃・反撃フェイズにも、ほかの部隊と一緒に攻撃できる。',
+    ],
   },
   'g-halftrack': {
     when: movementChitTiming,
@@ -147,8 +151,8 @@ const chitGuide = {
   },
   'g-infiltrate': {
     when: movementChitTiming,
-    effects: ['開始時にダイスを1個振る。1〜5ならその数を移動力として、敵ZOCと地形効果を無視して移動する。6なら移動できない。'],
-    note: '現在のゲームでは未実装。',
+    effects: ['開始時にダイスを1個振る。1〜5ならその数を移動力として、敵ZOCと地形効果を無視して移動する。6なら移動できない。',
+      '機械化移動との併用は不可。チットは移動中の輸送枚数に数え、使用後に捨てる。'],
   },
   'g-flak': {
     when: '連合軍のイベント解決フェイズ',
