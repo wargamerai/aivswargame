@@ -61,7 +61,9 @@ window.GAME_DATA = {
     '織田信長':'assets/cards/01_織田信長.png','徳川家康':'assets/cards/02_徳川家康.png','松永久秀':'assets/cards/03_松永久秀.png','追討令':'assets/cards/04_追討令.png',
     '羽柴秀吉':'assets/cards/05_羽柴秀吉.png','明智光秀':'assets/cards/06_明智光秀.png','柴田勝家':'assets/cards/07_柴田勝家.png','丹羽長秀':'assets/cards/08_丹羽長秀.png',
     '武田信玄':'assets/cards/09_武田信玄.png','浅井・朝倉':'assets/cards/10_浅井朝倉.png','三好三人衆':'assets/cards/11_三好三人衆.png','本願寺':'assets/cards/12_本願寺.png',
-    '上杉謙信':'assets/cards/13_上杉謙信.png','毛利輝元':'assets/cards/14_毛利輝元.png','宇喜多直家':'assets/cards/15_宇喜多直家.png','足利義昭':'assets/cards/16_足利義昭.png'
+    '上杉謙信':'assets/cards/13_上杉謙信.png','毛利輝元':'assets/cards/14_毛利輝元.png','宇喜多直家':'assets/cards/15_宇喜多直家.png','足利義昭':'assets/cards/16_足利義昭.png',
+    '滝川一益':'assets/cards/17_滝川一益.png',
+    '前田利家':'assets/cards/18_前田利家.png'
   },
   goals: {controlAll: true, defeatAreas: ['yamashiro','nishimino'], minimumStrategy: 2},
   unitImages: {}

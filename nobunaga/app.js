@@ -10,7 +10,7 @@
 
   // ===== ルールの手伝い（2026-11-09 ルール見直し）=====
   const leaderArmy=Object.fromEntries(D.areas.flatMap(a=>a.initial.filter(([l])=>l).map(([l,army])=>[l,army])));
-  function armyHomes(army){const out=new Set();for(const [l,ar] of Object.entries(leaderArmy))if(ar===army&&homeArea[l]&&(l!==takigawa||state.options.extraTakigawa))out.add(homeArea[l]);if(/一向一揆/.test(army))for(const a of D.areas)if(a.initial.some(([,ar])=>ar===army))out.add(a.id);if(army==='織田軍')for(const l of ['織田信長',...odaRetainers])if(homeArea[l])out.add(homeArea[l]);return out}
+  function armyHomes(army){const out=new Set();for(const [l,ar] of Object.entries(leaderArmy))if(ar===army&&homeArea[l]&&(!optionalLeaders[l]||state.options[optionalLeaders[l].option]))out.add(homeArea[l]);if(/一向一揆/.test(army))for(const a of D.areas)if(a.initial.some(([,ar])=>ar===army))out.add(a.id);if(army==='織田軍')for(const l of ['織田信長',...odaRetainers])if(homeArea[l])out.add(homeArea[l]);return out}
   function pieces(f){return (Number(f.count)||0)+(f.leader?1:0)}
   function alive(f){return pieces(f)>0}
   const isIkko=army=>/一向一揆|本願寺/.test(army);
@@ -18,27 +18,43 @@
   function shownArmy(f,areaId){if(!f||!/一向一揆/.test(f.army))return f?.army;if(!areaId){const hit=Object.entries(state.areas).find(([,r])=>r.forces.includes(f));areaId=hit?.[0]}return areaId&&!armyHomes(f.army).has(areaId)?'本願寺（雑賀軍）':f.army}
   function poolFor(force,n){if(!n)return;if(force.army==='中立軍')return;if(force.side==='enemy')state.enemyPool+=n;else state.playerPool+=n}
   const sideOfArmy = (army) => /織田|徳川|松永/.test(army) ? 'player' : (/中立|足利/.test(army) ? 'neutral' : 'enemy');
-  const takigawa = '滝川一益';
-  const takigawaCard = {name:takigawa,side:'player',leaders:[takigawa],reinforce:'actingOda',
-    description:'滝川一益が行動する。補充は織田軍なら戦略値分、反逆織田軍なら2駒。'};
+  const takigawa = '滝川一益', maeda = '前田利家';
+  const optionalLeaders = {
+    [takigawa]: {option:'extraTakigawa', home:'owari', cardOffset:0},
+    [maeda]: {option:'extraMaeda', home:'nishimino', cardOffset:2}
+  };
   function scenarioCards(options) {
     const cards = D.cards.map((card,id)=>({...card,id,leaders:card.leaders?.slice()}));
     const nobunaga = cards.find(card=>card.name==='織田信長');
-    if (options.extraTakigawa) {
-      nobunaga.leaders.push(takigawa);
-      cards.push({...takigawaCard,id:D.cards.length});
+    for (const [name, {option, cardOffset}] of Object.entries(optionalLeaders)) {
+      if (!options[option]) continue;
+      nobunaga.leaders.push(name);
+      cards.push({name,side:'player',leaders:[name],reinforce:'actingOda',id:D.cards.length+cardOffset,
+        description:`${name}が行動する。補充は織田軍なら戦略値分、反逆織田軍なら2駒。`});
     }
     if (options.extraNobunaga) cards.push({...nobunaga,id:D.cards.length+1});
     return cards;
   }
+  function startingStrength(options) {
+    const count=Number(options.startingStrength);
+    return Number.isInteger(count)&&count>=5&&count<=10 ? count : 0;
+  }
   function setupAreas(options, areas) {
-    if (options.extraTakigawa) {
-      areas.owari.forces.push({leader:takigawa,army:'織田軍',count:0,power:2,side:'player'});
+    for (const [leader, {option, home}] of Object.entries(optionalLeaders)) {
+      if (options[option]) areas[home].forces.push({leader,army:'織田軍',count:0,power:2,side:'player'});
+    }
+    const strength=startingStrength(options);
+    if (strength) for (const area of Object.values(areas)) {
+      for (const force of area.forces) {
+        if (force.side==='player'&&force.leader!=='織田信長') force.count=strength;
+      }
     }
     return areas;
   }
-  leaderArmy[takigawa]='織田軍';
-  homeArea[takigawa]='owari';
+  for (const [leader, {home}] of Object.entries(optionalLeaders)) {
+    leaderArmy[leader]='織田軍';
+    homeArea[leader]=home;
+  }
   function reserveTotal(options) {
     const count=Number(options.reserveTotal);
     return [12,13,14,15].includes(count) ? count : 10;
@@ -51,7 +67,7 @@
     }
     return deck;
   }
-  const fresh = (options={}) => ({options:{extraTakigawa:Boolean(options.extraTakigawa),extraNobunaga:Boolean(options.extraNobunaga),reserveTotal:reserveTotal(options),chooseFirstCard:Boolean(options.chooseFirstCard),firstCard:options.firstCard||'',captureDefeat:Boolean(options.captureDefeat),leaderInjury:Boolean(options.leaderInjury),showUnitStats:Boolean(options.showUnitStats)},leaderPool:{player:[],enemy:[]},areas:setupAreas(options,Object.fromEntries(D.areas.map(a=>[a.id,{control:(a.initial[0] ? sideOfArmy(a.initial[0][1]) : 'neutral'),ownerArmy:a.initial[0]?.[1]||'',forces:a.initial.map(([leader,army,count,power])=>({leader,army,count,power:D.units?.leaders?.[leader]??power,side:sideOfArmy(army)}))}]))),playerPool:reserveTotal(options),enemyPool:12,deck:initialDeck(options),discard:[],round:1,lastCard:null,selectedArea:null,selectedLeader:null,mode:'',moveDestination:null,moveCount:null,reinforceCount:null,actionHighlights:[],mapFocusArea:null,pendingCard:null,highlightedCard:null,lastMove:null,tracks:{oda:0,tokugawa:0,matsunaga:0,uesugi:0,mori:0,ukita:0},revoltTracks:{},activeCard:null,lastActor:null,log:['ゲームを開始しました。状況カードを引いてください。'],over:false,turnComplete:true,setupComplete:false});
+  const fresh = (options={}) => ({options:{extraTakigawa:Boolean(options.extraTakigawa),extraMaeda:Boolean(options.extraMaeda),startingStrength:startingStrength(options),extraNobunaga:Boolean(options.extraNobunaga),reserveTotal:reserveTotal(options),chooseFirstCard:Boolean(options.chooseFirstCard),firstCard:options.firstCard||'',captureDefeat:Boolean(options.captureDefeat),leaderInjury:Boolean(options.leaderInjury),showUnitStats:Boolean(options.showUnitStats)},leaderPool:{player:[],enemy:[]},areas:setupAreas(options,Object.fromEntries(D.areas.map(a=>[a.id,{control:(a.initial[0] ? sideOfArmy(a.initial[0][1]) : 'neutral'),ownerArmy:a.initial[0]?.[1]||'',forces:a.initial.map(([leader,army,count,power])=>({leader,army,count,power:D.units?.leaders?.[leader]??power,side:sideOfArmy(army)}))}]))),playerPool:reserveTotal(options),enemyPool:12,deck:initialDeck(options),discard:[],round:1,lastCard:null,selectedArea:null,selectedLeader:null,mode:'',moveDestination:null,moveCount:null,reinforceCount:null,actionHighlights:[],mapFocusArea:null,pendingCard:null,highlightedCard:null,lastMove:null,tracks:{oda:0,tokugawa:0,matsunaga:0,uesugi:0,mori:0,ukita:0},revoltTracks:{},activeCard:null,lastActor:null,log:['ゲームを開始しました。状況カードを引いてください。'],over:false,turnComplete:true,setupComplete:false});
   const savedState=load();
   let canContinue=Boolean(savedState&&savedState.setupComplete&&D.areas.every(a=>savedState.areas?.[a.id]));
   let state = savedState || fresh();
@@ -81,7 +97,7 @@
     $('#phaseTitle').textContent=state.over?'ゲーム終了':`戦略値 ${state.strategy} · 拠点 ${n}/${total}`;
     $('#playerPool').textContent=state.playerPool;$('#enemyPool').textContent=state.enemyPool;
     renderMap();renderTracks();renderPools();renderFactions();renderInventory();renderCommands();renderEvent();
-    if(state.mapFocusArea){const id=state.mapFocusArea;state.mapFocusArea=null;requestAnimationFrame(()=>{centerMapOnArea(id);requestAnimationFrame(positionActionPanel)})}else if((state.mode==='cardAction'||state.mode==='move')&&state.selectedArea)requestAnimationFrame(()=>{centerMapOnArea(state.selectedArea);requestAnimationFrame(positionActionPanel)});else requestAnimationFrame(positionActionPanel);
+    if(state.mapFocusArea){const id=state.mapFocusArea;state.mapFocusArea=null;requestAnimationFrame(()=>{centerMapOnArea(id);requestAnimationFrame(positionActionPanel)})}else if((state.mode==='cardAction'||(state.mode==='move'&&!state.moveDestination))&&state.selectedArea)requestAnimationFrame(()=>{centerMapOnArea(state.selectedArea);requestAnimationFrame(positionActionPanel)});else requestAnimationFrame(positionActionPanel);
     $('#log').innerHTML=state.log.map(x=>`<div class="log-entry">${esc(x)}</div>`).join('');$('#endTurn').disabled=state.over||Boolean(state.mode)||Boolean(pendingResolution)||Boolean(state.lastCard&&!state.turnComplete);$('#endTurn').textContent=state.over?'ゲーム終了':state.mode==='cardReveal'?'カードを確認中':state.lastCard?(state.turnComplete?'終了・次のカードへ':'行動を選択中'):'状況カードを引く';
     save();
   }
@@ -159,7 +175,7 @@
   function renderCommands(){
     const selectedArea=state.selectedArea,region=selectedArea?state.areas[selectedArea]:null;
     const found=state.selectedLeader&&getLeader(state.selectedLeader),force=found?.force;
-    $('#commandButtons').innerHTML='';$('#commandExtra').innerHTML='';$('#mapActionStrip').hidden=!region||(state.mode==='move'&&!state.moveDestination)||(!state.mode&&state.turnComplete); // 移動を選んだら窓を消し、行き先を押したらまた出す（2026-11-09）
+    $('#commandButtons').innerHTML='';$('#commandExtra').innerHTML='';$('#mapActionStrip').hidden=!region||(!state.mode&&state.turnComplete);
     if(!region){$('#commandTitle').textContent='未選択';$('#commandHint').textContent='地図のエリアを選ぶと部隊と行動が表示されます。';if($('#selectedStack'))$('#selectedStack').innerHTML='';return}
     if($('#selectedStack'))$('#selectedStack').innerHTML=region.forces.length?region.forces.map(f=>`<span class="selected-force ${f.side}"><b>${esc(f.leader||f.army)}</b>${f.leader?`<small>能力 ${Number(f.power)||0}</small>`:''}<small>駒 ${Number(f.count)||0}</small></span>`).join(''):'<span class="selected-force empty">部隊なし</span>';
     $('#commandTitle').textContent=found?state.selectedLeader:'部隊';
@@ -173,15 +189,28 @@
       $('#commandButtons').innerHTML=`<button id="confirmMove" ${!dest?'disabled':''}>移動を確定</button><button id="cancelAction">取り消し</button>`;
       const reg0=state.areas[found?.area||selectedArea],max=reg0.forces.filter(f=>f.side==='player'&&f.army===force?.army).reduce((s,f)=>s+f.count,0),value=Math.max(0,Math.min(max,state.moveCount??Math.max(0,max-1)));
       const comp=reg0.forces.filter(f=>f.leader&&f.leader!==state.selectedLeader&&f.side==='player'&&f.army==='織田軍'&&force?.army==='織田軍'&&f.leader!=='織田信長');
-      $('#commandExtra').innerHTML=`<label>引き連れる軍勢<input id="moveCount" type="number" min="0" max="${max}" value="${value}"></label>${comp.map(f=>`<label class="disband-leader"><input type="checkbox" data-companion="${esc(f.leader)}"> ${esc(f.leader)}も同行</label>`).join('')}`;
+      $('#commandExtra').innerHTML=`<label>引き連れる軍勢<input id="moveCount" type="number" min="0" max="${max}" value="${value}"></label>${comp.map(f=>`<label class="disband-leader"><input type="checkbox" data-companion="${esc(f.leader)}" ${(state.moveCompanions||[]).includes(f.leader)?'checked':''}> ${esc(f.leader)}も同行</label>`).join('')}`;
+      $('#moveCount').addEventListener('input',e=>{state.moveCount=Math.max(0,Math.min(max,Number(e.target.value)||0))});
+      document.querySelectorAll('[data-companion]').forEach(c=>c.addEventListener('change',()=>{state.moveCompanions=[...document.querySelectorAll('[data-companion]:checked')].map(x=>x.dataset.companion)}));
       $('#confirmMove').addEventListener('click',confirmMove);$('#cancelAction').addEventListener('click',cancelCurrentAction);return;
     }
     if(state.mode==='disband'){
-      const troops=force?.count||0,isLeader=Boolean(force?.leader);
-      $('#commandHint').textContent=`${state.selectedLeader}のいる${areaBy(found?.area||selectedArea).name}から、補充プールに戻す駒を選びます（ルール10.0）。`;
-      $('#commandButtons').innerHTML=`<button id="confirmDisband">解散を確定</button><button id="cancelAction">取り消し</button>`;
-      $('#commandExtra').innerHTML=`<label>戻す軍勢の駒数<input id="disbandCount" type="number" min="0" max="${troops}" value="${Math.min(1,troops)}"></label>${isLeader?`<label class="disband-leader"><input id="disbandLeader" type="checkbox"> 武将（${esc(force.leader)}）も戻す</label>`:''}`;
-      $('#confirmDisband').addEventListener('click',()=>disband(found?.area||selectedArea,state.selectedLeader,Number($('#disbandCount').value)||0,Boolean($('#disbandLeader')?.checked)));$('#cancelAction').addEventListener('click',cancelCurrentAction);return;
+      const id=state.disbandArea;
+      const targets=id?state.areas[id].forces.filter(f=>f.side==='player'&&alive(f)):[];
+      const target=targets[state.disbandTarget??0];
+      const troops=target?.count||0;
+      $('#commandHint').textContent=id
+        ? `${areaBy(id).name}で補充プールに戻す駒を選びます。地図でエリアを変更できます。`
+        : '解散する軍勢がいるエリアを地図で選んでください。';
+      $('#commandButtons').innerHTML=`<button id="confirmDisband" ${target?'':'disabled'}>解散を確定</button><button id="cancelAction">取り消し</button>`;
+      const choices=targets.length>1
+        ? `<label>部隊<select id="disbandTarget">${targets.map((f,i)=>`<option value="${i}" ${f===target?'selected':''}>${esc(f.leader||f.army)}（${f.count}駒）</option>`).join('')}</select></label>`
+        : '';
+      $('#commandExtra').innerHTML=target?`${choices}<label>戻す軍勢の駒数<input id="disbandCount" type="number" min="0" max="${troops}" value="${Math.min(1,troops)}"></label>${target.leader?`<label class="disband-leader"><input id="disbandLeader" type="checkbox"> 武将（${esc(target.leader)}）も戻す</label>`:''}`:'';
+      $('#disbandTarget')?.addEventListener('change',e=>{state.disbandTarget=Number(e.target.value);render()});
+      $('#confirmDisband').addEventListener('click',()=>disband(id,target,Number($('#disbandCount').value),Boolean($('#disbandLeader')?.checked)));
+      $('#cancelAction').addEventListener('click',cancelCurrentAction);
+      return;
     }
     if(state.mode==='attack'){
       const enemies=region.forces.some(x=>x.side!=='player');
@@ -207,7 +236,7 @@
       $('#skipCardAction').addEventListener('click',()=>{state.mode='';state.lastActor=state.selectedLeader;state.lastActorCardId=state.lastCard?.id;state.activeCard=null;state.turnComplete=true;note(`${state.selectedLeader}は今回は行動をパス。`);render();state.autoNext=true;tryAutoDraw()});return;
     }
     const playerForce=force&&force.side==='player',enemy=region.forces.some(x=>x.side!=='player');
-    const commands=[['移動','move',!playerForce],['戦闘','attack',!playerForce||!enemy],['補充','reinforce',!playerForce||state.playerPool<1||playerReinforceLimit(force)<=0],['解散','disband',!playerForce],['確定','end',!playerForce]];
+    const commands=[['移動','move',!playerForce],['戦闘','attack',!playerForce||!enemy],['補充','reinforce',!playerForce||state.playerPool<1||playerReinforceLimit(force)<=0],['解散','disband',!state.activeCard||!Object.values(state.areas).some(a=>a.forces.some(f=>f.side==='player'&&alive(f)))],['確定','end',!playerForce]];
     $('#commandHint').textContent='';$('#commandButtons').innerHTML=commands.map(([label,mode,disabled])=>`<button data-mode="${mode}" ${disabled?'disabled':''}>${label}</button>`).join('')+(state.mode==='cardAction'?(state.activeCard?.leaders||[]).filter(l=>state.leaderPool.player?.includes(l)&&!(state.rebels||[]).includes(l)&&redeployTargets(l).length).map(l=>`<button class="redeploy-btn" data-redeploy="${esc(l)}">${esc(l)}を戻す</button>`).join('')+'':'');
     document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>{const mode=b.dataset.mode;if(mode==='end')finishAction(selectedArea,state.selectedLeader);else if(mode==='attack')attack(selectedArea,state.selectedLeader);else beginMode(mode)}));
     document.querySelectorAll('[data-redeploy]').forEach(b=>b.addEventListener('click',()=>{const name=b.dataset.redeploy;state.mode='redeploy';state.redeployLeader=name;state.actionHighlights=redeployTargets(name);setBoardView('map');toast(`${name}を戻す本領を選んでください`);render()}));
@@ -228,10 +257,30 @@
     box.querySelectorAll('[data-pick]').forEach(btn=>btn.addEventListener('click',()=>{state.selectedArea=id;state.selectedLeader=btn.dataset.pick;$('#selectionHint').textContent=`${btn.dataset.pick}を選択中`;render();showAreaInfo(id)}))}
   function selectArea(id){
     if(state.mode==='moveAnimating')return;
-    if(!['move','redeploy'].includes(state.mode))setTimeout(()=>showAreaInfo(id),0);
+    if(!['move','redeploy','disband'].includes(state.mode))setTimeout(()=>showAreaInfo(id),0);
     if(state.mode==='redeploy'){if((state.actionHighlights||[]).includes(id))redeployLeader(state.redeployLeader,id);else toast('緑色で示された本領を選んでください');return}
+    if(state.mode==='disband'){
+      if (!state.actionHighlights.includes(id)) {
+        toast('信長側の駒がいるエリアを選んでください。');
+        return;
+      }
+      state.disbandArea=id;
+      state.disbandTarget=0;
+      render();
+      return;
+    }
     if(state.mode==='move'){
-      if((state.actionHighlights||[]).includes(id)){state.moveDestination=id;state.selectedArea=state.moveSource||state.selectedArea;state.mapFocusArea=id;render()}else toast('緑色で示されたエリアを選んでください');return
+      if (!(state.actionHighlights||[]).includes(id)) {
+        toast('緑色で示されたエリアを選んでください');
+        return;
+      }
+      const countInput=$('#moveCount');
+      if (countInput) state.moveCount=Math.max(0,Math.min(Number(countInput.max),Number(countInput.value)||0));
+      state.moveCompanions=[...document.querySelectorAll('#commandExtra [data-companion]:checked')].map(input=>input.dataset.companion);
+      state.moveDestination=id;
+      state.selectedArea=state.moveSource||state.selectedArea;
+      render();
+      return;
     }
     const reg=state.areas[id];
     if(state.mode==='cardAction'&&state.activeCard){if(state.lockedLeader){toast(`${state.lockedLeader}で行動してください`);return}const actors=reg.forces.filter(f=>state.activeCard.leaders.includes(f.leader)&&f.side==='player').sort((x,y)=>state.activeCard.leaders.indexOf(x.leader)-state.activeCard.leaders.indexOf(y.leader));const cardActor=actors.find(f=>f.leader===state.selectedLeader)||actors[0];if(cardActor){state.selectedArea=id;state.selectedLeader=cardActor.leader;$('#selectionHint').textContent=`${cardActor.leader}を選択中`;render();return}toast('このカードで行動できる武将を選んでください');return}
@@ -244,8 +293,17 @@
       region.forces.some(force=>force.side==='player' && force.army==='織田軍' && force.count>0);
   }
   function beginMode(mode){
+    if (mode==='disband') {
+      state.mode=mode;
+      state.disbandArea=null;
+      state.disbandTarget=0;
+      state.actionHighlights=Object.keys(state.areas).filter(id=>state.areas[id].forces.some(f=>f.side==='player'&&alive(f)));
+      setBoardView('map');
+      render();
+      return;
+    }
     const here=getLeader(state.selectedLeader);if(!here||here.force.side!=='player'){toast('信長側の武将がいるエリアを選んでください');return}
-    state.mode=mode;state.actionHighlights=[];state.moveDestination=null;state.moveSource=here.area;state.moveCount=odaTroopsCoverDeparture(state.areas[here.area],here.force.army)
+    state.mode=mode;state.actionHighlights=[];state.moveDestination=null;state.moveSource=here.area;state.moveCompanions=[];state.moveCount=odaTroopsCoverDeparture(state.areas[here.area],here.force.army)
       ? state.areas[here.area].forces.filter(force=>force.side==='player' && force.army===here.force.army).reduce((total,force)=>total+force.count,0)
       : Math.max(1,here.force.count-1);state.reinforceCount=null;
     if(mode==='move'){state.actionHighlights=legalMoves(here.area,here.force);setBoardView('map');toast('移動先を地図で選んでください（やめるときは Esc キー）')}
@@ -301,13 +359,33 @@
       let rest=hits-dealt;for(const f of targets){if(rest<=0)break;if(f.leader&&!targets.some(g=>g.army===f.army&&g.count>0)){const name=f.leader;sendLeaderToPool(f);casualties.push({name,troops:0,leader:true,side:f.side});dealt++;rest--}}
       dlg.close();dlg.remove();done({dealt,casualties})})}
   function reinforce(leader,num){const found=getLeader(leader);if(!found||state.playerPool<1)return;const limit=playerReinforceLimit(found.force);if(limit<1){toast('このカードでは補充できません');return}const amount=Math.min(Math.max(1,Number(num)||1),state.playerPool,limit);if(amount<1){toast('補充できる駒がありません');return}found.force.count+=amount;state.playerPool-=amount;note(`${leader}が${areaBy(found.area).name}で${amount}駒を補充（信長側の補充プール残り${state.playerPool}駒）。`);announceAction('補充',`${leader}が${areaBy(found.area).name}で${amount}駒を補充（プール残り${state.playerPool}駒）`);if(state.mode==='cardAction'&&state.cardStage==='reinforce'){state.cardStage='act';state.lockedLeader=leader;render();return}finishAction(found.area,leader)}
-  function disband(id,leader,num,withLeader){const reg=state.areas[id],f=reg.forces.find(x=>x.leader===leader);if(!f)return;const n=Math.max(0,Math.min(f.count,Number(num)||0));if(!n&&!withLeader){toast('戻す駒を選んでください');return}
+  function disband(id,force,num,withLeader){
+    const reg=state.areas[id];
+    if (!force||force.side!=='player'||!reg?.forces.includes(force)) return;
+    const leader=force.leader;
+    const n=Math.max(0,Math.min(force.count,Math.trunc(num)||0));
+    if(!n&&!(leader&&withLeader)){toast('戻す駒を選んでください');return}
     if(withLeader&&leader==='織田信長'&&!confirm('織田信長を補充プールに戻すと、その時点で敗北になります。戻しますか？'))return;
-    f.count-=n;state.playerPool+=n;const parts=[];if(n)parts.push(`軍勢${n}駒`);
-    if(withLeader){state.leaderPool.player||=[];state.leaderPool.player.push(leader);f.leader='';parts.push(`武将（${leader}）`)}
-    reg.forces=reg.forces.filter(x=>x.leader||x.count);const message=`${leader}が${areaBy(id).name}で${parts.join('と')}を解散し、補充プールへ戻した`;note(message+'。');announceAction('解散',message);
-    if(withLeader){state.mode='';state.actionHighlights=[];state.lastActor=leader;state.lastActorCardId=state.lastCard?.id;state.activeCard=null;state.turnComplete=true;resolveControl();checkEnd();render();if(state.over)showResolution(state.lastCard,resolutionEntries);return}
-    finishAction(id,leader)}
+    const actor=state.selectedLeader, actorArea=state.selectedArea;
+    const name=leader||force.army;
+    force.count-=n;
+    state.playerPool+=n;
+    const parts=[];
+    if(n)parts.push(`軍勢${n}駒`);
+    if(leader&&withLeader){
+      state.leaderPool.player||=[];
+      state.leaderPool.player.push(leader);
+      force.leader='';
+      parts.push(`武将（${leader}）`);
+    }
+    reg.forces=reg.forces.filter(alive);
+    const message=`${areaBy(id).name}の${name}から${parts.join('と')}を解散し、補充プールへ戻した`;
+    note(message+'。');
+    announceAction('解散',message);
+    state.disbandArea=null;
+    state.disbandTarget=0;
+    finishAction(actorArea,actor);
+  }
   function finishAction(id,leader,skipReinforce){
     // 行軍・攻撃（または解散・何もしない）のあとに、カードの補充。補充を終えたらこのカードは終わり（2026-11-09）
     if(false&&!skipReinforce&&state.activeCard&&state.mode!=='reinforce'){const f=getLeader(leader);const cap=f?playerReinforceLimit(f.force):0;if(f&&f.force.side==='player'&&cap>0&&state.playerPool>0){state.mode='reinforce';state.reinforceAfter=true;state.selectedLeader=leader;state.selectedArea=f.area;state.actionHighlights=[];state.moveDestination=null;state.reinforceCount=null;resolveControl();checkEnd();render();if(state.over)showResolution(state.lastCard,resolutionEntries);return}}
@@ -319,7 +397,7 @@
   function cardText(c){return c.description||'カード記載の武将・軍勢が行動します。'}
   function draw(){if(state.over||pendingResolution)return;if(state.mode){toast('カードをプレイするか、パスしてください');return}if(state.lastCard&&!state.turnComplete){toast('現在のカードの行動を終えてください');return}if(!state.deck.length){if(state.discard.length)state.deck=shuffle(state.discard.splice(0));else state.deck=shuffle(scenarioCards(state.options).filter(c=>!(state.removedCards||[]).includes(c.name)));state.round++;note('状況札を集めて山札を切り直しました。');state.reshuffleNotice='pending'}
     if(state.reshuffleNotice==='pending'){showRoundNotice();return}if(state.reshuffleNotice==='shown')state.reshuffleNotice=null;state.repeatOf=null;resolutionEntries=[];state.lastMove=null;const firstInDeck=state.discard.length===0,card=state.deck.shift();(state.report||=[]).push({k:'card',r:state.round,c:card.name,side:card.side});state.turnComplete=false;state.lastCard=card;state.pendingCard=card;state.mode='cardReveal';state.activeCard=null;state.actionHighlights=[];state.mapFocusArea=null;state.highlightedCard=card;if(firstInDeck&&card.name==='足利義昭'){note('足利義昭：山札の1枚目なので効果なし。処理結果の確認待ちです。');toast('足利義昭は効果なし。結果を確認してください')}render();openCardReveal(card)}
-  const odaCommanders=new Set(['織田信長','徳川家康','松永久秀','羽柴秀吉','明智光秀','柴田勝家','丹羽長秀',takigawa]);
+  const odaCommanders=new Set(['織田信長','徳川家康','松永久秀','羽柴秀吉','明智光秀','柴田勝家','丹羽長秀',takigawa,maeda]);
   function requiresHumanChoice(card){if(!card||card.side!=='player')return false;return (card.leaders||[]).some(name=>{if(!odaCommanders.has(name))return false;const found=getLeader(name);if(found)return found.force.side==='player';if(state.leaderPool?.enemy?.includes(name))return false;return true})}
   function openCardReveal(card){if(!card)return;const image=D.cardImages?.[card.name]||card.image,human=requiresHumanChoice(card);$('#cardControlLabel').textContent=human?'信長側カード · あなたが操作':'反信長側カード · 自動処理';$('#cardRevealTitle').textContent=card.name;$('#cardRevealText').textContent=cardText(card);$('#cardRevealContinue').textContent=human?'プレイ':'AIが処理中';$('#cardRevealContinue').disabled=!human;$('#cardRevealPass').hidden=true;$('#cardRevealClose').hidden=true;$('#cardRevealArt').innerHTML=image?`<img src="${esc(image)}" alt="${esc(card.name)}">`:`<div class="card-placeholder">${esc(card.name)}</div>`;if(!$('#cardRevealDialog').open)$('#cardRevealDialog').showModal();if(!human){toast('このカードの効果を自動処理します');setTimeout(()=>{if(state.pendingCard===card&&state.mode==='cardReveal')continueCard()},1200)}}
   function passCard(){const card=state.pendingCard;if(!card)return;resolutionEntries=[];$('#cardRevealDialog').close();state.pendingCard=null;state.mode='';state.activeCard=null;state.actionHighlights=[];state.discard.push(card);state.turnComplete=true;note(`「${card.name}」をパス。今回は何もせず終了。`);render();state.autoNext=true;tryAutoDraw()}
@@ -543,19 +621,20 @@
   $('#mapTab').addEventListener('click',()=>setBoardView('map'));$('#situationTab').addEventListener('click',()=>setBoardView('situation'));
   const firstCardSelect=$('#firstCardSelect');
   function refreshFirstCardChoices(name=firstCardSelect.value) {
-    const cards=scenarioCards({extraTakigawa:$('#optionTakigawa').checked});
+    const cards=scenarioCards({extraTakigawa:$('#optionTakigawa').checked,extraMaeda:$('#optionMaeda').checked});
     firstCardSelect.innerHTML=cards.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
     if (cards.some(c=>c.name===name)) firstCardSelect.value=name;
   }
   $('#optionTakigawa').addEventListener('change',()=>refreshFirstCardChoices());
-  function syncStartOptions(){const o=state.options||{};$('#optionFirstCard').checked=Boolean(o.chooseFirstCard);$('#optionCaptureDefeat').checked=Boolean(o.captureDefeat);$('#optionLeaderInjury').checked=Boolean(o.leaderInjury);$('#optionUnitStats').checked=Boolean(o.showUnitStats);$('#optionTakigawa').checked=Boolean(o.extraTakigawa);$('#optionExtraNobunaga').checked=Boolean(o.extraNobunaga);$('#optionReserveTotal').value=reserveTotal(o);refreshFirstCardChoices(o.firstCard);$('#firstCardChoice').hidden=!$('#optionFirstCard').checked}
+  $('#optionMaeda').addEventListener('change',()=>refreshFirstCardChoices());
+  function syncStartOptions(){const o=state.options||{};$('#optionFirstCard').checked=Boolean(o.chooseFirstCard);$('#optionCaptureDefeat').checked=Boolean(o.captureDefeat);$('#optionLeaderInjury').checked=Boolean(o.leaderInjury);$('#optionUnitStats').checked=Boolean(o.showUnitStats);$('#optionTakigawa').checked=Boolean(o.extraTakigawa);$('#optionMaeda').checked=Boolean(o.extraMaeda);$('#optionStartingStrength').value=startingStrength(o);$('#optionExtraNobunaga').checked=Boolean(o.extraNobunaga);$('#optionReserveTotal').value=reserveTotal(o);refreshFirstCardChoices(o.firstCard);$('#firstCardChoice').hidden=!$('#optionFirstCard').checked}
   $('#optionFirstCard').addEventListener('change',e=>$('#firstCardChoice').hidden=!e.target.checked);
   function openStart(){syncStartOptions();document.querySelector('.app-shell').hidden=true;$('#startScreen').hidden=false;$('#continueGame').hidden=!canContinue}
   function closeStart(){document.querySelector('.app-shell').hidden=false;$('#startScreen').hidden=true;requestAnimationFrame(()=>setMapZoom(mapZoom))}
   function updateRetainerSetup(){const selects=[...document.querySelectorAll('[data-retainer-site]')],values=selects.map(x=>x.value),unique=new Set(values.filter(Boolean)).size===odaRetainers.length,complete=values.length===retainerSites.length&&values.every(Boolean)&&unique;const hint=$('#retainerSetupHint');hint.textContent=complete?'配置先は山城・南近江・南伊勢・尾張に固定されています。内容を確認して確定してください。':'4人を別々のエリアに割り当ててください。';hint.classList.toggle('error',values.some(Boolean)&&!complete);$('#retainerSetupConfirm').disabled=!complete}
   function openRetainerSetup(){document.querySelectorAll('[data-retainer-site]').forEach(select=>{select.innerHTML='<option value="">武将を選択</option>'+odaRetainers.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');select.value='';select.onchange=updateRetainerSetup});updateRetainerSetup();$('#retainerSetupDialog').showModal()}
   function applyRetainerPlacement(){const assignment=Object.fromEntries([...document.querySelectorAll('[data-retainer-site]')].map(x=>[x.dataset.retainerSite,x.value]));for(const region of Object.values(state.areas))for(const force of region.forces)if(odaRetainers.includes(force.leader))force.leader='';for(const [id] of retainerSites){const leader=assignment[id],region=state.areas[id];let force=region.forces.find(f=>f.army==='織田軍'&&f.side==='player');if(!force){force={leader:'',army:'織田軍',count:0,power:D.units?.leaders?.[leader]||2,side:'player'};region.forces.push(force)}force.leader=leader;force.power=D.units?.leaders?.[leader]||force.power||2;force.side='player';region.control='player';region.ownerArmy='織田軍';homeArea[leader]=id;note(`${leader}を${areaBy(id).name}に配置。`)}resolveControl();state.setupComplete=true}
-  $('#startGame').addEventListener('click',()=>{state=fresh({extraTakigawa:$('#optionTakigawa').checked,extraNobunaga:$('#optionExtraNobunaga').checked,reserveTotal:$('#optionReserveTotal').value,chooseFirstCard:$('#optionFirstCard').checked,firstCard:firstCardSelect.value,captureDefeat:$('#optionCaptureDefeat').checked,leaderInjury:$('#optionLeaderInjury').checked,showUnitStats:$('#optionUnitStats').checked});canContinue=false;closeStart();render();openRetainerSetup()});
+  $('#startGame').addEventListener('click',()=>{state=fresh({extraTakigawa:$('#optionTakigawa').checked,extraMaeda:$('#optionMaeda').checked,startingStrength:$('#optionStartingStrength').value,extraNobunaga:$('#optionExtraNobunaga').checked,reserveTotal:$('#optionReserveTotal').value,chooseFirstCard:$('#optionFirstCard').checked,firstCard:firstCardSelect.value,captureDefeat:$('#optionCaptureDefeat').checked,leaderInjury:$('#optionLeaderInjury').checked,showUnitStats:$('#optionUnitStats').checked});canContinue=false;closeStart();render();openRetainerSetup()});
   function completeRetainerSetup(){applyRetainerPlacement();canContinue=true;$('#retainerSetupDialog').close();render();$('#firstDrawDialog').showModal()}
   $('#retainerSetupConfirm').addEventListener('click',completeRetainerSetup);$('#retainerRandomize').addEventListener('click',()=>{const names=[...odaRetainers];for(let i=names.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[names[i],names[j]]=[names[j],names[i]]}document.querySelectorAll('[data-retainer-site]').forEach((select,i)=>{select.value=names[i]});updateRetainerSetup();completeRetainerSetup()});$('#retainerSetupDialog').addEventListener('cancel',e=>e.preventDefault());
   $('#continueGame').addEventListener('click',()=>{closeStart();render();if(state.pendingCard)openCardReveal(state.pendingCard)});
