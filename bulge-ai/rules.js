@@ -214,6 +214,20 @@ const BulgeRules = (() => {
     state.setupOrders.push({unit:unit.id,chit:id});
     state.setupConfirmed=false;
   }
+  const germanSetupPreset=[
+    ['g3','g-peiper:1'],
+    ['g3','g-tiger:1'],
+    ['g90','g-arty:1'],
+    ['g88','g-arty:2'],
+    ['g8','g-engineer:1'],
+    ['g8','g-panther:1'],
+    ['g48','g-arty:3'],
+    ['g7','g-tank:1'],
+    ['g10','g-tank:3'],
+    ['g6','g-panther:2'],
+    ['g6','g-tank:2'],
+    ['g89','g-arty:4'],
+  ];
   const initialBridgeHex='2618';
   function setupBridgeOptions(state) {
     if (state.turn!==1 || state.phase!=='setup') return [];
@@ -240,16 +254,24 @@ const BulgeRules = (() => {
     log(state,`橋梁爆破の初期位置を ${initialBridgeHex} に修正しました。`);
     return true;
   }
-  const initialSupport = {
-    allied: ['a-fort','a-destroyer','a-arty','a-arty','a-tank','a-tank',...Array(6).fill('a-dummy')],
-    german: ['g-panther','g-panther','g-tiger','g-peiper','g-engineer',
-      ...Array(3).fill('g-tank'),...Array(4).fill('g-arty'),...Array(6).fill('g-dummy')],
-  };
+  const initialGermanSupport = ['g-panther','g-panther','g-tiger','g-peiper','g-engineer',
+    ...Array(3).fill('g-tank'),...Array(4).fill('g-arty'),...Array(6).fill('g-dummy')];
   function startSetup(state, side) {
     state.turnSide=side;
     state.setupOrders=[];
     state.setupConfirmed=false;
-    state.hand=initialSupport[side].map(key=>take(state,side,state.cups[side].find(id=>id.startsWith(key+':'))));
+    if (side==='allied') {
+      const eligible=state.cups.allied.filter(id=>!['event','dummy'].includes(chit(id).kind));
+      state.hand=[];
+      for (let i=0;i<6;i++) {
+        const [id]=eligible.splice(roll(state,eligible.length),1);
+        state.hand.push(take(state,side,id));
+      }
+      const dummies=state.cups.allied.filter(id=>chit(id).kind==='dummy');
+      for (const id of dummies) state.hand.push(take(state,side,id));
+    } else {
+      state.hand=initialGermanSupport.map(key=>take(state,side,state.cups[side].find(id=>id.startsWith(key+':'))));
+    }
     log(state,`${sideName(side)}の初期支援チットを配置してください。`);
   }
   function create(seed = 11162026, mode = 'ai') {
@@ -1365,6 +1387,10 @@ const BulgeRules = (() => {
         drop(state,unit,id);
         return true;
       }
+      case 'preset-german-setup':
+        if (phase!=='setup' || side!=='german' || state.turn!==1) return false;
+        while (execute(state,{type:'undo-setup'})) {}
+        return germanSetupPreset.every(([unit,chit])=>execute(state,{type:'assign',unit,chit}));
       case 'auto-allied-setup':
         if (phase!=='setup' || side!=='allied' || !state.hand.length) return false;
         autoAlliedSetup(state);

@@ -306,12 +306,14 @@ dialog dd { margin-left: 0; }
 .battle-attack { background: #e9f3f8; }
 .battle-defense { background: #fbefdb; }
 .battle-armies h3 { margin-top: 0; }
+.battle-unit { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 1fr); align-items: start; gap: .5rem; }
 .battle-unit + .battle-unit { margin-top: .7rem; padding-top: .7rem; border-top: 1px solid var(--line); }
 .battle-unit-title { display: flex; align-items: center; gap: .5rem; }
-.battle-unit-title img { width: 54px; height: 54px; object-fit: contain; }
+.battle-unit-title > div { min-width: 0; overflow-wrap: anywhere; }
+.battle-unit-title img { flex: none; width: 54px; height: 54px; object-fit: contain; }
 .battle-unit-title p { margin: .12rem 0 0; }
-.battle-chips { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .4rem; margin-top: .45rem; }
-.battle-chips figure, .battle-chips .tile { width: 84px; margin: 0; padding: .2rem; text-align: center; font-size: .72rem; overflow-wrap: anywhere; }
+.battle-chips { display: flex; align-items: flex-start; gap: .4rem; min-width: 0; overflow-x: auto; }
+.battle-chips figure, .battle-chips .tile { flex: 0 0 84px; margin: 0; padding: .2rem; text-align: center; font-size: .72rem; overflow-wrap: anywhere; }
 .battle-chips .tile { flex-direction: column; }
 .battle-chips img { display: block; width: 56px; height: 56px; object-fit: contain; margin-inline: auto; }
 .battle-chips .inactive-chit img { opacity: .45; }
@@ -320,7 +322,7 @@ dialog dd { margin-left: 0; }
 .battle-die { text-align: center; font-size: 3rem; line-height: 1.5; }
 .battle-die.rolling { animation: dice-rock .19s ease-in-out infinite alternate; }
 @keyframes dice-rock { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
-@media (max-width: 530px) { .battle-armies { grid-template-columns: 1fr; } }
+@media (max-width: 740px) { .battle-armies { grid-template-columns: 1fr; } }
 .crt { display: block; width: 100%; margin-top: .5rem; }
 @media (max-width: 800px) {
   .game { padding: 8px; }
