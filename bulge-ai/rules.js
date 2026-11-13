@@ -98,6 +98,7 @@ const BulgeRules = (() => {
     if (!unit.support.includes(id)) return;
     unit.support = unit.support.filter(value => value !== id);
     unit.usedSupport = unit.usedSupport.filter(value => value !== id);
+    if (unit.revealedSupport) unit.revealedSupport = unit.revealedSupport.filter(value => value !== id);
     if (unit.fortified === id) unit.fortified = null;
     returnChit(state,id);
   }
@@ -1133,7 +1134,10 @@ const BulgeRules = (() => {
     for (const entry of [...attackGroup,...defendGroup]) {
       const unit=unitById(state,entry.unit);
       for (const id of entry.declared) {
-        if (chit(id).move==='ignoreZoc' && unit.support.includes(id) && !unit.usedSupport.includes(id))
+        if (!unit.support.includes(id)) continue;
+        const revealed = unit.revealedSupport ??= [];
+        if (!revealed.includes(id)) revealed.push(id);
+        if (chit(id).move==='ignoreZoc' && !unit.usedSupport.includes(id))
           unit.usedSupport.push(id);
       }
       for (const id of entry.cards) {
@@ -1301,7 +1305,7 @@ const BulgeRules = (() => {
         const unit=unitById(state,command.unit);
         (next.supportUndo ??= []).push({
           hand:state.hand.slice(), captureHold:state.captureHold?.slice() ?? [], airSupply:state.airSupply ?? null,
-          unit:unit && {id:unit.id, support:unit.support.slice(), usedSupport:unit.usedSupport.slice(), fortified:unit.fortified},
+          unit:unit && {id:unit.id, support:unit.support.slice(), usedSupport:unit.usedSupport.slice(), revealedSupport:unit.revealedSupport?.slice() ?? [], fortified:unit.fortified},
         });
         next.supportConfirmed=false;
       }

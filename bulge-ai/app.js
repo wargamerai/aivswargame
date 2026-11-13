@@ -1019,12 +1019,20 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     return (unit.disrupted && back) || front;
   }
 
+  function supportIsPublic(unit, id) {
+    const original = R.unitById(state, unit.id);
+    return unit.side !== 'allied' || original?.usedSupport.includes(id) ||
+      original?.revealedSupport?.includes(id) || state.combat?.openSupport?.choices[unit.id]?.includes(id);
+  }
+
+  function supportPiece(unit, id, showAll = false) {
+    return showAll || supportIsPublic(unit, id) ? {src: R.chitImage(id), label: R.chit(id).label}
+      : {src: 'assets/allied-support-back.jpg', label: '裏向きの支援チット'};
+  }
+
   function supportPieces(unit) {
-    const hidden = unit.side === 'allied' && !(supportPractice && R.actor(state) === 'allied');
-    const used = R.unitById(state, unit.id)?.usedSupport ?? [];
-    return unit.support.map(id => hidden && !used.includes(id)
-      ? {src: 'assets/allied-support-back.jpg', label: '裏向きの支援チット'}
-      : {src: R.chitImage(id), label: R.chit(id).label});
+    const showAll = supportPractice && R.actor(state) === 'allied';
+    return unit.support.map(id => supportPiece(unit, id, showAll));
   }
 
   function stackFigure({src, label, caption = true}) {
@@ -1324,7 +1332,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       }
       if (moveBase && !unit.movementOrder && !unit.disrupted && !infiltration) {
         const controls = element('div', null, 'controls');
-        const publicSupport = R.unitById(state, unit.id).usedSupport;
         const originalUnit = R.unitById(state, unit.id);
         if (R.canUsePeiper(projection.state, unit)) {
           const adjacent = state.phase === 'reaction' && R.peiperTargets(projection.state, unit.id).length;
@@ -1340,7 +1347,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
             : 'パイパー連隊で移動できるヘクスがありません。', 'hint'));
         }
         const chits = R.moveChits(originalUnit).filter(id => R.chit(id).move !== 'infiltrate' &&
-          (!allied || id === moveSupport || publicSupport.includes(id)));
+          (!allied || id === moveSupport || supportIsPublic(unit, id)));
         const infiltrationChit = originalUnit.support.find(id => R.canDeclareInfiltration(state, originalUnit, id));
         if (infiltrationChit && !movePlan.some(order => order.unit === unit.id)) {
           controls.append(button('浸透移動を宣言してダイスを振る',
@@ -1351,7 +1358,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
           const choices = [['','なし']];
           for (const id of chits) {
             const definition = R.chit(id);
-            const hidden = allied && !publicSupport.includes(id);
+            const hidden = allied && !supportIsPublic(unit, id);
             choices.push([id, hidden ? 'AIが選んだ移動支援'
               : definition.move === 'river' ? `${definition.label}（渡河支援）` : definition.label]);
             if (!hidden && definition.move === 'river' && state.phase !== 'highbeam')
@@ -1502,7 +1509,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (unit.marker) return card;
 
     const chips = element('div', null, 'battle-chips');
-    const hiddenChit = () => stackFigure({src: 'assets/allied-support-back.jpg', label: '裏向きの支援チット'});
     if (revealed) {
       for (const id of entry.declared) {
         const status = revealed.shotDown.some(removed => removed.id === id) ? 'ATで除去'
@@ -1514,11 +1520,11 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       }
       if (!entry.declared.length) description.append(element('p', '使用チットなし', 'hint'));
       if (unit.side === 'allied') {
-        for (const id of unit.support.filter(id => !entry.declared.includes(id))) chips.append(hiddenChit());
+        for (const id of unit.support.filter(id => !entry.declared.includes(id))) chips.append(stackFigure(supportPiece(unit, id)));
       }
     } else if (unit.side === 'allied') {
       description.append(element('p', `支援チット ${unit.support.length}枚`, 'hint'));
-      for (let i = 0; i < unit.support.length; i++) chips.append(hiddenChit());
+      for (const id of unit.support) chips.append(stackFigure(supportPiece(unit, id)));
     } else {
       const chosen = supportChoices[unit.id] ?? [];
       const available = R.possibleSupport(unit, defensive);
