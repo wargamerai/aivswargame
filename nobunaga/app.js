@@ -43,7 +43,15 @@
     const count=Number(options.reserveTotal);
     return [12,13,14,15].includes(count) ? count : 10;
   }
-  const fresh = (options={}) => ({options:{extraTakigawa:Boolean(options.extraTakigawa),extraNobunaga:Boolean(options.extraNobunaga),reserveTotal:reserveTotal(options),chooseFirstCard:Boolean(options.chooseFirstCard),firstCard:options.firstCard||'',captureDefeat:Boolean(options.captureDefeat),leaderInjury:Boolean(options.leaderInjury),showUnitStats:Boolean(options.showUnitStats)},leaderPool:{player:[],enemy:[]},areas:setupAreas(options,Object.fromEntries(D.areas.map(a=>[a.id,{control:(a.initial[0] ? sideOfArmy(a.initial[0][1]) : 'neutral'),ownerArmy:a.initial[0]?.[1]||'',forces:a.initial.map(([leader,army,count,power])=>({leader,army,count,power:D.units?.leaders?.[leader]??power,side:sideOfArmy(army)}))}]))),playerPool:reserveTotal(options),enemyPool:12,deck:shuffle(scenarioCards(options)),discard:[],round:1,lastCard:null,selectedArea:null,selectedLeader:null,mode:'',moveDestination:null,moveCount:null,reinforceCount:null,actionHighlights:[],mapFocusArea:null,pendingCard:null,highlightedCard:null,lastMove:null,tracks:{oda:0,tokugawa:0,matsunaga:0,uesugi:0,mori:0,ukita:0},revoltTracks:{},activeCard:null,lastActor:null,log:['ゲームを開始しました。状況カードを引いてください。'],over:false,turnComplete:true,setupComplete:false});
+  function initialDeck(options) {
+    const deck=shuffle(scenarioCards(options));
+    if (options.chooseFirstCard) {
+      const index=deck.findIndex(card=>card.name===options.firstCard);
+      if (index>0) deck.unshift(deck.splice(index,1)[0]);
+    }
+    return deck;
+  }
+  const fresh = (options={}) => ({options:{extraTakigawa:Boolean(options.extraTakigawa),extraNobunaga:Boolean(options.extraNobunaga),reserveTotal:reserveTotal(options),chooseFirstCard:Boolean(options.chooseFirstCard),firstCard:options.firstCard||'',captureDefeat:Boolean(options.captureDefeat),leaderInjury:Boolean(options.leaderInjury),showUnitStats:Boolean(options.showUnitStats)},leaderPool:{player:[],enemy:[]},areas:setupAreas(options,Object.fromEntries(D.areas.map(a=>[a.id,{control:(a.initial[0] ? sideOfArmy(a.initial[0][1]) : 'neutral'),ownerArmy:a.initial[0]?.[1]||'',forces:a.initial.map(([leader,army,count,power])=>({leader,army,count,power:D.units?.leaders?.[leader]??power,side:sideOfArmy(army)}))}]))),playerPool:reserveTotal(options),enemyPool:12,deck:initialDeck(options),discard:[],round:1,lastCard:null,selectedArea:null,selectedLeader:null,mode:'',moveDestination:null,moveCount:null,reinforceCount:null,actionHighlights:[],mapFocusArea:null,pendingCard:null,highlightedCard:null,lastMove:null,tracks:{oda:0,tokugawa:0,matsunaga:0,uesugi:0,mori:0,ukita:0},revoltTracks:{},activeCard:null,lastActor:null,log:['ゲームを開始しました。状況カードを引いてください。'],over:false,turnComplete:true,setupComplete:false});
   const savedState=load();
   let canContinue=Boolean(savedState&&savedState.setupComplete&&D.areas.every(a=>savedState.areas?.[a.id]));
   let state = savedState || fresh();
