@@ -348,7 +348,7 @@ function setFacingTerrain(u, area) {
 function startBattle(area, advZones) {
   const d = G.day, prev = G.bb;
   const b = G.bb = freshBoard();
-  if (prev) { b.facing = prev.facing; b.turret = prev.turret; b.load = prev.load; b.reload = prev.reload; b.hatch = prev.hatch; }
+  if (prev) { b.load = prev.load; b.reload = prev.reload; b.hatch = prev.hatch; }
   if (d.sc === 'C') { b.hull = true; b.moving = false; }
   b.seq = 0; b.area = area.type; b.areaId = area.id; b.ended = false; b.firstAmbush = true;
   G.phase = 'battle'; G.battles++;
