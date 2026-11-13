@@ -261,7 +261,8 @@ const BulgeRules = (() => {
     state.setupOrders=[];
     state.setupConfirmed=false;
     if (side==='allied') {
-      const eligible=state.cups.allied.filter(id=>!['event','dummy'].includes(chit(id).kind));
+      const eligible=state.cups.allied.filter(id=>
+        !id.startsWith('a-nuts:') && !['event','dummy'].includes(chit(id).kind));
       state.hand=[];
       for (let i=0;i<6;i++) {
         const [id]=eligible.splice(roll(state,eligible.length),1);
