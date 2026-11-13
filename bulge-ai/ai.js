@@ -421,8 +421,10 @@ const BulgeAI = (() => {
             frontGap(state,unit,hex,before,change.reach);
           const alliedRisk=alliedEncirclementRisk(board,coverage,change.reach);
           const defense=frontDefenseScore(board,before,coverage,spacing,alliedRisk);
+          const withinOneMove=R.neighbors(hex).some(next=>before.has(next) ||
+            opponents.some(enemy=>!enemy.marker && enemy.hex===next));
           const value=state.phase==='reinforce'
-            ? [-Number(risk===2),Number(relevant),
+            ? [-Number(risk===2),-Number(!withinOneMove),Number(relevant),
               relevant ? 0 : -nearest(hex,opponents),defense,-Number(R.river(hex)),score]
             : [-Number(risk===2),defense,Number(relevant),-Number(R.river(hex)),score];
           if (!bestValue || betterDefense(value,bestValue)) {
