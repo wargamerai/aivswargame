@@ -325,6 +325,7 @@ async function playTurn() {
   const prevSector = sectorOf(M.pos);
   M.pos = to;
   M.breakoffAt = null;
+  M.hhHoldAt = null;
   const days = (M.convoy.speed === 'fast' ? 1 : 1.5) + (M.weather === 3 ? 0.5 : 0);
   advanceDays(days);
   const rep = [];   // このターンの部下の報告（まとめて1つの段落にする）
@@ -570,7 +571,7 @@ async function engage(ub, opts) {
       // 9.6 コルベットの攻撃
       if (help.escort) { help.escort = false; const r = await escortHelp(ub); if (r !== 'continue') return r; }
       // 爆雷もヘッジホッグも残っていなければ、4インチ砲で撃てる時（浮上中）を除いて、探知も接近もせず先へ進む（ユーザーの指示 2026-11-03）
-      if (SH().dcLeft <= 0 && !(SH().equipped.hh && SH().hhLeft > 0) && !ub.surfaced) {
+      if (SH().dcLeft <= 0 && !(SH().equipped.hh && SH().hhLeft > 0 && M.hhHoldAt !== M.pos) && !ub.surfaced) {
         UI.bad(L('爆雷が残っていない！ U ボートを追わず、船団の護衛に戻る。', 'No depth charges left! Breaking off the hunt and returning to the convoy.'));
         if (ub.attacksLeft <= 0) ub.rng = 'L'; // 攻撃が残っていなければ、そのまま戦闘海域から去る
         phase = await lostContact(ub, opts);
@@ -586,13 +587,14 @@ async function engage(ub, opts) {
         if (ub.rng !== 'C') { ub.rng = closer(ub.rng); UI.log(L(`U ボートを探知。距離を詰める → <b>${RANGE_NAME[ub.rng]}</b>`, `U-boat detected. Closing the range → <b>${RANGE_NAME[ub.rng]}</b>`), 'routine'); UI.story(story('closeIn')); await UI.next(); phase = '9.5'; continue; }
         // 近距離: 爆雷攻撃。ヘッジホッグを積んでいれば、弾（15発）が残っている限り、どちらで攻撃するか選べる
         let useHH = false;
-        if (SH().equipped.hh && SH().hhLeft > 0) {
+        if (SH().equipped.hh && SH().hhLeft > 0 && S.mission.hhHoldAt !== S.mission.pos) {
           useHH = SH().dcLeft <= 0 ? true : await UI.choose(say(L('近距離で U ボートを探知。どちらで攻撃しますか？', 'U-boat detected at close range. Which weapon?'), 'hhAsk'), [
             { label: storyOn() ? L(`「ヘッジホッグ、撃て！」（残り${SH().hhLeft}発）`, `"Hedgehog, fire!" (${SH().hhLeft} left)`) : L(`ヘッジホッグ（残り${SH().hhLeft}発）`, `Hedgehog (${SH().hhLeft} left)`), value: true, hint: L('同時2損害で撃沈確実・1損害で撃沈。外れても接触を保つ', '2 hits at once: certain kill · 1 hit: sunk. Contact is kept even on a miss') },
             { label: storyOn() ? L(`「爆雷戦用意！」（残り${SH().dcLeft}発）`, `"Stand by depth charges!" (${SH().dcLeft} left)`) : L(`爆雷（残り${SH().dcLeft}発）`, `Depth charges (${SH().dcLeft} left)`), value: false, hint: L('同時4損害で撃沈確実・3損害で撃沈。ASDIC の接触が途切れる', '4 hits at once: certain kill · 3 hits: sunk. ASDIC contact is broken') }]);
         }
         if (useHH) {
           const r = await depthCharge(ub, 'hh', opts);
+          if (r === 'hold' || r === 'breakoff') continue;
           if (r === null) {} else if (r !== 'continue') return r;
           else {
             // ヘッジホッグの後も接触を保つ: 近距離 +1・探知済み +3 で探知し、成功すれば爆雷攻撃（任意 13.2）
@@ -833,8 +835,19 @@ async function depthCharge(ub, weapon, opts, over) {
     const mx = Math.min(4, left);
     n = await UI.choose(storyOn() ? L(`${isHH ? '水雷長「ヘッジホッグ、何発撃ちますか！」' : story('dcAsk')}（残り${left}発・1発がダイス1個）`, `${isHH ? 'Torpedo officer: "How many Hedgehog bombs, sir?"' : story('dcAsk')} (${left} left · one die per charge)`) : L(`${name}攻撃: ダイスを何個振りますか？（同じ数だけ${name}を使う。残り${left}）`, `${name} attack: how many dice? (uses the same number of ${name}s, ${left} left)`),
       Array.from({ length: mx }, (_, i) => ({ label: storyOn() ? L(`「${mx - i}発、${isHH ? '撃て' : '投下せよ'}！」`, `"${mx - i}, ${isHH ? L('', 'fire') : L('', 'drop')}!"`) : L(`${mx - i}個`, `${mx - i}`), value: mx - i }))
-        .concat(isHH ? [] : [{ label: storyOn() ? L('「待て。投下するな」（0発・温存）', '"Hold it. Don\'t drop." (0 · keep them)') : L('0個（投下しない・温存）', '0 (don\'t drop · keep them)'), value: 0, hint: L('外れと同じ扱い。爆発音がないので ASDIC の接触は保たれる', 'Treated as a miss. No explosions, so ASDIC contact is kept') },
+        .concat(isHH ? [
+          { label: L('0発（発射しない・温存）', '0 (hold fire)'), value: 0 },
+          { label: L('この海域ではずっと0発（自動）', 'Always 0 in this square (automatic)'), value: -1 }
+        ] : [{ label: storyOn() ? L('「待て。投下するな」（0発・温存）', '"Hold it. Don\'t drop." (0 · keep them)') : L('0個（投下しない・温存）', '0 (don\'t drop · keep them)'), value: 0, hint: L('外れと同じ扱い。爆発音がないので ASDIC の接触は保たれる', 'Treated as a miss. No explosions, so ASDIC contact is kept') },
           { label: storyOn() ? L('「この海域では爆雷を落とすな」（ずっと0発）', '"No depth charges in these waters." (always 0)') : L('この海域ではずっと0個（自動）', 'Always 0 in this square (automatic)'), value: -1, hint: L('この海域にいる間は、聞かずに0個（温存）を選ぶ。U ボートの判定はそのまま続く。次の海域ではまた聞く', 'While in this square, 0 (keep them) is chosen without asking. The U-boat\'s rolls go on as usual. You are asked again in the next square') }]));
+    if (isHH && (n === 0 || n === -1)) {
+      if (n === -1) S.mission.hhHoldAt = S.mission.pos;
+      UI.log(n === -1
+        ? L('この海域ではヘッジホッグを発射しない（温存）。', 'Hedgehog fire is suspended in this square.')
+        : L('ヘッジホッグは発射せず温存した。', 'Hedgehog fire withheld.'),
+      'routine');
+      return 'hold';
+    }
     if (n === -1) {
       S.mission.breakoffAt = S.mission.pos;
       UI.log(L('この海域では爆雷を投下しない（ずっと0個・温存）。外れと同じ扱いで続ける', 'No depth charges in this square (always 0, kept). Treated as a miss'), 'routine');
