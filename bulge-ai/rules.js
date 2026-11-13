@@ -193,7 +193,12 @@ const BulgeRules = (() => {
     };
     const terrainPriority=(a,b)=>openingSupportTerrain(a.hex)-openingSupportTerrain(b.hex);
     const dummies=state.hand.filter(id=>chit(id).kind==='dummy');
-    for (const id of state.hand.filter(id=>chit(id).kind!=='dummy')) {
+    const realChits=state.hand.filter(id=>chit(id).kind!=='dummy');
+    for (let i=realChits.length-1;i>0;i--) {
+      const j=roll(state,i+1);
+      [realChits[i],realChits[j]]=[realChits[j],realChits[i]];
+    }
+    for (const id of realChits) {
       const card=chit(id);
       const openingFort=card.kind==='fort' ? units.filter(unit=>unit.id==='a135' || unit.id==='a61') : [];
       const candidates=openingFort.length ? openingFort : units;
@@ -254,25 +259,16 @@ const BulgeRules = (() => {
     log(state,`橋梁爆破の初期位置を ${initialBridgeHex} に修正しました。`);
     return true;
   }
-  const initialGermanSupport = ['g-panther','g-panther','g-tiger','g-peiper','g-engineer',
-    ...Array(3).fill('g-tank'),...Array(4).fill('g-arty'),...Array(6).fill('g-dummy')];
+  const initialSupport = {
+    allied: ['a-fort','a-destroyer','a-arty','a-arty','a-tank','a-tank',...Array(6).fill('a-dummy')],
+    german: ['g-panther','g-panther','g-tiger','g-peiper','g-engineer',
+      ...Array(3).fill('g-tank'),...Array(4).fill('g-arty'),...Array(6).fill('g-dummy')],
+  };
   function startSetup(state, side) {
     state.turnSide=side;
     state.setupOrders=[];
     state.setupConfirmed=false;
-    if (side==='allied') {
-      const eligible=state.cups.allied.filter(id=>
-        !id.startsWith('a-nuts:') && !['event','dummy'].includes(chit(id).kind));
-      state.hand=[];
-      for (let i=0;i<6;i++) {
-        const [id]=eligible.splice(roll(state,eligible.length),1);
-        state.hand.push(take(state,side,id));
-      }
-      const dummies=state.cups.allied.filter(id=>chit(id).kind==='dummy');
-      for (const id of dummies) state.hand.push(take(state,side,id));
-    } else {
-      state.hand=initialGermanSupport.map(key=>take(state,side,state.cups[side].find(id=>id.startsWith(key+':'))));
-    }
+    state.hand=initialSupport[side].map(key=>take(state,side,state.cups[side].find(id=>id.startsWith(key+':'))));
     log(state,`${sideName(side)}の初期支援チットを配置してください。`);
   }
   function create(seed = 11162026, mode = 'ai') {
