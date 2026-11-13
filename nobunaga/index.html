@@ -23,6 +23,11 @@
         <label class="option-row"><input id="optionCaptureDefeat" type="checkbox"><span><b>敗北条件を「支配」にする</b><small>山城・西美濃への侵入ではなく、反信長側の支配で敗北します。</small></span></label>
         <label class="option-row"><input id="optionLeaderInjury" type="checkbox"><span><b>信長側武将の負傷</b><small>武将が損害で補充プールへ戻る際、参戦トラックを進めます。</small></span></label>
         <label class="option-row"><input id="optionUnitStats" type="checkbox"><span><b>地図に能力値・駒数を表示</b><small>初期設定は非表示です。地図を広く見たいときに。</small></span></label>
+        <label class="option-row"><input id="optionTakigawa" type="checkbox"><span><b>滝川一益を追加</b><small>尾張に武将を置き、専用カードを山札に加えます。</small></span></label>
+        <label class="option-row"><input id="optionExtraNobunaga" type="checkbox"><span><b>織田信長カードを2枚にする</b></span></label>
+        <label class="first-card-choice">信長側の初期補充プール<select id="optionReserveTotal">
+          <option value="10">通常 · 10駒</option><option value="12">1.2倍 · 12駒</option><option value="13">1.3倍 · 13駒</option><option value="14">1.4倍 · 14駒</option><option value="15">1.5倍 · 15駒</option>
+        </select></label>
         <label id="firstCardChoice" class="first-card-choice" hidden>最初の状況カード<select id="firstCardSelect"></select></label>
       </fieldset>
       <div class="language-choice"><span>言語</span><div><button class="language-button active" type="button" aria-pressed="true">日本語</button><button class="language-button" type="button" disabled aria-label="英語表示は準備中">English · 準備中</button></div></div>
@@ -82,7 +87,7 @@
   <div id="toast" class="toast" role="status"></div>
   <script src="game-data.js"></script>
   <script src="territory-data.js"></script>
-  <script src="app.js?v=17"></script>
+  <script src="app.js?v=18"></script>
 <script defer src="../game-analytics.js"></script>
 </body>
 </html>
