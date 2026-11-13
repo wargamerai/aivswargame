@@ -783,3 +783,9 @@ body{background:#ece4d2}
 .map-viewport .split-counter .split-num.player{left:4px;top:4px}
 .map-viewport .split-counter .split-num.enemy{right:4px;bottom:4px}
 .map-viewport .split-counter~.force-label{top:40px!important}
+
+/* Formation: keep troop counts and the exclusion switch on the same row. */
+.formation-row{display:grid;grid-template-columns:minmax(0,1fr) 4em auto;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.formation-row input[type=number]{width:100%;padding:5px;border:1px solid var(--line);border-radius:6px;font:inherit}
+.formation-row label:last-child{display:flex;align-items:center;gap:2px;font-size:12px}
+#formationStatus{margin-top:12px}

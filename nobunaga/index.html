@@ -41,7 +41,7 @@
   </section>
   <main class="app-shell" hidden>
     <section class="board-panel panel">
-      <div class="board-head" aria-label="ゲーム操作"><div class="strategy-summary"><h2 id="phaseTitle">信長の戦略値を計算中</h2></div><div class="commander-summary"><span class="eyebrow">武将</span><h2 id="commandTitle">未選択</h2></div><div class="map-zoom" aria-label="地図の表示設定"><button id="unitToggle" class="quiet" type="button" aria-pressed="false">駒を隠す</button><button id="mapZoomOut" type="button" aria-label="地図を縮小">−</button><b id="mapZoomLevel">100%</b><button id="mapZoomIn" type="button" aria-label="地図を拡大">＋</button></div><div class="map-navigation-actions"><div class="board-tabs" role="tablist" aria-label="表示切り替え"><button type="button" class="board-tab active" id="mapTab" role="tab" aria-selected="true" aria-controls="mapPanel">地図</button><button type="button" class="board-tab" id="situationTab" role="tab" aria-selected="false" aria-controls="situationPanel">戦況</button></div><button id="endTurn" class="primary draw-card-button">状況カードを引く</button><button id="reportButton" type="button" class="quiet report-button" title="ここまでの経過をレポートにして保存">📜 レポート作成</button></div><div class="top-actions toolbar-extra"><button id="newGame" class="quiet" type="button">新しいゲーム</button><button id="helpBtn" class="quiet" type="button">遊び方</button></div></div>
+      <div class="board-head" aria-label="ゲーム操作"><div class="strategy-summary"><h2 id="phaseTitle">信長の戦略値を計算中</h2></div><div class="commander-summary"><span class="eyebrow">武将</span><h2 id="commandTitle">未選択</h2></div><div class="map-zoom" aria-label="地図の表示設定"><button id="unitToggle" class="quiet" type="button" aria-pressed="false">駒を隠す</button><button id="mapZoomOut" type="button" aria-label="地図を縮小">−</button><b id="mapZoomLevel">100%</b><button id="mapZoomIn" type="button" aria-label="地図を拡大">＋</button></div><div class="map-navigation-actions"><div class="board-tabs" role="tablist" aria-label="表示切り替え"><button type="button" class="board-tab active" id="mapTab" role="tab" aria-selected="true" aria-controls="mapPanel">地図</button><button type="button" class="board-tab" id="situationTab" role="tab" aria-selected="false" aria-controls="situationPanel">戦況</button></div><button id="openFormation" class="board-tab" type="button" title="カードの行動を使わずに軍勢を組み直す" disabled>編成</button><button id="endTurn" class="primary draw-card-button">状況カードを引く</button><button id="reportButton" type="button" class="quiet report-button" title="ここまでの経過をレポートにして保存">📜 レポート作成</button></div><div class="top-actions toolbar-extra"><button id="newGame" class="quiet" type="button">新しいゲーム</button><button id="helpBtn" class="quiet" type="button">遊び方</button></div></div>
       <div id="situationPanel" role="tabpanel" aria-labelledby="situationTab" hidden>
       <section class="panel status-panel">
         <div class="section-title"><div><span class="eyebrow">あなたの勢力</span><h2>信長側</h2></div><span class="strategy"><span id="strategy">0</span><small>戦略値</small></span></div>
@@ -82,6 +82,22 @@
   <dialog id="battleDialog" class="battle-dialog"><div class="battle-sheet"><span class="eyebrow">戦闘判定</span><h2 id="battleTitle"></h2><div class="battle-forces"><section class="battle-side"><h3 id="battleAttackerSide">攻撃側</h3><div id="battleAttackers" class="battle-force-list"></div></section><div class="battle-center"><small>攻撃ダイス</small><div id="battleDice" class="battle-dice"></div><b id="battleHitCount">判定中…</b></div><section class="battle-side"><h3 id="battleDefenderSide">防御側</h3><div id="battleDefenders" class="battle-force-list"></div></section></div><p id="battleSummary" class="battle-summary">ダイスを振っています…</p><button id="battleContinue" class="primary" disabled>判定中…</button></div></dialog>
   <div id="actionAnnouncement" class="action-announcement" hidden role="status" aria-live="polite"></div>
   <div id="trackAnnouncement" class="track-announcement" hidden role="status" aria-live="polite"><small>参戦マーカー移動</small><strong id="trackAnnounceName"></strong><div><span id="trackAnnounceFrom"></span><b>→</b><span id="trackAnnounceTo"></span></div></div>
+  <dialog id="formationDialog" class="retainer-setup-dialog" aria-labelledby="formationTitle">
+    <form id="formationForm" class="retainer-setup-sheet">
+      <h2 id="formationTitle">編成</h2>
+      <p>同じエリアの味方武将に軍勢を振り分けます。カードの行動は消費しません。</p>
+      <div class="retainer-placement-list">
+        <label><span>エリア</span><select id="formationArea"></select></label>
+      </div>
+      <div id="formationRows"></div>
+      <p id="formationStatus" class="retainer-setup-hint" aria-live="polite"></p>
+      <div class="retainer-setup-actions">
+        <button type="button" class="quiet" id="formationEqual">均等</button>
+        <button type="submit" class="primary" id="formationConfirm">確定</button>
+        <button type="button" class="quiet" id="formationCancel">取り消し</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="retainerSetupDialog" class="retainer-setup-dialog"><div class="retainer-setup-sheet"><span class="eyebrow">ゲーム開始前の配置</span><h2>織田家臣を配置</h2><p>4人を1人ずつ、指定された4つのエリアに配置してください。別の場所への配置や、同じ武将の重複はできません。</p><div class="retainer-placement-list"><label><span>山城</span><select data-retainer-site="yamashiro" aria-label="山城に配置する武将"></select></label><label><span>南近江</span><select data-retainer-site="minamikinki" aria-label="南近江に配置する武将"></select></label><label><span>南伊勢</span><select data-retainer-site="minamise" aria-label="南伊勢に配置する武将"></select></label><label><span>尾張</span><select data-retainer-site="owari" aria-label="尾張に配置する武将"></select></label></div><p id="retainerSetupHint" class="retainer-setup-hint" aria-live="polite">4人全員を別々のエリアに割り当ててください。</p><div class="retainer-setup-actions"><button id="retainerRandomize" class="primary" type="button">おまかせ配置</button><button id="retainerSetupConfirm" class="quiet" type="button" disabled>手動配置を確定</button></div></div></dialog>
   <dialog id="firstDrawDialog" class="first-draw-dialog"><div class="first-draw-sheet"><span class="eyebrow">第1巡</span><h2>配置完了</h2><p>確認するとゲームを開始し、1枚目の状況カードを引きます。</p><div class="first-draw-actions"><button id="firstDrawConfirm" class="primary" type="button">確認してカードを引く</button></div></div></dialog>
   <dialog id="cardRevealDialog" class="card-reveal-dialog"><div class="card-reveal-sheet"><button id="cardRevealClose" class="card-reveal-x" type="button" aria-label="カードをパス">×</button><div class="card-reveal-art" id="cardRevealArt"></div><div class="card-reveal-copy"><span id="cardControlLabel" class="eyebrow">引いた状況カード</span><h2 id="cardRevealTitle"></h2><p id="cardRevealText"></p><div class="card-reveal-actions"><button id="cardRevealPass" class="quiet" type="button">パス（何もしない）</button><button id="cardRevealContinue" class="primary" type="button">プレイ</button></div></div></div></dialog>
@@ -91,7 +107,7 @@
   <div id="toast" class="toast" role="status"></div>
   <script src="game-data.js"></script>
   <script src="territory-data.js"></script>
-  <script src="app.js?v=24"></script>
+  <script src="app.js?v=25"></script>
 <script defer src="../game-analytics.js"></script>
 </body>
 </html>
