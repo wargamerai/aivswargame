@@ -771,7 +771,9 @@ function renderTopActions() {
   }
   if (ui.mode || (!human && !reviewingSovietMove() && !canEditSetup())) return;
   if (ph.startsWith('setup')) {
-    if (ctrl === LOCAL_CONTROLS.assisted) b('お任せ配置', () => { AI.setup(game, side); ui.setupSel = null; render(); });
+    if (ctrl === LOCAL_CONTROLS.assisted || (ctrl === LOCAL_CONTROLS.sov && side === 'sov')) {
+      b('お任せ配置', () => { AI.setup(game, side); ui.setupSel = null; render(); });
+    }
     b('すべて取り外す', () => { for (const u of game.setupUnits(side)) game.unplace(u); ui.setupSel = null; render(); });
     b('配置完了', () => {
       if (!game.finishSetup(side)) return;
