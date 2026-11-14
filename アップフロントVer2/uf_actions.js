@@ -397,11 +397,11 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     // §38.51 効果範囲: 目標＋目標から相対射程5の味方グループ＋目標と同じ射程チットの隣
     applyStarshell('player', state.fireTarget.idx);
 
-    alert(`照明弾発射: GROUP ${tgtGrp.name} とその周辺を、相手の次のターンの終わりまで照らします`);
     if (!state.actedGroups) state.actedGroups = new Set();
     state.actedGroups.add(state.fireSource.idx);
     playerDidRuleAction = true;
     renderField('player'); renderField('ai');
+    alert(`照明弾発射: GROUP ${tgtGrp.name} と周辺（索敵不要・夜間半減なし）`);
   }
 
   if (act === 'trench') {
@@ -484,7 +484,7 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       if (srcGrp.recognizedTargets.indexOf(state.fireTarget.idx) < 0) {
         srcGrp.recognizedTargets.push(state.fireTarget.idx);
       }
-      alert(`索敵成功 (RNC ${rncAbs}${threshold <= 0 ? ' = 1' : ' < ' + threshold}) — アクション消費なし`);
+      alert(`索敵成功 (RNC ${rncAbs}${threshold <= 0 ? ' = 1' : ' < ' + threshold}) — アクション消費なし\nGROUP ${srcGrp.name} が GROUP ${tgtGrp.name} を発見。夜間半減あり。`);
       // アクションカウントしない
     } else {
       alert(`索敵失敗 (RNC ${rncAbs}${threshold <= 0 ? ' ≠ 1' : ' >= ' + threshold}) — アクション消費`);

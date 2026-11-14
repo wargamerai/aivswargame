@@ -340,6 +340,18 @@ function ufApplySaveData(saved) {
   // state・レポートは同じ物を使い続ける（他のファイルから参照されているため中身だけ入れ替える）
   Object.keys(state).forEach(k => { delete state[k]; });
   Object.assign(state, all.state);
+  const R = window.INFANTRY_RULES;
+  for (const side of ['player', 'ai']) {
+    const factionKey = getFactionKey(state[side]);
+    for (const group of state.groups[side] || []) {
+      for (const ownerNum of Object.keys(group.crewPairs || {})) {
+        const owner = group.cards.find(card => card.num === Number(ownerNum));
+        const def = R.lookupSoldier(owner, factionKey);
+        // 旧版では、助手用の数値がない軽機関銃にも助手が付くことがあった。
+        if (def && !def.needsCrew) delete group.crewPairs[ownerNum];
+      }
+    }
+  }
   Object.keys(UF_REPORT).forEach(k => { delete UF_REPORT[k]; });
   Object.assign(UF_REPORT, all.report);
   if (window.DISCARD_RULES && window.DISCARD_RULES.setState) window.DISCARD_RULES.setState(all.discard);

@@ -40,8 +40,14 @@ function parseRangeValue(s, weaponCat = '') {
   const t = String(s).trim();
   if (t === 'NA' || t.indexOf('NA') === 0) return { na: true };
   if (weaponCat.startsWith('対戦車ライフル')) {
-    const atr = t.match(/^(\d+)\/(\d+)$/);
-    if (atr) return { toHit: Number(atr[1]), main: Number(atr[2]) };
+    // 命中値[助手なしの命中値]/対歩兵火力。命中の範囲は上限を記録する。
+    const atr = t.match(/^(\d+)(?:-(\d+))?(?:\[(\d+)(?:-(\d+))?\])?\/(\d+)$/);
+    if (atr) {
+      const main = Number(atr[5]);
+      const toHit = Number(atr[2] ?? atr[1]);
+      return atr[3] == null ? { toHit, main }
+        : { toHit, toHitNoCrew: Number(atr[4] ?? atr[3]), main, noCrew: main };
+    }
   }
   const m = t.match(/^([0-9\-]+)\s*\[\s*([0-9\-]+)\s*\]/);
   if (m) {

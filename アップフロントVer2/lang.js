@@ -447,6 +447,11 @@ const LANG_TERMS = {
   '最終命中ランク:': 'Final hit range:',
   '(移動半減→': '(moving, halved →',
   '移動半減 -': 'Moving, halved -',
+  '夜間半減 -': 'Night fire, halved -',
+  '夜間半減あり': 'fire strength halved at night',
+  '夜間半減なし': 'no night fire penalty',
+  '照明弾で照らされている': 'Lit by a starshell',
+  'トーチカとの射撃半減 -': 'Pillbox fire, halved -',
   '射撃 距離': 'Fire, range',
   '→ 最終火力': '→ final firepower',
   '→ 最終': '→ final',
@@ -1063,6 +1068,14 @@ const LANG_PATTERNS_SRC = [
   ["AI: {0} 回復", "AI: {0} rallied"],
   ["AI: {0} に回復を積む（{1}/3）", "AI: Rally added to {0} ({1}/3)"],
   ["シナリオ{0} 勝利！ — {1}（GROUP {2}）", "Scenario {0} victory! — {1} (GROUP {2})"],
+  ["敵 {0} に発見された ・ 夜間半減あり", "Spotted by enemy {0} · Fire strength halved"],
+  ["味方 {0} が発見 ・ 夜間半減あり", "Spotted by friendly {0} · Fire strength halved"],
+  ["照明弾で照らされている ・ 夜間半減なし", "Lit by a starshell · No night fire penalty"],
+  ["AI: 索敵成功 → あなたの GROUP {0} を敵 GROUP {1} が発見（夜間半減あり）", "AI: Enemy GROUP {1} spotted your GROUP {0} (fire strength still halved at night)"],
+  ["AI: 照明弾 → あなたの GROUP {0} と周辺（索敵不要・夜間半減なし）", "AI: Starshell lights your GROUP {0} and nearby groups (no scouting needed or night fire penalty)"],
+  ["照明弾発射: GROUP {0} と周辺（索敵不要・夜間半減なし）", "Starshell lights GROUP {0} and nearby groups (no scouting needed or night fire penalty)"],
+  ["GROUP {0} が GROUP {1} を発見。夜間半減あり。", "GROUP {0} spotted GROUP {1}. Fire strength is still halved at night."],
+  ["射撃カード {0#} → {1#}（{2}）", "Fire cards {0} → {1} ({2})"],
 ];
 const LANG_PATTERNS = [];
 LANG_PATTERNS_SRC.forEach(([ja, en]) => {

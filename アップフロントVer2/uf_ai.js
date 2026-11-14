@@ -811,10 +811,10 @@ async function aiTryFlare() {
       if (isGroupFlared(tgt)) continue;
       if (window.__inChart) { if (!chartCanFireAtNight(ti, new Set([...acted, si]), state.aiFiredGroups || new Set())) continue; } // 照らしたあと、ほかのグループが今日の射撃の決まりで撃てるなら
       else if (aiEffectiveFireCount(ti) < 2) continue; // 照らしても効果のある射撃を2回できないなら使わない
-      await showAIAction(`AI: 照明弾 → GROUP ${tgt.name}`, null, si);
       applyStarshell('ai', ti); // §38.51
       acted.add(si);
       renderField('player'); renderField('ai');
+      await showAIAction(`AI: 照明弾 → あなたの GROUP ${tgt.name} と周辺（索敵不要・夜間半減なし）`, null, si);
       return true;
     }
   }
@@ -953,8 +953,8 @@ async function aiTryScout() {
   if (success) {
     if (!src.recognizedTargets) src.recognizedTargets = [];
     if (src.recognizedTargets.indexOf(bestTi) < 0) src.recognizedTargets.push(bestTi);
-    await showAIAction(`AI: 索敵成功 → GROUP ${tgt.name}`, null, bestSi);
     renderField('player'); renderField('ai');
+    await showAIAction(`AI: 索敵成功 → あなたの GROUP ${tgt.name} を敵 GROUP ${src.name} が発見（夜間半減あり）`, null, bestSi);
     return 'detected'; // §38.2 成功はアクションにならない
   } else {
     await showAIAction(`AI: 索敵失敗 → GROUP ${tgt.name}`, null, bestSi);
@@ -1400,15 +1400,22 @@ function aiPerformFire(plan) {
   // 移動は½（端数切り捨て）、夜間は別に½。ターゲットが照らされていれば夜間効果スキップ
   const _tgtFlaredAI = !!(tgt && tgt.flaredUntilTurn && tgt.flaredUntilTurn >= (state.turnCount || 0));
   const _effNight = state.isNight && !_tgtFlaredAI;
-  let baseStrength = halvedFireStrength(rawBaseStrength, srcMoving, _effNight);
-  if (pillboxRelation('ai', plan.si, plan.ti) === 'half') baseStrength = Math.floor(baseStrength / 2); // §23.7
+  const strengthAfterMove = halvedFireStrength(rawBaseStrength, srcMoving, false);
+  const strengthAfterNight = halvedFireStrength(strengthAfterMove, false, _effNight);
+  const pillboxHalf = pillboxRelation('ai', plan.si, plan.ti) === 'half';
+  const baseStrength = pillboxHalf ? Math.floor(strengthAfterNight / 2) : strengthAfterNight; // §23.7
+  const strengthMods = [];
+  if (srcMoving) strengthMods.push(`移動半減 -${rawBaseStrength - strengthAfterMove}`);
+  if (_effNight) strengthMods.push(`夜間半減 -${strengthAfterMove - strengthAfterNight}`);
+  if (state.isNight && _tgtFlaredAI) strengthMods.push('照明弾で照らされている ・ 夜間半減なし');
+  if (pillboxHalf) strengthMods.push(`トーチカとの射撃半減 -${strengthAfterNight - baseStrength}`);
 
   // §10.4 攻撃の解決前にヒーローでピン状態の兵士を回復できる → その後、隠蔽カード選択（§9.5 トーチカは不可）
   {
     const _jpMod = isJapanInGame() ? -1 : 0;
     const _total = baseStrength + atkMod + defMod + _jpMod;
     const _lines = [`攻撃の火力 ${_total}（射撃カード ${baseStrength}・攻撃側の地形 ${_sgn(atkMod)}・防御側の地形 ${_sgn(defMod)}${_jpMod ? '・日本軍 -1' : ''}）`];
-    if (baseStrength !== rawBaseStrength) _lines.push(`射撃カードの火力 ${rawBaseStrength} は、移動中・夜間のため ${baseStrength}`);
+    if (strengthMods.length) _lines.push(`射撃カード ${rawBaseStrength} → ${baseStrength}（${strengthMods.join('、')}）`);
     _lines.push(`距離 ${plan.dist}`);
     _lines.push('隠蔽カードを使うと、その数字だけ火力が下がります');
     setIncomingAttack({ si: plan.si, ti: plan.ti, lines: _lines,
@@ -1546,8 +1553,7 @@ function aiPerformFire(plan) {
     src.firedFPThisTurn = (src.firedFPThisTurn || 0) + (plan.totalNeed != null ? plan.totalNeed : plan.need);
     if (window.AFV) window.AFV.boxedAfterFire(src, tgt, plan.totalNeed != null ? plan.totalNeed : plan.need, baseFP); // §28.7 オープントップへ、同じカードでもう一度
 
-    const mods = [];
-    if (srcMoving && rawBaseStrength !== baseStrength) mods.push(`移動半減 -${rawBaseStrength - baseStrength}`);
+    const mods = strengthMods.slice();
     if (isFlankFireNow) mods.push('側面射撃(兵士火力×2)');
     atkBreakdown.forEach(x => {
       const label = x.type === 'MOVEMENT' ? '攻撃側移動カード' : `攻撃側 ${x.type}`;

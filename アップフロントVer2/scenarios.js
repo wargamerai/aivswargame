@@ -286,12 +286,9 @@
 
   // ===== AI 用の賢い編成 ============================================
 
-  // 火炎放射器は助手の要らない兵器（ルールの側と同じ）。クルー兵器には数えない
-  const CREW_WEAPON_PREFIXES = ['中機関銃','軽機関銃','バズーカ','パンツァーシュレック'];
   function isFlameDef(def) { return !!(def && def.weaponCat && def.weaponCat.indexOf('火炎放射器') === 0); }
   function isCrewWeaponDef(def) {
-    if (!def || !def.weaponCat) return false;
-    return CREW_WEAPON_PREFIXES.some(p => def.weaponCat.indexOf(p) === 0);
+    return !!(def && def.needsCrew);
   }
   function isLeaderDef(def) {
     return !!(def && def.leader && def.leader.trim().length > 0);

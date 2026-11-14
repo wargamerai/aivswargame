@@ -65,14 +65,20 @@ function makeMainGroup(side, group, idx) {
     if (side === 'ai' && idx === state._incoming.si) slot.classList.add('incoming-src');
     if (side === 'player' && idx === state._incoming.ti) slot.classList.add('incoming-tgt');
   }
-  // 夜間 + 相手陣営から認知されていない → 暗く表示（敵・味方とも）
-  if (state.isNight) {
+  let nightTag = '';
+  if (state.isNight && !group.eliminated) {
     const oppSide = side === 'player' ? 'ai' : 'player';
-    const isRecognized = (state.groups[oppSide] || []).some(g =>
-      g && g.recognizedTargets && g.recognizedTargets.indexOf(idx) >= 0
+    const observers = (state.groups[oppSide] || []).filter(g =>
+      g && !g.eliminated && (g.recognizedTargets || []).includes(idx)
     );
-    const isFlared = !!group.flaredUntilTurn && state.currentTurn != null && group.flaredUntilTurn >= (state.turnCount || 0);
-    if (!isRecognized && !isFlared) {
+    const badgeStyle = 'flex-basis:100%;font-size:12px;font-weight:bold;padding:2px 4px;border-radius:3px;';
+    if (isGroupFlared(group)) {
+      nightTag = `<span style="${badgeStyle}color:#281900;background:#ffcc69;">照明弾で照らされている ・ 夜間半減なし</span>`;
+    } else if (observers.length) {
+      const names = observers.map(g => g.name).join(' / ');
+      const text = side === 'player' ? `敵 ${names} に発見された` : `味方 ${names} が発見`;
+      nightTag = `<span style="${badgeStyle}color:#e4f4ff;background:#205172;">${text} ・ 夜間半減あり</span>`;
+    } else {
       slot.style.opacity = '0.4';
     }
   }
@@ -116,7 +122,10 @@ function makeMainGroup(side, group, idx) {
     const parts = [];
     enemyGroups.forEach((eg, ei) => {
       if (!eg || eg.eliminated) return;
-      const dist = R_enc.relativeRange(group.distance, eg.distance);
+      const dist = R_enc.relativeRangeBetweenGroups(group, eg, {
+        sameOpposing: idx === ei,
+        adjacent: Math.abs(idx - ei) === 1,
+      });
       const fp = R_enc.calcGroupFirepower(group, facKey, dist, { moving, crewMap });
       parts.push(`${eg.name}/${fp}`);
     });
@@ -136,7 +145,7 @@ function makeMainGroup(side, group, idx) {
   const trTag = (_outT || _inT) ? `<span style="color:#9cf;margin-left:8px;font-size:12px;">移送${_outT ? ' 送出' + _outT : ''}${_inT ? ' 受入待' + _inT : ''}</span>` : '';
   const fmTag = group.forming ? '<span style="color:#9f9;margin-left:8px;font-size:12px;">設立中</span>' : '';
   const shTag = group.pendingShift ? `<span style="color:#f9c;margin-left:8px;font-size:12px;">→${GROUP_LETTERS[group.pendingShift.toIdx]}へ側方移送中</span>` : '';
-  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${flankTag}${encTag}${ppTag}${wpTag}${trTag}${fmTag}${shTag}${fpRow}`;
+  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${flankTag}${encTag}${ppTag}${wpTag}${trTag}${fmTag}${shTag}${nightTag}${fpRow}`;
 
   const dctrl = document.createElement('div');
   dctrl.className = 'distance-ctrl';
