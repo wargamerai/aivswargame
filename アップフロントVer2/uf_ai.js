@@ -187,7 +187,7 @@ async function aiTryInfiltrate(opts) {
 async function aiTurn() {
   if (state.phase !== 'play' || state.currentTurn !== 'ai') return;
   const R = window.INFANTRY_RULES;
-  if (!R) { endAITurn(); return; }
+  if (!R) return endAITurn();
 
   // 1グループ1アクション制限のためのトラッキング
   state.aiActedGroups = new Set();
@@ -232,7 +232,10 @@ async function aiTurn() {
     if (!_lit && !_pin) discardTurn = true;
   }
   state.aiDiscardTurn = discardTurn;
-  if (window.__chartAI && (window.__chartNat === 'all' || aiKeyT === (window.__chartNat || 'us'))) { await chartTurn(aiKeyT); endAITurn(); return; } // チャートで動かす（本番は全部の国）
+  if (window.__chartAI && (window.__chartNat === 'all' || aiKeyT === (window.__chartNat || 'us'))) {
+    await chartTurn(aiKeyT);
+    return endAITurn();
+  }
 
   if (!discardTurn) {
     // §14.4 直前のプレイヤーターンに狙撃されていれば、狙撃兵チェックを1回試みる（1アクション）
@@ -358,7 +361,7 @@ async function aiTurn() {
       if (dumpedCards.length) await showAIAction('AI: 捨て札 ' + dumpedCards.length + '枚', dumpedCards);
     }
   }
-  endAITurn();
+  return endAITurn();
 }
 
 function aiIsGroupMoving(g) {
@@ -816,7 +819,9 @@ async function aiTryFlare() {
       const dist = R.relativeRange(src.distance, tgt.distance);
       if (dist < 1 || dist > 5) continue;
       if (isGroupFlared(tgt)) continue;
-      if (window.__inChart) { if (!chartCanFireAtNight(ti, new Set([...acted, si]), state.aiFiredGroups || new Set())) continue; } // 照らしたあと、ほかのグループが今日の射撃の決まりで撃てるなら
+      if (window.__inChart) {
+        if (!(await aiHasShotAfterScouting(ti, { exceptGroup: si, assumeLit: true }))) continue;
+      }
       else if (aiEffectiveFireCount(ti) < 2) continue; // 照らしても効果のある射撃を2回できないなら使わない
       applyStarshell('ai', ti); // §38.51
       acted.add(si);
@@ -840,26 +845,38 @@ function _calcScoutSuccessProb(threshold) {
   return count / _RNC_TOTAL;
 }
 
-/** チャートの夜の索敵用: 敵 ti を、まだ動いていないどれかのグループが、今日の射撃の決まりで撃てるか（見積もり） */
-function chartCanFireAtNight(ti, acted, fired) {
-  const R = window.INFANTRY_RULES; const aiKey = getFactionKey(state.ai), pk = getFactionKey(state.player);
-  const tgt = state.groups.player[ti]; if (!tgt || tgt.eliminated) return false;
-  const cards = state.aiHand.filter(c => c && c.terrain && String(c.terrain.type).indexOf('FIRE') === 0);
-  if (!cards.length) return false;
-  const minMor = (() => { const v = tgt.cards.filter(c => R.isAlive(c)).map(c => { const d = R.lookupSoldier(c, pk); if (!d) return 99; return R.isPinned(c) ? (parseInt(d.panic, 10) || 99) : (parseInt(d.morale, 10) || 99); }); return v.length ? Math.min(...v) : 99; })();
+// 索敵が成功した後、または照明弾が当たった後の射撃を実際の射撃条件で確認する。
+async function aiHasShotAfterScouting(ti, options = {}) {
+  if (!state.aiHand.some(c => c && c.terrain && String(c.terrain.type).startsWith('FIRE'))) return false;
+  if (await aiFireAt([ti], { ...options, preview: true })) return true;
+  const R = window.INFANTRY_RULES;
+  const M = window.MORTAR_RULES;
+  if (!M) return false;
+  const tgt = state.groups.player[ti];
+  const aiKey = getFactionKey(state.ai);
+  const acted = state.aiActedGroups || new Set();
+  const fired = state.aiFiredGroups || new Set();
   for (let si = 0; si < state.groups.ai.length; si++) {
+    if ((options.onlyGroup != null && si !== options.onlyGroup) || si === options.exceptGroup) continue;
     if (acted.has(si) || fired.has(si)) continue;
-    const src = state.groups.ai[si]; if (!src || src.eliminated) continue;
-    const base = R.relativeRange(src.distance, tgt.distance); const d = Math.abs(si - ti) <= 1 ? base : Math.max(0, base - 1);
-    const fp = R.calcGroupFirepower(src, aiKey, d, { moving: false, crewMap: buildCrewMapFromPairs(src) }); if (fp <= 0) continue;
-    const mg = src.cards.some(c => { if (!R.isAlive(c) || c.malfunctioned || c.destroyed) return false; const dd = R.lookupSoldier(c, aiKey); return !!(dd && dd.weaponCat && /^(軽機関銃|中機関銃)/.test(dd.weaponCat)); });
-    const defMod = R.calcTerrainMod(tgt.terrain || [], false, {}) || 0, atkMod = R.calcTerrainMod(src.terrain || [], true, {}) || 0;
-    for (const c of cards) {
-      const m = (c.terrain.sub || '').match(/FP(.)/); const need = circledToNum((m && m[1]) || ''); if (!(need > 0 && need <= fp)) continue;
-      const est = halvedFireStrength(parseInt(c.terrain.type.replace('FIRE ', ''), 10) || 0, false, true) + atkMod + defMod;
-      if (est <= 0) continue;
-      if (!mg || est - minMor >= (hasPillbox(tgt) ? -3 : -2)) return true;
-    }
+    const src = state.groups.ai[si];
+    if (!src || src.eliminated || src.cards.some(R.isPinned) || M.isMoving(src)) continue;
+    const [shooter] = M.getMortarShooters(src, aiKey);
+    if (!shooter) continue;
+    const acquired = isAcquiredBy(src, ti, shooter.card);
+    const fireCheck = M.canFire(src, tgt, { acquired });
+    if (!fireCheck.ok) continue;
+    const distance = R.relativeRangeBetweenGroups(src, tgt, {
+      sameOpposing: si === ti,
+      adjacent: Math.abs(si - ti) === 1,
+    });
+    const hit = M.calcHitCeiling(shooter, distance, src, {
+      pinpoint: acquired, smokePenalty: fireCheck.smokePenalty, targetSmoke: M.hasSmoke(tgt),
+      night: state.isNight && !options.assumeLit && !isGroupFlared(tgt),
+      guard: !!shooter.card.prisoners?.length,
+      wounded: R.isWoundActive(shooter.card),
+    });
+    if (!hit.na && hit.ceiling >= 0) return true;
   }
   return false;
 }
@@ -875,30 +892,6 @@ async function aiTryScout() {
   const _demoAt5 = state.groups.ai.some((g, i) => g && !g.eliminated && aiGroupHasDemo(g) && aiGroupFireNow(g, i).closest >= 5);
   const _aggrScout = _aggrStyle || _demoAt5;
   if (_fireCardsScout.length === 0 && !_aggrScout) return false;
-  const _aiKeyScout = getFactionKey(state.ai);
-  // 射撃カードが貯まるまで索敵しない。照明弾を使えないなら1枚でよい（ユーザーの指示 2026-11-03）
-  const _needCards = state.groups.ai.some(g => aiGroupHasUnpinnedSL(g, _aiKeyScout)) ? 2 : 1;
-  let _canFireAny = false;
-  for (let _si = 0; _si < state.groups.ai.length && !_canFireAny; _si++) {
-    const _src = state.groups.ai[_si];
-    if (!_src || _src.eliminated) continue;
-    for (let _ti = 0; _ti < state.groups.player.length && !_canFireAny; _ti++) {
-      const _tgt = state.groups.player[_ti];
-      if (!_tgt || _tgt.eliminated) continue;
-      if (!_tgt.cards.some(c => R.isAlive(c))) continue;
-      const _adj = Math.abs(_si - _ti) <= 1;
-      const _bd = R.relativeRange(_src.distance, _tgt.distance);
-      const _d = _adj ? _bd : Math.max(0, _bd - 1);
-      const _cm = buildCrewMapFromPairs(_src);
-      const _fp = R.calcGroupFirepower(_src, _aiKeyScout, _d, { moving: false, crewMap: _cm });
-      for (const _fc of _fireCardsScout) {
-        const _m = (_fc.terrain.sub || '').match(/FP(.)/);
-        const _need = circledToNum((_m && _m[1]) || '');
-        if (_need > 0 && _fp >= _need) { _canFireAny = true; break; }
-      }
-    }
-  }
-  if (!_canFireAny && !_aggrScout) return false;
   const acted = state.aiActedGroups || new Set();
   const fired = state.aiFiredGroups || new Set();
   const aiKey = getFactionKey(state.ai);
@@ -918,26 +911,19 @@ async function aiTryScout() {
       if (!tgt.cards.some(c => R.isAlive(c))) continue;
       if (src.recognizedTargets && src.recognizedTargets.indexOf(ti) >= 0) continue;
       if (tgt.flaredUntilTurn && tgt.flaredUntilTurn >= (state.turnCount || 0)) continue;
-      const dist = R.relativeRange(src.distance, tgt.distance);
-      // 侵入のための索敵: 爆薬のグループ、または攻撃的な性格のグループ（火炎放射器のグループは射撃を待つので除く）
-      const _forCC = dist >= 5 && (aiGroupHasDemo(src) || (_aggrStyle && !aiGroupHasUsableFlame(src)));
-      const _rrS = Math.abs(si - ti) <= 1 ? dist : Math.max(0, dist - 1);
-      // 火炎放射器は射撃カード1枚で撃つので 1枚でよい
-      const _flameHere = _rrS === 5 && aiGroupHasUsableFlame(src);
-      if (window.__inChart) {
-        // チャート（2026-11-08 ユーザーの決め）: 見つけた敵を、どれかのグループが今日の射撃の決まりで撃てるなら索敵する
-        //   （1でも撃つ。機関銃のグループは 撃つ値−相手の一番当たりやすい兵のモラル が −2 以上、トーチカは −3 以上）。撃つ値は夜の半分・地形の修正で見積もる
-        if (!_forCC && !chartCanFireAtNight(ti, acted, fired)) continue;
-      } else {
-      if (!_forCC && aiEffectiveFireCount(ti) < (_flameHere ? 1 : _needCards)) continue; // 撃っても効果がない敵は索敵しない
-      }
-      // 自分で撃てないグループは索敵しない（分隊長は照明弾を撃てるので索敵する）
-      if (!window.__inChart && !_forCC && !aiGroupHasUnpinnedSL(src, aiKey)) {
-        const _fpS = R.calcGroupFirepower(src, aiKey, _rrS, { moving: false, crewMap: buildCrewMapFromPairs(src) });
-        const _can = _fireCardsScout.some(c => { const m = (c.terrain.sub || '').match(/FP(.)/); const n = circledToNum((m && m[1]) || ''); return n > 0 && n <= _fpS; });
-        if (!_can) continue;
-      }
       if (!gullyObservationAllowed(src, tgt, aiKey)) continue; // §38.2
+      const dist = R.relativeRange(src.distance, tgt.distance);
+      if (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {
+        isMortar: !!window.MORTAR_RULES?.getMortarShooters(src, aiKey).length,
+      })) continue; // 涸れ谷にいる相手を観測できる場合も §38.2 の例外に限る
+      const canInfiltrate = dist === 5 && Math.abs(si - ti) <= 1
+        && (aiGroupHasDemo(src) || (_aggrStyle && !aiGroupHasUsableFlame(src)))
+        && window.CC_ACTION && window.CC_ACTION.canAttemptInfiltration(src, tgt, 'ai').ok;
+      if (!canInfiltrate && !(await aiHasShotAfterScouting(ti, { onlyGroup: si }))) {
+        const canLaunchFlare = dist >= 1 && dist <= 5 && aiGroupHasUnpinnedSL(src, aiKey)
+          && (window.__inChart || aiEffectiveFireCount(ti) >= 2);
+        if (!canLaunchFlare || !(await aiHasShotAfterScouting(ti, { exceptGroup: si, assumeLit: true }))) continue;
+      }
       const threshold = observationRange(src, tgt).total; // §38.3
       const successProb = threshold <= 0 ? _RNC_COUNTS[1] / _RNC_TOTAL : _calcScoutSuccessProb(threshold);
       if (successProb <= 0.4) continue;
@@ -1190,6 +1176,7 @@ function aiCalcGroupMaxFP(group, factionKey, distance) {
 
 async function aiFireAt(targetIdxList, opts) {
   const flameOnly = !!(opts && opts.flameOnly);
+  const preview = !!(opts && opts.preview);
   const R = window.INFANTRY_RULES;
   const aiKey = getFactionKey(state.ai);
   const acted = state.aiActedGroups || new Set();
@@ -1218,13 +1205,14 @@ async function aiFireAt(targetIdxList, opts) {
     for (let si = 0; si < state.groups.ai.length; si++) {
       // §6.6 1グループは1ターンに1回しか射撃できない
       if (acted.has(si) || fired.has(si)) continue;
+      if (preview && ((opts.onlyGroup != null && si !== opts.onlyGroup) || si === opts.exceptGroup)) continue;
       const src = state.groups.ai[si];
-      if (R.isInGully(src)) continue;
+      if (!src || src.eliminated || R.isInGully(src)) continue;
       for (const ti of targetIdxList) {
         const tgt = state.groups.player[ti];
         if (!tgt) continue;
         if (tgt.cards.every(c => !R.isAlive(c))) continue;
-        if (!aiCanTargetRecognized(si, ti)) continue; // 夜間: 未認知は射撃不可
+        if (!preview && !aiCanTargetRecognized(si, ti)) continue; // 夜間: 未認知は射撃不可
         const adjacent = Math.abs(si - ti) <= 1;
         const baseDist = R.relativeRange(src.distance, tgt.distance);
         const dist = adjacent ? baseDist : Math.max(0, baseDist - 1);
@@ -1248,7 +1236,7 @@ async function aiFireAt(targetIdxList, opts) {
         const rawBase = parseInt(card.terrain.type.replace('FIRE ', ''), 10) || 0;
         let adjBase = rawBase;
         const _tgtFlaredJudge = !!(tgt && tgt.flaredUntilTurn && tgt.flaredUntilTurn >= (state.turnCount || 0));
-        const _effNightJudge = state.isNight && !_tgtFlaredJudge;
+        const _effNightJudge = state.isNight && !_tgtFlaredJudge && !(preview && opts.assumeLit);
         // §12.1 移動中は½（端数切り捨て）。火炎放射器だけで必要火力を満たすカードは例外
         adjBase = halvedFireStrength(rawBase, srcMoving && !flameCoversNeed(src, aiKey, dist, need), _effNightJudge);
         if (_pbRelAI === 'half') adjBase = Math.floor(adjBase / 2); // §23.7
@@ -1310,6 +1298,7 @@ async function aiFireAt(targetIdxList, opts) {
     if (!_hasMG(state.groups.ai[c.si])) return true;
     return c._est - _minMor(state.groups.player[c.ti]) >= (c._pill ? -3 : -2);
   };
+  if (preview) return _cands.some(_okFire);
   const _tgtKey = c => { const t = state.groups.player[c.ti]; const pin = t.cards.some(x => R.isAlive(x) && R.isPinned(x)) ? 1 : 0; let tfp = 0; try { tfp = R.calcGroupFirepower(t, _pk, c.dist, { moving: false, crewMap: buildCrewMapFromPairs(t) }); } catch (e) {} return { pin, dist: c.dist, tfp }; };
   const _sortC = window.__inChart
     ? (a, b) => { const x = _tgtKey(a), y = _tgtKey(b); return (flameOnly ? ((b._pill ? 1 : 0) - (a._pill ? 1 : 0)) : 0) || (y.pin - x.pin) || (x.dist - y.dist) || (y.tfp - x.tfp) || (b._score - a._score); }
@@ -3394,7 +3383,15 @@ async function chartTurn0(nat) {
       for (let k = 0; k < fns.length; k++) {
         let r = false;
         try { r = await fns[k](); } catch (e) { inc('エラー:' + label); r = false; }
-        if (r) { inc(`${label}#${k + 1}`); if (!(nat === 'jpn' && label.indexOf('移動') >= 0)) state.aiActedThisTurn = true; did = true; acted++; break; }
+        if (r) {
+          inc(`${label}#${k + 1}`);
+          if (r !== 'detected') {
+            if (!(nat === 'jpn' && label.indexOf('移動') >= 0)) state.aiActedThisTurn = true;
+            acted++;
+          }
+          did = true;
+          break;
+        }
       }
       if (did) break;
     }

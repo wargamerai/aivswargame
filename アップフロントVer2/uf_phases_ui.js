@@ -790,6 +790,8 @@ function endTerrainPlacementPhase() {
   }
   state.aiHandCount = state.aiHand.length;
   // §4.1 先攻陣営からターン開始
+  state.playerIdleLastTurn = false;
+  state.aiIdleLastTurn = false;
   const firstFac = state.scenario && state.scenario.firstPlayer;
   const playerKey = getFactionKey(state.player);
   if (state.firstSideOverride) {
@@ -1074,11 +1076,23 @@ function endPlayerTurn() {
   setTimeout(aiTurn, 3000);
 }
 
-function endAITurn() {
+async function endAITurn() {
   // §14.4 AI がこのターンに狙撃した → 次のプレイヤーターンに狙撃兵チェックができる
   if (state.aiSnipeRncThisTurn != null) { state.aiSnipeCheckRnc = state.aiSnipeRncThisTurn; state.aiSnipeRncThisTurn = null; }
   // §4.6 AI がこのターンに何もしなかったか（次のプレイヤーターンはアクションか捨て札が必要）
-  state.aiIdleLastTurn = !(state.aiActedThisTurn || (state.aiDiscardedThisTurn || 0) > 0 || state.aiDumpedThisTurn);
+  const didSomething = state.aiActedThisTurn || state.aiActedGroups?.size || state.aiFiredGroups?.size
+    || state.aiDiscardedThisTurn > 0 || state.aiDumpedThisTurn;
+  state.aiIdleLastTurn = !didSomething;
+  if (state.aiIdleLastTurn && state.playerIdleLastTurn && state.aiHand.length > 0) {
+    const nonHero = state.aiHand.findIndex(card => card.terrain?.type !== 'HERO');
+    const [card] = state.aiHand.splice(Math.max(0, nonHero), 1);
+    pushTerrainToDiscard(card);
+    state.aiDumpedThisTurn = true;
+    state.aiIdleLastTurn = false;
+    state.aiHandCount = state.aiHand.length;
+    renderHands();
+    await showAIAction('AI: 捨て札 1枚', null);
+  }
   // §15.53 処刑の判定は自分のターン終了時だけ
   commissarExecutionCheck('ai');
   updateCommissarMarker('player');
