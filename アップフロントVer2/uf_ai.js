@@ -1897,9 +1897,18 @@ async function aiTryMove(opts) {
       }
     }
   }
-  // チャートの待機の表: 今より効果のある地形へ横移動（opts.lateral）
+  // 待機の表: 次に置ける地形があるグループだけ、地形を変えるための横移動を始める。
   if (bestIdx < 0 && opts && opts.lateral) {
-    for (let i = 0; i < state.groups.ai.length; i++) { if (isSkipped(i)) continue; bestIdx = i; moveMode = 'lateral'; break; }
+    for (let i = 0; i < state.groups.ai.length; i++) {
+      if (isSkipped(i)) continue;
+      const g = state.groups.ai[i];
+      if (isMovingIgnoringOverlays(g)) continue;
+      if (!state.aiHand.some(c => aiCanUseOwnTerrain(c)
+        && aiOwnTerrainPreference(c.terrain.type, g, i) >= 0)) continue;
+      bestIdx = i;
+      moveMode = 'lateral';
+      break;
+    }
     if (bestIdx < 0) return false;
   }
   // (側面射撃/包囲のための移動は #12 で処理)
@@ -2063,43 +2072,92 @@ async function aiTryMineRemove() {
   return false;
 }
 
-async function aiTryPlaceOwnTerrain(onlyGi) {
+function aiTerrainRange(g, gi, opposingSide) {
   const R = window.INFANTRY_RULES;
+  return (state.groups[opposingSide] || []).reduce((closest, enemy, ei) => {
+    if (!enemy || enemy.eliminated || !enemy.cards.some(R.isAlive)) return closest;
+    return Math.max(closest, R.relativeRangeBetweenGroups(g, enemy, {
+      sameOpposing: gi === ei, adjacent: Math.abs(gi - ei) === 1,
+    }));
+  }, 0); // 相対距離は数値が大きいほど近い
+}
+
+function aiFiringGroup(g, factionKey) {
+  if (g._role === 'fire' || g._role === 'support') return true;
+  const R = window.INFANTRY_RULES;
+  return g.cards.some(c => {
+    if (!R.isAlive(c) || c.destroyed) return false;
+    const def = R.lookupSoldier(c, factionKey);
+    return !!(def && /軽機関銃|中機関銃|迫撃砲|歩兵砲/.test(def.weaponCat));
+  });
+}
+
+function aiGullyApproach(g, gi) {
+  return (g._role === 'maneuver' || g._role === 'assault')
+    && !(window.AFV && window.AFV.isAfvGroup(g))
+    && aiTerrainRange(g, gi, 'player') <= 1;
+}
+
+// 1: 用途に合う地形、0: 通常の評価、-1: 味方への配置を見送る地形。
+function aiOwnTerrainPreference(type, g, gi) {
+  if (type !== 'GULLY' && type !== 'HILL') return 0;
+  const afv = window.AFV && window.AFV.isAfvGroup(g);
+  const fire = aiFiringGroup(g, getFactionKey(state.ai));
+  if (type === 'HILL') return (fire || afv) ? 1 : 0;
+  if (afv || aiTerrainRange(g, gi, 'player') >= 4) return -1;
+  if (aiGullyApproach(g, gi)) return 1;
+  return fire ? -1 : 0;
+}
+
+function aiEnemyGullyTarget(g, gi) {
+  const R = window.INFANTRY_RULES;
+  return !(window.AFV && window.AFV.isAfvGroup(g))
+    && !R.isInGully(g) && aiTerrainRange(g, gi, 'ai') < 5
+    && aiFiringGroup(g, getFactionKey(state.player));
+}
+
+function aiCanUseOwnTerrain(c) {
   const SH = window.SCENARIO_HELPERS;
   const goodTerrain = ['WOODS','BUILDINGS','BRUSH','HILL','WALL','GULLY'];
-  let tIdx = state.aiHand.findIndex(c =>
-    c && c.terrain && goodTerrain.indexOf(c.terrain.type) >= 0
-    && !(SH && SH.isCardDisabledAsTerrain(state.scenario, c, state.aiRole === 'attacker')));
-  if (tIdx < 0) return false;
-  // チャート（2026-11-08 ユーザーの指示）: 手札の地形のうち、一番守りのよいもの（修正の向きは建物の修正の符号で決める）
-  if (window.__inChart) {
-    const sgn = Math.sign(R.calcTerrainMod([{ terrain: { type: 'BUILDINGS' } }], false, {}) || -1);
-    let bestV = -Infinity;
-    state.aiHand.forEach((c, i) => {
-      if (!c || !c.terrain || goodTerrain.indexOf(c.terrain.type) < 0) return;
-      if (SH && SH.isCardDisabledAsTerrain(state.scenario, c, state.aiRole === 'attacker')) return;
-      const v = sgn * (R.calcTerrainMod([c], false, {}) || 0);
-      if (v > bestV) { bestV = v; tIdx = i; }
-    });
-  }
+  return c && c.terrain && goodTerrain.includes(c.terrain.type)
+    && !(SH && SH.isCardDisabledAsTerrain(state.scenario, c, state.aiRole === 'attacker'));
+}
+
+async function aiTryPlaceOwnTerrain(onlyGi) {
+  const R = window.INFANTRY_RULES;
 
   const acted = state.aiActedGroups || new Set();
-  let targetGi = -1;
+  const targets = [];
   // 最上が MOVEMENT のグループに地形を置く
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
     if (onlyGi != null && gi !== onlyGi) continue;
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const g = state.groups.ai[gi];
+    if (!g || g.eliminated || !g.cards.some(R.isAlive)) continue;
     if (g.terrain.length === 0) continue;
     const top = topIgnoringSmoke(g); // §13.23 移動カード上の煙幕は妨げにならない
     if (!top || !top.terrain || top.terrain.type !== 'MOVEMENT') continue;
-    // §8.22/8.42 涸れ谷・湿地は移動2枚必要。§8.53 河川は渡河に成功していればよい
+    // §8.22 涸れ谷は移動1枚、§8.42 湿地は2枚。§8.53 河川は渡河に成功していればよい
     if (R.canPlaceTerrainOnMarsh && !R.canPlaceTerrainOnMarsh(g)) continue;
     if (R.canPlaceTerrainOnGully && !R.canPlaceTerrainOnGully(g)) continue;
     if (R.canPlaceTerrainOnStream && !R.canPlaceTerrainOnStream(g)) continue;
-    targetGi = gi; break;
+    targets.push(gi);
   }
-  if (targetGi < 0) return false;
+  if (!targets.length) return false;
+  let best = null;
+  for (const [idx, c] of state.aiHand.entries()) {
+    if (!aiCanUseOwnTerrain(c)) continue;
+    const cover = window.__inChart ? -(R.calcTerrainMod([c], false, {}) || 0) : 0;
+    for (const gi of targets) {
+      const preference = aiOwnTerrainPreference(c.terrain.type, state.groups.ai[gi], gi);
+      if (preference < 0) continue;
+      if (!best || preference > best.preference || (preference === best.preference && cover > best.cover)) {
+        best = { idx, gi, preference, cover };
+      }
+    }
+  }
+  if (!best) return false;
+  const { idx: tIdx, gi: targetGi } = best;
 
   const grp = state.groups.ai[targetGi];
   // 下のカードを全て捨て札
@@ -2853,7 +2911,17 @@ function aiFindHarassPlay() {
     const t = aiHarassTargets(c.terrain.type);
     if (t.length) return { idx: i, gi: t[0] };
   }
-  return null;
+  // 味方の機動・突撃グループが安全に前進するために使えるなら、そちらに残す。
+  const gullyIdx = state.aiHand.findIndex(c => c && c.terrain && c.terrain.type === 'GULLY'
+    && !(SH && SH.isCardDisabledAsTerrain(state.scenario, c, state.aiRole === 'attacker')));
+  if (gullyIdx < 0) return null;
+  const R = window.INFANTRY_RULES;
+  const reserveGully = state.groups.ai.some((g, gi) => g && !g.eliminated
+    && g.cards.some(R.isAlive) && !g.cards.some(R.isPinned)
+    && !R.isInGully(g) && !R.hasTerrainType(g, 'WIRE') && aiGullyApproach(g, gi));
+  if (reserveGully) return null;
+  const gi = aiHarassTargets('GULLY').find(i => aiEnemyGullyTarget(state.groups.player[i], i));
+  return gi == null ? null : { idx: gullyIdx, gi };
 }
 /** 足止めの地形を置ける場面か（ターンの型を決める材料） */
 function aiHarassAvailable() { return !!aiFindHarassPlay(); }
@@ -3066,39 +3134,36 @@ function placeTerrainOnGroup(side, groupIdx, card, fromHand /* 'player'|'ai' */)
 
 function aiPlaceTerrain() {
   if (state.phase !== 'terrainPlacement' || state.terrainTurn !== 'ai') return;
-  const card = state.aiHand.find(isTerrainHandCard);
-  if (!card) { state.terrainDone.ai = true; tryAdvanceTerrainPhase(); return; }
-  // 防御に有利な地形 → 自軍に配置
-  const goodForSelf = ['WOODS','BUILDINGS','BRUSH','HILL','WALL','SMOKE','GULLY'];
   // 相手に不利な地形 → 相手に配置
   const badForEnemy = ['WIRE','STREAM','MARSH'];
   // 人工地形（初期配置では使えない、ゲーム中は既存地形の上にのみ）
   const artificial = ['SMOKE','WIRE','MINEFIELD'];
-  const type = card.terrain && card.terrain.type;
-
-  let targetSide, groups;
-  if (badForEnemy.indexOf(type) >= 0) {
-    targetSide = 'player';
-    groups = state.groups.player;
-  } else {
-    targetSide = 'ai';
-    groups = state.groups.ai;
-  }
-  if (!groups || groups.length === 0) { state.terrainDone.ai = true; tryAdvanceTerrainPhase(); return; }
-
-  // 置ける地形カード（人工地形・地雷原は初期配置では使えない §3.6）を順に試し、
-  // まだ地形のない（仮の平地だけの）グループに置けたら終わり。どれも置けなければ配置完了
+  const R = window.INFANTRY_RULES;
   const usable = state.aiHand.filter(c => isTerrainHandCard(c) && artificial.indexOf(c.terrain.type) < 0);
+  const plays = [];
   for (const c of usable) {
-    const side = badForEnemy.indexOf(c.terrain.type) >= 0 ? 'player' : 'ai';
-    const gs = state.groups[side] || [];
-    const cands = gs.map((g, i) => i).filter(i => {
-      const g = gs[i];
-      return g && !g.eliminated && !(g.terrain || []).some(x => !isDummyPlain(x));
-    }).sort(() => Math.random() - 0.5);
-    for (const gi of cands) {
-      if (placeTerrainOnGroup(side, gi, c, 'ai')) { tryAdvanceTerrainPhase(); return; }
+    const type = c.terrain.type;
+    const sides = type === 'GULLY' ? ['ai', 'player'] : [badForEnemy.includes(type) ? 'player' : 'ai'];
+    for (const side of sides) {
+      const gs = state.groups[side] || [];
+      const cands = gs.map((g, i) => i).filter(i => {
+        const g = gs[i];
+        return g && !g.eliminated && g.cards.some(R.isAlive) && !(g.terrain || []).some(x => !isDummyPlain(x));
+      }).sort(() => Math.random() - 0.5);
+      for (const gi of cands) {
+        const g = gs[gi];
+        const preference = side === 'ai' ? aiOwnTerrainPreference(type, g, gi) : 0;
+        if (preference < 0) continue;
+        const enemyGully = type === 'GULLY' && side === 'player';
+        if (enemyGully && !aiEnemyGullyTarget(g, gi)) continue;
+        plays.push({ side, gi, c, priority: preference * 2 + (enemyGully ? 1 : 0) });
+      }
     }
+  }
+  // 丘・ガリーの優先先があれば先に置き、残りは手札順。
+  plays.sort((a, b) => b.priority - a.priority);
+  for (const { side, gi, c } of plays) {
+    if (placeTerrainOnGroup(side, gi, c, 'ai')) { tryAdvanceTerrainPhase(); return; }
   }
   state.terrainDone.ai = true;
   tryAdvanceTerrainPhase();
@@ -3208,8 +3273,10 @@ async function chartTurn0(nat) {
     if (!n) return false;
     const pick = []; for (let k = 0; k < n; k++) { const j = Math.floor(Math.random() * cand.length); pick.push(cand.splice(j, 1)[0]); }
     pick.sort((a, b) => b.i - a.i).forEach(x => { const c = hand().splice(x.i, 1)[0]; pushTerrainToDiscard(c); });
+    state.aiDumpedThisTurn = true;
     state.aiHandCount = hand().length; renderHands();
     inc(label + `（${n}枚）`);
+    await showAIAction('AI: 捨て札 ' + n + '枚', null);
     return true;
   };
   // --- アクション ---
@@ -3291,6 +3358,7 @@ async function chartTurn0(nat) {
     ['塹壕', [aiTryTrench]],
   ];
   const ROW_HOLD = [
+    ['移動中がいれば有利な地形を置く', [() => aiTryPlaceOwnTerrain(), async () => state.isNight ? aiTryPlaceOwnPlain() : false]],
     ['塹壕', [aiTryTrench]],
     ['回復', [aiTryRally, aiTryHeroWound]],
     ['地雷原排除', [aiTryMineRemove]],
