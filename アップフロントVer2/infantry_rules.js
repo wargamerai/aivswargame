@@ -307,6 +307,8 @@
       // §12.1 移動射撃: 兵士火力は半減しない（基礎射撃力で半減）
       if (opts.moving) {
         if (def.weaponCat.indexOf('中機関銃') === 0) fp = 0;
+        // §12.12 対戦車ライフルは移動中に射撃できない。
+        if (def.weaponCat.startsWith('対戦車ライフル')) fp = 0;
         // 軽機関銃は移動中、クルー無しは 0、クルーがいても () 内火力を使用
         if (def.weaponCat.indexOf('軽機関銃') === 0) {
           if (!hasAssistant) fp = 0;

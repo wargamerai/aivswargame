@@ -34,11 +34,15 @@ function soldierImgPath(faction, num) {
   return { dir: '', prefix: '' };
 }
 
-/** "5" → {main:5}, "5[2]" → {main:5, noCrew:2}, "NA" → {na:true} */
-function parseRangeValue(s) {
+/** "5[2]" は通常火力と単独火力。対戦車ライフルの "4/1" は命中値と対歩兵火力。 */
+function parseRangeValue(s, weaponCat = '') {
   if (!s) return { main: 0 };
   const t = String(s).trim();
   if (t === 'NA' || t.indexOf('NA') === 0) return { na: true };
+  if (weaponCat.startsWith('対戦車ライフル')) {
+    const atr = t.match(/^(\d+)\/(\d+)$/);
+    if (atr) return { toHit: Number(atr[1]), main: Number(atr[2]) };
+  }
   const m = t.match(/^([0-9\-]+)\s*\[\s*([0-9\-]+)\s*\]/);
   if (m) {
     return { main: parseInt(m[1], 10) || 0, noCrew: parseInt(m[2], 10) || 0 };
@@ -56,8 +60,9 @@ function parseSoldierCSV(text, faction) {
     const num = parseInt(c[0], 10);
     if (!num) return;
     const { dir, prefix } = soldierImgPath(faction, num);
+    const weaponCat = c[5] || '';
     const rangeArr = [c[8], c[9], c[10], c[11], c[12], c[13]];
-    const rangeData = rangeArr.map(parseRangeValue);
+    const rangeData = rangeArr.map(value => parseRangeValue(value, weaponCat));
     const needsCrew = rangeData.some(rd => rd.noCrew != null);
     const card = {
       num,
@@ -65,7 +70,7 @@ function parseSoldierCSV(text, faction) {
       name:       c[2] || '',
       ccvFront:   c[3] || '',
       leader:     c[4] || '',
-      weaponCat:  c[5] || '',
+      weaponCat,
       xVal:       c[6] || '',
       weaponName: c[7] || '',
       range: rangeArr,
