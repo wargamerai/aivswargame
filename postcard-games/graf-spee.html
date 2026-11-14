@@ -595,6 +595,18 @@ const caption=f=>tr(f.type)+' '+(f.id+1);
 const button=(txt,fn,{main=false,disabled=false}={})=>{const b=document.createElement('button');b.textContent=txt;b.onclick=fn;b.disabled=disabled;if(main)b.className='main';return b};
 const remaining=()=>state.limit-state.moved.length;
 const current=()=>state.fleet.find(f=>f.id===selected);
+const canPlanRaid=()=>!state.contact&&!state.tracked&&state.lastCautiousRaid!==state.turn-1;
+const raidRiskLimit=()=>state.damage?0:3;
+function britishExposure(h,patrols){
+ return patrols.reduce((risk,{ship,range})=>{
+  if(ship.type==='DUMMY')return risk;
+  if(ship.type==='CV')return risk+([...range].some(k=>adj(k).includes(h))?3:0)
+   +(adj(ship.pos).includes(h)?2:0);
+  const weight=ship.type==='BB'?5:2;
+  return risk+(range.has(h)?weight:0)+(ship.pos===h?weight:0);
+ },0);
+}
+const britishPatrols=()=>state.fleet.filter(game.onMap).map(ship=>({ship,range:game.britMoves(ship)}));
 function reset(){
  clearInterval(battleTimer);for(const id of ['battleDialog','endDialog'])if($(id).open)$(id).close();
  state=game.setup();selected=null;showGerman=false;
@@ -603,18 +615,12 @@ function reset(){
  begin();
 }
 function begin(){
- const f=state.fleet.filter(game.onMap);
  const normal=game.sailing(state,false);
- const patrols=f.map(v=>({ship:v,range:game.britMoves(v)}));
+ const patrols=britishPatrols();
  const danger=h=>patrols.reduce((n,{ship:v,range})=>n+(v.pos===h?(v.type==='DUMMY'?1:6+types[v.type].power*.55):range.has(h)?(v.type==='DUMMY'?.15:1.25):v.type==='CV'&&adj(v.pos).includes(h)?1:0),0);
  const cautious=germanStyle==='cautious';
- const exposure=h=>patrols.reduce((risk,{ship,range})=>{
-  if(ship.type==='DUMMY')return risk;
-  if(ship.type==='CV')return risk+([...range].some(k=>adj(k).includes(h))?3:0)
-   +(adj(ship.pos).includes(h)?2:0);
-  const weight=ship.type==='BB'?5:2;
-  return risk+(range.has(h)?weight:0)+(ship.pos===h?weight:0);
- },0);
+ const exposure=h=>britishExposure(h,patrols);
+ state.plannedRaid=false;
  const escape=game.escapePlan(state,h=>cautious?exposure(h)*2:danger(h)*(state.damage?.75:.45));
  if(escape?.next){
   if(escape.goal==='E1'&&state.pos==='E1')game.scuttle(state);
@@ -625,10 +631,13 @@ function begin(){
   const supplied=game.sailing(state,true);
   const choices=[...supplied].filter(h=>all[h]);
   const unusedRoute=h=>raids.has(h)&&!state.usedRoutes.includes(h);
-  const score=h=>(unusedRoute(h)?6:h.endsWith('1')?-2:1)
-   -(h===state.pos&&state.turn>1?2:0)-(!normal.has(h)?2:0);
-  choices.sort((a,b)=>exposure(a)-exposure(b)||score(b)-score(a));
-  const next=choices[0];
+  const seekRaid=canPlanRaid();
+  const goodRaid=h=>seekRaid&&!h.endsWith('1')&&exposure(h)<=raidRiskLimit();
+  const score=h=>(goodRaid(h)?(unusedRoute(h)?8:5):0)-exposure(h)*1.5
+   -(h===state.pos&&state.turn>1?2:0)-(!normal.has(h)?2:0)+Math.random()*.8;
+  const ranked=choices.map(h=>({h,value:score(h)})).sort((a,b)=>b.value-a.value);
+  const next=ranked[0].h;
+  state.plannedRaid=goodRaid(next);
   game.go(state,next,!normal.has(next));render();return;
  }
  const best=[...normal].map(h=>{
@@ -648,7 +657,12 @@ function afterSearch(){
  if(state.stage==='raid')resolveRaid();else render();
 }
 function resolveRaid(){
- if(!game.raid(state)){
+ const cautious=germanStyle==='cautious';
+ const raidAllowed=!cautious||(state.plannedRaid&&canPlanRaid()
+  &&britishExposure(state.pos,britishPatrols())<=raidRiskLimit());
+ if(raidAllowed&&game.raid(state)){
+  if(cautious)state.lastCautiousRaid=state.turn;
+ }else{
   state.tracked=false;state.results=null;state.stage='result';
   game.note(state,'noContact');
  }

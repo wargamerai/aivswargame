@@ -47,6 +47,9 @@ const assets={"map": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAM
 const languages={ja:'日本語',en:'English',fr:'Français',de:'Deutsch',it:'Italiano',es:'Español',zh:'简体中文',ko:'한국어',ru:'Русский'};
 const localeRows={}
 for(const row of `
+germanStyle|ドイツAI|German AI|IA allemande|Deutsche KI|IA tedesca|IA alemana|德国 AI|독일 AI|Немецкий ИИ
+aggressive|攻勢|Aggressive|Offensive|Offensiv|Offensiva|Ofensiva|进攻型|공격형|Наступательная
+cautious|慎重|Cautious|Prudente|Vorsichtig|Prudente|Prudente|谨慎型|신중형|Осторожная
 title|シュペー号追撃戦|Pursuit of the Graf Spee|La poursuite du Graf Spee|Jagd auf die Graf Spee|La caccia alla Graf Spee|La persecución del Graf Spee|追击施佩伯爵号|그라프 슈페 추격전|Погоня за «Графом Шпее»
 language|言語|Language|Langue|Sprache|Lingua|Idioma|语言|언어|Язык
 roles|イギリス：人間 ／ ドイツ：AI|Britain: player / Germany: AI|Royaume-Uni : joueur / Allemagne : IA|Briten: Spieler / Deutschland: KI|Regno Unito: giocatore / Germania: IA|Reino Unido: jugador / Alemania: IA|英国：玩家 ／ 德国：AI|영국: 플레이어 / 독일: AI|Британия: игрок / Германия: ИИ
@@ -254,13 +257,20 @@ const carrier=f=>['Victorious','Ark'].includes(f.name),dice=()=>1+Math.floor(Mat
 let s,selected,eventTimer;
 function reset(){
  clearInterval(eventTimer);for(const id of ['actionDialog','endDialog'])if($(id).open)$(id).close();
- s={turn:1,phase:'setup',pos:null,ge:4,gv:0,bv:0,trail:[],voyage:[],moves:[],seen:null,tracked:[],enabled:[],moved:[],scanned:[],air:[],log:[],fleet:seeds.map(([name,a,d,v,h,where],id)=>({name,a,d,v,h,max:h,where,id}))};
+ s={turn:1,lastConvoyRaid:null,plannedConvoy:false,phase:'setup',pos:null,ge:4,gv:0,bv:0,trail:[],voyage:[],moves:[],seen:null,tracked:[],enabled:[],moved:[],scanned:[],air:[],log:[],fleet:seeds.map(([name,a,d,v,h,where],id)=>({name,a,d,v,h,max:h,where,id}))};
  selected=null;render();
 }
 function log(...event){s.log.unshift({turn:s.turn,event});s.voyage.at(-1)?.events.push(event)}
 function startAI(){
  s.pos=['A5','A6','B7'][Math.floor(Math.random()*3)];orders();
 }
+function convoyThreat(h){
+ return live().filter(f=>unlocked(f)&&f.name!=='Dummy').some(f=>{
+  const moves=reach(f.where,f.v);
+  return moves.has(h)||(carrier(f)&&[...moves].some(to=>adj(to).includes(h)));
+ });
+}
+const mayRaidConvoy=()=>!s.tracked.length&&s.lastConvoyRaid!==s.turn-1;
 function orders(){
  s.moved=[];s.moves=[];s.air=[];s.scanned=[];s.seen=null;
  const patrols=live().filter(unlocked).map(f=>{
@@ -276,17 +286,19 @@ function orders(){
  const distance=paths('F7',Object.keys(locations).length,mayEnter);
  const canWin=s.gv>=6||s.gv>s.bv;
  const home=s.gv>=6||canWin&&(s.ge<=2||s.turn>=12)||s.turn>=16;
+ const seekingConvoy=!home&&mayRaidConvoy();
  const convoyDistance=new Map();
- for(const h of routes)if(mayEnter(h)&&danger(h)<4){
+ for(const h of routes)if(seekingConvoy&&mayEnter(h)&&!convoyThreat(h)){
   for(const [q,p] of paths(h,6,mayEnter))if(p.length-1<(convoyDistance.get(q)??Infinity))convoyDistance.set(q,p.length-1);
  }
  const possible=paths(s.pos,geSpeed(),mayEnter);
  const destination=[...possible.keys()].map(h=>{
   const risk=danger(h),d=(distance.get(h)?.length??13)-1;
-  const raid=routes.has(h)?4:0,nextRaid=convoyDistance.get(h)??6;
-  const value=raid-risk*(s.ge<=2?1.7:1.15)-d*(home?3.6:.09)-nextRaid*(home?.18:1.2)-(h===s.pos?.5:0)+Math.random()*.9;
+  const raid=convoyDistance.get(h)===0?3:0,nextRaid=convoyDistance.get(h)??6;
+  const value=raid-risk*(s.ge<=2?2.3:1.8)-d*(home?3.6:.09)-(seekingConvoy?nextRaid*.45:0)+Math.random()*.7;
   return [h,value+(h==='F7'&&canWin?(home?26:8):0)];
  }).sort((a,b)=>b[1]-a[1])[0][0];
+ s.plannedConvoy=seekingConvoy&&convoyDistance.get(destination)===0;
  commitMove(possible.get(destination));
 }
 const geSpeed=()=>s.ge>=3?2:1;
@@ -394,7 +406,8 @@ function finishTurn(){
 function convoy(){
  if(s.phase!=='convoy'||$('actionDialog').open)return;
  const rows=[];
- if(routes.has(s.pos)){
+ if(routes.has(s.pos)&&s.plannedConvoy&&mayRaidConvoy()&&!s.seen&&!convoyThreat(s.pos)){
+  s.lastConvoyRaid=s.turn;
   const n=dice(),vp=n===6?2:n>=4?1:0;s.gv+=vp;
   const revealed=n===2||n===3||n===6;
   if(revealed)s.seen=s.pos;
