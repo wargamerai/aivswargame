@@ -361,12 +361,13 @@ function buildTerrainStack(group) {
     }
     const img = document.createElement('img');
     img.src = card.img;
-    // 涸れ谷/湿地/河川からの最初の移動カードは横向き表示（§8.22/§8.4/§8.53）
+    // 湿地・河川からの最初の移動は、向きの記録がない旧セーブでも横向きに表示する。
     const prevCard = i > 0 ? group.terrain[i - 1] : null;
     const isFirstMoveFromSpecial = card.terrain && card.terrain.type === 'MOVEMENT' &&
-      prevCard && prevCard.terrain && (prevCard.terrain.type === 'GULLY' || prevCard.terrain.type === 'MARSH' || prevCard.terrain.type === 'STREAM');
+      prevCard && prevCard.terrain && (prevCard.terrain.type === 'MARSH' || prevCard.terrain.type === 'STREAM');
     const lateral = card._moveMode === 'lateral' || isFirstMoveFromSpecial;
-    const transform = lateral ? 'translateX(-50%) rotate(90deg)' : 'translateX(-50%)';
+    const angle = lateral ? 90 : (card._moveMode === 'retreat' ? 180 : 0);
+    const transform = `translateX(-50%) rotate(${angle}deg)`;
     img.style.cssText = 'position:absolute;left:50%;transform:' + transform + ';width:80px;border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,0.5);top:' + (i * offset) + 'px;z-index:' + i + ';';
     img.onerror = () => { img.style.display = 'none'; };
     box.appendChild(img);

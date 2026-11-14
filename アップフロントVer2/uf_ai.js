@@ -1885,15 +1885,14 @@ async function aiTryMove(opts) {
       if (R.isInStream(g) && R.hasCrossedStream(g)) { bestIdx = i; moveMode = 'advance'; break; }
     }
   }
-  // 2. 湿地/涸れ谷の1枚目: 横移動強制（移動カード0枚の場合のみ）
+  // 2. 湿地の1枚目: 横移動強制（移動カード0枚の場合のみ）
   if (bestIdx < 0) {
     for (let i = 0; i < state.groups.ai.length; i++) {
       if (isSkipped(i)) continue;
       const g = state.groups.ai[i];
       if (R.isInStream(g)) continue;
       const inMarshFirst = R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0;
-      const inGullyFirst = R.isInGully && R.isInGully(g) && R.gullyMoveCount && R.gullyMoveCount(g) === 0;
-      if (inMarshFirst || inGullyFirst) {
+      if (inMarshFirst) {
         bestIdx = i; moveMode = 'lateral'; break;
       }
     }
@@ -1915,7 +1914,6 @@ async function aiTryMove(opts) {
       const g = state.groups.ai[i];
       if (R.isInStream(g) && !R.hasCrossedStream(g)) continue;
       if (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0) continue;
-      if (R.isInGully && R.isInGully(g) && R.gullyMoveCount && R.gullyMoveCount(g) === 0) continue;
       const opp = state.groups.player[i];
       const front = opp && !opp.eliminated && opp.cards.some(c => R.isAlive(c));
       if (front && R.isBlocked && R.isBlocked(g, opp)) continue;
@@ -1944,9 +1942,8 @@ async function aiTryMove(opts) {
       const g = state.groups.ai[i];
       // 河川は未渡河なら除外
       if (R.isInStream(g) && !R.hasCrossedStream(g)) continue;
-      // 湿地/涸れ谷で移動カード0枚（=1枚目）のグループは前進不可（横移動強制）
+      // 湿地で移動カード0枚（=1枚目）のグループは前進不可（横移動強制）
       if (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0) continue;
-      if (R.isInGully && R.isInGully(g) && R.gullyMoveCount && R.gullyMoveCount(g) === 0) continue;
       const opposing = state.groups.player[i];
       if (opposing && R.isBlocked && R.isBlocked(g, opposing)) continue;
       const { eff, closest } = fireNow(g, i);
@@ -1974,7 +1971,7 @@ async function aiTryMove(opts) {
   state.aiHand.splice(moveIdx, 1);
   state.aiHandCount = state.aiHand.length;
   renderField('ai'); renderHands();
-  await showAIAction(inEscapeTerrain ? 'AI: 横移動（脱出）' : 'AI: 移動', moveCard, bestIdx);
+  await showAIAction(inEscapeTerrain && moveMode === 'lateral' ? 'AI: 横移動（脱出）' : 'AI: 移動', moveCard, bestIdx);
   acted.add(bestIdx);
   return true;
 }
@@ -2442,11 +2439,10 @@ async function aiTryRetreatFromCC() {
     const g = state.groups.ai[gi];
     if (!g || g.eliminated) continue;
     if (window.__inChart ? !chartRetreatThreat(gi) : !aiCCThreat(gi, true)) continue;
-    // プレイヤーの後退と同じ制限: ピン状態の兵がいる・鉄条網・地雷原・トーチカ・河川/涸れ谷/湿地の1枚目・移送中は後退しない
+    // プレイヤーの後退と同じ制限: ピン状態の兵がいる・鉄条網・地雷原・トーチカ・河川/湿地の1枚目・移送中は後退しない
     if (g.cards.some(c => R.isAlive(c) && R.isPinned(c))) continue;
     if (R.hasTerrainType && (R.hasTerrainType(g, 'WIRE') || R.hasTerrainType(g, 'MINEFIELD') || R.hasTerrainType(g, 'PILLBOX'))) continue;
     if ((R.isInStream && R.isInStream(g) && R.streamMoveCount && R.streamMoveCount(g) === 0)
-      || (R.isInGully && R.isInGully(g) && R.gullyMoveCount && R.gullyMoveCount(g) === 0)
       || (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0)) continue;
     if (typeof groupInTransfer === 'function' && groupInTransfer('ai', gi)) continue;
     // §5.51 一番近い敵との相対距離が 0より小さくなる後退は不可。距離チットがマイナスになるのは赤の RNC の移動カードだけ
@@ -3240,7 +3236,7 @@ async function chartTurn0(nat) {
       if (rangeOf(g) < 4) continue;
       if (g.cards.some(c => R.isAlive(c) && R.isPinned(c))) continue;
       if (R.hasTerrainType && (R.hasTerrainType(g, 'WIRE') || R.hasTerrainType(g, 'MINEFIELD'))) continue;
-      if ((R.isInStream && R.isInStream(g)) || (R.isInGully && R.isInGully(g) && R.gullyMoveCount && R.gullyMoveCount(g) === 0) || (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0)) continue;
+      if ((R.isInStream && R.isInStream(g)) || (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0)) continue;
       const card = hand()[mi]; const nd = g.distance - 1;
       const es = enemies(); if (es.length && Math.min(...es.map(e => nd + (e.distance || 0))) < 0) continue;
       if (nd < 0 && !(card.terrain && card.terrain.rncColor === '赤')) continue;

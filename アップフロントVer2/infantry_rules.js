@@ -619,7 +619,7 @@
   }
 
   /**
-   * §8.22 涸れ谷上に地形カードを置けるか（移動1枚の上に置ける。1枚目は横移動で距離は変わらない）
+   * §8.22 涸れ谷上に地形カードを置けるか（向きにかかわらず、移動カード1枚の上に置ける）
    */
   function canPlaceTerrainOnGully(group) {
     if (!isInGully(group)) return true;

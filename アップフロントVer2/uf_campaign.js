@@ -604,14 +604,12 @@ function showMoveDirectionModal(grp, card, cardIdx) {
     updateDecideBtn();
   }
 
-  // §8.53 河川 / §8.22 涸れ谷 / §8.42 湿地: 1枚目の移動カードは横向き強制（2枚目以降は自由）
+  // §8.53 河川 / §8.42 湿地: 1枚目の移動カードは横向き強制（2枚目以降は自由）
   const R_move = window.INFANTRY_RULES;
   const inStream = R_move && R_move.isInStream(grp);
-  const inGully = R_move && R_move.isInGully && R_move.isInGully(grp);
   const inMarsh = R_move && R_move.isInMarsh && R_move.isInMarsh(grp);
   let _firstMoveOnSpecial = false;
   if (inStream && R_move.streamMoveCount && R_move.streamMoveCount(grp) === 0) _firstMoveOnSpecial = true;
-  if (inGully && R_move.gullyMoveCount && R_move.gullyMoveCount(grp) === 0) _firstMoveOnSpecial = true;
   if (inMarsh && R_move.marshMoveCount && R_move.marshMoveCount(grp) === 0) _firstMoveOnSpecial = true;
   // §17.8 移送中（送り出し・受け取り待ち）のグループは距離チットを動かせない（横移動だけ）
   const _gp = _groupSideIdx(grp);
