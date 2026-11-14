@@ -26,7 +26,7 @@ select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;bo
 @media(max-width:520px){.voyage-report li{grid-template-columns:minmax(0,1fr) auto;gap:3px 8px}.voyage-report .leg-turn{grid-column:1/-1}.voyage-report .leg-events{grid-column:1/-1}}
 </style>
 <main>
-<header><h1 data-text="title">シュペー号追撃戦</h1><span class="sides" data-text="roles">イギリス：人間 ／ ドイツ：AI</span><button id="help" data-text="rules">ルール</button><button id="restart" data-text="restart">やり直す</button><div class="language-controls"><select id="language" aria-label="言語"></select><button id="inspectGerman" type="button" aria-pressed="false">ドイツ軍を確認：オフ</button></div></header>
+<header><h1 data-text="title">シュペー号追撃戦</h1><span class="sides" data-text="roles">イギリス：人間 ／ ドイツ：AI</span><label><span data-text="germanStyle">ドイツAI</span> <select id="germanStyle"><option value="aggressive" data-text="aggressive">攻勢</option><option value="cautious" data-text="cautious">慎重</option></select></label><button id="help" data-text="rules">ルール</button><button id="restart" data-text="restart">やり直す</button><div class="language-controls"><select id="language" aria-label="言語"></select><button id="inspectGerman" type="button" aria-pressed="false">ドイツ軍を確認：オフ</button></div></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span data-text="points">ドイツ得点</span> <span id="score"></span></span><div id="actions"></div></div>
 <p id="hint"></p>
 <div class="layout">
@@ -55,6 +55,9 @@ const assets={"map": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAI
 const languages={ja:'日本語',en:'English',fr:'Français',de:'Deutsch',it:'Italiano',es:'Español',zh:'简体中文',ko:'한국어',ru:'Русский'};
 const localeRows={}
 for(const row of `
+germanStyle|ドイツAI|German AI|IA allemande|Deutsche KI|IA tedesca|IA alemana|德国 AI|독일 AI|Немецкий ИИ
+aggressive|攻勢|Aggressive|Offensive|Offensiv|Offensiva|Ofensiva|进攻型|공격형|Наступательная
+cautious|慎重|Cautious|Prudente|Vorsichtig|Prudente|Prudente|谨慎型|신중형|Осторожная
 title|シュペー号追撃戦|Pursuit of the Graf Spee|La poursuite du Graf Spee|Jagd auf die Graf Spee|La caccia alla Graf Spee|La persecución del Graf Spee|追击施佩伯爵号|그라프 슈페 추격전|Погоня за «Графом Шпее»
 language|言語|Language|Langue|Sprache|Lingua|Idioma|语言|언어|Язык
 roles|イギリス：人間 ／ ドイツ：AI|Britain: player / Germany: AI|Royaume-Uni : joueur / Allemagne : IA|Briten: Spieler / Deutschland: KI|Regno Unito: giocatore / Germania: IA|Reino Unido: jugador / Alemania: IA|英国：玩家 ／ 德国：AI|영국: 플레이어 / 독일: AI|Британия: игрок / Германия: ИИ
@@ -582,6 +585,8 @@ function downloadVoyage(state,report,style){
 const $=id=>document.getElementById(id);
 const {all,ids,starts,raids,types,adj,d6}=game;
 let state,selected,battleTimer,showGerman=false;
+let germanStyle='aggressive';
+try{if(localStorage.getItem('spee-ai-style')==='cautious')germanStyle='cautious'}catch{}
 const searchReady=f=>game.searchTargets(state,f).length>0;
 const searchedCount=()=>game.airAttackers(state).length;
 const searchAction=()=>state.contact?tr('air'):tr('search');
@@ -602,11 +607,29 @@ function begin(){
  const normal=game.sailing(state,false);
  const patrols=f.map(v=>({ship:v,range:game.britMoves(v)}));
  const danger=h=>patrols.reduce((n,{ship:v,range})=>n+(v.pos===h?(v.type==='DUMMY'?1:6+types[v.type].power*.55):range.has(h)?(v.type==='DUMMY'?.15:1.25):v.type==='CV'&&adj(v.pos).includes(h)?1:0),0);
- const escape=game.escapePlan(state,h=>danger(h)*(state.damage?.75:.45));
+ const cautious=germanStyle==='cautious';
+ const exposure=h=>patrols.reduce((risk,{ship,range})=>{
+  if(ship.type==='DUMMY')return risk;
+  if(ship.type==='CV')return risk+([...range].some(k=>adj(k).includes(h))?3:0)
+   +(adj(ship.pos).includes(h)?2:0);
+  const weight=ship.type==='BB'?5:2;
+  return risk+(range.has(h)?weight:0)+(ship.pos===h?weight:0);
+ },0);
+ const escape=game.escapePlan(state,h=>cautious?exposure(h)*2:danger(h)*(state.damage?.75:.45));
  if(escape?.next){
   if(escape.goal==='E1'&&state.pos==='E1')game.scuttle(state);
   else game.go(state,escape.next,!normal.has(escape.next));
   render();return;
+ }
+ if(cautious){
+  const supplied=game.sailing(state,true);
+  const choices=[...supplied].filter(h=>all[h]);
+  const unusedRoute=h=>raids.has(h)&&!state.usedRoutes.includes(h);
+  const score=h=>(unusedRoute(h)?6:h.endsWith('1')?-2:1)
+   -(h===state.pos&&state.turn>1?2:0)-(!normal.has(h)?2:0);
+  choices.sort((a,b)=>exposure(a)-exposure(b)||score(b)-score(a));
+  const next=choices[0];
+  game.go(state,next,!normal.has(next));render();return;
  }
  const best=[...normal].map(h=>{
   if(!all[h])return [h,state.damage&&state.score>=12?2:-Infinity];
@@ -806,6 +829,7 @@ function render(){
  for(const node of document.querySelectorAll('[data-text]'))node.textContent=tr(node.dataset.text);
  document.documentElement.lang=locale;document.title=tr('title');
  $('language').setAttribute('aria-label',tr('language'));
+ $('germanStyle').setAttribute('aria-label',tr('germanStyle'));
  $('mapView').setAttribute('aria-label',tr('map'));
  $('chart').alt=tr('map');$('ruleSheet').alt=tr('rules');
  const {stage}=state;
@@ -864,6 +888,11 @@ function render(){
 for(const [code,name] of Object.entries(languages))$('language').append(new Option(name,code));
 $('language').value=locale;
 $('language').onchange=()=>{locale=$('language').value;try{localStorage.setItem(localeStorageKey,locale)}catch{}render();renderRules()};
+$('germanStyle').value=germanStyle;
+$('germanStyle').onchange=()=>{
+ germanStyle=$('germanStyle').value;
+ try{localStorage.setItem('spee-ai-style',germanStyle)}catch{}
+};
 $('chart').src=assets.map;
 $('ruleSheet').src=assets.rules;
 $('help').onclick=()=>{renderRules();$('rules').showModal()};
