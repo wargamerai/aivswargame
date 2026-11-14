@@ -11,7 +11,7 @@
 
 let _aiActionQueue = Promise.resolve();
 let _lastActingGroupIdx = null;
-function showAIAction(text, cards, groupIdx) {
+function showAIAction(text, cards, groupIdx, fireSummary) {
   try { ufReportLog('ai', text, 'ai'); } catch (e) {}
   // グループが切り替わったら中継オーバーレイを挟む（カード非表示・テキストのみ）
   if (groupIdx != null && groupIdx !== _lastActingGroupIdx) {
@@ -21,11 +21,11 @@ function showAIAction(text, cards, groupIdx) {
     _aiActionQueue = sep.catch(() => {});
   }
   _lastActingGroupIdx = (groupIdx != null) ? groupIdx : _lastActingGroupIdx;
-  const next = _aiActionQueue.then(() => _showAIActionImpl(text, cards));
+  const next = _aiActionQueue.then(() => _showAIActionImpl(text, cards, fireSummary));
   _aiActionQueue = next.catch(() => {});
   return next;
 }
-function _showAIActionImpl(text, cards) {
+function _showAIActionImpl(text, cards, fireSummary) {
   return new Promise(resolve => {
     // 手番オーバーレイが消えてから表示
     const turnOv = document.getElementById('turn-overlay');
@@ -44,7 +44,14 @@ function _showAIActionImpl(text, cards) {
     ov.appendChild(label);
     const cardList = Array.isArray(cards) ? cards : (cards ? [cards] : []);
     const valid = cardList.filter(c => c && c.img);
-    if (valid.length > 0) {
+    if (fireSummary) {
+      ov.style.width = 'max-content';
+      ov.style.maxWidth = 'calc(100vw - 24px)';
+      ov.style.maxHeight = '80vh';
+      ov.style.overflowY = 'auto';
+      ov.style.boxSizing = 'border-box';
+      ov.appendChild(buildFireStrengthPreview(valid, fireSummary, true));
+    } else if (valid.length > 0) {
       const row = document.createElement('div');
       const stacked = valid.length >= 4;
       row.style.cssText = stacked
@@ -1409,19 +1416,28 @@ function aiPerformFire(plan) {
   if (_effNight) strengthMods.push(`夜間半減 -${strengthAfterMove - strengthAfterNight}`);
   if (state.isNight && _tgtFlaredAI) strengthMods.push('照明弾で照らされている ・ 夜間半減なし');
   if (pillboxHalf) strengthMods.push(`トーチカとの射撃半減 -${strengthAfterNight - baseStrength}`);
+  const japanRuleMod = isJapanInGame() ? -1 : 0;
+  const mods = strengthMods.slice();
+  atkBreakdown.forEach(x => {
+    const label = x.type === 'MOVEMENT' ? '攻撃側移動カード' : `攻撃側 ${x.type}`;
+    mods.push(`${label} ${_sgn(x.mod)}`);
+  });
+  defBreakdown.forEach(x => {
+    const label = x.type === 'MOVEMENT' ? '防御側移動カード' : `防御側 ${x.type}`;
+    mods.push(`${label} ${_sgn(x.mod)}`);
+  });
+  if (japanRuleMod) mods.push(`日本ルール ${_sgn(japanRuleMod)}`);
+  const unConcealedStrength = baseStrength + atkMod + defMod + japanRuleMod;
+  const fireCards = [plan.card, ...(plan.extras || []).map(ex => ex.card)].filter(Boolean);
 
   // §10.4 攻撃の解決前にヒーローでピン状態の兵士を回復できる → その後、隠蔽カード選択（§9.5 トーチカは不可）
-  {
-    const _jpMod = isJapanInGame() ? -1 : 0;
-    const _total = baseStrength + atkMod + defMod + _jpMod;
-    const _lines = [`攻撃の火力 ${_total}（射撃カード ${baseStrength}・攻撃側の地形 ${_sgn(atkMod)}・防御側の地形 ${_sgn(defMod)}${_jpMod ? '・日本軍 -1' : ''}）`];
-    if (strengthMods.length) _lines.push(`射撃カード ${rawBaseStrength} → ${baseStrength}（${strengthMods.join('、')}）`);
-    _lines.push(`距離 ${plan.dist}`);
-    _lines.push('隠蔽カードを使うと、その数字だけ火力が下がります');
-    setIncomingAttack({ si: plan.si, ti: plan.ti, lines: _lines,
-      cards: [plan.card].concat((plan.extras || []).map(ex => ex.card)),
-      title: `敵の GROUP ${src.name} が あなたの GROUP ${tgt.name} を射撃します` });
-  }
+  setIncomingAttack({
+    si: plan.si, ti: plan.ti,
+    title: `敵の GROUP ${src.name} が あなたの GROUP ${tgt.name} を射撃します`,
+    cards: fireCards,
+    fireSummary: { raw: rawBaseStrength, mods, total: unConcealedStrength },
+    lines: [`距離 ${plan.dist}`, '隠蔽カードを使うと、その数字だけ火力が下がります'],
+  });
   askPlayerHeroRally(tgt).then(() => canUseConcealment(tgt) ? askPlayerConcealment() : []).then(async concealCards => {
     clearIncomingAttack();
     const concealMod = getConcealMod(concealCards);
@@ -1432,7 +1448,6 @@ function aiPerformFire(plan) {
     // §17.4 側面射撃: 手動設定フラグ参照。§17.612 包囲下は自動で側面射撃扱い
     // 火力倍化は兵士火力（calcGroupFirepower）側で適用済み。基礎射撃力は変えない
     const isFlankFireNow = !tgt.eliminated && isFlankFire('ai', plan.si, plan.ti);
-    const japanRuleMod = isJapanInGame() ? -1 : 0;
     // HERO 使用時のボーナス
     let heroBonus = 0;
     if (plan.useHero && plan.heroIdx != null && plan.heroIdx >= 0) {
@@ -1454,7 +1469,7 @@ function aiPerformFire(plan) {
       }
     }
     // §10.45 英雄カード：必要火力の判定にのみ加算（基礎火力は変えない）
-    let baseFP = baseStrength + atkMod + defMod + concealMod + gullyMod + marshDefMod + aiInfShift + japanRuleMod;
+    const baseFP = unConcealedStrength + concealMod + gullyMod + marshDefMod + aiInfShift;
     // ===== DEBUG LOG =====
     try {
       console.log('[FIRE-AI exec] card="'+plan.card.terrain.type+'" range='+plan.card.terrain.range+' sub="'+plan.card.terrain.sub+'"'
@@ -1470,14 +1485,13 @@ function aiPerformFire(plan) {
 
     const results = [];
     let lastJudge = null;
-    let finalFP = 0;
     const _targets = attackTargetsOf(tgt); // §17.8 移送中の兵士も目標
     state._malfStopAttack = false;
     for (let ci = 0; ci < _targets.length; ci++) {
       if (state._malfStopAttack) break; // §19.11 残りの防御側の攻撃は解決しない
       const card = _targets[ci];
       if (!R.isAlive(card)) continue;
-      finalFP = baseFP + malfuncMod + transitFireBonus(card); // §17.8 移送中 +2
+      const finalFP = baseFP + malfuncMod + transitFireBonus(card); // §17.8 移送中 +2
       const judge = drawTerrainCard();
       if (!judge) continue;
       lastJudge = judge;
@@ -1553,26 +1567,12 @@ function aiPerformFire(plan) {
     src.firedFPThisTurn = (src.firedFPThisTurn || 0) + (plan.totalNeed != null ? plan.totalNeed : plan.need);
     if (window.AFV) window.AFV.boxedAfterFire(src, tgt, plan.totalNeed != null ? plan.totalNeed : plan.need, baseFP); // §28.7 オープントップへ、同じカードでもう一度
 
-    const mods = strengthMods.slice();
-    if (isFlankFireNow) mods.push('側面射撃(兵士火力×2)');
-    atkBreakdown.forEach(x => {
-      const label = x.type === 'MOVEMENT' ? '攻撃側移動カード' : `攻撃側 ${x.type}`;
-      mods.push(`${label} ${x.mod>=0?'+':''}${x.mod}`);
-    });
-    defBreakdown.forEach(x => {
-      const label = x.type === 'MOVEMENT' ? '防御側移動カード' : `防御側 ${x.type}`;
-      mods.push(`${label} ${x.mod>=0?'+':''}${x.mod}`);
-    });
-    if (concealMod) mods.push(`隠蔽${concealMod>=0?'+':''}${concealMod}`);
-    if (malfuncMod) mods.push(`故障${malfuncMod>=0?'+':''}${malfuncMod}`);
-    if (gullyMod) mods.push(`涸れ谷${gullyMod>=0?'+':''}${gullyMod}`);
-    if (marshDefMod) mods.push(`湿地防御${marshDefMod>=0?'+':''}${marshDefMod}`);
-    if (aiInfShift) mods.push(`AI侵入シフト${aiInfShift>=0?'+':''}${aiInfShift}`);
-    if (japanRuleMod) mods.push(`日本ルール ${japanRuleMod>=0?'+':''}${japanRuleMod}`);
-    const title = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 基礎射撃力${rawBaseStrength}<br/>修正項目:<br/>${mods.length ? mods.join('<br/>') : 'なし'}<br/>→ 最終火力${finalFP}`;
-    await showAIAction(`AI: 射撃 ${src.name}→${tgt.name}`, fireCard, plan.si);
-    const _allFireCards = [fireCard, ..._extrasCards].filter(c => c);
-    showFireResultOverlay(title, results, _allFireCards).then(() => {
+    if (concealMod) mods.push(`隠蔽 ${_sgn(concealMod)}`);
+    const varies = results.some(result => result.finalFP !== baseFP);
+    const title = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 基礎射撃力${rawBaseStrength}<br/>修正項目:<br/>${mods.length ? mods.join('<br/>') : 'なし'}<br/>→ 最終火力${baseFP}${varies ? '<br/>兵士ごとの修正は判定結果に表示' : ''}`;
+    await showAIAction(`AI: 射撃 ${src.name}→${tgt.name}`, fireCards, plan.si,
+      { raw: rawBaseStrength, mods, total: baseFP, varies });
+    showFireResultOverlay(title, results, fireCards).then(() => {
       cleanupEliminatedGroups();
       renderField('player'); renderField('ai');
       renderHands();

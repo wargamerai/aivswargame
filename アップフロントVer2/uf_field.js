@@ -73,11 +73,12 @@ function makeMainGroup(side, group, idx) {
     );
     const badgeStyle = 'flex-basis:100%;font-size:12px;font-weight:bold;padding:2px 4px;border-radius:3px;';
     if (isGroupFlared(group)) {
-      nightTag = `<span style="${badgeStyle}color:#281900;background:#ffcc69;">照明弾で照らされている ・ 夜間半減なし</span>`;
+      const turnsLeft = Math.ceil((group.flaredUntilTurn - (state.turnCount || 0) + 1) / 2);
+      nightTag = `<span style="${badgeStyle}color:#281900;background:#ffcc69;" title="照明弾で照らされている ・ 夜間半減なし"><span aria-hidden="true">✦</span> 照明弾 <span>残り${turnsLeft}ターン</span></span>`;
     } else if (observers.length) {
       const names = observers.map(g => g.name).join(' / ');
       const text = side === 'player' ? `敵 ${names} に発見された` : `味方 ${names} が発見`;
-      nightTag = `<span style="${badgeStyle}color:#e4f4ff;background:#205172;">${text} ・ 夜間半減あり</span>`;
+      nightTag = `<span style="${badgeStyle}color:#e4f4ff;background:#205172;" title="${text} ・ 夜間半減あり"><span aria-hidden="true">👁︎</span> <span>${text}</span></span>`;
     } else {
       slot.style.opacity = '0.4';
     }

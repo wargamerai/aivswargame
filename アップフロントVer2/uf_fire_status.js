@@ -24,6 +24,43 @@ function getConcealMod(cards) {
   return mod;
 }
 
+function buildFireStrengthPreview(cards, summary, confirm) {
+  const layout = document.createElement('div');
+  layout.className = 'fire-strength-preview';
+  layout.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 16px;max-width:100%;';
+
+  const cardRow = document.createElement('div');
+  cardRow.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;gap:5px;min-width:0;';
+  for (const card of cards || []) {
+    if (!card || !card.img) continue;
+    const img = document.createElement('img');
+    img.src = card.img;
+    img.alt = card.terrain.type;
+    img.style.cssText = 'height:' + (confirm ? 'clamp(100px, 27vh, 210px)' : '70px') + ';border-radius:4px;';
+    cardRow.appendChild(img);
+  }
+  if (cardRow.childElementCount) layout.appendChild(cardRow);
+
+  const values = document.createElement('div');
+  values.style.cssText = 'text-align:left;padding:8px 12px;background:#211e18;color:#fff5db;border-radius:5px;min-width:125px;';
+  for (const text of [`カードの射撃力 ${summary.raw}`, ...summary.mods]) {
+    const line = document.createElement('div');
+    line.textContent = text;
+    values.appendChild(line);
+  }
+  const total = document.createElement('strong');
+  total.style.cssText = 'display:block;color:#ffe08e;font-size:20px;margin-top:5px;padding-top:4px;border-top:1px solid #80664a;';
+  total.textContent = `${confirm ? '最終火力' : '隠蔽前の火力'} ${summary.total}`;
+  values.appendChild(total);
+  if (summary.varies) {
+    const note = document.createElement('small');
+    note.textContent = '兵士ごとの修正は判定結果に表示';
+    values.appendChild(note);
+  }
+  layout.appendChild(values);
+  return layout;
+}
+
 /** 撃たれる時の予告: ヒーローの確認・隠蔽カードの選択の前に、どの敵がどのグループをどれだけの火力で撃つかを
  *  画面の上に出し、撃つ敵のグループと撃たれる自分のグループを光らせる。info = { si, ti, title, cards, lines } */
 function setIncomingAttack(info) {
@@ -32,7 +69,9 @@ function setIncomingAttack(info) {
   if (!b) { b = document.createElement('div'); b.id = 'incoming-banner'; document.body.appendChild(b); }
   b.innerHTML = '';
   const t = document.createElement('div'); t.className = 'ib-title'; t.textContent = info.title; b.appendChild(t);
-  if (info.cards && info.cards.length) {
+  if (info.fireSummary) {
+    b.appendChild(buildFireStrengthPreview(info.cards, info.fireSummary, false));
+  } else if (info.cards && info.cards.length) {
     const row = document.createElement('div'); row.className = 'ib-cards';
     info.cards.forEach(c => { if (c && c.img) { const im = document.createElement('img'); im.src = c.img; row.appendChild(im); } });
     b.appendChild(row);
