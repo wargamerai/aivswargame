@@ -335,10 +335,7 @@
       }
       total += fp;
     });
-    // §8.41 湿地内から射撃: 全射撃力から-1
-    if (inMarsh && total > 0) total = Math.max(0, total - 1);
-    // §8.52 河川内から射撃: 全射撃力から-1
-    if (inStream && total > 0) total = Math.max(0, total - 1);
+    // §8.41/8.52 湿地・河川の -1 は射撃解決時に calcTerrainMod が射撃力に適用する。
     return total;
   }
 
