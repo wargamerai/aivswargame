@@ -108,7 +108,7 @@ function axisAiMove(){
       if(d >= s.spd){
         // 失敗: 目的の海域に隣接する味方の港があればそこへ（例: 北海経由の南大西洋 → フランス）、なければ元の港
         s.failedMove = true;
-        const alt = failMovePorts(s, sea, s.location)[0];
+        const alt = failMovePorts(s, sea, s.location).find(port => port !== 'France' || turn < 6);
         if(alt){ s.location = alt; s.movedThisTurn = true; }
         else if(SEAS[s.location]) s.location = s.homePort; // 6.4 海には残れない（補給で海から出た艦）
         log.push(`${s.name}: ${sea}へ2エリア移動失敗${alt ? ' → ' + alt : ''}`); ops.failed.push(s.name); return false;
@@ -326,6 +326,16 @@ function axisAiMove(){
   }
 
   } // POC の予想を使わない時の処理ここまで
+
+  // フランスは第6ターンで閉鎖。損傷艦も港に残さず、隣接海域へ出す。
+  if(turn === 6){
+    const exits = (PORT_SEAS.France || []).slice().sort((a, b) => sum(alliedAt(a)) - sum(alliedAt(b)));
+    SHIPS.filter(s => alive(s) && s.side === 'axis' && s.location === 'France' && !s.movedThisTurn)
+      .forEach(s => {
+        const dest = exits.find(sea => move(s, sea));
+        if(dest) log.push(`${s.name}: フランスの閉鎖前に ${dest} へ出港`);
+      });
+  }
 
   // --- Uボート ---
   const ubs = SHIPS.filter(s => alive(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany');

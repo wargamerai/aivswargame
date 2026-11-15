@@ -65,7 +65,7 @@ function repTurnData(turn, ctl, gain, total){
   const before = REP.before || start;
   const cb = REP.combat || {};
   const shipsAt = loc => {
-    const here = Object.values(before).filter(b => b.loc === loc && !b.sunk && (!b.removed || b.landed));
+    const here = Object.values(before).filter(b => b.loc === loc && !b.sunk && !b.removed);
     const c = cb[loc];
     const res = b => {
       if(!c) return { res: '', dmg: b.damage ? `${b.damage}/${b.def}` : '' };

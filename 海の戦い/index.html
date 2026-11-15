@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script defer src="../board-zoom.js"></script>
 <meta charset="UTF-8">
 <title>海の戦い - War at Sea</title>
 <!-- アクセス解析（GoatCounter） -->
@@ -990,7 +991,7 @@ async function advancePhase(){
     placeAllShips();
     renderLocShipList(); renderSeaResetButtons();
   } else if(phaseIdx === 6){
-    // 戦闘: 戦闘画面を開き、連合軍の攻撃ボタンから順に進行
+    if(humanSide === 'allies' && !simMode) await chooseAlliedLbaArea();
     runNextCombat();
   } else if(phaseIdx === 7){
     // 支配配置: 各海域の支配を判定してマーカー配置
@@ -1124,7 +1125,7 @@ function renderLocShipList(){
   }
   title.textContent = `${selectedLoc === 'UboatPens' ? 'U-Boat Pens' : locLabel(selectedLoc)} の艦船 (複数選択可)`;
   // 現在ここにいる艦 + このターンここから出た艦（消さない）
-  const ships = SHIPS.filter(s => !s.sunk && (inSelLoc(s) || (s.movedThisTurn && fromSelLoc(s))));
+  const ships = SHIPS.filter(s => !s.sunk && !s.removed && (inSelLoc(s) || (s.movedThisTurn && fromSelLoc(s))));
   if(!ships.length){
     el.innerHTML = '<div style="padding:6px;color:#aac;font-size:0.8em;">なし</div>';
     return;
@@ -1152,7 +1153,8 @@ function renderLocShipList(){
         </div>
       </div>`;
     }
-    return `<div class="ship-entry${sel}" onclick="toggleShip('${s.id}')">
+    const click = canSelectForMove(s) ? ` onclick="toggleShip('${s.id}')"` : ' style="cursor:default;"';
+    return `<div class="ship-entry${sel}"${click}>
       <img src="images/${s.file}">
       <div>
         <div class="name">${s.name}${dmgText}</div>
@@ -1164,10 +1166,35 @@ function renderLocShipList(){
 
 // 2.4 フランスの港が閉じているか（6ターンの後）。閉じた後、フランスにいる艦は出撃できない
 function isFranceClosed(){ return currentTurn > 6; }
+function canSelectForMove(ship){
+  return !!ship && !ship.sunk && !ship.removed && !ship.failedMove && !ship.returnPending &&
+    ship.side === humanSide && phaseIdx === (humanSide === 'allies' ? 2 : 3) && inSelLoc(ship);
+}
+
 function getValidDests(){
   if(!selectedLoc) return { seas:[], seas2:[], ports:[] };
-  const firstShip = selectedShipIds.length ? SHIPS.find(s => s.id === selectedShipIds[0]) : null;
-  const isUboat = firstShip && firstShip.type === 'UBOAT';
+  const chosen = selectedShipIds.map(id => SHIPS.find(s => s.id === id)).filter(canSelectForMove);
+  if(!chosen.length) return { seas:[], seas2:[], ports:[] };
+  const moves = chosen.map(ship => getShipDests(ship, ship.originThisTurn || ship.location));
+  const sameSea = moves[0].seas.filter(sea => moves.every(m => m.seas.includes(sea)));
+  const reachable = [...new Set([...moves[0].seas, ...moves[0].seas2])];
+  const twoSeas = reachable.filter(sea => !sameSea.includes(sea) &&
+    moves.every(m => m.seas.includes(sea) || m.seas2.includes(sea)));
+  const ports = moves[0].ports.filter(port => moves.every(m => m.ports.includes(port)));
+  return { seas: sameSea, seas2: twoSeas, ports };
+}
+
+function getShipDests(firstShip, origin){
+  const isUboat = firstShip.type === 'UBOAT';
+
+  // 14.1–14.6 船団はこの航路だけを、1ターンに1海域進む。
+  if(firstShip.type === 'CONVOY'){
+    let dest = origin === 'USA' ? 'NorthAtlantic' : null;
+    if(origin === 'NorthAtlantic' && firstShip.turnsAtSea >= 1) dest = 'Barents';
+    const occupied = dest && SHIPS.some(s => s !== firstShip && s.type === 'CONVOY' &&
+      s.location === dest && !s.sunk && !s.removed);
+    return { seas: dest && !occupied ? [dest] : [], seas2: [], ports: [] };
+  }
 
   // 6.5 Uボートはどこにでも配置可
   if(isUboat){
@@ -1178,28 +1205,28 @@ function getValidDests(){
     };
   }
 
-  const isPort = !!PORTS[selectedLoc];
-  const isSea  = !!SEAS[selectedLoc];
+  const isPort = !!PORTS[origin];
+  const isSea  = !!SEAS[origin];
   // 2.4 フランスは6ターンの後は使える港でなくなる。6ターンの終わりに戻った艦は、それ以降出撃できない
-  if(selectedLoc === 'France' && isFranceClosed()) return { seas:[], seas2:[], ports:[] };
+  if(origin === 'France' && isFranceClosed()) return { seas:[], seas2:[], ports:[] };
   let seas = [], seas2 = [], ports = [];
   if(isPort){
-    seas = PORT_SEAS[selectedLoc] || [];
+    seas = PORT_SEAS[origin] || [];
     // 2エリア移動: 最初のエリアが敵の支配でなければ可能
     const moveSide = firstShip ? firstShip.side
-      : (PORTS[selectedLoc].side !== 'neutral' ? PORTS[selectedLoc].side : null);
+      : (PORTS[origin].side !== 'neutral' ? PORTS[origin].side : null);
     const enemySide = moveSide === 'allies' ? 'axis' : (moveSide === 'axis' ? 'allies' : null);
     seas.forEach(s1 => {
       if(enemySide && seaControl[s1] === enemySide) return;
       (SEA_ADJ[s1] || []).forEach(s2 => {
-        if(s2 !== selectedLoc && !seas.includes(s2) && !seas2.includes(s2)){
+        if(s2 !== origin && !seas.includes(s2) && !seas2.includes(s2)){
           seas2.push(s2);
         }
       });
     });
   } else if(isSea){
-    seas = SEA_ADJ[selectedLoc] || [];
-    ports = Object.keys(PORT_SEAS).filter(p => PORT_SEAS[p].includes(selectedLoc));
+    seas = SEA_ADJ[origin] || [];
+    ports = Object.keys(PORT_SEAS).filter(p => PORT_SEAS[p].includes(origin));
   }
   // 6.6 バルト海はロシアとドイツの艦のみ（艦選択時のみ判定）
   if(firstShip){
@@ -1210,19 +1237,12 @@ function getValidDests(){
       seas2 = seas2.filter(s => s !== 'Baltic');
     }
   }
-  // 14.3 船団は2海域同時移動不可、海上での2ターン目以降のみバレンツ海可
-  if(firstShip && firstShip.type === 'CONVOY'){
-    seas2 = []; // 2海域移動不可
-    if(!firstShip.turnsAtSea || firstShip.turnsAtSea < 1){
-      seas = seas.filter(s => s !== 'Barents');
-    }
-  }
   // 16.1 給油成功ドイツ艦は海から出られる。隣の海域はそのまま、2エリア先は 6.2 / 6.4（途中が敵の支配でなく、ダイス判定）
   if(firstShip && firstShip.refuelTurn === currentTurn - 1 && isSea){
     seas.forEach(s1 => {
       if(seaControl[s1] === 'allies') return;
       (SEA_ADJ[s1] || []).forEach(s2 => {
-        if(s2 !== selectedLoc && !seas.includes(s2) && !seas2.includes(s2)) seas2.push(s2);
+        if(s2 !== origin && !seas.includes(s2) && !seas2.includes(s2)) seas2.push(s2);
       });
     });
   }
@@ -1250,14 +1270,6 @@ function getValidDests(){
     seas2 = seas2.filter(s => okSea.includes(s));
     ports = ports.filter(p => ['Italy', 'France', 'Neutral'].includes(p));
   }
-  // 14.1 同一海域に既に船団があれば船団は移動不可
-  if(firstShip && firstShip.type === 'CONVOY'){
-    seas = seas.filter(seaKey => {
-      const existing = SHIPS.find(s => s !== firstShip && s.type === 'CONVOY' && s.location === seaKey && !s.sunk && !s.removed);
-      return !existing;
-    });
-  }
-
   // 港のフィルタ: 使用可能ターン + 同陣営/中立のみ
   const side = firstShip ? firstShip.side : null;
   ports = ports.filter(p=>{
@@ -1324,6 +1336,7 @@ function selectLoc(loc){
   renderPortButtons(); renderLocShipList(); renderDestButtons(); renderStatus();
 }
 function toggleShip(id){
+  if(!canSelectForMove(SHIPS.find(s => s.id === id))) return;
   const i = selectedShipIds.indexOf(id);
   if(i >= 0) selectedShipIds.splice(i, 1);
   else selectedShipIds.push(id);
@@ -1332,7 +1345,7 @@ function toggleShip(id){
 }
 function selectAllShipsHere(){
   if(!selectedLoc) return;
-  selectedShipIds = SHIPS.filter(s => !s.sunk && inSelLoc(s) && !s.failedMove).map(s => s.id);
+  selectedShipIds = SHIPS.filter(canSelectForMove).map(s => s.id);
   refreshDestAfterSelect();
   renderLocShipList(); renderStatus();
 }
@@ -1343,6 +1356,8 @@ function refreshDestAfterSelect(){
   renderDestButtons();
 }
 function selectDest(loc){
+  const { seas, seas2, ports } = getValidDests();
+  if(![...seas, ...seas2, ...ports].includes(loc)) return;
   selectedDest = loc;
   renderDestButtons(); renderStatus();
 }
@@ -5825,7 +5840,14 @@ function executeMove(){
   const log = [];
   selectedShipIds.forEach(id=>{
     const s = SHIPS.find(x => x.id === id);
-    if(!s) return;
+    if(!canSelectForMove(s)) return;
+    const origin = s.originThisTurn || s.location;
+    const dest = selectedDest;
+    const { seas, seas2, ports } = getShipDests(s, origin);
+    if(![...seas, ...seas2, ...ports].includes(dest)){
+      log.push(`${s.name}: ${locLabel(dest)} へ移動不可`);
+      return;
+    }
     // 15.2 ロシア艦は5/6で出港
     if(s.country === 'RU'){
       const r = rollD6();
@@ -5854,25 +5876,17 @@ function executeMove(){
         log.push(`${s.name}: 投入判定⚂${r}=6 成功(永続)`);
       }
     }
-    // このターンに一度動かした艦の行き先を変える時は、出発した場所から数える（重ねて動かして2海域先へ行かせない）
-    const origin = s.originThisTurn || s.location;
+    // 行き先を変更する時も、このターン最初の出発地から数える。
     s.twoAreaPending = false;
-    const dest = selectedDest;
     // 移動済みフラグ＆起点記憶
     if(!s.originThisTurn) s.originThisTurn = origin;
     s.movedThisTurn = true;
-    // 隣接判定
-    let adj = [];
-    if(PORTS[origin]) adj = PORT_SEAS[origin] || [];
-    else if(SEAS[origin]) adj = SEA_ADJ[origin] || [];
-    const isAdjacent = adj.includes(dest);
-    const isPortDest = !!PORTS[dest];
     if(s.type === 'UBOAT'){
       // 6.5 Uボートはどこでも自由配置、判定なし
       s.location = dest;
       if(dest === 'Neutral') s.arrivedNeutralTurn = currentTurn;
       log.push(`${s.name}: Uボート → ${locLabel(dest)}`);
-    } else if(isAdjacent || isPortDest){
+    } else if(!seas2.includes(dest)){
       // 1海域 or 港湾帰還: 判定なし
       s.location = dest;
       if(dest === 'Neutral') s.arrivedNeutralTurn = currentTurn;
@@ -6160,15 +6174,21 @@ function convoyPutIn(){
     convoyPocPending += 3;
     convoyPocLog.push(`船団 ${s.name} ロシア上陸 +3POC(連合)`);
   });
-  if(aiSide !== 'allies') return;
   SHIPS.filter(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && s.location === 'NorthAtlantic').forEach(s => {
     const lost = seaControl['Barents'] === 'axis';
-    const weak = !lost && SHIPS.filter(x => x.englandByChoice).length < 2 && convoyBarentsWeak();
-    if(!lost && !weak) return;
+    const weak = aiSide === 'allies' && !lost && SHIPS.filter(x => x.englandByChoice).length < 2 && convoyBarentsWeak();
+    if(aiSide === 'allies'){
+      if(!lost && !weak) return;
+    } else {
+      const ja = typeof LANG === 'undefined' || LANG === 'ja';
+      if(simMode || !confirm(ja
+        ? `${s.name} を英国へ入港させますか？ 連合軍に1 POC入り、船団は除去されます。キャンセルで北大西洋に留まります。`
+        : `Deliver ${s.name} to Britain for 1 POC and remove it? Cancel to remain in the North Atlantic.`)) return;
+    }
     if(weak) s.englandByChoice = true;
-    s.removed = true; s.location = 'England'; s.atDock = false;
+    s.removed = true; s.location = 'England'; s.landed = true; s.atDock = false;
     convoyPocPending += 1;
-    convoyPocLog.push(`船団 ${s.name}: ${lost ? 'バレンツ海を取られているので' : 'バレンツ海の連合の戦力がドイツより弱い見込みなので'} England へ入る +1POC(連合)`);
+    convoyPocLog.push(`船団 ${s.name}: England へ入る +1POC(連合)`);
   });
 }
 let medAxisStreak = 0;    // 地中海の枢軸連続支配ターン数（7.支配配置で判定）
@@ -6204,6 +6224,7 @@ function executeItalySeizure(log){
 const combatDone = { uboat: new Set(), surface: new Set(), alliedAir: new Set(), axisAir: new Set(), area: new Set() };
 // 9.0 陸上攻撃機（LBA）。各陣営1個、毎ターン1回。
 const lbaUsed = { allies: false, axis: false };
+let alliedLbaSelection = null;
 const LBA_TARGETS = {
   allies: ['Germany', 'France', 'Italy', 'Mediterranean'],
   axis:   ['Barents', 'Baltic', 'Leningrad', 'Malta', 'Mediterranean']
@@ -6236,7 +6257,7 @@ function placeAllShips(){
   // place key（海域内で陣営/タイプ別に分割）でグルーピング
   const byKey = {};
   SHIPS.forEach(s => {
-    if(!s.location || s.sunk || (s.removed && !s.landed)) return;
+    if(!s.location || s.sunk || s.removed) return;
     const key = getPlaceKey(s);
     (byKey[key] ||= []).push(s);
   });
@@ -6416,8 +6437,23 @@ const isLbaPrey = s => s.side === 'axis' && s.country === 'IT' && s.type === 'CA
 // イタリアの 1-1-7 がいないときに狙う弱い敵: ドイツの 1-2-7 の重巡（ユーザーの指示 2026-11-08）
 const isLbaPrey2 = s => s.side === 'axis' && s.country === 'DE' && s.type === 'CA' && (s.atkOrig || s.atk) === 1 && s.def === 2 && s.spd === 7;
 // 連合AIの LBA を使うエリア: イタリアの 1-1-7 が一番多いエリア。いなければドイツの 1-2-7 が一番多いエリア。どちらもいなければ防御力の一番弱い艦がいるエリア
+async function chooseAlliedLbaArea(){
+  const areas = LBA_TARGETS.allies.filter(area => airTargetsAt(area, 'axis'));
+  alliedLbaSelection = null;
+  if(!areas.length) return;
+  await openCombatModal(null, []);
+  const ja = typeof LANG === 'undefined' || LANG === 'ja';
+  const title = ja ? '連合軍の陸上航空を配置' : 'Place Allied land-based air';
+  document.getElementById('combatTitle').textContent = title;
+  alliedLbaSelection = await chooseInPhaseLabel(title, [
+    ...areas.map(area => ({ label: wasL(combatAreaLabel(area)), value: area })),
+    { label: ja ? '使用しない' : 'Do not use', value: null }
+  ]);
+}
+
 function alliedLbaArea(){
   if(lbaUsed.allies) return null;
+  if(humanSide === 'allies' && !simMode) return alliedLbaSelection;
   const open = LBA_TARGETS.allies.filter(a => !combatDone.area.has(a));
   for(const prey of [isLbaPrey, isLbaPrey2]){
     let best = null, max = 0;
