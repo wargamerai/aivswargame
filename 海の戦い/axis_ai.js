@@ -10,7 +10,7 @@ var AXIS_AI = {
   lastGain: null, // シミュレーターは自分で渡す
   read() {
     const cum = typeof alliedCumPoc === 'function' ? alliedCumPoc() : poc;
-    const gain = this.lastGain !== null ? this.lastGain : cum - this.prevPoc;
+    const gain = this.lastGain ?? (typeof lastTurnPocGain !== 'undefined' ? lastTurnPocGain : cum - this.prevPoc);
     this.prevPoc = cum;
     return { axisState: this.state, cumPoc: cum, lastTurnGain: gain };
   },
@@ -123,7 +123,8 @@ function axisAiMove(){
   let assaultNow = null; // このターンに突撃する海域
   // POC の予想で配置する（ユーザーの指示 2026-11-03）。連合の配置は見えているので、それに対する一番よい手を探す
   const AX_MODE = (typeof window !== 'undefined' && window.__axisPlanMode !== undefined) ? window.__axisPlanMode : AXIS_PLAN_MODE;
-  let ubPlan = null;
+  const ubs = SHIPS.filter(s => alive(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany' && !s.movedThisTurn && !s.returnPending);
+  let ubPlan = null, ubTarget = null;
   if(AX_MODE >= 1){
     const seaList = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean', 'Baltic'];
     const movers = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.type !== 'UBOAT' && !s.movedThisTurn && !(s.damage > 0) &&
@@ -134,13 +135,15 @@ function axisAiMove(){
       const o = seaList.filter(sea => {
         if(s.country === 'IT'){
           if(sea === 'Mediterranean') return reach(s, sea) > 0;
-          return sea === 'SouthAtlantic' && s.type === 'CA' && reach(s, sea) > 0;
+          if(s.type !== 'CA') return false;
+          if(sea === 'SouthAtlantic') return reach(s, sea) > 0;
+          return AX_MODE >= 6 && sea === 'NorthAtlantic' && reach(s, sea) > 0;
         }
         if(sea === 'Mediterranean') return false;
         const h = reach(s, sea);
         return h === 1 || (h === 2 && (s.spd - 1) / 6 >= 0.6);
       });
-      return { s, opts: [...o, 'port'] };
+      return { s, opts: [...o, 'port'], direct: o.filter(sea => reach(s, sea) === 1) };
     });
     const allied = {};
     seaList.forEach(sea => { allied[sea] = alliedAt(sea); });
@@ -154,9 +157,12 @@ function axisAiMove(){
       alliedReinf[t] = SHIPS.filter(s => alive(s) && s.side === 'allies' && s.country === 'UK' && s.type !== 'CONVOY' && s.location === 'T' + t);
     }
     const italyPending = SHIPS.filter(s => alive(s) && s.country === 'IT' && /^T\d/.test(s.location || '')).length;
-    const r = (AX_MODE >= 6 ? PocPlanner.planAxisV6 : AX_MODE >= 4 ? PocPlanner.planAxisV2 : AX_MODE >= 3 ? PocPlanner.planAxisSimple : AX_MODE >= 2 ? PocPlanner.planAxisConcentrate : PocPlanner.planAxis)({ turn, seas: SEAS, seaList, ships, allied, fixed, nextReinf, reinf, alliedReinf, italyPending, ubs: SHIPS.filter(s => alive(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany').length });
+    const r = (AX_MODE >= 6 ? PocPlanner.planAxisV6 : AX_MODE >= 4 ? PocPlanner.planAxisV2 : AX_MODE >= 3 ? PocPlanner.planAxisSimple : AX_MODE >= 2 ? PocPlanner.planAxisConcentrate : PocPlanner.planAxis)({ turn, cumPoc, lastTurnGain, seas: SEAS, seaList, ships, allied, fixed, nextReinf, reinf, alliedReinf, italyPending, ubs: ubs.length });
     ubPlan = r.ubPlan || null;
-    if(r.notes) log.push(r.notes.join(' / '));
+    ubTarget = r.ubTarget || null;
+    if(r.attacks && r.attacks.length) ops.assault = r.attacks[0];
+    if(r.baltic) ops.baltic = r.baltic;
+    if(r.notes && r.notes.length) log.push(r.notes.join(' / '));
     ships.forEach(u => { const sea = r.plan[u.s.id]; if(sea && sea !== 'port') move(u.s, sea); });
     log.push(`POCの予想で配置（評価 ${r1(r.value)}）`);
     ops.mode = 'poc';
@@ -338,8 +344,13 @@ function axisAiMove(){
   }
 
   // --- Uボート ---
-  const ubs = SHIPS.filter(s => alive(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany');
-  if(ubs.length){
+  const putUboat = (u, sea) => { u.location = sea; u.movedThisTurn = true; u.originThisTurn = 'Germany'; placed[sea].push(u); };
+  if(AX_MODE >= 6){
+    // 水上艦が2海域移動に失敗したら、Uボートだけで殴り込みに行かない。
+    if(ubTarget && placed[ubTarget].some(s => s.type !== 'UBOAT')){
+      ubs.forEach(u => putUboat(u, ubTarget));
+    }
+  } else if(ubs.length){
     const aswDice = sea => alliedAt(sea).reduce((t, s) => t + ((s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1), 0);
     const convoyAt = Object.keys(SEAS).find(k => SHIPS.some(s => alive(s) && s.type === 'CONVOY' && s.location === k));
     // 連合がいて、ドイツ・イタリアの水上艦がいない海域（ドイツが支配を取れず、連合のPOCになる海域）を安全な順に
@@ -349,7 +360,7 @@ function axisAiMove(){
     const thin = Object.keys(SEAS).filter(k => alliedAt(k).length && !placed[k].some(s => s.type !== 'UBOAT') && k !== convoyAt)
       .sort((a, b) => danger[a] - danger[b]);
     const queue = [...ubs];
-    const put = (u, sea) => { u.location = sea; u.movedThisTurn = true; u.originThisTurn = 'Germany'; placed[sea].push(u); };
+    const put = putUboat;
     // 連合の対潜ダイス3個につきUボート1隻を止められるとみなす。置くのは、それを上回る数を置ける海域だけ
     //   need: その海域で上回るのに足りない数（連合がいなければ0）
     const need = sea => alliedAt(sea).length ? Math.max(0, Math.floor(aswDice(sea) / 3) + 1 - placed[sea].filter(s => s.type === 'UBOAT').length) : 0;

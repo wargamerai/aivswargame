@@ -1630,6 +1630,10 @@ function waitForTargetClickIn(side, focusSea, excludeIds, mode){
     );
     if(!candidates.length){ resolve(null); return; }
     if((aiMode && side === humanSide) || (humanSide === 'allies' && side === 'allies')){ // 人が連合の時は、枢軸AIの目標も自動
+      if(mode === 'uboat' && side === 'allies'){
+        const convoy = candidates.find(s => s.type === 'CONVOY');
+        if(convoy){ resolve(convoy); return; }
+      }
       // 連合の航空攻撃（空母・LBA）: 大物（攻撃力+防御力が最大）を狙う。5の目で帰還させると影響が大きい
       // 連合の LBA: イタリアの 1-1-7。いなければドイツの 1-2-7（ユーザーの指示 2026-11-08）
       if(side === 'axis' && mode === 'air'){
@@ -1749,7 +1753,7 @@ async function resolveUboatCombatPhase(seaKey){
       for(const u of uboats){
         highlightShip(u.id, 'firing');
         setPhaseLabel(`目標を選択してください（${u.name}）`);
-        const target = await waitForTargetClickIn('allies', seaKey);
+        const target = await waitForTargetClickIn('allies', seaKey, null, 'uboat');
         unhighlightShip(u.id, 'firing');
         if(!target) break;
         declared.push({ u, target });
@@ -1836,7 +1840,7 @@ async function resolveUboatCounterPhase(seaKey){
   for(const u of uboats){
     highlightShip(u.id, 'firing');
     setPhaseLabel(`${u.name} の目標をクリック`);
-    const target = await waitForTargetClickIn('allies', seaKey);
+    const target = await waitForTargetClickIn('allies', seaKey, null, 'uboat');
     unhighlightShip(u.id, 'firing');
     if(!target) break;
     const fireEvents = [];
@@ -1892,7 +1896,7 @@ async function resolveCombatOne(seaKey){
     for(const u of uboats){
       highlightShip(u.id, 'firing');
       setPhaseLabel(`${u.name} の目標をクリック`);
-      const target = await waitForTargetClickIn('allies', seaKey);
+      const target = await waitForTargetClickIn('allies', seaKey, null, 'uboat');
       unhighlightShip(u.id, 'firing');
       if(!target) break;
       const fireEvents = [];
@@ -1929,6 +1933,7 @@ async function flushPendingAxisDisabledUI(){
 
 // 5.62 航空戦闘（連合 or 枢軸の片方ずつ実行）
 async function playAirPhase(side, seaKey, modalAlreadyOpen){
+  if(side === 'axis' && axisSurfaceOnlyAt(seaKey)) return modalAlreadyOpen;
   const enemyName = side==='allies' ? 'axis' : 'allies';
   const cvs = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === side && s.type === 'CV');
   const lbaUsable = !lbaUsed[side] && LBA_TARGETS[side].includes(seaKey);
@@ -2708,6 +2713,7 @@ function waitForSurfaceTarget(side, focusSea, attacker, pending, opts){
     });
     if(isAiAttacker && attacker.side === 'allies'){ resolve(alliedPickTarget(candidates, pending)); return; }
     if(isAiAttacker){
+      if(convoy.length){ resolve(convoy[0]); return; }
       const firedAt = (pending && pending.firedAtBy && pending.firedAtBy[attackerSide]) || new Set();
       const unfired = candidates.filter(c => !firedAt.has(c.id));
       if(unfired.length){
@@ -6485,6 +6491,10 @@ function alliedLbaArea(){
   });
   return best;
 }
+// ドイツAIはソ連艦を航空攻撃で帰還させず、バルト海では水上艦で仕留める。
+function axisSurfaceOnlyAt(area){
+  return (humanSide === 'allies' || aiSide === 'axis') && (area === 'Baltic' || area === 'Leningrad');
+}
 // そのエリアで次にする戦闘（なければ null）
 function nextCombatStep(area){
   const isSea = !!SEAS[area];
@@ -6493,7 +6503,7 @@ function nextCombatStep(area){
     && _shipsAt(area, s => s.type === 'UBOAT' && !s.returnPending).length) return 'uboat';
   if(!combatDone.alliedAir.has(area) && airTargetsAt(area, 'axis') > 0
     && (alliedLbaArea() === area || cvAt(area, 'allies'))) return 'alliedAir';
-  if(!combatDone.axisAir.has(area) && airTargetsAt(area, 'allies') > 0
+  if(!axisSurfaceOnlyAt(area) && !combatDone.axisAir.has(area) && airTargetsAt(area, 'allies') > 0
     && ((!lbaUsed.axis && LBA_TARGETS.axis.includes(area)) || cvAt(area, 'axis'))) return 'axisAir';
   if(isSea && !combatDone.surface.has(area)
     && _shipsAt(area, s => s.side === 'allies' && s.type !== 'UBOAT' && !s.returnPending).length
@@ -6569,13 +6579,13 @@ function axisAirOptions(){
   const opts = [];
   if(!lbaUsed.axis){
     LBA_TARGETS.axis.forEach(a => {
-      if(targetCount(a) === 0) return;
+      if(axisSurfaceOnlyAt(a) || targetCount(a) === 0) return;
       const cv = !!hasCv(a);
       opts.push({ area: a, cvOnly: false, useCv: cv, label: `${cv ? 'LBA+空母' : 'LBA'} ${label(a)}` });
     });
   }
   Object.keys(SEAS).forEach(seaKey => {
-    if(!hasCv(seaKey) || targetCount(seaKey) === 0) return;
+    if(axisSurfaceOnlyAt(seaKey) || !hasCv(seaKey) || targetCount(seaKey) === 0) return;
     if(!lbaUsed.axis && LBA_TARGETS.axis.includes(seaKey)) return; // LBA+空母 として表示済み
     opts.push({ area: seaKey, cvOnly: true, useCv: true, label: `空母のみ ${label(seaKey)}` });
   });
