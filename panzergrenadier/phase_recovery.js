@@ -36,7 +36,7 @@ function resolveRecovery(unit) {
       unit.status = 'eliminated';
       result = { roll, success: false, effect: 'DD → 壊滅！', critical: true };
     }
-  } else if (roll <= effectiveMorale) {
+  } else if (roll < effectiveMorale) {
     if (unit.status === 'dd') {
       unit.status = 'd';
       result = { roll, success: true, effect: 'DD → D（回復）', critical: false };

@@ -1518,29 +1518,17 @@ function renderPhase() {
     return;
   }
   if (phase.id === 'recovery') {
-    // 回復判定前に敵隣接・射程・遮蔽プロパティを計算
-    testUnits.forEach(u => {
-      if (u.status === 'eliminated' || u.type === 'dummy' || u.type === 'leader') return;
-      const enemySide = u.side === 'german' ? 'allied' : 'german';
-      u.adjacentEnemy = testUnits.some(e =>
-        e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
-        hexDistance(e.col, e.row, u.col, u.row) === 1
-      );
-      u.inEnemyRange = testUnits.some(e =>
-        e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
-        hexDistance(e.col, e.row, u.col, u.row) <= (e.range || 1) &&
-        hasLOS(e.col, e.row, u.col, u.row)
-      );
-      const terrain = getHexTerrain(u.hexId);
-      u.inCover = terrain === 'f' || terrain === 'w' || terrain === 't' || terrain === 'c';
-    });
-
-    // 自動回復: 全D/DDユニットに回復判定を実行
-    const recoverUnits = testUnits.filter(u =>
-      (u.status === 'd' || u.status === 'dd') && u.type !== 'fortification'
-    );
+    const recoverUnits = testUnits.filter(u => pgOnMap(u) && ['d', 'dd'].includes(u.status) &&
+      !STACK_EXEMPT_TYPES.includes(u.type) && !recoveryResults[u.id])
+      .sort((a, b) => Number(b.side === G.initiative) - Number(a.side === G.initiative));
     const _recoveryOverlayRows = [];
     recoverUnits.forEach(u => {
+      const enemies = testUnits.filter(e => e.side !== u.side && pgOnMap(e) && e.status === 'ok' &&
+        !STACK_EXEMPT_TYPES.includes(e.type));
+      u.adjacentEnemy = enemies.some(e => hexDistance(e.col, e.row, u.col, u.row) === 1);
+      u.inEnemyRange = enemies.some(e => e.type !== 'A' && !e.marchMode && !e.outOfAmmo &&
+        hexDistance(e.col, e.row, u.col, u.row) <= e.range && hasLOS(e.col, e.row, u.col, u.row));
+      u.inCover = ['f', 'w', 't', 'c'].includes(getHexTerrain(u.hexId));
       const check = canAttemptRecovery(u);
       if (!check.can) {
         recoveryResults[u.id] = { roll: -1, success: false, effect: check.reason, effectiveMorale: 0 };
@@ -1560,7 +1548,7 @@ function renderPhase() {
       });
     });
     drawMap();
-    if (_recoveryOverlayRows.length > 0) {
+    if (_recoveryOverlayRows.length > 0 && G.gameMode !== 'aivai') {
       showDiceOverlay('回復チェック', '両軍自動判定', _recoveryOverlayRows, function() {
         renderRecoveryPhase();
       });
@@ -1731,7 +1719,6 @@ function runAIvAILoop() {
     case 'recovery':
       // Q学習の重みを更新（毎ターン）
       if (typeof pgUpdateWeights === 'function') pgUpdateWeights();
-      aiAutoRecovery();
       setTimeout(nextAI, 1000);
       break;
 
@@ -1861,41 +1848,6 @@ function _aiWaitConfirm(label) {
 // 旧互換
 function _showAIConfirmButton(label, callback) {
   _aiWaitConfirm(label).then(callback);
-}
-
-// AI自動回復
-function aiAutoRecovery() {
-  testUnits.forEach(u => {
-    if (u.status === 'd' || u.status === 'dd') {
-      // 敵に隣接していたら回復不可
-      const enemySide = u.side === 'german' ? 'allied' : 'german';
-      const adjacentEnemy = testUnits.some(e =>
-        e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
-        hexDistance(e.col, e.row, u.col, u.row) === 1
-      );
-      if (adjacentEnemy) return;
-
-      // 遮蔽地形でない場合（平地・荒地）、敵のLOS内なら回復不可
-      const terrain = getHexTerrain(u.hexId);
-      const inCover = terrain === 'f' || terrain === 'w' || terrain === 't' || terrain === 'c';
-      if (!inCover) {
-        const inEnemyLOS = testUnits.some(e =>
-          e.side === enemySide && e.status !== 'eliminated' && e.type !== 'dummy' &&
-          hexDistance(e.col, e.row, u.col, u.row) <= (e.range || 1) &&
-          hasLOS(e.col, e.row, u.col, u.row)
-        );
-        if (inEnemyLOS) return;
-      }
-
-      const roll = Math.floor(Math.random() * 10);
-      const morale = u.morale || 5;
-      if (roll <= morale) {
-        const oldStatus = u.status;
-        u.status = u.status === 'dd' ? 'd' : 'ok';
-        addLog('recovery', `${u.name} 回復: ${oldStatus} → ${u.status} (ダイス${roll})`);
-      }
-    }
-  });
 }
 
 // AI自動移動・射撃
