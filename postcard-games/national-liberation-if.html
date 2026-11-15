@@ -54,7 +54,7 @@ const IF=(()=>{
    hex[id]={x:944+(c-7)*127.8+(r%2===0?63.9:0),y:114+(11-r)*111.1,r,c,city:city[id]||'',coast:coastal.has(id),owner:c>=(northMin[r]??99)?'C':'U',t:city[id]?'city':mountains.includes(id)?'mountain':rough.includes(id)?'rough':'clear'};
   }
  }
- const sea = ['0301-0401','0402-0504','0504-0603','0603-0703','0703-0803','0704-0803','0803-0904','0804-0904','0805-0906','0404-0506','0303-0404','0407-0506','0308-0407','0411-0413','0101-0103'];
+ const sea = ['0301-0401','0402-0504','0603-0703','0703-0803','0704-0803','0803-0904','0804-0904','0805-0906','0404-0506','0303-0404','0407-0506','0308-0407','0411-0413','0101-0103'];
  const lines=[
   '0202 0303 0402 0502 0602 0603 0704 0803 0804 0805 0706 0806 0906 1006 1107',
   '0706 0805 0806','0603 0504 0404 0505 0506 0606 0607 0707 0807 0908 1008 1009',
@@ -899,6 +899,7 @@ async function loadGame(file){
  $('battleDie').classList.remove('rolling');
  if(dialog().open)dialog().close();
  ({s,combat,landing,review,sel,group,target,lastPath,mode,rpChoice,viewBattle,aiPaths}=position);
+ if(canChooseRetreat()||canChooseAdvance())hideBattleView();
  highlightPhase();
  commit();
 }
@@ -990,6 +991,9 @@ function chooseLanding(h){
 function canChooseRetreat(){
  return combat?.stage==='retreat'&&!aiControls(battleController());
 }
+function canChooseAdvance(){
+ return combat?.stage==='advance'&&!aiControls(battleController());
+}
 function retreatTargets(){
  if(!canChooseRetreat())return new Set();
  const steps=combat.retreatSteps||[];
@@ -1008,7 +1012,7 @@ function chooseRetreat(h){
  commit();
 }
 function pick(t){
- if(!aiRunning&&(combat?combat.stage!=='advance'||aiControls(battleController()):aiPhase()))return;
+ if(!aiRunning&&(combat?!canChooseAdvance():aiPhase()))return;
  if(combat?.stage==='advance'&&advanceChoices().includes(t)){sel=sel===t.id?null:t.id;render();return}
  if(s.phase==='combat'&&!combat){
   if(t.side===s.side&&!s.attacked.includes(t.id)){group=group.includes(t.id)?group.filter(id=>id!==t.id):[...group,t.id]}
@@ -1019,8 +1023,12 @@ function pick(t){
 }
 function choose(h){
  if(canChooseRetreat()){chooseRetreat(h);return}
- if(!aiRunning&&(combat?combat.stage!=='advance'||aiControls(battleController()):aiPhase()))return;
- if(combat?.stage==='advance'&&h===combat.t&&selected()){advance(selected());return}
+ if(!aiRunning&&(combat?!canChooseAdvance():aiPhase()))return;
+ if(canChooseAdvance()){
+  if(h===combat.t&&selected())advance(selected());
+  else if(at(s,h))pick(at(s,h));
+  return;
+ }
  if(s.phase==='landing'){chooseLanding(h);return}
  const paths=available(),t=selected();
  if(paths[h]){
@@ -1079,7 +1087,9 @@ function holdCity(defender){remember();IF.loss(s,defender);note(defender.name+' 
 function finishCombat(){
  const fromRetreat=combat.stage==='retreat';
  combat.stage=advanceChoices().length?'advance':'close';
- if(fromRetreat&&versusAI()&&combat.stage==='advance'&&aiControls(battleController()))viewBattle=true;
+ sel=null;
+ if(canChooseAdvance())hideBattleView();
+ else if(fromRetreat&&versusAI()&&combat.stage==='advance')viewBattle=true;
  commit();
 }
 function advance(t){if(!advanceChoices().includes(t))return;remember();IF.move(s,t,combat.t);note(t.name+' が '+combat.t+' に戦闘後前進');clearCombat(false)}
@@ -1197,10 +1207,7 @@ function renderBattle(){
  }else if(liveBattle&&b.stage==='retreat'){
   battleButton('地図で退却先を選ぶ',closeBattleView,true);
   if(b.out==='DR'&&hex[defender.pos].city)battleButton(tr('都市を死守（1ステップ損失）'),()=>holdCity(defender));
- }else if(liveBattle&&b.stage==='advance'){
-  for(const t of advanceChoices())battleButton(tr('{u} を前進',{u:unitLabel(t)}),()=>advance(t));
-  battleButton(tr('前進しない'),clearCombat);
- }else if(liveBattle){battleButton(tr('戦闘を閉じる'),clearCombat,true)}
+ }else if(liveBattle&&b.stage==='close'){battleButton(tr('戦闘を閉じる'),clearCombat,true)}
  if(!dialog().open)dialog().showModal();
 }
 function ruleControls(){
@@ -1222,18 +1229,19 @@ function ruleControls(){
   return;
  }
  if(combat){
-  const retreating=canChooseRetreat();
+  const retreating=canChooseRetreat(),advancing=canChooseAdvance();
   const instruction=retreating?(combat.retreatSteps?.length?'連鎖退却の次のヘクスをクリック。':'光っている退却先をクリック。'):
-   combat.stage==='advance'?'攻撃に参加した駒を選び、空いたヘクスをクリック。':'戦闘処理中';
-  h.textContent=(tr(hex[combat.t].city)||combat.t)+' ｜ '+tr(instruction);
+   advancing?'攻撃に参加した駒を選び、空いたヘクスをクリック。':'戦闘処理中';
+  const result=(retreating||advancing)&&combat.out?tr(results[combat.out]):'';
+  h.textContent=[tr(hex[combat.t].city)||combat.t,result,tr(instruction)].filter(Boolean).join(' ｜ ');
   const odds=combat.col??IF.odds(s,combat.a.map(u),u(combat.d),combat.shift+combat.banzai.length).col;
   $('crt').dataset.col=String(odds);$('crt').dataset.row=String(combat.roll||0);
-  add(tr('戦闘画面を開く'),openCombat,retreating?'':'primary');
+  add(tr('戦闘画面を開く'),openCombat,retreating||advancing?'':'primary');
   if(retreating&&combat.out==='DR'&&hex[u(combat.d).pos].city)
    add('都市を死守（1ステップ損失）',()=>holdCity(u(combat.d)));
   if(retreating&&combat.retreatSteps?.length)add('選択解除',()=>{remember();delete combat.retreatSteps;commit()});
   if(combat.stage==='close')add('戦闘を閉じる',()=>clearCombat(),'primary');
-  if(combat.stage==='advance'&&!aiControls(battleController()))add(tr('前進しない'),clearCombat);return;
+  if(advancing)add(tr('前進しない'),clearCombat);return;
  }
  if(setup()){
   h.textContent=tr('駒を選び、分割線の自軍側に配置してください。');
@@ -1340,13 +1348,15 @@ function board(){
  tracks();const svg=$('over');svg.replaceChildren();const path=available(),svgNS=svg.namespaceURI;
  const landingCells=new Set(s.phase==='landing'&&landing&&!aiPhase()&&s.u.some(selectable)?landingSites(landing.zone):[]);
  const retreatCells=retreatTargets();
+ const advanceCell=canChooseAdvance()?combat.t:null;
  for(const [id,x] of Object.entries(hex)){
   const p=document.createElementNS(svgNS,'polygon');
   p.setAttribute('points',[[0,-74],[63.9,-37],[63.9,37],[0,74],[-63.9,37],[-63.9,-37]].map(([a,b])=>[x.x+a,x.y+b].join(',')).join(' '));
   p.classList.add('hex');if(path[id])p.classList.add(mode==='strategy'?'strategic':'can');
   if(x.city)p.classList.add(s.control[id]==='C'?'cCity':'uCity');
-  if(combat?.t===id)p.classList.add(combat.stage==='advance'?'advance-target':'battle-target');
-  const action=landingCells.has(id)?['landing-target','上陸']:retreatCells.has(id)?['retreat-target','退却']:null;
+  if(combat?.t===id&&id!==advanceCell)p.classList.add('battle-target');
+  const action=landingCells.has(id)?['landing-target','上陸']:retreatCells.has(id)?['retreat-target','退却']:
+   id===advanceCell?['advance-target','戦闘後前進']:null;
   if(action){
    p.classList.add(action[0]);
    p.setAttribute('tabindex','0');
@@ -1386,8 +1396,9 @@ function board(){
 }
 function piece(t){
  const b=document.createElement('button');b.type='button';b.className='piece';b.title=tr(names[t.side])+' '+unitLabel(t)+(t.face?' · '+tr('戦闘力')+' '+strength(t):'');b.setAttribute('aria-label',b.title);
- b.classList.toggle('on',sel===t.id||group.includes(t.id)||target===t.id);
- b.classList.toggle('advance-choice',combat?.stage==='advance'&&advanceChoices().includes(t));
+ const advancing=canChooseAdvance();
+ b.classList.toggle('on',sel===t.id||!advancing&&(group.includes(t.id)||target===t.id));
+ b.classList.toggle('advance-choice',advancing&&advanceChoices().includes(t));
  const im=document.createElement('img');im.alt=unitLabel(t);im.src=assets[t.id+(t.face||2)];b.append(im);b.onclick=()=>{if(hex[t.pos])choose(t.pos);else pick(t)};return b;
 }
 function render(){
