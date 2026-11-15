@@ -203,6 +203,20 @@ dialog::backdrop { background: #17251dc9; }
 .dialog-content h2, .preview h2 { font-size: 1.5rem; }
 .preview { display: grid; grid-template-columns: minmax(8rem, 45%) 1fr; gap: 1rem; align-items: center; }
 .preview img { border-radius: .4rem; width: 100%; max-height: 72vh; object-fit: contain; }
+.xun-card {
+  display: grid; grid-template-rows: auto 1fr; align-items: center; width: 100%; min-width: 0;
+  aspect-ratio: 459 / 650; overflow: hidden; color: #32261c; text-align: center;
+  border: .23em solid #383322; border-radius: .38em;
+  background: linear-gradient(#f6eddbd9, #f6eddbeb), url("assets/cards/back.webp") center 60% / 145% auto;
+}
+.xun-card b {
+  display: block; padding: .1em 0; color: #fff7dc; background: #82332a;
+  font-size: 1.55em; letter-spacing: .12em; line-height: 1.3;
+}
+.xun-card small { color: #32261c; font-size: .8em; font-weight: 700; line-height: 1.25; }
+.preview .xun-card { font-size: clamp(1.1rem, 3.5vw, 2rem); }
+.card-button .xun-card { flex: 0 0 3.8rem; font-size: .7rem; }
+.card-button .xun-card small { color: #32261c; font-weight: 700; }
 .preview p:not(.kicker) { margin: .5rem 0 .8rem; }
 .first-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .35rem; }
 .first-grid button { padding: .2rem; font-size: .75rem; overflow-wrap: anywhere; }
@@ -269,4 +283,5 @@ dialog::backdrop { background: #17251dc9; }
   .first-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .preview { grid-template-columns: 1fr; gap: .55rem; }
   .preview img { width: auto; max-height: 47vh; margin: 0 auto; }
+  .preview .xun-card { width: min(100%, 32vh); margin: 0 auto; }
 }

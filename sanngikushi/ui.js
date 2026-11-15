@@ -120,6 +120,7 @@
     $('setupError').textContent = '';
     const next = rules.create(setupRoster, {
       captureOnly: form.has('captureOnly'), leaderDeath: form.has('leaderDeath'), fastBattle: form.has('fastBattle'),
+      doubleCaoCard: form.has('doubleCaoCard'), strongStart: form.has('strongStart'),
     });
     enterGame(next);
   });
@@ -163,9 +164,17 @@
     previewCard(state.last);
   });
 
+  function cardArt(id, alt = '') {
+    if (id === 'xun') {
+      return '<span class="xun-card" aria-hidden="true"><b>荀彧</b><small>参戦マーカー<br>−1</small></span>';
+    }
+    const source = id ? image(cards[id].image) : 'assets/cards/back.webp';
+    return `<img src="${source}" alt="${esc(alt)}">`;
+  }
+
   function previewCard(id) {
     const c = cards[id];
-    modal('preview', `<div class="preview"><img src="${c ? image(c.image) : 'assets/cards/back.webp'}" alt="${c?.name || '天命札の裏面'}"><div>${panelTitle('天命札', c?.name || '山札')}${c ? `<p>${c.description}</p>` : ''}${button('close', '閉じる', { primary: true })}</div></div>`);
+    modal('preview', `<div class="preview">${cardArt(id, c?.name || '天命札の裏面')}<div>${panelTitle('天命札', c?.name || '山札')}${c ? `<p>${c.description}</p>` : ''}${button('close', '閉じる', { primary: true })}</div></div>`);
   }
 
   function applyZoom() {
@@ -369,15 +378,16 @@
   });
 
   function showFirst() {
+    const caoCount = state.deck.filter(id => id === 'cao').length;
     modal('first', `<div class="dialog-content">${panelTitle('第1巡', '最初の天命札を選ぶ')}
-      <div class="first-grid">${state.deck.map(id => cards[id]).sort((a, b) => a.image - b.image).map(c =>
-        `<button type="button" data-do="firstDraw" data-value="${c.id}"><img src="${image(c.image)}" alt=""><span>${c.name}</span></button>`).join('')}</div>
+      <div class="first-grid">${[...new Set(state.deck)].map(id => cards[id]).sort((a, b) => a.image - b.image).map(c =>
+        `<button type="button" data-do="firstDraw" data-value="${c.id}">${cardArt(c.id)}<span>${c.name}${c.id === 'cao' && caoCount > 1 ? `（${caoCount}枚）` : ''}</span></button>`).join('')}</div>
       <div class="button-row">${button('firstDraw', '山札から引く', { primary: true })}${button('close', '戻る')}</div></div>`);
   }
 
   function cardThumbnail(id) {
     const card = cards[id];
-    return `<img src="${image(card.image)}" alt=""><span>${card.name}</span>`;
+    return `${cardArt(id)}<span>${card.name}</span>`;
   }
 
   function usedCardsView() {
@@ -448,7 +458,7 @@
   function phaseDialog() {
     if (state.phase === 'reveal') {
       const card = cards[state.last];
-      modal('reveal', `<div class="preview"><img src="${image(card.image)}" alt="${card.name}の天命札">
+      modal('reveal', `<div class="preview">${cardArt(state.last, card.name + 'の天命札')}
         <div>${panelTitle('引いた天命札', card.name)}<p>${card.description}</p>${button('play', 'この札を処理する', { primary: true })}</div></div>`);
     } else if (state.phase === 'battle') {
       battleView();
@@ -456,6 +466,11 @@
       modal('followup', `<div class="dialog-content">${panelTitle('夏侯淵の特別ルール', '行軍後の戦闘')}
         <p>移動した軍勢だけで戦闘をおこなえます。</p>
         <div class="button-row">${button('followup', '戦闘する', { value: 'yes', primary: true })}${button('followup', '戦闘しない', { value: 'no' })}</div></div>`);
+    } else if (state.phase === 'entryDelay') {
+      modal('entryDelay', `<div class="dialog-content">${panelTitle('荀彧', '参戦マーカーを1マス戻す')}
+        <div class="button-row">${rules.entryDelayTargets(state).map(id => button('delayEntry',
+          `${factions[id].name}　${state.track[id]} → ${state.track[id] - 1}`, { value: id })).join('')}
+          ${button('delayEntry', '戻さずに進む')}</div></div>`);
     } else if (state.phase === 'order') {
       modal('order', `<div class="dialog-content">${panelTitle('諸葛亮', '天下三分之計')}<p>次に処理する将軍を選んでください。</p>
         <div class="button-row">${state.order.map(id => button('order', leaders[id].name, { value: id })).join('')}</div></div>`);
@@ -479,7 +494,7 @@
     $('draw').hidden = state.phase === 'disband';
     $('finishDisband').hidden = state.phase !== 'disband';
     $('finishDisband').textContent = state.events.some(note => note.endsWith('を解散。')) ? '解散を終えて進む' : '解散せずに進む';
-    $('lastCard').innerHTML = `<img src="${state.last ? image(cards[state.last].image) : 'assets/cards/back.webp'}" alt="">
+    $('lastCard').innerHTML = `${cardArt(state.last)}
       <span><strong>${state.last ? cards[state.last].name : '山札'}</strong><small>クリックで拡大</small></span>`;
     $('log').innerHTML = [...state.log].reverse().slice(0, 25).map(note => `<li>${esc(note)}</li>`).join('');
     const focus = state.phase === 'movement' ? state.route.at(-1) :
@@ -535,6 +550,7 @@
     if (action === 'done') { change(rules.done(state)); return; }
     if (action === 'followup') { change(rules.followup(state, value === 'yes')); return; }
     if (action === 'order') { change(rules.order(state, value)); return; }
+    if (action === 'delayEntry') { change(rules.delayEntry(state, value)); return; }
     if (action === 'nextStrike') { change(rules.nextStrike(state)); return; }
     if (action === 'disbandLeader') { change(rules.disbandLeader(state, value)); return; }
     if (action === 'disbandTroops') { change(rules.disband(state, selected, Number($('disbandAmount').value))); return; }

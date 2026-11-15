@@ -77,6 +77,7 @@ const Campaign = (() => {
     ['guan', '関羽＊', 14, '劉備が武勇値5で行軍または戦闘し、補充します。'],
     ['zhang', '張飛＊', 15, '劉備が武勇値4で行軍または戦闘し、補充します。'],
     ['zhu', '諸葛亮＊', 16, '孔明出蘆を1段進めます。諸葛亮が盤上にいる場合は天下三分之計を実行します。'],
+    ['xun', '荀彧', 17, '参戦マーカーを1つ選び、1マス戻せます。参戦済みの勢力も選べます。'],
   ].map(([id, name, image, description]) => [id, { id, name, image, description }]));
   const extras = { liu: ['guan', 'zhang', 'zhu'], sun: ['zhou'] };
   const initialCards = Object.keys(cards).filter(id => !Object.values(extras).flat().includes(id));

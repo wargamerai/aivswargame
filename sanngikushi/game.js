@@ -42,14 +42,15 @@ const ThreeKingdoms = ((data) => {
     const s = {
       version: 1,
       options: { captureOnly: !!options.captureOnly, leaderDeath: !!options.leaderDeath,
-        fastBattle: !!options.fastBattle },
+        fastBattle: !!options.fastBattle, doubleCaoCard: !!options.doubleCaoCard,
+        strongStart: !!options.strongStart },
       board: Object.fromEntries(Object.values(areas).map(a => [a.id,
         { owner: a.faction, troops: { [a.faction]: a.troops } }])),
       pool: Object.fromEntries(factionIds.map(id => [id, factions[id].total])),
       location: Object.fromEntries(leaderIds.map(id => [id, leaders[id].start])),
       track: Object.fromEntries(factionIds.filter(id => factions[id].track).map(id => [id, 0])),
       dead: [], removedCards: [], kongming: 0, reserve: 3,
-      deck: shuffle(initialCards, rng), discard: [], last: null, previous: null,
+      deck: shuffle(options.doubleCaoCard ? [...initialCards, 'cao'] : initialCards, rng), discard: [], last: null, previous: null,
       round: 1, turn: 0, draws: 0, phase: 'ready', end: null,
       log: [], events: [], queue: [], touches: [], route: [], active: null, battle: null,
     };
@@ -57,6 +58,13 @@ const ThreeKingdoms = ((data) => {
     s.pool.liu -= s.reserve;
     setup.forEach((id, i) => { s.location[id] = setupSlots[i]; });
     notes(s, '初期配置を確定しました。最初の天命札は任意で選べます。');
+    if (s.options.strongStart) {
+      for (const id of new Set(setupSlots)) {
+        s.board[id].troops.cao++;
+        s.pool.cao--;
+      }
+      notes(s, '許都・定陶・洛陽・兗州に、補充プールから軍勢駒を1駒ずつ追加しました。');
+    }
     return s;
   }
 
@@ -66,7 +74,7 @@ const ThreeKingdoms = ((data) => {
     if (s.dead.includes(faction) || s.track[faction] === factions[faction].track) return;
     s.track[faction] = factions[faction].track;
     notes(s, `${baseName(faction)}が参戦。`);
-    const added = extras[faction] || [];
+    const added = (extras[faction] || []).filter(id => !s.deck.includes(id) && !s.discard.includes(id));
     s.discard.push(...added);
     if (added.length) notes(s, `${added.map(id => cards[id].name).join('・')}を捨て札に追加。`);
   }
@@ -175,13 +183,18 @@ const ThreeKingdoms = ((data) => {
       return;
     }
     const faction = card === 'zhou' ? 'sun' : ['guan', 'zhang', 'zhu'].includes(card) ? 'liu'
-      : caoLeaders.includes(card) ? 'cao' : card;
+      : (card === 'xun' || caoLeaders.includes(card)) ? 'cao' : card;
     if (s.dead.includes(faction) || (faction !== 'cao' && extinction(s, faction))) return;
     if (!repeated) {
       s.discard.push(card);
       s.previous = card;
     }
     if (faction === 'cao') {
+      if (card === 'xun') {
+        if (entryDelayTargets(s).length) s.phase = 'entryDelay';
+        else notes(s, '荀彧の効果：戻せる参戦マーカーがありません。');
+        return;
+      }
       if (s.options.leaderDeath && s.draws === 1 && card !== 'cao' && s.location[card] === null) {
         s.location[card] = 'out';
         s.removedCards.push(card);
@@ -463,6 +476,22 @@ const ThreeKingdoms = ((data) => {
     return true;
   }
 
+  function entryDelayTargets(s) {
+    return Object.keys(s.track).filter(id => s.track[id] > 0 && !s.dead.includes(id));
+  }
+
+  function delayEntry(s, faction, rng = Math.random) {
+    if (s.phase !== 'entryDelay') return false;
+    if (faction) {
+      if (!entryDelayTargets(s).includes(faction)) return false;
+      const previous = s.track[faction];
+      s.track[faction]--;
+      notes(s, `荀彧の効果：${baseName(faction)}の参戦マーカーを ${previous} → ${s.track[faction]} に戻しました。`);
+    } else notes(s, '荀彧の効果は使用しませんでした。');
+    advance(s, rng);
+    return true;
+  }
+
   function order(s, id, rng = Math.random) {
     if (s.phase !== 'order' || !s.order.includes(id)) return false;
     s.queue.unshift({ type: 'enemy', leader: id, mods: {}, three: true },
@@ -607,6 +636,7 @@ const ThreeKingdoms = ((data) => {
   }
 
   return { create, validSetup, draw, play, command, march, confirmMovement, canCancelMovement, cancelMovement, followup, order, disband, disbandLeader,
+    entryDelayTargets, delayEntry,
     done, paths, canMarch, canReinforce, troops, present, count, factionList, hostile, controlCount,
     lossChoices, lose, resolveLosses, nextStrike, tableHits, battleLineup, usedCards };
 })(typeof module === 'undefined' ? Campaign : require('./data.js'));
