@@ -1,5 +1,5 @@
-const CACHE='nobunaga1570-v27';
-const FILES=['./','./index.html','./style.css','./app.js?v=27','./game-data.js','./territory-data.js','./assets/maps/white-map.png','./assets/maps/map-details.png','./manifest.webmanifest','./icon.svg'];
+const CACHE='nobunaga1570-v28';
+const FILES=['./','./index.html','./style.css?v=28','./app.js?v=28','./game-data.js','./territory-data.js','./assets/maps/white-map.png','./assets/maps/map-details.png','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith("nobunaga1570-")&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch', event => {

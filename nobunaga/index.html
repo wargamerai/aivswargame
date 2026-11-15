@@ -7,7 +7,7 @@
   <meta name="description" content="孤高の信長：一五七〇 一人用Webゲーム試作">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=28">
   <title>孤高の信長：一五七〇</title>
 </head>
 <body>
@@ -106,12 +106,19 @@
   <dialog id="firstDrawDialog" class="first-draw-dialog"><div class="first-draw-sheet"><span class="eyebrow">第1巡</span><h2>配置完了</h2><p>確認するとゲームを開始し、1枚目の状況カードを引きます。</p><div class="first-draw-actions"><button id="firstDrawConfirm" class="primary" type="button">確認してカードを引く</button></div></div></dialog>
   <dialog id="cardRevealDialog" class="card-reveal-dialog"><div class="card-reveal-sheet"><button id="cardRevealClose" class="card-reveal-x" type="button" aria-label="カードをパス">×</button><div class="card-reveal-art" id="cardRevealArt"></div><div class="card-reveal-copy"><span id="cardControlLabel" class="eyebrow">引いた状況カード</span><h2 id="cardRevealTitle"></h2><p id="cardRevealText"></p><div class="card-reveal-actions"><button id="cardRevealPass" class="quiet" type="button">パス（何もしない）</button><button id="cardRevealContinue" class="primary" type="button">プレイ</button></div></div></div></dialog>
   <dialog id="resolutionDialog" class="resolution-dialog"><div class="resolution-sheet"><span id="resolutionEyebrow" class="eyebrow">カード処理結果</span><h2 id="resolutionCardName"></h2><ul id="resolutionEntries" class="resolution-entries"></ul><button id="resolutionConfirm" class="primary" type="button">確認して次へ</button></div></dialog>
+  <dialog id="gameEndDialog" class="game-end-dialog" aria-labelledby="gameEndTitle" aria-describedby="gameEndReason">
+    <div class="game-end-sheet">
+      <h2 id="gameEndTitle"></h2>
+      <p id="gameEndReason"></p>
+      <button id="gameEndView" class="primary" type="button">盤面を見る</button>
+    </div>
+  </dialog>
   <dialog id="helpDialog"><div class="dialog-head"><h2>遊び方</h2><button id="closeHelp" aria-label="閉じる">×</button></div><div class="dialog-body"><p>状況カードを引きます。織田側カードはプレイヤーが行動を選び、反信長側カードは自動処理します。処理結果の「確認して次へ」を押すまで、次のカードには進みません。</p><ol><li>武将を選び、「行軍」「攻撃」「補充」などを押します。</li><li>行軍可能なエリアと街路が表示されます。目的地をクリックすると移動し、敵がいれば戦闘します。</li><li>途中でやめるときは「取消」。行動後に「終了・次のカードへ」を押して次の札を引きます。</li></ol><p class="notice">追記されたルールの勝敗条件と参戦チャートを反映しています。地図は位置関係が分かる簡略図で、正式な初期配置と拠点数は調整中です。</p></div></dialog>
   <div id="hoverPreview" class="hover-preview" hidden aria-hidden="true"></div>
   <div id="toast" class="toast" role="status"></div>
   <script src="game-data.js"></script>
   <script src="territory-data.js"></script>
-  <script src="app.js?v=27"></script>
+  <script src="app.js?v=28"></script>
 <script defer src="../game-analytics.js"></script>
 </body>
 </html>

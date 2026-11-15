@@ -789,3 +789,24 @@ body{background:#ece4d2}
 .formation-row input[type=number]{width:100%;padding:5px;border:1px solid var(--line);border-radius:6px;font:inherit}
 .formation-row label:last-child{display:flex;align-items:center;gap:2px;font-size:12px}
 #formationStatus{margin-top:12px}
+
+.game-end-dialog{
+  width:min(92vw,520px);
+  max-width:520px;
+  border:2px solid #aa873e;
+  border-radius:12px;
+  background:#fbf3df;
+  color:#30241a;
+  text-align:center;
+}
+.game-end-dialog::backdrop{background:#211b16c7}
+.game-end-sheet{padding:clamp(24px,6vw,48px) 18px}
+.game-end-sheet h2{
+  margin:0;
+  color:#6f3a29;
+  font:800 clamp(3.25rem,15vw,6.5rem)/1.12 "Noto Serif JP",serif;
+}
+.game-end-dialog[data-result="win"] h2{color:#3f2d10}
+.game-end-sheet p{margin:16px 0 24px;font-size:clamp(1rem,3.8vw,1.2rem);line-height:1.6}
+.game-end-sheet .primary{min-height:44px;min-width:132px;font-size:1rem}
+.game-end-sheet .primary:focus-visible{outline:3px solid #a8853f;outline-offset:3px}
