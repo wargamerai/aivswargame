@@ -7,150 +7,170 @@
 <!-- アクセス解析（GoatCounter） -->
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#caeaff">
     <title>シナリオ選択 - Air Combat Game</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            color-scheme: light;
+            --ink: #173650;
+            --muted: #415d72;
+            --line: #9dbdd4;
+            --accent: #175c92;
+            --accent-hover: #114772;
+            --sky-panel: #e7f5ff;
+            --cloud: #fcfeff;
+            --red-ink: #852a3d;
+            --red-panel: #fff1f1;
+        }
+        * { box-sizing: border-box; }
         body {
-            font-family: sans-serif;
-            background-color: #2a2a2a;
-            color: #eee;
+            margin: 0;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 16px;
+            padding: clamp(44px, 8vw, 92px) 16px 40px;
+            color: var(--ink);
+            font: 15px/1.55 Inter, "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+            background:
+                radial-gradient(ellipse at 0% 32%, #ffffffdf 0%, transparent 43%),
+                radial-gradient(ellipse at 95% 55%, #ffffffeb 0%, transparent 41%),
+                linear-gradient(170deg, #a9daf8 0%, #dcf2ff 55%, #f5fbff 100%);
         }
+        button, select { font: inherit; }
+        :is(button, select, input):focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 3px;
+        }
+        #tabs, #card { width: 100%; max-width: 680px; }
 
-        /* ── タブ ── */
-        #tabs {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 0;
-            width: 100%;
-            max-width: 680px;
-        }
+        #tabs { display: flex; gap: 8px; }
         .tab-btn {
             flex: 1;
-            padding: 10px 0;
-            font-size: 15px;
-            font-weight: bold;
-            background: #3a3a3a;
-            color: #aaa;
-            border: 2px solid #555;
+            padding: 12px 6px;
+            font-weight: 700;
+            color: var(--accent);
+            background: #edf8ff;
+            border: 1px solid var(--line);
             border-bottom: none;
-            border-radius: 6px 6px 0 0;
+            border-radius: 10px 10px 0 0;
             cursor: pointer;
-            transition: 0.15s;
         }
-        .tab-btn:hover { background: #484848; color: #ddd; }
+        .tab-btn:hover { background: #d3edff; }
         .tab-btn.active {
-            background: #1e3a2e;
-            color: #00ffcc;
-            border-color: #00ffcc;
+            color: #fff;
+            background: var(--accent);
+            border-color: var(--accent);
         }
+        .tab-btn.active:hover { background: var(--accent-hover); }
 
-        /* ── メインカード ── */
         #card {
-            width: 100%;
-            max-width: 680px;
-            background: #1e1e1e;
-            border: 2px solid #00ffcc;
-            border-radius: 0 6px 6px 6px;
-            padding: 20px 24px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 17px;
+            padding: clamp(16px, 4vw, 27px);
+            background: var(--cloud);
+            border: 1px solid var(--line);
+            border-radius: 0 0 13px 13px;
+            box-shadow: 0 16px 42px #275f8a21;
         }
 
-        /* ── シナリオ詳細 ── */
-        .scenario-info {
-            font-size: 13px;
-            line-height: 1.7;
-            color: #ccc;
-        }
+        .scenario-info { font-size: 13px; line-height: 1.7; }
         .scenario-info h2 {
-            font-size: 17px;
-            color: #00ffcc;
-            margin-bottom: 8px;
-            padding-bottom: 6px;
-            border-bottom: 1px solid #444;
+            margin: 0 0 10px;
+            padding-bottom: 7px;
+            border-bottom: 1px solid var(--line);
+            font-size: clamp(20px, 4vw, 24px);
+            line-height: 1.35;
         }
-        .scenario-info p { margin-bottom: 3px; }
+        .scenario-info p { margin: 0 0 3px; }
+        .map-warning { color: #89511a; font-size: 12px; }
         .team-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
-            margin-top: 10px;
+            margin-top: 13px;
         }
         .team-box {
-            flex: 1;
-            padding: 10px 14px;
-            border-radius: 5px;
+            padding: 11px 14px;
+            border-radius: 7px;
             font-size: 13px;
             line-height: 1.6;
         }
-        .team-blue { background: #1a2a3a; border-left: 4px solid #4169e1; }
-        .team-red  { background: #3a1a1a; border-left: 4px solid #dc143c; }
+        .team-blue { color: var(--ink); background: var(--sky-panel); border-left: 4px solid #3b80b8; }
+        .team-red { color: var(--red-ink); background: var(--red-panel); border-left: 4px solid #bc5266; }
 
-        /* ── 区切り ── */
-        hr { border: none; border-top: 1px solid #444; }
-
-        /* ── AI機体数セレクト ── */
-        #red-count-input {
-            padding: 4px 8px;
-            background: #111;
-            color: #ff9999;
-            border: 1px solid #dc143c;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        /* ── モード選択 ── */
-        .mode-section h3 {
-            font-size: 14px;
-            color: #00ffcc;
-            margin-bottom: 8px;
-        }
-        .mode-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
+        hr { width: 100%; margin: 0; border: none; border-top: 1px solid var(--line); }
+        .mode-section h3 { margin: 0 0 8px; font-size: 14px; }
+        .mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
         .mode-label {
             display: flex;
             align-items: flex-start;
             gap: 8px;
             padding: 10px 12px;
-            background: #2a2a2a;
-            border: 1px solid #555;
-            border-radius: 5px;
+            background: var(--cloud);
+            border: 1px solid var(--line);
+            border-radius: 7px;
             cursor: pointer;
-            transition: 0.15s;
             font-size: 13px;
         }
-        .mode-label:hover  { background: #333; border-color: #00ffcc; }
-        .mode-label input  { margin-top: 3px; flex-shrink: 0; accent-color: #00ffcc; }
-        .mode-name { font-weight: bold; font-size: 13px; display: block; margin-bottom: 2px; }
-        .mode-desc { color: #888; font-size: 12px; line-height: 1.4; }
-        .cfg-row { margin: 6px 0; font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .cfg-select { padding: 3px 6px; background: #111; color: #eee; border: 1px solid #555; border-radius: 3px; font-size: 13px; cursor: pointer; }
-
-        /* ── スタートボタン ── */
-        #start-btn {
-            padding: 13px;
-            font-size: 17px;
-            font-weight: bold;
-            background: #4169e1;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: 0.15s;
-            width: 100%;
+        label.mode-label:hover { border-color: var(--accent); }
+        .mode-label:has(input:checked) {
+            background: var(--sky-panel);
+            border-color: var(--accent);
         }
-        #start-btn:hover    { background: #2a52c0; }
-        #start-btn:disabled { background: #555; color: #888; cursor: not-allowed; }
+        .mode-label input { margin: 3px 0 0; flex-shrink: 0; accent-color: var(--accent); }
+        .mode-name { display: block; margin-bottom: 2px; font-weight: 700; }
+        .mode-desc { color: var(--muted); font-size: 12px; line-height: 1.4; }
+        .cfg-row { margin: 6px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        #red-count-input, .cfg-select {
+            padding: 4px 8px;
+            color: var(--ink);
+            background: var(--cloud);
+            border: 1px solid var(--line);
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            max-width: 100%;
+        }
+        #red-count-input { color: var(--red-ink); border-color: #bc5266; font-weight: 700; }
+
+        #start-btn {
+            width: 100%;
+            padding: 13px;
+            color: #fff;
+            background: var(--accent);
+            border: none;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 17px;
+            font-weight: 700;
+        }
+        #start-btn:hover, #start-btn:active { background: var(--accent-hover); }
+        #start-btn:disabled { color: var(--muted); background: #dce7ef; cursor: not-allowed; }
+
+        #nvLangAsk { background: rgba(186, 220, 242, 0.84) !important; }
+        #nvLangAsk > div {
+            color: var(--ink) !important;
+            background: var(--cloud) !important;
+            border: 1px solid var(--line) !important;
+            box-shadow: 0 18px 44px #275f8a2b;
+        }
+        #nvLangAsk button {
+            color: var(--accent) !important;
+            background: var(--sky-panel) !important;
+            border-color: var(--line) !important;
+        }
+        #nvLangAsk button:hover, #nvLangAsk button:focus-visible, #nvLangAsk button:active {
+            color: #fff !important;
+            background: var(--accent) !important;
+        }
+
+        @media (max-width: 520px) {
+            .team-row, .mode-grid { grid-template-columns: 1fr; }
+            body { padding-inline: 12px; }
+        }
     </style>
 </head>
 <body>
@@ -258,7 +278,9 @@
         function selectTab(index, btn) {
             currentIndex = index;
             document.querySelectorAll('.tab-btn').forEach((b, i) => {
-                b.classList.toggle('active', i === index);
+                const active = i === index;
+                b.classList.toggle('active', active);
+                b.setAttribute('aria-pressed', String(active));
             });
 
             const sc = scenarios[index];
@@ -283,7 +305,7 @@
                 rcBox.style.display = '';
                 document.getElementById('scenario-info').innerHTML = `
                     <h2>${sc.name}</h2>
-                    <p><strong>マップ:</strong> ${sc.map}${sc.fixedMap ? '　<span style="color:#ffaa44;font-size:12px;">⚠ マップ外に出た機体は除去</span>' : ''}</p>
+                    <p><strong>マップ:</strong> ${sc.map}${sc.fixedMap ? '　<span class="map-warning">⚠ マップ外に出た機体は除去</span>' : ''}</p>
                     <p><strong>制限ターン:</strong> ${sc.turns}ターン　（先行: ${sc.firstMove}）</p>
                     <p><strong>勝利条件:</strong> ${sc.victory}</p>
                     <div class="team-row">
