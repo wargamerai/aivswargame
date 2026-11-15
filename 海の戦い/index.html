@@ -2672,14 +2672,9 @@ function decideRetreatPort(ship){
 function waitForSurfaceTarget(side, focusSea, attacker, pending, opts){
   return new Promise(resolve => {
     const isAiAttacker = attacker && attacker.side === aiSide;
-    // pending damageで撃沈確定の艦を除外
-    const willBeSunk = (s) => {
-      if(!pending) return false;
-      const pd = pending.damage[s.id] || 0;
-      return (s.damage + pd) > s.def;
-    };
+    // 射撃宣言中の pending.damage は予想値。撃沈が確定するまでは目標にできる。
     const enemies = SHIPS.filter(s =>
-      s.side === side && !s.sunk && s.location === focusSea && s.type !== 'UBOAT' && !s.disabledThisTurn && !s.removed && !willBeSunk(s)
+      s.side === side && !s.sunk && s.location === focusSea && s.type !== 'UBOAT' && !s.disabledThisTurn && !s.removed
     );
     // 通常艦（CV/CONVOYでない）
     // 攻撃を宣言した空母は、このラウンドは通常の艦と同じ扱い
