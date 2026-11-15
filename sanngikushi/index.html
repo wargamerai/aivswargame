@@ -77,7 +77,6 @@
           <span id="deckCount" class="muted"></span>
         </div>
         <div class="button-row">
-          <button type="button" id="draw" class="primary">天命札を引く</button>
           <button type="button" id="finishDisband" class="primary" hidden>解散せずに進む</button>
         </div>
       </div>
@@ -101,16 +100,19 @@
                 <button type="button" class="primary" id="confirmMovement">移動を確認</button>
               </div>
             </div>
-            <div id="viewport" class="map-viewport" tabindex="0" aria-label="地図">
-              <div id="board" class="board">
-                <img class="map-image" src="assets/board.jpg" alt="主要街道と間道が記された原盤面">
-                <svg class="routes" viewBox="0 0 1342 1888" aria-hidden="true"><defs>
-                <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="70" markerHeight="70" viewBox="0 0 70 70" refX="67" refY="35" orient="auto">
-                  <path d="M3 3 L67 35 L3 67 Z" fill="#c5221f" stroke="#fff9e5" stroke-width="4" stroke-linejoin="round"/>
-                  </marker>
-                </defs><g id="route"></g></svg>
-                <div id="areaNodes"></div><div id="mapTracks" aria-hidden="true"></div>
+            <div class="map-stage">
+              <div id="viewport" class="map-viewport" tabindex="0" aria-label="地図">
+                <div id="board" class="board">
+                  <img class="map-image" src="assets/board.jpg" alt="主要街道と間道が記された原盤面">
+                  <svg class="routes" viewBox="0 0 1342 1888" aria-hidden="true"><defs>
+                  <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="70" markerHeight="70" viewBox="0 0 70 70" refX="67" refY="35" orient="auto">
+                    <path d="M3 3 L67 35 L3 67 Z" fill="#c5221f" stroke="#fff9e5" stroke-width="4" stroke-linejoin="round"/>
+                    </marker>
+                  </defs><g id="route"></g></svg>
+                  <div id="areaNodes"></div><div id="mapTracks" aria-hidden="true"></div>
+                </div>
               </div>
+            <button type="button" id="draw" class="primary">天命札を引く</button>
             </div>
             <p class="map-legend"><span>外枠＝拠点を支配する勢力</span><span>各列＝将軍名と軍勢駒の数</span></p>
           </section>

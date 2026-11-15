@@ -134,6 +134,8 @@ legend { color: var(--green); font-weight: 750; }
 .movement-banner.enemy { background: #fae8dc; border-color: #dcad97; }
 .movement-banner p { font-size: .8rem; }
 .movement-banner button { flex-shrink: 0; }
+.map-stage { position: relative; isolation: isolate; }
+.map-stage > #draw { position: absolute; right: .75rem; bottom: .75rem; z-index: 20; }
 .map-viewport { height: clamp(32rem, 75vh, 60rem); overflow: auto; overscroll-behavior: contain; background: #e5decc; }
 .board { position: relative; width: 100%; aspect-ratio: 1342 / 1888; margin: 0 auto; }
 .map-image, .routes { position: absolute; inset: 0; width: 100%; height: 100%; }
