@@ -950,6 +950,7 @@ var PocPlanner = (function () {
     const seas = a.seaList, al = sea => a.allied[sea] || [];
     const fixed = a.fixed || {};
     const sumP = arr => arr.reduce((t, s) => t + pwS(s), 0);
+    const arrivalPower = (unit, sea) => pwS(unit.s) * (unit.arrival?.[sea] ?? 1);
     let free = a.ships.slice();
     const plan = {}, notes = [];
     const assign = (ships, sea) => {
@@ -963,21 +964,26 @@ var PocPlanner = (function () {
     if (soviet.length) {
       const direct = u => Number(u.direct?.includes('Baltic') || false);
       const guards = free.filter(u => u.s.country === 'DE' && u.s.type !== 'CV' && pwS(u.s) > 0 && u.opts.includes('Baltic'))
-        .sort((x, y) => direct(y) - direct(x) || pwS(y.s) - pwS(x.s));
+        .sort((x, y) => direct(y) - direct(x) || arrivalPower(y, 'Baltic') - arrivalPower(x, 'Baltic'));
       // 1隻に対して最低2隻、攻撃力はソ連の2倍以上。足りなければ届く水上艦をすべて出す。
       const force = [];
       let firepower = 0;
       for (const u of guards) {
         if (force.length >= soviet.length * 2 && firepower >= sumP(soviet) * 2) break;
         force.push(u);
-        firepower += pwS(u.s);
+        firepower += arrivalPower(u, 'Baltic');
       }
       assign(force, 'Baltic');
       baltic = { ships: force.map(u => u.s.name), ru: soviet.map(s => s.name), atk: firepower, ruAtk: sumP(soviet) };
       notes.push(`バルト海 ソ連${soviet.length}隻に水上艦${force.length}隻`);
     }
 
-    // 連合艦がいない地中海は、出撃可能なイタリア艦を全部送る。
+    // イタリアの1-1-7重巡は南大西洋へ出られるとき全艦を割り当てる。
+    const southCruisers = free.filter(u => u.s.country === 'IT' && u.s.type === 'CA' &&
+      u.s.atk === 1 && u.s.def === 1 && u.s.spd === 7 && u.opts.includes('SouthAtlantic'));
+    if (southCruisers.length) assign(southCruisers, 'SouthAtlantic');
+
+    // 連合艦がいない地中海は、出撃可能な残りのイタリア艦を全部送る。
     const medFleet = al('Mediterranean').length ? [] :
       free.filter(u => u.s.country === 'IT' && u.opts.includes('Mediterranean'));
     if (medFleet.length) assign(medFleet, 'Mediterranean');
@@ -993,9 +999,11 @@ var PocPlanner = (function () {
         if (!al(sea).length || attacks.some(attack => attack.target === sea)) continue;
         const force = free.filter(u => u.opts.includes(sea) &&
           (u.s.country === 'DE' || (u.s.type === 'CA' && a.turn > 1)));
-        const ships = force.map(u => u.s).concat(fixed[sea] || []);
-        if (!ships.length) continue;
-        const alliedPower = sumP(al(sea)), surfacePower = sumP(ships);
+        const alreadyThere = fixed[sea] || [];
+        const cruisers = sea === 'SouthAtlantic' ? southCruisers : [];
+        if (!force.length && !alreadyThere.length && !cruisers.length) continue;
+        const alliedPower = sumP(al(sea));
+        const surfacePower = force.concat(cruisers).reduce((total, u) => total + arrivalPower(u, sea), sumP(alreadyThere));
         const convoy = convoysIn(al(sea)) > 0;
         const asw = aswBySea[sea];
         const hitChance = uboatHitChance(ubs, asw);
@@ -1053,7 +1061,8 @@ var PocPlanner = (function () {
       if (Object.keys(posts).length === taken.length) { cover = posts; bestScore = score; }
     }
     const medPoc = medFleet.length ? a.seas.Mediterranean.axis : 0;
-    return { plan: Object.assign(plan, cover), value: bestScore + medPoc, notes, ubTarget, attacks, baltic };
+    const southPoc = southCruisers.length && !al('SouthAtlantic').length ? a.seas.SouthAtlantic.axis : 0;
+    return { plan: Object.assign(plan, cover), value: bestScore + medPoc + southPoc, notes, ubTarget, attacks, baltic };
   }
 
   function uboatHitChance(boats, aswDice) {

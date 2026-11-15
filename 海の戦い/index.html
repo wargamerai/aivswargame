@@ -1630,9 +1630,12 @@ function waitForTargetClickIn(side, focusSea, excludeIds, mode){
     );
     if(!candidates.length){ resolve(null); return; }
     if((aiMode && side === humanSide) || (humanSide === 'allies' && side === 'allies')){ // 人が連合の時は、枢軸AIの目標も自動
+      const strength = s => ((s.type === 'CV' ? s.air : s.atk) || 0) + (s.def || 0);
+      const strongestFirst = (a, b) => strength(b) - strength(a);
       if(mode === 'uboat' && side === 'allies'){
-        const convoy = candidates.find(s => s.type === 'CONVOY');
-        if(convoy){ resolve(convoy); return; }
+        const priority = s => s.type === 'CONVOY' ? 2 : s.type === 'CV' ? 1 : 0;
+        resolve(candidates.sort((a, b) => priority(b) - priority(a) || strongestFirst(a, b))[0]);
+        return;
       }
       // 連合の航空攻撃（空母・LBA）: 大物（攻撃力+防御力が最大）を狙う。5の目で帰還させると影響が大きい
       // 連合の LBA: イタリアの 1-1-7。いなければドイツの 1-2-7（ユーザーの指示 2026-11-08）
@@ -1652,23 +1655,12 @@ function waitForTargetClickIn(side, focusSea, excludeIds, mode){
         resolve(candidates.slice().sort((a, b) => val(b) - val(a) || (a.damage || 0) - (b.damage || 0))[0]); return;
       }
       if(mode === 'air'){
-        // 航空攻撃: 第1巡 無傷で未攻撃の艦を def 低い順
-        const undamagedUnhit = candidates.filter(c => c.damage === 0 && !c._aiAirHit1);
-        if(undamagedUnhit.length){
-          undamagedUnhit.sort((a,b) => (a.def||0) - (b.def||0));
-          undamagedUnhit[0]._aiAirHit1 = true;
-          undamagedUnhit[0]._aiAirHits = (undamagedUnhit[0]._aiAirHits || 0) + 1;
-          resolve(undamagedUnhit[0]); return;
-        }
-        // 航空攻撃: 第2巡以降 hit数最小、damage少ない、def低い順
-        const minAirHits = Math.min(...candidates.map(c => c._aiAirHits || 0));
-        const airPool = candidates.filter(c => (c._aiAirHits || 0) === minAirHits);
-        airPool.sort((a, b) => {
-          if((a.damage||0) !== (b.damage||0)) return (a.damage||0) - (b.damage||0);
-          return (a.def||0) - (b.def||0);
-        });
-        airPool[0]._aiAirHits = minAirHits + 1;
-        resolve(airPool[0]); return;
+        // ドイツの陸上航空は味方艦がいる海域では大物、単独なら沈めやすい艦から狙う。
+        const hasFriendlyShips = SHIPS.some(s => s.side === 'axis' && s.location === focusSea &&
+          !s.sunk && !s.removed && !s.returnPending && !s.disabledThisTurn);
+        const weakestFirst = (a, b) => sinkLeft(a) - sinkLeft(b) || strongestFirst(b, a);
+        resolve(candidates.sort(hasFriendlyShips ? strongestFirst : weakestFirst)[0]);
+        return;
       }
       if(mode === 'cv'){
         // 空母: 一番強い (atk高い) 無傷艦に集中、damage>0/即時帰還で次の無傷艦へ
@@ -2714,15 +2706,9 @@ function waitForSurfaceTarget(side, focusSea, attacker, pending, opts){
     if(isAiAttacker && attacker.side === 'allies'){ resolve(alliedPickTarget(candidates, pending)); return; }
     if(isAiAttacker){
       if(convoy.length){ resolve(convoy[0]); return; }
-      const firedAt = (pending && pending.firedAtBy && pending.firedAtBy[attackerSide]) || new Set();
-      const unfired = candidates.filter(c => !firedAt.has(c.id));
-      if(unfired.length){
-        const undamaged = unfired.filter(c => c.damage === 0);
-        resolve(undamaged.length ? undamaged[0] : unfired[0]); return;
-      }
-      // 全艦攻撃済 → 無傷艦から
-      const undamaged = candidates.filter(c => c.damage === 0);
-      resolve(undamaged.length ? undamaged[0] : candidates[0]); return;
+      const unassigned = candidates.find(s => !firedAt.has(s.id));
+      resolve(unassigned || candidates.slice().sort((a, b) => sinkLeft(a) - sinkLeft(b))[0]);
+      return;
     }
     const handlers = {};
     const cleanup = () => candidates.forEach(c => {
@@ -2936,19 +2922,22 @@ function getReturnPorts(ship){
 
 // 枢軸艦帰還UI: 縦に艦一覧、各行に到達可能港ボタン＋洋上補給ボタン＋やり直し
 // options.autoDefault: 戦闘フェイズ即時帰還時のみ true（DE/IT 自動コミット＋港にいる艦フィルタ）
-// 人が連合の時の、枢軸AIの帰還先: 洋上補給できるなら補給、それ以外は元の港
+// 枢軸AIは北大西洋のドイツ艦をドイツへ帰し、南大西洋では洋上補給も使う。
 function axisReturnAuto(ships, options){
   const list = options.autoDefault ? ships.filter(s => s.location && SEAS[s.location]) : ships;
   const turn = currentTurn;
   const toFrance = new Set();
   if(!options.autoDefault && PORTS.France.available.includes(turn) && turn < 6){
     let budget = PORTS.France.repair - SHIPS.filter(s => s.location === 'France' && !s.sunk && s.damage > 0).reduce((t, s) => t + s.damage, 0);
-    list.filter(s => s.country === 'DE' && s.damage > 0 && getReturnPorts(s).includes('France')).sort((a, b) => a.damage - b.damage)
+    list.filter(s => s.country === 'DE' && s.location !== 'NorthAtlantic' && s.damage > 0 && getReturnPorts(s).includes('France')).sort((a, b) => a.damage - b.damage)
       .forEach(s => { if(s.damage <= budget){ toFrance.add(s.id); budget -= s.damage; } });
   }
   for(const ship of list){
     const from = ship.location, ports = getReturnPorts(ship);
-    if(!ship.forcedReturn && ship.country === 'DE' && turn <= 3 && (from === 'NorthAtlantic' || from === 'SouthAtlantic') && !options.autoDefault && !(ship.damage > 0)){
+    if(ship.country === 'DE' && from === 'NorthAtlantic' && ports.includes('Germany')){
+      ship.location = 'Germany'; ship.atDock = false; continue;
+    }
+    if(!ship.forcedReturn && ship.country === 'DE' && turn <= 3 && from === 'SouthAtlantic' && !options.autoDefault && !(ship.damage > 0)){
       if(rollD6() <= 6 - turn){ ship.refuelTurn = turn; ship.atDock = false; continue; }
       ship.location = 'Neutral'; ship.arrivedNeutralTurn = turn; ship.atDock = false; continue;
     }

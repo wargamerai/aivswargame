@@ -143,7 +143,10 @@ function axisAiMove(){
         const h = reach(s, sea);
         return h === 1 || (h === 2 && (s.spd - 1) / 6 >= 0.6);
       });
-      return { s, opts: [...o, 'port'], direct: o.filter(sea => reach(s, sea) === 1) };
+      const direct = o.filter(sea => reach(s, sea) === 1);
+      const twoAreaArrival = Math.min(6, Math.max(0, s.spd - 1)) / 6;
+      const arrival = Object.fromEntries(o.map(sea => [sea, direct.includes(sea) ? 1 : twoAreaArrival]));
+      return { s, opts: [...o, 'port'], direct, arrival };
     });
     const allied = {};
     seaList.forEach(sea => { allied[sea] = alliedAt(sea); });
