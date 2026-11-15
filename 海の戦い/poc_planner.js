@@ -950,7 +950,8 @@ var PocPlanner = (function () {
     const seas = a.seaList, al = sea => a.allied[sea] || [];
     const fixed = a.fixed || {};
     const sumP = arr => arr.reduce((t, s) => t + pwS(s), 0);
-    const arrivalPower = (unit, sea) => pwS(unit.s) * (unit.arrival?.[sea] ?? 1);
+    const arrivalChance = (unit, sea) => unit.arrival?.[sea] ?? 1;
+    const arrivalPower = (unit, sea) => pwS(unit.s) * arrivalChance(unit, sea);
     let free = a.ships.slice();
     const plan = {}, notes = [];
     const assign = (ships, sea) => {
@@ -958,24 +959,25 @@ var PocPlanner = (function () {
       free = free.filter(u => !ships.includes(u));
     };
 
-    // バルト海にソ連艦が出たら先に水上艦を確保。無傷のドイツ艦の砲撃は出目に+1。
+    // 他の攻撃より先にバルト海へ。無人なら1 POC用に1隻、ソ連艦が出たら出撃できる水上艦を全艦送る。
     const soviet = al('Baltic');
+    const balticOptions = free.filter(u => u.s.country === 'DE' && u.s.type !== 'CV' && u.s.type !== 'UBOAT' &&
+      pwS(u.s) > 0 && u.opts.includes('Baltic'));
+    const balticForce = soviet.length ? balticOptions : [];
+    if (!soviet.length && !fixed.Baltic?.length && balticOptions.length) {
+      const isDirect = u => Number(u.direct?.includes('Baltic') || false);
+      const strength = u => pwS(u.s) + (u.s.def || 0);
+      balticOptions.sort((x, y) => arrivalChance(y, 'Baltic') - arrivalChance(x, 'Baltic') ||
+        isDirect(y) - isDirect(x) || Number(x.s.damage > 0) - Number(y.s.damage > 0) || strength(x) - strength(y));
+      balticForce.push(balticOptions[0]);
+    }
     let baltic = null;
-    if (soviet.length) {
-      const direct = u => Number(u.direct?.includes('Baltic') || false);
-      const guards = free.filter(u => u.s.country === 'DE' && u.s.type !== 'CV' && pwS(u.s) > 0 && u.opts.includes('Baltic'))
-        .sort((x, y) => direct(y) - direct(x) || arrivalPower(y, 'Baltic') - arrivalPower(x, 'Baltic'));
-      // 1隻に対して最低2隻、攻撃力はソ連の2倍以上。足りなければ届く水上艦をすべて出す。
-      const force = [];
-      let firepower = 0;
-      for (const u of guards) {
-        if (force.length >= soviet.length * 2 && firepower >= sumP(soviet) * 2) break;
-        force.push(u);
-        firepower += arrivalPower(u, 'Baltic');
-      }
-      assign(force, 'Baltic');
-      baltic = { ships: force.map(u => u.s.name), ru: soviet.map(s => s.name), atk: firepower, ruAtk: sumP(soviet) };
-      notes.push(`バルト海 ソ連${soviet.length}隻に水上艦${force.length}隻`);
+    if (balticForce.length || soviet.length) {
+      assign(balticForce, 'Baltic');
+      const atk = balticForce.reduce((total, u) => total + arrivalPower(u, 'Baltic'), 0);
+      baltic = { ships: balticForce.map(u => u.s.name), ru: soviet.map(s => s.name), atk, ruAtk: sumP(soviet) };
+      notes.push(soviet.length ? `バルト海 ソ連${soviet.length}隻に水上艦${balticForce.length}隻` :
+        `バルト海 1 POCを目指して${balticForce[0].s.name}を配置`);
     }
 
     // イタリアの1-1-7重巡は南大西洋へ出られるとき全艦を割り当てる。
@@ -1062,7 +1064,8 @@ var PocPlanner = (function () {
     }
     const medPoc = medFleet.length ? a.seas.Mediterranean.axis : 0;
     const southPoc = southCruisers.length && !al('SouthAtlantic').length ? a.seas.SouthAtlantic.axis : 0;
-    return { plan: Object.assign(plan, cover), value: bestScore + medPoc + southPoc, notes, ubTarget, attacks, baltic };
+    const balticPoc = !soviet.length && balticForce.length ? a.seas.Baltic.axis * arrivalChance(balticForce[0], 'Baltic') : 0;
+    return { plan: Object.assign(plan, cover), value: bestScore + medPoc + southPoc + balticPoc, notes, ubTarget, attacks, baltic };
   }
 
   function uboatHitChance(boats, aswDice) {

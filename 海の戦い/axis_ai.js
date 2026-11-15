@@ -127,12 +127,20 @@ function axisAiMove(){
   let ubPlan = null, ubTarget = null;
   if(AX_MODE >= 1){
     const seaList = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean', 'Baltic'];
-    const movers = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.type !== 'UBOAT' && !s.movedThisTurn && !(s.damage > 0) &&
-      !(s.location === 'France' && turn > 6) && (PORTS[s.location] || (SEAS[s.location] && s.refuelTurn === turn - 1)));
+    const canSendBaltic = s => AX_MODE >= 6 && s.country === 'DE' && s.type !== 'CV' &&
+      s.atk > 0 && !s.returnPending && !s.failedMove;
+    const movers = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.type !== 'UBOAT' && !s.movedThisTurn &&
+      (!(s.damage > 0) || canSendBaltic(s)) && !(s.location === 'France' && turn > 6) &&
+      (PORTS[s.location] || (SEAS[s.location] && s.refuelTurn === turn - 1)));
     const neutral = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.location === 'Neutral' && !s.movedThisTurn);
     neutral.forEach(s => { move(s, 'SouthAtlantic'); });
     const ships = movers.filter(s => !s.movedThisTurn).map(s => {
       const o = seaList.filter(sea => {
+        if(sea === 'Baltic' && AX_MODE >= 6){
+          const hops = reach(s, sea);
+          return canSendBaltic(s) && (hops === 1 || (hops === 2 && s.spd > 1));
+        }
+        if(s.damage > 0) return false;
         if(s.country === 'IT'){
           if(sea === 'Mediterranean') return reach(s, sea) > 0;
           if(s.type !== 'CA') return false;
