@@ -409,6 +409,49 @@
         this.moveState[u.id] = original;
       }
     }
+    canReturnMove(u) {
+      const ms = u && this.moveState?.[u.id];
+      if (!u?.alive || this.phase !== u.side + '_move' || !ms?.moved || !ms.start || u.holdTarget || ms.overran) return false;
+      const legacyOverrun = u.side === 'ger' && !Object.values(this.moveState).some(state => state.overran) &&
+        this.log.some(e => e.turn === this.turn && e.phase === this.phase && e.kind === 'combat' && e.text.startsWith('オーバーラン:'));
+      return !legacyOverrun && !this.enemyAt(ms.start, u.side) &&
+        this.friendCount(ms.start, u.side) - Number(u.hex === ms.start) < STACK_MAX;
+    }
+    returnMove(u, trails) {
+      if (!this.canReturnMove(u) || !this.undoStack.length || !trails.some(t => t.units.includes(u.id))) return false;
+      const { start } = this.moveState[u.id];
+      const initial = this.undoStack[0];
+      const previousHolds = this.undoStack.flatMap(s => s.holdOrders || []);
+      this._snap();
+      const snapshot = this.undoStack.at(-1);
+      const phaseLogStart = this.log.findIndex(e => e.turn === this.turn && e.phase === this.phase && e.kind === 'control');
+      if (phaseLogStart !== -1) {
+        snapshot.logStart = phaseLogStart;
+        snapshot.logTail = this.log.slice(phaseLogStart);
+        this.log = this.log.filter(e => !(e.turn === this.turn && e.phase === this.phase && e.kind === 'control'));
+      }
+      snapshot.trails = trails;
+      trails = trails.map(t => ({ ...t, units: t.units.filter(id => id !== u.id) })).filter(t => t.units.length);
+      u.hex = start;
+      this.moveState[u.id] = { mp: u.mov, moved: false, stopped: false, start, group: null };
+      this.control = { ...initial.control };
+      for (const trail of trails) {
+        for (const h of trail.path.slice(1)) {
+          if (this.control[h] && this.control[h] !== trail.side) {
+            this.control[h] = trail.side;
+            this.addLog(`${SIDE_NAME[trail.side]}が${FAC_NAME[this.map.facility(h)]}（${h}）を支配`, 'control');
+          }
+        }
+      }
+      if (u.side === 'ger') {
+        const holdBefore = new Set((snapshot.holdOrders || []).map(([id]) => id));
+        const passed = new Set(trails.flatMap(t => t.path.slice(1)));
+        this.restoreHoldOrders(previousHolds.filter(([, h]) => !passed.has(h) && this.control[h] !== 'ger' && !this.enemyAt(h, 'sov')));
+        snapshot.returnedHoldOrders = Object.fromEntries(this.holdOrders().filter(([id]) => !holdBefore.has(id)).map(([id, , rev]) => [id, rev]));
+      }
+      this.emit({ type: 'returnMove', trails });
+      return true;
+    }
     _canSpendMovement(u) {
       const ms = this.moveState?.[u.id];
       return !!(ms && u.alive && u.hex && !ms.stopped && ms.mp > 0 && this.phase === u.side + '_move');
@@ -497,13 +540,21 @@
       const s = this.undoStack.pop();
       for (const x of s.units) { const u = this.unit(x.id); u.hex = x.hex; u.alive = x.alive; u.revealed = x.revealed; u.broke = x.broke; }
       this.restoreHoldOrders(s.holdOrders);
-      this.moveState = s.ms; this.control = s.control; this.log.length = s.logLen; this.breakScore = s.breakScore; this._grp = s.grp;
+      this.moveState = s.ms; this.control = s.control; this.breakScore = s.breakScore; this._grp = s.grp;
+      if (s.logTail) this.log.splice(s.logStart, this.log.length - s.logStart, ...s.logTail);
+      else this.log.length = s.logLen;
+      if (s.trails && this.phase === 'ger_move') {
+        const keep = new Set((s.holdOrders || []).map(([id]) => id));
+        for (const u of this.onMap('sov')) {
+          if (u.holdTarget && !keep.has(u.id) && s.returnedHoldOrders?.[u.id] === (u.holdRevision ?? 0)) delete u.holdTarget;
+        }
+      }
       if (this.phase === 'ger_move') {
         for (const [, h] of this.holdOrders()) {
           if (this.control[h] === 'ger' || this.enemyAt(h, 'sov')) this._cancelHoldOrdersAt(h);
         }
       }
-      this.emit({ type: 'undo' });
+      this.emit({ type: 'undo', trails: s.trails });
       return true;
     }
     moveGroup(units, h) {
@@ -573,6 +624,7 @@
       this._snap();
       for (const v of def) this._kill(v, 'オーバーラン');
       const grp = this.overrunGroup(u);
+      for (const v of grp) this.moveState[v.id].overran = true;
       this.addLog(`オーバーラン: ${grp.map(v => this.unitName(v)).join('と')}（戦闘力${grp.reduce((t, v) => t + v.str, 0)}）が ${h} の ${def.length}個を除去`, 'combat');
       if (!this.adjEnemy(u.hex, u.side)) for (const v of grp) this.moveState[v.id].stopped = false;
       this.emit({ type: 'change' });

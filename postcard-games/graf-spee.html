@@ -504,12 +504,59 @@ const game=(()=>{
    const otherThreat=britishThreat(hex,patrols.filter(ship=>ship.pos!==hex));
    return likelyCarrier*(1-escort)/(1+otherThreat*.28);
  }
+ function pursuitForecast(s,patrols){
+   const last=s.germanIntel.findLast(entry=>entry.turn<s.turn);
+   const before=new Map(last?.positions.start?.map(ship=>[ship.id,ship.pos]));
+   const contact=s.contact?.hex;
+   const scanned=last?.searches.map(scan=>scan.hex)??[];
+   return hex=>{
+     if(!all[hex])return 0;
+     const points=adj(hex);
+     const nearContact=all[contact]&&hexDistance(hex,contact)<=2;
+     const nearScan=scanned.some(searched=>hexDistance(hex,searched)<=1);
+     const moves=[],reserves=[];
+     let stay=0;
+     for(const ship of patrols){
+       const from=before.get(ship.id);
+       const followed=all[from]&&all[ship.pos]&&from!==ship.pos&&(
+         hexDistance(ship.pos,hex)<hexDistance(from,hex)||
+         (nearContact&&hexDistance(ship.pos,contact)<hexDistance(from,contact))
+       );
+       let inPlace=0,advance=0;
+       for(const {type,chance,range} of ship.estimates){
+         if(type==='DUMMY')continue;
+         const carrier=type==='CV';
+         if(!carrier&&ship.pos===hex){inPlace+=chance;continue}
+         const reaches=carrier?s.tracked&&points.some(h=>range.has(h)):range.has(hex);
+         if(!reaches)continue;
+         let intent=s.tracked?.88:nearContact?.50:nearScan?.29:raids.has(hex)?.19:.12;
+         if(followed)intent=Math.min(.9,intent+.24);
+         if(ship.pos===null)intent*=.6;
+         advance+=chance*intent;
+       }
+       stay=1-(1-stay)*(1-inPlace);
+       if(ship.pos===null)reserves.push(advance);
+       else if(advance)moves.push(advance);
+     }
+     moves.sort((a,b)=>b-a);
+     let likely=stay;
+     for(let n=0;n<=Math.min(britishMoveLimit,reserves.length);n++){
+       const avoid=[...reserves.slice(0,n),...moves.slice(0,britishMoveLimit-n)].reduce((p,r)=>p*(1-r),1-stay);
+       likely=Math.max(likely,1-avoid);
+     }
+     return likely;
+   };
+ }
  function germanPlan(s,style,rng=Math.random){
    const patrols=britishPatrols(s);
    const risks=new Map(ids.map(hex=>[hex,britishThreat(hex,patrols)]));
    const threat=hex=>risks.get(hex)||0;
    const cautious=style==='cautious';
-   const escape=escapePlan(s,hex=>threat(hex)*(s.damage?1.25:cautious?.9:.65));
+   const forecast=pursuitForecast(s,patrols);
+   const pursuit=new Map(ids.map(hex=>[hex,forecast(hex)]));
+   const contactRisk=hex=>pursuit.get(hex)||0;
+   const dangerLimit=s.damage||cautious?.50:.58;
+   const escape=escapePlan(s,hex=>threat(hex)*(s.damage?1.25:cautious?.9:.65)+contactRisk(hex)*3);
    if(escape)return {next:escape.next,useSupply:escape.useSupply,action:escape.next===s.pos&&escape.goal==='E1'?'scuttle':'escape'};
    const safeRisk=s.damage?2:cautious?3.2:4.5;
    const unspent=hex=>raids.has(hex)&&!s.usedRoutes.includes(hex);
@@ -517,21 +564,25 @@ const game=(()=>{
    const normal=sailing(s,false);
    const candidates=[...sailing(s,true)].filter(hex=>all[hex]).map(hex=>{
      const risk=threat(hex);
-     const canRaid=raids.has(hex)&&!s.tracked&&!patrols.some(ship=>ship.pos===hex)&&risk<=safeRisk;
+     const likely=contactRisk(hex);
+     const canRaid=raids.has(hex)&&!s.tracked&&!patrols.some(ship=>ship.pos===hex)&&risk<=safeRisk&&likely<dangerLimit;
      const attack=carrierOpportunity(hex,patrols);
      const useSupply=!normal.has(hex);
      const repeat=hex===s.pos&&staysFromLast;
      const followups=[...reachable(hex,(s.damage?1:2)+Number(hex!==s.pos&&s.supplies.includes(hex)))];
-     const nextRaids=followups.filter(unspent).map(next=>threat(next));
+     const nextRaids=followups.filter(next=>unspent(next)&&contactRisk(next)<dangerLimit).map(next=>threat(next));
      const future=nextRaids.length?1/(1+Math.min(...nextRaids)) : 0;
      const suppliesAhead=hex!==s.pos&&s.supplies.includes(hex)?.35:0;
      const nav=future*.65+suppliesAhead-(repeat?.7:0)-(useSupply?.32:0)+rng()*.09;
-     return {next:hex,useSupply,risk,attack,nav,
+     return {next:hex,useSupply,risk,likely,attack,nav,
        action:canRaid&&unspent(hex)?'raid2':attack>=(s.damage?.55:cautious?.43:.34)?'carrier':canRaid?'raid':'hide'};
    });
    const priority={raid2:4,carrier:3,raid:2,hide:1};
-   const value=c=>c.action==='carrier'?c.attack*4+c.nav:c.nav-c.risk*(c.action==='hide'?.65:.55);
-   return candidates.sort((a,b)=>priority[b.action]-priority[a.action]||value(b)-value(a))[0];
+   const value=c=>c.action==='carrier'?c.attack*4+c.nav:c.nav-c.risk*.55-c.likely*2;
+   const exposed=c=>c.action!=='carrier'&&c.likely>=dangerLimit;
+   return candidates.sort((a,b)=>Number(exposed(a))-Number(exposed(b))||
+     priority[b.action]-priority[a.action]||
+     (exposed(a)&&exposed(b)?a.likely-b.likely:0)||value(b)-value(a))[0];
  }
  function moveBrit(s,id,h){
    const f=s.fleet.find(v=>v.id===id);
@@ -666,7 +717,7 @@ const game=(()=>{
    end(s,['scuttle'],'scuttle',loss);return true;
  }
  function end(s,cause,ending,penalty=0){s.stage='end';s.cause=cause;s.ending=ending;s.penalty=penalty;note(s,...cause,...(penalty?[{key:'vp',args:['−'+penalty]}]:[]))}
- return {all,ids,starts,exits,raids,types,adj,reachable,d6,setup,note,go,sailing,onMap,active,britMoves,moveBrit,undoBrit,finishBrit,searchTargets,search,finishSearch,airAttackers,battleForces,battle,raid,scuttle,supplyPlacement,escapePlan,hexDistance,rememberBritish,inferBritishTypes,britishPatrols,britishThreat,carrierOpportunity,germanPlan};
+ return {all,ids,starts,exits,raids,types,adj,reachable,d6,setup,note,go,sailing,onMap,active,britMoves,moveBrit,undoBrit,finishBrit,searchTargets,search,finishSearch,airAttackers,battleForces,battle,raid,scuttle,supplyPlacement,escapePlan,hexDistance,rememberBritish,inferBritishTypes,britishPatrols,britishThreat,carrierOpportunity,pursuitForecast,germanPlan};
 })();
 </script>
 <script>'use strict';
@@ -738,7 +789,29 @@ function downloadVoyage(state,report,style){
  const title=page.createElement('h1');title.textContent=page.title;
  const result=page.createElement('p');result.textContent=[tr(state.score>=15?'gWin':'bWin'),tr(...state.cause),tr('points')+' '+tr('vp',state.score)].join(' / ');
  page.body.append(title,result,report.cloneNode(true));
- const url=URL.createObjectURL(new Blob(['<!doctype html>\n'+page.documentElement.outerHTML],{type:'text/html;charset=utf-8'}));
+ const html=()=> '<!doctype html>\n'+page.documentElement.outerHTML;
+ const bytes=value=>new TextEncoder().encode(value).length;
+ if(bytes(html())>50000){
+  const image=page.querySelector('svg image');
+  const chart=$('chart');
+  if(image&&chart.naturalWidth){
+   const thumbnail=document.createElement('canvas');
+   thumbnail.width=Math.min(500,chart.naturalWidth);
+   thumbnail.height=Math.round(chart.naturalHeight*thumbnail.width/chart.naturalWidth);
+   thumbnail.getContext('2d').drawImage(chart,0,0,thumbnail.width,thumbnail.height);
+   image.setAttribute('href',thumbnail.toDataURL('image/jpeg',.28));
+  }
+  if(bytes(html())>50000)image?.remove();
+  const note=page.createElement('p');
+  note.textContent=locale==='ja'?'容量に合わせ、一部の図や航海記録を省略しました。':'Some figures or voyage details were omitted to fit the file limit.';
+  page.body.append(note);
+  if(bytes(html())>50000)page.querySelectorAll('svg').forEach(node=>(node.closest('figure')||node).remove());
+  for(const row of page.querySelectorAll('ol li')){
+   if(bytes(html())<=50000)break;
+   row.remove();
+  }
+ }
+ const url=URL.createObjectURL(new Blob([html()],{type:'text/html;charset=utf-8'}));
  const link=document.createElement('a');link.href=url;link.download=locale==='ja'?'シュペー号航路レポート.html':'Graf-Spee-report-'+locale+'.html';document.body.append(link);link.click();link.remove();
  setTimeout(()=>URL.revokeObjectURL(url),30000);
 }

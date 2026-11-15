@@ -479,7 +479,29 @@ function saveVoyage(){
  const viewport=page.createElement('meta');viewport.name='viewport';viewport.content='width=device-width, initial-scale=1';page.head.append(viewport);
  const style=page.createElement('style');style.textContent='body{background:#142932;color:#f1f6f8;font:16px system-ui;max-width:960px;margin:32px auto;padding:0 16px}'+$('endStyle').textContent;page.head.append(style);
  for(const id of ['endTitle','endScore','endRoute','endLegs'])page.body.append($(id).cloneNode(true));
- const url=URL.createObjectURL(new Blob(['<!doctype html>\n'+page.documentElement.outerHTML],{type:'text/html;charset=utf-8'}));
+ const html=()=> '<!doctype html>\n'+page.documentElement.outerHTML;
+ const bytes=value=>new TextEncoder().encode(value).length;
+ if(bytes(html())>50000){
+  const image=page.querySelector('svg image');
+  const chart=$('chart');
+  if(image&&chart.naturalWidth){
+   const thumbnail=document.createElement('canvas');
+   thumbnail.width=Math.min(500,chart.naturalWidth);
+   thumbnail.height=Math.round(chart.naturalHeight*thumbnail.width/chart.naturalWidth);
+   thumbnail.getContext('2d').drawImage(chart,0,0,thumbnail.width,thumbnail.height);
+   image.setAttribute('href',thumbnail.toDataURL('image/jpeg',.28));
+  }
+  if(bytes(html())>50000)image?.remove();
+  const note=page.createElement('p');
+  note.textContent=locale==='ja'?'容量に合わせ、一部の図や航海記録を省略しました。':'Some figures or voyage details were omitted to fit the file limit.';
+  page.body.append(note);
+  if(bytes(html())>50000)page.querySelectorAll('svg').forEach(node=>(node.closest('figure')||node).remove());
+  for(const row of page.querySelectorAll('ol li')){
+   if(bytes(html())<=50000)break;
+   row.remove();
+  }
+ }
+ const url=URL.createObjectURL(new Blob([html()],{type:'text/html;charset=utf-8'}));
  const link=document.createElement('a');link.href=url;link.download=locale==='ja'?'ビスマルク号航跡レポート.html':'Bismarck-report-'+locale+'.html';document.body.append(link);link.click();link.remove();
  setTimeout(()=>URL.revokeObjectURL(url),30000);
 }

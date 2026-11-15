@@ -124,7 +124,9 @@
   const stamp = () => 'monty_report_' + G.S.seed;
   function blogBox() {
     const box = $('rpBlogBox'); box.style.display = 'block';
-    const text = MMReport.blogText(rpData.data);
+    const text = GameReportLimit.html(MMReport.blogText(rpData.data), {
+      history: ['p:not(:first-of-type)'], summary: 'p:first-of-type, table',
+    });
     box.innerHTML = `<div>本文 ${text.length.toLocaleString()}文字。画像を先にアップロードし、本文の「report_map.jpg」を画像のURLに置き換えます。</div><div class="row"></div>`;
     const row = box.querySelector('.row');
     const add = (t, f, dis) => { const b = document.createElement('button'); b.textContent = t; b.disabled = !!dis; b.onclick = f; row.appendChild(b); return b; };
@@ -935,7 +937,9 @@
   $('endGo').onclick = openReport;
   $('rpClose').onclick = () => { $('rp').style.display = 'none'; };
   $('rpNew').onclick = () => start(newSeed());
-  $('rpOne').onclick = () => { saveFile(stamp() + '.html', new Blob([MMReport.oneFile(rpData.data, rpData.map)], { type: 'text/html' })); };
+  $('rpOne').onclick = () => { saveFile(stamp() + '.html', new Blob([GameReportLimit.html(MMReport.oneFile(rpData.data, rpData.map), {
+    discard: ['main > img, main > .leg'], history: ['main > p'], summary: '.res, main > table',
+  })], { type: 'text/html;charset=utf-8' })); };
   $('rpBlog').onclick = blogBox;
   $('bHelp').onclick = () => { $('help').style.display = 'flex'; };
   $('bPool').onclick = e => { const S = G.S; openList('除去された駒', S.u.filter(x => x.loc === 'dead'), e); };

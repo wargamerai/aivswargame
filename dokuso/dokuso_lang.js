@@ -39,6 +39,9 @@ dokusoTranslationRows(`
 湿地|Marsh|Marais|Sumpf|Palude|Pantano|沼泽|습지|Болото
 湖|Lake|Lac|See|Lago|Lago|湖泊|호수|Озеро
 対戦の形を選んでください|Choose a game mode|Choisissez le mode de jeu|Spielmodus wählen|Scegli la modalità|Elige el modo|选择对战模式|대전 모드 선택|Выберите режим
+ソロプレイ|Solo play|Jeu en solo|Solospiel|Partita in solitario|Juego en solitario|单人游戏|솔로 플레이|Одиночная игра
+補助あり|With assistance|Avec assistance|Mit Unterstützung|Con assistenza|Con asistencia|开启辅助|보조 있음|С помощью ИИ
+補助なし|Without assistance|Sans assistance|Ohne Unterstützung|Senza assistenza|Sin asistencia|关闭辅助|보조 없음|Без помощи ИИ
 ドイツ軍（人間）・対戦補助あり|Germany (human), with assistance|Allemagne (joueur), avec assistance|Deutschland (Mensch), mit Unterstützung|Germania (giocatore), con assistenza|Alemania (jugador), con asistencia|德军（玩家），开启辅助|독일군(플레이어), 보조 있음|Германия (игрок), с помощью ИИ
 ドイツ軍（人間）・対戦補助なし|Germany (human), without assistance|Allemagne (joueur), sans assistance|Deutschland (Mensch), ohne Unterstützung|Germania (giocatore), senza assistenza|Alemania (jugador), sin asistencia|德军（玩家），关闭辅助|독일군(플레이어), 보조 없음|Германия (игрок), без помощи ИИ
 AIがソ連軍の移動・戦闘を簡易的に進めます。その後人間が修正を加えられます。|The AI uses a simplified approach to Soviet movement and combat. You can make adjustments afterward.|L’IA gère de façon simplifiée les mouvements et les combats soviétiques. Vous pouvez ensuite apporter des corrections.|Die KI steuert die sowjetischen Bewegungen und Kämpfe auf vereinfachte Weise. Anschließend kannst du Korrekturen vornehmen.|L’IA gestisce in modo semplificato i movimenti e i combattimenti sovietici. Poi puoi apportare correzioni.|La IA gestiona de forma simplificada los movimientos y combates soviéticos. Después puedes hacer ajustes.|AI以简化方式处理苏军的移动和战斗。随后玩家可以进行调整。|AI가 소련군의 이동과 전투를 간소화된 방식으로 진행합니다. 이후 플레이어가 수정할 수 있습니다.|ИИ управляет перемещениями и боями советских войск в упрощённом режиме. Затем игрок может внести изменения.

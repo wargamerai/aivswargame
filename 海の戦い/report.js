@@ -148,6 +148,85 @@ function repBuildHtml(){
     sunk: { allies: SHIPS.filter(s => s.side === 'allies' && s.sunk && s.type !== 'UBOAT').map(s => s.name),
             axis: SHIPS.filter(s => s.side === 'axis' && s.sunk && s.type !== 'UBOAT').map(s => s.name),
             ubAxis: SHIPS.filter(s => s.side === 'axis' && s.sunk && s.type === 'UBOAT').length } };
+  return repLimitedReport(data, window.WAS_REPORT_I18N || {});
+}
+function repLimitedReport(data, translations) {
+  const build = (record, shortened = false, labels = translations) => repReportPage(record, shortened, labels);
+  const fits = html => GameReportLimit.size(html) <= GameReportLimit.limit;
+  let html = build(data);
+  if (fits(html)) return html;
+
+  const terse = { ...data, playLog: [], turns: data.turns.map(t => ({ ...t, ports: [] })) };
+  html = build(terse, true);
+  if (fits(html)) return html;
+
+  const emptySea = { allies: { ships: [] }, axis: { ships: [] } };
+  const combat = { ...terse, turns: terse.turns.map(t => ({
+    ...t, seas: Object.fromEntries(Object.keys(t.seas).map(sea => [sea, emptySea])),
+  })) };
+  html = build(combat, true);
+  if (fits(html)) return html;
+
+  const activeLabels = translations[data.lang] ? { [data.lang]: translations[data.lang] } : {};
+  html = build(combat, true, activeLabels);
+  if (fits(html)) return html;
+
+  const brief = { ...combat, playLog: data.playLog, turns: combat.turns.map(t => ({ ...t, seas: {} })) };
+  html = repCompactPage(brief);
+  if (fits(html)) return html;
+
+  for (const keep of [96, 64, 32, 16, 8, 0]) {
+    const compact = { ...brief, playLog: [], turns: brief.turns.map(t => ({
+      ...t,
+      log: t.log.length <= keep ? t.log : t.log.filter((_, i) =>
+        Math.floor(i * keep / t.log.length) !== Math.floor((i - 1) * keep / t.log.length)),
+    })) };
+    html = repCompactPage(compact);
+    if (fits(html)) return html;
+  }
+
+  return GameReportLimit.html(repCompactPage({ ...brief, turns: [], playLog: [] }), { summary: '.poc' });
+}
+function repCompactPage(data) {
+  const ja = data.lang === 'ja';
+  const L = (jp, en) => ja ? jp : en;
+  const esc = value => String(value).replace(/[&<>]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char]);
+  const winner = data.resigned ? (data.resigned.side === 'allies' ? 'axis' : 'allies')
+    : data.finalPoc > 0 ? 'allies' : data.finalPoc < 0 ? 'axis' : 'draw';
+  const result = {
+    allies: L('連合の勝ち', 'Allied victory'), axis: L('枢軸の勝ち', 'Axis victory'), draw: L('引き分け', 'Draw'),
+  }[winner];
+  const score = n => (n >= 0 ? '+' : '') + n;
+  const losses = (combat, side) => [
+    [L('撃沈', 'Sunk'), combat.sunk[side]],
+    [L('損害', 'Damaged'), combat.damaged[side]],
+    [L('強制帰還', 'Forced return'), combat.forced[side]],
+    [L('撤退', 'Retreated'), combat.retreat[side]],
+  ].filter(([, ships]) => ships.length).map(([label, ships]) => label + ' ' + esc(ships.join(', '))).join('<br>') || '—';
+  const rows = data.turns.map(turn => `<tr><th>T${turn.turn}</th><td>${score(turn.gain)}</td><td>${score(turn.total)}</td></tr>`).join('');
+  const details = data.turns.filter(turn => turn.combat.length).map(turn => `<details><summary>T${turn.turn}</summary>
+<table><thead><tr><th>${L('海域', 'Area')}</th><th>${L('連合', 'Allies')}</th><th>${L('枢軸', 'Axis')}</th></tr></thead><tbody>
+${turn.combat.map(c => `<tr><th>${esc(c.loc)}</th><td>${losses(c, 'allies')}</td><td>${losses(c, 'axis')}</td></tr>`).join('')}
+</tbody></table></details>`).join('');
+  return `<!doctype html><html lang="${L('ja', 'en')}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>War at Sea Game Report</title><style>body{max-width:56rem;margin:2rem auto;padding:0 1rem;font:15px/1.55 system-ui}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #aaa;padding:.35rem;text-align:left;vertical-align:top}
+details{margin:.5rem 0}summary{cursor:pointer}</style></head><body>
+<h1>${L('海の戦い：ゲームレポート', 'War at Sea Game Report')}</h1>
+<p class="poc">POC ${score(data.finalPoc)} · ${result}</p>
+<p>${L('連合の撃沈', 'Allied ships sunk')}: ${esc(data.sunk.allies.join(', ') || '—')}<br>
+${L('枢軸の撃沈', 'Axis ships sunk')}: ${esc(data.sunk.axis.join(', ') || '—')}<br>
+${L('Uボートの喪失', 'U-boats lost')}: ${data.sunk.ubAxis}</p>
+<table id="turns"><thead><tr><th>${L('ターン', 'Turn')}</th><th>${L('獲得', 'Gained')}</th><th>${L('累計', 'Total')}</th></tr></thead><tbody>${rows}</tbody></table>
+<h2>${L('海域別の戦闘結果', 'Combat results by area')}</h2>${details}
+<p>${L('容量に合わせて航行記録や詳細を省略しました。', 'Some movement records or details were omitted to fit the file limit.')}</p>
+<script>
+const D = ${JSON.stringify(data).replace(/</g, '\\u003c')};
+<\/script>
+</body></html>`;
+}
+
+function repReportPage(data, shortened, translations) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>War at Sea Game Report</title>
@@ -187,6 +266,7 @@ table{ border-collapse:collapse; width:100%; } td,th{ border-bottom:1px solid va
 </style></head><body><div class="wrap">
 <div class="top"><h1 id="title"></h1><div class="lang" id="langs"></div></div>
 <div class="sub" id="sub"></div>
+${shortened ? '<p>一部の航行記録や詳細を省略しました / Some movement records or details were omitted.</p>' : ''}
 <div class="nav" id="nav"></div>
 <div id="view"></div>
 </div>
@@ -221,7 +301,7 @@ const TX = {
 };
 // 場所の名前（英語 → 日本語）
 // 日本語と英語のほかは、下の表から作る
-const RI = ${JSON.stringify(window.WAS_REPORT_I18N || {}).replace(/</g, '\\u003c')};
+const RI = ${JSON.stringify(translations).replace(/</g, '\\u003c')};
 function mkTx(d){
   const x = s => (d[s] !== undefined ? d[s] : s);
   const f = (s, v) => { let o = x(s); for(const k in v) o = o.split('{' + k + '}').join(v[k]); return o; };
@@ -243,7 +323,7 @@ Object.keys(RI).forEach(l => { TX[l] = mkTx(RI[l]); });
 const LANG_NAMES = { ja:'日本語', en:'English', fr:'Français', de:'Deutsch', it:'Italiano', es:'Español', zh:'简体中文', ko:'한국어', ru:'Русский' };
 const LOC_JA = { 'North Atlantic':'北大西洋', 'Barents Sea':'バレンツ海', 'North Sea':'北海', 'Baltic Sea':'バルト海', 'Mediterranean':'地中海', 'South Atlantic':'南大西洋',
   'Germany':'ドイツ', 'France':'フランス', 'Italy':'イタリア', 'Malta':'マルタ', 'Britain':'英国', 'USA':'米国', 'Leningrad':'レニングラード', 'Russia':'ロシア', 'Neutral port':'中立港' };
-let lang = D.lang;
+let lang = TX[D.lang] ? D.lang : 'en';
 try { const sv = localStorage.getItem('wasReportLang'); if(TX[sv]) lang = sv; } catch(e){}
 const T = () => TX[lang];
 const L = name => lang === 'ja' ? (LOC_JA[name] || name) : lang === 'en' ? name : ((RI[lang] && RI[lang][name]) || (name === 'Britain' ? name : name));
@@ -317,7 +397,7 @@ function render(){
   v.innerHTML = h;
 }
 function setLang(l){ lang = l; try { localStorage.setItem('wasReportLang', l); } catch(e){} render(); }
-Object.keys(LANG_NAMES).forEach(l => { const b = document.createElement('button'); b.dataset.l = l; b.textContent = LANG_NAMES[l]; b.onclick = () => setLang(l); document.getElementById('langs').appendChild(b); });
+Object.keys(LANG_NAMES).filter(l => TX[l]).forEach(l => { const b = document.createElement('button'); b.dataset.l = l; b.textContent = LANG_NAMES[l]; b.onclick = () => setLang(l); document.getElementById('langs').appendChild(b); });
 render();
 <\/script></body></html>`;
 }

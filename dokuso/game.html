@@ -59,7 +59,10 @@
   #units { position: absolute; left: 0; top: 0; }
   #units[hidden] { display: none; }
   .unit { position: absolute; width: 40px; height: 40px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0,0,0,.8); cursor: pointer; }
-  .unit img { width: 40px; height: 40px; display: block; border-radius: 3px; }
+  .unit .unit-face { display: grid; place-items: center; position: absolute; inset: 0; border-radius: inherit; background: #a3aaad; color: #232323; font: bold 10px/1 sans-serif; }
+  .unit .unit-face.sov { background: #a8794f; color: #19110a; }
+  .unit.done .unit-face { filter: brightness(.75); }
+  .unit img { position: relative; width: 40px; height: 40px; display: block; border-radius: 3px; }
   .unit.sel { outline: 3px solid #ffeb3b; outline-offset: 1px; z-index: 6 !important; }
   .unit.pick { outline: 3px solid #ff5252; outline-offset: 1px; z-index: 6 !important; }
   .unit.done img { filter: brightness(.6); }
@@ -150,6 +153,8 @@
   #modal h2 { margin: 0 0 12px; color: #f0d070; }
   #modal h3 { margin: 14px 0 4px; color: #9fd3ff; font-size: 15px; }
   #modal label { display: block; margin: 6px 0; cursor: pointer; }
+  #modal .solo-modes { margin: 10px 0; padding: 2px 12px; border: 1px solid #5a6273; border-radius: 5px; }
+  #modal .solo-modes legend { padding: 0 .4em; color: #f0d070; font-weight: bold; }
   #modal .mode-detail { display: block; margin-inline-start: 1.6em; color: #c9d1dd; font-size: .85rem; }
   #modal button { background: #2e6b3a; color: #fff; border: 1px solid #5aa86a; border-radius: 4px; padding: 8px 18px; font-size: 15px; cursor: pointer; margin-top: 10px; }
   #modal .mode-disabled, #modal button:disabled { opacity: .55; filter: grayscale(1); cursor: default; }
@@ -282,6 +287,7 @@
 <div id="hoverBox"></div>
 <div id="phaseBanner" onclick="hideBanner()"></div>
 
+<script src="../report-limit.js"></script>
 <script src="images/mapdata.js"></script>
 <script src="dokuso_units.js"></script>
 <script src="dokuso_engine.js"></script>
@@ -320,14 +326,17 @@ function showStart() {
   document.getElementById('modalBox').innerHTML = `
     <h2>独ソ電撃戦</h2>
     <div>対戦の形を選んでください</div>
-    <label><input type="radio" name="mode" value="assisted" checked> ドイツ軍（人間）・対戦補助あり
-      <small class="mode-detail">AIがソ連軍の移動・戦闘を簡易的に進めます。その後人間が修正を加えられます。</small>
-    </label>
-    <label><input type="radio" name="mode" value="manual"> ドイツ軍（人間）・対戦補助なし
-      <small class="mode-detail">両軍の配置・移動・戦闘を自分で操作します。</small>
-    </label>
+    <label><input type="radio" name="mode" value="sov" checked> 人間（ソ連） 対 AI（ドイツ）</label>
     <label><input type="radio" name="mode" value="ai"> AI 対 AI（観戦）</label>
-    <label><input type="radio" name="mode" value="sov"> 人間（ソ連） 対 AI（ドイツ）</label>
+    <fieldset class="solo-modes">
+      <legend>ソロプレイ</legend>
+      <label><input type="radio" name="mode" value="assisted"> 補助あり
+        <small class="mode-detail">AIがソ連軍の移動・戦闘を簡易的に進めます。その後人間が修正を加えられます。</small>
+      </label>
+      <label><input type="radio" name="mode" value="manual"> 補助なし
+        <small class="mode-detail">両軍の配置・移動・戦闘を自分で操作します。</small>
+      </label>
+    </fieldset>
     <button type="button" disabled>オンライン対戦</button><br>
     <button onclick="startGame()">ゲーム開始</button> <button onclick="openGameFile()">ファイルを読み込む</button> <button style="background:#2a5a8a;border-color:#5a9ad0" onclick="showHelp(true)">遊び方を見る</button>`;
   document.getElementById('modal').style.display = 'flex';
@@ -413,7 +422,11 @@ function installGame(nextGame, savedUI, savedTrails = []) {
   trails = savedTrails;
   game.on(ev => {
     if (ev.type === 'log') addLogLine(ev.entry);
-    if (ev.type === 'undo') { renderLog(); trails = trails.filter(t => t.seq <= (game.undoStack ? game.undoStack.length : 0) || t.phase !== game.phase); }
+    if (ev.type === 'undo') {
+      renderLog();
+      trails = ev.trails || trails.filter(t => t.seq <= game.undoStack.length || t.phase !== game.phase);
+    }
+    if (ev.type === 'returnMove') { trails = ev.trails; renderLog(); }
     // 移動の経路を記録（同じ道を通った駒はまとめて1本）
     if (ev.type === 'move' && /_move$/.test(game.phase)) {
       const u = game.unit(ev.unit), path = [ev.from, ...(ev.path || [ev.to])];
@@ -898,6 +911,19 @@ function cancelSovietMoveEdit() {
   ui.msg = '';
   render();
 }
+async function returnHumanMoveToStart(unit) {
+  const { id } = unit;
+  const start = game.moveState[id].start;
+  if (isDokusoOnline()) {
+    if (!await dokusoOnlineSend('returnMove', [id])) return;
+  } else if (!game.returnMove(unit, trails)) return;
+  ui.moveSel = [id];
+  ui.hex = start;
+  ui.fanHex = null;
+  ui.msg = '';
+  render();
+  scrollToHex(start);
+}
 function returnSovietMoveToStart(unit) {
   const from = game.moveState[unit.id].start;
   if (applySovietMoveEdit(unit, from)) scrollToHex(from);
@@ -1214,7 +1240,16 @@ function unitEl(u, inTray, count) {
   }
   if (!inTray && reviewingSovietMove() && trails.some(t => t.edited && t.units.includes(u.id))) el.classList.add('edited');
   el.title = game.unitName(u) + (u.label ? ' ' + u.label : '');
-  const im = document.createElement('img'); im.src = encodeURI(unitImg(u)); el.appendChild(im);
+  const stats = `${u.side === 'sov' && !u.revealed ? 'U' : u.str}-${u.mov}`;
+  const face = document.createElement('span');
+  face.className = 'unit-face ' + u.side;
+  face.textContent = stats;
+  const im = document.createElement('img');
+  im.alt = '';
+  im.addEventListener('error', () => im.remove(), { once: true });
+  const image = unitImg(u);
+  if (image) { im.src = encodeURI(image); el.append(face, im); }
+  else el.append(face);
   if (u.side === 'sov' && u.revealed && !u.backImg) { const l = document.createElement('span'); l.className = 'lbl'; l.textContent = `${u.str}-${u.mov}`; el.appendChild(l); }
   if (u.broke) { const b = document.createElement('span'); b.className = 'brk'; b.textContent = '⛽'; el.appendChild(b); }
   if (count > 1) { const c = document.createElement('span'); c.className = 'cnt'; c.textContent = count; el.appendChild(c); }
@@ -1499,6 +1534,13 @@ function hexInspector() {
       actions.appendChild(edit);
       row.querySelector('.nm').appendChild(actions);
     }
+    if (moving && u.side === side && ms?.moved) {
+      const undo = document.createElement('button');
+      undo.textContent = '移動前のヘクスに戻す';
+      undo.disabled = !game.canReturnMove(u);
+      undo.onclick = e => { e.stopPropagation(); void returnHumanMoveToStart(u); };
+      row.querySelector('.nm').appendChild(undo);
+    }
     if (moving && u.side === side && game.canMove(u)) {
       const only = moveUnits().length === 1 && moveUnits()[0] === u;
       const b = document.createElement('button'); b.textContent = movable.length >= 2 ? 'これだけ動かす' : '動かす'; if (only) b.className = 'on';
@@ -1678,9 +1720,9 @@ function endReportFile() {
   if (maps.size && mapImg.naturalWidth) {
     try {
       const map = document.createElement('canvas');
-      map.width = width; map.height = height;
-      map.getContext('2d').drawImage(mapImg, 0, 0);
-      background = `background-image: url("${map.toDataURL('image/jpeg', 0.85)}");`;
+      map.width = Math.min(width, 520); map.height = Math.round(height * map.width / width);
+      map.getContext('2d').drawImage(mapImg, 0, 0, map.width, map.height);
+      background = `background-image: url("${map.toDataURL('image/jpeg', 0.26)}");`;
     } catch (error) {
       console.warn('Could not include the map image in the game report', error);
     }
@@ -1688,14 +1730,14 @@ function endReportFile() {
 
   if (maps.size) {
     const figures = [...maps].map(([turn, arrows]) => {
-      const lines = arrows.map(([from, to]) => `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" marker-end="url(#arrow-${turn})"/>`).join('');
+      const lines = arrows.map(([from, to]) => `<line x1="${Math.round(from.x)}" y1="${Math.round(from.y)}" x2="${Math.round(to.x)}" y2="${Math.round(to.y)}"/>`).join('');
       return `<figure id="turn-map-${turn}">
         <figcaption>ターン ${turn}</figcaption>
         <svg class="report-map" viewBox="0 0 ${width} ${height}" role="img" aria-label="ドイツ軍の移動">
           <defs><marker id="arrow-${turn}" markerWidth="3.5" markerHeight="3.5" refX="3" refY="1.75" orient="auto">
             <path d="M0 0 L3.5 1.75 L0 3.5 Z" fill="#ad202c"/>
           </marker></defs>
-          <g fill="none" stroke="#ad202c" stroke-width="12" stroke-linecap="round">${lines}</g>
+          <g fill="none" stroke="#ad202c" stroke-width="12" stroke-linecap="round" marker-end="url(#arrow-${turn})">${lines}</g>
         </svg>
       </figure>`;
     }).join('');
@@ -1709,6 +1751,7 @@ function endReportFile() {
 <html lang="${document.documentElement.lang}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 ${title.outerHTML}
+${background ? `<style data-report-map>.report-map { ${background} }</style>` : ''}
 <style>
   body { max-width: 58rem; margin: 2rem auto; padding: 0 1rem; background: #f4f2e8; color: #253528; font: 15px/1.5 system-ui, sans-serif; }
   h2, h3, figcaption { color: #365543; }
@@ -1720,7 +1763,7 @@ ${title.outerHTML}
   .score { text-align: center; }
   figure { margin: 1.2rem 0; break-inside: avoid; }
   figcaption { font-weight: bold; margin-bottom: .4rem; }
-  .report-map { display: block; width: 100%; background: #d4e2d0 center / 100% 100% no-repeat; ${background} }
+  .report-map { display: block; width: 100%; background: #d4e2d0 center / 100% 100% no-repeat; }
   a { color: #285368; }
 </style></head>
 <body>${content.outerHTML}</body>
@@ -1729,7 +1772,10 @@ ${title.outerHTML}
 function downloadEndReport() {
   if (game?.phase !== 'over') return;
   const date = new Date().toISOString().slice(0, 19).replace(/T|:/g, '-');
-  const url = URL.createObjectURL(new Blob([endReportFile()], {type: 'text/html;charset=utf-8'}));
+  const url = URL.createObjectURL(new Blob([GameReportLimit.html(endReportFile(), {
+    discard: ['[data-report-map]', 'main > section:not(.game-report), a[href^="#turn-map-"]'],
+    history: ['.report-table tbody tr'], summary: '.outcome, .res',
+  })], {type: 'text/html;charset=utf-8'}));
   const link = document.createElement('a');
   link.href = url;
   link.download = `dokuso-report-${date}.html`;
@@ -1925,6 +1971,15 @@ function onUnitClick(u, inTray, shift) {
   if (reviewingSovietMove() && !ui.moveEdit && u.side === side) {
     ui.hex = u.hex;
     ui.moveSel = [u.id];
+    ui.msg = '';
+    render();
+    return;
+  }
+  if (human && !ui.mode && game.phase === side + '_move' && u.side === side &&
+      game.moveState[u.id]?.moved && !game.canMove(u)) {
+    ui.hex = u.hex;
+    ui.moveSel = [u.id];
+    ui.fanHex = null;
     ui.msg = '';
     render();
     return;

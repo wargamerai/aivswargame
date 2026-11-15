@@ -1267,11 +1267,11 @@ function autoFiles() {
   }
 }
 function downloadLog() {
-  const L = S && S.camp && S.camp.lastLog;
-  if (!L) { alert(L('まだ終わった航海がありません', 'No voyage has been completed yet')); return; }
-  const blob = new Blob([L.html], { type: 'text/html' });
+  const record = S && S.camp && S.camp.lastLog;
+  if (!record) { alert(L('まだ終わった航海がありません', 'No voyage has been completed yet')); return; }
+  const blob = new Blob([GameReportLimit.html(record.html, { history: ['tr:has(td)'], summary: '.res' })], { type: 'text/html;charset=utf-8' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = L.name + '.html'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = record.name + '.html'; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 // 航海日誌のページ（ルールブックの記録用紙 OPERATIONS RECORD BOOK Form 33A 風）

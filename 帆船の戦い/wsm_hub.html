@@ -129,6 +129,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
 
 #infoLabel { color:#ffcc88; align-self:center; flex:1; }
 </style>
+<script src="../report-limit.js"></script>
 </head>
 <body>
 
@@ -1209,7 +1210,9 @@ ${timeline || `<p>${esc(X.none)}</p>`}
 ${dev}
 </div></body></html>`;
 
-    const blob = new Blob([html], { type: 'text/html' });
+    const blob = new Blob([GameReportLimit.html(html, {
+      discard: ['.map', '.page > details'], history: ['.turn li'], summary: '.sub, .res',
+    })], { type: 'text/html;charset=utf-8' });
     const a = document.createElement('a');
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     a.href = URL.createObjectURL(blob);

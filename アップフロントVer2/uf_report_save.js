@@ -83,6 +83,22 @@ function _ufCasualties(side) {
   return out;
 }
 function ufBuildReportHtml() {
+  const fits = html => GameReportLimit.size(html) <= GameReportLimit.limit;
+  let html = ufReportPage(UF_REPORT.snaps, UF_REPORT.events, UF_REPORT.ev);
+  if (fits(html)) return html;
+
+  const snapshots = UF_REPORT.snaps;
+  for (const stride of [2, 4, 8, 16, 32, Infinity]) {
+    const sampled = snapshots.filter((_, i) => i === 0 || i === snapshots.length - 1 || i % stride === 0);
+    const maxEvents = stride === Infinity ? 30 : Math.max(24, Math.floor(400 / stride));
+    html = ufReportPage(sampled, UF_REPORT.events.slice(-maxEvents), UF_REPORT.ev.slice(-maxEvents), true);
+    if (fits(html)) return html;
+  }
+  return GameReportLimit.html(ufReportPage([], [], [], true), {
+    discard: ['.board-history, body script', 'body details'], summary: '.res',
+  });
+}
+function ufReportPage(snapshots, events, boardEvents, shortened = false) {
   const en = (typeof LANG !== 'undefined' && LANG !== 'ja' && typeof langTranslate === 'function'); // 英語・イタリア語
   const L = t => en ? langTranslate(String(t)) : String(t);
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -97,7 +113,7 @@ function ufBuildReportHtml() {
   const cnt = c => Object.keys(c).sort((x, y) => c[y] - c[x]).map(k => `${L(k)} ${c[k]}`).join(' / ') || '-';
   // 手番ごとにまとめる
   const byTurn = new Map();
-  UF_REPORT.events.forEach(e => { if (!byTurn.has(e.turn)) byTurn.set(e.turn, []); byTurn.get(e.turn).push(e); });
+  events.forEach(e => { if (!byTurn.has(e.turn)) byTurn.set(e.turn, []); byTurn.get(e.turn).push(e); });
   const AVA = !!window.__ufAiVsAi; // AI 同士の対戦のレポート（画面なしの対戦で作る）
   const ME = AVA ? L(state.player.name) : L('自軍'), EN = AVA ? L(state.ai.name) : L('敵');
   const KIND = { ai: AVA ? EN : 'AI', player: ME, fire: L('射撃'), cc: L('白兵戦'), msg: '' };
@@ -134,10 +150,12 @@ ul.ev li.ai{ color:var(--ai); } ul.ev li.player{ color:var(--me); }
   p1: state.player.name, p2: state.ai.name, result: state._ufEndText || '', turns: state.turnCount || 0, vp: [vpP, vpA],
   loss: [cP.kia + cP.rout + cP.prisoner, cA.kia + cA.rout + cA.prisoner] }).replace(/--/g, '\\u002d\\u002d')}-->
 <h1>Up Front ${esc(L('対戦レポート'))}${AVA ? '（AI 対 AI）' : ''}</h1>
+${shortened ? '<p>一部の盤面や詳細を省略しました / Some board positions or details were omitted.</p>' : ''}
+<div class="board-history"${snapshots.length ? '' : ' hidden'}>
 <h2>${esc(L('盤面と出来事'))}</h2>
 <div class="card"><div class="nav"><button id="bPrev">◀ ${esc(L('前へ'))}</button><button id="bNext">${esc(L('次へ'))} ▶</button><span id="nLbl"></span></div>
 <div id="board"></div><div id="evs"></div>
-<div class="legend">${['ok:無事', 'pin:ピン', 'w:負傷', 'kia:戦死', 'rout:敗走', 'pris:捕虜'].map(x => { const [k, v] = x.split(':'); return `<span class="st-${k}">${esc(L(v))}</span>`; }).join(' ')}</div></div>
+<div class="legend">${['ok:無事', 'pin:ピン', 'w:負傷', 'kia:戦死', 'rout:敗走', 'pris:捕虜'].map(x => { const [k, v] = x.split(':'); return `<span class="st-${k}">${esc(L(v))}</span>`; }).join(' ')}</div></div></div>
 <h2>${esc(L('結果'))}</h2>
 <div class="card"><div class="res">${esc(L(result))}</div>
 <table>
@@ -158,8 +176,8 @@ ${row('手番の数', state.turnCount || 0, '')}
 <div class="card"><table>${row(ME, cnt(UF_REPORT.counts.player), '')}${row(AVA ? EN : '敵 (AI)', cnt(UF_REPORT.counts.ai), '')}</table></div>
 <details><summary>${esc(L('詳しい記録'))}</summary><div class="card">${turns || '-'}</div></details>
 <script>
-const SN = ${JSON.stringify(UF_REPORT.snaps.map(sn => ({ ...sn, label: L(sn.label), p: sn.p.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }), a: sn.a.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }) }))).replace(/</g, '\\u003c')};
-const EV = ${JSON.stringify(UF_REPORT.ev.map(e => ({ ...e, text: L(e.text) }))).replace(/</g, '\\u003c')};
+const SN = ${JSON.stringify(snapshots.map(sn => ({ ...sn, label: L(sn.label), p: sn.p.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }), a: sn.a.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }) }))).replace(/</g, '\\u003c')};
+const EV = ${JSON.stringify(boardEvents.map(e => ({ ...e, text: L(e.text) }))).replace(/</g, '\\u003c')};
 const NM = ${JSON.stringify({ p: L(state.player.name), a: L(state.ai.name), me: ME, en: EN, turn: L('手番'), rr: L('相対距離'), dist: L('距離'), mv: L('移動中'), gone: L('消滅'), none: L('なし'), inf: L('侵入') })};
 let k = SN.length - 1;
 const esc2 = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);

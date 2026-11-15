@@ -702,7 +702,7 @@
 <div class="legend">地図は終わったときの盤面。<i style="background:${red}"></i>信長側<i style="background:${blue}"></i>反信長　矢印＝行軍、「戦」＝合戦（番号は下の年表の番号）、四角＝残った駒の数（武将を含む）</div>
 <h2>合戦年表</h2>${rows||'<p>合戦はありませんでした。</p>'}
 </main></body></html>`}
-  function downloadReport(){const html=buildReport(),blob=new Blob([html],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a'),d=new Date(),pad=n=>String(n).padStart(2,'0');a.href=url;a.download=`nobunaga_report_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.html`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000)}
+  function downloadReport(){const html=GameReportLimit.html(buildReport(), {discard:['.map,.legend'],history:['.chron li:not(.end)'],summary:'.res,.stats'}),blob=new Blob([html],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a'),d=new Date(),pad=n=>String(n).padStart(2,'0');a.href=url;a.download=`nobunaga_report_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.html`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000)}
   window.__nobuReport=buildReport;
   document.addEventListener('click',e=>{if(e.target.closest('#reportButton'))downloadReport()});
 

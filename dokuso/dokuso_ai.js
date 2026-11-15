@@ -1100,7 +1100,9 @@
       for (const [src, mp] of [[sovFast, 8], [sovInf, 3]]) if (src.length) for (const h of zocReach(game, src, gs, mp, ctx).keys()) { danger.add(h); for (const n of m.neighbors(h)) danger.add(n); }
       const activeTarget = t => !targets.some(enemy => enemy.cityValue && enemy.h === t.h);
       const mobileTargets = gerTargets(game, { type: 'tank' }).filter(activeTarget);
-      const potAll = makePotential(game, gerTargets(game, null).filter(activeTarget), 0.88);
+      const availableCities = gerTargets(game, null).filter(activeTarget);
+      const potAll = makePotential(game, availableCities, 0.88);
+      const infantryGoal = makePotential(game, availableCities.concat(targets.map(t => ({ h: t.h, v: t.cityValue || 3 }))), 0.88);
       const potFast = makePotential(game, mobileTargets, 0.9);
       const tankGoals = mobileTargets.map(t => ({
         h: t.h, v: D.CITY_POINTS[m.facility(t.h)] ? 10 + (D.CITY_POINTS[m.facility(t.h)] + westernObjectiveBonus(game, t.h)) * 5 : t.v,
@@ -1113,6 +1115,8 @@
       for (const u of rest.filter(x => x.type === 'inf').concat(rest.filter(x => x.type !== 'inf'))) {
         const ia = infAt();
         const tank = u.type === 'tank';
+        const holdWithoutObjective = u.type === 'inf' && game.turn > 2;
+        const currentGoal = holdWithoutObjective ? infantryGoal(u.hex) : 0;
         const forwardGoal = h => eastOfTank(u, h);
         let best = u.hex, bs = -1e9, bestEastward = 0;
         for (const [h, info] of [[u.hex, { path: [], cost: 0 }], ...reach.get(u.id)]) {
@@ -1120,6 +1124,11 @@
           const eastward = m.parse(h).c - m.parse(u.hex).c;
           if (tank ? !forwardGoal(h) : eastward < 0) continue;
           if (tank && h !== u.hex && m.neighbors(h).some(n => infantryCities.has(n))) continue;
+          if (holdWithoutObjective && h !== u.hex) {
+            const takesCity = info.path.some(p => game.control[p] === 'sov');
+            const guardsRoad = (ctx.value.get(h) || 0) > (ctx.value.get(u.hex) || 0);
+            if (!takesCity && !guardsRoad && infantryGoal(h) <= currentGoal) continue;
+          }
           const pot = tank ? potTank(h, forwardGoal) : (D.BREAK_POINTS[u.type] ? potFast : potAll)(h);
           let sc = pot * (tank ? 3 : u.type === 'inf' ? 1 : 2) + eastward * 4 +
             (game.defMult(h, null) - 1) * 3;

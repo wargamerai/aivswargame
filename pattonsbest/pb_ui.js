@@ -55,7 +55,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 var FS = (() => { try { return +localStorage.getItem('pb_fs') || 17; } catch (e) { return 17; } })();
 function applyFs() { document.documentElement.style.setProperty('--fs', FS + 'px'); }
 function zoom(k) { FS = Math.max(12, Math.min(28, FS + k * 2)); try { localStorage.setItem('pb_fs', FS); } catch (e) {} applyFs(); }
-function saveLog() { const t = ALLLOG.map(x => x.t).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'text/plain' })); a.download = `pattons_best_log_${E.G ? E.G.days : 0}.txt`; a.click(); }
+function saveLog() { const t = ALLLOG.map(x => x.t).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.text(t)], { type: 'text/plain;charset=utf-8' })); a.download = `pattons_best_log_${E.G ? E.G.days : 0}.txt`; a.click(); }
 applyFs();
 var JUDGE_ON = true;
 function setJudgeOn(v) { JUDGE_ON = v; E.setJudge(v); }
@@ -65,7 +65,7 @@ function judgeBox() {
   $('over').innerHTML = `<div class="box"><h2>${L('判定の記録', 'Dice record')}</h2><p class="small">${L(`全${JUDGELOG.length}行。新しいものが下です。`, `${JUDGELOG.length} lines, newest at the bottom.`)}</p><div id="jlist" style="max-height:60vh;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:.82em;white-space:pre-wrap">${JUDGELOG.slice(-3000).map(esc).join('\n')}</div><p><button class="go" onclick="closeOver()">${L('閉じる', 'Close')}</button> <button onclick="saveJudge()">${L('ファイルに保存', 'Save to file')}</button> <button onclick="if(confirm('${L('記録を消しますか？', 'Clear the record?')}')){JUDGELOG=[];keepJudge();closeOver()}">${L('記録を消す', 'Clear')}</button></p></div>`;
   const j = $('jlist'); j.scrollTop = j.scrollHeight;
 }
-function saveJudge() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JUDGELOG.join('\n')], { type: 'text/plain' })); a.download = 'pattons_best_dice.txt'; a.click(); }
+function saveJudge() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.text(JUDGELOG.join('\n'))], { type: 'text/plain;charset=utf-8' })); a.download = 'pattons_best_dice.txt'; a.click(); }
 function renderLogHead() { $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> <button onclick="saveLog()">${L('ログ保存', 'Save log')}</button> <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`; } // 自動で進めるは、ログの見出しへ（ユーザーの指示 2026-11-08）
 // ===== 開始の画面 =====
 function startScreen() {
@@ -627,7 +627,9 @@ function reportHtml(R) {
   <h2>${L('戦闘ログ', 'Battle log')}</h2><div class="dlog">${log}</div></section>`;
 }
 const REPORT_CSS = `body{font:14px/1.5 'Helvetica Neue',Arial,'Hiragino Sans',sans-serif;color:#111;background:#fff;max-width:980px;margin:0 auto;padding:16px}h1{font-size:30px;text-align:center;margin:4px 0}h2{font-size:15px;margin:10px 0 3px;border-bottom:2px solid #111}table{border-collapse:collapse}.grid td,.grid th{border:1px solid #111;padding:2px 7px;text-align:left}.top{width:100%}.top>tbody>tr>td{vertical-align:top;padding-right:16px}.cols{display:grid;grid-template-columns:auto auto 1fr;gap:18px}.time td,.time th{border:1px solid #111;width:18px;height:15px;font-size:11px;font-weight:normal;padding:0 3px}.time .off{background:#aaa}.time .pre{background:repeating-linear-gradient(45deg,#fff,#fff 3px,#888 3px,#888 5px)}.time .used{background:#222}.small{font-size:12px;color:#444}.dlog div{margin:1px 0}.dlog .judge{color:#666;font-family:ui-monospace,Menlo,monospace;font-size:12px}.dlog .bad{color:#b00;font-weight:bold}.dlog .good{color:#070}.dlog .head{font-weight:bold;margin-top:8px;border-top:1px solid #999;padding-top:3px}.dlog .date,.dlog .evening{font-weight:bold;background:#eee;padding:2px 4px}section{page-break-after:always;margin-bottom:30px}@media(max-width:700px){.cols{grid-template-columns:1fr}}`;
-function downloadHtml(name, body) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([`<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Patton's Best Report</title><style>${REPORT_CSS}</style></head><body>${body}</body></html>`], { type: 'text/html' })); a.download = name; a.click(); }
+function downloadHtml(name, body) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.html(`<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Patton's Best Report</title><style>${REPORT_CSS}</style></head><body>${body}</body></html>`, {
+  discard: ['.dlog', '.cols'], history: ['.aar'], summary: '.aar:last-child .top',
+})], { type: 'text/html;charset=utf-8' })); a.download = name; a.click(); }
 function saveReport(i) { const R = REPORTS[i]; if (R) downloadHtml(`pattons_best_report_${R.date.replace(/\//g, '-')}.html`, reportHtml(R)); }
 function saveLastReport() { saveReport(REPORTS.length - 1); }
 function saveAllReports() { if (!REPORTS.length) return alert(L('まだレポートがありません', 'No reports yet')); downloadHtml('pattons_best_campaign.html', REPORTS.map(reportHtml).join('')); }

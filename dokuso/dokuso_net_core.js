@@ -17,7 +17,8 @@
     const g = room.game;
     g.on(ev => {
       if (ev.type === 'phase') { room.trails = []; room.result = null; room.advanceUndo = []; }
-      if (ev.type === 'undo') room.trails = room.trails.filter(t => t.seq <= g.undoStack.length);
+      if (ev.type === 'undo') room.trails = ev.trails || room.trails.filter(t => t.seq <= g.undoStack.length);
+      if (ev.type === 'returnMove') room.trails = ev.trails;
       if (ev.type === 'move' && /_move$/.test(g.phase)) {
         const path = [ev.from, ...(ev.path || [ev.to])], seq = g.undoStack.length;
         const key = g.phase + '|' + path.join('-') + '|' + seq;
@@ -98,6 +99,7 @@
       case 'setupClear': if (!setup) return false; for (const u of g.setupUnits(side)) g.unplace(u); return true;
       case 'finishSetup': return setup && g.finishSetup(side);
       case 'moveGroup': return move && ids(a[0], g.sideUnits(side).length) && hex(a[1]) && g.moveGroup(a[0].map(unit), a[1]);
+      case 'returnMove': return move && unit(a[0])?.side === side && g.returnMove(unit(a[0]), room.trails);
       case 'overrun': return move && side === 'ger' && unit(a[0])?.side === side && hex(a[1]) && g.overrun(unit(a[0]), a[1]);
       case 'undo': {
         if (move) return g.undo();
