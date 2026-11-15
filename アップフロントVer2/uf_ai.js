@@ -1177,6 +1177,7 @@ function aiCalcGroupMaxFP(group, factionKey, distance) {
 async function aiFireAt(targetIdxList, opts) {
   const flameOnly = !!(opts && opts.flameOnly);
   const preview = !!(opts && opts.preview);
+  const onlyGroup = opts?.onlyGroup;
   const R = window.INFANTRY_RULES;
   const aiKey = getFactionKey(state.ai);
   const acted = state.aiActedGroups || new Set();
@@ -1205,7 +1206,8 @@ async function aiFireAt(targetIdxList, opts) {
     for (let si = 0; si < state.groups.ai.length; si++) {
       // §6.6 1グループは1ターンに1回しか射撃できない
       if (acted.has(si) || fired.has(si)) continue;
-      if (preview && ((opts.onlyGroup != null && si !== opts.onlyGroup) || si === opts.exceptGroup)) continue;
+      if (onlyGroup != null && si !== onlyGroup) continue;
+      if (preview && si === opts.exceptGroup) continue;
       const src = state.groups.ai[si];
       if (!src || src.eliminated || R.isInGully(src)) continue;
       for (const ti of targetIdxList) {
@@ -1555,6 +1557,7 @@ function aiPerformFire(plan) {
     // ターン累積 FP を加算 (このグループの今ターン射撃合計に追加)
     src.firedFPThisTurn = (src.firedFPThisTurn || 0) + (plan.totalNeed != null ? plan.totalNeed : plan.need);
     if (window.AFV) window.AFV.boxedAfterFire(src, tgt, plan.totalNeed != null ? plan.totalNeed : plan.need, baseFP); // §28.7 オープントップへ、同じカードでもう一度
+    if (window.CC_ACTION) window.CC_ACTION.clearInfiltration(src, 'fire'); // §20.531 射撃に参加した侵入兵は侵入状態を失う
 
     if (concealMod) mods.push(`隠蔽 ${_sgn(concealMod)}`);
     const varies = results.some(result => result.finalFP !== baseFP);
@@ -2519,9 +2522,7 @@ async function aiTryRetreatFromCC() {
   return false;
 }
 
-/** §20.56 AI の侵入解除: 侵入兵の CCV の平均をランク（低 4以下 / 中 5〜7 / 高 8以上）にして、
- *  AI の性格で白兵戦をするランクを決める。防御的=高のみ、バランス=中と高、攻撃的=すべて（解かない）。
- *  白兵戦をしないランクなら侵入を解く（1アクション） */
+/** 白兵戦が不利なら侵入先への射撃を試し、撃てなければ侵入を解く（§20.56）。 */
 async function aiTryUninfiltrate() {
   const R = window.INFANTRY_RULES;
   const CC = window.CC_ACTION;
@@ -2536,6 +2537,8 @@ async function aiTryUninfiltrate() {
     if (!infs.length) continue;
     const byTgt = new Map();
     infs.forEach(c => { const k = c.infiltratedGroupSide + ':' + c.infiltratedGroupIdx; if (!byTgt.has(k)) byTgt.set(k, []); byTgt.get(k).push(c); });
+    const fireTargets = [];
+    let firstUnfavorable = null;
     for (const [, list] of byTgt) {
       // ランク（性格）と、侵入先の兵の CCV との差で、白兵戦をするか決める（aiCCRankOK と同じ基準）
       const _t = state.groups[list[0].infiltratedGroupSide] && state.groups[list[0].infiltratedGroupSide][list[0].infiltratedGroupIdx];
@@ -2546,12 +2549,18 @@ async function aiTryUninfiltrate() {
         const _my = Math.max(...list.map(c => _ccvU(c, aiKey, g))); const _keyT = list[0].infiltratedGroupSide === 'ai' ? aiKey : _pkU;
         const _w = _t.cards.filter(c => R.isAlive(c)).map(c => _ccvU(c, _keyT, _t)); if (!_w.length || Math.min(..._w) <= _my) continue;
       } else if (chk.ok) continue; // 白兵戦をする
-      list.forEach(c => CC.clearSoldierInfiltration(c));
-      _aiMarkActed(gi);
-      renderField('ai'); renderField('player');
-      await showAIAction(`AI: 侵入解除 — GROUP ${g.name} の侵入兵 ${list.length}名（CCV 平均 ${Math.round(avg * 10) / 10}・${RANK_NAME[rank]}・§20.56）`, null, gi);
-      return true;
+      if (!firstUnfavorable) firstUnfavorable = { list, avg, rank };
+      if (_t && list[0].infiltratedGroupSide === 'player') fireTargets.push(list[0].infiltratedGroupIdx);
     }
+    if (!firstUnfavorable) continue;
+    if (fireTargets.length && await aiFireAt(fireTargets, { onlyGroup: gi, anyFire: true })) return true;
+
+    const { list, avg, rank } = firstUnfavorable;
+    list.forEach(c => CC.clearSoldierInfiltration(c));
+    _aiMarkActed(gi);
+    renderField('ai'); renderField('player');
+    await showAIAction(`AI: 侵入解除 — GROUP ${g.name} の侵入兵 ${list.length}名（CCV 平均 ${Math.round(avg * 10) / 10}・${RANK_NAME[rank]}・§20.56）`, null, gi);
+    return true;
   }
   return false;
 }
