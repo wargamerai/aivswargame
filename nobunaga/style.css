@@ -594,7 +594,7 @@ body:has(.app-shell:not([hidden])) .topbar{display:none!important}
 .board>.territory-shapes{pointer-events:auto!important}.territory-hit-layer{pointer-events:auto}.territory-hit{fill:transparent;stroke:none;pointer-events:fill;cursor:pointer}
 
 /* 行動パネルは地図の上に浮かべ、ページの高さを変えない */
-#board>#mapActionStrip.map-action-strip{position:absolute;top:0;left:0;transform:none;z-index:30;width:min(320px,calc(100% - 16px));max-height:min(360px,48vh);overflow:auto;margin:0;padding:8px 10px;grid-template-columns:minmax(0,1fr);gap:5px;border:1px solid #66705a;border-radius:10px;background:#fffef4ed;backdrop-filter:blur(7px);box-shadow:0 5px 20px #17201855}
+#board>#mapActionStrip.map-action-strip{position:absolute;top:0;left:0;transform:none;z-index:30;width:min(320px,calc(100% - 16px));max-height:min(360px,48vh);overflow:auto;margin:0;padding:8px 10px;grid-template-columns:minmax(0,1fr);gap:5px;border:1px solid #66705a;border-radius:10px;background:#fffef4ed;box-shadow:0 5px 20px #17201855}
 #board>#mapActionStrip>#commandHint,#board>#mapActionStrip>.selected-stack,#board>#mapActionStrip>#commandButtons,#board>#mapActionStrip>#commandExtra{grid-column:1;grid-row:auto}
 #board>#mapActionStrip>#commandHint{margin:0;white-space:normal;font-size:18px;line-height:1.35}
 #board>#mapActionStrip>.selected-stack{max-height:110px;overflow:auto;flex-wrap:wrap;gap:6px}
@@ -675,11 +675,11 @@ body{background:#ece4d2}
 .zoom-counter .zoom-caption strong{font-size:20px;line-height:1.2}
 .zoom-counter .zoom-caption span{font-size:15px;opacity:.95}
 /* 浮かぶ窓は横長にして、地図をかくしにくく 2026-11-09 */
-#board>#mapActionStrip.map-action-strip{width:auto!important;max-width:min(860px,calc(100% - 20px))!important;max-height:none!important;display:flex!important;flex-wrap:wrap;align-items:center;gap:6px 10px!important;padding:6px 26px 6px 10px!important}
+#board>#mapActionStrip.map-action-strip{width:auto!important;max-width:min(860px,42%)!important;max-height:none!important;display:flex!important;flex-wrap:wrap;align-items:center;gap:6px 10px!important;padding:6px 26px 6px 10px!important}
 #board>#mapActionStrip>#commandHint{flex:1 1 220px;margin:0!important;font-size:12px!important;line-height:1.35}
 #board>#mapActionStrip>.selected-stack{flex:0 1 auto;max-height:none!important}
-#board>#mapActionStrip>#commandButtons{display:flex!important;flex-wrap:nowrap!important;gap:5px!important;width:auto!important}
-#board>#mapActionStrip>#commandExtra{display:flex!important;flex-wrap:nowrap!important;font-size:13px!important}
+#board>#mapActionStrip>#commandButtons{display:flex!important;flex-wrap:wrap!important;gap:5px!important;width:auto!important;min-width:0}
+#board>#mapActionStrip>#commandExtra{display:flex!important;flex-wrap:wrap!important;font-size:13px!important}
 #board>#mapActionStrip>#commandExtra input{height:30px!important;font-size:14px!important;width:64px!important}
 .resolution-dialog.floating{max-width:min(94vw,900px)!important;width:auto!important}
 .resolution-dialog.floating .resolution-sheet{display:flex!important;flex-wrap:wrap;align-items:center;gap:4px 12px!important;padding:8px 12px!important}
@@ -704,7 +704,9 @@ body{background:#ece4d2}
 .card-reveal-art img{max-height:52vh!important}
 .card-reveal-copy p{font-size:16px!important}
 /* 行動のボタンは海に埋め込む（浮かぶ窓の枠・影をなくし、少し小さく）2026-11-09 */
-#board>#mapActionStrip.map-action-strip{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;cursor:default!important;gap:4px 8px!important}
+#board>#mapActionStrip.map-action-strip{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;cursor:default!important;gap:4px 8px!important;pointer-events:none;touch-action:auto}
+#board>#mapActionStrip.map-action-strip[hidden]{display:none!important}
+#board>#mapActionStrip.map-action-strip :is(button,input,select,label,a){pointer-events:auto}
 #board>#mapActionStrip.map-action-strip:before{display:none!important}
 #board>#mapActionStrip>#commandHint{font-size:12px!important;color:#3d4f53!important;flex-basis:100%!important;text-shadow:0 0 3px #e3ece9,0 0 3px #e3ece9}
 #board>#mapActionStrip.map-action-strip button{font-size:12px!important;padding:4px 10px!important;min-height:0!important;background:#f6f1e4ee!important;border:1px solid #9fb2ae!important;border-radius:6px!important;box-shadow:0 1px 2px #2a3a3a22!important}
