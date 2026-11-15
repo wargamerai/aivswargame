@@ -728,7 +728,7 @@ async function geAI_moveAllStacks(canFire) {
 // ===== 突撃フェイズ =====
 function geAI_autoAssault() {
   const germanUnits = testUnits.filter(u =>
-    u.side === 'german' && u.status !== 'eliminated' && u.status !== 'dd' &&
+    u.side === 'german' && u.status !== 'eliminated' && u.status !== 'dd' && !u.pgMovementOrder &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'AT' && u.type !== 'A'
   );
 

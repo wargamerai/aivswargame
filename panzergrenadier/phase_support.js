@@ -59,16 +59,21 @@ function resetSupportState() {
   // 盤外砲兵の使用回数はターンをまたいでも保持（シナリオ通算）
 }
 
+function currentSupportSide() {
+  return PHASES[G.phase]?.id === 'supportDef'
+    ? (G.initiative === 'german' ? 'allied' : 'german') : G.initiative;
+}
+
 function renderSupportPhase(activeSide) {
   const c = document.getElementById('phaseContent');
   const sideNames = { german: 'ドイツ軍', allied: '連合軍' };
-  const side = activeSide || G.initiative;
+  const side = activeSide || currentSupportSide();
 
   let html = '<div class="phase-info">' + sideNames[side] + ' の間接射撃フェイズです。</div>';
 
   // 該当陣営の砲兵を表示
   [side].forEach(side => {
-    const artillery = testUnits.filter(u => u.type === 'A' && u.side === side && u.status !== 'eliminated');
+    const artillery = testUnits.filter(u => u.type === 'A' && u.side === side && pgOnMap(u));
     html += `<div class="recovery-section"><h3>${sideNames[side]} 砲兵</h3>`;
 
     if (artillery.length === 0) {
@@ -77,9 +82,10 @@ function renderSupportPhase(activeSide) {
       artillery.forEach(u => {
         const selected = supportState.selectedArtillery.includes(u.name);
         const fired = u.firedThisTurn;
+        const available = canIndirectFire(u);
         const hexId = toHexId(u.col, u.row);
         const bgColor = selected ? '#445522' : fired ? '#333' : '#222';
-        html += `<div class="recovery-unit" style="background:${bgColor};cursor:${fired?'default':'pointer'};" onclick="${fired?'':`toggleArtillerySelect('${u.name}')`}">`;
+        html += `<div class="recovery-unit" style="background:${bgColor};cursor:${available?'pointer':'default'};" onclick="${available?`toggleArtillerySelect('${u.name}')`:''}">`;
         html += `<span class="u-name">${u.name}</span>`;
         html += `<span style="color:#6af;font-size:0.75em;font-weight:bold;">${hexId}</span>`;
         html += `<span style="color:#aaa;font-size:0.8em;">FP${u.spSoft || u.fpSoft}/${u.spAT || u.fpAT} 射程${u.range}</span>`;
@@ -127,11 +133,8 @@ function renderSupportPhase(activeSide) {
       const tNames = {p:'平地',w:'林',f:'森林',r:'荒地',t:'町',c:'市街地',lake:'湖'};
       html += `<div style="color:#c8a020;font-weight:bold;">目標: ${supportState.targetHexId} (${tNames[terrain]||terrain}, 修正${mod>=0?'+':''}${mod})</div>`;
       // 目標ヘクスの敵ユニット
-      const enemies = testUnits.filter(u => {
-        const hid = toHexId(u.col, u.row);
-        return hid === supportState.targetHexId && u.side !== (supportState._firingSide || G.initiative) && u.status !== 'eliminated' &&
-          u.type !== 'leader' && u.type !== 'dummy';
-      });
+      const enemies = supportTargets(supportState.targetHexId, currentSupportSide())
+        .filter(u => u.type !== 'leader');
       if (enemies.length > 0) {
         html += '<div style="font-size:0.8em;color:#aaa;margin:4px 0;">';
         enemies.forEach(e => {
@@ -177,13 +180,11 @@ function toggleArtillerySelect(name) {
     }
     // 協同攻撃チェック: 同一or隣接ヘクスの砲兵のみ
     const newUnit = testUnits.find(u => u.name === name);
-    if (supportState.selectedArtillery.length > 0) {
-      const firstUnit = testUnits.find(u => u.name === supportState.selectedArtillery[0]);
-      const dist = hexDistance(firstUnit.col, firstUnit.row, newUnit.col, newUnit.row);
-      if (dist > 1) {
-        alert('協同攻撃は同一または隣接ヘクスの砲兵のみ可能です (9-1-(5))');
-        return;
-      }
+    if (!canIndirectFire(newUnit) || newUnit.side !== currentSupportSide()) return;
+    const selected = supportState.selectedArtillery.map(id => testUnits.find(u => u.name === id));
+    if (!canCombineSupport([...selected, newUnit])) {
+      alert('協同射撃は同じヘクスか隣接ヘクスの2部隊までです。');
+      return;
     }
     supportState.selectedArtillery.push(name);
   }
@@ -198,7 +199,7 @@ function toggleArtillerySelect(name) {
 // 盤外砲兵選択トグル
 function toggleOffBoardSelect(obId) {
   const ob = SCENARIO_OFF_BOARD.find(o => o.id === obId);
-  if (!ob || ob.usedCount >= ob.uses) return;
+  if (!ob || ob.side !== currentSupportSide() || ob.usedCount >= ob.uses) return;
 
   const idx = supportState.selectedOffBoard.indexOf(obId);
   if (idx >= 0) {
@@ -393,6 +394,7 @@ function showDiceOverlay(title, subtitle, rows, callback) {
 
 function cancelSupportTarget() {
   supportState.selectedArtillery = [];
+  supportState.selectedOffBoard = [];
   supportState.targetHexId = null;
   supportState.targetMode = false;
   supportState._offBoard = false;
@@ -414,57 +416,17 @@ function onSupportMapClick(col, row) {
         alert(`${u.name}: 近すぎます（最低3ヘクス、現在${dist}）`);
         return true;
       }
-      if (dist > (u.range || 8)) {
+      if (dist > u.range) {
         alert(`${u.name}: 射程外です（最大${u.range}、現在${dist}）`);
         return true;
       }
     }
   }
 
-  // 航空支援かどうか判定（IDが'air_'で始まる盤外砲兵）
-  const isAirSupport = supportState._offBoard && supportState.selectedOffBoard.some(id =>
-    id.startsWith('air_')
-  );
-
-  // ダミーがいるヘクスは砲撃不可（航空支援は例外）
-  if (!isAirSupport) {
-    const hasDummy = testUnits.some(u =>
-      u.hexId === hexId && u.type === 'dummy' && u.status !== 'eliminated'
-    );
-    if (hasDummy) {
-      alert('ダミーのいるヘクスには支援砲撃できません');
-      return true;
-    }
-  }
-
-  // 味方ユニットが目標を視認している必要がある
-  const firingSide = supportState._firingSide || G.initiative;
-  if (!isTargetSpottedByFriendly(hexId, firingSide)) {
-    if (isAirSupport) {
-      // 航空支援: 戦闘爆撃機発見表で視認チェック
-      const terrain = getHexTerrain(hexId) || 'p';
-      const disc = FIGHTER_BOMBER_DISCOVERY[terrain] || FIGHTER_BOMBER_DISCOVERY['p'];
-      const roll = Math.floor(Math.random() * 10);
-      const success = roll >= (disc[0] - 1) && roll <= (disc[1] - 1);  // 0-9に変換
-      if (success) {
-        addLog('init', `航空支援 視認チェック: ダイス${roll+1} (${terrain}, 成功範囲${disc[0]}-${disc[1]}) → 発見！`);
-        // 発見成功: ダミーマーカーを除去
-        const dummies = testUnits.filter(u =>
-          u.hexId === hexId && u.type === 'dummy' && u.status !== 'eliminated'
-        );
-        dummies.forEach(d => {
-          d.status = 'eliminated';
-          addLog('init', `航空支援: ${hexId} のダミーマーカーを除去`);
-        });
-      } else {
-        addLog('init', `航空支援 視認チェック: ダイス${roll+1} (${terrain}, 成功範囲${disc[0]}-${disc[1]}) → 発見できず`);
-        alert(`航空支援: 目標を発見できませんでした（ダイス${roll+1}、${terrain}地形は${disc[0]}-${disc[1]}で発見）`);
-        return true;
-      }
-    } else {
-      alert('味方ユニットが目標を視認していません');
-      return true;
-    }
+  const side = currentSupportSide();
+  if (supportTargets(hexId, side).length === 0 || !isTargetSpottedByFriendly(hexId, side)) {
+    alert('視認できる敵のいるヘクスを選んでください。');
+    return true;
   }
 
   supportState.targetHexId = hexId;
@@ -473,301 +435,130 @@ function onSupportMapClick(col, row) {
   return true;
 }
 
-// 砲撃実行
-function executeSupportFire() {
-  if (!supportState.targetHexId) return;
-  const targetHexId = supportState.targetHexId;
-  const side = supportState._firingSide || G.initiative;
-  const terrainMod = getTerrainFireMod(targetHexId);
-  const tNames = {p:'平地',w:'林',f:'森林',r:'荒地',t:'町',c:'市街地',lake:'湖'};
-  const terrain = getHexTerrain(targetHexId);
+// §9: 人間もAIも同じ射程・視認・協同射撃・損害判定を使う。
+function canIndirectFire(unit) {
+  return pgOnMap(unit) && unit.type === 'A' && unit.status === 'ok' &&
+    !unit.marchMode && !unit.outOfAmmo && !unit.firedThisTurn;
+}
 
-  // 目標ヘクスの敵ユニット（指揮官・ダミーは除外）
-  const targetUnits = testUnits.filter(u => {
-    const hid = toHexId(u.col, u.row);
-    return hid === targetHexId && u.side !== side && u.status !== 'eliminated' &&
-      u.type !== 'leader' && u.type !== 'dummy';
+function isInIndirectRange(unit, hex) {
+  const target = fromHexId(hex);
+  const distance = hexDistance(unit.col, unit.row, target.col, target.row);
+  return distance >= 3 && distance <= unit.range;
+}
+
+function isTargetSpottedByFriendly(hex, side) {
+  if (isDummyProtected(hex) && testUnits.some(u =>
+    u.hexId === hex && u.side !== side && u.type === 'dummy' && pgOnMap(u))) return false;
+  const target = fromHexId(hex);
+  return testUnits.some(u => {
+    if (!pgOnMap(u) || u.side !== side || u.status !== 'ok' || !['T', 'AC', 'I', 'A'].includes(u.type)) return false;
+    return Boolean(calculateVisionRange(u.col, u.row, G.visionRange)[`${target.col},${target.row}`]);
+  });
+}
+
+function supportTargets(hex, side) {
+  return testUnits.filter(u => pgOnMap(u) && u.hexId === hex && u.side !== side &&
+    !['dummy', 'leader', 'ip'].includes(u.type));
+}
+
+function canCombineSupport(artillery) {
+  return artillery.length <= 2 && (artillery.length < 2 ||
+    hexDistance(artillery[0].col, artillery[0].row, artillery[1].col, artillery[1].row) <= 1);
+}
+
+function supportRollModifier(hex, unit) {
+  const ip = FACILITY_MAP[hex] === 'ip';
+  const terrain = ip ? (TERRAIN_MODIFIERS[TERRAIN_MAP[hex]]?.fire ?? 0) - 1 : getTerrainFireMod(hex);
+  return terrain + (unit.marchMode ? 2 : 0);
+}
+
+function supportFirepower(target, artillery, offBoardPower, offBoardAT) {
+  const armored = ['T', 'AC', 'fortification'].includes(target.type);
+  return artillery.length
+    ? artillery.reduce((fp, u) => fp + (armored ? (u.spAT ?? u.fpAT ?? 0) : (u.spSoft ?? u.fpSoft ?? 0)), 0)
+    : Math.max(0, offBoardPower + (armored ? offBoardAT : 0));
+}
+
+function resolveSupportAttack(side, hex, artillery, offBoard) {
+  const targets = supportTargets(hex, side);
+  if (targets.length === 0 || !isTargetSpottedByFriendly(hex, side)) return null;
+  if (artillery.length && (offBoard.length || !canCombineSupport(artillery) ||
+    artillery.some(u => u.side !== side || !canIndirectFire(u) || !isInIndirectRange(u, hex)))) return null;
+  if (offBoard.some(ob => !ob || ob.side !== side || ob.usedCount >= ob.uses) ||
+    (offBoard.length > 1 && offBoard.some(ob => !ob.combinable))) return null;
+  if (!artillery.length && !offBoard.length) return null;
+
+  const firerName = [...artillery, ...offBoard].map(u => u.name).join('+');
+  let offBoardPower = 0;
+  let offBoardAT = 0;
+  artillery.forEach(u => { u.firedThisTurn = true; });
+  offBoard.forEach(ob => {
+    const fp = ob.fpMode === 'dice' ? Math.floor(Math.random() * 10) : ob.fp || 0;
+    offBoardPower += fp;
+    offBoardAT += ob.fpATModifier || 0;
+    ob.usedCount++;
+    addLog('init', `${ob.name}: FP${fp}、使用${ob.usedCount}/${ob.uses}回`);
   });
 
-  if (targetUnits.length === 0) {
-    alert('目標ヘクスに敵ユニットがいません');
+  const rows = [];
+  const hit = target => {
+    const prevStatus = target.status;
+    const targetName = target.name;
+    const fp = supportFirepower(target, artillery, offBoardPower, offBoardAT);
+    const terrainMod = supportRollModifier(hex, target);
+    const roll = fp > 0 ? Math.floor(Math.random() * 10) : null;
+    const modRoll = roll === null ? null : roll + terrainMod;
+    const combat = roll === null ? {damageLevel: 0, isElimination: false} : getFireCombatResult(fp, modRoll);
+    const damage = fp > 0 ? resolveDamage(combat.damageLevel, target.def || 0) : 'none';
+    applyDamageToUnit(target, damage);
+    if (target.type === 'fortification' && target.status === 'eliminated') downgradeFort(target);
+    const text = `${firerName} → ${targetName}: FP${fp}、ダイス${roll ?? '—'}、${prevStatus.toUpperCase()} → ${target.status.toUpperCase()}`;
+    addLog('init', text);
+    supportState.fireResults.push({text, damage});
+    rows.push({targetName, roll: roll ?? '—', modRoll, fp, terrainMod, damageLevel: combat.damageLevel,
+      isElimination: combat.isElimination, def: target.def || 0, damage, prevStatus, newStatus: target.status});
+    return damage;
+  };
+
+  const fort = targets.find(u => u.type === 'fortification');
+  if (fort) {
+    hit(fort); // §17-2: 陣地が残る間は中の部隊に損害なし
+    if (fort.status !== 'eliminated') return {firerName, hex, rows};
+  }
+
+  let damaged = false;
+  for (const target of targets) {
+    if (target !== fort && hit(target) !== 'none') damaged = true;
+  }
+  if (damaged) {
+    const defender = side === 'german' ? 'allied' : 'german';
+    const result = checkLeaderCasualty(hex, defender);
+    if (result) {
+      const {leader, roll, wounded} = result;
+      rows.push({targetName: leader.name + '【負傷チェック】', roll, fp: 0, terrainMod: 0,
+        damageLevel: 0, isElimination: wounded, def: 0, damage: wounded ? 'eliminated' : 'none',
+        prevStatus: 'ok', newStatus: leader.status});
+    }
+    checkLeaderOnStackEliminated(hex, defender);
+  }
+  return {firerName, hex, rows};
+}
+
+function executeSupportFire() {
+  const side = currentSupportSide();
+  const hex = supportState.targetHexId;
+  if (!hex) return;
+  const artillery = supportState.selectedArtillery.map(name => testUnits.find(u => u.name === name));
+  const offBoard = supportState.selectedOffBoard.map(id => SCENARIO_OFF_BOARD.find(ob => ob.id === id));
+  const attack = resolveSupportAttack(side, hex, artillery, offBoard);
+  if (!attack) {
+    alert('視認・射程・射撃部隊を確認してください。');
     return;
   }
-
-  // 陣地チェック: 陣地があればまず陣地への判定
-  const fort = testUnits.find(u =>
-    (u.hexId || toHexId(u.col, u.row)) === targetHexId &&
-    u.type === 'fortification' && u.status !== 'eliminated'
-  );
-  if (fort) {
-    const fortRoll = Math.floor(Math.random() * 10);
-    const prevFortStatus = fort.status;
-    let fortDamage = 'none';
-    if (fortRoll >= 4) {
-      if (typeof downgradeFort === 'function') downgradeFort(fort);
-      else fort.status = 'eliminated';
-      fortDamage = 'eliminated';
-    } else if (fortRoll === 3) {
-      if (fort.status === 'ok') { fort.status = 'dd'; fortDamage = 'dd'; }
-      else { if (typeof downgradeFort === 'function') downgradeFort(fort); else fort.status = 'eliminated'; fortDamage = 'eliminated'; }
-    } else if (fortRoll >= 1) {
-      if (fort.status === 'ok') { fort.status = 'd'; fortDamage = 'd'; }
-      else if (fort.status === 'd') { fort.status = 'dd'; fortDamage = 'dd'; }
-      else { if (typeof downgradeFort === 'function') downgradeFort(fort); else fort.status = 'eliminated'; fortDamage = 'eliminated'; }
-    }
-    const fortLabel = fort.status === 'eliminated' ? '破壊' : fortDamage === 'dd' ? 'DD' : fortDamage === 'd' ? 'D' : '効果なし';
-    addLog('init', `砲撃→陣地判定: ${fort.name} D10:${fortRoll} → ${fortLabel}`);
-    // 陣地が残っていたらユニットへの損害なし
-    if (fort.status !== 'eliminated') {
-      addLog('init', `陣地健在 → ユニットへの損害なし`);
-      supportState.targetHexId = null;
-      supportState.targetMode = false;
-      renderSupportPhase();
-      drawMap();
-      return;
-    }
-  }
-
-  let firerName = '';
-  const overlayResults = [];
-
-  // 盤外砲兵の場合
-  if (supportState._offBoard && supportState.selectedOffBoard.length > 0) {
-    const obUnits = supportState.selectedOffBoard.map(id => SCENARIO_OFF_BOARD.find(o => o.id === id)).filter(Boolean);
-    let fp = 0;
-    obUnits.forEach(ob => {
-      if (ob.fpMode === 'dice') {
-        fp += Math.floor(Math.random() * 10);
-      } else {
-        fp += ob.fp || 0;
-      }
-    });
-    firerName = obUnits.map(ob => ob.name).join('+');
-
-    targetUnits.forEach(target => {
-      const isArmored = target.type === 'T' || target.type === 'AC';
-      let adjFP = fp;
-      if (isArmored) {
-        const atMod = obUnits.reduce((s, ob) => s + (ob.fpATModifier || 0), 0);
-        adjFP = Math.max(0, fp + atMod);
-      }
-      const roll = Math.floor(Math.random() * 10);
-      const modRoll = roll + terrainMod;
-      const combat = getFireCombatResult(adjFP, modRoll);
-      const damage = resolveDamage(combat.damageLevel, target.def || 0);
-      const prevStatus = target.status;
-      applyDamageToUnit(target, damage);
-      const dlLabel = combat.isElimination ? 'E' : combat.damageLevel;
-      const fpLabel = isArmored && adjFP !== fp ? `FP${fp}(装甲${adjFP})` : `FP${adjFP}`;
-      const text = `${firerName}→${target.name}: ${fpLabel} ダイス${roll}${terrainMod?'(地形'+terrainMod+')':''}=${modRoll} 損害Lv${dlLabel} → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`;
-      supportState.fireResults.push({ text, damage });
-      addLog('init', text);
-      overlayResults.push({
-        targetName: target.name, roll, modRoll, fp: adjFP, terrainMod,
-        damageLevel: combat.damageLevel, isElimination: combat.isElimination,
-        def: target.def || 0, damage, prevStatus, newStatus: target.status
-      });
-    });
-
-    obUnits.forEach(ob => {
-      ob.usedCount++;
-      addLog('init', `${ob.name}: 使用${ob.usedCount}/${ob.uses}回`);
-    });
-
-    supportState.selectedOffBoard = [];
-    supportState.targetHexId = null;
-    supportState.targetMode = false;
-    supportState._offBoard = false;
-
-  } else {
-    // 盤上砲兵
-    const firingUnits = supportState.selectedArtillery.map(name => testUnits.find(u => u.name === name)).filter(Boolean);
-    firerName = firingUnits.map(u => u.name).join('+');
-
-    targetUnits.forEach(target => {
-      const isArmored = target.type === 'T' || target.type === 'AC';
-      let fp = 0;
-      firingUnits.forEach(u => { fp += isArmored ? (u.spAT || u.fpAT || 0) : (u.spSoft || u.fpSoft || 0); });
-      const roll = Math.floor(Math.random() * 10);
-      const modRoll = roll + terrainMod;
-      const combat = getFireCombatResult(fp, modRoll);
-      const damage = resolveDamage(combat.damageLevel, target.def || 0);
-      const prevStatus = target.status;
-      applyDamageToUnit(target, damage);
-      const dlLabel = combat.isElimination ? 'E' : combat.damageLevel;
-      const text = `${firerName}→${target.name}: FP${fp} ダイス${roll}${terrainMod?'(地形'+terrainMod+')':''}=${modRoll} 損害Lv${dlLabel} → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`;
-      supportState.fireResults.push({ text, damage });
-      addLog('init', text);
-      overlayResults.push({
-        targetName: target.name, roll, modRoll, fp, terrainMod,
-        damageLevel: combat.damageLevel, isElimination: combat.isElimination,
-        def: target.def || 0, damage, prevStatus, newStatus: target.status
-      });
-    });
-
-    firingUnits.forEach(u => { u.firedThisTurn = true; });
-
-    supportState.selectedArtillery = [];
-    supportState.targetHexId = null;
-    supportState.targetMode = false;
-  }
-
-  // 指揮官負傷チェック: 損害が出た場合、同ヘクスの指揮官もオーバーレイに表示
-  if (overlayResults.some(r => r.damage !== 'none')) {
-    const defSide = targetUnits[0]?.side;
-    const leader = getLeaderInHex(targetHexId, defSide);
-    if (leader) {
-      const lRoll = Math.floor(Math.random() * 10);
-      const wounded = lRoll === 0;
-      if (wounded) {
-        leader.status = 'eliminated';
-        addLog('init', `⚠ ${leader.name} 負傷！（ダイス: ${lRoll}）→ 除去`);
-      } else {
-        addLog('init', `${leader.name} 負傷チェック（ダイス: ${lRoll}）→ 無事`);
-      }
-      overlayResults.push({
-        targetName: `${leader.name}【負傷チェック】`,
-        roll: lRoll, modRoll: lRoll, fp: 0, terrainMod: 0,
-        damageLevel: 0, isElimination: wounded,
-        def: 0, damage: wounded ? 'eliminated' : 'none',
-        prevStatus: wounded ? 'ok' : leader.status,
-        newStatus: leader.status
-      });
-      // スタック壊滅チェック
-      checkLeaderOnStackEliminated(targetHexId, defSide);
-    }
-  }
-
-  // オーバーレイ表示
-  const targetInfo = `${firerName} → ${targetHexId} (${tNames[terrain]||terrain}${terrainMod ? ', 修正'+(terrainMod>=0?'+':'')+terrainMod : ''})`;
-  showFireOverlay('砲撃！', targetInfo, overlayResults);
-
-  renderSupportPhase();
+  cancelSupportTarget();
+  showFireOverlay('砲撃！', `${attack.firerName} → ${hex}`, attack.rows);
   drawMap();
-}
-
-// ===== 間接射撃 (ルール9) =====
-
-// 間接射撃可能か判定
-function canIndirectFire(unit) {
-  if (unit.type !== 'A') return { can: false, reason: '砲兵ユニットのみ間接射撃可能' };
-  if (unit.status !== 'ok') return { can: false, reason: '正常状態でない' };
-  if (unit.firedThisTurn) return { can: false, reason: '今フェイズ射撃済み' };
-  return { can: true, reason: '' };
-}
-
-// 間接射撃の射程チェック (9-1-(3): 最低3ヘクス〜最大射程)
-function isInIndirectRange(unit, targetHexId) {
-  const uPos = fromHexId(unit.hexId);
-  const tPos = fromHexId(targetHexId);
-  const dist = hexDistance(uPos.col, uPos.row, tPos.col, tPos.row);
-  if (dist < 3) return { inRange: false, reason: '近すぎる（最低3ヘクス）' };
-  if (dist > (unit.range || 8)) return { inRange: false, reason: '射程外' };
-  return { inRange: true, dist };
-}
-
-// 味方の誰かが目標を視認しているか (9-1-(2))
-function isTargetSpottedByFriendly(targetHexId, side) {
-  const tPos = fromHexId(targetHexId);
-  // ダミー付きなら視認不可
-  if (getDummyCount(targetHexId) > 0) {
-    const d = dummyMap[targetHexId];
-    if (d && d.side !== side && isDummyProtected(targetHexId)) return false;
-  }
-  for (const u of units) {
-    if (u.side !== side || u.status !== 'ok' || u.type === 'leader' || u.type === 'dummy') continue;
-    if (!u.hexId || u.hexId === 'reinforcement') continue;
-    const uPos = fromHexId(u.hexId);
-    const visionHexes = calculateVisionRange(uPos.col, uPos.row, G.visionRange);
-    if (visionHexes[`${tPos.col},${tPos.row}`]) return true;
-  }
-  return false;
-}
-
-// 協同攻撃可能な砲兵を取得 (9-1-(5): 同一or隣接ヘクスの砲兵)
-function getCoopArtillery(unit) {
-  const result = [];
-  const uPos = fromHexId(unit.hexId);
-  units.forEach(u => {
-    if (u === unit || u.type !== 'A' || u.side !== unit.side) return;
-    if (u.status !== 'ok' || u.firedThisTurn) return;
-    const pos = fromHexId(u.hexId);
-    const dist = hexDistance(uPos.col, uPos.row, pos.col, pos.row);
-    if (dist <= 1) result.push(u);
-  });
-  return result;
-}
-
-// 間接射撃実行
-// targetHexId: 攻撃先ヘクス
-// firingUnits: 射撃する砲兵ユニット配列（協同攻撃含む）
-function executeIndirectFire(firingUnits, targetHexId) {
-  // 火力合計
-  let totalFP = 0;
-  firingUnits.forEach(u => {
-    totalFP += u.fpSoft || 0; // 間接射撃は対非装甲火力
-    u.firedThisTurn = true;
-  });
-
-  // 目標ヘクスの地形修正
-  const terrainMod = getTerrainFireMod(targetHexId);
-
-  // 施設修正（I.P.）
-  const facility = FACILITY_MAP[targetHexId];
-  let facilityMod = 0;
-  if (facility === 'ip') facilityMod = -1; // I.P.の射撃修正
-
-  // 目標ヘクスの全敵ユニットに対して個別にダイスロール (9-3-(5))
-  const targetUnits = units.filter(u =>
-    u.hexId === targetHexId &&
-    u.side !== firingUnits[0].side &&
-    u.status !== 'eliminated' &&
-    u.type !== 'dummy' && u.type !== 'leader'
-  );
-
-  const results = [];
-  targetUnits.forEach(target => {
-    // 対装甲/対非装甲の火力選択 (9-3-(6))
-    const isArmored = target.type === 'T' || target.type === 'AC';
-    let fp = 0;
-    firingUnits.forEach(u => {
-      fp += isArmored ? (u.spAT || u.fpAT || 0) : (u.spSoft || u.fpSoft || 0);
-    });
-
-    const roll = Math.floor(Math.random() * 10);
-    const modifiedRoll = roll + terrainMod;
-    const combat = getFireCombatResult(fp, modifiedRoll);
-    const damage = resolveDamage(combat.damageLevel, target.def || 0);
-
-    // 損害適用
-    const prevStatus = target.status;
-    applyDamageToUnit(target, damage);
-
-    results.push({
-      target, roll, modifiedRoll, fp,
-      damageLevel: combat.damageLevel, isElimination: combat.isElimination,
-      ammoCheck: combat.ammoCheck, damage,
-      prevStatus, newStatus: target.status
-    });
-
-    const dlLabel = combat.isElimination ? 'E' : combat.damageLevel;
-    if (damage !== 'none') {
-      addLog('init', `間接射撃: ${target.name} (fp${fp}, ダイス${roll}${terrainMod?'+'+terrainMod:''}=${modifiedRoll}, 損害Lv${dlLabel}) → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`);
-    } else {
-      addLog('init', `間接射撃: ${target.name} (fp${fp}, ダイス${roll}${terrainMod?'+'+terrainMod:''}=${modifiedRoll}, 損害Lv${dlLabel}) → 効果なし`);
-    }
-  });
-
-  // 指揮官負傷チェック（損害が出た場合、1回の攻撃につき1回）
-  if (results.some(r => r.damage !== 'none')) {
-    checkLeaderCasualty(targetHexId, targetUnits[0]?.side);
-    // スタック壊滅チェック
-    checkLeaderOnStackEliminated(targetHexId, targetUnits[0]?.side);
-  }
-
-  // ダミー付きでも損害チェックは行う (9-3-(7)) — ダミーは取らない
-
-  return results;
 }
 
 // 損害をユニットに適用する共通関数
@@ -813,197 +604,74 @@ function applyDamageToUnit(unit, damage) {
   }
 }
 
-// ===== 盤外支援砲兵 (ルール9-2) =====
-// シナリオで定義。射程制限なし、距離制限なし、攻撃を受けない
-// 盤上砲兵との協同攻撃は不可 (9-2-(6))
-function executeOffBoardArtillery(firePower, targetHexId, side) {
-  // 味方の視認チェック
-  if (!isTargetSpottedByFriendly(targetHexId, side)) {
-    addLog('init', `盤外支援砲撃: ${targetHexId} — 視認なし、攻撃不可`);
-    return [];
-  }
-
-  const terrainMod = getTerrainFireMod(targetHexId);
-
-  // 陣地チェック
-  const fort = units.find(u =>
-    u.hexId === targetHexId && u.type === 'fortification' && u.status !== 'eliminated'
-  );
-  if (fort) {
-    const fortRoll = Math.floor(Math.random() * 10);
-    let fortDamage = 'none';
-    if (fortRoll >= 4) {
-      if (typeof downgradeFort === 'function') downgradeFort(fort); else fort.status = 'eliminated';
-      fortDamage = 'eliminated';
-    } else if (fortRoll === 3) {
-      if (fort.status === 'ok') { fort.status = 'dd'; fortDamage = 'dd'; }
-      else { if (typeof downgradeFort === 'function') downgradeFort(fort); else fort.status = 'eliminated'; fortDamage = 'eliminated'; }
-    } else if (fortRoll >= 1) {
-      if (fort.status === 'ok') { fort.status = 'd'; fortDamage = 'd'; }
-      else if (fort.status === 'd') { fort.status = 'dd'; fortDamage = 'dd'; }
-      else { if (typeof downgradeFort === 'function') downgradeFort(fort); else fort.status = 'eliminated'; fortDamage = 'eliminated'; }
-    }
-    const fortLabel = fort.status === 'eliminated' ? '破壊' : fortDamage === 'dd' ? 'DD' : fortDamage === 'd' ? 'D' : '効果なし';
-    addLog('init', `盤外砲撃→陣地判定: ${fort.name} D10:${fortRoll} → ${fortLabel}`);
-    if (fort.status !== 'eliminated') {
-      addLog('init', `陣地健在 → ユニットへの損害なし`);
-      return [];
-    }
-  }
-
-  const targetUnits = units.filter(u =>
-    u.hexId === targetHexId &&
-    u.side !== side &&
-    u.status !== 'eliminated' &&
-    u.type !== 'dummy' && u.type !== 'leader'
-  );
-
-  const results = [];
-  targetUnits.forEach(target => {
-    const isArmored = target.type === 'T' || target.type === 'AC';
-    const fp = firePower; // 盤外砲兵は単一火力
-
-    const roll = Math.floor(Math.random() * 10);
-    const modifiedRoll = roll + terrainMod;
-    const combat = getFireCombatResult(fp, modifiedRoll);
-    const damage = resolveDamage(combat.damageLevel, target.def || 0);
-
-    const prevStatus = target.status;
-    applyDamageToUnit(target, damage);
-
-    results.push({
-      target, roll, modifiedRoll, fp,
-      damageLevel: combat.damageLevel, isElimination: combat.isElimination,
-      ammoCheck: combat.ammoCheck, damage,
-      prevStatus, newStatus: target.status
-    });
-
-    const dlLabel = combat.isElimination ? 'E' : combat.damageLevel;
-    if (damage !== 'none') {
-      addLog('init', `盤外砲撃: ${target.name} (fp${fp}, ダイス${roll}${terrainMod?'+'+terrainMod:''}=${modifiedRoll}, 損害Lv${dlLabel}) → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`);
-    } else {
-      addLog('init', `盤外砲撃: ${target.name} (fp${fp}, ダイス${roll}${terrainMod?'+'+terrainMod:''}=${modifiedRoll}, 損害Lv${dlLabel}) → 効果なし`);
+// ===== AI自動支援砲撃 =====
+function aiAutoSupportFire(side) {
+  const attacks = [];
+  const enemyHexes = new Set(testUnits.filter(u => pgOnMap(u) && u.side !== side &&
+    !['dummy', 'leader', 'ip'].includes(u.type)).map(u => u.hexId));
+  const visible = [...enemyHexes].filter(hex => isTargetSpottedByFriendly(hex, side));
+  const artillery = testUnits.filter(u => u.side === side && canIndirectFire(u));
+  const offBoard = SCENARIO_OFF_BOARD.filter(ob => ob.side === side && ob.usedCount < ob.uses);
+  const groups = artillery.map(unit => ({artillery: [unit], offBoard: []}));
+  artillery.forEach((unit, i) => {
+    for (const other of artillery.slice(i + 1)) {
+      if (canCombineSupport([unit, other])) groups.push({artillery: [unit, other], offBoard: []});
     }
   });
+  offBoard.forEach(ob => groups.push({artillery: [], offBoard: [ob]}));
 
-  if (results.some(r => r.damage !== 'none')) {
-    checkLeaderCasualty(targetHexId, targetUnits[0]?.side);
-    checkLeaderOnStackEliminated(targetHexId, targetUnits[0]?.side);
+  for (;;) {
+    let best = null;
+    for (const firing of groups) {
+      if (firing.artillery.some(u => !canIndirectFire(u)) ||
+          firing.offBoard.some(ob => ob.usedCount >= ob.uses || ob._aiFiredTurn === G.turn)) continue;
+      for (const hex of visible) {
+        if (firing.artillery.some(u => !isInIndirectRange(u, hex))) continue;
+        const targets = supportTargets(hex, side);
+        const fort = targets.find(u => u.type === 'fortification');
+        const score = (fort ? [fort] : targets).reduce((sum, target) => {
+          const fp = supportFirepower(target, firing.artillery,
+            firing.offBoard.reduce((n, ob) => n + (ob.fpMode === 'dice' ? 5 : ob.fp || 0), 0),
+            firing.offBoard.reduce((n, ob) => n + (ob.fpATModifier || 0), 0));
+          if (fp <= 0) return sum;
+          const mod = supportRollModifier(hex, target);
+          for (let roll = 0; roll < 10; roll++) {
+            const {damageLevel} = getFireCombatResult(fp, roll + mod);
+            const damage = resolveDamage(damageLevel, target.def || 0);
+            sum += damage === 'eliminated' ? 5 : damage === 'dd' ? 3 : damage === 'd' ? 1 : 0;
+          }
+          return sum;
+        }, 0) / (firing.artillery.length || 1);
+        if (score > 0 && (!best || score > best.score)) best = {firing, hex, score};
+      }
+    }
+    if (!best) return attacks;
+    const {hex, firing} = best;
+    const attack = resolveSupportAttack(side, hex, firing.artillery, firing.offBoard);
+    if (!attack) {
+      visible.splice(visible.indexOf(hex), 1);
+      continue;
+    }
+    firing.offBoard.forEach(ob => { ob._aiFiredTurn = G.turn; });
+    attacks.push(attack);
   }
-
-  return results;
 }
 
-// ===== AI自動支援砲撃 =====
-function aiAutoSupportFire(activeSide) {
-  const sides = activeSide ? [activeSide] : ['german', 'allied'];
-  sides.forEach(side => {
-    const enemySide = side === 'german' ? 'allied' : 'german';
-
-    // 味方ユニットがマップ上にいなければスキップ（援軍未到着）
-    const friendlyOnMap = testUnits.some(u =>
-      u.side === side && u.status !== 'eliminated' &&
-      u.type !== 'dummy' && u.type !== 'leader' &&
-      u.col >= 0 && u.col < MAP_CONFIG.cols
-    );
-    if (!friendlyOnMap) return;
-
-    // 盤上砲兵
-    const artillery = testUnits.filter(u =>
-      u.side === side && u.type === 'A' && u.status === 'ok' && !u.firedThisTurn
-    );
-    artillery.forEach(arty => {
-      const enemies = testUnits.filter(e =>
-        e.side === enemySide && e.status !== 'eliminated' &&
-        e.type !== 'dummy' && e.type !== 'leader'
-      );
-      if (enemies.length === 0) return;
-      let bestTarget = null, bestScore = -1;
-      const checkedHexes = new Set();
-      enemies.forEach(e => {
-        if (checkedHexes.has(e.hexId)) return;
-        checkedHexes.add(e.hexId);
-        const dist = hexDistance(arty.col, arty.row, e.col, e.row);
-        if (dist < 3 || dist > (arty.range || 8)) return;
-        if (testUnits.some(u => u.hexId === e.hexId && u.type === 'dummy' && u.status !== 'eliminated')) return;
-        if (!isTargetSpottedByFriendly(e.hexId, side)) return;
-        const hexEnemies = enemies.filter(u => u.hexId === e.hexId).length;
-        // 正常な敵を優先（弱った敵は突撃で仕留める）
-        const okEnemies = enemies.filter(u => u.hexId === e.hexId && u.status === 'ok').length;
-        const score = okEnemies * 15 + hexEnemies * 5 + (10 - dist);
-        if (score > bestScore) { bestScore = score; bestTarget = e; }
-      });
-      if (!bestTarget) return;
-      const targetHexId = bestTarget.hexId;
-      const terrainMod = getTerrainFireMod(targetHexId);
-      const tgts = testUnits.filter(u =>
-        u.hexId === targetHexId && u.side === enemySide && u.status !== 'eliminated' &&
-        u.type !== 'leader' && u.type !== 'dummy'
-      );
-      if (tgts.length === 0) return;
-      tgts.forEach(target => {
-        const isArmored = target.type === 'T' || target.type === 'AC';
-        const fp = isArmored ? (arty.spAT || arty.fpAT || 0) : (arty.spSoft || arty.fpSoft || 0);
-        if (fp <= 0) return;
-        const roll = Math.floor(Math.random() * 10);
-        const modRoll = roll + terrainMod;
-        const combat = getFireCombatResult(fp, modRoll);
-        const damage = resolveDamage(combat.damageLevel, target.def || 0);
-        const prevStatus = target.status;
-        applyDamageToUnit(target, damage);
-        addLog('init', `AI支援砲撃: ${arty.name}→${target.name} FP${fp} D10:${roll}${terrainMod?'+'+terrainMod:''}=${modRoll} → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`);
-      });
-      arty.firedThisTurn = true;
-      if (tgts.some(u => u.status !== 'eliminated')) {
-        checkLeaderCasualty(targetHexId, enemySide);
-        checkLeaderOnStackEliminated(targetHexId, enemySide);
-      }
-    });
-
-    // 盤外砲兵
-    SCENARIO_OFF_BOARD.filter(ob => ob.side === side && ob.usedCount < ob.uses).forEach(ob => {
-      const enemies = testUnits.filter(e =>
-        e.side === enemySide && e.status !== 'eliminated' &&
-        e.type !== 'dummy' && e.type !== 'leader'
-      );
-      if (enemies.length === 0) return;
-      const isAir = ob.id && ob.id.startsWith('air_');
-      let bestTarget = null, bestScore = -1;
-      const checkedHexes = new Set();
-      enemies.forEach(e => {
-        if (checkedHexes.has(e.hexId)) return;
-        checkedHexes.add(e.hexId);
-        if (!isAir && testUnits.some(u => u.hexId === e.hexId && u.type === 'dummy' && u.status !== 'eliminated')) return;
-        if (!isTargetSpottedByFriendly(e.hexId, side)) {
-          if (!isAir) return;
-          const terrain = getHexTerrain(e.hexId) || 'p';
-          const disc = FIGHTER_BOMBER_DISCOVERY[terrain] || FIGHTER_BOMBER_DISCOVERY['p'];
-          const dRoll = Math.floor(Math.random() * 10);
-          if (!(dRoll >= (disc[0] - 1) && dRoll <= (disc[1] - 1))) return;
-        }
-        const hexEnemies = enemies.filter(u => u.hexId === e.hexId).length;
-        if (hexEnemies > bestScore) { bestScore = hexEnemies; bestTarget = e; }
-      });
-      if (!bestTarget) return;
-      const targetHexId = bestTarget.hexId;
-      const terrainMod = getTerrainFireMod(targetHexId);
-      const tgts = testUnits.filter(u =>
-        u.hexId === targetHexId && u.side === enemySide && u.status !== 'eliminated' &&
-        u.type !== 'leader' && u.type !== 'dummy'
-      );
-      if (tgts.length === 0) return;
-      tgts.forEach(target => {
-        const roll = Math.floor(Math.random() * 10);
-        const modRoll = roll + terrainMod;
-        const combat = getFireCombatResult(ob.fp, modRoll);
-        const damage = resolveDamage(combat.damageLevel, target.def || 0);
-        const prevStatus = target.status;
-        applyDamageToUnit(target, damage);
-        addLog('init', `AI盤外砲撃: ${ob.name}→${target.name} FP${ob.fp} D10:${roll}${terrainMod?'+'+terrainMod:''}=${modRoll} → ${prevStatus.toUpperCase()}→${target.status.toUpperCase()}`);
-      });
-      ob.usedCount++;
-      checkLeaderCasualty(targetHexId, enemySide);
-      checkLeaderOnStackEliminated(targetHexId, enemySide);
-    });
-  });
+function renderAISupportPhase(side) {
+  const phase = `${G.turn}:${G.phase}`;
+  const first = supportState._aiPhase !== phase;
+  if (first) {
+    supportState._aiPhase = phase;
+    supportState._aiAttacks = aiAutoSupportFire(side);
+  }
+  const attacks = supportState._aiAttacks;
+  document.getElementById('phaseContent').innerHTML = `<div class="phase-info">${attacks.length
+    ? 'AIの支援射撃が終了しました。' : 'AIの支援射撃はありません。'}</div>`;
+  if (first && attacks.length) {
+    showFireOverlay('AI支援射撃', side === 'german' ? 'ドイツ軍' : '連合軍',
+      attacks.flatMap(attack => attack.rows.map(row => ({
+        ...row, targetName: `${attack.hex} ${row.targetName}`,
+      }))));
+  }
+  drawMap();
 }

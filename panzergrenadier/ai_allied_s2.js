@@ -383,7 +383,7 @@ async function ukAI_moveAllStacks(canFire) {
   const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
 
   const alliedUnits = testUnits.filter(u =>
-    u.side === 'allied' && u.status !== 'eliminated' &&
+    u.side === 'allied' && u.status !== 'eliminated' && !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip' &&
     u.col >= 0 && u.col < MAP_CONFIG.cols
   );

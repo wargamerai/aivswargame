@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script defer src="../board-zoom.js"></script>
 <script src="../nobrowserback.js"></script>
 <!-- アクセス解析（GoatCounter） -->
+<script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <meta charset="UTF-8">
 <title>装甲擲弾兵 — Panzer Grenadier</title>
 <style>
@@ -347,6 +349,10 @@ function selectScenario(sc) {
       <div class="side-name" style="color:#c8a020;">人間 vs 人間</div>
       <div class="side-desc">2人で交互にプレイ</div>
     </div>
+    <div class="side-btn" data-mode="online" onclick="selectMode('online')">
+      <div class="side-name" style="color:#c8a020;">オンライン対戦</div>
+      <div class="side-desc">招待リンクで別端末の相手と対戦</div>
+    </div>
     <div class="side-btn" data-mode="aivai" onclick="selectMode('aivai')">
       <div class="side-name" style="color:#c8a020;">AI vs AI</div>
       <div class="side-desc">観戦モード</div>
@@ -409,7 +415,7 @@ function selectMode(mode) {
       </div>
     `;
     document.getElementById('startBtn').disabled = true;
-  } else if (mode === 'pvp') {
+  } else if (mode === 'pvp' || mode === 'online') {
     // 人間同士は陣営選択不要
     sideLabel.style.display = 'none';
     sideEl.innerHTML = '';
@@ -449,6 +455,5 @@ function startGame() {
 
 init();
 </script>
-<script defer src="../game-analytics.js"></script>
 </body>
 </html>

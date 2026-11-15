@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script defer src="../board-zoom.js"></script>
 <meta charset="UTF-8">
 <title>装甲擲弾兵 — Panzer Grenadier</title>
 <style>
@@ -265,7 +266,8 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
   <div id="phaseBar"></div>
   <span id="initBadge" style="display:none;"></span>
   <span class="info" id="playerInfo"></span>
-  <button class="top-btn" onclick="nextPhase()">次のフェイズ</button>
+  <button class="top-btn" id="nextPhaseBtn" onclick="nextPhase()">次のフェイズ</button>
+  <span id="pgOnlineStatus" class="info" hidden></span>
   <button class="top-btn" id="btnSplit" onclick="toggleStackSplit()" style="margin-left:4px;">スタック解除</button>
   <span id="losInfo" style="color:#aaa;font-size:0.8em;display:none;"></span>
   <span id="hexCursor" style="color:#ff0;font-size:0.85em;font-weight:bold;margin-left:8px;">--</span>
@@ -367,7 +369,14 @@ const _scenarioId = parseInt(_urlParams.get('scenario')) || 2;
 const _playerSide = _urlParams.get('side') || 'allied';
 
 // シナリオ選択
-const SCENARIO = window['SCENARIO_' + _scenarioId] || SCENARIO_2;
+const scenarioDefinitions = {
+  2: () => SCENARIO_2,
+  3: () => SCENARIO_3,
+  7: () => SCENARIO_7,
+  8: () => SCENARIO_8,
+  9: () => SCENARIO_9,
+};
+const SCENARIO = window['SCENARIO_' + _scenarioId] || (scenarioDefinitions[_scenarioId] ?? scenarioDefinitions[2])();
 
 const G = {
   turn: 1,
@@ -1442,6 +1451,9 @@ function isAIPhase() {
   if (G.gameMode !== 'pvai') return false;
   const aiSide = G.playerSide === 'german' ? 'allied' : 'german';
   const phase = PHASES[G.phase];
+  if (phase.id === 'supportAtk' || phase.id === 'supportDef') {
+    if (G.initiative && currentSupportSide() === aiSide) return true;
+  }
   // 先攻移動・射撃と突撃は先攻プレイヤーのフェイズ
   if (phase.id === 'moveFire' || phase.id === 'assault') {
     return G.initiative === aiSide;
@@ -1462,11 +1474,18 @@ function renderPhase() {
 
   // pvaiモードでAI側のフェイズなら自動実行
   if (isAIPhase()) {
+    if (phase.id === 'supportDef') {
+      renderAISupportPhase(currentSupportSide());
+      return;
+    }
+    if (phase.id === 'supportAtk' && (!SCENARIO.diceAirSupport || G._airSupportRolled ||
+       G.turn < SCENARIO.diceAirSupport.startTurn)) {
+      renderAISupportPhase(currentSupportSide());
+      return;
+    }
     addLog('ai', `AI自動実行: ${phase.name}フェイズ`);
     if (phase.id === 'moveFire') {
-      aiAutoMoveFire();
-      drawMap();
-      setTimeout(() => nextPhase(), 2000);
+      pgStartAIReview(G.initiative, showReview => aiAutoMoveFire(showReview));
       return;
     }
     if (phase.id === 'assault') {
@@ -1476,9 +1495,11 @@ function renderPhase() {
       return;
     }
     if (phase.id === 'defMove') {
-      aiAutoDefMove();
-      drawMap();
-      setTimeout(() => nextPhase(), 1500);
+      const defender = G.initiative === 'german' ? 'allied' : 'german';
+      pgStartAIReview(defender, async showReview => {
+        await aiAutoDefMove();
+        await showReview();
+      });
       return;
     }
   }
@@ -1583,7 +1604,8 @@ function renderPhase() {
         resultText: resultText,
         resultClass: resultClass,
       }], function() {
-        renderSupportPhase(G.initiative);
+        if (isAIPhase()) renderAISupportPhase(G.initiative);
+        else renderSupportPhase(G.initiative);
       });
       return;
     }
@@ -1621,7 +1643,7 @@ function renderPhase() {
       return;
     }
     if (!directFireState.activeSide) resetDirectFireState();
-    renderMoveFirePhase();
+    pgRenderManualMovement(G.initiative);
     return;
   }
 
@@ -1635,17 +1657,13 @@ function renderPhase() {
       directFireState.activeSide = G.initiative === 'german' ? 'allied' : 'german';
       directFireState.defenderSide = G.initiative;
       directFireState.mode = 'selectShooter';
-      renderMoveFirePhase();
+      pgRenderManualMovement(directFireState.activeSide);
       return;
     case 'turnEnd':
       html += `ターン ${G.turn} 終了。<br>`;
-      if (G.turn < G.maxTurn) {
-        // AIvAIモードではAIが自動進行するのでボタン不要（二重呼び出し防止）
-        if (G.gameMode !== 'aivai') {
-          html += '<br><button class="dice-btn" onclick="advanceTurn()">次のターンへ</button>';
-        }
-      } else {
-        html += '<b>ゲーム終了</b>';
+      if (G.gameMode !== 'aivai') {
+        html += '<br><button class="dice-btn" onclick="advanceTurn()">' +
+          (G.turn < G.maxTurn ? '次のターンへ' : '結果を見る') + '</button>';
       }
       break;
   }
@@ -1655,6 +1673,11 @@ function renderPhase() {
 
 // ===== フェイズ進行 =====
 function nextPhase() {
+  if (G.gameMode === 'online' && !pgOnlineMayAdvance()) return;
+  if (pgAIReview) { pgFinishAIReview(); return; }
+  if (pgOrderRun || pgOrderDraft || (['moveFire', 'defMove'].includes(PHASES[G.phase].id) && moveState.movingUnit)) return;
+  pgReconcileOrders();
+  pgOrderHex = null;
   if (G.phase === 0 && !G.diceRolled) {
     // イニシアチブ未決定
     return;
@@ -1876,7 +1899,7 @@ function aiAutoRecovery() {
 }
 
 // AI自動移動・射撃
-async function aiAutoMoveFire() {
+async function aiAutoMoveFire(reviewMovement = null) {
   const _fireDelay = () => new Promise(r => setTimeout(r, 1200));
   const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
   const atkSide = G.initiative;
@@ -1910,7 +1933,8 @@ async function aiAutoMoveFire() {
 
   // ===== 先攻側をスタック単位でまとめる（4台ずつに分割） =====
   const hexUnitsMap = {};
-  testUnits.filter(u => u.side === atkSide && u.status !== 'eliminated' && u.type !== 'dummy')
+  testUnits.filter(u => u.side === atkSide && u.status !== 'eliminated' && u.type !== 'dummy' &&
+    !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn)
     .forEach(u => {
       if (u.type === 'AT' || u.type === 'A') return; // AT砲は移動不可。砲兵(A)は別スタックで移動
       if (u.col < 0 || u.col >= MAP_CONFIG.cols) return; // マップ外は除外
@@ -2236,22 +2260,7 @@ async function aiAutoMoveFire() {
     }
 
     // 突破判定（シナリオ対応）
-    aliveStack.forEach(u => {
-      if (u.side !== 'german' || u.status === 'eliminated') return;
-      const uHex = toHexId(u.col, u.row);
-      let breached = false;
-      if (typeof S3_BREAKTHROUGH_HEXES !== 'undefined') {
-        breached = S3_BREAKTHROUGH_HEXES.includes(uHex);
-      } else {
-        breached = u.col <= 1 && u.row >= 1 && u.row <= 9;
-      }
-      if (breached) {
-        u.status = 'eliminated';
-        G.breakthroughCount++;
-        addLog('breakthrough', `★ ${u.name} 突破!`);
-        document.getElementById('breakthroughScore').textContent = `突破: ${G.breakthroughCount} / ${SCENARIO.victory.breakthroughTarget}`;
-      }
-    });
+    aliveStack.forEach(pgRegisterBreakthrough);
 
     // スタック移動完了 → 経路クリア＋表示更新＋ディレイ
     _aiMoveTrail = null;
@@ -2263,6 +2272,34 @@ async function aiAutoMoveFire() {
   // イギリス先攻時: 新AIで一括移動
   if (atkSide === 'allied') {
     await ukAI_moveAllStacks(true);
+  }
+
+  // ===== 砲兵(type=A)の移動（歩兵とは別スタック、射撃はしない） =====
+  function moveArtillery() {
+    const artilleryUnitsToMove = testUnits.filter(u =>
+      u.side === atkSide && u.type === 'A' && u.status === 'ok' &&
+      !u.moveComplete && !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
+      u.col >= 0 && u.col < MAP_CONFIG.cols
+    );
+    for (const arty of artilleryUnitsToMove) {
+      const mp = arty.move || 2;
+      const artyPath = geAI_findBestPath([arty], mp);
+      if (artyPath && artyPath.length > 0) {
+        const dest = artyPath[artyPath.length - 1];
+        const dHexId = toHexId(dest.col, dest.row);
+        const prevHex = arty.hexId;
+        arty.col = dest.col; arty.row = dest.row;
+        const c = getHexCenter(dest.col, dest.row);
+        arty.x = c.x; arty.y = c.y;
+        arty.hexId = dHexId;
+        arty.moveComplete = true;
+        if (prevHex !== dHexId) cleanupOrphanDummies(prevHex, atkSide);
+      }
+    }
+  }
+  if (reviewMovement) {
+    moveArtillery();
+    await reviewMovement();
   }
 
   // スタック超過チェック（先攻側のみ）
@@ -2490,26 +2527,7 @@ async function aiAutoMoveFire() {
     }
   }
 
-  // ===== 砲兵(type=A)の移動（歩兵とは別スタック、射撃はしない） =====
-  const artilleryUnitsToMove = testUnits.filter(u =>
-    u.side === atkSide && u.type === 'A' && u.status === 'ok' &&
-    !u.moveComplete && u.col >= 0 && u.col < MAP_CONFIG.cols
-  );
-  for (const arty of artilleryUnitsToMove) {
-    const mp = arty.move || 2;
-    const artyPath = geAI_findBestPath([arty], mp);
-    if (artyPath && artyPath.length > 0) {
-      const dest = artyPath[artyPath.length - 1];
-      const dHexId = toHexId(dest.col, dest.row);
-      const prevHex = arty.hexId;
-      arty.col = dest.col; arty.row = dest.row;
-      const c = getHexCenter(dest.col, dest.row);
-      arty.x = c.x; arty.y = c.y;
-      arty.hexId = dHexId;
-      arty.moveComplete = true;
-      if (prevHex !== dHexId) cleanupOrphanDummies(prevHex, atkSide);
-    }
-  }
+  if (!reviewMovement) moveArtillery();
 
   // ===== 連合軍（または非ドイツ）: 従来のヘクス単位射撃 =====
   if (atkSide !== 'german') {
@@ -2692,7 +2710,8 @@ async function aiAutoDefMove() {
   // ドイツが後攻の場合: 左へ突進（移動のみ、射撃不可）
   if (defSide === 'german') {
     const geStacks = {};
-    testUnits.filter(u => u.side === 'german' && u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'AT' && u.type !== 'A')
+    testUnits.filter(u => u.side === 'german' && u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'AT' && u.type !== 'A' &&
+      !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn)
       .forEach(u => {
         if (!geStacks[u.hexId]) geStacks[u.hexId] = [];
         geStacks[u.hexId].push(u);
@@ -2807,22 +2826,7 @@ async function aiAutoDefMove() {
         }
       }
       // 突破判定（シナリオ対応）
-      alive.forEach(u => {
-        if (u.side !== 'german' || u.status === 'eliminated') return;
-        const uHex = toHexId(u.col, u.row);
-        let breached = false;
-        if (typeof S3_BREAKTHROUGH_HEXES !== 'undefined') {
-          breached = S3_BREAKTHROUGH_HEXES.includes(uHex);
-        } else {
-          breached = u.col <= 1 && u.row >= 1 && u.row <= 9;
-        }
-        if (breached) {
-          u.status = 'eliminated';
-          G.breakthroughCount++;
-          addLog('breakthrough', `★ ${u.name} 突破!`);
-          document.getElementById('breakthroughScore').textContent = `突破: ${G.breakthroughCount} / ${SCENARIO.victory.breakthroughTarget}`;
-        }
-      });
+      alive.forEach(pgRegisterBreakthrough);
       drawMap(); await _moveDelay();
     }
   }
@@ -3073,6 +3077,7 @@ async function _aiAutoDefMoveContinue() {
   const alliedStacks = {};
   testUnits.filter(u =>
     u.side === 'allied' && u.status !== 'eliminated' &&
+    !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip' &&
     u.col >= 0 && u.col < MAP_CONFIG.cols
   ).forEach(u => {
@@ -3302,7 +3307,53 @@ async function _aiAutoDefMoveContinue() {
 }
 
 
+function pgRegisterBreakthrough(unit) {
+  if (!pgOnMap(unit) || unit.side !== 'german' ||
+      STACK_EXEMPT_TYPES.includes(unit.type) || !SCENARIO.victory.breakthroughTarget) return;
+  const atExit = SCENARIO.id === 3
+    ? unit.hexId === '1610' && unit.status === 'ok'
+    : SCENARIO.id === 2 && unit.col <= 1 && unit.row >= 1 && unit.row <= 9;
+  if (!atExit) return;
+  unit.status = 'eliminated';
+  G.breakthroughCount++;
+  addLog('breakthrough', `★ ${unit.name} 突破！`);
+  document.getElementById('breakthroughScore').textContent =
+    `突破: ${G.breakthroughCount} / ${SCENARIO.victory.breakthroughTarget}`;
+}
+
+function pgVictoryResult() {
+  const rule = SCENARIO.victory;
+  const troops = testUnits.filter(unit => pgOnMap(unit) && !STACK_EXEMPT_TYPES.includes(unit.type));
+  const counts = (hexes, side) =>
+    hexes.filter(hex => troops.some(unit => unit.hexId === hex && unit.side === side)).length;
+  if (rule.type === 'occupation') {
+    if (rule.townA && rule.townC) {
+      const captured = [rule.townA, rule.townC].some(town => counts(town, 'allied') === town.length);
+      return { winner: captured ? 'allied' : 'german', detail: '町A・町Cの占領' };
+    }
+    const target = rule.targetCount || 1;
+    const german = counts(rule.targetHexes, 'german');
+    const allied = counts(rule.targetHexes, 'allied');
+    return {
+      winner: german >= target && german > allied ? 'german' :
+        allied >= target && allied > german ? 'allied' : null,
+      detail: `目標ヘクスの占領　ドイツ軍 ${german} ／ 連合軍 ${allied}　必要数 ${target}`,
+    };
+  }
+  if (!rule.breakthroughTarget) return { winner: null, detail: '勝利条件はシナリオ説明を参照' };
+  if (SCENARIO.id === 3 && !troops.some(unit =>
+    unit.side === 'allied' && ['t', 'c'].includes(getHexTerrain(unit.hexId)))) {
+    return { winner: 'german', detail: '町・市街地から連合軍を排除' };
+  }
+  return {
+    winner: G.breakthroughCount >= rule.breakthroughTarget ? 'german' :
+      G.breakthroughCount >= rule.drawThreshold ? null : 'allied',
+    detail: `突破: ${G.breakthroughCount} / ${rule.breakthroughTarget}`,
+  };
+}
+
 function advanceTurn() {
+  if (G.turn > G.maxTurn) return;
   // イニシアチブ特殊シフト（ターン終了時）
   if (SCENARIO.initiativeShiftEvents) {
     SCENARIO.initiativeShiftEvents.forEach(ev => {
@@ -3318,25 +3369,18 @@ function advanceTurn() {
   if (G.turn > G.maxTurn) {
     // ゲーム終了
     addLog('turn', `===== ゲーム終了 =====`);
-    addLog('turn', `突破ユニット数: ${G.breakthroughCount}`);
-    let resultText, resultColor;
-    if (G.breakthroughCount >= SCENARIO.victory.breakthroughTarget) {
-      resultText = 'ドイツ軍の勝利！';
-      resultColor = '#e04040';
-    } else if (G.breakthroughCount >= SCENARIO.victory.drawThreshold) {
-      resultText = '引き分け';
-      resultColor = '#cc0';
-    } else {
-      resultText = 'イギリス軍の勝利！';
-      resultColor = '#4488ff';
-    }
+    const {winner, detail} = pgVictoryResult();
+    const resultText = winner === 'german' ? 'ドイツ軍の勝利！' :
+      winner === 'allied' ? '連合軍の勝利！' : '引き分け';
+    const resultColor = winner === 'german' ? '#e04040' : winner === 'allied' ? '#4488ff' : '#cc0';
+    addLog('turn', detail);
     addLog('turn', resultText);
     // ゲーム終了オーバーレイ表示
     const overlay = document.getElementById('gameOverOverlay');
     if (overlay) {
       document.getElementById('gameOverTitle').textContent = resultText;
       document.getElementById('gameOverTitle').style.color = resultColor;
-      document.getElementById('gameOverDetail').textContent = `突破: ${G.breakthroughCount} / ${SCENARIO.victory.breakthroughTarget}`;
+      document.getElementById('gameOverDetail').textContent = detail;
       overlay.style.display = 'flex';
     }
     return;
@@ -4027,6 +4071,7 @@ function getStacksByHex() {
   testUnits.forEach(u => {
     if (u.status === 'eliminated') return; // 壊滅ユニットは表示しない
     if (u.col < 0) return; // マップ外
+    if (G.gameMode === 'online' && pgOnlineHidden(u, G.playerSide)) return;
     // AI側の未配置援軍は非表示（人間側の援軍は表示）
     if (u.reinforcement && !u.reinforcement.deployed) {
       const isHumanSide = (G.gameMode === 'pvp') || (G.gameMode === 'pvai' && u.side === G.playerSide);
@@ -4741,6 +4786,8 @@ function drawMap() {
     });
   }
 
+  pgDrawMovementOrders(ctx);
+
   // 移動軌跡を描画
   if (window._aiMoveTrails && window._aiMoveTrails.length > 0) {
     window._aiMoveTrails.forEach(t => {
@@ -4839,7 +4886,7 @@ function initMap() {
 
     // ユニットのヒットテスト
     const hitU = hitTestUnit(mx, my);
-    if (hitU) {
+    if (G.gameMode !== 'online' && hitU && !hitU.pgMovementOrder && !pgAIReview && !pgOrderRun && !pgOrderDraft) {
       // スタック解除モードなら個別、通常ならスタック単位
       if (stackSplitMode) {
         dragUnit = hitU;
@@ -4848,7 +4895,7 @@ function initMap() {
         dragUnit = hitU;
         const hexId = hitU.hexId || toHexId(hitU.col, hitU.row);
         dragStack = testUnits.filter(u =>
-          (u.hexId || toHexId(u.col, u.row)) === hexId && u.status !== 'eliminated'
+          (u.hexId || toHexId(u.col, u.row)) === hexId && u.status !== 'eliminated' && !u.pgMovementOrder
         );
       }
       dragOffX = mx - hitU.x;
@@ -4966,6 +5013,11 @@ function onMapClick(e) {
   // クリック座標 → マップ座標に変換
   const mx = (e.clientX - rect.left - mapState.x) / mapState.zoom;
   const my = (e.clientY - rect.top - mapState.y) / mapState.zoom;
+  if (G.gameMode === 'online' && pgOnlineMapClick(mx, my, e)) return;
+  onMapPoint(mx, my, e);
+}
+
+function onMapPoint(mx, my, e) {
 
   // 突撃フェイズ中のマップクリック
   if (PHASES[G.phase] && PHASES[G.phase].id === 'assault') {
@@ -4981,7 +5033,7 @@ function onMapClick(e) {
   }
 
   // 移動・射撃フェイズ中のマップクリック（援軍配置含む）
-  if (PHASES[G.phase] && PHASES[G.phase].id === 'moveFire') {
+  if (['moveFire', 'defMove'].includes(PHASES[G.phase]?.id)) {
     // 右クリックまたはAlt+クリックでスタック吹き出し表示
     if (e.altKey || e.button === 2) {
       // 吹き出し表示へ（下のコードにフォールスルー）
@@ -5003,8 +5055,8 @@ function onMapClick(e) {
   if (PHASES[G.phase].id === 'supportAtk' || PHASES[G.phase].id === 'supportDef') {
     const hitU = hitTestUnit(mx, my);
     // 味方砲兵ユニットをクリック → 選択/解除（敵砲兵は目標として扱う）
-    const firingSide = supportState._firingSide || G.initiative;
-    if (hitU && hitU.type === 'A' && hitU.side === firingSide && hitU.status !== 'eliminated' && !hitU.firedThisTurn) {
+    const firingSide = currentSupportSide();
+    if (hitU && hitU.side === firingSide && canIndirectFire(hitU)) {
       // 同ヘクスの全砲兵を選択
       const hitHexId = hitU.hexId || toHexId(hitU.col, hitU.row);
       const hexArtillery = testUnits.filter(u =>
@@ -5215,6 +5267,8 @@ window.addEventListener('popstate', () => {
 <script src="phase_recovery.js"></script>
 <script src="phase_support.js"></script>
 <script src="phase_movefire.js"></script>
+<script src="movement_orders.js"></script>
+<script src="online.js"></script>
 <script src="phase_air.js"></script>
 <script src="ai_placement.js"></script>
 <script>
@@ -5264,6 +5318,9 @@ function showTitle() {
       </div>
       <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('pvp')">
         <div style="color:#c8a020;font-weight:bold;">人間 vs 人間</div>
+      </div>
+      <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('online')">
+        <div style="color:#c8a020;font-weight:bold;">オンライン対戦</div>
       </div>
       <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('aivai')">
         <div style="color:#c8a020;font-weight:bold;">AI vs AI</div>
@@ -5343,7 +5400,8 @@ function startGameFromTitle() {
   G.playerSide = _titleSelectedSide;
   G.gameMode = _titleSelectedMode;
   document.getElementById('titleOverlay').style.display = 'none';
-  initGame();
+  if (G.gameMode === 'online') pgOnlineLobby();
+  else initGame();
 }
 
 // ===== ゲーム初期化 =====
@@ -5400,6 +5458,7 @@ function initGame() {
 }
 
 function startGamePhases() {
+  if (G.gameMode === 'online' && pgOnlineRole === 'guest') return;
   if (G.gameMode === 'aivai') {
     addLog('init', 'AI同士の対戦を開始します...');
     renderPhase();
@@ -5416,7 +5475,8 @@ window.onload = function() {
     G.gameMode = _urlMode;
     G.playerSide = _playerSide;
     document.getElementById('titleOverlay').style.display = 'none';
-    initGame();
+    if (_urlMode === 'online') pgOnlineLobby();
+    else initGame();
   } else {
     showTitle();
   }

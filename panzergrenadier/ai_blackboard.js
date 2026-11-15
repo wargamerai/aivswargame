@@ -284,48 +284,40 @@ const SIDE_PARAMS = {
     role: 'defender',
     breakthroughGoal: false,
     blockingScore(col, row, board) {
-      if (G.turn < 3) return 0;
       const germanPositions = board.getGermanFrontPositions();
       if (germanPositions.length === 0) return 0;
-      const germanMaxRange = board.maxEnemyRange;
+
+      // 突破目標の中心
+      const btCol = (typeof S3_BREAKTHROUGH_COL !== 'undefined') ? S3_BREAKTHROUGH_COL : 1;
+      const btRow = (typeof S3_BREAKTHROUGH_ROW !== 'undefined') ? S3_BREAKTHROUGH_ROW : 5;
+
+      // 地形ボーナス: 遮蔽地形に入ることを強く優先
+      const hexId = toHexId(col, row);
+      const terrain = getHexTerrain(hexId);
+      const coverBonus = (terrain === 'f' || terrain === 'w' || terrain === 't' || terrain === 'c') ? 15 : 0;
+
       let bestScore = -100;
-
-      if (typeof S3_BREAKTHROUGH_COL !== 'undefined') {
-        for (const gp of germanPositions) {
-          const dist = hexDistance(col, row, gp.col, gp.row);
-          const gpDistToBT = hexDistance(gp.col, gp.row, S3_BREAKTHROUGH_COL, S3_BREAKTHROUGH_ROW);
-          const myDistToBT = hexDistance(col, row, S3_BREAKTHROUGH_COL, S3_BREAKTHROUGH_ROW);
-          if (myDistToBT < gpDistToBT) {
-            const outsideRange = dist > germanMaxRange;
-            const rangeBonus = outsideRange ? 10 : -5;
-            const posScore = (dist >= 2 && dist <= 5) ? 8 : Math.max(0, 5 - Math.abs(dist - 3));
-            const score = rangeBonus + posScore;
-            if (score > bestScore) bestScore = score;
-          } else {
-            const chaseScore = Math.max(0, 15 - dist * 2);
-            if (chaseScore > bestScore) bestScore = chaseScore;
-          }
-        }
-        return bestScore;
-      }
-
-      // シナリオ2フォールバック
-      const hasGermanEast = germanPositions.some(gp => gp.col > col);
       for (const gp of germanPositions) {
-        const rowDiff = Math.abs(row - gp.row);
-        const rowScore = Math.max(0, 10 - rowDiff * 3);
-        const dist = hexDistance(col, row, gp.col, gp.row);
-        if (col < gp.col) {
-          const outsideRange = dist > germanMaxRange;
-          const rangeBonus = outsideRange ? 10 : -5;
-          const colDiff = gp.col - col;
-          const posScore = (colDiff >= 1 && colDiff <= 4) ? 8 : Math.max(0, 5 - Math.abs(colDiff - 3));
-          const score = rowScore + rangeBonus + posScore;
+        const gpDistToBT = hexDistance(gp.col, gp.row, btCol, btRow);
+        const myDistToBT = hexDistance(col, row, btCol, btRow);
+        const distToEnemy = hexDistance(col, row, gp.col, gp.row);
+
+        // 経路逸脱度: 敵→突破の直線上にいるほど0に近い
+        const pathDeviation = (distToEnemy + myDistToBT) - gpDistToBT;
+
+        if (myDistToBT < gpDistToBT) {
+          // 敵より突破ヘクスに近い = 前方にいる
+          // 経路上ほど高スコア（deviation 0=完璧、大きいほど横にずれ）
+          const onPathScore = Math.max(0, 20 - pathDeviation * 5);
+          // 敵射程外を最優先（ストップ射撃回避）
+          const enemyMaxRange = board.maxEnemyRange || 4;
+          const rangeScore = distToEnemy > enemyMaxRange ? 20 : 0;
+          const score = onPathScore + rangeScore + coverBonus;
           if (score > bestScore) bestScore = score;
-        } else if (!hasGermanEast) {
-          let chaseScore = rowScore + Math.max(0, 15 - (col - gp.col) * 2);
-          if (dist > germanMaxRange) chaseScore += 5;
-          if (chaseScore > bestScore) bestScore = chaseScore;
+        } else {
+          // 敵より後ろ → 前に回り込む必要がある
+          const chaseScore = Math.max(0, 10 - pathDeviation * 3);
+          if (chaseScore + coverBonus > bestScore) bestScore = chaseScore + coverBonus;
         }
       }
       return bestScore;
@@ -368,9 +360,24 @@ function scoreBreakthroughMove(board, stack, col, row, params, weight, qw) {
     }
   } else {
     score += params.blockingScore(col, row, board);
+    // 現在のrowを維持して横に広がる防御線を形成
+    const rowDiff = Math.abs(row - stack[0].row);
+    score -= rowDiff * 8;
   }
 
   return score * weight;
+}
+
+class Expert {
+  constructor(name) { this.name = name; }
+}
+
+class BreakthroughExpert extends Expert {
+  constructor() { super('breakthrough'); }
+
+  evaluateMove(board, stack, col, row, params, weight, weights) {
+    return scoreBreakthroughMove(board, stack, col, row, params, weight, weights);
+  }
 }
 
 // --- 2. FireExpert: 射撃位置・射撃割当 ---
@@ -957,7 +964,7 @@ class AIController {
     for (const expert of this.experts) {
       if (expert.name === 'recovery') continue; // 正常時は不要
       const w = ew[expert.name] || 1.0;
-      const s = expert.evaluateMove(board, stack, col, row, params, w);
+      const s = expert.evaluateMove(board, stack, col, row, params, w, qw);
       _dbg[expert.name] = s;
       totalScore += s;
     }
@@ -1006,7 +1013,7 @@ async function aiMoveAllStacks(side, canFire) {
 
   // 自軍ユニット抽出
   const myUnits = testUnits.filter(u =>
-    u.side === side && u.status !== 'eliminated' &&
+    u.side === side && u.status !== 'eliminated' && !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip' &&
     !params.excludeMoveFire.includes(u.type) &&
     u.col >= 0 && u.col < MAP_CONFIG.cols
@@ -1502,7 +1509,7 @@ function aiAutoAssault(side) {
   AI_CONTROLLER.buildBoard(side);
 
   const myUnits = testUnits.filter(u =>
-    u.side === side && u.status !== 'eliminated' && u.status !== 'dd' &&
+    u.side === side && u.status !== 'eliminated' && u.status !== 'dd' && !u.pgMovementOrder &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'AT' && u.type !== 'A'
   );
 
