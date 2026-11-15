@@ -5,6 +5,7 @@ let pgOrderDraft = null;
 let pgOrderHex = null;
 let pgOrderUnit = null;
 const pgManualMoves = new Map();
+const pgManualMoveHistory = [];
 let pgManualOrderPhase = null;
 
 function pgRenderManualMovement(side) {
@@ -151,9 +152,12 @@ function pgStartManualMoveRecord(ms) {
   if (G.gameMode === 'aivai' || pgAIReview?.stage === 'ai' || pgOrderRun) return;
   const moving = ms._stackMoving || [ms.movingUnit];
   ms.pgMoveRecord = {
-    origins: new Map(moving.filter(pgCanReceiveOrder).map(unit => {
+    origins: new Map(moving.filter(pgOnMap).map(unit => {
       const {col, row, x, y, hexId, moveComplete, status} = unit;
-      return [unit, {col, row, x, y, hexId, moveComplete, status}];
+      return [unit, {
+        col, row, x, y, hexId, moveComplete, status,
+        wasMoved: directFireState.movedUnits.has(unit.id || unit.name),
+      }];
     })),
     dummies: testUnits.filter(unit => unit.type === 'dummy' && pgOnMap(unit)),
     orphaned: new Set(),
@@ -163,22 +167,24 @@ function pgStartManualMoveRecord(ms) {
 
 function pgRecordConfirmedMove(ms) {
   const record = ms.pgMoveRecord;
-  if (!record || ms.path.length < 2) return;
-  const group = {trail: ms.path, units: new Set()};
+  if (!record) return;
+  const group = {trail: ms.path, records: new Map()};
   const revealed = record.dummies.some(dummy => dummy.status === 'eliminated' && !record.orphaned.has(dummy));
   for (const [unit, origin] of record.origins) {
-    if (!pgOnMap(unit) || unit.hexId === origin.hexId || !unit.moveComplete) continue;
-    group.units.add(unit);
-    pgManualMoves.set(unit, {
+    if (unit.hexId === origin.hexId && unit.moveComplete === origin.moveComplete && unit.status === origin.status) continue;
+    const entry = {
       origin, destination: unit.hexId, group,
       blocked: record.blocked || revealed,
       dummies: record.dummies.filter(d => record.orphaned.has(d) && d.hexId === origin.hexId && d.side === unit.side),
-    });
+    };
+    group.records.set(unit, entry);
+    pgManualMoves.set(unit, entry);
   }
+  if (group.records.size) pgManualMoveHistory.push(group);
 }
 
 function pgReturnRecord(unit) {
-  if (!pgCanReceiveOrder(unit)) return null;
+  if (!pgOnMap(unit)) return null;
   if (pgAIReview?.stage === 'review') {
     const origin = pgAIReview.origins.get(unit);
     if (!origin || origin.hexId === unit.hexId || pgAIReview.returned.has(unit)) return null;
@@ -188,43 +194,77 @@ function pgReturnRecord(unit) {
   return unit.moveComplete && record?.destination === unit.hexId ? record : null;
 }
 
-function pgCanReturn(unit, record) {
+function pgCanReturn(unit, record, returning = [unit]) {
   const uid = unit.id || unit.name;
   return record && !record.blocked && !moveState.movingUnit && !pgOrderDraft && unit.status === record.origin.status &&
     unit.status !== 'dd' && !unit.firedThisTurn && !unit._counterFired &&
     !directFireState.firedUnits.has(uid) && !directFireState.counterFiredUnits.has(uid) &&
-    pgCanEnter([unit], record.origin.hexId);
+    (unit.hexId === record.origin.hexId || pgCanEnter(returning, record.origin.hexId));
 }
 
-function pgReturnUnit(unit) {
-  if (unit !== pgOrderUnit || unit.side !== directFireState.activeSide) return;
-  const record = pgReturnRecord(unit);
-  if (!pgCanReturn(unit, record)) return;
-  const from = unit.hexId;
-  const {origin, group, dummies} = record;
-  const uid = unit.id || unit.name;
-  const originEmpty = !testUnits.some(other => pgOnMap(other) && other.hexId === origin.hexId);
-  Object.assign(unit, origin);
-  directFireState.movedUnits.delete(uid);
-  pgManualMoves.delete(unit);
-  if (group) {
-    group.units.delete(unit);
-    if (!group.units.size) _completedMoveTrails = _completedMoveTrails.filter(trail => trail !== group.trail);
-    if (originEmpty) dummies.forEach(dummy => { dummy.status = 'ok'; });
+function pgReturnEntries(units) {
+  if (!units.length) return null;
+  const entries = units.map(unit => ({unit, record: pgReturnRecord(unit)}));
+  const byOrigin = new Map();
+  for (const {unit, record} of entries) {
+    if (!record || unit.side !== directFireState.activeSide) return null;
+    const hex = record.origin.hexId;
+    if (!byOrigin.has(hex)) byOrigin.set(hex, []);
+    byOrigin.get(hex).push(unit);
   }
-  if (pgAIReview?.stage === 'review') pgAIReview.returned.add(unit);
-  else {
+  return entries.every(({unit, record}) => pgCanReturn(unit, record, byOrigin.get(record.origin.hexId))) ? entries : null;
+}
+
+function pgReturnMovement(entries) {
+  if (!entries) return;
+  const departures = new Map();
+  const recoverDummies = new Set();
+  for (const {unit, record} of entries) {
+    const {origin, group, dummies} = record;
+    const uid = unit.id || unit.name;
+    if (unit.hexId !== origin.hexId) {
+      departures.set(unit.hexId, unit.side);
+      if (dummies?.length && !testUnits.some(other => pgOnMap(other) && other.hexId === origin.hexId)) {
+        dummies.forEach(dummy => recoverDummies.add(dummy));
+      }
+    }
+    const {wasMoved, ...restoredUnit} = origin;
+    Object.assign(unit, restoredUnit);
+    if (wasMoved) directFireState.movedUnits.add(uid);
+    else directFireState.movedUnits.delete(uid);
+    pgManualMoves.delete(unit);
+    if (group) {
+      group.records.delete(unit);
+      if (!group.records.size) _completedMoveTrails = _completedMoveTrails.filter(trail => trail !== group.trail);
+      const earlier = pgManualMoveHistory.findLast(move => move.records.has(unit))?.records.get(unit);
+      if (earlier) pgManualMoves.set(unit, earlier);
+    }
+    if (pgAIReview?.stage === 'review') pgAIReview.returned.add(unit);
+    addLog('move', `${unit.name}：移動を取り消し、${unit.hexId} に戻しました。`);
+  }
+  recoverDummies.forEach(dummy => { dummy.status = 'ok'; });
+  for (const [hex, side] of departures) cleanupOrphanDummies(hex, side);
+  const unit = entries.find(entry => pgCanReceiveOrder(entry.unit))?.unit || entries[0].unit;
+  pgOrderUnit = unit;
+  pgOrderHex = unit.hexId;
+  if (pgAIReview?.stage !== 'review') {
     directFireState.atkHexId = unit.hexId;
     directFireState.atkAdjacentHexes = [unit.hexId];
     checkState.atk.clear();
-    if (unit.status === 'ok') checkState.atk.add(uid);
+    for (const entry of entries) {
+      const moved = entry.unit;
+      if (pgCanReceiveOrder(moved) && moved.status === 'ok' && moved.hexId === unit.hexId) checkState.atk.add(moved.id || moved.name);
+    }
     updateFireRange();
   }
-  cleanupOrphanDummies(from, unit.side);
-  pgOrderHex = unit.hexId;
-  addLog('move', `${unit.name}：移動を取り消し、${unit.hexId} に戻しました。`);
   renderMoveFirePhase();
   drawMap();
+}
+
+function pgUndoLastManualMove() {
+  if (pgAIReview) return;
+  const last = pgManualMoveHistory.findLast(group => group.records.size);
+  pgReturnMovement(pgReturnEntries(last ? [...last.records.keys()] : []));
 }
 
 function pgHumanChoosesRearStopFire(movingSide) {
@@ -368,8 +408,16 @@ function pgMovementPanel() {
     return parent.appendChild(node);
   };
   const redraw = () => { renderMoveFirePhase(); drawMap(); };
+  if (!pgAIReview && !pgOrderDraft) {
+    const last = pgManualMoveHistory.findLast(group => group.records.size);
+    button(section, '味方の移動を一手戻す', pgUndoLastManualMove, !pgReturnEntries(last ? [...last.records.keys()] : []));
+  }
   if (review) {
-    text(section, 'AI移動の確認。戻した駒は移動し直すか、予約・死守を設定できます。');
+    const status = document.createElement('strong');
+    status.className = 'pg-ai-move-complete';
+    status.textContent = 'AIの移動完了';
+    section.append(status);
+    text(section, '戻した駒は移動し直すか、予約・死守を設定できます。');
     button(section, '確認を終えて進む', pgFinishAIReview, Boolean(pgOrderDraft));
   }
   if (pgOrderDraft) {
@@ -396,7 +444,8 @@ function pgMovementPanel() {
     const picker = document.createElement('div');
     picker.className = 'pg-order-picker';
     for (const unit of units) {
-      const pick = button(picker, unit.name, () => { pgOrderUnit = unit; redraw(); });
+      const pick = button(picker, '', () => { pgOrderUnit = unit; redraw(); });
+      pick.append(pgUnitLabel(unit));
       pick.setAttribute('aria-pressed', String(unit === selected));
       pick.classList.toggle('is-selected', unit === selected);
     }
@@ -408,13 +457,11 @@ function pgMovementPanel() {
     const order = unit.pgMovementOrder;
     const status = order ? (order.type === 'hold' ? '死守先 ' : '予約先 ') + order.target : '';
     const holding = order?.type === 'hold' && order.target === unit.hexId;
-    text(section, [unit.name, record ? `${record.origin.hexId} → ${unit.hexId}` : unit.hexId, holding ? '死守中' : status].filter(Boolean).join(' · '));
+    if (units.length === 1) section.append(pgUnitLabel(unit));
+    text(section, [record && record.origin.hexId !== unit.hexId ? `${record.origin.hexId} → ${unit.hexId}` : unit.hexId, holding ? '死守中' : status].filter(Boolean).join(' · '));
     if (record) {
       const allowed = pgCanReturn(unit, record);
-      button(section, '移動前のヘクスに戻す', () => {
-        pgOrderUnit = unit;
-        pgReturnUnit(unit);
-      }, !allowed);
+      button(section, '移動前のヘクスに戻す', () => pgReturnMovement(pgReturnEntries([unit])), !allowed);
       if (!allowed) text(section, '戦闘・偵察済み、または元のヘクスに配置できません。');
     }
     if (review?.returned.has(unit) && !order && !unit.moveComplete)

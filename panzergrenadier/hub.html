@@ -1664,6 +1664,7 @@ function nextPhase() {
   pgOrderHex = null;
   pgOrderUnit = null;
   pgManualMoves.clear();
+  pgManualMoveHistory.length = 0;
   if (G.phase === 0 && !G.diceRolled) {
     // イニシアチブ未決定
     return;
@@ -4066,6 +4067,29 @@ const _dummyImgCache = {};
 // AI移動経路を記録（drawMapで描画用）
 let _aiMoveTrail = [];
 
+function pgDrawMoveHex(ctx, col, row, hexSize, current) {
+  const center = getHexCenter(col, row);
+  ctx.save();
+  ctx.beginPath();
+  for (let corner = 0; corner < 6; corner++) {
+    const angle = Math.PI / 3 * corner;
+    const x = center.x + hexSize * .91 * Math.cos(angle);
+    const y = center.y + hexSize * .91 * Math.sin(angle);
+    if (corner === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = current ? 'rgba(255,220,120,.53)' : 'rgba(166,221,255,.40)';
+  ctx.fill();
+  ctx.strokeStyle = current ? '#fff3bd' : '#f5fbff';
+  ctx.lineWidth = current ? 8 : 6;
+  ctx.stroke();
+  ctx.strokeStyle = current ? '#91651b' : '#1759a6';
+  ctx.lineWidth = current ? 4.5 : 3.5;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawMap() {
   if (!mapState.img) return;
   const area = document.getElementById('mapArea');
@@ -4249,6 +4273,15 @@ function drawMap() {
     ctx.arc(_aiMoveTrail[0].x, _aiMoveTrail[0].y, 6, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,80,80,0.8)';
     ctx.fill();
+  }
+
+  if (moveState.movingUnit) {
+    for (const key of Object.keys(moveState.validHexes)) {
+      const [col, row] = key.split(',').map(Number);
+      pgDrawMoveHex(ctx, col, row, hexSize, false);
+    }
+    const {col, row} = moveState.movingUnit;
+    pgDrawMoveHex(ctx, col, row, hexSize, true);
   }
 
   // ユニット描画（カスケード方式：右上ずらし、起点を枚数に応じて左下に）
@@ -4446,7 +4479,7 @@ function drawMap() {
   // 射程・視認距離の反転表示（3段階: 射程内=クリア, 視認内=薄暗, 範囲外=濃暗）
   const hasFireRange = typeof fireRangeHexes !== 'undefined' && Object.keys(fireRangeHexes).length > 0;
   const hasFireVision = typeof fireVisionHexes !== 'undefined' && Object.keys(fireVisionHexes).length > 0;
-  if (hasFireRange || hasFireVision) {
+  if (!moveState.movingUnit && (hasFireRange || hasFireVision)) {
     for (let r = 0; r < MAP_CONFIG.rows; r++) {
       for (let c = 0; c < MAP_CONFIG.cols; c++) {
         const key = `${c},${r}`;
@@ -4470,43 +4503,6 @@ function drawMap() {
         ctx.fill();
       }
     }
-  }
-
-  // 移動可能ヘクスのハイライト
-  if (typeof moveState !== 'undefined' && moveState.movingUnit && Object.keys(moveState.validHexes).length > 0) {
-    Object.keys(moveState.validHexes).forEach(key => {
-      const [c, r] = key.split(',').map(Number);
-      const center = getHexCenter(c, r);
-      ctx.beginPath();
-      for (let a = 0; a < 6; a++) {
-        const angle = Math.PI / 3 * a;
-        const hx = center.x + hexSize * Math.cos(angle);
-        const hy = center.y + hexSize * Math.sin(angle);
-        if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
-      }
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(50,200,50,0.2)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(50,200,50,0.5)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    });
-    // 移動中ユニットのヘクスをハイライト
-    const mu = moveState.movingUnit;
-    const muCenter = getHexCenter(mu.col, mu.row);
-    ctx.beginPath();
-    for (let a = 0; a < 6; a++) {
-      const angle = Math.PI / 3 * a;
-      const hx = muCenter.x + hexSize * Math.cos(angle);
-      const hy = muCenter.y + hexSize * Math.sin(angle);
-      if (a === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
-    }
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(50,255,50,0.3)';
-    ctx.fill();
-    ctx.strokeStyle = '#4f4';
-    ctx.lineWidth = 3;
-    ctx.stroke();
   }
 
   // 退却先ハイライト
@@ -4571,9 +4567,12 @@ function drawMap() {
       const c = getHexCenter(path[i].col, path[i].row);
       ctx.lineTo(c.x, c.y);
     }
-    ctx.strokeStyle = '#0af';
-    ctx.lineWidth = 4;
     ctx.setLineDash([]);
+    ctx.strokeStyle = '#f5fbff';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.strokeStyle = '#2d3675';
+    ctx.lineWidth = 4;
     ctx.stroke();
     // 各ヘクスに消費移動力を表示
     let totalCost = 0;
@@ -4583,10 +4582,10 @@ function drawMap() {
       // 背景丸
       ctx.beginPath();
       ctx.arc(c.x, c.y - hexSize * 0.5, 12, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillStyle = '#2d3675';
       ctx.fill();
       // コスト数字
-      ctx.fillStyle = '#0af';
+      ctx.fillStyle = '#fff';
       ctx.font = 'bold 14px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -4595,7 +4594,7 @@ function drawMap() {
     // 始点マーカー
     ctx.beginPath();
     ctx.arc(startCenter.x, startCenter.y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = '#0af';
+    ctx.fillStyle = '#2d3675';
     ctx.fill();
   }
   // 完了済みユニットの移動線（薄く表示）

@@ -13,6 +13,22 @@ let reinforcementState = {
   entryHexes: [],      // 配置可能ヘクス [{col,row}]
 };
 
+function pgUnitLabel(unit) {
+  const label = document.createElement('span');
+  label.className = 'pg-unit-label';
+  if (unit.src) {
+    const image = document.createElement('img');
+    image.className = 'pg-unit-image';
+    image.src = unit.src;
+    image.alt = '';
+    label.append(image);
+  }
+  const name = document.createElement('span');
+  name.textContent = unit.name;
+  label.append(name);
+  return label;
+}
+
 function renderReinforcementPhase(undeployed) {
   const c = document.getElementById('phaseContent');
   reinforcementState.undeployed = undeployed;
@@ -40,18 +56,17 @@ function renderReinforcementPhase(undeployed) {
   </div>`;
 
   // 未配置ユニット一覧
-  html += `<div style="margin:8px 0;">`;
+  html += '<div class="pg-reinforcement-list">';
   undeployed.forEach(u => {
-    const isSel = reinforcementState.selectedUnit === u;
-    const style = isSel ? 'background:var(--pg-blue-bg);border-color:var(--pg-accent);' : 'cursor:pointer;';
-    html += `<div class="unit-entry" style="padding:3px 6px;margin:2px 0;border:1px solid var(--pg-line);border-radius:3px;font-size:0.8em;${style}"
-      onclick="selectReinforcementUnit('${u.id || u.name}')">
-      <span style="color:var(--pg-accent);">${u.name}</span>
-      <span style="color:var(--pg-muted);font-size:0.75em;"> ${u.type} fp:${u.fpAT}/${u.fpSoft} R:${u.range} M:${u.move}</span>
-      ${isSel ? '<span style="color:var(--pg-accent);"> ★選択中 → マップの入口ヘクスをクリック</span>' : ''}
-    </div>`;
+    const selected = reinforcementState.selectedUnit === u;
+    html += `<button type="button" class="btn-sm unit-entry" aria-pressed="${selected}"
+      value="${pgCheckboxValue(u.id || u.name)}" onclick="selectReinforcementUnit(this.value)">
+      ${pgUnitLabel(u).outerHTML}
+      <small>${u.type} · 火力 ${u.fpAT}/${u.fpSoft} · 射程 ${u.range} · 移動 ${u.move}</small>
+    </button>`;
   });
-  html += `</div>`;
+  if (reinforcementState.selectedUnit) html += '<small>地図の入口ヘクスをクリック</small>';
+  html += '</div>';
 
   // 一括配置ボタン
   html += `<div style="margin:8px 0;">
@@ -921,8 +936,10 @@ function renderMoveFirePhase() {
     const ms = moveState;
     const u = ms.movingUnit;
     html += `<div style="padding:6px;background:var(--pg-shade);border-radius:4px;">`;
-    html += `<b style="color:var(--pg-green);">移動中: ${u ? u.name : ''}</b><br>`;
+    html += '<b style="color:var(--pg-green);">移動中</b>';
     if (u) {
+      html += `<div class="pg-moving-units">${(ms._stackMoving || [u]).filter(pgOnMap).map(unit => pgUnitLabel(unit).outerHTML).join('')}</div>`;
+      html += '<div class="pg-move-legend"><span>青枠＝移動可能</span><span>黄枠＝現在地</span></div>';
       html += `<small>残移動力: ${ms.remainingMP} / ${u.move}`;
       if (ms.cautious) html += ' (警戒移動)';
       html += `</small>`;
@@ -945,7 +962,7 @@ function renderMoveFirePhase() {
       if (!ms.stopFirePending) {
         html += `<button class="btn-sm" onclick="confirmMove()">移動確定</button>`;
         if (!ms._stopFired && !pgOrderRun) {
-          html += `<button class="btn-sm" onclick="cancelMove()">キャンセル</button>`;
+          html += `<button class="btn-sm" onclick="cancelMove()">移動を取り消す</button>`;
         }
         if (u.type === 'T' || u.type === 'AC') {
           html += `<button class="btn-sm" onclick="toggleFormation(moveState.movingUnit)">${u.marchMode ? '戦闘隊形へ' : '移動隊形へ'}</button>`;
@@ -1017,12 +1034,16 @@ function renderMoveFirePhase() {
         const checked = checkState.atk.has(uid);
         const disabled = u.moveComplete && u.firedThisTurn;
         const statusColor = u.status === 'ok' ? 'var(--pg-green)' : u.status === 'd' ? 'var(--pg-accent)' : u.status === 'dd' ? 'var(--pg-red)' : 'var(--pg-muted)';
-        html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;${disabled?'opacity:0.4;':''}">`;
+        html += '<div class="pg-unit-row">';
         html += `<input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} value="${pgCheckboxValue(uid)}" onchange="toggleUnitCheck('atk',this.value,this.checked)" style="margin:0;">`;
-        html += `<span style="color:var(--pg-ink);">${u.name}</span>`;
+        html += pgUnitLabel(u).outerHTML;
         if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
         html += `<span style="color:var(--pg-muted);font-size:0.75em;">fp${u.fpAT}/${u.fpSoft} R${u.range}</span>`;
-        if (disabled) html += `<span style="color:var(--pg-red);font-size:0.7em;">行動済</span>`;
+        const fired = directFireState.firedUnits.has(uid) || directFireState.counterFiredUnits.has(uid) ||
+          u._counterFired || (u.firedThisTurn && !u.reconDone);
+        if (fired) html += '<span class="pg-action-state pg-fired">射撃済</span>';
+        if (u.reconDone) html += '<span class="pg-action-state">偵察済</span>';
+        if (u.moveComplete) html += '<span class="pg-action-state">移動済</span>';
         if (!u.moveComplete && !u.pgMovementOrder) {
           html += `<span class="btn-sm" style="padding:0 6px;font-size:0.7em;margin-left:auto;" onclick="startMove(testUnits.find(u=>(u.id||u.name)==='${uid}'))">移動</span>`;
         }
@@ -2670,11 +2691,12 @@ function cancelMove() {
 
   // 最初の位置に戻す
   if (ms.path.length > 0) {
-    const origin = ms.path[0];
-    const center = getHexCenter(origin.col, origin.row);
+    const start = ms.path[0];
     const movingUnits = ms._stackMoving || [ms.movingUnit];
     movingUnits.forEach(u => {
       if (u.status === 'eliminated') return;
+      const origin = ms.pgMoveRecord?.origins.get(u) || start;
+      const center = getHexCenter(origin.col, origin.row);
       u.col = origin.col;
       u.row = origin.row;
       u.x = center.x;
@@ -2683,6 +2705,7 @@ function cancelMove() {
     });
   }
 
+  ms.path = [];
   resetMoveState();
   directFireState.mode = 'selectShooter';
   renderMoveFirePhase();
