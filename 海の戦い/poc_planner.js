@@ -977,6 +977,11 @@ var PocPlanner = (function () {
       notes.push(`バルト海 ソ連${soviet.length}隻に水上艦${force.length}隻`);
     }
 
+    // 連合艦がいない地中海は、出撃可能なイタリア艦を全部送る。
+    const medFleet = al('Mediterranean').length ? [] :
+      free.filter(u => u.s.country === 'IT' && u.opts.includes('Mediterranean'));
+    if (medFleet.length) assign(medFleet, 'Mediterranean');
+
     const main = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic'];
     const pocRisk = (a.cumPoc || 0) + Math.max(0, a.lastTurnGain || 0) * (9 - a.turn) > 0;
     const aswBySea = Object.fromEntries(main.map(sea => [sea, aswOf(al(sea))]));
@@ -1047,7 +1052,8 @@ var PocPlanner = (function () {
       }
       if (Object.keys(posts).length === taken.length) { cover = posts; bestScore = score; }
     }
-    return { plan: Object.assign(plan, cover), value: bestScore, notes, ubTarget, attacks, baltic };
+    const medPoc = medFleet.length ? a.seas.Mediterranean.axis : 0;
+    return { plan: Object.assign(plan, cover), value: bestScore + medPoc, notes, ubTarget, attacks, baltic };
   }
 
   function uboatHitChance(boats, aswDice) {
