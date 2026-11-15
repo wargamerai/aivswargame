@@ -3995,21 +3995,18 @@ function medNeverLose(arr){
 }
 // POCの予想の使い方: 0=2ターン目の残りの艦だけ / 1=2ターン目以降の残りの艦 / 2=1＋予想の精度を上げる / 3=2＋北海とバレンツ海も予想で決める
 const ALLIED_PLAN_MODE = 10; // FS（planAlliesG。ユーザーの指示 2026-11-07）。9 は 北海とバレンツを最重要、余りを大西洋、小部隊をばらまかない（planAlliesV5）。ユーザーの指示 2026-11-06。8 はマスター30（planAlliesV4）
-// 連合AIの配置（ユーザーの指示 2026-11-08）
-//   A: そのエリアへ行けるドイツの水上艦の戦力（攻撃力。空母は砲撃＋航空攻撃）。行けるかは今の支配で決める
-//      （港の隣はそのまま、2つ先は間のエリアが連合の支配でなければ）。ソ連が出撃しているターンは半分に数える
-//   B: そのエリアへイタリアの 1-1-7 が出てこられるときは、その合計戦力＋2
-//   エリアに要る戦力 = A＋5＋B。バレンツ海 → 北海 → 南大西洋 → 北大西洋 の順に、届くまで入れる（超えてよい）
-//      1・2ターン目は北大西洋を入れない。コンボイがいる北大西洋は南大西洋より先
-//      バレンツ海は速い艦（速力6以上）から、ほかは遅い艦から。足りなければもう一方も入れる
-//   余力がイタリアの戦力以上なら地中海へ。足りなければ、速い艦はバレンツ海、遅い艦は北海へ足す
-//   マルタの艦は地中海、ロシアの港の艦はバレンツ海（aiAlliedMove の母港の決まり）。米国艦は4ターン目から北大西洋（15.4）
+// 連合AIの通常配置。出撃可能な戦力を基準に海域ごとの目標を決める。
+// 北大西洋を使わない第1・第2ターンは、そこの15%を残る3海域に均等に回す。
 function planAlliedDeployment(aiLog){
   const plan = {};
   const pw = s => (s.atk || 0) + (s.air || 0);
   const sumPw = arr => arr.reduce((t, s) => t + pw(s), 0);
   const fast = s => (s.spd || 0) >= 6;
-  if(currentTurn >= 4) SHIPS.filter(x => x.side === 'allies' && x.country === 'US' && x.type !== 'CONVOY' && !x.sunk && !x.removed && !(x.damage > 0) && x.location === 'USA').forEach(x => { plan[x.id] = 'NorthAtlantic'; });
+  const usShips = currentTurn >= 4 ? SHIPS.filter(s =>
+    s.side === 'allies' && s.country === 'US' && s.type !== 'CONVOY' &&
+    !s.sunk && !s.removed && !s.movedThisTurn && !(s.damage > 0) && s.location === 'USA'
+  ) : [];
+  usShips.forEach(s => { plan[s.id] = 'NorthAtlantic'; });
   // 行けるか（今の支配で見る）
   const reach = (s, sea) => {
     if(SEAS[s.location]) return s.location === sea || (SEA_ADJ[s.location] || []).includes(sea) || (s.refuelTurn === currentTurn - 1 && refuelReaches(s, sea));
@@ -4033,75 +4030,86 @@ function planAlliedDeployment(aiLog){
     // イタリアの 1-1-7: 南大西洋はイタリアの港から地中海を通って（ルール15.5。1ターン目も可）、海にいる艦は隣まで
     const its = it117.filter(s => SEAS[s.location] ? reach(s, sea) : (sea === 'SouthAtlantic' && s.location === 'Italy' && seaControl['Mediterranean'] !== 'allies'));
     const B = its.length ? sumPw(its) + 2 : 0;
-    return { A, B, need: A + 5 + B }; // ＋5（ユーザーの指示 2026-11-08。前は＋4。＋6も試した）
+    return A + 5 + B; // ＋5（ユーザーの指示 2026-11-08。前は＋4。＋6も試した）
   };
   // 動かせる艦: 英国本土とロシアの港にいる、損害のないイギリス艦。8ターン目は修理がないので損害があっても出す（ユーザーの指示 2026-11-08）
   const okDmg = s => !(s.damage > 0) || currentTurn >= 8;
-  let pool = SHIPS.filter(s => s.side === 'allies' && s.country === 'UK' && !s.sunk && !s.removed && s.type !== 'CONVOY' && (s.location === 'England' || s.location === 'Russia') && okDmg(s))
-    .sort((a, b) => pw(b) - pw(a));
-  // その艦がそのエリアへ行けるか: 港の隣はそのまま、2つ先は間のエリアが枢軸の支配でなければ（ロシアの港の艦はバレンツ海を通って北海・北大西洋へ）
-  const can = (s, sea) => { const adj = PORT_SEAS[s.location] || []; return adj.includes(sea) || adj.some(mid => seaControl[mid] !== 'axis' && (SEA_ADJ[mid] || []).includes(sea)); };
-  const ukReach = sea => can({ location: 'England' }, sea);
-  const anyCan = sea => pool.some(s => can(s, sea));
-  // 並べ方: バレンツ海はロシアの港の艦 → 速い艦 → 遅い艦。ほかのエリアは遅い艦 → 速い艦（同じなら英国本土の艦が先）
-  const ordered = sea => {
-    const c = pool.filter(s => can(s, sea));
-    const rank = sea === 'Barents' ? (s => s.location === 'Russia' ? 0 : fast(s) ? 1 : 2) : (s => (fast(s) ? 2 : 0) + (s.location === 'Russia' ? 1 : 0));
-    return c.sort((x, y) => rank(x) - rank(y));
+  let pool = SHIPS.filter(s =>
+    s.side === 'allies' && s.country === 'UK' && s.type !== 'CONVOY' &&
+    !s.sunk && !s.removed && !s.movedThisTurn && !s.failedMove &&
+    (s.location === 'England' || s.location === 'Russia') && okDmg(s)
+  ).sort((a, b) => pw(b) - pw(a));
+  const can = (ship, sea) => {
+    const adjacent = PORT_SEAS[ship.location] || [];
+    return adjacent.includes(sea) || (ship.spd > 1 && adjacent.some(mid =>
+      seaControl[mid] !== 'axis' && (SEA_ADJ[mid] || []).includes(sea)));
   };
-  const convoyNA = SHIPS.some(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && s.location === 'NorthAtlantic');
-  const order = ['Barents', 'NorthSea', ...(currentTurn <= 2 ? ['SouthAtlantic'] : convoyNA ? ['NorthAtlantic', 'SouthAtlantic'] : ['SouthAtlantic', 'NorthAtlantic'])];
-  const placed = { Barents: [], NorthSea: [], SouthAtlantic: [], NorthAtlantic: [], Mediterranean: [] };
+  // バレンツ海はロシアから出られる艦を優先し、英国からは速い艦を優先する。
+  const ordered = (ships, sea) => {
+    const rank = s => sea === 'Barents'
+      ? (s.location === 'Russia' ? 0 : fast(s) ? 1 : 2)
+      : (fast(s) ? 2 : 0) + (s.location === 'Russia' ? 1 : 0);
+    return ships.filter(s => can(s, sea)).sort((a, b) => rank(a) - rank(b));
+  };
+  const order = ['Barents', 'NorthSea', ...(currentTurn <= 2 ? ['SouthAtlantic'] : convoyInNA ? ['NorthAtlantic', 'SouthAtlantic'] : ['SouthAtlantic', 'NorthAtlantic'])];
   const logs = [];
-  // 米国の艦（4ターン目から北大西洋）の戦力の分、北大西洋に入れるイギリスの戦力を減らす（ユーザーの指示 2026-11-08）
-  const usPw = sumPw(SHIPS.filter(x => plan[x.id] === 'NorthAtlantic' && x.country === 'US'));
-  for(const sea of order){
-    const n = need(sea);
-    if(sea === 'NorthAtlantic' && usPw) n.need = Math.max(0, n.need - usPw);
-    if(!anyCan(sea)){ logs.push(`${SEA_LABEL[sea]}: 行けない`); continue; }
-    let x = 0;
-    for(const s of ordered(sea)){ if(x >= n.need) break; placed[sea].push(s); x += pw(s); }
-    pool = pool.filter(s => !placed[sea].includes(s));
-    logs.push(`${SEA_LABEL[sea]}: 要る${n.need}（A${n.A}${n.B ? ' B' + n.B : ''}） → ${x}`);
+  const power = { Barents: 0, NorthSea: 0, SouthAtlantic: 0, NorthAtlantic: sumPw(usShips) };
+  // 先に動いた船団と、中立港から出る艦も配置済みの戦力に含める。
+  for(const ship of SHIPS){
+    if(ship.side !== 'allies' || ship.sunk || ship.removed || ship.returnPending) continue;
+    const sea = ship.location === 'Neutral' ? 'SouthAtlantic' : ship.location;
+    if(order.includes(sea)) power[sea] += pw(ship);
   }
-  // 米国の艦で北大西洋を減らした分は、入れた戦力が一番少ないエリアへ回す（ユーザーの指示 2026-11-08）
-  if(usPw && order.includes('NorthAtlantic')){
-    const weak = order.filter(x => x !== 'NorthAtlantic' && anyCan(x)).sort((a, b) => sumPw(placed[a]) - sumPw(placed[b]))[0];
-    if(weak){
-      let x = 0;
-      for(const sh of ordered(weak)){ if(x >= usPw) break; placed[weak].push(sh); x += pw(sh); }
-      pool = pool.filter(y => !placed[weak].includes(y));
-      if(x) logs.push(`米国の分${usPw} → ${SEA_LABEL[weak]}へ${x}`);
+
+  // 地中海へ出すのは、ソ連が出撃し、海上に船団がなく、4海域を守ったうえで余力があるとき。
+  const convoyOut = SHIPS.some(s => s.type === 'CONVOY' && s.side === 'allies' && !s.sunk && !s.removed && SEAS[s.location]);
+  if(ruOut && !convoyOut){
+    const reserve = new Set(pool);
+    for(const sea of order){
+      const required = need(sea);
+      let strength = power[sea];
+      for(const ship of ordered([...reserve], sea)){
+        if(strength >= required) break;
+        reserve.delete(ship);
+        strength += pw(ship);
+      }
+    }
+    const medShips = [...reserve].filter(ship => can(ship, 'Mediterranean'));
+    const italianPower = sumPw(SHIPS.filter(s =>
+      s.side === 'axis' && s.country === 'IT' && !s.sunk && !s.removed &&
+      (s.location === 'Italy' || s.location === 'Mediterranean')));
+    if(medShips.length && sumPw(medShips) >= italianPower){
+      medShips.forEach(ship => { plan[ship.id] = 'Mediterranean'; });
+      pool = pool.filter(ship => !medShips.includes(ship));
+      logs.push(`余力${sumPw(medShips)} ≥ イタリア${italianPower} → 地中海`);
     }
   }
-  // 余力: ソ連が出撃したターンで、コンボイが海にいなく、英国本土の残りがイタリアの戦力（港と地中海のイタリアの水上艦）以上なら地中海へ
-  const itPw = sumPw(SHIPS.filter(s => s.side === 'axis' && s.country === 'IT' && !s.sunk && !s.removed && s.type !== 'UBOAT' && (s.location === 'Italy' || s.location === 'Mediterranean')));
-  const medOk = pool.filter(s => can(s, 'Mediterranean'));
-  const restPw = sumPw(medOk);
-  const convoyOut = SHIPS.some(x => x.type === 'CONVOY' && x.side === 'allies' && !x.sunk && !x.removed && SEAS[x.location]);
-  if(medOk.length && ruOut && restPw >= itPw && !convoyOut){ // 地中海はソ連が出撃したターンだけ・コンボイが海にいるターンは行かない（ユーザーの指示 2026-11-08）
-    placed.Mediterranean.push(...medOk);
-    pool = pool.filter(s => !medOk.includes(s));
-    logs.push(`余力${restPw} ≥ イタリア${itPw} → 地中海`);
-  }
-  if(pool.length){
-    // 余った分を均等割: 足した分が一番少ないエリアに1隻ずつ足す（ユーザーの指示 2026-11-08）
-    const added = {}; order.forEach(x => { added[x] = 0; });
+
+  const weights = { Barents: 30, NorthSea: 30, SouthAtlantic: 25, NorthAtlantic: 15 };
+  const destinations = new Map(pool.map(ship => [ship, order.filter(sea => can(ship, sea))]));
+  pool = pool.filter(ship => destinations.get(ship).length > 0);
+  const areas = order.filter(sea => power[sea] > 0 || pool.some(ship => destinations.get(ship).includes(sea)));
+  if(areas.length){
+    const total = sumPw(pool) + areas.reduce((sum, sea) => sum + power[sea], 0);
+    const extraShare = (100 - areas.reduce((sum, sea) => sum + weights[sea], 0)) / areas.length;
+    const target = Object.fromEntries(areas.map(sea => [sea, total * (weights[sea] + extraShare) / 100]));
     while(pool.length){
-      const seas = order.filter(x => anyCan(x));
-      if(!seas.length) break;
-      const weak = seas.sort((a, b) => added[a] - added[b])[0];
-      const sh = ordered(weak)[0];
-      placed[weak].push(sh);
-      added[weak] += pw(sh);
-      pool = pool.filter(y => y !== sh);
+      // 行ける海域の少ない艦から割り当て、柔軟に動ける艦を後に残す。
+      const fewestDestinations = Math.min(...pool.map(ship => destinations.get(ship).length));
+      const candidates = pool.filter(ship => destinations.get(ship).length === fewestDestinations);
+      const choices = areas.filter(sea => candidates.some(ship => destinations.get(ship).includes(sea)));
+      const sea = choices.sort((a, b) => (target[b] - power[b]) - (target[a] - power[a]))[0];
+      const ship = ordered(candidates, sea)[0];
+      plan[ship.id] = sea;
+      power[sea] += pw(ship);
+      pool = pool.filter(candidate => candidate !== ship);
     }
-    logs.push(`余りを均等割`);
+    logs.push(`戦力配分: ${areas.map(sea =>
+      `${SEA_LABEL[sea]}${power[sea]}（目安${target[sea].toFixed(1)}）`).join(' / ')}`);
   }
-  Object.keys(placed).forEach(sea => placed[sea].forEach(s => { plan[s.id] = sea; }));
   // マルタの艦は地中海
   const maltaSortie = SHIPS.filter(s => s.side === 'allies' && s.location === 'Malta' && !s.sunk && !s.removed && okDmg(s));
-  aiLog.push(`<b>配置: ${Object.keys(placed).map(k => `${SEA_LABEL[k]}${placed[k].length}隻(攻${sumPw(placed[k])})`).join(' / ')}${ruOut ? ' / ソ連出撃（ドイツの戦力は半分）' : ''}</b>`);
+  aiLog.push(`<b>配置: ${areas.map(sea => `${SEA_LABEL[sea]} 攻${power[sea]}`).join(' / ')}</b>`);
   aiLog.push(logs.join(' / '));
   if(typeof window !== 'undefined' && window.__pocTrace) window.__pocTrace.push(`T${currentTurn} ` + aiLog[aiLog.length - 2].replace(/<\/?b>/g, '') + ' :: ' + aiLog[aiLog.length - 1]);
   return { plan, maltaSortie };

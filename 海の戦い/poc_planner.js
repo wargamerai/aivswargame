@@ -1019,6 +1019,14 @@ var PocPlanner = (function () {
           // イタリア重巡を含む南大西洋への出撃は、通常の勝算基準を満たす場合に限る。
           const canRisk = group === force && pocRisk && !attacks.length && ratio < 1.8;
           if (ratio > 1.2 && !canRisk) continue;
+          // 第4ターンまでは、コマ表記の砲撃力を1隻あたりで比較する。
+          if (a.turn <= 4) {
+            const printedGunnery = (total, ship) => total + (ship.atkOrig ?? ship.atk ?? 0);
+            const axisShips = alreadyThere.concat(group.map(unit => unit.s));
+            const alliedShips = al(sea);
+            if (axisShips.reduce(printedGunnery, 0) * alliedShips.length <
+                alliedShips.reduce(printedGunnery, 0) * axisShips.length) continue;
+          }
           const value = win6(sea, power / Math.max(1, alliedPower)) * swing(sea, al(sea), a.seas);
           candidates.push({ target: sea, force: group, convoy, asw, hitChance, useUboats, atk: power, al: alliedPower, ratio, value });
           break;
