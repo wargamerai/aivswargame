@@ -980,15 +980,13 @@ var PocPlanner = (function () {
         `バルト海 1 POCを目指して${balticForce[0].s.name}を配置`);
     }
 
-    // イタリアの1-1-7重巡は南大西洋へ出られるとき全艦を割り当てる。
+    // イタリアの1-1-7重巡は南大西洋が無人なら占領し、戦闘があるなら勝算を判断する。
     const southCruisers = free.filter(u => u.s.country === 'IT' && u.s.type === 'CA' &&
-      u.s.atk === 1 && u.s.def === 1 && u.s.spd === 7 && u.opts.includes('SouthAtlantic'));
-    if (southCruisers.length) assign(southCruisers, 'SouthAtlantic');
+      u.s.atk === 1 && u.s.def === 1 && (u.s.spdOrig || u.s.spd) === 7 && u.opts.includes('SouthAtlantic'));
+    const southUnopposed = !al('SouthAtlantic').length;
+    if (southUnopposed && southCruisers.length) assign(southCruisers, 'SouthAtlantic');
 
-    // 連合艦がいない地中海は、出撃可能な残りのイタリア艦を全部送る。
-    const medFleet = al('Mediterranean').length ? [] :
-      free.filter(u => u.s.country === 'IT' && u.opts.includes('Mediterranean'));
-    if (medFleet.length) assign(medFleet, 'Mediterranean');
+    const medUnopposed = !al('Mediterranean').length;
 
     const main = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic'];
     const pocRisk = (a.cumPoc || 0) + Math.max(0, a.lastTurnGain || 0) * (9 - a.turn) > 0;
@@ -999,25 +997,32 @@ var PocPlanner = (function () {
       const candidates = [];
       for (const sea of main) {
         if (!al(sea).length || attacks.some(attack => attack.target === sea)) continue;
-        const force = free.filter(u => u.opts.includes(sea) &&
-          (u.s.country === 'DE' || (u.s.type === 'CA' && a.turn > 1)));
+        const force = free.filter(u => u.opts.includes(sea) && !southCruisers.includes(u) &&
+          (u.s.country === 'DE' || (u.s.type === 'CA' && a.turn > 1 &&
+            !(medUnopposed && u.opts.includes('Mediterranean')))));
         const alreadyThere = fixed[sea] || [];
         const cruisers = sea === 'SouthAtlantic' ? southCruisers : [];
-        if (!force.length && !alreadyThere.length && !cruisers.length) continue;
+        const groups = cruisers.length ? [force.concat(cruisers), force] : [force];
         const alliedPower = sumP(al(sea));
-        const surfacePower = force.concat(cruisers).reduce((total, u) => total + arrivalPower(u, sea), sumP(alreadyThere));
         const convoy = convoysIn(al(sea)) > 0;
         const asw = aswBySea[sea];
         const hitChance = uboatHitChance(ubs, asw);
-        // 対潜戦を経た一斉射の有効打率が、妨害なしの1隻分（1/3）を下回るなら温存。
-        const useUboats = ubs > 0 && hitChance >= 1 / 3 - Number.EPSILON &&
-          (convoy || alliedPower > surfacePower * 1.2);
-        const power = surfacePower + (useUboats ? ubs : 0);
-        if (!power) continue;
-        const ratio = alliedPower / power;
-        if (ratio > 1.2 && !(pocRisk && !attacks.length && ratio < 1.8)) continue;
-        const value = win6(sea, power / Math.max(1, alliedPower)) * swing(sea, al(sea), a.seas);
-        candidates.push({ target: sea, force, convoy, asw, hitChance, useUboats, atk: power, al: alliedPower, ratio, value });
+        for (const group of groups) {
+          if (!group.length && !alreadyThere.length) continue;
+          const surfacePower = group.reduce((total, u) => total + arrivalPower(u, sea), sumP(alreadyThere));
+          // 対潜戦を経た一斉射の有効打率が、妨害なしの1隻分（1/3）を下回るなら温存。
+          const useUboats = ubs > 0 && hitChance >= 1 / 3 - Number.EPSILON &&
+            (convoy || alliedPower > surfacePower * 1.2);
+          const power = surfacePower + (useUboats ? ubs : 0);
+          if (!power) continue;
+          const ratio = alliedPower / power;
+          // イタリア重巡を含む南大西洋への出撃は、通常の勝算基準を満たす場合に限る。
+          const canRisk = group === force && pocRisk && !attacks.length && ratio < 1.8;
+          if (ratio > 1.2 && !canRisk) continue;
+          const value = win6(sea, power / Math.max(1, alliedPower)) * swing(sea, al(sea), a.seas);
+          candidates.push({ target: sea, force: group, convoy, asw, hitChance, useUboats, atk: power, al: alliedPower, ratio, value });
+          break;
+        }
       }
       candidates.sort((x, y) => Number(y.convoy) - Number(x.convoy) ||
         Number(x.ratio > 1.2) - Number(y.ratio > 1.2) || y.value - x.value);
@@ -1031,7 +1036,11 @@ var PocPlanner = (function () {
       notes.push(`${target}: 連合${ratio.toFixed(2)}倍${ratio > 1.2 ? '・POCで逆転の恐れ' : ''}${best.convoy ? '・船団' : ''}${submarines}`);
     }
 
-    // 地中海のイタリア艦隊は従来どおり。先に殴り込みへ回した重巡は除く。
+    // 南大西洋へ向かわなかった艦も、連合艦がいなければ地中海へ送る。
+    const medFleet = medUnopposed ? free.filter(u => u.s.country === 'IT' && u.opts.includes('Mediterranean')) : [];
+    if (medFleet.length) assign(medFleet, 'Mediterranean');
+
+    // 連合艦がいる地中海では従来の出撃判断を使う。
     if (!IT6.out && Math.random() < IT6_P[a.turn]) { IT6.out = true; notes.push('イタリア出撃開始'); }
     if (IT6.out) {
       const it = free.filter(u => u.s.country === 'IT' && u.opts.includes('Mediterranean'));
@@ -1063,7 +1072,7 @@ var PocPlanner = (function () {
       if (Object.keys(posts).length === taken.length) { cover = posts; bestScore = score; }
     }
     const medPoc = medFleet.length ? a.seas.Mediterranean.axis : 0;
-    const southPoc = southCruisers.length && !al('SouthAtlantic').length ? a.seas.SouthAtlantic.axis : 0;
+    const southPoc = southUnopposed && southCruisers.length ? a.seas.SouthAtlantic.axis : 0;
     const balticPoc = !soviet.length && balticForce.length ? a.seas.Baltic.axis * arrivalChance(balticForce[0], 'Baltic') : 0;
     return { plan: Object.assign(plan, cover), value: bestScore + medPoc + southPoc + balticPoc, notes, ubTarget, attacks, baltic };
   }

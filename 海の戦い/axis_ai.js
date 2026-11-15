@@ -129,10 +129,13 @@ function axisAiMove(){
     const seaList = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean', 'Baltic'];
     const canSendBaltic = s => AX_MODE >= 6 && s.country === 'DE' && s.type !== 'CV' &&
       s.atk > 0 && !s.returnPending && !s.failedMove;
+    // 中立港のイタリア重巡も、南大西洋では戦力比を見てから出撃する。
+    const neutralItalianCruiser = s => AX_MODE >= 6 && s.location === 'Neutral' && s.country === 'IT' && s.type === 'CA';
     const movers = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.type !== 'UBOAT' && !s.movedThisTurn &&
-      (!(s.damage > 0) || canSendBaltic(s)) && !(s.location === 'France' && turn > 6) &&
+      (!(s.damage > 0) || canSendBaltic(s) || neutralItalianCruiser(s)) && !(s.location === 'France' && turn > 6) &&
       (PORTS[s.location] || (SEAS[s.location] && s.refuelTurn === turn - 1)));
-    const neutral = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.location === 'Neutral' && !s.movedThisTurn);
+    const neutral = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.location === 'Neutral' &&
+      !s.movedThisTurn && !neutralItalianCruiser(s));
     neutral.forEach(s => { move(s, 'SouthAtlantic'); });
     const ships = movers.filter(s => !s.movedThisTurn).map(s => {
       const o = seaList.filter(sea => {
@@ -140,7 +143,7 @@ function axisAiMove(){
           const hops = reach(s, sea);
           return canSendBaltic(s) && (hops === 1 || (hops === 2 && s.spd > 1));
         }
-        if(s.damage > 0) return false;
+        if(s.damage > 0 && !neutralItalianCruiser(s)) return false;
         if(s.country === 'IT'){
           if(sea === 'Mediterranean') return reach(s, sea) > 0;
           if(s.type !== 'CA') return false;
