@@ -13,19 +13,22 @@ let TERRAIN_CARDS = []; // { num, type, modifier, range, sub, dice:{1,2,3,4,5,6,
 
 function parseTerrainCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-  const rows = lines.slice(1); // skip header
+  // 外部CSVには修正列が2つあり、埋め込みCSVには1つだけある。
+  const rangeIndex = splitCSVLine(lines[0] || '').indexOf('射程');
+  const rncIndex = rangeIndex >= 0 ? rangeIndex : 14;
+  const rows = lines.slice(1);
   const out = [];
   rows.forEach(line => {
-    const c = line.split(',');
+    const c = splitCSVLine(line);
     const num = parseInt(c[0], 10);
     if (!num) return;
-    // 新CSV列構造: [0]# [1-5]左国名 [6]左種別 [7-11]右国名 [12]右種別 [13]修正 [14]射程 [15]色 [16]サブ [17+]dice
+    // 射程列の後ろに色・サブ・RPC（値と色の組）が続く。
     const diceKeys = ['1','2b','3','4c','5o','6','7w','8','9','0r'];
     const dice = {};
     const diceColor = {};
     diceKeys.forEach((key, i) => {
-      dice[key]      = c[17 + i * 2] || '';
-      diceColor[key] = c[18 + i * 2] || '';  // '赤' or ''(=黒)
+      dice[key]      = c[rncIndex + 3 + i * 2] || '';
+      diceColor[key] = c[rncIndex + 4 + i * 2] || '';  // '赤' or ''(=黒)
     });
     const leftFactions = [c[1], c[2], c[3], c[4], c[5]].map(x => (x || '').trim()).filter(x => x);
     const rightFactions = [c[7], c[8], c[9], c[10], c[11]].map(x => (x || '').trim()).filter(x => x);
@@ -40,12 +43,12 @@ function parseTerrainCSV(text) {
       restrictions: leftFactions,
       type:     leftType, // デフォルトは左種別（カード使用時に faction で実効値が決まる）
       modifier: c[13] || '',
-      range:    c[14] || '',
-      rncColor: (c[15] || '').trim(),
-      sub:      c[16] || '',
+      range:    c[rncIndex] || '',
+      rncColor: (c[rncIndex + 1] || '').trim(),
+      sub:      c[rncIndex + 2] || '',
       dice,
       diceColor,
-      note: (c[37] || '').trim(),
+      note: (c[rncIndex + 23] || '').trim(),
       img:     encPath(`upfrontimages/地形カード/AD ${num}.gif`),
       imgBack: encPath(`upfrontimages/地形カード/AD Back.gif`),
     });
