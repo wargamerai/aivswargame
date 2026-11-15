@@ -282,6 +282,8 @@ const game=(()=>{
  const ids=Object.keys(all), starts=ids.filter(id=>/^[AB][1-5]$/.test(id));
  const exits={A1:'ATL',A2:'ATL',A3:'ATL',B6:'IND'};
  const raids=new Set(['B2','B5','C3','C4','C5','C6','D2','D5']);
+ const britishMoveLimit=3;
+ const fleetComposition={DUMMY:2,CV:2,BB:1,CA:4};
  const types={DUMMY:{power:0,speed:2},CA:{power:2,speed:2},CV:{power:3,speed:2},BB:{power:9,speed:1},SPEE:{power:3,speed:2}};
  const dist=(a,b)=>Math.hypot(all[a].x-all[b].x,all[a].y-all[b].y);
  const adj=id=>ids.filter(x=>x!==id&&dist(x,id)<160);
@@ -334,32 +336,43 @@ const game=(()=>{
    return best;
  }
  function escapePlan(s,risk){
+   if(s.score<15)return null;
+   const goals=s.score>=18?exitsFor:exitsFor.slice(0,2);
    const speed=s.damage?1:2;
-   const plans=exitsFor.filter(goal=>goal==='E1'?s.score>=16:s.score>=15).map(goal=>{
-     const memo=new Map();
-     function route(from){
-       if(from===goal)return {cost:0,next:goal};
-       if(memo.has(from))return memo.get(from);
-       const distance=hexDistance(from,goal),supplied=s.supplies.includes(from);
-       let best={cost:Infinity,next:null};
-       for(const to of reachable(from,speed+(supplied?1:0),true)){
-         if(to!==goal&&(!all[to]||hexDistance(to,goal)>=distance))continue;
-         const cost=1+(to===goal&&goal!=='E1'?0:risk(to))+route(to).cost;
-         if(cost<best.cost||cost===best.cost&&hexDistance(to,goal)<hexDistance(best.next,goal))best={cost,next:to};
-       }
-       memo.set(from,best);return best;
+   const supplyBits=new Map(s.supplies.map((hex,index)=>[hex,1<<index]));
+   const queue=[{hex:s.pos,mask:(1<<s.supplies.length)-1,cost:0,next:null,useSupply:false}];
+   const best=new Map();
+   let plan=null;
+   while(queue.length){
+     queue.sort((a,b)=>b.cost-a.cost);
+     const point=queue.pop();
+     if(plan&&point.cost>=plan.cost)break;
+     const key=point.hex+':'+point.mask;
+     if(best.has(key))continue;
+     best.set(key,point.cost);
+     if(goals.includes(point.hex)){
+       const cost=point.cost+(point.hex==='E1'?1:0);
+       if(!plan||cost<plan.cost)plan={goal:point.hex,next:point.next??point.hex,useSupply:point.useSupply,cost};
      }
-     const plan=route(s.pos);
-     // In Montevideo, scuttling reduces the score by 1–3 VP.
-     return {goal,next:plan.next,cost:plan.cost+(goal==='E1'?1+Math.max(0,18-s.score)*4:0)};
-   });
-   return plans.sort((a,b)=>a.cost-b.cost)[0];
+     if(!all[point.hex])continue;
+     const supplyBit=supplyBits.get(point.hex)||0;
+     const canSupply=Boolean(point.mask&supplyBit);
+     for(const next of reachable(point.hex,speed+Number(canSupply),true)){
+       if(next===point.hex||!all[next]&&!goals.includes(next))continue;
+       const spend=hexDistance(point.hex,next)>speed;
+       const mask=spend?point.mask&~supplyBit:point.mask;
+       const cost=point.cost+1+(all[next]?risk(next):0)+(spend?.08:0);
+       if(!best.has(next+':'+mask))queue.push({hex:next,mask,cost,
+         next:point.next??next,useSupply:point.next===null?spend:point.useSupply});
+     }
+   }
+   return plan;
  }
  function d6(rng=Math.random){return 1+Math.floor(rng()*6)}
  function setup(rng=Math.random){
-   const fleet=['DUMMY','DUMMY','CV','CV','BB','CA','CA','CA','CA'];
+   const fleet=Object.entries(fleetComposition).flatMap(([type,count])=>Array(count).fill(type));
    for(let i=fleet.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[fleet[i],fleet[j]]=[fleet[j],fleet[i]]}
-   return {stage:'setup',turn:1,pos:null,supplies:[],damage:0,score:0,fleet:fleet.map((type,i)=>({id:i,type,pos:null})),usedRoutes:[],known:null,contact:null,revealed:null,tracked:false,searches:{},log:[],voyage:[]};
+   return {stage:'setup',turn:1,pos:null,supplies:[],damage:0,score:0,fleet:fleet.map((type,i)=>({id:i,type,pos:null})),usedRoutes:[],known:null,contact:null,revealed:null,tracked:false,searches:{},strikes:[],germanIntel:[],knownBritish:{},log:[],voyage:[]};
  }
  function note(s,...event){
    s.log.unshift({turn:s.turn,event});
@@ -375,10 +388,10 @@ const game=(()=>{
    s.voyage.push({turn:s.turn,path,supplied,events:[],score:s.score});
    if(supplied)s.supplies=s.supplies.filter(h=>h!==s.pos);
    s.previousContact=s.contact?{...s.contact}:null;
-   s.known=null;s.contact=null;s.revealed=null;s.searches={};
+   s.known=null;s.contact=null;s.revealed=null;s.searches={};s.strikes=[];
    if(['ATL','IND'].includes(where)){end(s,['exit',{key:where}],'escape');return true}
    s.pos=where;
-   if(s.tracked){s.known=where;s.contact={hex:where,method:'track'};}s.moved=[];s.moveHistory=[];s.limit=3;s.extra=false;s.stage='britain';
+   if(s.tracked){s.known=where;s.contact={hex:where,method:'track'};}s.moved=[];s.moveHistory=[];s.limit=britishMoveLimit;s.extra=false;s.stage='britain';
    if(s.tracked)note(s,'track',where);
    return true;
  }
@@ -388,6 +401,137 @@ const game=(()=>{
    if(onMap(f))return reachable(f.pos,types[f.type].speed);
    if(f.pos==='lost')return new Set();
    return new Set(Object.keys(exits).filter(h=>!f.pos||exits[h]===f.pos));
+ }
+ function intelligenceForTurn(s){
+   let entry=s.germanIntel.at(-1);
+   if(entry?.turn!==s.turn){
+     entry={turn:s.turn,positions:{},searches:[]};
+     s.germanIntel.push(entry);
+   }
+   return entry;
+ }
+ function rememberBritish(s,phase){
+   intelligenceForTurn(s).positions[phase]=s.fleet.map(({id,pos})=>({id,pos}));
+ }
+ function inferBritishTypes(s){
+   const options=s.fleet.map(({id})=>{
+     const known=s.knownBritish[id];
+     const ruledOutBB=s.germanIntel.some(({positions})=>{
+       const before=positions.start?.find(ship=>ship.id===id)?.pos;
+       const after=positions.afterMove?.find(ship=>ship.id===id)?.pos;
+       return all[before]&&all[after]&&hexDistance(before,after)>1;
+     });
+     return {id,types:known?[known]:Object.keys(fleetComposition).filter(type=>type!=='BB'||!ruledOutBB)};
+   }).sort((a,b)=>a.types.length-b.types.length);
+   const searchGroups=s.germanIntel.map(entry=>entry.searches.map(scan=>scan.candidates)).filter(group=>group.length);
+   const assignments={};
+   const remaining={...fleetComposition};
+   const counts=new Map(options.map(({id})=>[id,{}]));
+   let samples=0;
+   function enumerate(index,checkSearches){
+     if(index===options.length){
+       if(checkSearches&&!searchGroups.every(([first,second])=>first.some(id=>assignments[id]==='CV'&&
+         (!second||second.some(other=>other!==id&&assignments[other]==='CV')))))return;
+       samples++;
+       for(const [id,count] of counts){
+         const type=assignments[id];
+         count[type]=(count[type]||0)+1;
+       }
+       return;
+     }
+     const {id,types:possible}=options[index];
+     for(const type of possible){
+       if(!remaining[type])continue;
+       assignments[id]=type;remaining[type]--;
+       enumerate(index+1,checkSearches);
+       remaining[type]++;
+     }
+   }
+   enumerate(0,true);
+   if(!samples)enumerate(0,false);
+   return new Map([...counts].map(([id,count])=>[id,Object.entries(count).map(([type,n])=>({type,chance:n/samples}))]));
+ }
+ function britishPatrols(s){
+   const positions=s.germanIntel.at(-1)?.positions;
+   const last=positions?.afterBattle??positions?.afterMove??positions?.start??[];
+   const estimates=inferBritishTypes(s);
+   return last.filter(ship=>ship.pos!=='lost').map(ship=>({
+     ...ship,estimates:estimates.get(ship.id).map(({type,chance})=>{
+       const range=type==='DUMMY'?new Set(all[ship.pos]?[ship.pos]:[]):britMoves({...ship,type});
+       return {type,chance,range};
+     })
+   }));
+ }
+ function britishThreat(hex,patrols){
+   if(!all[hex])return 0;
+   let stationary=0;
+   const neighbors=adj(hex);
+   const moves=[],reserves=[];
+   for(const ship of patrols){
+     let stay=0,move=0;
+     for(const {type,chance,range} of ship.estimates){
+       const here=ship.pos===hex;
+       if(type==='DUMMY'){if(here)stay+=chance;continue}
+       const aircraft=type==='CV';
+       const surface=type==='BB'?5:type==='CA'?2:0;
+       const air=aircraft?3:0;
+       const currentRisk=here?surface*2+1:air&&neighbors.includes(ship.pos)?air:0;
+       const movementRisk=Math.max(range.has(hex)?surface+1:0,
+         air&&neighbors.some(pos=>range.has(pos))?air:0);
+       stay+=chance*currentRisk;
+       move+=chance*Math.max(currentRisk,movementRisk);
+     }
+     stationary+=stay;
+     if(ship.pos===null)reserves.push(move);
+     else if(move>stay)moves.push(move-stay);
+   }
+   moves.sort((a,b)=>b-a);
+   let maxGain=0;
+   // Undeployed counters must enter in order and use the same three-ship budget.
+   for(let count=0;count<=Math.min(britishMoveLimit,reserves.length);count++){
+     const gains=[...reserves.slice(0,count),...moves.slice(0,britishMoveLimit-count)];
+     maxGain=Math.max(maxGain,gains.reduce((sum,gain)=>sum+gain,0));
+   }
+   return stationary+maxGain;
+ }
+ function carrierOpportunity(hex,patrols){
+   const local=patrols.filter(ship=>ship.pos===hex);
+   const chance=(ship,...types)=>ship.estimates.filter(est=>types.includes(est.type)).reduce((sum,est)=>sum+est.chance,0);
+   const likelyCarrier=Math.max(0,...local.map(ship=>chance(ship,'CV')));
+   if(likelyCarrier<.5)return 0;
+   const escort=local.reduce((risk,ship)=>risk+chance(ship,'BB','CA'),0);
+   if(escort>=.45)return 0;
+   const otherThreat=britishThreat(hex,patrols.filter(ship=>ship.pos!==hex));
+   return likelyCarrier*(1-escort)/(1+otherThreat*.28);
+ }
+ function germanPlan(s,style,rng=Math.random){
+   const patrols=britishPatrols(s);
+   const risks=new Map(ids.map(hex=>[hex,britishThreat(hex,patrols)]));
+   const threat=hex=>risks.get(hex)||0;
+   const cautious=style==='cautious';
+   const escape=escapePlan(s,hex=>threat(hex)*(s.damage?1.25:cautious?.9:.65));
+   if(escape)return {next:escape.next,useSupply:escape.useSupply,action:escape.next===s.pos&&escape.goal==='E1'?'scuttle':'escape'};
+   const safeRisk=s.damage?2:cautious?3.2:4.5;
+   const unspent=hex=>raids.has(hex)&&!s.usedRoutes.includes(hex);
+   const staysFromLast=s.voyage.at(-1)?.path.at(-1)===s.pos;
+   const normal=sailing(s,false);
+   const candidates=[...sailing(s,true)].filter(hex=>all[hex]).map(hex=>{
+     const risk=threat(hex);
+     const canRaid=!s.tracked&&!hex.endsWith('1')&&!patrols.some(ship=>ship.pos===hex)&&risk<=safeRisk;
+     const attack=carrierOpportunity(hex,patrols);
+     const useSupply=!normal.has(hex);
+     const repeat=hex===s.pos&&staysFromLast;
+     const followups=[...reachable(hex,(s.damage?1:2)+Number(hex!==s.pos&&s.supplies.includes(hex)))];
+     const nextRaids=followups.filter(unspent).map(next=>threat(next));
+     const future=nextRaids.length?1/(1+Math.min(...nextRaids)) : 0;
+     const suppliesAhead=hex!==s.pos&&s.supplies.includes(hex)?.35:0;
+     const nav=future*.65+suppliesAhead-(repeat?.7:0)-(useSupply?.32:0)+rng()*.09;
+     return {next:hex,useSupply,risk,attack,nav,
+       action:canRaid&&unspent(hex)?'raid2':attack>=(s.damage?.55:cautious?.43:.34)?'carrier':canRaid?'raid':'hide'};
+   });
+   const priority={raid2:4,carrier:3,raid:2,hide:1};
+   const value=c=>c.action==='carrier'?c.attack*4+c.nav:c.nav-c.risk*(c.action==='hide'?.65:.55);
+   return candidates.sort((a,b)=>priority[b.action]-priority[a.action]||value(b)-value(a))[0];
  }
  function moveBrit(s,id,h){
    const f=s.fleet.find(v=>v.id===id);
@@ -401,9 +545,11 @@ const game=(()=>{
    s.fleet.find(f=>f.id===id).pos=from;s.moved.pop();return id;
  }
  function finishBrit(s){
+   rememberBritish(s,'afterMove');
    s.previousContact=null;
    const contacts=active(s);
    if(contacts.length){
+     for(const {id,type} of contacts)s.knownBritish[id]=type;
      s.known=s.pos;s.contact={hex:s.pos,method:'surface'};
      note(s,'surface',s.pos);
      contacts.filter(f=>f.type==='DUMMY').forEach(f=>f.pos='lost');
@@ -413,27 +559,42 @@ const game=(()=>{
    if(!s.fleet.some(f=>searchTargets(s,f).length))finishSearch(s);
  }
  function searchTargets(s,f){
-   if(s.stage!=='search'||!f||f.type!=='CV'||!onMap(f)||s.searches[f.id])return [];
+   if(s.stage!=='search'||!f||f.type!=='CV'||!onMap(f))return [];
    const nearby=adj(f.pos);
-   return s.contact?nearby.filter(h=>h===s.contact.hex):nearby;
+   if(s.contact)return s.strikes.includes(f.id)?[]:nearby.filter(h=>h===s.contact.hex);
+   return s.searches[f.id]?[]:nearby;
  }
- const airAttackers=s=>s.fleet.filter(f=>f.type==='CV'&&onMap(f)&&s.searches[f.id]===s.pos);
+ const airAttackers=s=>s.fleet.filter(f=>f.type==='CV'&&onMap(f)&&s.strikes.includes(f.id));
+ function addStrike(s,id,h){
+   s.strikes.push(id);
+   note(s,'air',{key:'CV',suffix:' '+(id+1)},h);
+ }
  function finishSearch(s){
    if(s.stage!=='search')return;
+   if(s.contact){
+     for(const ship of s.fleet)if(searchTargets(s,ship).includes(s.contact.hex))addStrike(s,ship.id,s.contact.hex);
+   }
    if(airAttackers(s).length||active(s).length)s.stage='combat';
-   else if(s.contact?.method==='surface'){
+   else if(s.contact){
      s.results=null;s.tracked=false;s.stage='result';note(s,'noBattle');
    }else s.stage='raid';
  }
  function search(s,id,h){
    const f=s.fleet.find(v=>v.id===id);
    if(!searchTargets(s,f).includes(h))return false;
-   s.searches[id]=h;
-   const name={key:'CV',suffix:' '+(id+1)};
-   if(h===s.pos){
-     if(!s.contact){s.known=h;s.contact={hex:h,method:'airContact'};note(s,'airContact',name,h);}
-     else note(s,'air',name,h);
-   }else note(s,'noContact',name,h);
+   if(s.contact)addStrike(s,id,h);
+   else{
+     s.searches[id]=h;
+     const found=h===s.pos;
+     const intel=intelligenceForTurn(s);
+     const seen=intel.positions.afterMove??intel.positions.start??[];
+     intel.searches.push({hex:h,found,candidates:seen.filter(ship=>all[ship.pos]&&adj(h).includes(ship.pos)).map(ship=>ship.id)});
+     const name={key:'CV',suffix:' '+(id+1)};
+     if(found){
+       s.known=h;s.contact={hex:h,method:'airContact'};s.strikes.push(id);
+       note(s,'airContact',name,h);
+     }else note(s,'noContact',name,h);
+   }
    if(!s.fleet.some(v=>searchTargets(s,v).length))finishSearch(s);
    return true;
  }
@@ -441,7 +602,7 @@ const game=(()=>{
    const local=active(s).filter(f=>f.type!=='DUMMY');
    const surface=local.filter(f=>f.type!=='CV');
    const targets=surface.length?surface:local;
-   const ships=local.map(f=>({ship:f,fire:f.type!=='CV'||surface.length>0,air:false}));
+   const ships=local.map(f=>({ship:f,fire:f.type!=='CV',air:false}));
    for(const ship of airAttackers(s))ships.push({ship,fire:true,air:true});
    return {targets,ships};
  }
@@ -484,6 +645,7 @@ const game=(()=>{
      if(s.tracked)note(s,'tracking');
      s.stage='result';
    }
+   rememberBritish(s,'afterBattle');
    s.results={hex:s.contact?.hex||s.pos,british,german,before,totalHits,gain:s.score+penalty-score,penalty,tracked:s.tracked&&s.stage!=='end'};
    return s.results;
  }
@@ -504,7 +666,7 @@ const game=(()=>{
    end(s,['scuttle'],'scuttle',loss);return true;
  }
  function end(s,cause,ending,penalty=0){s.stage='end';s.cause=cause;s.ending=ending;s.penalty=penalty;note(s,...cause,...(penalty?[{key:'vp',args:['−'+penalty]}]:[]))}
- return {all,ids,starts,exits,raids,types,adj,reachable,d6,setup,note,go,sailing,onMap,active,britMoves,moveBrit,undoBrit,finishBrit,searchTargets,search,finishSearch,airAttackers,battleForces,battle,raid,scuttle,supplyPlacement,escapePlan,hexDistance};
+ return {all,ids,starts,exits,raids,types,adj,reachable,d6,setup,note,go,sailing,onMap,active,britMoves,moveBrit,undoBrit,finishBrit,searchTargets,search,finishSearch,airAttackers,battleForces,battle,raid,scuttle,supplyPlacement,escapePlan,hexDistance,rememberBritish,inferBritishTypes,britishPatrols,britishThreat,carrierOpportunity,germanPlan};
 })();
 </script>
 <script>'use strict';
@@ -595,18 +757,6 @@ const caption=f=>tr(f.type)+' '+(f.id+1);
 const button=(txt,fn,{main=false,disabled=false}={})=>{const b=document.createElement('button');b.textContent=txt;b.onclick=fn;b.disabled=disabled;if(main)b.className='main';return b};
 const remaining=()=>state.limit-state.moved.length;
 const current=()=>state.fleet.find(f=>f.id===selected);
-const canPlanRaid=()=>!state.contact&&!state.tracked&&state.lastCautiousRaid!==state.turn-1;
-const raidRiskLimit=()=>state.damage?0:3;
-function britishExposure(h,patrols){
- return patrols.reduce((risk,{ship,range})=>{
-  if(ship.type==='DUMMY')return risk;
-  if(ship.type==='CV')return risk+([...range].some(k=>adj(k).includes(h))?3:0)
-   +(adj(ship.pos).includes(h)?2:0);
-  const weight=ship.type==='BB'?5:2;
-  return risk+(range.has(h)?weight:0)+(ship.pos===h?weight:0);
- },0);
-}
-const britishPatrols=()=>state.fleet.filter(game.onMap).map(ship=>({ship,range:game.britMoves(ship)}));
 function reset(){
  clearInterval(battleTimer);for(const id of ['battleDialog','endDialog'])if($(id).open)$(id).close();
  state=game.setup();selected=null;showGerman=false;
@@ -615,39 +765,12 @@ function reset(){
  begin();
 }
 function begin(){
- const normal=game.sailing(state,false);
- const patrols=britishPatrols();
- const danger=h=>patrols.reduce((n,{ship:v,range})=>n+(v.pos===h?(v.type==='DUMMY'?1:6+types[v.type].power*.55):range.has(h)?(v.type==='DUMMY'?.15:1.25):v.type==='CV'&&adj(v.pos).includes(h)?1:0),0);
- const cautious=germanStyle==='cautious';
- const exposure=h=>britishExposure(h,patrols);
- state.plannedRaid=false;
- const escape=game.escapePlan(state,h=>cautious?exposure(h)*2:danger(h)*(state.damage?.75:.45));
- if(escape?.next){
-  if(escape.goal==='E1'&&state.pos==='E1')game.scuttle(state);
-  else game.go(state,escape.next,!normal.has(escape.next));
-  render();return;
- }
- if(cautious){
-  const supplied=game.sailing(state,true);
-  const choices=[...supplied].filter(h=>all[h]);
-  const unusedRoute=h=>raids.has(h)&&!state.usedRoutes.includes(h);
-  const seekRaid=canPlanRaid();
-  const goodRaid=h=>seekRaid&&!h.endsWith('1')&&exposure(h)<=raidRiskLimit();
-  const score=h=>(goodRaid(h)?(unusedRoute(h)?8:5):0)-exposure(h)*1.5
-   -(h===state.pos&&state.turn>1?2:0)-(!normal.has(h)?2:0)+Math.random()*.8;
-  const ranked=choices.map(h=>({h,value:score(h)})).sort((a,b)=>b.value-a.value);
-  const next=ranked[0].h;
-  state.plannedRaid=goodRaid(next);
-  game.go(state,next,!normal.has(next));render();return;
- }
- const best=[...normal].map(h=>{
-  if(!all[h])return [h,state.damage&&state.score>=12?2:-Infinity];
-  const possible=!h.endsWith('1');
-  const raidValue=!possible?-3:raids.has(h)&&!state.usedRoutes.includes(h)?5:1.6;
-  const repeated=h===state.pos&&state.turn>1?2.4:0;
-  return [h,raidValue-danger(h)*(state.damage?1.45:1)-repeated+Math.random()*2.6];
- }).sort((a,b)=>b[1]-a[1])[0][0];
- game.go(state,best,false);render();
+ game.rememberBritish(state,'start');
+ const plan=game.germanPlan(state,germanStyle);
+ state.plannedRaid=plan.action==='raid2'||plan.action==='raid';
+ if(plan.action==='scuttle')game.scuttle(state);
+ else game.go(state,plan.next,plan.useSupply);
+ render();
 }
 function selectShip(id){
  selected=selected===id?null:id;render();
@@ -657,12 +780,7 @@ function afterSearch(){
  if(state.stage==='raid')resolveRaid();else render();
 }
 function resolveRaid(){
- const cautious=germanStyle==='cautious';
- const raidAllowed=!cautious||(state.plannedRaid&&canPlanRaid()
-  &&britishExposure(state.pos,britishPatrols())<=raidRiskLimit());
- if(raidAllowed&&game.raid(state)){
-  if(cautious)state.lastCautiousRaid=state.turn;
- }else{
+ if(!state.plannedRaid||!game.raid(state)){
   state.tracked=false;state.results=null;state.stage='result';
   game.note(state,'noContact');
  }
@@ -889,7 +1007,7 @@ function render(){
   label.textContent=f.pos==='ATL'?tr('ATL'):f.pos|| (f===queue[0]?tr('nextShip'):tr('reserve'));
   if(stage==='search'&&f.type==='CV'&&game.onMap(f)){
    const searched=state.searches[f.id];
-   const status=searched?(searched===state.contact?.hex?tr('joined'):tr('searched')):searchReady(f)?(state.contact?tr('readySortie'):tr('readySearch')):state.contact?.hex===f.pos?tr('contact'):tr('outOfRange');
+   const status=state.strikes.includes(f.id)?tr('joined'):searchReady(f)?(state.contact?tr('readySortie'):tr('readySearch')):searched?tr('searched'):state.contact?.hex===f.pos?tr('contact'):tr('outOfRange');
    p.title=caption(f);label.textContent+=' ｜ '+status;
   }
   p.append(label);tray.append(p);

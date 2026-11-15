@@ -17,7 +17,7 @@ select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;bo
 <style id="endStyle">
 #endDialog{width:min(840px,96vw);max-height:92dvh;text-align:center;padding:clamp(12px,3vw,24px)}#endTitle{font-size:clamp(1.6rem,4vw,2.6rem);margin:0}#endScore{font-weight:750;color:#ffe099;font-size:1.15rem;margin:.35rem 0}.end-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:.7rem 0}#endRoute{width:100%;height:auto;display:block;border-radius:8px}#endRoute polyline{fill:none;stroke:#ffda6b;stroke-width:6;stroke-linecap:round;stroke-linejoin:round}#endRoute .route-border{stroke:#17252d;stroke-width:12}#endRoute circle,#endRoute .route-arrow{fill:#ffda6b;stroke:#17252d;stroke-width:3}#endRoute text{fill:#fff8db;stroke:#17252d;stroke-width:6;paint-order:stroke;font:700 26px system-ui,sans-serif}#endLegs{text-align:left;padding:0;list-style:none}#endLegs li{border-top:1px solid #567079;padding:.5rem .15rem}#endLegs li div{font-size:.85rem;margin-top:.22rem}
 </style>
-<main><header><h1 data-text="bisTitle">ビスマルク号を撃沈せよ</h1><span class="sides" data-text="roles">イギリス：人間 ／ ドイツ：AI</span><select id="language" aria-label="言語"></select><button id="help" data-text="rules">ルール</button><button id="restart" data-text="restart">やり直す</button></header>
+<main><header><h1 data-text="bisTitle">ビスマルク号を撃沈せよ</h1><span class="sides" data-text="roles">イギリス：人間 ／ ドイツ：AI</span><select id="language" aria-label="言語"></select><button id="help" data-text="rules">ルール</button><button id="restart" data-text="restart">やり直す</button><button id="inspectGerman" type="button" aria-pressed="false"></button></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span id="score"></span></span><div id="actions"></div></div>
 <p id="hint"></p>
 <div id="airChoices" aria-label="航空索敵に出す空母" hidden></div>
@@ -254,11 +254,11 @@ function paths(h,n,mayEnter=()=>true){
 const reach=(h,n)=>new Set(paths(h,n).keys());
 const seeds=[['Hood',4,5,3,1,'C3'],['Wales',3,5,2,2,'C3'],['George',3,5,2,2,'C6'],['Repulse',3,5,3,1,'C6'],['Victorious',2,3,3,1,'C6'],['Rodney',5,4,1,2,'D6'],['Ramillies',4,4,1,2,'F1'],['Renown',3,5,3,1,'F4'],['Ark',2,3,3,1,'F4'],['Dummy',0,0,3,1,'B5'],['Dummy',0,0,3,1,'B6'],['Dummy',0,0,3,1,'C4']];
 const carrier=f=>['Victorious','Ark'].includes(f.name),dice=()=>1+Math.floor(Math.random()*6);
-let s,selected,eventTimer;
+let s,selected,eventTimer,showGermanPosition=false;
 function reset(){
  clearInterval(eventTimer);for(const id of ['actionDialog','endDialog'])if($(id).open)$(id).close();
  s={turn:1,lastConvoyRaid:null,plannedConvoy:false,phase:'setup',pos:null,ge:4,gv:0,bv:0,trail:[],voyage:[],moves:[],seen:null,tracked:[],enabled:[],moved:[],scanned:[],air:[],log:[],fleet:seeds.map(([name,a,d,v,h,where],id)=>({name,a,d,v,h,max:h,where,id}))};
- selected=null;render();
+ selected=null;showGermanPosition=false;render();
 }
 function log(...event){s.log.unshift({turn:s.turn,event});s.voyage.at(-1)?.events.push(event)}
 function startAI(){
@@ -539,6 +539,9 @@ function render(){
  for(const n of document.querySelectorAll('[data-text]'))n.textContent=tr(n.dataset.text);
  document.documentElement.lang=locale;document.title=tr('bisTitle');
  $('language').setAttribute('aria-label',tr('language'));
+ const inspect=$('inspectGerman');inspect.disabled=!s.pos;
+ inspect.setAttribute('aria-pressed',String(showGermanPosition));
+ inspect.textContent=tr('inspect')+' · '+tr(showGermanPosition?'on':'off');
  $('chart').alt=tr('map');$('ruleSheet').alt=tr('rules');$('endRoute').setAttribute('aria-label',tr('bisVoyage'));
  $('turn').textContent=tr('turn',s.turn)+' / 18';$('phase').textContent=tr(phases[s.phase]);$('score').textContent=factionScore(s);$('hint').textContent=tr(s.winner||instructions[s.phase]);
  const buttons=$('actions');buttons.replaceChildren();
@@ -584,12 +587,12 @@ function render(){
    p.setAttribute('role','button');p.setAttribute('tabindex','0');p.setAttribute('aria-label',tr(s.phase==='search'?'hexSearch':'hexChoose',h));
    p.onclick=()=>clickHex(h);p.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();clickHex(h)}};
   }
-  const geSpot=s.seen;
-  if(geSpot===h)p.classList.add('contact');svg.append(p);
+  const geSpot=showGermanPosition?s.pos:s.seen;
+  if(s.seen===h)p.classList.add('contact');svg.append(p);
   const fleet=live().filter(f=>f.where===h);
   if(!fleet.length&&geSpot!==h)continue;
   const row=document.createElement('div');row.className='marker';row.classList.toggle('stack',fleet.length+(geSpot===h)>1);row.style.left=o.x/15.15+'%';row.style.top=o.y/9.24+'%';
-  if(geSpot===h){const im=document.createElement('img');im.className='counter';im.src=assets['GE'+s.ge]||assets.GE1;im.alt=tr('Bismarck');row.append(im)}
+  if(geSpot===h){const im=document.createElement('img');im.className='counter';im.src=assets['GE'+s.ge]||assets.GE1;im.alt=tr('Bismarck');im.title=tr('Bismarck')+' '+h;row.append(im)}
   for(const f of fleet.slice(0,4)){
    const b=button('',()=>{if(ok.has(h)&&(selected!==null||s.phase==='release'))clickHex(h);else if(s.phase==='setup'&&(f.id<2||f.name==='Dummy')||s.phase==='move'&&unlocked(f)&&!s.moved.includes(f.id)||canSearch(f))pick(f.id)});
    b.className='counter';
@@ -606,6 +609,7 @@ $('language').onchange=()=>{locale=$('language').value;try{localStorage.setItem(
 $('chart').src=assets.map;$('ruleSheet').src=assets.rules;
 $('help').onclick=()=>$('rules').showModal();$('closeRules').onclick=()=>$('rules').close();
 $('restart').onclick=()=>{if(confirm(tr('restartAsk')))reset()};
+$('inspectGerman').onclick=()=>{showGermanPosition=!showGermanPosition;render()};
 $('actionDialog').addEventListener('cancel',e=>e.preventDefault());
 $('endBack').onclick=()=>$('endDialog').close();$('endSave').onclick=saveVoyage;
 reset();
