@@ -521,13 +521,19 @@ function initShipLocations(){
   }
 }
 // ===== 連合の作戦（ユーザーの指示 2026-11-07。スティーブさんの案と、3600局の試し）=====
-//   ゲームの最初に1つ引き、その局はずっとその作戦。No-Med 70% / B3 15% / M5 15%
+//   対局開始時に、従来の配置とチャックさんの第1ターン配置を半々で選ぶ。
 //   NoMed: 地中海を使わない（General 誌の Allied No-Med）。マルタは空、全ターン地中海へ送らない。1ターン目は決め打ち
 //   B3   : 1〜2ターン目はバレンツ海へ出さない。マルタは今のまま
 //   M5   : マルタに速い艦（4-4-7、3-3-6×2、4-4-4×3、1-1-7×6、空母0-2-7）。1ターン目は決め打ち。
 //          地中海を強く取る作戦なので、地中海の艦隊は英国へ帰さず、多少不利でも毎ターン出撃する（holdMed。ユーザーの指示 2026-11-07）
 const ALLIED_OPENINGS = {
-  NoMed: { weight: 100, noMed: true, malta: [], t1: {
+  Chuck: { weight: 50, noMed: true, malta: [], t1: {
+    NorthAtlantic: ['Barham','Malaya','Glorious','Exeter'],
+    Barents: ['Hood','Renown','Repulse','ArkRoyal','Norfolk','Suffolk','Kent','Sussex'],
+    NorthSea: ['Nelson','Rodney','Valiant','Revenge','RoyalOak','RoyalSovereign','Eagle'],
+    SouthAtlantic: ['Warspite','QueenElizabeth','Ramillies','Resolution','Courageous','Devonshire','Cumberland','Dorsetshire'],
+  } },
+  NoMed: { weight: 50, noMed: true, malta: [], t1: {
     Barents: ['Hood','Renown','Repulse','Norfolk','Suffolk','Kent','Sussex','Devonshire','Cumberland','Dorsetshire','Exeter','Warspite','ArkRoyal','Courageous'],
     NorthSea: ['Nelson','Rodney','Valiant','QueenElizabeth','Glorious'],
     NorthAtlantic: ['Ramillies','Resolution','Revenge','Eagle'],
@@ -4815,18 +4821,23 @@ async function aiAlliedMove(bbTargetOverride){
   if(!simMode) placeAllShips();
 
   // === 新しい配分: 全艦の移動先を先に宣言 → まとめて移動・2エリア移動のダイス判定 ===
-  const deploy = planAlliedDeployment(aiLog);
-  {
-    const op = ALLIED_OPENINGS[alliedOpening];
-    aiLog.push(`連合の作戦: ${alliedOpening}`);
-    if(false && op && op.t1 && currentTurn === 1){ // 1ターン目の決め打ちは使わない（新しい配置。ユーザーの指示 2026-11-08）
-      for(const id in deploy.plan) delete deploy.plan[id];
-      for(const sea in op.t1) SHIPS.filter(s => s.country === 'UK' && op.t1[sea].includes(s.name) && s.location === 'England' && !s.movedThisTurn).forEach(s => { deploy.plan[s.id] = sea; });
-      deploy.maltaSortie = op.noMed ? [] : SHIPS.filter(s => s.country === 'UK' && s.location === 'Malta' && !s.sunk);
+  aiLog.push(`連合の作戦: ${alliedOpening}`);
+  let deploy;
+  if(currentTurn === 1 && alliedOpening === 'Chuck'){
+    const plan = {};
+    for(const [sea, names] of Object.entries(ALLIED_OPENINGS.Chuck.t1)){
+      for(const name of names){
+        const ship = SHIPS.find(s => s.name === name && s.side === 'allies' && s.location === 'England' &&
+          !s.sunk && !s.removed && !s.movedThisTurn && !(s.damage > 0));
+        if(!ship) continue;
+        const {seas, seas2} = getShipDests(ship, ship.location);
+        if(seas.includes(sea) || seas2.includes(sea)) plan[ship.id] = sea;
+      }
     }
+    deploy = {plan, maltaSortie: []};
+  } else {
+    deploy = planAlliedDeployment(aiLog);
   }
-  // 1・2ターン目は北大西洋へ1隻も出さない（1ターン目の決め打ちの配置も含む。ユーザーの指示 2026-11-08）
-  if(currentTurn <= 2) Object.keys(deploy.plan).forEach(id => { const x = SHIPS.find(y => y.id === id); if(deploy.plan[id] === 'NorthAtlantic' && x && x.type !== 'CONVOY') delete deploy.plan[id]; });
   for(const shipId in deploy.plan){
     const ship = SHIPS.find(s => s.id === shipId);
     if(!ship || ship.movedThisTurn) continue;
