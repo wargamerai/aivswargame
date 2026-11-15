@@ -161,6 +161,7 @@ function showInterimScreen(factionKey, won) {
 
   // 戦間処理ボタン
   html += '<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">';
+  html += '<button id="interim-save-report" style="background:#2266cc;color:#fff;border:1px solid #6af;border-radius:4px;padding:8px 16px;cursor:pointer;">レポートを保存</button>';
   html += '<button id="interim-done" style="background:#555;color:#fff;border:1px solid #777;border-radius:4px;padding:8px 16px;cursor:pointer;">次のシナリオへ</button>';
   html += '<button id="interim-reset" style="background:#a33;color:#fff;border:1px solid #f66;border-radius:4px;padding:8px 16px;cursor:pointer;">リセット</button>';
   html += '<button id="interim-export" style="background:#36a;color:#fff;border:1px solid #6af;border-radius:4px;padding:8px 16px;cursor:pointer;">書き出し</button>';
@@ -170,6 +171,7 @@ function showInterimScreen(factionKey, won) {
   html += '</div>';
   ov.innerHTML = html;
 
+  document.getElementById('interim-save-report').addEventListener('click', ufSaveReport);
   document.getElementById('interim-reset').addEventListener('click', () => {
     if (!confirm('全キャンペーン記録をリセットしますか?')) return;
     try { localStorage.removeItem(SAVE_KEY); } catch (e) {}

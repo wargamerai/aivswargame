@@ -203,6 +203,7 @@ function ufSaveReport() {
 /** ゲーム終了の画面（結果と「レポートを保存」） */
 function ufShowGameOver() {
   if (window.__HEADLESS) return;
+  if (state.isCampaign && document.getElementById('interim-overlay')?.style.display === 'flex') return;
   let el = document.getElementById('ufGameOver');
   if (!el) {
     el = document.createElement('div');
