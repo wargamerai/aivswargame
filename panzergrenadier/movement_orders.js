@@ -6,6 +6,7 @@ let pgOrderHex = null;
 let pgOrderUnit = null;
 const pgManualMoves = new Map();
 const pgManualMoveHistory = [];
+let pgAIMovePreview = null;
 let pgManualOrderPhase = null;
 
 function pgRenderManualMovement(side) {
@@ -109,6 +110,7 @@ function pgStartAIReview(side, run) {
   directFireState.defenderSide = side === 'allied' ? 'german' : 'allied';
   const showReview = () => new Promise(resolve => {
     review.stage = 'review';
+    pgAIMovePreview = null;
     review.shown = true;
     for (const [unit, origin] of review.origins) {
       if (pgOnMap(unit) && unit.hexId !== origin.hexId) unit.moveComplete = true;
@@ -122,7 +124,7 @@ function pgStartAIReview(side, run) {
   });
   pgMovementOrders(side, async () => {
     review.stage = 'ai';
-    document.getElementById('phaseContent').textContent = 'AIが移動を処理しています。';
+    document.getElementById('phaseContent').textContent = 'AIが移動中…';
     for (const unit of testUnits) {
       if (unit.side === side && pgOnMap(unit) && unit.move > 0) {
         const {col, row, x, y, hexId, status, moveComplete, marchMode, cautious} = unit;
@@ -267,67 +269,134 @@ function pgUndoLastManualMove() {
   pgReturnMovement(pgReturnEntries(last ? [...last.records.keys()] : []));
 }
 
-function pgHumanChoosesRearStopFire(movingSide) {
-  return pgAIReview?.stage === 'ai' && G.gameMode === 'pvai' &&
-    PHASES[G.phase]?.id === 'defMove' && movingSide !== G.playerSide;
+function pgReviewAIReactions(movingSide) {
+  return pgAIReview?.stage === 'ai' && G.gameMode === 'pvai' && movingSide !== G.playerSide;
 }
 
-async function pgPlayerRearStopFire(moving, threats) {
-  const lead = moving.find(unit => pgOnMap(unit) && !STACK_EXEMPT_TYPES.includes(unit.type));
-  if (!lead) return false;
-  const firepower = (shooter, target) => ['T', 'AC'].includes(target.type) ? shooter.fpAT : shooter.fpSoft;
-  const targets = () => moving.filter(unit => pgOnMap(unit) && !STACK_EXEMPT_TYPES.includes(unit.type));
-  const stacks = new Map();
-  for (const unit of threats) {
-    if (unit.side !== G.playerSide || unit.reconDone || !targets().some(target => firepower(unit, target) > 0)) continue;
-    if (!stacks.has(unit.hexId)) stacks.set(unit.hexId, []);
-    stacks.get(unit.hexId).push(unit);
-  }
-  if (!stacks.size) return false;
-
-  const fire = await new Promise(resolve => {
+function pgAskReaction(title, detail, groups, accept, decline, revise = null) {
+  return new Promise(resolve => {
     const panel = document.createElement('section');
     panel.className = 'pg-stop-choice';
-    const title = document.createElement('strong');
-    title.textContent = 'ストップ射撃';
-    const detail = document.createElement('div');
-    detail.textContent = `敵の移動先 ${lead.hexId}。射撃するスタックを選んでください。`;
-    panel.append(title, detail);
-    const choices = [];
-    for (const [hex, shooters] of stacks) {
+    const state = document.createElement('strong');
+    state.textContent = 'AIの移動を一時停止';
+    const prompt = document.createElement('div');
+    prompt.textContent = `${title} · ${detail}`;
+    panel.append(state, prompt);
+    const choices = groups.map(shooters => {
       const label = document.createElement('label');
       label.className = 'pg-stop-option';
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.checked = true;
-      label.append(input, `${hex} · ${shooters.map(unit => unit.name).join('、')}`);
-      choices.push({input, shooters});
+      const units = document.createElement('span');
+      units.className = 'pg-reaction-units';
+      units.append(shooters[0].hexId, ...shooters.map(pgUnitLabel));
+      label.append(input, units);
       panel.append(label);
-    }
+      return {input, shooters};
+    });
     const controls = document.createElement('div');
     controls.className = 'phase-btn-row';
-    const shoot = document.createElement('button');
-    shoot.type = 'button';
-    shoot.className = 'dice-btn';
-    shoot.textContent = '射撃する';
-    const skip = document.createElement('button');
-    skip.type = 'button';
-    skip.className = 'btn-sm';
-    skip.textContent = '射撃せず移動続行';
-    const choose = groups => {
-      shoot.disabled = skip.disabled = true;
-      document.getElementById('phaseContent').textContent = 'AIが移動を処理しています。';
-      resolve(groups);
+    const add = (name, cssClass, value) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = cssClass;
+      button.textContent = name;
+      button.onclick = () => {
+        document.getElementById('phaseContent').textContent = 'AIが移動中…';
+        resolve(value());
+      };
+      controls.append(button);
+      return button;
     };
-    shoot.onclick = () => choose(choices.filter(choice => choice.input.checked).map(choice => choice.shooters));
-    skip.onclick = () => choose([]);
+    const shoot = add(accept, 'dice-btn', () => choices.filter(choice => choice.input.checked).map(choice => choice.shooters));
+    add(decline, 'btn-sm', () => []);
+    if (revise) add('移動を修正', 'btn-sm', () => revise);
     panel.onchange = () => { shoot.disabled = !choices.some(choice => choice.input.checked); };
-    controls.append(shoot, skip);
     panel.append(controls);
     document.getElementById('phaseContent').replaceChildren(panel);
     drawMap();
   });
+}
+
+function pgChooseAIMoveCorrection(moving, proposed, mp, formation) {
+  const lead = moving[0];
+  const choices = new Map();
+  for (const pos of getHexNeighbors(lead.col, lead.row)) {
+    if (pos.col < 0 || pos.row < 0 || pos.col >= MAP_CONFIG.cols || pos.row >= MAP_CONFIG.rows) continue;
+    if (!pgCanEnter(moving, toHexId(pos.col, pos.row))) continue;
+    const cost = getMoveCost(lead, lead.col, lead.row, pos.col, pos.row, formation).cost;
+    if (Number.isFinite(cost) && cost <= mp) choices.set(`${pos.col},${pos.row}`, pos);
+  }
+  return new Promise(resolve => {
+    const panel = document.createElement('section');
+    panel.className = 'pg-stop-choice';
+    const text = document.createElement('div');
+    text.textContent = 'AIの移動を一時停止 · 青枠のヘクスを選ぶか、現在地で止めます。';
+    panel.append(text);
+    const choose = pos => {
+      pgAIMovePreview = null;
+      document.getElementById('phaseContent').textContent = 'AIが移動中…';
+      resolve(pos);
+    };
+    for (const [label, pos] of [['現在地で止める', null], ['修正を取りやめる', undefined]]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn-sm';
+      button.textContent = label;
+      button.onclick = () => choose(pos);
+      panel.append(button);
+    }
+    pgAIMovePreview = {destination: proposed, choices, choose};
+    document.getElementById('phaseContent').replaceChildren(panel);
+    drawMap();
+  });
+}
+
+function pgStopFirePower(shooter, target) {
+  return ['T', 'AC'].includes(target.type) ? shooter.fpAT : shooter.fpSoft;
+}
+
+async function pgReviewAIMoveStep(moving, proposed, mp, formation) {
+  const units = moving.filter(pgOnMap);
+  if (!units.length || !pgCanEnter(units, toHexId(proposed.col, proposed.row))) {
+    return {destination: proposed, fire: [], changed: false};
+  }
+  const targets = units.filter(unit => !STACK_EXEMPT_TYPES.includes(unit.type));
+  const revise = Symbol('revise');
+  let destination = proposed;
+  while (destination) {
+    const changed = destination.col !== proposed.col || destination.row !== proposed.row;
+    const stacks = new Map();
+    for (const unit of checkStopFireAt(destination.col, destination.row, units[0].side)) {
+      if (unit.side !== G.playerSide || unit.reconDone || !targets.some(target => pgStopFirePower(unit, target) > 0)) continue;
+      if (!stacks.has(unit.hexId)) stacks.set(unit.hexId, []);
+      stacks.get(unit.hexId).push(unit);
+    }
+    if (!stacks.size) return {destination, fire: [], changed};
+    pgAIMovePreview = {destination};
+    const hex = toHexId(destination.col, destination.row);
+    const fire = await pgAskReaction('ストップ射撃', `AIの移動予定先 ${hex}`, [...stacks.values()],
+      '射撃する', '射撃せず移動続行', revise);
+    pgAIMovePreview = null;
+    if (fire !== revise) return {destination, fire, changed};
+    const replacement = await pgChooseAIMoveCorrection(units, destination, mp, formation);
+    if (replacement !== undefined) destination = replacement;
+  }
+  return {destination: null, fire: [], changed: true};
+}
+
+function pgPickAIMoveCorrection(col, row) {
+  const preview = pgAIMovePreview;
+  if (!preview?.choices) return false;
+  const pos = preview.choices.get(`${col},${row}`);
+  if (pos) preview.choose(pos);
+  return true;
+}
+
+async function pgResolveAIStopFire(moving, fire) {
   if (!fire.length) return false;
+  const targets = () => moving.filter(unit => pgOnMap(unit) && !STACK_EXEMPT_TYPES.includes(unit.type));
 
   const rows = [];
   const fired = new Set();
@@ -348,20 +417,32 @@ async function pgPlayerRearStopFire(moving, threats) {
     const shots = isSurpriseAttack(chosen[0].hexId, chosen[0].side) ? 2 : 1;
     for (let shot = 0; shot < shots; shot++) {
       const available = chosen.filter(unit => unit.status === 'ok' && !unit.outOfAmmo);
-      const target = targets().find(unit => available.some(shooter => firepower(shooter, unit) > 0));
+      const target = targets().find(unit => available.some(shooter => pgStopFirePower(shooter, unit) > 0));
       if (!target) break;
       recordShot(shots === 2 ? `サプライズ ${shot + 1}回目` : 'ストップ射撃',
-        available.filter(shooter => firepower(shooter, target) > 0), target);
+        available.filter(shooter => pgStopFirePower(shooter, target) > 0), target);
     }
   }
+  if (!rows.length) return false;
+  const site = moving[0].hexId;
+  drawMap();
+  await new Promise(resolve => showDiceOverlay('ストップ射撃', site, rows, resolve));
+
   const counterTarget = [...fired].find(unit => pgOnMap(unit) &&
     targets().some(shooter => canStationaryCounter(shooter, unit)));
   if (counterTarget) {
-    recordShot('反撃', targets().filter(unit => canStationaryCounter(unit, counterTarget)), counterTarget, true);
+    const eligible = targets().filter(unit => canStationaryCounter(unit, counterTarget));
+    const choice = await pgAskReaction('反撃', `目標 ${counterTarget.hexId} · ${counterTarget.name}`,
+      [eligible], '反撃する', '反撃しない');
+    if (choice.length) {
+      rows.length = 0;
+      recordShot('反撃', choice[0], counterTarget, true);
+      if (rows.length) {
+        drawMap();
+        await new Promise(resolve => showDiceOverlay('反撃', site, rows, resolve));
+      }
+    }
   }
-  if (!rows.length) return false;
-  drawMap();
-  await new Promise(resolve => showDiceOverlay('ストップ射撃', lead.hexId, rows, resolve));
   return true;
 }
 
@@ -458,6 +539,12 @@ function pgMovementPanel() {
     const status = order ? (order.type === 'hold' ? '死守先 ' : '予約先 ') + order.target : '';
     const holding = order?.type === 'hold' && order.target === unit.hexId;
     if (units.length === 1) section.append(pgUnitLabel(unit));
+    if (pgUnitHasFired(unit)) {
+      const fired = document.createElement('span');
+      fired.className = 'pg-action-state pg-fired';
+      fired.textContent = '射撃済';
+      section.append(fired);
+    }
     text(section, [record && record.origin.hexId !== unit.hexId ? `${record.origin.hexId} → ${unit.hexId}` : unit.hexId, holding ? '死守中' : status].filter(Boolean).join(' · '));
     if (record) {
       const allowed = pgCanReturn(unit, record);

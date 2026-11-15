@@ -29,6 +29,12 @@ function pgUnitLabel(unit) {
   return label;
 }
 
+function pgUnitHasFired(unit) {
+  const uid = unit.id || unit.name;
+  return directFireState.firedUnits.has(uid) || directFireState.counterFiredUnits.has(uid) ||
+    unit._counterFired || (unit.firedThisTurn && !unit.reconDone);
+}
+
 function renderReinforcementPhase(undeployed) {
   const c = document.getElementById('phaseContent');
   reinforcementState.undeployed = undeployed;
@@ -619,7 +625,12 @@ function fireFlowComplete() {
 }
 
 function fireFlowCancel() {
+  const type = _fireFlowState?.type;
   _fireFlowState = null;
+  if (moveState.stopFirePending && (type === 'stop' || type === 'counter')) {
+    skipCounterAttack();
+    return;
+  }
   renderMoveFirePhase();
   drawMap();
 }
@@ -922,6 +933,10 @@ function calcFirePreview(shooters, target) {
   };
 }
 
+function pgMayInitiateDirectFire() {
+  return PHASES[G.phase]?.id === 'moveFire';
+}
+
 function renderMoveFirePhase() {
   const c = document.getElementById('phaseContent');
   const df = directFireState;
@@ -955,6 +970,7 @@ function renderMoveFirePhase() {
         html += `<div style="margin-top:4px;display:flex;gap:4px;">`;
         html += `<button class="btn-sm" style="background:var(--pg-red-bg);" onclick="resolveStopFire()">ストップ射撃を実行</button>`;
         html += `<button class="btn-sm" onclick="skipStopFire()">射撃なし（移動続行）</button>`;
+        if (!ms._stopFired && !pgOrderRun) html += '<button class="btn-sm" onclick="cancelMove()">移動を取り消す</button>';
         html += `</div></div>`;
       }
 
@@ -1039,9 +1055,7 @@ function renderMoveFirePhase() {
         html += pgUnitLabel(u).outerHTML;
         if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
         html += `<span style="color:var(--pg-muted);font-size:0.75em;">fp${u.fpAT}/${u.fpSoft} R${u.range}</span>`;
-        const fired = directFireState.firedUnits.has(uid) || directFireState.counterFiredUnits.has(uid) ||
-          u._counterFired || (u.firedThisTurn && !u.reconDone);
-        if (fired) html += '<span class="pg-action-state pg-fired">射撃済</span>';
+        if (pgUnitHasFired(u)) html += '<span class="pg-action-state pg-fired">射撃済</span>';
         if (u.reconDone) html += '<span class="pg-action-state">偵察済</span>';
         if (u.moveComplete) html += '<span class="pg-action-state">移動済</span>';
         if (!u.moveComplete && !u.pgMovementOrder) {
@@ -1070,7 +1084,7 @@ function renderMoveFirePhase() {
     if (canMove) {
       html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;" onclick="startStackMove()">スタック移動</button>`;
     }
-    if (canFire && df.defHexId) {
+    if (pgMayInitiateDirectFire() && canFire && df.defHexId) {
       const defFort = getActiveFortification(df.defHexId);
       if (defFort) {
         // 陣地攻撃ボタン（装甲火力で陣地を攻撃）
@@ -1120,6 +1134,7 @@ function renderMoveFirePhase() {
       html += `<span style="color:var(--pg-ink);">${u.name}</span>`;
       if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
       html += `<span style="color:var(--pg-muted);font-size:0.8em;">防御${u.def}</span>`;
+      if (pgUnitHasFired(u)) html += '<span class="pg-action-state pg-fired">射撃済</span>';
       html += `</div>`;
     });
     html += `</div>`;
@@ -1131,7 +1146,7 @@ function renderMoveFirePhase() {
   const atkChecked = testUnits.filter(u => checkState.atk.has(u.id || u.name) && u.status !== 'eliminated');
   const defChecked = testUnits.filter(u => checkState.def.has(u.id || u.name) && u.status !== 'eliminated');
 
-  if (atkChecked.length > 0 && defChecked.length > 0) {
+  if (pgMayInitiateDirectFire() && atkChecked.length > 0 && defChecked.length > 0) {
     html += `<div style="margin:8px 0;padding:8px;background:var(--pg-green-bg);border:1px solid #4a4;border-radius:4px;">`;
     html += `<div style="color:var(--pg-green);font-weight:bold;font-size:0.85em;margin-bottom:4px;">射撃予測</div>`;
 
@@ -1165,6 +1180,7 @@ function renderMoveFirePhase() {
 // チェック済みユニットで射撃実行
 // 陣地攻撃実行
 function executeCheckedFortFire() {
+  if (!pgMayInitiateDirectFire()) return;
   const df = directFireState;
   const shooters = testUnits.filter(u => checkState.atk.has(u.id || u.name) && !u.firedThisTurn && u.status !== 'eliminated' && (u.fpAT || 0) > 0);
   if (shooters.length === 0 || !df.defHexId) return;
@@ -1200,6 +1216,7 @@ function executeCheckedFortFire() {
 }
 
 function executeCheckedFire() {
+  if (!pgMayInitiateDirectFire()) return;
   const df = directFireState;
   const shooters = testUnits.filter(u => checkState.atk.has(u.id || u.name) && canDirectFire(u).can);
   const targets = testUnits.filter(u => checkState.def.has(u.id || u.name) && u.status !== 'eliminated');
@@ -1262,6 +1279,7 @@ function executeCheckedFire() {
 
 // 射撃ユニット選択
 function onMoveFireUnitClick(uid) {
+  if (!pgMayInitiateDirectFire()) return;
   const df = directFireState;
   // 移動中や反撃中でなければ射撃モードに切り替え
   if (df.mode === 'moving' || df.mode === 'counterAttack') return;
@@ -1302,6 +1320,7 @@ function onMoveFireUnitClick(uid) {
 
 // マップクリック（移動射撃フェイズ）
 function onMoveFireMapClick(col, row, cmdKey, hitUnit) {
+  if (pgPickAIMoveCorrection(col, row)) return;
   if (pgAIReview?.stage === 'ai' || _pendingReconState) return;
   if (pgSelectOrderHex(col, row)) return;
   if (directFireState.mode !== 'moving') {
@@ -1385,6 +1404,7 @@ function onMoveFireMapClick(col, row, cmdKey, hitUnit) {
 }
 
 function startTargetSelect() {
+  if (!pgMayInitiateDirectFire()) return;
   directFireState.mode = 'selectTarget';
   renderMoveFirePhase();
 }
@@ -1471,6 +1491,7 @@ function resolveStopFire() {
     return;
   }
 
+  ms._stopFired = true;
   if (ms.pgMoveRecord) ms.pgMoveRecord.blocked = true;
   const shooterHexId = firingUnits[0].hexId || toHexId(firingUnits[0].col, firingUnits[0].row);
 
@@ -1549,13 +1570,14 @@ function resolveStopFire() {
     }
 
     showDiceOverlay('サプライズ・アタック', `${nameStr} → ${targetUnit.name}`, overlayRows, function() {
-      afterStopFire(shooterHexId, enemyStack);
+      afterStopFire(shooterHexId, firingUnits);
     });
   } else {
     // 通常ストップ射撃: 1回
     showFireFlow('stop', firingUnits, targetUnit, function(result) {
+      if (!result) { proceedStopFire(); return; }
       addLog('stop', `ストップ射撃: ${nameStr} (fp${totalFP}) → ${targetUnit.name}`);
-      afterStopFire(shooterHexId, enemyStack);
+      afterStopFire(shooterHexId, firingUnits);
     });
   }
 }
@@ -1564,7 +1586,8 @@ function afterStopFire(shooterHexId, enemyStack) {
   const ms = moveState;
   // 射撃したらダミーを全除去
   removeAllDummies(shooterHexId);
-  // 反撃選択へ
+  // 実際に射撃した駒を反撃候補にする。
+  ms._lastStopFireStack = enemyStack;
   ms._lastStopFireResult = {};
   ms._waitingCounterAttack = true;
   renderStopFireResult();
@@ -1600,13 +1623,7 @@ function renderStopFireResult() {
   } else {
     // 射程内に敵がいるかチェック
     const aliveEnemies = enemyStack.filter(u => u.status !== 'eliminated');
-    const canCounter = aliveEnemies.length > 0 && aliveMoving.some(u => {
-      if (u.status !== 'ok' || u.type === 'leader' || u.type === 'dummy') return false;
-      const dist = hexDistance(u.col, u.row, aliveEnemies[0].col, aliveEnemies[0].row);
-      const isArmored = aliveEnemies[0].type === 'T' || aliveEnemies[0].type === 'AC';
-      const fp = isArmored ? (u.fpAT || 0) : (u.fpSoft || 0);
-      return fp > 0 && dist <= (u.range || 1) && dist > 0;
-    });
+    const canCounter = aliveMoving.some(unit => aliveEnemies.some(target => canStationaryCounter(unit, target)));
 
     if (canCounter) {
       html += `<div style="margin-top:8px;border-top:1px solid var(--pg-line);padding-top:6px;">`;
@@ -1758,7 +1775,7 @@ function executeCounterAttack() {
   const friendlies = ms._counterAttackFriendlies;
   const selUnits = ms._counterSelectedUnits;
 
-  const firingUnits = friendlies.filter(u => selUnits.has(u.id || u.name));
+  const firingUnits = friendlies.filter(u => targetEnemy && selUnits.has(u.id || u.name) && canStationaryCounter(u, targetEnemy));
   if (firingUnits.length === 0 || !targetEnemy) { skipCounterAttack(); return; }
 
   const dist = hexDistance(firingUnits[0].col, firingUnits[0].row, targetEnemy.col, targetEnemy.row);
@@ -1856,7 +1873,9 @@ function proceedStopFire() {
     return;
   }
   if (ms.stopFireStacks && ms.stopFireStacks.length > 0) {
-    resolveStopFire();
+    ms.stopFireEnemies = ms.stopFireStacks.flat();
+    renderMoveFirePhase();
+    drawMap();
   } else {
     finishStopFire();
   }
@@ -1910,11 +1929,7 @@ function finishStopFire() {
 
 // ストップ射撃スキップ（移動続行）
 function skipStopFire() {
-  moveState.stopFirePending = false;
-  moveState.stopFireEnemies = [];
-  if (pgOrderRun) { confirmMove(); return; }
-  renderMoveFirePhase();
-  drawMap();
+  finishStopFire();
 }
 
 // オーバーラン実行 (12-5)
@@ -2514,7 +2529,6 @@ function moveToHex(col, row) {
     const stackList = Object.values(enemyStacks);
 
     ms.stopFirePending = true;
-    ms._stopFired = true; // ストップ射撃を受けたらキャンセル不可
     ms.stopFireStacks = stackList;
     ms.stopFireEnemies = threateningEnemies;
     addLog('move', `ストップ射撃警告: ${stackList.length}スタック(${threateningEnemies.length}ユニット)の射程内に進入`);

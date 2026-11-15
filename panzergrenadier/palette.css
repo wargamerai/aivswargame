@@ -78,3 +78,4 @@
 .pg-move-legend span::before { content: ''; display: inline-block; width: 1em; height: .75em; margin-right: 4px; border: 2px solid #1759a6; background: #a6ddff; }
 .pg-move-legend span + span::before { border-color: #91651b; background: #ffdc78; }
 .pg-ai-move-complete { display: block; color: var(--pg-green); font-size: 1rem; }
+.pg-reaction-units { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }

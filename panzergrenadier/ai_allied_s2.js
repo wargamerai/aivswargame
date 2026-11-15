@@ -423,8 +423,13 @@ async function ukAI_moveAllStacks(canFire) {
     const trail = [{ col: movableStack[0].col, row: movableStack[0].row }];
 
     while (mp > 0) {
-      const best = ukAI_getBestNeighbor(movableStack, mp);
+      let best = ukAI_getBestNeighbor(movableStack, mp);
       if (!best) break; // 移動しない方が良い
+      const review = typeof pgReviewAIReactions === 'function' && pgReviewAIReactions('allied') ? await pgReviewAIMoveStep(movableStack, best, mp, 'combat') : null;
+      if (review) {
+        if (!review.destination) break;
+        best = review.destination;
+      }
 
       const hexId = toHexId(best.col, best.row);
       const mc = getMoveCost(movableStack[0], movableStack[0].col, movableStack[0].row, best.col, best.row, 'combat');
@@ -469,7 +474,8 @@ async function ukAI_moveAllStacks(canFire) {
         return hasLOS(e.col, e.row, best.col, best.row);
       });
 
-      if (stopShooters.length > 0) {
+      const reviewedFire = review && await pgResolveAIStopFire(livingStack, review.fire);
+      if (!review && stopShooters.length > 0) {
         // ストップ射撃処理
         const sortedTargets = [...livingStack].sort((a, b) => (a.def || 5) - (b.def || 5));
         const firedThisStep = new Set();
@@ -543,7 +549,9 @@ async function ukAI_moveAllStacks(canFire) {
             }
           }
         }
+      }
 
+      if (reviewedFire || (!review && stopShooters.length > 0)) {
         // D/DDユニット離脱
         const damaged = movableStack.filter(u => u.status === 'd' || u.status === 'dd');
         if (damaged.length > 0) {
@@ -554,6 +562,7 @@ async function ukAI_moveAllStacks(canFire) {
         }
         if (movableStack.every(u => u.status === 'eliminated') || movableStack.length === 0) break;
       }
+      if (review?.changed) break;
     }
 
     if (trail.length > 1) {

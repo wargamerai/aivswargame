@@ -1005,6 +1005,7 @@ async function aiMoveAllStacks(side, canFire) {
   const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
   const params = SIDE_PARAMS[side];
   const enemySide = side === 'german' ? 'allied' : 'german';
+  const interactive = typeof pgReviewAIReactions === 'function' && pgReviewAIReactions(side);
 
   // Blackboard構築
   AI_CONTROLLER.buildBoard(side);
@@ -1058,7 +1059,12 @@ async function aiMoveAllStacks(side, canFire) {
       }
 
       if (path && path.length > 0) {
-        for (const step of path) {
+        for (let step of path) {
+          const review = interactive ? await pgReviewAIMoveStep(movableStack, step, mp, 'combat') : null;
+          if (review) {
+            if (!review.destination) break;
+            step = review.destination;
+          }
           const hexId = toHexId(step.col, step.row);
           const mc = getMoveCost(movableStack[0], movableStack[0].col, movableStack[0].row, step.col, step.row, 'combat');
           if (mc.cost === Infinity) break;
@@ -1079,8 +1085,10 @@ async function aiMoveAllStacks(side, canFire) {
           movableStack.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
 
           // ストップ射撃処理
-          const result = _handleStopFire(movableStack, step, side, canFire);
-          movableStack = result.stack;
+          if (review) {
+            if (await pgResolveAIStopFire(movableStack, review.fire)) movableStack = movableStack.filter(unit => unit.status === 'ok');
+          } else movableStack = _handleStopFire(movableStack, step, side, canFire).stack;
+          if (review?.changed) break;
           if (movableStack.length === 0 || movableStack.every(u => u.status === 'eliminated')) break;
         }
       }
@@ -1093,6 +1101,11 @@ async function aiMoveAllStacks(side, canFire) {
           best = _findForcedDisperse(movableStack, side);
         }
         if (!best) break;
+        const review = interactive ? await pgReviewAIMoveStep(movableStack, best, mp, 'combat') : null;
+        if (review) {
+          if (!review.destination) break;
+          best = review.destination;
+        }
 
         const hexId = toHexId(best.col, best.row);
         const mc = getMoveCost(movableStack[0], movableStack[0].col, movableStack[0].row, best.col, best.row, 'combat');
@@ -1114,8 +1127,10 @@ async function aiMoveAllStacks(side, canFire) {
         movableStack.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
 
         // ストップ射撃
-        const result = _handleStopFire(movableStack, best, side, canFire);
-        movableStack = result.stack;
+        if (review) {
+          if (await pgResolveAIStopFire(movableStack, review.fire)) movableStack = movableStack.filter(unit => unit.status === 'ok');
+        } else movableStack = _handleStopFire(movableStack, best, side, canFire).stack;
+        if (review?.changed) break;
         if (movableStack.length === 0 || movableStack.every(u => u.status === 'eliminated')) break;
       }
     }

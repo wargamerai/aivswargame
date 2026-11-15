@@ -2044,6 +2044,11 @@ async function aiAutoMoveFire(reviewMovement = null) {
         pathIdx++;
       }
       if (!best) break;
+      const review = pgReviewAIReactions(atkSide) ? await pgReviewAIMoveStep(aliveStack, best, mp, 'combat') : null;
+      if (review) {
+        if (!review.destination) break;
+        best = review.destination;
+      }
 
       const hexId = toHexId(best.col, best.row);
       const mc = getMoveCost(aliveStack[0], aliveStack[0].col, aliveStack[0].row, best.col, best.row, 'combat');
@@ -2114,7 +2119,8 @@ async function aiAutoMoveFire(reviewMovement = null) {
         return hasLOS(e.col, e.row, best.col, best.row);
       });
 
-      if (stopShooters.length > 0) {
+      if (review) await pgResolveAIStopFire(livingStack, review.fire);
+      else if (stopShooters.length > 0) {
         // ストップ射撃実行 → 射撃側ダミー除去
         const sfHexes = new Set(stopShooters.map(e => e.hexId || toHexId(e.col, e.row)));
         sfHexes.forEach(h => {
@@ -2202,7 +2208,7 @@ async function aiAutoMoveFire(reviewMovement = null) {
           }
         }
       }
-      if (aliveStack.every(u => u.status === 'eliminated') || aliveStack.length === 0) break;
+      if (review?.changed || aliveStack.every(u => u.status === 'eliminated') || aliveStack.length === 0) break;
     }
 
     // 移動軌跡を保存
@@ -2677,7 +2683,9 @@ async function aiAutoDefMove() {
       const alive = stack.filter(u => u.status !== 'eliminated');
       if (alive.length === 0) continue;
       // 移動開始 → ダミー除去（一括）
-      onUnitAction(alive[0], alive);
+      const interactive = pgReviewAIReactions(defSide);
+      let hasMoved = false;
+      if (!interactive) onUnitAction(alive[0], alive);
       const minMove = Math.min(...alive.map(u => u.move != null ? u.move : 1));
       let mp = minMove;
       // ドイツ: BFSで最適経路を計算
@@ -2690,6 +2698,15 @@ async function aiAutoDefMove() {
           defPathIdx++;
         }
         if (!best) break;
+        const review = interactive ? await pgReviewAIMoveStep(alive, best, mp, 'combat') : null;
+        if (review) {
+          if (!review.destination) break;
+          best = review.destination;
+          if (!hasMoved) {
+            onUnitAction(alive[0], alive);
+            hasMoved = true;
+          }
+        }
         const hexId = toHexId(best.col, best.row);
         const mc = getMoveCost(alive[0], alive[0].col, alive[0].row, best.col, best.row, 'combat');
         if (mc.cost === Infinity) break;
@@ -2708,8 +2725,9 @@ async function aiAutoDefMove() {
 
         // ストップ射撃チェック（敵の射程内に入ったか）
         const defStopThreats = checkStopFireAt(best.col, best.row, alive[0].side);
-        if (pgHumanChoosesRearStopFire(alive[0].side)) {
-          if (await pgPlayerRearStopFire(alive, defStopThreats)) break;
+        if (review) {
+          const fired = await pgResolveAIStopFire(alive, review.fire);
+          if (fired || review.changed) break;
           continue;
         }
         // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
@@ -2891,7 +2909,12 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
       const curRow = alive[0].row;
       if (curCol === targetCol && curRow === targetRow) break;
 
-      const next = path[pathIdx];
+      let next = path[pathIdx];
+      const review = pgReviewAIReactions(alive[0].side) ? await pgReviewAIMoveStep(alive, next, mp, formation) : null;
+      if (review) {
+        if (!review.destination) break;
+        next = review.destination;
+      }
       const mc = getMoveCost(alive[0], curCol, curRow, next.col, next.row, formation);
       if (mc.cost === Infinity) break;
       // 最初の1ヘクスはコスト超過でも進入可（ストップ射撃後を除く）
@@ -2931,8 +2954,9 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
       if (alive.every(u => u.status === 'eliminated')) break;
       // ストップ射撃チェック
       const threats = checkStopFireAt(next.col, next.row, alive[0].side);
-      if (pgHumanChoosesRearStopFire(alive[0].side)) {
-        if (await pgPlayerRearStopFire(alive, threats)) break;
+      if (review) {
+        const fired = await pgResolveAIStopFire(alive, review.fire);
+        if (fired || review.changed) break;
         continue;
       }
       // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
@@ -4284,6 +4308,15 @@ function drawMap() {
     pgDrawMoveHex(ctx, col, row, hexSize, true);
   }
 
+  if (pgAIMovePreview) {
+    if (pgAIMovePreview.choices) {
+      for (const {col, row} of pgAIMovePreview.choices.values()) pgDrawMoveHex(ctx, col, row, hexSize, false);
+    } else {
+      const {col, row} = pgAIMovePreview.destination;
+      pgDrawMoveHex(ctx, col, row, hexSize, true);
+    }
+  }
+
   // ユニット描画（カスケード方式：右上ずらし、起点を枚数に応じて左下に）
   const unitSize = hexSize * 0.9;
   const cascadeOffX = unitSize * 0.18;  // 右方向ずらし量
@@ -4479,7 +4512,7 @@ function drawMap() {
   // 射程・視認距離の反転表示（3段階: 射程内=クリア, 視認内=薄暗, 範囲外=濃暗）
   const hasFireRange = typeof fireRangeHexes !== 'undefined' && Object.keys(fireRangeHexes).length > 0;
   const hasFireVision = typeof fireVisionHexes !== 'undefined' && Object.keys(fireVisionHexes).length > 0;
-  if (!moveState.movingUnit && (hasFireRange || hasFireVision)) {
+  if (!moveState.movingUnit && !pgAIMovePreview && (hasFireRange || hasFireVision)) {
     for (let r = 0; r < MAP_CONFIG.rows; r++) {
       for (let c = 0; c < MAP_CONFIG.cols; c++) {
         const key = `${c},${r}`;
