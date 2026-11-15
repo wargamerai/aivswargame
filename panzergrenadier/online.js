@@ -63,7 +63,7 @@ function pgOnlineStatus(actor, connected, notice = '') {
   box.textContent = notice || (!connected ? '接続を待っています' :
     actor === pgOnlineSeat ? `${pgSideName(pgOnlineSeat)}・あなたの操作` :
     `${pgSideName(pgOnlineSeat)}・相手の操作を待っています`);
-  box.style.color = connected && actor === pgOnlineSeat ? '#ffdf74' : '#ddd';
+  box.style.color = connected && actor === pgOnlineSeat ? 'var(--pg-green)' : 'var(--pg-ink)';
   document.getElementById('nextPhaseBtn').disabled = !connected || actor !== pgOnlineSeat;
 }
 
@@ -76,7 +76,7 @@ function pgOnlineClean(node) {
       continue;
     }
     for (const attr of [...child.attributes]) {
-      if (['class', 'style', 'type', 'value', 'checked', 'disabled', 'selected', 'alt', 'data-pg-command'].includes(attr.name)) continue;
+      if (['class', 'style', 'type', 'value', 'checked', 'disabled', 'selected', 'alt', 'aria-pressed', 'data-pg-command'].includes(attr.name)) continue;
       if (attr.name === 'src' && child.tagName === 'IMG' && /^images\/(?!.*\.\.)[^\\?#]+$/u.test(attr.value)) continue;
       child.removeAttribute(attr.name);
     }
@@ -404,9 +404,9 @@ async function pgOnlineLocalDescription(description) {
 function pgOnlineLobby() {
   const lobby = document.createElement('section');
   lobby.id = 'pgOnlineLobby';
-  lobby.style.cssText = 'position:fixed;inset:0;z-index:12000;background:#121924;display:grid;place-items:center;padding:16px;overflow:auto;color:#f5f1df';
+  lobby.style.cssText = 'position:fixed;inset:0;z-index:12000;background:var(--pg-panel);display:grid;place-items:center;padding:16px;overflow:auto;color:#f5f1df';
   const invite = new URLSearchParams(location.hash.slice(1)).get('invite');
-  lobby.innerHTML = `<div style="width:min(600px,100%);background:#202a36;border:1px solid #637683;border-radius:10px;padding:24px">
+  lobby.innerHTML = `<div style="width:min(600px,100%);background:var(--pg-blue-bg);border:1px solid #637683;border-radius:10px;padding:24px">
     <h2 style="margin-top:0">オンライン対戦</h2>
     <p>シナリオ ${SCENARIO.id}　${SCENARIO.name}</p>
     <p id="pgConnectionHelp">${invite ? '応答コードを作り、招待した人に送ってください。' : '陣営を選び、招待リンクを相手に送ってください。'}</p>
@@ -418,7 +418,7 @@ function pgOnlineLobby() {
     <label id="pgAnswerLabel" hidden style="display:none;margin-top:12px">相手から届いた応答コード
       <textarea id="pgAnswer" rows="3" style="display:block;width:100%"></textarea>
       <button id="pgFinishConnection" class="dice-btn">対戦を始める</button></label>
-    <p id="pgConnectionMessage" role="status"></p><a href="title.html" style="color:#aecee8">シナリオ選択に戻る</a>
+    <p id="pgConnectionMessage" role="status"></p><a href="title.html" style="color:var(--pg-blue)">シナリオ選択に戻る</a>
     </div>`;
   document.body.appendChild(lobby);
   const q = id => lobby.querySelector('#' + id);

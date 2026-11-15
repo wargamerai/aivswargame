@@ -77,21 +77,21 @@ function renderSupportPhase(activeSide) {
     html += `<div class="recovery-section"><h3>${sideNames[side]} 砲兵</h3>`;
 
     if (artillery.length === 0) {
-      html += '<div style="color:#888;font-size:0.8em;padding:4px;">砲兵ユニットなし</div>';
+      html += '<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">砲兵ユニットなし</div>';
     } else {
       artillery.forEach(u => {
         const selected = supportState.selectedArtillery.includes(u.name);
         const fired = u.firedThisTurn;
         const available = canIndirectFire(u);
         const hexId = toHexId(u.col, u.row);
-        const bgColor = selected ? '#445522' : fired ? '#333' : '#222';
-        html += `<div class="recovery-unit" style="background:${bgColor};cursor:${available?'pointer':'default'};" onclick="${available?`toggleArtillerySelect('${u.name}')`:''}">`;
+        const bgColor = selected ? 'var(--pg-green-bg)' : fired ? 'var(--pg-shade)' : 'var(--pg-card)';
+        html += `<div class="recovery-unit" aria-pressed="${selected}" style="background:${bgColor};cursor:${available?'pointer':'default'};" onclick="${available?`toggleArtillerySelect('${u.name}')`:''}">`;
         html += `<span class="u-name">${u.name}</span>`;
-        html += `<span style="color:#6af;font-size:0.75em;font-weight:bold;">${hexId}</span>`;
-        html += `<span style="color:#aaa;font-size:0.8em;">FP${u.spSoft || u.fpSoft}/${u.spAT || u.fpAT} 射程${u.range}</span>`;
+        html += `<span style="color:var(--pg-blue);font-size:0.75em;font-weight:bold;">${hexId}</span>`;
+        html += `<span style="color:var(--pg-muted);font-size:0.8em;">FP${u.spSoft || u.fpSoft}/${u.spAT || u.fpAT} 射程${u.range}</span>`;
         html += `<span class="u-status ${u.status}">${u.status === 'ok' ? '正常' : u.status.toUpperCase()}</span>`;
-        if (fired) html += '<span style="color:#f66;font-size:0.8em;">射撃済</span>';
-        if (selected) html += '<span style="color:#8f8;font-size:0.8em;">✓選択</span>';
+        if (fired) html += '<span style="color:var(--pg-red);font-size:0.8em;">射撃済</span>';
+        if (selected) html += '<span style="color:var(--pg-green);font-size:0.8em;">✓選択</span>';
         html += '</div>';
       });
     }
@@ -99,22 +99,22 @@ function renderSupportPhase(activeSide) {
     // 盤外支援砲兵
     const offBoards = SCENARIO_OFF_BOARD.filter(ob => ob.side === side);
     if (offBoards.length > 0) {
-      html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid #444;">';
-      html += '<div style="color:#aaa;font-size:0.75em;">盤外支援砲兵</div>';
+      html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--pg-line);">';
+      html += '<div style="color:var(--pg-muted);font-size:0.75em;">盤外支援砲兵</div>';
       offBoards.forEach(ob => {
         const exhausted = ob.usedCount >= ob.uses;
         const selected = supportState.selectedOffBoard.includes(ob.id);
-        const bgColor = selected ? '#445522' : exhausted ? '#333' : '#222';
-        html += `<div class="recovery-unit" style="background:${bgColor};cursor:${exhausted?'default':'pointer'};" onclick="${exhausted?'':`toggleOffBoardSelect('${ob.id}')`}">`;
+        const bgColor = selected ? 'var(--pg-green-bg)' : exhausted ? 'var(--pg-shade)' : 'var(--pg-card)';
+        html += `<div class="recovery-unit" aria-pressed="${selected}" style="background:${bgColor};cursor:${exhausted?'default':'pointer'};" onclick="${exhausted?'':`toggleOffBoardSelect('${ob.id}')`}">`;
         html += `<span class="u-name">${ob.name}</span>`;
-        html += `<span style="color:#aaa;font-size:0.8em;">FP${ob.fp} (${ob.usedCount}/${ob.uses}回)</span>`;
+        html += `<span style="color:var(--pg-muted);font-size:0.8em;">FP${ob.fp} (${ob.usedCount}/${ob.uses}回)</span>`;
         if (exhausted) {
-          html += '<span style="color:#f66;font-size:0.8em;">使い切り</span>';
+          html += '<span style="color:var(--pg-red);font-size:0.8em;">使い切り</span>';
         } else if (selected) {
-          html += '<span style="color:#8f8;font-size:0.8em;">✓選択</span>';
+          html += '<span style="color:var(--pg-green);font-size:0.8em;">✓選択</span>';
         }
         if (ob.combinable && !exhausted) {
-          html += '<span style="color:#88f;font-size:0.7em;">合算可</span>';
+          html += '<span style="color:var(--pg-blue);font-size:0.7em;">合算可</span>';
         }
         html += '</div>';
       });
@@ -126,28 +126,28 @@ function renderSupportPhase(activeSide) {
 
   // 目標選択UI
   if (supportState.selectedArtillery.length > 0 || supportState.targetMode) {
-    html += '<div style="margin:8px 0;padding:8px;background:#333;border-radius:4px;">';
+    html += '<div style="margin:8px 0;padding:8px;background:var(--pg-shade);border-radius:4px;">';
     if (supportState.targetHexId) {
       const terrain = getHexTerrain(supportState.targetHexId);
       const mod = getTerrainFireMod(supportState.targetHexId);
       const tNames = {p:'平地',w:'林',f:'森林',r:'荒地',t:'町',c:'市街地',lake:'湖'};
-      html += `<div style="color:#c8a020;font-weight:bold;">目標: ${supportState.targetHexId} (${tNames[terrain]||terrain}, 修正${mod>=0?'+':''}${mod})</div>`;
+      html += `<div style="color:var(--pg-accent);font-weight:bold;">目標: ${supportState.targetHexId} (${tNames[terrain]||terrain}, 修正${mod>=0?'+':''}${mod})</div>`;
       // 目標ヘクスの敵ユニット
       const enemies = supportTargets(supportState.targetHexId, currentSupportSide())
         .filter(u => u.type !== 'leader');
       if (enemies.length > 0) {
-        html += '<div style="font-size:0.8em;color:#aaa;margin:4px 0;">';
+        html += '<div style="font-size:0.8em;color:var(--pg-muted);margin:4px 0;">';
         enemies.forEach(e => {
           html += `${e.name}(${e.type},防御${e.def||0}) `;
         });
         html += '</div>';
       } else {
-        html += '<div style="font-size:0.8em;color:#f66;">敵ユニットなし</div>';
+        html += '<div style="font-size:0.8em;color:var(--pg-red);">敵ユニットなし</div>';
       }
       html += `<button class="dice-btn" style="font-size:0.9em;padding:6px 16px;margin-top:4px;" onclick="executeSupportFire()">砲撃実行</button>`;
       html += ` <button class="top-btn" onclick="cancelSupportTarget()">キャンセル</button>`;
     } else {
-      html += '<div style="color:#ff0;font-size:0.9em;">🎯 マップ上のヘクスをクリックして目標を選択</div>';
+      html += '<div style="color:var(--pg-accent);font-size:0.9em;">🎯 マップ上のヘクスをクリックして目標を選択</div>';
       html += `<button class="top-btn" onclick="cancelSupportTarget()">キャンセル</button>`;
     }
     html += '</div>';
@@ -155,8 +155,8 @@ function renderSupportPhase(activeSide) {
 
   // 射撃結果ログ
   if (supportState.fireResults.length > 0) {
-    html += '<div style="margin:8px 0;padding:6px;background:#1a2a1a;border:1px solid #4a4;border-radius:4px;max-height:200px;overflow-y:auto;">';
-    html += '<div style="color:#8f8;font-weight:bold;font-size:0.85em;margin-bottom:4px;">射撃結果</div>';
+    html += '<div style="margin:8px 0;padding:6px;background:var(--pg-green-bg);border:1px solid #4a4;border-radius:4px;max-height:200px;overflow-y:auto;">';
+    html += '<div style="color:var(--pg-green);font-weight:bold;font-size:0.85em;margin-bottom:4px;">射撃結果</div>';
     supportState.fireResults.forEach(r => {
       const color = r.damage === 'eliminated' ? '#f44' : r.damage === 'dd' ? '#f88' : r.damage === 'd' ? '#fd8' : '#aaa';
       html += `<div style="font-size:0.8em;color:${color};padding:1px 0;">${r.text}</div>`;
@@ -252,7 +252,7 @@ function showFireOverlay(title, targetInfo, results) {
     row.innerHTML = `
       <span class="fire-unit-name">${r.targetName}</span>
       <span class="fire-dice" id="fireDice${i}">-</span>
-      <span class="fire-detail" id="fireDetail${i}" style="color:#666;font-size:0.85em;">FP${r.fp} 防御${r.def}</span>
+      <span class="fire-detail" id="fireDetail${i}" style="color:var(--pg-muted);font-size:0.85em;">FP${r.fp} 防御${r.def}</span>
       <span class="fire-damage none" id="fireDmg${i}" style="visibility:hidden;">-</span>
     `;
     container.appendChild(row);
@@ -300,8 +300,8 @@ function showFireOverlay(title, targetInfo, results) {
 
       const detailEl = document.getElementById(`fireDetail${i}`);
       if (detailEl) {
-        detailEl.style.color = '#aaa';
-        detailEl.innerHTML = `${statusChange ? '<span style="color:#fff;font-size:1.1em;font-weight:bold;">' + statusChange + '</span> ' : ''}FP${r.fp} ${terrainStr} ダイス${r.roll} 損害Lv${dlLabel} 防御${r.def}`;
+        detailEl.style.color = 'var(--pg-muted)';
+        detailEl.innerHTML = `${statusChange ? '<span style="color:var(--pg-ink);font-size:1.1em;font-weight:bold;">' + statusChange + '</span> ' : ''}FP${r.fp} ${terrainStr} ダイス${r.roll} 損害Lv${dlLabel} 防御${r.def}`;
       }
     });
   }, allDoneTime);
@@ -335,7 +335,7 @@ function showDiceOverlay(title, subtitle, rows, callback) {
     row.innerHTML = `
       <span class="fire-unit-name">${r.label}</span>
       <span class="fire-dice" id="fireDice${i}">-</span>
-      <span class="fire-detail" id="fireDetail${i}" style="color:#666;font-size:0.85em;">${r.detail || ''}</span>
+      <span class="fire-detail" id="fireDetail${i}" style="color:var(--pg-muted);font-size:0.85em;">${r.detail || ''}</span>
       <span class="fire-damage none" id="fireDmg${i}" style="visibility:hidden;">-</span>
     `;
     container.appendChild(row);
@@ -374,7 +374,7 @@ function showDiceOverlay(title, subtitle, rows, callback) {
 
       const detailEl = document.getElementById(`fireDetail${i}`);
       if (detailEl && r.detailAfter) {
-        detailEl.style.color = '#aaa';
+        detailEl.style.color = 'var(--pg-muted)';
         detailEl.innerHTML = r.detailAfter;
       }
     });

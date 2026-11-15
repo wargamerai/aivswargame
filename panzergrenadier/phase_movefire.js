@@ -34,7 +34,7 @@ function renderReinforcementPhase(undeployed) {
   const side = undeployed[0]?.side;
 
   let html = `<div class="phase-info" style="margin-bottom:8px;">
-    <b style="color:#c8a020;">援軍配置</b><br>
+    <b style="color:var(--pg-accent);">援軍配置</b><br>
     <small>${sideNames[side] || ''}の援軍 ${undeployed.length}ユニットを配置してください</small><br>
     <small>入口ヘクス: ${[...entrySet].join(', ')}</small>
   </div>`;
@@ -43,12 +43,12 @@ function renderReinforcementPhase(undeployed) {
   html += `<div style="margin:8px 0;">`;
   undeployed.forEach(u => {
     const isSel = reinforcementState.selectedUnit === u;
-    const style = isSel ? 'background:#446;border-color:#c8a020;' : 'cursor:pointer;';
-    html += `<div class="unit-entry" style="padding:3px 6px;margin:2px 0;border:1px solid #555;border-radius:3px;font-size:0.8em;${style}"
+    const style = isSel ? 'background:var(--pg-blue-bg);border-color:var(--pg-accent);' : 'cursor:pointer;';
+    html += `<div class="unit-entry" style="padding:3px 6px;margin:2px 0;border:1px solid var(--pg-line);border-radius:3px;font-size:0.8em;${style}"
       onclick="selectReinforcementUnit('${u.id || u.name}')">
-      <span style="color:#c8a020;">${u.name}</span>
-      <span style="color:#aaa;font-size:0.75em;"> ${u.type} fp:${u.fpAT}/${u.fpSoft} R:${u.range} M:${u.move}</span>
-      ${isSel ? '<span style="color:#ff0;"> ★選択中 → マップの入口ヘクスをクリック</span>' : ''}
+      <span style="color:var(--pg-accent);">${u.name}</span>
+      <span style="color:var(--pg-muted);font-size:0.75em;"> ${u.type} fp:${u.fpAT}/${u.fpSoft} R:${u.range} M:${u.move}</span>
+      ${isSel ? '<span style="color:var(--pg-accent);"> ★選択中 → マップの入口ヘクスをクリック</span>' : ''}
     </div>`;
   });
   html += `</div>`;
@@ -454,12 +454,12 @@ function showFireFlow(type, shooters, target, callback) {
   _fireFlowState = { type, shooters, target, preview, callback };
 
   const c = document.getElementById('phaseContent');
-  let html = `<div style="padding:10px;background:#333;border:2px solid #666;border-radius:6px;">`;
-  html += `<div style="color:#ff8;font-weight:bold;font-size:1.1em;">${typeLabel}</div>`;
+  let html = `<div style="padding:10px;background:var(--pg-shade);border:2px solid var(--pg-line);border-radius:6px;">`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:1.1em;">${typeLabel}</div>`;
   html += `<div style="margin:6px 0;">`;
-  html += `<div style="color:#8f8;">射撃: ${shooterNames} (fp${preview.totalFP})</div>`;
-  html += `<div style="color:#f88;">目標: ${target.name} (def${target.def || 0})</div>`;
-  html += `<div style="font-size:0.85em;color:#aaa;">距離:${preview.dist} 修正:${preview.totalMod}`;
+  html += `<div style="color:var(--pg-green);">射撃: ${shooterNames} (fp${preview.totalFP})</div>`;
+  html += `<div style="color:var(--pg-red);">目標: ${target.name} (def${target.def || 0})</div>`;
+  html += `<div style="font-size:0.85em;color:var(--pg-muted);">距離:${preview.dist} 修正:${preview.totalMod}`;
   if (preview.terrainMod) html += ` 地形${preview.terrainMod}`;
   if (preview.maxRangeMod) html += ` 最大射程${preview.maxRangeMod}`;
   if (preview.facilityMod) html += ` I.P.${preview.facilityMod}`;
@@ -467,14 +467,14 @@ function showFireFlow(type, shooters, target, callback) {
   html += `</div>`;
   // 確率表示
   html += `<div style="display:flex;gap:8px;margin:6px 0;font-size:0.9em;">`;
-  html += `<span style="color:#888;">効果なし:${preview.none}%</span>`;
-  html += `<span style="color:#ff0;">D:${preview.d}%</span>`;
-  html += `<span style="color:#f80;">DD:${preview.dd}%</span>`;
-  html += `<span style="color:#f00;">壊滅:${preview.elim}%</span>`;
+  html += `<span style="color:var(--pg-muted);">効果なし:${preview.none}%</span>`;
+  html += `<span style="color:var(--pg-accent);">D:${preview.d}%</span>`;
+  html += `<span style="color:var(--pg-red);">DD:${preview.dd}%</span>`;
+  html += `<span style="color:var(--pg-red);">壊滅:${preview.elim}%</span>`;
   html += `</div>`;
   html += `<div style="display:flex;gap:6px;margin-top:8px;">`;
-  html += `<button class="dice-btn" style="background:#844;padding:8px 20px;" onclick="fireFlowExecute()">射撃実行</button>`;
-  html += `<button class="dice-btn" style="background:#555;padding:8px 20px;" onclick="fireFlowCancel()">キャンセル</button>`;
+  html += `<button class="dice-btn" style="background:var(--pg-red-bg);padding:8px 20px;" onclick="fireFlowExecute()">射撃実行</button>`;
+  html += `<button class="dice-btn" style="background:var(--pg-shade);padding:8px 20px;" onclick="fireFlowCancel()">キャンセル</button>`;
   html += `</div></div>`;
   c.innerHTML = html;
 
@@ -532,9 +532,8 @@ function fireFlowShowResult(type, shooters, target, result, callback) {
   const dmgText = result.newStatus === 'eliminated' ? '壊滅' :
                   result.damage === 'dd' ? 'DD' :
                   result.damage === 'd' ? 'D' : '効果なし';
-  const dmgColor = result.newStatus === 'eliminated' ? '#f00' :
-                   result.damage === 'dd' ? '#f80' :
-                   result.damage === 'd' ? '#ff0' : '#888';
+  const dmgColor = result.newStatus === 'eliminated' || result.damage === 'dd' ? 'var(--pg-red)' :
+                   result.damage === 'd' ? 'var(--pg-accent)' : 'var(--pg-muted)';
 
   // 最大射程退避判定: ストップ射撃で敵射程3以上、最大射程、壊滅、移動力1以上
   const ms = moveState;
@@ -544,17 +543,17 @@ function fireFlowShowResult(type, shooters, target, result, callback) {
     shooters[0].range >= 3 &&
     ms && ms.remainingMP >= 1;
 
-  let html = `<div style="padding:10px;background:#333;border:2px solid #666;border-radius:6px;text-align:center;">`;
-  html += `<div style="color:#aaa;font-size:0.85em;">${typeLabel}</div>`;
-  html += `<div style="font-size:2em;font-weight:bold;color:#ff0;margin:6px 0;">D10: ${result.roll}</div>`;
-  if (result.totalMod) html += `<div style="font-size:0.85em;color:#aaa;">修正後: ${result.modifiedRoll}</div>`;
+  let html = `<div style="padding:10px;background:var(--pg-shade);border:2px solid var(--pg-line);border-radius:6px;text-align:center;">`;
+  html += `<div style="color:var(--pg-muted);font-size:0.85em;">${typeLabel}</div>`;
+  html += `<div style="font-size:2em;font-weight:bold;color:var(--pg-accent);margin:6px 0;">D10: ${result.roll}</div>`;
+  if (result.totalMod) html += `<div style="font-size:0.85em;color:var(--pg-muted);">修正後: ${result.modifiedRoll}</div>`;
   html += `<div style="font-size:1.5em;font-weight:bold;color:${dmgColor};margin:8px 0;">${dmgText}</div>`;
-  html += `<div style="font-size:0.85em;color:#ccc;">${target.name}: ${result.prevStatus.toUpperCase()} → ${result.newStatus.toUpperCase()}</div>`;
-  if (result.ammoDeplete) html += `<div style="color:#f80;margin-top:4px;">弾薬不足発生！</div>`;
+  html += `<div style="font-size:0.85em;color:var(--pg-ink);">${target.name}: ${result.prevStatus.toUpperCase()} → ${result.newStatus.toUpperCase()}</div>`;
+  if (result.ammoDeplete) html += `<div style="color:var(--pg-red);margin-top:4px;">弾薬不足発生！</div>`;
   html += `<div style="margin-top:10px;display:flex;gap:6px;justify-content:center;">`;
   html += `<button class="dice-btn" style="padding:6px 20px;" onclick="fireFlowComplete()">OK</button>`;
   if (canEvade) {
-    html += `<button class="dice-btn" style="padding:6px 20px;background:#448;" onclick="fireFlowEvade()">射程外に退避（全員DD）</button>`;
+    html += `<button class="dice-btn" style="padding:6px 20px;background:var(--pg-blue-bg);" onclick="fireFlowEvade()">射程外に退避（全員DD）</button>`;
   }
   html += `</div></div>`;
   c.innerHTML = html;
@@ -621,7 +620,7 @@ function executeDirectFire(shooters, target, counter = false) {
   });
 
   if (totalFP <= 0) return { error: '火力0 — 攻撃不可' };
-  if (typeof pgNoteAICombat === 'function') pgNoteAICombat(shooters, target);
+  if (typeof pgNoteMovementCombat === 'function') pgNoteMovementCombat(shooters, target);
 
   // ダイス修正計算
   const targetHexId = target.hexId || toHexId(target.col, target.row);
@@ -804,6 +803,38 @@ function toggleUnitCheck(group, uid, checked) {
   renderMoveFirePhase();
 }
 
+function pgStackCheckButtons(units, checks, eligible = () => true) {
+  if (units.length < 2) return '';
+  const has = unit => checks.has(unit.id || unit.name);
+  const allowed = units.filter(eligible);
+  const all = allowed.length > 0 && allowed.every(has);
+  const none = !units.some(has);
+  return `<div class="pg-stack-checks">
+    <button type="button" class="btn-sm" aria-pressed="${none}" onclick="pgToggleStackChecks(this, false)">全部外す</button>
+    <button type="button" class="btn-sm" aria-pressed="${all}" ${allowed.length ? '' : 'disabled'} onclick="pgToggleStackChecks(this, true)">全部入れる</button>
+  </div>`;
+}
+
+function pgToggleStackChecks(button, checked) {
+  const stack = button.closest('[data-pg-stack]');
+  const group = stack.dataset.pgStack;
+  const checks = group === 'assault' ? assaultState.atkChecked : checkState[group];
+  for (const box of stack.querySelectorAll('input[type="checkbox"]')) {
+    if (!checked) checks.delete(box.value);
+    else if (!box.disabled) checks.add(box.value);
+  }
+  if (group === 'assault') renderAssaultPhase();
+  else {
+    updateFireRange();
+    renderMoveFirePhase();
+  }
+  drawMap();
+}
+
+function pgCheckboxValue(uid) {
+  return String(uid).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+}
+
 // チェック済み味方ユニットの射程範囲・視認範囲を計算
 let fireRangeHexes = {}; // { "col,row": true }
 let fireVisionHexes = {}; // { "col,row": true } 視認距離範囲
@@ -889,8 +920,8 @@ function renderMoveFirePhase() {
   if (df.mode === 'moving') {
     const ms = moveState;
     const u = ms.movingUnit;
-    html += `<div style="padding:6px;background:#333;border-radius:4px;">`;
-    html += `<b style="color:#4f4;">移動中: ${u ? u.name : ''}</b><br>`;
+    html += `<div style="padding:6px;background:var(--pg-shade);border-radius:4px;">`;
+    html += `<b style="color:var(--pg-green);">移動中: ${u ? u.name : ''}</b><br>`;
     if (u) {
       html += `<small>残移動力: ${ms.remainingMP} / ${u.move}`;
       if (ms.cautious) html += ' (警戒移動)';
@@ -898,14 +929,14 @@ function renderMoveFirePhase() {
 
       // ストップ射撃警告
       if (ms.stopFirePending && ms.stopFireEnemies && ms.stopFireEnemies.length > 0) {
-        html += `<div style="margin:6px 0;padding:6px;background:#422;border:1px solid #844;border-radius:4px;">`;
-        html += `<b style="color:#f44;">⚠ ストップ射撃</b><br>`;
-        html += `<small style="color:#faa;">以下の敵ユニットがストップ射撃可能:</small>`;
+        html += `<div style="margin:6px 0;padding:6px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:4px;">`;
+        html += `<b style="color:var(--pg-red);">⚠ ストップ射撃</b><br>`;
+        html += `<small style="color:var(--pg-red);">以下の敵ユニットがストップ射撃可能:</small>`;
         ms.stopFireEnemies.forEach(e => {
-          html += `<div style="color:#f88;font-size:0.8em;">・${e.name} (fp${e.fpAT}/${e.fpSoft} R${e.range})</div>`;
+          html += `<div style="color:var(--pg-red);font-size:0.8em;">・${e.name} (fp${e.fpAT}/${e.fpSoft} R${e.range})</div>`;
         });
         html += `<div style="margin-top:4px;display:flex;gap:4px;">`;
-        html += `<button class="btn-sm" style="background:#844;" onclick="resolveStopFire()">ストップ射撃を実行</button>`;
+        html += `<button class="btn-sm" style="background:var(--pg-red-bg);" onclick="resolveStopFire()">ストップ射撃を実行</button>`;
         html += `<button class="btn-sm" onclick="skipStopFire()">射撃なし（移動続行）</button>`;
         html += `</div></div>`;
       }
@@ -926,8 +957,8 @@ function renderMoveFirePhase() {
         if (!pgAIReview && !pgOrderRun && !u.marchMode && u.status === 'ok' && !u.outOfAmmo && !ms.cautious) {
           const adjEnemies = getAdjacentEnemyStacks(u);
           if (Object.keys(adjEnemies).length > 0) {
-            html += `</div><div style="margin-top:4px;padding:4px;background:#422;border:1px solid #644;border-radius:3px;">`;
-            html += `<div style="color:#f84;font-size:0.8em;font-weight:bold;">オーバーラン可能</div>`;
+            html += `</div><div style="margin-top:4px;padding:4px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:3px;">`;
+            html += `<div style="color:var(--pg-red);font-size:0.8em;font-weight:bold;">オーバーラン可能</div>`;
             Object.keys(adjEnemies).forEach(hexId => {
               const terrain = getHexTerrain(hexId);
               const tNames = {p:'平地',w:'林',f:'森林',r:'荒地',t:'町',c:'市街地',lake:'湖'};
@@ -936,12 +967,12 @@ function renderMoveFirePhase() {
               const canOR = mc.cost !== Infinity && ms.remainingMP >= mc.cost + 2;
               const enemies = adjEnemies[hexId];
               const eNames = enemies.length > 0 ? enemies.map(e => e.name).join(',') : 'ダミー';
-              html += `<div style="font-size:0.75em;color:#aaa;display:flex;align-items:center;gap:4px;padding:1px 0;">`;
+              html += `<div style="font-size:0.75em;color:var(--pg-muted);display:flex;align-items:center;gap:4px;padding:1px 0;">`;
               html += `${hexId}(${tNames[terrain]||terrain}) ${eNames} MP:${overrunCost}`;
               if (canOR) {
-                html += `<button class="dice-btn" style="padding:4px 14px;font-size:0.9em;background:#a44;margin-left:6px;" onclick="doOverrun('${hexId}')">オーバーラン</button>`;
+                html += `<button class="dice-btn" style="padding:4px 14px;font-size:0.9em;background:var(--pg-red-bg);margin-left:6px;" onclick="doOverrun('${hexId}')">オーバーラン</button>`;
               } else {
-                html += ` <span style="color:#666;">MP不足</span>`;
+                html += ` <span style="color:var(--pg-muted);">MP不足</span>`;
               }
               html += `</div>`;
             });
@@ -957,8 +988,8 @@ function renderMoveFirePhase() {
 
   // 反撃モード
   if (df.mode === 'counterAttack') {
-    html += `<div style="padding:6px;background:#422;border:1px solid #844;border-radius:4px;">`;
-    html += `<b style="color:#f44;">反撃可能</b><br><small>反撃するユニットのヘクスをクリック</small>`;
+    html += `<div style="padding:6px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:4px;">`;
+    html += `<b style="color:var(--pg-red);">反撃可能</b><br><small>反撃するユニットのヘクスをクリック</small>`;
     html += `<button class="btn-sm" onclick="skipCounter()" style="margin-top:4px;">反撃しない</button>`;
     html += `</div>`;
     c.innerHTML = html;
@@ -967,7 +998,7 @@ function renderMoveFirePhase() {
 
   // === 味方スタック（上）＋隣接ヘクスの味方 ===
   const tNames = {p:'平地',w:'林',f:'森林',r:'荒地',t:'町',c:'市街地',lake:'湖'};
-  html += `<div style="color:#c8a020;font-weight:bold;font-size:0.85em;margin-bottom:2px;">▼ 味方</div>`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:0.85em;margin-bottom:2px;">▼ 味方</div>`;
   if (df.atkHexId) {
     const adjHexes = df.atkAdjacentHexes || [df.atkHexId];
     adjHexes.forEach(ahex => {
@@ -978,19 +1009,20 @@ function renderMoveFirePhase() {
       if (atkUnits.length === 0) return;
       const terrain = getHexTerrain(ahex);
       const isMain = ahex === df.atkHexId;
-      html += `<div style="padding:4px;background:${isMain?'#222':'#1a1a22'};border:1px solid ${isMain?'#555':'#444'};border-radius:4px;margin-bottom:2px;">`;
-      html += `<div style="color:#aaa;font-size:0.7em;">${ahex} (${tNames[terrain]||terrain})${isMain?'':' [隣接]'}</div>`;
+      html += `<div data-pg-stack="atk" style="padding:4px;background:${isMain?'var(--pg-card)':'var(--pg-shade)'};border:1px solid var(--pg-line);border-radius:4px;margin-bottom:2px;">`;
+      html += `<div style="color:var(--pg-muted);font-size:0.7em;">${ahex} (${tNames[terrain]||terrain})${isMain?'':' [隣接]'}</div>`;
+      html += pgStackCheckButtons(atkUnits, checkState.atk, unit => !(unit.moveComplete && unit.firedThisTurn));
       atkUnits.forEach(u => {
         const uid = u.id || u.name;
         const checked = checkState.atk.has(uid);
         const disabled = u.moveComplete && u.firedThisTurn;
-        const statusColor = u.status === 'ok' ? '#8f8' : u.status === 'd' ? '#fd8' : u.status === 'dd' ? '#f88' : '#888';
+        const statusColor = u.status === 'ok' ? 'var(--pg-green)' : u.status === 'd' ? 'var(--pg-accent)' : u.status === 'dd' ? 'var(--pg-red)' : 'var(--pg-muted)';
         html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;${disabled?'opacity:0.4;':''}">`;
-        html += `<input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} onchange="toggleUnitCheck('atk','${uid}',this.checked)" style="margin:0;">`;
-        html += `<span style="color:#eee;">${u.name}</span>`;
+        html += `<input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} value="${pgCheckboxValue(uid)}" onchange="toggleUnitCheck('atk',this.value,this.checked)" style="margin:0;">`;
+        html += `<span style="color:var(--pg-ink);">${u.name}</span>`;
         if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
-        html += `<span style="color:#888;font-size:0.75em;">fp${u.fpAT}/${u.fpSoft} R${u.range}</span>`;
-        if (disabled) html += `<span style="color:#f66;font-size:0.7em;">行動済</span>`;
+        html += `<span style="color:var(--pg-muted);font-size:0.75em;">fp${u.fpAT}/${u.fpSoft} R${u.range}</span>`;
+        if (disabled) html += `<span style="color:var(--pg-red);font-size:0.7em;">行動済</span>`;
         if (!u.moveComplete && !u.pgMovementOrder) {
           html += `<span class="btn-sm" style="padding:0 6px;font-size:0.7em;margin-left:auto;" onclick="startMove(testUnits.find(u=>(u.id||u.name)==='${uid}'))">移動</span>`;
         }
@@ -1005,7 +1037,7 @@ function renderMoveFirePhase() {
       html += `</div>`;
     });
   } else {
-    html += `<div style="color:#666;font-size:0.8em;padding:4px;">味方ヘクスをクリック</div>`;
+    html += `<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">味方ヘクスをクリック</div>`;
   }
 
   // === スタック全体操作ボタン ===
@@ -1023,12 +1055,12 @@ function renderMoveFirePhase() {
         // 陣地攻撃ボタン（装甲火力で陣地を攻撃）
         const hasFPAT = checkedUnits.some(u => (u.fpAT || 0) > 0 && !u.firedThisTurn);
         if (hasFPAT) {
-          html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;background:#a84;" onclick="executeCheckedFortFire()">陣地攻撃</button>`;
+          html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;background:var(--pg-gold);" onclick="executeCheckedFortFire()">陣地攻撃</button>`;
         } else {
-          html += `<div style="color:#888;font-size:0.75em;flex:1;text-align:center;">装甲火力なし</div>`;
+          html += `<div style="color:var(--pg-muted);font-size:0.75em;flex:1;text-align:center;">装甲火力なし</div>`;
         }
       } else {
-        html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;background:#844;" onclick="executeCheckedFire()">スタック射撃</button>`;
+        html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;background:var(--pg-red-bg);" onclick="executeCheckedFire()">スタック射撃</button>`;
       }
     }
     html += `<button class="btn-sm" style="padding:4px 12px;flex:1;" onclick="clearSelection()">キャンセル</button>`;
@@ -1036,7 +1068,7 @@ function renderMoveFirePhase() {
   }
 
   // === 敵スタック（下） ===
-  html += `<div style="color:#f84;font-weight:bold;font-size:0.85em;margin:8px 0 2px;">▼ 敵</div>`;
+  html += `<div style="color:var(--pg-red);font-weight:bold;font-size:0.85em;margin:8px 0 2px;">▼ 敵</div>`;
   if (df.defHexId) {
     const defUnits = testUnits.filter(u =>
       u.hexId === df.defHexId && u.status !== 'eliminated' && u.col >= 0 && u.type !== 'dummy' &&
@@ -1045,32 +1077,33 @@ function renderMoveFirePhase() {
     const terrain = getHexTerrain(df.defHexId);
     const tNames = {p:'平地',w:'林',f:'森林',r:'荒地',t:'町',c:'市街地',lake:'湖'};
     const activeFort = getActiveFortification(df.defHexId);
-    html += `<div style="padding:4px;background:#2a2020;border:1px solid #644;border-radius:4px;margin-bottom:4px;">`;
-    html += `<div style="color:#aaa;font-size:0.75em;margin-bottom:2px;">${df.defHexId} (${tNames[terrain]||terrain})</div>`;
+    html += `<div data-pg-stack="def" style="padding:4px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:4px;margin-bottom:4px;">`;
+    html += `<div style="color:var(--pg-muted);font-size:0.75em;margin-bottom:2px;">${df.defHexId} (${tNames[terrain]||terrain})</div>`;
     if (activeFort) {
       // 陣地表示
       const fortColor = activeFort.status === 'ok' ? '#8f8' : activeFort.status === 'd' ? '#fd8' : '#f88';
-      html += `<div style="padding:4px;background:#2a2a10;border:1px solid #aa4;border-radius:3px;margin-bottom:4px;">`;
-      html += `<div style="color:#ff0;font-weight:bold;font-size:0.85em;">陣地 <span style="color:${fortColor};">${activeFort.status.toUpperCase()}</span></div>`;
-      html += `<div style="color:#aaa;font-size:0.75em;">陣地を破壊しないとユニットを攻撃できません（装甲火力で攻撃）</div>`;
+      html += `<div style="padding:4px;background:var(--pg-gold);border:1px solid #aa4;border-radius:3px;margin-bottom:4px;">`;
+      html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:0.85em;">陣地 <span style="color:${fortColor};">${activeFort.status.toUpperCase()}</span></div>`;
+      html += `<div style="color:var(--pg-muted);font-size:0.75em;">陣地を破壊しないとユニットを攻撃できません（装甲火力で攻撃）</div>`;
       html += `</div>`;
     }
+    if (!activeFort) html += pgStackCheckButtons(defUnits.filter(u => u.type !== 'fortification'), checkState.def);
     defUnits.forEach(u => {
       if (u.type === 'fortification') return; // 陣地は上で表示済み
       const uid = u.id || u.name;
       const checked = checkState.def.has(uid);
       const disabled = activeFort ? true : false; // 陣地があれば選択不可
-      const statusColor = u.status === 'ok' ? '#8f8' : u.status === 'd' ? '#fd8' : u.status === 'dd' ? '#f88' : '#888';
+      const statusColor = u.status === 'ok' ? 'var(--pg-green)' : u.status === 'd' ? 'var(--pg-accent)' : u.status === 'dd' ? 'var(--pg-red)' : 'var(--pg-muted)';
       html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;${disabled?'opacity:0.4;':''}">`;
-      html += `<input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} onchange="toggleUnitCheck('def','${uid}',this.checked)" style="margin:0;">`;
-      html += `<span style="color:#eee;">${u.name}</span>`;
+      html += `<input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} value="${pgCheckboxValue(uid)}" onchange="toggleUnitCheck('def',this.value,this.checked)" style="margin:0;">`;
+      html += `<span style="color:var(--pg-ink);">${u.name}</span>`;
       if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
-      html += `<span style="color:#888;font-size:0.8em;">防御${u.def}</span>`;
+      html += `<span style="color:var(--pg-muted);font-size:0.8em;">防御${u.def}</span>`;
       html += `</div>`;
     });
     html += `</div>`;
   } else {
-    html += `<div style="color:#666;font-size:0.8em;padding:4px;">敵ヘクスをクリック</div>`;
+    html += `<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">敵ヘクスをクリック</div>`;
   }
 
   // === 命中率・損害確率 ===
@@ -1078,22 +1111,22 @@ function renderMoveFirePhase() {
   const defChecked = testUnits.filter(u => checkState.def.has(u.id || u.name) && u.status !== 'eliminated');
 
   if (atkChecked.length > 0 && defChecked.length > 0) {
-    html += `<div style="margin:8px 0;padding:8px;background:#1a2a1a;border:1px solid #4a4;border-radius:4px;">`;
-    html += `<div style="color:#8f8;font-weight:bold;font-size:0.85em;margin-bottom:4px;">射撃予測</div>`;
+    html += `<div style="margin:8px 0;padding:8px;background:var(--pg-green-bg);border:1px solid #4a4;border-radius:4px;">`;
+    html += `<div style="color:var(--pg-green);font-weight:bold;font-size:0.85em;margin-bottom:4px;">射撃予測</div>`;
 
     defChecked.forEach(target => {
       const preview = calcFirePreview(atkChecked, target);
       if (!preview) return;
-      html += `<div style="margin:4px 0;padding:4px;background:#223;border-radius:3px;font-size:0.8em;">`;
-      html += `<div style="color:#eee;">→ ${target.name} (防御${target.def}${preview.isArmored?' 装甲':' 非装甲'})</div>`;
-      html += `<div style="color:#aaa;">合計火力:${preview.totalFP} 距離:${preview.dist} 修正:${preview.totalMod>=0?'+':''}${preview.totalMod}</div>`;
+      html += `<div style="margin:4px 0;padding:4px;background:var(--pg-shade);border-radius:3px;font-size:0.8em;">`;
+      html += `<div style="color:var(--pg-ink);">→ ${target.name} (防御${target.def}${preview.isArmored?' 装甲':' 非装甲'})</div>`;
+      html += `<div style="color:var(--pg-muted);">合計火力:${preview.totalFP} 距離:${preview.dist} 修正:${preview.totalMod>=0?'+':''}${preview.totalMod}</div>`;
       // 確率バー
-      const colors = { none:'#555', d:'#da4', dd:'#e64', elim:'#f22' };
+      const colors = { none:'var(--pg-shade)', d:'var(--pg-gold)', dd:'#eec8ad', elim:'var(--pg-red-bg)' };
       html += `<div style="display:flex;height:16px;border-radius:2px;overflow:hidden;margin:4px 0;">`;
-      if (preview.none > 0) html += `<div style="width:${preview.none}%;background:${colors.none};text-align:center;font-size:0.7em;color:#aaa;line-height:16px;">無${preview.none}%</div>`;
-      if (preview.d > 0) html += `<div style="width:${preview.d}%;background:${colors.d};text-align:center;font-size:0.7em;color:#000;line-height:16px;">D${preview.d}%</div>`;
-      if (preview.dd > 0) html += `<div style="width:${preview.dd}%;background:${colors.dd};text-align:center;font-size:0.7em;color:#fff;line-height:16px;">DD${preview.dd}%</div>`;
-      if (preview.elim > 0) html += `<div style="width:${preview.elim}%;background:${colors.elim};text-align:center;font-size:0.7em;color:#fff;line-height:16px;">壊滅${preview.elim}%</div>`;
+      if (preview.none > 0) html += `<div style="width:${preview.none}%;background:${colors.none};text-align:center;font-size:0.7em;color:var(--pg-muted);line-height:16px;">無${preview.none}%</div>`;
+      if (preview.d > 0) html += `<div style="width:${preview.d}%;background:${colors.d};text-align:center;font-size:0.7em;color:var(--pg-ink);line-height:16px;">D${preview.d}%</div>`;
+      if (preview.dd > 0) html += `<div style="width:${preview.dd}%;background:${colors.dd};text-align:center;font-size:0.7em;color:var(--pg-ink);line-height:16px;">DD${preview.dd}%</div>`;
+      if (preview.elim > 0) html += `<div style="width:${preview.elim}%;background:${colors.elim};text-align:center;font-size:0.7em;color:var(--pg-ink);line-height:16px;">壊滅${preview.elim}%</div>`;
       html += `</div>`;
       html += `</div>`;
     });
@@ -1247,11 +1280,12 @@ function onMoveFireUnitClick(uid) {
 }
 
 // マップクリック（移動射撃フェイズ）
-function onMoveFireMapClick(col, row, cmdKey) {
+function onMoveFireMapClick(col, row, cmdKey, hitUnit) {
   if (pgAIReview?.stage === 'ai' || _pendingReconState) return;
   if (pgSelectOrderHex(col, row)) return;
   if (directFireState.mode !== 'moving') {
     pgOrderHex = toHexId(col, row);
+    pgOrderUnit = hitUnit?.hexId === pgOrderHex ? hitUnit : null;
     if (pgAIReview?.stage === 'review') {
       renderMoveFirePhase();
       drawMap();
@@ -1324,11 +1358,9 @@ function onMoveFireMapClick(col, row, cmdKey) {
         (G.gameMode !== 'online' || !pgOnlineHidden(u, df.activeSide))
       ).forEach(u => checkState.def.add(u.id || u.name));
     }
-    renderMoveFirePhase();
-    drawMap();
-    return;
   }
-
+  renderMoveFirePhase();
+  drawMap();
 }
 
 function startTargetSelect() {
@@ -1418,6 +1450,7 @@ function resolveStopFire() {
     return;
   }
 
+  if (ms.pgMoveRecord) ms.pgMoveRecord.blocked = true;
   const shooterHexId = firingUnits[0].hexId || toHexId(firingUnits[0].col, firingUnits[0].row);
 
   // サプライズ・アタック判定
@@ -1529,19 +1562,19 @@ function renderStopFireResult() {
 
   const enemyNames = enemyStack.filter(u => u.status !== 'eliminated').map(u => u.name).join(', ');
 
-  let html = `<div style="padding:8px;background:#422;border:1px solid #844;border-radius:4px;">`;
-  html += `<div style="color:#f84;font-weight:bold;font-size:1em;">ストップ射撃</div>`;
-  html += `<div style="font-size:0.85em;color:#eee;margin:4px 0;">敵: ${enemyNames}</div>`;
+  let html = `<div style="padding:8px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:4px;">`;
+  html += `<div style="color:var(--pg-red);font-weight:bold;font-size:1em;">ストップ射撃</div>`;
+  html += `<div style="font-size:0.85em;color:var(--pg-ink);margin:4px 0;">敵: ${enemyNames}</div>`;
 
   if (result && !result.error) {
     const dmgText = result.damageResult === 'eliminated' ? '壊滅' :
                     result.damageResult === 'dd' ? 'DD' :
                     result.damageResult === 'd' ? 'D' : '効果なし';
-    html += `<div style="font-size:1.1em;font-weight:bold;color:#ff0;margin:4px 0;">${dmgText}</div>`;
+    html += `<div style="font-size:1.1em;font-weight:bold;color:var(--pg-accent);margin:4px 0;">${dmgText}</div>`;
   }
 
   if (aliveMoving.length === 0) {
-    html += `<div style="color:#f44;font-size:0.85em;">全滅</div>`;
+    html += `<div style="color:var(--pg-red);font-size:0.85em;">全滅</div>`;
     html += `<button class="btn-sm" style="width:100%;margin:4px 0;" onclick="finishStopFire()">OK</button>`;
   } else {
     // 射程内に敵がいるかチェック
@@ -1555,18 +1588,18 @@ function renderStopFireResult() {
     });
 
     if (canCounter) {
-      html += `<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px;">`;
-      html += `<div style="color:#c8a020;font-weight:bold;font-size:0.85em;">反撃しますか？（スタック全体で1回）</div>`;
-      html += `<div style="font-size:0.75em;color:#aaa;">反撃したユニットは先制射撃不可になります</div>`;
+      html += `<div style="margin-top:8px;border-top:1px solid var(--pg-line);padding-top:6px;">`;
+      html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:0.85em;">反撃しますか？（スタック全体で1回）</div>`;
+      html += `<div style="font-size:0.75em;color:var(--pg-muted);">反撃したユニットは先制射撃不可になります</div>`;
       html += `<button class="dice-btn" style="font-size:0.85em;padding:6px 16px;width:100%;margin:4px 0;" onclick="doCounterAttack()">反撃する</button>`;
       html += `<button class="btn-sm" style="width:100%;margin:4px 0;" onclick="skipCounterAttack()">反撃しない</button>`;
     } else {
-      html += `<div style="margin-top:8px;border-top:1px solid #555;padding-top:6px;">`;
+      html += `<div style="margin-top:8px;border-top:1px solid var(--pg-line);padding-top:6px;">`;
       html += `<button class="btn-sm" style="width:100%;margin:4px 0;" onclick="skipCounterAttack()">OK</button>`;
     }
 
     if (ms.stopFireStacks && ms.stopFireStacks.length > 0) {
-      html += `<div style="font-size:0.75em;color:#888;margin-top:4px;">残り${ms.stopFireStacks.length}スタックがストップ射撃待ち</div>`;
+      html += `<div style="font-size:0.75em;color:var(--pg-muted);margin-top:4px;">残り${ms.stopFireStacks.length}スタックがストップ射撃待ち</div>`;
     }
     html += `</div>`;
   }
@@ -1616,36 +1649,36 @@ function renderCounterAttackUI() {
   const selTarget = ms._counterSelectedTarget;
   const selUnits = ms._counterSelectedUnits;
 
-  let html = `<div style="padding:8px;background:#333;border:1px solid #c8a020;border-radius:4px;">`;
-  html += `<div style="color:#c8a020;font-weight:bold;font-size:1.1em;margin-bottom:6px;">⚔ 反撃</div>`;
+  let html = `<div style="padding:8px;background:var(--pg-shade);border:1px solid var(--pg-accent);border-radius:4px;">`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:1.1em;margin-bottom:6px;">⚔ 反撃</div>`;
 
   // === 味方スタック（上） ===
-  html += `<div style="background:#2a3a2a;border:1px solid #4a4;border-radius:4px;padding:6px;margin-bottom:6px;">`;
-  html += `<div style="color:#8cf;font-weight:bold;font-size:0.85em;margin-bottom:4px;">味方ユニット</div>`;
+  html += `<div style="background:var(--pg-green-bg);border:1px solid #4a4;border-radius:4px;padding:6px;margin-bottom:6px;">`;
+  html += `<div style="color:var(--pg-blue);font-weight:bold;font-size:0.85em;margin-bottom:4px;">味方ユニット</div>`;
   friendlies.forEach(u => {
     const uid = u.id || u.name;
     const checked = selUnits.has(uid) ? 'checked' : '';
     const fpAT = u.fpAT || 0;
     const fpSoft = u.fpSoft || 0;
     const statusStr = u.status === 'd' ? ' [D]' : u.status === 'dd' ? ' [DD]' : '';
-    html += `<label style="display:flex;align-items:center;gap:4px;font-size:0.8em;color:#eee;cursor:pointer;padding:2px 0;">`;
+    html += `<label style="display:flex;align-items:center;gap:4px;font-size:0.8em;color:var(--pg-ink);cursor:pointer;padding:2px 0;">`;
     html += `<input type="checkbox" value="${uid}" ${checked} onchange="toggleCounterUnit('${uid}')">`;
     html += `<span>${u.name}${statusStr}</span>`;
-    html += `<span style="color:#aaa;margin-left:auto;">AT:${fpAT} Soft:${fpSoft} R:${u.range || 1}</span>`;
+    html += `<span style="color:var(--pg-muted);margin-left:auto;">AT:${fpAT} Soft:${fpSoft} R:${u.range || 1}</span>`;
     html += `</label>`;
   });
   html += `</div>`;
 
   // === 敵スタック（下） ===
-  html += `<div style="background:#3a2a2a;border:1px solid #a44;border-radius:4px;padding:6px;margin-bottom:6px;">`;
-  html += `<div style="color:#f88;font-weight:bold;font-size:0.85em;margin-bottom:4px;">敵ユニット（目標選択）</div>`;
+  html += `<div style="background:var(--pg-red-bg);border:1px solid #a44;border-radius:4px;padding:6px;margin-bottom:6px;">`;
+  html += `<div style="color:var(--pg-red);font-weight:bold;font-size:0.85em;margin-bottom:4px;">敵ユニット（目標選択）</div>`;
   enemies.forEach((e, i) => {
     const checked = selTarget === i ? 'checked' : '';
     const statusStr = e.status === 'd' ? ' [D]' : e.status === 'dd' ? ' [DD]' : '';
-    html += `<label style="display:flex;align-items:center;gap:4px;font-size:0.8em;color:#eee;cursor:pointer;padding:2px 0;">`;
+    html += `<label style="display:flex;align-items:center;gap:4px;font-size:0.8em;color:var(--pg-ink);cursor:pointer;padding:2px 0;">`;
     html += `<input type="radio" name="counterTarget" value="${i}" ${checked} onchange="selectCounterTarget(${i})">`;
     html += `<span>${e.name}${statusStr}</span>`;
-    html += `<span style="color:#aaa;margin-left:auto;">def:${e.def || '?'}</span>`;
+    html += `<span style="color:var(--pg-muted);margin-left:auto;">def:${e.def || '?'}</span>`;
     html += `</label>`;
   });
   html += `</div>`;
@@ -1664,14 +1697,14 @@ function renderCounterAttackUI() {
       preview = calcFirePreview(shooters, target);
     }
 
-    html += `<div style="background:#2a2a3a;border:1px solid #66a;border-radius:4px;padding:6px;margin-bottom:6px;">`;
-    html += `<div style="color:#ff0;font-weight:bold;font-size:0.85em;">合算火力: ${totalFP} (${isArmored ? '対装甲' : '対非装甲'})</div>`;
+    html += `<div style="background:var(--pg-blue-bg);border:1px solid #66a;border-radius:4px;padding:6px;margin-bottom:6px;">`;
+    html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:0.85em;">合算火力: ${totalFP} (${isArmored ? '対装甲' : '対非装甲'})</div>`;
     if (preview) {
       html += `<div style="display:flex;gap:8px;font-size:0.8em;margin-top:4px;">`;
-      html += `<span style="color:#888;">効果なし:${preview.none}%</span>`;
-      html += `<span style="color:#ff0;">D:${preview.d}%</span>`;
-      html += `<span style="color:#f80;">DD:${preview.dd}%</span>`;
-      html += `<span style="color:#f44;">壊滅:${preview.elim}%</span>`;
+      html += `<span style="color:var(--pg-muted);">効果なし:${preview.none}%</span>`;
+      html += `<span style="color:var(--pg-accent);">D:${preview.d}%</span>`;
+      html += `<span style="color:var(--pg-red);">DD:${preview.dd}%</span>`;
+      html += `<span style="color:var(--pg-red);">壊滅:${preview.elim}%</span>`;
       html += `</div>`;
     }
     html += `</div>`;
@@ -1914,16 +1947,16 @@ function doOverrun(targetHexId) {
   ms._overrunPending = true;
 
   const c = document.getElementById('phaseContent');
-  let html = `<div style="padding:10px;background:#432;border:2px solid #a64;border-radius:6px;">`;
-  html += `<div style="color:#fa4;font-weight:bold;font-size:1.1em;">オーバーラン確認</div>`;
+  let html = `<div style="padding:10px;background:var(--pg-red-bg);border:2px solid var(--pg-line);border-radius:6px;">`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:1.1em;">オーバーラン確認</div>`;
   html += `<div style="margin:6px 0;font-size:0.9em;">`;
-  html += `<div style="color:#ff8;">攻撃側: ${okUnits.map(u=>u.name).join(', ')} (近接攻撃力:${atkClose})</div>`;
-  html += `<div style="color:#8cf;">防御側: ${defenders.map(u=>u.name).join(', ')} (近接防御力:${defClose})</div>`;
-  html += `<div style="color:#aaa;">地形: ${tNames[terrain]||terrain} | 戦力比: ${ratioStr} | MP消費: ${totalCost}</div>`;
+  html += `<div style="color:var(--pg-accent);">攻撃側: ${okUnits.map(u=>u.name).join(', ')} (近接攻撃力:${atkClose})</div>`;
+  html += `<div style="color:var(--pg-blue);">防御側: ${defenders.map(u=>u.name).join(', ')} (近接防御力:${defClose})</div>`;
+  html += `<div style="color:var(--pg-muted);">地形: ${tNames[terrain]||terrain} | 戦力比: ${ratioStr} | MP消費: ${totalCost}</div>`;
   html += `</div>`;
   html += `<div style="display:flex;gap:6px;margin-top:8px;">`;
-  html += `<button class="dice-btn" style="background:#844;padding:6px 16px;" onclick="executeOverrun()">実行</button>`;
-  html += `<button class="dice-btn" style="background:#555;padding:6px 16px;" onclick="cancelOverrun()">やめる</button>`;
+  html += `<button class="dice-btn" style="background:var(--pg-red-bg);padding:6px 16px;" onclick="executeOverrun()">実行</button>`;
+  html += `<button class="dice-btn" style="background:var(--pg-shade);padding:6px 16px;" onclick="cancelOverrun()">やめる</button>`;
   html += `</div></div>`;
   c.innerHTML = html;
   drawMap();
@@ -1939,6 +1972,7 @@ function executeOverrun() {
   const totalCost = ms._overrunCost;
   const tPos = fromHexId(targetHexId);
   ms._overrunPending = false;
+  if (ms.pgMoveRecord) ms.pgMoveRecord.blocked = true;
 
   // 移動力消費
   ms.remainingMP -= totalCost;
@@ -2045,10 +2079,11 @@ let moveState = {
 function resetMoveState() {
   // 移動経路が2ヘクス以上あれば記録
   if (moveState.path && moveState.path.length >= 2) {
-    _completedMoveTrails.push([...moveState.path]);
+    _completedMoveTrails.push(moveState.path);
   }
   moveState.movingUnit = null;
   moveState._stackMoving = null;
+  moveState.pgMoveRecord = null;
   moveState.stopFirePending = false;
   moveState._stopFired = false;
   moveState.path = [];
@@ -2228,6 +2263,7 @@ function startStackMove() {
   moveState.formation = checkedUnits[0].marchMode ? 'march' : 'combat';
   moveState.remainingMP = minMove;
   moveState.path = [{ col: checkedUnits[0].col, row: checkedUnits[0].row, cost: 0 }];
+  pgStartManualMoveRecord(moveState);
 
   // 移動可能ヘクスを計算（最小移動力で）
   const tempUnit = { ...checkedUnits[0], move: minMove };
@@ -2264,6 +2300,8 @@ function clearSelection() {
   directFireState.atkHexId = null;
   directFireState.defHexId = null;
   directFireState.atkAdjacentHexes = null;
+  pgOrderHex = null;
+  pgOrderUnit = null;
   directFireState.mode = 'selectShooter';
   fireArrowData = null;
   if (typeof fireRangeHexes !== 'undefined') {
@@ -2301,6 +2339,7 @@ function startMove(unit, followingOrder = false) {
   moveState.formation = unit.marchMode ? 'march' : 'combat';
   moveState.remainingMP = unit.move || 0;
   moveState.path = [{ col: unit.col, row: unit.row, cost: 0 }];
+  pgStartManualMoveRecord(moveState);
 
   // 移動可能ヘクスを計算
   moveState.validHexes = calculateMovableHexes(unit, moveState.formation, moveState.cautious);
@@ -2410,6 +2449,13 @@ function moveToHex(col, row) {
   // 元ヘクスに味方がいなくなったらダミーを除去
   if (origHexId !== hexId && typeof cleanupOrphanDummies === 'function') {
     cleanupOrphanDummies(origHexId, unit.side);
+    const record = ms.pgMoveRecord;
+    if (record && ms.path.length === 1) {
+      for (const dummy of record.dummies) {
+        if (dummy.status === 'eliminated' && dummy.hexId === origHexId && dummy.side === unit.side)
+          record.orphaned.add(dummy);
+      }
+    }
   }
 
   // 移動力を経路に沿って消費
@@ -2528,11 +2574,11 @@ function renderReconChoice() {
     const dhId = toHexId(dh.col, dh.row);
     return `${dhId}(D${getDummyCount(dhId)})`;
   }).join(', ');
-  let html = `<div style="padding:8px;background:#334;border:1px solid #668;border-radius:4px;">`;
-  html += `<div style="color:#8af;font-weight:bold;font-size:1em;">偵察可能</div>`;
-  html += `<div style="font-size:0.85em;color:#eee;margin:4px 0;">隣接ダミー: ${dummyInfo}</div>`;
-  html += `<div style="font-size:0.8em;color:#aaa;margin:4px 0;">偵察可能ユニット: ${rs.reconUnits.filter(u => !u.reconDone && !u.firedThisTurn).map(u => u.name).join(', ')}</div>`;
-  html += `<div style="font-size:0.75em;color:#888;margin:4px 0;">偵察したユニットは射撃不可になります</div>`;
+  let html = `<div style="padding:8px;background:var(--pg-shade);border:1px solid #668;border-radius:4px;">`;
+  html += `<div style="color:var(--pg-blue);font-weight:bold;font-size:1em;">偵察可能</div>`;
+  html += `<div style="font-size:0.85em;color:var(--pg-ink);margin:4px 0;">隣接ダミー: ${dummyInfo}</div>`;
+  html += `<div style="font-size:0.8em;color:var(--pg-muted);margin:4px 0;">偵察可能ユニット: ${rs.reconUnits.filter(u => !u.reconDone && !u.firedThisTurn).map(u => u.name).join(', ')}</div>`;
+  html += `<div style="font-size:0.75em;color:var(--pg-muted);margin:4px 0;">偵察したユニットは射撃不可になります</div>`;
   html += `<button class="dice-btn" style="font-size:0.85em;padding:6px 16px;width:100%;margin:4px 0;" onclick="executeReconAll()">偵察実行</button>`;
   html += `<button class="btn-sm" style="width:100%;margin:4px 0;padding:6px;" onclick="skipRecon()">偵察しない</button>`;
   html += `</div>`;
@@ -2597,7 +2643,11 @@ function finishConfirmMove() {
   if (moveState.path.length > 1) {
     (moveState._stackMoving || [moveState.movingUnit]).forEach(pgRegisterBreakthrough);
   }
-  if (pgOnMap(moveState.movingUnit)) pgOrderHex = moveState.movingUnit.hexId;
+  pgRecordConfirmedMove(moveState);
+  if (pgOnMap(moveState.movingUnit)) {
+    pgOrderHex = moveState.movingUnit.hexId;
+    if (pgOrderUnit?.hexId !== pgOrderHex) pgOrderUnit = moveState.movingUnit;
+  }
   pgReconcileOrders();
   resetMoveState();
   directFireState.mode = 'selectShooter';
@@ -3058,6 +3108,7 @@ function applyAssaultDefDamage(r) {
 
 let assaultState = {
   atkHexId: null,
+  atkAdjacentHexes: [],
   defHexId: null,
   atkChecked: new Set(),
   pendingResult: null,
@@ -3077,10 +3128,9 @@ function renderAssaultPhase() {
   let html = '';
 
   // === 攻撃側スタック ===
-  html += `<div style="color:#c8a020;font-weight:bold;font-size:0.85em;margin-bottom:2px;">▼ 突撃ユニット</div>`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:0.85em;margin-bottom:2px;">▼ 突撃ユニット</div>`;
   if (assaultState.atkHexId) {
-    // atkCheckedに入っているユニットのヘクスを収集して表示
-    const participatingHexes = new Set([assaultState.atkHexId]);
+    const participatingHexes = new Set([assaultState.atkHexId, ...assaultState.atkAdjacentHexes]);
     assaultState.atkChecked.forEach(uid => {
       const u = testUnits.find(u2 => (u2.id || u2.name) === uid);
       if (u) participatingHexes.add(u.hexId);
@@ -3093,29 +3143,30 @@ function renderAssaultPhase() {
       if (atkUnits.length === 0) return;
       const terrain = getHexTerrain(hexId);
       const isAdj = hexId !== assaultState.atkHexId;
-      html += `<div style="padding:4px;background:#222;border:1px solid ${isAdj?'#558':'#555'};border-radius:4px;margin-bottom:4px;">`;
-      html += `<div style="color:#aaa;font-size:0.7em;">${hexId} (${tNames[terrain]||terrain})${isAdj?' <span style="color:#8af;">R指揮</span>':''}</div>`;
+      html += `<div data-pg-stack="assault" style="padding:4px;background:var(--pg-card);border:1px solid ${isAdj?'#558':'#555'};border-radius:4px;margin-bottom:4px;">`;
+      html += `<div style="color:var(--pg-muted);font-size:0.7em;">${hexId} (${tNames[terrain]||terrain})${isAdj?' <span style="color:var(--pg-blue);">R指揮</span>':''}</div>`;
+      html += pgStackCheckButtons(atkUnits, assaultState.atkChecked, unit => canAssault(unit).can);
       atkUnits.forEach(u => {
         const uid = u.id || u.name;
         const checked = assaultState.atkChecked.has(uid);
         const canAss = canAssault(u);
-        const statusColor = u.status === 'ok' ? '#8f8' : u.status === 'd' ? '#fd8' : '#f88';
+        const statusColor = u.status === 'ok' ? 'var(--pg-green)' : u.status === 'd' ? 'var(--pg-accent)' : 'var(--pg-red)';
         html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;${!canAss.can?'opacity:0.4;':''}">`;
-        html += `<input type="checkbox" ${checked?'checked':''} ${!canAss.can?'disabled':''} onchange="assaultToggle('${uid}',this.checked)" style="margin:0;">`;
-        html += `<span style="color:#eee;">${u.name}</span>`;
+        html += `<input type="checkbox" ${checked?'checked':''} ${!canAss.can?'disabled':''} value="${pgCheckboxValue(uid)}" onchange="assaultToggle(this.value,this.checked)" style="margin:0;">`;
+        html += `<span style="color:var(--pg-ink);">${u.name}</span>`;
         if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
-        html += `<span style="color:#888;font-size:0.75em;">近攻${u.closeAtk} 近防${u.closeDef}</span>`;
-        if (!canAss.can) html += `<span style="color:#f66;font-size:0.7em;">${canAss.reason}</span>`;
+        html += `<span style="color:var(--pg-muted);font-size:0.75em;">近攻${u.closeAtk} 近防${u.closeDef}</span>`;
+        if (!canAss.can) html += `<span style="color:var(--pg-red);font-size:0.7em;">${canAss.reason}</span>`;
         html += `</div>`;
       });
       html += `</div>`;
     });
   } else {
-    html += `<div style="color:#666;font-size:0.8em;padding:4px;">味方ヘクスをクリック</div>`;
+    html += `<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">味方ヘクスをクリック</div>`;
   }
 
   // === 防御側スタック ===
-  html += `<div style="color:#f84;font-weight:bold;font-size:0.85em;margin:8px 0 2px;">▼ 突撃目標</div>`;
+  html += `<div style="color:var(--pg-red);font-weight:bold;font-size:0.85em;margin:8px 0 2px;">▼ 突撃目標</div>`;
   if (assaultState.defHexId) {
     const defUnits = testUnits.filter(u =>
       u.hexId === assaultState.defHexId && u.side === defenderSide &&
@@ -3123,19 +3174,19 @@ function renderAssaultPhase() {
     );
     const terrain = getHexTerrain(assaultState.defHexId);
     const terrainMod = TERRAIN_MODIFIERS[terrain]?.assault || 0;
-    html += `<div style="padding:4px;background:#2a2020;border:1px solid #644;border-radius:4px;margin-bottom:4px;">`;
-    html += `<div style="color:#aaa;font-size:0.7em;">${assaultState.defHexId} (${tNames[terrain]||terrain} 突撃修正:${terrainMod>=0?'+':''}${terrainMod})</div>`;
+    html += `<div style="padding:4px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:4px;margin-bottom:4px;">`;
+    html += `<div style="color:var(--pg-muted);font-size:0.7em;">${assaultState.defHexId} (${tNames[terrain]||terrain} 突撃修正:${terrainMod>=0?'+':''}${terrainMod})</div>`;
     defUnits.forEach(u => {
-      const statusColor = u.status === 'ok' ? '#8f8' : u.status === 'd' ? '#fd8' : '#f88';
+      const statusColor = u.status === 'ok' ? 'var(--pg-green)' : u.status === 'd' ? 'var(--pg-accent)' : 'var(--pg-red)';
       html += `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;font-size:0.8em;">`;
-      html += `<span style="color:#eee;">${u.name}</span>`;
+      html += `<span style="color:var(--pg-ink);">${u.name}</span>`;
       if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
-      html += `<span style="color:#888;font-size:0.75em;">近攻${u.closeAtk} 近防${u.closeDef}</span>`;
+      html += `<span style="color:var(--pg-muted);font-size:0.75em;">近攻${u.closeAtk} 近防${u.closeDef}</span>`;
       html += `</div>`;
     });
     html += `</div>`;
   } else {
-    html += `<div style="color:#666;font-size:0.8em;padding:4px;">隣接する敵ヘクスをクリック</div>`;
+    html += `<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">隣接する敵ヘクスをクリック</div>`;
   }
 
   // === 突撃プレビュー ===
@@ -3163,10 +3214,10 @@ function renderAssaultPhase() {
       attackers.forEach(u => { if (u.unitName === 'Engineer') engMod += 1; });
       defenders.forEach(u => { if (u.unitName === 'Engineer') engMod -= 1; });
 
-      html += `<div style="margin:8px 0;padding:8px;background:#1a2a1a;border:1px solid #4a4;border-radius:4px;">`;
-      html += `<div style="color:#8f8;font-weight:bold;font-size:0.85em;">突撃プレビュー</div>`;
-      html += `<div style="font-size:0.8em;color:#aaa;">攻撃力:${atkPower} vs 防御力:${defPower} = <b style="color:#ff0;">${ASSAULT_RATIOS[ratioIdx]}</b></div>`;
-      html += `<div style="font-size:0.8em;color:#aaa;">地形修正:${terrainMod>=0?'+':''}${terrainMod}${engMod?' 工兵:'+engMod:''}</div>`;
+      html += `<div style="margin:8px 0;padding:8px;background:var(--pg-green-bg);border:1px solid #4a4;border-radius:4px;">`;
+      html += `<div style="color:var(--pg-green);font-weight:bold;font-size:0.85em;">突撃プレビュー</div>`;
+      html += `<div style="font-size:0.8em;color:var(--pg-muted);">攻撃力:${atkPower} vs 防御力:${defPower} = <b style="color:var(--pg-accent);">${ASSAULT_RATIOS[ratioIdx]}</b></div>`;
+      html += `<div style="font-size:0.8em;color:var(--pg-muted);">地形修正:${terrainMod>=0?'+':''}${terrainMod}${engMod?' 工兵:'+engMod:''}</div>`;
 
       // ダイス0-9の各結果を縦表示
       html += `<div style="margin-top:4px;font-size:0.75em;">`;
@@ -3179,14 +3230,14 @@ function renderAssaultPhase() {
         const hasD = res.includes('D') && !isDE;
         const color = isDE ? '#f22' : hasD ? '#da4' : '#888';
         html += `<tr>`;
-        html += `<td style="border:1px solid #444;padding:2px 6px;color:#888;width:40px;">D10:${d}</td>`;
-        html += `<td style="border:1px solid #444;padding:2px 6px;color:${color};">${res}</td>`;
+        html += `<td style="border:1px solid var(--pg-line);padding:2px 6px;color:var(--pg-muted);width:40px;">D10:${d}</td>`;
+        html += `<td style="border:1px solid var(--pg-line);padding:2px 6px;color:${color};">${res}</td>`;
         html += `</tr>`;
       }
       html += `</table></div>`;
 
       html += `<button class="dice-btn" style="font-size:0.9em;padding:8px 24px;margin-top:8px;width:100%;" onclick="doAssault()">突撃実行</button>`;
-      html += `<button class="btn-sm" style="margin-top:4px;width:100%;" onclick="assaultState.atkHexId=null;assaultState.defHexId=null;assaultState.atkChecked.clear();renderAssaultPhase();drawMap();">キャンセル</button>`;
+      html += `<button class="btn-sm" style="margin-top:4px;width:100%;" onclick="assaultState.atkHexId=null;assaultState.atkAdjacentHexes=[];assaultState.defHexId=null;assaultState.atkChecked.clear();renderAssaultPhase();drawMap();">キャンセル</button>`;
       html += `</div>`;
     }
   }
@@ -3218,6 +3269,7 @@ function onAssaultMapClick(col, row, cmdKey) {
   if (side === activeSide) {
     if (cmdKey && assaultState.atkHexId && areLinkedByRLeader(assaultState.atkHexId, hexId, activeSide)) {
       // Cmd+クリック: R指揮官経由で隣接部隊を追加
+      if (!assaultState.atkAdjacentHexes.includes(hexId)) assaultState.atkAdjacentHexes.push(hexId);
       testUnits.filter(u =>
         u.hexId === hexId && u.side === activeSide &&
         u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'leader' && u.col >= 0
@@ -3227,6 +3279,7 @@ function onAssaultMapClick(col, row, cmdKey) {
     } else {
       // 通常クリック: そのヘクスのみ選択
       assaultState.atkHexId = hexId;
+      assaultState.atkAdjacentHexes = [];
       assaultState.atkChecked.clear();
       testUnits.filter(u =>
         u.hexId === hexId && u.side === activeSide &&
@@ -3313,27 +3366,27 @@ function renderAssaultResult() {
   const r = assaultState.pendingResult;
   if (!r) { renderAssaultPhase(); return; }
 
-  let html = `<div style="padding:8px;background:#333;border-radius:4px;">`;
-  html += `<div style="color:#c8a020;font-weight:bold;font-size:1.1em;">突撃結果</div>`;
-  html += `<div style="font-size:0.9em;color:#eee;margin:4px 0;">戦力比: <b>${ASSAULT_RATIOS[r.ratioIdx]}</b> D10:${r.roll} → 修正${r.modifiedRoll}</div>`;
-  html += `<div style="font-size:1.2em;font-weight:bold;color:#ff0;margin:8px 0;">${r.resultStr}</div>`;
+  let html = `<div style="padding:8px;background:var(--pg-shade);border-radius:4px;">`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:1.1em;">突撃結果</div>`;
+  html += `<div style="font-size:0.9em;color:var(--pg-ink);margin:4px 0;">戦力比: <b>${ASSAULT_RATIOS[r.ratioIdx]}</b> D10:${r.roll} → 修正${r.modifiedRoll}</div>`;
+  html += `<div style="font-size:1.2em;font-weight:bold;color:var(--pg-accent);margin:8px 0;">${r.resultStr}</div>`;
 
   const parsed = r.result;
 
   // 攻撃側損害表示
   if (parsed.atkLoss > 0) {
-    html += `<div style="color:#f88;font-size:0.85em;">攻撃側損害: ${parsed.atkLoss}ユニット壊滅</div>`;
+    html += `<div style="color:var(--pg-red);font-size:0.85em;">攻撃側損害: ${parsed.atkLoss}ユニット壊滅</div>`;
   }
   // 防御側損害表示
   if (parsed.defLoss > 0) {
-    html += `<div style="color:#8cf;font-size:0.85em;">防御側損害: ${parsed.defLoss}ユニット壊滅</div>`;
+    html += `<div style="color:var(--pg-blue);font-size:0.85em;">防御側損害: ${parsed.defLoss}ユニット壊滅</div>`;
   }
   if (parsed.de) {
-    html += `<div style="color:#f22;font-size:0.85em;">防御側全滅 (DE)</div>`;
+    html += `<div style="color:var(--pg-red);font-size:0.85em;">防御側全滅 (DE)</div>`;
   }
 
-  html += `<div style="margin-top:12px;border-top:1px solid #555;padding-top:8px;">`;
-  html += `<div style="color:#c8a020;font-weight:bold;font-size:0.9em;margin-bottom:4px;">攻撃側の選択:</div>`;
+  html += `<div style="margin-top:12px;border-top:1px solid var(--pg-line);padding-top:8px;">`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:0.9em;margin-bottom:4px;">攻撃側の選択:</div>`;
 
   // 選択肢1: 損害を受け入れる（両軍に損害適用）
   html += `<button class="dice-btn" style="font-size:0.85em;padding:6px 16px;width:100%;margin:4px 0;" onclick="assaultAcceptLosses()">損害を受け入れる（攻${parsed.atkLoss} / 防${parsed.defLoss}）</button>`;
@@ -3342,7 +3395,7 @@ function renderAssaultResult() {
   // 移動力0のユニットは退却不可
   const atkHasImmobile = r.attackers.some(u => u.status !== 'eliminated' && (u.move || 0) === 0);
   if (atkHasImmobile) {
-    html += `<div style="color:#888;font-size:0.8em;margin:4px 0;">※ 移動力0のユニットがいるため退却不可</div>`;
+    html += `<div style="color:var(--pg-muted);font-size:0.8em;margin:4px 0;">※ 移動力0のユニットがいるため退却不可</div>`;
   } else {
     const reducedLoss = Math.max(0, parsed.atkLoss - 1);
     html += `<button class="btn-sm" style="width:100%;margin:4px 0;padding:6px;" onclick="assaultRetreatDD()">退却する（全員DD、損害${reducedLoss}、防御側損害なし）</button>`;
@@ -3441,9 +3494,9 @@ function renderDefenderChoice() {
     return;
   }
 
-  let html = `<div style="padding:8px;background:#333;border-radius:4px;">`;
-  html += `<div style="color:#f84;font-weight:bold;font-size:1.1em;">防御側の選択</div>`;
-  html += `<div style="font-size:0.9em;color:#eee;margin:4px 0;">結果: ${r.resultStr} — 防御側損害: ${parsed.defLoss}ユニット</div>`;
+  let html = `<div style="padding:8px;background:var(--pg-shade);border-radius:4px;">`;
+  html += `<div style="color:var(--pg-red);font-weight:bold;font-size:1.1em;">防御側の選択</div>`;
+  html += `<div style="font-size:0.9em;color:var(--pg-ink);margin:4px 0;">結果: ${r.resultStr} — 防御側損害: ${parsed.defLoss}ユニット</div>`;
 
   html += `<div style="margin-top:8px;">`;
   // 選択肢1: 損害を受け入れる
@@ -3453,7 +3506,7 @@ function renderDefenderChoice() {
   // 移動力0のユニットは退却不可
   const defHasImmobile = r.defenders.some(u => u.status !== 'eliminated' && (u.move || 0) === 0);
   if (defHasImmobile) {
-    html += `<div style="color:#888;font-size:0.8em;margin:4px 0;">※ 移動力0のユニットがいるため退却不可</div>`;
+    html += `<div style="color:var(--pg-muted);font-size:0.8em;margin:4px 0;">※ 移動力0のユニットがいるため退却不可</div>`;
   } else {
     const reducedLoss = Math.max(0, parsed.defLoss - 1);
     html += `<button class="btn-sm" style="width:100%;margin:4px 0;padding:6px;" onclick="defenderRetreat()">退却する（全員DD、損害${reducedLoss}）</button>`;
@@ -3530,15 +3583,15 @@ function renderRetreatChoice(side) {
     return enemiesHere.length === 0;
   });
 
-  let html = `<div style="padding:8px;background:#333;border-radius:4px;">`;
-  html += `<div style="color:#ff0;font-weight:bold;font-size:1em;">${isAtk ? '攻撃側' : '防御側'}退却先を選択</div>`;
+  let html = `<div style="padding:8px;background:var(--pg-shade);border-radius:4px;">`;
+  html += `<div style="color:var(--pg-accent);font-weight:bold;font-size:1em;">${isAtk ? '攻撃側' : '防御側'}退却先を選択</div>`;
 
   if (validRetreats.length === 0) {
-    html += `<div style="color:#f44;font-size:0.85em;">退却先なし → 全滅</div>`;
+    html += `<div style="color:var(--pg-red);font-size:0.85em;">退却先なし → 全滅</div>`;
     aliveUnits.forEach(u => { u.status = 'eliminated'; });
     addLog('assault', `${isAtk ? '攻撃側' : '防御側'}: 退却先なし → 全滅`);
   } else {
-    html += `<div style="font-size:0.9em;color:#ff0;margin:4px 0;">地図上の緑ハイライトヘクスをクリックしてください</div>`;
+    html += `<div style="font-size:0.9em;color:var(--pg-accent);margin:4px 0;">地図上の緑ハイライトヘクスをクリックしてください</div>`;
   }
 
   html += `</div>`;
@@ -3714,6 +3767,7 @@ function assaultReset() {
   const overrunTargetHex = assaultState.defHexId;
 
   assaultState.atkHexId = null;
+  assaultState.atkAdjacentHexes = [];
   assaultState.defHexId = null;
   assaultState.atkChecked.clear();
   assaultState.pendingResult = null;

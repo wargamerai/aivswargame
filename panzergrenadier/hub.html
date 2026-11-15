@@ -6,42 +6,42 @@
 <title>装甲擲弾兵 — Panzer Grenadier</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:#2a2a2a; color:#ddd; font-family:'Segoe UI',sans-serif; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
+body { background:var(--pg-panel); color:var(--pg-ink); font-family:'Segoe UI',sans-serif; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
 
 /* --- トップバー --- */
 #topbar {
-  background:#1a1a24; padding:6px 12px; display:flex; align-items:center; gap:12px;
-  border-bottom:1px solid #555; flex:0 0 auto; font-size:0.9em;
+  background:var(--pg-panel); padding:6px 12px; display:flex; align-items:center; gap:12px;
+  border-bottom:1px solid var(--pg-line); flex:0 0 auto; font-size:0.9em;
 }
-#topbar .title { font-weight:bold; font-size:1.1em; color:#c8a020; }
-#topbar .info { color:#aaa; }
+#topbar .title { font-weight:bold; font-size:1.1em; color:var(--pg-accent); }
+#topbar .info { color:var(--pg-muted); }
 #phaseBar { display:flex; gap:2px; }
 #phaseBar .ph {
-  padding:3px 8px; background:#333; border-radius:3px; font-size:0.8em; color:#888; cursor:pointer;
+  padding:3px 8px; background:var(--pg-shade); border-radius:3px; font-size:0.8em; color:var(--pg-muted); cursor:pointer;
 }
-#phaseBar .ph.active { background:#c8a020; color:#000; font-weight:bold; }
-#phaseBar .ph.done { background:#555; color:#aaa; }
+#phaseBar .ph.active { background:var(--pg-gold); color:var(--pg-ink); font-weight:bold; }
+#phaseBar .ph.done { background:var(--pg-shade); color:var(--pg-muted); }
 button.top-btn {
-  background:#445; color:#ccc; border:1px solid #667; padding:4px 12px;
+  background:var(--pg-blue-bg); color:var(--pg-ink); border:1px solid var(--pg-line); padding:4px 12px;
   border-radius:3px; cursor:pointer; font-size:0.85em;
 }
-button.top-btn:hover { background:#556; }
+button.top-btn:hover { background:var(--pg-shade); }
 
 /* --- メインエリア --- */
 #main { display:flex; flex:1; overflow:hidden; }
 
 /* --- マップエリア --- */
-#mapArea { flex:1; position:relative; overflow:hidden; background:#3a3a2a; margin:0; padding:0; }
+#mapArea { flex:1; position:relative; overflow:hidden; background:var(--pg-map); margin:0; padding:0; }
 #mapCanvas { position:absolute; top:0; left:0; cursor:grab; margin:0; padding:0; }
 
 /* --- 右パネル --- */
 #rightPanel {
-  width:320px; background:#1a1a24; border-left:1px solid #444;
+  width:320px; background:var(--pg-panel); border-left:1px solid var(--pg-line);
   display:flex; flex-direction:column; flex:0 0 320px; overflow-y:auto;
 }
 #rightPanel .phase-title {
-  padding:8px 12px; background:#222; color:#c8a020; font-weight:bold;
-  font-size:0.95em; border-bottom:1px solid #444;
+  padding:8px 12px; background:var(--pg-card); color:var(--pg-accent); font-weight:bold;
+  font-size:0.95em; border-bottom:1px solid var(--pg-line);
 }
 #phaseContent { padding:10px; flex:1; }
 
@@ -49,42 +49,42 @@ button.top-btn:hover { background:#556; }
 #initChart { margin:10px 0; }
 #initChart table { border-collapse:collapse; width:100%; font-size:0.8em; }
 #initChart th, #initChart td {
-  border:1px solid #555; padding:3px 6px; text-align:center; min-width:24px;
+  border:1px solid var(--pg-line); padding:3px 6px; text-align:center; min-width:24px;
 }
-#initChart th { background:#333; color:#aaa; }
-#initChart td.a { background:#2a4a6a; color:#8cf; }
-#initChart td.g { background:#5a3a2a; color:#fa8; }
+#initChart th { background:var(--pg-shade); color:var(--pg-muted); }
+#initChart td.a { background:var(--pg-blue-bg); color:var(--pg-blue); }
+#initChart td.g { background:var(--pg-red-bg); color:var(--pg-red); }
 #initChart td.marker { outline:3px solid #ff0; outline-offset:-2px; }
 
 /* マーカー位置表示 */
 #markerRow { display:flex; gap:2px; margin:8px 0; }
 #markerRow .slot {
-  flex:1; height:24px; background:#333; border:1px solid #555; border-radius:2px;
-  display:flex; align-items:center; justify-content:center; font-size:0.7em; color:#888;
+  flex:1; height:24px; background:var(--pg-shade); border:1px solid var(--pg-line); border-radius:2px;
+  display:flex; align-items:center; justify-content:center; font-size:0.7em; color:var(--pg-muted);
 }
-#markerRow .slot.current { background:#c8a020; color:#000; font-weight:bold; }
+#markerRow .slot.current { background:var(--pg-gold); color:var(--pg-ink); font-weight:bold; }
 
 /* ダイス */
 #diceArea { text-align:center; margin:8px 0; }
 #diceResult {
   display:inline-block; width:80px; height:80px; line-height:80px;
-  background:#111; border:3px solid #c8a020; border-radius:10px;
-  font-size:3em; font-weight:bold; color:#ff0; margin:6px;
+  background:var(--pg-card); border:3px solid var(--pg-accent); border-radius:10px;
+  font-size:3em; font-weight:bold; color:var(--pg-accent); margin:6px;
 }
-#diceResult.rolling { animation:shake 0.08s infinite; border-color:#f44; }
+#diceResult.rolling { animation:shake 0.08s infinite; border-color:var(--pg-red); }
 @keyframes shake {
   0%,100% { transform:rotate(0deg) scale(1); }
   25% { transform:rotate(-8deg) scale(1.05); }
   75% { transform:rotate(8deg) scale(1.05); }
 }
 button.dice-btn {
-  background:#c8a020; color:#000; border:none; padding:10px 28px;
+  background:var(--pg-gold); color:var(--pg-ink); border:none; padding:10px 28px;
   border-radius:4px; font-size:1.1em; font-weight:bold; cursor:pointer;
 }
-button.dice-btn:hover { background:#dab030; }
-button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
-.btn-sm { background:#556; color:#ddd; border:1px solid #778; padding:4px 12px; border-radius:3px; cursor:pointer; font-size:0.85em; }
-.btn-sm:hover { background:#778; }
+button.dice-btn:hover { background:var(--pg-gold); }
+button.dice-btn:disabled { background:var(--pg-shade); color:var(--pg-muted); cursor:default; }
+.btn-sm { background:var(--pg-shade); color:var(--pg-ink); border:1px solid var(--pg-line); padding:4px 12px; border-radius:3px; cursor:pointer; font-size:0.85em; }
+.btn-sm:hover { background:var(--pg-shade); }
 
 /* 結果表示 — 大きく */
 #initResult {
@@ -92,13 +92,13 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
   border-radius:6px; font-weight:bold; font-size:1.3em; display:none;
   border:2px solid;
 }
-#initResult.allied { background:#2a4a6a; color:#8cf; border-color:#4af; }
-#initResult.german { background:#5a3a2a; color:#fa8; border-color:#f84; }
+#initResult.allied { background:var(--pg-blue-bg); color:var(--pg-blue); border-color:var(--pg-blue); }
+#initResult.german { background:var(--pg-red-bg); color:var(--pg-red); border-color:var(--pg-red); }
 
 /* ダイス結果オーバーレイ */
 #diceOverlay {
   display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-  background:rgba(0,0,0,0.7); z-index:500;
+  background:rgba(241,236,220,0.84); z-index:500;
   justify-content:center; align-items:center; flex-direction:column;
 }
 #diceOverlay.show { display:flex; }
@@ -107,33 +107,32 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
   border-radius:12px; margin:10px; border:3px solid;
 }
 #diceOverlay .big-die {
-  font-size:6em; font-weight:bold; color:#ff0;
-  background:#111; border:4px solid #c8a020; border-radius:14px;
+  font-size:6em; font-weight:bold; color:var(--pg-accent);
+  background:var(--pg-card); border:4px solid var(--pg-accent); border-radius:14px;
   width:120px; height:120px; line-height:120px; text-align:center; margin:10px;
 }
-#diceOverlay .big-result.allied { background:#2a4a6a; color:#8cf; border-color:#4af; }
-#diceOverlay .big-result.german { background:#5a3a2a; color:#fa8; border-color:#f84; }
+#diceOverlay .big-result.allied { background:var(--pg-blue-bg); color:var(--pg-blue); border-color:var(--pg-blue); }
+#diceOverlay .big-result.german { background:var(--pg-red-bg); color:var(--pg-red); border-color:var(--pg-red); }
 
 /* --- 砲撃結果オーバーレイ --- */
 #fireOverlay {
   display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-  background:rgba(0,0,0,0.8); z-index:600;
+  background:rgba(241,236,220,0.9); z-index:600;
   justify-content:center; align-items:center; flex-direction:column;
 }
 #fireOverlay.show { display:flex; }
 #fireOverlay .fire-title {
-  font-size:2em; font-weight:bold; color:#f84; margin-bottom:12px;
-  text-shadow: 0 0 20px rgba(255,100,0,0.6);
+  font-size:2em; font-weight:bold; color:var(--pg-red); margin-bottom:12px;
 }
 #fireOverlay .fire-target {
-  font-size:1.2em; color:#c8a020; margin-bottom:16px;
+  font-size:1.2em; color:var(--pg-accent); margin-bottom:16px;
 }
 #fireOverlay .fire-results {
   max-width:600px; width:90%;
 }
 #fireOverlay .fire-row {
   display:flex; align-items:center; gap:12px; padding:10px 16px; margin:4px 0;
-  background:rgba(30,30,30,0.9); border-radius:8px; border-left:4px solid #555;
+  background:var(--pg-card); border-radius:8px; border-left:4px solid var(--pg-line);
   animation: fireRowIn 0.3s ease-out forwards;
   opacity:0; transform:translateX(-20px);
 }
@@ -141,82 +140,82 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
   to { opacity:1; transform:translateX(0); }
 }
 #fireOverlay .fire-row.hit-d { border-left-color:#fd8; }
-#fireOverlay .fire-row.hit-dd { border-left-color:#f84; }
+#fireOverlay .fire-row.hit-dd { border-left-color:var(--pg-red); }
 #fireOverlay .fire-row.hit-elim { border-left-color:#f22; }
-#fireOverlay .fire-row.hit-none { border-left-color:#666; }
+#fireOverlay .fire-row.hit-none { border-left-color:var(--pg-line); }
 #fireOverlay .fire-unit-name {
-  flex:1; font-weight:bold; font-size:1.1em; color:#ddd;
+  flex:1; font-weight:bold; font-size:1.1em; color:var(--pg-ink);
 }
 #fireOverlay .fire-dice {
   display:inline-block; width:48px; height:48px; line-height:48px; text-align:center;
-  background:#111; border:3px solid #c8a020; border-radius:8px;
-  font-size:1.8em; font-weight:bold; color:#ff0;
+  background:var(--pg-card); border:3px solid var(--pg-accent); border-radius:8px;
+  font-size:1.8em; font-weight:bold; color:var(--pg-accent);
 }
-#fireOverlay .fire-dice.rolling { animation:shake 0.08s infinite; border-color:#f44; }
+#fireOverlay .fire-dice.rolling { animation:shake 0.08s infinite; border-color:var(--pg-red); }
 #fireOverlay .fire-detail {
-  font-size:0.85em; color:#aaa;
+  font-size:0.85em; color:var(--pg-muted);
 }
 #fireOverlay .fire-damage {
   font-size:1.3em; font-weight:bold; padding:4px 12px; border-radius:4px;
   min-width:60px; text-align:center;
 }
-#fireOverlay .fire-damage.none { background:#333; color:#888; }
-#fireOverlay .fire-damage.d { background:#6a5a20; color:#fd8; }
-#fireOverlay .fire-damage.dd { background:#6a2020; color:#f88; }
-#fireOverlay .fire-damage.eliminated { background:#800; color:#fff; }
+#fireOverlay .fire-damage.none { background:var(--pg-shade); color:var(--pg-muted); }
+#fireOverlay .fire-damage.d { background:var(--pg-gold); color:var(--pg-accent); }
+#fireOverlay .fire-damage.dd { background:var(--pg-red-bg); color:var(--pg-red); }
+#fireOverlay .fire-damage.eliminated, #fireOverlay .fire-damage.elim { background:var(--pg-red-bg); color:var(--pg-ink); }
 #fireOverlay .fire-close {
-  color:#888; font-size:0.9em; margin-top:16px; cursor:pointer;
+  color:var(--pg-muted); font-size:0.9em; margin-top:16px; cursor:pointer;
 }
 
 /* フェイズ情報 */
-.phase-info { color:#aaa; font-size:0.85em; line-height:1.6; margin:8px 0; }
+.phase-info { color:var(--pg-muted); font-size:0.85em; line-height:1.6; margin:8px 0; }
 .phase-btn-row { display:flex; gap:8px; margin:8px 0; }
 
 /* 回復フェイズ */
 .recovery-section { margin:8px 0; }
-.recovery-section h3 { color:#c8a020; font-size:0.9em; margin:8px 0 4px; border-bottom:1px solid #444; padding-bottom:2px; }
+.recovery-section h3 { color:var(--pg-accent); font-size:0.9em; margin:8px 0 4px; border-bottom:1px solid var(--pg-line); padding-bottom:2px; }
 .recovery-unit {
   display:flex; align-items:center; gap:6px; padding:4px 6px; margin:2px 0;
-  background:#222; border-radius:3px; font-size:0.82em;
+  background:var(--pg-card); border-radius:3px; font-size:0.82em;
 }
 .recovery-unit .u-name { flex:1; font-weight:bold; }
 .recovery-unit .u-status { padding:1px 6px; border-radius:2px; font-size:0.9em; font-weight:bold; }
-.recovery-unit .u-status.ok { background:#2a5a2a; color:#8f8; }
-.recovery-unit .u-status.d { background:#6a5a20; color:#fd8; }
-.recovery-unit .u-status.dd { background:#6a2020; color:#f88; }
-.recovery-unit .u-status.eliminated { background:#400; color:#f44; }
-.recovery-unit .u-morale { color:#888; font-size:0.85em; }
-.recovery-unit .u-blocked { color:#f66; font-size:0.8em; }
+.recovery-unit .u-status.ok { background:var(--pg-green-bg); color:var(--pg-green); }
+.recovery-unit .u-status.d { background:var(--pg-gold); color:var(--pg-accent); }
+.recovery-unit .u-status.dd { background:var(--pg-red-bg); color:var(--pg-red); }
+.recovery-unit .u-status.eliminated { background:var(--pg-red-bg); color:var(--pg-red); }
+.recovery-unit .u-morale { color:var(--pg-muted); font-size:0.85em; }
+.recovery-unit .u-blocked { color:var(--pg-red); font-size:0.8em; }
 .recovery-unit .u-result { font-size:0.85em; padding:1px 4px; border-radius:2px; }
-.recovery-unit .u-result.success { background:#2a5a2a; color:#8f8; }
-.recovery-unit .u-result.fail { background:#444; color:#aaa; }
-.recovery-unit .u-result.critical { background:#6a2020; color:#f88; }
+.recovery-unit .u-result.success { background:var(--pg-green-bg); color:var(--pg-green); }
+.recovery-unit .u-result.fail { background:var(--pg-shade); color:var(--pg-muted); }
+.recovery-unit .u-result.critical { background:var(--pg-red-bg); color:var(--pg-red); }
 .recovery-unit button {
-  background:#556; color:#ddd; border:none; padding:2px 8px; border-radius:3px;
+  background:var(--pg-shade); color:var(--pg-ink); border:none; padding:2px 8px; border-radius:3px;
   cursor:pointer; font-size:0.85em;
 }
-.recovery-unit button:hover { background:#778; }
-.recovery-unit button:disabled { background:#333; color:#666; cursor:default; }
+.recovery-unit button:hover { background:var(--pg-shade); }
+.recovery-unit button:disabled { background:var(--pg-shade); color:var(--pg-muted); cursor:default; }
 .recovery-all-btn {
-  background:#c8a020; color:#000; border:none; padding:6px 16px; border-radius:4px;
+  background:var(--pg-gold); color:var(--pg-ink); border:none; padding:6px 16px; border-radius:4px;
   font-size:0.9em; font-weight:bold; cursor:pointer; margin:6px 0;
 }
-.recovery-all-btn:hover { background:#dab030; }
-.recovery-all-btn:disabled { background:#555; color:#888; cursor:default; }
+.recovery-all-btn:hover { background:var(--pg-gold); }
+.recovery-all-btn:disabled { background:var(--pg-shade); color:var(--pg-muted); cursor:default; }
 
 /* --- ログ --- */
 #gameLog {
   flex:0 0 auto; max-height:140px; overflow-y:auto;
-  background:#1a1a24; color:#ccc; font-size:0.8em; font-family:monospace;
-  padding:4px 8px; border-top:1px solid #555; line-height:1.5;
+  background:var(--pg-panel); color:var(--pg-ink); font-size:0.8em; font-family:monospace;
+  padding:4px 8px; border-top:1px solid var(--pg-line); line-height:1.5;
 }
-#gameLog .log-turn { color:#c8a020; font-weight:bold; }
-#gameLog .log-init { color:#8cf; }
+#gameLog .log-turn { color:var(--pg-accent); font-weight:bold; }
+#gameLog .log-init { color:var(--pg-blue); }
 
 /* --- スタック吹き出し --- */
 #stackPopup {
   display:none; position:fixed; z-index:400;
-  background:#1a1a24; border:2px solid #c8a020; border-radius:8px;
+  background:var(--pg-panel); border:2px solid var(--pg-accent); border-radius:8px;
   padding:8px; min-width:120px; max-width:360px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6);
   pointer-events:auto;
@@ -224,37 +223,40 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
 #stackPopup .popup-arrow {
   position:absolute; bottom:-8px; left:50%; transform:translateX(-50%);
   width:0; height:0; border-left:8px solid transparent; border-right:8px solid transparent;
-  border-top:8px solid #c8a020;
+  border-top:8px solid var(--pg-accent);
 }
 #stackPopup .popup-title {
-  color:#c8a020; font-size:0.8em; font-weight:bold; margin-bottom:6px;
-  border-bottom:1px solid #444; padding-bottom:4px;
+  color:var(--pg-accent); font-size:0.8em; font-weight:bold; margin-bottom:6px;
+  border-bottom:1px solid var(--pg-line); padding-bottom:4px;
 }
 #stackPopup .popup-unit {
   display:flex; align-items:center; gap:8px; padding:4px 2px;
-  border-bottom:1px solid #333;
+  border-bottom:1px solid var(--pg-line);
 }
 #stackPopup .popup-unit:last-child { border-bottom:none; }
 #stackPopup .popup-unit img {
-  width:106px; height:106px; object-fit:contain; border:1px solid #666; border-radius:2px;
+  width:106px; height:106px; object-fit:contain; border:1px solid var(--pg-line); border-radius:2px;
 }
 #stackPopup .popup-unit .pu-info { font-size:0.8em; }
-#stackPopup .popup-unit .pu-name { font-weight:bold; color:#ddd; }
+#stackPopup .popup-unit .pu-name { font-weight:bold; color:var(--pg-ink); }
 #stackPopup .popup-unit .pu-status {
   display:inline-block; padding:1px 6px; border-radius:2px; font-size:0.85em; font-weight:bold; margin-top:2px;
 }
-#stackPopup .popup-unit .pu-status.ok { background:#2a5a2a; color:#8f8; }
-#stackPopup .popup-unit .pu-status.d { background:#6a5a20; color:#fd8; }
-#stackPopup .popup-unit .pu-status.dd { background:#6a2020; color:#f88; }
+#stackPopup .popup-unit .pu-status.ok { background:var(--pg-green-bg); color:var(--pg-green); }
+#stackPopup .popup-unit .pu-status.d { background:var(--pg-gold); color:var(--pg-accent); }
+#stackPopup .popup-unit .pu-status.dd { background:var(--pg-red-bg); color:var(--pg-red); }
+.pg-order-picker,.pg-stack-checks{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+.pg-order-picker .is-selected{outline:1px solid var(--pg-accent)}
 </style>
+<link rel="stylesheet" href="palette.css">
 </head>
 <body>
 
 <!-- タイトル画面オーバーレイ -->
-<div id="titleOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#1a1a1a;z-index:9999;display:flex;flex-direction:column;align-items:center;overflow-y:auto;">
+<div id="titleOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:var(--pg-panel);z-index:9999;display:flex;flex-direction:column;align-items:center;overflow-y:auto;">
   <div style="text-align:center;padding:40px 20px 20px;">
-    <h1 style="font-size:2.8em;color:#c8a020;letter-spacing:0.15em;text-shadow:2px 2px 8px rgba(0,0,0,0.8);">装甲擲弾兵</h1>
-    <h2 style="font-size:1.4em;color:#888;font-weight:normal;letter-spacing:0.3em;font-style:italic;">PANZER GRENADIER</h2>
+    <h1 style="font-size:2.8em;color:var(--pg-accent);letter-spacing:0.15em;text-shadow:2px 2px 8px rgba(0,0,0,0.8);">装甲擲弾兵</h1>
+    <h2 style="font-size:1.4em;color:var(--pg-muted);font-weight:normal;letter-spacing:0.3em;font-style:italic;">PANZER GRENADIER</h2>
   </div>
   <div style="max-width:900px;width:100%;padding:20px;" id="titleContent"></div>
 </div>
@@ -269,8 +271,8 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
   <button class="top-btn" id="nextPhaseBtn" onclick="nextPhase()">次のフェイズ</button>
   <span id="pgOnlineStatus" class="info" hidden></span>
   <button class="top-btn" id="btnSplit" onclick="toggleStackSplit()" style="margin-left:4px;">スタック解除</button>
-  <span id="losInfo" style="color:#aaa;font-size:0.8em;display:none;"></span>
-  <span id="hexCursor" style="color:#ff0;font-size:0.85em;font-weight:bold;margin-left:8px;">--</span>
+  <span id="losInfo" style="color:var(--pg-muted);font-size:0.8em;display:none;"></span>
+  <span id="hexCursor" style="color:var(--pg-accent);font-size:0.85em;font-weight:bold;margin-left:8px;">--</span>
 </div>
 
 <!-- メイン -->
@@ -288,17 +290,17 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
 </div>
 
 <!-- ゲーム終了オーバーレイ -->
-<div id="gameOverOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;justify-content:center;align-items:center;flex-direction:column;cursor:pointer;" onclick="this.style.display='none'">
+<div id="gameOverOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(241,236,220,0.92);z-index:9999;justify-content:center;align-items:center;flex-direction:column;cursor:pointer;" onclick="this.style.display='none'">
   <div id="gameOverTitle" style="font-size:3em;font-weight:bold;text-shadow:0 0 20px currentColor;"></div>
-  <div id="gameOverDetail" style="font-size:1.5em;color:#ccc;margin-top:20px;"></div>
-  <div style="color:#666;font-size:0.9em;margin-top:30px;">クリックで閉じる</div>
+  <div id="gameOverDetail" style="font-size:1.5em;color:var(--pg-ink);margin-top:20px;"></div>
+  <div style="color:var(--pg-muted);font-size:0.9em;margin-top:30px;">クリックで閉じる</div>
 </div>
 
 <!-- ダイス結果オーバーレイ -->
 <div id="diceOverlay" onclick="closeDiceOverlay()">
   <div class="big-die" id="overlayDie">-</div>
   <div class="big-result" id="overlayResult"></div>
-  <div style="color:#888;font-size:0.9em;margin-top:10px;">クリックで閉じる</div>
+  <div style="color:var(--pg-muted);font-size:0.9em;margin-top:10px;">クリックで閉じる</div>
 </div>
 
 <!-- 砲撃結果オーバーレイ -->
@@ -310,11 +312,11 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
 </div>
 
 <!-- AI配置完了オーバーレイ -->
-<div id="aiPlacementOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:9999;display:none;justify-content:center;align-items:center;">
-  <div style="background:#1a1a2e;border:2px solid #c8a020;border-radius:12px;padding:30px 50px;text-align:center;max-width:500px;">
-    <div style="font-size:1.5em;color:#c8a020;font-weight:bold;margin-bottom:15px;" id="aiPlacementTitle">AI配置完了</div>
-    <div style="color:#ddd;font-size:1.1em;margin-bottom:20px;" id="aiPlacementInfo"></div>
-    <button onclick="closeAIPlacementOverlay()" style="background:#c8a020;color:#000;border:none;padding:10px 30px;border-radius:6px;font-size:1.1em;font-weight:bold;cursor:pointer;">ゲーム開始</button>
+<div id="aiPlacementOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(241,236,220,0.9);z-index:9999;display:none;justify-content:center;align-items:center;">
+  <div style="background:var(--pg-panel);border:2px solid var(--pg-accent);border-radius:12px;padding:30px 50px;text-align:center;max-width:500px;">
+    <div style="font-size:1.5em;color:var(--pg-accent);font-weight:bold;margin-bottom:15px;" id="aiPlacementTitle">AI配置完了</div>
+    <div style="color:var(--pg-ink);font-size:1.1em;margin-bottom:20px;" id="aiPlacementInfo"></div>
+    <button onclick="closeAIPlacementOverlay()" style="background:var(--pg-gold);color:var(--pg-ink);border:none;padding:10px 30px;border-radius:6px;font-size:1.1em;font-weight:bold;cursor:pointer;">ゲーム開始</button>
   </div>
 </div>
 
@@ -325,20 +327,20 @@ button.dice-btn:disabled { background:#555; color:#888; cursor:default; }
 </div>
 
 <!-- 下部バー -->
-<div id="bottomBar" style="background:#1a1a2e;border-top:1px solid #333;padding:4px 10px;font-size:0.85em;display:flex;align-items:center;gap:8px;">
-  <span id="visionDisplay" style="color:#c8a020;font-weight:bold;">--</span>
-  <span style="color:#555;">|</span>
+<div id="bottomBar" style="background:var(--pg-panel);border-top:1px solid var(--pg-line);padding:4px 10px;font-size:0.85em;display:flex;align-items:center;gap:8px;">
+  <span id="visionDisplay" style="color:var(--pg-accent);font-weight:bold;">--</span>
+  <span style="color:var(--pg-muted);">|</span>
   <button class="top-btn" onclick="zoomFit()">全体</button>
   <button class="top-btn" onclick="zoomStep(-10)">−</button>
   <input type="range" id="zoomSlider" min="10" max="300" value="100" style="width:120px;vertical-align:middle;">
   <button class="top-btn" onclick="zoomStep(10)">＋</button>
-  <span id="zoomLabel" style="color:#aaa;font-size:0.8em;">100%</span>
+  <span id="zoomLabel" style="color:var(--pg-muted);font-size:0.8em;">100%</span>
   <button class="top-btn" id="btnLOS" onclick="toggleLOSMode()" style="margin-left:8px;">視認</button>
   <button class="top-btn" id="btnLOSCheck" onclick="toggleLOSCheckMode()" style="margin-left:4px;">LOS確認</button>
-  <span id="losCheckInfo" style="color:#aaa;font-size:0.8em;margin-left:4px;"></span>
-  <span style="color:#555;margin-left:8px;">|</span>
-  <span id="breakthroughScore" style="color:#e04040;font-weight:bold;margin-left:4px;">突破: 0 / 7</span>
-  <span style="color:#555;margin-left:8px;">|</span>
+  <span id="losCheckInfo" style="color:var(--pg-muted);font-size:0.8em;margin-left:4px;"></span>
+  <span style="color:var(--pg-muted);margin-left:8px;">|</span>
+  <span id="breakthroughScore" style="color:var(--pg-red);font-weight:bold;margin-left:4px;">突破: 0 / 7</span>
+  <span style="color:var(--pg-muted);margin-left:8px;">|</span>
   <button class="top-btn" id="btnAIStep" onclick="toggleAIStepMode()" style="margin-left:4px;">確認:ON</button>
 </div>
 
@@ -1022,16 +1024,14 @@ function toggleLOSMode() {
   const btn = document.getElementById('btnLOS');
   const info = document.getElementById('losInfo');
   if (losMode) {
-    btn.style.background = '#c8a020';
-    btn.style.color = '#000';
+    btn.setAttribute('aria-pressed', 'true');
     btn.style.fontWeight = 'bold';
     info.style.display = 'inline';
     info.textContent = '← ユニットをクリックして視認範囲を表示';
     losSourceUnit = null;
     losVisibleHexes = {};
   } else {
-    btn.style.background = '';
-    btn.style.color = '';
+    btn.setAttribute('aria-pressed', 'false');
     btn.style.fontWeight = '';
     info.style.display = 'none';
     losSourceUnit = null;
@@ -1044,12 +1044,10 @@ function toggleStackSplit() {
   stackSplitMode = !stackSplitMode;
   const btn = document.getElementById('btnSplit');
   if (stackSplitMode) {
-    btn.style.background = '#c8a020';
-    btn.style.color = '#000';
+    btn.setAttribute('aria-pressed', 'true');
     btn.style.fontWeight = 'bold';
   } else {
-    btn.style.background = '';
-    btn.style.color = '';
+    btn.setAttribute('aria-pressed', 'false');
     btn.style.fontWeight = '';
   }
 }
@@ -1080,13 +1078,11 @@ function toggleLOSCheckMode() {
   if (losCheckMode) {
     // 他のモードを解除
     if (losMode) toggleLOSMode();
-    btn.style.background = '#c8a020';
-    btn.style.color = '#000';
+    btn.setAttribute('aria-pressed', 'true');
     btn.style.fontWeight = 'bold';
     info.textContent = '← Cmd+クリックで始点選択';
   } else {
-    btn.style.background = '';
-    btn.style.color = '';
+    btn.setAttribute('aria-pressed', 'false');
     btn.style.fontWeight = '';
     info.textContent = '';
   }
@@ -1100,7 +1096,7 @@ function onLOSCheckClick(col, row) {
     losCheckEnd = null;
     losCheckResult = null;
     info.textContent = `始点: ${toHexId(col, row)} → Cmd+クリックで終点選択`;
-    info.style.color = '#aaa';
+    info.style.color = 'var(--pg-muted)';
     drawMap();
   } else {
     losCheckEnd = { col, row, _srcCol: losCheckStart.col, _srcRow: losCheckStart.row };
@@ -1111,7 +1107,7 @@ function onLOSCheckClick(col, row) {
     const srcElev = getHexElevation(losCheckStart.col, losCheckStart.row);
     const tgtElev = getHexElevation(col, row);
     info.textContent = `${startId}(h${srcElev}) → ${endId}(h${tgtElev}) 距離${dist}: ${losCheckResult ? 'LOS通る ✓' : 'LOS遮蔽 ✗'}`;
-    info.style.color = losCheckResult ? '#4f4' : '#f44';
+    info.style.color = losCheckResult ? 'var(--pg-green)' : 'var(--pg-red)';
     // 次のクリックで始点リセット
     losCheckStart = null;
     drawMap();
@@ -1430,8 +1426,8 @@ function updatePhaseBar() {
   if (G.initiative) {
     const isG = G.initiative === 'german';
     badge.style.display = 'inline-block';
-    badge.style.background = isG ? '#5a3a2a' : '#2a4a6a';
-    badge.style.color = isG ? '#fa8' : '#8cf';
+    badge.style.background = isG ? 'var(--pg-red-bg)' : 'var(--pg-blue-bg)';
+    badge.style.color = isG ? 'var(--pg-red)' : 'var(--pg-blue)';
     badge.textContent = '';
     const vd = document.getElementById('visionDisplay');
     vd.textContent = `主導権: ${isG ? 'ドイツ軍' : '連合軍'} (M${G.markerPos}) 視認距離${G.visionRange}`;
@@ -1666,6 +1662,8 @@ function nextPhase() {
   if (pgOrderRun || pgOrderDraft || (['moveFire', 'defMove'].includes(PHASES[G.phase].id) && moveState.movingUnit)) return;
   pgReconcileOrders();
   pgOrderHex = null;
+  pgOrderUnit = null;
+  pgManualMoves.clear();
   if (G.phase === 0 && !G.diceRolled) {
     // イニシアチブ未決定
     return;
@@ -1798,14 +1796,14 @@ function _aiFireAndShow(shooters, target, typeLabel) {
                      result.damage === 'dd' ? '#f80' :
                      result.damage === 'd' ? '#ff0' : '#888';
 
-    let html = `<div style="padding:10px;background:#333;border:2px solid #666;border-radius:6px;text-align:center;">`;
-    html += `<div style="color:#aaa;font-size:0.85em;">${typeLabel}</div>`;
-    html += `<div style="color:#8f8;margin:4px 0;">${shooterNames} (fp${result.totalFP})</div>`;
-    html += `<div style="color:#f88;">→ ${target.name} (def${target.def || 0})</div>`;
-    html += `<div style="font-size:2.5em;font-weight:bold;color:#ff0;margin:8px 0;">D10: ${result.roll}</div>`;
-    if (result.totalMod) html += `<div style="font-size:0.85em;color:#aaa;">修正: ${result.totalMod} → ${result.modifiedRoll}</div>`;
+    let html = `<div style="padding:10px;background:var(--pg-shade);border:2px solid var(--pg-line);border-radius:6px;text-align:center;">`;
+    html += `<div style="color:var(--pg-muted);font-size:0.85em;">${typeLabel}</div>`;
+    html += `<div style="color:var(--pg-green);margin:4px 0;">${shooterNames} (fp${result.totalFP})</div>`;
+    html += `<div style="color:var(--pg-red);">→ ${target.name} (def${target.def || 0})</div>`;
+    html += `<div style="font-size:2.5em;font-weight:bold;color:var(--pg-accent);margin:8px 0;">D10: ${result.roll}</div>`;
+    if (result.totalMod) html += `<div style="font-size:0.85em;color:var(--pg-muted);">修正: ${result.totalMod} → ${result.modifiedRoll}</div>`;
     html += `<div style="font-size:1.5em;font-weight:bold;color:${dmgColor};margin:8px 0;">${dmgText}</div>`;
-    html += `<div style="font-size:0.85em;color:#ccc;">${target.name}: ${(result.prevStatus||'?').toUpperCase()} → ${(result.newStatus||target.status||'?').toUpperCase()}</div>`;
+    html += `<div style="font-size:0.85em;color:var(--pg-ink);">${target.name}: ${(result.prevStatus||'?').toUpperCase()} → ${(result.newStatus||target.status||'?').toUpperCase()}</div>`;
     html += `<button class="dice-btn" style="padding:8px 30px;margin-top:10px;" onclick="window._aiFireOK()">OK</button>`;
     html += `</div>`;
     c.innerHTML = html;
@@ -2709,6 +2707,10 @@ async function aiAutoDefMove() {
 
         // ストップ射撃チェック（敵の射程内に入ったか）
         const defStopThreats = checkStopFireAt(best.col, best.row, alive[0].side);
+        if (pgHumanChoosesRearStopFire(alive[0].side)) {
+          if (await pgPlayerRearStopFire(alive, defStopThreats)) break;
+          continue;
+        }
         // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
         const filteredThreats = defStopThreats.filter(e => {
           if ((e.range || 1) >= 3) {
@@ -2928,6 +2930,10 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
       if (alive.every(u => u.status === 'eliminated')) break;
       // ストップ射撃チェック
       const threats = checkStopFireAt(next.col, next.row, alive[0].side);
+      if (pgHumanChoosesRearStopFire(alive[0].side)) {
+        if (await pgPlayerRearStopFire(alive, threats)) break;
+        continue;
+      }
       // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
       const filteredThreats = threats.filter(e => {
         if ((e.range || 1) >= 3) {
@@ -4066,7 +4072,7 @@ function drawMap() {
   canvas.width = area.clientWidth;
   canvas.height = area.clientHeight;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#3a3a2a';
+  ctx.fillStyle = '#c4c4a5';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.translate(mapState.x, mapState.y);
@@ -4108,7 +4114,7 @@ function drawMap() {
   // マップ周囲余白（1-2ヘクス分）
   if (mapState.img) {
     const pad = MAP_CONFIG.hexSize * 4;
-    ctx.fillStyle = '#3a3a2a';
+    ctx.fillStyle = '#c4c4a5';
     ctx.fillRect(mapState.img.width, -pad, pad, mapState.img.height + pad * 2);
     ctx.fillRect(-pad, -pad, pad, mapState.img.height + pad * 2);
     ctx.fillRect(-pad, -pad, mapState.img.width + pad * 2, pad);
@@ -4766,7 +4772,7 @@ function initMap() {
   const area = document.getElementById('mapArea');
   canvas.width = area.clientWidth;
   canvas.height = area.clientHeight;
-  ctx.fillStyle = '#3a3a2a';
+  ctx.fillStyle = '#c4c4a5';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#666';
   ctx.font = '16px sans-serif';
@@ -4997,7 +5003,7 @@ function onMapPoint(mx, my, e) {
           placeReinforcement(nearest.col, nearest.row);
           return;
         }
-        onMoveFireMapClick(nearest.col, nearest.row, e.metaKey || e.ctrlKey);
+        onMoveFireMapClick(nearest.col, nearest.row, e.metaKey || e.ctrlKey, hitTestUnit(mx, my));
       }
       return;
     }
@@ -5086,9 +5092,9 @@ function showStackPopup(stack, screenX, screenY) {
 
   const stackCountReal = stack.filter(u => !STACK_EXEMPT_TYPES.includes(u.type)).length;
   const isOver = stackCountReal > STACK_LIMIT;
-  let html = `<div class="popup-title" ${isOver ? 'style="color:#f44;border-bottom-color:#f44;"' : ''}>スタック (${n}個)${isOver ? ' ⚠ 超過!' : ''}</div>`;
+  let html = `<div class="popup-title" ${isOver ? 'style="color:var(--pg-red);border-bottom-color:var(--pg-red);"' : ''}>スタック (${n}個)${isOver ? ' ⚠ 超過!' : ''}</div>`;
   if (isOver) {
-    html += `<div style="color:#f88;font-size:0.75em;padding:2px 0 4px;border-bottom:1px solid #444;margin-bottom:4px;">上限${STACK_LIMIT}個 — 全ユニットDD</div>`;
+    html += `<div style="color:var(--pg-red);font-size:0.75em;padding:2px 0 4px;border-bottom:1px solid var(--pg-line);margin-bottom:4px;">上限${STACK_LIMIT}個 — 全ユニットDD</div>`;
   }
   const ABILITY_LABELS = { F:'射撃', A:'突撃', M:'回復', R:'指揮範囲' };
   stack.forEach(u => {
@@ -5105,7 +5111,7 @@ function showStackPopup(stack, screenX, screenY) {
     if (u.type === 'leader' && u.abilities && u.status !== 'eliminated') {
       html += `<div style="margin-top:3px;">`;
       u.abilities.forEach(ab => {
-        html += `<span style="display:inline-block;background:#c8a020;color:#000;font-weight:bold;padding:1px 5px;border-radius:2px;font-size:0.75em;margin:1px;">${ab}(${ABILITY_LABELS[ab]})</span>`;
+        html += `<span style="display:inline-block;background:var(--pg-gold);color:var(--pg-ink);font-weight:bold;padding:1px 5px;border-radius:2px;font-size:0.75em;margin:1px;">${ab}(${ABILITY_LABELS[ab]})</span>`;
       });
       html += `</div>`;
     }
@@ -5257,37 +5263,37 @@ function selectTitle() {
 function showTitle() {
   const tc = document.getElementById('titleContent');
   tc.innerHTML = `
-    <div style="background:#222;border:2px solid #444;border-radius:8px;padding:16px;margin:12px 0;cursor:pointer;" onclick="selectTitle()">
-      <div style="color:#c8a020;font-size:0.85em;font-weight:bold;">SCENARIO ${SCENARIO.id}</div>
-      <div style="font-size:1.3em;font-weight:bold;color:#eee;margin:2px 0;">${SCENARIO.name}</div>
-      <div style="color:#aaa;font-size:0.85em;">${SCENARIO.date || ''}</div>
-      <div style="color:#888;font-size:0.8em;margin-top:6px;">${SCENARIO.description || ''}</div>
+    <div style="background:var(--pg-card);border:2px solid var(--pg-line);border-radius:8px;padding:16px;margin:12px 0;cursor:pointer;" onclick="selectTitle()">
+      <div style="color:var(--pg-accent);font-size:0.85em;font-weight:bold;">SCENARIO ${SCENARIO.id}</div>
+      <div style="font-size:1.3em;font-weight:bold;color:var(--pg-ink);margin:2px 0;">${SCENARIO.name}</div>
+      <div style="color:var(--pg-muted);font-size:0.85em;">${SCENARIO.date || ''}</div>
+      <div style="color:var(--pg-muted);font-size:0.8em;margin-top:6px;">${SCENARIO.description || ''}</div>
     </div>
-    <h4 style="color:#aaa;margin:16px 0 8px;">対戦モード</h4>
+    <h4 style="color:var(--pg-muted);margin:16px 0 8px;">対戦モード</h4>
     <div style="display:flex;gap:12px;justify-content:center;" id="titleModeSelect">
       <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('pvai')">
-        <div style="color:#c8a020;font-weight:bold;">人間 vs AI</div>
+        <div style="color:var(--pg-accent);font-weight:bold;">人間 vs AI</div>
       </div>
       <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('pvp')">
-        <div style="color:#c8a020;font-weight:bold;">人間 vs 人間</div>
+        <div style="color:var(--pg-accent);font-weight:bold;">人間 vs 人間</div>
       </div>
       <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('online')">
-        <div style="color:#c8a020;font-weight:bold;">オンライン対戦</div>
+        <div style="color:var(--pg-accent);font-weight:bold;">オンライン対戦</div>
       </div>
       <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleMode('aivai')">
-        <div style="color:#c8a020;font-weight:bold;">AI vs AI</div>
+        <div style="color:var(--pg-accent);font-weight:bold;">AI vs AI</div>
       </div>
     </div>
     <div id="titleSideSelect" style="margin:16px 0;"></div>
-    <div id="titleVictory" style="margin:12px 0;padding:10px;background:#1a2a1a;border:1px solid #464;border-radius:4px;">
-      <div style="color:#aaa;font-size:0.85em;font-weight:bold;">勝利条件</div>
-      ${SCENARIO.victory.german ? '<div style="color:#8a8;font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.german + '</div>' : ''}
-      ${SCENARIO.victory.allied ? '<div style="color:#8a8;font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.allied + '</div>' : ''}
-      ${SCENARIO.victory.draw ? '<div style="color:#8a8;font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.draw + '</div>' : ''}
+    <div id="titleVictory" style="margin:12px 0;padding:10px;background:var(--pg-green-bg);border:1px solid var(--pg-line);border-radius:4px;">
+      <div style="color:var(--pg-muted);font-size:0.85em;font-weight:bold;">勝利条件</div>
+      ${SCENARIO.victory.german ? '<div style="color:var(--pg-green);font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.german + '</div>' : ''}
+      ${SCENARIO.victory.allied ? '<div style="color:var(--pg-green);font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.allied + '</div>' : ''}
+      ${SCENARIO.victory.draw ? '<div style="color:var(--pg-green);font-size:0.8em;padding:2px 0;">● ' + SCENARIO.victory.draw + '</div>' : ''}
     </div>
-    ${SCENARIO.specialRules && SCENARIO.specialRules.length > 0 ? '<div style="margin:12px 0;padding:10px;background:#1a1a2a;border:1px solid #446;border-radius:4px;"><div style="color:#aaa;font-size:0.85em;font-weight:bold;">特別ルール</div>' + SCENARIO.specialRules.map(r => '<div style="color:#88a;font-size:0.8em;margin-left:16px;">・' + r + '</div>').join('') + '</div>' : ''}
+    ${SCENARIO.specialRules && SCENARIO.specialRules.length > 0 ? '<div style="margin:12px 0;padding:10px;background:var(--pg-blue-bg);border:1px solid var(--pg-line);border-radius:4px;"><div style="color:var(--pg-muted);font-size:0.85em;font-weight:bold;">特別ルール</div>' + SCENARIO.specialRules.map(r => '<div style="color:var(--pg-muted);font-size:0.8em;margin-left:16px;">・' + r + '</div>').join('') + '</div>' : ''}
     <div style="text-align:center;margin:20px 0;">
-      <button id="titleStartBtn" style="background:#c8a020;color:#000;border:none;padding:14px 48px;border-radius:6px;font-size:1.2em;font-weight:bold;cursor:pointer;letter-spacing:0.1em;" disabled onclick="startGameFromTitle()">ゲーム開始</button>
+      <button id="titleStartBtn" style="background:var(--pg-gold);color:var(--pg-ink);border:none;padding:14px 48px;border-radius:6px;font-size:1.2em;font-weight:bold;cursor:pointer;letter-spacing:0.1em;" disabled onclick="startGameFromTitle()">ゲーム開始</button>
     </div>
   `;
 }
@@ -5297,22 +5303,22 @@ function selectTitleMode(mode) {
   _titleSelectedSide = null;
   // ボタンハイライト
   document.querySelectorAll('#titleModeSelect .top-btn').forEach(b => {
-    b.style.background = '#445';
+    b.setAttribute('aria-pressed', 'false');
     b.style.borderColor = '#667';
   });
-  event.currentTarget.style.background = '#665522';
+  event.currentTarget.setAttribute('aria-pressed', 'true');
   event.currentTarget.style.borderColor = '#c8a020';
 
   const sideEl = document.getElementById('titleSideSelect');
   if (mode === 'pvai') {
     sideEl.innerHTML = `
-      <h4 style="color:#aaa;margin-bottom:8px;">操作する陣営</h4>
+      <h4 style="color:var(--pg-muted);margin-bottom:8px;">操作する陣営</h4>
       <div style="display:flex;gap:12px;justify-content:center;">
         <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleSide('german')">
-          <div style="color:#fa8;font-weight:bold;">ドイツ軍</div>
+          <div style="color:var(--pg-red);font-weight:bold;">ドイツ軍</div>
         </div>
         <div class="top-btn" style="padding:16px 24px;min-width:150px;text-align:center;cursor:pointer;" onclick="selectTitleSide('allied')">
-          <div style="color:#8cf;font-weight:bold;">連合軍</div>
+          <div style="color:var(--pg-blue);font-weight:bold;">連合軍</div>
         </div>
       </div>`;
     document.getElementById('titleStartBtn').disabled = true;
@@ -5326,10 +5332,10 @@ function selectTitleMode(mode) {
 function selectTitleSide(side) {
   _titleSelectedSide = side;
   document.querySelectorAll('#titleSideSelect .top-btn').forEach(b => {
-    b.style.background = '#445';
+    b.setAttribute('aria-pressed', 'false');
     b.style.borderColor = '#667';
   });
-  event.currentTarget.style.background = '#665522';
+  event.currentTarget.setAttribute('aria-pressed', 'true');
   event.currentTarget.style.borderColor = '#c8a020';
   document.getElementById('titleStartBtn').disabled = false;
 }

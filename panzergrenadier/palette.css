@@ -1,0 +1,67 @@
+:root {
+  color-scheme: light;
+  accent-color: #3c5130;
+  --pg-ink: #252b20;
+  --pg-muted: #565b49;
+  --pg-panel: #f5f1e5;
+  --pg-card: #fffcf2;
+  --pg-shade: #eee7d4;
+  --pg-map: #c4c4a5;
+  --pg-line: #a49c81;
+  --pg-accent: #6e4c14;
+  --pg-gold: #ead5a4;
+  --pg-green: #36592f;
+  --pg-green-bg: #e4edd8;
+  --pg-blue: #2d4f6b;
+  --pg-blue-bg: #e3edf3;
+  --pg-red: #883b2b;
+  --pg-red-bg: #f4e0d7;
+  --pg-pressed: #3c5130;
+  --pg-on-pressed: #fffdf2;
+}
+
+.top-btn, .btn-sm, .dice-btn, .start-btn, .recovery-all-btn, .recovery-unit button {
+  min-height: 26px;
+}
+:is(button, .btn-sm, .top-btn, .scenario-card, .side-btn):focus-visible {
+  outline: 2px solid var(--pg-pressed);
+  outline-offset: 2px;
+}
+:is(button:enabled, .btn-sm:not(button), .top-btn:not(button), .scenario-card, .side-btn):active,
+:is(button, .btn-sm, .top-btn, .recovery-unit)[aria-pressed="true"],
+:is(.scenario-card, .side-btn, #modeSelect [data-mode]).selected {
+  background: var(--pg-pressed) !important;
+  color: var(--pg-on-pressed) !important;
+  border-color: var(--pg-pressed) !important;
+}
+:is(.scenario-card, .side-btn, #modeSelect [data-mode]).selected :is(.sc-num, .sc-name, .sc-date, .sc-desc, .sc-details, .side-name, .side-desc) {
+  color: var(--pg-on-pressed) !important;
+}
+.recovery-unit[aria-pressed="true"] :is(.u-morale, .u-blocked) { color: var(--pg-on-pressed); }
+.scenario-card.selected .sc-details span { background: #53664a; }
+#phaseBar .ph.active { background: var(--pg-pressed); color: var(--pg-on-pressed); cursor: default; }
+
+.pg-stop-choice {
+  display: grid;
+  gap: .5rem;
+  padding: .7rem;
+  background: var(--pg-card);
+  border: 1px solid var(--pg-line);
+  border-radius: 5px;
+}
+.pg-stop-option {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .35rem .5rem;
+  background: var(--pg-shade);
+  border: 1px solid var(--pg-line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.pg-stop-option:has(input:checked) {
+  background: var(--pg-pressed);
+  color: var(--pg-on-pressed);
+}
+.pg-stop-choice .phase-btn-row { flex-wrap: wrap; margin-bottom: 0; }
+.pg-stop-choice .dice-btn { padding: 4px 12px; font-size: .9em; }

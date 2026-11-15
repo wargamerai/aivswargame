@@ -74,7 +74,7 @@ function renderRecoveryPhase() {
     html += `<h3>${sideNames[side]}（${needsRecovery.length}ユニット要回復）</h3>`;
 
     if (needsRecovery.length === 0) {
-      html += '<div style="color:#888;font-size:0.8em;padding:4px;">回復が必要なユニットなし</div>';
+      html += '<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">回復が必要なユニットなし</div>';
     } else {
       const allDone = needsRecovery.every(u => recoveryResults[u.id]);
       html += `<button class="recovery-all-btn" onclick="rollAllRecovery('${side}')" ${allDone ? 'disabled' : ''}>全ユニット一括ロール</button>`;
@@ -104,7 +104,7 @@ function renderRecoveryPhase() {
     }
 
     if (otherUnits.length > 0) {
-      html += `<div style="color:#666;font-size:0.75em;margin-top:4px;">${otherUnits.length}ユニット正常</div>`;
+      html += `<div style="color:var(--pg-muted);font-size:0.75em;margin-top:4px;">${otherUnits.length}ユニット正常</div>`;
     }
     html += `</div>`;
   });

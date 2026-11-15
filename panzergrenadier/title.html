@@ -10,9 +10,9 @@
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body {
-  background:#1a1a1a; color:#ddd; font-family:'Segoe UI',sans-serif;
+  background:var(--pg-panel); color:var(--pg-ink); font-family:'Segoe UI',sans-serif;
   min-height:100vh; display:flex; flex-direction:column; align-items:center;
-  background-image: linear-gradient(180deg, #1a1a24 0%, #2a2a1a 50%, #1a1a24 100%);
+  background-image: linear-gradient(180deg, var(--pg-panel), var(--pg-green-bg) 58%, var(--pg-panel));
 }
 
 /* タイトル */
@@ -20,16 +20,15 @@ body {
   text-align:center; padding:40px 20px 20px;
 }
 .title-area h1 {
-  font-size:2.8em; color:#c8a020; letter-spacing:0.15em;
-  text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
+  font-size:2.8em; color:var(--pg-accent); letter-spacing:0.15em;
   margin-bottom:4px;
 }
 .title-area h2 {
-  font-size:1.4em; color:#888; font-weight:normal; letter-spacing:0.3em;
+  font-size:1.4em; color:var(--pg-muted); font-weight:normal; letter-spacing:0.3em;
   font-style:italic;
 }
 .title-area .version {
-  font-size:0.8em; color:#555; margin-top:8px;
+  font-size:0.8em; color:var(--pg-muted); margin-top:8px;
 }
 
 /* メインコンテナ */
@@ -42,83 +41,84 @@ body {
   display:flex; flex-direction:column; gap:12px; margin:20px 0;
 }
 .scenario-card {
-  background:#222; border:2px solid #444; border-radius:8px;
+  background:var(--pg-card); border:2px solid var(--pg-line); border-radius:8px;
   padding:16px; cursor:pointer; transition:all 0.2s;
   display:flex; flex-direction:column; gap:12px;
 }
-.scenario-card:hover { border-color:#c8a020; background:#2a2a22; }
-.scenario-card.selected { border-color:#c8a020; background:#2a2a22; box-shadow:0 0 12px rgba(200,160,32,0.3); }
+.scenario-card:hover { border-color:var(--pg-accent); background:var(--pg-card); }
+.scenario-card.selected { border-color:var(--pg-accent); background:var(--pg-card); box-shadow:0 0 12px rgba(200,160,32,0.3); }
 .scenario-card.disabled { opacity:0.4; cursor:default; pointer-events:none; }
 
 .sc-thumb { border-radius:4px; overflow:hidden; }
 .sc-thumb img { display:block; width:100%; }
-.sc-thumb .no-img { color:#555; font-size:0.8em; padding:20px; text-align:center; background:#333; }
+.sc-thumb .no-img { color:var(--pg-muted); font-size:0.8em; padding:20px; text-align:center; background:var(--pg-shade); }
 
 .sc-info { flex:1; }
-.sc-info .sc-num { color:#c8a020; font-size:0.85em; font-weight:bold; }
-.sc-info .sc-name { font-size:1.3em; font-weight:bold; color:#eee; margin:2px 0; }
-.sc-info .sc-date { color:#aaa; font-size:0.85em; }
-.sc-info .sc-desc { color:#888; font-size:0.8em; margin-top:6px; line-height:1.4; }
+.sc-info .sc-num { color:var(--pg-accent); font-size:0.85em; font-weight:bold; }
+.sc-info .sc-name { font-size:1.3em; font-weight:bold; color:var(--pg-ink); margin:2px 0; }
+.sc-info .sc-date { color:var(--pg-muted); font-size:0.85em; }
+.sc-info .sc-desc { color:var(--pg-muted); font-size:0.8em; margin-top:6px; line-height:1.4; }
 .sc-info .sc-details {
-  display:flex; gap:12px; margin-top:8px; font-size:0.75em; color:#aaa;
+  display:flex; gap:12px; margin-top:8px; font-size:0.75em; color:var(--pg-muted);
 }
 .sc-info .sc-details span {
-  background:#333; padding:2px 8px; border-radius:3px;
+  background:var(--pg-shade); padding:2px 8px; border-radius:3px;
 }
 
 /* 対戦設定 */
 .match-setup {
-  background:#222; border:2px solid #555; border-radius:8px;
+  background:var(--pg-card); border:2px solid var(--pg-line); border-radius:8px;
   padding:20px; margin:20px 0; display:none;
 }
 .match-setup.show { display:block; }
-.match-setup h3 { color:#c8a020; margin-bottom:12px; }
+.match-setup h3 { color:var(--pg-accent); margin-bottom:12px; }
 
 .side-select {
   display:flex; gap:12px; justify-content:center; margin:16px 0;
 }
 .side-btn {
-  padding:16px 32px; border:2px solid #555; border-radius:8px;
-  background:#2a2a2a; cursor:pointer; text-align:center; min-width:180px;
+  padding:16px 32px; border:2px solid var(--pg-line); border-radius:8px;
+  background:var(--pg-panel); cursor:pointer; text-align:center; min-width:180px;
   transition:all 0.2s;
 }
 .side-btn:hover { border-color:#888; }
-.side-btn.selected { border-color:#c8a020; background:#333; box-shadow:0 0 8px rgba(200,160,32,0.3); }
+.side-btn.selected { border-color:var(--pg-accent); background:var(--pg-shade); box-shadow:0 0 8px rgba(200,160,32,0.3); }
 .side-btn .side-name { font-size:1.2em; font-weight:bold; }
-.side-btn .side-desc { font-size:0.8em; color:#888; margin-top:4px; }
-.side-btn.german .side-name { color:#fa8; }
-.side-btn.allied .side-name { color:#8cf; }
+.side-btn .side-desc { font-size:0.8em; color:var(--pg-muted); margin-top:4px; }
+.side-btn.german .side-name { color:var(--pg-red); }
+.side-btn.allied .side-name { color:var(--pg-blue); }
 
 /* 特別ルール */
 .special-rules {
-  margin:12px 0; padding:10px; background:#1a1a2a; border:1px solid #446; border-radius:4px;
+  margin:12px 0; padding:10px; background:var(--pg-blue-bg); border:1px solid var(--pg-line); border-radius:4px;
 }
-.special-rules h4 { color:#aaa; font-size:0.85em; margin-bottom:4px; }
-.special-rules li { color:#88a; font-size:0.8em; margin-left:16px; }
+.special-rules h4 { color:var(--pg-muted); font-size:0.85em; margin-bottom:4px; }
+.special-rules li { color:var(--pg-muted); font-size:0.8em; margin-left:16px; }
 
 /* 勝利条件 */
 .victory-cond {
-  margin:12px 0; padding:10px; background:#1a2a1a; border:1px solid #464; border-radius:4px;
+  margin:12px 0; padding:10px; background:var(--pg-green-bg); border:1px solid var(--pg-line); border-radius:4px;
 }
-.victory-cond h4 { color:#aaa; font-size:0.85em; margin-bottom:4px; }
-.victory-cond .vc-line { font-size:0.8em; color:#8a8; padding:2px 0; }
+.victory-cond h4 { color:var(--pg-muted); font-size:0.85em; margin-bottom:4px; }
+.victory-cond .vc-line { font-size:0.8em; color:var(--pg-green); padding:2px 0; }
 
 /* 開始ボタン */
 .start-area { text-align:center; margin:20px 0; }
 .start-btn {
-  background:#c8a020; color:#000; border:none; padding:14px 48px;
+  background:var(--pg-gold); color:var(--pg-ink); border:none; padding:14px 48px;
   border-radius:6px; font-size:1.2em; font-weight:bold; cursor:pointer;
   letter-spacing:0.1em; transition:all 0.2s;
 }
-.start-btn:hover { background:#dab030; transform:scale(1.02); }
-.start-btn:disabled { background:#555; color:#888; cursor:default; transform:none; }
+.start-btn:hover { background:var(--pg-gold); transform:scale(1.02); }
+.start-btn:disabled { background:var(--pg-shade); color:var(--pg-muted); cursor:default; transform:none; }
 
 /* フッター */
 .footer {
-  text-align:center; padding:20px; color:#444; font-size:0.75em;
+  text-align:center; padding:20px; color:var(--pg-muted); font-size:0.75em;
   margin-top:auto;
 }
 </style>
+<link rel="stylesheet" href="palette.css">
 </head>
 <body>
 
@@ -134,10 +134,10 @@ body {
   <div class="match-setup" id="matchSetup">
     <h3 id="setupTitle">対戦設定</h3>
 
-    <h4 style="color:#aaa;margin-bottom:8px;">対戦モード</h4>
+    <h4 style="color:var(--pg-muted);margin-bottom:8px;">対戦モード</h4>
     <div class="side-select" id="modeSelect"></div>
 
-    <h4 style="color:#aaa;margin:16px 0 8px;" id="sideLabel" style="display:none;">操作する陣営</h4>
+    <h4 style="color:var(--pg-muted);margin:16px 0 8px;" id="sideLabel" style="display:none;">操作する陣営</h4>
     <div class="side-select" id="sideSelect"></div>
 
     <div class="victory-cond" id="victoryCond"></div>
@@ -307,15 +307,15 @@ function init() {
     card.innerHTML = `
       ${sc.map > 0 ? `<img src="map/m${sc.map}.jpg" alt="Map ${sc.map}" style="display:block;width:50%;border-radius:4px;">` : ''}
       <div>
-        <div style="color:#c8a020;font-size:0.85em;font-weight:bold;">SCENARIO ${sc.id}</div>
-        <div style="font-size:1.3em;font-weight:bold;color:#eee;margin:2px 0;">${sc.name}</div>
-        <div style="color:#aaa;font-size:0.85em;">${sc.date || ''}</div>
-        <div style="color:#888;font-size:0.8em;margin-top:6px;line-height:1.4;">${sc.desc}</div>
-        <div style="display:flex;gap:12px;margin-top:8px;font-size:0.75em;color:#aaa;flex-wrap:wrap;">
-          ${sc.difficulty != null ? `<span style="background:#2a4a2a;border:1px solid #4a4;padding:2px 8px;border-radius:3px;color:#8c8;">難易度 ${'★'.repeat(sc.difficulty)}${'☆'.repeat(3-sc.difficulty)}</span>` : ''}
-          ${sc.turns ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">ターン: ${sc.turns}</span>` : ''}
-          ${sc.map ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">マップ: ${sc.map}</span>` : ''}
-          ${sc.sides.german ? `<span style="background:#333;padding:2px 8px;border-radius:3px;">${sc.sides.german.name} vs ${sc.sides.allied.name}</span>` : ''}
+        <div style="color:var(--pg-accent);font-size:0.85em;font-weight:bold;">SCENARIO ${sc.id}</div>
+        <div style="font-size:1.3em;font-weight:bold;color:var(--pg-ink);margin:2px 0;">${sc.name}</div>
+        <div style="color:var(--pg-muted);font-size:0.85em;">${sc.date || ''}</div>
+        <div style="color:var(--pg-muted);font-size:0.8em;margin-top:6px;line-height:1.4;">${sc.desc}</div>
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:0.75em;color:var(--pg-muted);flex-wrap:wrap;">
+          ${sc.difficulty != null ? `<span style="background:var(--pg-green-bg);border:1px solid #4a4;padding:2px 8px;border-radius:3px;color:var(--pg-green);">難易度 ${'★'.repeat(sc.difficulty)}${'☆'.repeat(3-sc.difficulty)}</span>` : ''}
+          ${sc.turns ? `<span style="background:var(--pg-shade);padding:2px 8px;border-radius:3px;">ターン: ${sc.turns}</span>` : ''}
+          ${sc.map ? `<span style="background:var(--pg-shade);padding:2px 8px;border-radius:3px;">マップ: ${sc.map}</span>` : ''}
+          ${sc.sides.german ? `<span style="background:var(--pg-shade);padding:2px 8px;border-radius:3px;">${sc.sides.german.name} vs ${sc.sides.allied.name}</span>` : ''}
         </div>
       </div>
     `;
@@ -342,19 +342,19 @@ function selectScenario(sc) {
   const modeEl = document.getElementById('modeSelect');
   modeEl.innerHTML = `
     <div class="side-btn" data-mode="pvai" onclick="selectMode('pvai')">
-      <div class="side-name" style="color:#c8a020;">人間 vs AI</div>
+      <div class="side-name" style="color:var(--pg-accent);">人間 vs AI</div>
       <div class="side-desc">片方を操作、相手はAI</div>
     </div>
     <div class="side-btn" data-mode="pvp" onclick="selectMode('pvp')">
-      <div class="side-name" style="color:#c8a020;">人間 vs 人間</div>
+      <div class="side-name" style="color:var(--pg-accent);">人間 vs 人間</div>
       <div class="side-desc">2人で交互にプレイ</div>
     </div>
     <div class="side-btn" data-mode="online" onclick="selectMode('online')">
-      <div class="side-name" style="color:#c8a020;">オンライン対戦</div>
+      <div class="side-name" style="color:var(--pg-accent);">オンライン対戦</div>
       <div class="side-desc">招待リンクで別端末の相手と対戦</div>
     </div>
     <div class="side-btn" data-mode="aivai" onclick="selectMode('aivai')">
-      <div class="side-name" style="color:#c8a020;">AI vs AI</div>
+      <div class="side-name" style="color:var(--pg-accent);">AI vs AI</div>
       <div class="side-desc">観戦モード</div>
     </div>
   `;
