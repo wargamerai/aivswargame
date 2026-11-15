@@ -120,7 +120,8 @@
     $('setupError').textContent = '';
     const next = rules.create(setupRoster, {
       captureOnly: form.has('captureOnly'), leaderDeath: form.has('leaderDeath'), fastBattle: form.has('fastBattle'),
-      doubleCaoCard: form.has('doubleCaoCard'), strongStart: form.has('strongStart'),
+      doubleCaoCard: form.has('doubleCaoCard'), xunCard: form.has('xunCard'),
+      startingTroops: Number(form.get('startingTroops')),
     });
     enterGame(next);
   });

@@ -39,18 +39,23 @@ const ThreeKingdoms = ((data) => {
 
   function create(setup, options = {}, rng = Math.random) {
     if (!validSetup(setup)) throw new Error('曹操軍の将軍5人を、重複なしで配置してください。');
+    const requestedTroops = Number(options.startingTroops ?? Number(Boolean(options.strongStart)));
+    const startingTroops = [0, 1, 2, 3].includes(requestedTroops) ? requestedTroops : 0;
+    const deck = [...initialCards];
+    if (options.doubleCaoCard) deck.push('cao');
+    if (options.xunCard) deck.push('xun');
     const s = {
       version: 1,
       options: { captureOnly: !!options.captureOnly, leaderDeath: !!options.leaderDeath,
         fastBattle: !!options.fastBattle, doubleCaoCard: !!options.doubleCaoCard,
-        strongStart: !!options.strongStart },
+        xunCard: !!options.xunCard, startingTroops },
       board: Object.fromEntries(Object.values(areas).map(a => [a.id,
         { owner: a.faction, troops: { [a.faction]: a.troops } }])),
       pool: Object.fromEntries(factionIds.map(id => [id, factions[id].total])),
       location: Object.fromEntries(leaderIds.map(id => [id, leaders[id].start])),
       track: Object.fromEntries(factionIds.filter(id => factions[id].track).map(id => [id, 0])),
       dead: [], removedCards: [], kongming: 0, reserve: 3,
-      deck: shuffle(options.doubleCaoCard ? [...initialCards, 'cao'] : initialCards, rng), discard: [], last: null, previous: null,
+      deck: shuffle(deck, rng), discard: [], last: null, previous: null,
       round: 1, turn: 0, draws: 0, phase: 'ready', end: null,
       log: [], events: [], queue: [], touches: [], route: [], active: null, battle: null,
     };
@@ -58,12 +63,12 @@ const ThreeKingdoms = ((data) => {
     s.pool.liu -= s.reserve;
     setup.forEach((id, i) => { s.location[id] = setupSlots[i]; });
     notes(s, '初期配置を確定しました。最初の天命札は任意で選べます。');
-    if (s.options.strongStart) {
+    if (startingTroops) {
       for (const id of new Set(setupSlots)) {
-        s.board[id].troops.cao++;
-        s.pool.cao--;
+        s.board[id].troops.cao += startingTroops;
+        s.pool.cao -= startingTroops;
       }
-      notes(s, '許都・定陶・洛陽・兗州に、補充プールから軍勢駒を1駒ずつ追加しました。');
+      notes(s, `許都・定陶・洛陽・兗州に、補充プールから軍勢駒を${startingTroops}駒ずつ追加しました。`);
     }
     return s;
   }

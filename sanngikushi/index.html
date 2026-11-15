@@ -47,7 +47,15 @@
           <fieldset>
             <legend>選択ルール</legend>
             <label><input name="doubleCaoCard" type="checkbox"> 曹操カードを2枚にする</label>
-            <label><input name="strongStart" type="checkbox"> 曹操軍の初期戦力を増やす（4拠点に各1駒）</label>
+            <label><input name="xunCard" type="checkbox"> 荀彧カードを追加する</label>
+            <label>曹操軍の初期戦力
+              <select name="startingTroops">
+                <option value="0">標準</option>
+                <option value="1">4拠点に各1駒（計4駒）を追加</option>
+                <option value="2">4拠点に各2駒（計8駒）を追加</option>
+                <option value="3">4拠点に各3駒（計12駒）を追加</option>
+              </select>
+            </label>
             <label><input name="captureOnly" type="checkbox"> 許都を支配されたときに敗北</label>
             <label><input name="leaderDeath" type="checkbox"> 曹操軍将軍の死亡</label>
             <label><input name="fastBattle" type="checkbox"> 簡易戦闘結果表を使う</label>

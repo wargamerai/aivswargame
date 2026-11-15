@@ -80,7 +80,7 @@ const Campaign = (() => {
     ['xun', '荀彧', 17, '参戦マーカーを1つ選び、1マス戻せます。参戦済みの勢力も選べます。'],
   ].map(([id, name, image, description]) => [id, { id, name, image, description }]));
   const extras = { liu: ['guan', 'zhang', 'zhu'], sun: ['zhou'] };
-  const initialCards = Object.keys(cards).filter(id => !Object.values(extras).flat().includes(id));
+  const initialCards = Object.keys(cards).filter(id => id !== 'xun' && !Object.values(extras).flat().includes(id));
   const combatTables = {
     2: [
       '0 0 0 0 0 0 0 0 0 1 1 2 3 3 4', '0 0 0 0 0 0 0 1 1 2 2 3 3 4 5',
