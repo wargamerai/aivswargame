@@ -264,42 +264,43 @@ function log(...event){s.log.unshift({turn:s.turn,event});s.voyage.at(-1)?.event
 function startAI(){
  s.pos=['A5','A6','B7'][Math.floor(Math.random()*3)];orders();
 }
-function convoyThreat(h){
- return live().filter(f=>unlocked(f)&&f.name!=='Dummy').some(f=>{
-  const moves=reach(f.where,f.v);
-  return moves.has(h)||(carrier(f)&&[...moves].some(to=>adj(to).includes(h)));
- });
-}
-const mayRaidConvoy=()=>!s.tracked.length&&s.lastConvoyRaid!==s.turn-1;
+const mayRaidConvoy=()=>s.gv<6&&!s.tracked.length&&s.lastConvoyRaid!==s.turn-1;
+const convoyPoints=roll=>roll===6?3:roll>=4?2:0;
 function orders(){
  s.moved=[];s.moves=[];s.air=[];s.scanned=[];s.seen=null;
- const patrols=live().filter(unlocked).map(f=>{
+ const home=s.gv>=6;
+ const occupied=new Set(live().map(f=>f.where));
+ const mayEnter=h=>h==='F7'?home:h!=='D8'&&!britishPorts.has(h)&&!occupied.has(h);
+ const possible=paths(s.pos,geSpeed(),mayEnter);
+ const mayRouteThrough=h=>h===s.pos||mayEnter(h);
+ const convoyHexes=[...routes].filter(h=>mayEnter(h));
+ const goals=home?['F7']:convoyHexes;
+ const distances=new Map();
+ for(const goal of goals)for(const [hex,path] of paths(goal,Object.keys(locations).length,mayRouteThrough)){
+  if(path.length-1<(distances.get(hex)??Infinity))distances.set(hex,path.length-1);
+ }
+ const patrols=live().filter(f=>unlocked(f)&&f.name!=='Dummy').map(f=>{
   const moves=reach(f.where,f.v);
-  const air=carrier(f)?new Set([...moves].flatMap(adj)):new Set();
-  return {f,moves,air};
+  return {f,moves,air:carrier(f)?new Set([...moves].flatMap(adj)):new Set()};
  });
  const danger=h=>patrols.reduce((sum,{f,moves,air})=>{
-  const hull=f.name==='Dummy'?1:carrier(f)?2.1:2.3+pow(f)*.55;
-  return sum+(f.where===h?hull*2.4:moves.has(h)?hull*.72:air.has(h)?1.6:0);
+  const hull=carrier(f)?2.1:2.3+pow(f)*.55;
+  return sum+(moves.has(h)?hull*.72:air.has(h)?1.6:0);
  },0);
- const mayEnter=h=>!britishPorts.has(h)&&!live().some(f=>f.where===h&&!unlocked(f));
- const distance=paths('F7',Object.keys(locations).length,mayEnter);
- const canWin=s.gv>=6||s.gv>s.bv;
- const home=s.gv>=6||canWin&&(s.ge<=2||s.turn>=12)||s.turn>=16;
- const seekingConvoy=!home&&mayRaidConvoy();
- const convoyDistance=new Map();
- for(const h of routes)if(seekingConvoy&&mayEnter(h)&&!convoyThreat(h)){
-  for(const [q,p] of paths(h,6,mayEnter))if(p.length-1<(convoyDistance.get(q)??Infinity))convoyDistance.set(q,p.length-1);
- }
- const possible=paths(s.pos,geSpeed(),mayEnter);
- const destination=[...possible.keys()].map(h=>{
-  const risk=danger(h),d=(distance.get(h)?.length??13)-1;
-  const raid=convoyDistance.get(h)===0?3:0,nextRaid=convoyDistance.get(h)??6;
-  const value=raid-risk*(s.ge<=2?2.3:1.8)-d*(home?3.6:.09)-(seekingConvoy?nextRaid*.45:0)+Math.random()*.7;
-  return [h,value+(h==='F7'&&canWin?(home?26:8):0)];
- }).sort((a,b)=>b[1]-a[1])[0][0];
- s.plannedConvoy=seekingConvoy&&convoyDistance.get(destination)===0;
- commitMove(possible.get(destination));
+ const candidates=[...possible.keys()].map(hex=>({
+  hex,raid:mayRaidConvoy()&&routes.has(hex)&&!occupied.has(hex),
+  distance:distances.get(hex)??Infinity,risk:danger(hex),tie:Math.random()
+ }));
+ const canRaidHere=candidates.some(candidate=>candidate.raid);
+ const alternatives=candidates.filter(({hex})=>hex!==s.pos);
+ // A real raid takes precedence. Otherwise spend the turn advancing instead of hovering in a safe hex.
+ const eligible=canRaidHere?candidates.filter(candidate=>candidate.raid):
+  home&&candidates.some(candidate=>Number.isFinite(candidate.distance))?candidates:
+  alternatives.length?alternatives:candidates;
+ const destination=eligible.sort((a,b)=>canRaidHere?a.risk-b.risk||a.tie-b.tie:
+  a.distance-b.distance||a.risk-b.risk||a.tie-b.tie)[0];
+ s.plannedConvoy=destination.raid;
+ commitMove(possible.get(destination.hex));
 }
 const geSpeed=()=>s.ge>=3?2:1;
 const by=id=>s.fleet.find(f=>f.id===id);
@@ -406,16 +407,16 @@ function finishTurn(){
 function convoy(){
  if(s.phase!=='convoy'||$('actionDialog').open)return;
  const rows=[];
- if(routes.has(s.pos)&&s.plannedConvoy&&mayRaidConvoy()&&!s.seen&&!convoyThreat(s.pos)){
+ if(routes.has(s.pos)&&s.plannedConvoy&&mayRaidConvoy()&&!s.seen&&!live().some(f=>f.where===s.pos)){
   s.lastConvoyRaid=s.turn;
-  const n=dice(),vp=n===6?2:n>=4?1:0;s.gv+=vp;
+  const n=dice(),vp=convoyPoints(n);s.gv+=vp;
   const revealed=n===2||n===3||n===6;
   if(revealed)s.seen=s.pos;
   const outcome=n===1?{key:'noContact'}:n<=3?{key:'radio'}:{key:'vp',args:['+'+vp]};
   const visibility=revealed?{key:'publicHex',suffix:' '+s.pos}:{key:'privateHex'};
   log('convoyRaid',{key:'rollValue',args:[n]},outcome,visibility);
   rows.push({ship:'GE'+s.ge,label:tr('Bismarck')+' · '+tr('convoyRaid'),rolls:[n],result:[outcome,visibility].map(translated).join(' · '),
-   reference:[['1',tr('noContact'),n===1],['2–3',tr('radio')+' · '+tr('publicHex'),n>=2&&n<=3],['4–5',tr('vp','+1'),n>=4&&n<=5],['6',tr('vp','+2')+' · '+tr('publicHex'),n===6]]});
+   reference:[['1',tr('noContact'),n===1],['2–3',tr('radio')+' · '+tr('publicHex'),n>=2&&n<=3],['4–5',tr('vp','+'+convoyPoints(4)),n>=4&&n<=5],['6',tr('vp','+'+convoyPoints(6))+' · '+tr('publicHex'),n===6]]});
  }else log('convoyNone');
  presentAction(tr('gFleet')+' · '+tr('convoyRaid'),tr(rows.length?'convoyTip':'convoyNone'),rows,finishTurn);
 }
