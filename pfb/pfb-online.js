@@ -51,20 +51,22 @@ const PFBOnline=(()=>{
         if(!data.guest||data.rev===loadedRevision)return;
         const previous=gameInst;
         const oldLog=previous?.onlineMatch?previous.log.length:0;
-        const fresh=PFBOnlineCore.unpack(null,players,null,data.public).game;
+        const {game:fresh,actions}=PFBOnlineCore.unpack(null,players,null,data.public);
         fresh.matchId='online-'+client.code;
         fresh.humanSide=seatNumber(seat);
         gameInst=fresh;
         loadedRevision=data.rev;
         close();
-        if(fresh.gameOver){renderFinalResult(previous?.matchId===fresh.matchId&&!previous.gameOver);return}
-        updateUI();
-        render();
-        if(loadedRevision>0&&oldLog>0&&fresh.log.length>oldLog){
-            const line=fresh.lineup[(fresh.batIdx[fresh.batSide]+8)%9];
-            const anim=determineAnim(fresh.log.slice(oldLog),playerName(line),fresh.batIdx[fresh.batSide]||9);
-            if(anim)playResultAnim(anim);
+        const sameMatch=previous?.matchId===fresh.matchId;
+        if(fresh.gameOver&&!sameMatch){renderFinalResult();return}
+        const continuedChoice=sameMatch&&previous.pending&&actions.at(-1)?.action.startsWith('choice:');
+        updateUI(sameMatch&&(fresh.gameOver||continuedChoice));
+        if(sameMatch&&fresh.log.length>oldLog){
+            const anim=determineAnim(fresh.log.slice(oldLog),playerName(previous.batter),previous.batIdx[previous.batSide]+1);
+            if(anim)playResultAnim(anim,continuedChoice);
         }
+        if(fresh.gameOver)showFinalPlay();
+        else render();
     }
     function render(){
         if(!gameInst?.onlineMatch||gameInst.gameOver)return;
@@ -116,7 +118,7 @@ const PFBOnline=(()=>{
     }
     function click(action){
         const g=gameInst;
-        if(!g?.onlineMatch || action==='restart')return false;
+        if(!g?.onlineMatch || action==='restart' || action==='final_report')return false;
         if(!active()||g.gameOver||PFBOnlineCore.actor(g)!==client.seat)return true;
         if(localMenu(g,action))return true;
         void client.send('play',[action]).catch(error=>{

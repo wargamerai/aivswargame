@@ -3,6 +3,7 @@
 const PFBSeasonUI=(()=>{
     const STORE='pfb-pennant-v1';
     let season=null, data=null, tab='news', month=2, dashboardLeague='CL', statTeam='', statType='hitting';
+    let statSort=null;
     let busy=false;
     const view=()=>document.getElementById('season-dialog');
     const body=()=>document.getElementById('season-content');
@@ -36,6 +37,7 @@ const PFBSeasonUI=(()=>{
         PFBSeason.updateSavedPitching(season,data);
         dashboardLeague=season.league;
         statTeam='';
+        statSort=null;
         month=PFBSeason.dateOf(season.day).getUTCMonth();
         close();
         showGameScreen();
@@ -60,6 +62,7 @@ const PFBSeasonUI=(()=>{
         gameInst=null;
         dashboardLeague=league;
         statTeam='';
+        statSort=null;
         month=PFBSeason.dateOf(season.day).getUTCMonth();
         autosave();
         show('news');
@@ -146,16 +149,32 @@ const PFBSeasonUI=(()=>{
         const arm=statType.endsWith('pitching');
         const cols=arm?[['PG','登板'],['GS','先発'],['IP','投球回'],['W','勝'],['L','敗'],['SV','S'],['PH','被安打'],['PK','奪三振'],['PBB','与四球'],['PR','失点'],['SHOCK','ショック']]:
             [['G','試合'],['PA','打席'],['AB','打数'],['H','安打'],['AVG','打率'],['2B','二塁打'],['3B','三塁打'],['HR','本塁打'],['RBI','打点'],['R','得点'],['BB','四球'],['SO','三振'],['SB','盗塁']];
-        const selected=roster.filter(([id,p])=>{
-            const played=arm ? ledger[id]?.PG : ledger[id]?.PA;
-            return played || Boolean(statTeam&&p.pitcher===arm);
-        })
-            .sort(([a],[b])=>(ledger[b]?.[arm?'W':'PA']||0)-(ledger[a]?.[arm?'W':'PA']||0));
+        const sort=statSort ?? {key:arm?'W':'AVG',descending:true};
+        const selected=roster.flatMap(([id,player])=>{
+            const line=ledger[id];
+            const played=Boolean(line?.[arm?'PG':'PA']);
+            if (!played && (!statTeam || player.pitcher!==arm)) return [];
+            let value=null;
+            if (played) value=sort.key==='AVG' ? (line.AB ? line.H/line.AB : null) : line[sort.key] ?? 0;
+            return [{player,line:line ?? PFBSeason.statLine(),value}];
+        }).sort((a,b)=>{
+            if (a.value===null || b.value===null) {
+                const missing=Number(a.value===null)-Number(b.value===null);
+                if (missing) return missing;
+            } else if (a.value!==b.value) {
+                return sort.descending ? b.value-a.value : a.value-b.value;
+            }
+            return (arm ? b.line.PK-a.line.PK : b.line.H-a.line.H) || a.player.name.localeCompare(b.player.name,'ja');
+        });
+        const headers=cols.map(([key,name])=>{
+            const active=key===sort.key;
+            return `<th scope="col"${active?` aria-sort="${sort.descending?'descending':'ascending'}"`:''}><button type="button"
+                class="stat-sort" data-season="stat-sort" data-id="${key}">${name}${active?` <span aria-hidden="true">${sort.descending?'▼':'▲'}</span>`:''}</button></th>`;
+        }).join('');
         return `<div class="season-filters"><select id="season-stat-team" aria-label="成績の球団"><option value=""${statTeam?'':' selected'}>リーグ全体</option>${teams.map(team=>`<option value="${esc(team)}"${team===statTeam?' selected':''}>${teamLabel(team)}</option>`).join('')}</select>
         <select id="season-stat-type" aria-label="成績の種類">${[['hitting','公式戦 打撃'],['pitching','公式戦 投手'],['post-hitting','ポストシーズン 打撃'],['post-pitching','ポストシーズン 投手']].map(([value,name])=>`<option value="${value}"${value===statType?' selected':''}>${name}</option>`).join('')}</select></div>
         ${selected.length?'':'<p>表示できる成績はまだありません。</p>'}
-        <div class="table-scroll"><table><thead><tr><th>選手</th><th>球団</th><th>上限</th>${cols.map(([,name])=>`<th>${name}</th>`).join('')}</tr></thead><tbody>${selected.map(([id,p])=>{
-            const line=ledger[id]||PFBSeason.statLine();
+        <div class="table-scroll"><table><thead><tr><th>選手</th><th>球団</th><th>上限</th>${headers}</tr></thead><tbody>${selected.map(({player:p,line})=>{
             return `<tr${p.team===season.team?' class="my-club"':''}><th scope="row">${esc(p.name)}</th><td>${teamLabel(p.team)}</td><td>${p.limit??'—'}</td>${cols.map(([key])=>{
                 if(key==='AVG')return `<td>${line.AB?PFBSeason.rateText(line.H/line.AB):'—'}</td>`;
                 return `<td>${key==='IP'?PFBResults.formatIP(line.IP):line[key]}</td>`;
@@ -250,6 +269,13 @@ const PFBSeasonUI=(()=>{
         else if(action==='leave'){leave();gameInst=null;showTeamSelect()}
         else if(action==='next'||action==='sim-day'){void advance(action==='sim-day')}
         else if(action==='save'){save()}
+        else if(action==='stat-sort'){
+            const key=target.dataset.id;
+            const current=statSort ?? {key:statType.endsWith('pitching')?'W':'AVG',descending:true};
+            statSort={key,descending:current.key!==key || !current.descending};
+            render();
+            body().querySelector(`[data-season="stat-sort"][data-id="${key}"]`)?.focus();
+        }
         else if(action==='month-prev'||action==='month-next'){month=Math.max(0,Math.min(11,month+(action==='month-next'?1:-1)));render()}
         else if(action==='report'){
             const report=season.reports[target.dataset.id];
@@ -260,7 +286,7 @@ const PFBSeasonUI=(()=>{
     view().addEventListener('change',event=>{
         if(event.target.id==='season-league'){dashboardLeague=event.target.value;statTeam=''}
         if(event.target.id==='season-stat-team') statTeam=event.target.value;
-        if(event.target.id==='season-stat-type') statType=event.target.value;
+        if(event.target.id==='season-stat-type') {statType=event.target.value;statSort=null;}
         render();
     });
     return {active,stored,load,start,leave,show,finish,save,autosave,profile,matchRecords,reportStandings};

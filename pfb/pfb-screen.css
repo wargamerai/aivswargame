@@ -53,6 +53,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     white-space: nowrap;
 }
 .toolbar-button:hover:not(:disabled) { background: #ffffff24; }
+.toolbar-button[aria-pressed="true"] { background: #f5d980; border-color: #f5d980; color: #312a1b; }
 .toolbar-button:disabled { color: #c9c8b8; border-color: #ffffff42; cursor: default; }
 .match-stat-source { padding-inline: 7px; }
 .match-stat-source option { background: var(--paper); color: var(--ink); }
@@ -193,6 +194,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 .batting-order th,.batting-order td { border-bottom:1px solid #ddd3b6; padding:.38em .25em; white-space:nowrap; }
 .batting-order thead { position:sticky; top:0; background:#f2ead4; color:var(--green); }
 .batting-order tbody th,.batting-order thead th:nth-child(2) { text-align:left; }
+.batting-order :is(th,td):nth-child(3) { text-align:center; }
 .batting-order button { border:0; background:none; color:inherit; font:inherit; font-weight:800; cursor:pointer; }
 .batting-order button:hover { text-decoration:underline; }
 .batting-order .batting-now { background:#f9e3a1; color:#312a1b; }
@@ -213,6 +215,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     height: min(100cqh, calc(100cqw / 1.5988));
     background: url("pfb-ballpark.png") center / 100% 100% no-repeat;
 }
+.park-viewport.is-dome { background-image:url("pfb-ballpark-dome.png"); }
 .field-area:empty {
     background: #164431 url("pfb-ballpark.png") center / cover no-repeat;
 }
@@ -293,19 +296,33 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     font-weight: 700;
 }
 #game-log:empty { display: none; }
+#action-splitter:not([hidden]) {
+    position:relative; display:grid; place-items:center; flex:none; height:18px;
+    cursor:ns-resize; touch-action:none; background:#eee7d3;
+    border-block:1px solid #cfc5aa;
+}
+#action-splitter::after {
+    content:""; width:42px; height:6px; border-block:2px solid #6f7962; border-radius:2px;
+}
+#action-splitter:hover, #action-splitter:focus-visible { background:#f9e3a1; }
 #action-area {
-    padding:5px; border:0; background:transparent;
+    flex:none; padding:5px; border:0; background:transparent;
     display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.8fr) minmax(0,1fr);
-    grid-template-areas:"human result opponent"; gap:5px; min-height:0;
+    grid-template-areas:"human result opponent"; grid-template-rows:minmax(0,1fr);
+    gap:5px; min-height:0;
+}
+#action-area:not(.is-setup) {
+    height:var(--action-area-height,clamp(122px,21dvh,185px)); max-height:max(120px,55dvh);
+    overflow:auto;
 }
 #action-buttons { display:contents; }
 #action-area.is-setup { display:block; }
 #action-area.is-setup .result-stream { display:none; }
 #action-buttons.setup-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; }
-.action-panel { grid-area:human; height:clamp(112px,19vh,175px); }
+.action-panel { grid-area:human; }
 .action-panel.opponent { grid-area:opponent; }
 .result-stream {
-    grid-area:result; min-width:0; min-height:0; height:clamp(112px,19vh,175px);
+    grid-area:result; min-width:0; min-height:0;
     display:flex; flex-direction:column; padding:4px 6px; background:var(--paper);
     border:1px solid var(--line); border-radius:8px;
 }
@@ -319,6 +336,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     display: grid;
     grid-template-columns: repeat(6,minmax(0,1fr));
     overflow-y: auto;
+    min-height: 0;
     align-content: start;
     gap: 4px;
     padding-top: 4px;
@@ -394,8 +412,11 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     .field-area { grid-area: 1/1/2/3; }
     #lineup-left { grid-area: 2/1; }
     #lineup-right { grid-area: 2/2; }
-    #action-area { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-areas:"result result" "human opponent"; }
-    .action-panel { height:auto; min-height:134px; }
+    #action-area { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-areas:"result result" "human opponent";
+        grid-template-rows:minmax(112px,1fr) minmax(134px,1fr); }
+    #action-area:not(.is-setup) {
+        height:var(--action-area-height,clamp(265px,52dvh,380px)); max-height:max(120px,65dvh);
+    }
     .game-action-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
     .game-action-grid .ab, .game-action-grid.batting-grid .ab:nth-child(n+4):nth-child(-n+5) { grid-column: auto; }
     .panel-heading { font-size: 15px; }
@@ -569,6 +590,8 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 .season-dialog button,.season-dialog select { padding:4px 8px; border:1px solid var(--line); border-radius:4px; background:white; color:var(--ink); }
 .season-dialog button[aria-pressed="true"],#season-toolbar button:first-child { color:white; background:var(--green); }
 .season-dialog button:disabled { opacity:.65; }
+.season-dialog .stat-sort { border:0; padding:.2em; color:var(--green); font-weight:750; background:transparent; }
+.season-dialog .stat-sort:hover { text-decoration:underline; }
 #season-summary { font-weight:800; color:#60411a; }
 .table-scroll { overflow:auto; max-height:58dvh; }
 .season-league-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }

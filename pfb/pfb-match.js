@@ -250,9 +250,9 @@ function openSaveFile() {
 }
 function resumeMatch(save) {
     const restored=importMatch(save);
-    clearInterval(autoTimer);
+    clearAutoTimer();
     clearTimeout(cpuTimer);
-    autoTimer=cpuTimer=null;
+    cpuTimer=null;
     halfEndPending=restored.changingSides;
     players=restored.roster;
     gameInst=restored.game;
