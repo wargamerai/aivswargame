@@ -692,7 +692,7 @@ state.terrainTurn = null; // 'player' | 'ai'
 state.terrainSelected = null; // 選択中の手札index
 state.terrainDone = { player: false, ai: false };
 
-function isTerrainHandCard(card) {
+function isTerrainHandCard(card, side = 'player') {
   if (!card || !card.terrain) return false;
   const t = card.terrain.type;
   // §3.6 配置可能なのは地形カード(平地以外); 移動カード等は不可
@@ -700,10 +700,9 @@ function isTerrainHandCard(card) {
   // 配置可能: WOODS, BUILDINGS, HILL, GULLY, WALL, BRUSH, STREAM, MARSH, SMOKE, WIRE, MINEFIELD, PILLBOX
   const placeable = ['WOODS','BUILDINGS','HILL','GULLY','WALL','BRUSH','STREAM','MARSH','SMOKE','WIRE','MINEFIELD','PILLBOX'];
   if (placeable.indexOf(t) < 0) return false;
-  // シナリオで除外指定があれば除く (treatAsPlain)
-  const tap = state.scenario && state.scenario.treatAsPlain;
-  if (tap && tap.indexOf(t) >= 0) return false;
-  return true;
+  return !window.SCENARIO_HELPERS.isCardDisabledAsTerrain(
+    state.scenario, card, state[side + 'Role'] === 'attacker'
+  );
 }
 
 /** 山札から引かない仮の平地カード（地形のないグループ用・裏向き表示） */
@@ -756,8 +755,8 @@ function updatePhaseBanner() {
   if (state.phase !== 'terrainPlacement') return;
   const turnName = state.terrainTurn === 'player' ? state.player.name : state.ai.name;
   const placeable = state.terrainTurn === 'player'
-    ? state.playerHand.filter(isTerrainHandCard).length
-    : state.aiHand.filter(isTerrainHandCard).length;
+    ? state.playerHand.filter(c => isTerrainHandCard(c)).length
+    : state.aiHand.filter(c => isTerrainHandCard(c, 'ai')).length;
   msg.innerHTML = `<b>地形配置フェーズ §3.6</b> ／ 手番: <b>${turnName}</b> ／ 配置可能な地形カード: <b>${placeable}枚</b>`;
 }
 

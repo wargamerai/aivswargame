@@ -291,6 +291,7 @@ function shuffleTerrainIndices(arr) {
 function initTerrainDeck() {
   if (!TERRAIN_CARDS.length) return;
   const indices = TERRAIN_CARDS.map((_, i) => i);
+  state.deckRemoved = {};
   state.terrainDeck = {
     draw: shuffleTerrainIndices(indices),
     discard: [],
@@ -422,6 +423,13 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
     renderField('player'); renderField('ai');
   };
   const reduceFor = fp => Math.ceil(fp / 2); // 火力2（2未満の余りも）につき1
+  const reduceAfterMalfunction = fp => {
+    if (firing.length === 1) {
+      state._malfStopAttack = true;
+      return 0;
+    }
+    return -reduceFor(fp);
+  };
 
   // §22.3 火炎放射器: 攻撃に使われていれば、どの防御側の判定でも赤5・6で RPC を引かずに火炎放射器が故障する
   //   （§20.741 捕獲兵器と一緒なら火炎放射器の方が故障）。残りの攻撃はほかの兵器で続ける
@@ -453,7 +461,7 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
     t.acquiredWeapon = null; // 捕獲兵器は除去。カードに印刷された兵器に戻る
     alert(`§20.741 捕獲兵器の故障: ${nm} の捕獲兵器は除去されました（赤${rncVal}）`);
     renderField('player'); renderField('ai');
-    return -reduceFor(fp);
+    return reduceAfterMalfunction(fp);
   }
 
   if (rncVal === 5) {
@@ -466,14 +474,13 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
     }
     const fp = soldierFP(t);
     breakWeapon(t, defOf(t), '赤5');
-    return -reduceFor(fp);
+    return reduceAfterMalfunction(fp);
   }
   // 赤6
   if (firing.length === 1) {
     const t = firing[0];
     breakWeapon(t, defOf(t), '赤6・射撃中の兵器が1つだけ — 残りの防御側の攻撃は解決しない §19.11');
-    state._malfStopAttack = true;
-    return 0;
+    return reduceAfterMalfunction(0);
   }
   if (firing.length === 0) return 0;
   const rpcCard = drawTerrainCard();
@@ -568,10 +575,10 @@ function wireBlockReason(grp) {
 }
 
 /** 地形以外の手札は全て平地として置ける。平地として置くカードか */
-function isPlainUseCard(card) {
+function isPlainUseCard(card, side = 'player') {
   if (!card || !card.terrain) return false;
   // §シナリオ: 使わない地形カード（攻撃側だけ使えないカードは、プレイヤーが攻撃側の時だけ）
-  if (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.isCardDisabledAsTerrain(state.scenario, card, state.playerRole === 'attacker')) return true;
+  if (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.isCardDisabledAsTerrain(state.scenario, card, state[side + 'Role'] === 'attacker')) return true;
   const placeable = ['WOODS','BUILDINGS','HILL','GULLY','WALL','BRUSH','STREAM','MARSH','SMOKE','WIRE','MINEFIELD','PILLBOX'];
   return placeable.indexOf(card.terrain.type) < 0;
 }

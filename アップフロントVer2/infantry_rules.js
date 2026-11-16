@@ -527,7 +527,7 @@
     let gullyPos = -1;
     for (let i = group.terrain.length - 1; i >= 0; i--) {
       const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t) continue;
+      if (!t || t.type === 'SMOKE' || t.type === 'WIRE') continue;
       if (t.type === 'GULLY') { gullyPos = i; break; }
       // GULLY より後に地形カード（MOVEMENT以外）があれば脱出済み
       if (t.type !== 'MOVEMENT') return false;
@@ -537,7 +537,8 @@
     let moveCount = 0;
     for (let i = gullyPos + 1; i < group.terrain.length; i++) {
       const t = group.terrain[i] && group.terrain[i].terrain;
-      if (t && t.type === 'MOVEMENT') moveCount++;
+      if (!t || t.type === 'SMOKE' || t.type === 'WIRE') continue;
+      if (t.type === 'MOVEMENT') moveCount++;
       else return false; // 地形カードがあれば脱出済み
     }
     // 移動1枚ではまだGULLY内、2枚以上で脱出
@@ -555,7 +556,7 @@
     if (srcGroup && srcGroup.terrain) {
       for (let i = srcGroup.terrain.length - 1; i >= 0; i--) {
         const t = srcGroup.terrain[i] && srcGroup.terrain[i].terrain;
-        if (!t) continue;
+        if (!t || t.type === 'SMOKE' || t.type === 'WIRE') continue;
         if (t.type === 'HILL') return true;
         if (t.type !== 'MOVEMENT') break;
       }

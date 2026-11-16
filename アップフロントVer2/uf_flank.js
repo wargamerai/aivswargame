@@ -570,6 +570,11 @@ function showTerrainDeckGameOver() {
 function updateDeckCounts() {
   const drawEl = document.querySelector('#deck-draw .count');
   const discEl = document.querySelector('#deck-discard .count');
+  const removedEl = document.querySelector('#deck-removed .count');
+  if (removedEl) {
+    const count = Object.values(state.deckRemoved || {}).reduce((sum, n) => sum + n, 0);
+    removedEl.textContent = String(count);
+  }
   const drawImg = document.querySelector('#deck-draw .pile-img');
   if (drawImg) drawImg.src = encPath('upfrontimages/地形カード/AD Back.gif');
 

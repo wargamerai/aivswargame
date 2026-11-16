@@ -592,7 +592,7 @@ function renderHands() {
   const aiCards = state.aiHand || [];
   for (let i = 0; i < state.aiHandCount; i++) {
     const c = document.createElement('div'); c.className = 'hand-card';
-    if (aiInPlace && aiCards[i] && isTerrainHandCard(aiCards[i])) {
+    if (aiInPlace && aiCards[i] && isTerrainHandCard(aiCards[i], 'ai')) {
       c.classList.add('terrain-pickable');
     }
     const img = document.createElement('img');

@@ -51,7 +51,7 @@
     treatAsPlain: ['PILLBOX', 'MINEFIELD'],
     // §16.1 デッキ改変:
     //   判定用 (RNC/RPC) として引かれて捨て札になった、もしくは
-    //   プレイヤーの手札から直接捨て札にされた最初の 5 枚の
+    //   手札から直接捨てた最初の 5 枚の
     //   「建物 (BUILDINGS)」カードはゲームから完全に除去する。
     //   (除去後、残り 3 枚の建物カードは地形カードとして使用できる)
     deckRemovals: [
@@ -724,7 +724,9 @@
     const t = card.terrain.type;
     if (scenario.treatAsPlain && scenario.treatAsPlain.indexOf(t) >= 0) return true;
     if (isAttacker && scenario.treatAsPlainAttacker && scenario.treatAsPlainAttacker.indexOf(t) >= 0) return true;
-    return false;
+    const removed = (global.state && global.state.deckRemoved) || {};
+    return (scenario.deckRemovals || []).some(rule =>
+      rule.type === t && (removed[t] || 0) < rule.count);
   }
 
   /** カードが捨て札になる前に除去対象か判定する。

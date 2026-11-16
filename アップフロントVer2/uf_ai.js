@@ -745,12 +745,12 @@ function aiFireCardEffectiveAt(c, ti) {
   const japanMod = isJapanInGame() ? -1 : 0;
   const raw = parseInt(c.terrain.type.replace('FIRE ', ''), 10) || 0;
   return state.groups.ai.some((src, si) => {
-    if (!src || src.eliminated || R.isInGully(src) || !src.cards.some(x => R.isAlive(x))) return false;
+    if (!src || src.eliminated || !src.cards.some(x => R.isAlive(x))) return false;
     const rel = pillboxRelation('ai', si, ti);
     if (rel === 'blocked') return false;
     const base = R.relativeRange(src.distance, tgt.distance);
     const dist = Math.abs(si - ti) <= 1 ? base : Math.max(0, base - 1);
-    if (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {})) return false;
+    if ((R.isInGully(src) && dist !== 5) || (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {}))) return false;
     const moving = isMovingIgnoringOverlays(src);
     const fp = R.calcGroupFirepower(src, aiKey, dist, { moving, crewMap: buildCrewMapFromPairs(src) });
     if (fp < need) return false;
@@ -1209,7 +1209,7 @@ async function aiFireAt(targetIdxList, opts) {
       if (onlyGroup != null && si !== onlyGroup) continue;
       if (preview && si === opts.exceptGroup) continue;
       const src = state.groups.ai[si];
-      if (!src || src.eliminated || R.isInGully(src)) continue;
+      if (!src || src.eliminated) continue;
       for (const ti of targetIdxList) {
         const tgt = state.groups.player[ti];
         if (!tgt) continue;
@@ -1220,7 +1220,7 @@ async function aiFireAt(targetIdxList, opts) {
         const dist = adjacent ? baseDist : Math.max(0, baseDist - 1);
         const _flameCand = dist === 5 && aiGroupHasUsableFlame(src);
         if (flameOnly && !_flameCand) continue;
-        if (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {})) continue;
+        if ((R.isInGully(src) && dist !== 5) || (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {}))) continue;
         const _pbRelAI = pillboxRelation('ai', si, ti); // §23.7
         if (_pbRelAI === 'blocked') continue;
         const crewMap = buildCrewMapFromPairs(src);
@@ -1374,7 +1374,6 @@ function aiPerformFire(plan) {
   const playerKey = getFactionKey(state.player);
   const src = state.groups.ai[plan.si];
   const tgt = state.groups.player[plan.ti];
-  markFiredAt(src, tgt); // §38.3 観測の修正用
 
   const jpOpts = { japanBuildings: isJapanInGame() };
   const _isFlankFromAdjacent = plan.si !== plan.ti;
@@ -1420,6 +1419,7 @@ function aiPerformFire(plan) {
   if (japanRuleMod) mods.push(`日本ルール ${_sgn(japanRuleMod)}`);
   const unConcealedStrength = baseStrength + atkMod + defMod + japanRuleMod;
   const fireCards = [plan.card, ...(plan.extras || []).map(ex => ex.card)].filter(Boolean);
+  const heroCard = plan.useHero ? state.aiHand[plan.heroIdx] : null;
 
   // §10.4 攻撃の解決前にヒーローでピン状態の兵士を回復できる → その後、隠蔽カード選択（§9.5 トーチカは不可）
   setIncomingAttack({
@@ -1442,7 +1442,6 @@ function aiPerformFire(plan) {
     // HERO 使用時のボーナス
     let heroBonus = 0;
     if (plan.useHero && plan.heroIdx != null && plan.heroIdx >= 0) {
-      const heroCard = state.aiHand[plan.heroIdx];
       if (heroCard && heroCard.terrain && heroCard.terrain.type === 'HERO') {
         heroBonus = aiCalcGroupMaxFP(src, getFactionKey(state.ai), plan.dist);
         // §10.45 英雄効果: ターン中、火力が一番増える兵士1名を2倍（2枚目なら3倍）
@@ -1455,12 +1454,15 @@ function aiPerformFire(plan) {
           _pickedAi._heroEnhanced = _pickedAi._heroEnhanced ? 2 : 1;
         }
         // HERO カードを手札から除去して捨て札へ
-        state.aiHand.splice(plan.heroIdx, 1);
+        state.aiHand.splice(state.aiHand.indexOf(heroCard), 1);
         pushTerrainToDiscard(heroCard);
       }
     }
     // §10.45 英雄カード：必要火力の判定にのみ加算（基礎火力は変えない）
     const baseFP = unConcealedStrength + concealMod + gullyMod + marshDefMod + aiInfShift;
+    // 隠蔽で射撃力がゼロ以下になった場合は、判定せずカードと行動を消費する。
+    const resolveAttack = !(concealMod < 0 && baseFP <= 0);
+    if (resolveAttack) markFiredAt(src, tgt); // §38.3 観測の修正用
     // ===== DEBUG LOG =====
     try {
       console.log('[FIRE-AI exec] card="'+plan.card.terrain.type+'" range='+plan.card.terrain.range+' sub="'+plan.card.terrain.sub+'"'
@@ -1476,7 +1478,7 @@ function aiPerformFire(plan) {
 
     const results = [];
     let lastJudge = null;
-    const _targets = attackTargetsOf(tgt); // §17.8 移送中の兵士も目標
+    const _targets = resolveAttack ? attackTargetsOf(tgt) : []; // §17.8 移送中の兵士も目標
     state._malfStopAttack = false;
     for (let ci = 0; ci < _targets.length; ci++) {
       if (state._malfStopAttack) break; // §19.11 残りの防御側の攻撃は解決しない
@@ -1547,19 +1549,26 @@ function aiPerformFire(plan) {
     if (lastJudge) showJudgeCard(lastJudge);
 
     // プライマリ + 追加 FIRE カードを全て手札から除去し捨て札へ
-    const fireCard = state.aiHand[plan.fi];
-    const _extrasCards = (plan.extras || []).map(ex => ex.card);
-    const _removeIdxs = [plan.fi, ...((plan.extras || []).map(ex => ex.fi))].sort((a, b) => b - a);
-    _removeIdxs.forEach(i => { if (i >= 0) state.aiHand.splice(i, 1); });
-    if (fireCard) pushTerrainToDiscard(fireCard);
-    _extrasCards.forEach(c => { if (c) pushTerrainToDiscard(c); });
+    for (const card of fireCards) {
+      const index = state.aiHand.indexOf(card);
+      if (index < 0) continue;
+      state.aiHand.splice(index, 1);
+      pushTerrainToDiscard(card);
+    }
     state.aiHandCount = state.aiHand.length;
+    if (concealMod) mods.push(`隠蔽 ${_sgn(concealMod)}`);
+    if (!resolveAttack) {
+      renderHands();
+      await showAIAction(`AI: 射撃取り消し ${src.name}→${tgt.name}`, fireCards, plan.si,
+        { raw: rawBaseStrength, mods, total: baseFP });
+      _aiFireResolve(true);
+      return;
+    }
     // ターン累積 FP を加算 (このグループの今ターン射撃合計に追加)
     src.firedFPThisTurn = (src.firedFPThisTurn || 0) + (plan.totalNeed != null ? plan.totalNeed : plan.need);
-    if (window.AFV) window.AFV.boxedAfterFire(src, tgt, plan.totalNeed != null ? plan.totalNeed : plan.need, baseFP); // §28.7 オープントップへ、同じカードでもう一度
+    if (window.AFV && !state._malfStopAttack) window.AFV.boxedAfterFire(src, tgt, plan.totalNeed != null ? plan.totalNeed : plan.need, baseFP); // §28.7 オープントップへ、同じカードでもう一度
     if (window.CC_ACTION) window.CC_ACTION.clearInfiltration(src, 'fire'); // §20.531 射撃に参加した侵入兵は侵入状態を失う
 
-    if (concealMod) mods.push(`隠蔽 ${_sgn(concealMod)}`);
     const varies = results.some(result => result.finalFP !== baseFP);
     const title = `AI射撃 ${src.name}→${tgt.name} 距離${plan.dist} 基礎射撃力${rawBaseStrength}<br/>修正項目:<br/>${mods.length ? mods.join('<br/>') : 'なし'}<br/>→ 最終火力${baseFP}${varies ? '<br/>兵士ごとの修正は判定結果に表示' : ''}`;
     await showAIAction(`AI: 射撃 ${src.name}→${tgt.name}`, fireCards, plan.si,
@@ -2178,7 +2187,7 @@ async function aiTryPlaceOwnTerrain(onlyGi) {
 // 地形以外の手札（移動・射撃カード以外）を平地として移動中の自グループに置く（§13.5 煙幕・鉄条網は残す）
 async function aiTryPlaceOwnPlain(onlyGi) {
   const R = window.INFANTRY_RULES;
-  const pIdx = state.aiHand.findIndex(c => isPlainUseCard(c)
+  const pIdx = state.aiHand.findIndex(c => isPlainUseCard(c, 'ai')
     && c.terrain.type !== 'MOVEMENT' && String(c.terrain.type).indexOf('FIRE') !== 0);
   if (pIdx < 0) return false;
   const acted = state.aiActedGroups || new Set();
@@ -3070,8 +3079,8 @@ async function aiTryPlaceBadTerrain() {
 
 function tryAdvanceTerrainPhase() {
   // 両者が完了/配置不可なら終了
-  const pHas = state.playerHand.some(isTerrainHandCard) && !state.terrainDone.player;
-  const aHas = state.aiHand.some(isTerrainHandCard) && !state.terrainDone.ai;
+  const pHas = state.playerHand.some(c => isTerrainHandCard(c)) && !state.terrainDone.player;
+  const aHas = state.aiHand.some(c => isTerrainHandCard(c, 'ai')) && !state.terrainDone.ai;
   if (!pHas && !aHas) { endTerrainPlacementPhase(); return; }
   // 手番交代 (相手にまだ置く余地があれば)
   if (state.terrainTurn === 'player') {
@@ -3143,7 +3152,7 @@ function aiPlaceTerrain() {
   // 人工地形（初期配置では使えない、ゲーム中は既存地形の上にのみ）
   const artificial = ['SMOKE','WIRE','MINEFIELD'];
   const R = window.INFANTRY_RULES;
-  const usable = state.aiHand.filter(c => isTerrainHandCard(c) && artificial.indexOf(c.terrain.type) < 0);
+  const usable = state.aiHand.filter(c => isTerrainHandCard(c, 'ai') && artificial.indexOf(c.terrain.type) < 0);
   const plays = [];
   for (const c of usable) {
     const type = c.terrain.type;

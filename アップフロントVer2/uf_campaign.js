@@ -768,7 +768,7 @@ function _resolveFireActionInner() {
   const distance = adjacent ? baseDistance : Math.max(0, baseDistance - 1);
 
   // §8.2 GULLY チェック
-  if (R.isInGully(srcGroup)) { alert('涸れ谷にいるグループは攻撃できません'); return; }
+  if (R.isInGully(srcGroup) && distance !== 5) { alert('涸れ谷からの通常射撃には相対距離5が必要です（§8.2）'); return; }
   if (R.isInGully(tgtGroup) && !R.canFireAtGully(srcGroup, distance, {})) { alert('涸れ谷にいるグループは攻撃できません（例外: 狙撃、迫撃砲、丘上、相対距離5）'); return; }
 
   // §6.2 火力（地形スタック末尾がMOVEMENTなら移動中＝火力半減）
@@ -900,10 +900,6 @@ function _resolveFireActionInner() {
   const gullyMod = 0;
   const marshDefMod = 0;
 
-  // §9 隠蔽: AI側が隠蔽カードを使うか判定
-  const aiConcealCards = canUseConcealment(tgtGroup) ? aiUseConcealment() : []; // §9.5 トーチカは不可
-  const concealMod = getConcealMod(aiConcealCards);
-
   // 射撃力 = FIREカードの数字（複数枚使用時は合算）。合計射撃力は味方火力 (fp) 以下である必要あり
   const _rawStrength = fireCards.reduce((s, c) => s + (parseInt(c.terrain.type.replace('FIRE ', ''), 10) || 0), 0);
   if (_rawStrength > fp) {
@@ -955,7 +951,10 @@ function _resolveFireActionInner() {
   const movingFP = strength;
   const japanRuleMod = isJapanInGame() ? -1 : 0;
   // §10.45 英雄カード：必要火力の判定にのみ加算（基礎火力は変えない）
-  let baseFP = movingFP + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift + japanRuleMod;
+  // §9.1 隠蔽は射撃カードと修正値を確定してから適用する。
+  const aiConcealCards = canUseConcealment(tgtGroup) ? aiUseConcealment() : [];
+  const concealMod = getConcealMod(aiConcealCards);
+  const baseFP = movingFP + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift + japanRuleMod;
   try {
     console.log(`  mods: atk=${atkMod} def=${defMod} conceal=${concealMod} gully=${gullyMod} marshDef=${marshDefMod} infShift=${infShift} jpRule=${japanRuleMod} isFlankFire=${isFlankFireNow} heroBonus=${heroBonus} infBonus=${infBonus}`);
     console.log(`  baseFP = strength(${strength}) + sum_mods = ${baseFP}`);
@@ -963,9 +962,14 @@ function _resolveFireActionInner() {
   } catch(e){}
   let malfuncMod = 0;
 
+  // §6.5 判定を取り消しても、出したカードとグループの行動を消費する。
+  const resolveAttack = confirm(
+    `隠蔽修正 ${concealMod}、最終火力 ${baseFP}。射撃を判定しますか？（キャンセルでも射撃カードと行動を消費）`
+  );
+
   // 各防御兵士に判定（1回の射撃で全員に判定）
   const results = [];
-  const _targets = attackTargetsOf(tgtGroup); // §17.8 移送中の兵士も目標
+  const _targets = resolveAttack ? attackTargetsOf(tgtGroup) : []; // §17.8 移送中の兵士も目標
   state._malfStopAttack = false;
   for (let i = 0; i < _targets.length; i++) {
     if (state._malfStopAttack) break; // §19.11 残りの防御側の攻撃は解決しない
@@ -1035,6 +1039,11 @@ function _resolveFireActionInner() {
     if (hc) pushTerrainToDiscard(hc);
   });
 
+  if (window.DISCARD_RULES) window.DISCARD_RULES.markActed();
+  if (!state.actedGroups) state.actedGroups = new Set();
+  state.actedGroups.add(src.idx);
+  if (!resolveAttack) return;
+
   // 修正項目の内訳を取得（カードごとに表示。火炎放射器射撃時は自然地形を除外）
   const atkBreakdown = R.getTerrainModBreakdown ? R.getTerrainModBreakdown(_effSrcTerrain, true, _atkOpts) : [];
   const defBreakdown = R.getTerrainModBreakdown ? R.getTerrainModBreakdown(_effDefTerrain, false, _defOptsP) : [];
@@ -1061,14 +1070,10 @@ function _resolveFireActionInner() {
   });
   // §20.53 射撃を行ったグループの侵入兵は侵入状態解除
   if (window.CC_ACTION) window.CC_ACTION.clearInfiltration(srcGroup, 'fire');
-  if (window.DISCARD_RULES) window.DISCARD_RULES.markActed();
-  // §6.6/§4.2 射撃はグループの1アクション（1ターンに1回）
-  if (!state.actedGroups) state.actedGroups = new Set();
-  state.actedGroups.add(src.idx);
   markFiredAt(srcGroup, tgtGroup); // §38.3 観測の修正用
   // ターン累積 FP を加算 (このグループの今ターン射撃合計に追加)
   srcGroup.firedFPThisTurn = (srcGroup.firedFPThisTurn || 0) + needed;
-  if (window.AFV) window.AFV.boxedAfterFire(srcGroup, tgtGroup, needed, baseFP); // §28.7 オープントップへ、同じカードでもう一度
+  if (window.AFV && !state._malfStopAttack) window.AFV.boxedAfterFire(srcGroup, tgtGroup, needed, baseFP); // §28.7 オープントップへ、同じカードでもう一度
 }
 
 /**
