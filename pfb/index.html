@@ -1,0 +1,3048 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PFB Professional Baseball 2026 ©IED</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body, html {
+    height: 100%; overflow: hidden;
+    background: linear-gradient(180deg, #e8e0d0 0%, #f2ece0 30%, #f5f0e5 100%);
+    color: #333;
+    font-family: 'Helvetica Neue', 'Hiragino Sans', sans-serif;
+}
+.container { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── Result animations ── */
+.result-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+}
+.anim-ball {
+    position: absolute;
+    left: 50%; top: 65%;
+    width: 10px; height: 10px;
+    background: #fff;
+    border: 1.5px solid #999;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: all 0.7s cubic-bezier(0.15, 0.8, 0.3, 1);
+    box-shadow: 0 0 6px rgba(255,255,255,0.9);
+    z-index: 15;
+}
+.anim-flash {
+    position: absolute; left: 50%; top: 45%;
+    transform: translate(-50%, -50%) scale(0.3);
+    font-weight: 900; font-family: 'Helvetica Neue', sans-serif;
+    white-space: pre-line; text-align: center; opacity: 0;
+    z-index: 20;
+    background: rgba(255,255,255,0.95);
+    border: 3px solid #333;
+    border-radius: 12px;
+    padding: 14px 24px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    line-height: 1.4;
+}
+.anim-hit  { color: #006600; font-size: 22px; animation: flash-pop .45s ease-out forwards; }
+.anim-out  { color: #aa2222; font-size: 20px; animation: flash-pop .45s ease-out forwards; }
+.anim-bb   { color: #2266aa; font-size: 20px; animation: flash-pop .45s ease-out forwards; }
+.anim-err  { color: #aa6600; font-size: 22px; animation: flash-pop .45s ease-out forwards; }
+.anim-bunt { color: #668800; font-size: 20px; animation: flash-pop .45s ease-out forwards; }
+.anim-hr {
+    color: #cc5500; font-size: 32px;
+    text-shadow: 0 0 20px #ff8800;
+    animation: hr-pop .7s ease-out forwards;
+}
+/* ── Game over overlay ── */
+.game-over-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.97);
+    z-index: 50; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border: 4px solid #333; border-radius: 0;
+}
+.go-title { font-size: 36px; font-weight: 900; color: #cc0000; margin-bottom: 16px; }
+.go-score { font-size: 48px; font-weight: 900; color: #333; margin: 8px 0; }
+.go-team  { font-size: 24px; color: #555; }
+.go-winner { font-size: 28px; font-weight: 900; color: #cc6600; margin: 12px 0; }
+.go-detail { font-size: 16px; color: #555; margin: 4px 0; }
+.go-innings { font-size: 14px; color: #666; margin: 12px 0; font-family: monospace; }
+.go-btn { margin-top: 20px; padding: 12px 32px; font-size: 18px; font-weight: bold;
+    background: #2a8a2a; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+
+@keyframes flash-pop {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+    55%  { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+    100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes hr-pop {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+    40%  { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
+    100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.anim-burst {
+    position: absolute; width: 80px; height: 80px; border-radius: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: radial-gradient(circle, rgba(255,200,0,0.9), rgba(255,120,0,0.5), transparent);
+    animation: burst 1.8s ease-out forwards; z-index: 12;
+}
+@keyframes burst {
+    0%   { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+    40%  { transform: translate(-50%, -50%) scale(4); opacity: 0.7; }
+    100% { transform: translate(-50%, -50%) scale(7); opacity: 0; }
+}
+/* ── Inning change flash ── */
+.inning-flash-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 30; display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+}
+.inning-flash-box {
+    background: rgba(10,40,20,0.92);
+    border: 4px solid #ffcc00;
+    border-radius: 16px;
+    padding: 20px 40px;
+    text-align: center;
+    color: #fff;
+    animation: inning-pop 2.2s ease-out forwards;
+}
+.inning-flash-box .inn-num { font-size: 32px; font-weight: 900; color: #ffcc00; }
+.inning-flash-box .inn-team { font-size: 22px; font-weight: 700; margin-top: 4px; }
+@keyframes inning-pop {
+    0%   { opacity: 0; transform: scale(0.3); }
+    12%  { opacity: 1; transform: scale(1.15); }
+    25%  { transform: scale(1); }
+    70%  { opacity: 1; }
+    100% { opacity: 0; transform: scale(0.95); }
+}
+
+.ab {
+    padding: 9px 16px; border-radius: 6px; border: none;
+    cursor: pointer; font-family: 'Helvetica Neue', sans-serif;
+    font-size: 14px; font-weight: bold; color: #fff;
+    transition: all 0.15s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.ab:hover { transform: translateY(-1px); box-shadow: 0 3px 6px rgba(0,0,0,0.25); }
+.ab:active { transform: translateY(0); }
+.bp { background: #2a8a2a; }
+.bn { background: #2a6aaa; }
+.bw { background: #cc8800; }
+.bs { background: #8844aa; }
+.ba { background: #999; font-size: 13px; }
+.bt { background: #3388aa; font-size: 13px; padding: 7px 14px; }
+
+/* ── Load screen ── */
+#load-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100vh; gap: 20px;
+    background: linear-gradient(180deg, #c8e0c0 0%, #e8e0d0 50%, #f2ece0 100%);
+}
+#load-screen h1 { color: #2a6a2a; font-size: 26px; }
+#load-screen p  { color: #556655; font-size: 15px; text-align: center; }
+#file-input { display: none; }
+.file-label {
+    padding: 14px 28px; border: 2px solid #2a8a2a; color: #fff;
+    background: #2a8a2a; cursor: pointer; border-radius: 8px;
+    font-size: 16px; font-weight: bold;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.file-label:hover { background: #3aaa3a; }
+
+/* ── Scrollbars ── */
+#game-log::-webkit-scrollbar, .lineup-panel::-webkit-scrollbar { width: 6px; }
+#game-log::-webkit-scrollbar-track, .lineup-panel::-webkit-scrollbar-track { background: #ece8dc; }
+#game-log::-webkit-scrollbar-thumb, .lineup-panel::-webkit-scrollbar-thumb { background: #c0b8a0; border-radius: 3px; }
+#roster-dialog { width:min(960px,94vw); max-height:90vh; color:#f1f5ef; background:#14281d; border:1px solid #72947b; border-radius:8px; padding:16px; }
+#roster-dialog::backdrop { background:#0009; }
+#roster-dialog h2 { margin:0 0 8px; font-size:20px; }
+#roster-dialog select, #roster-dialog button { font:inherit; padding:4px; }
+.roster-dome { margin-left:12px; }
+.roster-message { color:#ffcc9d; margin:5px 0; }
+</style>
+<link rel="stylesheet" href="pfb-screen.css">
+</head>
+<body>
+
+<div id="load-screen">
+  <h1>⚾ PFB Professional Baseball 2026</h1>
+  <p id="csv-load-status" role="status">選手データを読み込んでいます…</p>
+  <label class="file-label" id="csv-fallback" for="file-input" hidden>📂 Data_25.csv を開く</label>
+  <input type="file" id="file-input" accept=".csv">
+  <button type="button" class="file-label load-tool" onclick="openSaveFile()">ロード</button>
+  <button type="button" class="file-label load-tool" id="resume-season" onclick="PFBSeasonUI.load(PFBSeasonUI.stored())" hidden>前回のペナントを続ける</button>
+  <p class="load-footer">©IED</p>
+</div>
+
+<input type="file" id="save-input" accept=".json,application/json" hidden>
+<div class="container" id="game-screen" style="display:none">
+  <header class="game-toolbar">
+    <div class="game-brand"><span class="brand-ball" aria-hidden="true">⚾</span>PFB</div>
+    <nav aria-label="試合メニュー">
+      <button type="button" class="toolbar-button" id="dashboard-news" onclick="PFBSeasonUI.show('news')" hidden>ニュース</button>
+      <button type="button" class="toolbar-button" id="dashboard-calendar" onclick="PFBSeasonUI.show('calendar')" hidden>日程</button>
+      <button type="button" class="toolbar-button" id="dashboard-standing" onclick="PFBSeasonUI.show('standings')" hidden>順位</button>
+      <button type="button" class="toolbar-button" id="dashboard-season-stats" onclick="PFBSeasonUI.show('stats')" hidden>ペナント成績</button>
+      <button type="button" class="toolbar-button" id="dashboard-stats" onclick="showGameDialog('stats')">試合成績</button>
+      <select class="toolbar-button match-stat-source" id="match-stat-source" aria-label="表示する成績" hidden>
+        <option value="real">リアル成績</option><option value="game">ゲーム成績</option>
+      </select>
+      <label class="toolbar-button coach-toggle" id="coach-option" hidden><input type="checkbox" id="match-coach" checked> コーチ</label>
+      <button type="button" class="toolbar-button" id="dashboard-auto" onclick="toggleAutoPlay()">自動進行</button>
+      <button type="button" class="toolbar-button" id="dashboard-save" onclick="saveCurrentMatch()">セーブ</button>
+      <button type="button" class="toolbar-button" onclick="openSaveFile()">ロード</button>
+    </nav>
+  </header>
+  <div id="scoreboard"></div>
+  <div class="middle-area">
+    <section class="lineup-panel" id="lineup-left" aria-label="担当球団">
+      <h2 class="panel-heading" id="team-left"></h2>
+      <div class="lineup-summary" id="summary-left"></div>
+    </section>
+    <div class="field-area" id="field-area" aria-label="球場"></div>
+    <section class="lineup-panel opponent" id="lineup-right" aria-label="対戦相手">
+      <h2 class="panel-heading" id="team-right"></h2>
+      <div class="lineup-summary" id="summary-right"></div>
+    </section>
+  </div>
+  <div id="pitcher-changes" role="status" aria-atomic="true"></div>
+  <p id="player-change" role="status" aria-atomic="true"></p>
+  <div id="game-log" role="status"></div>
+  <p id="coach-advice" aria-live="polite" hidden></p>
+  <div id="action-area" aria-label="試合操作">
+    <div id="action-buttons"></div>
+    <section class="result-stream"><h2>判定結果</h2><ol id="result-feed" tabindex="0" aria-label="試合の判定履歴"></ol></section>
+  </div>
+</div>
+
+<dialog class="pfb-dialog" id="game-dialog" aria-labelledby="game-dialog-title">
+  <h2 id="game-dialog-title"></h2>
+  <select id="dialog-stat-source" aria-label="表示する成績" hidden>
+    <option value="real">リアル成績</option><option value="game">ゲーム成績</option>
+  </select>
+  <div id="game-dialog-body"></div>
+  <form method="dialog"><button type="submit" class="ab bp dialog-close">閉じる</button></form>
+</dialog>
+
+<dialog class="pfb-dialog" id="online-dialog" aria-labelledby="online-title">
+  <h2 id="online-title">オンライン対戦</h2>
+  <p id="online-description" role="status"></p>
+  <div class="online-row"><label>対戦相手 <select id="online-opponent"></select></label><button type="button" id="online-create" class="ab bp">部屋を作る</button></div>
+  <div class="online-row"><label>部屋番号 <input id="online-code" inputmode="numeric" maxlength="8" autocomplete="off"></label><button type="button" id="online-join" class="ab bn">参加する</button></div>
+  <button type="button" class="ab bs" id="online-cancel">戻る</button>
+</dialog>
+
+<dialog class="pfb-dialog season-dialog" id="season-dialog" aria-labelledby="season-title">
+  <h2 id="season-title"></h2><p id="season-summary" role="status"></p>
+  <nav id="season-tab-list" aria-label="ペナント"></nav>
+  <div id="season-content"></div><div id="season-toolbar"></div>
+</dialog>
+
+<dialog id="roster-dialog" aria-labelledby="roster-title">
+    <form>
+        <h2 id="roster-title"></h2>
+        <section class="roster-bench-stage">
+            <div class="roster-tools">
+                <label>選手名 <input class="roster-search" type="search" placeholder="名前で絞り込み"></label>
+                <label>表示 <select class="roster-filter"><option value="all">全選手</option><option value="bench">ベンチ入り</option><option value="starter">先発候補</option></select></label>
+            </div>
+            <div class="roster-count" aria-live="polite"></div>
+            <div class="roster-list"></div>
+            <fieldset class="roster-stat-source" hidden>
+                <legend>表示する成績</legend>
+                <label><input type="radio" name="roster-stats" value="real" checked> リアル成績</label>
+                <label><input type="radio" name="roster-stats" value="game"> ゲーム成績</label>
+            </fieldset>
+        </section>
+        <section class="roster-board-stage" hidden>
+            <h3 class="roster-board-title" tabindex="-1">打順と守備位置</h3>
+            <div class="roster-board-layout">
+                <div class="roster-diamond" role="group" aria-label="守備位置"></div>
+                <div class="roster-order" role="group" aria-label="打順"></div>
+            </div>
+            <div class="roster-board-actions">
+                <label>入れ替え先 <select class="roster-swap-target"></select></label>
+                <button type="button" class="roster-swap">打順を入れ替え</button>
+                <button type="button" class="roster-remove">選択を取り消す</button>
+                <button type="button" class="roster-undo">元に戻す</button>
+                <button type="button" class="roster-suggest">おすすめ編成</button>
+                <button type="button" class="roster-clear">1番から組み直す</button>
+            </div>
+            <p class="roster-pick-note" aria-live="polite"></p>
+            <div class="roster-picks" role="group" aria-label="選手候補"></div>
+        </section>
+        <label class="roster-dome"><input type="checkbox"> ドーム球場</label>
+        <p class="roster-message" role="alert"></p>
+        <button type="button" class="roster-cancel">チーム選択へ戻る</button>
+        <button type="submit" class="roster-next"></button>
+    </form>
+</dialog>
+<script>
+'use strict';
+// ============================================================
+// UTILITIES
+// ============================================================
+let diceRandom=()=>Math.random();
+const rnd=(lo,hi)=>Math.floor(diceRandom()*(hi-lo+1))+lo;
+const d10 = () => rnd(1, 10);
+const d100 = () => rnd(1, 100);
+
+function getVal(s, idx) {
+    if (!s || String(s).trim() === '' || s === 'nan') return -1;
+    const parts = String(s).trim().split(/\s+/);
+    if (parts.length <= idx) return -1;
+    const v = parts[idx];
+    if (v === '**') return -1;
+    const n = parseInt(v, 10);
+    return isNaN(n) ? -1 : n;
+}
+
+function playerName(p) {
+    return String(p['氏名'] || '').replace(/ /g, '　').split('　')[0];
+}
+
+function hitDir(roll) {
+    const o = roll % 10;
+    if ([1,4,7].includes(o)) return 'レフト';
+    if ([0,2,5,8].includes(o)) return 'センター';
+    return 'ライト';
+}
+
+const DEF_COL = i => '守備' + String.fromCharCode(0xFF10 + i);
+const FNAME = {P:'投手',C:'捕手','1B':'一塁手','2B':'二塁手','3B':'三塁手','SS':'遊撃手',LF:'左翼手',CF:'中堅手',RF:'右翼手'};
+
+// ============================================================
+// CSV PARSING
+// ============================================================
+function parseCSV(text) {
+    const lines = text.replace(/\r/g,'').split('\n').filter(l => l.trim());
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(',');
+        const obj = {};
+        headers.forEach((h, j) => { obj[h] = (vals[j] || '').trim(); });
+        if (obj['氏名']) rows.push(obj);
+    }
+    return rows;
+}
+
+// ============================================================
+// PITCHER STATE
+// ============================================================
+const PITCHER_COLUMNS = {G:'グレード', C:'コントロール', K:'三振', HR:'被本塁打', S:'スタミナ', I:'登板間隔'};
+
+function extractPitcherStats(row) {
+    const stats = {};
+    for (let i = 1; i <= 7; i++) {
+        const [key, value] = (row[DEF_COL(i)] || '').split('=');
+        if (value !== undefined) stats[key.trim()] = value.trim();
+    }
+    for (const [key, column] of Object.entries(PITCHER_COLUMNS)) {
+        const value = (row[column] || '').trim();
+        if (value) stats[key] = value.startsWith(key + '=') ? value.slice(key.length + 1) : value;
+    }
+    return stats;
+}
+function isPitcher(row) {
+    return (row['ポジション'] || '').replace(/\s/g, '') === '投手' &&
+        (extractPitcherStats(row).G !== undefined || /^P=/.test(row[DEF_COL(1)] || ''));
+}
+
+function gradeRoll(value) {
+    const tenths = Math.round(value * 10);
+    const whole = Math.floor(tenths / 10);
+    const fraction = tenths - whole * 10;
+    return Math.max(0, Math.min(4, whole + Number(fraction > 0 && d10() <= fraction)));
+}
+
+class PitcherState {
+    constructor(row) {
+        this.row = row;
+        this.name = playerName(row);
+        this.arm  = row['利き腕'] || '右';
+        const st  = extractPitcherStats(row);
+        this.cardG = Number(st.G ?? 2);
+        this.cardC = Number(st.C ?? 2);
+        this.baseG = this.baseC = null;
+        this.tempG = this.tempC = 0;
+        this.K = Math.max(0, Math.min(4, Number(st.K ?? 2)));
+        this.HR_mod = st.HR || '-';
+        this.S = Number(st.S ?? 3);
+        this.rotation = Number(st.I ?? 0);
+        this.outsPitched = 0;
+        this.inningsPitched = 0;
+        this.facedBatters = 0;
+        this.appearanceInning = null;
+        this.lastInning = null;
+        this.secondBaseChecked = false;
+        this.runsAllowed=0;
+        this.chargedRuns=0;
+        this.hitsAllowed=0;
+        this.strikeouts=0;
+        this.walks=0;
+        this.hitByPitch=0;
+        this.isUsed = false;
+        this.shock = 0; // 0=通常, 1=一時ショック, 2=回復不可
+        this.isStarter = false;
+        this.isRelief = false;
+    }
+    enter(inning, starter = false) {
+        this.isUsed = true;
+        this.isStarter = starter;
+        this.isRelief = !starter;
+        this.appearanceInning = inning;
+        this.baseG=gradeRoll(Math.max(0,this.cardG+(this.form?.adjust || 0)-(starter&&this.S<4?.5:0)));
+        this.baseC=gradeRoll(Math.max(0,this.cardC+(this.form?.adjust || 0)));
+        this.beginInning(inning);
+    }
+    beginInning(inning) {
+        if (this.lastInning === inning) return;
+        this.lastInning = inning;
+        this.inningsPitched++;
+        this.secondBaseChecked = false;
+    }
+    get staminaRemaining() { return this.S-this.inningsPitched-(this.form?.previousInnings||0); }
+    get fatigued() { return this.staminaRemaining<0; }
+    get G() {
+        if (this.shock === 2) return 0;
+        let v = this.baseG + this.tempG;
+        if (this.fatigued) v--;
+        if (this.shock === 1) v--;
+        return Math.max(0, Math.min(4, v));
+    }
+    get C() {
+        if (this.shock === 2) return 0;
+        let v = this.baseC + this.tempC;
+        if (this.fatigued) v--;
+        if (this.shock === 1) v--;
+        return Math.max(0, Math.min(4, v));
+    }
+    // §9.2.1 一時ショック状態チェック: 失点時D10で3以下→ショック
+    shockExempt(inning) {
+        return !this.fatigued && (this.isStarter && inning <= 3 && this.runsAllowed <= 3 ||
+            this.isRelief && this.appearanceInning === inning);
+    }
+    checkShock() {
+        const roll = d10();
+        if (roll <= 3) {
+            if (this.shock === 2) return false;
+            if (this.shock === 1) { this.shock = 2; return true; } // →回復できないショック
+            if (this.fatigued && this.shock === 0) { this.shock = 2; return true; } // 疲労+ショック→回復不可
+            this.shock = 1;
+            return true;
+        }
+        return false;
+    }
+    // §9.2.3 イニング終了時に回復(回復不可は除く)
+    recoverShock() {
+        if (this.shock !== 1) return false;
+        this.shock = 0;
+        return true;
+    }
+    resetTemp() { this.tempG = this.tempC = 0; }
+}
+
+// ============================================================
+// TABLE 5
+// ============================================================
+function table5(ones, tens) {
+    if (ones === 0) return ['RARE', null];
+    if (ones === 1) return ['G', tens % 2 !== 0 ? 'P' : '2B'];
+    if (ones === 2) return ['F', 'SS'];
+    if (ones === 3) return ['G', tens % 2 !== 0 ? '1B' : 'SS'];
+    if (ones === 4) return ['G', '2B'];
+    if (ones === 5) return ['G', '3B'];
+    if (ones === 6) return ['G', 'SS'];
+    if (ones === 7) return ['F', 'LF'];
+    if (ones === 8) return ['F', 'CF'];
+    return ['F', 'RF'];
+}
+
+// ============================================================
+// TABLE 18: エラー表 内野手
+// ============================================================
+function table18(pos, defR) {
+    const total = d10() + defR;
+    const fn = FNAME[pos] || '内野手';
+    if (total <= 6)  return ['INFIELD_HIT', `【内野安打！】${fn}の横を抜けた！打者1塁、各走者1進塁`];
+    if (total <= 9)  return ['INFIELD_ERR', `【内野ゴロエラー！】${fn}がファンブル！打者1塁、各走者1進塁`];
+    if (total === 10)return ['THROW_ERR',   `【送球エラー！】${fn}の悪送球！打者2塁、各走者2進塁`];
+    return ['GROUNDER', null];
+}
+
+// ============================================================
+// TABLE 19: エラー表 外野手
+// ============================================================
+function table19(pos, defR, hasR2, outs) {
+    const total = d10() + defR;
+    const fn = FNAME[pos] || '外野手';
+    if (total <= 5) {
+        const adv = outs === 2 ? 2 : 1;
+        return ['OF_POT', `【ポテンヒット！】${fn}が追いつけない！打者1塁、${outs===2?'各走者2進塁':'各走者1進塁'}`, 1, adv];
+    }
+    if (total <= 7) {
+        if (outs === 2) return ['OF_ERR2B', `【外野フライエラー！】${fn}が落球！打者2塁、各走者2進塁`, 2, 2];
+        const bt = hasR2 ? '1塁' : '2塁';
+        return ['OF_ERR', `【外野フライエラー！】${fn}が落球！打者${bt}、各走者1進塁`, hasR2?1:2, 1];
+    }
+    if (total === 8) return ['OF_THRW', `【外野+送球エラー！】打者2塁、各走者2進塁`, 2, 2];
+    return ['FLY_OUT', `${fn}フライアウト`, 0, 0];
+}
+
+// ============================================================
+// TABLE 2: 暴走表
+// ============================================================
+function table2_boso(speed, ofDef, outs, leftToThird, tagUp) {
+    const dm = (ofDef >= 4 ? 2 : ofDef <= 2 ? -2 : 0) +
+        (speed === 'F' ? -2 : speed === 'S' ? 2 : 0) +
+        (outs === 2 && !tagUp ? -2 : 0) + (leftToThird ? 4 : 0);
+    const total = d10() + dm;
+    return {
+        result:total <= 3 ? 'safe' : total <= 6 ? 'hold' : 'out',
+        extra:total > 1 && total <= 3 || total > 6 && total <= 10,
+        total
+    };
+}
+
+// ============================================================
+// TABLE 3/6/7/8/9/10/13/14: 内野ゴロ
+// ============================================================
+function resolveGrounder(pos, defR, bases, batter, speed, outs, isForward, isEndRun=false) {
+    const r1=bases[0], r2=bases[1], r3=bases[2];
+    const hr1=!!r1, hr2=!!r2, hr3=!!r3;
+    // §7.3(3) エンドラン時: 通常→一番上(≤5相当)、前進守備→振って安打以外は2番目
+    let roll;
+    if (isEndRun && !isForward) roll = 1;
+    else {
+        roll = d10() + defR;
+        if (isEndRun && isForward && (roll > 6 || pos === 'P' || pos === 'C')) roll = 7;
+    }
+    const g12 = ['P','C'].includes(pos);
+    const g34 = ['1B','2B'].includes(pos);
+    const g56 = ['3B','SS'].includes(pos);
+    let nb=[...bases], oa=1, runs=0, desc='';
+
+    // ── 走者満塁－通常守備 ──
+    if (hr1 && hr2 && hr3 && !isForward) {
+        if (roll<=5)  { runs=1; nb=[null,r1,r2]; desc='打者アウト。走者全員1進塁'; }
+        else if(roll===6) { runs=1; nb=[batter,null,r2]; desc='1塁走者アウト。打者セーフ。他走者1進塁'; }
+        else if(roll===7) { nb=[batter,r1,r2]; desc='3塁走者アウト。打者セーフ。他走者1進塁'; }
+        else if(roll===8) {
+            if(speed==='S'){ nb=[null,r1,r2];oa=2;desc='3塁走者・打者アウト(走力S)。他走者1進塁'; }
+            else{ nb=[batter,r1,r2];desc='3塁走者アウト。打者セーフ。他走者1進塁'; }
+        }
+        else if(roll===9) {
+            if(speed!=='F'){ runs=1;nb=[null,null,r2];oa=2;desc='1塁走者・打者アウト(走力F以外)。他走者1進塁'; }
+            else{ runs=1;nb=[batter,null,r2];desc='1塁走者アウト。打者セーフ。他走者1進塁'; }
+        }
+        else if(roll<=12){ runs=1;nb=[null,null,r2];oa=2;desc='ゲッツー！1塁走者・打者アウト。他走者1進塁'; }
+        else             { nb=[null,r1,r2];oa=2;desc='ゲッツー！3塁走者・打者アウト。他走者1進塁'; }
+    }
+    // ── 走者満塁－前進守備 ──
+    else if(hr1&&hr2&&hr3&&isForward) {
+        if(roll<=6){
+            if(g12){ nb=[batter,r1,r2];oa=1;desc='3塁走者アウト。他走者1進塁(G1/G2)'; }
+            else{ runs=1;nb=[batter,r1,r2];oa=0;desc='内野安打！打者1塁、各走者1進塁、3塁生還'; }
+        } else if(roll<=8){ nb=[batter,r1,r2];desc='3塁走者アウト。打者セーフ。他走者1進塁'; }
+        else if(roll===9){
+            if(speed==='S'){ nb=[null,r1,r2];oa=2;desc='3塁走者・打者アウト(走力S)。他走者1進塁'; }
+            else{ nb=[batter,r1,r2];desc='3塁走者アウト。打者セーフ。他走者1進塁'; }
+        }
+        else if(roll===10){
+            if(speed!=='F'){ nb=[null,r1,r2];oa=2;desc='3塁走者・打者アウト(走力F以外)。他走者1進塁'; }
+            else{ nb=[batter,r1,r2];desc='3塁走者アウト。打者セーフ。他走者1進塁'; }
+        }
+        else{ nb=[null,r1,r2];oa=2;desc='ゲッツー！3塁走者・打者アウト。他走者1進塁'; }
+    }
+    // ── 走者２３塁－通常守備 ──
+    else if(hr2&&hr3&&!hr1&&!isForward) {
+        if(roll<=5){
+            if(g12){ nb=[null,r2,r3];desc='打者アウト。走者そのまま(G1/G2)'; }
+            else{ runs=1;nb=[null,null,r2];desc='打者アウト。走者1進塁'; }
+        } else if(roll<=11){
+            if(g12){ nb=[null,r2,r3];desc='打者アウト。走者そのまま(G1/G2)'; }
+            else if(g56){ runs=1;nb=[null,r2,null];desc='打者アウト。3塁走者生還、2塁走者そのまま(G5/G6)'; }
+            else{ runs=1;nb=[null,null,r2];desc='打者アウト。走者1進塁'; }
+        } else { nb=[null,r2,r3];desc='打者アウト。走者そのまま'; }
+    }
+    // ── 走者２３塁－前進守備 ──
+    else if(hr2&&hr3&&!hr1&&isForward) {
+        if(roll<=6){
+            if(g12){ nb=[null,r2,r3];desc='打者アウト。走者そのまま(G1/G2)'; }
+            else{ runs=1;nb=[batter,null,r2];oa=0;desc='内野安打！打者1塁、走者1進塁、3塁生還'; }
+        } else { nb=[null,r2,r3];desc='打者アウト。走者そのまま'; }
+    }
+    // ── 走者１３塁－通常守備 ──
+    else if(hr1&&hr3&&!hr2&&!isForward) {
+        if(roll<=5){
+            if(g12){ nb=[null,r1,r3];desc='打者アウト。1塁→2塁、3塁そのまま(G1/G2)'; }
+            else{ runs=1;nb=[null,r1,null];desc='打者アウト。走者1進塁、3塁生還'; }
+        } else if(roll<=7){
+            if(g12){ nb=[batter,null,r3];desc='1塁走者アウト。打者セーフ。3塁そのまま(G1/G2)'; }
+            else{ runs=1;nb=[batter,null,null];desc='1塁走者アウト。打者セーフ。3塁走者生還'; }
+        } else if(roll===8){
+            if(speed==='S'){
+                if(g12){ nb=[null,null,r3];oa=2;desc='1塁走者・打者アウト(走力S)。3塁そのまま(G1/G2)'; }
+                else{ runs=1;nb=[null,null,null];oa=2;desc='1塁走者・打者アウト(走力S)。3塁走者生還'; }
+            } else {
+                if(g12){ nb=[batter,null,r3];desc='1塁走者アウト。打者セーフ。3塁そのまま(G1/G2)'; }
+                else{ runs=1;nb=[batter,null,null];desc='1塁走者アウト。打者セーフ。3塁走者生還'; }
+            }
+        } else if(roll===9){
+            if(speed!=='F'){
+                if(g12){ nb=[null,null,r3];oa=2;desc='1塁走者・打者アウト(走力F以外)。3塁そのまま(G1/G2)'; }
+                else{ runs=1;nb=[null,null,null];oa=2;desc='1塁走者・打者アウト(走力F以外)。3塁走者生還'; }
+            } else {
+                if(g12){ nb=[batter,null,r3];desc='1塁走者アウト。打者セーフ。3塁そのまま(G1/G2)'; }
+                else{ runs=1;nb=[batter,null,null];desc='1塁走者アウト。打者セーフ(俊足)。3塁走者生還'; }
+            }
+        } else {
+            if(g12){ nb=[null,null,r3];oa=2;desc='ゲッツー！3塁走者そのまま(G1/G2)'; }
+            else{ runs=1;nb=[null,null,null];oa=2;desc='ゲッツー！3塁走者生還'; }
+        }
+    }
+    // ── 走者１３塁－前進守備 ──
+    else if(hr1&&hr3&&!hr2&&isForward) {
+        if(roll<=6){
+            if(g12){ nb=[null,r1,r3];desc='打者アウト。1塁→2塁、3塁そのまま(G1/G2)'; }
+            else{ runs=1;nb=[batter,r1,null];oa=0;desc='内野安打！走者1進塁、3塁生還'; }
+        } else if(roll<=8){
+            if (isEndRun) { nb=[null,r1,r3]; desc='打者アウト。1塁→2塁、3塁そのまま'; }
+            else { nb=[batter,null,r3]; desc='1塁走者アウト。打者セーフ。3塁そのまま'; }
+        } else if(roll===9){
+            if(speed==='S'){ nb=[null,null,r3];oa=2;desc='1塁走者・打者アウト(走力S)。3塁そのまま'; }
+            else{ nb=[batter,null,r3];desc='1塁走者アウト。打者セーフ。3塁そのまま'; }
+        } else if(roll===10){
+            if(speed!=='F'){ nb=[null,null,r3];oa=2;desc='1塁走者・打者アウト(走力F以外)。3塁そのまま'; }
+            else{ nb=[batter,null,r3];desc='1塁走者アウト。打者セーフ。3塁そのまま'; }
+        } else {
+            nb=[null,null,r3];oa=2;desc='ゲッツー！1塁走者・打者アウト。3塁そのまま';
+        }
+    }
+    // ── 走者１２塁 ──
+    else if(hr1&&hr2&&!hr3) {
+        if(roll<=5){ nb=[null,r1,r2];desc='打者アウト。走者1進塁'; }
+        else if(roll<=7){ nb=[batter,null,r2];desc='1塁走者アウト。打者セーフ。2塁→3塁'; }
+        else if(roll===8){
+            if(speed==='S'){ nb=[null,null,r2];oa=2;desc='ゲッツー(走力S)'; }
+            else{ nb=[batter,null,r2];desc='1塁走者アウト。打者セーフ'; }
+        } else if(roll===9){
+            if(speed!=='F'){ nb=[null,null,r2];oa=2;desc='ゲッツー(走力F以外)'; }
+            else{ nb=[batter,null,r2];desc='1塁走者アウト。打者セーフ(俊足)'; }
+        } else { nb=[null,null,r2];oa=2;desc='ゲッツー！'; }
+    }
+    // ── 走者３塁－前進守備 ──
+    else if(hr3&&!hr1&&!hr2&&isForward) {
+        if(roll<=6){
+            if(g12){ nb=[null,null,r3];desc='打者アウト。3塁そのまま(G1/G2)'; }
+            else{ runs=1;nb=[batter,null,null];oa=0;desc='内野安打！打者1塁、3塁走者生還！'; }
+        } else { nb=[null,null,r3];desc='打者アウト。3塁そのまま'; }
+    }
+    // ── 走者３塁－通常守備 ──
+    else if(hr3&&!hr1&&!hr2) {
+        if(roll<=11){
+            if(g12){ nb=[null,null,r3];desc='打者アウト。3塁そのまま(G1/G2)'; }
+            else{ runs=1;nb=[null,null,null];desc='打者アウト。3塁走者生還！'; }
+        } else { nb=[null,null,r3];desc='打者アウト。3塁そのまま'; }
+    }
+    // ── 走者２塁 ──
+    else if(hr2&&!hr1&&!hr3) {
+        if(roll<=5)      { nb=[null,null,r2];desc='打者アウト。2塁→3塁'; }
+        else if(roll<=9) {
+            if(g34){ nb=[null,null,r2];desc='打者アウト。2塁→3塁(G3/G4方向)'; }
+            else{ nb=[null,r2,null];desc='打者アウト。2塁走者そのまま'; }
+        } else { nb=[null,r2,null];desc='打者アウト。2塁走者そのまま'; }
+    }
+    // ── 走者１塁 ──
+    else if(hr1&&!hr2&&!hr3) {
+        if(outs>=2){ nb=[null,r1,null];desc='打者アウト。1塁走者2塁へ'; }
+        else if(roll<=5){ nb=[null,r1,null];desc='打者アウト。1塁走者2塁へ'; }
+        else if(roll<=7){ nb=[batter,null,null];desc='1塁走者アウト。打者セーフ'; }
+        else if(roll===8){
+            if(speed==='S'){ nb=[null,null,null];oa=2;desc='ゲッツー！(走力S)'; }
+            else{ nb=[batter,null,null];desc='1塁走者アウト。打者セーフ'; }
+        } else if(roll===9){
+            if(speed!=='F'){ nb=[null,null,null];oa=2;desc='ゲッツー！(走力F以外)'; }
+            else{ nb=[batter,null,null];desc='1塁走者アウト。打者セーフ(俊足)'; }
+        } else { nb=[null,null,null];oa=2;desc='ゲッツー！'; }
+    }
+    // ── 走者なし（ここには来ないはずだがフォールバック） ──
+    else {
+        nb=[null,null,null]; desc='打者アウト';
+    }
+    let alternative = null;
+    if (hr1 && hr2 && hr3 && !isForward && g12 && (roll === 6 || roll >= 9 && roll <= 12)) {
+        alternative = {outs:oa, bases:[oa === 1 ? batter : null,r1,r2], runs:0, desc:'本塁送球、3塁走者アウト', side:'defense'};
+    } else if (!hr1 && hr2 && hr3 && (isForward && (g12 || roll >= 7) || !isForward && roll >= 12)) {
+        alternative = {outs:1,bases:[batter,null,r2],runs:0,desc:'3塁走者アウト、打者セーフ'};
+    } else if (!hr1 && hr2 && !hr3 && (roll >= 10 || roll >= 6 && !g34)) {
+        alternative = {outs:1,bases:[batter,null,null],runs:0,desc:'2塁走者アウト、打者セーフ'};
+    } else if (hr1 && !hr2 && hr3 && isForward && roll >= 7 && roll <= 10) {
+        alternative = {outs:1,bases:[batter,r1,null],runs:0,desc:'3塁走者アウト、打者セーフ'};
+    }
+    return {outs:oa, bases:nb, runs, desc, alternative};
+}
+
+// ============================================================
+// TABLE 17: 珍プレイ表
+// ============================================================
+function table17(pitcher, batter, bases, dome) {
+    const roll = d100();
+    const hasRunners = bases.some(Boolean);
+    if (roll <= 30) {
+        const index = [2,3,6,12,17,24,26,28,30].findIndex(limit => roll <= limit);
+        return {roll, type:'ERROR', field:['P',...FIELD_POSITIONS][index]};
+    }
+    if (roll === 31) return {roll,type:'FOUL',injury:'C'};
+    if (roll <= 35) {
+        const field = ['1B','2B','3B','SS'][roll-32];
+        return {roll,type:'GROUNDER',field,injury:field};
+    }
+    if (roll <= 38) return {roll,type:'WALL_FLY',injury:OUTFIELD[roll-36]};
+    if (roll <= 40) return {roll,type:'GROUNDER',field:'P',injury:'P'};
+    if (roll <= 45) return {roll,type:'K',injury:isPitcher(batter) ? null : 'batter'};
+    if (roll <= 52) return {roll,type:'HBP',injury:'batter'};
+    if (roll <= 54) return {roll,type:hasRunners ? 'HOLD' : 'K',injury:hasRunners ? 'lead' : null};
+
+    if (roll <= 66) {
+        const pitching = roll <= 60;
+        const row = pitching ? pitcher.row : batter;
+        const feature = row['特徴'] || '';
+        const longInjury = feature.match(/負傷(\d+)(?:\(([^)]+)\))?/);
+        const code = longInjury ? longInjury[2] : feature;
+        const events = pitching ? {WP:'WP',BK:'BK',PO:'PO'} :
+            {DB:'HBP',IH:'1H',退:'HBP',突:'FIGHT',GETR:'GETR',MAKR:'MAKR','?HR':'MAYBE_HR'};
+        let type = events[code] || (pitching ? 'BB' : 'K');
+        if (pitching && !hasRunners && events[code]) type = 'K';
+        return {roll,type,injury:longInjury ? (pitching ? 'P' : 'batter') : null, days:longInjury ? Number(longInjury[1]) : undefined};
+    }
+    if (roll <= 70) return {roll,type:'HBP'};
+    if (roll <= 74) return {roll,type:hasRunners ? 'PO' : 'K'};
+    if (roll <= 78) return {roll,type:hasRunners ? 'STEAL' : 'K'};
+    if (roll <= 90) return {roll,type:hasRunners ? 'WP' : 'K'};
+    if (roll <= 95) return {roll,type:hasRunners ? 'PB' : 'K'};
+    if (roll === 96) return {roll,type:hasRunners ? 'BK' : 'K'};
+    if (roll === 97) {
+        const detail = d10();
+        const foreign = /外国人/.test(batter['備考'] || '');
+        return {roll,detail,type:detail <= 4 ? 'HBP' : 'K',eject:detail <= 4 ? 'P' : detail >= 8 || foreign ? 'batter' : null,injury:detail === 4 ? 'batter' : null};
+    }
+    if (roll === 98) return {roll,type:'3H'};
+    if (roll === 99) return {roll,type:'HR'};
+    if (dome) return {roll,type:'IGNORE_RAIN'};
+    const detail = d10();
+    return {roll,detail,type:detail <= 4 ? 'SHORT_RAIN' : detail <= 8 ? 'LONG_RAIN' : 'RAIN_OUT'};
+}
+
+function injuryDays(player) {
+    const column = 'SABCDE'.indexOf(player['ﾀﾌﾈｽ']);
+    const roll = d100();
+    const row = [2,5,20,40,60,80,95,98,100].findIndex(limit => roll <= limit);
+    return [
+        [null,null,null,null,0,0], [null,null,0,1,3,4], [null,null,2,4,6,8],
+        [null,0,3,6,9,12], [null,1,4,8,12,16], [null,2,5,10,15,20],
+        [null,3,6,12,18,24], [0,4,7,14,21,28], [1,5,8,16,24,32]
+    ][row][column] ?? null;
+}
+
+// ============================================================
+// AT-BAT / BUNT / STEAL
+// ============================================================
+function resolveAtBat(batter, pitcher, outs, runners) {
+    const roll = d100();
+    const g = pitcher.G;
+    let hrVal = getVal(batter['HR'], g);
+    if(hrVal !== -1) { if(pitcher.HR_mod==='*') hrVal--; if(pitcher.HR_mod==='**') hrVal++; }
+    const h2p = getVal(batter['2H+'], g);
+    const h2  = getVal(batter['2H'],  g);
+    const h3  = getVal(batter['3H'],  g);
+    const h1s = getVal(batter['1H*'], g);
+    const h1p = getVal(batter['1H+'], g);
+    const h1  = getVal(batter['1H'],  g);
+    const fa  = getVal(batter['Fa'],  g);
+    const wLo = parseInt(batter['BS'],10)||51;
+    const wHi = getVal(batter['BB'], pitcher.C);
+    const kHi = parseInt(batter['KS'],10)||100;
+    const kLo = getVal(batter['K'], pitcher.K);
+    const dir = hitDir(roll);
+
+    if(fa !== -1 && roll >= 1 && roll <= fa) {
+        if(hrVal !== -1 && roll <= hrVal) return [roll, `${dir}スタンドへのホームラン！！`, 'HR'];
+        if(h2p !== -1 && roll <= h2p) return [roll, `${dir}の頭上を越えるツーベース！(2H+)`, '2H+'];
+        if(h2  !== -1 && roll <= h2)  return [roll, `${dir}線を破るツーベース！(2H)`, '2H'];
+        if(h3  !== -1 && roll <= h3)  return [roll, `${dir}へのスリーベース！(3H)`, '3H'];
+        if(h1s !== -1 && roll <= h1s) return [roll, `${dir}前クリーンヒット！(1H*)`, '1H*'];
+        if(h1p !== -1 && roll <= h1p) return [roll, `${dir}へのヒット！(1H+)`, '1H+'];
+        if(h1  !== -1 && roll <= h1)  return [roll, `${dir}前ヒット！(1H)`, '1H'];
+        if(outs < 2 && runners[2]) return [roll, '外野への大きなフライ！タッチアップで生還！（犠飛）', 'SF'];
+        return [roll, null, 'GENERIC'];
+    }
+    if(wHi !== -1 && roll >= wLo && roll <= wHi) return [roll, 'よく見た！四球！', 'BB'];
+    if(kLo !== -1 && roll >= kLo && roll <= kHi) return [roll, '三振！', 'K'];
+    return [roll, null, 'GENERIC'];
+}
+
+// FC表 (D10): セーフ/アウト判定
+function fcTable(defense, runner, forward = false, tag = false) {
+    const speed = runner['走'];
+    return d10() + defense + (speed === 'F' ? -1 : speed === 'S' ? 1 : 0) +
+        (forward ? 2 : 0) - (tag ? 2 : 0) <= 8;
+}
+
+function resolveBunt(batter, isSqueeze, strength) {
+    const roll = d100();
+    const buntHit = roll <= 4 || (roll <= 6 && batter['走'] === 'F');
+    if (buntHit) return [roll, 'バントヒット', 'HIT'];
+    if (roll <= strength * 10 + (isSqueeze ? 20 : 30)) return [roll, 'バント成功', 'SAC'];
+    const base = strength * 10 + (isSqueeze ? 20 : 30);
+    for (const [pos, limit] of [['P',4],['C',8],['1B',14],['3B',20]]) {
+        if (roll <= base + limit) return [roll, `${FNAME[pos]}へのバント`, 'FC', pos];
+    }
+    if (!isSqueeze) {
+        if (roll <= 80 + strength * 4) return [roll, 'ファウル、ツーストライク', 'FOUL'];
+        if (roll <= 95 + strength) return [roll, 'バント失敗、先頭走者アウト', 'LEAD_OUT'];
+        return [roll, '送りバント失敗', 'DP'];
+    }
+    if (roll <= 52 + strength * 8) return [roll, 'ファウル、ツーストライク', 'FOUL'];
+    if (roll <= 64 + strength * 6) return [roll, '空振り、3塁走者アウト', 'SWING'];
+    if (roll <= 76 + strength * 4) return [roll, 'スクイズ失敗、3塁走者アウト', 'LEAD_OUT'];
+    if (roll <= 88 + strength * 2) return [roll, 'スクイズ失敗、3塁走者アウト', 'LOADED_OUT'];
+    return [roll, '投手への小フライ、ダブルプレー', 'DP'];
+}
+
+function stealStartValue({runner,from},pitcher,cautious) {
+    return Number(runner['S1']) + (from === 0 && !pitcher.arm.startsWith('左投') ? 1 : 0) -
+        (from === 2 ? 3 : 0) - (cautious ? 2 : 0);
+}
+
+function stealSuccessValue({runner,from},catcherT,{cautious=false,corners=false,bonus=0}={}) {
+    return Number(runner['S2']) + (from === 2 ? -50 : catcherT) -
+        (cautious ? 20 : 0) + (corners && from === 0 ? 20 : 0) + bonus;
+}
+
+function resolveSteal(attempts, pitcher, catcherT, options = {}) {
+    const {cautious = false, forced = false, target = attempts[0]} = options;
+    const startValues = attempts.map(attempt=>stealStartValue(attempt,pitcher,cautious));
+    const threshold = Math.min(...startValues) - (attempts.length > 1 ? 1 : 0);
+    if (!forced && d10() > threshold) return {started:false, text:`スタートできず（スタート値 ${threshold}）`};
+
+    const {runner} = target;
+    const successValue = stealSuccessValue(target,catcherT,options);
+    const roll = d100();
+    const success = roll <= successValue;
+    return {started:true, success, text:`${playerName(runner)}が${success ? '盗塁成功' : '盗塁失敗'}（${roll}／成功値 ${successValue}）`};
+}
+
+// ============================================================
+// ADVANCE RUNNERS
+// ============================================================
+function advanceRunners(bases, batter, r1a, r2a, r3a, ba) {
+    const nb=[null,null,null],scorers=[];
+    const [r1,r2,r3]=bases;
+    if(r3){ if(r3a>=1) scorers.push(r3); else nb[2]=r3; }
+    if(r2){ if(r2a>=2) scorers.push(r2); else if(r2a===1) nb[2]=r2; else nb[1]=r2; }
+    if(r1){ if(r1a>=3) scorers.push(r1); else if(r1a===2) nb[2]=r1; else if(r1a===1) nb[1]=r1; else nb[0]=r1; }
+    if(ba>=4) scorers.push(batter); else if(ba===3) nb[2]=batter; else if(ba===2) nb[1]=batter; else if(ba===1) nb[0]=batter;
+    return [nb,scorers.length,scorers];
+}
+
+function advanceForceBB(bases, batter) {
+    const [r1,r2,r3] = bases;
+    if (!r1) return [[batter,r2,r3], 0];
+    if (!r2) return [[batter,r1,r3], 0];
+    return [[batter,r1,r2],Number(Boolean(r3)),r3?[r3]:[]];
+}
+
+// ============================================================
+// DEFENSE
+// ============================================================
+const FIELD_POSITIONS = ['C','1B','2B','3B','SS','LF','CF','RF'];
+const OUTFIELD = ['LF','CF','RF'];
+
+function fieldCard(row, position) {
+    if (!row) return {rating:0, throwing:20, preference:0};
+    const isOutfield = OUTFIELD.includes(position);
+    let outfield = null;
+    for (let i = 1; i <= 7; i++) {
+        const match = (row[DEF_COL(i)] || '').match(/^(P|C|1B|2B|3B|SS|OF|LF|CF|RF)=(\d+)(?:\(([^)]+)\))?/);
+        if (!match) continue;
+        const [, role, rating, detail] = match;
+        if (role === position) {
+            return {rating:Number(rating), throwing:Number(detail?.match(/^T:([+-]?\d+)/)?.[1] ?? 20), preference:3};
+        }
+        if (isOutfield && role === 'OF') {
+            outfield = {rating:Number(rating), throwing:20, preference:detail === position[0] ? 3 : detail ? 1 : 2};
+        }
+    }
+    return outfield || {rating:0, throwing:20, preference:0};
+}
+
+function getDefense(positions, pitcher) {
+    const defense = {P:fieldCard(pitcher.row, 'P').rating};
+    for (const pos of FIELD_POSITIONS) defense[pos] = fieldCard(positions[pos], pos).rating;
+    return defense;
+}
+
+// ============================================================
+// 2025 NPB OPENING DAY ROSTERS (default batting orders)
+// ============================================================
+const DEFAULT_ROSTERS = {
+    '読売 ジャイアンツ':     { order:['丸','吉川尚','岡本','坂本','門脇','ヘルナンデス','大城','浅野','オドーア'], starter:'戸郷' },
+    '東京ヤクルト スワローズ': { order:['塩見','山田','村上','サンタナ','オスナ','長岡','中村','濱田','西川'], starter:'小川' },
+    '横浜DeNA ベイスターズ':  { order:['佐野','度会','牧','宮﨑','筒香','桑原','戸柱','林','京田'], starter:'東' },
+    '中日 ドラゴンズ':       { order:['岡林','田中','ビシエド','中田','細川','木下','村松','カリステ','龍空'], starter:'小笠原' },
+    '広島東洋 カープ':       { order:['秋山','野間','菊池涼','末包','小園','坂倉','堂林','矢野','上本'], starter:'床田' },
+    '阪神 タイガース':       { order:['近本','中野','森下','大山','佐藤輝','前川','木浪','梅野','小幡'], starter:'才木' },
+    '福岡ソフトバンク ホークス':{ order:['周東','近藤','柳田','山川','正木','今宮','ダウンズ','栗原','谷川原'], starter:'有原' },
+    '千葉ロッテ マリーンズ':  { order:['西川','藤岡','藤原','ポランコ','佐藤都志也','ソト','_部','上田希由翔','小川'], starter:'小島' },
+    'オリックス バファローズ': { order:['福田','西野','頓宮','森','セデーニョ','紅林','太田','若月','宗'], starter:'宮城' },
+    '東北楽天 ゴールデンイーグルス':{ order:['小郷','村林','浅村','フランコ','鈴木大','岡島','辰己','太田','伊藤裕'], starter:'田中将' },
+    '埼玉西武 ライオンズ':   { order:['源田','外崎','中村剛','アギラー','マキノン','蛭間','岸','古賀','長谷川'], starter:'高橋光' },
+    '北海道日本ハム ファイターズ':{ order:['五十幡','万波','レイエス','清宮','野村','マルティネス','水野','田宮','松本剛'], starter:'伊藤大' },
+    // Short name aliases (Japanese)
+    'ジャイアンツ': null, 'スワローズ': null, 'ベイスターズ': null, 'ドラゴンズ': null,
+    'カープ': null, 'タイガース': null, 'ホークス': null, 'マリーンズ': null,
+    'バファローズ': null, 'イーグルス': null, 'ライオンズ': null, 'ファイターズ': null,
+    // English name aliases (for CSV with English team names)
+    'Giants': null, 'Swallows': null, 'Baystars': null, 'Dragons': null,
+    'Carp': null, 'Tigers': null, 'Hawks': null, 'Marines': null,
+    'Buffaloes': null, 'Eagles': null, 'Lions': null, 'Fighters': null
+};
+// Map short aliases
+(function() {
+    const keys = Object.keys(DEFAULT_ROSTERS).filter(k => DEFAULT_ROSTERS[k] !== null);
+    for (const k of keys) {
+        const short = k.split(/\s+/).pop();
+        if (DEFAULT_ROSTERS[short] === null) DEFAULT_ROSTERS[short] = DEFAULT_ROSTERS[k];
+    }
+    // English → Japanese mapping
+    const enMap = {
+        'Giants':'ジャイアンツ','Swallows':'スワローズ','Baystars':'ベイスターズ','Dragons':'ドラゴンズ',
+        'Carp':'カープ','Tigers':'タイガース','Hawks':'ホークス','Marines':'マリーンズ',
+        'Buffaloes':'バファローズ','Eagles':'イーグルス','Lions':'ライオンズ','Fighters':'ファイターズ'
+    };
+    for (const [en, jp] of Object.entries(enMap)) {
+        if (DEFAULT_ROSTERS[en] === null && DEFAULT_ROSTERS[jp]) DEFAULT_ROSTERS[en] = DEFAULT_ROSTERS[jp];
+    }
+})();
+
+function findDefaultRoster(teamName) {
+    if (!teamName) return null;
+    // Exact match
+    if (DEFAULT_ROSTERS[teamName]) return DEFAULT_ROSTERS[teamName];
+    // Partial match
+    for (const [k, v] of Object.entries(DEFAULT_ROSTERS)) {
+        if (v && (teamName.includes(k) || k.includes(teamName))) return v;
+    }
+    // Match any word
+    const words = teamName.split(/\s+/);
+    for (const w of words) {
+        if (w.length < 2) continue;
+        for (const [k, v] of Object.entries(DEFAULT_ROSTERS)) {
+            if (v && k.includes(w)) return v;
+        }
+    }
+    return null;
+}
+
+function defaultRoster(rows, team) {
+    const pitchers = rows.filter(isPitcher);
+    const players = rows.filter(row => !isPitcher(row));
+    const preset = findDefaultRoster(team);
+    const lineup = [];
+    for (const name of preset?.order || []) {
+        const index = players.findIndex(row => row['氏名'].replace(/\s/g,'').startsWith(name));
+        if (index >= 0) lineup.push(players.splice(index,1)[0]);
+    }
+    lineup.push(...players.splice(0,9-lineup.length));
+    const starter = pitchers.find(p => playerName(p) === preset?.starter) ||
+        pitchers.find(p => Number(extractPitcherStats(p).S) >= 4) || pitchers[0];
+    const bullpen = pitchers.filter(p => p !== starter);
+    const selected = [...lineup,...players.slice(0,7),starter].filter(Boolean);
+    selected.push(...bullpen.splice(0,25-selected.length));
+    selected.push(...players.slice(7,7+25-selected.length));
+    return {selected,lineup,starter};
+}
+
+// ============================================================
+// GAME CLASS
+// ============================================================
+class Game {
+    constructor(playerTeam, allPlayers, fixedOpp, selectedRosters, dome = false) {
+        this.playerTeam = playerTeam;
+        this.dome = dome;
+        const playerRows = allPlayers.filter(r=>r['チーム']===playerTeam);
+        if (fixedOpp) {
+            this.oppTeam = fixedOpp;
+        } else {
+            const otherTeams = [...new Set(allPlayers.map(r => r['チーム']).filter(t => t && t !== playerTeam))];
+            this.oppTeam = otherTeams[rnd(0,otherTeams.length-1)];
+        }
+        const oppRows = allPlayers.filter(r=>r['チーム']===this.oppTeam);
+        const teams = [playerRows,oppRows];
+        const rosters = selectedRosters || teams.map((rows,side) => defaultRoster(rows,[playerTeam,this.oppTeam][side]));
+        const [[p0,l0,b0],[p1,l1,b1]] = rosters.map(({selected,lineup,starter,pitchForms}) => {
+            const pitchers = [starter,...selected.filter(p => p !== starter && isPitcher(p))].filter(Boolean);
+            return [pitchers.map(row=>{
+                const pitcher=new PitcherState(row);
+                pitcher.form=pitchForms?.[String(row.Index)];
+                return pitcher;
+            }),[...lineup],selected.filter(p=>!isPitcher(p)&&!lineup.includes(p))];
+        });
+        this.pitchers = [p0, p1];
+        this.lineups  = [l0, l1];
+        this.benches  = [b0, b1];
+        this.positions=this.lineups.map((lineup,side)=>rosters[side].positions || assignFieldPositions(lineup));
+        this.curPit   = [p0[0]||null, p1[0]||null];
+        for (const pitcher of this.curPit) if (pitcher) pitcher.enter(1, true);
+        this.scores=[0,0]; this.inning=1; this.half=0; this.outs=0;
+        this.bases=[null,null,null]; this.batIdx=[0,0];
+        this.innScores=[[],[]]; this.homeRuns=[]; this.log=[];
+        this.gameOver=false; this.called=false; this.state='offense';
+        this.isAuto=false;
+        this.squeezeUsed=[false,false];
+        this.endRunUsed=false;
+        this.stealBlocked=new Map();
+        this.pending=null;
+        this.removed=new Set();
+        this.matchStats=Object.create(null);
+        this.matchId=globalThis.crypto?.randomUUID?.() || Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+        this.pitchingOrder=this.curPit.map(p=>p?[{id:String(p.row.Index),inning:1,outs:0,lead:0}]:[]);
+        this.hrEvents=[];
+        this.injuryEvents=[];
+        this.appearances=new Set(this.lineups.flat().map(row=>String(row.Index)));
+        this.responsible=Object.create(null);
+        this.leadingPitchers=null;
+        this.preparePlate();
+    }
+    get batSide()  { return this.half; }
+    get defSide()  { return 1-this.half; }
+    get playerBats(){ return true; }
+    get pitcher()  { return this.curPit[this.defSide]; }
+    get lineup()   { return this.lineups[this.batSide]; }
+    get bench()    { return this.benches[this.batSide]; }
+    get defLineup(){ return this.lineups[this.defSide]; }
+    get defBench() { return this.benches[this.defSide]; }
+    get defPositions() { return this.positions[this.defSide]; }
+    get batter()   { return this.lineup[this.batIdx[this.batSide]]; }
+    logAdd(text,cls='',side=null) {
+        this.log.push([text,cls,this.inning,this.half,side]);
+    }
+    addScore(runs,homeRun=false,scorers=[],rbi=true) {
+        if (runs <= 0) return;
+        if (!homeRun && this.inning >= 9 && this.half === 1) {
+            runs = Math.min(runs, this.scores[0] - this.scores[1] + 1);
+        }
+        if (runs <= 0) return;
+        const before=this.scores[this.batSide];
+        this.scores[this.batSide]+=runs;
+        this.pitcher.runsAllowed+=runs;
+        const opposition=this.scores[this.defSide];
+        for (let i=0;i<runs;i++) {
+            const runner=scorers[i];
+            const charged=this.pitchers[this.defSide].find(p=>String(p.row.Index)===this.responsible[runner?.Index]) || this.pitcher;
+            charged.chargedRuns++;
+            if (runner) this.battingLine(runner).r++;
+            if (rbi) this.battingLine(this.batter).rbi++;
+            if (before+i===opposition) {
+                this.leadingPitchers={side:this.batSide,win:String(this.curPit[this.batSide].row.Index),loss:String(charged.row.Index)};
+            }
+        }
+        this.checkShock();
+        if (this.inning >= 9 && this.half === 1 && this.scores[1] > this.scores[0]) {
+            this.logAdd('【サヨナラ！！】','l-say');
+            this.gameOver = true;
+        }
+    }
+    checkShock(ignoreExemption = false) {
+        if (this.shockChecked || this.pitcher.shock === 2 || !ignoreExemption && this.pitcher.shockExempt(this.inning)) return;
+        this.shockChecked = true;
+        if (this.pitcher.checkShock()) {
+            const result = this.pitcher.shock === 2 ? '回復不可ショック（G0・C0）' : '一時ショック（G−1・C−1）';
+            this.logAdd(`【${result}】${this.pitcher.name}`,'l-rare');
+            this.injuryEvents.push({id:String(this.pitcher.row.Index),kind:'shock',days:0,permanent:this.pitcher.shock===2});
+        }
+    }
+    beginPitchingInning() {
+        const p=this.pitcher;
+        const before=p.staminaRemaining;
+        p.beginInning(this.inning);
+        if (p.staminaRemaining===before) return;
+        const fatigue=before>=0&&p.fatigued ? '　疲労発生' : '';
+        this.logAdd(`${p.name}　残りスタミナ ${staminaLabel(before)} → ${staminaLabel(p.staminaRemaining)}${fatigue}`,'l-pitch-down',this.defSide);
+    }
+    endPitchingInning() {
+        const p=this.pitcher;
+        if (p.recoverShock()) this.logAdd(`${p.name}　一時ショックから回復`,'l-pitch-up',this.defSide);
+    }
+    checkSecondBase() {
+        const p = this.pitcher;
+        if (this.outs < 3 && this.bases[1] && !p.secondBaseChecked) {
+            p.secondBaseChecked = true;
+            if (p.fatigued) this.checkShock();
+        }
+    }
+    recordOuts(count = 1) {
+        const taken = Math.min(count, 3 - this.outs);
+        this.outs += taken;
+        this.pitcher.outsPitched += taken;
+    }
+    preparePlate() {
+        this.pitcher?.resetTemp();
+        if(this.batter&&!this.bases.includes(this.batter)) delete this.responsible?.[this.batter.Index];
+        this.isForward = this.isCautious = this.isSqueezeCautious = false;
+        this.shockChecked = this.stealAttempted = this.startFailed = false;
+        this.buntContinuation=null;
+        this.plateOutcome='OUT';
+        this.plateComplete=false;
+        this.offenseLocked=false;
+        this.waitingForCpuDefense=false;
+    }
+    replacePitcher(pitcher) {
+        const departing=this.pitcher;
+        this.curPit[this.defSide] = pitcher;
+        pitcher.enter(this.inning);
+        this.pitchingOrder[this.defSide].push({id:String(pitcher.row.Index),inning:this.inning,outs:this.outs,
+            lead:this.scores[this.defSide]-this.scores[this.batSide]});
+        this.logAdd(`【投手交代】${departing.name} → ${pitcher.name}`,'l-sub',this.defSide);
+    }
+    canReplacePitcher() {
+        const p = this.pitcher;
+        if (p.unavailable || (p.shock === 2 && this.outs === 0 && p.lastInning !== this.inning)) return true;
+        if (!p.facedBatters && p.appearanceInning === this.inning) return false;
+        if (!p.isStarter || this.inning > 5) return true;
+        const own = this.scores[this.defSide];
+        const rival = this.scores[this.batSide];
+        const runners = this.bases.filter(Boolean).length;
+        return p.runsAllowed + runners + 1 >= 5 || p.shock > 0 || p.fatigued ||
+            (this.inning >= 4 && (own <= rival || own - rival <= runners));
+    }
+    runnersStr() {
+        const parts=[];
+        if(this.bases[0]) parts.push(`1塁:${playerName(this.bases[0])}`);
+        if(this.bases[1]) parts.push(`2塁:${playerName(this.bases[1])}`);
+        if(this.bases[2]) parts.push(`3塁:${playerName(this.bases[2])}`);
+        return parts.length?parts.join(' '):'走者なし';
+    }
+    outStr() { return '●'.repeat(this.outs)+'○'.repeat(3-this.outs); }
+    battingLine(row) {
+        return this.matchStats[String(row.Index)] ||= {pa:0,ab:0,h:0,hr:0,bb:0,k:0,doubles:0,triples:0,hbp:0,sh:0,sf:0,r:0,rbi:0,sb:0,cs:0};
+    }
+    nextBatter() {
+        const row=this.batter,p=this.pitcher;
+        const line=this.battingLine(row);
+        const outcome=this.plateOutcome;
+        this.appearances.add(String(row.Index));
+        line.pa++;
+        if (outcome==='BB') { line.bb++;p.walks++; }
+        if (outcome==='HBP') { line.hbp++;p.hitByPitch++; }
+        if (outcome==='SAC') line.sh++;
+        if (outcome==='SF') line.sf++;
+        if (!['BB','HBP','SAC','SF'].includes(outcome)) line.ab++;
+        if (/^(1[HB][*+]?|2[HB]\+?|3[HB]|HR)$/.test(outcome)) { line.h++;p.hitsAllowed++; }
+        if (outcome.startsWith('2H')||outcome==='2B') line.doubles++;
+        if (outcome.startsWith('3H')||outcome==='3B') line.triples++;
+        if (outcome==='HR') line.hr++;
+        if (outcome==='K') { line.k++;p.strikeouts++; }
+        if (this.bases.includes(row)) this.responsible[row.Index] ||= String(p.row.Index);
+        this.plateOutcome='OUT';
+        this.pitcher.facedBatters++;
+        this.batIdx[this.batSide]=(this.batIdx[this.batSide]+1)%9;
+        this.plateComplete=true;
+    }
+    defense() { return getDefense(this.defPositions, this.pitcher); }
+    catcherT() { return fieldCard(this.defPositions.C,'C').throwing; }
+    autoPitChange(beforePlate = false) {
+        const p = this.pitcher;
+        if (!p || !(p.unavailable || p.shock === 2 && p.lastInning !== this.inning)) return;
+        const available = this.pitchers[this.defSide].filter(pitcher => !pitcher.isUsed);
+        const enter = next => this.replacePitcher(next);
+        if (available.length) {
+            if (this.isAuto || this.manualForcedSubs===false) {
+                enter(available[0]);
+                return;
+            }
+            this.choose(`${p.name}の交代投手を選択`,available.map(next=>[
+                `${next.name}（G${next.cardG}・C${next.cardC}・S${next.S}）`,()=>enter(next)
+            ]),0,this.defSide);
+            if (this.pending) this.pending.beforePlate=beforePlate;
+        } else if (p.unavailable) {
+            this.called = true;
+            this.endReason = '登板できる投手がいないため試合終了';
+        }
+    }
+    applyHitResult(type, batter, text) {
+        const r=this.bases;
+        let nb,runs,scorers;
+        if(type==='HR'){
+            [nb,runs,scorers]=advanceRunners(r,batter,4,4,4,4);
+            this.homeRuns.push(playerName(batter));
+            this.hrEvents.push({id:String(batter.Index),name:displayName(batter),side:this.batSide,inning:this.inning,runs});
+        }
+        else if(type==='3H'||type==='3B'){ [nb,runs,scorers]=advanceRunners(r,batter,3,3,1,3); }
+        else if(type==='2H+'){ [nb,runs,scorers]=advanceRunners(r,batter,3,2,1,2); }
+        else if(type==='2H'||type==='2B'){ [nb,runs,scorers]=advanceRunners(r,batter,2,2,1,2); }
+        else if(type==='1H*'){ [nb,runs,scorers]=advanceRunners(r,batter,2,2,1,1); }
+        else if(type==='1H+'){ [nb,runs,scorers]=advanceRunners(r,batter,1,2,1,1); }
+        else if(type==='1H'||type==='1B'){ [nb,runs,scorers]=advanceRunners(r,batter,1,1,1,1); }
+        else if(type==='BB'||type==='HBP'){ [nb,runs,scorers]=advanceForceBB(r,batter); }
+        else { return; }
+        this.bases=nb;
+        this.plateOutcome=type;
+        const previousScore = this.scores[this.batSide];
+        this.addScore(runs,type==='HR',scorers);
+        const scored = this.scores[this.batSide] - previousScore;
+        if (scored > 0) this.logAdd(` → ${scored}点入った！`,'l-score');
+    }
+    choose(title,choices,defaultIndex=0,side=this.batSide) {
+        if (this.isAuto || this.gameOver) choices[defaultIndex][1]();
+        else this.pending={title,choices,defaultIndex,side};
+    }
+    offerExtraBases(type, batter, direction, tagUp = false, isEndRun = false) {
+        const possibilities = {
+            '2H':[[2,3]], '1H+':[[1,2]], '1H':[[1,2],[2,3]], SF:[[1,2]],
+            FLY:isEndRun ? [[2,3]] : [[1,2],[2,3]]
+        }[type];
+        const eligible = possibilities.filter(([from,to]) => this.bases[from] && this.bases[from] !== batter && to !== from);
+        const choices = [['進塁しない', () => this.nextBatter()]];
+        for (let mask = 1; mask < (1 << eligible.length); mask++) {
+            const moves = eligible.filter((_,index) => mask & (1 << index));
+            if (moves.some(([,to]) => to < 3 && this.bases[to] && !moves.some(([from]) => from === to))) continue;
+            const label = moves.map(([from,to]) => `${from+1}塁走者→${to === 3 ? '本塁' : to+1+'塁'}`).join('、');
+            choices.push([label, () => {
+                const targets = moves.map(([,to],index) => [
+                    `${to === 3 ? '本塁' : to+1+'塁'}へ送球`,
+                    () => this.finishExtraBases(moves,index,direction,tagUp,isEndRun)
+                ]);
+                targets.push(['送球しない', () => this.finishExtraBases(moves,-1,direction,tagUp,isEndRun)]);
+                this.choose('守備側は送球先を選択',targets,moves.length-1,this.defSide);
+            }]);
+        }
+        if (choices.length === 1) { this.nextBatter(); return; }
+        this.choose(tagUp ? 'タッチアップする走者を選択' : '追加進塁する走者を選択', choices);
+    }
+    finishExtraBases(moves, target, direction, tagUp, isEndRun) {
+        const old = [...this.bases];
+        const pos = {レフト:'LF',センター:'CF',ライト:'RF'}[direction];
+        let result = {result:'safe',extra:false};
+        if (target >= 0) {
+            const [from,to] = moves[target];
+            result = table2_boso(old[from]['走'],this.defense()[pos],this.outs,pos === 'LF' && to === 2,tagUp);
+            const label = {safe:'セーフ',hold:'進塁できず',out:'アウト'}[result.result];
+            this.logAdd(`${playerName(old[from])}：${label}（判定値 ${result.total}）`,'l-info');
+        }
+        const scorers=[];
+        for (let from = 2; from >= 0; from--) {
+            const moveIndex = moves.findIndex(move => move[0] === from);
+            const player = old[from];
+            if (!player) continue;
+            if (moveIndex === target && moveIndex >= 0 && result.result === 'hold') continue;
+            if (moveIndex === target && moveIndex >= 0 && result.result === 'out') {
+                this.bases[from] = null;
+                this.recordOuts();
+                continue;
+            }
+            if (moveIndex < 0 && (!result.extra || isEndRun && tagUp && from < 2)) continue;
+            const to = moveIndex < 0 ? from+1 : moves[moveIndex][1];
+            if (to < 3 && this.bases[to]) continue;
+            this.bases[from] = null;
+            if (to===3) scorers.push(player);
+            else this.bases[to] = player;
+        }
+        if(tagUp&&scorers.length&&this.plateOutcome==='OUT')this.plateOutcome='SF';
+        this.addScore(scorers.length,false,scorers,tagUp);
+        this.nextBatter();
+    }
+    playGrounder(fielder,batter,isForward,isEndRun) {
+        const result = resolveGrounder(fielder,this.defense()[fielder],this.bases,batter,batter['走'],this.outs,isForward,isEndRun);
+        const finish = play => {
+            const inningEnds = this.outs + play.outs >= 3;
+            this.recordOuts(play.outs);
+            this.logAdd(inningEnds ? `${play.desc.split('。')[0]}、3アウト。得点なし` : play.desc,'l-out');
+            const previous=this.bases;
+            this.bases=inningEnds?[null,null,null]:play.bases;
+            if (!play.outs) this.plateOutcome='1H';
+            if (!inningEnds) {
+                const scorer=play.runs?previous[2]:null;
+                const retired=previous.find(r=>r&&r!==scorer&&!this.bases.includes(r));
+                if (retired && this.bases.includes(batter) && this.responsible[retired.Index]) {
+                    this.responsible[batter.Index]=this.responsible[retired.Index];
+                }
+                this.addScore(play.runs,false,[scorer],play.outs<2);
+            }
+            this.nextBatter();
+        };
+        if (result.alternative && this.outs < 2) {
+            const side = result.alternative.side === 'defense' ? '守備側' : '攻撃側';
+            this.choose(`${side}がゴロの結果を選択`,[[result.desc,() => finish(result)],[result.alternative.desc,() => finish(result.alternative)]],0,result.alternative.side==='defense'?this.defSide:this.batSide);
+        } else finish(result);
+    }
+    playFly(fielder,batter,isEndRun) {
+        this.recordOuts();
+        if (OUTFIELD.includes(fielder) && this.outs < 3) {
+            const direction = {LF:'レフト',CF:'センター',RF:'ライト'}[fielder];
+            this.offerExtraBases('FLY',batter,direction,true,isEndRun);
+        } else this.nextBatter();
+    }
+    handleGeneric(roll, batter, isForward, isEndRun = false) {
+        const [type,fielder] = table5(roll%10,Math.floor(roll/10)%10);
+        const rollStr = String(roll).padStart(2,'0');
+        if (type === 'RARE') {
+            this.handleRarePlay(batter,isForward,isEndRun,rollStr);
+        } else if (type === 'G') {
+            this.logAdd(`ダイス[${rollStr}]: ${FNAME[fielder]}ゴロ`,'l-out');
+            if (this.bases.some(Boolean)) this.playGrounder(fielder,batter,isForward,isEndRun);
+            else { this.recordOuts(); this.nextBatter(); }
+        } else if (isEndRun && fielder === 'SS') {
+            this.logAdd(`ダイス[${rollStr}]: ショートライナー（エンドラン）`,'l-out');
+            this.recordOuts();
+            const runner = this.bases[1] ? 1 : 0;
+            if (this.outs < 3 && this.bases[runner]) {
+                this.bases[runner] = null;
+                this.recordOuts();
+                this.logAdd('走者が飛び出してダブルプレー','l-out');
+            }
+            this.nextBatter();
+        } else {
+            this.logAdd(`ダイス[${rollStr}]: ${FNAME[fielder]}フライ、打者アウト`,'l-out');
+            this.playFly(fielder,batter,isEndRun);
+        }
+    }
+    removePlayer(player,side,reason,event=null) {
+        if (!player || this.removed.has(player)) return;
+        this.removed.add(player);
+        if (event) this.injuryEvents.push({id:String(player.Index),...event});
+        this.logAdd(`【${reason}】${playerName(player)}が退場`,'l-rare',side);
+        if (player === this.pitcher.row) {
+            this.pitcher.unavailable = true;
+            return;
+        }
+        if (this.isAuto || this.manualForcedSubs===false) this.replaceRemovedFielder(side,player,false);
+    }
+    replaceRemovedFielder(side,player,manual) {
+        const index = this.lineups[side].indexOf(player);
+        if (index < 0) return;
+        const position = FIELD_POSITIONS.find(pos => this.positions[side][pos] === player);
+        const candidates = this.benches[side].map((row,index) => ({row,index}))
+            .sort((a,b) => fieldCard(b.row,position).rating - fieldCard(a.row,position).rating);
+        if (!candidates.length) {
+            this.called = true;
+            this.endReason = '交代できる選手がいないため試合終了';
+            return;
+        }
+        if (!manual) {
+            this.substitute(side,index,candidates[0].index);
+            return;
+        }
+        this.choose(`${playerName(player)}の交代選手を選択（${position ? FNAME[position] : 'DH'}）`,
+            candidates.map(candidate=>[
+                displayName(candidate.row)+(position ? `（守${fieldCard(candidate.row,position).rating}）` : ''),
+                ()=>this.substitute(side,index,candidate.index)
+            ]),0,side);
+    }
+    resolveRemovedFielders() {
+        if (this.pending || this.gameOver || this.called) return;
+        for (const [side,lineup] of this.lineups.entries()) {
+            const player=lineup.find(row=>this.removed.has(row));
+            if (player) {
+                this.replaceRemovedFielder(side,player,true);
+                return;
+            }
+        }
+    }
+    substitute(side, lineupIndex, benchIndex) {
+        const lineup = this.lineups[side];
+        const departing = lineup[lineupIndex];
+        const incoming = this.benches[side].splice(benchIndex,1)[0];
+        if (!incoming) return;
+        lineup[lineupIndex]=incoming;
+        this.appearances.add(String(incoming.Index));
+        if (side===this.batSide && this.responsible[departing.Index]) this.responsible[incoming.Index]=this.responsible[departing.Index];
+        this.removed.add(departing);
+        const positions = this.positions[side];
+        const position = FIELD_POSITIONS.find(pos => positions[pos] === departing);
+        if (position) positions[position] = incoming;
+        if (side === this.batSide) {
+            this.bases = this.bases.map(player => player === departing ? incoming : player);
+        }
+        this.logAdd(`【交代】${playerName(departing)} → ${playerName(incoming)}`,'l-sub',side);
+    }
+    handleRarePlay(batter,isForward,isEndRun,rollStr='') {
+        const play = table17(this.pitcher,batter,this.bases,this.dome);
+        const lead = this.bases.findLastIndex(Boolean);
+        const participant = role => {
+            if (role === 'P') return [this.pitcher.row,this.defSide];
+            if (role === 'batter') return [batter,this.batSide];
+            if (role === 'lead') return [this.bases[lead],this.batSide];
+            return [this.defPositions[role],this.defSide];
+        };
+        const injury = role => {
+            const [player,side] = participant(role);
+            if (!player) return;
+            if (play.days && this.longInjuries?.[String(player.Index)]) return;
+            const days=play.days ?? injuryDays(player);
+            if (days!==null) this.removePlayer(player,side,`負傷・${days}日`,{kind:'injury',days,long:Boolean(play.days)});
+            else this.logAdd(`${playerName(player)}はプレー続行`,'l-rare');
+        };
+        const dice=rollStr?`ダイス[${rollStr}]　`:'';
+        this.logAdd(`${dice}珍プレイ［${play.roll}${play.detail?'/'+play.detail:''}］`,'l-rare');
+        if (play.injury==='lead') injury('lead');
+        const advanceAll = (batter, bases) => {
+            const [next,runs,scorers]=advanceRunners(this.bases,batter,bases,bases,bases,batter?bases:0);
+            this.bases=next;
+            this.addScore(runs,false,scorers,Boolean(batter) && this.plateOutcome==='1H');
+        };
+        if (isEndRun && ['FOUL','HOLD','PO','STEAL','WP','PB','BK','SHORT_RAIN','LONG_RAIN','IGNORE_RAIN'].includes(play.type)) {
+            this.endRunUsed = false;
+        }
+        if (play.type === 'ERROR') {
+            const pos = play.field;
+            const defense = this.defense()[pos];
+            if (OUTFIELD.includes(pos)) {
+                const [type,text,base,advance] = table19(pos,defense,Boolean(this.bases[0] || this.bases[1]),this.outs);
+                this.logAdd(text,type === 'FLY_OUT' ? 'l-out' : 'l-hit');
+                if (type === 'FLY_OUT') this.playFly(pos,batter,isEndRun);
+                else {
+                    const [next,runs,scorers]=advanceRunners(this.bases,batter,advance,advance,advance,base);
+                    this.bases=next;
+                    if (type==='OF_POT') this.plateOutcome='1H';
+                    this.addScore(runs,false,scorers,type==='OF_POT');
+                    this.nextBatter();
+                }
+            } else {
+                const [type,text] = table18(pos,defense);
+                if (type === 'GROUNDER') this.playGrounder(pos,batter,isForward,isEndRun);
+                else { this.logAdd(text,'l-hit'); if (type==='INFIELD_HIT') this.plateOutcome='1H'; advanceAll(batter,type==='THROW_ERR'?2:1); this.nextBatter(); }
+            }
+        } else if (play.type === 'GROUNDER') {
+            this.logAdd(`${FNAME[play.field]}への強いゴロ`,'l-out');
+            this.playGrounder(play.field,batter,isForward,isEndRun);
+        } else if (play.type === 'WALL_FLY') {
+            this.recordOuts();
+            this.logAdd('フェンスに激突、外野フライで打者アウト','l-out');
+            if (this.outs < 3) {
+                if(this.bases[2])this.plateOutcome='SF';
+                if (isEndRun) {
+                    if (this.bases[2]) { const runner=this.bases[2];this.bases[2]=null;this.addScore(1,false,[runner]); }
+                } else advanceAll(null,1);
+            }
+            this.nextBatter();
+        } else if (play.type === 'PO') {
+            this.logAdd(`牽制アウト：${playerName(this.bases[lead])}`,'l-out');
+            this.bases[lead] = null;
+            this.recordOuts();
+        } else if (play.type === 'STEAL') {
+            const choices = this.stealGroups(true).map(group => [
+                this.stealLabel(group), () => this.runSteal(group,{forced:true,bonus:10})
+            ]);
+            if (choices.length) this.choose('盗塁チャンス（成功値＋10）',[['走らない',() => {}],...choices]);
+        } else if (['WP','PB','BK'].includes(play.type)) {
+            this.logAdd(({WP:'ワイルドピッチ',PB:'パスボール',BK:'ボーク'})[play.type] + '、走者1進塁','l-rare');
+            advanceAll(null,1);
+        } else if (play.type === 'HOLD' || play.type === 'FOUL') {
+            this.logAdd(play.type === 'HOLD' ? '牽制球、先頭走者セーフ' : 'ファウルチップ','l-rare');
+        } else if (['BB','HBP','HR','3H','1H','FIGHT','MAYBE_HR','K','GETR','MAKR'].includes(play.type)) {
+            let type = play.type;
+            if (type === 'GETR' || type === 'MAKR') {
+                this.resolveSwing(batter,isForward,isEndRun,(type === 'GETR') === this.bases.some(Boolean));
+            } else {
+                if (type === 'MAYBE_HR') type = this.scores[this.batSide] + this.bases.filter(Boolean).length + 1 >= this.scores[this.defSide] ? 'HR' : 'K';
+                if (type === 'FIGHT') {
+                    const roll = d10();
+                    if (roll >= 7) injury('P');
+                    if (roll>=4) play.eject='batter';
+                    if (roll>=7) play.suspension=10;
+                    type = 'HBP';
+                }
+                this.logAdd(({BB:'四球',HBP:'死球',HR:'本塁打', '3H':'ライトへの三塁打','1H':'内野安打',K:'三振'})[type],type === 'K' ? 'l-out' : 'l-hit');
+                if (type==='K') { this.plateOutcome='K'; this.recordOuts(); }
+                else this.applyHitResult(type,batter,'');
+                this.nextBatter();
+            }
+        } else if (play.type === 'LONG_RAIN') {
+            this.logAdd('降雨で60分中断','l-rare');
+            this.checkShock(true);
+        } else if (play.type === 'SHORT_RAIN' || play.type === 'IGNORE_RAIN') {
+            this.logAdd(play.type === 'IGNORE_RAIN' ? 'ドーム球場のため続行' : '降雨で10分中断、試合続行','l-rare');
+        } else if (play.type === 'RAIN_OUT') {
+            this.called = true;
+            this.endReason = '降雨のため試合打ち切り';
+        }
+        if (play.injury && play.injury !== 'lead') injury(play.injury);
+        if (play.eject) this.removePlayer(...participant(play.eject),play.eject==='P'?'危険球':'退場処分',{kind:'eject',days:play.suspension||0});
+    }
+    stealLabel(group) {
+        return group.map(({from}) => from === 2 ? '本盗' : `${from+2}盗`).join('・');
+    }
+    canBunt(isSqueeze) {
+        if (this.outs >= 2 || this.stealAttempted || this.buntStrength(isSqueeze) <= 0) return false;
+        const [r1,r2,r3] = this.bases;
+        if (isSqueeze) return Boolean(r3 && !this.squeezeUsed[this.batSide]);
+        return Boolean(r3 ? r1 && !r2 : r1 || r2);
+    }
+    canEndRun() {
+        const [r1,r2,r3] = this.bases;
+        return !this.endRunUsed && !this.stealAttempted && !this.buntContinuation &&
+            Boolean(r3 ? r1 && !r2 : r1 || r2);
+    }
+    buntStrength(isSqueeze) {
+        return Number(this.batter['バント']) - Number(Boolean(this.buntContinuation?.twoStrikes)) - Number(isSqueeze && this.isSqueezeCautious);
+    }
+    startBunt(isSqueeze) {
+        const batter = this.batter;
+        const strength = this.buntStrength(isSqueeze);
+        if (strength <= 0) return;
+        const [roll, text, result, fielder] = resolveBunt(batter, isSqueeze, strength);
+        this.logAdd(`${isSqueeze ? 'スクイズ' : '送りバント'} ダイス[${roll}]: ${text}`,'l-bunt');
+        if (result === 'FC') {
+            const corners = Boolean(this.bases[0] && !this.bases[1] && this.bases[2]);
+            const lead = isSqueeze ? 2 : !corners && this.bases[1] ? 1 : 0;
+            this.choose(`${FNAME[fielder]}から${lead === 2 ? '本塁' : lead + 2 + '塁'}に送球しますか`, [
+                ['先頭走者を狙う', () => {
+                    const forward = isSqueeze && this.isForward && !['P','C'].includes(fielder);
+                    const tag = lead === 2 && !(this.bases[0] && this.bases[1]) || lead === 1 && !this.bases[0];
+                    const safe = fcTable(this.defense()[fielder], this.bases[lead], forward, tag);
+                    this.finishBunt(safe ? 'HIT' : 'LEAD_OUT', isSqueeze);
+                }],
+                ['打者をアウトにする', () => this.finishBunt('SAC', isSqueeze)]
+            ],1,this.defSide);
+            return;
+        }
+        this.finishBunt(result, isSqueeze);
+    }
+    finishBunt(result, isSqueeze) {
+        const batter = this.batter;
+        const [r1,r2,r3] = this.bases;
+        const corners = Boolean(r1 && !r2 && r3);
+        const keepThird = !isSqueeze && corners;
+        const lead = isSqueeze ? 2 : !keepThird && r2 ? 1 : 0;
+        if (result === 'FOUL' && !this.buntContinuation?.twoStrikes) {
+            this.buntContinuation = {squeeze:isSqueeze, twoStrikes:true};
+            return;
+        }
+        if (result === 'SWING') {
+            this.recordOuts();
+            this.bases = [null,r1,r2];
+            this.buntContinuation = {squeeze:isSqueeze, twoStrikes:Boolean(this.buntContinuation?.twoStrikes)};
+            return;
+        }
+        this.plateOutcome=result==='SAC'?'SAC':result==='HIT'?'1H':result==='FOUL'?'K':'OUT';
+        if (isSqueeze) this.squeezeUsed[this.batSide]=true;
+        if (result === 'DP' || result === 'FOUL') {
+            this.recordOuts(result === 'FOUL' || !isSqueeze && !r1 && r2 ? 1 : 2);
+            this.bases[lead] = result === 'FOUL' ? this.bases[lead] : null;
+            if (result === 'DP' && !isSqueeze && !r1 && r2) this.bases[0] = batter;
+        } else if (result === 'SAC' || result === 'HIT') {
+            const safe = result === 'HIT';
+            if (!safe) this.recordOuts();
+            const [bases,runs,scorers]=advanceRunners(this.bases,batter,1,1,keepThird?0:1,safe?1:0);
+            this.bases = bases;
+            this.logAdd(safe ? '打者セーフ、走者進塁' : '打者アウト、走者進塁', safe ? 'l-hit' : 'l-out');
+            if (this.outs<3) this.addScore(runs,false,scorers);
+        } else {
+            const retired=this.bases[lead];
+            this.bases[lead]=null;
+            const batterOut = result === 'LOADED_OUT' && r1 && r2;
+            this.recordOuts(batterOut ? 2 : 1);
+            if (isSqueeze || result === 'LEAD_OUT') {
+                this.bases = advanceRunners(this.bases, batter, 1, 1, keepThird ? 0 : 1, batterOut ? 0 : 1)[0];
+            }
+            if (!batterOut && this.bases.includes(batter) && this.responsible[retired?.Index]) this.responsible[batter.Index]=this.responsible[retired.Index];
+            this.logAdd(`${lead + 1}塁走者アウト${batterOut ? '、打者もアウト' : '、打者セーフ'}`,'l-out');
+        }
+        this.nextBatter();
+    }
+    stealGroups(rare = false) {
+        if (!rare && (this.stealAttempted || this.buntContinuation)) return [];
+        const occupied = this.bases.flatMap((runner,from) => runner ? [{runner,from}] : []);
+        const groups = [];
+        const eligible = occupied.filter(({runner,from}) => (rare ? from < 2 : this.stealBlocked.get(runner) !== from));
+        for (let mask = 1; mask < (1 << eligible.length); mask++) {
+            const group = eligible.filter((_,index) => mask & (1 << index));
+            if (group.every(({from}) => !this.bases[from+1] || group.some(other => other.from === from+1))) {
+                groups.push(group);
+            }
+        }
+        return groups;
+    }
+    runSteal(attempts, options = {}, after = () => {}) {
+        const complete = target => {
+            const result = resolveSteal(attempts,this.pitcher,this.catcherT(), {
+                cautious:this.isCautious, corners:Boolean(this.bases[0] && !this.bases[1] && this.bases[2]),
+                ...options, target
+            });
+            this.logAdd(result.text,'l-steal');
+            if (!result.started) {
+                this.startFailed = true;
+                for (const {runner,from} of attempts) this.stealBlocked.set(runner,from);
+            } else {
+                const scorers=[];
+                for (const {runner,from} of [...attempts].reverse()) {
+                    this.bases[from] = null;
+                    if (from===target.from && !result.success) {
+                        this.battingLine(runner).cs++;
+                        this.recordOuts();
+                    } else {
+                        this.battingLine(runner).sb++;
+                        if (from===2) scorers.push(runner);
+                        else this.bases[from+1]=runner;
+                    }
+                    this.stealBlocked.delete(runner);
+                }
+                if (this.outs<3) this.addScore(scorers.length,false,scorers,false);
+            }
+            after();
+        };
+        if (attempts.length === 1) complete(attempts[0]);
+        else this.choose('守備側は送球先を選択', attempts.map(target => [
+            target.from === 2 ? '本塁' : `${target.from + 2}塁`, () => complete(target)
+        ]),attempts.length-1,this.defSide);
+    }
+    processAtBat(action, isForward = this.isForward, isEndRun = false) {
+        const batter = this.batter;
+        if (action === 'bunt' || action === 'squeeze') {
+            const isSqueeze = action === 'squeeze';
+            if (this.canBunt(isSqueeze) && (!this.buntContinuation || this.buntContinuation.squeeze === isSqueeze)) this.startBunt(isSqueeze);
+            return;
+        }
+        this.beginPitchingInning();
+        this.pitcher.resetTemp();
+        if (this.pitcher.arm.startsWith('左投') && (batter['利き腕'] || '').endsWith('左打')) this.pitcher.tempG++;
+        if (this.bases.every(Boolean)) this.pitcher.tempC++;
+        if (this.pitcher.isRelief && !this.pitcher.facedBatters) { this.pitcher.tempG++; this.pitcher.tempC++; }
+        if (this.isCautious) this.pitcher.tempG--;
+        if (this.isSqueezeCautious) this.pitcher.tempC--;
+        if (this.startFailed || this.buntContinuation?.twoStrikes) this.pitcher.tempG++;
+        if (isEndRun) {
+            this.pitcher.tempG++;
+            this.pitcher.tempC++;
+            this.endRunUsed = true;
+        }
+
+        this.resolveSwing(batter,isForward,isEndRun);
+    }
+    resolveSwing(batter,isForward,isEndRun,zeroGrade = false) {
+        const pitcher = zeroGrade ? {G:0,C:0,K:this.pitcher.K,HR_mod:this.pitcher.HR_mod} : this.pitcher;
+        let [roll,text,event] = resolveAtBat(batter,pitcher,this.outs,this.bases);
+        if (isEndRun && ['2H','1H','1H+'].includes(event)) {
+            event = event === '2H' ? '2H+' : '1H*';
+            text = `${hitDir(roll)}への安打（${event}・ヒットエンドラン）`;
+        }
+        const rollText = String(roll).padStart(2, '0');
+        if (event === 'GENERIC') {
+            this.handleGeneric(roll,batter,isForward,isEndRun);
+            return;
+        }
+        this.logAdd(`ダイス[${rollText}]: ${text}`, event === 'K' ? 'l-out' : 'l-hit');
+        if (event==='K') {
+            this.plateOutcome='K';
+            this.recordOuts();
+            const attempts = this.bases.slice(0,2).flatMap((runner,from) => runner ? [{runner,from}] : []);
+            if (isEndRun && this.outs < 3 && attempts.length) {
+                this.runSteal(attempts,{forced:true, bonus:-20},() => this.nextBatter());
+            } else this.nextBatter();
+            return;
+        }
+        if (event==='SF') {
+            this.plateOutcome='SF';
+            this.recordOuts();
+            const scorer=this.bases[2];
+            this.bases[2]=null;
+            this.addScore(1,false,[scorer]);
+            if (!isEndRun && !this.gameOver && this.bases[1]) {
+                this.offerExtraBases('SF',batter,hitDir(roll),true,isEndRun);
+            } else this.nextBatter();
+            return;
+        }
+        const finishHit = () => {
+            if (this.outs < 3) {
+                this.applyHitResult(event,batter,text);
+                if (!this.gameOver && ['1H','1H+','2H'].includes(event)) {
+                    this.offerExtraBases(event,batter,hitDir(roll));
+                    return;
+                }
+            }
+            this.nextBatter();
+        };
+        if (isEndRun && event === 'BB' && this.bases[1]) {
+            this.runSteal([{runner:this.bases[1],from:1}],{forced:true,bonus:-20},finishHit);
+        } else finishHit();
+    }
+
+}
+
+// ============================================================
+// UI GLOBALS
+// ============================================================
+let gameInst = null;
+let players = [];
+let matchStatSource = 'real';
+
+const TEAM_LABELS = {
+    Tigers:'阪神',Baystars:'DeNA',Giants:'巨人',Dragons:'中日',Carp:'広島',Swallows:'ヤクルト',
+    Hawks:'ソフトバンク',Fighters:'日本ハム',Buffaloes:'オリックス',Eagles:'楽天',Lions:'西武',Marines:'ロッテ'
+};
+function teamShort(name) {
+    if (!name) return '';
+    const short=String(name).trim().split(/\s+/).at(-1);
+    return TEAM_LABELS[short] || short;
+}
+function teamAt(game,side) {
+    return side===0 ? game.playerTeam : game.oppTeam;
+}
+function esc(value) {
+    return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function displayName(row) {
+    return String(row?.['氏名'] || '').replace(/\s+/g,' ').trim();
+}
+function handedness(row,batting) {
+    const hands=row?.['利き腕'] || '';
+    if (batting && hands.includes('左右打')) return '両打';
+    return hands.match(batting ? /[左右]打/ : /[左右]投/)?.[0] || '';
+}
+
+// ============================================================
+// FIELD POSITION MAPPING
+// ============================================================
+function assignFieldPositions(lineup,fixed={}) {
+    const positions={...fixed};
+    const assigned=new Map(Object.entries(fixed).map(([pos,row])=>[row,pos]));
+    const locked=new Set(assigned.keys());
+    const candidates = {};
+    for (const pos of FIELD_POSITIONS) {
+        candidates[pos] = lineup.filter(p => fieldCard(p, pos).preference > 0)
+            .sort((a,b) => fieldCard(b,pos).preference - fieldCard(a,pos).preference);
+    }
+    function fill(pos, tried) {
+        for (const player of candidates[pos]) {
+            if (tried.has(player) || locked.has(player)) continue;
+            tried.add(player);
+            const oldPosition = assigned.get(player);
+            if (oldPosition && !fill(oldPosition, tried)) continue;
+            positions[pos] = player;
+            assigned.set(player, pos);
+            return true;
+        }
+        return false;
+    }
+    for (const pos of [...FIELD_POSITIONS].reverse()) if (!positions[pos]) fill(pos,new Set());
+    for (const pos of FIELD_POSITIONS) {
+        if (!positions[pos]) {
+            const player = lineup.find(p => !assigned.has(p));
+            if (player) { positions[pos] = player; assigned.set(player, pos); }
+        }
+    }
+    return positions;
+}
+
+// ============================================================
+// SVG FIELD (wider, bigger text, day-game colors)
+// ============================================================
+const FIELD_MARKERS = {
+    P:[50,68], C:[50,95],
+    '1B':[75,62], '2B':[61,52], '3B':[25,62], SS:[39,52],
+    LF:[27,42], CF:[50,38], RF:[73,42]
+};
+const BASE_MARKERS=[[78,72],[50,58],[22,72]];
+function runnerSpeed(row) {
+    return ({F:'俊足',S:'鈍足','-':'普通'})[row['走']] || '走力不明';
+}
+
+function renderField() {
+    const el=document.getElementById('field-area');
+    const g=gameInst;
+    if (!g) { el.innerHTML=''; return; }
+    const defense=g.defense();
+    const defenders=Object.entries(FIELD_MARKERS).map(([pos,[x,y]])=>{
+        const row=pos==='P'?g.pitcher.row:g.defPositions[pos];
+        if (!row) return '';
+        const rating=defense[pos];
+        const title=`${FNAME[pos]} ${displayName(row)} 守備力${rating}`;
+        return `<button type="button" class="park-marker" data-player="${esc(row.Index)}" title="${esc(title)}" aria-label="${esc(title)}" style="left:${x}%;top:${y}%">
+            <span class="marker-name">${esc(playerName(row))}</span><span class="marker-value">守${rating}</span>
+        </button>`;
+    });
+    const runners=g.bases.map((row,index) => {
+        if (!row) return '';
+        const [x,y]=BASE_MARKERS[index];
+        const speed=runnerSpeed(row);
+        const title=`${index+1}塁走者 ${displayName(row)}　${speed}`;
+        return `<button type="button" class="park-marker runner" data-player="${esc(row.Index)}" title="${esc(title)}" aria-label="${esc(title)}" style="left:${x}%;top:${y}%">
+            <span class="marker-name">${esc(playerName(row))}</span><span class="marker-value">${speed}</span>
+        </button>`;
+    });
+    el.innerHTML=`<div class="park-viewport">${defenders.join('')}${runners.join('')}</div>`;
+}
+
+function matchupRow(label,row,meta,current=false,record='') {
+    return `<button type="button" class="matchup-row${current?' is-current':''}" data-player="${esc(row.Index)}">
+        <span class="player-role">${esc(label)}</span>
+        <span class="player-name">${esc(playerName(row))}</span>
+        <span class="player-meta">${esc(meta)}</span>
+        ${record?`<span class="player-record">${esc(record)}</span>`:''}
+    </button>`;
+}
+
+function cardBattingRecord(row) {
+    const card=row['個人DATA'] || '';
+    const average=card.match(/率\s*([.\d]+)/)?.[1] || '—';
+    const homers=card.match(/(\d+)本/)?.[1] ?? '—';
+    return {average,homers,games:card.match(/(\d+)\s*試/)?.[1] ?? '—'};
+}
+
+function cardPitchingRecord(row) {
+    const card=row['個人DATA'] || '';
+    const result=card.match(/(\d+)\s*勝\s*(\d+)\s*敗\s*(\d+)\s*S/);
+    return {wins:result?.[1] ?? '—',losses:result?.[2] ?? '—',saves:result?.[3] ?? '—',
+        games:card.match(/(\d+)\s*試/)?.[1] ?? '—',era:card.match(/防\s*率\s*([.\d]+)/)?.[1] ?? '—'};
+}
+
+function matchRecordScope(g) {
+    if (g.seasonMatch && typeof PFBSeasonUI!=='undefined') return PFBSeasonUI.matchRecords(g);
+    return null;
+}
+
+function matchBattingTotals(g,row,scope) {
+    const id=String(row.Index);
+    const completed=scope?.totals?.[id];
+    const live=scope?.includeLive===false ? null : g.matchStats[id];
+    if (!completed && !live) return null;
+    return Object.fromEntries([['pa','PA'],['ab','AB'],['h','H'],['hr','HR'],['bb','BB'],['k','SO']]
+        .map(([key,column])=>[key,(completed?.[column] || 0)+(live?.[key] || 0)]));
+}
+
+function battingAverage(line) {
+    return line?.ab ? (line.h/line.ab).toFixed(3).replace(/^0\./,'.') : '—';
+}
+
+function staminaLabel(remaining) {
+    return remaining<0 ? `${Math.abs(remaining)}回超過` : `${remaining}回`;
+}
+
+function renderLineups() {
+    const g=gameInst,assigned=g?.humanSide ?? 0;
+    const scope=g && matchStatSource==='game' ? matchRecordScope(g) : null;
+    for (const [index,place] of ['left','right'].entries()) {
+        const heading=document.getElementById('team-'+place),content=document.getElementById('summary-'+place);
+        if (!g) {
+            heading.textContent=index===0?'担当球団':'対戦相手';
+            content.innerHTML='';
+            continue;
+        }
+        const side=index===0?assigned:1-assigned, bats=side===g.batSide;
+        heading.innerHTML=`${esc(teamShort(teamAt(g,side)))} <span>${index===0?'担当・':g.versusAI?'AI・':''}${bats?'攻撃':'守備'}</span>`;
+        const pitcher=g.curPit[side];
+        const fatigue=pitcher.fatigued?'　疲労':'';
+        const shock=pitcher.shock===2?'　回復不可ショック':pitcher.shock===1?'　一時ショック':'';
+        const pitcherRow=!bats?matchupRow('投手',pitcher.row,handedness(pitcher.row,false),true,
+            `G${pitcher.G}・C${pitcher.C}　残りスタミナ ${staminaLabel(pitcher.staminaRemaining)}${fatigue}${shock}`):'';
+        const order=g.lineups[side].map((row,i)=>{
+            const live=g.matchStats[String(row.Index)];
+            const totals=matchStatSource==='game' ? matchBattingTotals(g,row,scope) : null;
+            const record=matchStatSource==='real' ? cardBattingRecord(row) :
+                {average:battingAverage(totals),homers:totals?.pa ? totals.hr : '—'};
+            const today=live?.pa ? `${live.h}/${live.ab}` : '—';
+            return `<tr${bats&&i===g.batIdx[side]?' class="batting-now"':''}>
+                <td>${i+1}</td><th scope="row"><button type="button" data-player="${esc(row.Index)}" title="${esc(displayName(row))}">${esc(playerName(row))}</button></th>
+                <td>${esc(record.average)}</td><td>${esc(record.homers)}</td><td>${esc(today)}</td></tr>`;
+        }).join('');
+        const statLabel=matchStatSource==='real' ? 'リアル成績' : scope?.label || 'この試合の成績';
+        content.innerHTML=pitcherRow+`<table class="batting-order" aria-label="打順と${statLabel}">
+            <thead><tr><th scope="col">番</th><th scope="col">選手</th><th scope="col">打率</th><th scope="col">本</th><th scope="col" title="この試合の安打／打数">安/打</th></tr></thead><tbody>${order}</tbody></table>`;
+    }
+}
+
+function renderScoreboard() {
+    const g=gameInst;
+    const board=document.getElementById('scoreboard');
+    if (!g) { board.innerHTML=''; return; }
+    const running=g.bases.flatMap((row,index) => row ? ['一','二','三'][index] : []);
+    const occupied=running.length===3?'満塁':running.length?'走者 '+running.join('・')+'塁':'走者なし';
+    const columns=Math.max(9,g.inning,g.innScores[0].length,g.innScores[1].length);
+    const headers=Array.from({length:columns},(_,index) =>
+        `<th scope="col"${index+1===g.inning?' class="cur-inn"':''}>${index+1}</th>`).join('');
+    const rows=[0,1].map(side => {
+        const done=g.innScores[side].reduce((runs,r)=>runs+r,0);
+        const runsInProgress=g.scores[side]-done;
+        const cells=Array.from({length:columns},(_,index) => {
+            const active=!g.gameOver&&side===g.batSide&&index+1===g.inning;
+            return `<td${active?' class="cur-inn"':''}>${g.innScores[side][index] ?? (active&&runsInProgress>0?runsInProgress:'')}</td>`;
+        }).join('');
+        return `<tr><th scope="row"${side===g.batSide&&!g.gameOver?' aria-current="true"':''}>${esc(teamShort(teamAt(g,side)))}</th>${cells}<td class="rc">${g.scores[side]}</td></tr>`;
+    });
+    board.innerHTML=`<div class="inning-readout"><span>${g.inning}回${g.half===0?'表':'裏'}</span><span>${g.outs}アウト</span><span>${occupied}</span></div>
+        <div class="score-strip"><table class="score-table" aria-label="イニング別得点"><thead><tr><th scope="col">球団</th>${headers}<th scope="col">計</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+
+function isPlayerChange([text,kind]) {
+    return kind==='l-sub' || kind==='l-rare' && text.endsWith('が退場');
+}
+
+function renderLog() {
+    const feed=document.getElementById('result-feed');
+    const notice=document.getElementById('player-change');
+    const pitching=document.getElementById('pitcher-changes');
+    const g=gameInst;
+    const scroll=feed.scrollTop || 0;
+    const atEnd=(feed.scrollHeight || 0)-(feed.clientHeight || 0)-scroll<20;
+    const records=(g?.log || []).filter(([,kind])=>!['l-sep','l-status','l-pitch','l-batter'].includes(kind));
+    const halfNow=g ? g.inning*2+g.half : 0;
+    const changes=records.filter(([,kind,inning,half])=>kind==='l-pitch-down' && inning*2+half===halfNow ||
+        kind==='l-pitch-up' && inning*2+half===halfNow-1);
+    const pitchingHtml=changes.map(([text,kind,,,side])=>
+        `<span data-kind="${kind}">${esc(teamShort(teamAt(g,side)))}　${esc(text)}</span>`).join('');
+    if (pitching.innerHTML!==pitchingHtml) pitching.innerHTML=pitchingHtml;
+    const latest=records.findLast(isPlayerChange);
+    const noticeText=latest ? [
+        latest[2] ? `${latest[2]}回${latest[3]===0?'表':'裏'}` : '',
+        latest[4]==null ? '' : teamShort(teamAt(g,latest[4])),
+        latest[0]
+    ].filter(Boolean).join('　') : '';
+    if (notice.textContent!==noticeText) notice.textContent=noticeText;
+    feed.innerHTML=records.map(record=>{
+        const [msg,kind,inning,half,side]=record;
+        const team=side===null||side===undefined?'':teamShort(teamAt(g,side));
+        return `<li data-kind="${esc(kind)}"${isPlayerChange(record)?' class="player-change-entry"':''}><time>${inning?inning+'回'+(half===0?'表':'裏'):''}</time><span>${team?`<b>${esc(team)} </b>`:''}${esc(msg.trim())}</span></li>`;
+    }).join('');
+    feed.scrollTop=atEnd?feed.scrollHeight:scroll;
+}
+
+const ATTACK_ACTIONS=[['打つ','hit','bp'],['代打','pinch','bs'],['バント','bunt','bn'],['盗塁','steal_menu','bn'],['ヒットエンドラン','hr','bn']];
+const DEFENSE_ACTIONS=[['通常守備','def_normal','bp'],['前進守備','def_forward','bn'],['敬遠','def_ibb','bw'],['盗塁警戒','def_steal','bn'],['投手交代','def_pitcher','bs'],['野手交代','def_fielder','bs']];
+function actionHtml([label,action,cls],enabled=true) {
+    return `<button type="button" class="ab ${esc(cls)}" data-action="${esc(action)}"${enabled?'':' disabled'}>${esc(label)}</button>`;
+}
+
+function renderButtons(buttons,owner=null,context='') {
+    const container=document.getElementById('action-buttons');
+    const g=gameInst;
+    container.classList.toggle('setup-actions',!g);
+    document.getElementById('action-area').classList.toggle('is-setup',!g);
+    if (typeof PFBMatchCoach!=='undefined') PFBMatchCoach.menu(g,buttons,owner);
+    if (!g) { container.innerHTML=buttons.map(button => actionHtml(button)).join(''); return; }
+    const assigned=g.humanSide ?? 0;
+    const possible=new Map(buttons.map(button => [button[1],button]));
+    const standard=new Set([...ATTACK_ACTIONS,...DEFENSE_ACTIONS].map(button=>button[1]));
+    const extras=buttons.filter(button=>!standard.has(button[1]) && !['auto','stop_auto'].includes(button[1]));
+    const auto=document.getElementById('dashboard-auto');
+    auto.textContent=g.isAuto?'自動停止':'自動進行';
+    auto.disabled=Boolean(g.onlineMatch||g.pending || g.gameOver || (g.state==='offense' && g.versusAI && g.batSide!==g.humanSide && !g.isAuto));
+    container.innerHTML=[assigned,1-assigned].map(side => {
+        const bats=side===g.batSide;
+        const listed=bats?ATTACK_ACTIONS:DEFENSE_ACTIONS;
+        const onSide=owner===null ? (g.state==='defense'?g.defSide:g.batSide) : owner;
+        const active=side===onSide && !((g.versusAI||g.onlineMatch)&&side!==assigned);
+        const menu=active && extras.some(([,action])=>/^(next$|choice:|defout:|defsub:|chpitch:|pinch:|steal:)/.test(action));
+        const beforeDefense=!g.onlineMatch&&!g.versusAI && g.state==='defense' && owner===g.defSide && possible.has('pinch');
+        const buttonsHtml=menu ? extras.map(button=>actionHtml(button)).join('') :
+            listed.map(button=>{
+                const enabled=possible.has(button[1]) && (active || beforeDefense && button[1]==='pinch');
+                return actionHtml(possible.get(button[1]) || button,enabled);
+            }).join('')+(active?extras.map(button=>actionHtml(button)).join(''):'');
+        return `<section class="action-panel${side===assigned?'':' opponent'}">
+            <h2 class="panel-heading">${esc(teamShort(teamAt(g,side)))} <span>${bats?'攻撃':'守備'}</span></h2>
+            <div class="game-action-grid${menu?' is-choice':bats?' batting-grid':''}">${buttonsHtml}</div>${side===onSide&&context?`<p class="action-context">${esc(context)}</p>`:''}
+        </section>`;
+    }).join('');
+}
+
+function updateUI() {
+    renderScoreboard();
+    renderField();
+    renderLineups();
+    renderLog();
+    const seasonActive=typeof PFBSeasonUI!=='undefined'&&PFBSeasonUI.active();
+    for(const id of ['dashboard-news','dashboard-calendar','dashboard-standing','dashboard-season-stats'])document.getElementById(id).hidden=!seasonActive;
+    document.getElementById('dashboard-save').disabled=(!gameInst&&!seasonActive)||Boolean(gameInst?.pending||gameInst?.onlineMatch);
+    document.getElementById('dashboard-stats').disabled=!gameInst;
+    document.getElementById('match-stat-source').hidden=!gameInst;
+    if (typeof PFBMatchCoach!=='undefined') PFBMatchCoach.gameChanged(gameInst);
+    document.getElementById('dashboard-auto').disabled=!gameInst;
+}
+
+// ============================================================
+// RESULT ANIMATION
+// ============================================================
+const BALL_TARGETS = {
+    'レフト':[28,43], 'センター':[50,39], 'ライト':[72,43],
+    '一塁':[71,65], '二塁':[60,53], '三塁':[29,65],
+    '遊撃':[40,53], '投手':[50,68], '捕手':[50,90], 'HR':[50,12]
+};
+
+function extractDir(text) {
+    if (!text) return 'センター';
+    if (text.includes('レフト') || text.includes('左翼') || text.includes('左飛')) return 'レフト';
+    if (text.includes('ライト') || text.includes('右翼') || text.includes('右飛')) return 'ライト';
+    if (text.includes('中堅') || text.includes('中飛') || text.includes('センター')) return 'センター';
+    if (text.includes('一塁')) return '一塁';
+    if (text.includes('二塁')) return '二塁';
+    if (text.includes('三塁')) return '三塁';
+    if (text.includes('遊撃')) return '遊撃';
+    if (text.includes('投手')) return '投手';
+    if (text.includes('捕手')) return '捕手';
+    return 'センター';
+}
+
+function determineAnim(logs, batterName, batterNum) {
+    const prefix = `${batterNum}番 ${batterName}`;
+    // Collect score and detail lines (skip the main result line)
+    let scoreText = '';
+    let details = [];
+    for (const [text, cls] of logs) {
+        if (text.match(/(\d+)点入/)) { const m = text.match(/(\d+)点/); scoreText = m ? `\n${m[1]}点追加！` : '\n得点！'; }
+        else if (text.includes('生還') && !scoreText) { scoreText = '\n得点！'; }
+        // 走者移動の詳細
+        if (text.startsWith('  →') || text.includes('走者') && text.includes('アウト')) {
+            const short = text.replace(/^\s*→\s*/, '').trim();
+            if (short.length > 2 && short.length < 50) details.push(short);
+        }
+    }
+    const detailStr = details.length ? '\n' + details.slice(0, 3).join('\n') : '';
+    // Only scan main result lines (l-hit, l-out, l-rare, l-bunt, l-score) to avoid duplicates
+    for (const [text, cls] of logs) {
+        if (!['l-hit','l-out','l-rare','l-bunt','l-score'].includes(cls)) continue;
+        const dir = extractDir(text);
+        if (cls==='l-rare' && text.includes('珍プレイ')) {
+            const intro=text.replace(/^ダイス\[\d+\]\s*/, '');
+            const outcome=[...new Set(logs.filter(([line,kind])=>
+                ['l-rare','l-hit','l-out','l-steal'].includes(kind)&&!line.includes('珍プレイ')&&!line.includes('ショック')
+            ).map(([line])=>line.trim()))].slice(0,3);
+            const rareDir=outcome.length?extractDir(outcome[0]):dir;
+            return {type:'err',dir:rareDir,text:[prefix,intro,...outcome].join('\n')+scoreText};
+        }
+        if (text.includes('ホームラン'))
+            return {type:'hr', dir, text:`${prefix}\n${dir}スタンドへ\n特大ホームラン！！！${scoreText}`};
+        if (text.includes('スリーベース'))
+            return {type:'hit', dir, text:`${prefix}\n${dir}を破る三塁打！！${scoreText}${detailStr}`};
+        if (text.includes('ツーベース'))
+            return {type:'hit', dir, text:`${prefix}\n${dir}へ鋭い当たり！\n二塁打！${scoreText}${detailStr}`};
+        if (text.includes('クリーンヒット'))
+            return {type:'hit', dir, text:`${prefix}\n${dir}前へクリーンヒット！${scoreText}${detailStr}`};
+        if (text.includes('ヒット') && !text.includes('バント') && !text.includes('内野'))
+            return {type:'hit', dir, text:`${prefix}\n${dir}へヒット！${scoreText}${detailStr}`};
+        if (text.includes('内野安打'))
+            return {type:'hit', dir, text:`${prefix}\n内野安打！\n俊足を飛ばしセーフ${scoreText}${detailStr}`};
+        if (text.includes('バントヒット'))
+            return {type:'hit', dir:'投手', text:`${prefix}\nバントヒット！\n絶妙な転がし${scoreText}${detailStr}`};
+        if (text.includes('三振'))
+            return {type:'out', dir:'投手', text:`${prefix}\n空振り三振！\nバッターアウト！`};
+        if (text.includes('見逃'))
+            return {type:'out', dir:'投手', text:`${prefix}\n見逃し三振！\nバッターアウト！`};
+        if (text.includes('ゲッツー') || text.includes('ダブルプレー'))
+            return {type:'out', dir, text:`${prefix}\n${dir}ゴロ\nダブルプレー！！${detailStr}`};
+        if (text.includes('フライ') && text.includes('アウト'))
+            return {type:'out', dir, text:`${prefix}\n${dir}フライ\nバッターアウト！${detailStr}`};
+        if (text.includes('ゴロ') && text.includes('アウト'))
+            return {type:'out', dir, text:`${prefix}\n${dir}ゴロ\nバッターアウト！${detailStr}`};
+        if (text.includes('ゴロ') && text.includes('FC'))
+            return {type:'hit', dir, text:`${prefix}\n${dir}ゴロ\nフィルダースチョイス！${scoreText}${detailStr}`};
+        if (text.includes('エラー'))
+            return {type:'err', dir, text:`${prefix}\n${dir}エラー！\n野手が弾いた！${scoreText}${detailStr}`};
+        if (text.includes('ポテンヒット'))
+            return {type:'hit', dir, text:`${prefix}\n${dir}へポテンヒット！\n野手の間に落ちた！${scoreText}${detailStr}`};
+        if (text.includes('四球') || text.includes('よく見た'))
+            return {type:'bb', dir:'一塁', text:`${prefix}\nフォアボール\n一塁へ歩く`};
+        if (text.includes('死球'))
+            return {type:'bb', dir:'一塁', text:`${prefix}\nデッドボール！\n一塁へ`};
+        if (text.includes('犠飛') || text.includes('犠牲'))
+            return {type:'out', dir, text:`${prefix}\n${dir}犠牲フライ\nタッチアップ！${scoreText}${detailStr}`};
+        if (text.includes('バント成功') || text.includes('送りバント'))
+            return {type:'bunt', dir:'投手', text:`${prefix}\n送りバント成功\n走者を進めた${detailStr}`};
+        if (text.includes('バント失敗') || text.includes('バントファウル'))
+            return {type:'out', dir:'投手', text:`${prefix}\nバント失敗！\nバッターアウト！`};
+        // ゴロ with runner details
+        if (text.includes('ゴロ'))
+            return {type:'out', dir, text:`${prefix}\n${dir}ゴロ${detailStr || '\nバッターアウト！'}${scoreText}`};
+    }
+    // Fallback
+    const mainLog = logs.find(([t,c]) => ['l-hit','l-out','l-bunt'].includes(c));
+    if (mainLog) return {type:'out', dir:'投手', text:`${prefix}\n${mainLog[0].replace(/^.*ダイス\[\d+\]:\s*/, '')}`};
+    return null;
+}
+
+function playResultAnim(info) {
+    const field=document.getElementById('field-area');
+    const container=field.querySelector('.park-viewport') || field;
+    container.querySelectorAll('.result-overlay').forEach(e => e.remove());
+
+    const overlay = document.createElement('div');
+    overlay.className = 'result-overlay';
+
+    const target = info.type === 'hr' ? BALL_TARGETS['HR'] : (BALL_TARGETS[info.dir] || [50, 50]);
+
+    // Ball
+    const ball = document.createElement('div');
+    ball.className = 'anim-ball';
+    overlay.appendChild(ball);
+
+    // Flash text
+    const flash = document.createElement('div');
+    flash.className = `anim-flash anim-${info.type}`;
+    flash.textContent = info.text;
+    overlay.appendChild(flash);
+
+    // HR burst
+    if (info.type === 'hr') {
+        const burst = document.createElement('div');
+        burst.className = 'anim-burst';
+        burst.style.left = target[0] + '%';
+        burst.style.top = target[1] + '%';
+        overlay.appendChild(burst);
+    }
+
+    container.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            ball.style.left = target[0] + '%';
+            ball.style.top = target[1] + '%';
+            if (info.type === 'hr') {
+                ball.style.transform = 'translate(-50%,-50%) scale(0)';
+                ball.style.opacity = '0';
+            } else {
+                ball.style.transform = 'translate(-50%,-50%) scale(0.4)';
+                ball.style.opacity = '0.3';
+            }
+        });
+    });
+}
+
+function playInningFlash(inning, halfStr, teamName) {
+    const container = document.getElementById('field-area');
+    container.querySelectorAll('.inning-flash-overlay').forEach(e => e.remove());
+    const ov = document.createElement('div');
+    ov.className = 'inning-flash-overlay';
+    ov.innerHTML = `<div class="inning-flash-box"><div class="inn-num">${inning}回${halfStr}</div><div class="inn-team">${esc(teamShort(teamName))}の攻撃</div></div>`;
+    container.appendChild(ov);
+    setTimeout(() => ov.remove(), 2500);
+}
+
+// ============================================================
+// MENUS
+// ============================================================
+const TEAM_LEAGUES={
+    CL:new Set(['Tigers','Baystars','Giants','Dragons','Carp','Swallows']),
+    PL:new Set(['Hawks','Fighters','Buffaloes','Eagles','Lions','Marines'])
+};
+let setup=null;
+let cpuTimer=null;
+
+function rosterTeams() {
+    return [...new Set(players.map(p=>p['チーム']).filter(Boolean))];
+}
+function showTeamSelect() {
+    setup={away:null,home:null,assigned:null,opponent:null,rosters:[],humanSide:0,versusAI:true,dome:false};
+    document.getElementById('game-log').textContent='担当球団のリーグを選択';
+    updateUI();
+    const choices=[['セ・リーグ','league:CL','bp'],['パ・リーグ','league:PL','bp']];
+    if (PFBSeasonUI.stored()) choices.push(['前回のペナントを続ける','continue_season','bs']);
+    renderButtons(choices);
+}
+function onwardTeam(team) {
+    return String(team).split(/\s+/).at(-1);
+}
+function cpuRoster(team) {
+    const available=players.filter(row=>row['チーム']===team);
+    available.sort((a,b)=>Number(b['試合数'])-Number(a['試合数']));
+    const bats=available.filter(row=>!isPitcher(row));
+    const pitchers=available.filter(isPitcher);
+    const positions=assignFieldPositions(bats);
+    const fielders=Object.values(positions);
+    const lineup=[...fielders,...bats.filter(row=>!fielders.includes(row))].slice(0,9);
+    const starter=pitchers.find(p=>Number(extractPitcherStats(p).S)>=4) || pitchers[0];
+    const bench=[...lineup,...bats.filter(row=>!lineup.includes(row))].slice(0,16);
+    const arms=[starter,...pitchers.filter(row=>row!==starter)].filter(Boolean).slice(0,25-bench.length);
+    return {selected:[...bench,...arms],lineup,starter};
+}
+function newExhibition() {
+    gameInst=new Game(setup.away,players,setup.home,setup.rosters,setup.dome);
+    gameInst.humanSide=setup.humanSide;
+    gameInst.versusAI=setup.versusAI;
+    gameInst.logAdd(`試合開始　${teamShort(setup.away)} 対 ${teamShort(setup.home)}`,'l-inning');
+    updateUI();
+    startAtBat();
+    playInningFlash(1,'表',setup.away);
+}
+const ROSTER_FIELD_GROUPS = [['C',FNAME.C],['1B',FNAME['1B']],['2B',FNAME['2B']],['3B',FNAME['3B']],
+    ['SS',FNAME.SS],['OF','外野手'],['other','その他']];
+const ROSTER_PITCH_GROUPS = [['starter','先発'],['reliever','中継ぎ'],['closer','抑え']];
+
+function rosterDefense(row) {
+    const ratings=FIELD_POSITIONS.map(pos=>({pos,...fieldCard(row,pos)})).filter(card=>card.rating>0);
+    const best=[...ratings].sort((a,b)=>b.rating-a.rating || b.preference-a.preference)[0];
+    const infield=ratings.filter(card=>!OUTFIELD.includes(card.pos));
+    const outfield=ratings.filter(card=>OUTFIELD.includes(card.pos));
+    const defense=infield.map(card=>FNAME[card.pos].slice(0,-1)+card.rating);
+    if (outfield.length===3 && outfield.every(card=>card.rating===outfield[0].rating)) {
+        const preferred=outfield.filter(card=>card.preference===3);
+        const position=preferred.length===1 ? `（${FNAME[preferred[0].pos][0]}）` : '';
+        defense.push(`外野${outfield[0].rating}${position}`);
+    } else {
+        defense.push(...outfield.map(card=>FNAME[card.pos].slice(0,-1)+card.rating));
+    }
+    const group=OUTFIELD.includes(best?.pos) ? 'OF' : best?.pos || 'other';
+    return {group,details:defense.join('・') || '—'};
+}
+
+function rosterStatText(row,pitcher,records) {
+    if (records) {
+        const line=records[rowId(row)];
+        if (pitcher) return line?.PG ? `${line.W}勝${line.L}敗 ${line.SV}S` : '—';
+        return line?.PA ? `${line.AB ? PFBSeason.rateText(line.H/line.AB) : '—'}　${line.HR}本` : '—';
+    }
+    if (pitcher) {
+        const {wins,losses,saves}=cardPitchingRecord(row);
+        return wins==='—' ? '—' : `${wins}勝${losses}敗 ${saves}S`;
+    }
+    const {average,homers}=cardBattingRecord(row);
+    return homers==='—' ? average : `${average}　${homers}本`;
+}
+
+function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,onCancel=null) {
+    const dialog = document.getElementById('roster-dialog');
+    const team = side === 0 ? setup.away : setup.home;
+    const rows=seasonRoster?.pool||players.filter(p=>p['チーム']===team);
+    const preset=seasonRoster||defaultRoster(rows,team);
+    const form = dialog.querySelector('form');
+    dialog.querySelector('h2').textContent = `${side === 0 ? '先攻' : '後攻'}　${team}`;
+    const list = dialog.querySelector('.roster-list');
+    const search=dialog.querySelector('.roster-search');
+    const filter=dialog.querySelector('.roster-filter');
+    search.value='';
+    filter.value='all';
+    search.onkeydown=event=>{if (event.key==='Enter') event.preventDefault();};
+    const starterCandidates=new Set(seasonRoster?.starterCandidates || rows.filter(row=>isPitcher(row) && PFBSeason.starterStamina(row)));
+    const statsOption=dialog.querySelector('.roster-stat-source');
+    const gameStatsOption=statsOption.querySelector('input[value="game"]');
+    const message = dialog.querySelector('.roster-message');
+    list.replaceChildren();
+    message.textContent = '';
+    const groups=new Map([...ROSTER_FIELD_GROUPS,...ROSTER_PITCH_GROUPS].map(([key])=>[key,[]]));
+    const entries=rows.map(row=>{
+        const pitcher=isPitcher(row);
+        const stats=pitcher ? extractPitcherStats(row) : null;
+        const defense=pitcher ? null : rosterDefense(row);
+        const saves=pitcher ? Number(cardPitchingRecord(row).saves) : 0;
+        const role=Number(stats?.S)>=4 ? 'starter' : saves>=5 ? 'closer' : 'reliever';
+        const group=pitcher ? role : defense.group;
+        const label = document.createElement('div');
+        const check = document.createElement('input');
+        const name=document.createElement('b');
+        const card=document.createElement('span');
+        const record=document.createElement('span');
+        label.className='roster-candidate';
+        record.className='roster-record';
+        check.type = 'checkbox';
+        check.checked = preset.selected.includes(row);
+        name.textContent=displayName(row);
+        check.setAttribute('aria-label',name.textContent+'をベンチ入り');
+        card.textContent=pitcher ? `${handedness(row,false) || '—'}　G${stats.G ?? '—'}　S${stats.S ?? '—'}` : defense.details;
+        card.title=pitcher ? '利き腕・グレード・スタミナ' : '守備力';
+        record.title=pitcher ? '勝・敗・セーブ' : '打率・本塁打';
+        label.append(check,name,card,record);
+        groups.get(group).push(label);
+        return {row,check,pitcher,record,element:label};
+    });
+    for (const [title,sections] of [['野手',ROSTER_FIELD_GROUPS],['投手',ROSTER_PITCH_GROUPS]]) {
+        const column=document.createElement('section');
+        const heading=document.createElement('h3');
+        heading.textContent=title;
+        column.append(heading);
+        for (const [key,groupName] of sections) {
+            const members=groups.get(key);
+            if (!members.length) continue;
+            const group=document.createElement('section');
+            const groupHeading=document.createElement('h4');
+            groupHeading.textContent=groupName;
+            group.append(groupHeading,...members);
+            column.append(group);
+        }
+        list.append(column);
+    }
+    function filterRows() {
+        const normalize=name=>name.normalize('NFKC').replace(/\s/g,'').toLowerCase();
+        const query=normalize(search.value);
+        for (const {row,check,element} of entries) {
+            const included=filter.value==='all' || (filter.value==='bench' ? check.checked : starterCandidates.has(row));
+            element.hidden=!included || !normalize(displayName(row)).includes(query);
+        }
+        for (const group of list.querySelectorAll('section > section')) {
+            group.hidden=!group.querySelector('.roster-candidate:not([hidden])');
+        }
+    }
+    search.oninput=filterRows;
+    filter.onchange=filterRows;
+    statsOption.hidden=!seasonRoster?.records;
+    function refreshStats() {
+        const records=gameStatsOption.checked ? seasonRoster?.records : null;
+        for (const {row,pitcher,record} of entries) record.textContent=rosterStatText(row,pitcher,records);
+    }
+    statsOption.onchange=refreshStats;
+    refreshStats();
+    const benchStage=dialog.querySelector('.roster-bench-stage');
+    const boardStage=dialog.querySelector('.roster-board-stage');
+    const diamond=dialog.querySelector('.roster-diamond');
+    const order=dialog.querySelector('.roster-order');
+    const picks=dialog.querySelector('.roster-picks');
+    const pickNote=dialog.querySelector('.roster-pick-note');
+    const swapTarget=dialog.querySelector('.roster-swap-target');
+    const swapButton=dialog.querySelector('.roster-swap');
+    const removeButton=dialog.querySelector('.roster-remove');
+    const undoButton=dialog.querySelector('.roster-undo');
+    const cancelButton=dialog.querySelector('.roster-cancel');
+    const nextButton=dialog.querySelector('.roster-next');
+    const domeInput=dialog.querySelector('.roster-dome input');
+    dialog.querySelector('.roster-dome').hidden=Boolean(seasonRoster)||!setup.versusAI&&side===0;
+    domeInput.checked=setup.dome;
+    const chosenRows=()=>entries.filter(({check})=>check.checked).map(({row})=>row);
+    function refreshBench() {
+        dialog.querySelector('.roster-count').textContent=`ベンチ入り ${chosenRows().length}／25人`;
+        filterRows();
+    }
+    const boardPositions=['LF','CF','RF','SS','2B','3B','P','1B','C','DH'];
+    const positionName=pos=>pos==='DH' ? 'DH' : pos==='P' ? '先発投手' : FNAME[pos];
+    let slots=Array(9).fill(null);
+    let starter=null;
+    let activeSlot=0;
+    let activePosition=null;
+    let boardOpen=false;
+    let selected=[];
+    const history=[];
+    const back=onCancel||showTeamSelect;
+    const gameButton=!setup.versusAI && side===0 ? '後攻の編成へ' : '試合開始';
+
+    function remember() {
+        history.push({slots:[...slots],starter,activeSlot,activePosition});
+    }
+    function suggested() {
+        const bats=selected.filter(row=>!isPitcher(row));
+        const lineup=[...new Set([...preset.lineup.filter(row=>bats.includes(row)),...bats])].slice(0,9);
+        const fixed=Object.fromEntries(Object.entries(preset.positions||{}).filter(([,row])=>lineup.includes(row)));
+        const field=assignFieldPositions(lineup,fixed);
+        slots=lineup.map(row=>({row,pos:FIELD_POSITIONS.find(pos=>field[pos]===row)||'DH'}));
+        starter=selected.includes(preset.starter)&&starterCandidates.has(preset.starter)
+            ? preset.starter : selected.find(row=>starterCandidates.has(row));
+        activeSlot=0;
+        activePosition=null;
+    }
+    function button(label,action) {
+        const control=document.createElement('button');
+        control.type='button';
+        control.textContent=label;
+        control.onclick=action;
+        return control;
+    }
+    function selectSlot(index) {
+        activeSlot=index;
+        activePosition=slots[index]?.pos || null;
+        renderBoard();
+    }
+    function advanceSlot() {
+        const next=slots.findIndex(slot=>!slot);
+        if (next>=0) activeSlot=next;
+        activePosition=next<0&&!starter ? 'P' : null;
+    }
+    function renderBoard() {
+        message.textContent='';
+        diamond.replaceChildren();
+        order.replaceChildren();
+        picks.replaceChildren();
+        const occupied=new Set(slots.filter(Boolean).map(({row})=>row));
+        for (const pos of boardPositions) {
+            const index=slots.findIndex(slot=>slot?.pos===pos);
+            const row=pos==='P' ? starter : slots[index]?.row;
+            const control=button(row ? `${positionName(pos)}
+${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
+                if (index>=0) activeSlot=index;
+                activePosition=pos;
+                renderBoard();
+                (picks.firstElementChild || diamond.querySelector(`[data-position="${pos}"]`))?.focus();
+            });
+            control.dataset.position=pos;
+            if (!row) control.dataset.unassigned='';
+            control.setAttribute('aria-pressed',String(activePosition===pos));
+            diamond.append(control);
+        }
+        for (const [index,slot] of slots.entries()) {
+            const label=slot ? `${index+1}番　${positionName(slot.pos)}　${displayName(slot.row)}` : `${index+1}番　未選択`;
+            const control=button(label,()=>{
+                selectSlot(index);
+                order.children[index].focus();
+            });
+            control.setAttribute('aria-pressed',String(index===activeSlot&&activePosition!=='P'));
+            order.append(control);
+        }
+        const target=swapTarget.value;
+        swapTarget.replaceChildren(new Option('選択',''));
+        for (const [index,slot] of slots.entries()) {
+            if (index!==activeSlot&&slot) swapTarget.add(new Option(`${index+1}番　${displayName(slot.row)}`,String(index)));
+        }
+        swapTarget.value=Array.from(swapTarget.options).some(option=>option.value===target) ? target : '';
+        swapButton.disabled=activePosition==='P'||!slots[activeSlot]||swapTarget.value==='';
+        swapTarget.disabled=activePosition==='P'||!slots[activeSlot]||swapTarget.options.length===1;
+        removeButton.disabled=activePosition==='P' ? !starter : !slots[activeSlot];
+        undoButton.disabled=!history.length;
+        if (!activePosition) {
+            pickNote.textContent=slots[activeSlot]&&starter ? '打順または守備位置を選んで編集できます。' :
+                `${activeSlot+1}番の守備位置を選んでください。`;
+            return;
+        }
+        const pos=activePosition;
+        const candidates=selected.filter(row=>{
+            if (pos==='P') return row!==starter&&starterCandidates.has(row);
+            return !isPitcher(row)&&!occupied.has(row)&&(pos==='DH'||fieldCard(row,pos).rating>0);
+        });
+        if (pos!=='P'&&pos!=='DH') candidates.sort((a,b)=>fieldCard(b,pos).rating-fieldCard(a,pos).rating);
+        const prefix=pos==='P' ? positionName(pos) : `${activeSlot+1}番・${positionName(pos)}`;
+        pickNote.textContent=candidates.length ? `${prefix}の選手を選んでください（候補${candidates.length}人）。` : `${prefix}に選べる未配置の選手がいません。`;
+        for (const row of candidates) {
+            const detail=pos==='P' ? 'S'+extractPitcherStats(row).S : pos==='DH' ? '' : '守'+fieldCard(row,pos).rating;
+            picks.append(button([displayName(row),detail].filter(Boolean).join('　'),()=>{
+                remember();
+                if (pos==='P') {
+                    starter=row;
+                    activePosition=null;
+                } else {
+                    slots[activeSlot]={row,pos};
+                    advanceSlot();
+                }
+                renderBoard();
+                const nextControl=activePosition==='P' ? diamond.querySelector('[data-position="P"]') :
+                    diamond.querySelector('[data-unassigned]:not([data-position="P"])');
+                (nextControl || nextButton).focus();
+            }));
+        }
+    }
+    swapTarget.onchange=()=>{swapButton.disabled=swapTarget.value==='';};
+    swapButton.onclick=()=>{
+        if (swapTarget.value==='') return;
+        remember();
+        const other=Number(swapTarget.value);
+        [slots[activeSlot],slots[other]]=[slots[other],slots[activeSlot]];
+        selectSlot(other);
+    };
+    removeButton.onclick=()=>{
+        remember();
+        if (activePosition==='P') starter=null;
+        else {
+            activePosition=slots[activeSlot].pos;
+            slots[activeSlot]=null;
+        }
+        renderBoard();
+    };
+    undoButton.onclick=()=>{
+        const previous=history.pop();
+        if (!previous) return;
+        ({slots,starter,activeSlot,activePosition}=previous);
+        renderBoard();
+    };
+    dialog.querySelector('.roster-suggest').onclick=()=>{remember();suggested();renderBoard();};
+    dialog.querySelector('.roster-clear').onclick=()=>{
+        remember();
+        slots.fill(null);
+        activeSlot=0;
+        activePosition=null;
+        renderBoard();
+    };
+    function showStage(showBoard) {
+        boardOpen=showBoard;
+        benchStage.hidden=showBoard;
+        boardStage.hidden=!showBoard;
+        cancelButton.textContent=showBoard ? 'ベンチ選択に戻る' : 'チーム選択へ戻る';
+        nextButton.textContent=showBoard ? gameButton : '25人を確定して打順・守備へ';
+        message.textContent='';
+    }
+    list.onchange=refreshBench;
+    form.onchange=()=>{message.textContent='';};
+    refreshBench();
+    showStage(false);
+    cancelButton.onclick=()=>{
+        if (boardOpen) {showStage(false);return;}
+        dialog.close();
+        back();
+    };
+    dialog.oncancel=event=>{
+        if (boardOpen) {
+            event.preventDefault();
+            showStage(false);
+        } else back();
+    };
+    form.onsubmit=event=>{
+        event.preventDefault();
+        if (!boardOpen) {
+            const checked=chosenRows();
+            const errors=[];
+            if (checked.length!==25) errors.push(`ベンチ入りは25人必要です（現在${checked.length}人）。`);
+            if (checked.filter(row=>!isPitcher(row)).length<9) errors.push('野手を9人以上選んでください。');
+            if (!checked.some(row=>starterCandidates.has(row))) errors.push('登板可能でスタミナ4以上の投手をベンチ入りさせてください。');
+            if (errors.length) {message.textContent=errors.join('\n');return;}
+            if (!selected.length&&preset.restored) {
+                selected=checked;
+                suggested();
+            } else {
+                const eligible=new Set(checked);
+                if (selected.some(row=>!eligible.has(row))) history.length=0;
+                slots=slots.map(slot=>slot&&eligible.has(slot.row) ? slot : null);
+                if (!eligible.has(starter)) starter=null;
+                selected=checked;
+                advanceSlot();
+            }
+            showStage(true);
+            renderBoard();
+            dialog.querySelector('.roster-board-title').focus();
+            return;
+        }
+        const emptySlots=slots.flatMap((slot,index)=>slot ? [] : [index+1]);
+        const errors=[];
+        if (emptySlots.length) errors.push(`打順の${emptySlots.join('・')}番の選手を選んでください。`);
+        if (!starter) errors.push('「先発投手」から投手を選んでください。');
+        if (errors.length) {message.textContent=errors.join('\n');return;}
+        const lineup=slots.map(({row})=>row);
+        const positions=Object.fromEntries(slots.filter(({pos})=>pos!=='DH').map(({row,pos})=>[pos,row]));
+        const choices={selected,lineup,starter,positions};
+        if(onConfirm){
+            try {
+                onConfirm(choices);
+                dialog.close();
+            } catch (error) {
+                message.textContent=`試合開始エラー：${error.message || error}`;
+            }
+            return;
+        }
+        setup.rosters[side]=choices;
+        if (!setup.versusAI && side===0) { openRosterSetup(1); return; }
+        setup.dome=domeInput.checked;
+        if (setup.versusAI) setup.rosters[1-side]=cpuRoster(setup.opponent);
+        dialog.close();
+        newExhibition();
+    };
+    if (!dialog.open) dialog.showModal();
+}
+
+function laterCPU(g,work) {
+    clearTimeout(cpuTimer);
+    cpuTimer=setTimeout(() => {
+        cpuTimer=null;
+        if (gameInst===g && !g.gameOver) work();
+    },350);
+}
+function applyCpuDefense(g) {
+    if (!g.waitingForCpuDefense) return;
+    g.waitingForCpuDefense=false;
+    const close=Math.abs(g.scores[0]-g.scores[1])<=1;
+    g.isForward=Boolean(g.bases[2] && g.outs<2 && close && g.inning>=6);
+    g.isCautious=!g.isForward&&Boolean(g.bases[0] && !g.bases[1] && Number(g.bases[0].S2)>=80 && g.pitcher.G>0);
+    const profile=g.profiles?.[g.defSide];
+    const replace=g.pitcher.shock===2 || (g.pitcher.fatigued&&(!profile||g.inning>=profile.pen));
+    if (g.canReplacePitcher() && replace) {
+        const next=g.pitchers[g.defSide].find(p=>!p.isUsed);
+        if (next) {
+            g.replacePitcher(next);
+            updateUI();
+        }
+    }
+    if(profile?.lateDefense&&g.inning===8&&g.outs===0&&g.scores[g.defSide]>g.scores[g.batSide]&&g.fielderChangeInning!==g.inning){
+        PFBSeason.improveDefense(g);g.fielderChangeInning=g.inning;updateUI();
+    }
+    announceDefense(g);
+}
+function announceDefense(g) {
+    const label=g.isForward?'前進守備':g.isCautious?'盗塁警戒':'通常守備';
+    g.logAdd(g.isSqueezeCautious?label+'・スクイズ警戒':label,'l-info',g.defSide);
+    renderLog();
+}
+function cpuAttack(g) {
+    const gap=g.scores[g.defSide]-g.scores[g.batSide];
+    const profile=g.profiles?.[g.batSide];
+    if(profile&&!g.offenseLocked&&g.inning>=profile.pinch&&gap>=0&&gap<=3){
+        const current=getVal(g.batter['1H'],g.pitcher.G);
+        const substitute=g.bench.findIndex(p=>getVal(p['1H'],g.pitcher.G)>=current+8);
+        if(substitute>=0)g.substitute(g.batSide,g.batIdx[g.batSide],substitute);
+    }
+    if (g.canBunt(false) && !g.buntContinuation && g.outs===0 && g.inning>=7 && gap>=0 && gap<=1 && profile?.attack!==2) {
+        execAtBat('bunt');
+    } else {
+        execAtBat('hit');
+    }
+}
+function showOffenseMenu() {
+    const g=gameInst;
+    g.state='offense';
+    if (g.versusAI && g.batSide!==g.humanSide && !g.isAuto) {
+        renderButtons([],g.batSide,'相手が作戦を選択中');
+        laterCPU(g,() => cpuAttack(g));
+        return;
+    }
+    const btns=[ATTACK_ACTIONS[0]];
+    if (g.bench.length && !g.offenseLocked) btns.push(ATTACK_ACTIONS[1]);
+    if (g.canBunt(false) && !g.buntContinuation?.squeeze) btns.push(ATTACK_ACTIONS[2]);
+    if (g.stealGroups().length) btns.push(ATTACK_ACTIONS[3]);
+    if (g.canEndRun()) btns.push(ATTACK_ACTIONS[4]);
+    if (g.canBunt(true) && (!g.buntContinuation || g.buntContinuation.squeeze)) btns.push(['スクイズ','squeeze','bw']);
+    btns.push(['自動進行','auto','ba']);
+    renderButtons(btns,g.batSide);
+}
+function showDefenseMenu() {
+    const g=gameInst;
+    g.state='defense';
+    if (g.versusAI && g.defSide!==g.humanSide && !g.isAuto) {
+        g.waitingForCpuDefense=true;
+        showOffenseMenu();
+        return;
+    }
+    const btns=[DEFENSE_ACTIONS[0],DEFENSE_ACTIONS[2]];
+    const relief=Number(g.pitcher.isRelief && !g.pitcher.facedBatters);
+    const leftMatch=Number(g.pitcher.arm.startsWith('左投') && g.batter['利き腕']?.endsWith('左打'));
+    if (g.bases.some(Boolean) && g.pitcher.G+relief+leftMatch>0) btns.push(DEFENSE_ACTIONS[3]);
+    if (g.bases[2]) {
+        btns.push(DEFENSE_ACTIONS[1]);
+        if (g.pitcher.C+relief+Number(g.bases.every(Boolean))>0) {
+            btns.push(['スクイズ警戒','def_squeeze','bn'],['前進＋スクイズ警戒','def_forward_squeeze','bn']);
+        }
+    }
+    if (g.pitchers[g.defSide].some(p=>!p.isUsed) && g.canReplacePitcher()) btns.push(DEFENSE_ACTIONS[4]);
+    if (g.defBench.length) btns.push(DEFENSE_ACTIONS[5]);
+    if (!g.versusAI && g.bench.length && !g.offenseLocked) btns.push(ATTACK_ACTIONS[1]);
+    btns.push(['自動進行','auto','ba']);
+    renderButtons(btns,g.defSide);
+}
+function showPending() {
+    const g=gameInst;
+    const {title,choices,side,defaultIndex}=g.pending;
+    if (g.versusAI && side!==g.humanSide) {
+        renderButtons([],side,title);
+        laterCPU(g,() => doAction(`choice:${defaultIndex}`));
+        return;
+    }
+    renderButtons(choices.map(([label],index)=>[label,`choice:${index}`,'bp']),side,title);
+}
+function showNext(label='次へ') {
+    const g=gameInst;
+    const side=g?.humanSide ?? g?.batSide;
+    const buttons=g?.isAuto ? [['停止','stop_auto','bw']] : [[label,'next','bp'],['自動進行','auto','ba']];
+    renderButtons(buttons,side);
+}
+
+// ============================================================
+// GAME FLOW
+// ============================================================
+function startAtBat() {
+    const g = gameInst;
+    g.preparePlate();
+    g.autoPitChange(true);
+    if (g.pending) { updateUI(); showPending(); return; }
+    if (g.called) { endGame(); return; }
+    g.beginPitchingInning();
+    const b = g.batter, p = g.pitcher;
+    if(!p) { g.logAdd('投手がいません！試合終了','l-rare'); g.gameOver=true; return; }
+    const fat = (p.fatigued ? '【疲労】' : '') + (p.shock===2 ? '【回復不可ショック】' : p.shock===1 ? '【一時ショック】' : '');
+    const inn = `${Math.floor(p.outsPitched / 3)}回${p.outsPitched % 3}/3`;
+    g.logAdd('─────────────────────', 'l-sep');
+    g.logAdd(`[${g.outStr()}] ${g.runnersStr()}  ${g.scores[0]}-${g.scores[1]}`, 'l-status');
+    g.logAdd(`▼ ${fat}${p.name}(${p.arm}) ${inn} G:${p.G} C:${p.C} S:${p.S}`, 'l-pitch');
+    g.logAdd(`【${g.batIdx[g.batSide] + 1}番 ${b['ポジション'] || ''}】${playerName(b)}  走:${b['走'] || '?'} バント:${b['バント'] || '?'}`, 'l-batter');
+    updateUI();
+    if (g.isAuto) {
+        showNext();
+    } else {
+        showDefenseMenu();
+    }
+}
+
+function execAtBat(action) {
+    const g=gameInst;
+    applyCpuDefense(g);
+    g.offenseLocked=true;
+    const batter = g.batter;
+    const batNum = g.batIdx[g.batSide] + 1;
+    const logStart = g.log.length;
+    if (action === 'hr') g.logAdd('ヒットエンドラン、走者スタート','l-steal');
+    g.processAtBat(action,g.isForward,action === 'hr');
+    const anim = determineAnim(g.log.slice(logStart),playerName(batter),batNum);
+    finishPlay(anim);
+}
+
+function finishPlay(anim) {
+    const g = gameInst;
+    g.resolveRemovedFielders();
+    if (!g.pending) {
+        if (g.outs >= 3) g.bases = [null,null,null];
+        for (const [runner,from] of g.stealBlocked) if (g.bases[from] !== runner) g.stealBlocked.delete(runner);
+    }
+    if (!g.pending && !g.gameOver && !g.called) {
+        g.checkSecondBase();
+        if (g.outs < 3 && g.pitcher.unavailable) g.autoPitChange();
+    }
+    updateUI();
+    if (anim) playResultAnim(anim);
+    if (g.gameOver || g.called) { endGame(); return; }
+    if (g.pending) { g.pending.resultAnim=anim; showPending(); return; }
+    if (g.outs >= 3) { scheduleEndHalf(); return; }
+    g.state = 'between';
+    showNext(g.plateComplete ? '▶ 次の打席' : '▶ 打席を続ける');
+}
+
+function scheduleEndHalf() {
+    const g = gameInst;
+    console.log(`[DEBUG] scheduleEndHalf: ${g.inning}回${g.half===0?'表':'裏'} OUT:${g.outs} SCORE:${g.scores[0]}-${g.scores[1]}`);
+    halfEndPending = true;
+    showNext('▶ チェンジ');
+    g.state = 'between';
+}
+function flushEndHalf() {
+    console.log(`[DEBUG] flushEndHalf: pending=${halfEndPending}`);
+    if (!halfEndPending) return;
+    halfEndPending = false;
+    endHalf();
+}
+function endHalf() {
+    const g = gameInst;
+    console.log(`[DEBUG] endHalf: ${g.inning}回${g.half===0?'表':'裏'} SCORE:${g.scores[0]}-${g.scores[1]}`);
+    const prev = g.innScores[g.batSide].reduce((a, b) => a + b, 0);
+    g.innScores[g.batSide].push(g.scores[g.batSide] - prev);
+    g.logAdd(`=== ${g.inning}回${g.half === 0 ? '表' : '裏'}終了  ${g.scores[0]}-${g.scores[1]} ===`, 'l-inning');
+    // §9.2.3 イニング終了時に一時ショック回復
+    g.endPitchingInning();
+    g.outs = 0; g.bases = [null, null, null];
+    g.endRunUsed = false;
+    g.stealBlocked.clear();
+    g.responsible=Object.create(null);
+    g.plateComplete = true;
+    g.state = 'between';
+    if (g.half === 0) { g.half = 1; }
+    else { g.half = 0; g.inning++; if (g.inning>12&&!g.seasonMatch?.noDraw || g.inning>9&&g.scores[0]!==g.scores[1]) { console.log(`[DEBUG] endGame: イニング超過 ${g.inning}回 SCORE:${g.scores[0]}-${g.scores[1]}`); endGame(); return; } }
+    if (g.inning >= 9 && g.half === 1 && g.scores[1] > g.scores[0]) { console.log(`[DEBUG] endGame: サヨナラ ${g.inning}回裏不要 SCORE:${g.scores[0]}-${g.scores[1]}`); endGame(); return; }
+    const hstr = g.half === 0 ? '表' : '裏';
+    const batting = g.half === 0 ? g.playerTeam : g.oppTeam;
+    g.logAdd(`\n▶ ${g.inning}回${hstr} ${teamShort(batting)}の攻撃`, 'l-inning');
+    updateUI();
+    playInningFlash(g.inning, hstr, batting);
+    showNext(`▶ ${g.inning}回${hstr}開始`);
+    g.state = 'between';
+}
+
+function endGame() {
+    const g=gameInst;
+    clearInterval(autoTimer);
+    clearTimeout(cpuTimer);
+    autoTimer=cpuTimer=null;
+    g.isAuto=false;
+    const inningTotal = g.innScores[g.batSide].reduce((sum,runs) => sum + runs,0);
+    if (g.innScores[g.batSide].length < g.inning && (g.outs || g.gameOver || g.called)) {
+        g.innScores[g.batSide][g.inning-1] = g.scores[g.batSide] - inningTotal;
+    }
+    let winner = '引き分け';
+    if (g.scores[0] > g.scores[1]) winner = g.playerTeam;
+    else if (g.scores[1] > g.scores[0]) winner = g.oppTeam;
+    g.logAdd('=' + '='.repeat(38), 'l-sep');
+    if (g.called) g.logAdd(g.endReason || '試合打ち切り', 'l-inning');
+    g.logAdd('【ゲームセット！】', 'l-inning');
+    g.logAdd(`最終: ${teamShort(g.playerTeam)} ${g.scores[0]} - ${g.scores[1]} ${teamShort(g.oppTeam)}`, 'l-score');
+    if (winner !== '引き分け') g.logAdd(`勝利: ${winner}`, 'l-score');
+    if (g.homeRuns.length) g.logAdd(`本塁打: ${g.homeRuns.join(', ')}`, 'l-hit');
+    g.gameOver=true;
+    PFBResults.record(g,{season:Boolean(g.seasonMatch),online:Boolean(g.onlineMatch),date:g.seasonMatch?.date,label:g.seasonMatch?.label});
+    if (g.seasonMatch) PFBSeasonUI.finish(g);
+    renderFinalResult(true);
+}
+function renderFinalResult(automaticDownload = false) {
+    const g=gameInst;
+    const report=PFBResults.record(g,{season:Boolean(g.seasonMatch),online:Boolean(g.onlineMatch)});
+    updateUI();
+    const field=document.getElementById('field-area');
+    field.querySelectorAll('.game-over-overlay').forEach(el=>el.remove());
+    const overlay=document.createElement('div');
+    overlay.className='game-over-overlay report-overlay';
+    const next=g.seasonMatch?'ペナントへ戻る':g.onlineMatch?'オンラインを終了':'もう一度';
+    const standings=g.seasonMatch ? PFBSeasonUI.reportStandings() : '';
+    overlay.innerHTML=PFBResults.reportHtml(report)+`<div class="report-actions">
+        <button type="button" class="go-btn" onclick="doAction('restart')">${next}</button>
+        <button type="button" class="go-btn report-download">HTMLを保存</button>
+        </div>`+standings;
+    overlay.querySelector('.report-download').onclick=()=>PFBResults.downloadReport(report,standings);
+    field.appendChild(overlay);
+    renderButtons([],g.humanSide ?? g.batSide);
+    if (automaticDownload) {
+        try { PFBResults.downloadReport(report,standings,true); }
+        catch (error) { console.warn('試合結果の自動保存に失敗しました',error); }
+    }
+}
+
+// ============================================================
+// ACTION DISPATCHER
+// ============================================================
+function doAction(action) {
+    const g = gameInst;
+    if (action==='pick_roster') { document.getElementById('file-input').click(); return; }
+    if (action.startsWith('league:')) {
+        setup.league=action.slice(7);
+        const league=TEAM_LEAGUES[setup.league];
+        if (!league) return;
+        document.getElementById('game-log').textContent='担当球団を選択';
+        renderButtons(rosterTeams().filter(team=>league.has(onwardTeam(team))).map(team=>[teamShort(team),`assign:${team}`,'bt']));
+        return;
+    }
+    if (action.startsWith('assign:')) {
+        setup.assigned=action.slice(7);
+        document.getElementById('game-log').textContent=`${teamShort(setup.assigned)}のゲーム形式を選択`;
+        const choices=[['ペナント（130試合）','season','bp'],['単発試合','exhibition','bn']];
+        if(typeof PFBOnline!=='undefined')choices.push(['オンライン対戦','online','bn']);
+        if(PFBSeasonUI.stored())choices.push(['前回のペナントを続ける','continue_season','bs']);
+        renderButtons(choices);
+        return;
+    }
+    if(action==='season'){PFBSeasonUI.start(setup.league,setup.assigned);return}
+    if(action==='continue_season'){PFBSeasonUI.load(PFBSeasonUI.stored());return}
+    if(action==='online'){PFBOnline.open();return}
+    if(action==='exhibition'){
+        document.getElementById('game-log').textContent='対戦相手を選択';
+        renderButtons(rosterTeams().filter(team=>team!==setup.assigned).map(team=>[teamShort(team),`rival:${team}`,'bt']));
+        return;
+    }
+    if (action.startsWith('rival:')) {
+        setup.opponent=action.slice(6);
+        document.getElementById('game-log').textContent='先攻・後攻を選択';
+        renderButtons([['先攻で対AI','format:away','bp'],['後攻で対AI','format:home','bp'],['両球団を操作','format:both','bn']]);
+        return;
+    }
+    if (action.startsWith('format:')) {
+        const format=action.slice(7);
+        setup.humanSide=format==='home'?1:0;
+        setup.versusAI=format!=='both';
+        setup.away=setup.humanSide===0?setup.assigned:setup.opponent;
+        setup.home=setup.humanSide===1?setup.assigned:setup.opponent;
+        openRosterSetup();
+        return;
+    }
+    if (action==='restart') {
+        document.getElementById('field-area').querySelectorAll('.game-over-overlay').forEach(el=>el.remove());
+        gameInst=null;
+        clearTimeout(cpuTimer);
+        document.getElementById('game-log').textContent='';
+        if(g?.seasonMatch&&PFBSeasonUI.active()){updateUI();PFBSeasonUI.show('news')}
+        else if(g?.onlineMatch){PFBOnline.leave();showTeamSelect()}
+        else showTeamSelect();
+        return;
+    }
+    if (!g || g.gameOver) return;
+    if (g.pending) {
+        if (!action.startsWith('choice:')) return;
+        const {choices,beforePlate,resultAnim}=g.pending;
+        const choice = choices[Number(action.slice(7))];
+        if (!choice) return;
+        g.pending = null;
+        choice[1]();
+        if (beforePlate) startAtBat();
+        else finishPlay(resultAnim);
+        return;
+    }
+    if (action === 'auto') { startAutoPlay(); return; }
+    if (action === 'stop_auto') { stopAutoPlay(); return; }
+    if (action === 'next') {
+        if (halfEndPending) flushEndHalf();
+        else if (g.state === 'between') {
+            if (g.plateComplete) startAtBat();
+            else {
+                document.getElementById('field-area').querySelector('.result-overlay')?.remove();
+                g.state = 'offense';
+                showOffenseMenu();
+            }
+        }
+        return;
+    }
+    if (['hit','bunt','squeeze','hr'].includes(action)) {
+        if (g.state !== 'offense' || action === 'hr' && !g.canEndRun()) return;
+        execAtBat(action);
+    } else if (action==='steal_menu') {
+        if (g.state!=='offense') return;
+        const groups=g.stealGroups();
+        if (groups.length===1) doAction('steal:0');
+        else renderButtons([...groups.map((group,i)=>[g.stealLabel(group),`steal:${i}`,'bp']),['戻る','cancel_offense','bn']],g.batSide,'盗塁する走者を選択');
+    } else if (action.startsWith('steal:')) {
+        if (g.state !== 'offense') return;
+        const group = g.stealGroups()[Number(action.slice(6))];
+        if (!group) return;
+        applyCpuDefense(g);
+        g.stealAttempted=true;
+        g.offenseLocked=true;
+        g.runSteal(group);
+        finishPlay();
+    } else if (action === 'pinch') {
+        const back=g.state==='defense'?'cancel':'cancel_offense';
+        renderButtons([...g.bench.map((p,i)=>[displayName(p),`pinch:${i}`,'bs']),['戻る',back,'bn']],g.batSide,'代打を選択');
+    } else if (action.startsWith('pinch:')) {
+        if (g.offenseLocked) return;
+        g.substitute(g.batSide,g.batIdx[g.batSide],Number(action.slice(6)));
+        updateUI();
+        if (g.state==='defense') showDefenseMenu();
+        else showOffenseMenu();
+    } else if (action==='cancel_offense') {
+        showOffenseMenu();
+    } else if (action==='cancel') {
+        showDefenseMenu();
+    } else if (['def_normal','def_forward','def_steal','def_squeeze','def_forward_squeeze'].includes(action)) {
+        g.isForward = action.includes('forward');
+        g.isCautious = action === 'def_steal';
+        g.isSqueezeCautious=action.includes('squeeze');
+        announceDefense(g);
+        showOffenseMenu();
+    } else if (action === 'def_ibb') {
+        g.logAdd(`【敬遠】${playerName(g.batter)}`,'l-info');
+        g.applyHitResult('BB',g.batter,'');
+        g.nextBatter();
+        finishPlay();
+    } else if (action === 'def_pitcher') {
+        if (!g.canReplacePitcher()) return;
+        const avail = g.pitchers[g.defSide].filter(p => !p.isUsed);
+        renderButtons([...avail.map((p,i) => [`${p.name}（G${p.cardG}・C${p.cardC}・S${p.S}）`,`chpitch:${i}`,'bs']),['戻る','cancel','bn']],g.defSide,'登板する投手を選択');
+    } else if (action.startsWith('chpitch:')) {
+        const np = g.pitchers[g.defSide].filter(p => !p.isUsed)[Number(action.slice(8))];
+        if (np && g.canReplacePitcher()) {
+            g.replacePitcher(np);
+        }
+        updateUI();
+        showDefenseMenu();
+    } else if (action === 'def_fielder') {
+        renderButtons([...g.defLineup.map((p,i) => [`${i+1}番 ${playerName(p)}`,`defout:${i}`,'bs']),['戻る','cancel','bn']],g.defSide,'交代する野手を選択');
+    } else if (action.startsWith('defout:')) {
+        const outgoing = Number(action.slice(7));
+        renderButtons([...g.defBench.map((p,i) => [playerName(p),`defsub:${outgoing}:${i}`,'bs']),['戻る','cancel','bn']],g.defSide,'出場する野手を選択');
+    } else if (action.startsWith('defsub:')) {
+        const [,outgoing,incoming] = action.split(':');
+        g.substitute(g.defSide,Number(outgoing),Number(incoming));
+        updateUI();
+        showDefenseMenu();
+    }
+}
+
+// ============================================================
+// AUTO-PLAY
+// ============================================================
+let autoTimer = null;
+let halfEndPending = false;
+
+function autoStep() {
+    const g = gameInst;
+    if (!g || g.gameOver || !g.isAuto) { stopAutoPlay(); return; }
+    if (halfEndPending) { flushEndHalf(); return; }
+    if (g.state === 'between' && g.plateComplete) startAtBat();
+    if (!g.gameOver) execAtBat('hit');
+}
+
+function toggleAutoPlay() {
+    if (!gameInst || gameInst.gameOver || gameInst.pending || gameInst.onlineMatch) return;
+    if (gameInst.isAuto) stopAutoPlay();
+    else startAutoPlay();
+}
+function startAutoPlay() {
+    const g = gameInst;
+    if (!g || g.pending) return;
+    g.isAuto=true;
+    clearTimeout(cpuTimer);
+    showNext();
+    if (autoTimer) clearInterval(autoTimer);
+    // First step immediately
+    autoStep();
+    if (!g.isAuto || g.gameOver) return;
+    autoTimer = setInterval(() => {
+        if (!gameInst || gameInst.gameOver) { stopAutoPlay(); return; }
+        autoStep();
+    }, 2000);
+}
+
+function stopAutoPlay() {
+    console.log(`[DEBUG] stopAutoPlay: pending=${halfEndPending}`);
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    const g = gameInst;
+    if (g) {
+        g.isAuto = false;
+        if (g.gameOver) return;
+        if (halfEndPending) {
+            // 3アウト目の結果表示中にSTOP → チェンジボタンを表示
+            showNext('▶ チェンジ');
+        } else if (g.state === 'between') {
+            showNext(g.plateComplete ? '▶ 次の打席' : '▶ 打席を続ける');
+        } else if (g.state === 'offense') {
+            showOffenseMenu();
+        } else {
+            showDefenseMenu();
+        }
+    }
+}
+
+// ============================================================
+// FILE LOADING
+// ============================================================
+let playerLoadRequest=0;
+
+function loadPlayerData(bytes) {
+    let text;
+    try { text=new TextDecoder('utf-8',{fatal:true}).decode(bytes); }
+    catch { text=new TextDecoder('shift-jis').decode(bytes); }
+    const roster=parseCSV(text);
+    if (roster.length<10) throw new Error('選手データの読み込みに失敗しました。');
+    PFBSeasonUI.leave();
+    gameInst=null;
+    players=roster;
+    showGameScreen();
+    showTeamSelect();
+}
+
+function promptForCsv() {
+    document.getElementById('csv-load-status').textContent='Data_25.csv を選択してゲームを開始';
+    document.getElementById('csv-fallback').hidden=false;
+}
+
+async function loadDefaultRoster() {
+    const request=playerLoadRequest;
+    try {
+        let bytes;
+        if (location.protocol==='file:') {
+            bytes=Uint8Array.from(atob(PFB_DEFAULT_CSV_BASE64),value=>value.charCodeAt(0));
+        } else {
+            const response=await fetch('Data_25.csv');
+            if (!response.ok) throw new Error('選手データがありません。');
+            bytes=await response.arrayBuffer();
+        }
+        if (request===playerLoadRequest && !players.length) loadPlayerData(bytes);
+    } catch {
+        if (request===playerLoadRequest && !players.length) promptForCsv();
+    }
+}
+
+document.getElementById('file-input').addEventListener('change', function(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const request=++playerLoadRequest;
+    const reader = new FileReader();
+    const failed=()=>{
+        if (request!==playerLoadRequest) return;
+        if (!players.length) promptForCsv();
+        alert('選手データの読み込みに失敗しました。');
+    };
+    reader.onload = function(ev) {
+        if (request!==playerLoadRequest) return;
+        try { loadPlayerData(ev.target.result); }
+        catch { failed(); }
+    };
+    reader.onerror=failed;
+    reader.readAsArrayBuffer(file);
+    e.target.value='';
+});
+</script>
+<script src="report-limit.js"></script>
+<script src="pfb-results.js"></script>
+<script src="pfb-match.js"></script>
+<script src="pfb-season.js"></script>
+<script src="pfb-season-ui.js"></script>
+<script src="pfb-online-config.js"></script>
+<script src="pfb-room.js"></script>
+<script src="pfb-online-core.js"></script>
+<script src="pfb-online.js"></script>
+<script src="pfb-coach.js"></script>
+<script src="pfb-default-roster.js"></script>
+<script>void loadDefaultRoster();</script>
+</body>
+</html>
