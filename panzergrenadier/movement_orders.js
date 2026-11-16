@@ -158,6 +158,8 @@ function pgStartManualMoveRecord(ms) {
       const {col, row, x, y, hexId, moveComplete, status} = unit;
       return [unit, {
         col, row, x, y, hexId, moveComplete, status,
+        marchMode: unit.marchMode, move: unit.move, closeAtk: unit.closeAtk, closeDef: unit.closeDef,
+        _towed: unit._towed, _origMove: unit._origMove, _origCloseAtk: unit._origCloseAtk, _origCloseDef: unit._origCloseDef,
         wasMoved: directFireState.movedUnits.has(unit.id || unit.name),
       }];
     })),
@@ -470,7 +472,7 @@ function pgSelectOrderHex(col, row) {
   return true;
 }
 
-function pgMovementPanel() {
+function pgMovementPanel(showPicker = true) {
   const section = document.createElement('section');
   section.className = 'phase-info';
   const review = pgAIReview?.stage === 'review' ? pgAIReview : null;
@@ -520,8 +522,8 @@ function pgMovementPanel() {
   const units = testUnits.filter(unit => pgCanReceiveOrder(unit) &&
     unit.side === activeSide && unit.hexId === selectedHex);
   if (review && !units.length) text(section, '修正する駒を地図で選べます。');
-  const selected = units.includes(pgOrderUnit) ? pgOrderUnit : units.length === 1 ? units[0] : null;
-  if (units.length > 1) {
+  const selected = units.includes(pgOrderUnit) ? pgOrderUnit : showPicker && units.length === 1 ? units[0] : null;
+  if (showPicker && units.length > 1) {
     const picker = document.createElement('div');
     picker.className = 'pg-order-picker';
     for (const unit of units) {
@@ -538,14 +540,14 @@ function pgMovementPanel() {
     const order = unit.pgMovementOrder;
     const status = order ? (order.type === 'hold' ? '死守先 ' : '予約先 ') + order.target : '';
     const holding = order?.type === 'hold' && order.target === unit.hexId;
-    if (units.length === 1) section.append(pgUnitLabel(unit));
-    if (pgUnitHasFired(unit)) {
+    if (showPicker && units.length === 1) section.append(pgUnitLabel(unit));
+    if (showPicker && pgUnitHasFired(unit)) {
       const fired = document.createElement('span');
       fired.className = 'pg-action-state pg-fired';
       fired.textContent = '射撃済';
       section.append(fired);
     }
-    text(section, [record && record.origin.hexId !== unit.hexId ? `${record.origin.hexId} → ${unit.hexId}` : unit.hexId, holding ? '死守中' : status].filter(Boolean).join(' · '));
+    text(section, [!showPicker && unit.name, record && record.origin.hexId !== unit.hexId ? `${record.origin.hexId} → ${unit.hexId}` : unit.hexId, holding ? '死守中' : status].filter(Boolean).join(' · '));
     if (record) {
       const allowed = pgCanReturn(unit, record);
       button(section, '移動前のヘクスに戻す', () => pgReturnMovement(pgReturnEntries([unit])), !allowed);

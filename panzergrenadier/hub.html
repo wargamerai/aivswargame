@@ -248,7 +248,7 @@ button.dice-btn:disabled { background:var(--pg-shade); color:var(--pg-muted); cu
 .pg-order-picker,.pg-stack-checks{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
 .pg-order-picker .is-selected{outline:1px solid var(--pg-accent)}
 </style>
-<link rel="stylesheet" href="palette.css">
+<link rel="stylesheet" href="palette.css?v=20261116-pg-move-los">
 </head>
 <body>
 
@@ -351,7 +351,7 @@ button.dice-btn:disabled { background:var(--pg-shade); color:var(--pg-muted); cu
 // シナリオに応じてマップデータを動的に読み込む
 (function() {
   var sid = parseInt(new URLSearchParams(window.location.search).get('scenario')) || 2;
-  var mapFile = sid === 3 ? 'mapdata3.js' : sid === 4 ? 'mapdata4.js' : sid === 5 ? 'mapdata5.js' : sid === 7 ? 'mapdata7.js' : sid === 8 ? 'mapdata8.js' : sid === 9 ? 'mapdata9.js' : 'mapdata.js';
+  var mapFile = sid === 3 ? 'mapdata3.js' : sid === 4 ? 'mapdata4.js' : sid === 5 ? 'mapdata5.js' : sid === 7 ? 'mapdata7.js?v=20261116-pg-move-los' : sid === 8 ? 'mapdata8.js' : sid === 9 ? 'mapdata9.js' : 'mapdata.js';
   document.write('<script src="' + mapFile + '"><\/script>');
 })();
 </script>
@@ -712,10 +712,9 @@ function getHexTerrain(hexId) {
 // slope1境界の低い側=0, 高い側=1, slope2の高い側=2
 function getHexElevation(col, row) {
   const hid = toHexId(col, row);
-  if (typeof ELEVATION_MAP !== 'undefined' && ELEVATION_MAP[hid] != null) {
-    return ELEVATION_MAP[hid];
-  }
-  return 0;
+  const level = ELEVATION_MAP[hid];
+  // シナリオ2の地図は平地を1とする番号で登録されている。
+  return level == null ? 0 : level - (_scenarioId === 2 ? 1 : 0);
 }
 
 // ===== 視認システム (ルール6) =====
@@ -730,211 +729,60 @@ function isLOSBlocker(hexId) {
   return t === 'f' || t === 'w' || t === 't' || t === 'c';
 }
 
-// 2点間のヘクスを直線で結んで通過ヘクスを列挙（ブレゼンハム風）
+// ヘクス中心を整数座標に変換し、線分が内部または辺を通るヘクスを取得する。
 function getHexesOnLine(col1, row1, col2, row2) {
-  const c1 = getHexCenter(col1, row1);
-  const c2 = getHexCenter(col2, row2);
-  const steps = Math.max(Math.abs(col2 - col1), Math.abs(row2 - row1), 1) * 3;
+  const x1 = 3 * col1;
+  const y1 = 2 * row1 + (col1 % 2);
+  const dx = 3 * col2 - x1;
+  const dy = 2 * row2 + (col2 % 2) - y1;
   const hexes = [];
-  const seen = new Set();
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps;
-    const px = c1.x + (c2.x - c1.x) * t;
-    const py = c1.y + (c2.y - c1.y) * t;
-    const nh = getNearestHex(px, py);
-    const key = `${nh.col},${nh.row}`;
-    if (seen.has(key) || (nh.col === col1 && nh.row === row1) || (nh.col === col2 && nh.row === row2)) continue;
-    // ヘクスサイド平行チェック: 最近ヘクスの中心とLOS線の距離が
-    // ヘクスサイズの一定割合以内なら境界上 → parallel フラグを付ける
-    const hc = getHexCenter(nh.col, nh.row);
-    const distToCenter = Math.sqrt((px - hc.x) ** 2 + (py - hc.y) ** 2);
-    const threshold = MAP_CONFIG.hexSize * 0.75; // ヘクスサイド近傍（中心→サイド≈0.866）
-    nh._onBorder = distToCenter > threshold;
-    nh._sampleX = px;
-    nh._sampleY = py;
-    seen.add(key);
-    hexes.push(nh);
+  const faces = [[0, 1, 1], [0, -1, 1], [1, 1, 2], [1, -1, 2], [-1, 1, 2], [-1, -1, 2]];
+
+  for (let col = Math.min(col1, col2); col <= Math.max(col1, col2); col++) {
+    for (let row = Math.max(0, Math.min(row1, row2) - 1); row <= Math.min(MAP_CONFIG.rows - 1, Math.max(row1, row2) + 1); row++) {
+      if ((col === col1 && row === row1) || (col === col2 && row === row2)) continue;
+      const x = 3 * col;
+      const y = 2 * row + (col % 2);
+      let enter = 0;
+      let exit = 1;
+      let edgeSide = 0;
+      for (const [a, b, limit] of faces) {
+        const room = limit - a * (x1 - x) - b * (y1 - y);
+        const speed = a * dx + b * dy;
+        if (speed > 0) exit = Math.min(exit, room / speed);
+        else if (speed < 0) enter = Math.max(enter, room / speed);
+        else if (room < 0) { exit = 0; break; }
+        else if (room === 0) edgeSide = Math.sign(dx * (y - y1) - dy * (x - x1));
+      }
+      if (exit - enter > 1e-9) hexes.push({col, row, edgeSide});
+    }
   }
   return hexes;
 }
 
-
-// LOS判定: 2ヘクス間の視線が通るか
-// 斜面隣接で得られる高さボーナスを返す（0, 1, 2）
-function getSlopeBonus(col, row) {
-  const hid = toHexId(col, row);
-  let bonus = 0;
-  for (const [h1, h2, type] of RIVER_MAP) {
-    if (type === 'slope1' || type === 'slope2' || type === 'cliff') {
-      if (h1 === hid || h2 === hid) {
-        const b = (type === 'slope2') ? 2 : 1;
-        if (b > bonus) bonus = b;
-      }
+function getClearSightHexes(col1, row1, col2, row2) {
+  const fromLevel = getHexElevation(col1, row1);
+  const toLevel = getHexElevation(col2, row2);
+  const high = Math.max(fromLevel, toLevel);
+  const sameLevel = fromLevel === toLevel;
+  const clear = [];
+  const blockedSides = new Set();
+  for (const hex of getHexesOnLine(col1, row1, col2, row2)) {
+    const height = getHexElevation(hex.col, hex.row) + Number(isLOSBlocker(toHexId(hex.col, hex.row)));
+    if (height < high || (sameLevel && height === high)) {
+      clear.push(hex);
+    } else if (!hex.edgeSide) {
+      return null;
+    } else {
+      blockedSides.add(hex.edgeSide);
+      if (blockedSides.size === 2) return null;
     }
   }
-  return bonus;
-}
-
-// 地形の障害物レベル（森・林・街 = 1、それ以外 = 0）
-function getTerrainBlockLevel(hexId) {
-  const t = getHexTerrain(hexId);
-  if (t === 'f' || t === 'w' || t === 't' || t === 'c') return 1;
-  return 0;
-}
-
-// 点から直線への距離
-function _distPointToLine(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1, dy = y2 - y1;
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
-  return Math.abs(dy * px - dx * py + x2 * y1 - y2 * x1) / Math.sqrt(len2);
-}
-
-// 点から直線への垂線の足
-function _projectPointToLine(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1, dy = y2 - y1;
-  const len2 = dx * dx + dy * dy;
-  if (len2 === 0) return { x: x1, y: y1 };
-  const t = ((px - x1) * dx + (py - y1) * dy) / len2;
-  return { x: x1 + t * dx, y: y1 + t * dy };
-}
-
-// hasLOS用のLOS線座標（一時変数）
-let _losX1 = 0, _losY1 = 0, _losX2 = 0, _losY2 = 0;
-
-// LOS線が斜面ヘクスサイドを横切るかチェック
-// LOS通過ヘクスの遷移で、隣接ヘクス間にRIVER_MAPの斜面があるか判定
-function checkSlopeCrossing(col1, row1, col2, row2) {
-  const hexesOnLine = getHexesOnLine(col1, row1, col2, row2);
-  const srcSight = 1 + getHexElevation(col1, row1);
-  const tgtSight = 1 + getHexElevation(col2, row2);
-
-  // 通過ヘクス列（始点→中間→終点）
-  const fullPath = [{ col: col1, row: row1 }, ...hexesOnLine, { col: col2, row: row2 }];
-
-  // 斜面ルックアップ用マップを構築
-  const slopeMap = {};
-  for (const [h1, h2, type] of RIVER_MAP) {
-    if (type !== 'slope1' && type !== 'slope2' && type !== 'cliff') continue;
-    const key1 = `${h1}-${h2}`;
-    const key2 = `${h2}-${h1}`;
-    const level = (type === 'slope2') ? 2 : 1;
-    slopeMap[key1] = level;
-    slopeMap[key2] = level;
-  }
-
-  // LOS線の座標（かすめ判定用）
-  const _sc = getHexCenter(col1, row1);
-  const _tc = getHexCenter(col2, row2);
-  const slopeApothem = MAP_CONFIG.hexSize * 0.75;
-
-  // 連続するヘクス間に斜面があるかチェック
-  for (let i = 0; i < fullPath.length - 1; i++) {
-    const cur = fullPath[i];
-    const next = fullPath[i + 1];
-    const curId = toHexId(cur.col, cur.row);
-    const nextId = toHexId(next.col, next.row);
-    const key = `${curId}-${nextId}`;
-    const slopeLevel = slopeMap[key];
-    if (slopeLevel) {
-      // 斜面の両方のヘクスがLOS線に近いか（かすめなら横切りでない）
-      const cc = getHexCenter(cur.col, cur.row);
-      const nc = getHexCenter(next.col, next.row);
-      const curDist = _distPointToLine(cc.x, cc.y, _sc.x, _sc.y, _tc.x, _tc.y);
-      const nextDist = _distPointToLine(nc.x, nc.y, _sc.x, _sc.y, _tc.x, _tc.y);
-      if (curDist > slopeApothem || nextDist > slopeApothem) continue; // 片方がかすめ → 横切りでない
-      // 斜面を横切った
-      const srcId = toHexId(col1, row1);
-      const tgtId = toHexId(col2, row2);
-      const srcElev = getHexElevation(col1, row1);
-      const tgtElev = getHexElevation(col2, row2);
-
-      // 上から下を見る場合
-      if (srcElev > tgtElev) {
-        // 途中に始点と同じ高度のヘクスがあれば遮蔽
-        const curElev = getHexElevation(cur.col, cur.row);
-        const nextElev = getHexElevation(next.col, next.row);
-        const midElev = Math.max(curElev, nextElev);
-        if (midElev >= srcElev) {
-          // ただし斜面の隣接なら見える
-          if (curId === srcId || nextId === srcId) continue;
-          if (curId === tgtId || nextId === tgtId) continue;
-          return false;
-        }
-        continue; // 同じ高度でなければ見える
-      }
-      // 下から上を見る場合（従来ロジック）
-      if ((curId === srcId || nextId === srcId) && srcElev >= slopeLevel) continue;
-      if ((curId === tgtId || nextId === tgtId) && tgtElev >= slopeLevel) continue;
-      if (srcSight > slopeLevel && tgtSight > slopeLevel) continue;
-      if (srcSight > slopeLevel + 1 || tgtSight > slopeLevel + 1) continue;
-      return false;
-    }
-  }
-  return true; // 斜面に遮られない
+  return clear;
 }
 
 function hasLOS(col1, row1, col2, row2) {
-  if (col1 === col2 && row1 === row2) return true;
-
-  // LOS線の座標を設定
-  const _s = getHexCenter(col1, row1);
-  const _t = getHexCenter(col2, row2);
-  _losX1 = _s.x; _losY1 = _s.y; _losX2 = _t.x; _losY2 = _t.y;
-
-  // 斜面ヘクスサイドの交差チェック
-  if (!checkSlopeCrossing(col1, row1, col2, row2)) return false;
-
-  // 地形障害チェック
-  const hexesOnLine = getHexesOnLine(col1, row1, col2, row2);
-  const srcSight = 1 + getHexElevation(col1, row1);
-  const tgtSight = 1 + getHexElevation(col2, row2);
-
-  for (const h of hexesOnLine) {
-    const hexId = toHexId(h.col, h.row);
-
-    // LOS線がこのヘクスを本当に通過するか判定
-    // LOS線とヘクス中心の距離を計算
-    const hc = getHexCenter(h.col, h.row);
-    const losDistToCenter = _distPointToLine(hc.x, hc.y, _losX1, _losY1, _losX2, _losY2);
-    const apothem = MAP_CONFIG.hexSize * 0.75; // ヘクス内部判定閾値
-    if (losDistToCenter > apothem) {
-      // LOS線がヘクスの端をかすめるだけ → ブロッカーなら反対側チェック
-      if (isLOSBlocker(hexId)) {
-        // 反対側のヘクスを特定（ヘクス中心からLOS線への垂線の反対方向）
-        const proj = _projectPointToLine(hc.x, hc.y, _losX1, _losY1, _losX2, _losY2);
-        const rx = proj.x * 2 - hc.x;
-        const ry = proj.y * 2 - hc.y;
-        const otherHex = getNearestHex(rx, ry);
-        if (otherHex.col !== h.col || otherHex.row !== h.row) {
-          const otherId = toHexId(otherHex.col, otherHex.row);
-          if (isLOSBlocker(otherId)) return false; // 両側ブロッカー → 遮蔽
-        }
-      }
-      continue; // 片側だけ or 非ブロッカー → 通る
-    }
-
-    // --- 地形障害（森林・林・町・市街地）---
-    if (isLOSBlocker(hexId)) {
-      // 障害物レベル = 地形レベル + 地面の高さ
-      const blockLevel = getTerrainBlockLevel(hexId) + getHexElevation(h.col, h.row);
-      // 始点・終点の両方の視線レベルが障害物レベルより高ければ越えて見える
-      if (srcSight > blockLevel && tgtSight > blockLevel) continue;
-      return false;
-    }
-
-    // --- 高度障害（中間ヘクスが端点より高い場合）---
-    const midElev = getHexElevation(h.col, h.row);
-    if (midElev > 0) {
-      const midSight = 1 + midElev;
-      const lo = Math.min(srcSight, tgtSight);
-      const hi = Math.max(srcSight, tgtSight);
-      // 中間が低い方より高く、かつ高い方以上 → 遮蔽
-      // （高い方が中間より高ければ壁の上から見える）
-      if (midSight > lo && midSight >= hi) return false;
-    }
-  }
-  return true;
+  return getClearSightHexes(col1, row1, col2, row2) !== null;
 }
 
 // 視認コスト（地形チャートより）
@@ -953,42 +801,48 @@ function getVisionCost(hexId, hasElevDiff) {
   }
 }
 
-// 視認範囲を計算（直線上の地形コスト合計で判定）
-// visionPoints: シナリオ指定の視認能力ポイント
-function calculateVisionRange(col, row, visionPoints) {
-  const result = {}; // { "col,row": true }
-  const startKey = `${col},${row}`;
-  result[startKey] = true;
+// 最短の通過ヘクス数で数える。辺を通る箇所は見やすい側、ほかは見えにくい経路を使う。
+function pgSightCostBeforeTarget(col, row, targetCol, targetRow, hexes) {
+  const distance = hexDistance(col, row, targetCol, targetRow);
+  const elevationDiff = getHexElevation(col, row) !== getHexElevation(targetCol, targetRow);
+  const steps = Array.from({length: distance}, () => []);
+  for (const hex of hexes) {
+    const step = hexDistance(col, row, hex.col, hex.row);
+    if (step + hexDistance(hex.col, hex.row, targetCol, targetRow) === distance) {
+      steps[step].push(hex);
+    }
+  }
 
-  // マップ上の全ヘクスに対して直線判定
+  let prev = [{col, row, cost: 0}];
+  for (let i = 1; i < distance; i++) {
+    const curr = steps[i].flatMap(hex => {
+      const predecessors = prev.filter(p => hexDistance(p.col, p.row, hex.col, hex.row) === 1);
+      if (!predecessors.length) return [];
+      const costs = predecessors.map(p => p.cost);
+      const cost = predecessors.some(p => p.edgeSide) ? Math.min(...costs) : Math.max(...costs);
+      return [{...hex, cost: cost + getVisionCost(toHexId(hex.col, hex.row), elevationDiff)}];
+    });
+    prev = curr;
+  }
+  const lastCosts = prev.map(hex => hex.cost);
+  return prev.some(hex => hex.edgeSide) ? Math.min(...lastCosts) : Math.max(...lastCosts);
+}
+
+function pgSightStatus(col, row, targetCol, targetRow, visionPoints = G.visionRange || 12) {
+  if (col === targetCol && row === targetRow) return 'visible';
+  if (hexDistance(col, row, targetCol, targetRow) > visionPoints) return 'out-of-vision';
+  const hexes = getClearSightHexes(col, row, targetCol, targetRow);
+  if (!hexes) return 'blocked';
+  // 目標の一つ手前までで視認ポイントが残っていれば、目標ヘクスは見える。
+  return pgSightCostBeforeTarget(col, row, targetCol, targetRow, hexes) < visionPoints
+    ? 'visible' : 'out-of-vision';
+}
+
+function calculateVisionRange(col, row, visionPoints) {
+  const result = {};
   for (let r = 0; r < MAP_CONFIG.rows; r++) {
     for (let c = 0; c < MAP_CONFIG.cols; c++) {
-      if (c === col && r === row) continue;
-      // LOS判定（地形障害・高低差）
-      if (!hasLOS(col, row, c, r)) continue;
-      // LOS通過 → 視認コスト計算
-      const hexesOnLine = getHexesOnLine(col, row, c, r);
-      const observerElev = getHexElevation(col, row);
-      const targetElev = getHexElevation(c, r);
-      const hasElevDiff = observerElev !== targetElev;
-      let totalCost = 0;
-      for (const h of hexesOnLine) {
-        const hid = toHexId(h.col, h.row);
-        totalCost += getVisionCost(hid, hasElevDiff);
-      }
-      // 目標ヘクス自体のコストも加算
-      const tgtHexId = toHexId(c, r);
-      totalCost += getVisionCost(tgtHexId, hasElevDiff);
-      // 視認ポイント内なら見える（余りルール: コスト超えても1ヘクス前で余りがあれば見える）
-      if (totalCost <= visionPoints) {
-        result[`${c},${r}`] = true;
-      } else {
-        // 余りルール: 目標の1つ手前まででポイントが残っていれば目標も見える
-        const costBeforeTarget = totalCost - getVisionCost(tgtHexId, hasElevDiff);
-        if (costBeforeTarget < visionPoints) {
-          result[`${c},${r}`] = true;
-        }
-      }
+      if (pgSightStatus(col, row, c, r, visionPoints) === 'visible') result[`${c},${r}`] = true;
     }
   }
   return result;
@@ -1101,13 +955,14 @@ function onLOSCheckClick(col, row) {
   } else {
     losCheckEnd = { col, row, _srcCol: losCheckStart.col, _srcRow: losCheckStart.row };
     losCheckResult = hasLOS(losCheckStart.col, losCheckStart.row, col, row);
+    const withinVision = pgSightStatus(losCheckStart.col, losCheckStart.row, col, row) === 'visible';
     const dist = hexDistance(losCheckStart.col, losCheckStart.row, col, row);
     const startId = toHexId(losCheckStart.col, losCheckStart.row);
     const endId = toHexId(col, row);
     const srcElev = getHexElevation(losCheckStart.col, losCheckStart.row);
     const tgtElev = getHexElevation(col, row);
-    info.textContent = `${startId}(h${srcElev}) → ${endId}(h${tgtElev}) 距離${dist}: ${losCheckResult ? 'LOS通る ✓' : 'LOS遮蔽 ✗'}`;
-    info.style.color = losCheckResult ? 'var(--pg-green)' : 'var(--pg-red)';
+    info.textContent = `${startId}(h${srcElev}) → ${endId}(h${tgtElev}) 距離${dist}: ${!losCheckResult ? '射線遮蔽' : withinVision ? '射線あり' : '射線あり・視認範囲外'}`;
+    info.style.color = withinVision ? 'var(--pg-green)' : 'var(--pg-red)';
     // 次のクリックで始点リセット
     losCheckStart = null;
     drawMap();
@@ -1775,7 +1630,8 @@ function toggleAIStepMode() {
 function _aiFireAndShow(shooters, target, typeLabel) {
   return new Promise(resolve => {
     if (target.status === 'eliminated') { resolve(null); return; }
-    const validShooters = shooters.filter(s => s.status !== 'eliminated');
+    const validShooters = shooters.filter(s => s.status !== 'eliminated' &&
+      pgSightStatus(s.col, s.row, target.col, target.row) === 'visible');
     if (validShooters.length === 0) { resolve(null); return; }
     // 射撃矢印を表示
     const shooterHexId = validShooters[0].hexId || toHexId(validShooters[0].col, validShooters[0].row);
@@ -1916,7 +1772,7 @@ async function aiAutoMoveFire(reviewMovement = null) {
         if (t.side !== 'allied' || t.status !== 'ok' || t.type === 'dummy' || t.type === 'leader') return false;
         const dist = hexDistance(s.col, s.row, t.col, t.row);
         if (dist <= 0 || dist > sRange) return false;
-        return hasLOS(s.col, s.row, t.col, t.row);
+        return canTargetUnit(s, t).can;
       });
       if (candidates.length === 0) continue;
 
@@ -2497,7 +2353,7 @@ async function aiAutoMoveFire(reviewMovement = null) {
       if (t.status === 'eliminated') return false;
       const dist = hexDistance(shooters[0].col, shooters[0].row, t.col, t.row);
       if (dist <= 0 || dist > effectiveRange) return false;
-      return hasLOS(shooters[0].col, shooters[0].row, t.col, t.row);
+      return canTargetUnit(shooters[0], t).can;
     });
     if (inRangeTargets.length === 0) continue;
 
@@ -4559,6 +4415,24 @@ function drawMap() {
     });
   }
 
+  const selectedFireLines = typeof pgSelectedFireLines === 'function' ? pgSelectedFireLines() : [];
+  for (const {shooter, target, clear} of selectedFireLines) {
+    const from = getHexCenter(shooter.col, shooter.row);
+    const to = getHexCenter(target.col, target.row);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    if (!clear) ctx.setLineDash([9, 5]);
+    ctx.strokeStyle = '#fffdf2';
+    ctx.lineWidth = 7;
+    ctx.stroke();
+    ctx.strokeStyle = clear ? '#136739' : '#a52724';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // LOS確認: 始点マーカー（終点選択待ち）
   if (losCheckMode && losCheckStart && !losCheckEnd) {
     const sc = getHexCenter(losCheckStart.col, losCheckStart.row);
@@ -5256,8 +5130,8 @@ window.addEventListener('popstate', () => {
 <script src="phase_initiative.js"></script>
 <script src="phase_recovery.js"></script>
 <script src="phase_support.js"></script>
-<script src="phase_movefire.js"></script>
-<script src="movement_orders.js"></script>
+<script src="phase_movefire.js?v=20261116-pg-move-los"></script>
+<script src="movement_orders.js?v=20261116-pg-move-los"></script>
 <script src="online.js"></script>
 <script src="phase_air.js"></script>
 <script src="ai_placement.js"></script>

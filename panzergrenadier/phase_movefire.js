@@ -275,17 +275,8 @@ function canTargetUnit(shooter, target) {
   if (target.status === 'eliminated') return { can: false, reason: '壊滅済み' };
   if (target.type === 'leader') return { can: false, reason: '指揮官は攻撃対象外' };
 
-  // 視認チェック
-  const sPos = fromHexId(shooter.hexId || toHexId(shooter.col, shooter.row));
-  const tPos = fromHexId(target.hexId || toHexId(target.col, target.row));
-
-  if (!hasLOS(sPos.col, sPos.row, tPos.col, tPos.row))
-    return { can: false, reason: '視認不可（障害物）' };
-
-  // 射程チェック
-  const dist = hexDistance(sPos.col, sPos.row, tPos.col, tPos.row);
-  if (dist > shooter.range) return { can: false, reason: `射程外（距離${dist}/射程${shooter.range}）` };
-  if (dist === 0) return { can: false, reason: '同一ヘクス' };
+  const shot = pgShotLineCheck(shooter, target);
+  if (!shot.can) return shot;
 
   // ダミーチェック — ダミー付きで偵察されていなければ視認不可
   const tHexId = target.hexId || toHexId(target.col, target.row);
@@ -294,6 +285,19 @@ function canTargetUnit(shooter, target) {
     if (d && d.side !== shooter.side) return { can: false, reason: 'ダミーに覆われている' };
   }
 
+  return shot;
+}
+
+function pgShotLineCheck(shooter, target) {
+  const sPos = fromHexId(shooter.hexId || toHexId(shooter.col, shooter.row));
+  const tPos = fromHexId(target.hexId || toHexId(target.col, target.row));
+
+  const dist = hexDistance(sPos.col, sPos.row, tPos.col, tPos.row);
+  if (dist > shooter.range) return { can: false, reason: `射程外（距離${dist}/射程${shooter.range}）` };
+  if (dist === 0) return { can: false, reason: '同一ヘクス' };
+  const sight = pgSightStatus(sPos.col, sPos.row, tPos.col, tPos.row);
+  if (sight === 'blocked') return { can: false, reason: '射線が地形で遮られている' };
+  if (sight === 'out-of-vision') return { can: false, reason: '視認範囲外' };
   return { can: true, dist };
 }
 
@@ -827,6 +831,7 @@ function toggleUnitCheck(group, uid, checked) {
   // 射程範囲を更新
   updateFireRange();
   renderMoveFirePhase();
+  drawMap();
 }
 
 function pgStackCheckButtons(units, checks, eligible = () => true) {
@@ -845,9 +850,9 @@ function pgToggleStackChecks(button, checked) {
   const stack = button.closest('[data-pg-stack]');
   const group = stack.dataset.pgStack;
   const checks = group === 'assault' ? assaultState.atkChecked : checkState[group];
-  for (const box of stack.querySelectorAll('input[type="checkbox"]')) {
-    if (!checked) checks.delete(box.value);
-    else if (!box.disabled) checks.add(box.value);
+  for (const control of stack.querySelectorAll('input[type="checkbox"], .pg-unit-pick')) {
+    if (!checked) checks.delete(control.value);
+    else if (!control.disabled && control.dataset.pgSelectable !== 'false') checks.add(control.value);
   }
   if (group === 'assault') renderAssaultPhase();
   else {
@@ -855,6 +860,34 @@ function pgToggleStackChecks(button, checked) {
     renderMoveFirePhase();
   }
   drawMap();
+}
+
+function pgFriendlyUnits(hexId) {
+  return testUnits.filter(unit => pgOnMap(unit) && unit.hexId === hexId &&
+    unit.side === directFireState.activeSide && !STACK_EXEMPT_TYPES.includes(unit.type));
+}
+
+function pgPickedFriendlyUnits() {
+  return (directFireState.atkAdjacentHexes || [directFireState.atkHexId])
+    .flatMap(pgFriendlyUnits).filter(unit => checkState.atk.has(unit.id || unit.name));
+}
+
+function pgCanPickFriendlyUnit(unit) {
+  return !(unit.moveComplete && pgUnitHasFired(unit));
+}
+
+function pgPickFriendlyUnit(uid) {
+  const unit = (directFireState.atkAdjacentHexes || [directFireState.atkHexId])
+    .flatMap(pgFriendlyUnits).find(unit => (unit.id || unit.name) === uid);
+  if (!unit) return;
+  pgOrderUnit = unit;
+  pgOrderHex = unit.hexId;
+  if (checkState.atk.has(uid) || pgCanPickFriendlyUnit(unit)) {
+    toggleUnitCheck('atk', uid, !checkState.atk.has(uid));
+  } else {
+    renderMoveFirePhase();
+    drawMap();
+  }
 }
 
 function pgCheckboxValue(uid) {
@@ -867,27 +900,37 @@ let fireVisionHexes = {}; // { "col,row": true } 視認距離範囲
 function updateFireRange() {
   fireRangeHexes = {};
   fireVisionHexes = {};
-  const shooters = testUnits.filter(u => checkState.atk.has(u.id || u.name) && u.status !== 'eliminated');
-  if (shooters.length === 0) return;
-  const src = shooters[0];
-  const sCol = src.col, sRow = src.row;
-  // 視認距離範囲を計算（キーは "col,row" 形式）
-  fireVisionHexes = calculateVisionRange(sCol, sRow, G.visionRange);
-  // 射程範囲を計算（射程と視認距離の小さい方）
-  const effectiveRange = Math.min(
-    Math.min(...shooters.map(u => u.range || 0)),
-    G.visionRange || 12
-  );
-  if (effectiveRange <= 0) return;
-  for (let r = 0; r < MAP_CONFIG.rows; r++) {
-    for (let c = 0; c < MAP_CONFIG.cols; c++) {
-      const key = `${c},${r}`;
-      const dist = hexDistance(sCol, sRow, c, r);
-      if (dist >= 1 && dist <= effectiveRange && fireVisionHexes[key] && hasLOS(sCol, sRow, c, r)) {
-        fireRangeHexes[key] = true;
-      }
+  if (!pgMayInitiateDirectFire()) return;
+  const shooters = pgPickedFriendlyUnits().filter(unit => canDirectFire(unit).can);
+  const rangesByHex = new Map();
+  for (const shooter of shooters) {
+    const current = rangesByHex.get(shooter.hexId);
+    if (!current || shooter.range > current.range) rangesByHex.set(shooter.hexId, shooter);
+  }
+  for (const {col, row, range} of rangesByHex.values()) {
+    const seen = calculateVisionRange(col, row, G.visionRange);
+    Object.assign(fireVisionHexes, seen);
+    for (const key of Object.keys(seen)) {
+      const [c, r] = key.split(',').map(Number);
+      if (hexDistance(col, row, c, r) <= range) fireRangeHexes[key] = true;
     }
   }
+}
+
+function pgSelectedFireLines() {
+  const df = directFireState;
+  if (!pgMayInitiateDirectFire() || df.mode !== 'selectShooter' || pgAIReview ||
+      pgOrderDraft || losMode || losCheckMode || fireArrowData?.from || !df.defHexId) return [];
+  const target = testUnits.find(unit => unit.hexId === df.defHexId && checkState.def.has(unit.id || unit.name))
+    || getActiveFortification(df.defHexId);
+  if (!target) return [];
+  const byHex = new Map();
+  for (const shooter of pgPickedFriendlyUnits().filter(unit => canDirectFire(unit).can)) {
+    if (target.type === 'fortification' && shooter.fpAT <= 0) continue;
+    const clear = (target.type === 'fortification' ? pgShotLineCheck(shooter, target) : canTargetUnit(shooter, target)).can;
+    if (!byHex.has(shooter.hexId) || !clear) byHex.set(shooter.hexId, {shooter, target, clear});
+  }
+  return [...byHex.values()];
 }
 
 // 命中率・損害確率を計算
@@ -955,7 +998,10 @@ function renderMoveFirePhase() {
     if (u) {
       html += `<div class="pg-moving-units">${(ms._stackMoving || [u]).filter(pgOnMap).map(unit => pgUnitLabel(unit).outerHTML).join('')}</div>`;
       html += '<div class="pg-move-legend"><span>青枠＝移動可能</span><span>黄枠＝現在地</span></div>';
-      html += `<small>残移動力: ${ms.remainingMP} / ${u.move}`;
+      const combatUnits = (ms._stackMoving || [u]).filter(unit => pgOnMap(unit) && unit.type !== 'leader');
+      const fullMP = Math.min(...combatUnits.map(unit => unit.move || 0));
+      const startingMP = ms.cautious ? Math.floor(fullMP / 2) : fullMP;
+      html += `<small>残移動力: ${ms.remainingMP} / ${startingMP}`;
       if (ms.cautious) html += ' (警戒移動)';
       html += `</small>`;
 
@@ -980,14 +1026,18 @@ function renderMoveFirePhase() {
         if (!ms._stopFired && !pgOrderRun) {
           html += `<button class="btn-sm" onclick="cancelMove()">移動を取り消す</button>`;
         }
-        if (u.type === 'T' || u.type === 'AC') {
-          html += `<button class="btn-sm" onclick="toggleFormation(moveState.movingUnit)">${u.marchMode ? '戦闘隊形へ' : '移動隊形へ'}</button>`;
-        }
-        if (!u.marchMode) {
-          html += `<button class="btn-sm" onclick="toggleCautious(moveState.movingUnit)">${ms.cautious ? '警戒解除' : '警戒移動'}</button>`;
+        if (ms.path.length === 1 && !ms._stopFired && !pgOrderRun) {
+          const inMarch = combatUnits.some(unit => unit.marchMode);
+          if ((inMarch || combatUnits.some(isVehicle)) &&
+              combatUnits.every(unit => unit.status === 'ok' && (inMarch || !unit.noTransport))) {
+            html += `<button class="btn-sm" onclick="toggleFormation()">${inMarch ? '戦闘隊形へ' : '移動隊形へ'}</button>`;
+          }
+          if (!inMarch && combatUnits.every(unit => unit.status === 'ok')) {
+            html += `<button class="btn-sm" aria-pressed="${ms.cautious}" onclick="toggleCautious()">${ms.cautious ? '警戒解除' : '警戒移動'}</button>`;
+          }
         }
         // オーバーラン (12-5): 隣接敵がいれば表示
-        if (!pgAIReview && !pgOrderRun && !u.marchMode && u.status === 'ok' && !u.outOfAmmo && !ms.cautious) {
+        if (!pgAIReview && !pgOrderRun && combatUnits.every(unit => !unit.marchMode && unit.status === 'ok') && !u.outOfAmmo && !ms.cautious) {
           const adjEnemies = getAdjacentEnemyStacks(u);
           if (Object.keys(adjEnemies).length > 0) {
             html += `</div><div style="margin-top:4px;padding:4px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:3px;">`;
@@ -1035,72 +1085,55 @@ function renderMoveFirePhase() {
   if (df.atkHexId) {
     const adjHexes = df.atkAdjacentHexes || [df.atkHexId];
     adjHexes.forEach(ahex => {
-      const atkUnits = testUnits.filter(u =>
-        u.hexId === ahex && u.status !== 'eliminated' && u.col >= 0 &&
-        u.type !== 'dummy' && u.type !== 'leader' && u.side === df.activeSide
-      );
+      const atkUnits = pgFriendlyUnits(ahex);
       if (atkUnits.length === 0) return;
       const terrain = getHexTerrain(ahex);
       const isMain = ahex === df.atkHexId;
       html += `<div data-pg-stack="atk" style="padding:4px;background:${isMain?'var(--pg-card)':'var(--pg-shade)'};border:1px solid var(--pg-line);border-radius:4px;margin-bottom:2px;">`;
       html += `<div style="color:var(--pg-muted);font-size:0.7em;">${ahex} (${tNames[terrain]||terrain})${isMain?'':' [隣接]'}</div>`;
-      html += pgStackCheckButtons(atkUnits, checkState.atk, unit => !(unit.moveComplete && unit.firedThisTurn));
+      html += pgStackCheckButtons(atkUnits, checkState.atk, pgCanPickFriendlyUnit);
       atkUnits.forEach(u => {
         const uid = u.id || u.name;
         const checked = checkState.atk.has(uid);
-        const disabled = u.moveComplete && u.firedThisTurn;
         const statusColor = u.status === 'ok' ? 'var(--pg-green)' : u.status === 'd' ? 'var(--pg-accent)' : u.status === 'dd' ? 'var(--pg-red)' : 'var(--pg-muted)';
-        html += '<div class="pg-unit-row">';
-        html += `<input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} value="${pgCheckboxValue(uid)}" onchange="toggleUnitCheck('atk',this.value,this.checked)" style="margin:0;">`;
+        html += `<button type="button" class="btn-sm pg-unit-row pg-unit-pick" value="${pgCheckboxValue(uid)}"
+          data-pg-selectable="${pgCanPickFriendlyUnit(u)}" aria-pressed="${checked}" onclick="pgPickFriendlyUnit(this.value)">`;
         html += pgUnitLabel(u).outerHTML;
         if (u.status !== 'ok') html += `<span style="color:${statusColor};font-weight:bold;">${u.status.toUpperCase()}</span>`;
         html += `<span style="color:var(--pg-muted);font-size:0.75em;">fp${u.fpAT}/${u.fpSoft} R${u.range}</span>`;
         if (pgUnitHasFired(u)) html += '<span class="pg-action-state pg-fired">射撃済</span>';
         if (u.reconDone) html += '<span class="pg-action-state">偵察済</span>';
         if (u.moveComplete) html += '<span class="pg-action-state">移動済</span>';
-        if (!u.moveComplete && !u.pgMovementOrder) {
-          html += `<span class="btn-sm" style="padding:0 6px;font-size:0.7em;margin-left:auto;" onclick="startMove(testUnits.find(u=>(u.id||u.name)==='${uid}'))">移動</span>`;
-        }
-        if ((u.type === 'T' || u.type === 'AC') && !disabled) {
-          html += `<span class="btn-sm" style="padding:0 6px;font-size:0.7em;" onclick="toggleFormation(testUnits.find(u=>(u.id||u.name)==='${uid}'));renderMoveFirePhase();">${u.marchMode ? '戦闘隊形' : '移動隊形'}</span>`;
-        }
-        if (!u.marchMode && !disabled && u.status === 'ok') {
-          html += `<span class="btn-sm" style="padding:0 6px;font-size:0.7em;" onclick="toggleCautious(testUnits.find(u=>(u.id||u.name)==='${uid}'));renderMoveFirePhase();">${u.cautious ? '警戒解除' : '警戒'}</span>`;
-        }
-        html += `</div>`;
+        html += `</button>`;
       });
       html += `</div>`;
     });
   } else {
-    html += `<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">味方ヘクスをクリック</div>`;
+    html += `<div style="color:var(--pg-muted);font-size:0.8em;padding:4px;">地図の味方をクリック</div>`;
   }
 
   // === スタック全体操作ボタン ===
   if (df.atkHexId) {
-    const checkedUnits = testUnits.filter(u => checkState.atk.has(u.id || u.name) && u.status !== 'eliminated');
-    const canMove = checkedUnits.some(u => !u.moveComplete && !u.firedThisTurn && !u.pgMovementOrder);
-    const canFire = checkedUnits.length > 0 && checkedUnits.some(u => !u.firedThisTurn);
+    const checkedUnits = pgPickedFriendlyUnits();
+    const canMove = pgCanMoveSelection(checkedUnits);
     html += `<div style="display:flex;gap:4px;margin:6px 0;flex-wrap:wrap;">`;
-    if (canMove) {
-      html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;" onclick="startStackMove()">スタック移動</button>`;
-    }
-    if (pgMayInitiateDirectFire() && canFire && df.defHexId) {
-      const defFort = getActiveFortification(df.defHexId);
-      if (defFort) {
-        // 陣地攻撃ボタン（装甲火力で陣地を攻撃）
-        const hasFPAT = checkedUnits.some(u => (u.fpAT || 0) > 0 && !u.firedThisTurn);
-        if (hasFPAT) {
-          html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;background:var(--pg-gold);" onclick="executeCheckedFortFire()">陣地攻撃</button>`;
-        } else {
-          html += `<div style="color:var(--pg-muted);font-size:0.75em;flex:1;text-align:center;">装甲火力なし</div>`;
-        }
-      } else {
-        html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;background:var(--pg-red-bg);" onclick="executeCheckedFire()">スタック射撃</button>`;
+    html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;" onclick="startStackMove()" ${canMove ? '' : 'disabled'}>${checkedUnits.length > 1 ? 'スタック移動' : '移動'}</button>`;
+    const fort = pgMayInitiateDirectFire() && df.defHexId && getActiveFortification(df.defHexId);
+    if (fort && checkedUnits.length) {
+      const shooters = checkedUnits.filter(unit => canDirectFire(unit).can && unit.fpAT > 0);
+      const denied = shooters.map(unit => pgShotLineCheck(unit, fort)).find(check => !check.can);
+      if (shooters.length) {
+        html += `<button class="dice-btn" style="font-size:0.8em;padding:4px 12px;flex:1;background:var(--pg-gold);" onclick="executeCheckedFortFire()" ${denied ? 'disabled' : ''}>陣地攻撃</button>`;
+      }
+      if (denied || !shooters.length) {
+        html += `<div class="pg-shot-blocked">${denied?.reason || '射撃可能な装甲火力なし'}</div>`;
       }
     }
     html += `<button class="btn-sm" style="padding:4px 12px;flex:1;" onclick="clearSelection()">キャンセル</button>`;
     html += `</div>`;
   }
+
+  html += '<div class="pg-friendly-controls"></div>';
 
   // === 敵スタック（下） ===
   html += `<div style="color:var(--pg-red);font-weight:bold;font-size:0.85em;margin:8px 0 2px;">▼ 敵</div>`;
@@ -1143,7 +1176,7 @@ function renderMoveFirePhase() {
   }
 
   // === 命中率・損害確率 ===
-  const atkChecked = testUnits.filter(u => checkState.atk.has(u.id || u.name) && u.status !== 'eliminated');
+  const atkChecked = pgPickedFriendlyUnits().filter(unit => canDirectFire(unit).can);
   const defChecked = testUnits.filter(u => checkState.def.has(u.id || u.name) && u.status !== 'eliminated');
 
   if (pgMayInitiateDirectFire() && atkChecked.length > 0 && defChecked.length > 0) {
@@ -1151,6 +1184,13 @@ function renderMoveFirePhase() {
     html += `<div style="color:var(--pg-green);font-weight:bold;font-size:0.85em;margin-bottom:4px;">射撃予測</div>`;
 
     defChecked.forEach(target => {
+      const denied = atkChecked.map(unit => ({unit, check: canTargetUnit(unit, target)})).filter(entry => !entry.check.can);
+      if (denied.length) {
+        for (const {unit, check} of denied) {
+          html += `<div class="pg-shot-blocked">${unit.name} → ${target.name}：${check.reason}</div>`;
+        }
+        return;
+      }
       const preview = calcFirePreview(atkChecked, target);
       if (!preview) return;
       html += `<div style="margin:4px 0;padding:4px;background:var(--pg-shade);border-radius:3px;font-size:0.8em;">`;
@@ -1167,14 +1207,14 @@ function renderMoveFirePhase() {
       html += `</div>`;
     });
 
-    html += `<button class="dice-btn" style="font-size:0.9em;padding:8px 24px;margin-top:8px;width:100%;" onclick="executeCheckedFire()">射撃実行</button>`;
+    html += `<button class="dice-btn" style="font-size:0.9em;padding:8px 24px;margin-top:8px;width:100%;" onclick="executeCheckedFire()" ${atkChecked.every(unit => canTargetUnit(unit, defChecked[0]).can) ? '' : 'disabled'}>射撃実行</button>`;
     html += `<button class="btn-sm" style="margin-top:4px;width:100%;" onclick="checkState.atk.clear();checkState.def.clear();fireRangeHexes={};fireVisionHexes={};renderMoveFirePhase();drawMap();">キャンセル</button>`;
     html += `</div>`;
   }
 
 
   c.innerHTML = html;
-  if (G.gameMode !== 'aivai') c.prepend(pgMovementPanel());
+  if (G.gameMode !== 'aivai') c.querySelector('.pg-friendly-controls').append(pgMovementPanel(false));
 }
 
 // チェック済みユニットで射撃実行
@@ -1182,18 +1222,18 @@ function renderMoveFirePhase() {
 function executeCheckedFortFire() {
   if (!pgMayInitiateDirectFire()) return;
   const df = directFireState;
-  const shooters = testUnits.filter(u => checkState.atk.has(u.id || u.name) && !u.firedThisTurn && u.status !== 'eliminated' && (u.fpAT || 0) > 0);
+  const shooters = pgPickedFriendlyUnits().filter(unit => canDirectFire(unit).can && unit.fpAT > 0);
   if (shooters.length === 0 || !df.defHexId) return;
 
   const fort = getActiveFortification(df.defHexId);
   if (!fort) return;
 
-  // 視認チェック
-  const sCol = shooters[0].col, sRow = shooters[0].row;
-  const tPos = fromHexId(df.defHexId);
-  if (!hasLOS(sCol, sRow, tPos.col, tPos.row)) {
-    addLog('fire', '陣地攻撃: 視認不可');
-    return;
+  for (const shooter of shooters) {
+    const check = pgShotLineCheck(shooter, fort);
+    if (!check.can) {
+      addLog('fire', `${shooter.name} → ${fort.name}：${check.reason}`);
+      return;
+    }
   }
 
   const result = fireFortification(shooters, fort);
@@ -1218,7 +1258,7 @@ function executeCheckedFortFire() {
 function executeCheckedFire() {
   if (!pgMayInitiateDirectFire()) return;
   const df = directFireState;
-  const shooters = testUnits.filter(u => checkState.atk.has(u.id || u.name) && canDirectFire(u).can);
+  const shooters = pgPickedFriendlyUnits().filter(unit => canDirectFire(unit).can);
   const targets = testUnits.filter(u => checkState.def.has(u.id || u.name) && u.status !== 'eliminated');
 
   if (shooters.length === 0 || targets.length === 0) return;
@@ -1371,21 +1411,12 @@ function onMoveFireMapClick(col, row, cmdKey, hitUnit) {
     const side = clickedUnits[0].side;
     if (side === df.activeSide) {
       if (cmdKey && df.atkHexId && areLinkedByRLeader(df.atkHexId, hexId, df.activeSide)) {
-        // Cmd+クリック: R指揮官経由で隣接部隊を追加（D/DD除外）
+        // Cmd+クリック: R指揮官経由で隣接部隊を候補に追加
         if (!df.atkAdjacentHexes.includes(hexId)) df.atkAdjacentHexes.push(hexId);
-        testUnits.filter(u =>
-          u.hexId === hexId && u.side === df.activeSide && u.status === 'ok' &&
-          u.type !== 'dummy' && u.type !== 'leader' && !u.firedThisTurn
-        ).forEach(u => checkState.atk.add(u.id || u.name));
-      } else {
-        // 通常クリック: そのヘクスのみ選択（D/DD除外）
+      } else if (df.atkHexId !== hexId || df.atkAdjacentHexes?.length !== 1) {
         df.atkHexId = hexId;
         df.atkAdjacentHexes = [hexId];
         checkState.atk.clear();
-        testUnits.filter(u =>
-          u.hexId === hexId && u.side === df.activeSide && u.status === 'ok' &&
-          u.type !== 'dummy' && u.type !== 'leader' && !u.firedThisTurn
-        ).forEach(u => checkState.atk.add(u.id || u.name));
       }
       updateFireRange();
     } else {
@@ -1816,7 +1847,7 @@ function doCounterAttackAuto() {
   const movingUnits = ms._stackMoving || [ms.movingUnit];
   const aliveMoving = movingUnits.filter(u => u.status === 'ok');
   const aliveEnemies = enemyStack.filter(u => u.status !== 'eliminated');
-  if (aliveEnemies.length === 0) { skipCounterAttack(); return; }
+  if (!aliveMoving.length || !aliveEnemies.length) { skipCounterAttack(); return; }
 
   // 最も防御の低い敵を狙う
   const targetEnemy = [...aliveEnemies].sort((a, b) => (a.def || 5) - (b.def || 5))[0];
@@ -1826,7 +1857,7 @@ function doCounterAttackAuto() {
     skipCounterAttack();
     return;
   }
-  if (!hasLOS(aliveMoving[0].col, aliveMoving[0].row, targetEnemy.col, targetEnemy.row)) {
+  if (pgSightStatus(aliveMoving[0].col, aliveMoving[0].row, targetEnemy.col, targetEnemy.row) !== 'visible') {
     skipCounterAttack();
     return;
   }
@@ -2089,8 +2120,8 @@ function finishOverrun() {
   // 移動可能ヘクスを再計算
   ms.validHexes = {};
   if (ms.remainingMP > 0) {
-    const tempUnit = { ...unit, move: ms.remainingMP };
-    ms.validHexes = calculateMovableHexes(tempUnit, ms.formation, ms.cautious);
+    const tempUnit = { ...ms.movingUnit, move: ms.remainingMP };
+    ms.validHexes = calculateMovableHexes(tempUnit, ms.formation, false, ms._stackMoving || [ms.movingUnit], false);
   }
 
   renderMoveFirePhase();
@@ -2230,10 +2261,11 @@ function getMoveCost(unit, fromCol, fromRow, toCol, toRow, formation) {
 }
 
 // 移動可能ヘクスをBFSで計算
-function calculateMovableHexes(unit, formation, cautious, movingGroup = moveState._stackMoving || [unit]) {
+function calculateMovableHexes(unit, formation, cautious, movingGroup = moveState._stackMoving || [unit], fromStart = true) {
   let mp = unit.move || 0;
   if (cautious) mp = Math.floor(mp / 2); // 警戒移動 (12-6-(2))
 
+  const combatUnits = movingGroup.filter(member => member.type !== 'leader' && pgOnMap(member));
   const start = { col: unit.col, row: unit.row };
   const visited = {}; // "col,row" → remaining MP
   const queue = [{ col: start.col, row: start.row, mp: mp }];
@@ -2248,13 +2280,16 @@ function calculateMovableHexes(unit, formation, cautious, movingGroup = moveStat
       if (n.col < 0 || n.col >= MAP_CONFIG.cols || n.row < 0 || n.row >= MAP_CONFIG.rows) continue;
 
       if (!pgCanEnter(movingGroup, toHexId(n.col, n.row))) continue;
-      const mc = getMoveCost(unit, cur.col, cur.row, n.col, n.row, formation);
-      if (mc.cost === Infinity) continue;
+      const cost = combatUnits.length > 1
+        ? Math.max(...combatUnits.map(member => getMoveCost(member, cur.col, cur.row, n.col, n.row,
+          member.marchMode ? 'march' : 'combat').cost))
+        : getMoveCost(unit, cur.col, cur.row, n.col, n.row, formation).cost;
+      if (cost === Infinity) continue;
 
-      let remaining = cur.mp - mc.cost;
+      let remaining = cur.mp - cost;
 
-      // 最低1ヘクス移動可 (12-1-(5)) — 出発点から直接隣接のみ
-      if (remaining < 0 && cur.col === start.col && cur.row === start.row && mc.cost <= unit.move * 2) {
+      // 最低1ヘクス移動可 (12-1-(5)) — 移動開始時の隣接ヘクスのみ
+      if (remaining < 0 && fromStart && cur.col === start.col && cur.row === start.row && cost <= unit.move * 2) {
         remaining = 0;
       }
       if (remaining < 0) continue;
@@ -2271,43 +2306,44 @@ function calculateMovableHexes(unit, formation, cautious, movingGroup = moveStat
   return result;
 }
 
-// 移動開始
-// スタック移動開始（チェック済みユニット全員）
+function pgCanMoveSelection(units) {
+  return units.length > 0 && units.every(unit =>
+    unit.hexId === units[0].hexId && pgCanReceiveOrder(unit) &&
+    unit.status !== 'dd' && !unit.moveComplete && !pgUnitHasFired(unit) && !unit.pgMovementOrder);
+}
+
 function startStackMove() {
-  if (pgOrderDraft || pgAIReview || pgOrderRun) return;
-  const checkedUnits = testUnits.filter(u =>
-    checkState.atk.has(u.id || u.name) && u.status !== 'eliminated' &&
-    !u.moveComplete && !u.firedThisTurn && !u.pgMovementOrder && u.side === directFireState.activeSide
-  );
-  if (checkedUnits.length === 0) return;
-  // 同ヘクスの指揮官も一緒に移動（マーカー扱い）
-  const hexId = checkedUnits[0].hexId;
-  const side = checkedUnits[0].side;
-  testUnits.filter(u =>
-    u.hexId === hexId && u.side === side && u.type === 'leader' &&
-    u.status !== 'eliminated' && !checkedUnits.includes(u)
-  ).forEach(u => checkedUnits.push(u));
+  if (pgOrderDraft || pgAIReview || pgOrderRun || directFireState.mode === 'moving') return;
+  const units = pgPickedFriendlyUnits();
+  if (!pgCanMoveSelection(units)) return;
+  if (units.length === 1) {
+    startMove(units[0]);
+    return;
+  }
+  const group = [...units, ...pgMoveGroup(units[0]).slice(1)];
+  pgBeginMove(group);
+}
 
-  // 最小移動力
-  const minMove = Math.min(...checkedUnits.map(u => u.move || 0));
-  if (minMove <= 0) return;
-
+function pgBeginMove(group) {
+  const unit = group[0];
   resetMoveState();
-  // スタック移動: 先頭ユニットをmovingUnitにして、残りを_stackMovingに入れる
-  moveState.movingUnit = checkedUnits[0];
-  moveState._stackMoving = checkedUnits;
-  moveState.formation = checkedUnits[0].marchMode ? 'march' : 'combat';
-  moveState.remainingMP = minMove;
-  moveState.path = [{ col: checkedUnits[0].col, row: checkedUnits[0].row, cost: 0 }];
+  moveState.movingUnit = unit;
+  moveState._stackMoving = group;
+  moveState.formation = unit.marchMode ? 'march' : 'combat';
+  moveState.path = [{col: unit.col, row: unit.row, cost: 0}];
   pgStartManualMoveRecord(moveState);
-
-  // 移動可能ヘクスを計算（最小移動力で）
-  const tempUnit = { ...checkedUnits[0], move: minMove };
-  moveState.validHexes = calculateMovableHexes(tempUnit, moveState.formation, moveState.cautious);
-
+  pgResetStartingMoveRange();
   directFireState.mode = 'moving';
   renderMoveFirePhase();
   drawMap();
+}
+
+function pgResetStartingMoveRange() {
+  const ms = moveState;
+  const units = ms._stackMoving.filter(unit => unit.type !== 'leader');
+  const budget = Math.min(...units.map(unit => unit.move || 0));
+  ms.remainingMP = ms.cautious ? Math.floor(budget / 2) : budget;
+  ms.validHexes = calculateMovableHexes({...ms.movingUnit, move: budget}, ms.formation, ms.cautious);
 }
 
 // 選択解除
@@ -2369,20 +2405,7 @@ function startMove(unit, followingOrder = false) {
     return;
   }
 
-  resetMoveState();
-  moveState.movingUnit = unit;
-  moveState._stackMoving = pgMoveGroup(unit);
-  moveState.formation = unit.marchMode ? 'march' : 'combat';
-  moveState.remainingMP = unit.move || 0;
-  moveState.path = [{ col: unit.col, row: unit.row, cost: 0 }];
-  pgStartManualMoveRecord(moveState);
-
-  // 移動可能ヘクスを計算
-  moveState.validHexes = calculateMovableHexes(unit, moveState.formation, moveState.cautious);
-
-  directFireState.mode = 'moving';
-  renderMoveFirePhase();
-  drawMap();
+  pgBeginMove(pgMoveGroup(unit));
 }
 
 // 経路復元（BFSのprevを辿る）
@@ -2411,10 +2434,7 @@ function checkStopFireAt(col, row, side) {
     const dist = hexDistance(enemy.col, enemy.row, col, row);
     const effectiveRange = Math.min(enemy.range, G.visionRange || 12);
     if (dist <= effectiveRange && dist > 0) {
-      // 視認コストもチェック
-      const visionHexes = calculateVisionRange(enemy.col, enemy.row, G.visionRange || 12);
-      const targetKey = `${col},${row}`;
-      if (visionHexes[targetKey] && hasLOS(enemy.col, enemy.row, col, row)) {
+      if (pgSightStatus(enemy.col, enemy.row, col, row) === 'visible') {
         threats.push(enemy);
       }
     }
@@ -2514,7 +2534,7 @@ function moveToHex(col, row) {
   ms.validHexes = {};
   if (ms.remainingMP > 0) {
     const tempUnit = { ...unit, move: ms.remainingMP };
-    ms.validHexes = calculateMovableHexes(tempUnit, ms.formation, ms.cautious);
+    ms.validHexes = calculateMovableHexes(tempUnit, ms.formation, false, movingUnits, false);
   }
 
   // ストップ射撃チェック
@@ -2682,6 +2702,11 @@ function finishConfirmMove() {
   if (pgOnMap(moveState.movingUnit)) {
     pgOrderHex = moveState.movingUnit.hexId;
     if (pgOrderUnit?.hexId !== pgOrderHex) pgOrderUnit = moveState.movingUnit;
+    if (!pgAIReview && !pgOrderRun) {
+      directFireState.atkHexId = pgOrderHex;
+      directFireState.atkAdjacentHexes = [pgOrderHex];
+      checkState.atk.clear();
+    }
   }
   pgReconcileOrders();
   resetMoveState();
@@ -2709,13 +2734,14 @@ function cancelMove() {
     const movingUnits = ms._stackMoving || [ms.movingUnit];
     movingUnits.forEach(u => {
       if (u.status === 'eliminated') return;
-      const origin = ms.pgMoveRecord?.origins.get(u) || start;
-      const center = getHexCenter(origin.col, origin.row);
-      u.col = origin.col;
-      u.row = origin.row;
-      u.x = center.x;
-      u.y = center.y;
-      u.hexId = toHexId(origin.col, origin.row);
+      const origin = ms.pgMoveRecord?.origins.get(u);
+      if (origin) {
+        const {wasMoved, status, ...beforeMove} = origin;
+        Object.assign(u, beforeMove);
+      } else {
+        const {col, row} = start;
+        Object.assign(u, {col, row, ...getHexCenter(col, row), hexId: toHexId(col, row)});
+      }
     });
   }
 
@@ -2732,87 +2758,47 @@ function isVehicle(unit) {
 }
 
 // 隊形変換 (12-4)
-function toggleFormation(unit) {
-  if (!unit) return;
-  // リーダー・ダミーは隊形変換不可
-  if (unit.type === 'leader' || unit.type === 'dummy') {
-    addLog('move', `${unit.name}: 隊形変換不可`);
-    return;
-  }
-  if (unit.status === 'd' || unit.status === 'dd') {
-    addLog('move', `${unit.name}: D/DD状態で隊形変換不可`);
-    return;
-  }
-  // 壊滅後に輸送体系不可フラグがある場合
-  if (!unit.marchMode && unit.noTransport) {
-    addLog('move', `${unit.name}: 輸送体系への変換不可（壊滅経験あり）`);
-    return;
-  }
+function toggleFormation() {
+  const ms = moveState;
+  if (!ms.movingUnit || ms.path.length !== 1 || ms._stopFired || pgOrderRun) return;
+  const units = ms._stackMoving.filter(unit => unit.type !== 'leader');
+  const newMode = !units.some(unit => unit.marchMode);
+  if (units.some(unit => unit.status !== 'ok' || (newMode && unit.noTransport)) ||
+      (newMode && !units.some(isVehicle))) return;
 
-  const newMode = !unit.marchMode;
-  const formName = newMode ? '移動隊形' : '戦闘隊形';
-
-  // スタック全体を変換
-  const hexId = unit.hexId || toHexId(unit.col, unit.row);
-  const stackUnits = testUnits.filter(u =>
-    (u.hexId || toHexId(u.col, u.row)) === hexId &&
-    u.side === unit.side && u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'leader'
-  );
-  stackUnits.forEach(u => {
-    if (newMode && !isVehicle(u)) {
-      // 非車両 → 牽引状態: 元の値を保存して能力変更
-      u._origCloseAtk = u.closeAtk;
-      u._origCloseDef = u.closeDef;
-      u._origMove = u.move;
-      u.closeAtk = 0;
-      u.closeDef = 1;
-      u.move = 10;
-      u.marchMode = true;
-      u._towed = true; // 牽引状態フラグ
-    } else if (!newMode && u._towed) {
-      // 牽引状態から戦闘隊形へ: 元の値を復元
-      u.closeAtk = u._origCloseAtk;
-      u.closeDef = u._origCloseDef;
-      u.move = u._origMove;
-      u.marchMode = false;
-      u._towed = false;
-    } else {
-      // 車両: 従来通り
-      u.marchMode = newMode;
+  for (const unit of units) {
+    if (newMode && !isVehicle(unit)) {
+      unit._origCloseAtk = unit.closeAtk;
+      unit._origCloseDef = unit.closeDef;
+      unit._origMove = unit.move;
+      unit.closeAtk = 0;
+      unit.closeDef = 1;
+      unit.move = 10;
+      unit._towed = true;
+    } else if (!newMode && unit._towed) {
+      unit.closeAtk = unit._origCloseAtk;
+      unit.closeDef = unit._origCloseDef;
+      unit.move = unit._origMove;
+      unit._towed = false;
     }
-  });
-  addLog('move', `${stackUnits.map(u=>u.name).join(', ')} → ${formName}に変換 (12-4)`);
-
-  // 移動中なら移動可能ヘクスを再計算
-  if (moveState.movingUnit === unit) {
-    moveState.formation = newMode ? 'march' : 'combat';
-    moveState.validHexes = calculateMovableHexes(unit, moveState.formation, moveState.cautious);
+    unit.marchMode = newMode;
   }
-
+  ms.formation = newMode ? 'march' : 'combat';
+  if (newMode) ms.cautious = false;
+  pgResetStartingMoveRange();
+  addLog('move', `${units.map(unit => unit.name).join(', ')} → ${newMode ? '移動隊形' : '戦闘隊形'}に変換 (12-4)`);
   renderMoveFirePhase();
   drawMap();
 }
 
 // 警戒移動切り替え (12-6)
-function toggleCautious(unit) {
-  if (!unit) return;
-  if (unit.marchMode) {
-    addLog('move', `${unit.name}: 移動隊形では警戒移動不可 (12-6-(4))`);
-    return;
-  }
-  if (unit.status === 'd' || unit.status === 'dd') {
-    addLog('move', `${unit.name}: D/DD状態で警戒移動不可 (12-6-(5))`);
-    return;
-  }
-
-  moveState.cautious = !moveState.cautious;
-  const label = moveState.cautious ? '警戒移動ON（移動力半分・防御+1）' : '警戒移動OFF';
-  addLog('move', `${unit.name}: ${label}`);
-
-  if (moveState.movingUnit === unit) {
-    moveState.validHexes = calculateMovableHexes(unit, moveState.formation, moveState.cautious);
-  }
-
+function toggleCautious() {
+  const ms = moveState;
+  if (!ms.movingUnit || ms.path.length !== 1 || ms._stopFired || pgOrderRun ||
+      ms._stackMoving.some(unit => unit.type !== 'leader' && (unit.marchMode || unit.status !== 'ok'))) return;
+  ms.cautious = !ms.cautious;
+  pgResetStartingMoveRange();
+  addLog('move', `${ms.movingUnit.name}: ${ms.cautious ? '警戒移動' : '警戒解除'} (12-6)`);
   renderMoveFirePhase();
   drawMap();
 }

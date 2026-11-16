@@ -79,3 +79,11 @@
 .pg-move-legend span + span::before { border-color: #91651b; background: #ffdc78; }
 .pg-ai-move-complete { display: block; color: var(--pg-green); font-size: 1rem; }
 .pg-reaction-units { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.pg-unit-pick {
+  width: 100%;
+  margin-top: 3px;
+  padding: 3px 6px;
+  text-align: left;
+}
+.pg-unit-pick[aria-pressed="true"] span:not(.pg-action-state) { color: inherit !important; }
+.pg-shot-blocked { margin: 4px 0; color: var(--pg-red); font-size: .8em; }
