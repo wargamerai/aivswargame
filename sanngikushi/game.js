@@ -427,7 +427,7 @@ const ThreeKingdoms = ((data) => {
     if (type === 'march') s.phase = 'march';
     if (type === 'battle') startBattle(s, leader, special(card, leader), null, rng);
     if (type === 'reinforce') {
-      reinforce(s, leader, card === 'ren' ? 3 : 2, rng);
+      reinforce(s, leader, leader === 'ren' ? 3 : 2, rng);
       advance(s, rng);
     }
     if (type === 'pass') { notes(s, `${label(leader)}は行動しません。`); advance(s, rng); }
