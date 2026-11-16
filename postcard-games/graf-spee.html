@@ -9,9 +9,14 @@ aside{background:var(--panel);border:1px solid var(--edge);border-radius:9px;pad
 .map-pane{min-width:0}.map-tools{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-bottom:6px}.map-tools button{min-width:38px;min-height:35px;padding:2px 9px}.map-tools #zoomReset{min-width:65px}.map-tools span{margin-left:auto;color:#d4e4e7;font-size:.86rem;text-align:right}.map-view{overflow:auto;max-height:76vh;min-height:130px;border-radius:9px;overscroll-behavior:contain}.chart{width:100%}
 .marker .counter{width:clamp(36px,6.2vw,78px);max-width:7.1cqw}.chart{container-type:inline-size}.marker.stack{display:grid;grid-template-columns:repeat(2,max-content);gap:2px}.marker.stack .counter{max-width:5.3cqw}.marker .counter.inactive{pointer-events:none}.marker.stack .counter:nth-child(3){grid-column:1/-1;justify-self:center}.marker small{position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:2px;white-space:nowrap}.contact-indicator{position:absolute;z-index:1;transform:translateX(-50%);margin-top:var(--fleet-offset);pointer-events:none}.contact-indicator .spee{display:block;width:clamp(28px,5.3cqw,62px);border:2px solid #f9cf72;border-radius:3px;overflow:hidden;box-shadow:0 1px 4px #0008}.layer .contact{stroke:#8a1515;stroke-width:8;fill:#fe5c434a}.layer .search-target{stroke:#16615b;stroke-width:7;fill:#78ffda88}.layer .search-target:hover{fill:#aeffe4cc}.layer .searched{stroke:#28484d;stroke-width:5;stroke-dasharray:14 9;fill:#193d4329}.find-badge{border-radius:4px;min-width:max-content;margin-left:2px;background:#8a1515;color:#fff;padding:.25rem .38rem;font-size:.73rem;font-weight:750;line-height:1.2}
 .search-info{margin:8px 0;background:#204944;border-radius:8px;padding:8px;font-size:.9rem}.search-info[hidden]{display:none}.search-info p{margin:.4rem 0 0}.search-info .searched-note{color:#bcd8d2;font-size:.82rem}.fleet-card small{font-size:.82rem}
-.result-dialog{width:min(960px,96vw);max-height:94dvh;padding:clamp(14px,3vw,28px);border:1px solid #58747c;text-align:center}.dialog-kicker{color:#c3d9df;font-weight:700;font-size:1.02rem}.result-dialog h2{font-size:clamp(1.7rem,4.5vw,2.8rem);line-height:1.2;margin:.35rem 0}.result-dialog p{margin:.5rem 0;color:#e7eff2;font-size:1rem}.battle-sides{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:14px}.battle-side{background:#203a43;border:1px solid #45636a;border-radius:12px;padding:10px;min-width:0}.battle-side h3{margin:0 0 .55rem;font-size:1.13rem}.battle-unit{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:10px;text-align:left;background:#132a32;border-radius:8px;padding:7px;margin:5px 0}.battle-unit img{width:64px;margin:0;border-radius:4px;display:block}.battle-unit>div{min-width:0}.battle-unit strong,.battle-unit small{display:block}.battle-unit small{font-size:.83rem}.battle-unit .outcome{color:#f9d583}.battle-unit.sunk img{opacity:.38}.battle-unit.sunk .outcome{color:#ffb3a4}.battle-dice{display:flex;flex-wrap:wrap;gap:4px;margin:.25rem 0}.die{display:inline-grid;place-items:center;min-width:1.65rem;min-height:1.65rem;background:#eff5f2;color:#213138;border-radius:4px;font-weight:760;font-variant-numeric:tabular-nums;font-size:1.03rem}.die.hit{background:#f3c76c;border:2px solid #9b6026}.die.rolling{animation:dice .28s ease-in-out infinite alternate}@keyframes dice{from{transform:rotate(-12deg) translateY(-2px)}to{transform:rotate(10deg) translateY(2px)}}.dialog-buttons{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px}.dialog-buttons button{font-size:1.06rem;min-height:42px}.end-dialog{width:min(610px,96vw)}.end-score{margin:12px auto;display:grid;background:#263e43;border-radius:10px;padding:10px;max-width:250px}.end-score strong{color:#ffd987;font-size:2.7rem;line-height:1.12}.end-score span{font-size:.95rem}#endReason{font-size:1.13rem;font-weight:700}
+.result-dialog{width:min(960px,96vw);max-height:94dvh;padding:clamp(14px,3vw,28px);border:1px solid #58747c;text-align:center}.dialog-kicker{color:#c3d9df;font-weight:700;font-size:1.02rem}.result-dialog h2{font-size:clamp(1.7rem,4.5vw,2.8rem);line-height:1.2;margin:.35rem 0}.result-dialog p{margin:.5rem 0;color:#e7eff2;font-size:1rem}.battle-sides{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:14px}.battle-side{background:#203a43;border:1px solid #45636a;border-radius:12px;padding:10px;min-width:0}.battle-side h3{margin:0 0 .55rem;font-size:1.13rem}.battle-unit{display:grid;grid-template-columns:64px 1fr;align-items:center;gap:10px;text-align:left;background:#132a32;border-radius:8px;padding:7px;margin:5px 0}.battle-unit img{width:64px;margin:0;border-radius:4px;display:block}.battle-unit>div{min-width:0}.battle-unit strong,.battle-unit small{display:block}.battle-unit small{font-size:.83rem}.battle-unit .outcome{color:#f9d583}.battle-unit.sunk img{opacity:.38}.battle-unit.sunk .outcome{color:#ffb3a4}.battle-dice{display:flex;flex-wrap:wrap;gap:7px;margin:.4rem 0}.die{display:inline-grid;place-items:center;min-width:2.75rem;min-height:2.75rem;width:clamp(2.75rem,6vw,3.6rem);aspect-ratio:1;background:#eff5f2;color:#14242a;border-radius:8px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;font-size:clamp(1.7rem,4vw,2.25rem);flex:none}.die.hit{background:#f3c76c;border:2px solid #9b6026}.die.rolling{animation:dice .28s ease-in-out infinite alternate}@keyframes dice{from{transform:rotate(-12deg) translateY(-2px)}to{transform:rotate(10deg) translateY(2px)}}.dialog-buttons{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:14px}.dialog-buttons button{font-size:1.06rem;min-height:42px}.end-dialog{width:min(610px,96vw)}.end-score{margin:12px auto;display:grid;background:#263e43;border-radius:10px;padding:10px;max-width:250px}.end-score strong{color:#ffd987;font-size:2.7rem;line-height:1.12}.end-score span{font-size:.95rem}#endReason{font-size:1.13rem;font-weight:700}
 @media(max-width:780px){.layout{grid-template-columns:1fr}#fleet{grid-template-columns:repeat(auto-fit,minmax(62px,1fr))}#actions{margin-left:0}.map-view{max-height:65vh}}
-@media(max-width:520px){.battle-unit{grid-template-columns:38px 1fr;gap:5px;padding:5px}.battle-unit img{width:38px}.battle-side{padding:4px}.battle-sides{gap:5px}.die{min-width:1.4rem;min-height:1.4rem}.battle-sides h3{font-size:.91rem}}
+@media(max-width:640px){.battle-sides{grid-template-columns:1fr}.battle-unit{grid-template-columns:48px 1fr;gap:7px}.battle-unit img{width:48px}}
+.roll-result{display:flex;align-items:center;justify-content:center;gap:.9rem;padding:.65rem 1rem;margin:.65rem auto .9rem;
+ max-width:34rem;background:#203a43;border:2px solid var(--accent);border-radius:11px;text-align:left}
+.roll-result[hidden]{display:none}.roll-result .die{min-width:3.5rem;min-height:3.5rem;width:clamp(3.5rem,12vw,4.6rem);font-size:clamp(2.3rem,8vw,3.1rem)}
+.roll-result strong,.roll-result small{display:block}.roll-result strong{font-size:1.1rem;color:#ffe3a8}
+.roll-result small{font-size:.93rem;color:#e8f2f2}
 @media(prefers-reduced-motion:reduce){.die.rolling{animation:none}}
 .layer .previous-contact{stroke:#703116;stroke-width:8;stroke-dasharray:15 9}.find-badge.previous{background:#73371f}
 .language-controls{display:flex;align-items:center;gap:6px}.map-tools:has(#mapStatus:empty){display:none}
@@ -29,6 +34,7 @@ select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;bo
 <header><h1 data-text="title">シュペー号追撃戦</h1><span class="sides" data-text="roles">イギリス：人間 ／ ドイツ：AI</span><label><span data-text="germanStyle">ドイツAI</span> <select id="germanStyle"><option value="aggressive" data-text="aggressive">攻勢</option><option value="cautious" data-text="cautious">慎重</option></select></label><button id="help" data-text="rules">ルール</button><button id="restart" data-text="restart">やり直す</button><div class="language-controls"><select id="language" aria-label="言語"></select><button id="inspectGerman" type="button" aria-pressed="false">ドイツ軍を確認：オフ</button></div></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span data-text="points">ドイツ得点</span> <span id="score"></span></span><div id="actions"></div></div>
 <p id="hint"></p>
+<div id="rollResult" class="roll-result" role="status" hidden></div>
 <div class="layout">
 <section class="map-pane"><div class="map-tools"><span id="mapStatus" role="status"></span></div><div class="map-view" id="mapView"><div class="chart" id="chartBoard"><img id="chart" alt="シュペー号追撃戦の南大西洋・インド洋マップ"><div class="layer" id="layer"></div></div></div></section>
 <aside><div class="fleet-head"><h2 data-text="fleet">イギリス艦隊</h2><b id="remaining"></b></div><div id="searchInfo" class="search-info" hidden></div><div id="fleet"></div><details open><summary data-text="log">行動記録</summary><ul id="log"></ul></details></aside>
@@ -39,10 +45,12 @@ select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;bo
 <div id="ruleText"></div><details id="ruleOriginal"><summary>原版ハガキのルール</summary><img id="ruleSheet" alt="原版ハガキ裏面のルール抜粋"></details></dialog>
 <dialog id="battleDialog" class="result-dialog" aria-labelledby="battleTitle">
   <div class="dialog-kicker" id="battleHex"></div><h2 id="battleTitle">戦闘</h2><p id="battleSummary" role="status"></p>
-  <div id="battleSides" class="battle-sides"></div><div class="dialog-buttons" id="battleActions"></div>
+  <div id="battleSides" class="battle-sides"></div><div id="battlePenalty" class="roll-result" role="status" hidden></div>
+  <div class="dialog-buttons" id="battleActions"></div>
 </dialog>
 <dialog id="endDialog" class="result-dialog" aria-labelledby="endTitle">
   <div class="dialog-kicker" data-text="end">対局終了</div><h2 id="endTitle"></h2><p id="endCause"></p>
+  <div id="endRoll" class="roll-result" role="status" hidden></div>
   <div class="end-score"><strong id="endScore"></strong><span data-text="finalScore">ドイツ軍の最終得点</span></div><p id="endReason"></p>
   <div class="dialog-buttons"><button id="saveReport" data-text="saveReport" class="main">レポートをHTMLで保存</button><button id="endMap" data-text="map">地図を確認</button><button id="endNew" data-text="new">新しい対局</button></div>
   <section id="voyageReport" class="voyage-report" aria-labelledby="voyageTitle"></section>
@@ -91,7 +99,7 @@ extra|1点を渡し追加移動（D6）|Give Germany 1 VP for extra moves (D6)|C
 extraUsed|追加移動を取得済み|Extra moves granted|Déplacements supplémentaires accordés|Zusatzbewegungen erhalten|Movimenti extra ottenuti|Movimientos extra concedidos|已获得额外移动|추가 이동 획득 완료|Дополнительные перемещения получены
 extraLog|英国がドイツに1点を与え、移動可能数 +{0}|Britain gives Germany 1 VP and gains {0} moves|Le Royaume-Uni cède 1 PV et gagne {0} déplacements|Briten geben Deutschland 1 SP und erhalten {0} Bewegungen|Il Regno Unito cede 1 PV e ottiene {0} movimenti|Reino Unido cede 1 PV y gana {0} movimientos|英国给德国1分，可额外移动 {0} 艘|영국이 독일에 1점을 주고 {0}척을 더 이동할 수 있습니다|Британия отдаёт Германии 1 очко и получает {0} доп. перемещений
 finishSearch|索敵を終える|End search|Terminer la recherche|Suche beenden|Termina la ricognizione|Terminar la búsqueda|结束搜索|수색 종료|Завершить поиск
-finishSortie|出撃指定を終える|Finish assigning air strikes|Valider les attaques aériennes|Luftangriffe bestätigen|Conferma gli attacchi aerei|Confirmar los ataques aéreos|完成出击指定|출격 지정 완료|Завершить назначение авиаударов
+finishSortie|出撃可能な全空母で戦闘へ|Fight with all eligible carriers|Combattre avec tous les porte-avions à portée|Mit allen Trägern in Reichweite kämpfen|Combatti con tutte le portaerei a portata|Combatir con todos los portaaviones al alcance|所有射程内航母参战|출격 가능 항모 모두 참전|В бой со всеми авианосцами в радиусе
 airNext|航空攻撃へ|Proceed to air attack|Passer à l’attaque aérienne|Zum Luftangriff|Passa all’attacco aereo|Pasar al ataque aéreo|进入空袭|항공 공격으로|К авиаудару
 battleNext|戦闘へ|Proceed to combat|Passer au combat|Zum Gefecht|Passa al combattimento|Pasar al combate|进入战斗|전투로|К бою
 next|次のターン|Next turn|Tour suivant|Nächste Runde|Turno successivo|Turno siguiente|下一回合|다음 턴|Следующий ход
@@ -188,7 +196,7 @@ function eventText([key,...values]){
 <script>'use strict';
 const ruleTexts={
 ja:[
- ['準備','ドイツ軍はA1〜A5かB1〜B5にシュペー号を置き、別の3マスに補給艦を1隻ずつ配置します。位置は非公開です。英軍の9枚（ダミー2、空母2、戦艦1、巡洋艦4）は無作為に並べ、盤外で待機します。'],
+ ['準備','この版ではドイツ軍はB2かC3をランダムに選んでシュペー号を置き、別の3マスに補給艦を1隻ずつ配置します。位置は非公開です。英軍の9枚（ダミー2、空母2、戦艦1、巡洋艦4）は無作為に並べ、盤外で待機します。'],
  ['ターンと移動','シュペー号の秘密移動、英軍の移動、索敵、戦闘または通商破壊の順です。戦艦と損傷したシュペー号は1マスまで、ほかは2マスまで移動できます。補給艦と同じマスから出発するシュペー号は、補給艦を消費して1マス余計に移動できます。英軍はターンにつき3隻まで移動でき、ドイツ軍に1点を与えれば1D6隻分を追加できます。増援の進入も1隻分に数えます。A1〜A3は大西洋、B6はインド洋への出入口です。重ねる数に制限はありません。'],
  ['索敵','英軍の移動終了時に同じマスにいれば発見し、接触したダミーを除去します。空母の索敵は1隻につき隣接1マスで、対象をクリックすると判定します。この版では、発見後も隣接する未出撃の空母を指定して航空攻撃を追加できます。'],
  ['戦闘','シュペー号と空母はダイス3個、巡洋艦は2個、戦艦は9個。英軍は6で命中、シュペー号は戦艦に6、それ以外に5以上で命中します。シュペー号は同じマスの英軍艦を1隻選び、空母以外がいればそちらを狙います。空母の航空攻撃にシュペー号は反撃できません。空母だけが同じマスにいる場合はシュペー号だけが砲撃します。1発で損傷、2発で撃沈。損傷した英艦は大西洋へ退避します。無傷で残った英巡洋艦は追尾し、次ターンのシュペー号の移動先が公開されます。'],
@@ -196,7 +204,7 @@ ja:[
  ['勝敗','シュペー号の撃沈、脱出、またはE1（モンテビデオ）での自沈で終局します。ドイツ軍は英艦の損傷で1点、撃沈でその艦の戦闘力分（空母は6点）を得ます。シュペー号撃沈で1D6点、自沈で1D3点を失います。最終得点15点以上でドイツ軍の勝利です。'],
 ],
 en:[
- ['Setup','Germany secretly places the Graf Spee in A1–A5 or B1–B5, then places three supply ships in three other hexes. The nine British counters are shuffled off-map: two decoys, two carriers, one battleship and four cruisers.'],
+ ['Setup','In this version, Germany randomly places the Graf Spee at B2 or C3 in secret, then places three supply ships in three other hexes. The nine British counters are shuffled off-map: two decoys, two carriers, one battleship and four cruisers.'],
  ['Turn and movement','The Graf Spee moves secretly, then Britain moves and searches, followed by combat or commerce raiding. The battleship and a damaged Graf Spee can move one hex; other ships can move two. Starting with a supply ship lets the Graf Spee spend it for one extra hex. Britain can move up to three ships, including entering reinforcements, and may give Germany 1 VP to add D6 moves. A1–A3 connect to the Atlantic and B6 to the Indian Ocean. Stacking is unlimited.'],
  ['Search','A British counter in the same hex after British movement automatically locates the Graf Spee. Decoys in contact are removed. Each carrier can search one adjacent hex. Select the carrier and click that hex to check it. In this version, unused carriers adjacent to a known contact can also be assigned to the air attack.'],
  ['Combat','Roll three dice for the Graf Spee or a carrier, two for a cruiser and nine for the battleship. Britain hits on 6. The Graf Spee hits the battleship on 6 and other ships on 5–6. It targets one ship in its own hex, choosing a non-carrier if present. It cannot return fire against an air strike. A carrier alone in the same hex can be attacked but cannot fire. One hit damages a ship; two sink it. Damaged British ships withdraw to the Atlantic. Surviving undamaged cruisers shadow the Graf Spee and reveal where it moves next turn.'],
@@ -204,7 +212,7 @@ en:[
  ['Victory','Play ends when the Graf Spee is sunk, escapes or scuttles at E1 (Montevideo). Germany gains 1 VP per British ship damaged and VP equal to the combat strength of a ship sunk (6 for a carrier). Losing the Graf Spee costs D6 VP, or D3 if scuttled. Germany wins with at least 15 VP.'],
 ],
 fr:[
- ['Mise en place','L’Allemagne place secrètement le Graf Spee en A1–A5 ou B1–B5 et trois ravitailleurs dans trois autres hexagones. Les neuf pions britanniques sont mélangés hors carte : deux leurres, deux porte-avions, un cuirassé et quatre croiseurs.'],
+ ['Mise en place','Dans cette version, l’Allemagne place secrètement le Graf Spee au hasard en B2 ou C3, puis trois ravitailleurs dans trois autres hexagones. Les neuf pions britanniques sont mélangés hors carte : deux leurres, deux porte-avions, un cuirassé et quatre croiseurs.'],
  ['Tour et mouvement','Déplacement secret du Graf Spee, déplacement et recherche britanniques, puis combat ou attaque du commerce. Le cuirassé et le Graf Spee endommagé avancent d’un hexagone, les autres navires de deux. Le Graf Spee peut consommer un ravitailleur présent au départ pour avancer d’un hexagone de plus. Les Britanniques déplacent trois navires par tour, renforts compris, et peuvent céder 1 PV pour ajouter D6 déplacements. A1–A3 mènent à l’Atlantique, B6 à l’océan Indien. Empilement illimité.'],
  ['Recherche','Après le mouvement britannique, un pion dans le même hexagone détecte automatiquement le Graf Spee. Les leurres au contact sont retirés. Chaque porte-avions peut fouiller un hexagone adjacent : sélectionnez-le puis cliquez sur l’hexagone. Dans cette version, les porte-avions adjacents encore disponibles peuvent aussi rejoindre l’attaque après le contact.'],
  ['Combat','Lancez trois dés pour le Graf Spee ou un porte-avions, deux pour un croiseur et neuf pour le cuirassé. Les Britanniques touchent sur 6. Le Graf Spee touche le cuirassé sur 6 et les autres navires sur 5–6. Il vise un navire du même hexagone, en donnant priorité aux navires autres que les porte-avions. Il ne peut pas riposter à une attaque aérienne. Un porte-avions seul dans le même hexagone peut être pris pour cible mais ne tire pas. Une touche endommage, deux coulent. Un navire britannique endommagé se replie dans l’Atlantique. Les croiseurs intacts poursuivent le Graf Spee et révèlent sa position après son prochain déplacement.'],
@@ -212,7 +220,7 @@ fr:[
  ['Victoire','La partie s’achève si le Graf Spee s’échappe, est coulé ou se saborde en E1 (Montevideo). L’Allemagne reçoit 1 PV par navire britannique endommagé et la valeur de combat de chaque navire coulé (6 pour un porte-avions). Elle perd D6 PV si le Graf Spee est coulé, D3 s’il se saborde. L’Allemagne gagne à partir de 15 PV.'],
 ],
 de:[
- ['Aufstellung','Deutschland setzt die Graf Spee verdeckt nach A1–A5 oder B1–B5 und je ein Versorgungsschiff in drei andere Hexfelder. Die neun britischen Spielsteine bleiben gemischt außerhalb der Karte: zwei Attrappen, zwei Flugzeugträger, ein Schlachtschiff und vier Kreuzer.'],
+ ['Aufstellung','In dieser Fassung setzt Deutschland die Graf Spee verdeckt per Zufall nach B2 oder C3 und je ein Versorgungsschiff in drei andere Hexfelder. Die neun britischen Spielsteine bleiben gemischt außerhalb der Karte: zwei Attrappen, zwei Flugzeugträger, ein Schlachtschiff und vier Kreuzer.'],
  ['Runde und Bewegung','Zuerst bewegt sich die Graf Spee verdeckt, dann bewegen sich die Briten und suchen. Danach folgt ein Gefecht oder ein Angriff auf Handelsschiffe. Schlachtschiff und beschädigte Graf Spee fahren bis zu einem Hexfeld, alle anderen bis zu zwei. Hat die Graf Spee beim Start ein Versorgungsschiff im selben Feld, kann sie es für ein zusätzliches Feld einsetzen. Die Briten bewegen bis zu drei Schiffe, einschließlich der Einfahrt von Verstärkungen. Für 1 SP an Deutschland erhalten sie W6 zusätzliche Bewegungen. A1–A3 führen zum Atlantik, B6 zum Indischen Ozean. Stapel sind unbegrenzt.'],
  ['Suche','Nach der britischen Bewegung wird die Graf Spee automatisch entdeckt, wenn ein britischer Stein im selben Feld liegt. Beteiligte Attrappen werden entfernt. Jeder Träger kann ein Nachbarfeld absuchen. Wähle den Träger und klicke auf das Feld. In dieser Fassung können freie Träger auf Nachbarfeldern nach einer Entdeckung ebenfalls zum Luftangriff starten.'],
  ['Gefecht','Graf Spee und Träger würfeln je dreimal, Kreuzer zweimal, das Schlachtschiff neunmal. Britische Schiffe treffen bei 6. Die Graf Spee trifft das Schlachtschiff bei 6, sonst bei 5–6. Sie wählt ein Schiff im eigenen Feld und bevorzugt andere Schiffe vor Trägern. Gegen Luftangriffe kann sie nicht zurückschießen. Trifft sie im eigenen Feld nur auf Träger, schießen diese nicht. Ein Treffer beschädigt, zwei versenken. Beschädigte britische Schiffe ziehen sich in den Atlantik zurück. Unbeschädigte Kreuzer verfolgen die Graf Spee und enthüllen ihr nächstes Bewegungsziel.'],
@@ -220,7 +228,7 @@ de:[
  ['Sieg','Das Spiel endet bei Versenkung, Flucht oder Selbstversenkung der Graf Spee in E1 (Montevideo). Deutschland erhält 1 SP für jedes beschädigte britische Schiff und SP in Höhe der Kampfstärke eines versenkten Schiffs (6 für einen Träger). Versenkung der Graf Spee kostet W6 SP, Selbstversenkung W3 SP. Ab 15 SP gewinnt Deutschland.'],
 ],
 it:[
- ['Preparazione','La Germania colloca in segreto la Graf Spee in A1–A5 o B1–B5 e piazza tre navi rifornitrici in tre altri esagoni. Le nove pedine britanniche vengono mescolate fuori mappa: due diversivi, due portaerei, una corazzata e quattro incrociatori.'],
+ ['Preparazione','In questa versione la Germania colloca in segreto la Graf Spee a caso in B2 o C3 e piazza tre navi rifornitrici in tre altri esagoni. Le nove pedine britanniche vengono mescolate fuori mappa: due diversivi, due portaerei, una corazzata e quattro incrociatori.'],
  ['Turno e movimento','La Graf Spee muove in segreto. Seguono il movimento e la ricognizione britannici, quindi il combattimento o l’incursione mercantile. La corazzata e la Graf Spee danneggiata possono muovere di un esagono, le altre navi di due. La Graf Spee può usare un rifornitore presente nell’esagono di partenza per muovere di un esagono in più. I britannici muovono al massimo tre navi, inclusi i rinforzi, e possono cedere 1 PV per ottenere D6 movimenti extra. A1–A3 collegano l’Atlantico, B6 l’Oceano Indiano. Nessun limite di pedine per esagono.'],
  ['Ricognizione','Dopo il movimento britannico, una pedina nello stesso esagono scopre automaticamente la Graf Spee. I diversivi coinvolti sono rimossi. Ogni portaerei può controllare un esagono adiacente: selezionala e clicca sull’esagono. In questa versione anche le portaerei adiacenti ancora disponibili possono unirsi all’attacco dopo il contatto.'],
  ['Combattimento','Tira tre dadi per la Graf Spee o una portaerei, due per un incrociatore e nove per la corazzata. Le navi britanniche colpiscono con 6. La Graf Spee colpisce la corazzata con 6 e le altre navi con 5–6. Sceglie un bersaglio nello stesso esagono evitando le portaerei se ci sono altre navi. Non può rispondere agli attacchi aerei. Le portaerei sole nel suo esagono possono essere attaccate, ma non sparano. Un colpo danneggia, due affondano. Le navi britanniche danneggiate si ritirano nell’Atlantico. Gli incrociatori intatti seguono la Graf Spee e ne rivelano la destinazione nel turno successivo.'],
@@ -228,7 +236,7 @@ it:[
  ['Vittoria','La partita termina se la Graf Spee fugge, affonda o si autoaffonda in E1 (Montevideo). La Germania ottiene 1 PV per nave britannica danneggiata e la forza di combattimento di ogni nave affondata in PV (6 per una portaerei). La perdita della Graf Spee costa D6 PV, o D3 se si autoaffonda. La Germania vince con almeno 15 PV.'],
 ],
 es:[
- ['Preparación','Alemania sitúa en secreto el Graf Spee en A1–A5 o B1–B5 y tres buques de suministro en otros tres hexágonos. Las nueve fichas británicas se barajan fuera del mapa: dos señuelos, dos portaaviones, un acorazado y cuatro cruceros.'],
+ ['Preparación','En esta versión, Alemania sitúa en secreto y al azar el Graf Spee en B2 o C3, y tres buques de suministro en otros tres hexágonos. Las nueve fichas británicas se barajan fuera del mapa: dos señuelos, dos portaaviones, un acorazado y cuatro cruceros.'],
  ['Turno y movimiento','El Graf Spee se mueve en secreto. Después se resuelven el movimiento y la búsqueda británicos, y luego el combate o el ataque al tráfico mercante. El acorazado y el Graf Spee dañado pueden mover un hexágono, los demás buques dos. El Graf Spee puede gastar un buque de suministro en su hexágono de partida para mover un hexágono más. Los británicos mueven hasta tres buques, incluidos los refuerzos, y pueden ceder 1 PV para añadir D6 movimientos. A1–A3 conectan con el Atlántico y B6 con el Índico. Apilamiento ilimitado.'],
  ['Búsqueda','Al terminar el movimiento británico, una ficha en el mismo hexágono localiza automáticamente al Graf Spee. Los señuelos en contacto se retiran. Cada portaaviones puede buscar en un hexágono adyacente: selecciónalo y pulsa el hexágono. En esta versión, los portaaviones adyacentes disponibles también pueden unirse al ataque tras el contacto.'],
  ['Combate','Tira tres dados para el Graf Spee o un portaaviones, dos para un crucero y nueve para el acorazado. Los británicos impactan con 6. El Graf Spee impacta al acorazado con 6 y a otros buques con 5–6. Elige un blanco en su propio hexágono, dando prioridad a otros buques sobre los portaaviones. No puede responder a un ataque aéreo. Los portaaviones solos en su hexágono pueden ser atacados pero no disparan. Un impacto causa daños, dos hunden. Los buques británicos dañados se retiran al Atlántico. Los cruceros intactos siguen al Graf Spee y revelan su destino en el siguiente turno.'],
@@ -236,7 +244,7 @@ es:[
  ['Victoria','La partida termina si el Graf Spee escapa, es hundido o se autohunde en E1 (Montevideo). Alemania gana 1 PV por buque británico dañado y tantos PV como la fuerza de combate del buque hundido (6 para un portaaviones). Si el Graf Spee es hundido pierde D6 PV; si se autohunde pierde D3 PV. Alemania gana con al menos 15 PV.'],
 ],
 zh:[
- ['准备','德国秘密选择A1–A5或B1–B5作为施佩伯爵号的初始位置，并在另外三个格各放一艘补给舰。英国的九枚棋子随机排列，在地图外待命：两枚诱饵、两艘航母、一艘战列舰和四艘巡洋舰。'],
+ ['准备','此版本中，德国秘密随机选择B2或C3作为施佩伯爵号的初始位置，并在另外三个格各放一艘补给舰。英国的九枚棋子随机排列，在地图外待命：两枚诱饵、两艘航母、一艘战列舰和四艘巡洋舰。'],
  ['回合与移动','先由施佩伯爵号秘密移动，再由英国移动和搜索，最后进行战斗或破交袭击。战列舰与受损的施佩伯爵号最多移动一格，其他舰船最多两格。若出发时同格有补给舰，施佩伯爵号可消耗该补给舰，多移动一格。英国每回合最多移动三艘舰船，增援入场也计入。可给德国1分以额外移动D6艘。A1–A3通往大西洋，B6通往印度洋。堆叠不限。'],
  ['搜索','英国移动结束后，如果有英国棋子同格，就会自动发现施佩伯爵号，并移除接触的诱饵。每艘航母可搜索一格相邻海域，选择航母后点击目标格。在本版本中，发现目标后，停在相邻格且尚未出击的航母也可参加空袭。'],
  ['战斗','施佩伯爵号和航母各掷三颗骰子，巡洋舰掷两颗，战列舰掷九颗。英国掷出6命中。施佩伯爵号攻击战列舰时掷出6命中，攻击其他舰船时5或6命中。它选择同格内一艘舰船为目标，优先选择航母以外的舰船。它不能反击空袭。如果同格内只有航母，则只有施佩伯爵号能开火。一发命中造成受损，两发击沉。受损英舰撤往大西洋。未受损的巡洋舰会继续跟踪，公开施佩伯爵号下回合的移动终点。'],
@@ -244,7 +252,7 @@ zh:[
  ['胜负','施佩伯爵号被击沉、脱逃或在E1（蒙得维的亚）自沉时，游戏结束。德国每击伤一艘英舰得1分，每击沉一艘得其战斗力对应的分数（航母6分）。施佩伯爵号被击沉扣D6分，自沉扣D3分。德国最终达到15分即获胜。'],
 ],
 ko:[
- ['준비','독일은 A1–A5 또는 B1–B5에 그라프 슈페를 비밀리에 배치하고, 서로 다른 다른 세 칸에 보급함을 한 척씩 배치합니다. 영국 말 9개는 섞어 지도 밖에서 대기시킵니다. 더미 2개, 항모 2척, 전함 1척, 순양함 4척입니다.'],
+ ['준비','이 버전에서 독일은 B2 또는 C3에 그라프 슈페를 무작위로 비밀 배치하고, 서로 다른 다른 세 칸에 보급함을 한 척씩 배치합니다. 영국 말 9개는 섞어 지도 밖에서 대기시킵니다. 더미 2개, 항모 2척, 전함 1척, 순양함 4척입니다.'],
  ['턴과 이동','그라프 슈페가 은밀히 이동한 뒤 영국이 이동과 수색을 합니다. 이어 전투나 통상 파괴를 처리합니다. 전함과 손상된 그라프 슈페는 한 칸, 나머지 함선은 두 칸까지 이동합니다. 출발점에 보급함이 있는 그라프 슈페는 보급함을 소비해 한 칸 더 이동할 수 있습니다. 영국은 증원 진입을 포함해 턴마다 최대 3척을 이동시키며, 독일에 1점을 주면 D6척을 추가로 이동시킬 수 있습니다. A1–A3는 대서양, B6는 인도양과 연결됩니다. 한 칸에 놓을 수 있는 함선 수에는 제한이 없습니다.'],
  ['수색','영국의 이동이 끝났을 때 같은 칸에 영국 말이 있으면 그라프 슈페가 자동으로 발견됩니다. 접촉한 더미는 제거합니다. 항모는 한 척당 인접한 한 칸을 수색합니다. 항모를 선택한 뒤 해당 칸을 누르세요. 이 버전에서는 발견 후 인접 칸의 미출격 항모도 공격에 참가할 수 있습니다.'],
  ['전투','그라프 슈페와 항모는 주사위 3개, 순양함은 2개, 전함은 9개를 굴립니다. 영국군은 6이 명중입니다. 그라프 슈페는 전함에 6, 나머지에는 5–6으로 명중합니다. 같은 칸에 있는 영국 함선 한 척을 공격하며, 항모 외의 함선이 있으면 그중에서 고릅니다. 그라프 슈페는 항공 공격에 반격할 수 없습니다. 같은 칸에 항모만 있으면 그라프 슈페만 포격합니다. 1회 명중은 손상, 2회는 격침입니다. 손상된 영국 함선은 대서양으로 퇴피합니다. 손상되지 않은 순양함은 추적을 계속해 다음 턴의 이동 목적지를 공개합니다.'],
@@ -252,7 +260,7 @@ ko:[
  ['승패','그라프 슈페가 격침되거나 탈출하거나 E1(몬테비데오)에서 자침하면 종료됩니다. 독일은 영국 함선 손상에 1점, 격침에 해당 함선의 전투력만큼 점수를 얻습니다(항모는 6점). 그라프 슈페 격침에는 D6점, 자침에는 D3점을 잃습니다. 독일은 최종 15점 이상이면 승리합니다.'],
 ],
 ru:[
- ['Подготовка','Германия тайно размещает «Граф Шпее» в A1–A5 или B1–B5, а три судна снабжения — в трёх других клетках. Девять британских фишек перемешиваются вне карты: две ложные цели, два авианосца, линкор и четыре крейсера.'],
+ ['Подготовка','В этой версии Германия тайно размещает «Граф Шпее» случайным образом в B2 или C3, а три судна снабжения — в трёх других клетках. Девять британских фишек перемешиваются вне карты: две ложные цели, два авианосца, линкор и четыре крейсера.'],
  ['Ход и движение','Сначала «Граф Шпее» тайно перемещается, затем Британия перемещает корабли и ведёт поиск, после чего разыгрывается бой или атака торговых судов. Линкор и повреждённый «Граф Шпее» проходят до одной клетки, остальные — до двух. Судно снабжения в исходной клетке можно израсходовать для дополнительной клетки. Британия перемещает до трёх кораблей, включая вход подкреплений, и может дать Германии 1 очко за D6 дополнительных перемещений. A1–A3 ведут в Атлантику, B6 — в Индийский океан. Число кораблей в клетке не ограничено.'],
  ['Поиск','После движения британская фишка в той же клетке автоматически обнаруживает «Граф Шпее». Ложные цели в контакте снимаются. Каждый авианосец может проверить одну соседнюю клетку: выберите корабль и щёлкните клетку. В этой версии после обнаружения также можно назначить соседние авианосцы, ещё не выполнявшие вылет, на авиаудар.'],
  ['Бой','«Граф Шпее» и авианосцы бросают по три кубика, крейсеры по два, линкор девять. Британия попадает на 6, «Граф Шпее» — на 6 по линкору и на 5–6 по остальным кораблям. Он выбирает цель в своей клетке, причём авианосец можно выбрать, только если нет других целей. На авиаудар он ответить не может. Если в одной клетке с ним только авианосцы, стреляет лишь «Граф Шпее». Одно попадание повреждает корабль, два топят. Повреждённые британские корабли отходят в Атлантику. Неповреждённые крейсеры продолжают слежение и раскрывают место, куда «Граф Шпее» переместится в следующем ходу.'],
@@ -279,7 +287,7 @@ const game=(()=>{
  row('C',[[1,1],[2,2],[3,3],[4,4],[5,5],[6,7]],523);
  row('D',[[1,.5],[2,1.5],[3,2.5],[4,3.5],[5,4.5],[6,6.5],[7,7.5]],656);
  row('E',Array.from({length:8},(_,i)=>[i+1,i]),790);
- const ids=Object.keys(all), starts=ids.filter(id=>/^[AB][1-5]$/.test(id));
+ const ids=Object.keys(all), starts=['B2','C3'];
  const exits={A1:'ATL',A2:'ATL',A3:'ATL',B6:'IND'};
  const raids=new Set(['B2','B5','C3','C4','C5','C6','D2','D5']);
  const britishMoveLimit=3;
@@ -363,7 +371,9 @@ const game=(()=>{
        if(next===point.hex||!all[next]&&!goals.includes(next))continue;
        const spend=hexDistance(point.hex,next)>speed;
        const mask=spend?point.mask&~supplyBit:point.mask;
-       const cost=point.cost+1+(all[next]?risk(next):0)+(spend?.08:0);
+       // A jump directly off the map ends the voyage, so it has no reserve cost.
+       const reserveCost=spend&&all[next]?1.05:0;
+       const cost=point.cost+1+(all[next]?risk(next):0)+reserveCost;
        if(!best.has(next+':'+mask))queue.push({hex:next,mask,cost,
          next:point.next??next,useSupply:point.next===null?spend:point.useSupply});
      }
@@ -384,13 +394,13 @@ const game=(()=>{
  const sailPaths=(s,supply)=>movementPaths(s.pos,(s.damage?1:2)+(supply?1:0),true);
  const sailing=(s,supply)=>new Set(sailPaths(s,supply&&s.supplies.includes(s.pos)).keys());
  function go(s,where,useSupply){
-   const supplied=useSupply&&s.supplies.includes(s.pos);
+   const supplied=useSupply&&s.supplies.includes(s.pos)&&hexDistance(s.pos,where)>(s.damage?1:2);
    const path=sailPaths(s,supplied).get(where);
    if(!path)return false;
    s.voyage.push({turn:s.turn,path,supplied,events:[],score:s.score});
    if(supplied)s.supplies=s.supplies.filter(h=>h!==s.pos);
    s.previousContact=s.contact?{...s.contact}:null;
-   s.known=null;s.contact=null;s.revealed=null;s.searches={};s.strikes=[];
+   s.known=null;s.contact=null;s.revealed=null;s.searches={};s.strikes=[];s.lastRoll=null;
    if(['ATL','IND'].includes(where)){end(s,['exit',{key:where}],'escape');return true}
    s.pos=where;
    if(s.tracked){s.known=where;s.contact={hex:where,method:'track'};}s.moved=[];s.moveHistory=[];s.limit=britishMoveLimit;s.extra=false;s.stage='britain';
@@ -458,7 +468,7 @@ const game=(()=>{
    }
    return evidence;
  }
- function inferBritishTypes(s){
+ function inferBritishFleet(s){
    const evidence=britishEvidence(s);
    const options=s.fleet.map(({id})=>{
      const known=s.knownBritish[id];
@@ -470,13 +480,20 @@ const game=(()=>{
    const assignments={};
    const remaining={...fleetComposition};
    const counts=new Map(options.map(({id})=>[id,{}]));
-   let totalWeight=0;
+   let totalWeight=0,bestWeight=-1,roles={};
+   const visible=s.fleet.filter(ship=>ship.pos!=='lost').map(ship=>ship.id);
+   const fleetLayouts=new Map();
    function enumerate(index,weight,checkSearches){
      if(index===options.length){
        // Two adjacent searches in one turn must come from different carriers.
        if(checkSearches&&!searchGroups.every(([first,second])=>first.some(id=>assignments[id]==='CV'&&
          (!second||second.some(other=>other!==id&&assignments[other]==='CV')))))return;
        totalWeight+=weight;
+       if(weight>bestWeight){bestWeight=weight;roles={...assignments};}
+       const key=visible.map(id=>assignments[id]).join('/');
+       const layout=fleetLayouts.get(key);
+       if(layout)layout.weight+=weight;
+       else fleetLayouts.set(key,{roles:{...assignments},weight});
        for(const [id,count] of counts){
          const type=assignments[id];
          count[type]=(count[type]||0)+weight;
@@ -493,14 +510,30 @@ const game=(()=>{
    }
    enumerate(0,1,true);
    if(!totalWeight)enumerate(0,1,false);
-   return new Map([...counts].map(([id,count])=>[id,Object.entries(count).map(([type,n])=>({type,chance:n/totalWeight}))]));
+   const estimates=new Map([...counts].map(([id,count])=>[id,Object.entries(count).map(([type,n])=>({type,chance:n/totalWeight}))]));
+   // Sample the joint estimate, preserving exactly two carriers and four cruisers.
+   const plans=new Map();
+   let mass=0,index=0;
+   for(const layout of fleetLayouts.values()){
+     mass+=layout.weight;
+     while(index<3&&mass>=totalWeight*(index+.5)/3){
+       plans.set(layout.roles,(plans.get(layout.roles)||0)+1/3);
+       index++;
+     }
+   }
+   return {estimates,roles,plans};
  }
- function britishPatrols(s){
+ const inferBritishTypes=s=>inferBritishFleet(s).estimates;
+ function britishPatrols(s,model=inferBritishFleet(s)){
    const positions=s.germanIntel.at(-1)?.positions;
    const last=positions?.afterBattle??positions?.afterMove??positions?.start??[];
-   const estimates=inferBritishTypes(s);
+   const {estimates,roles}=model;
    return last.filter(ship=>ship.pos!=='lost').map(ship=>({
-     ...ship,estimates:estimates.get(ship.id).map(({type,chance})=>{
+     ...ship,role:roles[ship.id],movement:s.germanIntel.slice(-6).flatMap(({positions})=>{
+       const before=positions.start?.find(entry=>entry.id===ship.id)?.pos;
+       const after=positions.afterMove?.find(entry=>entry.id===ship.id)?.pos;
+       return all[before]&&all[after]?[Number(before!==after)]:[];
+     }),estimates:estimates.get(ship.id).map(({type,chance})=>{
        if(type==='DUMMY'){
          const range=new Set(all[ship.pos]?[ship.pos]:[]);
          return {type,chance,range,later:range};
@@ -551,186 +584,366 @@ const game=(()=>{
    return {contact:fixedContact+highestBritishGain(contactMoves,contactReserves),
      fire:fixedFire+highestBritishGain(fireMoves,fireReserves)};
  }
- function britishForecast(s,patrols,sighting){
-   const indexes=new Map(ids.map((hex,index)=>[hex,index]));
-   const neighbors=ids.map(hex=>adj(hex).map(next=>indexes.get(next)));
-   const used=new Set(s.usedRoutes);
-   const values=ids.map(hex=>{
-     const convoy=raids.has(hex)?(used.has(hex)?1:2):0;
-     if(!sighting)return convoy;
-     const distance=hexDistance(sighting.hex,hex);
-     const age=s.turn-sighting.turn;
-     const pursuit=distance<=age*2+1?Math.max(1,3-age)/(1+distance):0;
-     return convoy+pursuit;
-   });
-   const anchors=[null,...raids];
-   const risk=ids.map(()=>0);
-   const cruiserChance=patrols.map(ship=>ship.estimates.find(({type})=>type==='CA')?.chance??0);
-   const knownLostCruisers=Object.entries(s.knownBritish).filter(([id,type])=>
-     type==='CA'&&!patrols.some(ship=>ship.id===Number(id))).length;
-   const cruisersLeft=fleetComposition.CA-knownLostCruisers;
-   const likelyCruisers=new Set(cruiserChance.map((chance,index)=>({chance,index}))
-     .sort((a,b)=>b.chance-a.chance).slice(0,cruisersLeft)
-     .filter(({chance})=>chance>=.6).map(({index})=>index));
-   const haveCruiserPatrol=likelyCruisers.size===cruisersLeft;
-   for(const anchor of anchors){
-     const priority=values.map((value,index)=>anchor&&hexDistance(ids[index],anchor)<=1?value*1.75:value);
-     const coverage=ids.map(()=>0);
-     const options=patrols.map(ship=>{
-       const destinations=new Set([ship.pos,...ship.estimates.flatMap(est=>[...est.range])]);
-       return [...destinations].map(destination=>{
-         const cover=new Map();
-         const add=(index,chance)=>cover.set(index,(cover.get(index)||0)+chance);
-         for(const {type,chance,range} of ship.estimates){
-           const pos=range.has(destination)?destination:ship.pos;
-           if(!indexes.has(pos))continue;
-           const index=indexes.get(pos);
-           if(type==='DUMMY'){if(pos===ship.pos)add(index,chance);continue}
-           if(type!=='CV'){add(index,chance);continue}
-           add(index,chance*.2);
-           const nearby=neighbors[index];
-           const total=nearby.reduce((sum,hex)=>sum+priority[hex],0);
-           for(const hex of nearby){
-             add(hex,chance*(total?priority[hex]/total:1/nearby.length));
-           }
-         }
-         return {cover};
-       });
-     });
-     const add=(cover,sign)=>{for(const [index,value] of cover)coverage[index]+=value*sign;};
-     const assigned=options.map(moves=>moves[0]);
-     for(const move of assigned)add(move.cover,1);
-     const moved=new Set();
-     for(let count=0;count<britishMoveLimit;count++){
-       const nextReserve=patrols.findIndex((ship,index)=>ship.pos===null&&!moved.has(index));
-       let choice=null;
-       for(let index=0;index<patrols.length;index++){
-         if(moved.has(index)||patrols[index].pos===null&&index!==nextReserve)continue;
-         if(haveCruiserPatrol&&all[patrols[index].pos]&&!likelyCruisers.has(index))continue;
-         const current=assigned[index];
-         add(current.cover,-1);
-         const value=cover=>{
-           let gain=0;
-           for(const [hex,weight] of cover){
-             gain+=priority[hex]*weight/(1+coverage[hex])**2;
-           }
-           return gain;
-         };
-         const baseline=value(current.cover);
-         for(const move of options[index]){
-           if(move===current)continue;
-           const gain=(value(move.cover)-baseline)*(1+cruiserChance[index]*.65);
-           if(gain>(choice?.gain??.00001))choice={index,move,gain};
-         }
-         add(current.cover,1);
-       }
-       if(!choice)break;
-       moved.add(choice.index);
-       add(assigned[choice.index].cover,-1);
-       assigned[choice.index]=choice.move;
-       add(choice.move.cover,1);
-     }
-     for(let i=0;i<ids.length;i++)risk[i]+=Math.max(0,coverage[i])/anchors.length;
-   }
-   return new Map(ids.map((hex,index)=>[hex,risk[index]]));
+ const hexBits=new Map(ids.map((hex,index)=>[hex,1<<index]));
+ const hexBit=hex=>hexBits.get(hex)||0;
+ const maskFor=hexes=>[...hexes].reduce((mask,hex)=>mask|hexBit(hex),0);
+ function bitCount(mask){
+   mask=mask-((mask>>>1)&0x55555555);
+   mask=(mask&0x33333333)+((mask>>>2)&0x33333333);
+   return (((mask+(mask>>>4))&0x0f0f0f0f)*0x01010101)>>>24;
  }
- function carrierOpportunity(hex,patrols){
-   const local=patrols.filter(ship=>ship.pos===hex);
-   if(!local.length||local.length>fleetComposition.CV)return 0;
-   // Use the lower bound for all counters in the hex being carriers.
-   const chance=1-local.reduce((unknown,ship)=>unknown+1-
-     (ship.estimates.find(({type})=>type==='CV')?.chance??0),0);
-   if(chance<.58)return 0;
-   const support=britishPressure(hex,patrols.filter(ship=>ship.pos!==hex));
-   // Only the forces that could reach a carrier-only hex can return fire.
-   if(support.fire>=1.5)return 0;
-   return chance*(local.length===2?1.1:1)/(1+support.fire);
+ function britishLandingOptions(ship,type){
+   return [...britMoves({...ship,type})].flatMap(hex=>{
+     const contact=hexBit(hex);
+     if(type!=='CV')return [{hex,contact,fire:type==='DUMMY'?0:contact,carriers:0}];
+     const neighbors=adj(hex);
+     const fire=maskFor(neighbors);
+     return neighbors.map(target=>({hex,contact:contact|hexBit(target),fire,carriers:contact}));
+   });
+ }
+ const scanBits=ids.map(hex=>adj(hex).map(hexBit));
+ const scanAreas=scanBits.map(areas=>areas.reduce((mask,bit)=>mask|bit,0));
+ const emptyScan=[0];
+ function planBritishSearch(patrols,roles,zone){
+   const wait={hex:null,contact:0,fire:0,carrier:-1,possible:0,weight:1};
+   const movementPrior={CA:.65,BB:.35,CV:.18,DUMMY:.12};
+   let carrierIndex=0;
+   const decks=patrols.filter(ship=>roles[ship.id]).map(ship=>{
+     const role=roles[ship.id];
+     const carrier=role==='CV'?carrierIndex++:-1;
+     const options=[...britMoves({...ship,type:role})].map(hex=>{
+       const contact=hexBit(hex),index=31-Math.clz32(contact);
+       const fire=role==='CV'?scanAreas[index]:role==='DUMMY'?0:contact;
+       return {hex,contact,fire,carrier,index,possible:role==='CV'?contact|fire:contact};
+     });
+     const moved=ship.movement.reduce((sum,move)=>sum+move,0);
+     const chance=(6*movementPrior[role]+moved)/(6+ship.movement.length);
+     const hold=options.filter(option=>option.hex===ship.pos);
+     const move=options.filter(option=>option.hex!==ship.pos);
+     const weigh=(choices,weight)=>choices.map(option=>({...option,weight:weight/choices.length}));
+     return {reserve:ship.pos===null,hold:hold.length?weigh(hold,1-chance):[wait],
+       move:weigh(move,hold.length?chance:1)};
+   });
+   const ordinary=decks.filter(deck=>!deck.reserve);
+   const reserve=decks.filter(deck=>deck.reserve);
+   const outcomes=[],maximum=new Set();
+   let best=-1;
+   function collect(probs,mask,weight){
+     while(mask){
+       const bit=mask&-mask;
+       probs[31-Math.clz32(bit)]+=weight;
+       mask^=bit;
+     }
+   }
+   function bucketFor(size){
+     return outcomes[size]??(outcomes[size]={weight:0,visits:new Float64Array(ids.length),
+       counterfire:new Float64Array(ids.length),unguarded:new Float64Array(ids.length)});
+   }
+   function score(contact,fire,first,second,weight){
+     const covered=contact&zone,count=bitCount(covered);
+     const firstArea=(scanAreas[first]||0)&zone&~contact;
+     const secondArea=(scanAreas[second]||0)&zone&~contact;
+     const bestExtra=Math.min(Number(first>=0)+Number(second>=0),bitCount(firstArea|secondArea),
+       Number(firstArea!==0)+Number(secondArea!==0));
+     if(count+bestExtra<best-1)return;
+     if(count+bestExtra>best){best=count+bestExtra;maximum.clear();}
+     const firstScans=scanBits[first]??emptyScan;
+     const secondScans=scanBits[second]??emptyScan;
+     const part=weight/(firstScans.length*secondScans.length);
+     let zero=0,one=0,two=0;
+     for(const a of firstScans)for(const b of secondScans){
+       const extra=(a|b)&~contact,added=bitCount(extra&zone),size=count+added;
+       if(size<best-1)continue;
+       if(size===best)maximum.add(covered|(extra&zone));
+       collect(bucketFor(size).visits,extra,part);
+       if(added===0)zero++;
+       else if(added===1)one++;
+       else two++;
+     }
+     const unguarded=((first<0?0:1<<first)|(second<0?0:1<<second))&~fire;
+     const counts=[zero,one,two];
+     for(let added=0;added<counts.length;added++){
+       if(!counts[added])continue;
+       const mass=counts[added]*part,bucket=bucketFor(count+added);
+       bucket.weight+=mass;
+       collect(bucket.visits,contact,mass);
+       collect(bucket.counterfire,fire,mass);
+       collect(bucket.unguarded,unguarded,mass);
+     }
+   }
+   for(let count=0;count<=Math.min(britishMoveLimit,reserve.length);count++){
+     const moves=[...ordinary,...reserve.slice(0,count).map(deck=>({hold:deck.move,move:[]}))];
+     const suffix=new Array(moves.length+1).fill(0);
+     for(let i=moves.length-1;i>=0;i--){
+       suffix[i]=[...moves[i].hold,...moves[i].move].reduce((mask,option)=>mask|option.possible,suffix[i+1]);
+     }
+     function search(index,left,contact,fire,first,second,weight){
+       const upper=contact|suffix[index]|(scanAreas[first]||0)|(scanAreas[second]||0);
+       if(bitCount(upper&zone)<best-1)return;
+       if(index===moves.length){
+         score(contact,fire,first,second,weight);
+         return;
+       }
+       const {hold,move}=moves[index];
+       for(const option of hold)search(index+1,left,contact|option.contact,fire|option.fire,
+         option.carrier===0?option.index:first,option.carrier===1?option.index:second,weight*option.weight);
+       if(left>0)for(const option of move){
+         search(index+1,left-1,contact|option.contact,fire|option.fire,
+           option.carrier===0?option.index:first,option.carrier===1?option.index:second,weight*option.weight);
+       }
+     }
+     search(0,britishMoveLimit-count,0,0,-1,-1,(reserve.length?1.6**count:1));
+   }
+   return {best,patterns:maximum.size,optimal:outcomes[best],near:outcomes[best-1]};
+ }
+ function britishCoverage(s,patrols,sighting,plans){
+   const speed=s.damage?1:2;
+   // Public history determines the area Britain is trying to cover.
+   const rounds=sighting?Math.max(1,s.turn-sighting.turn):s.turn;
+   const from=sighting?[sighting.hex]:starts;
+   const zone=maskFor(from.flatMap(hex=>[...reachable(hex,speed*rounds)]));
+   const layouts=plans?.size?plans:new Map([[Object.fromEntries(patrols.map(ship=>[ship.id,ship.role])),1]]);
+   const probabilities={visits:new Float64Array(ids.length),unguarded:new Float64Array(ids.length),
+     counterfire:new Float64Array(ids.length)};
+   let maximum=0,patterns=0;
+   for(const [roles,weight] of layouts){
+     const result=planBritishSearch(patrols,roles,zone);
+     maximum=Math.max(maximum,result.best);
+     patterns+=result.patterns;
+     // Escorting a carrier can give up one position in the search net.
+     const total=result.optimal.weight*2+(result.near?.weight??0);
+     for(const [kind,values] of Object.entries(probabilities)){
+       for(let i=0;i<values.length;i++){
+         values[i]+=weight*(result.optimal[kind][i]*2+(result.near?.[kind][i]??0))/total;
+       }
+     }
+   }
+   const maps=Object.fromEntries(Object.entries(probabilities).map(([kind,values])=>[
+     kind,new Map(ids.map((hex,index)=>[hex,values[index]]))
+   ]));
+   // These masks include any fleet type still compatible with the evidence.
+   let possible=0,armed=0,undeployed=0;
+   for(const ship of patrols){
+     if(ship.pos===null&&++undeployed>britishMoveLimit)continue;
+     for(const {type} of ship.estimates)for(const option of britishLandingOptions(ship,type)){
+       possible|=option.contact;
+       armed|=option.fire;
+     }
+   }
+   return {...maps,maximum,patterns,
+     physicallyOpen:hex=>!(hexBit(hex)&possible),counterfirePossible:hex=>Boolean(hexBit(hex)&armed)};
+ }
+ // The forecast uses inferred fleet layouts and a separate deterministic random stream.
+ function forecastRng(seed){
+   return ()=>{
+     seed=(Math.imul(seed,1664525)+1013904223)>>>0;
+     return seed/0x100000000;
+   };
+ }
+ function forecastBritishTurn(s,lastSighting,rng) {
+   const covered = new Set();
+   const targets = new Map(ids.map(hex => {
+     const distance = lastSighting ? hexDistance(lastSighting.hex, hex) : 0;
+     const age = lastSighting ? s.turn - lastSighting.turn : 0;
+     const possible = !lastSighting || distance <= age * 2 + 1;
+     const payoff = raids.has(hex) ? (s.usedRoutes.includes(hex) ? 2 : 7) : .3;
+     return [hex, s.contact ? (s.contact.hex === hex ? 80 : 0) : possible ? payoff / (1 + distance * .18) : .01];
+   }));
+   function gain(ship, target) {
+     if (!all[target] || ship.type === 'DUMMY') return 0;
+     if (ship.type === 'CV') {
+       const bestScan = Math.max(0, ...adj(target)
+         .map(hex => (targets.get(hex) || 0) * (covered.has(hex) ? .20 : 1)));
+       const retreat = s.contact ? 0 : Number(raids.has(target)) * -.2;
+       return bestScan * 1.1 + retreat;
+     }
+     const v = (targets.get(target) || 0) * (covered.has(target) ? .20 : 1);
+     return v * (ship.type === 'BB' ? 1.6 : 1);
+   }
+   while (s.moved.length < s.limit) {
+     const reserve = s.fleet.find(ship => !ship.pos);
+     const eligible = s.fleet.filter(ship => !s.moved.includes(ship.id) && ship.pos !== 'lost' &&
+       (ship.pos || ship === reserve));
+     const best = eligible.flatMap(ship => [...britMoves(ship)].filter(hex => hex !== ship.pos)
+       .map(hex => ({ship, hex, value: gain(ship, hex) - (ship.pos ? gain(ship, ship.pos)*.8 : 0) + rng() * .12})))
+       .sort((a,b) => b.value - a.value)[0];
+     if(!best || best.value < 0) break;
+     if(!moveBrit(s,best.ship.id,best.hex))break;
+     if(best.ship.type === 'CA' || best.ship.type === 'BB') covered.add(best.hex);
+   }
+   finishBrit(s);
+   const searched = new Set();
+   while (s.stage === 'search') {
+     const best = s.fleet.flatMap(ship => searchTargets(s,ship).map(hex => ({
+       ship,hex,value:(targets.get(hex) || 0) + rng()*.1 - (searched.has(hex) ? 10 : 0)
+     }))).sort((a,b) => b.value-a.value)[0];
+     if (!best) { finishSearch(s); break; }
+     if(!search(s,best.ship.id,best.hex)){finishSearch(s);break;}
+     searched.add(best.hex);
+   }
+ }
+
+ function forecastBritishFleet(fleet,turn,usedRoutes,lastSighting,rng) {
+   const shadow={pos:'unseen',turn,fleet:fleet.map(ship=>({...ship})),usedRoutes,
+       stage:'britain',moved:[],moveHistory:[],limit:britishMoveLimit,contact:null,searches:{},strikes:[],
+       germanIntel:[],knownBritish:{},voyage:[],log:[]};
+   forecastBritishTurn(shadow,lastSighting,rng);
+   const blocked=new Set(shadow.fleet.filter(ship=>all[ship.pos]).map(ship=>ship.pos));
+   for(const hex of Object.values(shadow.searches))blocked.add(hex);
+   return {fleet:shadow.fleet,blocked};
+ }
+ function possibleInterceptions(fleet) {
+   const possible=new Set();
+   let reserves=0;
+   for(const ship of fleet){
+     if(ship.pos===null&&++reserves>britishMoveLimit)continue;
+     for(const hex of britMoves(ship)){
+       possible.add(hex);
+       if(ship.type==='CV')for(const search of adj(hex))possible.add(search);
+     }
+   }
+   return possible;
+ }
+ // Discount a raid if Britain's next search leaves few usable escape routes.
+ function rankRaidRoutes(s,scoring,{model,patrols,sighting,speed}) {
+   if(!scoring.some(choice=>choice.action==='raid2'||choice.action==='raid'))return scoring;
+   const trials=[];
+   let scenario=0;
+   for(const [roles,weight] of model.plans){
+     const fleet=patrols.map(ship=>({id:ship.id,pos:ship.pos,type:roles[ship.id]}));
+     const seed=(s.turn*104729+(++scenario)*56311)>>>0;
+     const thisTurn=forecastBritishFleet(fleet,s.turn,s.usedRoutes,sighting,forecastRng(seed));
+     trials.push({weight,seed,...thisTurn,possible:possibleInterceptions(thisTurn.fleet)});
+   }
+   return scoring.flatMap(choice=>{
+     if(choice.action==='carrier')return [choice];
+     const from=choice.next;
+     const afterRaid=s.score+2;
+     const jump=s.supplies.includes(from)&&!(choice.useSupply&&from===s.pos);
+     const exits=[...reachable(from,speed+Number(jump),true)].filter(hex=>
+       hex!==from&&(all[hex]||afterRaid>=15&&(hex==='ATL'||hex==='IND')));
+     if(exits.some(hex=>hex==='ATL'||hex==='IND'))return [choice];
+
+     const clear=trials.filter(trial=>!trial.blocked.has(from));
+     if(!clear.length)return [{...choice,chance:choice.chance*.65}];
+     const used=s.usedRoutes.includes(from)?s.usedRoutes:[...s.usedRoutes,from];
+     let weightSum=0;
+     const success=new Map(exits.map(hex=>[hex,0]));
+     for(const trial of clear){
+       for(const delta of [199,10909]){
+         const next=forecastBritishFleet(trial.fleet,s.turn+1,used,{hex:from,turn:s.turn},forecastRng(trial.seed+delta));
+         weightSum+=trial.weight;
+         for(const hex of exits){
+           if(!next.blocked.has(hex)){
+             success.set(hex,success.get(hex)+trial.weight*(trial.possible.has(hex)?.78:1));
+           }
+         }
+       }
+     }
+     const escape=Math.max(0,...success.values())/weightSum;
+     if(escape<.30)return [];
+     return [{...choice,chance:choice.chance*(.30+.70*escape)}];
+   });
  }
  function germanPlan(s,style,rng=Math.random){
-   const patrols=britishPatrols(s);
-   const cautious=style==='cautious';
+   const model=inferBritishFleet(s);
+   const patrols=britishPatrols(s,model);
    const lastExposure=s.voyage.findLast(leg=>leg.events.some(([event])=>
      ['raid','surface','airContact','track'].includes(event)));
    const lastKnown=s.contact?.hex??lastExposure?.path.at(-1);
    const sighting=lastKnown?{hex:lastKnown,turn:lastExposure?.turn??s.turn-1}:null;
-   const forecast=s.tracked?null:britishForecast(s,patrols,sighting);
-   const evading=Boolean(s.tracked||s.contact);
-   const liveRisk=new Map(ids.map(hex=>{
-     const {contact,fire}=britishPressure(hex,patrols);
-     const likely=forecast?.get(hex)??contact;
-     const harm=contact*.46+fire*(s.damage?.47:.24)+likely*(cautious?2.55:2.05);
-     return [hex,{harm,likely,fire}];
-   }));
-   const escape=escapePlan(s,hex=>liveRisk.get(hex).harm);
+   const cover=britishCoverage(s,patrols,sighting,model.plans);
+   const threats=new Map(ids.map(hex=>[hex,britishPressure(hex,patrols)]));
+   const exposure=hex=>s.tracked?Math.min(1,threats.get(hex).contact):Math.min(1,cover.visits.get(hex));
+   const fireRisk=hex=>s.tracked?Number(cover.counterfirePossible(hex)):Math.min(1,cover.counterfire.get(hex));
+   const danger=hex=>exposure(hex)*1.5+fireRisk(hex)*2.5+threats.get(hex).fire*(s.damage?.30:.14);
+   const escape=escapePlan(s,danger);
    if(escape)return {next:escape.next,useSupply:escape.useSupply,action:escape.next===s.pos&&escape.goal==='E1'?'scuttle':'escape'};
 
-   const targets=new Map(ids.map(hex=>[hex,carrierOpportunity(hex,patrols)]).filter(([,chance])=>chance>0));
-   const carrierSightings=patrols.filter(ship=>all[ship.pos]).flatMap(ship=>{
-     const chance=ship.estimates.find(({type})=>type==='CV')?.chance??0;
-     return chance>=.58?[{pos:ship.pos,chance}]:[];
-   });
-   const hunting=carrierSightings.length>0;
-   const occupied=new Set(patrols.filter(ship=>all[ship.pos]).map(ship=>ship.pos));
-   const unspent=hex=>raids.has(hex)&&!s.usedRoutes.includes(hex);
-   const payoff=hex=>raids.has(hex)&&!occupied.has(hex)?(unspent(hex)?2:1):0;
-   const secondRisk=new Map(ids.map(hex=>{
-     const {contact,fire}=britishPressure(hex,patrols,true);
-     // The outer reach is an upper bound, since two rounds of moves are possible.
-     return [hex,liveRisk.get(hex).harm*.65+Math.min(4,contact+fire*.25)*.35];
-   }));
-   const recent=s.voyage.slice(-6).map(leg=>leg.path.at(-1));
-   let holds=0;
-   for(let i=recent.length-1;i>=1&&recent[i]===s.pos&&recent[i-1]===s.pos;i--)holds++;
    const speed=s.damage?1:2;
    const normal=sailing(s,false);
-   const ranked=[...sailing(s,true)].filter(hex=>all[hex]).map(hex=>{
+   const opening=s.turn<=5;
+   const fresh=hex=>raids.has(hex)&&!s.usedRoutes.includes(hex);
+   const routes=[...raids].filter(fresh);
+   const centralRoutes=opening?routes.filter(hex=>hexDistance('C4',hex)<=2):routes;
+   const toward=centralRoutes.length?centralRoutes:[...raids];
+   const recent=s.voyage.slice(-5).map(leg=>leg.path.at(-1));
+   let sitting=0;
+   for(let i=recent.length-1;i>=0&&recent[i]===s.pos;i--)sitting++;
+   const safeEnough=style==='cautious'?.65:.55;
+   const openSea=hex=>exposure(hex)<.36&&fireRisk(hex)<.30;
+   const ordinaryExits=[...normal].filter(hex=>all[hex]&&hex!==s.pos&&openSea(hex));
+   const narrowing=ordinaryExits.length<=2;
+   const ordinaryDanger=Math.min(...[...normal].filter(hex=>all[hex]&&hex!==s.pos).map(danger));
+   const gunHit=1-(2/3)**3;
+   const candidates=[...sailing(s,true)].filter(hex=>all[hex]).map(hex=>{
      const useSupply=!normal.has(hex);
-     const carriesSupply=s.supplies.includes(hex);
-     const following=reachable(hex,speed+Number(carriesSupply),true);
-     const nextSea=[...following].filter(next=>all[next]&&next!==hex);
-     const bestRetreat=Math.min(4,...nextSea.map(next=>secondRisk.get(next)));
-     const staging=Math.max(0,...nextSea.map(next=>payoff(next)/(1+secondRisk.get(next))));
-     const hunt=Math.max(0,...carrierSightings.map(({pos,chance})=>{
-       const distance=hexDistance(hex,pos);
-       return chance*(distance<=speed?2.5:Math.max(0,3.6-distance*.45));
-     }));
-     const jumps=nextSea.filter(next=>hexDistance(hex,next)>speed);
-     const jumpBenefit=jumps.length?Math.max(0,1.25-Math.min(...jumps.map(next=>secondRisk.get(next)))):0;
+     const supplyAhead=hex!==s.pos&&s.supplies.includes(hex);
+     const next=[...reachable(hex,speed+Number(supplyAhead))].filter(destination=>destination!==hex);
+     const openNext=next.filter(openSea);
+     const jumpExits=supplyAhead?openNext.filter(destination=>hexDistance(hex,destination)>speed).length:0;
+     const breakout=useSupply&&narrowing&&openSea(hex)&&
+       (ordinaryExits.length===0||danger(hex)+.45<ordinaryDanger);
+     const reserveCost=useSupply?(breakout?.12:1.1):0;
+     const central=hexDistance('C4',hex);
      const visits=recent.filter(visited=>visited===hex).length;
-     const stationary=hex===s.pos?.65+Math.min(3,holds)*.55:0;
-     const navigation=-bestRetreat*.40+Number(carriesSupply)*.30+jumpBenefit*.80-
-       visits*.19-stationary-Number(useSupply)*.23;
-     const danger=liveRisk.get(hex);
-     let score=navigation-danger.harm;
-     let action='hide';
-
-     const attack=targets.get(hex)||0;
-     if(attack){
-       action='carrier';
-       score=navigation+attack*4.4;
-     }else if(evading){
-       const distance=hexDistance(lastKnown??s.pos,hex);
-       score+=distance*.50+Math.max(0,liveRisk.get(s.pos).harm-danger.harm)*.32;
-     }else if(hunting){
-       score+=hunt;
-     }else{
-       score+=staging*.75;
-       const canExit=payoff(hex)&&s.score+payoff(hex)>=15&&
-         (following.has('ATL')||following.has('IND'));
-       const raidValue=payoff(hex)/(1+danger.likely*1.8+danger.fire*.16)
-         -(canExit?0:.24+bestRetreat*.24)-danger.likely*1.25;
-       if(raidValue>0){
-         action=unspent(hex)?'raid2':'raid';
-         score+=raidValue;
-       }
-     }
-     return {next:hex,useSupply,action,score};
-   }).sort((a,b)=>b.score-a.score);
-   const attacks=ranked.filter(candidate=>candidate.action==='carrier');
-   const choices=attacks.length?attacks:ranked;
-   const comparable=choices.filter(candidate=>candidate.score>=choices[0].score-.30);
-   const {next,useSupply,action}=comparable[Math.floor(rng()*comparable.length)];
-   return {next,useSupply,action};
+     const routeDistance=Math.min(6,...toward.map(target=>hexDistance(hex,target)));
+     const nav=openNext.length*.15+Math.min(3,jumpExits)*(narrowing?.38:.23)+
+       adj(hex).length*.16-routeDistance*(opening?.25:.12)-
+       (opening?central*.10:0)-reserveCost-visits*.23-
+       (hex===s.pos?.48+Math.max(0,sitting-1)*.36:0)-danger(hex);
+     const raidSafety=raids.has(hex)&&!s.tracked?1-exposure(hex):0;
+     const carrierSafety=fireRisk(hex)<1?Math.min(1,cover.unguarded.get(hex)):0;
+     const local=patrols.filter(ship=>ship.pos===hex);
+     const dummyChance=local.length?Math.max(0,1-local.reduce((sum,ship)=>
+       sum+1-(ship.estimates.find(({type})=>type==='DUMMY')?.chance??0),0)):0;
+     const dummy=dummyChance>=(narrowing?.58:.70)&&fireRisk(hex)<(narrowing?.35:.20)?dummyChance:0;
+     return {next:hex,useSupply,nav,dummy,quiet:!raids.has(hex),raidSafety,carrierSafety};
+   });
+   function pick(group,value,action){
+     const sorted=group.map(option=>({option,rank:value(option)})).sort((a,b)=>b.rank-a.rank);
+     const best=sorted[0];
+     const close=sorted.filter(item=>item.rank>=best.rank-.20&&(best.option.useSupply||!item.option.useSupply));
+     const selected=close[Math.floor(rng()*close.length)].option;
+     return {next:selected.next,useSupply:selected.useSupply,action:action??selected.action};
+   }
+   function scoringOptions(minimum){
+     return candidates.flatMap(candidate=>{
+       const first=fresh(candidate.next);
+       const raidChance=candidate.raidSafety>=minimum?candidate.raidSafety*(first?1:.5):0;
+       const carrierChance=candidate.carrierSafety>=minimum?candidate.carrierSafety*gunHit:0;
+       const chance=Math.max(raidChance,carrierChance);
+       if(!chance)return [];
+       const action=carrierChance>raidChance?'carrier':first?'raid2':'raid';
+       return [{...candidate,action,chance}];
+     });
+   }
+   const retreatTurns=3;
+   const retreating=s.voyage.slice(-retreatTurns).some(leg=>
+     s.turn-leg.turn>=1&&s.turn-leg.turn<=retreatTurns&&leg.events.some(([event])=>event==='raid'));
+   let scoring=scoringOptions(safeEnough);
+   const dummies=candidates.filter(c=>c.dummy);
+   if(!scoring.length&&!dummies.length&&!s.damage&&!s.tracked){
+     // An occasional raid on the edge of the normal safety margin.
+     const stretch=scoringOptions(safeEnough-.05);
+     if(stretch.length&&rng()<.05)scoring=stretch;
+   }
+   if(retreating){
+     const departures=candidates.filter(c=>c.next!==s.pos);
+     const openSea=departures.filter(c=>c.quiet);
+     const options=openSea.length?openSea:departures;
+     if(options.length)return pick(options,c=>c.nav+hexDistance(s.pos,c.next)*.55,'hide');
+   }
+   scoring=rankRaidRoutes(s,scoring,{model,patrols,sighting,speed});
+   if(scoring.length){
+     const bestChance=Math.max(...scoring.map(c=>c.chance));
+     return pick(scoring.filter(c=>c.chance>=bestChance-.04),c=>c.nav);
+   }
+   if(dummies.length)return pick(dummies,c=>c.nav+c.dummy*(narrowing?1.2:.6),'dummy');
+   const quiet=candidates.filter(c=>c.quiet);
+   const bestShelter=Math.max(...candidates.map(c=>c.nav));
+   const shelter=quiet.filter(c=>c.nav>=bestShelter-.65);
+   return pick(shelter.length?shelter:candidates,c=>c.nav,'hide');
  }
  function moveBrit(s,id,h){
    const f=s.fleet.find(v=>v.id===id);
@@ -757,22 +970,31 @@ const game=(()=>{
    s.stage='search';
    if(!s.fleet.some(f=>searchTargets(s,f).length))finishSearch(s);
  }
+ function carriersInRange(s){
+   const hex=s.contact?.hex;
+   return hex?s.fleet.filter(ship=>ship.type==='CV'&&onMap(ship)&&adj(ship.pos).includes(hex)):[];
+ }
  function searchTargets(s,f){
    if(s.stage!=='search'||!f||f.type!=='CV'||!onMap(f))return [];
-   const nearby=adj(f.pos);
-   if(s.contact)return s.strikes.includes(f.id)?[]:nearby.filter(h=>h===s.contact.hex);
-   return s.searches[f.id]?[]:nearby;
+   if(s.contact)return !s.strikes.includes(f.id)&&carriersInRange(s).includes(f)?[s.contact.hex]:[];
+   return s.searches[f.id]?[]:adj(f.pos);
  }
- const airAttackers=s=>s.fleet.filter(f=>f.type==='CV'&&onMap(f)&&s.strikes.includes(f.id));
+ function airAttackers(s){
+   const available=carriersInRange(s);
+   return s.stage==='combat'?available:available.filter(ship=>s.strikes.includes(ship.id));
+ }
  function addStrike(s,id,h){
    s.strikes.push(id);
    note(s,'air',{key:'CV',suffix:' '+(id+1)},h);
  }
+ function confirmSorties(s){
+   for(const ship of carriersInRange(s)){
+     if(!s.strikes.includes(ship.id))addStrike(s,ship.id,s.contact.hex);
+   }
+ }
  function finishSearch(s){
    if(s.stage!=='search')return;
-   if(s.contact){
-     for(const ship of s.fleet)if(searchTargets(s,ship).includes(s.contact.hex))addStrike(s,ship.id,s.contact.hex);
-   }
+   confirmSorties(s);
    if(airAttackers(s).length||active(s).length)s.stage='combat';
    else if(s.contact){
      s.results=null;s.tracked=false;s.stage='result';note(s,'noBattle');
@@ -787,7 +1009,10 @@ const game=(()=>{
      const found=h===s.pos;
      const intel=intelligenceForTurn(s);
      const seen=intel.positions.afterMove??intel.positions.start??[];
-     intel.searches.push({hex:h,found,candidates:seen.filter(ship=>all[ship.pos]&&adj(h).includes(ship.pos)).map(ship=>ship.id)});
+     const nearby=new Set(adj(h));
+     const candidates=seen.filter(ship=>nearby.has(ship.pos)).map(ship=>ship.id);
+     intel.searches.push({hex:h,found,candidates});
+     if(candidates.length===1)s.knownBritish[candidates[0]]='CV';
      const name={key:'CV',suffix:' '+(id+1)};
      if(found){
        s.known=h;s.contact={hex:h,method:'airContact'};s.strikes.push(id);
@@ -807,6 +1032,7 @@ const game=(()=>{
  }
  function battle(s,targetId,rng=Math.random){
    if(s.stage!=='combat')return;
+   confirmSorties(s);
    const {targets,ships}=battleForces(s);
    for(const {ship,air} of ships)if(air)s.knownBritish[ship.id]='CV';
    const target=targets.find(f=>f.id===targetId)||targets[0];
@@ -838,8 +1064,11 @@ const game=(()=>{
    german.outcome=s.damage>=2?'sunk':s.damage?'damage':'unscratched';
    note(s,'combat',s.pos,{key:'fleet'},{key:'hits',args:[totalHits]},{key:'gFleet'},{key:'hits',args:[hits]});
    let penalty=0;
+   s.lastRoll=null;
    if(s.damage>=2){
-     penalty=d6(rng);s.score-=penalty;end(s,['sunkSpee'],'sunk',penalty);
+     penalty=d6(rng);s.score-=penalty;
+     s.lastRoll={kind:'sunk',value:penalty};
+     end(s,['sunkSpee'],'sunk',penalty);
    }else{
      if(totalHits)note(s,'damageSpeed');
      if(s.tracked)note(s,'tracking');
@@ -855,6 +1084,7 @@ const game=(()=>{
    const roll=auto?null:d6(rng);
    if(auto)s.usedRoutes.push(s.pos);
    const good=auto||roll>=4;if(good)s.score+=2;
+   s.lastRoll=auto?null:{kind:'raid',value:roll,hex:s.pos,gain:good?2:0};
    s.known=s.pos;s.revealed=s.pos;s.contact={hex:s.pos,method:'raid'};s.tracked=false;
    note(s,'raid',s.pos,auto?{key:'convoy'}:{key:'rollValue',args:[roll]},{key:'vp',args:[good?'+2':'0']});
    s.results=null;s.stage='result';return true;
@@ -862,11 +1092,12 @@ const game=(()=>{
  function scuttle(s,rng=Math.random){
    if(s.pos!=='E1')return false;
    const loss=Math.ceil(d6(rng)/2);s.score-=loss;
+   s.lastRoll={kind:'scuttle',value:loss};
    if(s.voyage.at(-1)?.turn!==s.turn)s.voyage.push({turn:s.turn,path:[s.pos],supplied:false,events:[],score:s.score});
    end(s,['scuttle'],'scuttle',loss);return true;
  }
  function end(s,cause,ending,penalty=0){s.stage='end';s.cause=cause;s.ending=ending;s.penalty=penalty;note(s,...cause,...(penalty?[{key:'vp',args:['−'+penalty]}]:[]))}
- return {all,ids,starts,exits,raids,types,adj,reachable,d6,setup,note,go,sailing,onMap,active,britMoves,moveBrit,undoBrit,finishBrit,searchTargets,search,finishSearch,airAttackers,battleForces,battle,raid,scuttle,supplyPlacement,escapePlan,hexDistance,rememberBritish,inferBritishTypes,britishPatrols,britishPressure,britishForecast,carrierOpportunity,germanPlan};
+ return {all,ids,starts,exits,raids,types,adj,reachable,d6,setup,note,go,sailing,onMap,active,britMoves,moveBrit,undoBrit,finishBrit,searchTargets,search,finishSearch,carriersInRange,airAttackers,battleForces,battle,raid,scuttle,supplyPlacement,escapePlan,hexDistance,rememberBritish,inferBritishTypes,britishPatrols,britishPressure,britishCoverage,germanPlan};
 })();
 </script>
 <script>'use strict';
@@ -987,6 +1218,7 @@ function reset(){
  begin();
 }
 function begin(){
+ selected=null;
  game.rememberBritish(state,'start');
  const plan=game.germanPlan(state,germanStyle);
  state.plannedRaid=plan.action==='raid2'||plan.action==='raid';
@@ -1109,11 +1341,44 @@ function renderSearch(){
  info.append(p);
  const old=Object.values(state.searches).filter(hex=>hex!==state.contact?.hex);
  if(old.length){const line=document.createElement('p');line.className='searched-note';line.textContent=tr('noContact')+' · '+old.join(', ');info.append(line);}
- if(searchedCount()){const line=document.createElement('p');line.className='searched-note';line.textContent=tr('airCount',searchedCount());info.append(line);}
+ const joining=game.carriersInRange(state);
+ if(joining.length){
+  const line=document.createElement('p');line.className='searched-note';
+  line.textContent=tr('airCount',joining.length)+' · '+joining.map(caption).join(' / ');
+  info.append(line);
+ }
 }
 const modal=id=>{const el=$(id);if(!el.open)el.showModal();return el;};
+function dieFace(value){
+ const face=document.createElement('span');
+ face.className='die';
+ face.setAttribute('role','img');
+ face.setAttribute('aria-label',tr('rollValue',value));
+ face.textContent=value;
+ return face;
+}
+function showRollResult(id,result){
+ const root=$(id);
+ root.hidden=!result;
+ root.replaceChildren();
+ if(!result)return;
+ const {kind,value}=result;
+ const labels={
+  extra:()=>[tr('extraUsed')+' · D6',tr('extraLog',value)],
+  raid:()=>[tr('raid')+' · '+result.hex,tr('vp',result.gain?'+'+result.gain:'0')],
+  scuttle:()=>[tr('scuttle')+' · D3',tr('vp','−'+value)],
+  sunk:()=>[tr('sunkSpee')+' · D6',tr('vp','−'+value)]
+ };
+ const [title,text]=labels[kind]();
+ const caption=document.createElement('div');
+ const heading=document.createElement('strong');heading.textContent=title;
+ const detail=document.createElement('small');detail.textContent=text;
+ caption.append(heading,detail);
+ root.append(dieFace(value),caption);
+}
 function openBattle(){
  if(state.stage!=='combat')return;
+ showRollResult('battlePenalty',null);
  const forces=game.battleForces(state);
  const target=forces.targets.slice().sort((a,b)=>({CV:6,BB:4,CA:3}[b.type]||0)-({CV:6,BB:4,CA:3}[a.type]||0))[0];
  const airOnly=forces.ships.some(v=>v.air)&&!target;
@@ -1149,12 +1414,16 @@ function openBattle(){
   const motion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const tiles=[];
   for(const u of units)for(const n of u.roll?.dice||[]){
-   const tile=document.createElement('span');tile.className='die rolling';tile.textContent=d6();
+   const tile=dieFace(d6());tile.classList.add('rolling');tile.setAttribute('aria-hidden','true');
    draws.get(u.id).dice.append(tile);tiles.push({tile,n,min:u.roll.min});
   }
   const reveal=()=>{
    clearInterval(battleTimer);
-   for(const {tile,n,min} of tiles){tile.textContent=n;tile.classList.remove('rolling');tile.classList.toggle('hit',n>=min);}
+   for(const {tile,n,min} of tiles){
+    tile.textContent=n;tile.removeAttribute('aria-hidden');tile.setAttribute('aria-label',tr('rollValue',n));
+    tile.classList.remove('rolling');tile.classList.toggle('hit',n>=min);
+   }
+   showRollResult('battlePenalty',data.penalty?state.lastRoll:null);
    for(const u of units){
     const {row,note,outcome}=draws.get(u.id);
     if(u.roll)note.textContent=tr(u.roll.label)+' · '+tr('hits',u.roll.hits)+' · '+tr('hitOn',u.roll.min);
@@ -1177,7 +1446,8 @@ function showEnd(){
  if(state.stage!=='end')return;
  const german=state.score>=15;
  $('endTitle').textContent=german?tr('gWin'):tr('bWin');
- $('endCause').textContent=tr(...state.cause)+(state.penalty?' · '+tr('vp','−'+state.penalty):'');
+ $('endCause').textContent=tr(...state.cause);
+ showRollResult('endRoll',state.penalty?state.lastRoll:null);
  $('endScore').textContent=state.score+' / 15';
  $('endReason').textContent=german?tr('gReason'):tr('bReason');
  $('voyageReport').replaceChildren(...voyageReport(state,assets.map));
@@ -1200,6 +1470,9 @@ function render(){
   result:tr('resultTip'),
   end:stage==='end'?tr(...state.cause):''
  }[stage];
+ const lastRoll=state.lastRoll;
+ const visibleRoll=lastRoll&&(lastRoll.kind==='extra'&&stage==='britain'||lastRoll.kind==='raid'&&stage==='result');
+ showRollResult('rollResult',visibleRoll?lastRoll:null);
  const controls=$('actions');controls.replaceChildren();
  if(stage==='britain'){
   controls.append(button(tr('finishMove'),finishMove,{main:true}),
@@ -1207,7 +1480,8 @@ function render(){
    button(tr('undo'),()=>{selected=game.undoBrit(state);render()},{disabled:!state.moveHistory.length}),
    button(state.extra?tr('extraUsed'):tr('extra'),()=>{
     if(state.extra)return;
-    const n=d6();state.extra=true;state.limit+=n;state.score++;game.note(state,'extraLog',n);render();
+    const n=d6();state.extra=true;state.limit+=n;state.score++;
+    state.lastRoll={kind:'extra',value:n};game.note(state,'extraLog',n);render();
    },{disabled:state.extra}));
  }
  if(stage==='search')controls.append(button(state.contact?tr('finishSortie'):tr('finishSearch'),afterSearch,{main:true}));
