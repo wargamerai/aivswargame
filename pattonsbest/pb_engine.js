@@ -134,6 +134,16 @@ function rollWeather(c) {
 const weatherText = w => { const a = []; if (w.fog) a.push(L('霧', 'Fog')); if (w.fall) a.push(L('降雪', 'Falling snow')); if (w.deep) a.push(L('深雪', 'Deep snow')); else if (w.ground) a.push(L('積雪', 'Ground snow')); if (w.mud) a.push(L('泥濘', 'Mud')); if (w.rain) a.push(L('雨', 'Rain')); if (w.overcast) a.push(L('曇り', 'Overcast')); return a.join('・') || L('晴れ', 'Clear'); };
 // 即応弾架の既定（28.0: 半分以上AP、煙1〜2発、残りHE。76はAP75%、HE25%）
 function defaultRack(t) { if (t.gun === 76) { const ap = Math.round(t.rack * .75); return { AP: ap, HE: t.rack - ap, WP: 0, HCBI: 0, HVAP: 0 }; } const ap = Math.ceil(t.rack / 2); return { AP: ap, WP: 1, HE: t.rack - ap - 1, HCBI: 0, HVAP: 0 }; }
+const RACK_AMMO = ['AP', 'HE', 'WP', 'HCBI', 'HVAP'];
+function fitRack(t, ammo, load) {
+  let left = t.rack;
+  const rack = {};
+  for (const k of RACK_AMMO) {
+    rack[k] = clamp(load[k] || 0, 0, Math.min(left, ammo[k] || 0));
+    left -= rack[k];
+  }
+  return rack;
+}
 // 朝の弾薬の積み方（4.26）。he は残り。ap/wp は主砲弾の数、rack は弾種ごとの即応弾架の数、vol は任意の追加（30発まで）
 function setLoad(o) {
   const d = G.day, t = tank();
@@ -143,7 +153,10 @@ function setLoad(o) {
   const wp = t.gun === 75 ? clamp(o.wp || 0, 0, total) : 0, ap = clamp(o.ap || 0, 0, total - wp), he = total - wp - ap;
   d.ammo.HE = Math.max(0, he - d.heSpent); d.ammo.AP = ap; d.ammo.WP = wp;
   d.base = total; d.overload = req + vol > 0;
-  if (o.rack) { let left = t.rack; const r = {}; for (const k of ['AP', 'HE', 'WP', 'HCBI', 'HVAP']) { const n = clamp(o.rack[k] || 0, 0, Math.min(left, d.ammo[k] || 0)); r[k] = n; left -= n; } d.rack = r; }
+  if (o.rack) {
+    G.rackLoad = fitRack(t, d.ammo, o.rack);
+    d.rack = { ...G.rackLoad };
+  }
   d.loaded = true;
 }
 function morning(c) {
@@ -167,10 +180,11 @@ function morning(c) {
   const hvapR = t.gun === 76 ? d10('HVAP') : 0;
   G.day = {
     c, sc: c.sc, res: c.res, w, set, time: rise + elapsed * 60, rise, freeCheck: true, ammo: { HE: Math.max(0, he - roll * 2), AP: ap, WP: wp, HCBI: t.gun === 75 ? d10('HCBI') : 0, HVAP: t.gun === 76 ? (hvapR <= 3 ? 1 : hvapR <= 7 ? 2 : 3) : 0 }, extra: needExtra,
-    start: rise + elapsed * 60, areas: 0, exits: 0, lostN: 0, lostEx: 0, fko: {}, fortT: 0, fortF: 0, notes: [], smokeBomb: t.mortar ? 14 : 0, grenades: 6, periscopes: 6, heSpent: roll * 2, base: total, overload: false, rack: defaultRack(t),
+    start: rise + elapsed * 60, areas: 0, exits: 0, lostN: 0, lostEx: 0, fko: {}, fortT: 0, fortF: 0, notes: [], smokeBomb: t.mortar ? 14 : 0, grenades: 6, periscopes: 6, heSpent: roll * 2, base: total, overload: false,
     vpTank: 0, vpFriend: 0, vpArea: 0, vpLost: 0, tanksLost: 0, squadsLost: 0, ko: {}, broken: { main: false, coax: false, bow: false, aa: false, sight: false }, jam: { main: false, coax: false, bow: false, aa: false },
     woundsToday: false, cmdExposedColl: false, lead: false, status: 'ok', map: null, areaIdx: null, medalBonus: 0,
   };
+  G.day.rack = fitRack(t, G.day.ammo, G.rackLoad || defaultRack(t));
   say(L(`${c.sc === 'A' ? '進撃' : c.sc === 'B' ? '戦闘' : '反撃阻止'}作戦。予想される抵抗: ${{ L: '軽', M: '中', H: '重' }[c.res]}。天候: ${weatherText(w)}。`, `${{ A: 'Advance', B: 'Battle', C: 'Counterattack' }[c.sc]} scenario. Expected resistance: ${{ L: 'Light', M: 'Medium', H: 'Heavy' }[c.res]}. Weather: ${weatherText(w)}.`), 'head');
   say(pick([L(`${G.crew.D.name}「エンジン快調。今日も無事に帰りましょうや」`, `${G.crew.D.name}: "Engine's sweet. Let's all get home today."`), L(`${G.crew.L.name}が砲弾を数えながら口笛を吹く。`, `${G.crew.L.name} whistles as he counts the rounds.`), L(`${G.crew.G.name}は照準器のレンズを丁寧に拭いた。`, `${G.crew.G.name} carefully wipes the gunsight.`), L('砲兵の朝の射撃が地平線の向こうで始まった。', 'The morning barrage begins beyond the horizon.')]));
   say(L(`日の出から${elapsed}時間が経過。出撃 ${clock(G.day.time)}、日没 ${clock(set)}。`, `${elapsed} hours past sunrise. Start ${clock(G.day.time)}, sunset ${clock(set)}.`));
@@ -235,7 +249,14 @@ function weatherHour() {
   }
 }
 const dayDone = () => G.day.time >= G.day.set;
-function opCheck(id) { const d = G.day, a = d.map.areas[id]; if (d.freeCheck) d.freeCheck = false; else spend(15); a.res = rollResistance(a); say(L(`斥候の報告: 前方の区域の抵抗は${{ L: '軽', M: '中', H: '重' }[a.res]}。`, `Scouts report ${{ L: 'light', M: 'medium', H: 'heavy' }[a.res]} resistance ahead.`)); return dayEndCheck(); }
+function opCheck(id) {
+  const d = G.day, a = d?.map?.areas[id];
+  if (!a || a.us || a.res) return null;
+  if (d.freeCheck) d.freeCheck = false; else spend(15);
+  a.res = rollResistance(a);
+  say(L(`斥候の報告: 前方の区域の抵抗は${{ L: '軽', M: '中', H: '重' }[a.res]}。`, `Scouts report ${{ L: 'light', M: 'medium', H: 'heavy' }[a.res]} resistance ahead.`));
+  return dayEndCheck();
+}
 // 支援砲撃の結果は、ボタンで一度止めて見せる（ユーザーの指示 2026-11-08）
 function opArt(id) { spend(15); const a = G.day.map.areas[id]; const r = d10(L('砲兵の到着(1-7)', 'Artillery arrives (1-7)')); const cn = G.crew.C.name, w = crewN('L') || crewN('A');
   // 頼んだ結果は無線のやり取りのセリフで出す。ダイスの目は出さない（判定の記録には残る。ユーザーの指示 2026-11-08）
@@ -651,7 +672,7 @@ function fireMainGun(u, mode, opts) {
 function resolveHit(u, h) {
   const b = G.bb, gun = tank().gun, w = G.day.w;
   if (h.amm === 'WP' || h.amm === 'HCBI') return false;
-  if (h.track && !TARGET_INF(u)) { u.disabled = true; say(L('履帯に命中！ 敵は動けない。', 'Track hit! The enemy is immobilized.'), 'good'); return false; }
+  if (h.track && !TARGET_INF(u)) { u.disabled = true; u.moving = false; say(L('履帯に命中！ 敵は動けない。', 'Track hit! The enemy is immobilized.'), 'good'); return false; }
   let ko = false;
   if (TARGET_INF(u)) {
     if (h.amm !== 'HE') return false;
@@ -671,7 +692,7 @@ function resolveHit(u, h) {
     const t = u.type || (u.shown);
     const loc = (() => { if (u.terr === 'hull') return d10(L('命中箇所(車体隠蔽)', 'Hit location (HD)')) <= 5 ? 'T' : null; const r = d10(L('命中箇所(1-4砲塔、5-9車体、10履帯)', 'Hit location')); return r <= 4 ? 'T' : r <= 9 ? 'H' : 'X'; })();
     if (loc === null) { say(L('砲弾は地形に当たった。', 'The round strikes the ground in front of the hull.')); return false; }
-    if (loc === 'X') { u.disabled = true; say(L(`${unitLabel(u)}の履帯を吹き飛ばした！ もう動けない。`, `${unitLabel(u)} throws a track — immobilized!`), 'good'); return false; }
+    if (loc === 'X') { u.disabled = true; u.moving = false; say(L(`${unitLabel(u)}の履帯を吹き飛ばした！ もう動けない。`, `${unitLabel(u)} throws a track — immobilized!`), 'good'); return false; }
     let need = 0;
     if (h.amm === 'AP') {
       const tb = gun === 75 ? PB.AP75 : PB.AP76, row = tb[t];
@@ -970,8 +991,20 @@ function resolveRound(o) {
   return beginRound();
 }
 function afterBattle() { if (G.phase === 'postko') return debrief(); return { ended: true }; }
-// 8.36 弾架の補充: 残っている弾で全部埋める（Q&A）
-function restockRack() { const d = G.day, t = tank(); const def = defaultRack(t); let left = t.rack; const r = {}; for (const k of ['AP', 'HE', 'WP', 'HCBI', 'HVAP']) { const n = Math.min(left, def[k] || 0, d.ammo[k] || 0); r[k] = n; left -= n; } for (const k of ['HE', 'AP']) { const n = Math.min(left, (d.ammo[k] || 0) - r[k]); if (n > 0) { r[k] += n; left -= n; } } d.rack = r; }
+// 8.36 弾架の補充: 戦闘前に選んだ配分を、手持ちの弾薬で補う。
+function restockRack() {
+  const d = G.day, t = tank();
+  const rack = fitRack(t, d.ammo, G.rackLoad || defaultRack(t));
+  if (!G.rackLoad) {
+    let left = t.rack - Object.values(rack).reduce((sum, count) => sum + count, 0);
+    for (const k of ['HE', 'AP']) {
+      const n = Math.min(left, (d.ammo[k] || 0) - rack[k]);
+      rack[k] += n;
+      left -= n;
+    }
+  }
+  d.rack = rack;
+}
 function tryRepair(what, rating) {
   const d = G.day;
   if (!d.jam[what]) return;
@@ -994,13 +1027,13 @@ function enemyPhase(ambush) {
     let act = rowOf(T, raw);
     J(L(`${unitLabel(u)}は何をするか: 2D = ${raw0}${ambush ? ` (待ち伏せで ${raw})` : ''} → ${ACT_WORD(act)}`, `What does ${unitLabel(u)} do: ${raw0} → ${ACT_WORD(act)}`));
     if (u.spot === 'hidden' && !['F', 'L', 'R', 'B'].includes(act)) act = 'none';
-    if (u.disabled && ['F', 'L', 'R', 'B'].includes(act)) act = 'none';
     const firingAt = b.acq && b.acq.id === u.id;
     if (act === 'any3') { if (firingAt) act = u.facing === 0 ? 'you' : 'B'; else act = 'any'; }
     else if (act === 'any4') { act = firingAt ? 'you' : 'any'; }
     if (act === 'lead') act = d.lead ? 'you' : 'any';
     if (act === 'leadcoll') act = d.lead ? 'coll' : 'none'; // 会戦: MG/LW の 96-100 は先頭戦車のみ
     if (u.cls === 'TRUCK' && (act === 'inf' || act === 'coll')) act = 'none';
+    if (u.disabled && ['F', 'L', 'R', 'B'].includes(act)) act = 'none';
     if (act === 'none') { u.moving = false; continue; } // 4.75 何もしない・射撃なら移動マーカーを外す
     if ('FLRB'.includes(act)) { enemyMove(u, act); if (b.units.includes(u)) { say(L(`${unitLabel(u)}${tagOf(u)}が${sectorName(u.sector)}・${rangeName(u.range)}へ動いた。`, `${unitLabel(u)}${tagOf(u)} moves to ${sectorName(u.sector)}, ${rangeName(u.range)}.`)); checkAdvMG(u); } PAUSE(ack()); continue; }
     u.moving = false;
@@ -1235,7 +1268,14 @@ function checkBattleEnd() {
   if ((b.offBoard || []).length && !b.replaced) {
     b.replaced = true; const back = b.offBoard; b.offBoard = [];
     let k = 0;
-    for (const u of back) { const nu = placeUnit(u.cls, { type: b.area }); if (nu) { nu.type = u.type; nu.shown = u.shown; nu.identified = u.identified; k++; } }
+    for (const u of back) {
+      const nu = placeUnit(u.cls, { type: b.area });
+      if (!nu) continue;
+      nu.type = u.type; nu.shown = u.shown; nu.identified = u.identified;
+      nu.disabled = !!u.disabled;
+      if (nu.disabled) nu.moving = false;
+      k++;
+    }
     if (k) { say(L('押し出した敵が戻ってきた。', 'The enemy you drove off comes back.'), 'warn'); return null; }
   }
   say(L('敵影なし。この区域の戦闘は終わった。', 'No more targets. The battle here is over.'), 'head');

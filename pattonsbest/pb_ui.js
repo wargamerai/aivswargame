@@ -484,11 +484,14 @@ function renderOps() {
   } else if (g.phase === 'move') {
     const d = g.day, m = d.map, cur = m.areas[m.cur];
     const nearOk = SEL != null && (d.advChoice ? d.advChoice.includes(SEL) : E.neighbors(cur).some(a => a.id === SEL));
+    const area = nearOk ? m.areas[SEL] : null;
+    const canScout = area && !area.res && !area.us;
+    const scoutLabel = area?.res && !area.us ? L('偵察済み', 'Scouted') : d.freeCheck ? L('偵察 無料', 'Scout free') : L('偵察 15分', 'Scout 15m');
     const left = d.set - d.time;
     h = `<span class="small wide">${L(`日没まで${left}分`, `${left} min to sunset`)}${nearOk ? '' : L('。隣の区域を押してください', '. Click an adjacent area')}</span>
     <label><input type="checkbox" ${ADV ? 'checked' : ''} onchange="ADV=this.checked"> ${L('前進射撃', 'Advancing fire')}</label>
     <button class="go" ${nearOk ? '' : 'disabled'} onclick="doEnter()">${L('進入', 'Enter')}${nearOk ? `（${d.advChoice ? 0 : E.enterTime(cur, m.areas[SEL])}${L('分', 'm')}）` : ''}</button>
-    <button ${nearOk ? '' : 'disabled'} onclick="doOp('check')">${d.freeCheck ? L('偵察 無料', 'Scout free') : L('偵察 15分', 'Scout 15m')}</button>
+    <button ${canScout ? '' : 'disabled'} onclick="doOp('check')">${scoutLabel}</button>
     <button ${nearOk ? '' : 'disabled'} onclick="doOp('art')">${L('砲兵 15分', 'Artillery 15m')}</button>
     <button ${nearOk ? '' : 'disabled'} onclick="doOp('air')">${L('航空 30分', 'Air strike 30m')}</button>
     <button onclick="doOp('res')">${L('補給 60分', 'Resupply 60m')}</button>
