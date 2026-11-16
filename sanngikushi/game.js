@@ -503,7 +503,21 @@ const ThreeKingdoms = ((data) => {
   }
 
   function entryDelayTargets(s) {
-    return Object.keys(s.track).filter(id => s.track[id] > 0 && !s.dead.includes(id));
+    return Object.keys(s.track).filter(id => s.track[id] > 0 &&
+      s.track[id] < factions[id].track && !s.dead.includes(id));
+  }
+
+  function restoreJoinedTracks(s) {
+    // 旧版で参戦後に戻されたマーカーを、参戦の記録が残っていれば復元する。
+    for (const [id, position] of Object.entries(s.track)) {
+      const { name, track } = factions[id];
+      if (position >= track || s.dead.includes(id)) continue;
+      if (s.log.includes(`${name}が参戦。`) ||
+          s.log.includes(`荀彧の効果：${name}の参戦マーカーを ${track} → ${track - 1} に戻しました。`)) {
+        s.track[id] = track;
+      }
+    }
+    return s;
   }
 
   function delayEntry(s, faction, rng = Math.random) {
@@ -663,7 +677,7 @@ const ThreeKingdoms = ((data) => {
 
   return { create, validSetup, draw, play, selectLeader, commandRestriction, command, march, confirmMovement,
     canCancelMovement, cancelMovement, followup, order, disband, disbandLeader,
-    entryDelayTargets, delayEntry,
+    entryDelayTargets, delayEntry, restoreJoinedTracks,
     done, paths, canMarch, canReinforce, troops, present, count, factionList, hostile, controlCount,
     lossChoices, lose, resolveLosses, nextStrike, tableHits, battleLineup, usedCards };
 })(typeof module === 'undefined' ? Campaign : require('./data.js'));

@@ -31,7 +31,8 @@
   function readSave() {
     try {
       const value = JSON.parse(localStorage.getItem(storeKey));
-      return value?.version === 1 && value.board && value.location && Array.isArray(value.log) ? value : null;
+      return value?.version === 1 && value.board && value.location && value.track && Array.isArray(value.log)
+        ? rules.restoreJoinedTracks(value) : null;
     } catch { return null; }
   }
 
@@ -472,8 +473,10 @@
         <p>移動した軍勢だけで戦闘をおこなえます。</p>
         <div class="button-row">${button('followup', '戦闘する', { value: 'yes', primary: true })}${button('followup', '戦闘しない', { value: 'no' })}</div></div>`);
     } else if (state.phase === 'entryDelay') {
-      modal('entryDelay', `<div class="dialog-content">${panelTitle('荀彧', '参戦マーカーを1マス戻す')}
-        <div class="button-row">${rules.entryDelayTargets(state).map(id => button('delayEntry',
+      const targets = rules.entryDelayTargets(state);
+      modal('entryDelay', `<div class="dialog-content">${panelTitle('荀彧', '未参戦の勢力を選ぶ')}
+        ${targets.length ? '<p>参戦マーカーを1マス戻します。</p>' : '<p>戻せる参戦マーカーがありません。</p>'}
+        <div class="button-row">${targets.map(id => button('delayEntry',
           `${factions[id].name}　${state.track[id]} → ${state.track[id] - 1}`, { value: id })).join('')}
           ${button('delayEntry', '戻さずに進む')}</div></div>`);
     } else if (state.phase === 'order') {
