@@ -83,22 +83,7 @@ function _ufCasualties(side) {
   return out;
 }
 function ufBuildReportHtml() {
-  const fits = html => GameReportLimit.size(html) <= GameReportLimit.limit;
-  let html = ufReportPage(UF_REPORT.snaps, UF_REPORT.events, UF_REPORT.ev);
-  if (fits(html)) return html;
-
-  const snapshots = UF_REPORT.snaps;
-  for (const stride of [2, 4, 8, 16, 32, Infinity]) {
-    const sampled = snapshots.filter((_, i) => i === 0 || i === snapshots.length - 1 || i % stride === 0);
-    const maxEvents = stride === Infinity ? 30 : Math.max(24, Math.floor(400 / stride));
-    html = ufReportPage(sampled, UF_REPORT.events.slice(-maxEvents), UF_REPORT.ev.slice(-maxEvents), true);
-    if (fits(html)) return html;
-  }
-  return GameReportLimit.html(ufReportPage([], [], [], true), {
-    discard: ['.board-history, body script', 'body details'], summary: '.res',
-  });
-}
-function ufReportPage(snapshots, events, boardEvents, shortened = false) {
+  const { snaps: snapshots, events, ev: boardEvents } = UF_REPORT;
   const en = (typeof LANG !== 'undefined' && LANG !== 'ja' && typeof langTranslate === 'function'); // 英語・イタリア語
   const L = t => en ? langTranslate(String(t)) : String(t);
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -150,7 +135,6 @@ ul.ev li.ai{ color:var(--ai); } ul.ev li.player{ color:var(--me); }
   p1: state.player.name, p2: state.ai.name, result: state._ufEndText || '', turns: state.turnCount || 0, vp: [vpP, vpA],
   loss: [cP.kia + cP.rout + cP.prisoner, cA.kia + cA.rout + cA.prisoner] }).replace(/--/g, '\\u002d\\u002d')}-->
 <h1>Up Front ${esc(L('対戦レポート'))}${AVA ? '（AI 対 AI）' : ''}</h1>
-${shortened ? '<p>一部の盤面や詳細を省略しました / Some board positions or details were omitted.</p>' : ''}
 <div class="board-history"${snapshots.length ? '' : ' hidden'}>
 <h2>${esc(L('盤面と出来事'))}</h2>
 <div class="card"><div class="nav"><button id="bPrev">◀ ${esc(L('前へ'))}</button><button id="bNext">${esc(L('次へ'))} ▶</button><span id="nLbl"></span></div>
