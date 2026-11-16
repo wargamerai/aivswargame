@@ -48,7 +48,7 @@ const Campaign = (() => {
     ['ren', '曹仁', 'cao', 2, 1, null, 7],
     ['hong', '曹洪', 'cao', 2, 1, null, 8],
     ['lu', '呂布', 'lu', 5, 1, 'xuzhou', 3],
-    ['shu', '袁術', 'shu', 2, 1, 'shouchun', 2],
+    ['shu', '袁術', 'shu', 2, 0, 'shouchun', 2],
     ['shao', '袁紹', 'shao', 2, 1, 'ye', 9],
     ['biao', '劉表', 'biao', 2, 0, 'jing', 10],
     ['sun', '孫権', 'sun', 2, 1, 'jianye', 11],
