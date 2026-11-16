@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#212b27">
   <meta name="description" content="孤高の曹操 建安元年の一人用ボードゲーム">
   <title>孤高の曹操 建安元年</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261116-orders">
   <script defer src="data.js"></script>
-  <script defer src="game.js"></script>
-  <script defer src="ui.js"></script>
+  <script defer src="game.js?v=20261116-orders"></script>
+  <script defer src="ui.js?v=20261116-orders"></script>
 </head>
 <body>
   <header class="topbar">
@@ -76,9 +76,6 @@
           <strong id="controlCount"></strong>
           <span id="deckCount" class="muted"></span>
         </div>
-        <div class="button-row">
-          <button type="button" id="finishDisband" class="primary" hidden>解散せずに進む</button>
-        </div>
       </div>
       <div class="play-layout">
         <div class="board-column">
@@ -112,7 +109,8 @@
                   <div id="areaNodes"></div><div id="mapTracks" aria-hidden="true"></div>
                 </div>
               </div>
-            <button type="button" id="draw" class="primary">天命札を引く</button>
+              <button type="button" id="draw" class="primary map-action">天命札を引く</button>
+              <button type="button" id="finishDisband" class="primary map-action" hidden>解散せずに進む</button>
             </div>
             <p class="map-legend"><span>外枠＝拠点を支配する勢力</span><span>各列＝将軍名と軍勢駒の数</span></p>
           </section>

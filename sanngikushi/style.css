@@ -135,7 +135,7 @@ legend { color: var(--green); font-weight: 750; }
 .movement-banner p { font-size: .8rem; }
 .movement-banner button { flex-shrink: 0; }
 .map-stage { position: relative; isolation: isolate; }
-.map-stage > #draw { position: absolute; right: .75rem; bottom: .75rem; z-index: 20; }
+.map-stage > .map-action { position: absolute; right: .75rem; bottom: .75rem; z-index: 20; }
 .map-viewport { height: clamp(32rem, 75vh, 60rem); overflow: auto; overscroll-behavior: contain; background: #e5decc; }
 .board { position: relative; width: 100%; aspect-ratio: 1342 / 1888; margin: 0 auto; }
 .map-image, .routes { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -174,6 +174,9 @@ legend { color: var(--green); font-weight: 750; }
 .faction-label { display: inline-flex; gap: .34rem; align-items: center; }
 .faction-label i { width: .63rem; height: .63rem; border-radius: 50%; background: var(--faction); flex-shrink: 0; }
 .command-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .4rem; }
+.acting-leaders { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: .35rem; }
+.acting-leaders button { padding: .35rem .45rem; text-align: left; }
+.acting-leaders small { display: block; color: var(--muted); }
 .destination-list { display: flex; flex-wrap: wrap; gap: .32rem; }
 .destination-list button { min-height: 2rem; font-size: .78rem; }
 .card-button { display: flex; align-items: center; gap: .75rem; width: 100%; margin-top: .55rem; text-align: left; }

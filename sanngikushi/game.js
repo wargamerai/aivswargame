@@ -395,14 +395,35 @@ const ThreeKingdoms = ((data) => {
     ...(leader === 'hong' ? { protect: 1 } : {}),
   } : {};
 
-  function command(s, type, leader, rng = Math.random) {
-    if (s.phase !== 'action' || !s.active.choices.includes(leader)) return false;
-    if (!['march', 'battle', 'reinforce', 'pass'].includes(type)) return false;
-    const from = s.location[leader], card = s.active.card;
-    if (type === 'march' && !Object.keys(paths(s, leader)).length) return false;
-    if (type === 'battle' && (!areas[from] || !hostile(s, from, 'cao'))) return false;
-    if (type === 'reinforce' && !canReinforce(s, leader)) return false;
+  function selectLeader(s, leader) {
+    if (s.phase !== 'action' || !s.active?.choices.includes(leader) || !alive(s, leader)) return false;
     s.active.leader = leader;
+    return true;
+  }
+
+  function commandRestriction(s, type, leader) {
+    if (s.phase !== 'action' || !s.active?.choices.includes(leader) || !alive(s, leader)) {
+      return 'この札で行動できる武将を選んでください。';
+    }
+    const from = s.location[leader];
+    if (type === 'march') {
+      if (!areas[from]) return '補充して盤上に戻ると行軍できます。';
+      if (!canMarch(s, leader, 0)) return '拠点に守備駒を残す必要があります。';
+      if (!Object.keys(paths(s, leader)).length) return '行軍できる行き先がありません。';
+    }
+    if (type === 'battle' && (!areas[from] || !hostile(s, from, 'cao'))) {
+      return '同じ拠点に敵軍がいると戦闘できます。';
+    }
+    if (type === 'reinforce' && !canReinforce(s, leader)) {
+      return areas[from] ? '補充プールに軍勢駒がありません。' : '許都を支配していると復帰できます。';
+    }
+    return '';
+  }
+
+  function command(s, type, leader, rng = Math.random) {
+    if (!['march', 'battle', 'reinforce', 'pass'].includes(type) || commandRestriction(s, type, leader)) return false;
+    const { card } = s.active;
+    selectLeader(s, leader);
     if (type === 'march') s.phase = 'march';
     if (type === 'battle') startBattle(s, leader, special(card, leader), null, rng);
     if (type === 'reinforce') {
@@ -429,7 +450,7 @@ const ThreeKingdoms = ((data) => {
     const faction = leaders[movement.leader].faction;
     s.movement = null;
     if (target === 'xu' && faction !== 'cao') defeat(s, true);
-    if (faction === 'cao' && s.active?.card === 'yuan' && hostile(s, target, 'cao')) {
+    if (movement.leader === 'yuan' && ['yuan', 'cao'].includes(s.active?.card) && hostile(s, target, 'cao')) {
       s.active.moved = { troops: movement.troops, leaders: movement.leaders };
       s.phase = 'followup';
     } else advance(s, rng);
@@ -640,7 +661,8 @@ const ThreeKingdoms = ((data) => {
     return true;
   }
 
-  return { create, validSetup, draw, play, command, march, confirmMovement, canCancelMovement, cancelMovement, followup, order, disband, disbandLeader,
+  return { create, validSetup, draw, play, selectLeader, commandRestriction, command, march, confirmMovement,
+    canCancelMovement, cancelMovement, followup, order, disband, disbandLeader,
     entryDelayTargets, delayEntry,
     done, paths, canMarch, canReinforce, troops, present, count, factionList, hostile, controlCount,
     lossChoices, lose, resolveLosses, nextStrike, tableHits, battleLineup, usedCards };

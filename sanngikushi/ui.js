@@ -13,7 +13,7 @@
   const areaLabel = id => areas[id]?.name || '補充プール';
   const panelTitle = (kicker, title) => `<p class="kicker">${kicker}</p><h2>${title}</h2>`;
   const button = (id, text, options = {}) =>
-    `<button type="button" data-do="${id}"${options.value ? ` data-value="${options.value}"` : ''}${options.primary ? ' class="primary"' : ''}${options.disabled ? ' disabled' : ''}>${text}</button>`;
+    `<button type="button" data-do="${id}"${options.value ? ` data-value="${options.value}"` : ''}${options.primary ? ' class="primary"' : ''}${options.disabled ? ' disabled' : ''}${options.title ? ` title="${esc(options.title)}"` : ''}>${text}</button>`;
   const detail = (id, count) => `<span class="faction-label"><i style="--faction:${factions[id].color}"></i>${factions[id].name}${count === undefined ? '' : ` <b>${count}</b>`}</span>`;
 
   let saved = readSave();
@@ -107,7 +107,7 @@
     $('resetButton').hidden = false;
     applyZoom();
     render();
-    if (state.phase !== 'movement') requestAnimationFrame(() => center('xu', 'instant'));
+    if (state.phase !== 'movement' && !following) requestAnimationFrame(() => center('xu', 'instant'));
   }
 
   $('setupForm').addEventListener('submit', event => {
@@ -233,7 +233,9 @@
       $('movementRoute').textContent = `${state.route.map(areaLabel).join(' → ')}　軍勢 ${movement.troops}駒${escort ? `・同行将軍 ${escort}` : ''}`;
       $('movementBanner').classList.toggle('enemy', faction !== 'cao');
     }
-    $('mapHint').textContent = state.phase === 'march' ? '軍勢の数を選び、明るい枠の拠点を押してください。' : '拠点を選ぶと駒の内訳を表示します。';
+    $('mapHint').textContent = state.phase === 'march' ? '軍勢の数を選び、明るい枠の拠点を押してください。'
+      : state.phase === 'action' && state.active.card === 'cao' ? '武将が1人の拠点を押すと、その武将を選べます。'
+      : '拠点を選ぶと駒の内訳を表示します。';
     $('areaNodes').innerHTML = Object.values(areas).map(a => {
       const owner = state.board[a.id].owner;
       const groups = rules.factionList(state, a.id).map(faction => ({
@@ -331,22 +333,24 @@
   function actionView() {
     let content = '';
     if (state.phase === 'action') {
-      const { leader, choices } = state.active, at = state.location[leader];
-      const otherLeaders = at ? rules.present(state, at, 'cao').filter(id => id !== leader) : [];
-      const canMove = at && Object.keys(rules.paths(state, leader)).length &&
-        [null, ...otherLeaders].some(id => rules.canMarch(state, leader, 0, id));
+      const { leader, choices } = state.active;
+      const commands = [['march', '行軍'], ['battle', '戦闘'], ['reinforce', '補充'], ['pass', '何もしない']];
       content = `${panelTitle('曹操側の行動', cards[state.active.card].name)}
-        <label class="stack-label">行動する将軍<select id="actingLeader">${choices.map(id =>
-          `<option value="${id}"${leader === id ? ' selected' : ''}>${leaders[id].name}（${areaLabel(state.location[id])}）</option>`).join('')}</select></label>
-        <div class="command-grid">${button('march', '行軍', { disabled: !canMove, primary: !!canMove })}
-          ${button('battle', '戦闘', { disabled: !at || !rules.hostile(state, at, 'cao') })}
-          ${button('reinforce', '補充', { disabled: !rules.canReinforce(state, leader) })}${button('pass', '何もしない')}</div>`;
+        <div class="acting-leaders" role="group" aria-label="行動する武将">${choices.map(id =>
+          `<button type="button" data-do="selectLeader" data-value="${id}" aria-pressed="${id === leader}">
+            <strong>${leaders[id].name}</strong><small>${areaLabel(state.location[id])}</small>
+          </button>`).join('')}</div>
+        <div class="command-grid">${commands.map(([type, label]) => {
+          const reason = rules.commandRestriction(state, type, leader);
+          return button(type, label, { disabled: Boolean(reason), primary: type === 'march' && !reason, title: reason });
+        }).join('')}</div>
+        ${state.location[leader] === null ? '<p class="muted">補充を選ぶと武将が許都に復帰します。</p>' : ''}`;
     } else if (state.phase === 'march') {
       content = '<p class="muted">地図の上で行軍の編成と行き先を選べます。</p>';
     } else if (state.phase === 'disband') {
       const at = selected;
       const n = rules.troops(state, at, 'cao');
-      content = `${panelTitle('献帝', '曹操軍の解散')}<p>解散は任意です。駒を戻す場合は拠点を選び、終わったら画面上部のボタンで進みます。</p>
+      content = `${panelTitle('献帝', '曹操軍の解散')}<p>解散は任意です。駒を戻す場合は拠点を選び、終わったら地図右下のボタンで進みます。</p>
         ${n ? `<div class="button-row"><label>軍勢駒 <input type="number" id="disbandAmount" min="1" max="${n}" value="1"></label>${button('disbandTroops', '軍勢駒を解散')}</div>` : ''}
         <div class="button-row">${rules.present(state, at, 'cao').map(id => button('disbandLeader',
           `${leaders[id].name}を解散`, { value: id })).join('')}</div>`;
@@ -354,7 +358,7 @@
       content = `${panelTitle('ゲーム終了', state.won ? '勝利' : '敗北')}<p>${state.end}</p>`;
     } else {
       content = `${panelTitle('戦況', state.turn ? '次の天命札へ' : '戦いの始まり')}
-        <p class="muted">${state.turn ? '上のボタンから山札を引きます。' : '最初の天命札は任意で選べます。'}</p>`;
+        <p class="muted">${state.turn ? '地図右下のボタンから山札を引きます。' : '最初の天命札は任意で選べます。'}</p>`;
     }
     $('actionPanel').innerHTML = content + detailView();
   }
@@ -516,10 +520,17 @@
   }
 
   const change = ok => { if (ok) render(); };
+  function chooseActingLeader(id) {
+    if (!rules.selectLeader(state, id)) return false;
+    const at = state.location[id];
+    if (areas[at]) selected = at;
+    render();
+    return true;
+  }
+
   document.addEventListener('change', event => {
     const { id, value } = event.target;
     if (!state) return;
-    if (id === 'actingLeader') { state.active.leader = value; render(); }
     if (id === 'marchExtra') { marchExtra = value; marchView(); $('marchExtra').focus(); }
     if (id === 'marchTroops') marchTroops = Number(value);
   });
@@ -540,9 +551,20 @@
     }
     if (action === 'area') {
       selected = value;
+      if (state.phase === 'action' && state.active.card === 'cao') {
+        const here = state.active.choices.filter(id => state.location[id] === value);
+        if (here.length === 1 && chooseActingLeader(here[0])) {
+          $('areaNodes').querySelector(`[data-value="${value}"]`)?.focus({ preventScroll: true });
+          return;
+        }
+      }
       if (state.phase === 'march' && marchTroops !== null &&
           rules.march(state, value, marchTroops, marchExtra || null)) render();
       else { boardView(); actionView(); }
+      return;
+    }
+    if (action === 'selectLeader') {
+      if (chooseActingLeader(value)) $('actionPanel').querySelector(`[data-value="${value}"]`)?.focus({ preventScroll: true });
       return;
     }
     if (action === 'cancelMarch') { state.phase = 'action'; render(); return; }
