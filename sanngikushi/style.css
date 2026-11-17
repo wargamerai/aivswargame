@@ -44,6 +44,12 @@ small { font-size: .78rem; }
   background: var(--dark); border-bottom: 3px solid #997749; color: #fff9e9;
 }
 .identity, .top-actions, .button-row, .toolbar-status, .section-heading { display: flex; align-items: center; gap: .5rem; }
+.top-actions { flex-wrap: wrap; justify-content: flex-end; }
+.language-select { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
+.language-select select {
+  min-height: 2.5rem; padding: .3rem .4rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: .4rem;
+}
 .identity { gap: .75rem; }
 .identity h1 { font-family: "Yu Mincho", "Hiragino Mincho ProN", serif; font-size: 1.35rem; line-height: 1.12; }
 .identity p { color: var(--gold); font-size: .72rem; letter-spacing: .18em; }
@@ -269,7 +275,8 @@ dialog::backdrop { background: #17251dc9; }
   .action-panel { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
-  .topbar { padding: .55rem .65rem; }
+  .topbar { flex-wrap: wrap; gap: .5rem; padding: .55rem .65rem; }
+  .language-select { font-size: .75rem; }
   .topbar button { font-size: .75rem; padding: .3rem .5rem; }
   .start-shell { margin: .75rem auto 1.5rem; padding: 0 .65rem; }
   .setup-panel { grid-template-columns: minmax(0, 1fr); grid-template-areas: "heading" "roster" "map" "footer"; }
