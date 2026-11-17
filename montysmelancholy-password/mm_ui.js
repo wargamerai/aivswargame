@@ -334,7 +334,8 @@
     return out;
   }
   const fmt = c => (c === 0.5 ? '½' : c % 1 ? Math.floor(c) + '½' : String(c));
-  const movers = () => [...UI.sel].filter(i => !G.S.u[i].back && G.UNIT[i].m > 0);
+  const hasLegalMove = id => Object.keys(G.legalMoves(id)).length > 0;
+  const movers = () => [...UI.sel].filter(hasLegalMove);
   function moveSet(mode) {
     mode = mode || UI.mode;
     const ids = movers();
@@ -673,7 +674,9 @@
       const allElig = al.filter(s => elig.has(s.id) && !UI.orders.some(o => o.id === s.id));
       b('全部選ぶ', allElig.length > 0, () => { allElig.forEach(s => UI.sel.add(s.id)); openArea(id, ev); renderMap(); });
       const room = p.val - usedVal() - [...UI.sel].filter(i => !UI.orders.some(o => o.id === i)).length;
+      const enemyPresent = G.enemyHere(id, 'A');
       const strong = allElig.filter(s => !s.back && !UI.sel.has(s.id))
+        .filter(s => hasLegalMove(s.id) || (enemyPresent && G.UNIT[s.id].a > 0))
         .map((s, k) => ({ s, k }))
         .sort((x, y) => (G.UNIT[y.s.id].a - G.UNIT[x.s.id].a) || (G.UNIT[y.s.id].d - G.UNIT[x.s.id].d) || (x.k - y.k))
         .map(x => x.s);
@@ -684,10 +687,10 @@
       const atk = sel.filter(s => !s.back && G.UNIT[s.id].a > 0);
       const rec = sel.filter(s => s.back);
       const canMove = Object.keys(moveSet('move')).length > 0;
-      const canMA = mv.some(s => G.UNIT[s.id].tank) && Object.keys(moveSet('moveattack')).length > 0;
+      const canMA = movers().some(i => G.UNIT[i].tank) && Object.keys(moveSet('moveattack')).length > 0;
       b('移動', canMove, () => { UI.mode = 'move'; UI.err = null; closePop(); render(); });
       b('移動+攻撃', canMA, () => { UI.mode = 'moveattack'; UI.err = null; closePop(); render(); });
-      b('攻撃', atk.length > 0 && G.enemyHere(id, 'A'), () => { setOrder('attack'); openArea(id, ev); });
+      b('攻撃', atk.length > 0 && enemyPresent, () => { setOrder('attack'); openArea(id, ev); });
       b('回復', rec.length > 0, () => { setOrder('recover'); openArea(id, ev); });
       b('命令を消す', sel.some(s => UI.orders.some(o => o.id === s.id)), () => { UI.orders = UI.orders.filter(o => !UI.sel.has(o.id)); UI.sel = new Set(); openArea(id, ev); render(); });
       b('1つ戻す', UI.orders.length > 0, () => { undoLast(); openArea(id, ev); render(); });
@@ -706,9 +709,12 @@
       const fixed = sel.filter(s => !s.back && !G.UNIT[s.id].m).map(s => G.UNIT[s.id].name);
       if (fixed.length) warn(`${fixed.join('、')} は移動力0・攻撃力0なので、移動も攻撃もしません。`);
       const noAtk = sel.filter(s => !s.back && G.UNIT[s.id].m && !G.UNIT[s.id].a).map(s => G.UNIT[s.id].name);
-      if (noAtk.length && G.enemyHere(id, 'A')) warn(`${noAtk.join('、')} は攻撃力0なので攻撃しません。`);
-      if (mv.length && !canMove && !(atk.length && G.enemyHere(id, 'A'))) warn(noMoveReason(mv));
-      if (atk.length && !G.enemyHere(id, 'A')) warn('攻撃できるのは同じエリアの敵だけ。このエリアに敵はいない。戦車以外は、移動した札では攻撃できない。');
+      if (noAtk.length && enemyPresent) warn(`${noAtk.join('、')} は攻撃力0なので攻撃しません。`);
+      if (mv.length && !canMove && !(atk.length && enemyPresent)) warn(noMoveReason(mv));
+      if (canMove) {
+        mv.filter(s => !hasLegalMove(s.id)).forEach(s => warn(`${G.UNIT[s.id].name}　この駒には移動先がない。`));
+      }
+      if (atk.length && !enemyPresent) warn('攻撃できるのは同じエリアの敵だけ。このエリアに敵はいない。戦車以外は、移動した札では攻撃できない。');
     }
     place(ev);
     renderMap();
