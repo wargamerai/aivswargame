@@ -129,6 +129,21 @@
   @media (max-width: 600px) { #status { flex-basis:44%; } .col { min-width:0 !important; width:100%; } }
   /* スマホ（縦持ち・横持ち）は、ステータス → 船団と地図 → Uボート を縦1列に */
   @media (max-width: 600px), (pointer: coarse) and (max-height: 500px) { #status .col, #status .col.ship, #status .col.info, #status .col.ub { flex:0 0 100%; min-width:0 !important; width:100%; } }
+  #epilogue-dialog { width:min(calc(100% - 1.25rem),42rem); max-height:calc(100dvh - 1.25rem); padding:0; border:1px solid #776543; border-radius:.7rem; background:#14212e; color:var(--txt); box-shadow:0 20px 70px #000a; }
+  #epilogue-dialog::backdrop { background:#070e16dd; }
+  #epilogue-dialog[open] { display:flex; flex-direction:column; }
+  #epilogue-dialog header, #epilogue-dialog footer { padding:clamp(.75rem,3vw,1.4rem); background:#101c27; }
+  #epilogue-ship { color:var(--acc); margin:0; font-weight:700; overflow-wrap:anywhere; }
+  #epilogue-title { margin:0; font-size:clamp(1.25rem,5vw,2rem); line-height:1.25; }
+  #epilogue-report { overflow:auto; padding:.7rem clamp(.75rem,3vw,1.4rem); }
+  #epilogue-report ul { margin:.4rem 0; padding-left:1.45rem; }
+  .epilogue-details { color:var(--dice); font-variant-numeric:tabular-nums; }
+  .epilogue-results { color:#f4e4be; font-weight:700; }
+  #epilogue-report blockquote { margin:.75rem 0; padding:.65rem .9rem; border-left:3px solid var(--acc); background:#1c2b39; color:#fff2d6; font-family:'Hiragino Mincho ProN','Yu Mincho',serif; }
+  #epilogue-report cite { display:block; margin-bottom:.3rem; font-family:system-ui,sans-serif; font-size:.85rem; font-weight:700; font-style:normal; color:var(--acc); }
+  #epilogue-report blockquote p { margin:0; }
+  #epilogue-next { cursor:pointer; width:100%; min-height:2.75rem; border:0; border-radius:.3rem; background:var(--acc); color:#211a10; font:inherit; font-weight:700; }
+  #epilogue-next:focus-visible { outline:2px solid #fff; outline-offset:3px; }
 </style>
 </head>
 <body>
@@ -156,7 +171,13 @@
 <script src="cc_story_en.js"></script>
 <script src="cc_story_more_en.js"></script>
 <script src="../report-limit.js"></script>
-<script src="cc_game.js"></script>
+<dialog id="epilogue-dialog" aria-labelledby="epilogue-title">
+  <header><p id="epilogue-ship"></p><h2 id="epilogue-title" tabindex="-1"></h2></header>
+  <div id="epilogue-report"></div>
+  <footer><button type="button" id="epilogue-next"></button></footer>
+</dialog>
+<script src="cc_epilogue.js?v=last-escort"></script>
+<script src="cc_game.js?v=last-escort"></script>
 <script>
   // 英語の時は、上のボタンなどの文字を英語にする
   if (LANG !== 'ja') {

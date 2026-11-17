@@ -1347,7 +1347,6 @@ Victory points <b>${vp > 0 ? '+' : ''}${vp} VP</b><br>Year-to-date total <b>${ye
 // ===================== ゲームの終わり（12.0）=====================
 async function campaignEnd(why) {
   const C = S.camp;
-  S.phase = 'over';
   UI.head(L('━━━━ 戦いの終わり ━━━━', '━━━━ The war\'s end ━━━━'));
   if (S.mode === '1m') {
     const m = C.missions[C.missions.length - 1];
@@ -1367,63 +1366,18 @@ async function campaignEnd(why) {
   if (why === 'sunk') UI.bad(L('乗艦の沈没で、ここで終えました。', 'Your ship was sunk; the game ends here.'));
   else if (S.mode === '2y') {
     const v = await UI.choose(L(`${SH().name}は1943年5月31日まで生き残った。その後の運命を見ますか？（15.4）`, `${SH().name} survived until 31 May 1943. Do you want to see what became of her? (15.4)`), [{ label: L('見る', 'Show me'), value: 1 }, { label: L('見ない', 'No thanks'), value: 0 }]);
-    if (v) await epilogue();
+    if (v) { await epilogue(); return; }
   }
+  await finishCampaign();
+}
+
+async function finishCampaign() {
+  S.phase = 'over';
   saveLocal();
   await UI.choose(L('おつかれさまでした。', 'Well done.'), [{ label: L('新しいゲームを始める', 'Start a new game'), value: 1 }]);
   localStorage.removeItem(SAVE_KEY);
   location.reload();
 }
-// 15.4 コルベットのその後
-async function epilogue() {
-  const total = ['gun4', 'aa', 'dc', 'asdic', 'watch', 'engine', 'radar', 'hfdf'].filter(hasSection).reduce((t, k) => t + SH().skills[k], 0);
-  const vpAll = (S.camp.yearVP[1] || 0) + (S.camp.yearVP[2] || 0);
-  const d36 = () => d6() * d6();
-  let alive = true;
-  UI.log(L(`総合スキル ${total}`, `Overall skill ${total}`));
-  const yearRun = async (y, table) => {
-    const r = d6(); const area = table[r];
-    const x = d36();
-    UI.dice(L(`${y}年: 1d6＝${r} → <b>${area}</b>`, `${y}: 1d6=${r} → <b>${TK(area)}</b>`));
-    if (area === '地中海' || area === 'イギリス海峡') {
-      UI.dice(`1d36＝${x}`);
-      if ((area === '地中海' && x === 36) || (area === 'イギリス海峡' && (x === 30 || x === 36))) { UI.bad(L('コルベットは戦没した。', 'The corvette was lost in action.')); return false; }
-      if (x <= total) UI.good(L(`${area === '地中海' ? 'ハスキー作戦' : 'ネプチューン作戦'}に参加、功績をあげた（+1 VP）`, `Took part in ${area === '地中海' ? 'Operation Husky' : 'Operation Neptune'} with distinction (+1 VP)`));
-      if (x <= total / 2) UI.good(L('U ボートを1隻撃沈した。', 'Sank one U-boat.'));
-    } else if (area === '近海') {
-      UI.dice(`1d36＝${x}`);
-      if (x === 36) { UI.bad(L('コルベットは戦没した。', 'The corvette was lost in action.')); return false; }
-      if (x <= SH().skills.dc) UI.good(L('U ボートを1隻撃沈した。', 'Sank one U-boat.'));
-    } else if (area === '北極海') {
-      UI.dice(`1d36＝${x}`);
-      if (x === 30 || x === 36) { UI.bad(L('コルベットは戦没した。', 'The corvette was lost in action.')); return false; }
-      if (x <= total / 2) UI.good(L('U ボートを1隻撃沈した。', 'Sank one U-boat.'));
-    } else UI.log(L('オーバーホールのため、主立った戦果はなかった。', 'Under overhaul, so no notable successes.'));
-    return true;
-  };
-  alive = await yearRun(1943, { 1: '地中海', 2: '地中海', 3: '近海', 4: '近海', 5: '北極海', 6: 'オーバーホール' });
-  if (alive) alive = await yearRun(1944, { 1: '近海', 2: 'イギリス海峡', 3: 'イギリス海峡', 4: 'イギリス海峡', 5: '北極海', 6: 'オーバーホール' });
-  if (!alive) return;
-  let mod = 0, year = 1945;
-  for (let guard = 0; guard < 20; guard++) {
-    const r = Math.min(6, d6() + mod);
-    UI.dice(L(`${year}年: 1d6${mod ? '+' + mod : ''}＝${r}`, `${year}: 1d6${mod ? '+' + mod : ''}=${r}`));
-    if (r === 1) {
-      const x = d36(); UI.dice(L(`護衛任務 1d36＝${x}`, `Escort duty 1d36=${x}`));
-      if (x === 25 || x === 30 || x === 36) { UI.bad(L('最後の護衛任務で戦没した。', 'Lost in action on her last escort duty.')); return; }
-      if (x <= SH().skills.dc) UI.good(L('U ボートを1隻撃沈した。', 'Sank one U-boat.'));
-      mod += 1;
-    } else if (r === 2) { UI.log(L('イギリス連邦または同盟国に譲渡され、軍艦として運用された。', 'Transferred to a Commonwealth or Allied navy and served on as a warship.')); mod += 2; }
-    else if (r === 3) { UI.log(L('民間に払い下げられ、おそらく捕鯨船として使われた。', 'Sold into civilian hands, probably to serve as a whale catcher.')); mod += 2; }
-    else {
-      const x = d36(); UI.dice(L(`解体 1d36＝${x}（合計 VP ${vpAll}）`, `Scrapping 1d36=${x} (total VP ${vpAll})`));
-      if (x <= vpAll) UI.good(L(`<b>${SH().name}は記念館として保存された！</b>`, `<b>${SH().name} has been preserved as a memorial!</b>`)); else UI.log(L(`長年活躍した${SH().name}も、ついにスクラップにされた。`, `After long years of service, ${SH().name} was finally broken up for scrap.`));
-      return;
-    }
-    year += 5;
-  }
-}
-
 // ===================== ステータス（上半分）=====================
 function renderStatus() {
   const el = $('status');
@@ -1574,6 +1528,7 @@ async function runGame() {
       else if (S.phase === 'missionSetup') { await missionSetup(); S.phase = 'turn'; }
       else if (S.phase === 'turn') { const r = await playTurn(); if (r === 'arrived') S.phase = 'missionEnd'; }
       else if (S.phase === 'missionEnd') await missionEnd();
+      else if (S.phase === 'epilogue') { await epilogue(); return; }
       else if (S.phase === 'campaignEnd') { await campaignEnd(); return; }
       else return;
     }
