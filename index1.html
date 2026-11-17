@@ -134,6 +134,17 @@
             letter-spacing: 1px;
         }
 
+        .journal-section {
+            margin-top: 36px;
+            padding-top: 18px;
+            border-top: 2px solid var(--border-color);
+        }
+
+        .journal-section h2 {
+            margin: 0 0 16px;
+            color: var(--indigo);
+            font-size: 1.4em;
+        }
     </style>
 </head>
 <body>
@@ -279,7 +290,26 @@
         </a>
     </div>
 
+    <section class="journal-section" aria-labelledby="game-journal">
+        <h2 id="game-journal">ゲームジャーナル</h2>
+        <div class="btn-group">
+            <a href="nobunaga-gj/index.html" class="theater-btn">
+                孤高の信長
+                <span>GJ版 · パスワード付き</span>
+            </a>
+            <a id="monty-password-link" href="montysmelancholy-password/index.html?lang=ja" class="theater-btn">
+                モントゴメリーの憂鬱
+                <span>パスワード版</span>
+            </a>
+        </div>
+    </section>
 </div>
+
+<script>
+    if (location.protocol === "file:") {
+        document.getElementById("monty-password-link").href = "b17/モントゴメリーの憂鬱-パスワード版/index.html?lang=ja";
+    }
+</script>
 
 </body>
 </html>

@@ -1,5 +1,7 @@
 (() => {
   const D = window.GAME_DATA;
+  const edition = document.documentElement.dataset.edition;
+  const saveKey = edition === 'gj' ? 'nobunaga1570-gj-save' : 'nobunaga1570-save';
   try{history.replaceState({nobunagaGame:true},'',location.href);history.pushState({nobunagaGame:true},'',location.href);window.addEventListener('popstate',()=>history.pushState({nobunagaGame:true},'',location.href))}catch{}
   let battleQueue=[],battleInProgress=false,battleTimer=null,movementTimer=null,movementPlan=null,resolutionEntries=[],enemyStepQueue=[],enemyStepCard=null,enemyCurrentStep=null,enemyStepHistory=[],enemyViewIdx=-1,enemyAutoConfirm=false;const announcementQueue=[];let announcementBusy=false,gameEndDismissed=false;
   const $ = (s) => document.querySelector(s);
@@ -77,8 +79,8 @@
   state.tracks ||= {};for(const key of ['oda','tokugawa','matsunaga','uesugi','mori','ukita'])state.tracks[key]??=0;state.tracks.uesugi=Math.min(7,state.tracks.uesugi);state.tracks.mori=Math.min(7,state.tracks.mori);state.tracks.ukita=Math.min(7,state.tracks.ukita);state.tracks.tokugawa=Math.min(4,state.tracks.tokugawa);state.tracks.matsunaga=Math.min(4,state.tracks.matsunaga);syncLoyaltyForce('tokugawa');syncLoyaltyForce('matsunaga');state.tracks.oda=Math.min(5,state.tracks.oda);state.revoltTracks ||= {};state.activeCard ||= null;state.lastActor ||= null;
   if(!state.deck?.every(c=>scenarioCards(state.options).some(d=>d.name===c.name))){state.deck=shuffle(scenarioCards(state.options));state.discard=[];state.lastCard=null}
   function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-  function save(){if(state.over&&!state.reportDone&&(state.report||[]).length){state.reportDone=true;setTimeout(()=>{try{downloadReport()}catch(e){console.error(e)}},900)}try{localStorage.setItem('nobunaga1570-save',JSON.stringify(state))}catch{}}
-  function load(){try{const v=JSON.parse(localStorage.getItem('nobunaga1570-save'));return v&&v.areas?v:null}catch{return null}}
+  function save(){if(state.over&&!state.reportDone&&(state.report||[]).length){state.reportDone=true;setTimeout(()=>{try{downloadReport()}catch(e){console.error(e)}},900)}try{localStorage.setItem(saveKey,JSON.stringify(state))}catch{}}
+  function load(){try{const v=JSON.parse(localStorage.getItem(saveKey));return v&&v.areas?v:null}catch{return null}}
   function note(t){(state.report||=[]).push({k:'note',r:state.round,c:state.lastCard?.name||'',t});state.log.unshift(t);state.log=state.log.slice(0,24);resolutionEntries.unshift(t)}
   function areaBy(id){return D.areas.find(a=>a.id===id)}
   function isPlayer(f){return f.side==='player'}
@@ -445,18 +447,94 @@
     const done=damage=>{reg.forces=reg.forces.filter(alive);note(`${leader}が攻撃。出目 ${rolls.join('・')}、${hits}損害。`);queueBattle({area:areaBy(id).name,attackerSide:att.side,attackers:attSnap,defenders:defSnap,attackPower:power,rolls,hits,damage});finishAction(id,leader)};
     // 8.0(4): 損害を与える駒はプレーヤーが選ぶ（制限の中で）。選べる相手が1つだけなら自動
     const homeHere=a=>armyHomes(a).has(id),choices=targets.filter(f=>!homeHere(f.army));
-    if(hits>0&&new Set(choices.filter(f=>f.count>0).map(f=>f.army)).size>1){note(`${leader}が攻撃。出目 ${rolls.join('・')}、${hits}損害。`);queueBattle({area:areaBy(id).name,attackerSide:att.side,attackers:attSnap,defenders:defSnap,attackPower:power,rolls,hits,damage:null,allocate:cb=>chooseCasualties(reg,targets,hits,id,damage=>{reg.forces=reg.forces.filter(alive);cb(damage);finishAction(id,leader)})})}else done(applyDamage(reg,targets,hits,'player',id))}
-  function chooseCasualties(reg,targets,hits,id,done){
-    const homeHere=a=>armyHomes(a).has(id);const rows=targets.map((f,i)=>({f,i,home:homeHere(f.army)}));
-    const dlg=document.createElement('dialog');dlg.className='casualty-dialog resolution-dialog';
-    dlg.innerHTML=`<div class="resolution-sheet"><span class="eyebrow">損害の割り振り（ルール8.0(4)）</span><h2>${hits} 損害を、どの駒に与えますか</h2><p class="muted">武将は同じ軍の軍勢が0になってから。${areaBy(id).name}が本領の軍は、ほかの駒がなくなってから。</p><div class="cas-rows">${rows.map(r=>`<label class="cas-row">${esc(r.f.leader||r.f.army)}${r.home?'（本領）':''} 軍勢${r.f.count}駒<input type="number" min="0" max="${r.f.count}" value="0" data-i="${r.i}"></label>`).join('')}</div><p class="cas-left"></p><button class="primary" type="button">決定</button></div>`;
-    document.body.append(dlg);const inputs=[...dlg.querySelectorAll('input')],left=dlg.querySelector('.cas-left'),btn=dlg.querySelector('button');
-    const troopsTotal=targets.reduce((s,f)=>s+f.count,0),need=Math.min(hits,troopsTotal);
-    const check=()=>{const sum=inputs.reduce((s,x)=>s+(Number(x.value)||0),0);const nonHomeLeft=rows.filter(r=>!r.home).reduce((s,r)=>s+r.f.count-(Number(inputs.find(x=>+x.dataset.i===r.i).value)||0),0);const homeUsed=rows.filter(r=>r.home).reduce((s,r)=>s+(Number(inputs.find(x=>+x.dataset.i===r.i).value)||0),0);let msg=`あと ${need-sum} 駒`;let ok=sum===need;if(homeUsed>0&&nonHomeLeft>0){ok=false;msg='本領の軍より先に、ほかの駒から選んでください'}left.textContent=msg;btn.disabled=!ok};
-    inputs.forEach(x=>x.addEventListener('input',check));check();dlg.showModal();
-    btn.addEventListener('click',()=>{const casualties=[];let dealt=0;for(const x of inputs){const n=Math.min(Number(x.value)||0,targets[+x.dataset.i].count);if(!n)continue;const f=targets[+x.dataset.i];f.count-=n;poolFor(f,n);dealt+=n;casualties.push({name:f.leader||shownArmy(f),troops:n,leader:false,side:f.side})}
-      let rest=hits-dealt;for(const f of targets){if(rest<=0)break;if(f.leader&&!targets.some(g=>g.army===f.army&&g.count>0)){const name=f.leader;sendLeaderToPool(f);casualties.push({name,troops:0,leader:true,side:f.side});dealt++;rest--}}
-      dlg.close();dlg.remove();done({dealt,casualties})})}
+    if(hits>0&&new Set(choices.filter(f=>f.count>0).map(f=>f.army)).size>1){note(`${leader}が攻撃。出目 ${rolls.join('・')}、${hits}損害。`);queueBattle({area:areaBy(id).name,attackerSide:att.side,attackers:attSnap,defenders:defSnap,attackPower:power,rolls,hits,damage:null,allocate:(confirm,cancel)=>chooseCasualties(targets,hits,id,damage=>{reg.forces=reg.forces.filter(alive);confirm(damage);finishAction(id,leader)},cancel)})}else done(applyDamage(reg,targets,hits,'player',id))}
+  function chooseCasualties(targets, hits, id, done, cancel) {
+    const need = Math.min(hits, targets.reduce((sum, f) => sum + f.count, 0));
+    const rows = targets.map(force => ({force, home:armyHomes(force.army).has(id), buttons:[]}));
+    const selected = new Set();
+    const dlg = document.createElement('dialog');
+    dlg.className = 'casualty-dialog resolution-dialog';
+    dlg.setAttribute('aria-labelledby', 'casualtyTitle');
+    dlg.innerHTML = `<div class="resolution-sheet">
+      <h2 id="casualtyTitle">${hits} 命中 · 損害の割り振り</h2>
+      <p class="muted">駒を押して選択し、もう一度押すと外せます。本領の軍勢は、ほかの軍勢のあとに選べます。武将の損害は残りの命中で処理します。</p>
+      <div class="cas-rows"></div>
+      <p class="cas-left" role="status"></p>
+      <div class="cas-actions">
+        <button class="primary" type="button" data-confirm>決定</button>
+        <button class="quiet" type="button" data-cancel>取り消し</button>
+      </div>
+    </div>`;
+    const list = dlg.querySelector('.cas-rows');
+    const left = dlg.querySelector('.cas-left');
+    const confirm = dlg.querySelector('[data-confirm]');
+
+    function updateSelection() {
+      const otherTroopsLeft = rows.some(row => !row.home && row.buttons.some(token => !selected.has(token)));
+      const homeSelectedEarly = otherTroopsLeft && rows.some(row => row.home && row.buttons.some(token => selected.has(token)));
+      const remaining = need - selected.size;
+      for (const row of rows) for (const token of row.buttons) {
+        const pressed = selected.has(token);
+        token.setAttribute('aria-pressed', String(pressed));
+        token.classList.toggle('casualty', pressed);
+        token.disabled = !pressed && (remaining === 0 || (row.home && otherTroopsLeft));
+      }
+      left.textContent = homeSelectedEarly ? '先に本領以外の軍勢駒を選んでください。' : `あと ${remaining} 駒選択`;
+      confirm.disabled = remaining !== 0 || homeSelectedEarly;
+    }
+
+    for (const row of rows) {
+      const force = snapshotForce(row.force);
+      if (row.home) force.name += '（本領）';
+      addBattleForce(list, force, undefined, (token, index) => {
+        row.buttons.push(token);
+        token.setAttribute('aria-label', `${force.name}の軍勢駒 ${index + 1}`);
+        token.addEventListener('click', () => {
+          if (!selected.delete(token)) selected.add(token);
+          updateSelection();
+        });
+      });
+    }
+
+    function close() {
+      dlg.close();
+      dlg.remove();
+    }
+    function cancelSelection() {
+      close();
+      cancel();
+    }
+    dlg.querySelector('[data-cancel]').addEventListener('click', cancelSelection);
+    dlg.addEventListener('cancel', event => {
+      event.preventDefault();
+      cancelSelection();
+    });
+    confirm.addEventListener('click', () => {
+      const casualties = [];
+      let dealt = 0;
+      for (const {force, buttons} of rows) {
+        const count = buttons.filter(token => selected.has(token)).length;
+        if (!count) continue;
+        force.count -= count;
+        poolFor(force, count);
+        dealt += count;
+        casualties.push({name:force.leader || shownArmy(force), troops:count, leader:false, side:force.side});
+      }
+      for (const force of targets) {
+        if (dealt >= hits) break;
+        if (!force.leader || targets.some(other => other.army === force.army && other.count > 0)) continue;
+        const name = force.leader;
+        sendLeaderToPool(force);
+        casualties.push({name, troops:0, leader:true, side:force.side});
+        dealt++;
+      }
+      close();
+      done({dealt, casualties});
+    });
+    updateSelection();
+    document.body.append(dlg);
+    dlg.showModal();
+  }
   function bindReinforceChoices(max){
     $('#confirmReinforce').addEventListener('click',()=>reinforce(state.selectedLeader,Number($('#reinforceCount').value)));
     const group=friendlyCommanders(state.selectedArea).filter(f=>!excludedFromAllocation(f.leader));
@@ -672,7 +750,7 @@
   // ===== レポート（ゲーム終了時に自動、ボタンでいつでも）2026-11-09 =====
   function buildReport(){const W=4153,H=2923,R=state.report||[],P=a=>{const x=areaBy(a);return x?[W*x.x/100,H*x.y/100]:[0,0]};
     const red='#a8432f',blue='#2f4f6f',sideCol=s=>s==='player'?red:s==='enemy'?blue:'#777',sideJ=s=>s==='player'?'信長側':s==='enemy'?'反信長':'中立';
-    const mapUrl=new URL('assets/maps/white-map.png',location.href).href;
+    const mapUrl=new URL('assets/maps/white-map.png',document.baseURI).href;
     const terr=Object.entries(window.TERRITORY_PATHS||{}).map(([id,d])=>{const c=state.areas[id]?.control;return `<path d="${d}" fill="${c==='player'?red:c==='enemy'?blue:'none'}" fill-opacity=".22" stroke="none"/>`}).join('');
     const moves=R.filter(e=>e.k==='move');
     const arrows=moves.map((e,i)=>{const [x1,y1]=P(e.from),[x2,y2]=P(e.to),dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,o=(i%3-1)*18,nx=-dy/L*o,ny=dx/L*o,sx=x1+dx*.12+nx,sy=y1+dy*.12+ny,ex=x2-dx*.18+nx,ey=y2-dy*.18+ny,c=sideCol(e.side);
@@ -796,7 +874,42 @@
   function showNextAnnouncement(){if(!announcementQueue.length){announcementBusy=false;return}announcementBusy=true;const item=announcementQueue.shift(),el=$('#actionAnnouncement');el.innerHTML=`<b>${esc(item.kind)}</b><span>${esc(item.message)}</span>`;el.hidden=false;el.classList.remove('announce-in');void el.offsetWidth;el.classList.add('announce-in');setTimeout(()=>{el.hidden=true;announcementBusy=false;showNextAnnouncement()},2600)}
   function queueBattle(event){if(event.damage)battleReport(event);battleQueue.push(event);if(!battleInProgress)showNextBattle()}
   function battleReport(event){{const ar=D.areas.find(a=>a.name===event.area);(state.report||=[]).push({k:'battle',r:state.round,c:state.lastCard?.name||'',area:ar?.id,side:event.attackerSide,hits:event.hits,dealt:event.damage?.dealt||0,att:(event.attackers.find(f=>f.leader)||event.attackers[0]||{}).name||'',attArmy:(event.attackers[0]||{}).army||'',defs:[...new Set(event.defenders.map(f=>f.army))],lost:(event.damage?.casualties||[]).filter(x=>x.leader).map(x=>x.name)})}}
-  function addBattleForce(container,force,marks={troops:0,leader:false},sideName=''){const row=document.createElement('div');row.className=`battle-force ${force.side}`;const header=document.createElement('div');header.className='battle-force-head';const name=document.createElement('b');name.textContent=force.name||force.army;const quantity=document.createElement('small');quantity.textContent=`${force.count}駒${force.leader?' + 武将':''}`;header.append(name,quantity);row.append(header);const pile=document.createElement('div');pile.className='battle-token-pile';for(let i=0;i<force.count;i++){const token=document.createElement('span');token.className=`battle-token ${i<marks.troops?'casualty':''}`;token.textContent='兵';token.style.setProperty('--tone',factionColor(force.army));pile.append(token)}if(force.leader){const leader=document.createElement('span');leader.className=`battle-token leader-token ${marks.leader?'casualty':''}`;leader.textContent='将';leader.title=force.leader;leader.style.setProperty('--tone',factionColor(force.army));pile.append(leader)}row.append(pile);container.append(row)}
+  function addBattleForce(container, force, marks = {troops:0, leader:false}, bindTroop) {
+    const row = document.createElement('div');
+    row.className = `battle-force ${force.side}`;
+    const header = document.createElement('div');
+    header.className = 'battle-force-head';
+    const name = document.createElement('b');
+    name.textContent = force.name || force.army;
+    const quantity = document.createElement('small');
+    quantity.textContent = `${force.count}駒${force.leader ? ' + 武将' : ''}`;
+    header.append(name, quantity);
+    row.append(header);
+    const pile = document.createElement('div');
+    pile.className = 'battle-token-pile';
+    const tone = factionColor(force.army);
+    for (let i = 0; i < force.count; i++) {
+      const token = document.createElement(bindTroop ? 'button' : 'span');
+      token.className = `battle-token ${i < marks.troops ? 'casualty' : ''}`;
+      token.textContent = '兵';
+      token.style.setProperty('--tone', tone);
+      if (bindTroop) {
+        token.type = 'button';
+        bindTroop(token, i);
+      }
+      pile.append(token);
+    }
+    if (force.leader) {
+      const leader = document.createElement('span');
+      leader.className = `battle-token leader-token ${marks.leader ? 'casualty' : ''}`;
+      leader.textContent = '将';
+      leader.title = force.leader;
+      leader.style.setProperty('--tone', tone);
+      pile.append(leader);
+    }
+    row.append(pile);
+    container.append(row);
+  }
   function showNextBattle(){if(!battleQueue.length){battleInProgress=false;return}battleInProgress=true;const b=battleQueue[0];$('#battleTitle').textContent=`${b.area}の合戦`;
     const sideText=side=>side==='player'?'信長側':side==='enemy'?'反信長':'中立';$('#battleAttackerSide').textContent=`攻撃側 · ${sideText(b.attackerSide)}`;$('#battleDefenderSide').textContent=`防御側 · ${[...new Set(b.defenders.map(f=>sideText(f.side)))].join('・')||'なし'}`;
     const a=$('#battleAttackers'),d=$('#battleDefenders');a.replaceChildren();d.replaceChildren();for(const f of b.attackers)addBattleForce(a,f);for(const f of b.defenders)addBattleForce(d,f,{troops:0,leader:false});const showLosses=b.showLosses=()=>{const damageByName={};for(const loss of b.damage.casualties){damageByName[loss.name]||={troops:0,leader:false};damageByName[loss.name].troops+=loss.troops;damageByName[loss.name].leader=damageByName[loss.name].leader||loss.leader}d.replaceChildren();for(const f of b.defenders){const loss=damageByName[f.name]||{troops:0,leader:false};addBattleForce(d,f,loss)}};
@@ -804,7 +917,45 @@
     b.roll=()=>{b.roll=null;$('#battleHitCount').textContent='判定中…';$('#battleContinue').disabled=true;$('#battleContinue').textContent='判定中…';paintBattleDice(b.rolls.map(()=>1+Math.floor(Math.random()*6)),b.attackPower,true);
     let step=0;clearInterval(battleTimer);battleTimer=setInterval(()=>{step++;if(step<12){paintBattleDice(b.rolls.map(()=>1+Math.floor(Math.random()*6)),b.attackPower,true);return}clearInterval(battleTimer);battleTimer=null;paintBattleDice(b.rolls,b.attackPower,false);$('#battleHitCount').textContent=`命中 ${b.hits} 個`;if(b.allocate){$('#battleSummary').textContent=`命中 ${b.hits} 個。どの駒に損害を与えるか選んでください`;$('#battleContinue').textContent='損害を割り振る';$('#battleContinue').disabled=false;return}showLosses();$('#battleSummary').textContent=`損害 ${b.damage.dealt} 駒 · ×印が損害を受けたコマです`;$('#battleContinue').textContent='結果を確認';$('#battleContinue').disabled=false},105)}}
   function paintBattleDice(values,power,rolling){$('#battleDice').innerHTML=values.map(n=>`<span class="battle-die ${!rolling&&n<=power?'hit':''} ${rolling?'rolling':''}">${n}</span>`).join('')||'<span class="muted">ダイスなし</span>'}
-  function closeBattle(){if($('#battleContinue').disabled)return;if(battleQueue[0]?.roll){battleQueue[0].roll();return}if(battleQueue[0]?.allocate){const b=battleQueue[0],go=b.allocate;b.allocate=null;$('#battleContinue').disabled=true;go(damage=>{b.damage=damage;battleReport(b);b.showLosses();$('#battleSummary').textContent=`損害 ${damage.dealt} 駒 · ×印が損害を受けたコマです`;$('#battleContinue').textContent='結果を確認';$('#battleContinue').disabled=false});return}$('#battleDialog').close();clearInterval(battleTimer);battleTimer=null;battleQueue.shift();battleInProgress=false;if(battleQueue.length)setTimeout(showNextBattle,180);else if(state.mode==='enemyBattleWait'){state.mode='enemyStep';render();showEnemyStepConfirmation()}else{showGameEnd();tryAutoDraw()}}
+  function closeBattle() {
+    const button = $('#battleContinue');
+    if (button.disabled) return;
+    const battle = battleQueue[0];
+    if (battle?.roll) {
+      battle.roll();
+      return;
+    }
+    if (battle?.allocate) {
+      button.disabled = true;
+      battle.allocate(damage => {
+        battle.allocate = null;
+        battle.damage = damage;
+        battleReport(battle);
+        battle.showLosses();
+        $('#battleSummary').textContent = `損害 ${damage.dealt} 駒 · ×印が損害を受けたコマです`;
+        button.textContent = '結果を確認';
+        button.disabled = false;
+      }, () => {
+        button.disabled = false;
+        button.focus();
+      });
+      return;
+    }
+    $('#battleDialog').close();
+    clearInterval(battleTimer);
+    battleTimer = null;
+    battleQueue.shift();
+    battleInProgress = false;
+    if (battleQueue.length) setTimeout(showNextBattle, 180);
+    else if (state.mode === 'enemyBattleWait') {
+      state.mode = 'enemyStep';
+      render();
+      showEnemyStepConfirmation();
+    } else {
+      showGameEnd();
+      tryAutoDraw();
+    }
+  }
   function toast(text){const el=$('#toast');el.textContent=text;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
   let mapZoom=1,mapBaseWidth=0,mapBaseHeight=0;
   function setMapZoom(value){const board=$('#board'),viewport=$('.map-viewport');if(!mapBaseWidth){mapBaseWidth=board.clientWidth;mapBaseHeight=board.clientHeight}mapZoom=Math.max(.45,Math.min(1.8,Math.round(value*100)/100));const width=Math.round(mapBaseWidth*mapZoom);board.style.width=`${width}px`;const height=Math.round(mapBaseHeight*mapZoom);board.style.height=`${height}px`;viewport.style.width=`${Math.min(width,mapBaseWidth)}px`;viewport.style.height=`${height}px`;viewport.style.maxHeight='none';viewport.style.maxWidth='100%';viewport.style.marginInline='auto';board.style.setProperty('--map-zoom',mapZoom);$('#mapZoomLevel').textContent=`${Math.round(mapZoom*100)}%`;requestAnimationFrame(positionActionPanel)}
@@ -847,6 +998,7 @@
   $('#formationCancel').addEventListener('click',()=>$('#formationDialog').close());
   $('#formationDialog').addEventListener('close',tryAutoDraw);
   $('#endTurn').addEventListener('click',draw);$('#newGame').addEventListener('click',openStart);$('#helpBtn').addEventListener('click',()=>$('#helpDialog').showModal());$('#closeHelp').addEventListener('click',()=>$('#helpDialog').close());
-  if(!canContinue)$('#continueGame').hidden=true;
-  if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  syncStartOptions();
+  $('#continueGame').hidden=!canContinue;
+  if(edition!=='gj' && 'serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});
 })();
