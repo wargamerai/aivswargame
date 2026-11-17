@@ -218,5 +218,27 @@ button.go { background:#6a5a1c; border-color:var(--acc); font-weight:bold; }
 <script src="mm_report.js"></script>
 <script src="report-limit.js"></script>
 <script src="mm_ui.js"></script>
+<script>
+(() => {
+  const picker = document.getElementById('lg');
+  const loadCounter = () => {
+    if (document.getElementById('monty-goatcounter')) return;
+    const script = document.createElement('script');
+    script.id = 'monty-goatcounter';
+    script.src = 'https://gc.zgo.at/count.js';
+    script.dataset.goatcounter = 'https://shigerusuzuki.goatcounter.com/count';
+    document.head.appendChild(script);
+  };
+  if (picker?.style.display === 'flex') {
+    picker.addEventListener('click', event => {
+      const choice = event.target.closest('#lgBtns button');
+      // Choosing a different language reloads the page and is counted there.
+      if (choice?.lang === MMLang.lang) loadCounter();
+    });
+  } else {
+    loadCounter();
+  }
+})();
+</script>
 </body>
 </html>
