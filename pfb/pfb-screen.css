@@ -319,6 +319,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 #action-area.is-setup .result-stream { display:none; }
 #action-buttons.setup-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:5px; }
 .action-panel { grid-area:human; }
+.action-panel > [data-action="resume_semi"] { display:block; margin:5px 0 0; width:100%; }
 .action-panel.opponent { grid-area:opponent; }
 .result-stream {
     grid-area:result; min-width:0; min-height:0;
@@ -603,6 +604,8 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 .season-dialog table th:nth-child(2) { text-align:left; }
 .season-dialog tr.my-club { background:#fae7a3; }
 .season-dialog .season-fixture { display:block; width:100%; text-align:left; border:0; border-top:1px solid #dfd4ba; background:transparent; padding:.25em .2em; font-size:.92em; overflow-wrap:anywhere; }
+.season-dialog .season-starter { display:grid; gap:2px; font-size:.9em; margin:2px 0 5px; }
+.season-dialog .season-starter select { width:100%; min-width:0; }
 .season-dialog .season-fixture.my-club { background:#fae7a3; font-weight:800; }
 .season-calendar-head { justify-content:space-between; }
 .season-calendar { display:grid; grid-template-columns:repeat(7,minmax(70px,1fr)); overflow:auto; gap:2px; }

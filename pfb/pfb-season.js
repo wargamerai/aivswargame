@@ -267,7 +267,7 @@ const PFBSeason = (() => {
         return {...plan,lineup,starter,selected,positions:assignFieldPositions(lineup,fixed),restored:true};
     }
 
-    function roster(season,data,team,day,startingChoices = false) {
+    function roster(season,data,team,day,startingChoices = false,scheduledGame=null) {
         const restingStarter=startingChoices ? yesterdayStarter(season,team,day) : null;
         const pool=data.filter(row => row['チーム']===team && idOf(row)!==restingStarter && available(season,row,day))
             .sort((a,b) => Number(b['試合数'])-Number(a['試合数']));
@@ -304,9 +304,22 @@ const PFBSeason = (() => {
             pits.push(reserve);
             starterCandidates.push(reserve);
         }
-        const starter = starterCandidates?.[0] || pits.find(row => real(row) && Number(extractPitcherStats(row).S)>=4 &&
+        const registered=starterCandidates?.find(row=>idOf(row)===scheduledGame?.starter);
+        const starter = registered || starterCandidates?.[0] || pits.find(row => real(row) && Number(extractPitcherStats(row).S)>=4 &&
             (readyPitcher(season,row,day)?.previousInnings || 0)===0) ||
             pits.find(row => !row._anonymous && Number(extractPitcherStats(row).S)>=4) || pits[0];
+        if (scheduledGame) {
+            pits=pits.filter(row=>row===starter || !starterStamina(row));
+            for (let number=0; pits.length<11; number++) {
+                const reserve=anonymous(data,team,'P',number);
+                reserve.Index=reserve._seasonId=team+'/P/R'+(number+1);
+                reserve['氏名']='無名救援投手'+(number+1);
+                reserve['スタミナ']='S=2';
+                if (!available(season,reserve,day)) continue;
+                pits.push(reserve);
+                pool.push(reserve);
+            }
+        }
         const chosenBats = [...selected,...bats.filter(row=>!selected.includes(row))].slice(0,14);
         const chosenPits = [starter,...pits.filter(row=>row!==starter)].slice(0,11);
         const profile = PROFILES[season.clubs[leagueOf(team)].indexOf(team)%PROFILES.length];
@@ -315,14 +328,15 @@ const PFBSeason = (() => {
         const dh = battingOrder.find(row => !selected.includes(row));
         const field = {...positions};
         if (!dh) throw new Error('打順を作成できません。');
-        const plan={pool:startingChoices?pool:undefined,selected:[...chosenBats,...chosenPits],lineup:battingOrder,
-            starter,starterCandidates,positions:field,profile};
+        const plan={pool:startingChoices?[...bats,...pits]:undefined,selected:[...chosenBats,...chosenPits],lineup:battingOrder,
+            starter,starterCandidates:scheduledGame?[starter]:starterCandidates,positions:field,profile,
+            fixedStarter:Boolean(scheduledGame),starterUnavailable:Boolean(scheduledGame?.starter && !registered)};
         const previous=startingChoices && team===season.team ? season.lastRoster : null;
         return previous ? restoreRoster(plan,previous) : plan;
     }
 
     function newGame(season,data,game,rosters) {
-        const selected=rosters || [game.away,game.home].map(team=>roster(season,data,team,game.day));
+        const selected=rosters || [game.away,game.home].map(team=>team===season.team ? roster(season,data,team,game.day,true,game) : roster(season,data,team,game.day));
         for (const team of selected) {
             team.pitchForms = Object.fromEntries(team.selected.filter(isPitcher)
                 .map(row => [idOf(row),readyPitcher(season,row,game.day)]));

@@ -96,7 +96,7 @@ const SAVE_GAME_FIELDS=[
     'gameOver','called','endReason','state','squeezeUsed','endRunUsed','isForward','isCautious',
     'isSqueezeCautious','shockChecked','stealAttempted','startFailed','buntContinuation','plateOutcome',
     'plateComplete','offenseLocked','waitingForCpuDefense','matchStats','matchId','pitchingOrder','hrEvents',
-    'responsible','leadingPitchers','injuryEvents','finalReport','seasonMatch'
+    'responsible','leadingPitchers','injuryEvents','finalReport','seasonMatch','semiAutoInterrupted'
 ];
 const SAVE_PITCHER_FIELDS=[
     'baseG','baseC','tempG','tempC','outsPitched','inningsPitched','facedBatters','appearanceInning','lastInning',

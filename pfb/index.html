@@ -161,7 +161,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css?v=scoreboard-result">
+<link rel="stylesheet" href="pfb-screen.css?v=pennant-tactics">
 </head>
 <body>
 
@@ -1963,9 +1963,11 @@ function renderButtons(buttons,owner=null,context='') {
                 const enabled=possible.has(button[1]) && (active || beforeDefense && button[1]==='pinch');
                 return actionHtml(possible.get(button[1]) || button,enabled);
             }).join('')+(active?extras.map(button=>actionHtml(button)).join(''):'');
+        const showResume=g.semiAutoInterrupted && (active && (possible.has('hit') || possible.has('def_normal')));
+        const resume=showResume ? actionHtml(['半自動運転を再開','resume_semi','bn']) : '';
         return `<section class="action-panel${side===assigned?'':' opponent'}">
             <h2 class="panel-heading">${esc(teamShort(teamAt(g,side)))} <span>${bats?'攻撃':'守備'}</span></h2>
-            <div class="game-action-grid${menu?' is-choice':bats?' batting-grid':''}">${buttonsHtml}</div>${side===onSide&&context?`<p class="action-context">${esc(context)}</p>`:''}
+            <div class="game-action-grid${menu?' is-choice':bats?' batting-grid':''}">${buttonsHtml}</div>${resume}${side===onSide&&context?`<p class="action-context">${esc(context)}</p>`:''}
         </section>`;
     }).join('');
 }
@@ -2255,6 +2257,8 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     const filter=dialog.querySelector('.roster-filter');
     search.value='';
     filter.value='all';
+    const fixedStarter=Boolean(seasonRoster?.fixedStarter);
+    filter.querySelector('option[value="starter"]').hidden=fixedStarter;
     search.onkeydown=event=>{if (event.key==='Enter') event.preventDefault();};
     const starterCandidates=new Set(seasonRoster?.starterCandidates || rows.filter(row=>isPitcher(row) && PFBSeason.starterStamina(row)));
     const statsOption=dialog.querySelector('.roster-stat-source');
@@ -2279,6 +2283,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         record.className='roster-record';
         check.type = 'checkbox';
         check.checked = preset.selected.includes(row);
+        check.disabled = fixedStarter && row===preset.starter;
         name.textContent=displayName(row);
         check.setAttribute('aria-label',name.textContent+'をベンチ入り');
         card.textContent=pitcher ? `${handedness(row,false) || '—'}　G${stats.G ?? '—'}　S${stats.S ?? '—'}` :
@@ -2348,7 +2353,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     const boardPositions=['LF','CF','RF','SS','2B','3B','P','1B','C','DH'];
     const positionName=pos=>pos==='DH' ? 'DH' : pos==='P' ? '先発投手' : FNAME[pos];
     let slots=Array(9).fill(null);
-    let starter=null;
+    let starter=fixedStarter ? preset.starter : null;
     let activeSlot=0;
     let activePosition=null;
     let boardOpen=false;
@@ -2405,6 +2410,7 @@ ${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
                 (picks.firstElementChild || diamond.querySelector(`[data-position="${pos}"]`))?.focus();
             });
             control.dataset.position=pos;
+            control.disabled=fixedStarter && pos==='P';
             if (!row) control.dataset.unassigned='';
             control.setAttribute('aria-pressed',String(activePosition===pos));
             diamond.append(control);
@@ -2669,7 +2675,8 @@ function showNext(label) {
     const side=g?.humanSide ?? g?.batSide;
     const nextLabel=label || g?.nextActionLabel || '次へ';
     if (g) g.nextActionLabel=nextLabel;
-    const buttons=autoPlayRunning(g) ? [['停止','stop_auto','bw']] : [[nextLabel,'next','bp']];
+    const buttons=g?.isAuto ? [['停止','stop_auto','bw']] :
+        autoPlayRunning(g) ? [] : [[nextLabel,'next','bp']];
     renderButtons(buttons,side,g?.semiAutoPause || '');
 }
 
@@ -2682,7 +2689,9 @@ function startAtBat(keepPlayResult=false) {
     g.autoPitChange(true);
     if (g.pending) { updateUI(keepPlayResult); showPending(); return; }
     if (g.called) { endGame(); return; }
+    const pitcherWasFatigued=g.pitcher?.fatigued;
     g.beginPitchingInning();
+    if (g.semiAuto && !pitcherWasFatigued && g.pitcher.fatigued) interruptSemiAuto(g);
     const b = g.batter, p = g.pitcher;
     if(!p) { g.logAdd('投手がいません！試合終了','l-rare'); g.gameOver=true; return; }
     const fat = (p.fatigued ? '【疲労】' : '') + (p.shock===2 ? '【回復不可ショック】' : p.shock===1 ? '【一時ショック】' : '');
@@ -2707,7 +2716,7 @@ function execAtBat(action) {
     const batter = g.batter;
     const batNum = g.batIdx[g.batSide] + 1;
     const logStart = g.log.length;
-    const before=g.semiAuto && !g.semiAutoPause ? {runners:new Set(g.bases),homeRuns:g.hrEvents.length} : null;
+    const before=g.semiAuto && !g.semiAutoPause ? {runners:new Set(g.bases),homeRuns:g.hrEvents.length,fatigued:g.pitcher.fatigued} : null;
     if (action === 'hr') g.logAdd('ヒットエンドラン、走者スタート','l-steal');
     g.processAtBat(action,g.isForward,action === 'hr');
     const anim = determineAnim(g.log.slice(logStart),playerName(batter),batNum);
@@ -2716,17 +2725,13 @@ function execAtBat(action) {
 
 function finishPlay(anim,before,keepPlayResult=false) {
     const g = gameInst;
-    const manualNotice='走者が出たため半自動を終了しました。通常操作に戻ります。';
-    if (before && g.semiAuto) {
-        if (g.outs<3 && g.bases.some(runner=>runner && !before.runners.has(runner))) {
-            clearAutoTimer();
-            g.semiAuto=false;
-            g.semiAutoPause='';
-            before.returnToManual=true;
-            g.logAdd(manualNotice,'l-info');
-        } else if (g.hrEvents.slice(before.homeRuns).some(event=>event.side!==(g.humanSide ?? 0))) {
-            pauseSemiAuto(g,'相手の本塁打で停止');
-        }
+    if (before && g.semiAuto && (
+        g.outs<3 && g.bases.some(runner=>runner && !before.runners.has(runner)) ||
+        !before.fatigued && g.pitcher.fatigued ||
+        g.hrEvents.slice(before.homeRuns).some(event=>event.side!==(g.humanSide ?? 0))
+    )) {
+        interruptSemiAuto(g);
+        before.returnToManual=true;
     }
     g.resolveRemovedFielders();
     if (!g.pending) {
@@ -2739,15 +2744,15 @@ function finishPlay(anim,before,keepPlayResult=false) {
     }
     updateUI(keepPlayResult);
     if (anim) playResultAnim(anim,keepPlayResult);
-    if (before?.returnToManual) document.getElementById('game-log').textContent=manualNotice;
     if (g.gameOver || g.called) { endGame(); return; }
     if (g.pending) { g.pending.beforePlay=before; showPending(); return; }
-    if (g.outs >= 3) { scheduleEndHalf(); return; }
     if (before?.returnToManual) {
-        if (g.plateComplete) startAtBat(true);
-        else showOffenseMenu();
+        if (g.outs >= 3) endHalf(true);
+        else if (g.plateComplete) startAtBat(true);
+        else showDefenseMenu();
         return;
     }
+    if (g.outs >= 3) { scheduleEndHalf(); return; }
     g.state = 'between';
     showNext(g.plateComplete ? '▶ 次の打席' : '▶ 打席を続ける');
 }
@@ -2765,7 +2770,7 @@ function flushEndHalf() {
     halfEndPending = false;
     endHalf();
 }
-function endHalf() {
+function endHalf(openTactics=false) {
     const g = gameInst;
     console.log(`[DEBUG] endHalf: ${g.inning}回${g.half===0?'表':'裏'} SCORE:${g.scores[0]}-${g.scores[1]}`);
     const prev = g.innScores[g.batSide].reduce((a, b) => a + b, 0);
@@ -2790,8 +2795,8 @@ function endHalf() {
     g.logAdd(`\n▶ ${g.inning}回${hstr} ${teamShort(batting)}の攻撃`, 'l-inning');
     updateUI();
     playInningFlash(g.inning, hstr, batting);
-    showNext(`▶ ${g.inning}回${hstr}開始`);
-    g.state = 'between';
+    if (openTactics) startAtBat(true);
+    else showNext(`▶ ${g.inning}回${hstr}開始`);
 }
 
 function endGame() {
@@ -2921,6 +2926,7 @@ function doAction(action) {
         else finishPlay(determineAnim(g.log.slice(logStart),batter,batNum),beforePlay,true);
         return;
     }
+    if (action === 'resume_semi' && g.semiAutoInterrupted) { startAutoPlay(true); return; }
     if (action === 'auto') { startAutoPlay(); return; }
     if (action === 'stop_auto') { stopAutoPlay(); return; }
     if (action === 'next') {
@@ -3029,7 +3035,8 @@ function updateAutoControls() {
         (g.state==='offense' && g.versusAI && g.batSide!==g.humanSide && !autoPlayRunning(g));
     auto.textContent=g?.isAuto?'自動停止':'自動進行';
     auto.disabled=Boolean(unavailable || g?.semiAuto);
-    semi.textContent=g?.semiAutoPause?'半自動を解除':g?.semiAuto?'半自動停止':'半自動進行';
+    semi.hidden=Boolean(g?.semiAutoInterrupted);
+    semi.textContent=g?.semiAutoPause?'半自動を解除':g?.semiAuto?'半自動中':'半自動進行';
     semi.setAttribute('aria-pressed',String(Boolean(g?.semiAuto)));
     semi.disabled=Boolean(unavailable || g?.isAuto);
 }
@@ -3037,6 +3044,13 @@ function updateAutoControls() {
 function clearAutoTimer() {
     clearTimeout(autoTimer);
     autoTimer=null;
+}
+
+function interruptSemiAuto(g) {
+    clearAutoTimer();
+    g.semiAuto=false;
+    g.semiAutoPause='';
+    g.semiAutoInterrupted=true;
 }
 
 function pauseSemiAuto(g,reason) {
@@ -3067,6 +3081,7 @@ function startAutoPlay(semi=false) {
     if (!g || g.gameOver || g.called || g.pending || g.onlineMatch) return;
     g.isAuto=!semi;
     g.semiAuto=semi;
+    g.semiAutoInterrupted=false;
     g.semiAutoPause='';
     clearTimeout(cpuTimer);
     cpuTimer=null;
@@ -3189,9 +3204,9 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 </script>
 <script src="report-limit.js"></script>
 <script src="pfb-results.js"></script>
-<script src="pfb-match.js"></script>
-<script src="pfb-season.js"></script>
-<script src="pfb-season-ui.js"></script>
+<script src="pfb-match.js?v=pennant-tactics"></script>
+<script src="pfb-season.js?v=pennant-tactics"></script>
+<script src="pfb-season-ui.js?v=pennant-tactics"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
 <script src="pfb-online-core.js"></script>
