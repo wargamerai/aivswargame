@@ -2,7 +2,7 @@
 (function (root) {
   const DATA = (typeof MM_DATA !== 'undefined') ? MM_DATA : require('./mm_data.js');
   const CYCLE_CODES = ['324', '010', '424', '000', '212', '313', '312', '424'];
-  const codeSlot = cycle => (cycle - 1) % CYCLE_CODES.length;
+  const CYCLES_PER_PASSWORD = 5;
   const AREA = DATA.areas;
   const UNIT = DATA.units;
   const DIR = DATA.dir;
@@ -36,6 +36,7 @@
 
   function newGame(seed) {
     const R = rng(seed);
+    const passwordRandom = rng((seed ^ 0x8F37B21D) >>> 0);
     const d6 = () => 1 + Math.floor(R() * 6);
     const pick = arr => arr.splice(Math.floor(R() * arr.length), 1)[0];
     const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
@@ -673,8 +674,9 @@
       return S.u.some(x => x.loc === 'cupA' || x.loc === 'cupG' || /^T\d$/.test(x.loc));
     }
     function* unlockCycle() {
+      if (S.cycle % CYCLES_PER_PASSWORD !== 0) return;
       let attempted = false;
-      const slot = codeSlot(S.cycle);
+      const slot = Math.floor(passwordRandom() * CYCLE_CODES.length);
       while (true) {
         const answer = yield { kind: 'cycleCode', cycle: S.cycle, position: slot + 1, incorrect: attempted };
         if (answer?.cycleCode === CYCLE_CODES[slot]) return;
@@ -692,7 +694,6 @@
       S.deck = shuffle(DATA.deck.map(c => c.id));
       L('ゲーム開始。', 'card');
       yield { kind: 'gamestart' };
-      yield* unlockCycle();
       while (!S.over) {
         if (!S.deck.length) {
           S.deck = shuffle(DATA.deck.map(c => c.id)); S.prev = null; S.cycle++;
@@ -748,7 +749,7 @@
       validateAlloc, randomAlloc, noEffectPossible, legalMoves, supplied, supplyAreas, enemyHere, here, effect, ladder, capacity, curDef, waste, bestAlloc, stepInfo, germanPath, retreatOptions, orderCost, checkOrders, onMap,
       step(ans) {
         if (G.prompt?.kind === 'cycleCode') {
-          if (ans?.cycleCode === CYCLE_CODES[codeSlot(S.cycle)]) G.answers.push({ cycleUnlock: S.cycle });
+          if (ans?.cycleCode === CYCLE_CODES[G.prompt.position - 1]) G.answers.push({ cycleUnlock: S.cycle });
         } else if (ans !== undefined) G.answers.push(ans);
         const r = gen.next(ans);
         G.prompt = r.done ? null : r.value;
@@ -763,10 +764,17 @@
   function restore(seed, answers) {
     const g = newGame(seed);
     for (const a of answers) {
-      if (g.prompt?.kind === 'cycleCode') {
-        if (a?.cycleUnlock !== g.S.cycle) throw new Error('Invalid saved cycle checkpoint');
-        g.step({ cycleCode: CYCLE_CODES[codeSlot(g.S.cycle)] });
-      } else g.step(a);
+      if (a?.cycleUnlock !== undefined) {
+        // Older saves contain a checkpoint on every cycle. Keep only gates still in use.
+        if (a.cycleUnlock % CYCLES_PER_PASSWORD !== 0) continue;
+        if (g.prompt?.kind !== 'cycleCode' || a.cycleUnlock !== g.S.cycle) {
+          throw new Error('Invalid saved cycle checkpoint');
+        }
+        g.step({ cycleCode: CYCLE_CODES[g.prompt.position - 1] });
+      } else {
+        if (g.prompt?.kind === 'cycleCode') throw new Error('Missing saved cycle checkpoint');
+        g.step(a);
+      }
     }
     return g;
   }

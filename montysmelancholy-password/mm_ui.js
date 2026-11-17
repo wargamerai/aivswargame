@@ -208,9 +208,7 @@
       return;
     }
     $('cycleTitle').textContent = p.cycle + '巡目のパスワード';
-    $('cycleHint').textContent = p.position === 1
-      ? (p.cycle === 1 ? '最初は一番左です。' : p.cycle + '巡目なので、また一番左です。')
-      : '左から' + p.position + '個目です。';
+    $('cycleHint').textContent = '左から' + p.position + '個目です。';
     $('cycleError').textContent = p.incorrect ? '数字が違います。ヒントを確認してください。' : '';
     $('cycleInput').value = '';
     if (!dialog.open) dialog.showModal();
