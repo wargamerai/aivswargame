@@ -2676,11 +2676,11 @@ function showNext(label) {
 // ============================================================
 // GAME FLOW
 // ============================================================
-function startAtBat() {
+function startAtBat(keepPlayResult=false) {
     const g = gameInst;
     g.preparePlate();
     g.autoPitChange(true);
-    if (g.pending) { updateUI(); showPending(); return; }
+    if (g.pending) { updateUI(keepPlayResult); showPending(); return; }
     if (g.called) { endGame(); return; }
     g.beginPitchingInning();
     const b = g.batter, p = g.pitcher;
@@ -2691,7 +2691,7 @@ function startAtBat() {
     g.logAdd(`[${g.outStr()}] ${g.runnersStr()}  ${g.scores[0]}-${g.scores[1]}`, 'l-status');
     g.logAdd(`▼ ${fat}${p.name}(${p.arm}) ${inn} G:${p.G} C:${p.C} S:${p.S}`, 'l-pitch');
     g.logAdd(`【${g.batIdx[g.batSide] + 1}番 ${b['ポジション'] || ''}】${playerName(b)}  走:${b['走'] || '?'} バント:${b['バント'] || '?'}`, 'l-batter');
-    updateUI();
+    updateUI(keepPlayResult);
     if (g.isAuto || g.semiAuto) {
         g.state='between';
         showNext('▶ 打席を続ける');
@@ -2716,11 +2716,16 @@ function execAtBat(action) {
 
 function finishPlay(anim,before,keepPlayResult=false) {
     const g = gameInst;
-    if (before) {
-        if (g.hrEvents.slice(before.homeRuns).some(event=>event.side!==(g.humanSide ?? 0))) {
+    const manualNotice='走者が出たため半自動を終了しました。通常操作に戻ります。';
+    if (before && g.semiAuto) {
+        if (g.outs<3 && g.bases.some(runner=>runner && !before.runners.has(runner))) {
+            clearAutoTimer();
+            g.semiAuto=false;
+            g.semiAutoPause='';
+            before.returnToManual=true;
+            g.logAdd(manualNotice,'l-info');
+        } else if (g.hrEvents.slice(before.homeRuns).some(event=>event.side!==(g.humanSide ?? 0))) {
             pauseSemiAuto(g,'相手の本塁打で停止');
-        } else if (g.outs<3 && g.bases.some(runner=>runner && !before.runners.has(runner))) {
-            pauseSemiAuto(g,'走者が出たため停止');
         }
     }
     g.resolveRemovedFielders();
@@ -2734,9 +2739,15 @@ function finishPlay(anim,before,keepPlayResult=false) {
     }
     updateUI(keepPlayResult);
     if (anim) playResultAnim(anim,keepPlayResult);
+    if (before?.returnToManual) document.getElementById('game-log').textContent=manualNotice;
     if (g.gameOver || g.called) { endGame(); return; }
     if (g.pending) { g.pending.beforePlay=before; showPending(); return; }
     if (g.outs >= 3) { scheduleEndHalf(); return; }
+    if (before?.returnToManual) {
+        if (g.plateComplete) startAtBat(true);
+        else showOffenseMenu();
+        return;
+    }
     g.state = 'between';
     showNext(g.plateComplete ? '▶ 次の打席' : '▶ 打席を続ける');
 }
