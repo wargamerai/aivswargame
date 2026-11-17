@@ -71,8 +71,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 }
 #dialog-stat-source { padding: 4px 7px; color: var(--ink); background: white; }
 
-#scoreboard {
-    flex: none;
+#scoreboard, #play-result {
     display: grid;
     grid-template-columns: minmax(250px,31%) minmax(0,1fr);
     align-items: stretch;
@@ -405,7 +404,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 @media (max-width: 680px) {
     html, body { overflow: auto; }
     #game-screen { min-height: 100vh; min-height: 100dvh; height: auto; }
-    #scoreboard { grid-template-columns: 1fr; gap: 3px; }
+    #scoreboard, #play-result { grid-template-columns: 1fr; gap: 3px; }
     .inning-readout { min-height: 37px; font-size: 16px; }
     .score-table { width: 100%; min-width: 365px; font-size: 13px; }
     .middle-area { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-rows: minmax(215px,50vw) minmax(140px,31vh); }

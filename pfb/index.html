@@ -19,6 +19,10 @@ body, html {
     position: absolute; top: 0; left: 0; right: 0; bottom: 0;
     pointer-events: none; z-index: 10;
 }
+.scoreboard-area { position: relative; flex: none; }
+#play-result {
+    position: absolute; inset: 0; z-index: 20; pointer-events: none;
+}
 .anim-ball {
     position: absolute;
     left: 50%; top: 65%;
@@ -32,27 +36,29 @@ body, html {
     z-index: 15;
 }
 .anim-flash {
-    position: absolute; left: 50%; top: 45%;
-    transform: translate(-50%, -50%) scale(0.3);
-    font-weight: 900; font-family: 'Helvetica Neue', sans-serif;
-    white-space: pre-line; text-align: center; opacity: 0;
-    z-index: 20;
-    background: rgba(255,255,255,0.95);
-    border: 3px solid #333;
-    border-radius: 12px;
-    padding: 14px 24px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-    line-height: 1.4;
+    grid-column: 2;
+    align-content: safe center;
+    overflow: auto; overflow-wrap: anywhere; pointer-events: auto;
+    font-weight: 900; font-family: inherit;
+    font-size: clamp(14px, 1.55vw, 22px);
+    text-align: center; opacity: 0;
+    background: #fffdf4;
+    border: 2px solid #333; border-radius: 7px;
+    padding: 5px clamp(8px, 1.5vw, 22px);
+    line-height: 1.35;
+    animation: flash-pop .25s ease-out forwards;
 }
-.anim-hit  { color: #006600; font-size: 22px; animation: flash-pop .45s ease-out forwards; }
-.anim-out  { color: #aa2222; font-size: 20px; animation: flash-pop .45s ease-out forwards; }
-.anim-bb   { color: #2266aa; font-size: 20px; animation: flash-pop .45s ease-out forwards; }
-.anim-err  { color: #aa6600; font-size: 22px; animation: flash-pop .45s ease-out forwards; }
-.anim-bunt { color: #668800; font-size: 20px; animation: flash-pop .45s ease-out forwards; }
+@media (max-width: 680px) {
+    .anim-flash { grid-column: 1; }
+}
+.anim-hit  { color: #006600; }
+.anim-out  { color: #aa2222; }
+.anim-bb   { color: #2266aa; }
+.anim-err  { color: #805000; }
+.anim-bunt { color: #526a00; }
 .anim-hr {
-    color: #cc5500; font-size: 32px;
-    text-shadow: 0 0 20px #ff8800;
-    animation: hr-pop .7s ease-out forwards;
+    color: #a34100;
+    text-shadow: 0 0 10px #ffbb78;
 }
 /* ── Game over overlay ── */
 .game-over-overlay {
@@ -72,14 +78,8 @@ body, html {
     background: #2a8a2a; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
 
 @keyframes flash-pop {
-    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
-    55%  { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
-    100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-@keyframes hr-pop {
-    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
-    40%  { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
-    100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 .anim-burst {
     position: absolute; width: 80px; height: 80px; border-radius: 50%;
@@ -161,7 +161,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css">
+<link rel="stylesheet" href="pfb-screen.css?v=scoreboard-result">
 </head>
 <body>
 
@@ -195,7 +195,10 @@ body, html {
       <button type="button" class="toolbar-button" onclick="openSaveFile()">ロード</button>
     </nav>
   </header>
-  <div id="scoreboard"></div>
+  <div class="scoreboard-area">
+    <div id="scoreboard"></div>
+    <div id="play-result"></div>
+  </div>
   <div class="middle-area">
     <section class="lineup-panel" id="lineup-left" aria-label="担当球団">
       <h2 class="panel-heading" id="team-left"></h2>
@@ -1968,6 +1971,7 @@ function renderButtons(buttons,owner=null,context='') {
 }
 
 function updateUI(keepPlayResult=false) {
+    if (!keepPlayResult || !gameInst) document.getElementById('play-result').replaceChildren();
     renderScoreboard();
     renderField(keepPlayResult);
     renderLineups();
@@ -2087,11 +2091,19 @@ function determineAnim(logs, batterName, batterNum) {
     return null;
 }
 
+function clearPlayResult() {
+    document.getElementById('field-area').querySelector('.result-overlay')?.remove();
+    document.getElementById('play-result').replaceChildren();
+}
+
 function playResultAnim(info,keepAnimation=false) {
     const field=document.getElementById('field-area');
-    const current=keepAnimation ? field.querySelector('.result-overlay .anim-flash') : null;
+    const result=document.getElementById('play-result');
+    const current=keepAnimation ? result.querySelector('.anim-flash') : null;
+    const text=info.text.trim().replace(/\s*\n\s*/g,'　');
     if (current) {
-        current.textContent=info.text;
+        current.className=`anim-flash anim-${info.type}`;
+        current.textContent=text;
         return;
     }
     const container=field.querySelector('.park-viewport') || field;
@@ -2110,8 +2122,8 @@ function playResultAnim(info,keepAnimation=false) {
     // Flash text
     const flash = document.createElement('div');
     flash.className = `anim-flash anim-${info.type}`;
-    flash.textContent = info.text;
-    overlay.appendChild(flash);
+    flash.textContent = text;
+    result.replaceChildren(flash);
 
     // HR burst
     if (info.type === 'hr') {
@@ -2141,7 +2153,8 @@ function playResultAnim(info,keepAnimation=false) {
 
 function playInningFlash(inning, halfStr, teamName) {
     const container = document.getElementById('field-area');
-    container.querySelectorAll('.result-overlay,.inning-flash-overlay').forEach(e=>e.remove());
+    clearPlayResult();
+    container.querySelectorAll('.inning-flash-overlay').forEach(e=>e.remove());
     const ov = document.createElement('div');
     ov.className = 'inning-flash-overlay';
     ov.innerHTML = `<div class="inning-flash-box"><div class="inn-num">${inning}回${halfStr}</div><div class="inn-team">${esc(teamShort(teamName))}の攻撃</div></div>`;
@@ -2906,7 +2919,7 @@ function doAction(action) {
         else if (g.state === 'between') {
             if (g.plateComplete) startAtBat();
             else {
-                document.getElementById('field-area').querySelector('.result-overlay')?.remove();
+                clearPlayResult();
                 if (resumeSemi) showNext('▶ 打席を続ける');
                 else showOffenseMenu();
             }
