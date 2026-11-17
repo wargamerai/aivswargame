@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <title>帆船の戦い - 戦闘画面</title>
-<!-- アクセス解析（GoatCounter） -->
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#0a1a2a; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
@@ -5356,6 +5355,22 @@ if (mapImgLoaded) { initCanvas(); draw(); }
 </script>
 
 <script src="lang.js"></script>
+<script>
+(() => {
+  const scenarioNo = Number(state.scenarioNo);
+  if (!Number.isSafeInteger(scenarioNo) || !Object.hasOwn(SCENARIOS, scenarioNo)) return;
+  const language = typeof LANG === 'string' ? LANG : 'ja';
+  const folder = decodeURI(location.pathname).replace(/[^/]*$/, '');
+  window.goatcounter = window.goatcounter || {};
+  window.goatcounter.path = () => folder + 'scenario/' + scenarioNo + '?lang=' + language;
+  window.goatcounter.title = () => SCENARIOS[scenarioNo].name;
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = 'https://gc.zgo.at/count.js';
+  script.dataset.goatcounter = 'https://shigerusuzuki.goatcounter.com/count';
+  document.head.appendChild(script);
+})();
+</script>
 <script defer src="../game-analytics.js"></script>
 </body>
 </html>
