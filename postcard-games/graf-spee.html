@@ -295,11 +295,13 @@ const game=(()=>{
  const types={DUMMY:{power:0,speed:2},CA:{power:2,speed:2},CV:{power:3,speed:2},BB:{power:9,speed:1},SPEE:{power:3,speed:2}};
  const dist=(a,b)=>Math.hypot(all[a].x-all[b].x,all[a].y-all[b].y);
  const adj=id=>ids.filter(x=>x!==id&&dist(x,id)<160);
+ // Land at the shared B1–C1 edge blocks ships, while aircraft use geometric adjacency.
+ const landAcross = {B1: 'C1', C1: 'B1'};
  function movementPaths(id,n,allowExit=false){
    const paths=new Map([[id,[id]]]);
    for(const [h,path] of paths){
      if(path.length>n||!all[h])continue;
-     const next=adj(h);
+     const next = adj(h).filter(q => q !== landAcross[h]);
      if(allowExit&&exits[h])next.push(exits[h]);
      for(const q of next)if(!paths.has(q))paths.set(q,[...path,q]);
    }
