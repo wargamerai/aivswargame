@@ -86,14 +86,10 @@ document.getElementById('assault-password-form').addEventListener('submit', asyn
 // hold: [地形, 最小距離, 1グループの必要人数, 必要グループ数（既定1）]
 // clear: 失わせる守備拠点のグループ名
 function installAssaultScenarios(scenarios) {
-  const riflemen = {
-    ger: [1, 2, 3, 5, 7, 8, 10, 4, 6, 9],
-    rus: [1, 2, 5, 7, 9, 11, 13, 15, 3, 6, 8, 12],
-    us:  [1, 2, 3, 5, 7, 9, 11, 4, 6, 8, 10, 12],
-    jpn: [1, 2, 3, 5, 7, 9, 12, 14, 4, 6, 8, 11],
-    uk:  [1, 2, 3, 5, 7, 8, 10, 4, 6, 9],
-  };
   const flameOperator = { ger: 14, rus: 17, us: 16, jpn: 17, uk: 14 };
+  const infantry = Object.fromEntries(Object.entries(SOLDIER_CARDS).map(([key, cards]) =>
+    [key, cards.filter(card => !card.afv && card.weaponCat !== 'AFV' &&
+      !card.weaponCat.startsWith('対戦車砲') && card.num !== flameOperator[key]).map(card => card.num)]));
   const terrainNames = {
     BUILDINGS: ['建物', 'buildings'], WOODS: ['森林', 'woods'], HILL: ['丘', 'hill'],
     WALL: ['障壁', 'wall'], BRUSH: ['繁み', 'brush'], GULLY: ['涸れ谷', 'gully'],
@@ -105,8 +101,8 @@ function installAssaultScenarios(scenarios) {
   for (const entry of scenarios) {
     const [name, englishName] = entry.name;
     const label = entry.id + '　' + name;
-    const defense = entry.defense.map(([type, distance, soldiers], index) =>
-      ({ type, distance, soldiers, name: 'ABC'[index] }));
+    const defense = entry.defense.map(([type, distance], index) =>
+      ({ type, distance, name: 'ABC'[index] }));
     const hold = (entry.hold || []).map(([type, distance, soldiers, groups = 1]) =>
       ({ type, distance, soldiers, groups }));
     const clear = entry.clear || [];
@@ -118,14 +114,29 @@ function installAssaultScenarios(scenarios) {
       en.push(`hold ${english} at distance ${h.distance}+ with ${h.groups} stationary group${h.groups > 1 ? 's' : ''} of ${h.soldiers}+ active, unpinned soldiers each`);
     }
     const description = `攻撃側の目標は${ja.join('、かつ')}。山札${entry.cycles}巡で時間切れ。`;
-    const defenderSize = defense.reduce((sum, g) => sum + g.soldiers, 0);
-    const roster = (size, includeFlame) => Object.fromEntries(Object.entries(riflemen).map(([faction, cards]) =>
-      [faction, { soldierList: includeFlame ? [flameOperator[faction], ...cards.slice(0, size - 1)] : cards.slice(0, size) }]));
+    const factions = {};
+    const defendersByAttacker = {};
+    const nations = Object.keys(entry.headcounts);
+    for (const attacker of nations) {
+      const [count] = entry.headcounts[attacker];
+      if (!count) continue;
+      const defenders = {};
+      const opponents = entry.opponents?.[attacker] ?? nations;
+      for (const defender of opponents) {
+        if (defender === attacker) continue;
+        const [, defenseCount] = entry.headcounts[defender];
+        const soldiers = typeof defenseCount === 'number' ? defenseCount : defenseCount[attacker];
+        if (soldiers) defenders[defender] = { soldierList: infantry[defender].slice(0, soldiers) };
+      }
+      if (!Object.keys(defenders).length) continue;
+      factions[attacker] = { soldierList: [...infantry[attacker].slice(0, count), flameOperator[attacker]] };
+      defendersByAttacker[attacker] = defenders;
+    }
     window.SCENARIOS[entry.id] = {
       id: entry.id, name, description,
       asymmetric: true, attackerOnly: true, firstPlayer: 'attacker',
       flameOperator, attackerDistance: entry.start, defenderGroups: defense,
-      factions: roster(entry.attackers, true), defenderFactions: roster(defenderSize, false),
+      factions, defendersByAttacker,
       deckCycles: entry.cycles, victory: { type: 'assault', description, hold, clear },
     };
     translations[name] = englishName;

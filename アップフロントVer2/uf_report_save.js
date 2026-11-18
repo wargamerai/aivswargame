@@ -426,10 +426,6 @@ function placeInitialDefenderBuildings(side, count) {
 function startGameWithSetup() {
   const playerFaction = setupState.faction;
   const scenario = setupState.scenario;
-  if (!setupHasRequiredFlamethrower()) {
-    alert('火炎放射器を持つ兵士をグループに入れてください。');
-    return false;
-  }
   if (scenario?.attackerOnly) {
     const counts = new Map();
     for (const site of scenario.defenderGroups) counts.set(site.type, (counts.get(site.type) || 0) + 1);
@@ -452,14 +448,17 @@ function startGameWithSetup() {
       'The deck does not contain enough building cards.'));
     return false;
   }
-  const others = Object.keys(FACTIONS).filter(k => k !== playerFaction &&
-    (!scenario?.onlyFactions || scenario.onlyFactions.includes(k)));
+  const assaultDefenders = scenario?.defendersByAttacker?.[playerFaction];
+  const others = assaultDefenders ? Object.keys(assaultDefenders) :
+    Object.keys(FACTIONS).filter(k => k !== playerFaction &&
+      (!scenario?.onlyFactions || scenario.onlyFactions.includes(k)));
   const aiKey = others.includes(setupState.aiFactionOverride)
     ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
   const aiRole = setupState.role === 'attacker' ? 'defender' : (setupState.role === 'defender' ? 'attacker' : undefined);
+  const defenseScenario = assaultDefenders ? { ...scenario, defenderFactions: assaultDefenders } : scenario;
   const formationError = partisanStartingForcesError(scenario, playerFaction, setupState.groups.flat()) ||
     partisanStartingForcesError(scenario, aiKey,
-      window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, aiKey, aiRole) || []);
+      window.SCENARIO_HELPERS?.getSoldierNumbers(defenseScenario, aiKey, aiRole) || []);
   if (formationError) {
     alert(formationError);
     return false;
@@ -514,7 +513,7 @@ function startGameWithSetup() {
 
   // AI は賢い編成 (リーダー分散 + クルー指定)
   state.groups.ai = (window.SCENARIO_HELPERS && scenario)
-    ? window.SCENARIO_HELPERS.buildAIGroupsSmart(scenario, aiKey, aiRole, state.aiStyle)
+    ? window.SCENARIO_HELPERS.buildAIGroupsSmart(defenseScenario, aiKey, aiRole, state.aiStyle)
     : [];
   state.playerRole = setupState.role || null;
   state.aiRole = aiRole || null;

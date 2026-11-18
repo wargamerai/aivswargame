@@ -6,8 +6,7 @@
 
 // 文全体が一致したときの訳（語句の置き換えより先に使う）
 const LANG_EXACT = {
-  '自軍は攻撃側。火炎放射器を1基配備。': 'You attack with one flamethrower.',
-  '火炎放射器を持つ兵士をグループに入れてください。': 'Assign the flamethrower operator to a group.',
+  '自軍は攻撃側。火炎放射器を編成に加えられます。': 'You attack and may deploy a flamethrower.',
   'シナリオの初期配置に必要なカードを読み込めませんでした。': 'The cards required for this scenario could not be loaded.',
   'F〜Xを解除': 'Unlock F–X',
   'F〜Xのパスワード': 'Password for F–X',

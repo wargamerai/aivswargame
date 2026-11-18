@@ -196,6 +196,7 @@ function openSetupScreen(factionKey) {
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
   if (!scenario) { alert('シナリオ未読込'); return; }
+  if (scenario.attackerOnly && !scenario.factions[factionKey]) return;
   if (scenario.onlyFactions && !scenario.onlyFactions.includes(factionKey)) {
     if (scenario.defenderInitialBuildings) {
       alert(radioText('「奇襲」は日本軍とイギリス軍の対局です。', 'Surprise Attack is played by Japan and Britain.'));
@@ -240,12 +241,6 @@ function openSetupScreen(factionKey) {
   // プールに使用兵士全員 (役割に応じて左列/右列)
   const nums = (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.getSoldierNumbers(scenario, factionKey, playerRole)) || [];
   setupState.pool = nums.slice();
-  if (scenario.attackerOnly) {
-    const attackGroupSize = Math.ceil(nums.length / 2);
-    setupState.groups[0] = nums.slice(0, attackGroupSize);
-    setupState.groups[1] = nums.slice(attackGroupSize);
-    setupState.pool = [];
-  }
 
   document.getElementById('faction-select').style.display = 'none';
   document.getElementById('setup-screen').classList.add('active');
@@ -582,12 +577,6 @@ function rebuildCrewKeysAfterGroupChange() {
   // (実装上の no-op だが将来の拡張用に名前を残す)
 }
 
-function setupHasRequiredFlamethrower() {
-  const scenario = setupState.scenario;
-  return !scenario?.attackerOnly ||
-    setupState.groups.some(group => group.includes(scenario.flameOperator[setupState.faction]));
-}
-
 function renderSetup() {
   const poolEl = document.getElementById('pool-cards');
   poolEl.innerHTML = '';
@@ -642,9 +631,7 @@ function renderSetup() {
   const groupsPlaced = setupState.groups.filter(g => g.length > 0).length;
   const buildings = setupState.scenario?.defenderInitialBuildings;
   const groupCountOk = buildings && setupState.role === 'defender' ? groupsPlaced === buildings : groupsPlaced > 0;
-  const flameReady = setupHasRequiredFlamethrower();
-  document.getElementById('setup-flame-required').hidden = flameReady;
-  document.getElementById('setup-start').disabled = !(sizesOk && groupCountOk && flameReady);
+  document.getElementById('setup-start').disabled = !(sizesOk && groupCountOk);
 }
 
 function countLeadersInGroup(gi) {

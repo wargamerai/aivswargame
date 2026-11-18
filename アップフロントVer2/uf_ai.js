@@ -3305,7 +3305,10 @@ document.getElementById('deck-draw').addEventListener('click', () => {
   const update = () => {
     const sc = window.SCENARIOS && window.SCENARIOS[sp.value];
     row.style.display = sc?.asymmetric && !sc.attackerOnly ? '' : 'none';
-    info.textContent = sc?.attackerOnly ? '自軍は攻撃側。火炎放射器を1基配備。' : '';
+    info.textContent = sc?.attackerOnly ? '自軍は攻撃側。火炎放射器を編成に加えられます。' : '';
+    document.querySelectorAll('.faction-btn').forEach(btn => {
+      btn.style.display = sc?.attackerOnly && !sc.factions[btn.dataset.faction] ? 'none' : '';
+    });
   };
   sp.addEventListener('change', update);
   update();
