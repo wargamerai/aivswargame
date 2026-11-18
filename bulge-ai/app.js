@@ -30,8 +30,9 @@
   const moving = () => ['move', 'reaction', 'highbeam'].includes(state.phase);
   const planning = () => ['attack', 'counter'].includes(state.phase);
   const hasPendingEvent = () => !supportPractice && ['event', 'reinforce'].includes(state.phase) && state.events.length > 0;
-  const assigningSupport = () => supportPractice && state.phase === 'support';
-  const reviewingSupport = () => state.phase === 'support' && !adminPractice && state.supportConfirmed;
+  const assigningSupport = () => (supportPractice && state.phase === 'support') ||
+    (!adminPractice && ['setup', 'support'].includes(state.phase) && R.actor(state) === 'german');
+  const reviewingSupport = () => state.phase === 'support' && !adminPractice && !assigningSupport() && state.supportConfirmed;
   const waitingReinforcements = board => board.units.filter(unit => unit.side === R.actor(board) &&
     unit.status === 'reserve' && board.reinforceGroups.includes(unit.group));
   const eventChits = side => Object.keys(D.chits)
@@ -596,7 +597,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       const corrected = R.apply(state, {type: 'correct-initial-bridge', side: R.actor(state)});
       if (corrected.ok) state = corrected.state;
     }
-    if (automate && ['setup', 'support'].includes(state.phase)) prepareSupport();
+    if (automate && ['setup', 'support'].includes(state.phase) && !assigningSupport()) prepareSupport();
     if (automate && (moving() || planning())) {
       const side = R.actor(state);
       for (const unit of R.onMap(state, side)) {
@@ -1859,7 +1860,16 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     byId('setup-chits').hidden = true;
     if (state.phase !== 'setup') return;
     const side = R.actor(state);
-    const ready = state.setupConfirmed && !R.setupPlacementRequired(state);
+    const required = R.setupPlacementRequired(state);
+    const ready = state.setupConfirmed && !required;
+    if (assigningSupport()) {
+      actions.append(
+        button(required ? 'ここまでの配置を確定' : '配置を確定', () => step({type: 'confirm-setup'}),
+          {primary: !state.setupConfirmed, disabled: Boolean(state.setupConfirmed), id: 'confirm-setup'}),
+        button('直前の配置を取り消す', () => step({type: 'undo-setup'}),
+          {disabled: !state.setupOrders?.length, id: 'undo-setup'}),
+      );
+    }
     actions.append(button(side === 'allied' ? 'ドイツ軍の初期配置へ' : '移動フェイズへ',
       () => step({type: 'finish-setup'}), {primary: true, disabled: !ready, id: 'finish-setup'}));
   }
@@ -1870,7 +1880,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     tray.replaceChildren();
     const events = hasPendingEvent();
     const reinforcements = state.phase === 'reinforce' && !events;
-    tray.hidden = reviewingSupport() || (state.phase !== 'support' && !events && !reinforcements);
+    tray.hidden = !assigningSupport() && (reviewingSupport() || (state.phase !== 'support' && !events && !reinforcements));
     if (tray.hidden) return;
     if (reinforcements) {
       tray.setAttribute('aria-label', '未配置の増援');
@@ -1902,7 +1912,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     }
     const showDummies = supportPractice || R.actor(state) === 'allied';
     tray.setAttribute('aria-label', events ? '未処理のイベントチット'
-      : showDummies ? '引いたチットと手元のダミー' : '引いたチット');
+      : state.phase === 'setup' ? '未配置の初期支援チット'
+        : showDummies ? '引いたチットと手元のダミー' : '引いたチット');
     if (events) {
       for (const id of state.events) {
         if (eventPractice) appendAssignableChit(tray, id, R.eventOptions(state, id).length ? eventChitType : null);
@@ -1914,7 +1925,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const visibleChits = new Set([...(state.supportDraw ?? []), ...state.hand, ...state.events]);
     for (const id of visibleChits) {
       const {label, kind} = R.chit(id);
-      if (state.hand.includes(id) && kind !== 'dummy') {
+      if (state.hand.includes(id) && (kind !== 'dummy' || state.phase === 'setup')) {
         appendAssignableChit(tray, id);
       } else if (state.events.includes(id)) {
         const figure = stackFigure({src: R.chitImage(id), label, caption: false});
@@ -2024,7 +2035,8 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     const reinforcementNotice = reinforcementKind && ['reentry', 'recovery', 'support', 'event', 'move'].includes(phase)
       ? `${reinforcementKind === 'special' ? '特別増援' : '増援'}を選択済み：このターンの通常移動後に登場します。` : '';
     const guidance = {
-      setup:'AIが初期支援チットを配属します。盤面を確認して次へ進みます。',
+      setup:assigningSupport() ? '手持ちの初期支援チットを部隊に配置し、配置を確定して進みます。'
+        : 'AIが初期支援チットを配属します。盤面を確認して次へ進みます。',
       resolve:'両軍の支援チットを確認して戦闘を判定します。',
       advance:'戦闘後前進を選ぶと、この戦闘が終了します。',
       supply:'残りの補給チットから1枚選びます。',
