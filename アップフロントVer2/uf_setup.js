@@ -620,14 +620,13 @@ function renderSetup() {
   };
 
   document.getElementById('setup-target').textContent = ['A','B','C','D'][setupState.targetGroup];
-  // 開始ボタン: プールが空 かつ 各グループ 2~10。車両は1枚で1グループにできる
-  const allPlaced = setupState.pool.length === 0;
+  // 未配置の兵士は参加しない。各グループは2〜10名、車両だけのグループは1枚でもよい。
   const soloVehicle = g => g.length === 1 && !!(getSoldierDef(setupState.faction, g[0]) || {}).afv;
   const sizesOk = setupState.groups.every(g => g.length === 0 || (g.length >= 2 && g.length <= 10) || soloVehicle(g));
   const groupsPlaced = setupState.groups.filter(g => g.length > 0).length;
   const buildings = setupState.scenario?.defenderInitialBuildings;
   const groupCountOk = buildings && setupState.role === 'defender' ? groupsPlaced === buildings : groupsPlaced > 0;
-  document.getElementById('setup-start').disabled = !(allPlaced && sizesOk && groupCountOk);
+  document.getElementById('setup-start').disabled = !(sizesOk && groupCountOk);
 }
 
 function countLeadersInGroup(gi) {
