@@ -20,9 +20,6 @@ body, html {
     pointer-events: none; z-index: 10;
 }
 .scoreboard-area { position: relative; flex: none; }
-#play-result {
-    position: absolute; inset: 0; z-index: 20; pointer-events: none;
-}
 .anim-ball {
     position: absolute;
     left: 50%; top: 65%;
@@ -34,31 +31,6 @@ body, html {
     transition: all 0.7s cubic-bezier(0.15, 0.8, 0.3, 1);
     box-shadow: 0 0 6px rgba(255,255,255,0.9);
     z-index: 15;
-}
-.anim-flash {
-    grid-column: 2;
-    align-content: safe center;
-    overflow: auto; overflow-wrap: anywhere; pointer-events: auto;
-    font-weight: 900; font-family: inherit;
-    font-size: clamp(14px, 1.55vw, 22px);
-    text-align: center; opacity: 0;
-    background: #fffdf4;
-    border: 2px solid #333; border-radius: 7px;
-    padding: 5px clamp(8px, 1.5vw, 22px);
-    line-height: 1.35;
-    animation: flash-pop .25s ease-out forwards;
-}
-@media (max-width: 680px) {
-    .anim-flash { grid-column: 1; }
-}
-.anim-hit  { color: #006600; }
-.anim-out  { color: #aa2222; }
-.anim-bb   { color: #2266aa; }
-.anim-err  { color: #805000; }
-.anim-bunt { color: #526a00; }
-.anim-hr {
-    color: #a34100;
-    text-shadow: 0 0 10px #ffbb78;
 }
 /* ── Game over overlay ── */
 .game-over-overlay {
@@ -161,7 +133,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css?v=pennant-tactics">
+<link rel="stylesheet" href="pfb-screen.css?v=backscreen-result">
 </head>
 <body>
 
@@ -197,14 +169,15 @@ body, html {
   </header>
   <div class="scoreboard-area">
     <div id="scoreboard"></div>
-    <div id="play-result"></div>
   </div>
   <div class="middle-area">
     <section class="lineup-panel" id="lineup-left" aria-label="担当球団">
       <h2 class="panel-heading" id="team-left"></h2>
       <div class="lineup-summary" id="summary-left"></div>
     </section>
-    <div class="field-area" id="field-area" aria-label="球場"></div>
+    <div class="field-area" id="field-area" aria-label="球場">
+      <div id="play-result" role="status" aria-atomic="true"></div>
+    </div>
     <section class="lineup-panel opponent" id="lineup-right" aria-label="対戦相手">
       <h2 class="panel-heading" id="team-right"></h2>
       <div class="lineup-summary" id="summary-right"></div>
@@ -1770,8 +1743,9 @@ function runnerSpeed(row) {
 
 function renderField(keepPlayResult=false) {
     const el=document.getElementById('field-area');
+    const result=document.getElementById('play-result');
     const g=gameInst;
-    if (!g) { el.innerHTML=''; return; }
+    if (!g) { el.replaceChildren(result); return; }
     const defense=g.defense();
     const defenders=Object.entries(FIELD_MARKERS).map(([pos,[x,y]])=>{
         const row=pos==='P'?g.pitcher.row:g.defPositions[pos];
@@ -1798,6 +1772,7 @@ function renderField(keepPlayResult=false) {
         park.insertAdjacentHTML('afterbegin',markers);
     } else {
         el.innerHTML=`<div class="park-viewport${g.dome?' is-dome':''}">${markers}</div>`;
+        el.firstElementChild.appendChild(result);
     }
 }
 

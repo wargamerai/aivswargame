@@ -71,7 +71,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 }
 #dialog-stat-source { padding: 4px 7px; color: var(--ink); background: white; }
 
-#scoreboard, #play-result {
+#scoreboard {
     display: grid;
     grid-template-columns: minmax(250px,31%) minmax(0,1fr);
     align-items: stretch;
@@ -215,9 +215,44 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     background: url("pfb-ballpark.png") center / 100% 100% no-repeat;
 }
 .park-viewport.is-dome { background-image:url("pfb-ballpark-dome.png"); }
-.field-area:empty {
+.field-area:has(> #play-result) {
     background: #164431 url("pfb-ballpark.png") center / cover no-repeat;
 }
+#play-result:empty { display: none; }
+#play-result {
+    position: absolute;
+    z-index: 20;
+    inset-inline: 6%;
+    top: 20%;
+    transform: translateY(-50%);
+    display: grid;
+    justify-items: center;
+    pointer-events: none;
+}
+.anim-flash {
+    width: fit-content;
+    max-width: min(100%, 42ch);
+    max-height: min(33cqh, 7em);
+    padding: .33em .75em;
+    overflow: auto;
+    overflow-wrap: anywhere;
+    pointer-events: auto;
+    border: 1px solid #dfc772;
+    border-radius: 5px;
+    background: #13241af5;
+    box-shadow: 0 2px 10px #000a;
+    color: #fff0ba;
+    font-size: clamp(11px, 2.65cqw, 20px);
+    font-weight: 800;
+    line-height: 1.25;
+    text-align: center;
+    animation: flash-pop .25s ease-out forwards;
+}
+.anim-hit { color: #b6ffcb; }
+.anim-out { color: #ffd5ca; }
+.anim-bb { color: #c8e8ff; }
+.anim-err { color: #ffdcab; }
+.anim-hr { color: #ffdc7b; }
 .park-marker {
     position: absolute;
     display: inline-flex;
@@ -405,7 +440,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 @media (max-width: 680px) {
     html, body { overflow: auto; }
     #game-screen { min-height: 100vh; min-height: 100dvh; height: auto; }
-    #scoreboard, #play-result { grid-template-columns: 1fr; gap: 3px; }
+    #scoreboard { grid-template-columns: 1fr; gap: 3px; }
     .inning-readout { min-height: 37px; font-size: 16px; }
     .score-table { width: 100%; min-width: 365px; font-size: 13px; }
     .middle-area { grid-template-columns: repeat(2,minmax(0,1fr)); grid-template-rows: minmax(215px,50vw) minmax(140px,31vh); }
