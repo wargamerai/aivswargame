@@ -107,7 +107,7 @@
     };
     const run = async keys => {
       let n = 0, safety = 30;
-      outer: while (safety-- > 0 && global.partisanActionRoom('ai')) {
+      outer: while (st.phase === 'play' && safety-- > 0 && global.partisanActionRoom('ai')) {
         for (const k of keys) {
           const previousActions = st.aiActionCount;
           const r = await S[k]();
@@ -138,6 +138,7 @@
       if (!st.aiActedThisTurn && key === 'ger') await run(['move']);
       if (st.aiActedThisTurn && P.trench) await run(['trench']);
     }
+    if (st.phase !== 'play') return;
     st.aiDiscardTurn = !st.aiActedThisTurn;
     // 捨て札: 足止めの地形 → 狙撃 → 手札の整理
     while (global.aiRemainingDiscard() > 0 && await global.aiTryPlaceBadTerrain()) { /* 置ける限り */ }

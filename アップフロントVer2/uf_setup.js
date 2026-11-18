@@ -196,7 +196,14 @@ function openSetupScreen(factionKey) {
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
   if (!scenario) { alert('シナリオ未読込'); return; }
-  if (scenario.onlyFactions && scenario.onlyFactions.indexOf(factionKey) < 0) { alert('シナリオEはドイツ・ソ連・アメリカだけです'); return; }
+  if (scenario.onlyFactions && !scenario.onlyFactions.includes(factionKey)) {
+    if (scenario.defenderInitialBuildings) {
+      alert(radioText('「奇襲」は日本軍とイギリス軍の対局です。', 'Surprise Attack is played by Japan and Britain.'));
+    } else {
+      alert('シナリオEはドイツ・ソ連・アメリカだけです');
+    }
+    return;
+  }
   setupState.faction = factionKey;
   setupState.scenario = scenario;
   const british = document.getElementById('british-unit-type');
@@ -235,9 +242,11 @@ function openSetupScreen(factionKey) {
   document.getElementById('faction-select').style.display = 'none';
   document.getElementById('setup-screen').classList.add('active');
   const fac = FACTIONS[factionKey];
-  const roleLabel = (scenario.id === 'C') ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
+  const roleLabel = (scenario.id === 'C' || scenario.defenderInitialBuildings) ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
   document.getElementById('setup-title').textContent =
     `${fac.flag} ${fac.name} 編成 — シナリオ${scenario.id}「${scenario.name}」${roleLabel ? ' ['+roleLabel+']' : ''} (兵士 ${nums.length}名)`;
+  document.getElementById('setup-scenario-note').hidden =
+    !(scenario.defenderInitialBuildings && playerRole === 'defender');
   renderSetup();
 }
 
@@ -615,8 +624,10 @@ function renderSetup() {
   const allPlaced = setupState.pool.length === 0;
   const soloVehicle = g => g.length === 1 && !!(getSoldierDef(setupState.faction, g[0]) || {}).afv;
   const sizesOk = setupState.groups.every(g => g.length === 0 || (g.length >= 2 && g.length <= 10) || soloVehicle(g));
-  const nonEmpty = setupState.groups.some(g => g.length > 0);
-  document.getElementById('setup-start').disabled = !(allPlaced && sizesOk && nonEmpty);
+  const groupsPlaced = setupState.groups.filter(g => g.length > 0).length;
+  const buildings = setupState.scenario?.defenderInitialBuildings;
+  const groupCountOk = buildings && setupState.role === 'defender' ? groupsPlaced === buildings : groupsPlaced > 0;
+  document.getElementById('setup-start').disabled = !(allPlaced && sizesOk && groupCountOk);
 }
 
 function countLeadersInGroup(gi) {

@@ -401,9 +401,36 @@ function ufResign() {
   ufShowGameOver();
 }
 
+function placeInitialDefenderBuildings(side, count) {
+  const draw = state.terrainDeck.draw;
+  const buildings = [];
+  const passed = [];
+  let revealed = 0;
+  while (revealed < draw.length && buildings.length < count) {
+    const index = draw[revealed++];
+    if (TERRAIN_CARDS[index]?.type === 'BUILDINGS') buildings.push(makeTerrainHandCard(index));
+    else passed.push(index);
+  }
+  if (buildings.length !== count || state.groups[side].length !== count) return false;
+  draw.splice(0, revealed, ...passed);
+  state.groups[side].forEach((group, i) => group.terrain.push(buildings[i]));
+  return true;
+}
+
 function startGameWithSetup() {
   const playerFaction = setupState.faction;
   const scenario = setupState.scenario;
+  const buildings = scenario?.defenderInitialBuildings;
+  if (buildings && setupState.role === 'defender' &&
+      setupState.groups.filter(g => g.length > 0).length !== buildings) {
+    alert(radioText('守備側は3グループに編成します。', 'Divide the defending force into three groups.'));
+    return false;
+  }
+  if (buildings && TERRAIN_CARDS.filter(card => card.type === 'BUILDINGS').length < buildings) {
+    alert(radioText('建物カードが足りません。山札の読み込みを確認してください。',
+      'The deck does not contain enough building cards.'));
+    return false;
+  }
   const others = Object.keys(FACTIONS).filter(k => k !== playerFaction &&
     (!scenario?.onlyFactions || scenario.onlyFactions.includes(k)));
   const aiKey = others.includes(setupState.aiFactionOverride)
@@ -550,6 +577,10 @@ function startGameWithSetup() {
   state.aiHandCount = state.ai.handMax;
   if (TERRAIN_CARDS.length > 0) {
     initTerrainDeck();
+    if (buildings) {
+      const defender = state.playerRole === 'defender' ? 'player' : 'ai';
+      if (!placeInitialDefenderBuildings(defender, buildings)) return false;
+    }
     for (let i = 0; i < state.player.handMax; i++) {
       const c = drawTerrainCard();
       if (c) state.playerHand.push(c);
@@ -668,6 +699,7 @@ function startGame(playerFaction) {
   // 選択中のシナリオから初期グループを生成
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
+  if (scenario?.defenderInitialBuildings) return openSetupScreen(playerFaction);
   for (const faction of [playerFaction, others[0]]) {
     const numbers = window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, faction) || [];
     const formationError = partisanStartingForcesError(scenario, faction, numbers);

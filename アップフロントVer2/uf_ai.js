@@ -299,7 +299,7 @@ async function aiTurn() {
       orderNow = [...orderNow.slice(0, _at), 'streamExit', ...orderNow.slice(_at)];
     }
     let safety = 30;
-    outer: while (safety-- > 0 && partisanActionRoom('ai')) {
+    outer: while (state.phase === 'play' && safety-- > 0 && partisanActionRoom('ai')) {
       for (const key of orderNow) {
         const previousActions = state.aiActionCount;
         const r = await S[key]();
@@ -316,6 +316,7 @@ async function aiTurn() {
   }
 
   // ===== 捨て札（§4.3）: 1) 足止めの地形を置けるだけ置く 2) 狙撃できれば狙撃 3) 残りで手札の整理 =====
+  if (state.phase !== 'play') return;
   while (aiRemainingDiscard() > 0 && await aiTryPlaceBadTerrain()) { /* 置ける限り続ける */ }
   while (aiRemainingDiscard() > 0 && await aiTrySnipe()) { state.aiSnipedThisTurn = true; }
 
@@ -3462,7 +3463,7 @@ async function chartTurn0(nat) {
   ];
   const rows = hold ? ROW_HOLD : ROW_ADV;
   let acted = 0;
-  for (let safety = 0; safety < 30; safety++) {
+  for (let safety = 0; state.phase === 'play' && safety < 30; safety++) {
     let did = false;
     for (const [label, fns] of rows) {
       for (let k = 0; k < fns.length; k++) {
@@ -3484,6 +3485,7 @@ async function chartTurn0(nat) {
     if (!did) break;
   }
   // テスト用（2026-11-08）: ドイツは、何もできなかった手番に、移動以外で手札が減るアクションを1つ試す（そのあと1枚捨てる）
+  if (state.phase !== 'play') return;
   if (!acted && nat === 'ger' && window.__gerExtra) {
     const EXTRA = [['射撃(1枚でも)', () => aiFireAt(state.groups.player.map((_, i) => i), { anyFire: true })], ['火炎放射器', aiTryFlameFire], ['大砲', aiTryMortar], ['地形(移動中に)', () => aiTryPlaceOwnTerrain()], ['平地(移動中に)', () => aiTryPlaceOwnPlain()], ['煙幕', aiTryPlaceOwnSmoke], ['回復', aiTryRally], ['修理', aiTryRepair], ['塹壕', aiTryTrench]];
     for (const [label, fn] of EXTRA) {

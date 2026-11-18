@@ -782,6 +782,7 @@
       <option value="C">C: 要塞強襲（非対称）</option>
       <option value="D">D: 後衛戦（非対称）</option>
       <option value="E">E: 機甲偵察（AFV、非対称）</option>
+      <option value="S3">サ. 奇襲</option>
     </select>
     <span id="scenario-info" style="font-size:12px; color:#aaa;"></span>
     <button onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ" style="background:#365; color:#fff; border:1px solid #6a9; padding:8px 14px; font-size:15px; border-radius:4px; cursor:pointer;">Load</button>
@@ -856,6 +857,7 @@
 <div id="setup-screen">
   <div class="head">
     <h2 id="setup-title">編成</h2>
+    <p id="setup-scenario-note" hidden>守備側は3グループに編成します。</p>
     <div class="info">
       配置先グループ <b id="setup-target">A</b> を選択 → 未配置兵士をクリックで連続配置<br>
       グループ内兵士をクリック→選択 → 別グループクリックで移動 ／ クルー設定: クルー兵器持ちを選択 → <b>クルー設定</b>ボタン → 同じグループの別兵士をアシスタント指定

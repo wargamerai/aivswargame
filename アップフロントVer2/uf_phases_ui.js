@@ -799,6 +799,11 @@ function endTerrainPlacementPhase() {
     state.currentTurn = (firstFac === playerKey) ? 'player' : 'ai';
   }
   if (state.currentTurn === 'player' && window.DISCARD_RULES) window.DISCARD_RULES.resetTurn();
+  if (checkBuildingParityVictory()) {
+    renderField('player');
+    renderField('ai');
+    return;
+  }
   renderHands();
   updateTurnBanner();
   if (state.currentTurn === 'ai') setTimeout(aiTurn, 800);
@@ -1034,6 +1039,7 @@ function commissarExecutionCheck(side) {
 }
 
 function endPlayerTurn() {
+  if (state.phase === 'gameover') return;
   // §14.4 狙撃兵チェックは狙撃を受けた直後のターンだけ。プレイヤーが狙撃していれば次のAIターンにチェックされうる
   state.aiSnipeCheckRnc = null;
   state.playerSnipeCheckRnc = state.playerSnipeRncThisTurn != null ? state.playerSnipeRncThisTurn : null;
@@ -1076,6 +1082,7 @@ function endPlayerTurn() {
 }
 
 async function endAITurn() {
+  if (state.phase === 'gameover') return;
   // §14.4 AI がこのターンに狙撃した → 次のプレイヤーターンに狙撃兵チェックができる
   if (state.aiSnipeRncThisTurn != null) { state.aiSnipeCheckRnc = state.aiSnipeRncThisTurn; state.aiSnipeRncThisTurn = null; }
   // §4.6 AI がこのターンに何もしなかったか（次のプレイヤーターンはアクションか捨て札が必要）

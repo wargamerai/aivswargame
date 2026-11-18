@@ -573,6 +573,26 @@ function calcVictoryPoints(side) {
   return vp;
 }
 
+function checkBuildingParityVictory() {
+  if (state.phase !== 'play' || state.scenario?.victory?.type !== 'buildingParity') return false;
+  const R = window.INFANTRY_RULES;
+  const attacker = state.playerRole === 'defender' ? 'ai' : 'player';
+  const defender = attacker === 'player' ? 'ai' : 'player';
+  const occupied = side => state.groups[side].filter(group =>
+    group && !group.eliminated && R.currentTerrainType(group) === 'BUILDINGS' &&
+    group.cards.some(card => R.isAlive(card) && !card.transfer && !card.infiltrating)).length;
+  const attackBuildings = occupied(attacker);
+  if (!attackBuildings || attackBuildings < occupied(defender)) return false;
+
+  state.phase = 'gameover';
+  state.terrainDeck.gameOver = true;
+  const name = state[attacker].name;
+  alert(radioText(`奇襲 — 建物の確保に成功。 ${name}の勝利！`,
+    `Surprise Attack — ${langTranslate(name)} wins by securing the buildings!`));
+  endCampaignScenario(attacker);
+  return true;
+}
+
 /** シナリオB「市街戦」勝利判定 (vpCount)
  *  デッキ3巡 or 損害限界超え時に、各グループ「ピン以外の生存兵士数 × distance」の合計で勝者決定。
  *  同点は引き分け（記録なし）。

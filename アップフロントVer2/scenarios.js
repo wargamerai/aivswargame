@@ -177,11 +177,31 @@
     ],
   };
 
+  const SCENARIO_SURPRISE = {
+    id: 'S3',
+    name: '奇襲',
+    description: '守備側は山札から先に出た建物3枚に展開してから対局を始める。',
+    asymmetric: true,
+    onlyFactions: ['jpn', 'uk'],
+    factions: {
+      jpn: { soldierRange: [1, 14] },
+      uk: { soldierRange: [1, 11] },
+    },
+    firstPlayer: 'attacker',
+    defenderInitialBuildings: 3,
+    deckCycles: 3,
+    victory: {
+      type: 'buildingParity',
+      description: '攻撃側は建物を1枚以上占領し、占領枚数で守備側に並ぶか上回れば勝ち。山札3巡まで守れば守備側の勝ち。',
+    },
+  };
+
   const SCENARIOS = {
     A: SCENARIO_A_PATROL,
     B: SCENARIO_B_CITY,
     C: SCENARIO_C_ASSAULT,
     D: SCENARIO_D_REARGUARD,
+    S3: SCENARIO_SURPRISE,
   };
 
   /**
@@ -664,6 +684,13 @@
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
+    if (role === 'defender' && scenario?.defenderInitialBuildings) {
+      const count = scenario.defenderInitialBuildings;
+      const size = Math.floor(enriched.length / count);
+      const remainder = enriched.length % count;
+      return _forcedSplit(enriched, factionKey,
+        Array.from({length: count}, (_, i) => size + Number(i < remainder)));
+    }
     const _isChart = typeof window !== 'undefined' && window.__chartAI && (window.__chartNat === 'all' || factionKey === (window.__chartNat || 'us'));
     const _splitA = _isChart && window.__splitA ? (typeof window.__splitA === 'object' ? window.__splitA[factionKey] : window.__splitA) : null;
     const _defAdv = _isChart && window.__defAdv && role === 'defender' && (window.__defAdv !== 'D' || (scenario && scenario.id === 'D'));

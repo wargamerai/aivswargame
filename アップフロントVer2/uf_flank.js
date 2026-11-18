@@ -533,6 +533,18 @@ function pushTerrainToDiscard(card) {
 window.pushTerrainToDiscard = pushTerrainToDiscard;
 
 function showTerrainDeckGameOver() {
+  if (state.scenario?.victory?.type === 'buildingParity') {
+    if (state.phase === 'gameover' || checkBuildingParityVictory()) return;
+    const defender = state.playerRole === 'defender' ? 'player' : 'ai';
+    const name = state[defender].name;
+    state.terrainDeck.gameOver = true;
+    state.phase = 'gameover';
+    updateDeckCounts();
+    alert(radioText(`奇襲 — 時間切れ。守備側の${name}が勝利！`,
+      `Surprise Attack — Time is up. ${langTranslate(name)} wins on defense!`));
+    endCampaignScenario(defender);
+    return;
+  }
   const lim = getScenarioDeckCycles();
   state.terrainDeck.gameOver = true;
   updateDeckCounts();
