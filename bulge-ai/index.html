@@ -5,12 +5,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>激突！バルジ突破作戦</title>
-  <link rel="stylesheet" href="style.css?v=1.7&amp;rev=2">
+  <link rel="stylesheet" href="style.css?v=1.7&amp;rev=3">
   <script defer src="map-data.js?v=1.7"></script>
   <script defer src="data.js?v=1.7"></script>
-  <script defer src="rules.js?v=1.7&amp;rev=6"></script>
+  <script defer src="rules.js?v=1.7&amp;rev=7"></script>
   <script defer src="ai.js?v=1.7&amp;rev=11"></script>
-  <script defer src="app.js?v=1.7&amp;rev=5"></script>
+  <script defer src="app.js?v=1.7&amp;rev=6"></script>
   <script defer src="../game-analytics.js"></script>
 </head>
 <body>
@@ -45,7 +45,6 @@
       <div id="phase-announcement" class="phase-announcement" role="status" aria-atomic="true" hidden>
         <span id="announced-turn"></span>
         <strong id="announced-phase"></strong>
-        <div id="phase-overview-actions" hidden></div>
       </div>
       <div id="map-scroll" tabindex="0">
         <span id="map-coordinate" aria-hidden="true" hidden></span>
@@ -53,9 +52,6 @@
           <defs>
             <marker id="move-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="13" markerHeight="13" markerUnits="userSpaceOnUse" orient="auto">
               <path d="M0 0 L12 6 L0 12 Z" fill="#c21c29"/>
-            </marker>
-            <marker id="reservation-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="13" markerHeight="13" markerUnits="userSpaceOnUse" orient="auto">
-              <path d="M0 0 L12 6 L0 12 Z" fill="#6a3194"/>
             </marker>
           </defs>
           <image href="assets/map.jpg" width="1888" height="1333"/>
@@ -68,7 +64,7 @@
       </div>
       <button id="toggle-command" class="command-toggle" type="button" aria-controls="command-panel"
         aria-expanded="true" aria-label="右パネルを隠す" title="右パネルを隠す">▶</button>
-      <div class="map-legend"><strong id="german-city-count"></strong><span class="key legal">移動・配置可能</span><span class="key stop">進入で停止</span><span id="movement-support-legend" class="key support-movement" hidden>移動支援で有利</span><span class="key planned">移動案</span><span class="key reserved">予約・死守先</span><span class="key target">攻撃・戦闘地点</span><span id="victory-city-legend" hidden>赤：20都市の集計対象　濃赤：即時勝利　橙：最終ターンの勝利条件</span><span id="coordinates">ヘクスを指すと座標を表示</span></div>
+      <div class="map-legend"><strong id="german-city-count"></strong><span class="key legal">移動・配置可能</span><span class="key stop">進入で停止</span><span id="movement-support-legend" class="key support-movement" hidden>移動支援で有利</span><span class="key planned">移動案</span><span class="key target">攻撃・戦闘地点</span><span id="victory-city-legend" hidden>赤：20都市の集計対象　濃赤：即時勝利　橙：最終ターンの勝利条件</span><span id="coordinates">ヘクスを指すと座標を表示</span></div>
     </section>
     <aside id="command-panel" class="command" aria-label="対局操作">
       <div class="phase-guidance">
@@ -143,22 +139,20 @@
   </dialog>
   <dialog id="help">
     <div class="dialog-title"><h2>遊び方</h2><form method="dialog"><button>閉じる</button></form></div>
-    <p>同じ端末でドイツ軍と連合軍を交代で操作します。画面に表示された陣営のプレイヤーが操作してください。</p>
+    <p>同じ端末でドイツ軍と連合軍を交代で操作します。支援チットはAIが担当します。</p>
     <dl>
       <dt>駒と支援チット</dt>
       <dd>支援チットは駒の下に重なっています。駒にマウスを乗せると右パネルに内訳が表示され、クリックすると右パネル下部に拡大表示されます。相手の未公開チットは裏向きで表示します。</dd>
       <dt>移動</dt>
-      <dd>駒を選び、色の付いたヘクスを選びます。「経路を採用」で案に加えます。案の一覧から各部隊の移動を変更・取消できます。「移動を確定」でまとめて進めます。輸送力を超える場合は警告が出ます。「返却して移動」を選ぶと、AIが表示した超過分の支援チットを返却して移動します。</dd>
+      <dd>駒を選び、色の付いたヘクスをクリックすると移動案に加わります。右パネルの「変更」「取消」で移動先を訂正できます。「移動を確定」でまとめて進めます。輸送力を超える移動案は確定前に警告が出ます。</dd>
       <dt>増援</dt>
       <dd>補給源ヘクスに増援を置くたびに、その部隊の輸送能力と同じ枚数を引き、支援チットをその部隊に配属します。イベントチットを引いた場合は、その場で処理します。</dd>
       <dt>ZOC（支配地域）</dt>
       <dd>森林河川を含む河川ヘクスではZOCを失います。都市河川ヘクス（例 2207）ではZOCが隣接ヘクスに及びます。</dd>
       <dt>攻撃・反撃</dt>
-      <dd>味方の駒を複数選んでから、隣接する敵の駒を選びます。「攻撃案を確定」すると今回の攻撃先が強調されます。オーバービューで操作する陣営を切り替え、両軍が使う支援チットを選んだら公開します。チットの効果を確認して判定し、結果を見てから損害を適用します。</dd>
+      <dd>味方の駒を複数選んでから、隣接する敵の駒を選びます。「攻撃案を確定」すると今回の攻撃先が強調されます。両軍が使う支援チットはAIが選びます。チットの効果を確認して判定し、結果を見てから損害を適用します。</dd>
       <dt>戦闘後前進</dt>
       <dd>敵のいなくなったヘクスに、混乱していない参加部隊を1個前進させられます。</dd>
-      <dt>移動予約・死守命令</dt>
-      <dd>移動フェイズに駒を選び、右パネルで「移動予約」または「死守命令」を選びます。地図で目的地を指定して「命令を確定」を押すと、紫の破線で行き先を表示します。自軍の通常移動で目的地に向かい、そのターンで届かなければ次回の通常移動に持ち越します。移動予約は到着で終了し、死守命令は到着したヘクスに留まります。現在地を死守先に指定することもできます。敵が目的地に進入すると解除され、右パネルからも解除できます。</dd>
       <dt>勝利</dt>
       <dd>ドイツ軍はリエージュ、ユイ、ナミュール、ディナンのいずれかを占領すると即時勝利。第10ターン終了時はバストーニュかヴェルヴィエの支配、または連絡線の通じる20都市の支配が勝利条件です。この20都市には、開始時からドイツ軍が支配するジークフリード線東側の都市も含めます。連合軍はこれを阻止するか、ドイツ軍の補給源を6か所以上支配します。</dd>
     </dl>
@@ -166,12 +160,11 @@
     <details><summary>原本の戦闘結果表</summary><img class="crt" src="assets/crt.png" alt="戦闘結果表"></details>
   </dialog>
   <dialog id="start-dialog" aria-labelledby="start-title">
-    <h2 id="start-title">対戦方式を選択</h2>
+    <h2 id="start-title">バルジ</h2>
+    <p>両軍は人間が操作し、支援チットはAIが担当します。</p>
     <p id="start-replace-note" hidden>新しい対局を始めると、現在の対局の保存内容を置き換えます。</p>
     <div class="game-mode-options">
-      <button type="button" id="start-local" class="primary" autofocus>人間対人間</button>
-      <button type="button" disabled>オンライン対戦（利用できません）</button>
-      <button type="button" disabled>人間対AI（利用できません）</button>
+      <button type="button" id="start-local" class="primary" autofocus>対局を始める</button>
     </div>
     <p id="start-error" class="battle-error" role="alert" hidden></p>
     <div class="header-actions">
