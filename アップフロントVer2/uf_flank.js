@@ -533,6 +533,10 @@ function pushTerrainToDiscard(card) {
 window.pushTerrainToDiscard = pushTerrainToDiscard;
 
 function showTerrainDeckGameOver() {
+  if (state.scenario?.victory?.type === 'assault') {
+    checkAssaultVictory(true);
+    return;
+  }
   if (state.scenario?.victory?.type === 'buildingParity') {
     if (state.phase === 'gameover' || checkBuildingParityVictory()) return;
     const defender = state.playerRole === 'defender' ? 'player' : 'ai';

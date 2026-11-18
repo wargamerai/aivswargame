@@ -225,7 +225,9 @@ function openSetupScreen(factionKey) {
   setupState.demoHolders = new Set(); // "<grpIdx>:<num>" 形式
   // 非対称シナリオの先攻選択 → プレイヤーの役割 (attacker/defender)
   let playerRole;
-  if (scenario.asymmetric) {
+  if (scenario.attackerOnly) {
+    playerRole = 'attacker';
+  } else if (scenario.asymmetric) {
     const fpPick = document.getElementById('first-player-pick');
     const firstSide = (fpPick && fpPick.value) ? fpPick.value : 'player';
     playerRole = (firstSide === 'player') ? 'attacker' : 'defender';
@@ -238,15 +240,23 @@ function openSetupScreen(factionKey) {
   // プールに使用兵士全員 (役割に応じて左列/右列)
   const nums = (window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.getSoldierNumbers(scenario, factionKey, playerRole)) || [];
   setupState.pool = nums.slice();
+  if (scenario.attackerOnly) {
+    const attackGroupSize = Math.ceil(nums.length / 2);
+    setupState.groups[0] = nums.slice(0, attackGroupSize);
+    setupState.groups[1] = nums.slice(attackGroupSize);
+    setupState.pool = [];
+  }
 
   document.getElementById('faction-select').style.display = 'none';
   document.getElementById('setup-screen').classList.add('active');
   const fac = FACTIONS[factionKey];
-  const roleLabel = (scenario.id === 'C' || scenario.defenderInitialBuildings) ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
+  const roleLabel = (scenario.id === 'C' || scenario.defenderInitialBuildings || scenario.attackerOnly) ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
   document.getElementById('setup-title').textContent =
     `${fac.flag} ${fac.name} 編成 — シナリオ${scenario.id}「${scenario.name}」${roleLabel ? ' ['+roleLabel+']' : ''} (兵士 ${nums.length}名)`;
-  document.getElementById('setup-scenario-note').hidden =
+  const scenarioNote = document.getElementById('setup-scenario-note');
+  scenarioNote.hidden = !scenario.attackerOnly &&
     !(scenario.defenderInitialBuildings && playerRole === 'defender');
+  scenarioNote.textContent = scenario.attackerOnly ? scenario.description : '守備側は3グループに編成します。';
   renderSetup();
 }
 
@@ -572,6 +582,12 @@ function rebuildCrewKeysAfterGroupChange() {
   // (実装上の no-op だが将来の拡張用に名前を残す)
 }
 
+function setupHasRequiredFlamethrower() {
+  const scenario = setupState.scenario;
+  return !scenario?.attackerOnly ||
+    setupState.groups.some(group => group.includes(scenario.flameOperator[setupState.faction]));
+}
+
 function renderSetup() {
   const poolEl = document.getElementById('pool-cards');
   poolEl.innerHTML = '';
@@ -626,7 +642,9 @@ function renderSetup() {
   const groupsPlaced = setupState.groups.filter(g => g.length > 0).length;
   const buildings = setupState.scenario?.defenderInitialBuildings;
   const groupCountOk = buildings && setupState.role === 'defender' ? groupsPlaced === buildings : groupsPlaced > 0;
-  document.getElementById('setup-start').disabled = !(sizesOk && groupCountOk);
+  const flameReady = setupHasRequiredFlamethrower();
+  document.getElementById('setup-flame-required').hidden = flameReady;
+  document.getElementById('setup-start').disabled = !(sizesOk && groupCountOk && flameReady);
 }
 
 function countLeadersInGroup(gi) {

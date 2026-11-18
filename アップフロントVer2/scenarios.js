@@ -684,6 +684,11 @@
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
+    if (role === 'defender' && scenario?.defenderGroups) {
+      const groups = _forcedSplit(enriched, factionKey, scenario.defenderGroups.map(g => g.soldiers));
+      groups.forEach(g => { g._role = 'hold'; g._strategy = 'hold'; });
+      return groups;
+    }
     if (role === 'defender' && scenario?.defenderInitialBuildings) {
       const count = scenario.defenderInitialBuildings;
       const size = Math.floor(enriched.length / count);

@@ -339,6 +339,12 @@ function ufLoadFromFile(inp) {
   reader.readAsText(f);
 }
 function ufApplySaveData(saved) {
+  const scenarioRef = saved?.data?.$obj?.state?.$obj?.scenario?.$ext;
+  if (typeof scenarioRef === 'string' && scenarioRef.startsWith('S:') &&
+      isLockedAssaultScenario(scenarioRef.slice(2))) {
+    openAssaultUnlock(() => ufApplySaveData(saved));
+    return;
+  }
   const all = ufSaveDecode(saved.data);
   // state・レポートは同じ物を使い続ける（他のファイルから参照されているため中身だけ入れ替える）
   Object.keys(state).forEach(k => { delete state[k]; });
@@ -420,6 +426,21 @@ function placeInitialDefenderBuildings(side, count) {
 function startGameWithSetup() {
   const playerFaction = setupState.faction;
   const scenario = setupState.scenario;
+  if (!setupHasRequiredFlamethrower()) {
+    alert('火炎放射器を持つ兵士をグループに入れてください。');
+    return false;
+  }
+  if (scenario?.attackerOnly) {
+    const counts = new Map();
+    for (const site of scenario.defenderGroups) counts.set(site.type, (counts.get(site.type) || 0) + 1);
+    const cardsReady = Array.from(counts).every(([type, count]) =>
+      TERRAIN_CARDS.filter(card => card.type === type).length >= count);
+    const operator = getSoldierDef(playerFaction, scenario.flameOperator[playerFaction]);
+    if (!cardsReady || !operator?.weaponCat.startsWith('火炎放射器')) {
+      alert('シナリオの初期配置に必要なカードを読み込めませんでした。');
+      return false;
+    }
+  }
   const buildings = scenario?.defenderInitialBuildings;
   if (buildings && setupState.role === 'defender' &&
       setupState.groups.filter(g => g.length > 0).length !== buildings) {
@@ -457,7 +478,9 @@ function startGameWithSetup() {
   const _todPick = document.getElementById('time-of-day-pick');
   state.isNight = !!(_todPick && _todPick.value === 'night');
   // 非対称シナリオの先攻選択を保存
-  if (scenario && scenario.asymmetric) {
+  if (scenario?.attackerOnly) {
+    state.firstSideOverride = 'player';
+  } else if (scenario && scenario.asymmetric) {
     const fpPick = document.getElementById('first-player-pick');
     state.firstSideOverride = (fpPick && fpPick.value) ? fpPick.value : 'player';
   } else {
@@ -476,7 +499,7 @@ function startGameWithSetup() {
         }
         return card;
       }),
-      distance: 0,
+      distance: scenario?.attackerDistance ?? 0,
       terrain: [],
       actions: [],
       _faction: playerFaction,
@@ -577,6 +600,15 @@ function startGameWithSetup() {
   state.aiHandCount = state.ai.handMax;
   if (TERRAIN_CARDS.length > 0) {
     initTerrainDeck();
+    if (scenario?.attackerOnly) {
+      const draw = state.terrainDeck.draw;
+      for (const site of scenario.defenderGroups) {
+        const group = state.groups.ai.find(g => g.name === site.name);
+        const index = draw.findIndex(i => TERRAIN_CARDS[i].type === site.type);
+        group.distance = site.distance;
+        group.terrain.push(makeTerrainHandCard(draw.splice(index, 1)[0]));
+      }
+    }
     if (buildings) {
       const defender = state.playerRole === 'defender' ? 'player' : 'ai';
       if (!placeInitialDefenderBuildings(defender, buildings)) return false;
@@ -699,7 +731,7 @@ function startGame(playerFaction) {
   // 選択中のシナリオから初期グループを生成
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
-  if (scenario?.defenderInitialBuildings) return openSetupScreen(playerFaction);
+  if (scenario?.defenderInitialBuildings || scenario?.attackerOnly) return openSetupScreen(playerFaction);
   for (const faction of [playerFaction, others[0]]) {
     const numbers = window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, faction) || [];
     const formationError = partisanStartingForcesError(scenario, faction, numbers);

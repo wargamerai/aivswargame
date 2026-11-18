@@ -523,6 +523,7 @@ function cleanupEliminatedGroups() {
 }
 
 function checkDefeat() {
+  if (state.scenario?.attackerOnly && state.phase === 'gameover') return;
   if (!state.initialSoldierCount) return;
   const R = window.INFANTRY_RULES;
   if (!R) return;
@@ -590,6 +591,38 @@ function checkBuildingParityVictory() {
   alert(radioText(`奇襲 — 建物の確保に成功。 ${name}の勝利！`,
     `Surprise Attack — ${langTranslate(name)} wins by securing the buildings!`));
   endCampaignScenario(attacker);
+  return true;
+}
+
+/** At the deck limit the defender wins unless the attacker has already met every objective. */
+function checkAssaultVictory(timeExpired = false) {
+  if (state.phase !== 'play' || state.scenario?.victory?.type !== 'assault') return false;
+  const R = window.INFANTRY_RULES;
+  const scenario = state.scenario;
+  const active = card => R.isAlive(card) && !card.captured && !card.transfer && !card.infiltrating;
+  const cleared = scenario.victory.clear.every(name => {
+    const site = scenario.defenderGroups.find(g => g.name === name);
+    const group = state.groups.ai.find(g => g.name === name);
+    return !group || group.eliminated || !group.cards.some(card => R.isAlive(card) && !card.captured) ||
+      group.distance !== site.distance || R.currentTerrainType(group) !== site.type;
+  });
+  const held = scenario.victory.hold.every(goal =>
+    state.groups.player.filter(group => !group.eliminated && group.distance >= goal.distance &&
+      !isMovingIgnoringOverlays(group) && R.currentTerrainType(group) === goal.type &&
+      group.cards.filter(card => active(card) && !R.isPinned(card)).length >= goal.soldiers
+    ).length >= goal.groups);
+  const attackerWon = cleared && held;
+  if (!attackerWon && !timeExpired) return false;
+
+  state.phase = 'gameover';
+  state.terrainDeck.gameOver = true;
+  updateDeckCounts();
+  const label = `${scenario.id}　${scenario.name}`;
+  const result = attackerWon
+    ? radioText('作戦目標を達成。攻撃側の勝利！', 'Objectives secured. The attacker wins!')
+    : radioText('時間切れ。防御側の勝利！', 'Time is up. The defender wins!');
+  alert(radioText(label, langTranslate(label)) + ' — ' + result);
+  endCampaignScenario(attackerWon ? 'player' : 'ai');
   return true;
 }
 

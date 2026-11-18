@@ -783,8 +783,10 @@
       <option value="D">D: 後衛戦（非対称）</option>
       <option value="E">E: 機甲偵察（AFV、非対称）</option>
       <option value="S3">サ. 奇襲</option>
+      <optgroup id="assault-scenario-options" label="F–X" hidden></optgroup>
     </select>
     <span id="scenario-info" style="font-size:12px; color:#aaa;"></span>
+    <button id="assault-unlock" type="button" style="background:#444; color:#eee; border:1px solid #888; padding:8px 14px; border-radius:4px;">F〜Xを解除</button>
     <button onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ" style="background:#365; color:#fff; border:1px solid #6a9; padding:8px 14px; font-size:15px; border-radius:4px; cursor:pointer;">Load</button>
     <span id="first-player-row" style="display:none; margin-left:12px; font-size:15px;">
       先攻:
@@ -858,6 +860,7 @@
   <div class="head">
     <h2 id="setup-title">編成</h2>
     <p id="setup-scenario-note" hidden>守備側は3グループに編成します。</p>
+    <p id="setup-flame-required" hidden>火炎放射器を持つ兵士をグループに入れてください。</p>
     <div class="info">
       配置先グループ <b id="setup-target">A</b> を選択 → 未配置兵士をクリックで連続配置<br>
       グループ内兵士をクリック→選択 → 別グループクリックで移動 ／ クルー設定: クルー兵器持ちを選択 → <b>クルー設定</b>ボタン → 同じグループの別兵士をアシスタント指定
@@ -1059,8 +1062,22 @@
   </div>
 </div>
 
+<dialog id="assault-password-dialog" style="background:#292929; color:#eee; border:1px solid #888; border-radius:8px; max-width:calc(100% - 2rem);">
+  <form id="assault-password-form">
+    <label for="assault-password">F〜Xのパスワード</label>
+    <input id="assault-password" type="password" required autocomplete="off" autofocus>
+    <p id="assault-password-message" role="status" hidden></p>
+    <p>
+      <button id="assault-password-submit" type="submit">解除</button>
+      <button id="assault-password-cancel" type="button">キャンセル</button>
+    </p>
+  </form>
+</dialog>
+
 <script src="infantry_rules.js"></script>
 <script src="scenarios.js"></script>
+<script src="uf_assault_data.js"></script>
+<script src="uf_assault_scenarios.js"></script>
 <script src="discard.js"></script>
 <script src="embedded_csv.js"></script>
 <script src="cc.js"></script>
