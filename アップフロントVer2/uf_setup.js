@@ -196,7 +196,6 @@ function openSetupScreen(factionKey) {
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
   if (!scenario) { alert('シナリオ未読込'); return; }
-  if (scenario.attackerOnly && !scenario.factions[factionKey]) return;
   if (scenario.onlyFactions && !scenario.onlyFactions.includes(factionKey)) {
     if (scenario.defenderInitialBuildings) {
       alert(radioText('「奇襲」は日本軍とイギリス軍の対局です。', 'Surprise Attack is played by Japan and Britain.'));
@@ -226,9 +225,7 @@ function openSetupScreen(factionKey) {
   setupState.demoHolders = new Set(); // "<grpIdx>:<num>" 形式
   // 非対称シナリオの先攻選択 → プレイヤーの役割 (attacker/defender)
   let playerRole;
-  if (scenario.attackerOnly) {
-    playerRole = 'attacker';
-  } else if (scenario.asymmetric) {
+  if (scenario.asymmetric) {
     const fpPick = document.getElementById('first-player-pick');
     const firstSide = (fpPick && fpPick.value) ? fpPick.value : 'player';
     playerRole = (firstSide === 'player') ? 'attacker' : 'defender';
@@ -245,13 +242,11 @@ function openSetupScreen(factionKey) {
   document.getElementById('faction-select').style.display = 'none';
   document.getElementById('setup-screen').classList.add('active');
   const fac = FACTIONS[factionKey];
-  const roleLabel = (scenario.id === 'C' || scenario.defenderInitialBuildings || scenario.attackerOnly) ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
+  const roleLabel = (scenario.id === 'C' || scenario.defenderInitialBuildings) ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
   document.getElementById('setup-title').textContent =
     `${fac.flag} ${fac.name} 編成 — シナリオ${scenario.id}「${scenario.name}」${roleLabel ? ' ['+roleLabel+']' : ''} (兵士 ${nums.length}名)`;
-  const scenarioNote = document.getElementById('setup-scenario-note');
-  scenarioNote.hidden = !scenario.attackerOnly &&
+  document.getElementById('setup-scenario-note').hidden =
     !(scenario.defenderInitialBuildings && playerRole === 'defender');
-  scenarioNote.textContent = scenario.attackerOnly ? scenario.description : '守備側は3グループに編成します。';
   renderSetup();
 }
 

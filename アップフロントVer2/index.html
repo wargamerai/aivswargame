@@ -782,10 +782,9 @@
       <option value="C">C: 要塞強襲（非対称）</option>
       <option value="D">D: 後衛戦（非対称）</option>
       <option value="E">E: 機甲偵察（AFV、非対称）</option>
-      <optgroup id="assault-scenario-options" label="F–X" hidden></optgroup>
+      <option value="S3">サ. 奇襲</option>
     </select>
     <span id="scenario-info" style="font-size:12px; color:#aaa;"></span>
-    <button id="assault-unlock" type="button" style="background:#444; color:#eee; border:1px solid #888; padding:8px 14px; border-radius:4px;">F〜Xを解除</button>
     <button onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ" style="background:#365; color:#fff; border:1px solid #6a9; padding:8px 14px; font-size:15px; border-radius:4px; cursor:pointer;">Load</button>
     <span id="first-player-row" style="display:none; margin-left:12px; font-size:15px;">
       先攻:
@@ -1060,29 +1059,15 @@
   </div>
 </div>
 
-<dialog id="assault-password-dialog" style="background:#292929; color:#eee; border:1px solid #888; border-radius:8px; max-width:calc(100% - 2rem);">
-  <form id="assault-password-form">
-    <label for="assault-password">F〜Xのパスワード</label>
-    <input id="assault-password" type="password" required autocomplete="off" autofocus>
-    <p id="assault-password-message" role="status" hidden></p>
-    <p>
-      <button id="assault-password-submit" type="submit">解除</button>
-      <button id="assault-password-cancel" type="button">キャンセル</button>
-    </p>
-  </form>
-</dialog>
-
 <script src="infantry_rules.js"></script>
-<script src="scenarios.js?v=20261118-2"></script>
-<script src="uf_assault_data.js?v=20261118-2"></script>
-<script src="uf_assault_scenarios.js?v=20261118-2"></script>
+<script src="scenarios.js"></script>
 <script src="discard.js"></script>
 <script src="embedded_csv.js"></script>
 <script src="cc.js"></script>
 <script src="mortar.js"></script>
 <script src="campaign.js"></script>
 <script src="uf_i18n.js"></script>
-<script src="lang.js?v=20261118-2"></script>
+<script src="lang.js"></script>
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script>
 // 画面全体のズーム: 50%〜200%、10%きざみ。倍率は覚えておく（各画面の − ＋ ボタン）
@@ -1100,15 +1085,15 @@ ufApplyZoom();
 </script>
 <script src="uf_data.js"></script>
 <script src="uf_flank.js"></script>
-<script src="uf_setup.js?v=20261118-2"></script>
-<script src="uf_report_save.js?v=20261118-2"></script>
+<script src="uf_setup.js"></script>
+<script src="uf_report_save.js"></script>
 <script src="uf_field.js"></script>
 <script src="uf_national_rules.js"></script>
 <script src="uf_actions.js"></script>
 <script src="uf_fire_status.js"></script>
 <script src="uf_campaign.js"></script>
 <script src="uf_phases_ui.js"></script>
-<script src="uf_ai.js?v=20261118-2"></script>
+<script src="uf_ai.js"></script>
 <script src="uf_cardscore.js"></script>
 <script src="uf_afv.js"></script>
 <script src="uf_reinforcements.js"></script>

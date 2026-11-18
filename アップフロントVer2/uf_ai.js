@@ -3300,15 +3300,10 @@ document.getElementById('deck-draw').addEventListener('click', () => {
 (function () {
   const sp = document.getElementById('scenario-pick');
   const row = document.getElementById('first-player-row');
-  const info = document.getElementById('scenario-info');
   if (!sp || !row) return;
   const update = () => {
     const sc = window.SCENARIOS && window.SCENARIOS[sp.value];
-    row.style.display = sc?.asymmetric && !sc.attackerOnly ? '' : 'none';
-    info.textContent = sc?.attackerOnly ? '自軍は攻撃側。火炎放射器を編成に加えられます。' : '';
-    document.querySelectorAll('.faction-btn').forEach(btn => {
-      btn.style.display = sc?.attackerOnly && !sc.factions[btn.dataset.faction] ? 'none' : '';
-    });
+    row.style.display = (sc && sc.asymmetric) ? '' : 'none';
   };
   sp.addEventListener('change', update);
   update();

@@ -48,7 +48,6 @@ function renderField(side) {
   if (typeof updateAcquisitions === 'function') updateAcquisitions(); // §27.2 捕捉を失う
   if (typeof updatePrisoners === 'function') updatePrisoners(); // §32.2/§32.22 監視役の引き継ぎ・捕虜の解放
   checkBuildingParityVictory();
-  checkAssaultVictory();
   try { updateInfoPanel(); } catch (e) { console.warn('updateInfoPanel', e); } // 枠の上の勝利条件・勝利点・損害
   try { if (state.phase === 'play' && !UF_REPORT.snaps.length) { ufSnapshot('開始時', ''); UF_REPORT.snaps[0].t = -1; } } catch (e) {}
   if (state.phase === 'gameover' && !state._ufReportShown) { state._ufReportShown = true; try { ufSnapshot('終了時', ''); } catch (e) {} setTimeout(ufShowGameOver, 400); } // ゲーム終了の画面

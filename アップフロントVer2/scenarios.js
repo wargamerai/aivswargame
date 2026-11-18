@@ -684,17 +684,6 @@
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
-    if (role === 'defender' && scenario?.defenderGroups) {
-      const pillboxes = scenario.defenderGroups.filter(g => g.type === 'PILLBOX').length;
-      const fieldGroups = scenario.defenderGroups.length - pillboxes;
-      const fieldSoldiers = enriched.length - 3 * pillboxes;
-      const size = Math.floor(fieldSoldiers / fieldGroups);
-      let remainder = fieldSoldiers % fieldGroups;
-      const sizes = scenario.defenderGroups.map(g => g.type === 'PILLBOX' ? 3 : size + Number(remainder-- > 0));
-      const groups = _forcedSplit(enriched, factionKey, sizes);
-      groups.forEach(g => { g._role = 'hold'; g._strategy = 'hold'; });
-      return groups;
-    }
     if (role === 'defender' && scenario?.defenderInitialBuildings) {
       const count = scenario.defenderInitialBuildings;
       const size = Math.floor(enriched.length / count);
