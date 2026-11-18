@@ -96,6 +96,8 @@ function pushTerrainWithFaction(grp, card) {
   // MOVEMENT カードが地形スタックに置かれたら塹壕を除去（鉄条網除去は pushTerrainToDiscard で別経路）
   if (card.terrain && card.terrain.type === 'MOVEMENT' && grp.terrain) {
     grp.terrain = grp.terrain.filter(c => !c._isTrench);
+    const side = _groupSideIdx(grp)?.side;
+    if (side) grp.cards.filter(c => infantryGunProfile(c,side)).forEach(c => { c._infantryGunUsed = true; });
   }
   grp.terrain.push(card);
   try {
@@ -292,6 +294,9 @@ function initTerrainDeck() {
   if (!TERRAIN_CARDS.length) return;
   const indices = TERRAIN_CARDS.map((_, i) => i);
   state.deckRemoved = {};
+  state.reinforcementsUsed = {};
+  state.reinforcementStart = {};
+  state.partisanSniperChecks = {};
   state.terrainDeck = {
     draw: shuffleTerrainIndices(indices),
     discard: [],

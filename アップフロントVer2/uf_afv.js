@@ -196,6 +196,37 @@
     });
     return out;
   }
+  // §31 自作シナリオは antiTankMines[faction] に所持者の兵士番号を指定できる。
+  function hasMagneticMine(card, side) {
+    const faction = getFactionKey(state[side]);
+    return (faction === 'ger' || faction === 'rus') && !card._magneticMineSpent &&
+      !card.demoCharge && !!state.scenario?.antiTankMines?.[faction]?.includes(card.num);
+  }
+
+  function tryMagneticMineAgainstOverrun(man, defendingSide, vehicleGroup, vehicle, attackRoll) {
+    const rules = R();
+    if (!attackRoll.red || !rules.isAlive(man) || !hasMagneticMine(man, defendingSide)) return null;
+    if (rules.isPinned(man)) {
+      if (!_useHeroFromHand(defendingSide, 'ヒーローで兵を回復し、対戦車磁気地雷を使いますか？')) return null;
+      rules.unpinSoldier(man);
+      man.heroRecovery = true;
+    }
+    const judge = draw();
+    if (!judge || rncOf(judge).red) return null;
+    const column = isButtoned(vehicle) ? '2b' : defOf(vehicle).ot ? '5o' : '4c';
+    if (judge.terrain.diceColor?.[column] !== '赤') return null;
+    const rpc = judge.terrain.dice?.['0r'];
+    if (rpc === '' || rpc == null || !/^\d$/.test(String(rpc))) return null;
+    const value = Number(rpc);
+    man._magneticMineSpent = true;
+    if (value === 0 || value >= 6) {
+      kill(vehicleGroup, vehicle, '対戦車磁気地雷');
+      return 'KIA';
+    }
+    immobilize(vehicleGroup, vehicle);
+    return 'IMMOB';
+  }
+
   function overrun(g, t, moveCard, tgtKey, side) {
     const c = afvCard(g), s = sideOf(c), dd = defOf(c), Rr = R();
     moveCard._moveMode = 'lateral';
@@ -226,6 +257,11 @@
       else if (res.result === 'PANIC_ROUT') { Rr.routSoldier(man); stats.overrunKills++; }
       else if (res.result === 'PIN') Rr.pinSoldier(man);
       results.push({ name: def ? def.name : man.id, result: res.result });
+      const counter = tryMagneticMineAgainstOverrun(man, side === 'player' ? 'ai' : 'player', g, c, r2);
+      if (counter) {
+        results.push({ name: defOf(c).name + '（対戦車磁気地雷）', result: counter });
+        break;
+      }
     }
     if (typeof cleanupEliminatedGroups === 'function') cleanupEliminatedGroups();
     log(`オーバーラン 強さ${final} ${results.map(r => r.name + ':' + r.result).join(' ')}`);
@@ -250,10 +286,14 @@
     // 侵入: RPC が赤なら近づけた
     if (jr.terrain.diceColor && jr.terrain.diceColor[use] !== '赤') return { ok: false };
     const j = draw(); const rn = rncOf(j);
-    let m = rn.v;
+    let m = rn.v + (getFactionKey(state[side]) === 'jpn' ? 1 : 0);
     const t = (afvG.terrain || [])[(afvG.terrain || []).length - 1], ty = t && t.terrain && t.terrain.type;
     if (ty === 'BUILDINGS') m += 3; if (ty === 'WOODS' || ty === 'WALL' || ty === 'GULLY') m += 2; if (ty === 'BRUSH') m += 1;
     if (!isButtoned(c) && !dd.ot) m -= 1; if (isButtoned(c)) m += 1; m += ckMod(c); if (afvG._immob || afvG._bog) m += 2; if (dd.ot) m += 3;
+    if (hasMagneticMine(attacker, side) && (side === 'ai' || confirm('対戦車磁気地雷を使いますか？'))) {
+      m += 4;
+      attacker._magneticMineSpent = true;
+    }
     if (attacker.demo || attacker.demoCharge) { m += 4; attacker.demo = false; attacker.demoCharge = false; } // §28.81 爆薬 +4、使ったら取り除く（印は demoCharge）
     if (m >= 7) { kill(afvG, c, '白兵戦'); return { ok: true, res: 'KILL' }; }
     if (m === 6) { immobilize(afvG, c); return { ok: true, res: 'IMMOB' }; }
@@ -343,8 +383,8 @@
           if (!isButtoned(ac) && !dd.ot) m -= 1; if (isButtoned(ac)) m += 1; m += ckMod(ac); if (t._immob || t._bog) m += 2; if (dd.ot) m += 3; return m; };
         tg.sort((a, b) => (modOf(b.t) - modOf(a.t)) || (Math.abs(a.ti - gi) - Math.abs(b.ti - gi)));
         const tgt = tg[0].t;
-        const armed = g.cards.filter(m => { if (!R().isAlive(m) || R().isPinned(m) || m.destroyed) return false; const d = R().lookupSoldier(m, aKey); return !!(d && d.weaponCat && d.weaponCat !== '非武装') || !!m.acquiredWeapon || !!m.demoCharge; })
-          .sort((a, b) => ((b.demoCharge ? 1 : 0) - (a.demoCharge ? 1 : 0)));
+        const armed = g.cards.filter(m => { if (!R().isAlive(m) || R().isPinned(m) || m.destroyed) return false; const d = R().lookupSoldier(m, aKey); return !!(d && d.weaponCat && d.weaponCat !== '非武装') || !!m.acquiredWeapon || !!m.demoCharge || hasMagneticMine(m, 'ai'); })
+          .sort((a, b) => Number(b.demoCharge || hasMagneticMine(b, 'ai')) - Number(a.demoCharge || hasMagneticMine(a, 'ai')));
         const man = armed[0]; if (!man) continue;
         const mi = state.aiHand.findIndex(x => x && x.terrain && x.terrain.type === 'MOVEMENT');
         acted.add(gi);
@@ -361,7 +401,8 @@
       }
       const tgt = (state.groups.player || []).find((t, ti) => isAfvGroup(t) && !t.eliminated && Math.abs(ti - gi) <= 0 && R().relativeRange(g.distance, t.distance) === 5);
       if (!tgt) continue;
-      const man = g.cards.find(m => R().isAlive(m) && !R().isPinned(m)); if (!man) continue;
+      const men = g.cards.filter(m => R().isAlive(m) && !R().isPinned(m));
+      const man = men.find(m => hasMagneticMine(m, 'ai')) || men[0]; if (!man) continue;
       ccAttack(man, g, tgt, 'ai'); acted.add(gi);
       if (typeof renderField === 'function') { renderField('ai'); renderField('player'); }
       if (typeof showAIAction === 'function') await showAIAction('AI: AFV に肉薄', null, gi);
@@ -416,7 +457,10 @@
       const eg = state.groups.ai.findIndex(isAfvGroup); const t = state.groups.ai[eg];
       const gi = state.groups.player.findIndex((g, i) => g && !g.eliminated && !isAfvGroup(g) && i === eg && R().relativeRange(g.distance, t.distance) === 5);
       if (gi < 0) return alert('真向かいで距離5のグループがありません');
-      const g = state.groups.player[gi], m = g.cards.find(x => R().isAlive(x) && !R().isPinned(x)); if (!m) return alert('動ける兵がいません');
+      const g = state.groups.player[gi];
+      const men = g.cards.filter(x => R().isAlive(x) && !R().isPinned(x));
+      const m = men.find(x => hasMagneticMine(x, 'player')) || men[0];
+      if (!m) return alert('動ける兵がいません');
       const r = ccAttack(m, g, t, 'player'); alert(!r.ok ? '近づけなかった' : { KILL: '撃破！', IMMOB: '移動不能にした', ATTACKER_KIA: '返り討ちにあった', NONE: '効果なし' }[r.res]);
       if (state.actedGroups && state.actedGroups.add) state.actedGroups.add(gi); uiAfterAction();
     },
@@ -487,6 +531,7 @@
       global.startGameWithSetup = function () {
         inject();
         const r = o.apply(this, arguments);
+        if (r === false) return r;
         try { if (state.scenario && state.scenario.id === 'E') { state.groups.player = splitAfv(state.groups.player); state.groups.player.forEach((g, i) => { g.name = ['A', 'B', 'C', 'D'][i]; }); if (typeof renderField === 'function') renderField('player'); } } catch (e) {}
         return r;
       };
@@ -494,7 +539,21 @@
     }
     if (global.CARD_SCORE && global.CARD_SCORE.wire) global.CARD_SCORE.wire();
   }
-  global.AFV = Object.assign({ isAfvCard, isAfvGroup, afvCard, wire, boxedAfterFire, aiTryGun, aiTryOverrun, aiTryCCAfv, aiTryUnbog, canOverrun, humanPanel, stats, defOf, E, splitAfv }, AFVAPI);
+  function radioCritical(group, card, red, value) {
+    if (!isAfvCard(card) || red) return null;
+    if (value === 5 && defOf(card).ot) { kill(group, card, '砲撃の直撃'); return 'KIA'; }
+    if (value === 6) { immobilize(group, card); return 'IMMOB'; }
+    return null;
+  }
+  function applyOrdnanceHit(target, sourceGroup, strength, side, source, targetIndex) {
+    const card = afvCard(target);
+    const hullDown = isHullDown(target, sourceGroup);
+    const modifier = hullDown ? 0 : R().calcTerrainMod(target.terrain, false, {});
+    const flank = sideway(target) || isFlankFire(side,source,targetIndex);
+    const result = armorResult(target,card,strength+modifier,flank);
+    return { name:defOf(card).name, result:result === 'KILL' ? 'KIA' : result };
+  }
+  global.AFV = Object.assign({ applyOrdnanceHit, isHullDown, radioCritical, hasMagneticMine, isAfvCard, isAfvGroup, afvCard, wire, boxedAfterFire, aiTryGun, aiTryOverrun, aiTryCCAfv, aiTryUnbog, canOverrun, humanPanel, stats, defOf, E, splitAfv }, AFVAPI);
   wire();
   // シナリオEは公開した（ユーザーの指示 2026-11-06）。以前の scenarioE=1 の制限は外した
   setInterval(() => { try { if (global.document && global.state) humanPanel(); } catch (e) {} }, 800);

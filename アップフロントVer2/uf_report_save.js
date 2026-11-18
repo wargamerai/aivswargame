@@ -402,21 +402,30 @@ function ufResign() {
 }
 
 function startGameWithSetup() {
+  const playerFaction = setupState.faction;
+  const scenario = setupState.scenario;
+  const others = Object.keys(FACTIONS).filter(k => k !== playerFaction &&
+    (!scenario?.onlyFactions || scenario.onlyFactions.includes(k)));
+  const aiKey = others.includes(setupState.aiFactionOverride)
+    ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
+  const aiRole = setupState.role === 'attacker' ? 'defender' : (setupState.role === 'defender' ? 'attacker' : undefined);
+  const formationError = partisanStartingForcesError(scenario, playerFaction, setupState.groups.flat()) ||
+    partisanStartingForcesError(scenario, aiKey,
+      window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, aiKey, aiRole) || []);
+  if (formationError) {
+    alert(formationError);
+    return false;
+  }
+
   state.campaignEnded = false; // 新シナリオ開始: 終了フラグリセット
   ufReportReset(); state._ufEndText = ''; state._ufReportShown = false; // 対戦レポートの記録を空に
   state.isCampaign = !!setupState.fromCampaign; // キャンペーン編成から始めた時だけ true
-  const playerFaction = setupState.faction;
-  const scenario = setupState.scenario;
   state.player = FACTIONS[playerFaction];
-  const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
-  // 敵の陣営: キャンペーンで決めた国、それ以外（通常の対戦）は自分以外の国からランダム
-  // シナリオの国の制限（シナリオE）
-  { const _only = setupState.scenario && setupState.scenario.onlyFactions; if (_only) { const _keep = others.filter(f => _only.indexOf(f) >= 0); others.length = 0; _keep.forEach(f => others.push(f)); } }
-  const aiKey = (setupState.aiFactionOverride && others.indexOf(setupState.aiFactionOverride) >= 0)
-    ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
   state.ai = FACTIONS[aiKey];
   setupState.aiFactionOverride = null;
   state.scenario = scenario;
+  state.britishUnitType = britishUnitType(scenario?.britishUnitType ??
+    (playerFaction === 'uk' ? document.getElementById('british-unit-type').value : 'line'));
   // 時間帯選択（昼/夜）
   const _todPick = document.getElementById('time-of-day-pick');
   state.isNight = !!(_todPick && _todPick.value === 'night');
@@ -450,8 +459,6 @@ function startGameWithSetup() {
   // §42 キャンペーン: 記録にある能力値（モラル・パニック・KIA・CCV）を戦闘で使う
   if (state.isCampaign) applyCampaignStats(playerFaction);
   // AIの性格をゲーム開始時にくじで決める（ソ連・日本は攻撃的、ドイツはバランス、米・英は防御的が出やすい）
-  // 非対称シナリオでは、プレイヤーの役割と逆の役割を AI に割当
-  const aiRole = setupState.role === 'attacker' ? 'defender' : (setupState.role === 'defender' ? 'attacker' : undefined);
   // シナリオの勝利条件で性格を決める（ユーザーの指示 2026-11-06）
   state.aiStyle = null; // 性格はなくした（2026-11-08 ユーザーの指示。チャートの AI に入れ替えたため）
 
@@ -580,6 +587,7 @@ function startGameWithSetup() {
   renderHands();
 
   // §3.6 開始時の地形交互配置フェーズ
+  document.getElementById('setup-screen').classList.remove('active');
   startTerrainPlacementPhase();
 }
 
@@ -656,16 +664,24 @@ function initAICrewPairs() {
 }
 
 function startGame(playerFaction) {
-  state.campaignEnded = false; // 新シナリオ開始: 終了フラグリセット
-  ufReportReset(); state._ufEndText = ''; state._ufReportShown = false; // 対戦レポートの記録を空に
-  state.player = FACTIONS[playerFaction];
   const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
-  state.ai = FACTIONS[others[0]];
-
   // 選択中のシナリオから初期グループを生成
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
+  for (const faction of [playerFaction, others[0]]) {
+    const numbers = window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, faction) || [];
+    const formationError = partisanStartingForcesError(scenario, faction, numbers);
+    if (formationError) {
+      alert(formationError);
+      return false;
+    }
+  }
+  state.campaignEnded = false; // 新シナリオ開始: 終了フラグリセット
+  ufReportReset(); state._ufEndText = ''; state._ufReportShown = false; // 対戦レポートの記録を空に
+  state.player = FACTIONS[playerFaction];
+  state.ai = FACTIONS[others[0]];
   state.scenario = scenario || null;
+  state.britishUnitType = britishUnitType(scenario?.britishUnitType);
   // 時間帯選択（昼/夜）
   const _todPick2 = document.getElementById('time-of-day-pick');
   state.isNight = !!(_todPick2 && _todPick2.value === 'night');

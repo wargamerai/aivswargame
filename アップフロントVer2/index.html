@@ -866,6 +866,13 @@
       <button class="cancel" id="setup-sort">モラル順 ↓</button>
       <button class="crew" id="setup-crew">クルー設定</button>
       <button class="crew" id="setup-demo" style="background:#a44;border-color:#f66;">爆薬</button>
+      <label id="setup-british-type" hidden><span>イギリス軍の部隊</span>
+        <select id="british-unit-type">
+          <option value="line">戦列部隊</option>
+          <option value="airborne">空挺部隊</option>
+          <option value="home-guard">本土防衛部隊</option>
+        </select>
+      </label>
       <button id="setup-start" disabled>ゲーム開始</button>
       <button class="lang-btn" onclick="toggleLang()" style="background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; font-weight:bold;">🌐 English</button>
       <span class="zoom-ctl" style="display:inline-flex; align-items:center; gap:4px;"><button onclick="ufZoom(-10)" style="">−</button><span class="zoom-label" style="min-width:40px; text-align:center; color:#eee; font-size:13px;">100%</span><button onclick="ufZoom(10)" style="">＋</button></span>
@@ -934,12 +941,17 @@
         <button class="action-btn" data-act="move">移動</button>
         <button class="action-btn" data-act="recover">回復</button>
         <button class="action-btn" data-act="mortar">迫撃砲</button>
+        <button class="action-btn" id="btn-ordnance" data-act="ordnance" hidden>砲兵器射撃</button>
+        <button class="action-btn" id="btn-radio" data-act="radio" hidden>無線支援</button>
+        <button class="action-btn" id="btn-radio-repair" data-act="radio-repair" hidden>無線機修理</button>
         <button class="action-btn" data-act="infiltrate">侵入</button>
         <button class="action-btn" data-act="cc">白兵戦</button>
+        <button class="action-btn" id="btn-banzai" data-act="banzai" hidden>バンザイ突撃</button>
         <button class="action-btn" data-act="flank">側面</button>
         <button class="action-btn" data-act="encircle">包囲</button>
         <button class="action-btn" data-act="wire-remove">鉄条網除去</button>
         <button class="action-btn" data-act="trench">塹壕</button>
+        <button class="action-btn" id="btn-reinforcements" onclick="playerReinforcements()" hidden disabled>増援</button>
         <button class="action-btn" data-act="flare">照明弾</button>
       </div>
       <div class="ap-col wide">
@@ -1074,6 +1086,7 @@ ufApplyZoom();
 <script src="uf_setup.js"></script>
 <script src="uf_report_save.js"></script>
 <script src="uf_field.js"></script>
+<script src="uf_national_rules.js"></script>
 <script src="uf_actions.js"></script>
 <script src="uf_fire_status.js"></script>
 <script src="uf_campaign.js"></script>
@@ -1081,5 +1094,10 @@ ufApplyZoom();
 <script src="uf_ai.js"></script>
 <script src="uf_cardscore.js"></script>
 <script src="uf_afv.js"></script>
+<script src="uf_reinforcements.js"></script>
+<script src="uf_radio.js"></script>
+<script src="uf_ordnance.js"></script>
+<script src="uf_partisans.js"></script>
+<script src="uf_ai3.js"></script>
 </body>
 </html>

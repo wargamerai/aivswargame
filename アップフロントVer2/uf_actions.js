@@ -4,12 +4,12 @@
 state.fireSource = null; // {side:'player'|'ai', idx:int}
 state.fireTarget = null;
 
-const ACTIONS_NEED_SOURCE = ['fire','mortar','move','flank','encircle','recover','snipe','terrain','wire-remove','mine-remove','guard','repair','infiltrate','cc','crew','demo','transfer','scout','flare','trench','snipercheck','receive','groupshift','weapon','uninfiltrate'];
-const ACTIONS_NEED_TARGET = ['fire','mortar','snipe','terrain','infiltrate','flank','encircle','transfer','scout','flare'];
+const ACTIONS_NEED_SOURCE = ['banzai','ordnance','radio','radio-repair','fire','mortar','move','flank','encircle','recover','snipe','terrain','wire-remove','mine-remove','guard','repair','infiltrate','cc','crew','demo','transfer','scout','flare','trench','snipercheck','receive','groupshift','weapon','uninfiltrate'];
+const ACTIONS_NEED_TARGET = ['banzai','ordnance','radio','fire','mortar','snipe','terrain','infiltrate','flank','encircle','transfer','scout','flare'];
 
 document.querySelectorAll('.action-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    if (btn.disabled) return;
+    if (btn.disabled || state.radioResolving) return;
     // 捨て札・終了・確定ボタンは専用リスナーで処理するのでスキップ
     if (!btn.dataset.act) return;
     const act = btn.dataset.act;
@@ -29,13 +29,13 @@ document.querySelectorAll('.action-btn').forEach(btn => {
 });
 
 document.getElementById('btn-discard').addEventListener('click', () => {
-  if (state.phase !== 'play' || state.currentTurn !== 'player') return;
+  if (state.phase !== 'play' || state.currentTurn !== 'player' || state.radioResolving) return;
   if (state.selectedHand.size === 0) return;
   if (window.DISCARD_RULES) window.DISCARD_RULES.execute();
 });
 
 document.getElementById('btn-end-turn').addEventListener('click', () => {
-  if (state.phase !== 'play' || state.currentTurn !== 'player') return;
+  if (state.phase !== 'play' || state.currentTurn !== 'player' || state.radioResolving) return;
   // §4.6 相手が直前のターンに何もしていなければ、アクションか捨て札をしなければならない
   const _playerDid = (window.DISCARD_RULES && window.DISCARD_RULES.didAnything())
     || (state.actedGroups && state.actedGroups.size > 0);
@@ -54,7 +54,7 @@ document.getElementById('btn-end-turn').addEventListener('click', () => {
 });
 
 function onGroupClickActionPhase(side, idx) {
-  if (!state.selectedAction) return;
+  if (!state.selectedAction || state.radioResolving) return;
   const needsSource = ACTIONS_NEED_SOURCE.indexOf(state.selectedAction) >= 0;
   const needsTarget = ACTIONS_NEED_TARGET.indexOf(state.selectedAction) >= 0;
   // 全滅グループは選択不可
@@ -134,7 +134,29 @@ function resolveSniperPanic(soldier, def, judge) {
 function updateConfirmBtn() {
   const btn = document.getElementById('btn-confirm');
   const act = state.selectedAction;
-  if (!act) { btn.disabled = true; return; }
+  if (!act || state.radioResolving) { btn.disabled = true; return; }
+  if (act === 'banzai') {
+    const [index] = state.selectedHand;
+    btn.disabled = state.selectedHand.size !== 1 || state.playerHand[index]?.terrain?.type !== 'MOVEMENT' ||
+      !banzaiOptions('player', state.fireSource?.idx, state.fireTarget?.idx).length;
+    return;
+  }
+  if (act === 'ordnance') {
+    const cards = [...state.selectedHand].map(i => state.playerHand[i]);
+    const plans = ordnancePlans('player', state.fireSource?.idx, state.fireTarget?.idx);
+    btn.disabled = !cards.length || !cards.every(isOrdnanceFireCard) ||
+      cards.length > new Set(plans.map(p => p.card)).size;
+    return;
+  }
+  if (act === 'radio' || act === 'radio-repair') {
+    const repair = act === 'radio-repair';
+    const source = state.fireSource?.idx;
+    const selected = [...state.selectedHand];
+    btn.disabled = !radioOperator('player', source, repair) ||
+      (!repair && !(radioTarget('player', state.fireTarget?.idx) &&
+        selected.length === 1 && isRadioCard(state.playerHand[selected[0]], 'player')));
+    return;
+  }
   if (act === 'move') {
     const _g = state.fireSource && state.groups.player[state.fireSource.idx];
     btn.disabled = !(state.selectedHand.size > 0 && state.fireSource) || !!(_g && (_g._immob || _g._bog || _g._stun)); // §28 AFV の移動不能・スタック・スタン
@@ -252,9 +274,9 @@ function updateConfirmBtn() {
 }
 window.updateConfirmBtn = updateConfirmBtn;
 
-document.getElementById('btn-confirm').addEventListener('click', () => {
+document.getElementById('btn-confirm').addEventListener('click', async () => {
   const btn = document.getElementById('btn-confirm');
-  if (btn.disabled) return;
+  if (btn.disabled || state.radioResolving) return;
   const act = state.selectedAction;
   let playerDidRuleAction = false;
   try { const _b = document.querySelector('.action-btn[data-act="' + act + '"]'); ufReportLog('player', '行動: ' + (_b ? _b.textContent : act), 'player'); } catch (e) {}
@@ -266,10 +288,68 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       || (act === 'terrain' && _tTarget && _tTarget.side === 'ai')
       || (act === 'recover' && _selCard && _selCard.terrain && _selCard.terrain.type === 'HERO')
       || (act === 'move' && getFactionKey(state.player) === 'jpn'); // §45 日本軍の移動はアクションに数えない
+    if (!_notAction && !partisanActionRoom('player')) {
+      alert(radioText('パルチザンの行動上限です。','The partisan action limit has been reached.'));
+      return;
+    }
     if (!_notAction && window.DISCARD_RULES && window.DISCARD_RULES.canStillAct && !window.DISCARD_RULES.canStillAct()) {
       alert('このターンは捨て札（狙撃・相手への地形配置を含む）をしたため、アクションはできません（§4.3・§14.1）');
       return;
     }
+  }
+
+  if (act === 'banzai') {
+    const source = state.fireSource?.idx;
+    const target = state.fireTarget?.idx;
+    const candidates = banzaiOptions('player', source, target);
+    if (!candidates.length) return;
+    const R = window.INFANTRY_RULES;
+    const names = candidates.map((c, i) => (i + 1) + ': ' + R.lookupSoldier(c, 'jpn').name);
+    const answer = prompt([radioText('参加する兵士を1～2人選んでください（例 1,2）。',
+      'Choose one or two soldiers (e.g. 1,2).'), ...names].join('\n'), '1');
+    if (answer == null) return;
+    const soldiers = answer.trim().split(/[,、，\s]+/).map(value => /^\d+$/.test(value) && candidates[Number(value) - 1]);
+    if (soldiers.length > 2 || soldiers.some(c => !c) || new Set(soldiers).size !== soldiers.length) {
+      alert(radioText('異なる兵士を1～2人選んでください。', 'Choose one or two different soldiers.'));
+      return;
+    }
+    const [index] = state.selectedHand;
+    if (!await executeBanzai('player', source, target, state.playerHand[index], soldiers)) return;
+  }
+
+  if (act === 'ordnance') {
+    const cards = [...state.selectedHand].map(i => state.playerHand[i]);
+    const plans = ordnancePlans('player', state.fireSource?.idx, state.fireTarget?.idx);
+    if (!plans.length) return;
+    let selected = plans.slice(0, 1);
+    if (plans.length > 1) {
+      const names = plans.map((p,i) => (i+1) + ': ' + ordnanceName(p));
+      const instruction = cards.length === 1
+        ? radioText('撃つ兵器の番号を入力してください。', 'Enter the number of the weapon to fire.')
+        : radioText(`撃つ兵器を${cards.length}門、順に番号で選んでください（例 1,2）。`,
+          `Enter ${cards.length} weapon numbers in firing order (e.g. 1,2).`);
+      const choice = prompt([instruction, ...names].join('\n'), cards.length === 1 ? '1' : '');
+      if (choice == null) return;
+      selected = choice.trim().split(/[,、，\s]+/).map(num => /^\d+$/.test(num) && plans[Number(num) - 1]);
+      if (selected.length !== cards.length || selected.some(p => !p) ||
+          new Set(selected.map(p => p.card)).size !== selected.length) {
+        alert(radioText('射撃カード1枚につき、異なる兵器を1門選んでください。',
+          'Choose a different weapon for each Fire card.'));
+        return;
+      }
+    }
+    if (!await resolveOrdnance(selected, cards)) return;
+  }
+
+  if (act === 'radio') {
+    const idx = [...state.selectedHand][0];
+    if (!await resolveRadioMission('player', state.fireSource?.idx,
+      state.fireTarget?.idx, state.playerHand[idx])) return;
+  }
+  if (act === 'radio-repair') {
+    const result = repairRadio('player', state.fireSource?.idx);
+    if (!result) return;
+    alert(result);
   }
 
   if (act === 'move') {
@@ -409,6 +489,10 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     const srcGrp = state.groups.player[state.fireSource.idx];
     const R = window.INFANTRY_RULES;
     if (!R || !srcGrp) return;
+    if (window.AFV?.isAfvGroup(srcGrp) || !groupCanEntrench(srcGrp,'player')) {
+      alert(LANG === 'ja' ? '装甲車両と歩兵砲は塹壕に入れません。' : 'Armoured vehicles and infantry guns cannot occupy entrenchments.');
+      return;
+    }
     // ピン兵士がいるグループは塹壕作成不可
     if (srcGrp.cards.some(c => R.isPinned(c))) {
       alert('ピン状態の兵士がいるグループでは塹壕を作れません'); return;
@@ -531,6 +615,10 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       if (R_p && !R_p.canPlaceTerrainOnMarsh(pGrp)) { alert('湿地に地形カードを置くには移動カード2枚が必要です'); return; }
       if (R_p && R_p.canPlaceTerrainOnGully && !R_p.canPlaceTerrainOnGully(pGrp)) { alert('涸れ谷に地形カードを置くには移動カードが必要です'); return; }
       if (R_p && R_p.canPlaceTerrainOnStream && !R_p.canPlaceTerrainOnStream(pGrp)) { alert('河川に地形カードを置くには、先に渡河を成功させる必要があります'); return; }
+      if (!infantryGunCanEnter(pGrp,'PLAIN','player')) {
+        alert(radioText('歩兵砲の移動カードが足りません。','The infantry gun needs another Movement card.'));
+        return;
+      }
       const escapeP = processMinefieldEscape(pGrp, 'player');
       state.playerHand.splice(cardIdx, 1);
       if (!escapeP.ok) {
@@ -550,6 +638,10 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     const R = window.INFANTRY_RULES;
     // 移動中（最上が MOVEMENT）でないグループには地形カードを置けない（煙幕/鉄条網除く）
     const _placeTtype = card.terrain && card.terrain.type;
+    if (!infantryGunCanEnter(grp,_placeTtype,target.side,target.side === 'player')) {
+      alert(radioText('歩兵砲はこの地形に置けません。','The infantry gun cannot enter that terrain.'));
+      return;
+    }
     const _placeOverlay = _placeTtype === 'SMOKE' || _placeTtype === 'WIRE';
     const _placeTop = topIgnoringSmoke(grp); // §13.23 移動カード上の煙幕は妨げにならない
     const _placeTopType = _placeTop && _placeTop.terrain && _placeTop.terrain.type;
@@ -599,6 +691,10 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       alert('夜間に後退中の相手グループに地形カードを置くには、そのグループを観測している必要があります（§38.7）');
       return;
     }
+    if (target.side === 'player' && _placeTtype === 'MINEFIELD' && partisanSide('player')) {
+      alert(radioText('パルチザンの地雷原は敵の移動中グループに使います。','Partisan traps are played on moving enemy groups.'));
+      return;
+    }
     // §7.3 相手への地形配置は捨て札の代わり（国籍による捨て札の枚数制限を受ける。アクションではない）
     if (target.side === 'ai' && window.DISCARD_RULES && window.DISCARD_RULES.getRemainingDiscard() <= 0) {
       alert('捨て札の枚数制限により、このターンは相手に地形を置けません（§7.3・§4.3）');
@@ -614,7 +710,9 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       const isSmoke = card.terrain && card.terrain.type === 'SMOKE';
       const lastMove = findLastMovement(grp);
       // §8.5 河川/煙幕/鉄条網/地雷原は拒否不可。他は移動カードがあれば50%の確率で拒否
-      if (!isStream && !isWire && !isMinefield && !isSmoke && lastMove && Math.random() < 0.5) {
+      if (partisanTrap('player',grp,card)) {
+        // §37.6 判定後に取り除き、地形は変えない。
+      } else if (!isStream && !isWire && !isMinefield && !isSmoke && lastMove && Math.random() < 0.5) {
         if (lastMove.mode === 'advance') {
           grp.distance -= 1;
           if (lastMove.card) lastMove.card._moveMode = 'lateral';
@@ -876,6 +974,17 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       alert('ヒーローカード: このプレイヤーターンの間、負傷の効果を止めます（§33.9）');
       playerDidRuleAction = false; // §10.4 ヒーローはアクションに数えない
     } else {
+    const gunRally = (card.terrain.type === 'HERO' || !state.actedGroups?.has(state.fireSource.idx))
+      ? tryRallyInfantryGun(grp, 'player', card) : null;
+    if (gunRally) {
+      state.playerHand.splice(cardIdx, 1);
+      pushTerrainToDiscard(card);
+      if (card.terrain.type !== 'HERO') {
+        window.DISCARD_RULES.markActed();
+        (state.actedGroups ||= new Set()).add(state.fireSource.idx);
+      }
+      alert(gunRally);
+    } else {
     // §28.42 ピンの AFV は、回復の強さを合わせて3以上で回復する
     const _afvR = (typeof window.afvRallyCredit === 'function' && !(state.actedGroups && state.actedGroups.has(state.fireSource.idx) && card.terrain.type !== 'HERO')) ? window.afvRallyCredit(grp, card) : null;
     if (_afvR) {
@@ -885,7 +994,8 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       playerDidRuleAction = card.terrain.type !== 'HERO';
     } else {
     // RALLY X → X人回復、RALLY ALL → 全員回復、HERO → 1人回復
-    const pinnedIdx = grp.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c)) ? i : -1).filter(i => i >= 0);
+    const pinnedIdx = grp.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c) &&
+      (card.terrain.type === 'RALLY ALL' || !infantryGunProfile(c, 'player'))) ? i : -1).filter(i => i >= 0);
     let rallyVal = 0;
     if (card.terrain.type === 'RALLY ALL') {
       rallyVal = pinnedIdx.length;
@@ -902,25 +1012,35 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
       alert('このグループは今ターン既にアクション済みです');
       return;
     }
-    if (rallyVal >= pinnedIdx.length) {
-      // 全員回復
-      const names = pinnedIdx.map(i => { const d = R.lookupSoldier(grp.cards[i], playerKey); return d ? d.name : grp.cards[i].id; });
-      pinnedIdx.forEach(i => {
-        R.unpinSoldier(grp.cards[i]);
-        if (isHeroCard) grp.cards[i].heroRecovery = true; // §42.43
+    let targets = pinnedIdx;
+    if (rallyVal < pinnedIdx.length) {
+      if (rallyVal <= 0) return;
+      const names = pinnedIdx.map((i, n) => {
+        const soldier = grp.cards[i];
+        const name = R.lookupSoldier(soldier, playerKey)?.name || soldier.id;
+        return `${n + 1}: #${soldier.num} ${name}`;
       });
-      alert(`回復(${rallyVal}): ${names.join(', ')} が回復しました`);
-    } else {
-      // 回復対象を選択させる（簡易: 先頭から回復値分）
-      // TODO: 選択UI
-      const targets = pinnedIdx.slice(0, rallyVal);
-      const names = targets.map(i => { const d = R.lookupSoldier(grp.cards[i], playerKey); return d ? d.name : grp.cards[i].id; });
-      targets.forEach(i => {
-        R.unpinSoldier(grp.cards[i]);
-        if (isHeroCard) grp.cards[i].heroRecovery = true; // §42.43
-      });
-      alert(`回復(${rallyVal}): ${names.join(', ')} が回復しました`);
+      const instruction = LANG === 'ja'
+        ? `回復する兵士を${rallyVal}人選んでください（番号を空白で区切る）`
+        : `Choose ${rallyVal} to rally. Separate the numbers with spaces.`;
+      const answer = prompt([instruction, ...names].join('\n'));
+      if (answer === null || !answer.trim()) return;
+      const chosen = answer.trim().split(/[\s,、]+/).map(Number);
+      if (chosen.length !== rallyVal || new Set(chosen).size !== rallyVal ||
+          chosen.some(n => !Number.isInteger(n) || n < 1 || n > pinnedIdx.length)) {
+        alert(LANG === 'ja' ? `一覧から異なる番号を${rallyVal}個入力してください。` :
+          `Enter ${rallyVal} different numbers from the list.`);
+        return;
+      }
+      targets = chosen.map(n => pinnedIdx[n - 1]);
     }
+    const names = targets.map(i => {
+      const soldier = grp.cards[i];
+      R.unpinSoldier(soldier);
+      if (isHeroCard) soldier.heroRecovery = true; // §42.43
+      return R.lookupSoldier(soldier, playerKey)?.name || soldier.id;
+    });
+    alert(`回復(${rallyVal}): ${names.join(', ')} が回復しました`);
     // §10.23 全回復: 条件を満たせば、もう1つのグループのピン状態の兵士も全員回復（そのグループも1アクション）
     if (card.terrain.type === 'RALLY ALL') {
       const srcIdx = state.fireSource.idx;
@@ -946,6 +1066,7 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     pushTerrainToDiscard(card);
     // §10.4 ヒーローでの回復はアクションに数えない
     playerDidRuleAction = !isHeroCard;
+    }
     }
     }
   }
@@ -1005,7 +1126,15 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     else if (kiaRange.length === 1 && rnc === kiaRange[0]) result = 'KIA';
     else if (pinRange.length === 2 && rnc >= pinRange[0] && rnc <= pinRange[1]) result = 'PIN';
     else if (pinRange.length === 1 && rnc === pinRange[0]) result = 'PIN';
-    if (result === 'KIA') { if (R) R.killSoldier(soldier); }
+    if (R && infantryGunProfile(soldier,tgt.side) && result !== 'MISS') {
+      if (result === 'KIA') {
+        if (loseInfantryGunCrew(soldier,tgt.side)) {
+          R.pinSoldier(soldier);
+          result = 'PIN';
+        } else R.killSoldier(soldier);
+      } else if (wasPinned) { R.killSoldier(soldier); result = 'KIA'; }
+      else R.pinSoldier(soldier);
+    } else if (result === 'KIA') { if (R) R.killSoldier(soldier); }
     else if (result === 'PIN') {
       // §14.3 すでにピン状態ならパニック → §6.531 潰走チェック（RNCの0rの数字がパニック値以下ならKIA、より大きければ潰走）
       if (wasPinned) result = resolveSniperPanic(soldier, def, judge);
@@ -1221,12 +1350,15 @@ document.getElementById('btn-confirm').addEventListener('click', () => {
     checkBreezeRemoveSmoke(judge); pushTerrainToDiscard(judge);
     const num = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
     const isBlack = !(judge.terrain && judge.terrain.rncColor === '赤');
+    const sniperRoll = state.aiSnipeCheckRnc;
+    if (partisanSide('ai')) state.aiSnipeCheckRnc = null;
     // 黒で、狙撃に使われたRNC（色は無関係）より大きければ成功
-    if (isBlack && num > state.aiSnipeCheckRnc) {
-      state.aiSniperDisabled = true;
-      alert(`狙撃兵チェック成功: 黒${num} > ${state.aiSnipeCheckRnc}。相手の狙撃カードは以後使えません`);
+    if (isBlack && num > sniperRoll) {
+      state.aiSniperDisabled = partisanSniperCheck('ai');
+      alert(state.aiSniperDisabled ? `狙撃兵チェック成功: 黒${num} > ${sniperRoll}。相手の狙撃カードは以後使えません` :
+        radioText('狙撃兵チェック成功。パルチザンの狙撃兵は活動を続けます。','Sniper check successful. Partisan snipers remain active.'));
     } else {
-      alert(`狙撃兵チェック失敗: ${isBlack ? '黒' : '赤'}${num}（狙撃のRNC ${state.aiSnipeCheckRnc} より大きい黒が必要）`);
+      alert(`狙撃兵チェック失敗: ${isBlack ? '黒' : '赤'}${num}（狙撃のRNC ${sniperRoll} より大きい黒が必要）`);
     }
     playerDidRuleAction = true;
   }

@@ -15,7 +15,7 @@
     uk:  { withAction: 0, withoutAction: 2 },     // §44.1 Line: 未行動時2枚（アクション後は不可、独のみ唯一同時可）
   };
 
-  let actedThisTurn = false;
+  let actionCount = 0;
   let discardedThisTurn = 0;
 
   function getFactionKey() {
@@ -25,11 +25,16 @@
     return Object.keys(factions).find(function (k) { return factions[k] === player; });
   }
 
-  function getMaxDiscard() {
-    const key = getFactionKey();
-    if (!key || !DISCARD_LIMITS[key]) return 0;
+  function turnLimit(key, actions) {
+    const unitType = global.state?.britishUnitType ?? global.state?.scenario?.britishUnitType;
+    if (key === 'uk' && unitType === 'airborne') return actions === 0 ? 2 : Number(actions === 1);
+    if (key === 'uk' && unitType === 'home-guard') return Number(actions === 0);
     const limits = DISCARD_LIMITS[key];
-    return actedThisTurn ? limits.withAction : limits.withoutAction;
+    return limits ? (actions ? limits.withAction : limits.withoutAction) : 0;
+  }
+
+  function getMaxDiscard() {
+    return turnLimit(getFactionKey(), actionCount);
   }
 
   function execute() {
@@ -49,8 +54,8 @@
     const max = getMaxDiscard();
     const remaining = max === Infinity ? Infinity : (max - discardedThisTurn);
     if (!allCower && remaining <= 0) {
-      alert(actedThisTurn
-        ? 'アクション後は捨て札できません（米・ソ §4.3）'
+      alert(actionCount
+        ? 'このターンに残っている捨て札はありません'
         : 'このターンの捨て札上限に達しています');
       return;
     }
@@ -79,7 +84,7 @@
     if (global.updateDecideBtn) global.updateDecideBtn();
   }
 
-  function markActed() { actedThisTurn = true; }
+  function markActed() { actionCount++; }
   /** §7.3 捨て札の代わりに相手へ地形を置いた: 捨て札1枚分を使う */
   function consume(n) { discardedThisTurn += (n || 1); }
   /** §4.3/§14.1 このターンの捨て札（狙撃・相手への地形配置を含む）の後でもアクションできるか
@@ -87,11 +92,11 @@
   function canStillAct() {
     const key = getFactionKey();
     if (!key || !DISCARD_LIMITS[key]) return true;
-    return discardedThisTurn <= DISCARD_LIMITS[key].withAction;
+    return discardedThisTurn <= turnLimit(key, actionCount + 1);
   }
   /** §4.6 このターンにアクションか捨て札をしたか */
-  function didAnything() { return actedThisTurn || discardedThisTurn > 0; }
-  function resetTurn() { actedThisTurn = false; discardedThisTurn = 0; }
+  function didAnything() { return actionCount > 0 || discardedThisTurn > 0; }
+  function resetTurn() { actionCount = 0; discardedThisTurn = 0; }
 
   /** このターンまだ捨てられる枚数（米: 未行動で最大2／行動後0、ソ: 未行動は無制限／行動後0） */
   function getRemainingDiscard() {
@@ -101,9 +106,9 @@
   }
 
   /** 途中セーブ・ロード用: このターンの行動・捨て札の状態 */
-  function getState() { return { actedThisTurn: actedThisTurn, discardedThisTurn: discardedThisTurn }; }
+  function getState() { return { actedThisTurn: actionCount > 0, actionCount, discardedThisTurn }; }
   function setState(st) {
-    actedThisTurn = !!(st && st.actedThisTurn);
+    actionCount = st?.actionCount ?? Number(Boolean(st?.actedThisTurn));
     discardedThisTurn = (st && st.discardedThisTurn) || 0;
   }
 
@@ -117,6 +122,7 @@
     canStillAct: canStillAct,
     resetTurn: resetTurn,
     getMaxDiscard: getMaxDiscard,
+    turnLimit: turnLimit,
     getRemainingDiscard: getRemainingDiscard,
   };
 })(typeof window !== 'undefined' ? window : this);

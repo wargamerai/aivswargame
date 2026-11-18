@@ -245,6 +245,15 @@ function makeMainGroup(side, group, idx) {
       m.title = '武器破壊';
       c.appendChild(m);
     }
+    const support = radioHolders(side).includes(card.num) && !card._radioRemoved
+      ? (card._radioBroken ? radioText('無線故障', 'Radio out') : radioText('無線', 'Radio'))
+      : window.AFV?.hasMagneticMine(card, side) ? radioText('磁気地雷', 'ATMM') : '';
+    if (support) {
+      const chip = document.createElement('span');
+      chip.textContent = support;
+      chip.style.cssText = 'position:absolute;left:2px;top:16px;padding:1px 3px;border-radius:2px;background:#394d33;color:#fff;font-size:10px;z-index:5;';
+      c.appendChild(chip);
+    }
     // §18/§19.4/§17.8 拾った・捕獲した兵器／非武装／移送中のチット
     appendSoldierChits(c, card, 1);
     // 爆薬保持マーカー (シナリオB)
@@ -550,6 +559,12 @@ function showHandPreview(cardEl, src) {
 }
 
 function renderHands() {
+  updateReinforcementButton();
+  updateRadioControls();
+  updateOrdnanceControls();
+  const banzai = document.getElementById('btn-banzai');
+  banzai.hidden = getFactionKey(state.player) !== 'jpn';
+  banzai.textContent = radioText('バンザイ突撃', 'Banzai Charge');
   const ph = document.getElementById('player-hand');
   const ah = document.getElementById('ai-hand');
   hideHandPreview();

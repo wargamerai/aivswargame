@@ -60,8 +60,12 @@
   }
 
   /** 兵器カテゴリ → CC兵器値 */
-  function getWeaponValue(weaponCat) {
+  function getWeaponValue(weaponCat, faction) {
     if (!weaponCat) return 0;
+    if (faction === 'jpn') {
+      if (/^(軽機関銃|LMG)/.test(weaponCat)) return 2;
+      if (/^短機関銃/.test(weaponCat)) return 4;
+    }
     for (const [key, val] of WEAPON_CCV) {
       if (weaponCat.includes(key)) return val;
     }
@@ -81,7 +85,9 @@
   /** §32.21 監視役（捕虜を監視している兵）は潜入を試みられない */
   function isGuard(card) { return !!(card && card.prisoners && card.prisoners.length); }
   /** §32.21 監視役・§33.5 負傷兵は潜入を試みられない */
-  function cannotInfiltrate(card) { return isGuard(card) || !!(R().isWoundActive && R().isWoundActive(card)); }
+  function cannotInfiltrate(card, faction) {
+    return isGuard(card) || R().isWoundActive(card) || !!R().lookupSoldier(card, faction)?.isInfantryGun;
+  }
 
   /** グループ内のピン状態兵士数 */
   function pinnedCount(group) {
@@ -243,7 +249,7 @@
     if (R().hasTerrainType(tgtGroup, 'MINEFIELD'))
       return { ok: false, error: '地雷原にいるグループには侵入できません' };
     // ピン状態でない生存兵士が必要
-    const eligible = unpinnedAlive(srcGroup).filter(c => !cannotInfiltrate(c)); // §32.21 監視役・§33.5 負傷兵は潜入不可
+    const eligible = unpinnedAlive(srcGroup).filter(c => !cannotInfiltrate(c, st && global.getFactionKey(st[srcSide]))); // §32.21 監視役・§33.5 負傷兵は潜入不可
     if (eligible.length === 0) return { ok: false, error: 'ピン状態でない兵士がいません（監視役・負傷兵は潜入できません）' };
     return { ok: true };
   }
@@ -334,6 +340,9 @@
   function getCCV(card, soldierDef, opts) {
     opts = opts || {};
     const pinnedReal = R().isPinned(card);
+    if (soldierDef.isInfantryGun) {
+      return (parseInt(soldierDef.morale,10) || 0) - (pinnedReal ? 4 : 0);
+    }
     // §33.5 負傷兵: 良好な状態の間は「ピン時の CCV」、ピン状態の間は「ピン時かつ非武装時の CCV」
     const wounded = R().isWoundActive && R().isWoundActive(card);
     const pinned = pinnedReal || wounded;
@@ -355,7 +364,10 @@
     } else if (card.acquiredWeapon || isAsst) {
       // §20.6 兵器を変えた・助手: モラル値＋兵器値（ピン状態は -4）。キャンペーンで上がった分も足す
       const morale = parseInt(soldierDef.morale, 10) || 0;
-      ccv = morale + (isAsst ? 0 : getWeaponValue(soldierDef.weaponCat)) + (card._ccvDelta || 0);
+      const faction = card.acquiredWeapon?.fac ?? opts.faction ?? g?._faction ??
+        (/^Jap[ _]/.test(card.id) ? 'jpn' : null);
+      const weaponValue = isAsst ? 0 : getWeaponValue(soldierDef.weaponCat, faction);
+      ccv = morale + weaponValue + (card._ccvDelta || 0);
       if (pinned) ccv -= 4;
     } else {
       ccv = p.armed;
@@ -480,7 +492,7 @@
         const aBonus = atkList.slice(ai + 1).filter(x => alive(x) && !R().isPinned(x) && !R().isWoundActive(x)).length * 3;
         const dBonus = defs.filter((x, k) => k !== di && alive(x) && !R().isPinned(x) && !R().isWoundActive(x)).length * 3;
         const aCon = conceal.get(a) || 0, dCon = conceal.get(d) || 0;
-        const atkCCV = getCCV(a, aDef, { group: srcGroup }) + aBonus - aCon - (takePrisoners ? 2 : 0); // §32.11
+        const atkCCV = getCCV(a, aDef, { group: srcGroup, faction: srcFacKey }) + aBonus - aCon - (ctx.attackerPenalty || 0) - (takePrisoners ? 2 : 0); // §32.11
         const defCCV = getCCV(d, dDef, { group: tgtGroup }) + dBonus - dCon;
         // §33.5 ピン状態かつ非武装の負傷兵が単独で防御する白兵戦は自動的に敗北
         const dAloneUnarmedWounded = R().isWoundActive(d) && R().isPinned(d)
@@ -506,7 +518,7 @@
           atkBonus: aBonus, defBonus: dBonus, concealMod: aCon + dCon,
           result: combat.result,
         });
-        if (combat.result === 'DEF_KIA' && takePrisoners && global.capturePrisoner(d, tgtSide, srcGroup, srcSide)) {
+        if (combat.result === 'DEF_KIA' && !dDef.isInfantryGun && takePrisoners && global.capturePrisoner(d, tgtSide, srcGroup, srcSide)) {
           // §32.11 敗れた兵は捕虜になる。捕虜を取った兵は潜入状態を失う
           battles[battles.length - 1].defName += '（捕虜）';
           ccCaptureOrRemove(a, srcSide, srcFacKey, d, tgtFacKey);
@@ -514,6 +526,11 @@
           lastDiff.set(a, combat.diff);
           di++;
         } else if (combat.result === 'DEF_KIA') {
+          if (loseInfantryGunCrew(d,tgtSide)) {
+            battles.at(-1).defName += '（歩兵砲の乗員損失）';
+            lastDiff.set(a,combat.diff);
+            continue;
+          }
           R().killSoldier(d);
           a.ccKills = (a.ccKills || 0) + 1; // §42.43
           ccCaptureOrRemove(a, srcSide, srcFacKey, d, tgtFacKey);
@@ -526,10 +543,11 @@
           ai++; // §20.72 次の攻撃側
         } else { // BOTH_KIA §20.742 兵器は侵入されたグループに残る
           a._dropSide = tgtSide; a._dropIdx = tgtIdx;
-          R().killSoldier(d);
+          if (loseInfantryGunCrew(d,tgtSide)) battles.at(-1).defName += '（歩兵砲の乗員損失）';
+          else { R().killSoldier(d); di++; }
           R().killSoldier(a);
           clearSoldierInfiltration(a);
-          ai++; di++;
+          ai++;
         }
       }
       // §20.73 最後の相手を3以上の差で破った攻撃側だけ侵入状態を保つ
@@ -537,7 +555,7 @@
         const tookPrisoner = !!a._tookPrisoner; delete a._tookPrisoner;
         if (!alive(a)) continue;
         if (tookPrisoner) { clearSoldierInfiltration(a); continue; } // §32.11 捕虜を取った兵は潜入状態を失う
-        if (diff >= 3) { a.infiltrating = true; a.infiltratedGroupSide = tgtSide; a.infiltratedGroupIdx = tgtIdx; }
+        if (!ctx.banzai && diff >= 3) { a.infiltrating = true; a.infiltratedGroupSide = tgtSide; a.infiltratedGroupIdx = tgtIdx; }
         else clearSoldierInfiltration(a);
       }
     }
@@ -674,7 +692,7 @@
         const entry = { card, cardIdx, soldierDef: def, selected: false, useMove: false };
         selections.push(entry);
 
-        if (isPinned || cannotInfiltrate(card)) {
+        if (isPinned || cannotInfiltrate(card, srcFacKey)) {
           tr.style.opacity = '0.4';
           const td = el('td', { padding:'4px 6px', color:'#f88', fontSize:'13px' }, `✕ #${card.num} ${def.name} (${isPinned ? 'ピン状態' : isGuard(card) ? '監視役 §32.21' : '負傷 §33.5'})`);
           td.colSpan = 5;
@@ -1226,7 +1244,7 @@
       let _concealVal = 0;
       if (typeof global.askPlayerConcealment === 'function' && typeof global.getConcealMod === 'function') {
         const _cc = await global.askPlayerConcealment();
-        if (_cc && _cc.length) _concealVal = Math.abs(global.getConcealMod(_cc));
+        if (_cc && _cc.length) _concealVal = Math.abs(global.getConcealMod(_cc, 'player'));
       }
       const colDetail = calcInfiltrationColumnDetailed(tgtGroup, srcGroup, { srcFacKey, night: _isNight2 && !_sFlared2, concealValue: _concealVal });
       const entry = {
@@ -1612,7 +1630,7 @@
    * @returns {boolean} trueなら狂暴兵化
    */
   function checkBerserkEligibility(card, soldierDef, rpc0r, factionKey, relativeDistance) {
-    if (factionKey !== 'rus') return false;
+    if (factionKey !== 'rus' || soldierDef.isInfantryGun) return false;
     if (relativeDistance !== 5) return false;
     if (!R().isPinned(card)) return false;
     // パニック値以下なら狂暴兵化
@@ -1688,7 +1706,7 @@
    * AI自動侵入（モーダルなし）
    */
   async function aiExecuteInfiltration(srcGroup, srcIdx, tgtGroup, tgtSide, tgtIdx, drawFn, aiFacKey) {
-    const eligible = unpinnedAlive(srcGroup).filter(c => !cannotInfiltrate(c)); // §32.21 監視役・§33.5 負傷兵は潜入不可
+    const eligible = unpinnedAlive(srcGroup).filter(c => !cannotInfiltrate(c, aiFacKey)); // §32.21 監視役・§33.5 負傷兵は潜入不可
     // 爆薬を持つ兵を先頭に: 移動カード（モラルチェックなし）と隠ぺいカードを優先して使い、侵入を助ける
     eligible.sort((a, b) => (b.demoCharge ? 1 : 0) - (a.demoCharge ? 1 : 0));
     if (eligible.length === 0) return { ok: false, actionUsed: false };
@@ -1744,7 +1762,7 @@
       let _aiConcealVal = 0;
       if (typeof global.aiUseConcealment === 'function' && typeof global.getConcealMod === 'function') {
         const _acc = global.aiUseConcealment();
-        if (_acc && _acc.length) _aiConcealVal = Math.abs(global.getConcealMod(_acc));
+        if (_acc && _acc.length) _aiConcealVal = Math.abs(global.getConcealMod(_acc, 'ai'));
       }
       const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey: aiFacKey, night: _isNight3 && !_sFlared3, concealValue: _aiConcealVal });
       entry.column = column;
@@ -1842,10 +1860,21 @@
   // 12. エクスポート
   // ===========================================================
 
+  async function executeBanzaiCombat(srcGroup, srcSide, tgtGroup, tgtSide, tgtIdx, participants, drawFn, title) {
+    const tgtFacKey = tgtGroup._faction || global.getFactionKey(global.state[tgtSide]);
+    const battles = await resolveCCBattles({
+      srcGroup, srcSide, srcFacKey: 'jpn', tgtGroup, tgtSide, tgtIdx, tgtFacKey,
+      participants, drawFn, banzai: true, attackerPenalty: 1,
+    });
+    if (battles.length) await showCCResultOverlay(title, battles);
+    return battles;
+  }
+
   global.CC_ACTION = {
     // メイン実行
     executeInfiltration,
     executeCC,
+    executeBanzaiCombat,
     // チェック
     canAttemptInfiltration,
     canAttemptCC,

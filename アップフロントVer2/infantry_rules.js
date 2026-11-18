@@ -51,9 +51,7 @@
 
   // AFV/IG など歩兵ルールでは扱わない武器カテゴリ (前方一致)
   // 迫撃砲 は搭載のため NON_INFANTRY から除外（砲兵類だが歩兵ルール内で処理）
-  const NON_INFANTRY_WEAPON_PREFIXES = [
-    // '60mm迫撃砲', '50mm迫撃砲', '迫撃砲',
-  ];
+  const NON_INFANTRY_WEAPON_PREFIXES = ['バズーカ', 'パンツァーシュレック', 'PIAT', '歩兵砲'];
 
   // クルー操作兵器のカテゴリ (歩兵範囲)
   // 中機関銃 / 軽機関銃 / バズーカ / パンツァーシュレック / 迫撃砲（火炎放射器はクルー不要）
@@ -113,9 +111,11 @@
     if (!m) return null;
     const num = parseInt(m[1], 10);
     const base = list.find(s => s.num === num) || null;
+    const partisan = base && typeof global.partisanFaction === 'function' && global.partisanFaction(factionKey);
+    const ig = base && global.state?.scenario?.infantryGuns?.[factionKey]?.[num];
     // §18.2 拾った兵器を持っていれば、カードに印刷された兵器の代わりにそれを使う
     // §42 キャンペーンで変わった能力値（モラル・パニック・KIA・CCV）
-    if (base && (card._statOverride || card.acquiredWeapon || card.destroyed)) {
+    if (base && (partisan || ig || card._statOverride || card.acquiredWeapon || card.destroyed)) {
       const d = Object.assign({}, base, card._statOverride || {}, card.acquiredWeapon || {});
       // §22.4 印刷されていない火炎放射器を持つ間は KIA 値 -1、印刷されている火炎放射器を失ったら KIA 値 +1
       if (card.acquiredWeapon || card.destroyed) {
@@ -126,6 +126,17 @@
           if (d.kiaFront !== '' && d.kiaFront != null) d.kiaFront = String((parseInt(d.kiaFront, 10) || 0) + delta);
           if (d.kiaBack !== '' && d.kiaBack != null) d.kiaBack = String((parseInt(d.kiaBack, 10) || 0) + delta);
         }
+      }
+      if (partisan) d.panic = String(Math.max(0, (parseInt(d.panic, 10) || 0) - 1));
+      if (ig) {
+        d.weaponCat = '歩兵砲';
+        d.weaponName = ig.name || '歩兵砲';
+        d.rangeData = Array.from({length:6}, () => ({main:0}));
+        for (const field of ['morale', 'panic', 'kiaFront', 'kiaBack']) {
+          if (ig[field] != null) d[field] = ig[field];
+        }
+        d.isInfantryGun = true;
+        d.gunshieldDefense = ig.boxedDefense;
       }
       return d;
     }
@@ -455,11 +466,14 @@
    *   rncRPC  : 同カードの RPC (パニック→潰走判定用, 0..9)
    * 戻り値: { result: 'NONE'|'PIN'|'PANIC_KIA'|'PANIC_ROUT'|'KIA' }
    */
-  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod, woundRPN) {
+  function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod, woundRPN, boxedDefense = false) {
+    if (boxedDefense && soldier?.gunshieldDefense) {
+      soldier = { ...soldier, ...soldier.gunshieldDefense };
+    }
     const res = _resolveFireOnSoldierCore(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod);
     // §33.1 負傷: 敗走する時、または最終攻撃値が KIA の最低値とちょうど等しくて KIA になる時（ピン状態のパニックによる KIA を含む）、
     //   その RNC の「7w」列のランダム位置番号が兵士の印刷された士気値と等しければ、代わりに負傷
-    if (soldier && woundRPN != null) {
+    if (soldier && !soldier.isInfantryGun && woundRPN != null) {
       const sum = (finalFP | 0) + (rnc | 0);
       const kMod = kiaMod || 0;
       let eligible = false;
@@ -601,6 +615,9 @@
    */
   function canPlaceTerrainOnMarsh(group) {
     if (!isInMarsh(group)) return true;
+    const side = typeof _groupSideIdx === 'function' ? _groupSideIdx(group)?.side : null;
+    if (side && typeof global.partisanSide === 'function' && global.partisanSide(side) &&
+        group.terrain.at(-1)?._moveMode === 'lateral') return true;
     return marshMoveCount(group) >= 2;
   }
 

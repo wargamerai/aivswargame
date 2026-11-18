@@ -199,6 +199,15 @@ function openSetupScreen(factionKey) {
   if (scenario.onlyFactions && scenario.onlyFactions.indexOf(factionKey) < 0) { alert('シナリオEはドイツ・ソ連・アメリカだけです'); return; }
   setupState.faction = factionKey;
   setupState.scenario = scenario;
+  const british = document.getElementById('british-unit-type');
+  const britishLabel = document.getElementById('setup-british-type');
+  britishLabel.hidden = factionKey !== 'uk';
+  britishLabel.querySelector('span').textContent = radioText('イギリス軍の部隊', 'British force');
+  const names = [radioText('戦列部隊', 'Line infantry'), radioText('空挺部隊', 'Airborne'),
+    radioText('本土防衛部隊', 'Home Guard')];
+  Array.from(british.options).forEach((option, i) => { option.textContent = names[i]; });
+  british.value = britishUnitType(scenario.britishUnitType);
+  british.disabled = scenario.britishUnitType != null;
   setupState.groups = [[], [], [], []];
   setupState.crewPairs = {};
   setupState.crewMode = false;
@@ -662,7 +671,6 @@ document.getElementById('setup-sort').addEventListener('click', () => {
   renderSetup();
 });
 document.getElementById('setup-start').addEventListener('click', () => {
-  document.getElementById('setup-screen').classList.remove('active');
   startGameWithSetup();
 });
 

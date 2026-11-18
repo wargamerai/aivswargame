@@ -9,7 +9,7 @@ function findConcealedIndices(hand) {
   return out;
 }
 
-function getConcealMod(cards) {
+function getConcealMod(cards, side) {
   let mod = 0;
   cards.forEach(c => {
     const raw = (c.terrain.modifier || '').replace(/[*⊙]/g, '');
@@ -21,7 +21,7 @@ function getConcealMod(cards) {
       mod += parseInt(raw.replace(/[^\-+0-9]/g, ''), 10) || 0;
     }
   });
-  return mod;
+  return mod < 0 && side && partisanSide(side) ? mod - 1 : mod;
 }
 
 function buildFireStrengthPreview(cards, summary, confirm) {

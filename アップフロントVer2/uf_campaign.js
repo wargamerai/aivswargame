@@ -610,7 +610,7 @@ function showMoveDirectionModal(grp, card, cardIdx) {
   const R_move = window.INFANTRY_RULES;
   const inStream = R_move && R_move.isInStream(grp);
   const inMarsh = R_move && R_move.isInMarsh && R_move.isInMarsh(grp);
-  let _firstMoveOnSpecial = false;
+  let _firstMoveOnSpecial = infantryGunFirstLateral(grp,'player');
   if (inStream && R_move.streamMoveCount && R_move.streamMoveCount(grp) === 0) _firstMoveOnSpecial = true;
   if (inMarsh && R_move.marshMoveCount && R_move.marshMoveCount(grp) === 0) _firstMoveOnSpecial = true;
   // §17.8 移送中（送り出し・受け取り待ち）のグループは距離チットを動かせない（横移動だけ）
@@ -649,7 +649,7 @@ function showMoveDirectionModal(grp, card, cardIdx) {
     // §8.53 河川内なら渡河判定
     if (R && R.isInStream(grp) && !R.hasCrossedStream(grp)) {
       state.playerHand.splice(cardIdx, 1);
-      if (R.isFordCard(card)) {
+      if (R.isFordCard(card) || partisanSide('player')) {
         card._moveMode = 'lateral';
         pushTerrainWithFaction(grp, card);
         alert('渡河成功（渡河カード使用）');
@@ -815,6 +815,7 @@ function _resolveFireActionInner() {
     const m = (c.terrain.sub || '').match(/FP(.)/);
     needed += circledToNum((m && m[1]) || '');
   });
+  needed = infantryFireNeed(srcFacKey, srcGroup, needed);
   // §10.45 ヒーローカード: 兵士1名の火力をそのターン2倍（すでに2倍なら3倍）。対象の兵士を選ぶ
   const heroPreCard = [...state.selectedHand].map(i => state.playerHand[i]).find(c => c && c.terrain && c.terrain.type === 'HERO');
   let _heroPicked = null;
@@ -902,11 +903,18 @@ function _resolveFireActionInner() {
 
   // 射撃力 = FIREカードの数字（複数枚使用時は合算）。合計射撃力は味方火力 (fp) 以下である必要あり
   const _rawStrength = fireCards.reduce((s, c) => s + (parseInt(c.terrain.type.replace('FIRE ', ''), 10) || 0), 0);
-  if (_rawStrength > fp) {
+  if (!usesBritishFireBonus(srcFacKey, srcGroup) && _rawStrength > fp) {
     alert(`射撃力超過: 合計射撃力 ${_rawStrength} > 味方火力 ${fp}\n選択カード数を減らしてください`);
     return;
   }
-  let strength = _rawStrength;
+  const ambushCard = [...state.selectedHand].map(i => state.playerHand[i]).find(c => c?.terrain?.type === 'CONCEALED');
+  const ambushStrength = ambushCard && partisanCanAmbush('player',srcGroup,tgtGroup)
+    ? Math.abs(getConcealMod([ambushCard])) : 0;
+  if (ambushCard && partisanSide('player') && !ambushStrength) {
+    alert(radioText('この射撃には隠蔽カードを使えません。','A Concealed card cannot be used for this attack.'));
+    return;
+  }
+  let strength = _rawStrength + ambushStrength;
   // 火炎放射器使用で 1/2 火力
   if (flameHalf) strength = Math.floor(strength / 2);
   // §12.1 移動射撃: 射撃カードの射撃力は他の修正に先だって½（端数切り捨て）。横移動も移動中（§6.4）
@@ -953,7 +961,7 @@ function _resolveFireActionInner() {
   // §10.45 英雄カード：必要火力の判定にのみ加算（基礎火力は変えない）
   // §9.1 隠蔽は射撃カードと修正値を確定してから適用する。
   const aiConcealCards = canUseConcealment(tgtGroup) ? aiUseConcealment() : [];
-  const concealMod = getConcealMod(aiConcealCards);
+  const concealMod = getConcealMod(aiConcealCards, 'ai');
   const baseFP = movingFP + atkMod + defMod + concealMod + gullyMod + marshDefMod + infShift + japanRuleMod;
   try {
     console.log(`  mods: atk=${atkMod} def=${defMod} conceal=${concealMod} gully=${gullyMod} marshDef=${marshDefMod} infShift=${infShift} jpRule=${japanRuleMod} isFlankFire=${isFlankFireNow} heroBonus=${heroBonus} infBonus=${infBonus}`);
@@ -975,7 +983,8 @@ function _resolveFireActionInner() {
     if (state._malfStopAttack) break; // §19.11 残りの防御側の攻撃は解決しない
     const card = _targets[i];
     if (!R.isAlive(card)) continue;
-    const finalFP = baseFP + malfuncMod + transitFireBonus(card); // §17.8 移送中 +2
+    const finalFP = baseFP + malfuncMod + transitFireBonus(card) +
+      infantryGunDefense(tgtGroup, card, tgt.side, concealMod);
     const judge = drawTerrainCard();
     if (!judge) continue;
     const rncAbs = parseInt((judge.terrain && judge.terrain.range) || '0', 10) || 0;
@@ -990,7 +999,7 @@ function _resolveFireActionInner() {
     const encircleMod = (tgtGroup && tgtGroup.encircled && wasPinned) ? -1 : 0;
     // 火炎放射器を保持中の兵士は kia -1 (戦死しやすい)
     const flameKiaMod = (def && def.weaponCat && def.weaponCat.indexOf('火炎放射器') === 0 && !card.malfunctioned && !card.flameDiscarded) ? -1 : 0;
-    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod, commissarMod + encircleMod + malfMoraleMod, flameKiaMod, R.rpc7wOf(judge));
+    const r = R.resolveFireOnSoldier(finalFP, rnc, def, wasPinned, rpc0r, commissarMod + malfMoraleMod, commissarMod + encircleMod + malfMoraleMod, flameKiaMod, R.rpc7wOf(judge), isFlankFireNow);
     if (r.result === 'WOUND') r.result = applyWound(card); // §33.1
     // §20.9 狂暴兵チェック（ソ連軍ピン状態兵がPANIC_KIAのとき）
     let actualResult = r.result;
@@ -1043,6 +1052,11 @@ function _resolveFireActionInner() {
   if (!state.actedGroups) state.actedGroups = new Set();
   state.actedGroups.add(src.idx);
   if (!resolveAttack) return;
+
+  if (!state._malfStopAttack) {
+    results.push(...infantryGunBoxedFire(srcGroup, tgtGroup, tgt.side, distance, fireCards,
+      baseFP + malfuncMod, concealMod, isFlankFireNow));
+  }
 
   // 修正項目の内訳を取得（カードごとに表示。火炎放射器射撃時は自然地形を除外）
   const atkBreakdown = R.getTerrainModBreakdown ? R.getTerrainModBreakdown(_effSrcTerrain, true, _atkOpts) : [];
