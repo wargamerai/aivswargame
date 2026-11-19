@@ -27,9 +27,16 @@ dialog{width:min(720px,calc(100% - 30px));border:1px solid #94a287;border-radius
 .sortie-sidebar #flight-options:not(:empty){padding-top:9px;border-top:1px solid var(--line)}
 .record-actions{display:flex;flex-wrap:wrap;gap:7px;padding-top:9px;border-top:1px solid var(--line)}
 .record-actions button{padding:7px 10px}
+#file-save-status{margin:0;color:var(--muted);font-size:12px}
+#file-save-status:empty{display:none}
 .control .order{padding:9px 0 0;min-height:0;border-top:1px solid var(--line)}
 .control .order p{margin:0 0 7px}
 .control .gunlist{margin-top:7px}
+.control .gunlist button[aria-pressed=true]{background:var(--paper);border-color:var(--paper);color:#fff9e9}
+.control .gunlist button[aria-pressed=true]:hover{background:var(--green)}
+.control .gunlist .gun-assigned-mark{margin-left:7px;font-size:12px}
+.fire-assignments{margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:4px}
+.fire-assignments ul{margin:4px 0 0;padding-left:18px}
 .contact-marker{pointer-events:none}
 .contact-marker.hit-record{border-style:dashed;background:#f3e6ca}
 .contact-marker.hit-record img{opacity:.58}
@@ -256,7 +263,8 @@ body{font-size:16px}
     <div id="order" class="order" aria-live="polite" hidden></div>
     <div id="flight-options"></div>
     <div class="commands"><label id="mission-input">任務 <input id="number" type="number" required min="1" max="25" value="1"></label><button id="abort" class="subtle" hidden>任務中止・帰投</button><button id="advance" class="primary">新しく始める <span aria-hidden="true">›</span></button></div>
-    <div class="record-actions"><button id="show-log" type="button" class="subtle">判定ログ</button><button id="report" type="button" class="subtle" disabled>出撃レポート</button></div>
+    <div class="record-actions"><button id="save-game" type="button" class="subtle" title="進行をファイルに保存" disabled>SAVE</button><button id="load-game" type="button" class="subtle" title="進行ファイルを読み込む">LOAD</button><input id="load-game-file" type="file" accept=".json,application/json" hidden><button id="show-log" type="button" class="subtle">判定ログ</button><button id="report" type="button" class="subtle" disabled>出撃レポート</button></div>
+    <p id="file-save-status" role="status"></p>
   </section>
   <details class="card sortie-options">
     <summary>オプション</summary>
@@ -284,7 +292,7 @@ body{font-size:16px}
   </div>
 </main>
 <dialog id="detail-dialog"><div class="dialog-head"><h2 id="dialog-title">判定ログ</h2><form method="dialog"><button class="subtle" aria-label="閉じる">閉じる</button></form></div><div id="dialog-content"></div><div id="report-exports" hidden><button id="download" type="button" class="subtle">HTMLで保存</button></div></dialog>
-<script src="b17-lang.js?v=20261120-en" translate="no"></script>
+<script src="b17-lang.js?v=20261120-save" translate="no"></script>
 <script translate="no">
 const tables = {
   "cities": {
@@ -1409,6 +1417,7 @@ function renderFlightOptions(){
 "use strict";
 
 const saveKey="b17-sortie-v2";
+const saveFormat="b17-save-v1";
 const playModeKey="b17-play-mode";
 let playMode="game";
 const flightRulesKey="b17-flight-events";
@@ -1735,8 +1744,8 @@ function sprayFire(key,position){
     if(result===6)damageFighter(key,f,true);
   }
 }
-function rememberAircraftHit(f){
-  const records=s.aircraftHits??=[];
+function rememberAircraftHit(f,progress=s){
+  const records=progress.aircraftHits??=[];
   f.hitMarker??=records.length;
   records[f.hitMarker]={id:f.id,type:f.type,p:f.p,damage:f.damage,hitMarker:f.hitMarker};
 }
@@ -1941,31 +1950,68 @@ function resolveRockets(){
   return true;
 }
 
+function serializeGame(){
+  return JSON.stringify({format:saveFormat,s,campaign,boardView,playMode},(_,value)=>value instanceof Set?[...value]:value);
+}
 function persistGame(){
   if(!s)return;
   try{
-    const payload=JSON.stringify({s,campaign,boardView},(_,value)=>value instanceof Set?[...value]:value);
-    if(payload!==lastSaved){localStorage.setItem(saveKey,payload);lastSaved=payload;}
+    const payload=serializeGame();
+    if(payload!==lastSaved||!saveAvailable){localStorage.setItem(saveKey,payload);lastSaved=payload;}
+    saveAvailable=true;
   }catch{saveAvailable=false;}
+}
+function readGameSave(payload){
+  const data=JSON.parse(payload);
+  const progress=data?.s;
+  const record=value=>Boolean(value&&typeof value==="object"&&!Array.isArray(value));
+  const invalid=()=>{throw new Error("B-17のセーブファイルを読み込めませんでした。");};
+  if(!record(progress)||!record(data.campaign)||data.format!==undefined&&data.format!==saveFormat)invalid();
+  const arrays=["engines","contacts","hitQueue","log","frost"];
+  const records=["ammo","orders","wounds","damageByArea","crewResult","service","flightRecord"];
+  if(!Number.isInteger(progress.n)||progress.n<1||progress.n>25||!Object.hasOwn(labels,progress.phase)||
+      !arrays.every(key=>Array.isArray(progress[key]))||!records.every(key=>record(progress[key]))||
+      !Array.isArray(data.campaign.history)||!record(data.campaign.crew)||progress.engines.length!==4||
+      !progress.engines.every(record)||!record(progress.flightRecord.out)||!record(progress.flightRecord.back)||
+      !crew.every(([role])=>record(progress.service[role])&&record(data.campaign.crew[role]))||
+      !record(progress.target)||typeof progress.target.name!=="string"||
+      !Array.isArray(progress.target.point)||progress.target.point.length!==2||!progress.target.point.every(Number.isFinite)||
+      !Array.isArray(progress.target.route)||!progress.target.route.length||
+      !progress.target.route.every(entry=>typeof entry==="string"&&entry.includes("/"))||
+      !Number.isInteger(progress.zone)||progress.zone<1||progress.zone>progress.target.route.length+1)invalid();
+  const fighter=value=>record(value)&&Number.isInteger(value.p)&&value.p>=0&&value.p<tables.positions.length;
+  if(!progress.contacts.every(fighter)||
+      ![progress.aircraftHits,progress.followUps].every(list=>list==null||Array.isArray(list)&&list.every(fighter))||
+      ![progress.faults,progress.disabled].every(list=>list==null||Array.isArray(list)&&list.every(item=>typeof item==="string"))||
+      (progress.phase==="emergency"&&!record(progress.emergency))||
+      (data.playMode!==undefined&&!["game","story"].includes(data.playMode)))invalid();
+  progress.faults=new Set(progress.faults);
+  progress.disabled=new Set(progress.disabled);
+  for(const contact of progress.contacts)
+    if(contact.damage>0&&contact.hitMarker==null)rememberAircraftHit(contact,progress);
+  if(progress.phase==="hits"&&progress.afterHits==="combat"){
+    for(const contact of progress.followUps||[]){
+      const live=progress.contacts.find(f=>f.id===contact.id);
+      if(live?.hitMarker!=null)contact.hitMarker=live.hitMarker;
+    }
+  }
+  return data;
+}
+function applyGameSave(data){
+  s=data.s;
+  campaign=data.campaign;
+  const savedView=data.boardView;
+  boardView=data.format===saveFormat&&(savedView==="map"||savedView==="crew")?savedView:
+    isBasePhase()?"base":savedView==="crew"?"crew":"map";
+  playMode=data.playMode??playMode;
+  flightRules={...flightRules,...s.flightRules};
+  syncGameOptions();
 }
 function restoreGame(){
   try{
     const payload=localStorage.getItem(saveKey);
     if(!payload)return;
-    const data=JSON.parse(payload);
-    if(!data.s?.engines||!data.campaign)return;
-    s=data.s;
-    s.faults=new Set(s.faults);
-    s.disabled=new Set(s.disabled);
-    for(const contact of s.contacts)if(contact.damage>0&&contact.hitMarker==null)rememberAircraftHit(contact);
-    if(s.phase==="hits"&&s.afterHits==="combat"){
-      for(const contact of s.followUps||[]){
-        const live=s.contacts.find(f=>f.id===contact.id);
-        if(live?.hitMarker!=null)contact.hitMarker=live.hitMarker;
-      }
-    }
-    campaign=data.campaign;
-    boardView=isBasePhase()?"base":data.boardView==="crew"?"crew":"map";
+    applyGameSave(readGameSave(payload));
     lastSaved=payload;
   }catch{saveAvailable=false;}
 }
@@ -3000,6 +3046,19 @@ function renderMap(){
   plane.style.setProperty("--heading",(s?heading+90+(s.returning?180:0):28)+"deg");
   if(!plane.isConnected)layer.append(plane);
 }
+function renderFireAssignments(){
+  const list=make("ul");
+  for(const [key,[gun]] of Object.entries(guns)){
+    const target=s.contacts.find(f=>f.id===s.orders[key]);
+    const position=s.sprayOrders?.[key];
+    if(target)list.append(make("li",gun+" → "+names[target.type]+" #"+target.id+" · "+tables.positions[target.p]));
+    else if(position!=null)list.append(make("li",gun+" → "+tables.positions[position]+" · 散布射撃"));
+  }
+  if(!list.children.length)return;
+  const group=make("div",undefined,"fire-assignments");
+  group.append(make("strong","設定済みの射撃"),list);
+  el("order").append(group);
+}
 function renderCombat(){
   const board=el("contacts");
   const order=el("order");
@@ -3069,7 +3128,8 @@ function renderCombat(){
       const passing=passingShot(key,f);
       const reply=guns[key][0]+(assigned?"、待て":passing?"、後ろに抜けたところを撃て":"、あいつを狙え");
       const gunLabel=guns[key][0]+(passing?" すれ違い射撃":"");
-      const button=make("button",playMode==="story"?quoteLine(reply):gunLabel+" "+(assigned?"✓":s.ammo[key]+"発"),assigned?"primary":"subtle");
+      const button=make("button",assigned?gunLabel:playMode==="story"?quoteLine(reply):gunLabel+" "+s.ammo[key]+"発","subtle");
+      if(assigned)button.append(make("span","✓ 設定済み","gun-assigned-mark"));
       button.setAttribute("aria-pressed",String(assigned));
       button.title=assigned?"射撃の割り当てを解除":"射撃を割り当てる";
       button.addEventListener("click",()=>{
@@ -3080,8 +3140,11 @@ function renderCombat(){
       list.append(button);
       if(spraying||canSpray(key,f)){
         const sprayReply=guns[key][0]+(spraying?"、散布射撃は取り消し":"、その方向に弾幕を張れ");
-        const sprayButton=make("button",playMode==="story"?quoteLine(sprayReply):guns[key][0]+" 散布射撃（3発）"+(spraying?" ✓":""),spraying?"primary":"subtle");
+        const sprayLabel=guns[key][0]+" 散布射撃（3発）";
+        const sprayButton=make("button",!spraying&&playMode==="story"?quoteLine(sprayReply):sprayLabel,"subtle");
+        if(spraying)sprayButton.append(make("span","✓ 設定済み","gun-assigned-mark"));
         sprayButton.setAttribute("aria-pressed",String(spraying));
+        sprayButton.title=spraying?"散布射撃の割り当てを解除":"散布射撃を割り当てる";
         sprayButton.addEventListener("click",()=>{
           captainReply(sprayReply,headingReport());
           s.sprayOrders??={};
@@ -3097,7 +3160,10 @@ function renderCombat(){
     ?crewLine("尾部銃手","機長、どの敵を狙いますか？")
     :"敵機を選択して射撃を割り当ててください。配分後にまとめて確定します。";
   else if(s.phase==="hits")order.textContent=s.hitQueue.length?"残り "+s.hitQueue.length+" 件の被弾確認":"次の戦闘手順へ進みます。";
-  if(s.phase==="combat"&&!targets.parentNode)order.append(targets);
+  if(s.phase==="combat"){
+    if(!targets.parentNode)order.append(targets);
+    renderFireAssignments();
+  }
 }
 function renderCrew(){
   const counters=el("crew-counters"), roster=el("crew-roster"), markers=el("crew-hit-markers"), damage=el("crew-damage");
@@ -3294,7 +3360,7 @@ function showBoard(view){
   el("crew-tab").setAttribute("aria-pressed",String(view==="crew"));
 }
 
-function render(){
+function render(autosave=true){
   renderMap();
   renderCombat();
   renderCrew();
@@ -3304,6 +3370,7 @@ function render(){
   const story=playMode==="story";
   el("sortie-log-title").textContent=story?"クルーの会話":"判定ログ";
   el("restart-campaign").hidden=!s;
+  el("save-game").disabled=!s;
   if(!s)return;
   el("mission").textContent=String(s.n).padStart(2,"0")+" / 25";
   el("target").textContent=s.target.name;
@@ -3339,7 +3406,7 @@ function render(){
   el("abort").textContent=story?"「任務中止、基地へ戻る」":"任務中止・帰投";
   action.firstChild.textContent=(story&&s.phase!=="emergency"&&!(s.phase==="end"&&aircraftLost(s))?quoteLine(advanceLine()):advanceLine())+" ";
   if(s.phase==="end")el("number").value=nextMissionNumber();
-  persistGame();
+  if(autosave)persistGame();
   el("save-state").textContent=saveAvailable?"進行はこのブラウザに自動保存":"このブラウザでは自動保存できません";
   const condition=el("condition");
   condition.replaceChildren(
@@ -3366,6 +3433,13 @@ el("base-tab").addEventListener("click",()=>showBoard("base"));
 el("map-tab").addEventListener("click",()=>showBoard("map"));
 el("crew-tab").addEventListener("click",()=>showBoard("crew"));
 el("advance").addEventListener("click",advance);
+function syncGameOptions(){
+  for(const [kind,enabled] of Object.entries(flightRules)){
+    const checkbox=el(kind+"-events");
+    if(checkbox)checkbox.checked=enabled;
+  }
+  el("play-mode").value=playMode;
+}
 for(const kind of Object.keys(flightRules)){
   if(!el(kind+"-events"))continue;
   const checkbox=el(kind+"-events");
@@ -3403,16 +3477,52 @@ el("abort").addEventListener("click",()=>{
 });
 el("show-log").addEventListener("click",()=>showDetail(false));
 el("report").addEventListener("click",()=>showDetail(true));
-function saveReport(markup,filename){
-  const url=URL.createObjectURL(new Blob([markup],{type:"text/html;charset=utf-8"}));
+function downloadFile(content,filename,type){
+  const url=URL.createObjectURL(new Blob([content],{type}));
   const link=make("a");
   link.href=url;
-  link.download=filename+".html";
+  link.download=filename;
   link.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 el("download").addEventListener("click",()=>{
-  if(reportExport)saveReport(reportExport.html,reportExport.filename);
+  if(reportExport)downloadFile(reportExport.html,reportExport.filename+".html","text/html;charset=utf-8");
+});
+el("save-game").addEventListener("click",()=>{
+  if(!s)return;
+  const status=el("file-save-status");
+  try{
+    downloadFile(serializeGame(),"B-17-Mission-"+String(s.n).padStart(2,"0")+".json","application/json;charset=utf-8");
+    status.textContent="進行ファイルのダウンロードを開始しました。";
+  }catch{status.textContent="進行をファイルに保存できませんでした。";}
+});
+el("load-game").addEventListener("click",()=>el("load-game-file").click());
+el("load-game-file").addEventListener("change",async event=>{
+  const input=event.target;
+  const file=input.files[0];
+  input.value="";
+  if(!file)return;
+  const load=el("load-game"),status=el("file-save-status");
+  load.disabled=true;
+  status.textContent="";
+  try{
+    const data=readGameSave(await file.text());
+    if(s&&!confirm("現在の進行を読み込んだファイルで置き換えますか？"))return;
+    const previous={s,campaign,boardView,playMode,flightRules};
+    try{
+      applyGameSave(data);
+      render(false);
+    }catch(error){
+      ({s,campaign,boardView,playMode,flightRules}=previous);
+      syncGameOptions();
+      render(false);
+      throw error;
+    }
+    persistGame();
+    el("save-state").textContent=saveAvailable?"進行はこのブラウザに自動保存":"このブラウザでは自動保存できません";
+    status.textContent="進行ファイルを読み込みました。";
+  }catch{status.textContent="B-17のセーブファイルを読み込めませんでした。";}
+  finally{load.disabled=false;}
 });
 el("crew-roster").style.setProperty("--crew-portraits",portraitAtlas);
 el("base-plane").src=asset("b17.png");
