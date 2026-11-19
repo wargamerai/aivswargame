@@ -153,7 +153,8 @@
   <button onclick="fontSize(1)" title="文字を大きく" data-en="A＋" data-en-title="Larger text">文字＋</button>
   <button id="stepBtn" onclick="toggleStep()" data-en="Step by step: ON">1手ずつ: ON</button>
   <button onclick="openOptions()" data-en="Options">オプション</button>
-  <button onclick="downloadLog()" data-en="Logbook">航海日誌</button>
+  <button onclick="downloadLog()"><span data-en="Logbook">航海日誌</span> HTML</button>
+  <button onclick="downloadLog(this)"><span data-en="Logbook">航海日誌</span> PNG</button>
   <button onclick="saveFile()">Save</button>
   <button onclick="loadFile()">Load</button>
   <button onclick="restart()" data-en="New game">最初から</button>
@@ -177,7 +178,8 @@
   <footer><button type="button" id="epilogue-next"></button></footer>
 </dialog>
 <script src="cc_epilogue.js?v=last-escort"></script>
-<script src="cc_game.js?v=last-escort"></script>
+<script src="../report-image.js"></script>
+<script src="cc_game.js?v=report-png"></script>
 <script>
   // 英語の時は、上のボタンなどの文字を英語にする
   if (LANG !== 'ja') {

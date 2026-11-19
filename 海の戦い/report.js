@@ -324,10 +324,18 @@ Object.keys(LANG_NAMES).filter(l => TX[l]).forEach(l => { const b = document.cre
 render();
 <\/script></body></html>`;
 }
-function saveGameReport(){
+function saveGameReport(pngButton){
   const d = new Date(), z = n => String(n).padStart(2, '0');
   const name = `war_at_sea_report_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}.html`;
-  const blob = new Blob([repBuildHtml()], { type: 'text/html' });
+  const markup = repBuildHtml();
+  if (pngButton) return ReportImage.download(markup, name, pngButton, {
+    prepare: 'const reportSections = []; for (const turnIndex of ["sum", ...D.turns.keys()]) {' +
+      'cur = turnIndex; render(); const section = document.createElement("section");' +
+      'section.innerHTML = document.getElementById("view").innerHTML; reportSections.push(section);}' +
+      'document.getElementById("view").replaceChildren(...reportSections);' +
+      'document.getElementById("nav").remove(); document.getElementById("langs").remove();'
+  });
+  const blob = new Blob([markup], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
@@ -351,6 +359,7 @@ function showReportSave(){
     <p style="margin:10px 0;font-size:1.1em;">最終POC ${poc >= 0 ? '+' : ''}${poc}（${result}）</p>
     <p style="margin:6px 0 14px;color:#cde;font-size:0.9em;">ターンごとの移動、戦闘結果、支配、POCのレポートを、このパソコンに保存できます。</p>
     <button class="locBtn" style="background:#2266cc;padding:6px 18px;" onclick="saveGameReport()">レポートを保存</button>
+    <button type="button" class="locBtn" style="padding:6px 18px;" onclick="saveGameReport(this)">PNG</button>
     <button class="locBtn" style="padding:6px 18px;margin-left:8px;" onclick="document.getElementById('reportSaveModal').remove()">閉じる</button>
   </div>`;
 }

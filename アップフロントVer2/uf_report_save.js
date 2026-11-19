@@ -220,10 +220,15 @@ k = 0; if (SN.length) render();
 <\/script>
 </div></body></html>`;
 }
-function ufSaveReport() {
+function ufSaveReport(pngButton) {
   const d = new Date(), z = n => String(n).padStart(2, '0');
   const name = `upfront_report_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}.html`;
-  const blob = new Blob([ufBuildReportHtml()], { type: 'text/html' });
+  const markup = ufBuildReportHtml();
+  if (pngButton) return ReportImage.download(markup, name, pngButton, {
+    prepare: 'if (SN.length) { k = SN.length - 1; render(); }' +
+      'document.querySelectorAll("#bPrev,#bNext").forEach(button => button.remove());'
+  });
+  const blob = new Blob([markup], { type: 'text/html' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click();
@@ -255,6 +260,7 @@ function ufShowGameOver() {
     <div data-result style="margin:8px 0 12px;"></div>
     <div style="font-size:12px;color:#ccc;margin-bottom:12px;">勝敗・損害・行動の回数・手番ごとの出来事のレポートを、このパソコンに保存できます。</div>
     <button class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;background:#2266cc;" onclick="ufSaveReport()">レポートを保存</button>
+    <button type="button" class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;" onclick="ufSaveReport(this)">PNG</button>
     <button class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;margin-left:8px;" onclick="document.getElementById('ufGameOver').remove()">閉じる</button>
   </div>`;
   el.querySelector('[data-result]').textContent = _ufStrip(state._ufEndText || '');

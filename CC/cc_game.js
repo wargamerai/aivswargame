@@ -1266,9 +1266,10 @@ function autoFiles() {
     UI.bad(L('ファイルのダウンロードに失敗しました。ブラウザの中には保存してあります。', 'The file download failed. The game is still saved in the browser.'));
   }
 }
-function downloadLog() {
+function downloadLog(pngButton) {
   const record = S && S.camp && S.camp.lastLog;
   if (!record) { alert(L('まだ終わった航海がありません', 'No voyage has been completed yet')); return; }
+  if (pngButton) return ReportImage.download(record.html, record.name, pngButton);
   const blob = new Blob([GameReportLimit.html(record.html, { history: ['tr:has(td)'], summary: '.res' })], { type: 'text/html;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = record.name + '.html'; a.click();

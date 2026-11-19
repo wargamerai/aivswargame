@@ -288,6 +288,7 @@
 <div id="phaseBanner" onclick="hideBanner()"></div>
 
 <script src="../report-limit.js"></script>
+<script src="../report-image.js"></script>
 <script src="images/mapdata.js"></script>
 <script src="dokuso_units.js"></script>
 <script src="dokuso_engine.js"></script>
@@ -1696,6 +1697,7 @@ function showEnd() {
     ? `<button type="button" onclick="showReportMap(${turn})">地図を見る</button>` : '');
   box.querySelector('.game-report').insertAdjacentHTML('beforeend', `
     <button type="button" onclick="downloadEndReport()">HTMLをダウンロード</button>
+    <button type="button" onclick="downloadEndReport(this)">PNG</button>
     <button type="button" onclick="showReportMap()">地図を見る</button>
     ${isDokusoOnline() ? '' : '<button type="button" onclick="showStart()">もう一度</button>'}
   `);
@@ -1769,10 +1771,12 @@ ${background ? `<style data-report-map>.report-map { ${background} }</style>` : 
 <body>${content.outerHTML}</body>
 </html>`;
 }
-function downloadEndReport() {
+function downloadEndReport(pngButton) {
   if (game?.phase !== 'over') return;
   const date = new Date().toISOString().slice(0, 19).replace(/T|:/g, '-');
-  const url = URL.createObjectURL(new Blob([GameReportLimit.html(endReportFile(), {
+  const html = endReportFile();
+  if (pngButton) return ReportImage.download(html, 'dokuso-report-' + date, pngButton);
+  const url = URL.createObjectURL(new Blob([GameReportLimit.html(html, {
     discard: ['[data-report-map]', 'main > section:not(.game-report), a[href^="#turn-map-"]'],
     history: ['.report-table tbody tr'], summary: '.outcome, .res',
   })], {type: 'text/html;charset=utf-8'}));

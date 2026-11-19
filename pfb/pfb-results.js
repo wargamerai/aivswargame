@@ -226,7 +226,7 @@ const PFBResults=(()=>{
     const reportCreditHtml=`<footer class="report-credit"><p>このゲームは、もりつち様作の『PFB』のウェブ版です。ご興味のある方は、<a href="https://mk2kpfb.chu.jp/SGame/SLG_Moritsuchi.html" target="_blank" rel="noopener noreferrer">もりつちブランドの公式サイト</a>をご覧ください。</p></footer>`;
 
     const exportedReports=new Set();
-    function downloadReport(report,standings,automatic=false) {
+    function downloadReport(report,standings,automatic=false,pngButton=null) {
         if (automatic&&exportedReports.has(report.id)) return;
         const names=report.teams.map(teamShort);
         const title=newspaper(report,names).headline;
@@ -266,6 +266,7 @@ th:first-child,th[scope="row"] { text-align:left; }
 <body><main>${reportHtml(report)}${standings}${reportCreditHtml}</main></body></html>`;
         const filename=['PFB試合結果',report.date,...names,report.scores.join('-')].filter(Boolean)
             .join('-').replace(/[\\/:*?"<>|]/g,'-');
+        if (pngButton) return ReportImage.download(html,filename,pngButton,{width:1200});
         const file=GameReportLimit.html(html, {
             history:['.report-teams tbody tr'],
             summary:'.match-report h2, .report-score, .report-line-score, .report-league-summary',

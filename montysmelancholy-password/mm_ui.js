@@ -967,6 +967,9 @@
   $('rpOne').onclick = () => { saveFile(stamp() + '.html', new Blob([GameReportLimit.html(MMReport.oneFile(rpData.data, rpData.map), {
     discard: ['main > img, main > .leg'], history: ['main > p'], summary: '.res, main > table',
   })], { type: 'text/html;charset=utf-8' })); };
+  $('rpPng').onclick = e => {
+    if (rpData) ReportImage.download(MMReport.oneFile(rpData.data, rpData.map), stamp(), e.currentTarget);
+  };
   $('rpBlog').onclick = blogBox;
   $('bHelp').onclick = () => { $('help').style.display = 'flex'; };
   $('bPool').onclick = e => { const S = G.S; openList('除去された駒', S.u.filter(x => x.loc === 'dead'), e); };

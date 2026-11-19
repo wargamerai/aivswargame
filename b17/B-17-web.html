@@ -291,8 +291,9 @@ body{font-size:16px}
   </aside>
   </div>
 </main>
-<dialog id="detail-dialog"><div class="dialog-head"><h2 id="dialog-title">判定ログ</h2><form method="dialog"><button class="subtle" aria-label="閉じる">閉じる</button></form></div><div id="dialog-content"></div><div id="report-exports" hidden><button id="download" type="button" class="subtle">HTMLで保存</button></div></dialog>
-<script src="b17-lang.js?v=20261120-save" translate="no"></script>
+<dialog id="detail-dialog"><div class="dialog-head"><h2 id="dialog-title">判定ログ</h2><form method="dialog"><button class="subtle" aria-label="閉じる">閉じる</button></form></div><div id="dialog-content"></div><div id="report-exports" hidden><button id="download" type="button" class="subtle">HTMLで保存</button><button id="download-image" type="button" class="subtle">PNGで保存</button></div></dialog>
+<script src="../report-image.js"></script>
+<script src="b17-lang.js?v=20261120-report" translate="no"></script>
 <script translate="no">
 const tables = {
   "cities": {
@@ -2147,12 +2148,11 @@ function reportChart(){
   chart.append(notes);
   return chart;
 }
-function reportPage(chart){
+function reportPage(chart,limit=50000){
   const copy=chart.cloneNode(true);
   window.B17Language.localize(copy);
   const markup=()=>'<!doctype html><html lang="'+window.B17Language.code+'"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'+
     '<title>'+(window.B17Language.code==="en"?"B-17 Mission Record":"B-17 任務記録票")+'</title><style>'+chartStyle+'</style>'+copy.outerHTML+'</html>';
-  const limit=50000;
   let html=markup();
   const lists=Array.from(copy.querySelectorAll(".chart-notes ul"));
   while(new Blob([html]).size>limit){
@@ -2175,7 +2175,7 @@ function showDetail(report){
     const chart=reportChart();
     content.append(style,chart);
     const filename="B-17-Mission-"+String(s.n).padStart(2,"0");
-    reportExport={filename,html:reportPage(chart)};
+    reportExport={filename,html:reportPage(chart),chart};
   }else content.append(make("pre",s?s.log.join("\n"):"出撃すると、ここにダイスと修正値が表示されます。"));
   dialog.showModal();
 }
@@ -3487,6 +3487,9 @@ function downloadFile(content,filename,type){
 }
 el("download").addEventListener("click",()=>{
   if(reportExport)downloadFile(reportExport.html,reportExport.filename+".html","text/html;charset=utf-8");
+});
+el("download-image").addEventListener("click",()=>{
+  if(reportExport)ReportImage.download(reportPage(reportExport.chart,Infinity),reportExport.filename,el("download-image"));
 });
 el("save-game").addEventListener("click",()=>{
   if(!s)return;

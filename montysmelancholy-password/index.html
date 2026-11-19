@@ -180,7 +180,7 @@ button.go { background:#6a5a1c; border-color:var(--acc); font-weight:bold; }
 <div id="bt"></div>
 <div id="lg"><div><h1>Monty's Melancholy</h1><p>言語 / Language / Langue / Sprache / Lingua / Idioma / 语言 / 언어 / Язык</p><div id="lgBtns"></div></div></div>
 <div id="end"><div><h1 id="endT"></h1><p id="endW"></p><button class="go" id="endGo">レポートへ</button></div></div>
-<div id="rp"><div id="rpBar"><b>戦闘報告</b><span class="sp"></span><button class="go" id="rpOne">1本もので保存</button><button id="rpBlog">ブログ用に分割</button><button id="rpNew">新しいゲーム</button><button id="rpClose">閉じる</button></div><div id="rpBlogBox"></div><iframe id="rpFrame" title="戦闘報告"></iframe></div>
+<div id="rp"><div id="rpBar"><b>戦闘報告</b><span class="sp"></span><button class="go" id="rpOne">1本もので保存</button> <button id="rpPng">PNG</button><button id="rpBlog">ブログ用に分割</button><button id="rpNew">新しいゲーム</button><button id="rpClose">閉じる</button></div><div id="rpBlogBox"></div><iframe id="rpFrame" title="戦闘報告"></iframe></div>
 <div id="st"><div><p class="big" id="stBig"></p><p class="no" id="stNo"></p><h1 id="stT"></h1><p class="tx" id="stTx"></p><div id="stU"></div><button class="go" id="stGo">配置する</button></div></div>
 <div id="gs"><div><h1>ゲーム開始</h1><p>空挺降下が終わりました。ここから札を1枚ずつめくります。</p><button class="go" id="gsGo">最初の札をめくる</button></div></div>
 <dialog id="cycleGate" aria-labelledby="cycleTitle" aria-describedby="cycleSource cycleHint">
@@ -217,7 +217,8 @@ button.go { background:#6a5a1c; border-color:var(--acc); font-weight:bold; }
 <script src="mm_engine.js"></script>
 <script src="mm_report.js"></script>
 <script src="report-limit.js"></script>
-<script src="mm_ui.js"></script>
+<script src="../report-image.js"></script>
+<script src="mm_ui.js?v=report-png"></script>
 <script>
 (() => {
   const picker = document.getElementById('lg');

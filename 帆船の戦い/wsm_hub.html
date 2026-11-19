@@ -129,6 +129,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
 #infoLabel { color:#ffcc88; align-self:center; flex:1; }
 </style>
 <script src="../report-limit.js"></script>
+<script src="../report-image.js"></script>
 </head>
 <body>
 
@@ -261,6 +262,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
   <button onclick="centerMapView()" title="選んだ艦（選んでいなければ全艦の真ん中）を画面の中央へ" style="background:#2a5a7a;color:#fff;border:1px solid #4a8ab0;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">◎ 中央へ</button>
   <button onclick="saveGameToFile()" style="background:#864;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">💾 保存</button>
   <button onclick="downloadBattleLog()" title="ここまでの戦闘報告をファイルに書き出す。不具合のときはこのファイルを送ってください" style="background:#456;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">📜 レポート作成</button>
+  <button onclick="downloadBattleLog(this)" type="button" style="background:#456;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">PNG</button>
   <button class="back" onclick="location.href='sandbox.html'">← 編成へ</button>
 </div>
 
@@ -1081,7 +1083,7 @@ const BL_TXT = {
 };
 
 // 戦闘レポートの書き出し（上: 地図、下: 砲撃と白兵戦の結果、最終結果。いちばん下に開発用の記録とセーブデータ）
-function downloadBattleLog() {
+function downloadBattleLog(pngButton) {
   try {
     let lang = 'ja'; try { lang = (typeof LANG !== 'undefined' && LANG) || 'ja'; } catch (e) {}
     const X = BL_TXT[lang] || BL_TXT.en;
@@ -1209,6 +1211,7 @@ ${timeline || `<p>${esc(X.none)}</p>`}
 ${dev}
 </div></body></html>`;
 
+    if (pngButton) return ReportImage.download(html, 'wsim_report_T' + state.turn, pngButton);
     const blob = new Blob([GameReportLimit.html(html, {
       discard: ['.map', '.page > details'], history: ['.turn li'], summary: '.sub, .res',
     })], { type: 'text/html;charset=utf-8' });

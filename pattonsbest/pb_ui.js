@@ -630,11 +630,19 @@ function reportHtml(R) {
   <h2>${L('戦闘ログ', 'Battle log')}</h2><div class="dlog">${log}</div></section>`;
 }
 const REPORT_CSS = `body{font:14px/1.5 'Helvetica Neue',Arial,'Hiragino Sans',sans-serif;color:#111;background:#fff;max-width:980px;margin:0 auto;padding:16px}h1{font-size:30px;text-align:center;margin:4px 0}h2{font-size:15px;margin:10px 0 3px;border-bottom:2px solid #111}table{border-collapse:collapse}.grid td,.grid th{border:1px solid #111;padding:2px 7px;text-align:left}.top{width:100%}.top>tbody>tr>td{vertical-align:top;padding-right:16px}.cols{display:grid;grid-template-columns:auto auto 1fr;gap:18px}.time td,.time th{border:1px solid #111;width:18px;height:15px;font-size:11px;font-weight:normal;padding:0 3px}.time .off{background:#aaa}.time .pre{background:repeating-linear-gradient(45deg,#fff,#fff 3px,#888 3px,#888 5px)}.time .used{background:#222}.small{font-size:12px;color:#444}.dlog div{margin:1px 0}.dlog .judge{color:#666;font-family:ui-monospace,Menlo,monospace;font-size:12px}.dlog .bad{color:#b00;font-weight:bold}.dlog .good{color:#070}.dlog .head{font-weight:bold;margin-top:8px;border-top:1px solid #999;padding-top:3px}.dlog .date,.dlog .evening{font-weight:bold;background:#eee;padding:2px 4px}section{page-break-after:always;margin-bottom:30px}@media(max-width:700px){.cols{grid-template-columns:1fr}}`;
-function downloadHtml(name, body) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.html(`<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Patton's Best Report</title><style>${REPORT_CSS}</style></head><body>${body}</body></html>`, {
+function reportDocument(body) { return `<!doctype html><html lang="${LANG}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Patton's Best Report</title><style>${REPORT_CSS}</style></head><body>${body}</body></html>`; }
+function downloadHtml(name, body) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.html(reportDocument(body), {
   discard: ['.dlog', '.cols'], history: ['.aar'], summary: '.aar:last-child .top',
 })], { type: 'text/html;charset=utf-8' })); a.download = name; a.click(); }
-function saveReport(i) { const R = REPORTS[i]; if (R) downloadHtml(`pattons_best_report_${R.date.replace(/\//g, '-')}.html`, reportHtml(R)); }
-function saveLastReport() { saveReport(REPORTS.length - 1); }
+function saveReport(i, pngButton) {
+  const report = REPORTS[i];
+  if (!report) return;
+  const name = 'pattons_best_report_' + report.date.replace(/\//g, '-');
+  const body = reportHtml(report);
+  if (pngButton) return ReportImage.download(reportDocument(body), name, pngButton);
+  downloadHtml(name + '.html', body);
+}
+function saveLastReport(pngButton) { return saveReport(REPORTS.length - 1, pngButton); }
 function saveAllReports() { if (!REPORTS.length) return alert(L('まだレポートがありません', 'No reports yet')); downloadHtml('pattons_best_campaign.html', REPORTS.map(reportHtml).join('')); }
 function showDebrief(r) {
   keepJudge();
@@ -644,13 +652,13 @@ function showDebrief(r) {
   <p>${L('戦車の戦果', 'Your tank')}: ${r.your} / ${L('味方', 'Friendly forces')}: ${r.fr} / ${L('地域', 'Territory')}: ${r.terr}</p><p><b>${L('合計', 'Total')} ${r.total} VP — ${r.total > 0 && !r.ko ? L('今日は勝った', 'A victory today') : L('今日は負けた', 'A defeat today')}</b></p>
   ${r.ko ? `<p>${L(`新しい戦車: #${g.tankId} ${E.tank().model}`, `New tank: #${g.tankId} ${E.tank().model}`)} ${tankChoice()}</p>` : ''}${r.promoted ? `<p style="color:var(--good)">${L('昇進した！', 'Promoted!')}</p>` : ''}${r.medal ? `<p style="color:var(--good)">🎖 ${r.medal}</p>` : ''}
   ${g.medals.length ? `<p style="color:var(--mute);font-size:.9em">${L('勲章', 'Medals')}: ${g.medals.join('、')}</p>` : ''}
-  <p><button class="go" onclick="closeOver()">${L('続ける', 'Continue')}</button> <button onclick="saveLastReport()">${L('レポートを保存', 'Save report')}</button></p>`);
+  <p><button class="go" onclick="closeOver()">${L('続ける', 'Continue')}</button> <button onclick="saveLastReport()">${L('レポート HTML', 'Report HTML')}</button> <button onclick="saveLastReport(this)">${L('レポート PNG', 'Report PNG')}</button></p>`);
 }
 function showOver() {
   const g = E.G, o = g.over; if (!o) return;
   const kills = Object.keys(g.kills).map(k => `${L((PB.UNIT[k] || {}).name || k, (PB.UNIT[k] || {}).en || k)} ×${g.kills[k]}`).join('、') || L('なし', 'none');
   inlineBox(`<h2>${o.win ? L('終戦', 'War\'s end') : L('戦いの終わり', 'The end')}</h2><p>${o.why}</p><p>${L(`出撃 ${g.days}日、戦闘 ${g.battles}回、累計 ${g.totalVP}VP`, `${g.days} days in action, ${g.battles} battles, ${g.totalVP} VP`)}</p><p>${L('撃破', 'Kills')}: ${esc(kills)}</p>${g.medals.length ? `<p>${L('勲章', 'Medals')}: ${g.medals.join('、')}</p>` : ''}
-  <p>${o.canContinue ? `<button class="go" onclick="E.continueAsReplacement();closeOver();save()">${L('次の車長として続ける', 'Continue as the replacement')}</button> ` : ''}<button onclick="saveLastReport()">${L('最後のレポート', 'Last report')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <button onclick="try{localStorage.removeItem('pb_save')}catch(e){};location.reload()">${L('最初から', 'New campaign')}</button></p>`);
+  <p>${o.canContinue ? `<button class="go" onclick="E.continueAsReplacement();closeOver();save()">${L('次の車長として続ける', 'Continue as the replacement')}</button> ` : ''}<button onclick="saveLastReport()">${L('最後のレポート HTML', 'Last report HTML')}</button> <button onclick="saveLastReport(this)">${L('最後のレポート PNG', 'Last report PNG')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <button onclick="try{localStorage.removeItem('pb_save')}catch(e){};location.reload()">${L('最初から', 'New campaign')}</button></p>`);
 }
 function helpBox() {
   $('over').style.display = 'flex';

@@ -782,7 +782,11 @@
 </main></body></html>`}
   function downloadReport(){const html=GameReportLimit.html(buildReport(), {discard:['.map,.legend'],history:['.chron li:not(.end)'],summary:'.res,.stats'}),blob=new Blob([html],{type:'text/html'}),url=URL.createObjectURL(blob),a=document.createElement('a'),d=new Date(),pad=n=>String(n).padStart(2,'0');a.href=url;a.download=`nobunaga_report_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.html`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000)}
   window.__nobuReport=buildReport;
-  document.addEventListener('click',e=>{if(e.target.closest('#reportButton'))downloadReport()});
+  document.addEventListener('click',e=>{
+    if(e.target.closest('#reportButton'))downloadReport();
+    const png=e.target.closest('#reportImageButton');
+    if(png)ReportImage.download(buildReport(),'nobunaga_report',png);
+  });
 
   function allEnemyForcesDefeated(){
     if(Object.values(state.areas).some(area=>area.forces.some(f=>f.side==='enemy'&&alive(f))))return false;
