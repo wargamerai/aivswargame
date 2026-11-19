@@ -22,7 +22,7 @@ window.GameReportLimit = (() => {
     return (line > 0 ? kept.slice(0, line) : kept) + footer;
   }
 
-  function html(value, { discard = [], history = [], summary = '' } = {}) {
+  function html(value, { discard = [], history = [], summary = '', footer = '' } = {}) {
     if (size(value) <= limit) return value;
     const page = new DOMParser().parseFromString(value, 'text/html');
     const serialize = () => '<!doctype html>\n' + page.documentElement.outerHTML;
@@ -32,7 +32,9 @@ window.GameReportLimit = (() => {
       : 'Some figures or details were omitted to keep this report within 50,000 bytes.';
     const result = Array.from(summary ? page.querySelectorAll(summary) : [])
       .map(node => node.textContent.trim()).join('\n');
-    page.body.append(notice);
+    const footerNode = footer ? page.querySelector(footer) : null;
+    if (footerNode) footerNode.before(notice);
+    else page.body.append(notice);
 
     for (const selector of discard) {
       for (const node of page.querySelectorAll(selector)) node.remove();
@@ -59,6 +61,7 @@ window.GameReportLimit = (() => {
     title.textContent = heading;
     const body = page.createElement('pre');
     page.body.replaceChildren(title, body, notice);
+    if (footerNode) page.body.append(footerNode);
     body.textContent = prefix(result, 7000);
     if (size(serialize()) > limit) title.textContent = prefix(heading, 2000);
     return serialize();

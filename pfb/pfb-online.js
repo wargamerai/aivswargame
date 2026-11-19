@@ -102,7 +102,7 @@ const PFBOnline=(()=>{
             renderButtons([...g.bench.map((row,i)=>[playerName(row),`pinch:${i}`,'bs']),back],g.batSide,'代打を選択');return true;
         }
         if(action==='def_pitcher'){
-            renderButtons([...g.pitchers[g.defSide].filter(p=>!p.isUsed).map((p,i)=>[p.name,`chpitch:${i}`,'bs']),back],g.defSide,'登板する投手を選択');return true;
+            renderButtons([...g.pitchers[g.defSide].filter(p=>!p.isUsed).map((p,i)=>[pitcherChoiceLabel(p),`chpitch:${i}`,'bs']),back],g.defSide,'登板する投手を選択');return true;
         }
         if(action==='def_fielder'){
             renderButtons([...g.defLineup.map((p,i)=>[playerName(p),`defout:${i}`,'bs']),back],g.defSide,'交代する野手を選択');return true;

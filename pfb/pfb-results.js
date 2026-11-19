@@ -223,6 +223,8 @@ const PFBResults=(()=>{
         </article>`;
     }
 
+    const reportCreditHtml=`<footer class="report-credit"><p>このゲームは、もりつち様作の『PFB』のウェブ版です。ご興味のある方は、<a href="https://mk2kpfb.chu.jp/SGame/SLG_Moritsuchi.html" target="_blank" rel="noopener noreferrer">もりつちブランドの公式サイト</a>をご覧ください。</p></footer>`;
+
     const exportedReports=new Set();
     function downloadReport(report,standings,automatic=false) {
         if (automatic&&exportedReports.has(report.id)) return;
@@ -256,16 +258,18 @@ th:first-child,th[scope="row"] { text-align:left; }
 .report-team small { display:block; color:var(--muted); }
 .report-team ul { padding-left:1.2em; }
 .report-league-summary { margin-top:1.6em; border-top:5px double; padding-top:.55em; }
+.report-credit { margin-top:1.6em; border-top:1px solid var(--rule); padding-top:.55em; color:var(--muted); font-size:.9rem; }
 .season-leaders { margin-top:1em; }
 @media(max-width:760px) { .report-teams,.season-league-grid { grid-template-columns:1fr; } }
 @media print { body { background:white; } main { margin:0; padding:0; } }
 </style>
-<body><main>${reportHtml(report)}${standings}</main></body></html>`;
+<body><main>${reportHtml(report)}${standings}${reportCreditHtml}</main></body></html>`;
         const filename=['PFB試合結果',report.date,...names,report.scores.join('-')].filter(Boolean)
             .join('-').replace(/[\\/:*?"<>|]/g,'-');
         const file=GameReportLimit.html(html, {
             history:['.report-teams tbody tr'],
             summary:'.match-report h2, .report-score, .report-line-score, .report-league-summary',
+            footer:'.report-credit',
         });
         downloadFile(new Blob([file],{type:'text/html;charset=utf-8'}),filename+'.html');
         if (automatic) exportedReports.add(report.id);
@@ -275,5 +279,5 @@ th:first-child,th[scope="row"] { text-align:left; }
         report.totals=Object.fromEntries(report.pitchers.filter(p=>totals[p.key]).map(p=>[p.key,{...totals[p.key]}]));
     }
 
-    return {record,decide,reportHtml,downloadReport,applyTotals,officialGame,addToTotals,formatIP,pitcherId,statKey};
+    return {record,decide,reportHtml,reportCreditHtml,downloadReport,applyTotals,officialGame,addToTotals,formatIP,pitcherId,statKey};
 })();

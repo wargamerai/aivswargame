@@ -133,7 +133,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css?v=backscreen-result">
+<link rel="stylesheet" href="pfb-screen.css?v=report-credit">
 </head>
 <body>
 
@@ -221,6 +221,11 @@ body, html {
 <dialog id="roster-dialog" aria-labelledby="roster-title">
     <form>
         <h2 id="roster-title"></h2>
+        <fieldset class="roster-stat-source" hidden>
+            <legend>表示する成績</legend>
+            <label><input type="radio" name="roster-stats" value="real" checked> リアル成績</label>
+            <label><input type="radio" name="roster-stats" value="game"> ゲーム成績</label>
+        </fieldset>
         <section class="roster-bench-stage">
             <div class="roster-tools">
                 <label>選手名 <input class="roster-search" type="search" placeholder="名前で絞り込み"></label>
@@ -228,11 +233,6 @@ body, html {
             </div>
             <div class="roster-count" aria-live="polite"></div>
             <div class="roster-list"></div>
-            <fieldset class="roster-stat-source" hidden>
-                <legend>表示する成績</legend>
-                <label><input type="radio" name="roster-stats" value="real" checked> リアル成績</label>
-                <label><input type="radio" name="roster-stats" value="game"> ゲーム成績</label>
-            </fieldset>
         </section>
         <section class="roster-board-stage" hidden>
             <h3 class="roster-board-title" tabindex="-1">打順と守備位置</h3>
@@ -473,15 +473,30 @@ function table19(pos, defR, hasR2, outs) {
 // ============================================================
 // TABLE 2: 暴走表
 // ============================================================
-function table2_boso(speed, ofDef, outs, leftToThird, tagUp) {
-    const dm = (ofDef >= 4 ? 2 : ofDef <= 2 ? -2 : 0) +
+function extraAdvanceModifier(speed, ofDef, outs, leftToThird, tagUp) {
+    return (ofDef >= 4 ? 2 : ofDef <= 2 ? -2 : 0) +
         (speed === 'F' ? -2 : speed === 'S' ? 2 : 0) +
         (outs === 2 && !tagUp ? -2 : 0) + (leftToThird ? 4 : 0);
-    const total = d10() + dm;
+}
+
+function extraAdvanceOutcome(total) {
+    return total <= 3 ? 'safe' : total <= 6 ? 'hold' : 'out';
+}
+
+function extraAdvanceOdds(modifier) {
+    const odds={safe:0,hold:0,out:0};
+    for (let roll=1;roll<=10;roll++) odds[extraAdvanceOutcome(roll+modifier)]+=10;
+    return `セーフ ${odds.safe}%・進塁できず ${odds.hold}%・アウト ${odds.out}%`;
+}
+
+function table2_boso(speed, ofDef, outs, leftToThird, tagUp) {
+    const modifier=extraAdvanceModifier(speed,ofDef,outs,leftToThird,tagUp);
+    const roll=d10();
+    const total=roll+modifier;
     return {
-        result:total <= 3 ? 'safe' : total <= 6 ? 'hold' : 'out',
+        result:extraAdvanceOutcome(total),
         extra:total > 1 && total <= 3 || total > 6 && total <= 10,
-        total
+        total,roll,modifier
     };
 }
 
@@ -715,6 +730,21 @@ function table17(pitcher, batter, bases, dome) {
     return {roll,detail,type:detail <= 4 ? 'SHORT_RAIN' : detail <= 8 ? 'LONG_RAIN' : 'RAIN_OUT'};
 }
 
+function rarePlayLabel(play) {
+    if (play.type==='ERROR') return `${FNAME[play.field]}の守備判定`;
+    if (play.type==='GROUNDER') return `${FNAME[play.field]}への強いゴロ`;
+    if (play.type==='WALL_FLY') return `${FNAME[play.injury]}がフェンスに激突`;
+    return {
+        FOUL:'ファウルチップ', K:'三振', HBP:'死球', HOLD:'牽制球・走者セーフ',
+        PO:'牽制アウト', STEAL:'盗塁のチャンス', WP:'暴投', PB:'捕逸', BK:'ボーク',
+        BB:'四球', HR:'本塁打', '3H':'ライトへの三塁打', '1H':'内野安打',
+        FIGHT:'死球をきっかけに乱闘', MAYBE_HR:'得点状況で本塁打か三振を判定',
+        GETR:'走者がいるときの特性による打撃判定', MAKR:'走者がいないときの特性による打撃判定',
+        SHORT_RAIN:'降雨で10分中断', LONG_RAIN:'降雨で60分中断',
+        RAIN_OUT:'降雨で試合打ち切り', IGNORE_RAIN:'ドーム球場のため続行'
+    }[play.type];
+}
+
 function injuryDays(player) {
     const column = 'SABCDE'.indexOf(player['ﾀﾌﾈｽ']);
     const roll = d100();
@@ -801,17 +831,33 @@ function stealSuccessValue({runner,from},catcherT,{cautious=false,corners=false,
         (cautious ? 20 : 0) + (corners && from === 0 ? 20 : 0) + bonus;
 }
 
-function resolveSteal(attempts, pitcher, catcherT, options = {}) {
-    const {cautious = false, forced = false, target = attempts[0]} = options;
-    const startValues = attempts.map(attempt=>stealStartValue(attempt,pitcher,cautious));
-    const threshold = Math.min(...startValues) - (attempts.length > 1 ? 1 : 0);
-    if (!forced && d10() > threshold) return {started:false, text:`スタートできず（スタート値 ${threshold}）`};
+function rollChance(threshold,sides) {
+    return Math.max(0,Math.min(sides,Math.floor(threshold) || 0))*100/sides;
+}
 
-    const {runner} = target;
-    const successValue = stealSuccessValue(target,catcherT,options);
+function stealThreshold(attempts,pitcher,cautious) {
+    return Math.min(...attempts.map(attempt=>stealStartValue(attempt,pitcher,cautious))) -
+        (attempts.length > 1 ? 1 : 0);
+}
+
+function stealProbabilities(attempts,target,pitcher,catcherT,options) {
+    const threshold=stealThreshold(attempts,pitcher,options.cautious);
+    const successValue=stealSuccessValue(target,catcherT,options);
+    const start=options.forced ? 100 : rollChance(threshold,10);
+    const afterStart=rollChance(successValue,100);
+    return {threshold,successValue,start,afterStart,success:start*afterStart/100};
+}
+
+function resolveSteal(attempts, pitcher, catcherT, options = {}) {
+    const {forced=false,target=attempts[0]}=options;
+    const odds=stealProbabilities(attempts,target,pitcher,catcherT,options);
+    const startRoll=forced ? null : d10();
+    if (!forced && startRoll > odds.threshold) {
+        return {started:false,text:`${playerName(target.runner)}：盗塁のスタートを切れず（出目 ${startRoll}／スタート値 ${odds.threshold}、スタート ${odds.start}%）`};
+    }
     const roll = d100();
-    const success = roll <= successValue;
-    return {started:true, success, text:`${playerName(runner)}が${success ? '盗塁成功' : '盗塁失敗'}（${roll}／成功値 ${successValue}）`};
+    const success = roll <= odds.successValue;
+    return {started:true,success,text:`${playerName(target.runner)}が${success ? '盗塁成功' : '盗塁失敗'}（出目 ${roll}／成功値 ${odds.successValue}、スタート後の成功率 ${odds.afterStart}%）`};
 }
 
 // ============================================================
@@ -1146,7 +1192,7 @@ class Game {
                 return;
             }
             this.choose(`${p.name}の交代投手を選択`,available.map(next=>[
-                `${next.name}（G${next.cardG}・C${next.cardC}・S${next.S}）`,()=>enter(next)
+                pitcherChoiceLabel(next),()=>enter(next)
             ]),0,this.defSide);
             if (this.pending) this.pending.beforePlate=beforePlate;
         } else if (p.unavailable) {
@@ -1181,6 +1227,10 @@ class Game {
         if (this.isAuto || this.gameOver) choices[defaultIndex][1]();
         else this.pending={title,choices,defaultIndex,side};
     }
+    extraAdvanceCheck([from,to],direction,tagUp) {
+        const pos={レフト:'LF',センター:'CF',ライト:'RF'}[direction];
+        return [this.bases[from]['走'],this.defense()[pos],this.outs,pos==='LF'&&to===2,tagUp];
+    }
     offerExtraBases(type, batter, direction, tagUp = false, isEndRun = false) {
         const possibilities = {
             '2H':[[2,3]], '1H+':[[1,2]], '1H':[[1,2],[2,3]], SF:[[1,2]],
@@ -1191,10 +1241,12 @@ class Game {
         for (let mask = 1; mask < (1 << eligible.length); mask++) {
             const moves = eligible.filter((_,index) => mask & (1 << index));
             if (moves.some(([,to]) => to < 3 && this.bases[to] && !moves.some(([from]) => from === to))) continue;
-            const label = moves.map(([from,to]) => `${from+1}塁走者→${to === 3 ? '本塁' : to+1+'塁'}`).join('、');
+            const odds=moves.map(move=>extraAdvanceOdds(extraAdvanceModifier(...this.extraAdvanceCheck(move,direction,tagUp))));
+            const label=moves.map(([from,to],index)=>
+                `${from+1}塁走者→${to===3?'本塁':to+1+'塁'}（${odds[index]}）`).join('\n');
             choices.push([label, () => {
                 const targets = moves.map(([,to],index) => [
-                    `${to === 3 ? '本塁' : to+1+'塁'}へ送球`,
+                    `${to === 3 ? '本塁' : to+1+'塁'}へ送球（${odds[index]}）`,
                     () => this.finishExtraBases(moves,index,direction,tagUp,isEndRun)
                 ]);
                 targets.push(['送球しない', () => this.finishExtraBases(moves,-1,direction,tagUp,isEndRun)]);
@@ -1202,17 +1254,18 @@ class Game {
             }]);
         }
         if (choices.length === 1) { this.nextBatter(); return; }
-        this.choose(tagUp ? 'タッチアップする走者を選択' : '追加進塁する走者を選択', choices);
+        this.choose(`${tagUp?'タッチアップ':'追加進塁'}（送球された場合の確率）`,choices);
     }
     finishExtraBases(moves, target, direction, tagUp, isEndRun) {
         const old = [...this.bases];
-        const pos = {レフト:'LF',センター:'CF',ライト:'RF'}[direction];
         let result = {result:'safe',extra:false};
         if (target >= 0) {
             const [from,to] = moves[target];
-            result = table2_boso(old[from]['走'],this.defense()[pos],this.outs,pos === 'LF' && to === 2,tagUp);
+            result=table2_boso(...this.extraAdvanceCheck(moves[target],direction,tagUp));
             const label = {safe:'セーフ',hold:'進塁できず',out:'アウト'}[result.result];
-            this.logAdd(`${playerName(old[from])}：${label}（判定値 ${result.total}）`,'l-info');
+            this.logAdd(`${playerName(old[from])}：${to===3?'本塁':to+1+'塁'}への進塁は${label}（出目 ${result.roll}、補正後 ${result.total}／${extraAdvanceOdds(result.modifier)}）`,'l-running');
+        } else {
+            this.logAdd('送球なし、選んだ走者が進塁','l-running');
         }
         const scorers=[];
         for (let from = 2; from >= 0; from--) {
@@ -1373,7 +1426,7 @@ class Game {
             else this.logAdd(`${playerName(player)}はプレー続行`,'l-rare');
         };
         const dice=rollStr?`ダイス[${rollStr}]　`:'';
-        this.logAdd(`${dice}珍プレイ［${play.roll}${play.detail?'/'+play.detail:''}］`,'l-rare');
+        this.logAdd(`${dice}珍プレイ［${play.roll}${play.detail?'/'+play.detail:''}］ ${rarePlayLabel(play)}`,'l-rare');
         if (play.injury==='lead') injury('lead');
         const advanceAll = (batter, bases) => {
             const [next,runs,scorers]=advanceRunners(this.bases,batter,bases,bases,bases,batter?bases:0);
@@ -1420,9 +1473,10 @@ class Game {
             this.recordOuts();
         } else if (play.type === 'STEAL') {
             const choices = this.stealGroups(true).map(group => [
-                this.stealLabel(group), () => this.runSteal(group,{forced:true,bonus:10})
+                this.stealLabel(group,{forced:true,bonus:10}), () => this.runSteal(group,{forced:true,bonus:10})
             ]);
             if (choices.length) this.choose('盗塁チャンス（成功値＋10）',[['走らない',() => {}],...choices]);
+            else this.logAdd('盗塁できる走者なし','l-rare');
         } else if (['WP','PB','BK'].includes(play.type)) {
             this.logAdd(({WP:'ワイルドピッチ',PB:'パスボール',BK:'ボーク'})[play.type] + '、走者1進塁','l-rare');
             advanceAll(null,1);
@@ -1436,6 +1490,7 @@ class Game {
                 if (type === 'MAYBE_HR') type = this.scores[this.batSide] + this.bases.filter(Boolean).length + 1 >= this.scores[this.defSide] ? 'HR' : 'K';
                 if (type === 'FIGHT') {
                     const roll = d10();
+                    this.logAdd(`乱闘の判定 ${roll}：${roll>=7?'投手負傷判定・打者は退場と10日間の出場停止':roll>=4?'打者退場':'試合続行'}`,'l-rare');
                     if (roll >= 7) injury('P');
                     if (roll>=4) play.eject='batter';
                     if (roll>=7) play.suspension=10;
@@ -1458,8 +1513,18 @@ class Game {
         if (play.injury && play.injury !== 'lead') injury(play.injury);
         if (play.eject) this.removePlayer(...participant(play.eject),play.eject==='P'?'危険球':'退場処分',{kind:'eject',days:play.suspension||0});
     }
-    stealLabel(group) {
-        return group.map(({from}) => from === 2 ? '本盗' : `${from+2}盗`).join('・');
+    stealConditions(options) {
+        return {cautious:this.isCautious,corners:Boolean(this.bases[0]&&!this.bases[1]&&this.bases[2]),...options};
+    }
+    stealLabel(group,options={}) {
+        const conditions=this.stealConditions(options);
+        const catcherT=this.catcherT();
+        const targets=group.map(target=>({
+            label:target.from===2?'本盗':`${target.from+2}盗`,
+            ...stealProbabilities(group,target,this.pitcher,catcherT,conditions)
+        }));
+        const success=targets.map(({label,success})=>`${label} ${Number(success.toFixed(1))}%`).join('・');
+        return `成功 ${success}${options.forced?'':`（スタート ${targets[0].start}%）`}`;
     }
     canBunt(isSqueeze) {
         if (this.outs >= 2 || this.stealAttempted || this.buntStrength(isSqueeze) <= 0) return false;
@@ -1553,12 +1618,11 @@ class Game {
         return groups;
     }
     runSteal(attempts, options = {}, after = () => {}) {
+        const conditions=this.stealConditions(options);
+        const catcherT=this.catcherT();
         const complete = target => {
-            const result = resolveSteal(attempts,this.pitcher,this.catcherT(), {
-                cautious:this.isCautious, corners:Boolean(this.bases[0] && !this.bases[1] && this.bases[2]),
-                ...options, target
-            });
-            this.logAdd(result.text,'l-steal');
+            const result=resolveSteal(attempts,this.pitcher,catcherT,{...conditions,target});
+            this.logAdd(result.text,'l-running');
             if (!result.started) {
                 this.startFailed = true;
                 for (const {runner,from} of attempts) this.stealBlocked.set(runner,from);
@@ -1581,9 +1645,11 @@ class Game {
             after();
         };
         if (attempts.length === 1) complete(attempts[0]);
-        else this.choose('守備側は送球先を選択', attempts.map(target => [
-            target.from === 2 ? '本塁' : `${target.from + 2}塁`, () => complete(target)
-        ]),attempts.length-1,this.defSide);
+        else this.choose('守備側は盗塁の送球先を選択', attempts.map(target => {
+            const {afterStart}=stealProbabilities(attempts,target,this.pitcher,catcherT,conditions);
+            const base=target.from===2?'本塁':`${target.from+2}塁`;
+            return [`${base}（スタート後の阻止 ${100-afterStart}%）`,()=>complete(target)];
+        }),attempts.length-1,this.defSide);
     }
     processAtBat(action, isForward = this.isForward, isEndRun = false) {
         const batter = this.batter;
@@ -1687,6 +1753,10 @@ function handedness(row,batting) {
     const hands=row?.['利き腕'] || '';
     if (batting && hands.includes('左右打')) return '両打';
     return hands.match(batting ? /[左右]打/ : /[左右]投/)?.[0] || '';
+}
+
+function pitcherChoiceLabel(pitcher) {
+    return `${pitcher.name}（${handedness(pitcher.row,false) || '—'}・G${pitcher.cardG}・C${pitcher.cardC}・S${pitcher.S}）`;
 }
 
 function battingHand(row) {
@@ -1986,6 +2056,24 @@ function extractDir(text) {
 }
 
 function determineAnim(logs, batterName, batterNum) {
+    const rareIndex=logs.findIndex(([text,kind])=>kind==='l-rare'&&text.includes('珍プレイ［'));
+    const running=logs.filter(([,kind])=>kind==='l-running').map(([text])=>text);
+    if (rareIndex>=0) {
+        const intro=logs[rareIndex][0];
+        const heading=intro.slice(intro.indexOf('］')+1).trim();
+        const outcomes=logs.slice(rareIndex+1).filter(([text,kind])=>
+            ['l-hit','l-out','l-rare','l-score','l-grounder','l-running'].includes(kind)&&text.trim()!==heading
+        ).map(([text])=>text.trim());
+        const headline=`${batterNum}番 ${batterName}　${intro}`;
+        return {type:'err',dir:extractDir(intro),text:[headline,...new Set(outcomes)].join('\n')};
+    }
+    const batting=describeBattingResult(logs,batterName,batterNum);
+    if (!running.length) return batting;
+    if (batting) return {...batting,text:[batting.text,...running].join('\n')};
+    return {type:'running',text:running.join('\n'),append:true};
+}
+
+function describeBattingResult(logs, batterName, batterNum) {
     const prefix = `${batterNum}番 ${batterName}`;
     const grounder=logs.findLast(([,kind])=>kind==='l-grounder');
     if (grounder) {
@@ -2010,14 +2098,6 @@ function determineAnim(logs, batterName, batterNum) {
     for (const [text, cls] of logs) {
         if (!['l-hit','l-out','l-rare','l-bunt','l-score'].includes(cls)) continue;
         const dir = extractDir(text);
-        if (cls==='l-rare' && text.includes('珍プレイ')) {
-            const intro=text.replace(/^ダイス\[\d+\]\s*/, '');
-            const outcome=[...new Set(logs.filter(([line,kind])=>
-                ['l-rare','l-hit','l-out','l-steal'].includes(kind)&&!line.includes('珍プレイ')&&!line.includes('ショック')
-            ).map(([line])=>line.trim()))].slice(0,3);
-            const rareDir=outcome.length?extractDir(outcome[0]):dir;
-            return {type:'err',dir:rareDir,text:[prefix,intro,...outcome].join('\n')+scoreText};
-        }
         if (text.includes('ホームラン'))
             return {type:'hr', dir, text:`${prefix}\n${dir}スタンドへ\n特大ホームラン！！！${scoreText}`};
         if (text.includes('スリーベース'))
@@ -2077,14 +2157,24 @@ function playResultAnim(info,keepAnimation=false) {
     const field=document.getElementById('field-area');
     const result=document.getElementById('play-result');
     const current=keepAnimation ? result.querySelector('.anim-flash') : null;
-    const text=info.text.trim().replace(/\s*\n\s*/g,'　');
+    const text=info.text.trim();
     if (current) {
+        if (info.append) {
+            current.textContent+='\n'+text;
+            return;
+        }
         current.className=`anim-flash anim-${info.type}`;
         current.textContent=text;
         return;
     }
     const container=field.querySelector('.park-viewport') || field;
     field.querySelectorAll('.result-overlay,.inning-flash-overlay').forEach(e=>e.remove());
+
+    const flash=document.createElement('div');
+    flash.className=`anim-flash anim-${info.type}`;
+    flash.textContent=text;
+    result.replaceChildren(flash);
+    if (info.type==='running') return;
 
     const overlay = document.createElement('div');
     overlay.className = 'result-overlay';
@@ -2095,12 +2185,6 @@ function playResultAnim(info,keepAnimation=false) {
     const ball = document.createElement('div');
     ball.className = 'anim-ball';
     overlay.appendChild(ball);
-
-    // Flash text
-    const flash = document.createElement('div');
-    flash.className = `anim-flash anim-${info.type}`;
-    flash.textContent = text;
-    result.replaceChildren(flash);
 
     // HR burst
     if (info.type === 'hr') {
@@ -2299,11 +2383,12 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     search.oninput=filterRows;
     filter.onchange=filterRows;
     statsOption.hidden=!seasonRoster?.records;
-    function refreshStats() {
-        const records=gameStatsOption.checked ? seasonRoster?.records : null;
-        for (const {row,pitcher,record} of entries) record.textContent=rosterStatText(row,pitcher,records);
+    function statsFor(row,pitcher) {
+        return rosterStatText(row,pitcher,gameStatsOption.checked ? seasonRoster?.records : null);
     }
-    statsOption.onchange=refreshStats;
+    function refreshStats() {
+        for (const {row,pitcher,record} of entries) record.textContent=statsFor(row,pitcher);
+    }
     refreshStats();
     const benchStage=dialog.querySelector('.roster-bench-stage');
     const boardStage=dialog.querySelector('.roster-board-stage');
@@ -2358,6 +2443,13 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         control.onclick=action;
         return control;
     }
+    function addStats(control,row,pitcher=false) {
+        const record=document.createElement('span');
+        record.className='roster-board-record';
+        record.textContent=statsFor(row,pitcher);
+        control.append(record);
+        return control;
+    }
     function selectSlot(index) {
         activeSlot=index;
         activePosition=slots[index]?.pos || null;
@@ -2377,8 +2469,9 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         for (const pos of boardPositions) {
             const index=slots.findIndex(slot=>slot?.pos===pos);
             const row=pos==='P' ? starter : slots[index]?.row;
-            const control=button(row ? `${positionName(pos)}
-${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
+            const playerLabel=pos==='P' ? [displayName(row),handedness(row,false)].filter(Boolean).join('　') :
+                `${index+1}番 ${displayName(row)}`;
+            const control=button(row ? `${positionName(pos)}\n${playerLabel}` : positionName(pos),()=>{
                 if (index>=0) activeSlot=index;
                 activePosition=pos;
                 renderBoard();
@@ -2387,6 +2480,7 @@ ${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
             control.dataset.position=pos;
             control.disabled=fixedStarter && pos==='P';
             if (!row) control.dataset.unassigned='';
+            if (row && pos==='P') addStats(control,row,true);
             control.setAttribute('aria-pressed',String(activePosition===pos));
             diamond.append(control);
         }
@@ -2397,6 +2491,7 @@ ${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
                 order.children[index].focus();
             });
             control.setAttribute('aria-pressed',String(index===activeSlot&&activePosition!=='P'));
+            if (slot) addStats(control,slot.row);
             order.append(control);
         }
         const target=swapTarget.value;
@@ -2425,7 +2520,7 @@ ${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
         for (const row of candidates) {
             const detail=pos==='P' ? 'S'+extractPitcherStats(row).S : pos==='DH' ? '' : '守'+fieldCard(row,pos).rating;
             const hand=pos==='P' ? handedness(row,false) : battingHand(row);
-            picks.append(button([displayName(row),hand,detail].filter(Boolean).join('　'),()=>{
+            const control=button([displayName(row),hand,detail].filter(Boolean).join('　'),()=>{
                 remember();
                 if (pos==='P') {
                     starter=row;
@@ -2438,7 +2533,8 @@ ${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
                 const nextControl=activePosition==='P' ? diamond.querySelector('[data-position="P"]') :
                     diamond.querySelector('[data-unassigned]:not([data-position="P"])');
                 (nextControl || nextButton).focus();
-            }));
+            });
+            picks.append(addStats(control,row,pos==='P'));
         }
     }
     swapTarget.onchange=()=>{swapButton.disabled=swapTarget.value==='';};
@@ -2480,6 +2576,10 @@ ${pos==='P'?'':(index+1)+'番 '}${displayName(row)}` : positionName(pos),()=>{
         nextButton.textContent=showBoard ? gameButton : '25人を確定して打順・守備へ';
         message.textContent='';
     }
+    statsOption.onchange=()=>{
+        refreshStats();
+        if (boardOpen) renderBoard();
+    };
     list.onchange=refreshBench;
     form.onchange=()=>{message.textContent='';};
     refreshBench();
@@ -2765,6 +2865,10 @@ function endHalf(openTactics=false) {
     g.state = 'between';
     if (g.half === 0) { g.half = 1; }
     else { g.half = 0; g.inning++; }
+    if (g.semiAuto && g.inning>=7 && g.inning<=9 && g.defSide===(g.humanSide ?? 0)) {
+        interruptSemiAuto(g);
+        openTactics=true;
+    }
     const hstr = g.half === 0 ? '表' : '裏';
     const batting = g.half === 0 ? g.playerTeam : g.oppTeam;
     g.logAdd(`\n▶ ${g.inning}回${hstr} ${teamShort(batting)}の攻撃`, 'l-inning');
@@ -2818,7 +2922,7 @@ function renderFinalResult(automaticDownload = false) {
     overlay.innerHTML=PFBResults.reportHtml(report)+`<div class="report-actions">
         <button type="button" class="go-btn" onclick="doAction('restart')">${next}</button>
         <button type="button" class="go-btn report-download">HTMLを保存</button>
-        </div>`+standings;
+        </div>`+standings+PFBResults.reportCreditHtml;
     overlay.querySelector('.report-download').onclick=()=>PFBResults.downloadReport(report,standings);
     field.appendChild(overlay);
     renderButtons([],g.humanSide ?? g.batSide);
@@ -2924,9 +3028,9 @@ function doAction(action) {
         execAtBat(action);
     } else if (action==='steal_menu') {
         if (g.state!=='offense') return;
+        applyCpuDefense(g);
         const groups=g.stealGroups();
-        if (groups.length===1) doAction('steal:0');
-        else renderButtons([...groups.map((group,i)=>[g.stealLabel(group),`steal:${i}`,'bp']),['戻る','cancel_offense','bn']],g.batSide,'盗塁する走者を選択');
+        renderButtons([...groups.map((group,i)=>[g.stealLabel(group),`steal:${i}`,'bp']),['戻る','cancel_offense','bn']],g.batSide,'盗塁する走者を選択');
     } else if (action.startsWith('steal:')) {
         if (g.state !== 'offense') return;
         const group = g.stealGroups()[Number(action.slice(6))];
@@ -2934,8 +3038,9 @@ function doAction(action) {
         applyCpuDefense(g);
         g.stealAttempted=true;
         g.offenseLocked=true;
+        const logStart=g.log.length;
         g.runSteal(group);
-        finishPlay();
+        finishPlay(determineAnim(g.log.slice(logStart),playerName(g.batter),g.batIdx[g.batSide]+1));
     } else if (action === 'pinch') {
         const back=g.state==='defense'?'cancel':'cancel_offense';
         renderButtons([...g.bench.map((p,i)=>[displayName(p),`pinch:${i}`,'bs']),['戻る',back,'bn']],g.batSide,'代打を選択');
@@ -2963,7 +3068,7 @@ function doAction(action) {
     } else if (action === 'def_pitcher') {
         if (!g.canReplacePitcher()) return;
         const avail = g.pitchers[g.defSide].filter(p => !p.isUsed);
-        renderButtons([...avail.map((p,i) => [`${p.name}（G${p.cardG}・C${p.cardC}・S${p.S}）`,`chpitch:${i}`,'bs']),['戻る','cancel','bn']],g.defSide,'登板する投手を選択');
+        renderButtons([...avail.map((p,i)=>[pitcherChoiceLabel(p),`chpitch:${i}`,'bs']),['戻る','cancel','bn']],g.defSide,'登板する投手を選択');
     } else if (action.startsWith('chpitch:')) {
         const np = g.pitchers[g.defSide].filter(p => !p.isUsed)[Number(action.slice(8))];
         if (np && g.canReplacePitcher()) {
@@ -3177,15 +3282,15 @@ document.getElementById('file-input').addEventListener('change', function(e) {
     e.target.value='';
 });
 </script>
-<script src="report-limit.js"></script>
-<script src="pfb-results.js"></script>
+<script src="report-limit.js?v=report-credit"></script>
+<script src="pfb-results.js?v=report-credit"></script>
 <script src="pfb-match.js?v=pennant-tactics"></script>
 <script src="pfb-season.js?v=pennant-tactics"></script>
-<script src="pfb-season-ui.js?v=pennant-tactics"></script>
+<script src="pfb-season-ui.js?v=report-credit"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
 <script src="pfb-online-core.js"></script>
-<script src="pfb-online.js"></script>
+<script src="pfb-online.js?v=judgment-details"></script>
 <script src="pfb-coach.js"></script>
 <script src="pfb-default-roster.js"></script>
 <script>void loadDefaultRoster();</script>

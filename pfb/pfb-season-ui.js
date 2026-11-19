@@ -304,7 +304,7 @@ const PFBSeasonUI=(()=>{
         else if(action==='month-prev'||action==='month-next'){month=Math.max(0,Math.min(11,month+(action==='month-next'?1:-1)));render()}
         else if(action==='report'){
             const report=season.reports[target.dataset.id];
-            if(report)body().innerHTML=`<button type="button" data-season="tab" data-id="${esc(tab)}">戻る</button>${PFBResults.reportHtml(report)}${reportStandings()}`;
+            if(report)body().innerHTML=`<button type="button" data-season="tab" data-id="${esc(tab)}">戻る</button>${PFBResults.reportHtml(report)}${reportStandings()}${PFBResults.reportCreditHtml}`;
         }
     }
     view().addEventListener('click',event=>{const action=event.target.closest('button[data-season]');if(action&&!action.disabled)dispatch(action)});

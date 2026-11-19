@@ -231,8 +231,8 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 }
 .anim-flash {
     width: fit-content;
-    max-width: min(100%, 42ch);
-    max-height: min(33cqh, 7em);
+    max-width: min(100%, 52ch);
+    max-height: min(37cqh, 9em);
     padding: .33em .75em;
     overflow: auto;
     overflow-wrap: anywhere;
@@ -246,6 +246,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     font-weight: 800;
     line-height: 1.25;
     text-align: center;
+    white-space: pre-line;
     animation: flash-pop .25s ease-out forwards;
 }
 .anim-hit { color: #b6ffcb; }
@@ -401,7 +402,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     transform: none;
 }
 .game-action-grid.is-choice { grid-template-columns: repeat(auto-fit,minmax(105px,1fr)); }
-.game-action-grid.is-choice .ab { grid-column: auto; font-size: clamp(11px,1vw,16px); }
+.game-action-grid.is-choice .ab { grid-column: auto; font-size: clamp(11px,1vw,16px); white-space: pre-line; }
 .game-action-grid.batting-grid .ab:nth-child(n+4):nth-child(-n+5) { grid-column: span 3; }
 .action-panel .panel-heading { padding: 6px 8px; }
 .action-context { flex: none; color: #234934; font-size: 12px; padding: 4px 3px 0; font-weight: 700; }
@@ -564,6 +565,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 .roster-board-stage button[aria-pressed="true"] { background: #ffeb9d; border-color: #775714; }
 .roster-diamond button { min-height: 42px; white-space: pre-line; }
 .roster-order button { text-align: left; }
+.roster-board-record { display: block; color: #405f49; font-size: .84em; font-variant-numeric: tabular-nums; }
 .roster-board-actions, .roster-picks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
 .roster-picks button { min-height: 36px; }
 .roster-pick-note { margin: 8px 0 0; }
@@ -618,6 +620,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 .report-team ul { list-style:none; padding:0; }
 .report-team li { font-size:.9em; }
 .report-actions { display:flex; flex-wrap:wrap; align-self:center; gap:.45em; }
+.report-credit { flex:none; margin-top:1em; border-top:1px solid #cfc2ae; padding-top:.45em; color:#51483b; font-size:.9rem; }
 .report-overlay .go-btn { margin:.5em 0; }
 
 .season-dialog { width:min(1100px,96vw); }
