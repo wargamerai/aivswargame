@@ -284,7 +284,7 @@ body{font-size:16px}
   </div>
 </main>
 <dialog id="detail-dialog"><div class="dialog-head"><h2 id="dialog-title">判定ログ</h2><form method="dialog"><button class="subtle" aria-label="閉じる">閉じる</button></form></div><div id="dialog-content"></div><div id="report-exports" hidden><button id="download" type="button" class="subtle">HTMLで保存</button></div></dialog>
-<script src="b17-lang.js" translate="no"></script>
+<script src="b17-lang.js?v=20261120-en" translate="no"></script>
 <script translate="no">
 const tables = {
   "cities": {
@@ -1190,6 +1190,7 @@ function resolveLanding(where,extra=0,departure=false){
   else if(s.faults.has("降着装置故障")&&roll("N-1 #26 機体の修復可否")>=4)result="基地着陸・機体修復不能";
   else result=departure?"離陸中止・基地に帰還":r===1?"基地着陸・機体は修理可能":"基地着陸・生還";
   if(!water&&r<=0&&bombsAboard()&&roll("G-9 搭載爆弾の誘爆")===6)result="爆弾が誘爆・乗員全員戦死";
+  s.landing.touchedDown=!water&&!result.includes("全員戦死");
   if(!result.includes("全員戦死")){
     for(const [person] of crew){
       if(wasBailed(person))continue;
@@ -1421,6 +1422,12 @@ let lastSaved="";
 function crewExperience(person){return s.service[person]?.missions||0;}
 function aircraftLost(record){
   return !/^(基地着陸|離陸中止・基地に帰還)/.test(record.outcome)||record.outcome.includes("修復不能");
+}
+function landedAtBase(record){
+  // Older saves record the landing outcome without a touchdown flag.
+  return record.landing?.touchedDown===undefined
+    ? /^基地着陸/.test(record.outcome)
+    : record.landing.where==="E"&&record.landing.touchedDown;
 }
 function missionVerdict(record){
   if(aircraftLost(record))return "ドイツ防空軍の勝ち";
@@ -2082,7 +2089,7 @@ function reportChart(){
   chart.append(grid);
   const notes=make("div",undefined,"chart-notes");
   for(const [title,entries] of [
-    ["機体損傷",Object.entries(s.damageByArea).flatMap(([area,items])=>items.map(item=>area+" "+item))],
+    ["機体損傷",Object.entries(s.damageByArea).flatMap(([area,items])=>items.map(item=>area+"："+item))],
     ["被弾・判定経過",s.hitRecord]
   ]){
     const box=make("section"),list=make("ul");
@@ -2273,8 +2280,8 @@ function advanceLine(){
 function dialogue(title, detail){
   const pilot="正操縦士", navigator="航法士", engineer="航空機関士";
   let role=pilot, line;
-  if(title==="出撃完了"&&aircraftLost(s)){
-    return {speaker:"基地作戦室",line:s.outcome.replace(/[。！]$/,"")+"。乗員の記録をまとめました。"};
+  if(title==="出撃完了"){
+    return {speaker:"基地作戦室",line:s.outcome.replace(/[。！]$/,"")+"。"};
   }
   if(title==="出撃準備完了"){
     role=navigator;
@@ -2320,7 +2327,7 @@ function dialogue(title, detail){
     line=s.out?"機長、離陸しました。編隊外で飛行します。":"機長、離陸しました。編隊に合流できます。";
   }else if(title==="基地上空に帰還"){
     role="副操縦士";
-    line="機長、英国の基地に戻りました。"+(s.baseWeather?"視界が悪いので慎重に進入しましょう。":"滑走路を確認しました。");
+    line="機長、基地上空です。"+(s.baseWeather?"視界が悪いので慎重に進入しましょう。":"滑走路を確認しました。");
   }else if(title==="任務中止"){
     line="これ以上は無理だ。基地へ引き返すぞ。";
   }else if(title==="緊急事態"||title.includes("命中")||title.endsWith("の損傷")||s.phase==="hits"){
@@ -3170,11 +3177,18 @@ function renderBaseAftermath(){
   const lost=s?.phase==="end"&&aircraftLost(s);
   panel.hidden=!lost;
   if(!lost)return;
-  el("aftermath-title").textContent=/^基地着陸/.test(s.outcome)?"機体喪失の報告":s.outcome.includes("墜落")?"墜落の報告":"帰投できなかった機体";
+  const landing=s.landing;
+  let title="機体喪失の報告";
+  if(landedAtBase(s))title="基地に着陸・機体は修復不能";
+  else if(s.outcome.includes("墜落")||landing?.where==="E")title="墜落の報告";
+  else if(landing?.where==="W")title="着水の報告";
+  else if(landing?.touchedDown||s.outcome.includes("に不時着"))title="不時着の報告";
+  el("aftermath-title").textContent=title;
   const location=s.landing?terrainNames[s.landing.where]:null;
   const details=["B-17 "+String(s.airframe).padStart(2,"0")+" ／ 第"+s.n+"任務 "+s.target.name];
   if(s.landing?.departure)details.push("基地を離れた直後、着陸を試みました。");
   else if(location==="英国"&&s.outcome.includes("墜落"))details.push("英国基地への着陸進入中でした。");
+  else if(landedAtBase(s))details.push("着陸地点 英国基地");
   else if(location)details.push("最終地点 "+location);
   else if(s.zone>1)details.push("最終地点 ゾーン "+s.zone+"（"+(s.returning?"復路":"往路")+"）");
   if(s.emergency?.reason)details.push(s.emergency.reason);
@@ -3223,7 +3237,8 @@ function renderBase(){
   renderBaseAftermath();
   el("base-location").textContent=scene==="end"?"第８航空軍・作戦記録":"英国・第８航空軍基地";
   el("base-plane").hidden=lost;
-  el("base-scene-title").textContent=({ready:"出撃待機",briefing:"出撃前ブリーフィング",takeoffChoice:"滑走路の手前",land:"基地への着陸進入",end:"任務後の報告"})[scene];
+  const titles={ready:"出撃待機",briefing:"出撃前ブリーフィング",takeoffChoice:"滑走路の手前",land:"基地への着陸進入",end:"任務後の報告"};
+  el("base-scene-title").textContent=scene==="end"&&landedAtBase(s)&&!lost?"基地に無事着陸":titles[scene];
   const facts=[];
   let note="右の任務番号を選び、出撃準備を始めてください。";
   if(scene==="briefing"||scene==="takeoffChoice"){

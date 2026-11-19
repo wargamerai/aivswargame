@@ -713,7 +713,14 @@
       <select aria-label="操作する車両" onchange="state.playerAfvGroup=Number(this.value);AFV.humanPanel()">
       ${vehicles.map(i => `<option value="${i}" ${i === gi ? 'selected' : ''}>${gs[i].name} ${defOf(afvCard(gs[i])).name}</option>`).join('')}
       </select></label><br>`;
-    const buttons = (c ? `<b>${defOf(c).name}</b> ${isButtoned(c) ? '閉鎖' : '乗員露出'}${gs[gi]._immob ? ' 移動不能' : ''}${gs[gi]._bog ? ' スタック' : ''}${gs[gi]._stun ? ' スタン' : ''}${c._ck ? ' 車長戦死' : ''}<br>
+    const status = c ? [
+      isButtoned(c) ? '閉鎖' : '乗員露出',
+      gs[gi]._immob && '移動不能',
+      gs[gi]._bog && 'スタック',
+      gs[gi]._stun && 'スタン',
+      c._ck && '車長戦死',
+    ].filter(Boolean).map(label => `<span>${label}</span>`).join(' · ') : '';
+    const buttons = (c ? `<b>${defOf(c).name}</b> ${status}<br>
       ${sideOf(c).ovr ? '<button onclick="AFV.uiOverrun()">オーバーラン</button> ' : ''}
       ${gunProfile(c) ? '<button onclick="AFV.uiGun()">主砲・火炎放射</button> ' : ''}
       ${canTryUnbog(gs[gi]) ? '<button onclick="AFV.uiUnbog()">スタック脱出</button> ' : ''}
