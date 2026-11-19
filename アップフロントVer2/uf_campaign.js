@@ -991,7 +991,11 @@ function _resolveFireActionInner() {
   if (!state.actedGroups) state.actedGroups = new Set();
   state.actedGroups.add(src.idx);
   markTransferFire(transfers);
-  if (!resolveAttack) return;
+  if (!resolveAttack) {
+    showJudgeCard(null);
+    ufReportLog('cancel', `射撃中止 GROUP ${srcGroup.name} → ${tgtGroup.name}（射撃カード ${usedFireCards.length} 枚と行動を消費。判定なし）`, 'player');
+    return;
+  }
 
   // 各防御兵士に判定（1回の射撃で全員に判定）
   const results = [];

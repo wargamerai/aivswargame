@@ -4,6 +4,7 @@
   const editorUnlockKey = 'upfront-scenario-editor-unlocked';
   const passwordSalt = '0f7cc864426bf9357c72520c5bec80d6';
   const passwordDigest = '910c44e8133981963af2577052a53f9b89ca16fd05d3f9797125e542118c98af';
+  const aiPolicies = ['advance', 'hold', 'retreat'];
   const equipmentKinds = ['demo', 'panzerfaustHolders', 'antiTankMines', 'radioHolders'];
   const terrainLabels = {
     BUILDINGS: '建物', WOODS: '森林', HILL: '丘', WALL: '障壁', BRUSH: '繁み',
@@ -59,6 +60,14 @@
       </section>
       <section class="uf-editor-panel" role="tabpanel" data-panel="special">
         <p><label>時間帯 <select name="timeOfDay"><option value="day">昼</option><option value="night">夜</option></select></label></p>
+        <p><label>AIの方針
+          <select name="aiPolicy">
+            <option value="">従来どおり</option>
+            <option value="advance">前進</option>
+            <option value="hold">死守</option>
+            <option value="retreat">後退</option>
+          </select>
+        </label></p>
         <div data-special></div>
       </section>
       <section class="uf-editor-panel" role="tabpanel" data-panel="sides">
@@ -687,7 +696,8 @@
       return null;
     }
     const timeOfDay = form.elements.timeOfDay.value;
-    return { name, player, opponent, formationYear, deckCycles, timeOfDay, ...terrainRules, victories, special };
+    const aiPolicy = form.elements.aiPolicy.value || undefined;
+    return { name, player, opponent, formationYear, deckCycles, timeOfDay, aiPolicy, ...terrainRules, victories, special };
   }
 
   function library() {
@@ -722,6 +732,7 @@
       usingDefaultName = false;
       deckCycles = saved.deckCycles ?? 3;
       form.elements.timeOfDay.value = saved.timeOfDay === 'night' ? 'night' : 'day';
+      form.elements.aiPolicy.value = aiPolicies.includes(saved.aiPolicy) ? saved.aiPolicy : '';
       for (const [key, check] of victoryChoices) check.checked = (saved.victories || [saved.victory || 'B']).includes(key);
       for (const [key, choice] of specialChoices) choice.check.checked = (saved.special || []).includes(key);
       for (const [type, { attacker, defender, removalCount }] of terrainRows) {
@@ -821,6 +832,7 @@
     if (typeof config?.name !== 'string' || !config.name.trim() || /[<>]/.test(config.name)) return false;
     if (config.deckCycles != null && (!Number.isInteger(config.deckCycles) || config.deckCycles < 1)) return false;
     if (config.timeOfDay != null && !['day', 'night'].includes(config.timeOfDay)) return false;
+    if (config.aiPolicy != null && !aiPolicies.includes(config.aiPolicy)) return false;
     if (['victories', 'special', 'treatAsPlain', 'treatAsPlainAttacker', 'treatAsPlainDefender'].some(key =>
         config[key] != null && (!Array.isArray(config[key]) || config[key].some(value => typeof value !== 'string')))) return false;
     const victories = config.victories?.length ? config.victories : [config.victory || 'B'];
@@ -887,7 +899,7 @@
     }
   });
   function buildEditorScenario(config) {
-    const { name, player, opponent, formationYear, deckCycles = 3, timeOfDay = 'day',
+    const { name, player, opponent, formationYear, deckCycles = 3, timeOfDay = 'day', aiPolicy,
       treatAsPlainAttacker, treatAsPlainDefender, terrainRemovalCounts } = config;
     const victories = config.victories?.length ? config.victories : [config.victory || 'B'];
     const special = config.special || [];
@@ -918,7 +930,7 @@
       openingBuildings: rules.some(rule => rule.openingBuildings),
       surprisePinning: rules.some(rule => rule.surprisePinning),
       surpriseSniper: rules.some(rule => rule.surpriseSniper),
-      deckCycles, timeOfDay, victoryPreset: victories[0], victoryPresets: victories,
+      deckCycles, timeOfDay, aiPolicy, victoryPreset: victories[0], victoryPresets: victories,
       treatAsPlain: [...new Set([...(config.treatAsPlain || []), ...rules.flatMap(rule => rule.treatAsPlain || [])])],
       treatAsPlainAttacker: [...new Set([...(treatAsPlainAttacker || []), ...rules.flatMap(rule => rule.treatAsPlainAttacker || [])])],
       treatAsPlainDefender: treatAsPlainDefender || [],

@@ -37,12 +37,38 @@ function ufSnapshot(label, side) {
 }
 window.ufEvent = ufEvent;
 function _ufStrip(t) { return String(t == null ? '' : t).replace(/<br\s*\/?>/gi, ' / ').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(); }
-/** 出来事を 1つ記録する。kind: ai（AIの行動）/ player（プレイヤーの行動）/ fire（射撃の結果）/ cc（白兵戦の結果）/ msg（メッセージ） */
+function ufActionLogRow(entry) {
+  const row = document.createElement('li');
+  row.dataset.kind = entry.kind;
+  const label = document.createElement('b');
+  label.append('手番', ` ${(entry.turn || 0) + 1}`);
+  if (entry.side === 'player' || entry.side === 'ai') {
+    label.append(' · ', entry.side === 'player' ? '自軍' : '敵');
+  }
+  row.append(label, entry.text);
+  return row;
+}
+function renderUFActionLog() {
+  const list = document.getElementById('uf-action-log-list');
+  if (!list) return;
+  const rows = document.createDocumentFragment();
+  for (const entry of UF_REPORT.events || []) rows.appendChild(ufActionLogRow(entry));
+  list.replaceChildren(rows);
+  list.scrollTop = list.scrollHeight;
+}
+/** 出来事を記録し、右下の行動ログにも表示する。 */
 function ufReportLog(kind, text, side) {
   if (typeof state === 'undefined' || !state || (state.phase !== 'play' && state.phase !== 'gameover')) return;
   const t = _ufStrip(text);
   if (!t) return;
-  UF_REPORT.events.push({ turn: state.turnCount || 0, side: side || state.currentTurn || '', kind, text: t });
+  const entry = { turn: state.turnCount || 0, side: side || state.currentTurn || '', kind, text: t };
+  UF_REPORT.events.push(entry);
+  const list = document.getElementById('uf-action-log-list');
+  if (list) {
+    const follow = list.scrollHeight - list.clientHeight - list.scrollTop < 8;
+    list.appendChild(ufActionLogRow(entry));
+    if (follow) list.scrollTop = list.scrollHeight;
+  }
   if (kind === 'ai' || kind === 'player') {
     const k = kind === 'ai' ? (t.replace(/^AI:\s*/, '').split(/[ —（(→:：]/)[0] || '?') : t.replace(/^行動:\s*/, '');
     const c = UF_REPORT.counts[kind === 'ai' ? 'ai' : 'player'];
@@ -51,7 +77,10 @@ function ufReportLog(kind, text, side) {
   if (state.phase === 'gameover' && !state._ufEndText && kind === 'msg') state._ufEndText = t;
 }
 window.ufReportLog = ufReportLog;
-function ufReportReset() { UF_REPORT.events = []; UF_REPORT.counts = { player: {}, ai: {} }; UF_REPORT.snaps = []; UF_REPORT.ev = []; }
+function ufReportReset() {
+  UF_REPORT.events = []; UF_REPORT.counts = { player: {}, ai: {} }; UF_REPORT.snaps = []; UF_REPORT.ev = [];
+  renderUFActionLog();
+}
 /** 射撃の結果を記録する（詳しい記録と、大まかな出来事） */
 function ufLogFire(title, results) {
   const t = _ufStrip(title);
@@ -240,7 +269,10 @@ const UF_SAVE_VERSION = 1;
 function ufSaveAlert(msg) {
   const ev = UF_REPORT.events, n = ev ? ev.length : 0;
   alert(msg);
-  if (UF_REPORT.events === ev && ev) ev.length = n;
+  if (UF_REPORT.events === ev && ev && ev.length !== n) {
+    ev.length = n;
+    renderUFActionLog();
+  }
 }
 function ufSaveExtRefs() {
   const m = new Map();
@@ -398,6 +430,7 @@ function ufApplySaveData(saved) {
   }
   Object.keys(UF_REPORT).forEach(k => { delete UF_REPORT[k]; });
   Object.assign(UF_REPORT, all.report);
+  renderUFActionLog();
   if (window.DISCARD_RULES && window.DISCARD_RULES.setState) window.DISCARD_RULES.setState(all.discard);
   // 選択中の物は持ち越さない
   state.selectedAction = null;
@@ -426,6 +459,7 @@ function ufApplySaveData(saved) {
   renderHands();
   updateDeckCounts();
   updateConfirmBtn();
+  updateDecideBtn();
   ufSaveAlert('ロードしました');
   if (state.phase === 'gameover') ufShowGameOver();
 }

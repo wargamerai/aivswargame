@@ -8,6 +8,11 @@ Object.assign(window.UF_I18N.it, {
 });
 
 window.UF_I18N.scenarioUI = [
+  ["行動ログ", "Action log", "Registro delle azioni"],
+  ["まだ行動の記録はありません。", "No actions recorded yet.", "Nessuna azione registrata."],
+  ["射撃の選択を解除（カードと行動は未消費）", "Fire selection cleared (cards and action unspent)", "Selezione di fuoco annullata (carte e azione non consumate)"],
+  ["射撃中止 GROUP {0} → {1}（射撃カード {2#} 枚と行動を消費。判定なし）", "Fire cancelled GROUP {0} → {1} ({2} Fire cards and action spent; no resolution)", "Fuoco annullato GRUPPO {0} → {1} ({2} carte Fuoco e azione consumate, nessuna risoluzione)"],
+  ["{0}（Shift＋クリックで拡大）", "{0} (Shift-click to enlarge)", "{0} (Maiusc + clic per ingrandire)"],
   ["シナリオエディタ", "Scenario Editor", "Editor degli scenari"],
   ["シナリオ設定", "Scenario settings", "Impostazioni dello scenario"],
   ["シナリオ情報", "Scenario details", "Dettagli dello scenario"],
@@ -23,6 +28,12 @@ window.UF_I18N.scenarioUI = [
   ["決定して試遊", "Continue to setup", "Passa allo schieramento"],
   ["複数選んだ場合は、いずれかの条件を先に達成した側が勝ちます。同じ判定で両軍が達成した場合は引き分けです。時間切れの勝敗は、選んだ条件で判定します。", "The first side to meet any selected condition wins. If both sides meet a condition on the same check, the game is a draw. At the time limit, apply the selected conditions.", "Vince la prima parte a soddisfare una delle condizioni selezionate. Se entrambe le parti soddisfano una condizione con lo stesso controllo, la partita è patta. Allo scadere del tempo si applicano le condizioni selezionate."],
   ["時間帯", "Time of day", "Ora del giorno"],
+  ["AIの方針", "AI orders", "Ordini dell’IA"],
+  ["従来どおり", "Scenario default", "Impostazione dello scenario"],
+  ["前進", "Advance", "Avanza"],
+  ["死守", "Hold position", "Mantieni la posizione"],
+  ["後退", "Fall back", "Ripiega"],
+  ["AI: 後退 — GROUP {0}", "AI: falls back — GROUP {0}", "IA: arretra — GRUPPO {0}"],
   ["年代", "Year", "Anno"],
   ["指定なし", "Any year", "Qualsiasi anno"],
   ["編成する軍", "Select force", "Seleziona la forza"],

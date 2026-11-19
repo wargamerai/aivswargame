@@ -18,6 +18,9 @@ document.querySelectorAll('.action-btn').forEach(btn => {
     // 捨て札・終了・確定ボタンは専用リスナーで処理するのでスキップ
     if (!btn.dataset.act || !playerCanStartAction()) return;
     const act = btn.dataset.act;
+    if (state.selectedAction === 'fire' && (state.selectedHand.size || state.fireSource || state.fireTarget)) {
+      ufReportLog('cancel', '射撃の選択を解除（カードと行動は未消費）', 'player');
+    }
     if (state.selectedAction === act) {
       state.selectedAction = null;
     } else {
@@ -63,6 +66,7 @@ document.getElementById('btn-end-turn').addEventListener('click', async () => {
   if (window.DISCARD_RULES) window.DISCARD_RULES.resetTurn();
   endPlayerTurn(draw);
   updateConfirmBtn();
+  updateDecideBtn();
 });
 
 // §4.3・§14.5 複数の捨て札攻撃は、結果を見る前に札と目標を確定する。
@@ -1691,7 +1695,7 @@ function updateDecideBtn() {
   if (!slot) return;
   const act = state.selectedAction;
   let ok = false;
-  if (act && ACTIONS_NEED_JUDGE.indexOf(act) >= 0) {
+  if (state.phase === 'play' && state.currentTurn === 'player' && ACTIONS_NEED_JUDGE.includes(act)) {
     const needSrc = ACTIONS_NEED_SOURCE.indexOf(act) >= 0;
     const needTgt = ACTIONS_NEED_TARGET.indexOf(act) >= 0;
     const hasHand = state.selectedHand.size > 0;
@@ -1702,6 +1706,7 @@ function updateDecideBtn() {
     if (needTgt) ok = ok && hasTgt;
   }
   slot.classList.toggle('armed', ok);
+  slot.disabled = !ok;
 }
 
 document.getElementById('judge-slot').addEventListener('click', () => {

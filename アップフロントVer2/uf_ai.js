@@ -246,7 +246,9 @@ async function aiTurn() {
   }
   if (state.phase !== 'play' || settleDeckTimeLimit()) return;
   const firedSmoke = !discardTurn && await aiTryAfvSmoke();
-  if (!discardTurn && !firedSmoke && window.__chartAI && (window.__chartNat === 'all' || aiKeyT === (window.__chartNat || 'us'))) {
+  const useChart = aiMovementPolicy() ||
+    (window.__chartAI && (window.__chartNat === 'all' || aiKeyT === (window.__chartNat || 'us')));
+  if (!discardTurn && !firedSmoke && useChart) {
     await chartTurn(aiKeyT);
     return endAITurn();
   }
@@ -721,6 +723,11 @@ function nightRetreatAllowed(group, side, newDistance) {
   return !state.isNight || retreatRangeAllowed(group, side, newDistance);
 }
 
+function aiRetreatCardIndex(newDistance) {
+  const red = aiActionCardIndex('MOVEMENT', face => face.rncColor === '赤');
+  return red >= 0 || newDistance < 0 ? red : aiActionCardIndex('MOVEMENT');
+}
+
 /** 夜間に前進を終える位置か: 火力10に届いたら性格で分かれる（ユーザーの指示 2026-11-03）
  *  攻撃的=距離5まで前進して白兵戦を目指す / バランス・防御的=止まって射撃に専念する。火力が届かなくても距離5で終わり */
 function aiNightInPlace(g, i) {
@@ -1187,19 +1194,14 @@ async function aiFireAt(targetIdxList, opts) {
     if (flameOnly && c._pill) c._score += 1000; // 火炎放射器はトーチカを先に狙う（§22.1 トーチカの修正が効かない）
   });
   const _okFire0 = c => (opts && opts.anyFire) || c._flame || c._est >= 3 || (c._tgtMoving && c._defMod >= 0 && c._est >= 2) || (_handFullOfFire && c._est >= 1);
-  // チャート（2026-11-08 ユーザーの決め）: 1でも撃つ。機関銃（軽・中）を持つグループだけ、故障が怖いので
-  //   「撃つ値 − 相手の一番当たりやすい兵のモラル（ピン状態はパニック値）」が −2 以上（トーチカ相手は −3 以上）。昼も夜も同じ。隠蔽は考えない
-  //   撃つ相手の順番: ピン状態の兵がいる敵 → 近い敵 → 火力の高い敵
+  // チャートでは補正後の射撃力が1以上であれば候補にする。
+  // 撃つ相手の順番: ピン状態の兵がいる敵 → 近い敵 → 火力の高い敵
   const _pk = getFactionKey(state.player);
   const _hasMG = g => g.cards.some(c => { if (!R.isAlive(c) || c.malfunctioned || c.destroyed) return false; const d = R.lookupSoldier(c, aiKey); return !!(d && d.weaponCat && /^(軽機関銃|中機関銃)/.test(d.weaponCat)); });
   const _minMor = g => { const v = g.cards.filter(c => R.isAlive(c)).map(c => { const d = R.lookupSoldier(c, _pk); if (!d) return 99; return R.isPinned(c) ? (parseInt(d.panic, 10) || 99) : (parseInt(d.morale, 10) || 99); }); return v.length ? Math.min(...v) : 99; };
-  const _okFire = c => {
-    if (!window.__inChart) return _okFire0(c);
-    if ((opts && opts.anyFire) || c._flame) return true;
-    if (c._est <= 0) return false;
-    if (!_hasMG(state.groups.ai[c.si])) return true;
-    return c._est - _minMor(state.groups.player[c.ti]) >= (c._pill ? -3 : -2);
-  };
+  const _okFire = c => window.__inChart
+    ? Boolean(opts?.anyFire || c._flame || c._est > 0)
+    : _okFire0(c);
   const preferTerrain = aiKey !== 'ger' && !flameOnly && aiRemainingDiscard() > 0 &&
     aiFindHarassPlay(['STREAM', 'MARSH']);
   const takeShot = c => _okFire(c) && (!preferTerrain || c._est > 3 || c._flame ||
@@ -1748,7 +1750,16 @@ function aiGroupWantsAdvance(g, i) {
   return eff < 3 || (style === 'bal' && eff < 6) || style === 'aggr';
 }
 
+function aiMovementPolicy() {
+  const scenario = state.scenario;
+  if (scenario?.aiPolicy) return scenario.aiPolicy;
+  if (state.aiRole === 'defender' && (scenario?.id === 'D' || scenario?.id === 'E')) return 'retreat';
+}
+
 async function aiTryMove(opts) {
+  if (aiMovementPolicy() === 'retreat' && !opts?.lateral) {
+    return aiTryRetreat({ only: opts?.only });
+  }
   const R = window.INFANTRY_RULES;
   const moveIdx = aiActionCardIndex('MOVEMENT');
   if (moveIdx < 0) return false;
@@ -1769,7 +1780,9 @@ async function aiTryMove(opts) {
     const g = state.groups.ai[i];
     if (!_groupAlive(g)) return true;
     if (acted.has(i) || fired.has(i)) return true;
-    if (opts && opts.only && !opts.only.has(i)) return true;
+    if (opts?.only && !opts.only.has(i)) return true;
+    if (opts?.lateral && (R.currentTerrainType(g) !== 'PLAIN' ||
+        R.hasTerrainType(g, 'TRENCH') || isMovingIgnoringOverlays(g))) return true;
     if (g.cards.some(c => R.isPinned(c))) return true;
     if (g._immob || g._bog || g._stun) return true; // §28 AFV の移動不能・スタック・スタン
     // §13.34 鉄条網があるグループは移動できない（除去は aiTryRemoveWire）
@@ -1813,12 +1826,11 @@ async function aiTryMove(opts) {
       }
     }
   }
-  // 待機の表: 次に置ける地形があるグループだけ、地形を変えるための横移動を始める。
-  if (bestIdx < 0 && opts && opts.lateral) {
+  // 待機の表: 平地の部隊は、次に置ける有利な地形が手札にあるときに横移動する。
+  if (bestIdx < 0 && opts?.lateral) {
     for (let i = 0; i < state.groups.ai.length; i++) {
       if (isSkipped(i)) continue;
       const g = state.groups.ai[i];
-      if (isMovingIgnoringOverlays(g)) continue;
       if (!state.aiHand.some(c => aiCanUseOwnTerrain(c)
         && aiOwnTerrainPreference(c.terrain.type, g, i) >= 0)) continue;
       bestIdx = i;
@@ -2401,18 +2413,21 @@ function aiCCThreat(gi, needRange5) {
 /** §20.55 AI の後退: 侵入されて白兵戦が不利なら、移動カードで1つ後退する（相対距離が5より小さくなれば白兵戦を受けない）。
  *  さらに相対距離3まで下がるか、相対距離4で地形カードを置けば、侵入そのものが終わる（§20.53） */
 async function aiTryRetreatFromCC() {
-  const R = window.INFANTRY_RULES, CC = window.CC_ACTION;
-  if (!R || !CC) return false;
-  const moveIdx = aiActionCardIndex('MOVEMENT');
-  if (moveIdx < 0) return false;
-  const card = state.aiHand[moveIdx];
+  return aiTryRetreat({ threatOnly: true });
+}
+
+async function aiTryRetreat({ only, threatOnly = false } = {}) {
+  const R = window.INFANTRY_RULES;
+  if (!R || (threatOnly && !window.CC_ACTION) || !state.aiHand.some(card => handActionFace(card, 'MOVEMENT', 'ai'))) {
+    return false;
+  }
   const acted = state.aiActedGroups || new Set();
   const fired = state.aiFiredGroups || new Set();
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
-    if (acted.has(gi) || fired.has(gi)) continue;
+    if (acted.has(gi) || fired.has(gi) || (only && !only.has(gi))) continue;
     const g = state.groups.ai[gi];
     if (!_groupAlive(g) || g._immob || g._bog || g._stun) continue;
-    if (window.__inChart ? !chartRetreatThreat(gi) : !aiCCThreat(gi, true)) continue;
+    if (threatOnly && !(window.__inChart ? chartRetreatThreat(gi) : aiCCThreat(gi, true))) continue;
     // プレイヤーの後退と同じ制限: ピン状態の兵がいる・鉄条網・地雷原・トーチカ・河川/湿地の1枚目・移送中は後退しない
     if (g.cards.some(c => R.isAlive(c) && R.isPinned(c))) continue;
     if (R.hasTerrainType(g, 'WIRE') || R.hasTerrainType(g, 'PILLBOX') || requiresLateralMovement(g, 'ai')) continue;
@@ -2420,14 +2435,17 @@ async function aiTryRetreatFromCC() {
     // §5.51 一番近い敵との相対距離が 0より小さくなる後退は不可。距離チットがマイナスになるのは赤の RNC の移動カードだけ
     const newDist = g.distance - 1;
     if (!retreatRangeAllowed(g, 'ai', newDist)) continue;
-    if (newDist < 0 && !(card.terrain && card.terrain.rncColor === '赤')) continue;
+    const moveIdx = aiRetreatCardIndex(newDist);
+    if (moveIdx < 0) continue;
+    const card = state.aiHand[moveIdx];
     g.distance = newDist;
     card._moveMode = 'retreat';
     pushTerrainWithFaction(g, card);
     state.aiHand.splice(moveIdx, 1);
     state.aiHandCount = state.aiHand.length;
     renderField('ai'); renderField('player'); renderHands();
-    await showAIAction(`AI: 後退 — GROUP ${g.name}（白兵戦を避ける・§20.55）`, card, gi);
+    const label = threatOnly ? `AI: 後退 — GROUP ${g.name}（白兵戦を避ける・§20.55）` : `AI: 後退 — GROUP ${g.name}`;
+    await showAIAction(label, card, gi);
     const n = releaseInfiltrationOnRetreat(g, 'ai', 'move');
     if (n) await showAIAction(`AI: GROUP ${g.name} が相対距離3まで下がったので、侵入兵 ${n}名は侵入状態でなくなりました（§20.53）`, null, gi);
     acted.add(gi);
@@ -3187,7 +3205,12 @@ async function chartTurn0(nat) {
   const hand = () => state.aiHand || [];
   const nMove = () => hand().filter(c => handActionFace(c, 'MOVEMENT', 'ai')).length;
   const nFire = () => hand().filter(c => c && c.terrain && String(c.terrain.type).indexOf('FIRE') === 0).length;
-  const hold = chartDefAdv() ? false : ((state.groups.ai || []).some(g => g && g._role === 'hold') || state.aiRole === 'defender');
+  const policy = aiMovementPolicy();
+  const holdingPosition = policy === 'hold';
+  const retreating = policy === 'retreat';
+  const hold = policy ? holdingPosition :
+    !chartDefAdv() && ((state.groups.ai || []).some(g => g && g._role === 'hold') || state.aiRole === 'defender');
+  const tryOverrun = () => !retreating && window.AFV ? window.AFV.aiTryOverrun() : false;
   // 前の手番の終わりに移動中だったグループが、相手の手番のあとどうなったか
   const isMovingTop = g => { const t = g.terrain && g.terrain.length ? g.terrain[g.terrain.length - 1] : null; return !!(t && t.terrain && t.terrain.type === 'MOVEMENT'); };
   (state.groups.ai || []).forEach(g => {
@@ -3197,9 +3220,9 @@ async function chartTurn0(nat) {
     else if (isMovingTop(g)) inc('移動したグループ: 自分の手番の始めにまだ移動中');
     else inc('移動したグループ: 相手に地形を置かれた');
   });
-  inc(hold ? '表:待機' : '表:前進');
+  inc(hold ? '表:待機' : retreating ? '表:後退' : '表:前進');
   inc('手番の始めの手札 ' + hand().length + '枚（上限 ' + (state.ai && state.ai.handMax) + '）');
-  const goodTerrain = () => hand().some(c => c && c.terrain && ['WOODS','BUILDINGS','BRUSH','HILL','WALL','GULLY'].indexOf(c.terrain.type) >= 0);
+  const goodTerrain = () => hand().some(aiCanUseOwnTerrain);
   const isHero = c => c && c.terrain && c.terrain.type === 'HERO';
   const discard = async (label) => {
     const keepMove = !hold && !goodTerrain(); // 前進で地形カードがない時は、移動カードは残して地形を引きに行く
@@ -3233,7 +3256,6 @@ async function chartTurn0(nat) {
   const cDefMovable = () => new Set(mine().filter(x => !hasPillbox(x.g) && !protectiveNow(x.g)).map(x => x.i));
   // 相対距離4になったグループ（トーチカでない）は後退する。移動カード1枚で距離チットを1つ戻す
   const chartCDefRetreat = async () => {
-    const mi = aiActionCardIndex('MOVEMENT'); if (mi < 0) return false;
     const acted = state.aiActedGroups || new Set(), fired = state.aiFiredGroups || new Set();
     for (const x of mine()) {
       const g = x.g, gi = x.i;
@@ -3242,9 +3264,11 @@ async function chartTurn0(nat) {
       if (rangeOf(g) < 4) continue;
       if (g.cards.some(c => R.isAlive(c) && R.isPinned(c))) continue;
       if (R.hasTerrainType(g, 'WIRE') || R.isInStream(g) || requiresLateralMovement(g, 'ai')) continue;
-      const card = hand()[mi]; const nd = g.distance - 1;
+      const nd = g.distance - 1;
       if (!retreatRangeAllowed(g, 'ai', nd)) continue;
-      if (nd < 0 && !(card.terrain && card.terrain.rncColor === '赤')) continue;
+      const mi = aiRetreatCardIndex(nd);
+      if (mi < 0) continue;
+      const card = hand()[mi];
       g.distance = nd; card._moveMode = 'retreat'; pushTerrainWithFaction(g, card);
       state.aiHand.splice(mi, 1); state.aiHandCount = state.aiHand.length;
       releaseInfiltrationOnRetreat(g, 'ai', 'move');
@@ -3270,7 +3294,10 @@ async function chartTurn0(nat) {
     ['地雷原を抜ける', [aiTryMineLateral]],
     ['迫られたグループは後退', [aiTryRetreatFromCC]],
     ['地形+横移動のとき移動カード', [aiTryCrossStream, typeof aiTryStreamExit === 'function' ? aiTryStreamExit : async () => false]],
-    ['移動中がいれば有利な地形を置く', [() => aiTryPlaceOwnTerrain(), async () => (window.__nightMove && state.isNight) ? aiTryPlaceOwnPlain() : false]],
+    ['移動中の部隊に平地以外の有利な地形を置く', [
+      () => aiTryPlaceOwnTerrain(),
+      () => window.__nightMove && state.isNight && aiTryPlaceOwnPlain(),
+    ]],
     ['回復', [aiTryRally, aiTryHeroWound]],
     ['地雷原排除', [aiTryMineRemove]],
     ['兵器を拾う', [aiTryPickupWeapon]],
@@ -3280,9 +3307,21 @@ async function chartTurn0(nat) {
     ['AFVへの侵入→肉薄', [async () => window.AFV ? window.AFV.aiTryCCAfv() : false]],
     ['対人への侵入', [aiTryBanzai, () => aiTryInfiltrate({ noAfv: true }), () => aiTryInfiltrate({ demoOnly: true, noAfv: true }), aiTryCC]],
     ['煙幕(相対距離3以上)', [async () => mine().some(x => rangeOf(x.g) >= 3) ? aiTryPlaceOwnSmoke() : false]],
-    ['敵が射撃した次のターン→地形なしで移動', [async () => firedLast() ? aiTryMove({ noTerrainNeed: true }) : false, async () => firedLast() && window.AFV ? window.AFV.aiTryOverrun() : false, async () => firedLast() ? aiTryFlankEncircle() : false]],
-    ['移動+地形カード→移動', [async () => (goodTerrain() || (window.__nightMove && state.isNight)) ? aiTryMove() : false, async () => window.AFV ? window.AFV.aiTryOverrun() : false, aiTryFlankEncircle]],
-    ['移動中→さらに移動/平地を置く', [async () => { const i = keepMovingGroup(); return i >= 0 ? aiTryMove({ only: new Set([i]), noTerrainNeed: true }) : false; }, () => aiTryPlaceOwnPlain()]],
+    ['敵が射撃した次のターン→地形なしで移動', [
+      () => firedLast() && aiTryMove({ noTerrainNeed: true }),
+      () => firedLast() && tryOverrun(),
+      () => !retreating && firedLast() && aiTryFlankEncircle(),
+    ]],
+    ['移動+地形カード→移動', [
+      () => (retreating || goodTerrain() || (window.__nightMove && state.isNight)) && aiTryMove(),
+      tryOverrun,
+      () => !retreating && aiTryFlankEncircle(),
+    ]],
+    ['移動中→さらに移動', [() => {
+      const i = keepMovingGroup();
+      return i >= 0 && aiTryMove({ only: new Set([i]), noTerrainNeed: true });
+    }]],
+    ['移動中→地形を置く', [() => aiTryPlaceOwnTerrain(), () => aiTryPlaceOwnPlain()]],
     ['修理', [aiTryRepair]],
     ['夜:射撃/索敵/照明弾', [nightOnly(aiTryFireLit), nightOnly(aiTryFireAny), nightOnly(aiTryScout), nightOnly(aiTryFlare)]],
     ['相手が移動中なら撃つ', [aiTryFireMovingEnemy]],
@@ -3306,7 +3345,17 @@ async function chartTurn0(nat) {
     ['侵入解除', [aiTryUninfiltrate]],
     ['AFVへの侵入→肉薄', [async () => window.AFV ? window.AFV.aiTryCCAfv() : false]], // チャートの待機24行目（2026-11-08 前進の表と同じ形に分けた）
     ['対人への侵入', [aiTryBanzai, () => aiTryInfiltrate({ noAfv: true }), () => aiTryInfiltrate({ demoOnly: true, noAfv: true }), aiTryCC]],
-    /* チャートの待機25行目（2026-11-08 ユーザーが「今より」を外した）。C の守備（試し）: 守りのある地形にいるグループは動かない。相対距離4なら後退、そうでなければ前進 */ ['移動+効果のある地形→横移動', [async () => { if (window.__cDefAdv && state.scenario && state.scenario.id === 'C') { if (await chartCDefRetreat()) return true; const o = cDefMovable(); return (goodTerrain() && o.size) ? aiTryMove({ only: o }) : false; } return goodTerrain() ? aiTryMove({ lateral: true }) : false; }, async () => window.AFV ? window.AFV.aiTryOverrun() : false, aiTryFlankEncircle]],
+    ...(holdingPosition ? [] : [
+      ['平地にいる部隊は移動+効果のある地形→横移動', [async () => {
+        // C の守備: 相対距離4以上で後退し、それ以外は守りのある地形にいない部隊だけ前進する。
+        if (window.__cDefAdv && state.scenario?.id === 'C') {
+          if (await chartCDefRetreat()) return true;
+          const movable = cDefMovable();
+          return goodTerrain() && movable.size ? aiTryMove({ only: movable }) : false;
+        }
+        return goodTerrain() ? aiTryMove({ lateral: true }) : false;
+      }, tryOverrun, aiTryFlankEncircle]],
+    ]),
     ['修理', [aiTryRepair]],
     ['夜:射撃/索敵/照明弾', [nightOnly(aiTryFireLit), nightOnly(aiTryFireAny), nightOnly(aiTryScout), nightOnly(aiTryFlare)]],
     ['相手が移動中なら撃つ', [aiTryFireMovingEnemy]],
@@ -3315,7 +3364,7 @@ async function chartTurn0(nat) {
     ['鉄条網除去', [aiTryRemoveWire]],
     ['狙撃兵チェック', [aiTrySniperCheck]],
     ['個人移送/受け取り', [aiTryTransferLoner, aiTryReceiveTransfer]],
-    ['側方移送', [aiTryGroupShift]],
+    ...(holdingPosition ? [] : [['側方移送', [aiTryGroupShift]]]),
     ['監視役交代', [aiTryGuardChange]],
   ];
   const rows = hold ? ROW_HOLD : ROW_ADV;

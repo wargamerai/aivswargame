@@ -314,7 +314,28 @@
     flex: 0 0 auto; width: 274px; height: 100%;
     background: #1c1c1c; border-left: 2px solid #555;
     display: flex; flex-direction: column;
-    padding: 6px; box-sizing: border-box; overflow-y: auto;
+    padding: 6px; box-sizing: border-box; overflow: hidden;
+  }
+  .ap-controls {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .ap-controls > * { flex-shrink: 0; }
+  .ap-action-log {
+    flex: 0 0 clamp(88px, 19vh, 155px); min-height: 0; margin-top: 6px;
+    display: flex; flex-direction: column; background: #222; border: 1px solid #555; border-radius: 4px;
+    color: #eee; font-size: 12px;
+  }
+  .ap-action-log h2 { margin: 0; padding: 4px 6px; font-size: 12px; border-bottom: 1px solid #555; }
+  #uf-action-log-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0; padding: 0 6px; list-style: none; }
+  #uf-action-log-list li { padding: 4px 0; border-bottom: 1px solid #3d3d3d; overflow-wrap: anywhere; }
+  #uf-action-log-list li b { display: block; color: #bbb; font-size: 11px; }
+  #uf-action-log-list li[data-kind="cancel"] { color: #ffdb8c; }
+  .ap-action-log-empty { margin: 4px 6px; color: #bbb; }
+  #uf-action-log-list:not(:empty) + .ap-action-log-empty { display: none; }
+  .dropped-weapon-chits { margin-left: 8px; display: inline-flex; gap: 2px; color: #fc6; font-size: 11px; }
+  .dropped-weapon-chits img {
+    width: 18px; height: 18px; border: 1px solid #fc6; border-radius: 2px; background: #000; cursor: zoom-in;
   }
   /* margin-top:auto で中身を枠の下にそろえる（入りきらない時は枠の中でスクロール） */
   #ap-info { font-size: 12px; line-height: 1.45; color: #ddd; }
@@ -336,7 +357,7 @@
     width: 100%; height: 34px; font-size: 12px;
     white-space: normal; line-height: 1.15; padding: 2px 1px; /* 日本語は幅で 1行に収まる。英語の長い名前は 2行 */
   }
-  /* 山札・捨て札・判定: アクションボタンの下に 3つずつ2段（枠の幅に合わせて小さく） */
+  /* 山札・捨て札・判定結果をアクションボタンの下に表示 */
   #action-pane .ai-deck-area {
     margin: 8px 0 0; padding: 8px 0 0; border-left: none; border-top: 1px solid #555;
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
@@ -448,8 +469,9 @@
   .decide-btn:disabled { background: #333; color: #666; border-color: #444; cursor: not-allowed; }
 
   .judge-slot {
-    flex: 0 0 80px;
-    height: 96px;
+    box-sizing: border-box;
+    width: 100%;
+    height: 34px;
     background: #222;
     border: 2px dashed #666;
     border-radius: 4px;
@@ -983,6 +1005,7 @@
   </div><!-- /#game-main -->
   <!-- アクションボタン（画面右側の別枠・3列） -->
   <div id="action-pane">
+    <div class="ap-controls">
     <!-- 勝利条件・勝利点・損害（画面の描き直しのたびに updateInfoPanel で更新） -->
     <div id="ap-info"></div>
     <label class="hand-refill-option">手札補充 <select id="end-turn-refill"><option value="">上限まで</option></select></label>
@@ -1001,6 +1024,7 @@
           <button style="flex:1;padding:3px 0;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;font-size:12px;" onclick="ufSaveGame()" title="ここまでの状態をファイルに保存する">Save</button>
           <button style="flex:1;padding:3px 0;background:#365;color:#fff;border:1px solid #6a9;border-radius:4px;cursor:pointer;font-size:12px;" onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ">Load</button>
         </div>
+        <button type="button" class="judge-slot" id="judge-slot" title="判定 (有効化されたら押す)" disabled>判定</button>
       </div>
       <div class="ap-col">
         <div class="ap-head">アクション</div>
@@ -1040,7 +1064,7 @@
         <button class="action-btn" data-act="reorder" title="グループ内で兵士の位置を変える（§3.3）">隊列変更</button>
       </div>
     </div>
-    <!-- 山札・捨て札・判定（右上から移動） -->
+    <!-- 山札・捨て札・判定結果 -->
       <div class="ai-deck-area">
         <div class="cycle-box">
           <div class="label">サイクル</div>
@@ -1058,13 +1082,18 @@
           <div class="pile-label">除去</div>
           <div class="count">0</div>
         </div>
-        <div class="judge-slot" id="judge-slot" title="判定 (有効化されたら押す)">判定</div>
         <div class="judge-result" id="judge-result"></div>
       <!-- 投了: 間違えて押さないように、一番下に離して置く -->
     <div style="margin-top:14px;padding-top:8px;border-top:1px solid #555;text-align:right;">
       <button class="action-btn" style="width:auto;padding:2px 12px;background:#822;border-color:#c44;" onclick="ufResign()" title="負けを認めてゲームを終わり、ここまでのレポートを保存できる">投了</button>
     </div>
     </div>
+    </div><!-- /.ap-controls -->
+    <section class="ap-action-log" aria-labelledby="uf-action-log-title">
+      <h2 id="uf-action-log-title">行動ログ</h2>
+      <ol id="uf-action-log-list" role="log" aria-labelledby="uf-action-log-title" tabindex="0"></ol>
+      <p class="ap-action-log-empty">まだ行動の記録はありません。</p>
+    </section>
   </div>
 </div>
 
@@ -1134,7 +1163,7 @@
 <script src="cc.js"></script>
 <script src="mortar.js"></script>
 <script src="campaign.js"></script>
-<script src="uf_i18n.js"></script>
+<script src="uf_i18n.js?v=action-log"></script>
 <script src="lang.js"></script>
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script>
@@ -1154,14 +1183,14 @@ ufApplyZoom();
 <script src="uf_data.js"></script>
 <script src="uf_flank.js"></script>
 <script src="uf_setup.js"></script>
-<script src="uf_report_save.js"></script>
-<script src="uf_field.js"></script>
+<script src="uf_report_save.js?v=action-log"></script>
+<script src="uf_field.js?v=action-log"></script>
 <script src="uf_national_rules.js"></script>
-<script src="uf_actions.js"></script>
+<script src="uf_actions.js?v=action-log"></script>
 <script src="uf_fire_status.js"></script>
-<script src="uf_campaign.js"></script>
+<script src="uf_campaign.js?v=action-log"></script>
 <script src="uf_phases_ui.js"></script>
-<script src="uf_ai.js"></script>
+<script src="uf_ai.js?v=action-log"></script>
 <script src="uf_cardscore.js"></script>
 <script src="uf_vehicle_data.js"></script>
 <script src="uf_afv.js"></script>
@@ -1170,6 +1199,6 @@ ufApplyZoom();
 <script src="uf_ordnance.js"></script>
 <script src="uf_partisans.js"></script>
 <script src="uf_ai3.js"></script>
-<script src="uf_scenario_editor.js"></script>
+<script src="uf_scenario_editor.js?v=ai-policy"></script>
 </body>
 </html>

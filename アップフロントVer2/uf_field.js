@@ -65,6 +65,38 @@ function renderField(side) {
   });
 }
 
+function buildDroppedWeaponChits(weapons) {
+  const row = document.createElement('span');
+  row.className = 'dropped-weapon-chits';
+  for (const weapon of weapons) {
+    const name = weapon.weaponName || weapon.weaponCat || '';
+    const secondary = weapon.secondary?.kind || (weapon.isDemo ? 'demo' : null);
+    const src = secondary ? setupEquipmentImage(secondary, weapon.fac) : weaponChitImage(weapon, false);
+    const placeholder = () => {
+      const marker = document.createElement('span');
+      marker.title = name;
+      marker.textContent = '🔫';
+      return marker;
+    };
+    if (!src) {
+      row.appendChild(placeholder());
+      continue;
+    }
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = name;
+    img.title = `${name}（Shift＋クリックで拡大）`;
+    img.addEventListener('error', () => img.replaceWith(placeholder()), { once: true });
+    img.addEventListener('click', event => {
+      if (!event.shiftKey) return;
+      event.stopPropagation();
+      showOverlay(img.src, true);
+    });
+    row.appendChild(img);
+  }
+  return row;
+}
+
 function makeMainGroup(side, group, idx) {
   const slot = document.createElement('div');
   slot.className = 'main-group';
@@ -141,19 +173,14 @@ function makeMainGroup(side, group, idx) {
   }
   header.style.flexWrap = 'wrap';
   // §18.1 グループに残っている兵器チット／§17.8 移送中／§17.9 設立中／§17.7 側方移送の途中
-  const _wp = (group.weaponPool || []);
-  const wpTag = _wp.length ? `<span style="margin-left:8px;display:inline-flex;gap:2px;vertical-align:middle;" title="グループに残っている兵器（拾える §18.2）: ${_wp.map(w => w.weaponName || w.weaponCat).join(' / ')}">${
-    _wp.map(w => { const src = w.isDemo ? encPath(getDemoImagePath(w.fac)) : weaponChitImage(w, false); // 捨てた爆薬（§33.6）
-      return src ? `<img src="${src}" style="width:18px;height:18px;border:1px solid #fc6;border-radius:2px;background:#000;" onerror="this.outerHTML='<span style=&quot;color:#fc6;font-size:11px;&quot;>🔫</span>'">`
-                 : '<span style="color:#fc6;font-size:11px;">🔫</span>'; }).join('')
-  }</span>` : '';
   const _gpIdx = idx;
   const _outT = group.cards.filter(c => c.transfer).length;
   const _inT = (typeof incomingTransit === 'function') ? incomingTransit(side, _gpIdx).length : 0;
   const trTag = (_outT || _inT) ? `<span style="color:#9cf;margin-left:8px;font-size:12px;">移送${_outT ? ' 送出' + _outT : ''}${_inT ? ' 受入待' + _inT : ''}</span>` : '';
   const fmTag = group.forming ? '<span style="color:#9f9;margin-left:8px;font-size:12px;">設立中</span>' : '';
   const shTag = group.pendingShift ? `<span style="color:#f9c;margin-left:8px;font-size:12px;">→${groupSlotName(group.pendingShift.toIdx)}へ側方移送中</span>` : '';
-  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${flankTag}${encTag}${ppTag}${wpTag}${trTag}${fmTag}${shTag}${nightTag}${fpRow}`;
+  header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${flankTag}${encTag}${ppTag}${trTag}${fmTag}${shTag}${nightTag}${fpRow}`;
+  if (group.weaponPool?.length) header.querySelector('.gname').after(buildDroppedWeaponChits(group.weaponPool));
 
   const dctrl = document.createElement('div');
   dctrl.className = 'distance-ctrl';
