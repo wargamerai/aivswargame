@@ -225,30 +225,85 @@
     <div class="news" style="margin:0 0 16px;">
         <h2>Today's Updates</h2>
         <h3>November 18–19, 2026</h3>
-        <h3>Up Front</h3>
+        <h3>Up Front scenario editor and setup</h3>
         <ul>
-            <li>The scenario editor now lets you set both forces, combine victory conditions, choose special rules, and set day or night, year, and point limits.</li>
-            <li>Switch between your force and the opposing force with tabs. Selected cards appear in numerical order. Shift-click a card to enlarge it.</li>
-            <li>Choose reinforcement cards and the first deck in which each force may bring them in.</li>
-            <li>Set how many copies of a terrain card to remove. The remaining copies become usable after the specified number has been removed. Cower settings can be applied separately to the attacker and defender.</li>
-            <li>Choose which equipment each force brings. Assign your carriers in group setup. The AI assigns its own carriers. Demolition charge and radio counters use their national artwork.</li>
-            <li>Save scenarios to JSON files and open them from the editor or the start screen. The start screen’s Load button also resumes saved games. Older browser-saved scenarios can still be opened and exported.</li>
-            <li>Use Scenario Details in group setup to review victory conditions, special rules, reinforcements, and the time limit. The editor’s blanket 2–40 card check was removed.</li>
-            <li>The editor and setup details are available in English and Italian. Enter the editor password once per browser. The standalone Surprise Attack entry was removed from the new-game menu.</li>
-            <li>Split action cards shade the faces unavailable to the current nation. Cower cards can still be placed face down as Open Ground.</li>
-            <li>Choose how many cards to draw at the end of your turn, from zero up to the hand limit. The hand refill control now fits on one line. The draw pile no longer shows its remaining card count.</li>
-            <li>Declare multiple discard attacks and their targets before resolving them. Sniper checks draw at resolution. Attacks already underway can finish when the final card is drawn.</li>
-            <li>Updated pinned soldiers’ position changes, the placement of crew assistants next to their gunners, and morale and weapon handling when a stream crossing fails.</li>
-            <li>Updated hill, marsh, and stream restrictions, related flanking and transfer rules, and follow-up fire when a breeze clears smoke.</li>
-            <li>Updated vehicle-only groups, armored movement, hull-down hits, stun and recovery, overrun risks, and terrain bog checks.</li>
-            <li>Updated infantry guns, anti-tank rifles, support, Concealment, and the end of a mortar attack when its only firing weapon malfunctions.</li>
-            <li>Updated infiltration, weapons left on the ground, Hero retries against vehicles in close combat, prisoners and guards, and how wounded soldiers handle secondary weapons.</li>
-            <li>Updated adjacent vehicle support against demolition charges, starshells on moving targets, night overruns and moving ordnance fire, troop-type restrictions, Partisan Concealment, and terrain choices for infantry reinforcements.</li>
+            <li>Use the scenario editor to build both forces, combine victory conditions, and select special rules from the available presets.</li>
+            <li>Set day or night, year, points, and the deck limit. The year filters cards with a recorded availability date, and reinforcements count toward the point limit.</li>
+            <li>Switch between the two forces with tabs. The selected cards appear in numerical order in the preview. Shift-click a card to enlarge it.</li>
+            <li>The force picker includes vehicles and infantry guns. The general 2–40 card requirement in the editor was removed.</li>
+            <li>Select reinforcements for each side and set the first deck in which they can enter. Bring available reinforcements onto the field with Movement.</li>
+            <li>Set how many copies of a terrain card are removed when drawn, including cards drawn for a check. Remaining copies of that terrain can then be played.</li>
+            <li>Choose Cower cards separately for the attacker and defender.</li>
+            <li>Select equipment below the force cards. Options include demolition charges, Panzerfausts, magnetic anti-tank mines, and radios.</li>
+            <li>Demolition charges and radios use national artwork. The equipment previews also show Panzerfaust and mine images.</li>
+            <li>Assign equipment carriers during group setup. The AI assigns carriers for its own force.</li>
+            <li>Download a scenario as a JSON file and reopen it in the editor. Scenarios previously saved in the browser can still be opened and exported.</li>
+            <li>Use the start screen’s Load button to open a scenario file and go into group setup or resume a saved game.</li>
+            <li>Open Scenario Details in group setup to review victory conditions, special rules, reinforcements, day or night, and the time limit.</li>
+            <li>The editor and setup details are available in English and Italian. The browser remembers the editor unlock.</li>
+            <li>The standalone Surprise Attack entry was removed from the new-game menu.</li>
+        </ul>
+        <h3>Up Front cards, turns, and terrain</h3>
+        <ul>
+            <li>Split Action cards shade the faces unavailable to the current nation. When both faces are legal, choose which face to play.</li>
+            <li>A fully unavailable split card can still be placed face down as Open Ground under the Cower rules. Playing or discarding either face uses the whole physical card.</li>
+            <li>A night restriction on a Smoke face leaves the other face usable where allowed. Reloading a saved hand restores the national faces, and checks still use the original printed values.</li>
+            <li>Choose how many cards to draw at the end of a turn, from zero to the hand limit. The hand refill control now fits on one line.</li>
+            <li>The draw pile display shows the deck cycle while hiding the number of cards remaining in the pile.</li>
+            <li>Players and the AI declare multiple discard attacks and their targets before resolving them. Sniper checks draw a card when the attack resolves.</li>
+            <li>An attack already underway resolves when it draws the final card. Drawing the final card during end-of-turn refill ends play without starting another turn.</li>
+            <li>Movement and observation now account for gullies, hills, marsh, and streams. A failed stream crossing applies the morale rules and clears weapons left behind.</li>
+            <li>Flanking and encirclement account for sideways movement and successful stream crossings. The first sideways movement in marsh cannot establish a flank.</li>
+            <li>When a breeze clears Smoke, later fire uses the updated defense modifier.</li>
+            <li>Groups must be adjacent and at the same range to start a transfer. Eligible riflemen can fire with either group during the transfer, and a pin can interrupt it.</li>
+            <li>Transfer and position checks keep range consistent. Crew members must leave their crew before transferring. A sideways group swap checks both Movement cards and any stream crossing first.</li>
+            <li>At night, starshell illumination follows a moving target. Retreat and overrun checks use night observation.</li>
+        </ul>
+        <h3>Up Front weapons, vehicles, and AI</h3>
+        <ul>
+            <li>Group setup uses consecutive groups A through D and keeps each vehicle in a separate group. Crew assistants are placed next to their gunners.</li>
+            <li>Pinned soldiers can change position where allowed. Crew weapons check the status of the actual assistant when firing.</li>
+            <li>Vehicle and infantry gun cards use their registered stats for movement and attacks. Crew exposure, buttoning up, and sniper attacks against exposed crews use the vehicle rules.</li>
+            <li>A direct hit on a hull-down vehicle causes stun. Stun recovery uses its own Rally values.</li>
+            <li>An overrun checks the terrain for bogging, including Wire. Encirclement affects panic checks for pinned troops in an overrun.</li>
+            <li>Eligible American, German, and British armored vehicles can fire Smoke as their action.</li>
+            <li>Ordnance resolves accuracy and effect separately. The combat display brings the drawn judgment card to the front when showing the shot result.</li>
+            <li>Moving ordnance at night checks black random numbers and uses a hit number reduced by one.</li>
+            <li>Infantry guns and anti-tank rifles use separate target, support, and Concealment rules. A mortar attack ends if its only participating tube malfunctions.</li>
+            <li>An infiltrating soldier can leave a flamethrower or other secondary weapon behind. The equipment stays there if the attempt fails.</li>
+            <li>Close combat accounts for infiltrator positions and cover. A Hero retry against a vehicle keeps its Hero effect.</li>
+            <li>The defender can take prisoners in close combat. Prisoner handling now covers guard reassignment and release.</li>
+            <li>Demolition charges can be used against vehicles in close combat. The defense checks the support of adjacent vehicles individually.</li>
+            <li>Wounded soldiers can choose between eligible primary and secondary weapons. Equipment transfers and wound checks follow the receiving soldier’s status and the deck cycle.</li>
+            <li>Special troop rules cover conscripts, green troops, American airborne troops, and Volksgrenadiers. Partisan Concealment also applies against radio fire.</li>
+            <li>Infantry reinforcements can enter with River or Marsh where allowed. Vehicle reinforcements check their separate terrain restrictions.</li>
+            <li>The AI uses legal split-card faces, checks crossings during flanking, and avoids starting ordnance or support fire after declaring discard attacks.</li>
         </ul>
         <h3>B-17 Sortie Control</h3>
         <ul>
             <li><a href="../b17/B-17-web.html?lang=en">Play B-17 in English.</a> The interface, mission controls, crew screens, and mission reports are available in English. Some detailed logs and dialogue are still in Japanese.</li>
             <li>The Japanese and English homepages now link to their respective language versions.</li>
+        </ul>
+        <h3>PFB</h3>
+        <ul>
+            <li>Play results appear on the stadium backscreen. The scoreboard keeps showing the score.</li>
+            <li>Semi-auto play hands control back to you when a runner reaches base or play calls for a tactical decision. Use Resume to restart semi-auto play.</li>
+            <li>Select your starting pitcher on the pennant schedule. If that pitcher is unavailable, the game selects an eligible replacement and prepares the bullpen for the scheduled game.</li>
+            <li>The pennant mode downloads a season JSON after your team’s games.</li>
+        </ul>
+        <h3>Battle of the Bulge</h3>
+        <ul>
+            <li>Players on the same device can control both armies. Review and change staged moves and attacks before confirming them.</li>
+            <li>During the German player’s support placement phase, place support chits manually and confirm or undo the placements.</li>
+        </ul>
+        <h3>Walcheren 1944</h3>
+        <ul>
+            <li>Published the original postcard game in Japanese, English, French, German, Italian, Spanish, Simplified Chinese, Korean, and Russian.</li>
+            <li>The homepage shows the nine language flags, and the game now records site visits.</li>
+        </ul>
+        <h3>Corvette Command</h3>
+        <ul>
+            <li>The campaign epilogue now unfolds in yearly reports and ends with the ship’s fate. The final escort also has its own narration.</li>
         </ul>
     </div>
 
