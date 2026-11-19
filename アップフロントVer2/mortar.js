@@ -13,8 +13,8 @@
  *   - 命中したら兵士ごとに判定カードを引き、RNCの数字を加算（射撃と同様）
  *
  * 撃てない地形:
- *   - 建物・トーチカ・川・湿地・森林から撃てない（枯れ谷OK §26.2）
- *   - 味方煙幕がある場合、補足中の敵にのみ不利修正(-1ランク)で撃てる
+ *   - 建物・トーチカ・川・湿地から撃てない（枯れ谷OK §26.2）
+ *   - 煙幕を越えるたびに命中頻度が1下がる
  *
  * クルー:
  *   - クルー不在のときは [ ] 内の数字を使う
@@ -67,15 +67,14 @@
     if (!SOLDIERS) return [];
     const out = [];
     group.cards.forEach((card, i) => {
-      if (!isAlive(card)) return;
-      if (isPinned(card)) return;
+      if (!isAlive(card) || isPinned(card) || card.transfer) return;
       if (card.malfunctioned || card.destroyed) return;
       const m = String(card.id).match(/(\d+)\s*$/);
       if (!m) return;
       const num = parseInt(m[1], 10);
       const def = SOLDIERS.find(s => s.num === num);
       if (!def) return;
-      if (!def.weaponCat || def.weaponCat.indexOf('迫撃砲') < 0) return;
+      if (!global.INFANTRY_RULES.isArtillery(def.weaponCat)) return;
       out.push({ idx: i, card: card, def: def });
     });
     return out;
@@ -91,7 +90,7 @@
     const assistIdx = group.cards.findIndex(c => c.num === assistNum);
     if (assistIdx < 0) return false;
     const a = group.cards[assistIdx];
-    return isAlive(a) && !isPinned(a);
+    return isAlive(a) && !isPinned(a) && !a.transfer;
   }
 
   /** 地形スタックの一番上の地形タイプ（MOVEMENTを除く直近の地形） */
@@ -102,7 +101,7 @@
       const t = group.terrain[i] && group.terrain[i].terrain;
       if (!t) continue;
       // 煙幕・鉄条網は地形カードではない（§13.1）ので飛ばす
-      if (t.type === 'SMOKE' || t.type === 'WIRE') continue;
+      if (['SMOKE','WIRE','TRENCH'].includes(t.type)) continue;
       if (t.type === 'MOVEMENT') { moves++; continue; }
       // §5.2 地形カードの上に移動カードが2枚あれば平地に出ている
       return moves >= 2 ? null : t;
@@ -120,9 +119,9 @@
 
   /** 地形スタック末尾がMOVEMENTか（移動中） */
   function isMoving(group) {
-    if (!group || !group.terrain || group.terrain.length === 0) return false;
-    const last = group.terrain[group.terrain.length - 1];
-    return !!(last && last.terrain && last.terrain.type === 'MOVEMENT');
+    if (global.isMovingIgnoringOverlays) return global.isMovingIgnoringOverlays(group);
+    const base = group?.terrain?.findLast(card => card && !['SMOKE','WIRE'].includes(card.terrain?.type));
+    return base?.terrain?.type === 'MOVEMENT';
   }
 
   /** 攻撃側が壁地形にいるか */
@@ -150,23 +149,12 @@
     if (top) {
       if (top.type === 'BUILDINGS') return { ok: false, reason: '建物からは迫撃砲を撃てません' };
       if (top.type === 'BUNKER' || top.type === 'PILLBOX') return { ok: false, reason: 'トーチカからは迫撃砲を撃てません' };
-      if (top.type === 'WOODS') return { ok: false, reason: '森林からは迫撃砲を撃てません' };
     }
     if (R.isInStream && R.isInStream(srcGroup)) return { ok: false, reason: '河川内からは迫撃砲を撃てません' };
     if (R.isInMarsh && R.isInMarsh(srcGroup))  return { ok: false, reason: '湿地内からは迫撃砲を撃てません' };
 
-    // 味方煙幕: 砲撃不可、ただし補足中の敵には不利修正で可
-    // opts.acquired: この迫撃砲がその目標を捕捉しているか（§27 捕捉は火砲ごと）
-    const acquired = opts.acquired != null ? !!opts.acquired : !!(tgtGroup && tgtGroup.pinpointed);
-    let smokePenalty = false;
-    if (hasSmoke(srcGroup)) {
-      if (acquired) {
-        smokePenalty = true;
-      } else {
-        return { ok: false, reason: '味方側に煙幕があるため迫撃砲を撃てません（補足中の敵には可）' };
-      }
-    }
-    return { ok: true, smokePenalty: smokePenalty };
+    // §25.7 煙幕は命中を下げる。捕捉は射撃の条件ではない。
+    return { ok: true, smokePenalty: hasSmoke(srcGroup) };
   }
 
   /**
@@ -213,11 +201,8 @@
    *  - 日本以外: 距離に関わらず2固定
    *  - 日本: 擲弾筒/迫撃砲 距離別 [2,2,2,1,1,0]
    */
-  function getMortarFP(soldier, distance, factionKey) {
-    if (factionKey === 'jpn') {
-      const jpnFP = [2, 2, 2, 1, 1, 0];
-      return jpnFP[distance] != null ? jpnFP[distance] : 0;
-    }
+  function getMortarFP(soldier, distance) {
+    if (soldier.weaponCat?.startsWith('擲弾筒')) return [2, 2, 2, 1, 1, 0][distance] ?? 0;
     return 2;
   }
 

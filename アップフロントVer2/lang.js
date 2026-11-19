@@ -55,6 +55,7 @@ const LANG_EXACT = {
   '敵': 'Enemy',
   '自軍': 'Player',
   '手札:': 'Hand:',
+  '手札を補充': 'Refill hand',
   '枚 / 補充': 'cards / Draw',
   'サイクル': 'Cycle',
   '山札': 'Deck',
@@ -118,6 +119,7 @@ const LANG_EXACT = {
   '照明弾': 'Flare',
   '塹壕': 'Entrench',
   '確定': 'Confirm',
+  '平地として置く': 'Place as Open Ground',
   '終了': 'End',
   // ダイアログ
   '移動方向を選択': 'Choose direction of movement',
@@ -1091,6 +1093,10 @@ const LANG_PATTERNS_SRC = [
   ["GROUP {0} が GROUP {1} を発見。夜間半減あり。", "GROUP {0} spotted GROUP {1}. Fire strength is still halved at night."],
   ["射撃カード {0#} → {1#}（{2}）", "Fire cards {0} → {1} ({2})"],
 ];
+for (const [ja, en, it] of window.UF_I18N?.scenarioUI || []) {
+  LANG_PATTERNS_SRC.push([ja, en]);
+  window.UF_I18N.it[en] = it;
+}
 const LANG_PATTERNS = [];
 LANG_PATTERNS_SRC.forEach(([ja, en]) => {
   if (!/\{\d+#?\}/.test(ja)) { LANG_EXACT[ja] = en; return; }
@@ -1140,6 +1146,8 @@ function langTranslate(s){
     out = langX(LANG_EXACT[core]);
   } else if((pm = langMatchPattern(core)) !== null){
     out = pm;
+  } else if((pm = core.match(/^([A-X]\d?)\s+(.+)$/)) && LANG_EXACT[pm[2]] !== undefined){
+    out = pm[1] + ' ' + langX(LANG_EXACT[pm[2]]);
   } else {
     // 語句を置き換え、英単語どうしや数字と続くところに空白を入れる
     out = '';
@@ -1175,7 +1183,8 @@ try {
 } catch(e){}
 
 // 文字ごとに元の日本語と英語を覚えておき、切り替えで戻せるようにする
-const langText = new WeakMap(), langTitle = new WeakMap();
+const langText = new WeakMap(), langAttributes = new WeakMap();
+const localizableAttributes = ['title', 'aria-label', 'placeholder', 'alt'];
 let langApplying = false;
 function langApplyText(node){
   if(node.parentNode && node.parentNode.classList && node.parentNode.classList.contains('lang-btn')) return; // 切り替えボタン自身は訳さない
@@ -1187,32 +1196,39 @@ function langApplyText(node){
   langText.set(node, r);
   if(LANG !== 'ja' && r.en !== v) node.nodeValue = r.en;
 }
-function langApplyTitle(el){
-  const v = el.getAttribute('title');
-  if(v == null) return;
-  const rec = langTitle.get(el);
-  if(rec && ((rec.lang === LANG && v === rec.en) || (v === rec.ja && LANG === 'ja'))) return;
-  if(!LANG_JP.test(v)){ if(rec) langTitle.delete(el); return; }
-  const r = { ja: v, en: langTranslate(v), lang: LANG };
-  langTitle.set(el, r);
-  if(LANG !== 'ja' && r.en !== v) el.setAttribute('title', r.en);
+function langApplyAttribute(el, name){
+  const value = el.getAttribute(name);
+  if(value == null) return;
+  let records = langAttributes.get(el);
+  const record = records?.get(name);
+  if(record && ((record.lang === LANG && value === record.en) || (value === record.ja && LANG === 'ja'))) return;
+  if(!LANG_JP.test(value)){ records?.delete(name); return; }
+  const translated = langTranslate(value);
+  if(!records){ records = new Map(); langAttributes.set(el, records); }
+  records.set(name, { ja: value, en: translated, lang: LANG });
+  if(LANG !== 'ja' && translated !== value) el.setAttribute(name, translated);
 }
 function langWalk(root, fn){
   if(root.nodeType === 3){ fn.text(root); return; }
   if(root.nodeType !== 1) return;
   if(root.tagName === 'SCRIPT' || root.tagName === 'STYLE' || root.classList.contains('lang-btn')) return;
-  if(root.hasAttribute('title')) fn.title(root);
+  for(const name of localizableAttributes) {
+    if(root.hasAttribute(name)) fn.attribute(root, name);
+  }
   for(const c of root.childNodes) langWalk(c, fn);
 }
 function langApplyAll(){
   langApplying = true;
-  langWalk(document.body, { text: langApplyText, title: langApplyTitle });
+  langWalk(document.body, { text: langApplyText, attribute: langApplyAttribute });
   langApplying = false;
 }
 function langRestoreAll(){
   langWalk(document.body, {
     text: n => { const r = langText.get(n); if(r && n.nodeValue === r.en) n.nodeValue = r.ja; },
-    title: el => { const r = langTitle.get(el); if(r && el.getAttribute('title') === r.en) el.setAttribute('title', r.ja); },
+    attribute: (el, name) => {
+      const record = langAttributes.get(el)?.get(name);
+      if(record && el.getAttribute(name) === record.en) el.setAttribute(name, record.ja);
+    },
   });
 }
 const langObserver = new MutationObserver(muts => {
@@ -1220,8 +1236,8 @@ const langObserver = new MutationObserver(muts => {
   langApplying = true;
   for(const m of muts){
     if(m.type === 'characterData') langApplyText(m.target);
-    else if(m.type === 'attributes') langApplyTitle(m.target);
-    else m.addedNodes.forEach(n => langWalk(n, { text: langApplyText, title: langApplyTitle }));
+    else if(m.type === 'attributes') langApplyAttribute(m.target, m.attributeName);
+    else m.addedNodes.forEach(n => langWalk(n, { text: langApplyText, attribute: langApplyAttribute }));
   }
   langApplying = false;
 });
@@ -1235,7 +1251,7 @@ function setLang(lang){
   document.documentElement.lang = lang;
   if(lang !== 'ja'){
     langApplyAll();
-    langObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['title'] });
+    langObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: localizableAttributes });
   } else {
     langObserver.disconnect();
     langRestoreAll();

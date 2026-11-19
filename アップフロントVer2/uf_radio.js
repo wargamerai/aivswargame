@@ -1,12 +1,14 @@
 // §40 シナリオの radioHolders[国籍] に、無線機を持つ兵士の番号を定義する。
 'use strict';
 
-function radioText(ja, en) { return LANG === 'ja' ? ja : en; }
+function radioText(ja, en) { return LANG === 'ja' ? ja : langX(en); }
 
 function radioHolders(side) {
   const faction = getFactionKey(state[side]);
-  const holders = state.scenario?.radioHolders?.[faction];
-  return Array.isArray(holders) ? holders : [];
+  const R = window.INFANTRY_RULES;
+  return (state.groups[side] || []).flatMap(group => (group?.cards || [])
+    .filter(card => R.isAlive(card) && secondaryWeaponOn(card, faction)?.kind === 'radioHolders')
+    .map(card => card.num));
 }
 
 function isRadioCard(card, side) {
@@ -37,9 +39,8 @@ function radioOperator(side, index, broken=false) {
   });
   if (!broken && !hasLeader) return null;
   if (broken && (isMovingIgnoringOverlays(group) || R.isInStream(group) || R.isInMarsh(group))) return null;
-  const holders = radioHolders(side);
-  return group.cards.find(c => holders.includes(c.num) && !c._radioRemoved &&
-    Boolean(c._radioBroken) === broken && ready(c)) || null;
+  return group.cards.find(c => ready(c) && !isCrewAssistant(group, c) &&
+    carriesScenarioSecondary(c, faction, 'radioHolders') && Boolean(c._radioBroken) === broken) || null;
 }
 
 function radioTarget(side, index) {
@@ -58,43 +59,77 @@ function radioActionUsed(side, index) {
   }
 }
 
-function resolveSupportHits(target, targetSide, base=5, radio=false, ordnance=false) {
+function ordnanceTargets(target, source) {
+  const origin = source ? _groupSideIdx(source) : null;
+  return attackTargetsOf(target).filter(card => !origin || !card.infiltrating ||
+    card.infiltratedGroupSide !== origin.side || card.infiltratedGroupIdx !== origin.idx);
+}
+
+function resolveSupportHits(target, targetSide, base=5, radio=false, ordnance=false, flame=false, source=null, hitStrengths=null, mortar=false, concealMod=0) {
   const R = window.INFANTRY_RULES;
   const faction = getFactionKey(state[targetSide]);
-  const terrain = radio ? target.terrain.filter(card => card.terrain?.type !== 'WOODS') : target.terrain;
-  const strength = base + R.calcTerrainMod(terrain, false, { japanBuildings: isJapanInGame() });
-  return attackTargetsOf(target).filter(R.isAlive).flatMap(card => {
-    const draw = ccDrawCard();
+  const terrain = target.terrain.filter(card => {
+    const type = card.terrain?.type;
+    if (flame) return type === 'SMOKE' || type === 'WIRE';
+    return !((radio || mortar) && type === 'WOODS') && !(ordnance && type === 'SMOKE');
+  });
+  const support = Number(window.AFV?.adjacentArmorSupport(target) || 0);
+  const firingSlot = source && _groupSideIdx(source);
+  const targetSlot = _groupSideIdx(target);
+  const attackRange = firingSlot && targetSlot ? R.relativeRangeBetweenGroups(source, target, {
+    sameOpposing: firingSlot.idx === targetSlot.idx,
+    adjacent: Math.abs(firingSlot.idx - targetSlot.idx) === 1
+  }) : null;
+  const terrainOpts = {
+    japanBuildings: isJapanInGame(),
+    isFlank: radio || mortar || Boolean(firingSlot && targetSlot && firingSlot.idx !== targetSlot.idx),
+    encircled: Boolean(target.encircled), attackRange, isMortar: mortar, otherStack: source?.terrain
+  };
+  const terrainMod = (flame ? 0 : jungleFireMod()) + R.calcTerrainMod(terrain, false, terrainOpts);
+  const trench = R.getTerrainModBreakdown(terrain, false, terrainOpts).find(item => item.type === 'TRENCH');
+  return ordnanceTargets(target, source).filter(card => R.isAlive(card) && (!hitStrengths || hitStrengths.has(card))).flatMap(card => {
+    const draw = ccDrawCard(state.currentTurn);
     const def = R.lookupSoldier(card, faction);
     if (!draw || !def) return [];
     const red = draw.terrain.rncColor === '赤';
     const value = Number(draw.terrain.range) || 0;
     const rnc = red ? -value : value;
     const pinned = R.isPinned(card);
-    const leadership = hasCommissar(target) ? 1 : 0;
-    const moraleMod = leadership - Number(card.malfunctioned || card.destroyed || false);
+    const leadership = commissarModOf(target, card);
+    const moraleMod = leadership - R.weaponMoralePenalty(card, def);
     const panicMod = moraleMod - Number(Boolean(target.encircled && pinned));
     let result = radio ? window.AFV?.radioCritical(target, card, red, value) : null;
-    const finalFP = strength + transitFireBonus(card) + infantryGunDefense(target, card, targetSide);
-    const resolution = R.resolveFireOnSoldier(finalFP, rnc, def, pinned,
-      Number(draw.terrain.dice?.['0r']) || 0, moraleMod, panicMod, 0, R.rpc7wOf(draw), ordnance);
+    const hullDown = ordnance && source && infantryGunProfile(card, targetSide) &&
+      window.AFV.isHullDown(target, source);
+    const hit = hitStrengths?.get(card) ?? base;
+    const infantrySupport = infantryGunProfile(card, targetSide) ? 0 : support;
+    const adjusted = def.afv ? hit : hit - infantrySupport + (hullDown ? jungleFireMod() : terrainMod);
+    const finalFP = adjusted + personnelDefenseAdjustment(card, targetSide, hullDown || def.afv ? 0 : trench?.mod, concealMod);
+    if (!result && def.afv) result = window.AFV.applyExposedCrewHit(card, finalFP + rnc);
     if (!result) {
-      result = resolution.result;
-      if (result === 'WOUND') result = def.afv ? 'NONE' : applyWound(card);
+      const rpc = Number(draw.terrain.dice?.['0r']) || 0;
+      const resolution = R.resolveFireOnSoldier(finalFP, rnc, def, pinned,
+        rpc, moraleMod, panicMod, 0, R.rpc7wOf(draw), ordnance || radio);
+      result = berserkFireResult(resolution, target, card, def, targetSide, rpc);
+      if (result === 'WOUND') result = applyWound(card);
       if (result === 'KIA' || result === 'PANIC_KIA') R.killSoldier(card);
       else if (result === 'PANIC_ROUT') R.routSoldier(card);
-      else if (result === 'PIN') R.pinSoldier(card);
+      else if (result === 'PIN') result = applyPersonnelPin(card);
       if (result !== 'NONE' && def.leader === '分隊長') applySLDamagePenalty(targetSide);
     }
+    const defense = def.afv ? {} : R.fireDefenseValues(def, pinned, pinned ? panicMod : moraleMod, 0, ordnance || radio);
     return [{
       name: def.name || card.id, rnc, rncColor: red ? '赤' : '黒', result, finalFP,
-      sum: finalFP + rnc, morale: Number(pinned ? def.panic : def.morale) || 0,
-      kia: Number(pinned ? def.kiaBack : def.kiaFront) || 0, wasPinned: pinned
+      sum: finalFP + rnc, ...defense, wasPinned: pinned
     }];
   });
 }
 
 async function resolveRadioMission(side, source, targetIndex, card) {
+  return withDeckAttack(() => resolveRadioMissionInProgress(side, source, targetIndex, card));
+}
+
+async function resolveRadioMissionInProgress(side, source, targetIndex, card) {
   if (state.radioResolving) return false;
   const operator = radioOperator(side, source);
   const target = radioTarget(side, targetIndex);
@@ -107,11 +142,14 @@ async function resolveRadioMission(side, source, targetIndex, card) {
     hand.splice(hand.indexOf(card), 1);
     pushTerrainToDiscard(card);
     radioActionUsed(side, source);
-    if (defender === 'player') await showAIAction(title, card, source);
+    if (defender === 'player') {
+      await showAIAction(title, card, source);
+      await askPlayerHeroRally(target);
+    }
     const conceal = canUseConcealment(target)
       ? (defender === 'player' ? await askPlayerConcealment() : aiUseConcealment()) : [];
-    const penalty = Math.min(3, Math.abs(parseInt(conceal[0]?.terrain?.modifier, 10) || 0));
-    const draw = ccDrawCard();
+    const penalty = Math.max(0, -getConcealMod(conceal, defender));
+    const draw = ccDrawCard(state.currentTurn);
     const red = draw?.terrain.rncColor === '赤';
     const value = Number(draw?.terrain.range) || 0;
     if (red && value >= 5) operator._radioBroken = true;
@@ -132,6 +170,10 @@ async function resolveRadioMission(side, source, targetIndex, card) {
 }
 
 function repairRadio(side, index) {
+  return withDeckAttack(() => repairRadioInProgress(side, index)) || null;
+}
+
+function repairRadioInProgress(side, index) {
   const operator = radioOperator(side, index, true);
   if (!operator) return null;
   const faction = getFactionKey(state[side]);
@@ -139,9 +181,9 @@ function repairRadio(side, index) {
   if (!entry) return null;
   const R = window.INFANTRY_RULES;
   radioActionUsed(side, index);
-  const wound = R.isWoundActive(operator) ? ccDrawCard() : null;
+  const wound = R.isWoundActive(operator) ? ccDrawCard(state.currentTurn) : null;
   if (wound?.terrain?.rncColor === '赤') return radioText('負傷で無線機の修理不可', 'Wounded: unable to repair the radio');
-  const draw = ccDrawCard();
+  const draw = ccDrawCard(state.currentTurn);
   if (!draw) return radioText('無線機の修理判定なし', 'No radio repair roll');
   showJudgeCard(draw);
   const color = draw.terrain.rncColor, value = Number(draw.terrain.range) || 0;

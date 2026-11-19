@@ -1,10 +1,10 @@
 // アップフロント: 隠蔽カード・射撃結果・§33 負傷・§32 捕虜
 // （index.html から切り出したもの。読み込む順番が大事: index.html の <script src> の順で読み込む）
 // ===== 隠蔽カード処理 =====
-function findConcealedIndices(hand) {
+function findConcealedIndices(hand, side = 'player') {
   const out = [];
   hand.forEach((c, i) => {
-    if (c && c.terrain && c.terrain.type === 'CONCEALED') out.push(i);
+    if (handActionFace(c, 'CONCEALED', side)) out.push(i);
   });
   return out;
 }
@@ -136,6 +136,7 @@ function askPlayerConcealment() {
       cleanup();
       const cards = [...selected].sort((a,b) => b-a).map(i => {
         const c = state.playerHand[i];
+        if (!useHandActionFace(c, handActionFace(c, 'CONCEALED', 'player'))) return null;
         state.playerHand.splice(i, 1);
         if (c) pushTerrainToDiscard(c);
         return c;
@@ -153,12 +154,12 @@ function askPlayerConcealment() {
 /** AI側の隠蔽カード自動使用: 1枚あれば使う */
 /** §10.4/§10.42 相手のターン: AI の攻撃を解決する前に、撃たれるグループのピン状態の兵士1名をヒーローで回復できる
  *  （アクションに数えない。使った分の補充は自分のターンの終わりまで無し §9.3） */
-async function askPlayerHeroRally(tgtGroup) {
+async function askPlayerHeroRally(tgtGroup, targets = tgtGroup?.cards || []) {
   const R = window.INFANTRY_RULES;
   if (!R || !tgtGroup) return;
   const heroIdx = state.playerHand.findIndex(c => c && c.terrain && c.terrain.type === 'HERO');
   if (heroIdx < 0) return;
-  const pinned = tgtGroup.cards.filter(c => R.isAlive(c) && R.isPinned(c));
+  const pinned = targets.filter(c => R.isAlive(c) && R.isPinned(c));
   if (pinned.length === 0) return;
   const playerKey = getFactionKey(state.player);
   const nameOf = c => { const d = R.lookupSoldier(c, playerKey); return d ? d.name : c.id; };
@@ -176,21 +177,30 @@ async function askPlayerHeroRally(tgtGroup) {
   }
   const hero = state.playerHand.splice(heroIdx, 1)[0];
   pushTerrainToDiscard(hero);
-  R.unpinSoldier(picked);
-  picked.heroRecovery = true; // §42.43
+  if (window.AFV?.isAfvCard(picked)) window.afvRallyCredit(tgtGroup, hero);
+  else if (infantryGunProfile(picked, 'player')) rallyInfantryGun(picked, 1);
+  else {
+    R.unpinSoldier(picked);
+    picked.heroRecovery = true; // §42.43
+  }
   renderField('player'); renderHands();
 }
 
 /** §9.5 トーチカにいるグループには隠ぺいカードを使えない */
-function canUseConcealment(grp) {
+function canUseConcealment(grp, forOrdnance = false) {
   const R = window.INFANTRY_RULES;
-  return !(grp && R && R.currentTerrainType && R.currentTerrainType(grp) === 'PILLBOX');
+  if (!grp || !R) return true;
+  if (R.currentTerrainType(grp) === 'PILLBOX' || window.AFV?.isAfvGroup(grp)) return false;
+  const side = _groupSideIdx(grp)?.side;
+  if (!side) return true;
+  const defenders = attackTargetsOf(grp).filter(R.isAlive);
+  return forOrdnance ? defenders.length > 0 && !defenders.some(card => ignoresConcealment(card, side)) :
+    defenders.some(card => !ignoresConcealment(card, side));
 }
 
 function aiUseConcealment() {
-  const indices = findConcealedIndices(state.aiHand);
-  if (indices.length === 0) return [];
-  const idx = indices[0];
+  const idx = aiActionCardIndex('CONCEALED');
+  if (idx < 0) return [];
   const card = state.aiHand[idx];
   state.aiHand.splice(idx, 1);
   if (card) pushTerrainToDiscard(card);
@@ -206,11 +216,14 @@ function resultLabel(r) {
   if (r === 'PANIC_ROUT') return '潰走';
   if (r === 'BERSERK') return '狂暴兵';
   if (r === 'WOUND') return '負傷';
+  if (r === 'COMMANDER_KILLED') return '車長戦死';
+  if (r === 'BUTTONED') return 'ハッチ閉鎖';
   return r;
 }
 function resultColor(r) {
   if (r === 'KIA' || r === 'PANIC_KIA') return '#f44';
-  if (r === 'PIN') return '#fd0';
+  if (r === 'PIN' || r === 'BUTTONED') return '#fd0';
+  if (r === 'COMMANDER_KILLED') return '#f80';
   if (r === '潰走' || r === 'PANIC_ROUT') return '#f80';
   if (r === 'BERSERK') return '#f0f';
   if (r === 'WOUND') return '#fa0';
@@ -251,12 +264,33 @@ function _useHeroFromHand(side, question) {
   if (side === 'ai') state.aiHandCount = state.aiHand.length;
   return true;
 }
+/** §10.4 / §17.8: ピン直後のヒーローで潜入や移送を続けられる。 */
+function applyPersonnelPin(card) {
+  const R = window.INFANTRY_RULES;
+  const transferring = Boolean(card.transfer);
+  const side = (transferring || card.infiltrating) ? _sideOfCard(card) : null;
+  if (side && !infantryGunProfile(card, side)) {
+    const name = R.lookupSoldier(card, getFactionKey(state[side]))?.name || card.id;
+    const action = transferring ? radioText('移送', 'transfer') : radioText('潜入', 'infiltration');
+    if (_useHeroFromHand(side, radioText(
+      `${name} の${action}を続けるためヒーローを使いますか？`,
+      `Use a Hero to let ${name} continue their ${action}?`))) {
+      if (side === 'ai') alert(`AI: ${name} はヒーローで${action}を続けます。`);
+      return 'NONE';
+    }
+  }
+  R.pinSoldier(card);
+  if (card.infiltrating) window.CC_ACTION.clearSoldierInfiltration(card);
+  if (transferring) updateTransfers();
+  return 'PIN';
+}
+
 /** §33.1 負傷を付ける。負傷前と同じ状態（ピンか通常）のまま。
  *  §33.7 すでに負傷している兵が再び負傷したら、ヒーローカードをすぐに使わない限り KIA。戻り値: 'WOUND' | 'KIA' */
 function applyWound(card) {
   const R = window.INFANTRY_RULES;
   const side = _sideOfCard(card);
-  if (card.wounded) {
+  if (R.isWoundActive(card)) {
     const d = R.lookupSoldier(card, getFactionKey(side === 'player' ? state.player : state.ai));
     const name = d ? d.name : card.id;
     if (side && _useHeroFromHand(side, `${name} が再び負傷しました。ヒーローカードを使って戦死を防ぎますか？（§33.7）`)) {
@@ -272,90 +306,237 @@ function applyWound(card) {
 window.applyWound = applyWound;
 
 /** §21.1 爆薬（副次兵器）を持てる兵器: 非武装か、小銃・突撃銃・カービン・BAR・短機関銃 */
-const DEMO_OK_WEAPONS = ['非武装', 'ボルトアクション小銃', '半自動小銃', '突撃銃', 'カービン', 'BAR自動小銃', '短機関銃'];
-/** 兵士が主兵器（壊れていない兵器）を持っているか */
+const SECONDARY_ELIGIBLE_WEAPONS = ['非武装', 'ボルトアクション小銃', '半自動小銃', '突撃銃', 'カービン', 'BAR自動小銃', '短機関銃'];
+
+function secondaryWeaponEligible(card, faction) {
+  const R = window.INFANTRY_RULES;
+  if (!R.isAlive(card) || window.AFV?.isAfvCard(card)) return false;
+  const def = card.id ? R.lookupSoldier(card, faction) : getSoldierDef(faction, card.num);
+  const weapon = card.destroyed || card.flameDiscarded ? '非武装' : def?.weaponCat;
+  return SECONDARY_ELIGIBLE_WEAPONS.includes(weapon) &&
+    (!R.isWoundActive(card) || weapon === '非武装');
+}
+
+function reservedSecondaryWeapon(scenario, faction, number) {
+  return ['panzerfaustHolders', 'antiTankMines', 'radioHolders', 'demoHolders'].find(key =>
+    scenario?.[key]?.[faction]?.includes(number));
+}
+
+function secondaryWeaponOn(card, faction) {
+  if (card.demoCharge) return { kind: 'demo' };
+  const kind = card._secondaryWeapon === undefined ?
+    reservedSecondaryWeapon(state.scenario, faction, card.num) : card._secondaryWeapon;
+  if (!kind || kind === 'demoHolders' || (kind === 'radioHolders' && card._radioRemoved) ||
+      (kind === 'antiTankMines' && card._magneticMineSpent) ||
+      (kind === 'panzerfaustHolders' && card._panzerfaustSpent)) return null;
+  return { kind, broken: kind === 'radioHolders' && Boolean(card._radioBroken) };
+}
+function setSecondaryWeapon(card, weapon) {
+  const kind = weapon?.kind;
+  card.demoCharge = kind === 'demo';
+  card._secondaryWeapon = kind && kind !== 'demo' ? kind : null;
+  card._radioBroken = kind === 'radioHolders' && Boolean(weapon.broken);
+  card._radioRemoved = false;
+  card._magneticMineSpent = false;
+  card._panzerfaustSpent = false;
+}
+function carriesScenarioSecondary(card, faction, key) {
+  return secondaryWeaponOn(card, faction)?.kind === key && secondaryWeaponEligible(card, faction);
+}
+function secondaryWeaponLabel(kind, translate = true) {
+  const label = translate ? radioText : ja => ja;
+  if (kind === 'demo') return label('爆薬', 'Demolition charge');
+  if (kind === 'radioHolders') return label('無線機', 'Radio');
+  if (kind === 'panzerfaustHolders') return label('パンツァーファウスト', 'Panzerfaust');
+  return label('対戦車磁気地雷', 'Anti-tank magnetic mine');
+}
+function secondaryWeaponToken(weapon, card, faction, side) {
+  const name = secondaryWeaponLabel(weapon.kind);
+  return { secondary: weapon, isDemo: weapon.kind === 'demo', weaponCat: name, weaponName: name,
+    fac: faction, fromNum: card.num, fromSide: side };
+}
+function noteSniperCheck(group, number) {
+  const turn = (state.turnCount || 0) + 1;
+  const previous = group._sniperCheck;
+  group._sniperCheck = { turn, number: previous?.turn === turn ? Math.min(previous.number, number) : number };
+}
+
+function voluntaryPanicCandidates(group, side) {
+  const R = window.INFANTRY_RULES;
+  return group?.cards.filter(card => R.isPinned(card) && R.isAlive(card) && !card._commissar &&
+    !card.berserk && !card.transfer && !window.AFV.isAfvCard(card) && !infantryGunProfile(card, side)) || [];
+}
+
+function berserkTargets(group, side) {
+  const R = window.INFANTRY_RULES;
+  const index = state.groups[side].indexOf(group);
+  return state.groups[_enemySide(side)].map((enemy, target) => ({ enemy, target }))
+    .filter(({ enemy, target }) => _groupAlive(enemy) && R.relativeRangeBetweenGroups(group, enemy, {
+      sameOpposing: index === target, adjacent: Math.abs(index - target) === 1
+    }) === 5);
+}
+
+function berserkFireResult(resolution, group, card, def, side, rpc) {
+  const result = resolution.result;
+  const panic = resolution.replaced || result;
+  if (card.berserk && (panic === 'PANIC_KIA' || panic === 'PANIC_ROUT')) {
+    card.berserk = false;
+    return 'PANIC_KIA';
+  }
+  if (result !== 'PANIC_KIA' || !def || !_groupSideIdx(group) ||
+      !window.CC_ACTION.checkBerserkEligibility(card, def, rpc, getFactionKey(state[side]), 5) ||
+      !berserkTargets(group, side).length) return result;
+  if (window.INFANTRY_RULES.hasTerrainType(group, 'MINEFIELD')) return 'KIA';
+  card.berserk = true;
+  return 'BERSERK';
+}
+
+async function runBerserkAtTurnStart(side) {
+  const R = window.INFANTRY_RULES;
+  const groups = state.groups[side];
+  const enemySide = _enemySide(side);
+  const faction = getFactionKey(state[side]);
+  for (const group of groups) {
+    for (const card of group?.cards.filter(c => c.berserk && R.isAlive(c)) || []) {
+      if (state.phase !== 'play' || settleDeckTimeLimit()) return;
+      const definition = R.lookupSoldier(card, faction);
+      const targets = berserkTargets(group, side).filter(({ enemy }) =>
+        !window.AFV.isAfvGroup(enemy) || (!definition?.needsCrew && window.AFV.canAttackVehicleInCloseCombat(card, side)));
+      if (!targets.length) {
+        R.unpinSoldier(card);
+        card.berserk = false;
+      } else {
+        let picked = targets[0];
+        if (side === 'player' && targets.length > 1) {
+          const answer = prompt(radioText('狂暴兵の攻撃先を番号で選んでください。', 'Choose a target for the berserk soldier.') +
+            '\n' + targets.map(({ enemy }, i) => `${i + 1}: GROUP ${enemy.name}`).join('\n'), '1');
+          picked = targets[Number(answer) - 1] || picked;
+        }
+        if (definition?.needsCrew) dropWeaponToPool(group, card, faction, side);
+        if (window.AFV.isAfvGroup(picked.enemy)) {
+          const results = await window.AFV.resolveVehicleCloseCombat(group, picked.enemy, side, card);
+          if (results?.some(hit => hit.result === 'KIA')) R.unpinSoldier(card);
+        } else {
+          await window.CC_ACTION.executeBerserkCC(card, group, groups.indexOf(group),
+            picked.enemy, enemySide, picked.target, ccDrawCard, faction);
+        }
+        cleanupEliminatedGroups();
+      }
+      renderField('player');
+      renderField('ai');
+    }
+  }
+}
+
+function sniperCheckNumber(group, side, checked = group?._sniperCheck) {
+  if (checked?.turn !== (state.turnCount || 0) || group.eliminated) return null;
+  const rules = window.INFANTRY_RULES;
+  const faction = getFactionKey(state[side]);
+  const armed = group.cards.some(card => {
+    if (!rules.isAlive(card) || rules.isPinned(card) || card.transfer) return false;
+    if (window.AFV?.isAfvCard(card)) return !window.AFV.isButtoned(card);
+    return infantryGunProfile(card, side) || hasPrimaryWeapon(card, faction);
+  });
+  return armed ? checked.number : null;
+}
+
+/** §14.4・§14.41: 成功したチェック1回につき、その狙撃兵だけを除去する。 */
+function resolveSniperCheck(sniperSide, attackNumber, judge) {
+  const roll = ordnanceRNC(judge);
+  if (roll.red || roll.number <= attackNumber) return 'failed';
+  if (!partisanSniperCheck(sniperSide)) return 'remaining';
+
+  const extra = sniperSide + 'ExtraSnipers';
+  if (state[extra] > 0) {
+    state[extra]--;
+    if (state.partisanSniperChecks) state.partisanSniperChecks[sniperSide] = 0;
+    return 'remaining';
+  }
+  state[sniperSide + 'SniperDisabled'] = true;
+  return 'disabled';
+}
+
 function hasPrimaryWeapon(card, fk) {
   const w = (typeof weaponOfCard === 'function') ? weaponOfCard(card, fk) : null;
   return !!(w && w.weaponCat !== '非武装' && !card.destroyed);
 }
-/** この兵士が爆薬を持てるか（§21.1・§33.6 負傷兵は主兵器と両方は持てない） */
-function demoEligible(card, fk) {
-  const R = window.INFANTRY_RULES;
-  if (!card || card.demoCharge || (R && !R.isAlive(card))) return false;
-  const w = (typeof weaponOfCard === 'function') ? weaponOfCard(card, fk) : null;
-  const cat = (!w || card.destroyed) ? '非武装' : w.weaponCat;
-  if (DEMO_OK_WEAPONS.indexOf(cat) < 0) return false;
-  if (card.wounded && cat !== '非武装') return false; // §33.6
-  return true;
+/** §21.1: 副次兵器は1個まで。 */
+function demoEligible(card, faction) {
+  return Boolean(card && !secondaryWeaponOn(card, faction) && secondaryWeaponEligible(card, faction));
 }
-/** §33.6 負傷した兵士は主兵器と副次兵器（今は爆薬）の両方は持てない。どちらかを捨て、捨てた兵器はグループの兵器チットとして残す（§18 で拾える）。
- *  プレイヤーは選ぶ。AI は侵入中なら爆薬を残し（侵入先で使う §21）、そうでなければ主兵器を残す */
+
+/** §33.6: 負傷時は主兵器か副次兵器のどちらかを手放す。 */
 function woundPortage(card) {
-  const side = _sideOfCard(card);
-  if (!side || !card.demoCharge) return;
-  const fk = getFactionKey(side === 'player' ? state.player : state.ai);
-  if (!hasPrimaryWeapon(card, fk)) return;
   const R = window.INFANTRY_RULES;
-  const d = R.lookupSoldier(card, fk);
-  const name = d ? d.name : card.id;
-  const g = (state.groups[side] || []).find(x => x && x.cards && x.cards.indexOf(card) >= 0);
-  if (!g) return;
-  // 捨てた兵器を置くグループ（侵入中なら侵入先 §20.57）
-  let where = g;
-  if (card.infiltrating && card.infiltratedGroupSide && card.infiltratedGroupIdx != null) {
-    where = (state.groups[card.infiltratedGroupSide] || [])[card.infiltratedGroupIdx] || g;
-  }
-  let dropDemo;
-  if (side === 'player') {
-    dropDemo = confirm(`負傷した ${name} は、主兵器と爆薬の両方は持てません（§33.6）。「OK」で爆薬を捨てて主兵器を残します。「キャンセル」で主兵器を捨てて爆薬を残します。`);
+  if (!R.isAlive(card) || !R.isWoundActive(card)) return;
+  const side = _sideOfCard(card);
+  if (!side) return;
+  const faction = getFactionKey(state[side]);
+  const secondary = secondaryWeaponOn(card, faction);
+  if (!secondary || !hasPrimaryWeapon(card, faction)) return;
+  const group = state.groups[side].find(candidate => candidate?.cards.includes(card));
+  if (!group) return;
+  const destination = card.infiltrating ? state.groups[card.infiltratedGroupSide]?.[card.infiltratedGroupIdx] || group : group;
+  const name = window.INFANTRY_RULES.lookupSoldier(card, faction)?.name || card.id;
+  const label = secondaryWeaponLabel(secondary.kind);
+  const dropSecondary = side === 'player' ?
+    confirm(radioText(`${name} は負傷のため主兵器と${label}を同時に持てません。OKで${label}を、キャンセルで主兵器を手放します。`,
+      `${name} is wounded. OK drops ${label}. Cancel drops the primary weapon.`)) :
+    !card.infiltrating || secondary.kind !== 'demo';
+  if (dropSecondary) {
+    (destination.weaponPool ||= []).push(secondaryWeaponToken(secondary, card, faction, side));
+    setSecondaryWeapon(card, null);
   } else {
-    dropDemo = !card.infiltrating;
+    dropWeaponToPool(destination, card, faction, side);
+    releaseFromCrew(group, card);
+    if (group.crewPairs) delete group.crewPairs[card.num];
   }
-  if (dropDemo) {
-    card.demoCharge = false;
-    (where.weaponPool || (where.weaponPool = [])).push({ isDemo: true, weaponCat: '爆薬', weaponName: '爆薬', xVal: '',
-      range: ['0','0','0','0','0','0'], rangeData: [0,1,2,3,4,5].map(() => ({ main: 0 })), needsCrew: false,
-      fac: fk, fromNum: card.num, assistantNum: null, fromSide: side });
-    if (side === 'ai') alert(`AI: 負傷した ${name} は爆薬を捨てました（§33.6）`);
-  } else {
-    dropWeaponToPool(where, card, fk, side);
-    // クルー兵器の持ち主だったらクルーの組を解く
-    if (g.crewPairs) Object.keys(g.crewPairs).forEach(o => {
-      if (Number(o) === card.num || Number(g.crewPairs[o]) === card.num) delete g.crewPairs[o];
-    });
-    if (side === 'ai') alert(`AI: 負傷した ${name} は主兵器を捨てて爆薬を残しました（§33.6）`);
+  if (side === 'ai') alert(`AI: 負傷した ${name} は${dropSecondary ? label : '主兵器'}を手放しました（§33.6）`);
+}
+
+/** §33.9 ヒーローで止めていた負傷の効果は手番終了時に戻る。 */
+function expireWoundSuspensions() {
+  const endingTurn = state.turnCount || 0;
+  for (const side of ['player', 'ai']) {
+    const cards = state.groups[side].flatMap(group => group?.cards || []);
+    for (const card of cards) {
+      if (card.woundSuspendedTurn !== endingTurn) continue;
+      delete card.woundSuspendedTurn;
+      woundPortage(card);
+    }
   }
 }
 
-/** §33.7 新しいデッキの最初のターンの開始時に、負傷兵1人ごとに RNC。赤なら KIA。直前にヒーローカードで免除できる */
+/** §33.7 山札を作り直した後、各陣営が自分の次の手番に負傷兵の耐久判定を行う。 */
 function checkWoundEndurance() {
-  if (!state.woundCheckPending) return;
-  state.woundCheckPending = false;
+  if (state.phase !== 'play') return;
+  const side = state.currentTurn;
+  const pending = state.woundCheckPending === true ? { player: true, ai: true } : state.woundCheckPending;
+  if (!pending?.[side]) return;
+  const otherSide = _enemySide(side);
+  state.woundCheckPending = pending[otherSide] ? { [otherSide]: true } : false;
   const R = window.INFANTRY_RULES;
-  if (!R) return;
+  const faction = getFactionKey(state[side]);
+  const groups = state.groups[side].filter(group => group && !group.eliminated);
+
   const lines = [];
-  ['player', 'ai'].forEach(side => {
-    const facKey = getFactionKey(side === 'player' ? state.player : state.ai);
-    (state.groups[side] || []).forEach(g => {
-      if (!g || g.eliminated) return;
-      g.cards.forEach(c => {
-        if (!c.wounded || !R.isAlive(c)) return;
-        const d = R.lookupSoldier(c, facKey);
-        const name = d ? d.name : c.id;
-        if (_useHeroFromHand(side, `新しいデッキ: 負傷兵 ${name} の耐久判定の前に、ヒーローカードで免除しますか？（§33.7）`)) {
-          lines.push(`${side === 'player' ? '' : 'AI: '}${name} — ヒーローカードで免除`);
-          return;
-        }
-        const j = drawTerrainCard();
-        if (!j) return;
-        showJudgeCard(j);
-        checkBreezeRemoveSmoke(j); pushTerrainToDiscard(j);
-        const red = j.terrain && j.terrain.rncColor === '赤';
-        if (red) R.killSoldier(c);
-        lines.push(`${side === 'player' ? '' : 'AI: '}${name} — RNC ${red ? '赤' : '黒'}${j.terrain.range}${red ? ' → 戦死' : ' → 無事'}`);
-      });
-    });
-  });
+  for (const card of groups.flatMap(group => group.cards)) {
+    if (state.terrainDeck?.timeLimitReached) break;
+    if (!R.isAlive(card) || !R.isWoundActive(card) || card._evacuationWound) continue;
+    const name = (side === 'ai' ? 'AI: ' : '') + (R.lookupSoldier(card, faction)?.name || card.id);
+    if (_useHeroFromHand(side, `新しいデッキ: 負傷兵 ${name} の耐久判定の前に、ヒーローカードで免除しますか？（§33.7）`)) {
+      lines.push(`${name} — ヒーローカードで免除`);
+      continue;
+    }
+    const judge = drawRandomReinforcementRnc(side);
+    if (!judge) break;
+    showJudgeCard(judge);
+    checkBreezeRemoveSmoke(judge);
+    pushTerrainToDiscard(judge);
+    const red = judge.terrain.rncColor === '赤';
+    if (red) R.killSoldier(card);
+    lines.push(`${name} — RNC ${red ? '赤' : '黒'}${judge.terrain.range}${red ? ' → 戦死' : ' → 無事'}`);
+  }
   if (lines.length) {
     alert(`§33.7 新しいデッキ: 負傷兵の耐久判定\n${lines.join('\n')}`);
     cleanupEliminatedGroups();
@@ -371,64 +552,85 @@ function checkWoundEndurance() {
 function isCrewAssistant(grp, card) {
   return !!(grp && grp.crewPairs && card && card.num != null && Object.values(grp.crewPairs).some(v => Number(v) === card.num));
 }
+/** §11.11: 他のクルー兵器を所持する兵士や捕虜の監視役は助手になれない。 */
+function canServeAsWeaponAssistant(card, faction) {
+  const R = window.INFANTRY_RULES;
+  if (!R.isAlive(card) || R.isPinned(card) || card.transfer || card.infiltrating || card.prisoners?.length) return false;
+  const def = R.lookupSoldier(card, faction);
+  return def && !def.afv && !def.isInfantryGun && !def.infantryGun && (!def.needsCrew || card.destroyed);
+}
 /** 補助乗員の任務を解く（§32.2 補助乗員しか監視役の候補がいない時） */
 function releaseFromCrew(grp, card) {
   if (!isCrewAssistant(grp, card)) return;
   Object.keys(grp.crewPairs).forEach(k => { if (Number(grp.crewPairs[k]) === card.num) delete grp.crewPairs[k]; });
 }
-/** §32.2 監視役の候補: 生存している兵（ピン・負傷・非武装でもよい）。補助乗員は不可（それしかいなければ可） */
-function guardCandidates(grp) {
+/** §32.2 ピン・負傷・非武装でも監視できる。助手を使うのは他に候補がいない時だけ。 */
+function guardCandidates(group, side) {
   const R = window.INFANTRY_RULES;
-  const alive = grp.cards.filter(c => R.isAlive(c));
-  const nonAsst = alive.filter(c => !isCrewAssistant(grp, c));
-  return nonAsst.length ? nonAsst : alive;
+  const members = group.cards.filter(card => R.isAlive(card) && !card.transfer &&
+    !window.AFV?.isAfvCard(card) && !infantryGunProfile(card, side));
+  const withoutAssistants = members.filter(card => !isCrewAssistant(group, card));
+  return withoutAssistants.length ? withoutAssistants : members;
 }
-/** 監視役を自動で選ぶ（AI・監視役の引き継ぎ用）: 指揮官とクルー兵器の持ち主を避け、CCV の低い兵 */
-function pickGuardAuto(grp, side) {
+
+function choosePrisonerGuard(group, side, candidates) {
+  if (candidates.length < 2) return candidates[0];
   const R = window.INFANTRY_RULES;
-  const cands = guardCandidates(grp);
-  if (!cands.length) return null;
-  const facKey = getFactionKey(side === 'player' ? state.player : state.ai);
-  const score = c => {
-    const d = R.lookupSoldier(c, facKey) || {};
-    let sc = 0;
-    if (d.leader) sc += 10;
-    if (grp.crewPairs && grp.crewPairs[c.num] != null) sc += 10;
-    sc += parseInt(String(d.ccvFront || '0'), 10) || 0;
-    return sc;
+  const faction = getFactionKey(state[side]);
+  if (side === 'player') {
+    const list = candidates.map((card, i) => {
+      const name = R.lookupSoldier(card, faction)?.name || card.id;
+      return `${i + 1}: #${card.num} ${name}`;
+    }).join('\n');
+    const choice = parseInt(prompt(`捕虜の監視役を選択（番号）§32.2:\n${list}`, '1'), 10) - 1;
+    return candidates[choice] || candidates[0];
+  }
+
+  // 指揮官とクルー兵器の射手を避け、CCV の低い兵を優先する。
+  const score = card => {
+    const definition = R.lookupSoldier(card, faction);
+    return 10 * Number(Boolean(definition?.leader)) +
+      10 * Number(group.crewPairs?.[card.num] != null) +
+      (parseInt(definition?.ccvFront, 10) || 0);
   };
-  return cands.slice().sort((a, b) => score(a) - score(b))[0];
+  return candidates.reduce((best, card) => score(card) < score(best) ? card : best);
 }
-/** 捕虜を監視役の下に置く */
-function _assignPrisoner(prisoner, guard, grp) {
-  releaseFromCrew(grp, guard);
-  guard.prisoners = (guard.prisoners || []).concat([prisoner]);
+
+function assignPrisoners(group, guard, prisoners) {
+  releaseFromCrew(group, guard);
+  guard.prisoners = (guard.prisoners || []).concat(prisoners);
 }
-/** §32 捕虜にする。prisonerSide: 捕虜になる側、captorGroup/captorSide: 捕獲する側。成功したら true */
+
+function prisonerGuardsAvailableToChange(group) {
+  const R = window.INFANTRY_RULES;
+  return (group?.cards || []).filter(card => R.isAlive(card) && !card.transfer && card.prisoners?.length);
+}
+
+function changePrisonerGuard(group, previousGuards, nextGuard) {
+  const moved = [];
+  for (const guard of previousGuards) {
+    if (guard === nextGuard) continue;
+    moved.push(...guard.prisoners);
+    guard.prisoners = [];
+  }
+  assignPrisoners(group, nextGuard, moved);
+}
+
+/** §32 捕虜にする。成功したら true。 */
 function capturePrisoner(prisoner, prisonerSide, captorGroup, captorSide) {
   const R = window.INFANTRY_RULES;
-  if (!R || !prisoner || !captorGroup) return false;
-  const cands = guardCandidates(captorGroup);
-  if (!cands.length) return false;
-  let guard;
-  if (captorSide === 'player') {
-    const facKey = getFactionKey(state.player);
-    if (cands.length === 1) guard = cands[0];
-    else {
-      const list = cands.map((c, i) => { const d = R.lookupSoldier(c, facKey); return `${i + 1}: #${c.num} ${d ? d.name : c.id}`; }).join('\n');
-      const sel = parseInt(prompt(`捕虜の監視役を選択（番号）§32.2:\n${list}`, '1'), 10) - 1;
-      guard = cands[sel] || cands[0];
-    }
-  } else {
-    guard = pickGuardAuto(captorGroup, captorSide);
-  }
+  if (!R || !R.isAlive(prisoner) || prisoner.captured || !captorGroup ||
+      captorGroup.eliminated || captorGroup.forming || window.AFV?.isAfvCard(prisoner) ||
+      infantryGunProfile(prisoner, prisonerSide)) return false;
+  const guard = choosePrisonerGuard(captorGroup, captorSide, guardCandidates(captorGroup, captorSide));
   if (!guard) return false;
   prisoner.routed = true;
   prisoner.captured = true;
   prisoner.pinned = false;
-  if (prisoner.infiltrating && window.CC_ACTION && window.CC_ACTION.clearSoldierInfiltration) window.CC_ACTION.clearSoldierInfiltration(prisoner);
-  prisoner.infiltrating = false;
-  _assignPrisoner(prisoner, guard, captorGroup);
+  if (prisoner.infiltrating) window.CC_ACTION.clearSoldierInfiltration(prisoner);
+  assignPrisoners(captorGroup, guard, [prisoner]);
+  if (prisoner.transfer) updateTransfers();
+  recordTerrainClaimAfterLoss(prisoner);
   return true;
 }
 window.capturePrisoner = capturePrisoner;
@@ -442,12 +644,14 @@ function onSoldierRout(card) {
   ['player', 'ai'].forEach(sd => (state.groups[sd] || []).forEach((g, i) => { if (g && g.cards.indexOf(card) >= 0) { side = sd; gi = i; } }));
   if (!side) return false;
   const grp = state.groups[side][gi];
+  if (window.AFV?.isAfvCard(card) || infantryGunProfile(card, side)) return false;
   const eSide = side === 'player' ? 'ai' : 'player';
   const captors = [];
   (state.groups[eSide] || []).forEach((e, ei) => {
-    if (!e || e.eliminated || !e.cards.some(c => R.isAlive(c))) return;
-    const base = R.relativeRange(grp.distance, e.distance);
-    const rr = Math.abs(ei - gi) > 1 ? Math.max(0, base - 1) : base;
+    if (!e || e.eliminated || e.forming || !guardCandidates(e, eSide).length) return;
+    const rr = R.relativeRangeBetweenGroups(grp, e, {
+      sameOpposing: ei === gi, adjacent: Math.abs(ei - gi) === 1
+    });
     if (rr === 5) captors.push(ei);
   });
   if (!captors.length) return false;
@@ -475,34 +679,161 @@ function onSoldierRout(card) {
 }
 window.onSoldierRout = onSoldierRout;
 
-/** §32.2/§32.22 監視役が排除されたら同じグループの別の兵へ（行動に数えない）。グループの兵が全員排除されたら捕虜を解放 */
-function updatePrisoners() {
+/** §32.2/§32.22 監視役を失ったグループの捕虜は、生存者に引き継ぐ。 */
+function updateGroupPrisoners(group, side) {
   const R = window.INFANTRY_RULES;
-  if (!R || !state || !state.groups) return;
-  const released = [];
-  ['player', 'ai'].forEach(side => (state.groups[side] || []).forEach(g => {
-    if (!g) return;
-    g.cards.forEach(c => {
-      if (!c.prisoners || !c.prisoners.length || R.isAlive(c)) return;
-      const list = c.prisoners;
-      c.prisoners = [];
-      const ng = pickGuardAuto(g, side);
-      if (ng) list.forEach(p => _assignPrisoner(p, ng, g));
-      else list.forEach(p => { p.released = true; released.push(p); });
-    });
-  }));
-  if (released.length) alert(`§32.22 捕虜 ${released.length} 人が解放されました（捕獲側はその勝利点を失います）`);
+  const waiting = group._prisonersAwaitingGuard || [];
+  for (const card of group.cards) {
+    if (!card.prisoners?.length || R.isAlive(card)) continue;
+    waiting.push(...card.prisoners);
+    card.prisoners = [];
+  }
+  if (!waiting.length) return 0;
+
+  if (!group.cards.some(R.isAlive)) {
+    waiting.forEach(prisoner => { prisoner.released = true; });
+    delete group._prisonersAwaitingGuard;
+    return waiting.length;
+  }
+
+  const guard = choosePrisonerGuard(group, side, guardCandidates(group, side));
+  if (guard) {
+    assignPrisoners(group, guard, waiting);
+    delete group._prisonersAwaitingGuard;
+  } else {
+    // 歩兵砲だけが残った場合なども、グループが全滅するまでは解放しない。
+    group._prisonersAwaitingGuard = waiting;
+  }
+  return 0;
+}
+
+function updatePrisoners(boundaryTransfer) {
+  let released = 0;
+  if (boundaryTransfer) {
+    released = updateGroupPrisoners(boundaryTransfer.group, boundaryTransfer.side);
+  } else {
+    for (const side of ['player', 'ai']) {
+      for (const group of state.groups[side]) {
+        if (group) released += updateGroupPrisoners(group, side);
+      }
+    }
+  }
+  if (released) alert(`§32.22 捕虜 ${released} 人が解放されました（捕獲側はその勝利点を失います）`);
+}
+
+/** §20.8 最後の兵を失った時点の侵入兵を、射撃や白兵戦で侵入が解除される前に記録する。 */
+function recordTerrainClaimAfterLoss(card) {
+  if (state.phase !== 'play') return;
+  const side = _sideOfCard(card);
+  if (!side) return;
+  const index = state.groups[side].findIndex(group => group?.cards.includes(card));
+  const group = state.groups[side][index];
+  if (!group || group.eliminated || _groupAlive(group)) return;
+  const claims = terrainClaimants(side, index);
+  if (claims.length) group._terrainClaim = claims;
+}
+
+function terrainClaimants(side, index) {
+  const R = window.INFANTRY_RULES;
+  return state.groups[_enemySide(side)].flatMap(group => _groupAlive(group) && !group.forming
+    ? group.cards.filter(card => R.isAlive(card) && card.infiltrating &&
+      card.infiltratedGroupSide === side && card.infiltratedGroupIdx === index).map(card => ({ group, card })) : []);
+}
+
+function captureEliminatedTerrain(defender, side, index) {
+  const R = window.INFANTRY_RULES;
+  const attackers = _enemySide(side);
+  const claims = (defender._terrainClaim || terrainClaimants(side, index)).filter(({ group, card }) =>
+    _groupAlive(group) && group.cards.includes(card) && R.isAlive(card));
+  delete defender._terrainClaim;
+  if (!claims.length) return;
+
+  // FAQ §20.8 2枚移動していれば、古い移動カードを裏返して平地として捕獲する。
+  const stack = (defender.terrain || []).filter(card => card?.terrain &&
+    !['WIRE', 'SMOKE', 'TRENCH'].includes(card.terrain.type));
+  const base = stack.findLastIndex(card => card.terrain.type !== 'MOVEMENT');
+  const moves = stack.slice(base + 1);
+  const covered = moves.length >= 2 ? moves[0] : stack[base];
+  const trench = defender.terrain?.find(card => card.terrain?.type === 'TRENCH');
+  if ((!covered || covered._surpriseBuilding || isDummyPlain(covered)) && !trench) return;
+  const ground = covered && !covered._surpriseBuilding
+    ? (moves.length >= 2 ? placedOpenGround(covered) : covered) : makeDummyPlain();
+  const type = ground.terrain.type;
+  const faction = getFactionKey(state[attackers]);
+  const pillboxEligible = card => !window.AFV.isAfvCard(card) && !infantryGunProfile(card, attackers) &&
+    !secondaryWeaponOn(card, faction) && !pillboxForbiddenWeapon(R.lookupSoldier(card, faction)?.weaponCat);
+  const groups = [...new Set(claims.map(claim => claim.group))].filter(group => {
+    if (type === 'MARSH' && (window.AFV.isAfvGroup(group) || groupHasInfantryGun(group, attackers))) return false;
+    if (type !== 'PILLBOX') return true;
+    const men = group.cards.filter(R.isAlive);
+    return men.length <= 3 && men.every(pillboxEligible);
+  });
+  if (!groups.length) return;
+
+  const newTerrain = [ground, ...(trench ? [trench] : [])];
+  let captor;
+  if (attackers === 'player') {
+    const names = groups.map((group, i) => `${i + 1}. GROUP ${group.name}`);
+    const question = radioText('地形を占拠するグループを選んでください。0で占拠しません（§20.8）。',
+      'Choose a group to capture the terrain. Enter 0 to decline (§20.8).');
+    captor = groups[Number(prompt([question, ...names].join('\n'), '0')) - 1];
+  } else {
+    const defense = R.calcTerrainMod(newTerrain, false);
+    captor = groups.find(group => defense < R.calcTerrainMod(group.terrain, false) || isMovingIgnoringOverlays(group));
+  }
+  if (!captor) return;
+
+  defender.terrain = defender.terrain.filter(card => card !== covered && card !== trench);
+  const wire = captor.terrain.filter(card => card.terrain?.type === 'WIRE');
+  captor.terrain.filter(card => !wire.includes(card)).forEach(pushTerrainToDiscard);
+  captor.terrain = [...newTerrain, ...wire];
+  clearOutgoingFlanks(captor);
+  breakFlanksOn(captor);
+  delete captor.pendingShift;
+  delete captor._overrunTargets;
+  if (defender.weaponPool?.length) {
+    captor.weaponPool = defender.weaponPool;
+    defender.weaponPool = [];
+  }
+
+  const capacity = (type === 'PILLBOX' ? 3 : 10) - captor.cards.filter(R.isAlive).length -
+    incomingTransit(attackers, state.groups[attackers].indexOf(captor)).length;
+  const others = capacity > 0 ? claims.filter(({ group, card }) =>
+    group !== captor && card.infiltrating && !card.prisoners?.length && (type !== 'PILLBOX' || pillboxEligible(card))) : [];
+  if (attackers === 'player' && others.length) {
+    const names = others.map(({ group, card }, i) => `${i + 1}. GROUP ${group.name} / ${R.lookupSoldier(card, faction)?.name || card.id}`);
+    const question = radioText(`占拠したグループに合流させる侵入兵の番号（最大${capacity}人・空欄で合流なし）。`,
+      `Enter numbers of infiltrators to join the group that captured the terrain (up to ${capacity}), or leave blank.`);
+    const answer = prompt([question, ...names].join('\n'), '')?.trim();
+    const chosen = answer ? [...new Set(answer.split(/[\s,、]+/).map(number => others[Number(number) - 1]))] : [];
+    if (chosen.length <= capacity && chosen.every(Boolean)) {
+      for (const { group, card } of chosen) {
+        group.cards = group.cards.filter(man => man !== card);
+        captor.cards.push(card);
+        if (!group.cards.some(R.isAlive)) {
+          group.terrain.forEach(pushTerrainToDiscard);
+          group.terrain = [];
+          group.weaponPool = [];
+          group.eliminated = true;
+        }
+      }
+    }
+  }
+  ufReportLog(attackers, `GROUP ${captor.name} が GROUP ${defender.name} の地形を占拠（§20.8）`, attackers);
 }
 
 function cleanupEliminatedGroups() {
   const R = window.INFANTRY_RULES;
   if (!R) return;
+  processDroppedWeapons();
   updatePrisoners(); // §32.2/§32.22
   // 消滅グループは削除せず eliminated フラグを立てて位置関係を保持
   ['player', 'ai'].forEach(side => {
-    state.groups[side].forEach(grp => {
+    state.groups[side].forEach((grp, index) => {
+      if (!grp) return;
       const alive = grp.cards.some(c => R.isAlive(c));
       if (!alive && grp.cards.length > 0 && !grp.eliminated) {
+        captureEliminatedTerrain(grp, side, index);
         (grp.terrain || []).forEach(tc => { if (tc) pushTerrainToDiscard(tc); });
         grp.terrain = [];
         grp.eliminated = true;
@@ -522,68 +853,120 @@ function cleanupEliminatedGroups() {
   checkDefeat();
 }
 
-function checkDefeat() {
-  if (!state.initialSoldierCount) return;
-  const R = window.INFANTRY_RULES;
-  if (!R) return;
-  ['player', 'ai'].forEach(side => {
-    const initial = state.initialSoldierCount[side];
-    if (!initial) return;
-    let lost = 0;
-    state.groups[side].forEach(g => {
-      g.cards.forEach(c => { if (c.killed || c.routed) lost++; });
-    });
-    // 全滅グループの兵士も数える（グループ除去済みなので initialCount - 現存生存数）
-    let alive = 0;
-    state.groups[side].forEach(g => {
-      g.cards.forEach(c => { if (R.isAlive(c)) alive++; });
-    });
-    lost = initial - alive;
-    const half = Math.floor(initial / 2) + 1;
-    if (lost >= half) {
-      const name = side === 'player' ? state.player.name : state.ai.name;
-      const winner = side === 'player' ? state.ai.name : state.player.name;
-      state.phase = 'gameover';
-      alert(`${name} の過半数が損害を受けました。${winner} の勝利です！`);
-      endCampaignScenario(side === 'player' ? 'ai' : 'player');
-      return;
-    }
-  });
+function participatingPersonnel(side) {
+  const cards = state.groups[side].flatMap(group => group?.cards || []);
+  cards.push(...(state.retiredCasualties?.[side] || []));
+  if (side === 'ai') cards.push(...(state.randomReinforcements?.losses || []));
+  return cards;
 }
 
-/** §16.4 勝利ポイント: 各グループの（ピン状態でなく移動中でない兵士の数 × 距離チット）の合計
- *  ＋ KIA させた敵兵 1人につき 2点、潰走させた敵兵 1人につき 1点 */
-function calcVictoryPoints(side) {
+function breakForceSize(side) {
+  // 旧セーブでは、増援が登場しても初期兵員数が更新されていない場合がある。
+  return Math.max(state.initialSoldierCount?.[side] || 0, participatingPersonnel(side).length);
+}
+
+function breakLossLimit(side) {
+  const initial = breakForceSize(side);
+  if (!initial) return 0;
+  const breakLevel = state[side]?.breakLvl;
+  if (state.scenario?.victoryPresets?.includes('V') && breakLevel > 0.51) {
+    return Math.ceil(initial * breakLevel);
+  }
+  return Math.floor(initial / 2) + 1;
+}
+
+function checkDefeat() {
+  if (state.phase !== 'play' || deckAttackInProgress() || !state.initialSoldierCount) return;
+  const R = window.INFANTRY_RULES;
+  if (!R) return;
+  const broken = ['player', 'ai'].filter(side => {
+    const initial = breakForceSize(side);
+    if (!initial) return false;
+    const alive = state.groups[side].reduce((sum, group) =>
+      sum + (group?.cards.filter(R.isAlive).length || 0), 0);
+    return initial - alive >= breakLossLimit(side);
+  });
+  if (broken.length === 2) {
+    const message = radioText('両軍が同時に敗北ラインに達しました。両軍とも敗北です。',
+      'Both squads broke simultaneously. Both sides lose.');
+    state.phase = 'gameover';
+    state._ufEndText = message;
+    alert(message);
+    endCampaignScenario(null);
+    return;
+  }
+  const [side] = broken;
+  if (!side || (side === 'ai' && advanceEditorSegment())) return;
+  const winner = _enemySide(side);
+  state.phase = 'gameover';
+  alert(`${state[side].name} の損害が敗北ラインに達しました。${state[winner].name} の勝利です！`);
+  endCampaignScenario(winner);
+}
+
+function retainGroupCasualties(side, group) {
+  if (!group?.eliminated || !group.cards.length) return;
+  const retired = state.retiredCasualties ||= { player: [], ai: [] };
+  retired[side].push(...group.cards);
+}
+
+// §16.4 動ける装甲車両は、移動カードがある場合も陣地点を得る。
+function calcVictoryPoints(side, allowedTerrain = state.scenario?.victory?.requireBuildingsForTerritorial ? ['BUILDINGS'] : null) {
   const R = window.INFANTRY_RULES;
   if (!R) return 0;
+  const afv = window.AFV;
   let vp = 0;
-  (state.groups[side] || []).forEach(g => {
-    if (!g || g.eliminated) return;
-    if (isMovingIgnoringOverlays(g)) return; // 移動中の兵士は数えない
-    const n = g.cards.filter(c => R.isAlive(c) && !R.isPinned(c)).length;
-    vp += n * (g.distance || 0);
-  });
-  const enemySide = side === 'player' ? 'ai' : 'player';
-  (state.groups[enemySide] || []).forEach(g => g.cards.forEach(c => {
-    if (c.captured) { if (!c.released) vp += 5; } // §32.1 捕虜 5点（§32.22 解放されたら 0点）
-    else if (c.killed) vp += 2;
-    else if (c.routed) vp += 1;
-    else if (c.wounded) vp += 1; // §33.8 生き延びた負傷兵は相手に 1点（敗走 1点・KIA 2点は上で数える）
-  }));
+  for (const group of state.groups[side]) {
+    if (!group || group.eliminated) continue;
+    if (allowedTerrain && !allowedTerrain.includes(R.currentTerrainType({
+      terrain: group.terrain.filter(card => !card._isTrench)
+    }))) continue;
+    const moving = isMovingIgnoringOverlays(group);
+    const ready = group.cards.filter(card => {
+      if (!R.isAlive(card) || R.isPinned(card)) return false;
+      return afv?.isAfvCard(card) ? !group._immob && !group._bog && !group._stun : !moving;
+    });
+    vp += ready.length * (group.distance || 0);
+  }
+
+  return vp + calcCasualtyVictoryPoints(side);
+}
+
+function calcCasualtyVictoryPoints(side) {
+  const afv = window.AFV;
+  const enemy = _enemySide(side);
+  let vp = 0;
+  const casualties = participatingPersonnel(enemy);
+  for (const card of casualties) {
+    const vehicle = afv?.defOf(card);
+    const gun = infantryGunProfile(card, enemy);
+    if (vehicle) vp += 2 * (card._ck || 0);
+    if (gun) vp += 2 * (card._infantryGunCrewLost || 0);
+    if (card.captured) { if (!card.released) vp += 5; }
+    else if (card.killed) {
+      if (vehicle) vp += 10 + (vehicle.effect?.box ?? 0);
+      else vp += gun ? 6 : 2;
+    } else if (card.routed || card.wounded) vp++;
+  }
   return vp;
 }
 
-function checkBuildingParityVictory() {
-  if (state.phase !== 'play' || state.scenario?.victory?.type !== 'buildingParity') return false;
+function hasBuildingParity(attacker, defender) {
   const R = window.INFANTRY_RULES;
-  const attacker = state.playerRole === 'defender' ? 'ai' : 'player';
-  const defender = attacker === 'player' ? 'ai' : 'player';
   const occupied = side => state.groups[side].filter(group =>
     group && !group.eliminated && R.currentTerrainType(group) === 'BUILDINGS' &&
     group.cards.some(card => R.isAlive(card) && !card.transfer && !card.infiltrating)).length;
   const attackBuildings = occupied(attacker);
-  if (!attackBuildings || attackBuildings < occupied(defender)) return false;
+  return attackBuildings > 0 && attackBuildings >= occupied(defender);
+}
 
+function checkBuildingParityVictory() {
+  if (state.scenario?.victoryPresets || state.phase !== 'play' ||
+      (state.scenario?.victory?.type !== 'buildingParity' && !ufUsesVictory(state.scenario, 'W'))) return false;
+  const attacker = state.playerRole === 'defender' ? 'ai' : 'player';
+  const defender = _enemySide(attacker);
+  if (!hasBuildingParity(attacker, defender)) return false;
+
+  if (attacker === 'player' && advanceEditorSegment()) return true;
   state.phase = 'gameover';
   state.terrainDeck.gameOver = true;
   const name = state[attacker].name;
@@ -593,14 +976,11 @@ function checkBuildingParityVictory() {
   return true;
 }
 
-/** シナリオB「市街戦」勝利判定 (vpCount)
- *  デッキ3巡 or 損害限界超え時に、各グループ「ピン以外の生存兵士数 × distance」の合計で勝者決定。
- *  同点は引き分け（記録なし）。
- */
+/** シナリオB「市街戦」は時間切れに建物の陣地点と損害点で決着する。 */
 function checkScenarioBVictory() {
   if (state.phase === 'gameover') return;
   const sc = state.scenario;
-  if (!sc || sc.id !== 'B') return;
+  if (!ufUsesVictory(sc, 'B')) return;
   const R = window.INFANTRY_RULES;
   if (!R) return;
   const playerVP = calcVictoryPoints('player');
@@ -625,7 +1005,7 @@ function checkScenarioBVictory() {
 function checkScenarioDVictory() {
   if (state.phase === 'gameover') return;
   const sc = state.scenario;
-  if (!sc || sc.id !== 'D') return;
+  if (sc?.victoryPresets || !ufUsesVictory(sc, 'D')) return;
   const R = window.INFANTRY_RULES;
   if (!R) return;
   // テスト用（2026-11-08）: 攻撃側を役割で決める（元は「プレイヤー＝攻撃側」の決め打ち）
@@ -663,9 +1043,9 @@ function checkScenarioDVictory() {
  *  PILLBOX が消えた = 放棄 → 攻撃側勝利
  */
 function checkScenarioCVictory() {
-  if (state.phase === 'gameover') return;
+  if (state.phase !== 'play') return;
   const sc = state.scenario;
-  if (!sc || sc.id !== 'C') return;
+  if (!ufUsesVictory(sc, 'C') || sc?.victoryPresets) return;
   const R = window.INFANTRY_RULES;
   if (!R) return;
   // 防御側を判定（攻守は state.playerRole で決まる）
@@ -696,12 +1076,14 @@ function checkScenarioCVictory() {
 function checkScenarioAVictory() {
   if (state.phase === 'gameover') return;
   const sc = state.scenario;
-  if (!sc || (sc.id !== 'A' && sc.id !== 'E')) return; // E も同じ勝利条件（ユーザーの指示 2026-11-04）
+  if (sc?.victoryPresets) return;
+  const useE = ufUsesVictory(sc, 'E');
+  if (!ufUsesVictory(sc, 'A') && !useE) return;
   const R = window.INFANTRY_RULES;
   if (!R) return;
   const sides = ['player', 'ai'];
   // シナリオE: 1つ以上のグループで合わせて4枚（ルールE）。AFV は数えない（ユーザーの指示 2026-11-06）
-  const isE = sc.id === 'E';
+  const isE = useE;
   const countOf = grp => grp.cards.filter(c => R.isAlive(c) && !R.isPinned(c) && !(isE && isAfvCardForVictory(c))).length;
   for (const side of sides) {
     const ourGroups = state.groups[side].filter(g => !g.eliminated);
@@ -747,8 +1129,175 @@ function isAfvCardForVictory(c) {
   for (const side of ['player', 'ai']) {
     const who = side === 'player' ? state.player : state.ai;
     const d = R && who ? R.lookupSoldier(c, getFactionKey(who)) : null;
-    if (d && d.afv && (c.num === 31 || c.num === 131)) return true;
+    if (d?.afv) return true;
   }
   return false;
 }
 
+
+
+// W3/W4: 開始時の制限と解除条件。対局セーブには state と共に記録される。
+function surpriseReadyRifleman(def) {
+  return Number(def?.morale) === 3 && /^(ボルトアクション小銃|半自動小銃|カービン|突撃銃)$/.test(def.weaponCat);
+}
+
+function startSurpriseRules() {
+  const sc = state.scenario;
+  if (state.surprise || (!sc?.surprisePinning && !sc?.surpriseSniper)) return;
+  const defender = state.playerRole === 'defender' ? 'player' : 'ai';
+  state.surprise = { defender, rallyAfter: null, ralliedWithoutHero: false };
+  if (!sc.surprisePinning) return;
+  const R = window.INFANTRY_RULES;
+  const faction = getFactionKey(state[defender]);
+  const cards = state.groups[defender].flatMap(group => group.cards);
+  const ready = cards.find(card => surpriseReadyRifleman(R.lookupSoldier(card, faction)));
+  cards.filter(card => card !== ready).forEach(card => { card.pinned = true; });
+}
+
+function noteSurpriseAttack(source, target) {
+  const rule = state.surprise;
+  if (!state.scenario?.surprisePinning || !rule) return;
+  if (target === rule.defender) rule.rallyAfter = state.turnCount || 0;
+  else if (source === rule.defender && rule.rallyAfter === null) rule.rallyAfter = (state.turnCount || 0) + 2;
+}
+
+function surpriseCanRally(side, card) {
+  const rule = state.surprise;
+  return !state.scenario?.surprisePinning || rule?.defender !== side ||
+    card?.terrain?.type === 'HERO' ||
+    (rule.rallyAfter !== null && (state.turnCount || 0) >= rule.rallyAfter);
+}
+
+function surprisePinnedForRally(side, card, group) {
+  if (!state.scenario?.surpriseSniper || state.surprise?.defender !== side ||
+      state.surprise.ralliedWithoutHero || card?.terrain?.type === 'HERO') return [];
+  return group.cards.filter(window.INFANTRY_RULES.isPinned);
+}
+
+function noteSurpriseRally(previouslyPinned) {
+  if (previouslyPinned.some(card => !window.INFANTRY_RULES.isPinned(card))) {
+    state.surprise.ralliedWithoutHero = true;
+  }
+}
+
+function surpriseCanSnipe(side) {
+  return !state.scenario?.surpriseSniper || state.surprise?.defender !== side ||
+    state.surprise.ralliedWithoutHero;
+}
+
+// エディタの勝利条件は、元シナリオの編成や特別ルールと独立して判定する。
+function jungleFireMod() {
+  return state.scenario?.jungleMode ? -1 : 0;
+}
+
+function infantryTerrainFireMod(flameOnly) {
+  return state.scenario?.jungleMode ? (flameOnly ? 0 : -1) : (isJapanInGame() ? -1 : 0);
+}
+
+function jungleTerrainAllowed(group, card, side) {
+  if (!state.scenario?.jungleMode) return true;
+  if (card.terrain?.denseJungle && window.AFV?.isAfvGroup(group)) return false;
+  return card.terrain?.type !== 'MARSH' || (!window.AFV?.isAfvGroup(group) && !groupHasInfantryGun(group, side));
+}
+
+function checkEditorVictory(atTimeLimit = false) {
+  const sc = state.scenario;
+  if (state.phase !== 'play' || !sc?.victoryPresets) return false;
+  const R = window.INFANTRY_RULES;
+  const enabled = id => sc.victoryPresets.includes(id);
+  const attacker = state.playerRole === 'defender' ? 'ai' : 'player';
+  const defender = _enemySide(attacker);
+  const ready = card => R.isAlive(card) && !R.isPinned(card) && !card.transfer && !card.infiltrating;
+  const active = group => group && !group.eliminated && !group.forming && group.cards.some(R.isAlive);
+  const qualifyingCover = (group, side, index) => {
+    if (!active(group) || isMovingIgnoringOverlays(group)) return false;
+    const terrain = group.terrain.filter(card => !['SMOKE', 'MOVEMENT'].includes(card.terrain?.type));
+    if (R.calcTerrainMod(terrain, false, { japanBuildings: isJapanInGame() }) >= 0) return false;
+    return !state.groups[_enemySide(side)].some(other => active(other) && other.cards.some(card =>
+      R.isAlive(card) && card.infiltrating && card.infiltratedGroupSide === side && card.infiltratedGroupIdx === index));
+  };
+  const coveringCount = (side, acceptsRange, acceptsCard = ready) => state.groups[side].reduce((total, group, index) =>
+    qualifyingCover(group, side, index) && acceptsRange(group, index)
+      ? total + group.cards.filter(acceptsCard).length : total, 0);
+  const rangeIs = (...ranges) => group => ranges.includes(group.distance);
+  const relative = (group, index, enemy, enemyIndex) => R.relativeRangeBetweenGroups(group, enemy, {
+    sameOpposing: index === enemyIndex, adjacent: Math.abs(index - enemyIndex) === 1
+  });
+  const relativeFive = (group, index) => state.groups[defender].some((enemy, enemyIndex) =>
+    active(enemy) && relative(group, index, enemy, enemyIndex) === 5);
+  const losses = side => participatingPersonnel(side).filter(card => !R.isAlive(card)).length;
+  const finish = (side, criteria) => {
+    if (!atTimeLimit && side === attacker && advanceEditorSegment()) return true;
+    state.phase = 'gameover';
+    if (state.terrainDeck) state.terrainDeck.gameOver = true;
+    const result = side ? state[side].name + 'の勝利' : '引き分け';
+    state._ufEndText = `${sc.name} — ${result}（${criteria.join('・')}${atTimeLimit ? '／時間切れ' : ''}）`;
+    alert(state._ufEndText);
+    endCampaignScenario(side);
+    return true;
+  };
+  const results = new Map();
+  const record = (side, id) => {
+    if (!results.has(side)) results.set(side, []);
+    results.get(side).push(id);
+  };
+
+  for (const id of ['C','O']) {
+    if (!enabled(id)) continue;
+    const group = state.groups[defender].find(g => g.name === 'B');
+    if (group && (!active(group) || R.currentTerrainType(group) !== 'PILLBOX')) record(attacker, id);
+  }
+  for (const id of ['A','E','F','K','M','T','U']) {
+    if (!enabled(id)) continue;
+    const allowed = id === 'U' ? rangeIs(4, 5) : rangeIs(4);
+    for (const side of ['player','ai']) {
+      if (coveringCount(side, allowed) >= 4) record(side, id);
+    }
+  }
+  for (const id of ['D','Q']) {
+    if (enabled(id) && coveringCount(attacker, relativeFive) >= 5) record(attacker, id);
+  }
+  for (const id of ['H','L','S']) {
+    if (enabled(id) && coveringCount(attacker, rangeIs(5)) >= (id === 'H' ? 5 : 4)) record(attacker, id);
+  }
+  if (enabled('D') && state.groups[defender].filter(active).length === 1 &&
+      state.groups[defender].some(group => group && !active(group) && group.cards.length) &&
+      losses(attacker) < losses(defender)) record(attacker, 'D');
+  if (enabled('P')) {
+    if (coveringCount(attacker, rangeIs(5)) >= 4) record(attacker, 'P');
+    const outsideAttackers = (group, index) => group.cards.every(card => !R.isAlive(card) || !R.isPinned(card)) &&
+      state.groups[attacker].every((enemy, enemyIndex) => !active(enemy) || relative(group, index, enemy, enemyIndex) === 0);
+    if (coveringCount(defender, outsideAttackers, card => ready(card) && card._evacuationWound) >= 2) record(defender, 'P');
+  }
+  if (enabled('I')) {
+    const arrived = state.groups[attacker].filter(group => active(group) && group.distance === 5)
+      .reduce((count, group) => count + group.cards.filter(R.isAlive).length, 0);
+    if (arrived >= Math.ceil(state.initialSoldierCount[attacker] / 2) &&
+        calcCasualtyVictoryPoints(attacker) > calcVictoryPoints(defender)) record(attacker, 'I');
+  }
+  if (enabled('W') && hasBuildingParity(attacker, defender)) record(attacker, 'W');
+
+  if (results.size) return finish(results.size === 1 ? [...results.keys()][0] : null,
+    [...new Set([...results.values()].flat())]);
+  if (!atTimeLimit) return false;
+  if (enabled('K') || (sc.twoSegments && state.editorSegment?.number === 1)) return finish(defender, ['K']);
+
+  const scored = [];
+  for (const [id, terrain] of [['B','BUILDINGS'], ['N','WOODS'], ['G','BUILDINGS']]) {
+    if (!enabled(id)) continue;
+    scored.push(id);
+    const a = calcVictoryPoints(attacker, [terrain]);
+    const b = calcVictoryPoints(defender, [terrain]);
+    if (id === 'G') {
+      if (a > 0 && a >= 2 * b) record(attacker, id);
+    } else if (a !== b) record(a > b ? attacker : defender, id);
+  }
+  if (results.size) return finish(results.size === 1 ? [...results.keys()][0] : null, scored);
+  if (enabled('B') || enabled('N')) return finish(null, scored);
+
+  const hold = sc.victoryPresets.filter(id => 'CDEFGHILOPQSTUVW'.includes(id));
+  if (hold.length) return finish(defender, hold);
+  const a = calcVictoryPoints(attacker);
+  const b = calcVictoryPoints(defender);
+  return finish(a === b ? null : a > b ? attacker : defender, sc.victoryPresets);
+}

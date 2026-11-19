@@ -89,11 +89,11 @@
   async function turn3() {
     const st = global.state, key = global.getFactionKey(st.ai);
     st.aiActedGroups = new Set(); st.aiFiredGroups = new Set();
-    st.aiActedThisTurn = false; st.aiActionCount = 0; st.aiDiscardedThisTurn = 0; st.aiDumpedThisTurn = false;
+    st.aiActedThisTurn = false; st.aiActionCount = 0; st.aiEntrenchments = 0; st.aiDiscardedThisTurn = 0; st.aiDumpedThisTurn = false;
     global.checkWoundEndurance();
+    if (st.phase !== 'play' || global.settleDeckTimeLimit()) return;
     await global.aiEnterReinforcements();
-    await global.aiUseRadio();
-    await global.aiUseOrdnance();
+    if (st.phase !== 'play' || global.settleDeckTimeLimit()) return;
     const S = {
       ownTerrain: async () => (await global.aiTryPlaceOwnTerrain()) || (await global.aiTryPlaceOwnPlain()),
       rally: global.aiTryRally, fireMoving: global.aiTryFireMovingEnemy, mortar: global.aiTryMortar,
@@ -109,6 +109,7 @@
       let n = 0, safety = 30;
       outer: while (st.phase === 'play' && safety-- > 0 && global.partisanActionRoom('ai')) {
         for (const k of keys) {
+          if (st.phase !== 'play' || global.settleDeckTimeLimit()) return n;
           const previousActions = st.aiActionCount;
           const r = await S[k]();
           if (!r) continue;
@@ -122,8 +123,13 @@
       }
       return n;
     };
-    await global.aiTrySniperCheck();
     if (!global.aiVehicleGullyAvailable() || key === 'ger') {
+      await global.aiUseRadio();
+      if (st.phase !== 'play' || global.settleDeckTimeLimit()) return;
+      await global.aiUseOrdnance();
+      if (st.phase !== 'play' || global.settleDeckTimeLimit()) return;
+      await global.aiTrySniperCheck();
+      if (st.phase !== 'play' || global.settleDeckTimeLimit()) return;
       // まず、札の揃い具合に関係なくやること
       await run(['weapon', 'receive', 'loner', 'ccRetreat', 'uninfiltrate', 'flameFire', 'demoInfil', 'heroWound', 'cc', 'infiltrate', 'rally', 'cross', 'wire', 'mine', 'fireMoving', 'ownTerrain']);
       const ss = stages(), rd = ready(ss);
@@ -138,20 +144,20 @@
       if (!st.aiActedThisTurn && key === 'ger') await run(['move']);
       if (st.aiActedThisTurn && P.trench) await run(['trench']);
     }
-    if (st.phase !== 'play') return;
+    if (st.phase !== 'play' || global.settleDeckTimeLimit()) return;
     st.aiDiscardTurn = !st.aiActedThisTurn;
-    // 捨て札: 足止めの地形 → 狙撃 → 手札の整理
-    while (global.aiRemainingDiscard() > 0 && await global.aiTryPlaceBadTerrain()) { /* 置ける限り */ }
-    while (global.aiRemainingDiscard() > 0 && await global.aiTrySnipe()) { st.aiSnipedThisTurn = true; }
-    let discards = 0;
+    const attackDiscards = global.planAiDiscardAttacks();
+    const cowerCards = [];
     if (key === 'jpn') {
-      for (let i = st.aiHand.length - 1; i >= 0; i--) if (isCower(st.aiHand[i]) && !global.aiProtectRally(i, key)) { global.pushTerrainToDiscard(st.aiHand.splice(i, 1)[0]); discards++; }
+      for (let i = st.aiHand.length - 1; i >= 0; i--) {
+        if (isCower(st.aiHand[i]) && !global.aiProtectRally(i, key)) cowerCards.push(st.aiHand.splice(i, 1)[0]);
+      }
     }
     const ss2 = stages(), dumped = [];
     while (global.aiRemainingDiscard() - dumped.length > 0 && st.aiHand.length > 0) {
       let bi = -1, bv = Infinity;
       st.aiHand.forEach((c, i) => {
-        if (global.aiProtectRally(i, key)) return;
+        if (global.aiProtectRally(i, key) || !global.DISCARD_RULES.discardCardAllowed(c, 'ai')) return;
         const v = value(c, ss2);
         if (v < bv) { bv = v; bi = i; }
       });
@@ -160,10 +166,17 @@
       if (bv >= P.keepValue && dumped.length >= P.minDiscard) break;
       if (type(st.aiHand[bi]) === 'HERO') break;
       const c = st.aiHand.splice(bi, 1)[0];
-      global.pushTerrainToDiscard(c); dumped.push(c); st.aiDumpedThisTurn = true;
+      dumped.push(c);
     }
-    discards += dumped.length;
+    const discards = cowerCards.length + dumped.length;
     st.aiHandCount = st.aiHand.length;
+    await global.resolveAiDiscardAttacks(attackDiscards);
+    if (st.phase !== 'play' || global.settleDeckTimeLimit()) return;
+    [...cowerCards, ...dumped].forEach(card => {
+      global.pushTerrainToDiscard(card);
+      global.DISCARD_RULES.revealVolksDiscard('ai', card);
+    });
+    if (discards) st.aiDumpedThisTurn = true;
     global.renderHands();
     if (dumped.length) await global.showAIAction('AI: 捨て札 ' + dumped.length + '枚', dumped);
     try { record(key, ss2, st.aiActedThisTurn, discards); } catch (e) { /* 記録だけ */ }
@@ -181,7 +194,7 @@
   };
   global.aiTurn = async function () {
     const st = global.state;
-    if (st.phase !== 'play' || st.currentTurn !== 'ai') return;
+    if (st.phase !== 'play' || st.currentTurn !== 'ai' || global.settleDeckTimeLimit()) return;
     if (!R() || !applies()) return oldTurn();
     return turn3();
   };

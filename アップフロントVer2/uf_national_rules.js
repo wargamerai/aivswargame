@@ -1,5 +1,23 @@
 'use strict';
 
+const BASIC_TROOP_TYPES = {
+  rus: [['conscripts', '徴集兵', 'Conscripts'], ['guards', '親衛兵', 'Guards']],
+  us: [['green', '新兵', 'Green troops'], ['paratroops', '空挺兵', 'Paratroops']],
+  ger: [['volksgrenadiers', '国民擲弾兵', 'Volksgrenadiers'], ['ss', 'SS', 'SS']]
+};
+
+function troopTypeOf(faction) {
+  const type = state.troopTypes?.[faction] ?? state.scenario?.troopTypes?.[faction];
+  return BASIC_TROOP_TYPES[faction]?.some(([value]) => value === type) ? type : 'regular';
+}
+
+function isEditorEliteFaction(faction) {
+  if (['guards', 'paratroops', 'ss'].includes(troopTypeOf(faction))) return true;
+  if (!state.scenario?.eliteAttackers) return false;
+  const attacker = state.playerRole === 'defender' ? 'ai' : 'player';
+  return getFactionKey(state[attacker]) === faction;
+}
+
 function britishUnitType(value) {
   return value === 'airborne' || value === 'home-guard' ? value : 'line';
 }
@@ -12,9 +30,9 @@ function infantryFireNeed(faction, group, printedNeed) {
   return usesBritishFireBonus(faction, group) ? Math.max(1, printedNeed - 1) : printedNeed;
 }
 
-function markAIAction() {
+function markAIAction(count = 1) {
   state.aiActedThisTurn = true;
-  state.aiActionCount = (state.aiActionCount || 0) + 1;
+  state.aiActionCount = (state.aiActionCount || 0) + count;
 }
 
 function banzaiOptions(side, sourceIndex, targetIndex) {
@@ -71,7 +89,7 @@ async function executeBanzai(side, sourceIndex, targetIndex, move, soldiers) {
 
 async function aiTryBanzai() {
   if (getFactionKey(state.ai) !== 'jpn') return false;
-  const move = state.aiHand.find(c => c.terrain?.type === 'MOVEMENT');
+  const move = state.aiHand[aiActionCardIndex('MOVEMENT')];
   if (!move) return false;
   const R = window.INFANTRY_RULES;
   const CC = window.CC_ACTION;

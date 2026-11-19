@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script defer src="../board-zoom.js"></script>
 <script src="../nobrowserback.js"></script>
 <meta charset="UTF-8">
 <title>Up Front</title>
@@ -182,6 +183,21 @@
   #setup-screen .head .actions button.crew { background: #c83; border-color: #fa6; }
   #setup-screen .head .actions button.crew.active { background: #fa6; color: #000; }
   #setup-screen .head .actions button:disabled { background: #333; color: #666; border-color: #555; cursor: not-allowed; }
+  #setup-scenario-info {
+    background: #292929; color: #eee; border: 1px solid #777; border-radius: 8px;
+    width: min(580px, calc(100% - 40px)); max-height: 80vh; overflow: auto;
+  }
+  #setup-scenario-info::backdrop { background: rgba(0,0,0,.7); }
+  #setup-scenario-info h2 { margin: 0 0 0.4em; }
+  #setup-scenario-info h3 { margin: 1em 0 0.3em; font-size: 1em; color: #dceabb; }
+  #setup-scenario-info ul { margin: 0 0 0.75em; padding-inline-start: 1.4em; }
+  #setup-scenario-info li { margin-block: 0.25em; }
+  #setup-equipment:not([hidden]) {
+    display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+    padding: 8px 18px; background: #222; border-bottom: 1px solid #555;
+  }
+  #setup-equipment label { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  #setup-equipment img { width: 24px; height: 24px; object-fit: contain; }
 
   #setup-screen .stage {
     flex: 1 1 0; min-height: 0;
@@ -308,7 +324,7 @@
   #ap-info td { padding: 1px 2px; }
   #ap-info td.num { text-align: right; font-weight: bold; }
   #ap-info .warn { color: #f66; }
-  #action-pane .ap-cols { display: flex; gap: 4px; align-items: flex-start; margin-top: auto; }
+  #action-pane .ap-cols { display: flex; gap: 4px; align-items: flex-start; }
   /* 1・2列目は 4〜5文字、3列目は 7文字（狙撃兵チェック）まで 1行に収まる幅 */
   #action-pane .ap-col { flex: 0 0 76px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
   #action-pane .ap-col.wide { flex: 1 1 auto; }
@@ -329,6 +345,11 @@
   #action-pane .ai-deck-area .cycle-box .value { font-size: 18px; }
   /* 確定・終了: 1列目の捨て札の下に、大きめに */
   #action-pane .action-btn.ap-big { height: 44px; font-size: 15px; font-weight: bold; margin-top: 4px; }
+  #action-pane .hand-refill-option {
+    display: flex; flex: 0 0 auto; align-items: center; gap: 6px;
+    margin: auto 0 6px; font-size: 12px; white-space: nowrap;
+  }
+  #end-turn-refill { font: inherit; }
 
   /* 手札バー */
   .hand-bar {
@@ -366,6 +387,21 @@
   .hand-card.selected {
     border: 3px solid #ffeb3b;
     transform: translateY(-6px);
+  }
+  .hand-card.national-action-ready { outline: 2px solid #79dea0; }
+  .national-card-face {
+    height: 100%;
+    max-width: 100%;
+    aspect-ratio: 19 / 30;
+    position: relative;
+    overflow: hidden;
+    border-radius: 3px;
+  }
+  .national-card-mask {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(135deg, rgb(0 0 0 / 90%) 0 2px, rgb(0 0 0 / 54%) 2px 5px);
   }
 
   /* アクションメニュー (2段グリッド) */
@@ -638,13 +674,12 @@
     border-radius: 4px;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
-    font-size: 9px; cursor: pointer;
+    font-size: 9px;
     text-align: center; padding: 3px;
     line-height: 1.2;
     position: relative;
     overflow: hidden;
   }
-  .pile:hover { background: #555; }
   .pile .count {
     font-size: 14px; font-weight: bold;
     position: absolute; bottom: 2px; right: 4px;
@@ -722,6 +757,14 @@
     box-shadow: 0 0 30px #000;
     border-radius: 8px;
   }
+  #card-overlay.enlarged {
+    align-items: flex-start; justify-content: flex-start;
+    overflow: auto; padding: 20px; z-index: 5000;
+  }
+  #card-overlay.enlarged img.single {
+    flex: none; height: max(825px, 112.5vh); max-width: none; max-height: none;
+    margin-inline: auto;
+  }
   #card-overlay .group-view {
     background: #222; border-radius: 8px;
     padding: 20px; max-width: 92vw; max-height: 92vh;
@@ -782,10 +825,19 @@
       <option value="C">C: 要塞強襲（非対称）</option>
       <option value="D">D: 後衛戦（非対称）</option>
       <option value="E">E: 機甲偵察（AFV、非対称）</option>
-      <option value="S3">サ. 奇襲</option>
+      <optgroup label="確認中 / Under review" disabled>
+        <option disabled>F</option>
+        <option disabled>G</option>
+        <option disabled>H</option>
+        <option disabled>I</option>
+        <option disabled>J</option>
+        <option disabled>K</option>
+        <option disabled>L</option>
+      </optgroup>
     </select>
     <span id="scenario-info" style="font-size:12px; color:#aaa;"></span>
-    <button onclick="ufPickLoad()" title="セーブファイルを読み込んで続きから遊ぶ" style="background:#365; color:#fff; border:1px solid #6a9; padding:8px 14px; font-size:15px; border-radius:4px; cursor:pointer;">Load</button>
+    <button id="open-scenario-editor" type="button">シナリオエディタ</button>
+    <button onclick="ufPickLoad('lobby')" title="対局セーブを再開、またはシナリオファイルを開く" style="background:#365; color:#fff; border:1px solid #6a9; padding:8px 14px; font-size:15px; border-radius:4px; cursor:pointer;">Load</button>
     <span id="first-player-row" style="display:none; margin-left:12px; font-size:15px;">
       先攻:
       <select id="first-player-pick" style="background:#444; color:#eee; border:1px solid #888; padding:6px 10px; font-size:14px; border-radius:4px;">
@@ -864,6 +916,7 @@
     </div>
     <div class="actions">
       <button class="cancel" id="setup-back">戻る</button>
+      <button class="cancel" id="setup-scenario-info-open" type="button" aria-haspopup="dialog" aria-controls="setup-scenario-info">シナリオ情報</button>
       <button class="cancel" id="setup-reset">リセット</button>
       <button class="cancel" id="setup-sort">モラル順 ↓</button>
       <button class="crew" id="setup-crew">クルー設定</button>
@@ -875,11 +928,15 @@
           <option value="home-guard">本土防衛部隊</option>
         </select>
       </label>
+      <label id="setup-troop-type" hidden><span>兵種</span>
+        <select id="troop-type-pick"></select>
+      </label>
       <button id="setup-start" disabled>ゲーム開始</button>
       <button class="lang-btn" onclick="toggleLang()" style="background:#2a4d7a; color:#fff; border:2px solid #6fa8e8; font-weight:bold;">🌐 English</button>
       <span class="zoom-ctl" style="display:inline-flex; align-items:center; gap:4px;"><button onclick="ufZoom(-10)" style="">−</button><span class="zoom-label" style="min-width:40px; text-align:center; color:#eee; font-size:13px;">100%</span><button onclick="ufZoom(10)" style="">＋</button></span>
     </div>
   </div>
+  <div id="setup-equipment" hidden></div>
   <div class="stage">
     <div class="pool-row">
       <div class="label">未配置の兵士 (<span id="pool-count">0</span>名)</div>
@@ -888,6 +945,12 @@
     <div class="groups-row" id="setup-groups"></div>
   </div>
 </div>
+
+<dialog id="setup-scenario-info" aria-labelledby="setup-scenario-info-title">
+  <h2 id="setup-scenario-info-title"></h2>
+  <div data-scenario-info-body></div>
+  <form method="dialog"><button type="submit" autofocus>閉じる</button></form>
+</dialog>
 
 <!-- メインゲーム画面 -->
 <div id="game">
@@ -922,6 +985,7 @@
   <div id="action-pane">
     <!-- 勝利条件・勝利点・損害（画面の描き直しのたびに updateInfoPanel で更新） -->
     <div id="ap-info"></div>
+    <label class="hand-refill-option">手札補充 <select id="end-turn-refill"><option value="">上限まで</option></select></label>
     <div class="ap-cols">
       <div class="ap-col">
         <div class="ap-head">アクション外</div>
@@ -930,6 +994,7 @@
         <button class="action-btn" data-act="terrain">地形配置</button>
         <button class="action-btn discard" id="btn-discard" data-act="discard">捨て札</button>
         <button class="action-btn ap-big" id="btn-confirm" disabled>確定</button>
+        <button type="button" class="action-btn" id="btn-place-open-ground" hidden>平地として置く</button>
         <button class="action-btn end ap-big" id="btn-end-turn">終了</button>
         <!-- セーブ・ロード（ゲームの途中の状態をファイルに保存・読み込み） -->
         <div style="display:flex;gap:4px;margin-top:4px;">
@@ -944,6 +1009,7 @@
         <button class="action-btn" data-act="recover">回復</button>
         <button class="action-btn" data-act="mortar">迫撃砲</button>
         <button class="action-btn" id="btn-ordnance" data-act="ordnance" hidden>砲兵器射撃</button>
+        <button class="action-btn" id="btn-afv-smoke" data-act="afv-smoke" hidden>戦車の煙幕射撃</button>
         <button class="action-btn" id="btn-radio" data-act="radio" hidden>無線支援</button>
         <button class="action-btn" id="btn-radio-repair" data-act="radio-repair" hidden>無線機修理</button>
         <button class="action-btn" data-act="infiltrate">侵入</button>
@@ -962,6 +1028,7 @@
         <button class="action-btn" data-act="repair">修理</button>
         <button class="action-btn" data-act="mine-remove">地雷原排除</button>
         <button class="action-btn" data-act="guard">監視役交代</button>
+        <button class="action-btn" data-act="voluntary-panic" title="ピン状態の兵士を盤上から退かせる（§10.3）">自発的パニック</button>
         <button class="action-btn" data-act="demo">爆薬</button>
         <button class="action-btn" data-act="transfer">個人移送</button>
         <button class="action-btn" data-act="receive" title="前のターン以降に移送してきた兵士を、このグループの1アクションで受け取る（§17.8）">移送受け取り</button>
@@ -969,6 +1036,8 @@
         <button class="action-btn" data-act="weapon" title="グループに残った兵器を、ピン状態でない兵士が1アクションで拾う（黒のRNCで成功 §18.2）">兵器を拾う</button>
         <button class="action-btn" data-act="groupshift" title="横向きの移動カードで、隣の空いた位置へ移る／隣のグループと入れ替わる（§17.7）">側方移送</button>
         <button class="action-btn" data-act="crew">クルー</button>
+        <button class="action-btn" data-act="exchange" title="同じグループの兵士同士で兵器を受け渡す（§18.21）">兵器の受け渡し</button>
+        <button class="action-btn" data-act="reorder" title="グループ内で兵士の位置を変える（§3.3）">隊列変更</button>
       </div>
     </div>
     <!-- 山札・捨て札・判定（右上から移動） -->
@@ -980,7 +1049,6 @@
         <div class="pile" id="deck-draw">
           <img class="pile-img" alt="">
           <div class="pile-label">山札</div>
-          <div class="count">-</div>
         </div>
         <div class="pile" id="deck-discard">
           <div class="pile-label">捨て札</div>
@@ -1095,11 +1163,13 @@ ufApplyZoom();
 <script src="uf_phases_ui.js"></script>
 <script src="uf_ai.js"></script>
 <script src="uf_cardscore.js"></script>
+<script src="uf_vehicle_data.js"></script>
 <script src="uf_afv.js"></script>
 <script src="uf_reinforcements.js"></script>
 <script src="uf_radio.js"></script>
 <script src="uf_ordnance.js"></script>
 <script src="uf_partisans.js"></script>
 <script src="uf_ai3.js"></script>
+<script src="uf_scenario_editor.js"></script>
 </body>
 </html>

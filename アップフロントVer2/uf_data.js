@@ -33,7 +33,8 @@ function parseTerrainCSV(text) {
     const leftFactions = [c[1], c[2], c[3], c[4], c[5]].map(x => (x || '').trim()).filter(x => x);
     const rightFactions = [c[7], c[8], c[9], c[10], c[11]].map(x => (x || '').trim()).filter(x => x);
     const leftType = (c[6] || '').trim();
-    const rightType = (c[12] || '').trim();
+    const rawRightType = (c[12] || '').trim();
+    const rightType = { 平地: 'COWER', 隠蔽: 'CONCEALED' }[rawRightType] || rawRightType;
     out.push({
       num,
       leftFactions,
@@ -43,6 +44,7 @@ function parseTerrainCSV(text) {
       restrictions: leftFactions,
       type:     leftType, // デフォルトは左種別（カード使用時に faction で実効値が決まる）
       modifier: c[13] || '',
+      rightModifier: rncIndex > 14 ? c[14] || '' : c[13] || '',
       range:    c[rncIndex] || '',
       rncColor: (c[rncIndex + 1] || '').trim(),
       sub:      c[rncIndex + 2] || '',
@@ -56,29 +58,63 @@ function parseTerrainCSV(text) {
   return out;
 }
 
-// 国別カード（左/右で種別・修正値が異なる）の実効値を、使用する faction で確定する
-function applyFactionToTerrainCard(card, factionKey) {
-  const t = card && card.terrain;
-  if (!t || t._factionApplied) return;
-  const factionLabelMap = { ger: '独', rus: 'ソ', jpn: '日', uk: '英', us: '米' };
-  const factionLabel = factionLabelMap[factionKey] || factionKey;
-  // 国別指定が無いカード (HILL 等) は modifier を保持
-  const hasFactionSplit = (t.leftFactions && t.leftFactions.length > 0) || (t.rightFactions && t.rightFactions.length > 0);
-  if (!hasFactionSplit) {
-    t._factionApplied = true;
-    return;
+const ACTION_CARD_NATIONALITY = { ger: '独', rus: 'ソ', jpn: '日', uk: '英', us: '米' };
+
+// §2.21 斜線の両側は別の用途。判定カードの原表と盤面に出した面は切り替えない。
+function nationalActionFaces(printed, faction) {
+  const mark = ACTION_CARD_NATIONALITY[faction];
+  if (!printed.rightType || !mark) return null;
+  const faces = [];
+  if (printed.leftFactions.includes(mark)) {
+    faces.push({ ...printed, nationalFace: 0 });
   }
-  const inLeft  = t.leftFactions  && t.leftFactions.indexOf(factionLabel)  >= 0;
-  const inRight = t.rightFactions && t.rightFactions.indexOf(factionLabel) >= 0;
-  const mods = (t.modifier || '').split('/');
-  if (inRight && t.rightType) {
-    t.type = t.rightType;
-    t.modifier = mods.slice(1).join('/');
-  } else if (inLeft && t.leftType) {
-    t.type = t.leftType;
-    t.modifier = mods[0] != null ? mods[0] : t.modifier;
+  if (printed.rightFactions.includes(mark)) {
+    faces.push({ ...printed, type: printed.rightType, modifier: printed.rightModifier, nationalFace: 1 });
   }
-  t._factionApplied = true;
+  return faces;
+}
+
+function handActionFaces(card, side) {
+  if (!card?.terrain) return [];
+  const H = window.SCENARIO_HELPERS;
+  const faces = card.nationalFaces || [card.terrain];
+  return faces.filter(face => !H.isCardDisabledAsTerrain(state.scenario,
+    { terrain: face, nationalFaces: card.nationalFaces, terrainIndex: card.terrainIndex },
+    state[side + 'Role'] === 'attacker'));
+}
+
+function handActionFace(card, type, side) {
+  return handActionFaces(card, side).find(face => face.type === type);
+}
+
+/** §14.4 狙撃兵の除去後やシナリオで無効の間は、狙撃カードを使えない。 */
+function sniperCardPlayable(card, side) {
+  return card?.terrain?.type === 'SNIPER' && !state[side + 'SniperDisabled'] &&
+    !window.SCENARIO_HELPERS.isCardDisabledAsTerrain(state.scenario, card, state[side + 'Role'] === 'attacker');
+}
+
+function handCardIsCower(card, side) {
+  if (card?.terrain?.type === 'SNIPER') return !sniperCardPlayable(card, side);
+  if (card?.nationalFaces) return !handActionFaces(card, side).some(face => face.type !== 'COWER');
+  return card?.terrain?.type === 'COWER' || window.SCENARIO_HELPERS.isCardDisabledAsTerrain(
+    state.scenario, card, state[side + 'Role'] === 'attacker');
+}
+
+function useHandActionFace(card, face) {
+  if (!face) return false;
+  card.terrain = face;
+  return true;
+}
+
+function handActionCardIndex(side, type, accepts = () => true) {
+  return state[side + 'Hand'].findIndex(card => {
+    const face = handActionFace(card, type, side);
+    return face && accepts(face, card) && useHandActionFace(card, face);
+  });
+}
+
+function aiActionCardIndex(type, accepts) {
+  return handActionCardIndex('ai', type, accepts);
 }
 
 function getGroupFaction(grp) {
@@ -88,9 +124,54 @@ function getGroupFaction(grp) {
   return null;
 }
 
+function entrenchAllowed(group, side) {
+  const R = window.INFANTRY_RULES;
+  return group && !group.eliminated && groupCanEntrench(group, side) && !isMovingIgnoringOverlays(group) &&
+    !group.cards.some(c => R.isAlive(c) && (R.isPinned(c) || c.infiltrating)) && !R.hasTerrainType(group, 'WIRE') &&
+    !R.hasTerrainType(group, 'TRENCH') && ['PLAIN','WOODS','HILL','BRUSH'].includes(R.currentTerrainType(group));
+}
+function placeEntrenchment(group) {
+  pushTerrainWithFaction(group, {
+    terrain: { type: 'TRENCH', modifier: '/-1', range: '0', rncColor: '黒', dice: {} },
+    _isTrench: true
+  });
+}
+function discardUnclaimedWeapons(group) {
+  if (group.weaponPool?.length) group.weaponPool.length = 0;
+}
+/** §45.6: 日本軍の重いMMG・ATRは、負傷していない2名のクルーがいなければ移動時に失う。 */
+function abandonUnsupportedHeavyWeapons(group) {
+  const side = _groupSideIdx(group)?.side;
+  if (!side) return;
+  const R = window.INFANTRY_RULES;
+  const faction = getFactionKey(state[side]);
+  const ready = card => R.isAlive(card) && !R.isPinned(card) && !R.isWoundActive(card) && !card.transfer;
+  for (const card of group.cards) {
+    if (!R.isAlive(card) || card.transfer) continue;
+    const weapon = weaponOfCard(card, faction);
+    if (weapon?.fac !== 'jpn' || !/^(中機関銃|対戦車ライフル)/.test(weapon.weaponCat)) continue;
+    const assistant = group.cards.find(other => other.num === Number(group.crewPairs?.[card.num]));
+    if (ready(card) && ready(assistant)) continue;
+    installAcquiredWeapon(group, card, UNARMED_WEAPON);
+    const message = radioText(`${weapon.weaponName} は移動に必要なクルーを欠き、放棄されました（§45.6）。`,
+      `${weapon.weaponName} was abandoned for lack of a crew able to move it (§45.6).`);
+    if (side === 'player') alert(message);
+    else ufReportLog(side, message, side);
+  }
+}
+
 function pushTerrainWithFaction(grp, card) {
-  const facKey = getGroupFaction(grp);
-  if (facKey) applyFactionToTerrainCard(card, facKey);
+  const type = card.terrain?.type;
+  if (type === 'TRENCH') {
+    grp.terrain.push(card);
+    return;
+  }
+  if (type && type !== 'SMOKE' && type !== 'WIRE') {
+    discardUnclaimedWeapons(grp);
+    if (state.phase === 'play') abandonUnsupportedHeavyWeapons(grp);
+  }
+  if (type === 'MOVEMENT' || type === 'WIRE') clearOutgoingFlanks(grp); // §17.41
+  if (!['MOVEMENT','SMOKE','WIRE'].includes(card.terrain?.type)) delete grp._overrunTargets;
   // §24.6 グループに置かれた地雷原カードは二度とデッキに戻らない（印を付け、捨て札にせずゲームから除く）
   if (card.terrain && card.terrain.type === 'MINEFIELD') card._minefieldPlaced = true;
   // MOVEMENT カードが地形スタックに置かれたら塹壕を除去（鉄条網除去は pushTerrainToDiscard で別経路）
@@ -100,6 +181,10 @@ function pushTerrainWithFaction(grp, card) {
     if (side) grp.cards.filter(c => infantryGunProfile(c,side)).forEach(c => { c._infantryGunUsed = true; });
   }
   grp.terrain.push(card);
+  if (card.terrain?.type === 'MOVEMENT' && grp.terrain.some(terrain => terrain._surpriseBuilding) &&
+      window.INFANTRY_RULES.currentTerrainType(grp) !== 'BUILDINGS') {
+    grp.terrain = grp.terrain.filter(terrain => !terrain._surpriseBuilding);
+  }
   try {
     const _w = _ufSideOfGroup(grp), _ty = card.terrain && card.terrain.type;
     if (_w && _ty === 'MOVEMENT') ufEvent(_w.side, `GROUP ${grp.name} が${{ advance: '前進', lateral: '横移動', retreat: '後退' }[card._moveMode || 'advance'] || '移動'}（距離 ${grp.distance}）`);
@@ -107,32 +192,15 @@ function pushTerrainWithFaction(grp, card) {
       _w.side === state.currentTurn ? `GROUP ${grp.name} に「${UF_TERR_NAME[_ty]}」` : `敵の GROUP ${grp.name} に「${UF_TERR_NAME[_ty]}」を置いた`);
   } catch (e) {}
   // §27.2 卓上に残る移動カードを置いたグループは、捕捉している目標も、捕捉されている状態も失う
-  if (card.terrain && card.terrain.type === 'MOVEMENT') loseAcquisitionOnMove(grp);
+  if (type === 'MOVEMENT') {
+    loseAcquisitionOnMove(grp);
+    window.CC_ACTION?.clearInfiltration(grp, 'move'); // §20.53 自分のグループの移動で侵入が解除される。
+  }
   // §17.42 地形カードが使われた／§17.43 移動カードを使った グループへの側面射撃は終わる（煙幕・鉄条網は除く）
   const _ty = card.terrain && card.terrain.type;
   if (_ty && _ty !== 'SMOKE' && _ty !== 'WIRE' && typeof breakFlanksOn === 'function') breakFlanksOn(grp);
   // §17.7 側方移送の成立／§17.92 新グループの設立完了（地形カードが置かれて認められた）
   if (_ty && _ty !== 'MOVEMENT' && _ty !== 'SMOKE' && _ty !== 'WIRE' && typeof onTerrainAccepted === 'function') onTerrainAccepted(grp);
-  // §20.53 侵入兵: 非MOVEMENTの地形カード配置時、侵入先との相対距離が4なら侵入解除
-  if (card.terrain && card.terrain.type !== 'MOVEMENT') {
-    const R = window.INFANTRY_RULES;
-    if (R && grp.cards && state && state.groups) {
-      grp.cards.forEach(c => {
-        if (!c.infiltrating) return;
-        const tSide = c.infiltratedGroupSide;
-        const tIdx = c.infiltratedGroupIdx;
-        if (!tSide || tIdx == null) return;
-        const tgtGroup = state.groups[tSide] && state.groups[tSide][tIdx];
-        if (!tgtGroup) return;
-        const relDist = R.relativeRange(grp.distance, tgtGroup.distance);
-        if (relDist === 4) {
-          c.infiltrating = false;
-          delete c.infiltratedGroupSide;
-          delete c.infiltratedGroupIdx;
-        }
-      });
-    }
-  }
 }
 
 // トーチカ持ち判定 (包囲/CC/側面攻撃/隠蔽の対象外判定用)
@@ -150,32 +218,45 @@ function _minefieldAttackSoldier(group, card, side, target, rncMode) {
   const facKey = side === 'player' ? getFactionKey(state.player) : getFactionKey(state.ai);
   const def = R.lookupSoldier(target, facKey);
   if (!def) return null;
-  const rc = drawTerrainCard();
+  const rc = drawRandomReinforcementRnc();
   if (!rc) return null;
   checkBreezeRemoveSmoke(rc); pushTerrainToDiscard(rc);
   const abs = parseInt((rc.terrain && rc.terrain.range) || '0', 10) || 0;
   const red = rc.terrain && rc.terrain.rncColor === '赤';
+  if (window.AFV?.isAfvCard(target)) {
+    const signed = red ? -abs : abs;
+    const result = window.AFV.applyMinefieldHit(group, target, signed, wireMod);
+    return `${def.name}: 地雷原 1${wireMod ? '+鉄条網1' : ''}（RNC ${red ? '赤' : '黒'}${abs}）→ ${result}`;
+  }
   const rnc = rncMode === 'signed' ? (red ? -abs : abs) : abs;
   const rpc0r = parseInt((rc.terrain.dice && rc.terrain.dice['0r']) || '0', 10) || 0;
   const wasPinned = R.isPinned(target);
-  const r = R.resolveFireOnSoldier(atk + wireMod, rnc, def, wasPinned, rpc0r, commissarModOf(group), commissarModOf(group), 0, R.rpc7wOf(rc));
+  const moraleMod = commissarModOf(group, target) - R.weaponMoralePenalty(target, def);
+  const panicMod = moraleMod - Number(Boolean(group.encircled && wasPinned));
+  const r = R.resolveFireOnSoldier(atk + wireMod, rnc, def, wasPinned, rpc0r, moraleMod, panicMod, 0, R.rpc7wOf(rc));
+  r.result = berserkFireResult(r, group, target, def, side, rpc0r);
   if (r.result === 'WOUND') r.result = applyWound(target); // §33.1
   if (r.result === 'KIA' || r.result === 'PANIC_KIA') R.killSoldier(target);
   else if (r.result === 'PANIC_ROUT') R.routSoldier(target);
-  else if (r.result === 'PIN') R.pinSoldier(target);
+  else if (r.result === 'PIN') r.result = applyPersonnelPin(target);
   return `${def.name}: 攻撃力${atk}${wireMod ? '+鉄条網1' : ''} ${rnc >= 0 ? '+' : ''}${rnc}（RNC ${red ? '赤' : '黒'}${abs}）→ ${r.result}`;
 }
 
 /** §24.31 地雷原攻撃: RPC で1つの位置を決め、RNC の数字（色に関係なく）を攻撃力に足す */
 function triggerMinefieldAttack(group, card, side) {
+  return withDeckAttack(() => triggerMinefieldAttackInProgress(group, card, side));
+}
+
+function triggerMinefieldAttackInProgress(group, card, side) {
   const R = window.INFANTRY_RULES;
   if (!R) return;
   const rpcCard = drawTerrainCard();
   if (!rpcCard) return;
   checkBreezeRemoveSmoke(rpcCard); pushTerrainToDiscard(rpcCard);
-  const target = pickByRPC(rpcCard, group);
+  const targets = { cards: attackTargetsOf(group) };
+  const target = pickByRPC(rpcCard, targets);
   if (!target) return;
-  const pos = group.cards.filter(c => R.isAlive(c)).indexOf(target) + 1;
+  const pos = targets.cards.filter(R.isAlive).indexOf(target) + 1;
   const line = _minefieldAttackSoldier(group, card, side, target, 'abs');
   if (line) alert(`§24.31 地雷原攻撃（GROUP ${group.name} の位置 ${pos}）\n${line}`);
   renderField(side);
@@ -183,6 +264,10 @@ function triggerMinefieldAttack(group, card, side) {
 
 /** §24.4 地雷原の上の移動カード1枚の上に自分で地形カードを置いて出る: 全員がそれぞれの RNC で攻撃を受ける（赤は－、黒は＋） */
 function triggerMinefieldGroupAttack(group, card, side) {
+  return withDeckAttack(() => triggerMinefieldGroupAttackInProgress(group, card, side));
+}
+
+function triggerMinefieldGroupAttackInProgress(group, card, side) {
   const R = window.INFANTRY_RULES;
   if (!R) return;
   const lines = [];
@@ -223,13 +308,33 @@ function getMinefieldThresholds(card) {
   };
 }
 
-// 地雷原: 縦移動・鉄条網除去時の RNC 判定（赤かつ RNC > 4 で 1 名攻撃）
+function minefieldMovementCount(group, mineIndex) {
+  return group.terrain.slice(mineIndex + 1)
+    .filter(card => card.terrain?.type === 'MOVEMENT' && card._moveMode === 'lateral').length;
+}
+
+/** §24.4・§24.6 横移動2枚で出た地雷原は捨て札に戻さない。移動カードはその場に残す。 */
+function retireEscapedMinefield(group) {
+  const mineIndex = group?.terrain?.findIndex(card => card.terrain?.type === 'MINEFIELD') ?? -1;
+  if (mineIndex >= 0 && minefieldMovementCount(group, mineIndex) >= 2) {
+    group.terrain.splice(mineIndex, 1);
+  }
+}
+
+// 地雷原上の横移動・鉄条網除去の判定。2枚目の横移動も判定してから地雷原を除く。
 function triggerMinefieldRNCCheck(group, side) {
-  const R = window.INFANTRY_RULES;
-  if (!R || !group.terrain) return false;
-  const minefield = group.terrain.find(c => c && c.terrain && c.terrain.type === 'MINEFIELD');
+  const minefield = group.terrain?.find(card => card.terrain?.type === 'MINEFIELD');
   if (!minefield) return false;
-  const judgeCard = drawTerrainCard();
+  return withDeckAttack(() => {
+    const attacked = triggerMinefieldRNCCheckInProgress(group, side, minefield);
+    retireEscapedMinefield(group);
+    if (attacked) cleanupEliminatedGroups();
+    return attacked;
+  });
+}
+
+function triggerMinefieldRNCCheckInProgress(group, side, minefield) {
+  const judgeCard = drawRandomReinforcementRnc(side);
   if (!judgeCard) return false;
   const rncAbs = parseInt((judgeCard.terrain && judgeCard.terrain.range) || '0', 10) || 0;
   const isRed = judgeCard.terrain && judgeCard.terrain.rncColor === '赤';
@@ -249,13 +354,11 @@ function triggerMinefieldRNCCheck(group, side) {
 //   移動カード1枚の上に地形カードを置いたら出られるが、全員が攻撃を受ける
 //   （各移動カードを置いた時の RNC 判定は triggerMinefieldRNCCheck で行う）
 function processMinefieldEscape(group, side) {
-  const R = window.INFANTRY_RULES;
-  if (!R) return { ok: false, reason: 'no R' };
-  const minefieldCard = (group.terrain || []).find(c => c && c.terrain && c.terrain.type === 'MINEFIELD');
-  if (!minefieldCard) return { ok: true, hadMinefield: false };
-  const moveCount = (group.terrain || []).filter(c => c && c.terrain && c.terrain.type === 'MOVEMENT').length;
+  const mineIndex = group.terrain.findIndex(card => card.terrain?.type === 'MINEFIELD');
+  if (mineIndex < 0) return { ok: true, hadMinefield: false };
+  const moveCount = minefieldMovementCount(group, mineIndex);
   if (moveCount === 0) return { ok: false, reason: '地雷原から出るには、先に移動カードが必要です' };
-  if (moveCount === 1) triggerMinefieldGroupAttack(group, minefieldCard, side);
+  if (moveCount === 1) triggerMinefieldGroupAttack(group, group.terrain[mineIndex], side);
   return { ok: true, hadMinefield: true, lateralCount: moveCount };
 }
 
@@ -270,7 +373,7 @@ function applyTerrainCsvText(text) {
   if (state && state.player && state.playerHand && state.playerHand.length === 0) {
     ensureTerrainDeck();
     for (let i = 0; i < state.player.handMax; i++) {
-      const c = drawTerrainCard();
+      const c = drawTerrainCard('player');
       if (c) state.playerHand.push(c);
     }
     renderHands();
@@ -294,6 +397,7 @@ function initTerrainDeck() {
   if (!TERRAIN_CARDS.length) return;
   const indices = TERRAIN_CARDS.map((_, i) => i);
   state.deckRemoved = {};
+  state.woundCheckPending = false;
   state.reinforcementsUsed = {};
   state.reinforcementStart = {};
   state.partisanSniperChecks = {};
@@ -361,16 +465,8 @@ function checkMortarMalfunction(judgeCard, group, shooter) {
   return true;
 }
 
-/** §19 故障チェック（射撃の解決で引いた RNC ごとに呼ぶ）
- *  - 赤5: いま使っている X 値に 5 を含む射撃中の兵器（§19.15 () の火力で撃つ兵器など）が直接故障。2つ以上なら RNC で決める
- *  - 赤6: 射撃中の兵器が1つだけなら自動で故障し、残りの防御側の攻撃は解決しない（§19.11）
- *         2つ以上なら RPC で兵士を決める（§19.13）:
- *           ピン状態の兵士 → 攻撃への影響なし、兵器は故障（§19.14）
- *           すでに故障している兵器 → 除去（§19.2）、攻撃への影響なし
- *           射撃中の機関銃の助手／今の距離で火力のない兵器 → 一時的な故障: 残りの射撃力 -1、兵器は故障しない
- *           射撃中の兵器 → 故障。残りの射撃力を、その兵器の火力2（2未満の余りも）につき1減らす
- *  - §22.3 攻撃に使われている火炎放射器は、赤5・6で RPC なしに故障（捕獲兵器より優先）
- *  戻り値: 残りの防御側への射撃力の修正（負値）。§19.11 の時は state._malfStopAttack = true */
+/** §19 射撃の各RNCで兵器故障を調べ、残りの射撃力への修正を返す。
+ *  赤5は該当兵器のみ、赤6で複数の候補があるときは移送中を除く全員の位置でRPCを引く。 */
 function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, currentStrength) {
   if (!judgeCard || !judgeCard.terrain) return 0;
   if (judgeCard.terrain.rncColor !== '赤') return 0;
@@ -381,13 +477,14 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
   if (!R) return 0;
   const moving = isMovingIgnoringOverlays(firingGroup);
   const crewMap = buildCrewMapFromPairs(firingGroup);
-  const assistantIdx = new Set(Object.values(crewMap));
+  const ownerByAssistant = new Map(Object.entries(crewMap).map(([owner, assistant]) => [assistant, firingGroup.cards[owner]]));
+  const bracketTerrain = R.isInMarsh(firingGroup) || R.isInStream(firingGroup) || R.hasTerrainType(firingGroup, 'WIRE');
   const opts = { moving, crewMap };
   const total = R.calcGroupFirepower(firingGroup, factionKey, fireDistance, opts);
   // その兵士の兵器の火力（その兵士を除いた時に減るグループ火力）
   const soldierFP = c => {
     const i = firingGroup.cards.indexOf(c);
-    const tmp = { cards: firingGroup.cards.filter(x => x !== c), terrain: firingGroup.terrain, crewPairs: firingGroup.crewPairs };
+    const tmp = { ...firingGroup, cards: firingGroup.cards.filter(x => x !== c) };
     const cm = {}; Object.keys(crewMap).forEach(o => { if (Number(o) !== i && crewMap[o] !== i) {
       const no = firingGroup.cards[o], na = firingGroup.cards[crewMap[o]];
       cm[tmp.cards.indexOf(no)] = tmp.cards.indexOf(na); } });
@@ -398,25 +495,40 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
   const hasActiveAssistant = c => {
     const i = firingGroup.cards.indexOf(c);
     const a = crewMap[i] != null ? firingGroup.cards[crewMap[i]] : null;
-    return !!(a && R.isAlive(a) && !R.isPinned(a));
+    return !!(a && R.isAlive(a) && !R.isPinned(a) && !a.transfer);
   };
   // いま使っている X 値（() の火力で撃つ兵器は [X..] の値）
   const xOf = (c, d) => {
     const ents = parseXValues(d.xVal);
     const br = ents.find(e => e.type === 'bracket');
     const nm = [].concat(...ents.filter(e => e.type === 'normal').map(e => e.values));
-    const usesBracket = d.needsCrew && (moving || !hasActiveAssistant(c));
+    const usesBracket = d.needsCrew && (moving || c.transfer || bracketTerrain || !hasActiveAssistant(c));
     if (usesBracket && br) return br.values;
     return nm.length ? nm : [6];
   };
   const nameOf = (c, d) => (d && d.name) || c.id;
-  // 射撃中の兵器（§19.13 の例外: 火炎放射器・射撃していない侵入兵・助手本来の兵器は除く）
-  const firing = firingGroup.cards.filter((c, i) => {
-    if (!R.isAlive(c) || R.isPinned(c) || c.malfunctioned || c.destroyed || assistantIdx.has(i) || c._noFire) return false;
-    const d = defOf(c);
-    return d && !isFlame(d) && d.weaponCat && d.weaponCat !== '非武装' && soldierFP(c) > 0;
+  const isArmed = def => def?.weaponCat && def.weaponCat !== '非武装';
+  const firingOnlyAsOrdnance = (card, def) => Boolean(def && (def.afv || def.infantryGun ||
+    def.isInfantryGun || R.isArtillery(def.weaponCat) || /^(バズーカ|パンツァーシュレック|PIAT)/i.test(def.weaponCat)) &&
+    !soldierFP(card));
+  const eligible = card => R.isAlive(card) && (!card.transfer || firingGroup.transferFire?.has(card));
+  const positionCheck = cards => {
+    const rpcCard = drawTerrainCard();
+    if (!rpcCard) return null;
+    checkBreezeRemoveSmoke(rpcCard);
+    pushTerrainToDiscard(rpcCard);
+    return pickByRPC(rpcCard, { cards });
+  };
+  // §19.13 現在の距離で火力が0の小火器も故障の対象に含める。
+  const regularWeapons = firingGroup.cards.filter((card, index) => {
+    if (!eligible(card) || R.isPinned(card) || card.malfunctioned || card.destroyed ||
+        ownerByAssistant.has(index) || card._noFire) return false;
+    const def = defOf(card);
+    return isArmed(def) && !isFlame(def) && !firingOnlyAsOrdnance(card, def);
   });
-  let mod = 0;
+  const firing = regularWeapons.filter(card => soldierFP(card) > 0);
+  const participants = firingGroup.cards.filter(eligible);
+  const woundedInMovingFire = card => (moving || card.transfer) && R.isWoundActive(card);
   const breakWeapon = (c, d, why) => {
     if (c.malfunctioned) {
       c.malfunctioned = false; c.destroyed = true;
@@ -429,7 +541,7 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
   };
   const reduceFor = fp => Math.ceil(fp / 2); // 火力2（2未満の余りも）につき1
   const reduceAfterMalfunction = fp => {
-    if (firing.length === 1) {
+    if (firing.length + flames.length === 1) {
       state._malfStopAttack = true;
       return 0;
     }
@@ -437,20 +549,20 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
   };
 
   // §22.3 火炎放射器: 攻撃に使われていれば、どの防御側の判定でも赤5・6で RPC を引かずに火炎放射器が故障する
-  //   （§20.741 捕獲兵器と一緒なら火炎放射器の方が故障）。残りの攻撃はほかの兵器で続ける
+  //   （§20.741 捕獲兵器と一緒なら火炎放射器の方が故障）。ほかの兵器の残りの攻撃は同じ射撃力で続ける。
   const flames = firingGroup.cards.filter(c => {
-    if (!R.isAlive(c) || R.isPinned(c) || c.malfunctioned || c.destroyed || c._noFire) return false;
+    if (!eligible(c) || R.isPinned(c) || c.malfunctioned || c.destroyed || c._noFire) return false;
     return isFlame(defOf(c)) && soldierFP(c) > 0;
   });
   if (flames.length > 0) {
     let t = flames[0];
     if (flames.length > 1) {
-      const rc = drawTerrainCard();
+      const rc = drawRandomReinforcementRnc();
       if (rc) { checkBreezeRemoveSmoke(rc); pushTerrainToDiscard(rc); if (rc.terrain.rncColor !== '赤') t = flames[1]; }
     }
-    const fp = soldierFP(t);
     breakWeapon(t, defOf(t), `火炎放射器・赤${rncVal} §22.3`);
-    return -reduceFor(fp);
+    if (flames.length === 1 && !firing.length) state._malfStopAttack = true;
+    return 0;
   }
 
   // §20.741 捕獲兵器は赤の5か6で自動的に故障し、除去される（2つ以上なら RNC 赤→1つ目、黒→2つ目）
@@ -458,57 +570,54 @@ function checkMalfunction(judgeCard, firingGroup, factionKey, fireDistance, curr
   if (captured.length > 0) {
     let t = captured[0];
     if (captured.length > 1) {
-      const rc = drawTerrainCard();
+      const rc = drawRandomReinforcementRnc();
       if (rc) { checkBreezeRemoveSmoke(rc); pushTerrainToDiscard(rc); if (rc.terrain.rncColor !== '赤') t = captured[1]; }
     }
     const fp = soldierFP(t);
     const nm = nameOf(t, defOf(t));
-    t.acquiredWeapon = null; // 捕獲兵器は除去。カードに印刷された兵器に戻る
+    abandonCapturedWeapon(t); // §20.741
     alert(`§20.741 捕獲兵器の故障: ${nm} の捕獲兵器は除去されました（赤${rncVal}）`);
     renderField('player'); renderField('ai');
     return reduceAfterMalfunction(fp);
   }
 
   if (rncVal === 5) {
-    const cands = firing.filter(c => xOf(c, defOf(c)).indexOf(5) >= 0);
-    if (cands.length === 0) return 0;
-    let t = cands[0];
-    if (cands.length > 1) {
-      const rc = drawTerrainCard();
-      if (rc) { checkBreezeRemoveSmoke(rc); pushTerrainToDiscard(rc); t = cands[(parseInt(rc.terrain.range, 10) || 0) % cands.length]; }
-    }
-    const fp = soldierFP(t);
-    breakWeapon(t, defOf(t), '赤5');
-    return reduceAfterMalfunction(fp);
+    const candidates = firing.filter(card => xOf(card, defOf(card)).includes(5));
+    if (!candidates.length) return 0;
+    const chosen = candidates.length === 1 ? candidates[0] : positionCheck(candidates);
+    if (!chosen) return 0;
+    const fp = soldierFP(chosen);
+    breakWeapon(chosen, defOf(chosen), '赤5');
+    return fp ? reduceAfterMalfunction(fp) : 0;
   }
-  // 赤6
-  if (firing.length === 1) {
-    const t = firing[0];
-    breakWeapon(t, defOf(t), '赤6・射撃中の兵器が1つだけ — 残りの防御側の攻撃は解決しない §19.11');
-    return reduceAfterMalfunction(0);
+  // §19訂正: 射撃中の銃が1挺でも、同じ故障値を持つ別の銃や機関銃の助手がいれば位置を判定する。
+  const isMGAssistant = card => {
+    const owner = ownerByAssistant.get(firingGroup.cards.indexOf(card));
+    return owner && firing.includes(owner) && /^[軽中]機関銃/.test(defOf(owner)?.weaponCat || '');
+  };
+  const candidates = participants.filter(card => {
+    const def = defOf(card);
+    if (!isArmed(def) || card.destroyed) return false;
+    if (R.isPinned(card) || card.malfunctioned || woundedInMovingFire(card)) return true;
+    return isMGAssistant(card) || (regularWeapons.includes(card) && xOf(card, def).includes(6));
+  });
+  if (!candidates.length) return 0;
+  const chosen = candidates.length === 1 ? candidates[0] : positionCheck(participants);
+  if (!candidates.includes(chosen)) return 0;
+  const def = defOf(chosen);
+  const label = `赤6${candidates.length > 1 ? ' RPC 位置' + (participants.indexOf(chosen) + 1) : ''}`;
+  if (R.isPinned(chosen) || chosen.malfunctioned || woundedInMovingFire(chosen)) {
+    breakWeapon(chosen, def, label);
+    return 0;
   }
-  if (firing.length === 0) return 0;
-  const rpcCard = drawTerrainCard();
-  if (!rpcCard) return 0;
-  checkBreezeRemoveSmoke(rpcCard);
-  pushTerrainToDiscard(rpcCard);
-  const T = pickByRPC(rpcCard, firingGroup);
-  if (!T) return 0;
-  const d = defOf(T);
-  if (!d || !d.weaponCat || d.weaponCat === '非武装' || T.destroyed) return 0;
-  const pos = firingGroup.cards.filter(c => R.isAlive(c)).indexOf(T) + 1;
-  const label = `赤6 RPC 位置${pos}`;
-  if (T._noFire && !R.isPinned(T)) return 0;                            // 射撃していない兵士（侵入兵 §20.531・火炎放射器 §22.2）: 影響なし
-  if (R.isPinned(T)) { breakWeapon(T, d, label + '・ピン状態の兵士 — 攻撃への影響なし §19.14'); return 0; }
-  if (T.malfunctioned) { breakWeapon(T, d, label + '・すでに故障'); return 0; }
-  const isAsst = assistantIdx.has(firingGroup.cards.indexOf(T));
-  const fpT = soldierFP(T);
-  if (isAsst || fpT <= 0) {
-    alert(`§19.13 一時的な故障: ${nameOf(T, d)}（${isAsst ? '機関銃の助手' : 'この距離では火力のない兵器'}）— 残りの射撃力 -1、兵器は故障しない (${label})`);
+  const fp = soldierFP(chosen);
+  if (isMGAssistant(chosen) || !fp) {
+    const reason = isMGAssistant(chosen) ? '機関銃の助手' : 'この距離で火力なし';
+    alert(`§19.13 一時的な故障: ${nameOf(chosen, def)}（${reason}）— 残りの射撃力 -1 (${label})`);
     return -1;
   }
-  breakWeapon(T, d, label);
-  return -reduceFor(fpT);
+  breakWeapon(chosen, def, label);
+  return reduceAfterMalfunction(fp);
 }
 
 /** §13.2 自軍グループに煙幕を置けない理由（置けるなら null）:
@@ -517,12 +626,13 @@ function smokeBlockReason(grp, side) {
   const R = window.INFANTRY_RULES;
   if (state.isNight) return '夜間シナリオでは煙幕は非機能カードです（置けません）'; // §13.26
   if (state.breezeTurn != null && state.breezeTurn === (state.turnCount || 0)) return '風が出たターンには煙幕を置けません';
-  if (marshBlocksOverlay(grp)) return '湿地には移動カード2枚を置くまで煙幕を置けません';
+  if (R?.isInMarsh(grp)) return '湿地には移動カード2枚を置くまで煙幕を置けません';
   const facKey = getFactionKey(side === 'player' ? state.player : state.ai);
   const hasLeader = R && grp.cards.some(c => {
     if (!R.isAlive(c) || R.isPinned(c)) return false;
     const def = R.lookupSoldier(c, facKey);
-    return !!(def && (def.leader === '分隊長' || def.leader === '副分隊長' || def.afv)); // §13.2 ピン状態でない AFV のいるグループにも置ける
+    return !!(def && (def.afv ? ['us','uk','ger'].includes(facKey) :
+      def.leader === '分隊長' || def.leader === '副分隊長'));
   });
   if (!hasLeader) return 'ピン状態でない指揮官（SL・ASL）か AFV がいるグループにのみ煙幕を置けます';
   return null;
@@ -539,20 +649,6 @@ function topIgnoringSmoke(grp) {
   return null;
 }
 
-/** §8.42 湿地に移動カード2枚が置かれるまでは鉄条網・煙幕を置けない（上の煙幕・鉄条網は飛ばして判定） */
-function marshBlocksOverlay(grp) {
-  const t = grp && grp.terrain;
-  if (!t) return false;
-  let moves = 0;
-  for (let i = t.length - 1; i >= 0; i--) {
-    const ty = t[i] && t[i].terrain && t[i].terrain.type;
-    if (ty === 'SMOKE' || ty === 'WIRE') continue;
-    if (ty === 'MOVEMENT') { moves++; continue; }
-    return ty === 'MARSH' && moves < 2;
-  }
-  return false;
-}
-
 /** 煙幕の除去を大きく表示する */
 function announceSmokeRemoval(side, grp, reason, cards) {
   if (!cards || cards.length === 0) return;
@@ -565,16 +661,9 @@ function announceSmokeRemoval(side, grp, reason, cards) {
 function wireBlockReason(grp) {
   const R = window.INFANTRY_RULES;
   if (R && R.hasTerrainType && R.hasTerrainType(grp, 'PILLBOX')) return 'トーチカにいるグループには鉄条網を置けません';
-  if (marshBlocksOverlay(grp)) return '湿地には移動カード2枚を置くまで鉄条網を置けません';
-  // 河川: 渡河に成功（河川の上に移動カードが置かれる）した後のみ。上の煙幕・鉄条網は飛ばして判定
-  const t = grp.terrain || [];
-  let moves = 0;
-  for (let i = t.length - 1; i >= 0; i--) {
-    const ty = t[i] && t[i].terrain && t[i].terrain.type;
-    if (ty === 'SMOKE' || ty === 'WIRE') continue;
-    if (ty === 'MOVEMENT') { moves++; continue; }
-    if (ty === 'STREAM' && moves === 0) return '河川には渡河に成功した後でなければ鉄条網を置けません';
-    break;
+  if (R?.isInMarsh(grp)) return '湿地には移動カード2枚を置くまで鉄条網を置けません';
+  if (R?.isInStream(grp) && !R.hasCrossedStream(grp)) {
+    return '河川には渡河に成功した後でなければ鉄条網を置けません';
   }
   return null;
 }
@@ -590,6 +679,7 @@ function isPlainUseCard(card, side = 'player') {
 
 /** 煙幕・鉄条網を無視した最上のカードが移動カードか（平地を置ける＝移動中） */
 function isMovingIgnoringOverlays(grp) {
+  if (grp?._immob || grp?._bog || grp?._stun) return false;
   const t = (grp && grp.terrain) || [];
   for (let i = t.length - 1; i >= 0; i--) {
     const ty = t[i] && t[i].terrain && t[i].terrain.type;
@@ -599,9 +689,47 @@ function isMovingIgnoringOverlays(grp) {
   return false;
 }
 
-/** 手札のカードを平地として移動中のグループに置く。
- *  §13.5 煙幕・鉄条網はそのまま残し、その下（移動カードの上）に平地を置く。移動カードと下の地形は捨て札 */
+/** §8・§24・§34 距離チットを変えず、横向きに置かなくてはならない移動。 */
+function requiresLateralMovement(group, side) {
+  const R = window.INFANTRY_RULES;
+  return infantryGunFirstLateral(group, side) || R.hasTerrainType(group, 'MINEFIELD') ||
+    (R.isInStream(group) && !R.hasCrossedStream(group)) ||
+    (R.isInMarsh(group) && R.marshMoveCount(group) === 0) ||
+    (window.AFV?.isAfvGroup(group) && topIgnoringSmoke(group)?.terrain?.type === 'WOODS');
+}
+
+/** §8.1 裏向きのカードで平地に入る条件。 */
+function openGroundBlockReason(group, side) {
+  if (!group || group.eliminated) return '配置先のグループを選んでください';
+  if (!isMovingIgnoringOverlays(group) && !group.forming) return '移動中のグループにのみ平地を置けます';
+  const R = window.INFANTRY_RULES;
+  if (!R.canPlaceTerrainOnMarsh(group)) return '湿地から平地に出るには移動カード2枚が必要です';
+  if (!R.canPlaceTerrainOnGully(group)) return '涸れ谷から平地に出るには移動カードが必要です';
+  if (!R.canPlaceTerrainOnStream(group)) return '河川から平地に出るには、先に渡河を成功させてください';
+  const mineIndex = group.terrain.findIndex(card => card.terrain?.type === 'MINEFIELD');
+  if (mineIndex >= 0 && minefieldMovementCount(group, mineIndex) < 2) {
+    return '地雷原から平地に出るには横移動カード2枚が必要です';
+  }
+  if (!infantryGunCanEnter(group, 'PLAIN', side)) {
+    return radioText('歩兵砲の移動カードが足りません。','The infantry gun needs another Movement card.');
+  }
+  return null;
+}
+
+/** カードを裏返して平地にする。捨て札になるまで元のカードを記録する。 */
+function placedOpenGround(card) {
+  return {
+    terrain: { type: 'PLAIN', modifier: '0', range: '0', rncColor: '黒', dice: {} },
+    terrainIndex: terrainIndexFromCard(card),
+    _faceDown: true,
+    _isPlain: true
+  };
+}
+
+/** §13.5 裏向きの平地を煙幕・鉄条網の下に置き、移動カードと元の地形を捨てる。 */
 function placePlainOnGroup(grp, card) {
+  discardUnclaimedWeapons(grp);
+  if (state.phase === 'play') abandonUnsupportedHeavyWeapons(grp);
   const overlays = [];
   for (let i = grp.terrain.length - 1; i >= 0; i--) {
     const ty = grp.terrain[i] && grp.terrain[i].terrain && grp.terrain[i].terrain.type;
@@ -609,15 +737,8 @@ function placePlainOnGroup(grp, card) {
     overlays.unshift(grp.terrain.pop());
   }
   while (grp.terrain.length > 0) pushTerrainToDiscard(grp.terrain.pop());
-  const plain = {
-    terrain: { type: 'PLAIN', modifier: '0', range: '0', rncColor: '黒', dice: {} },
-    terrainIndex: terrainIndexFromCard(card), // 捨て札時は元のカードとして戻す
-    _faceDown: true,
-    _isPlain: true
-  };
-  grp.terrain.push(plain);
+  grp.terrain.push(placedOpenGround(card));
   overlays.forEach(c => grp.terrain.push(c));
-  grp.flankingTarget = null;
   breakFlanksOn(grp); // §17.42 平地も地形カード
   onTerrainAccepted(grp); // §17.7/§17.92 平地も地形カード
 }

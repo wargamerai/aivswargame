@@ -1,3 +1,8 @@
+function ufUsesVictory(scenario, id) {
+  return !!scenario && ((scenario.victoryPresets && (scenario.victoryPresets.includes(id) || (id === 'C' && scenario.victoryPresets.includes('O')))) ??
+    ((scenario.victoryPreset || scenario.id) === id));
+}
+
 /* ============================================================
  * Up Front シナリオデータ
  *
@@ -51,7 +56,7 @@
     treatAsPlain: ['PILLBOX', 'MINEFIELD'],
     // §16.1 デッキ改変:
     //   判定用 (RNC/RPC) として引かれて捨て札になった、もしくは
-    //   手札から直接捨てた最初の 5 枚の
+    //   手札から捨てるか RNC/RPC に使った最初の 5 枚の
     //   「建物 (BUILDINGS)」カードはゲームから完全に除去する。
     //   (除去後、残り 3 枚の建物カードは地形カードとして使用できる)
     deckRemovals: [
@@ -146,11 +151,11 @@
     asymmetric: true,
     attackerRole: 'player',
     factions: {
-      ger: { soldierList: [2,3,4,5,6,7,8,9,10,18,22,23,25], dc: true },
-      rus: { soldierList: [3,4,5,6,7,8,9,10,11,12,19,20,23,24,25,26,27,28], dc: true },
-      us:  { soldierList: [1,2,4,5,6,7,8,9,10,11,12,17,19,24,28], dc: true },
-      jpn: { soldierList: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,23], dc: true },
-      uk:  { soldierList: [1,3,4,5,6,7,9,10,15,19,22,23,25], dc: true },
+      ger: { soldierList: [2,3,4,5,6,7,8,9,10,18,22,23,25] },
+      rus: { soldierList: [3,4,5,6,7,8,9,10,11,12,19,20,23,24,25,26,27,28] },
+      us:  { soldierList: [1,2,4,5,6,7,8,9,10,11,12,17,19,24,28] },
+      jpn: { soldierList: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,23] },
+      uk:  { soldierList: [1,3,4,5,6,7,9,10,15,19,22,23,25] },
     },
     defenderFactions: {
       ger: { soldierList: [2,4,6,8,9,10,12,23] },
@@ -244,6 +249,7 @@
     const enc = global.encPath || (s => s);
     const nums = getSoldierNumbers(scenario, factionKey, role);
     return nums.map(num => {
+      if (typeof global.makeCardWithMeta === 'function') return global.makeCardWithMeta(factionKey, num);
       // ソ連は番号により prefix が異なる (russian/Rus)
       let prefix = fac.prefix;
       let dir = fac.dir;
@@ -635,8 +641,8 @@
   }
 
   /** AI のグループを作る（作戦を選び、各グループに役割 _role と作戦 _strategy を付ける）。style: AI の性格 */
-  function buildAIGroupsSmart(scenario, factionKey, role, style) {
-    const _g = buildAIGroupsSmart0(scenario, factionKey, role, style);
+  function buildAIGroupsSmart(scenario, factionKey, role, style, equipmentHolders = new Set()) {
+    const _g = buildAIGroupsSmart0(scenario, factionKey, role, style, equipmentHolders);
     return _pillboxFix(scenario, role, _g, factionKey);
   }
   // テスト用（2026-11-08）: §23.3 トーチカ（C の守備側の B）は3人まで、迫撃砲・擲弾筒・バズーカ・パンツァーシュレックは入れない
@@ -680,10 +686,56 @@
     _assignCrew(gs, enriched);
     return gs.filter(g => g.cards.length);
   }
-  function buildAIGroupsSmart0(scenario, factionKey, role, style) {
+  function buildAIGroupsSmart0(scenario, factionKey, role, style, equipmentHolders) {
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
+    if (scenario?.victoryPreset) {
+      if (scenario.evacuationSetup && role === 'defender') {
+        const count = enriched.length > 30 ? 4 : 3;
+        const sizes = Array.from({ length: count }, (_, i) =>
+          Math.floor(enriched.length / count) + Number(i < enriched.length % count));
+        const groups = _forcedSplit(enriched, factionKey, sizes);
+        groups.forEach(group => { group.distance = 2; });
+        return groups;
+      }
+      const vehicles = enriched.filter(unit => unit.def?.afv);
+      const pillboxStart = role === 'defender' && (scenario.defenderPillbox || ufUsesVictory(scenario, 'C'));
+      if (vehicles.length || pillboxStart || enriched.length === 1) {
+        const infantry = enriched.filter(unit => !unit.def?.afv);
+        const secondaryHolders = new Set(infantry.map(unit => unit.num).filter(num =>
+          equipmentHolders.has(num) || reservedSecondaryWeapon(scenario, factionKey, num)));
+        const pillbox = pillboxStart ? editorPillboxSize(infantry.map(unit => unit.num), factionKey, secondaryHolders) : 0;
+        const field = infantry.length - pillbox;
+        const groupCount = Math.ceil(field / 10);
+        const sizes = Array.from({ length: groupCount }, (_, i) =>
+          Math.floor(field / groupCount) + Number(i < field % groupCount));
+        if (pillbox) sizes.splice(1, 0, pillbox);
+        const groups = infantry.length ? _forcedSplit(infantry, factionKey, sizes) : [];
+        if (pillbox) {
+          const shelter = groups[1];
+          const allowed = card => {
+            const def = getSoldierDef(factionKey, card.num);
+            return def && !def.infantryGun && !pillboxForbiddenWeapon(def.weaponCat) && !secondaryHolders.has(card.num);
+          };
+          for (const [i, card] of shelter.cards.entries()) {
+            if (allowed(card)) continue;
+            const outside = groups.find(group => group !== shelter && group.cards.some(allowed));
+            const replacement = outside.cards.findIndex(allowed);
+            shelter.cards[i] = outside.cards[replacement];
+            outside.cards[replacement] = card;
+          }
+          groups.forEach(group => { group.crewPairs = {}; });
+          _assignCrew(groups, infantry);
+        }
+        for (const vehicle of vehicles) {
+          const g = _newGroup('ABCD'[groups.length], factionKey);
+          addCard(g, vehicle);
+          groups.push(g);
+        }
+        return groups;
+      }
+    }
     if (role === 'defender' && scenario?.defenderInitialBuildings) {
       const count = scenario.defenderInitialBuildings;
       const size = Math.floor(enriched.length / count);
@@ -744,16 +796,30 @@
 
   // ===== デッキ除去ルール ============================================
 
-  /** このシナリオで地形カードとして使用不可か判定する
-   *  isAttacker=true なら攻撃側のみ非機能の treatAsPlainAttacker も含めて判定 */
+  function isScenarioCardTypeDisabled(scenario, type, role) {
+    return Boolean(scenario?.treatAsPlain?.includes(type) ||
+      (role === 'attacker' && scenario?.treatAsPlainAttacker?.includes(type)) ||
+      (role === 'defender' && scenario?.treatAsPlainDefender?.includes(type)));
+  }
+
+  /** シナリオの非機能指定と、除外枚数に達するまでの使用制限を判定する。 */
   function isCardDisabledAsTerrain(scenario, card, isAttacker) {
-    if (!scenario || !card || !card.terrain) return false;
+    if (!card?.terrain) return false;
     const t = card.terrain.type;
-    if (scenario.treatAsPlain && scenario.treatAsPlain.indexOf(t) >= 0) return true;
-    if (isAttacker && scenario.treatAsPlainAttacker && scenario.treatAsPlainAttacker.indexOf(t) >= 0) return true;
-    const removed = (global.state && global.state.deckRemoved) || {};
+    if (t === 'SMOKE' && global.state?.isNight) return true; // §13.26
+    if (!scenario) return false;
+    const printed = typeof TERRAIN_CARDS !== 'undefined' ? TERRAIN_CARDS[card.terrainIndex]?.type : undefined;
+    const types = scenario.victoryPresets && !card.nationalFaces && printed && printed !== t ? [t, printed] : [t];
+    const role = isAttacker ? 'attacker' : 'defender';
+    if (types.some(type => isScenarioCardTypeDisabled(scenario, type, role))) return true;
+    // 以前のエディタで開始した対局のセーブを引き継ぐ。
+    const deck = global.state?.terrainDeck;
+    const cycles = (deck?.cycle || 0) + Number(Boolean(deck?.draw && !deck.draw.length));
+    if (types.some(type => scenario.terrainCutoffs?.[type] != null &&
+        cycles >= scenario.terrainCutoffs[type])) return true;
+    const removed = global.state?.deckRemoved || {};
     return (scenario.deckRemovals || []).some(rule =>
-      rule.type === t && (removed[t] || 0) < rule.count);
+      rule.type === (printed || t) && (removed[rule.type] || 0) < rule.count);
   }
 
   /** カードが捨て札になる前に除去対象か判定する。
@@ -797,6 +863,7 @@
     AI_STRATEGY_NAMES,
     shouldRemoveFromGame,
     isCardDisabledAsTerrain,
+    isScenarioCardTypeDisabled,
     getPromotionTable,
   };
 

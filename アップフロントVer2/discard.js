@@ -17,6 +17,9 @@
 
   let actionCount = 0;
   let discardedThisTurn = 0;
+  let entrenchments = 0;
+  let freeDiscards = 0;
+  let volksCowerDiscarded = false;
 
   function getFactionKey() {
     const factions = global.FACTIONS;
@@ -26,6 +29,13 @@
   }
 
   function turnLimit(key, actions) {
+    const troopType = global.troopTypeOf?.(key);
+    if (troopType === 'conscripts') return actions === 0 ? 2 : 0;
+    if (troopType === 'green') return actions === 0 ? 1 : 0;
+    if (global.isEditorEliteFaction?.(key)) {
+      if (key === 'ger' || key === 'rus' || key === 'jpn') return actions <= 1 ? 2 : 0;
+      if (key === 'us' || key === 'uk') return actions === 0 ? 2 : Number(actions === 1);
+    }
     const unitType = global.state?.britishUnitType ?? global.state?.scenario?.britishUnitType;
     if (key === 'uk' && unitType === 'airborne') return actions === 0 ? 2 : Number(actions === 1);
     if (key === 'uk' && unitType === 'home-guard') return Number(actions === 0);
@@ -34,7 +44,29 @@
   }
 
   function getMaxDiscard() {
-    return turnLimit(getFactionKey(), actionCount);
+    const limit = turnLimit(getFactionKey(), actionCount);
+    if (entrenchments === 0) return limit;
+    return limit === Infinity ? discardedThisTurn + Math.max(0, global.state.playerHand.length - entrenchments) :
+      Math.max(0, limit - entrenchments);
+  }
+
+  // §45.12 日本軍の非機能カードは、通常の捨て札枠を使わない。
+  function isFreeDiscard(card) {
+    return getFactionKey() === 'jpn' && global.handCardIsCower(card, 'player');
+  }
+
+  function discardCardAllowed(card, side) {
+    if (!card) return false;
+    const faction = side === 'player' ? getFactionKey() : global.getFactionKey(global.state.ai);
+    if (global.troopTypeOf?.(faction) !== 'volksgrenadiers') return true;
+    const acted = side === 'player' ? actionCount : global.state.aiActionCount || global.state.aiActedThisTurn;
+    return !acted || !global.handCardIsCower(card, side);
+  }
+
+  function revealVolksDiscard(side, card) {
+    const faction = global.getFactionKey(global.state[side]);
+    if (global.troopTypeOf?.(faction) !== 'volksgrenadiers') return;
+    global.ufReportLog?.(side, `§39.5 捨て札公開 — ${card.id || card.terrain?.type}`, side);
   }
 
   function execute() {
@@ -42,37 +74,30 @@
     if (!s || s.phase !== 'play' || s.currentTurn !== 'player') return;
     if (s.selectedHand.size === 0) return;
 
-    // §45.12 日本軍: 相手に見せたcower/非機能カードは行動/捨て札制限に影響せず自由に捨て札可能
-    const key = getFactionKey();
-    const SH = global.SCENARIO_HELPERS;
     const sel = Array.from(s.selectedHand);
-    const allCower = (key === 'jpn' && SH && SH.isCardDisabledAsTerrain) && sel.every(i => {
-      const c = s.playerHand[i];
-      return c && SH.isCardDisabledAsTerrain(s.scenario, c, s.playerRole === 'attacker'); // 攻撃側だけ使えないカードも含む
-    });
-
-    const max = getMaxDiscard();
-    const remaining = max === Infinity ? Infinity : (max - discardedThisTurn);
-    if (!allCower && remaining <= 0) {
-      alert(actionCount
-        ? 'このターンに残っている捨て札はありません'
-        : 'このターンの捨て札上限に達しています');
+    let remaining = getRemainingDiscard();
+    const indices = sel.sort((a, b) => b - a);
+    let count = 0;
+    for (const index of indices) {
+      const card = s.playerHand[index];
+      if (!discardCardAllowed(card, 'player')) continue;
+      const free = isFreeDiscard(card);
+      if (!free && remaining <= 0) continue;
+      if (global.troopTypeOf?.(getFactionKey()) === 'volksgrenadiers' && global.handCardIsCower(card, 'player')) {
+        volksCowerDiscarded = true;
+      }
+      s.playerHand.splice(index, 1);
+      global.pushTerrainToDiscard(card);
+      revealVolksDiscard('player', card);
+      if (free) freeDiscards++;
+      else { discardedThisTurn++; remaining--; }
+      count++;
+    }
+    if (!count) {
+      alert('このターンに残っている捨て札はありません');
       return;
     }
-
-    const indices = sel.sort(function (a, b) { return b - a; });
-    const count = allCower ? indices.length : Math.min(indices.length, remaining);
-    for (let i = 0; i < count; i++) {
-      const idx = indices[i];
-      const card = s.playerHand[idx];
-      if (!card) continue;
-      s.playerHand.splice(idx, 1);
-      if (global.pushTerrainToDiscard) global.pushTerrainToDiscard(card);
-      discardedThisTurn++;
-    }
-    if (count < indices.length) {
-      alert('国籍ルールにより' + count + '枚のみ捨て札しました');
-    }
+    if (count < indices.length) alert('国籍ルールにより' + count + '枚のみ捨て札しました');
 
     s.selectedHand.clear();
     s.selectedAction = null;
@@ -85,18 +110,37 @@
   }
 
   function markActed() { actionCount++; }
+  function markEntrenchment() {
+    if (getFactionKey() === 'rus') entrenchments++;
+    else markActed();
+  }
+  function canEntrench() {
+    if (getFactionKey() !== 'rus') return canStillAct();
+    if (global.afvSmokeActionUsed?.('player')) return false;
+    if (discardedThisTurn === 0) return true;
+    const limit = turnLimit('rus', actionCount);
+    return limit === Infinity ? global.state.playerHand.length > entrenchments :
+      discardedThisTurn <= limit - entrenchments - 1;
+  }
   /** §7.3 捨て札の代わりに相手へ地形を置いた: 捨て札1枚分を使う */
   function consume(n) { discardedThisTurn += (n || 1); }
   /** §4.3/§14.1 このターンの捨て札（狙撃・相手への地形配置を含む）の後でもアクションできるか
    *  （米・ソ・日・英は捨て札をしたターンにアクション不可、独は1枚までなら可） */
-  function canStillAct() {
+  function canStillAct(actions = 1) {
+    if (global.afvSmokeActionUsed?.('player') || volksCowerDiscarded) return false;
     const key = getFactionKey();
     if (!key || !DISCARD_LIMITS[key]) return true;
-    return discardedThisTurn <= turnLimit(key, actionCount + 1);
+    return discardedThisTurn <= Math.max(0, turnLimit(key, actionCount + actions) - entrenchments);
   }
   /** §4.6 このターンにアクションか捨て札をしたか */
-  function didAnything() { return actionCount > 0 || discardedThisTurn > 0; }
-  function resetTurn() { actionCount = 0; discardedThisTurn = 0; }
+  function didAnything() { return actionCount + discardedThisTurn + entrenchments + freeDiscards > 0; }
+  function resetTurn() {
+    actionCount = 0;
+    discardedThisTurn = 0;
+    entrenchments = 0;
+    freeDiscards = 0;
+    volksCowerDiscarded = false;
+  }
 
   /** このターンまだ捨てられる枚数（米: 未行動で最大2／行動後0、ソ: 未行動は無制限／行動後0） */
   function getRemainingDiscard() {
@@ -106,17 +150,25 @@
   }
 
   /** 途中セーブ・ロード用: このターンの行動・捨て札の状態 */
-  function getState() { return { actedThisTurn: actionCount > 0, actionCount, discardedThisTurn }; }
+  function getState() { return { actedThisTurn: actionCount + entrenchments > 0, actionCount, discardedThisTurn, entrenchments, freeDiscards, volksCowerDiscarded }; }
   function setState(st) {
     actionCount = st?.actionCount ?? Number(Boolean(st?.actedThisTurn));
-    discardedThisTurn = (st && st.discardedThisTurn) || 0;
+    discardedThisTurn = st?.discardedThisTurn || 0;
+    entrenchments = st?.entrenchments || 0;
+    freeDiscards = st?.freeDiscards || 0;
+    volksCowerDiscarded = Boolean(st?.volksCowerDiscarded);
   }
 
   global.DISCARD_RULES = {
     getState: getState,
     setState: setState,
     execute: execute,
+    isFreeDiscard: isFreeDiscard,
+    discardCardAllowed: discardCardAllowed,
+    revealVolksDiscard: revealVolksDiscard,
     markActed: markActed,
+    markEntrenchment: markEntrenchment,
+    canEntrench: canEntrench,
     consume: consume,
     didAnything: didAnything,
     canStillAct: canStillAct,

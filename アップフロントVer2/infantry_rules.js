@@ -58,12 +58,12 @@
   const CREW_WEAPON_PREFIXES = [
     '中機関銃', '軽機関銃',
     // 'バズーカ', 'パンツァーシュレック',  // 搭載しないため処理からはずす
-    '迫撃砲', '60mm迫撃砲', '50mm迫撃砲',
+    '迫撃砲', '60mm迫撃砲', '50mm迫撃砲', '擲弾筒',
   ];
 
   // 砲兵類 (§19.12 赤5/6で自動故障)
   const ARTILLERY_PREFIXES = [
-    '迫撃砲', '60mm迫撃砲', '50mm迫撃砲',
+    '迫撃砲', '60mm迫撃砲', '50mm迫撃砲', '擲弾筒',
   ];
 
   // ボルトアクションライフル (移動射撃で半減 §12.11)
@@ -113,20 +113,30 @@
     const base = list.find(s => s.num === num) || null;
     const partisan = base && typeof global.partisanFaction === 'function' && global.partisanFaction(factionKey);
     const ig = base && global.state?.scenario?.infantryGuns?.[factionKey]?.[num];
+    const eliteMorale = base && !base.afv && !base.infantryGun &&
+      global.isEditorEliteFaction?.(factionKey) && Number(base.morale) === 1;
     // §18.2 拾った兵器を持っていれば、カードに印刷された兵器の代わりにそれを使う
     // §42 キャンペーンで変わった能力値（モラル・パニック・KIA・CCV）
-    if (base && (partisan || ig || card._statOverride || card.acquiredWeapon || card.destroyed)) {
-      const d = Object.assign({}, base, card._statOverride || {}, card.acquiredWeapon || {});
+    if (base && (eliteMorale || partisan || ig || card._statOverride || card.acquiredWeapon || card.destroyed || card.flameDiscarded)) {
+      const d = { ...base, ...card._statOverride, ...card.acquiredWeapon, printedMorale: base.morale };
       // §22.4 印刷されていない火炎放射器を持つ間は KIA 値 -1、印刷されている火炎放射器を失ったら KIA 値 +1
-      if (card.acquiredWeapon || card.destroyed) {
+      if (card.acquiredWeapon || card.destroyed || card.flameDiscarded) {
         const isFT = w => !!(w && w.indexOf('火炎放射器') === 0);
-        const hasFT = !card.destroyed && isFT(d.weaponCat); // 兵器が除去されていれば持っていない
+        const legacyDrop = card.flameDiscarded && isFT(d.weaponCat);
+        const hasFT = !card.destroyed && !legacyDrop && isFT(d.weaponCat);
         const delta = (hasFT && !isFT(base.weaponCat)) ? -1 : (!hasFT && isFT(base.weaponCat)) ? 1 : 0;
         if (delta) {
           if (d.kiaFront !== '' && d.kiaFront != null) d.kiaFront = String((parseInt(d.kiaFront, 10) || 0) + delta);
           if (d.kiaBack !== '' && d.kiaBack != null) d.kiaBack = String((parseInt(d.kiaBack, 10) || 0) + delta);
         }
+        if (legacyDrop) {
+          d.weaponCat = d.weaponName = '非武装';
+          d.range = Array(6).fill('0');
+          d.rangeData = Array.from({ length: 6 }, () => ({ main: 0 }));
+          d.xVal = '';
+        }
       }
+      if (eliteMorale) d.morale = '2';
       if (partisan) d.panic = String(Math.max(0, (parseInt(d.panic, 10) || 0) - 1));
       if (ig) {
         d.weaponCat = '歩兵砲';
@@ -217,7 +227,10 @@
    * §5.7 ブロック位置: 真正面の敵グループとの相対距離 5 で前進不可
    */
   function isBlocked(group, opposingGroup) {
-    return relativeRange(group.distance, opposingGroup.distance) >= 5;
+    if (!opposingGroup || opposingGroup.eliminated ||
+        (opposingGroup.cards && !opposingGroup.cards.some(isAlive))) return false;
+    return relativeRange(group.distance, opposingGroup.distance) >= 5 &&
+      !group._overrunTargets?.includes(opposingGroup);
   }
 
   // ===== §6/§7 射撃力計算 ==========================================
@@ -237,53 +250,37 @@
     const idx = rangeIndex(distance);
     const inMarsh = isInMarsh(group);
     const inStream = isInStream(group);
+    const needsFullCrew = inMarsh || inStream || hasTerrainType(group, 'WIRE');
+    if (group._stun) return 0;
     // §11 クルーアシスタント（副兵）は射撃しない（主兵のクルー扱い）
     const assistantSet = new Set(Object.values(opts.crewMap || {}));
     let total = 0;
     group.cards.forEach((card, i) => {
-      // §10.11 ピン状態の兵士の火力は加算しない
-      if (isPinned(card) || !isAlive(card)) return;
+      // §17.8 FAQ: 射撃に加えた移送兵だけを数え、その兵士は移動中として扱う。
+      if (isPinned(card) || !isAlive(card) || (card.transfer && !group.transferFire?.has(card))) return;
+      const moving = opts.moving || Boolean(card.transfer);
       // クルーアシスタントは火力に加算しない
       if (assistantSet.has(i)) return;
       // §20.531 射撃に参加しないことにした侵入兵
       if (card._noFire) return;
-      // 故障・破壊した武器は射撃不可
-      if (card.malfunctioned || card.destroyed) return;
       const def = lookupSoldier(card, factionKey);
+      const unarmed = !def?.weaponCat || def.weaponCat === '非武装' || card.destroyed || card.malfunctioned;
+      const elitePistol = idx === 5 && global.isEditorEliteFaction?.(factionKey) &&
+        ((factionKey === 'us' && opts.eliteBlackFire) || (factionKey === 'jpn' && unarmed));
+      if ((card.malfunctioned || card.destroyed) && !elitePistol) return;
       if (!def) return;
 
       // 砲兵類/迫撃砲などは歩兵ルール対象外
-      if (!isInfantryWeapon(def.weaponCat)) return;
+      if (!isInfantryWeapon(def.weaponCat) && !elitePistol) return;
+      if (elitePistol && (def.afv || def.infantryGun)) return;
 
-      // §8.41 湿地からの射撃制限
-      if (inMarsh) {
-        if (def.weaponCat.indexOf('中機関銃') === 0) return;
-        if (def.weaponCat.indexOf('迫撃砲') >= 0) return;
-        // クルー必要武器（括弧データあり）: クルー完備＋非移動でなければ射撃不可
-        if (def.needsCrew) {
-          const hasAssist = !!(opts.crewMap && opts.crewMap[i] != null);
-          if (!hasAssist || opts.moving) return;
-        }
-      }
-
-      // §8.52 河川からの射撃制限
-      if (inStream) {
-        if (def.weaponCat.indexOf('中機関銃') === 0) return;
-        if (def.weaponCat.indexOf('迫撃砲') >= 0) return;
-        // クルー必要武器: クルー完備＋非移動で () 内火力のみ
-        if (def.needsCrew) {
-          const hasAssist = !!(opts.crewMap && opts.crewMap[i] != null);
-          if (!hasAssist || opts.moving) return;
-        }
-      }
-
-      // データ駆動: rangeData[idx] から FP を決定
-      const rd = (def.rangeData && def.rangeData[idx]) || null;
-      const assistIdxC = (opts.crewMap && opts.crewMap[i] != null) ? opts.crewMap[i] : -1;
-      const assistCardC = assistIdxC >= 0 ? group.cards[assistIdxC] : null;
-      const hasAssistant = !!(assistCardC && isAlive(assistCardC) && !isPinned(assistCardC));
-      // データ駆動のクルー判定: 括弧あり = クルー必要兵器
+      const rd = def.rangeData?.[idx];
+      const assistant = group.cards[opts.crewMap?.[i]];
+      const hasAssistant = isAlive(assistant) && !isPinned(assistant) && !assistant.transfer;
       const needsCrew = !!def.needsCrew;
+      if ((inMarsh || inStream) && (isArtillery(def.weaponCat) || /中機関銃/.test(def.weaponCat))) return;
+      if (needsFullCrew && needsCrew && (!hasAssistant || moving)) return;
+
       let fp;
       if (rd && rd.na) {
         fp = 0;
@@ -297,7 +294,7 @@
       }
       // §26.3 迫撃砲の兵士は、迫撃砲の射程（命中数値の欄）では小火器の火力を持たない。
       //   最小射程未満（カードの「NA/nFP」）でだけ、主要操作者が n の小火器の火力を持つ
-      if (def.weaponCat && def.weaponCat.indexOf('迫撃砲') >= 0) {
+      if (isArtillery(def.weaponCat)) {
         const mfp = String((def.range && def.range[idx]) || '').match(/NA\s*\/\s*(\d+)\s*FP/);
         fp = mfp ? parseInt(mfp[1], 10) : 0;
       }
@@ -306,30 +303,24 @@
         fp = Math.max(fp, 1);
       }
 
-      // §8.41 湿地内のクルー兵器は () 内火力を使用 (括弧があれば noCrew を使う)
-      if (inMarsh && needsCrew && rd && rd.noCrew != null) {
-        fp = rd.noCrew;
-      }
-      // §8.52 河川内のクルー兵器は () 内火力を使用
-      if (inStream && needsCrew && rd && rd.noCrew != null) {
-        fp = rd.noCrew;
-      }
+      // §8.41・§8.52・§13.32 は、クルーが揃っていても括弧内の値を使う。
+      if (needsFullCrew && needsCrew) fp = rd?.noCrew ?? 0;
 
       // §12.1 移動射撃: 兵士火力は半減しない（基礎射撃力で半減）
-      if (opts.moving) {
+      if (moving) {
         if (def.weaponCat.indexOf('中機関銃') === 0) fp = 0;
         // §12.12 対戦車ライフルは移動中に射撃できない。
         if (def.weaponCat.startsWith('対戦車ライフル')) fp = 0;
         // 軽機関銃は移動中、クルー無しは 0、クルーがいても () 内火力を使用
         if (def.weaponCat.indexOf('軽機関銃') === 0) {
-          if (!hasAssistant) fp = 0;
-          else if (rd && !rd.na && rd.noCrew != null) fp = rd.noCrew;
+          fp = hasAssistant && !rd?.na ? (rd?.noCrew ?? 0) : 0;
         }
         // §12.12 迫撃砲は移動中射撃不可
-        if (def.weaponCat.indexOf('迫撃砲') >= 0) fp = 0;
+        if (isArtillery(def.weaponCat)) fp = 0;
         // §12.11 ボルトアクション・ライフルは移動中 ½（端数切り捨て）
         if (isBoltAction(def.weaponCat)) fp = Math.floor(fp / 2);
       }
+      if (elitePistol) fp = Math.max(unarmed ? 0 : fp, 1);
       // §10.45 ヒーロー: その兵士1名の火力をそのターン2倍（2枚目なら3倍）。
       //   機関銃はクルーが完備していても () 内の火力を倍にする。迫撃砲は対象外
       if (card._heroEnhanced && fp > 0 && def.weaponCat.indexOf('迫撃砲') < 0) {
@@ -341,7 +332,7 @@
       if (card.prisoners && card.prisoners.length) fp = Math.floor(fp / 2);
       // §33.2 負傷兵: 移動射撃はできない。火力は半分（端数切り捨て）。主武器が火砲（迫撃砲）なら火力ではなく命中頻度 -1（mortar.js）
       if (isWoundActive(card)) {
-        if (opts.moving) fp = 0;
+        if (moving) fp = 0;
         else if (!(def.weaponCat && def.weaponCat.indexOf('迫撃砲') >= 0)) fp = Math.floor(fp / 2);
       }
       total += fp;
@@ -390,37 +381,41 @@
 
   /** 地形修正の項目リスト [{type, mod}]（calcTerrainMod / getTerrainModBreakdown 共通）
    *  opts.otherStack: 相手グループの地形スタック（§8.31/8.32 丘の例外判定）
+   *  opts.attackRange / opts.isMortar: 涸れ谷内にも届く射撃の判定（§8.22）
    *  opts.encircled : 防御グループが包囲下（§8.9 障壁の修正なし） */
   function _terrainModItems(terrainStack, asAttacker, opts) {
     const result = [];
     if (!terrainStack || terrainStack.length === 0) return result;
     const o = opts || {};
-    // §7.2 例E: 地形の上に移動カードが2枚あれば平地に出たので、その地形の修正は使わない（移動カードは両方使う）
-    //   §8.42 湿地も同じ。§8.22 涸れ谷だけは1枚目の移動の修正も使わない（2枚目の+1のみ）
-    //   煙幕・鉄条網・地雷原は地形カードではないので飛ばして、移動カードの下の地形を探す
-    const skip = new Set();
+    // §7.2 最新2枚まで。最新が地形ならその1枚、移動なら直前の地形または移動も有効。
+    const movements = [];
+    let terrainIndex = -1;
+    let moveLimit = 2;
     for (let i = terrainStack.length - 1; i >= 0; i--) {
-      const ty = terrainStack[i] && terrainStack[i].terrain && terrainStack[i].terrain.type;
-      if (!ty || ty === 'MOVEMENT' || ty === 'SMOKE' || ty === 'WIRE' || ty === 'MINEFIELD') continue;
-      const moves = [];
-      for (let j = i + 1; j < terrainStack.length; j++) {
-        const tj = terrainStack[j] && terrainStack[j].terrain && terrainStack[j].terrain.type;
-        if (tj === 'MOVEMENT') moves.push(j);
+      const type = terrainStack[i]?.terrain?.type;
+      if (!type || ['SMOKE', 'WIRE', 'TRENCH'].includes(type)) continue;
+      if (type === 'MOVEMENT') {
+        movements.push(i);
+        continue;
       }
-      if (moves.length >= 2) {
-        skip.add(i);
-        if (ty === 'GULLY') skip.add(moves[0]);
-      }
+      if (movements.length < 2) terrainIndex = i;
+      // §8.22 谷の中にも届く攻撃だけ、谷を出るまでの2枚の移動修正を使う。
+      if (type === 'GULLY' && movements.length === 2 &&
+          !canFireAtGully({ terrain: o.otherStack }, o.attackRange, o)) moveLimit = 1;
       break;
     }
+    const earliestMove = movements[Math.min(moveLimit, movements.length) - 1] ?? Infinity;
     terrainStack.forEach((card, idx) => {
       const t = card && card.terrain;
       if (!t) return;
-      if (skip.has(idx)) return;
+      if (t.type === 'MOVEMENT') {
+        if (o.ignoreMovement || idx < earliestMove) return;
+      } else if (idx !== terrainIndex && !['SMOKE', 'WIRE', 'TRENCH'].includes(t.type)) return;
       // 裏向き(平地扱い)は modifier 無視
       if (card._faceDown) return;
       // 地雷原は射撃修正に影響しない（平地扱い）
       if (t.type === 'MINEFIELD') return;
+      if (t.type === 'TRENCH' && terrainStack.some(entry => entry?.terrain?.type === 'WIRE')) return;
       // §13.26 夜間シナリオでは煙幕は非機能カード（修正なし）
       if (t.type === 'SMOKE' && typeof window !== 'undefined' && window.state && window.state.isNight) return;
       // WALL: 被攻撃側のとき 正面(同位置敵) -2、隣のグループからの攻撃 -1。§8.9 包囲下は修正なし
@@ -467,48 +462,52 @@
    * 戻り値: { result: 'NONE'|'PIN'|'PANIC_KIA'|'PANIC_ROUT'|'KIA' }
    */
   function resolveFireOnSoldier(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod, woundRPN, boxedDefense = false) {
-    if (boxedDefense && soldier?.gunshieldDefense) {
-      soldier = { ...soldier, ...soldier.gunshieldDefense };
-    }
+    soldier = fireDefenseProfile(soldier, boxedDefense);
     const res = _resolveFireOnSoldierCore(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod);
-    // §33.1 負傷: 敗走する時、または最終攻撃値が KIA の最低値とちょうど等しくて KIA になる時（ピン状態のパニックによる KIA を含む）、
+    // §33.1 負傷: 敗走、または最終攻撃値が KIA の最低値と等しいとき。パニックによる戦死は除く。
     //   その RNC の「7w」列のランダム位置番号が兵士の印刷された士気値と等しければ、代わりに負傷
-    if (soldier && !soldier.isInfantryGun && woundRPN != null) {
+    if (soldier && !soldier.afv && !soldier.isInfantryGun && woundRPN != null) {
       const sum = (finalFP | 0) + (rnc | 0);
       const kMod = kiaMod || 0;
       let eligible = false;
-      if (res.result === 'PANIC_ROUT' || res.result === 'PANIC_KIA') eligible = true;
+      if (res.result === 'PANIC_ROUT') eligible = true;
       else if (res.result === 'KIA') eligible = sum === (wasPinned ? num(soldier.kiaBack) : num(soldier.kiaFront)) + kMod;
-      if (eligible && woundRPN === num(soldier.morale)) return { result: 'WOUND', replaced: res.result };
+      if (eligible && woundRPN === num(soldier.printedMorale ?? soldier.morale)) return { result: 'WOUND', replaced: res.result };
     }
     return res;
+  }
+
+  function fireDefenseProfile(soldier, boxedDefense) {
+    return boxedDefense && soldier?.gunshieldDefense ? { ...soldier, ...soldier.gunshieldDefense } : soldier;
+  }
+
+  function fireDefenseValues(soldier, wasPinned, modifier, kiaMod, boxedDefense = false) {
+    const profile = fireDefenseProfile(soldier, boxedDefense);
+    return {
+      morale: parseInt(wasPinned ? profile?.panic : profile?.morale, 10) + (modifier || 0),
+      kia: num(wasPinned ? profile?.kiaBack : profile?.kiaFront) + (kiaMod || 0),
+    };
+  }
+
+  function weaponMoralePenalty(card, soldier) {
+    return card?.malfunctioned || card?.destroyed || soldier?.weaponCat === '非武装' ? 1 : 0;
+  }
+
+  // §6.531 0rはカード裏面の潰走条件で判定する。攻撃時のパニック修正とは別。
+  function routThreshold(soldier) {
+    const printed = />\s*(\d+)/.exec(soldier?.rncRoute || '');
+    return printed ? Number(printed[1]) : num(soldier?.panic);
   }
 
   function _resolveFireOnSoldierCore(finalFP, rnc, soldier, wasPinned, rncRPC, moraleMod, panicMod, kiaMod) {
     const sum = (finalFP | 0) + (rnc | 0);
     if (!soldier) return { result: 'NONE' };
-    const mMod = moraleMod || 0;
-    const pMod = panicMod || 0;
-    const kMod = kiaMod || 0;
-
-    if (!wasPinned) {
-      const morale = num(soldier.morale) + mMod;
-      const kia    = num(soldier.kiaFront) + kMod;
-      // KIA 値以上 → 戦死
-      if (kia > 0 && sum >= kia) return { result: 'KIA' };
-      // モラル値以上 (KIA未満) → ピン
-      if (morale > 0 && sum >= morale) return { result: 'PIN' };
-      return { result: 'NONE' };
-    }
-
-    // 既にピン状態 → KIA(裏)/パニック値で判定
-    const kiaBack = num(soldier.kiaBack) + kMod;
-    const panic   = num(soldier.panic) + pMod;
-    if (kiaBack > 0 && sum >= kiaBack) return { result: 'KIA' };
-    if (panic > 0 && sum >= panic) {
-      // §6.531 潰走チェック: rncRPC > パニック値 なら戦死せず潰走
+    const { morale, kia } = fireDefenseValues(soldier, wasPinned, wasPinned ? panicMod : moraleMod, kiaMod);
+    if (kia > 0 && sum >= kia) return { result: 'KIA' };
+    if (sum >= morale) {
+      if (!wasPinned) return { result: 'PIN' };
       const rpc = (rncRPC == null) ? 0 : (rncRPC | 0);
-      if (rpc > panic) return { result: 'PANIC_ROUT' };
+      if (rpc > routThreshold(soldier)) return { result: 'PANIC_ROUT' };
       return { result: 'PANIC_KIA' };
     }
     return { result: 'NONE' };
@@ -524,8 +523,25 @@
       if (!isAlive(card)) return { result: 'NONE' };
       const def = lookupSoldier(card, factionKey);
       const draw = draws[i] || {};
-      return resolveFireOnSoldier(finalFP, draw.rnc, def, isPinned(card), draw.rpc);
+      const modifier = -weaponMoralePenalty(card, def);
+      return resolveFireOnSoldier(finalFP, draw.rnc, def, isPinned(card), draw.rpc, modifier, modifier);
     });
+  }
+
+  /** §13.1 煙幕と鉄条網を飛ばし、現在の地形とその上の移動カードを調べる。 */
+  function movementAboveTerrain(group) {
+    const stack = group?.terrain || [];
+    let moveCount = 0;
+    let lastMove = null;
+    for (let i = stack.length - 1; i >= 0; i--) {
+      const card = stack[i];
+      const type = card?.terrain?.type;
+      if (!type || type === 'SMOKE' || type === 'WIRE') continue;
+      if (type !== 'MOVEMENT') return { baseType: type, moveCount, lastMove };
+      if (!lastMove) lastMove = card;
+      moveCount++;
+    }
+    return { baseType: null, moveCount, lastMove };
   }
 
   // ===== §8.2 涸れ谷 (GULLY) ========================================
@@ -536,27 +552,8 @@
    *        移動2枚以上 or 別の地形カードで脱出。
    */
   function isInGully(group) {
-    if (!group.terrain || group.terrain.length === 0) return false;
-    // スタックを後ろから走査し、GULLYの位置と以後のカードを調べる
-    let gullyPos = -1;
-    for (let i = group.terrain.length - 1; i >= 0; i--) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t || t.type === 'SMOKE' || t.type === 'WIRE') continue;
-      if (t.type === 'GULLY') { gullyPos = i; break; }
-      // GULLY より後に地形カード（MOVEMENT以外）があれば脱出済み
-      if (t.type !== 'MOVEMENT') return false;
-    }
-    if (gullyPos < 0) return false;
-    // GULLY 以降のMOVEMENTカード数を数える
-    let moveCount = 0;
-    for (let i = gullyPos + 1; i < group.terrain.length; i++) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t || t.type === 'SMOKE' || t.type === 'WIRE') continue;
-      if (t.type === 'MOVEMENT') moveCount++;
-      else return false; // 地形カードがあれば脱出済み
-    }
-    // 移動1枚ではまだGULLY内、2枚以上で脱出
-    return moveCount < 2;
+    const { baseType, moveCount } = movementAboveTerrain(group);
+    return baseType === 'GULLY' && moveCount < 2;
   }
 
   /** §8.2 GULLY内グループへの射撃が可能か (例外判定) */
@@ -566,109 +563,65 @@
     if (opts && opts.isMortar) return true;
     if (opts && opts.isCC) return true;
     if (distance >= 5) return true;
-    // 攻撃側が丘にいるか
-    if (srcGroup && srcGroup.terrain) {
-      for (let i = srcGroup.terrain.length - 1; i >= 0; i--) {
-        const t = srcGroup.terrain[i] && srcGroup.terrain[i].terrain;
-        if (!t || t.type === 'SMOKE' || t.type === 'WIRE') continue;
-        if (t.type === 'HILL') return true;
-        if (t.type !== 'MOVEMENT') break;
-      }
-    }
-    return false;
+    return currentTerrainType(srcGroup) === 'HILL';
   }
 
   // ===== §8.4 湿地 (MARSH) ==========================================
 
   /**
-   * GULLYと同様の判定: 地形スタックでMARSH内にいるか。
-   * MARSHの上に移動2枚＋地形で脱出。
+   * §8.42・§13.4 湿地は移動2枚で抜ける。
    */
   function isInMarsh(group) {
-    if (!group.terrain || group.terrain.length === 0) return false;
-    for (let i = group.terrain.length - 1; i >= 0; i--) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t) continue;
-      if (t.type === 'MARSH') return true;
-      if (t.type !== 'MOVEMENT') return false;
-    }
-    return false;
+    const { baseType, moveCount } = movementAboveTerrain(group);
+    return baseType === 'MARSH' && moveCount < 2;
   }
 
   /**
    * §8.42 湿地上の移動カード枚数を返す
    */
   function marshMoveCount(group) {
-    if (!group.terrain || group.terrain.length === 0) return 0;
-    let count = 0;
-    for (let i = group.terrain.length - 1; i >= 0; i--) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t) continue;
-      if (t.type === 'MOVEMENT') count++;
-      else break;
-    }
-    return count;
+    return movementAboveTerrain(group).moveCount;
   }
 
   /**
    * §8.42 湿地上に地形カードを置けるか（移動2枚必要）
    */
   function canPlaceTerrainOnMarsh(group) {
-    if (!isInMarsh(group)) return true;
+    const { baseType, moveCount, lastMove } = movementAboveTerrain(group);
+    if (baseType !== 'MARSH' || moveCount >= 2) return true;
     const side = typeof _groupSideIdx === 'function' ? _groupSideIdx(group)?.side : null;
-    if (side && typeof global.partisanSide === 'function' && global.partisanSide(side) &&
-        group.terrain.at(-1)?._moveMode === 'lateral') return true;
-    return marshMoveCount(group) >= 2;
+    return lastMove?._moveMode === 'lateral' && Boolean(side && global.partisanSide?.(side));
   }
 
   /**
    * §8.22 涸れ谷上の移動カード枚数を返す
    */
   function gullyMoveCount(group) {
-    if (!group.terrain || group.terrain.length === 0) return 0;
-    let count = 0;
-    for (let i = group.terrain.length - 1; i >= 0; i--) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t) continue;
-      if (t.type === 'MOVEMENT') count++;
-      else break;
-    }
-    return count;
+    return movementAboveTerrain(group).moveCount;
   }
 
   /**
    * §8.22 涸れ谷上に地形カードを置けるか（向きにかかわらず、移動カード1枚の上に置ける）
    */
   function canPlaceTerrainOnGully(group) {
-    if (!isInGully(group)) return true;
-    return gullyMoveCount(group) >= 1;
+    const { baseType, moveCount } = movementAboveTerrain(group);
+    return baseType !== 'GULLY' || moveCount >= 1;
   }
 
   // ===== §8.5 河川 (STREAM) ==========================================
 
-  /** グループがSTREAM内にいるか */
+  /** §5.2・§8.53 渡河の移動カードを含めて2枚置けば河川を出る。 */
   function isInStream(group) {
-    if (!group.terrain || group.terrain.length === 0) return false;
-    for (let i = group.terrain.length - 1; i >= 0; i--) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t) continue;
-      if (t.type === 'STREAM') return true;
-      if (t.type !== 'MOVEMENT') return false;
-    }
-    return false;
+    const { baseType, moveCount } = movementAboveTerrain(group);
+    return baseType === 'STREAM' && moveCount < 2;
   }
 
-  /** 渡河済みか（STREAM上に移動カードが1枚以上ある） */
+  /** §8.53 渡河に成功していれば移動カードが残る。歩兵砲は2枚目で渡河判定。 */
   function hasCrossedStream(group) {
-    if (!isInStream(group)) return false;
-    let foundStream = false;
-    for (let i = 0; i < group.terrain.length; i++) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t) continue;
-      if (t.type === 'STREAM') { foundStream = true; continue; }
-      if (foundStream && t.type === 'MOVEMENT') return true;
-    }
-    return false;
+    const { baseType, moveCount } = movementAboveTerrain(group);
+    if (baseType !== 'STREAM' || moveCount === 0) return false;
+    const side = global._groupSideIdx?.(group)?.side;
+    return moveCount >= (side && global.groupHasInfantryGun?.(group, side) ? 2 : 1);
   }
 
   /** 移動カードが渡河カード(sub=渡河)か */
@@ -680,19 +633,8 @@
    * §8.5 河川上の移動カード枚数を返す（渡河成功した移動カードも含む）
    */
   function streamMoveCount(group) {
-    if (!group.terrain || group.terrain.length === 0) return 0;
-    let count = 0;
-    let foundStream = false;
-    for (let i = 0; i < group.terrain.length; i++) {
-      const t = group.terrain[i] && group.terrain[i].terrain;
-      if (!t) continue;
-      if (t.type === 'STREAM') { foundStream = true; continue; }
-      if (foundStream) {
-        if (t.type === 'MOVEMENT') count++;
-        else break;
-      }
-    }
-    return count;
+    const { baseType, moveCount } = movementAboveTerrain(group);
+    return baseType === 'STREAM' ? moveCount : 0;
   }
 
   /**
@@ -701,7 +643,7 @@
    */
   function canPlaceTerrainOnStream(group) {
     if (!isInStream(group)) return true;
-    return streamMoveCount(group) >= 1;
+    return hasCrossedStream(group);
   }
 
   // ===== §8.6-8.8 建物・森林・繁み ===================================
@@ -720,7 +662,7 @@
       const c = st[i];
       const t = c && c.terrain;
       if (!t) continue;
-      if (t.type === 'SMOKE' || t.type === 'WIRE') continue;
+      if (['SMOKE','WIRE','TRENCH'].includes(t.type)) continue;
       if (t.type === 'MOVEMENT') { moves++; continue; }
       if (c._faceDown || c._isPlain || t.type === 'PLAIN') return 'PLAIN';
       return moves >= 2 ? 'PLAIN' : t.type;
@@ -747,11 +689,27 @@
 
   function pinSoldier(card)   { card.pinned = true; }
   function unpinSoldier(card) { card.pinned = false; }
-  function killSoldier(card)  { card.killed = true; }
+
+  /** §18.1 侵入状態が解除される前に、落とした兵器の行き先を記録する。 */
+  function recordInfiltratorWeaponDrop(card) {
+    if (!card._dropSide && card.infiltrating && card.infiltratedGroupSide && card.infiltratedGroupIdx != null) {
+      card._dropSide = card.infiltratedGroupSide;
+      card._dropIdx = card.infiltratedGroupIdx;
+    }
+  }
+
+  function killSoldier(card) {
+    recordInfiltratorWeaponDrop(card);
+    card.killed = true;
+    global.recordTerrainClaimAfterLoss?.(card);
+  }
+
   function routSoldier(card)  {
     // §32.12 相対射程5に敵の歩兵グループがいれば、敗走の代わりに降伏して捕虜になることがある（index.html の onSoldierRout）
     if (card && !card.captured && typeof global.onSoldierRout === 'function' && global.onSoldierRout(card)) return;
+    recordInfiltratorWeaponDrop(card);
     card.routed = true;
+    global.recordTerrainClaimAfterLoss?.(card);
   }
 
   /**
@@ -1032,6 +990,12 @@
    *   - 兵士は非ピン
    * 戻り値: { ok: bool, reason: string }
    */
+  function isDesignatedCrew(group, card) {
+    const num = Number(card.num);
+    return Number.isInteger(num) && Object.entries(group.crewPairs || {})
+      .some(([operator, assistant]) => Number(operator) === num || Number(assistant) === num);
+  }
+
   function canIndividualTransfer(fromGroup, toGroup, soldierIdx, factionKey) {
     if (!fromGroup || !toGroup) return { ok: false, reason: 'group missing' };
     if (fromGroup === toGroup) return { ok: false, reason: 'same group' };
@@ -1040,7 +1004,7 @@
     if (hasTerrainType(fromGroup, 'WIRE') || hasTerrainType(fromGroup, 'MINEFIELD'))
       return { ok: false, reason: 'wire/mine' };
     const soldier = fromGroup.cards[soldierIdx];
-    if (!soldier || !isAlive(soldier) || isPinned(soldier))
+    if (!soldier || !isAlive(soldier) || isPinned(soldier) || soldier.transfer || soldier.infiltrating || isDesignatedCrew(fromGroup, soldier))
       return { ok: false, reason: 'soldier invalid' };
     if (!isAdjacentByName(fromGroup.name, toGroup.name))
       return { ok: false, reason: 'not adjacent' };
@@ -1141,7 +1105,7 @@
     isInTerrainType, currentTerrainType, isInBuildings, isInWoods, isInBrush,
 
     // fire resolution
-    resolveFireOnSoldier, resolveFireOnGroup,
+    resolveFireOnSoldier, resolveFireOnGroup, fireDefenseValues, weaponMoralePenalty, routThreshold,
     applyConcealment,
 
     // pin/recovery
@@ -1168,7 +1132,7 @@
 
     // flank/encirclement/transfer
     flankFireMultiplier, isAdjacentByName, canEncircle,
-    canIndividualTransfer, canEstablishNewGroup, hasTerrainType,
+    isDesignatedCrew, canIndividualTransfer, canEstablishNewGroup, hasTerrainType,
 
     // weapon ownership
     disposeWeaponOnKIA, tryAcquireWeapon,

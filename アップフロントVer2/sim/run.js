@@ -39,6 +39,8 @@ async function playOne(gameNo) {
       if (process.env.UF_VALUE_FACTION) w.UF_VALUE_FACTION = process.env.UF_VALUE_FACTION;
       if (process.env.UF_BOTH_AFV) w.UF_BOTH_AFV = true;
       if (process.env.UF_AFV_POLICY) w.AFV_POLICY = JSON.parse(process.env.UF_AFV_POLICY);
+      w.UF_AI3_SIDE = process.env.UF_AI3_SIDE || 'none'; // 手札を回す AI を使う側（p1 / p2 / both / none）
+      if (process.env.UF_AI3_P) w.UF_AI3_P = JSON.parse(process.env.UF_AI3_P);
       w.alert = m => { alerts.push(String(m)); };
       w.confirm = () => false;  // 確認は「いいえ」（捕獲しない・参加させない等）
       w.prompt = () => null;
@@ -127,7 +129,9 @@ async function playOne(gameNo) {
       sw('aiSnipeCheckRnc', 'playerSnipeCheckRnc'); sw('aiSnipeRncThisTurn', 'playerSnipeRncThisTurn');
       sw('aiSniperDisabled', 'playerSniperDisabled'); sw('actedGroups', 'aiActedGroups');
       swk(st.slCardAtLastEnd); swk(st.slDamagePenalty); swk(st.terrainDone); swk(st.initialSoldierCount);
+      if (typeof st.woundCheckPending === 'object') swk(st.woundCheckPending);
       st.currentTurn = flip(st.currentTurn);
+      (st.starshells || []).forEach(shell => { shell.side = flip(shell.side); });
       if (st.terrainTurn) st.terrainTurn = flip(st.terrainTurn);
       if (st.firstSideOverride) st.firstSideOverride = flip(st.firstSideOverride);
       ['player', 'ai'].forEach(sd => (st.groups[sd] || []).forEach(g => {
@@ -221,6 +225,7 @@ async function playOne(gameNo) {
     phase: st().phase,
     acts: w.__acts,
     afv: w.__afvStats, score: w.__cardScore,
+    ai3: process.env.UF_AI3_LOG ? w.__ai3Log : undefined,
     errors: [...new Set(errors)].slice(0, 3),
   };
   if (REPORT) {

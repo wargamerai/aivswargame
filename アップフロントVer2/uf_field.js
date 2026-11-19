@@ -11,25 +11,28 @@ function updateInfoPanel() {
   const role = state.playerRole === 'attacker' ? '（自軍は攻撃側）' : state.playerRole === 'defender' ? '（自軍は防御側）' : '';
   let title = '勝利条件', cond = '';
   const v = sc && sc.victory;
-  if (sc) title = `シナリオ${sc.id}「${sc.name}」${role}`;
+  if (sc) title = sc.victoryPreset ? sc.name + role : `シナリオ${sc.id}「${sc.name}」${role}`;
   if (!v) cond = '敵の兵の過半数に損害を与えれば勝ち（§16.5）';
   else if (v.type === 'reachAndHold') cond = `相対射程${v.maxRelativeRange}以内で、侵入されておらず、ピン状態でない兵${v.minSoldiers}人以上が守りになる地形にいるグループを作れば勝ち`;
   else if (v.type === 'vpCount') cond = `デッキ${getScenarioDeckCycles()}巡の時間切れで、勝利点の多い側が勝ち${v.requireBuildingsForTerritorial ? '（距離の点は建物にいる兵だけ）' : ''}`;
   else if (v.type === 'pillboxClear') cond = v.description || '攻撃側はトーチカの兵を全滅か放棄させれば勝ち';
   else if (v.type === 'reducedDefender') cond = `攻撃側: ピン状態でない兵${v.attackerMinSoldiers}人以上が相対射程${v.attackerRange}${v.requireProtectiveTerrain ? 'で、守りになる地形' : ''}にいれば勝ち`;
   else cond = v.description || '';
+  if (sc?.victoryLabels) {
+    cond = sc.victoryLabels.join('<br>');
+  }
   const loss = side => {
-    const initial = (state.initialSoldierCount && state.initialSoldierCount[side]) || 0;
+    const initial = breakForceSize(side);
     let alive = 0;
     (state.groups[side] || []).forEach(g => g && g.cards.forEach(c => { if (R.isAlive(c)) alive++; }));
     const lost = Math.max(0, initial - alive);
-    const limit = initial ? Math.floor(initial / 2) + 1 : 0;
+    const limit = breakLossLimit(side);
     return { lost, limit };
   };
   const pL = loss('player'), aL = loss('ai');
   const lossCell = l => l.limit ? `<span class="${l.limit - l.lost <= 1 ? 'warn' : ''}">${l.lost} / ${l.limit}</span>` : '-';
   el.innerHTML =
-    `<div class="ap-info-sec"><div class="ap-info-h">${title}</div><div>${cond}</div><div style="color:#aaa;">兵の過半数が損害を受けた側は負け（§16.5）</div></div>`
+    `<div class="ap-info-sec"><div class="ap-info-h">${title}</div><div>${cond}</div><div style="color:#aaa;">損害が敗北ラインに達した側は負け（§16.5）</div></div>`
     + (() => { if (true) return ''; /* 敵の作戦はゲームの間は見せない（興ざめするため） */ const st = ((state.groups.ai || []).find(g => g && g._strategy) || {})._strategy; const nm = st && window.SCENARIO_HELPERS && window.SCENARIO_HELPERS.AI_STRATEGY_NAMES ? window.SCENARIO_HELPERS.AI_STRATEGY_NAMES[st] : null; return nm ? `<div class="ap-info-sec"><div class="ap-info-h">敵の作戦</div><div>${nm}</div></div>` : ''; })()
     + `<div class="ap-info-sec"><div class="ap-info-h">勝利点・損害</div><table>`
     + `<tr><td></td><td class="num">勝利点</td><td class="num">損害/負け</td></tr>`
@@ -47,10 +50,13 @@ function renderField(side) {
   if (typeof updatePillboxBehind === 'function') updatePillboxBehind(); // §23.7
   if (typeof updateAcquisitions === 'function') updateAcquisitions(); // §27.2 捕捉を失う
   if (typeof updatePrisoners === 'function') updatePrisoners(); // §32.2/§32.22 監視役の引き継ぎ・捕虜の解放
-  checkBuildingParityVictory();
+  if (!deckAttackInProgress()) {
+    checkBuildingParityVictory();
+    checkEditorVictory();
+  }
   try { updateInfoPanel(); } catch (e) { console.warn('updateInfoPanel', e); } // 枠の上の勝利条件・勝利点・損害
   try { if (state.phase === 'play' && !UF_REPORT.snaps.length) { ufSnapshot('開始時', ''); UF_REPORT.snaps[0].t = -1; } } catch (e) {}
-  if (state.phase === 'gameover' && !state._ufReportShown) { state._ufReportShown = true; try { ufSnapshot('終了時', ''); } catch (e) {} setTimeout(ufShowGameOver, 400); } // ゲーム終了の画面
+  queueGameOverDisplay();
   const container = document.getElementById(side === 'player' ? 'player-field' : 'ai-field');
   container.innerHTML = '';
   // メイングループ A, B, C, D
@@ -73,8 +79,9 @@ function makeMainGroup(side, group, idx) {
       g && !g.eliminated && (g.recognizedTargets || []).includes(idx)
     );
     const badgeStyle = 'flex-basis:100%;font-size:12px;font-weight:bold;padding:2px 4px;border-radius:3px;';
-    if (isGroupFlared(group)) {
-      const turnsLeft = Math.ceil((group.flaredUntilTurn - (state.turnCount || 0) + 1) / 2);
+    const flareUntil = groupFlaredUntil(group);
+    if (flareUntil != null) {
+      const turnsLeft = Math.ceil((flareUntil - (state.turnCount || 0) + 1) / 2);
       nightTag = `<span style="${badgeStyle}color:#281900;background:#ffcc69;" title="照明弾で照らされている ・ 夜間半減なし"><span aria-hidden="true">✦</span> 照明弾 <span>残り${turnsLeft}ターン</span></span>`;
     } else if (observers.length) {
       const names = observers.map(g => g.name).join(' / ');
@@ -116,9 +123,8 @@ function makeMainGroup(side, group, idx) {
   const ppTag = (!group.eliminated && group.pinpointed) ? '<span style="color:#ff6;margin-left:8px;font-weight:bold;font-size:12px;background:#660;padding:1px 6px;border-radius:3px;border:1px solid #ff6;">◎補足</span>' : '';
   // 敵の各グループとの距離に応じたグループ火力を、名前の下の行に並べて表示（斜め射撃用）
   let fpRow = '';
+  const facKey = getFactionKey(state[side]);
   if (!group.eliminated && R_enc && R_enc.calcGroupFirepower) {
-    const fac = side === 'player' ? state.player : state.ai;
-    const facKey = getFactionKey(fac);
     const moving = !!(top && top.terrain && top.terrain.type === 'MOVEMENT');
     const crewMap = group.crewPairs ? buildCrewMapFromPairs(group) : {};
     const parts = [];
@@ -146,7 +152,7 @@ function makeMainGroup(side, group, idx) {
   const _inT = (typeof incomingTransit === 'function') ? incomingTransit(side, _gpIdx).length : 0;
   const trTag = (_outT || _inT) ? `<span style="color:#9cf;margin-left:8px;font-size:12px;">移送${_outT ? ' 送出' + _outT : ''}${_inT ? ' 受入待' + _inT : ''}</span>` : '';
   const fmTag = group.forming ? '<span style="color:#9f9;margin-left:8px;font-size:12px;">設立中</span>' : '';
-  const shTag = group.pendingShift ? `<span style="color:#f9c;margin-left:8px;font-size:12px;">→${GROUP_LETTERS[group.pendingShift.toIdx]}へ側方移送中</span>` : '';
+  const shTag = group.pendingShift ? `<span style="color:#f9c;margin-left:8px;font-size:12px;">→${groupSlotName(group.pendingShift.toIdx)}へ側方移送中</span>` : '';
   header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${flankTag}${encTag}${ppTag}${wpTag}${trTag}${fmTag}${shTag}${nightTag}${fpRow}`;
 
   const dctrl = document.createElement('div');
@@ -246,9 +252,11 @@ function makeMainGroup(side, group, idx) {
       m.title = '武器破壊';
       c.appendChild(m);
     }
-    const support = radioHolders(side).includes(card.num) && !card._radioRemoved
+    const secondary = secondaryWeaponOn(card, facKey);
+    const support = secondary?.kind === 'radioHolders'
       ? (card._radioBroken ? radioText('無線故障', 'Radio out') : radioText('無線', 'Radio'))
-      : window.AFV?.hasMagneticMine(card, side) ? radioText('磁気地雷', 'ATMM') : '';
+      : secondary?.kind === 'antiTankMines' ? radioText('磁気地雷', 'ATMM')
+      : secondary?.kind === 'panzerfaustHolders' ? radioText('パンツァーファウスト', 'Panzerfaust') : '';
     if (support) {
       const chip = document.createElement('span');
       chip.textContent = support;
@@ -267,7 +275,12 @@ function makeMainGroup(side, group, idx) {
       demo.onerror = () => { demo.style.display = 'none'; };
       c.appendChild(demo);
     }
-    c.addEventListener('click', () => {
+    c.addEventListener('click', e => {
+      if (e.shiftKey) {
+        e.stopPropagation();
+        showOverlay(img.src, true);
+        return;
+      }
       if (state.selectedAction === 'snipe' && side === 'ai') {
         // §14.2 選ぶのはグループ。撃たれる兵士は RPC で決まる
         state.sniperTarget = { side, grpIdx: idx };
@@ -335,8 +348,9 @@ function makeMainGroup(side, group, idx) {
 
   // 照明弾効果: 各カードに光る縁（照明弾1のチット=赤、裏返した照明弾2=オレンジ）
   if (state.isNight) {
-    const flareRemaining = (group.flaredUntilTurn || 0) - (state.turnCount || 0);
-    if (group.flaredUntilTurn && flareRemaining >= 0) {
+    const flareUntil = groupFlaredUntil(group);
+    if (flareUntil != null) {
+      const flareRemaining = flareUntil - (state.turnCount || 0);
       const tint = flareRemaining >= 2 ? '#f44' : '#fa6';
       slot.querySelectorAll('.card').forEach(c => {
         c.style.boxShadow = `0 0 8px 4px ${tint}`;
@@ -395,7 +409,8 @@ function buildTerrainStack(group) {
   box.style.cursor = 'pointer';
   box.addEventListener('click', e => {
     e.stopPropagation();
-    showCardGridOverlay(`GROUP ${group.name} — 地形`, group.terrain);
+    if (e.shiftKey && e.target instanceof HTMLImageElement) showOverlay(e.target.src, true);
+    else showCardGridOverlay(`GROUP ${group.name} — 地形`, group.terrain);
   });
   return box;
 }
@@ -418,7 +433,11 @@ function buildCardBox(cls, cardList, placeholder, onClick) {
       box.appendChild(badge);
     }
     box.style.cursor = 'pointer';
-    box.addEventListener('click', e => { e.stopPropagation(); onClick(); });
+    box.addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.shiftKey) showOverlay(img.src, true);
+      else onClick();
+    });
   } else {
     box.textContent = placeholder;
   }
@@ -526,6 +545,47 @@ function getRepairEntry(factionKey, weaponCat) {
   return null;
 }
 
+function repairOptions(group, side) {
+  const R = window.INFANTRY_RULES;
+  const faction = getFactionKey(state[side]);
+  return group.cards.filter(card => R.isAlive(card) && !R.isPinned(card) && !card.transfer).flatMap(card => {
+    const def = R.lookupSoldier(card, faction);
+    if (!def) return [];
+    const gun = def.afv ? window.AFV.gunProfile(card) : null;
+    const repairs = [];
+    if (gun && card._mainGunMalfunctioned && !card._gunGone) {
+      const rule = gun.kind === 'afvFlame' ? getRepairEntry(faction, '火炎放射器') :
+        { repair:'黒0-6', destroy:'赤6' };
+      if (rule) repairs.push({ card, def, name: gun.name, rule, main: true });
+    }
+    if (card.malfunctioned && !card.destroyed) {
+      let rule = getRepairEntry(faction, def.weaponCat);
+      if (def.isInfantryGun) rule = { repair:'黒0-6', destroy:'赤6' };
+      else if (def.afv) rule = { repair:'黒0-6', destroy:'赤5-6' };
+      if (rule) repairs.push({ card, def, rule, name: def.name + (def.afv ? ' 機関銃' : ''), main: false });
+    }
+    return repairs;
+  });
+}
+
+function applyWeaponRepair(repair, judge) {
+  const { card, main, rule } = repair;
+  const color = judge.terrain.rncColor === '赤' ? '赤' : '黒';
+  const number = Number(judge.terrain.range) || 0;
+  const destroyed = matchesRange(parseRepairRange(rule.destroy), color, number);
+  const restored = !destroyed && matchesRange(parseRepairRange(rule.repair), color, number);
+  if (destroyed || restored) {
+    if (main) {
+      card._mainGunMalfunctioned = false;
+      if (destroyed) card._gunGone = true;
+    } else {
+      card.malfunctioned = false;
+      if (destroyed) card.destroyed = true;
+    }
+  }
+  return `${destroyed ? '武器使用不能' : restored ? '修理成功' : '修理失敗'}: ${repair.name} — ${color}${number}`;
+}
+
 // ===== 手札 =====
 state.selectedAction = null;
 state.selectedHand = new Set();
@@ -559,7 +619,80 @@ function showHandPreview(cardEl, src) {
   el.style.top = top + 'px';
 }
 
+// 228 × 360 のカード画像で、斜線が通る位置（画像上の y=60 と y=250）。
+const ACTION_CARD_DIVIDERS = {
+  12: [52,166], 14: [52,166], 37: [51,163], 41: [51,163],
+  51: [46,158], 52: [46,158], 53: [46,158], 57: [48,164], 60: [48,164], 65: [48,164],
+  128: [47,165], 130: [47,165], 132: [47,165], 134: [47,165], 158: [47,165],
+  159: [57,171], 161: [54,168], 162: [54,168],
+};
+
+const NATIONAL_MOVEMENT_ACTIONS = new Set([
+  'move','flank','encircle','wire-remove','mine-remove','transfer','infiltrate','groupshift','banzai',
+]);
+
+function preferredNationalHandFace(card) {
+  const faces = handActionFaces(card, 'player');
+  const action = state.selectedAction;
+  if (NATIONAL_MOVEMENT_ACTIONS.has(action)) return faces.find(face => face.type === 'MOVEMENT');
+  if (action === 'afv-smoke') return faces.find(face => face.type === 'SMOKE');
+  if (action === 'recover') return faces.find(face => face.type.startsWith('RALLY '));
+  if (action === 'fire' && partisanSide('player')) return faces.find(face => face.type === 'CONCEALED');
+  if (action === 'radio') return faces.find(face => isRadioCard({ ...card, terrain: face }, 'player'));
+  if (action === 'terrain') {
+    const side = (state.fireSource || state.fireTarget)?.side;
+    if (side === 'ai') return null;
+    return faces.find(face => face.type === 'SMOKE') || faces.find(face =>
+      ['COWER','MOVEMENT','CONCEALED'].includes(face.type) || face.type.startsWith('RALLY '));
+  }
+}
+
+function drawNationalHandFace(wrapper, img, card) {
+  const divider = card.nationalFaces ? ACTION_CARD_DIVIDERS[card.terrain.num] : null;
+  if (!divider) {
+    wrapper.appendChild(img);
+    return;
+  }
+  const cower = handCardIsCower(card, 'player');
+  const art = document.createElement('div');
+  art.className = 'national-card-face';
+  art.appendChild(img);
+  const usable = handActionFaces(card, 'player');
+  const labels = usable.map(face => ({
+    MOVEMENT: radioText('移動','Movement'), SMOKE: radioText('煙幕','Smoke'),
+    CONCEALED: radioText('隠蔽','Concealment'), COWER: radioText('平地として使用','Use as Open Ground'),
+  }[face.type] || face.type.replace('RALLY ', radioText('回復 ','Rally '))));
+  wrapper.title = card.id + ' · ' + (cower
+    ? radioText('非機能・平地として使用', 'Cower · Use as Open Ground') : labels.join(' / '));
+  img.alt = wrapper.title;
+  const target = state.fireSource || state.fireTarget;
+  const plainReady = state.selectedAction === 'terrain' && target?.side !== 'ai';
+  wrapper.classList.toggle('national-action-ready', state.phase === 'play' && state.currentTurn === 'player' &&
+    (cower ? plainReady : Boolean(preferredNationalHandFace(card))));
+  const percentX = y => ((divider[0] + (divider[1] - divider[0]) * (y - 60) / 190) / 228 * 100).toFixed(2) + '%';
+  // 片面の網掛けは上の判定数字と下のRPCを残す。
+  const upper = percentX(48) + ' 13.333%';
+  const lower = percentX(274) + ' 76.111%';
+  const leftFace = card.terrain.num === 158 ? 0 : 1;
+  const maskedFaces = cower ? ['cower'] : [0, 1].filter(face =>
+    !usable.some(action => action.nationalFace === face));
+  for (const face of maskedFaces) {
+    const mask = document.createElement('span');
+    mask.className = 'national-card-mask';
+    mask.dataset.face = String(face);
+    if (!cower) {
+      mask.style.clipPath = face === leftFace
+        ? `polygon(0 13.333%, ${upper}, ${lower}, 0 76.111%)`
+        : `polygon(${upper}, 100% 13.333%, 100% 76.111%, ${lower})`;
+    }
+    mask.setAttribute('aria-hidden', 'true');
+    art.appendChild(mask);
+  }
+  wrapper.appendChild(art);
+}
+
 function renderHands() {
+  updateHandRefillOptions();
   updateReinforcementButton();
   updateRadioControls();
   updateOrdnanceControls();
@@ -585,14 +718,22 @@ function renderHands() {
     img.src = card.img; img.alt = card.id;
     img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'contain'; img.style.borderRadius = '4px';
     img.onerror = () => { c.textContent = card.id; img.remove(); };
-    c.appendChild(img);
-    c.addEventListener('click', () => {
+    drawNationalHandFace(c, img, card);
+    c.addEventListener('click', e => {
+      if (e.shiftKey) {
+        hideHandPreview();
+        showOverlay(img.src, true);
+        return;
+      }
       if (state.phase === 'terrainPlacement') {
         if (state.terrainTurn === 'player') onPlayerHandClickTerrainPhase(idx);
         return;
       }
       if (state.selectedHand.has(idx)) state.selectedHand.delete(idx);
-      else state.selectedHand.add(idx);
+      else {
+        if (card.nationalFaces) useHandActionFace(card, preferredNationalHandFace(card));
+        state.selectedHand.add(idx);
+      }
       renderHands();
       updateConfirmBtn();
       updateDecideBtn();

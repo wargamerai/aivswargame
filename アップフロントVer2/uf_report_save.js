@@ -83,7 +83,6 @@ function _ufCasualties(side) {
   return out;
 }
 function ufBuildReportHtml() {
-  const { snaps: snapshots, events, ev: boardEvents } = UF_REPORT;
   const en = (typeof LANG !== 'undefined' && LANG !== 'ja' && typeof langTranslate === 'function'); // 英語・イタリア語
   const L = t => en ? langTranslate(String(t)) : String(t);
   const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -98,7 +97,7 @@ function ufBuildReportHtml() {
   const cnt = c => Object.keys(c).sort((x, y) => c[y] - c[x]).map(k => `${L(k)} ${c[k]}`).join(' / ') || '-';
   // 手番ごとにまとめる
   const byTurn = new Map();
-  events.forEach(e => { if (!byTurn.has(e.turn)) byTurn.set(e.turn, []); byTurn.get(e.turn).push(e); });
+  UF_REPORT.events.forEach(e => { if (!byTurn.has(e.turn)) byTurn.set(e.turn, []); byTurn.get(e.turn).push(e); });
   const AVA = !!window.__ufAiVsAi; // AI 同士の対戦のレポート（画面なしの対戦で作る）
   const ME = AVA ? L(state.player.name) : L('自軍'), EN = AVA ? L(state.ai.name) : L('敵');
   const KIND = { ai: AVA ? EN : 'AI', player: ME, fire: L('射撃'), cc: L('白兵戦'), msg: '' };
@@ -135,15 +134,14 @@ ul.ev li.ai{ color:var(--ai); } ul.ev li.player{ color:var(--me); }
   p1: state.player.name, p2: state.ai.name, result: state._ufEndText || '', turns: state.turnCount || 0, vp: [vpP, vpA],
   loss: [cP.kia + cP.rout + cP.prisoner, cA.kia + cA.rout + cA.prisoner] }).replace(/--/g, '\\u002d\\u002d')}-->
 <h1>Up Front ${esc(L('対戦レポート'))}${AVA ? '（AI 対 AI）' : ''}</h1>
-<div class="board-history"${snapshots.length ? '' : ' hidden'}>
 <h2>${esc(L('盤面と出来事'))}</h2>
 <div class="card"><div class="nav"><button id="bPrev">◀ ${esc(L('前へ'))}</button><button id="bNext">${esc(L('次へ'))} ▶</button><span id="nLbl"></span></div>
 <div id="board"></div><div id="evs"></div>
-<div class="legend">${['ok:無事', 'pin:ピン', 'w:負傷', 'kia:戦死', 'rout:敗走', 'pris:捕虜'].map(x => { const [k, v] = x.split(':'); return `<span class="st-${k}">${esc(L(v))}</span>`; }).join(' ')}</div></div></div>
+<div class="legend">${['ok:無事', 'pin:ピン', 'w:負傷', 'kia:戦死', 'rout:敗走', 'pris:捕虜'].map(x => { const [k, v] = x.split(':'); return `<span class="st-${k}">${esc(L(v))}</span>`; }).join(' ')}</div></div>
 <h2>${esc(L('結果'))}</h2>
 <div class="card"><div class="res">${esc(L(result))}</div>
 <table>
-${row('シナリオ', sc ? `${sc.id}: ${sc.name}` : '-', state.isNight ? '夜間' : '昼間')}
+${row('シナリオ', sc ? (sc.victoryPreset ? sc.name : `${sc.id}: ${sc.name}`) : '-', state.isNight ? '夜間' : '昼間')}
 <tr><th></th><td><b>${esc(ME)}</b></td><td><b>${esc(EN)}${AVA ? '' : ' (AI)'}</b></td></tr>
 ${row('国', state.player.name, state.ai.name)}
 ${row('役割', state.playerRole === 'attacker' ? '攻撃側' : state.playerRole === 'defender' ? '防御側' : '-', state.aiRole === 'attacker' ? '攻撃側' : state.aiRole === 'defender' ? '防御側' : '-')}
@@ -160,8 +158,8 @@ ${row('手番の数', state.turnCount || 0, '')}
 <div class="card"><table>${row(ME, cnt(UF_REPORT.counts.player), '')}${row(AVA ? EN : '敵 (AI)', cnt(UF_REPORT.counts.ai), '')}</table></div>
 <details><summary>${esc(L('詳しい記録'))}</summary><div class="card">${turns || '-'}</div></details>
 <script>
-const SN = ${JSON.stringify(snapshots.map(sn => ({ ...sn, label: L(sn.label), p: sn.p.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }), a: sn.a.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }) }))).replace(/</g, '\\u003c')};
-const EV = ${JSON.stringify(boardEvents.map(e => ({ ...e, text: L(e.text) }))).replace(/</g, '\\u003c')};
+const SN = ${JSON.stringify(UF_REPORT.snaps.map(sn => ({ ...sn, label: L(sn.label), p: sn.p.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }), a: sn.a.map(g => g && { ...g, terr: g.terr.map(L), s: g.s }) }))).replace(/</g, '\\u003c')};
+const EV = ${JSON.stringify(UF_REPORT.ev.map(e => ({ ...e, text: L(e.text) }))).replace(/</g, '\\u003c')};
 const NM = ${JSON.stringify({ p: L(state.player.name), a: L(state.ai.name), me: ME, en: EN, turn: L('手番'), rr: L('相対距離'), dist: L('距離'), mv: L('移動中'), gone: L('消滅'), none: L('なし'), inf: L('侵入') })};
 let k = SN.length - 1;
 const esc2 = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -202,6 +200,16 @@ function ufSaveReport() {
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+function queueGameOverDisplay() {
+  if (state.phase !== 'gameover' || state._ufReportShown) return;
+  state._ufReportShown = true;
+  const deck = state.terrainDeck;
+  try { ufSnapshot('終了時', ''); } catch (e) { /* レポートの保存に失敗しても勝敗は表示する。 */ }
+  setTimeout(() => {
+    if (state.phase === 'gameover' && state.terrainDeck === deck) ufShowGameOver();
+  }, 400);
+}
+
 /** ゲーム終了の画面（結果と「レポートを保存」） */
 function ufShowGameOver() {
   if (window.__HEADLESS) return;
@@ -215,11 +223,12 @@ function ufShowGameOver() {
   }
   el.innerHTML = `<div style="background:#2a2a2a;border:2px solid #aaa;border-radius:8px;padding:18px 22px;min-width:320px;max-width:90vw;text-align:center;color:#eee;">
     <div style="font-size:18px;font-weight:bold;color:#ffeb3b;margin-bottom:8px;">ゲーム終了</div>
-    <div style="margin:8px 0 12px;">${_ufStrip(state._ufEndText || '')}</div>
+    <div data-result style="margin:8px 0 12px;"></div>
     <div style="font-size:12px;color:#ccc;margin-bottom:12px;">勝敗・損害・行動の回数・手番ごとの出来事のレポートを、このパソコンに保存できます。</div>
     <button class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;background:#2266cc;" onclick="ufSaveReport()">レポートを保存</button>
     <button class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;margin-left:8px;" onclick="document.getElementById('ufGameOver').remove()">閉じる</button>
   </div>`;
+  el.querySelector('[data-result]').textContent = _ufStrip(state._ufEndText || '');
 }
 /** 投了: 負けを認めてゲームを終わる（AIの勝ち）。ここまでのレポートを保存できる */
 // ===== 途中セーブ・ロード（ファイルに書き出し、ファイルから読み込む） =====
@@ -288,11 +297,11 @@ function ufSaveDecode(d) {
 }
 // アクションの途中（選んだ行動・射撃元・目標などが残っている）か
 function ufActionInProgress() {
-  return !!(state.selectedAction || state.fireSource || state.fireTarget || state.sniperTarget || state.woundCheckPending);
+  return !!(state.selectedAction || state.fireSource || state.fireTarget || state.sniperTarget);
 }
 function ufSaveBlockedReason() {
   if (!state.player || state.phase !== 'play' || state.currentTurn !== 'player') return '自分の手番の間だけセーブできます';
-  if (ufActionInProgress()) return 'アクションの途中ではセーブできません。アクションを終えるか取り消してからセーブしてください';
+  if (ufActionInProgress() || deckAttackInProgress()) return 'アクションの途中ではセーブできません。アクションを終えるか取り消してからセーブしてください';
   return null;
 }
 function ufBuildSaveData() {
@@ -316,34 +325,66 @@ function ufSaveGame() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-function ufPickLoad() {
+function ufPickLoad(source = 'game') {
   // 相手の手番やアクションの途中に読み込むと、進行中の処理と食い違うので止める
   if (state.player && state.phase !== 'gameover') {
     if (state.phase !== 'play' || state.currentTurn !== 'player') { ufSaveAlert('自分の手番の間だけロードできます'); return; }
-    if (ufActionInProgress()) { ufSaveAlert('アクションの途中ではロードできません。アクションを終えるか取り消してからロードしてください'); return; }
+    if (ufActionInProgress() || deckAttackInProgress()) { ufSaveAlert('アクションの途中ではロードできません。アクションを終えるか取り消してからロードしてください'); return; }
   }
   const inp = document.getElementById('uf-load-file');
+  inp.dataset.loadSource = source;
   inp.value = '';
   inp.click();
 }
 function ufLoadFromFile(inp) {
   const f = inp.files && inp.files[0];
   if (!f) return;
+  const source = inp.dataset.loadSource;
   const reader = new FileReader();
   reader.onload = () => {
     let saved;
-    try { saved = JSON.parse(reader.result); } catch (e) { ufSaveAlert('セーブファイルを読み込めませんでした'); return; }
+    try { saved = JSON.parse(reader.result); } catch { ufSaveAlert('JSONファイルを読み込めませんでした'); return; }
+    const scenarioFiles = window.UF_SCENARIO_FILES;
+    if (scenarioFiles && saved?.format === scenarioFiles.format) {
+      if (source !== 'lobby') {
+        ufSaveAlert('シナリオファイルはスタート画面のLoadから開いてください。');
+      } else if (!scenarioFiles.open(saved)) {
+        ufSaveAlert('Up Frontのシナリオファイルを読み込めませんでした。');
+      }
+      return;
+    }
     if (!saved || saved.game !== 'up-front' || !saved.data) { ufSaveAlert('アップフロントのセーブファイルではありません'); return; }
     ufApplySaveData(saved);
   };
+  reader.onerror = () => ufSaveAlert('JSONファイルを読み込めませんでした');
   reader.readAsText(f);
 }
 function ufApplySaveData(saved) {
   const all = ufSaveDecode(saved.data);
+  // 旧版の単独対局に同梱された、廃止済みモードの空フィールドを取り除く。
+  if (all.state.teamMatch) {
+    ufSaveAlert('このセーブは現在の版では読み込めません。');
+    return;
+  }
+  for (const key of ['teamMatch', 'teamBoardIndex', 'teamSupportSide', 'teamTransitCasualties',
+    'teamSlots', 'teamEndQueued', 'teamStartedRound']) delete all.state[key];
   // state・レポートは同じ物を使い続ける（他のファイルから参照されているため中身だけ入れ替える）
   Object.keys(state).forEach(k => { delete state[k]; });
   Object.assign(state, all.state);
   const R = window.INFANTRY_RULES;
+  const AFV = window.AFV;
+  restoreNationalActionHands(state);
+  for (const side of ['player', 'ai']) {
+    for (const group of state.groups?.[side] || []) {
+      retireEscapedMinefield(group);
+      // 旧版は密閉型AFVにスタン解除後もピンを残していた。
+      const vehicle = AFV?.afvCard(group);
+      if (group?._stun === 0 && R.isPinned(vehicle) && AFV.isButtoned(vehicle) && !AFV.defOf(vehicle)?.ot) {
+        R.unpinSoldier(vehicle);
+        group._afvRally = 0;
+      }
+    }
+  }
   for (const side of ['player', 'ai']) {
     const factionKey = getFactionKey(state[side]);
     for (const group of state.groups[side] || []) {
@@ -401,7 +442,7 @@ function ufResign() {
   ufShowGameOver();
 }
 
-function placeInitialDefenderBuildings(side, count) {
+function placeInitialDefenderBuildings(side, count, removeWhenVacated = false) {
   const draw = state.terrainDeck.draw;
   const buildings = [];
   const passed = [];
@@ -413,19 +454,58 @@ function placeInitialDefenderBuildings(side, count) {
   }
   if (buildings.length !== count || state.groups[side].length !== count) return false;
   draw.splice(0, revealed, ...passed);
-  state.groups[side].forEach((group, i) => group.terrain.push(buildings[i]));
+  state.groups[side].forEach((group, i) => {
+    if (removeWhenVacated) buildings[i]._surpriseBuilding = true;
+    group.terrain.push(buildings[i]);
+  });
+  return true;
+}
+
+function advanceEditorSegment() {
+  const segment = state.editorSegment;
+  if (state.phase !== 'play' || segment?.number !== 1) return false;
+  const current = new Map(state.groups.player.flatMap(g => g.cards.map(card => [card.num, card])));
+  const survivors = new Map();
+  for (const number of segment.originalAttackers) {
+    const card = current.get(number);
+    if (!card || card.killed || card.captured) continue;
+    const next = { wounded: !!card.wounded };
+    if (!state.scenario.restoreSegmentWeapons) {
+      for (const field of ['destroyed', 'malfunctioned', 'acquiredWeapon', '_igGunDisabled', '_afvGunMalf']) {
+        if (card[field] !== undefined) next[field] = card[field];
+      }
+    }
+    survivors.set(number, next);
+  }
+  if (!survivors.size) return false;
+
+  state.phase = 'segmentSetup';
+  segment.number = 2;
+  segment.survivors = survivors;
+  for (const side of ['player', 'ai']) {
+    for (const card of state[side + 'Hand']) pushTerrainToDiscard(card);
+    for (const group of state.groups[side]) group.terrain.forEach(pushTerrainToDiscard);
+  }
+  ufReportLog('scenario', '第1区間は攻撃側の勝利。生き残った兵で第2区間を編成。', 'player');
+  document.getElementById('game').classList.remove('active');
+  openSetupScreen(getFactionKey(state.player), state.scenario, true);
   return true;
 }
 
 function startGameWithSetup() {
   const playerFaction = setupState.faction;
   const scenario = setupState.scenario;
-  const buildings = scenario?.defenderInitialBuildings;
-  if (buildings && setupState.role === 'defender' &&
-      setupState.groups.filter(g => g.length > 0).length !== buildings) {
-    alert(radioText('守備側は3グループに編成します。', 'Divide the defending force into three groups.'));
+  const secondSegment = setupState.secondSegment;
+  if (scenario?.victoryPresets && setupState.pool.length) {
+    alert('エディタで選んだカードをすべて配置してください。');
     return false;
   }
+  const groupCountError = setupGroupCountError() || setupEquipmentError();
+  if (groupCountError) {
+    alert(groupCountError);
+    return false;
+  }
+  const buildings = scenario?.defenderInitialBuildings;
   if (buildings && TERRAIN_CARDS.filter(card => card.type === 'BUILDINGS').length < buildings) {
     alert(radioText('建物カードが足りません。山札の読み込みを確認してください。',
       'The deck does not contain enough building cards.'));
@@ -436,26 +516,64 @@ function startGameWithSetup() {
   const aiKey = others.includes(setupState.aiFactionOverride)
     ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
   const aiRole = setupState.role === 'attacker' ? 'defender' : (setupState.role === 'defender' ? 'attacker' : undefined);
+  const aiRoster = window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, aiKey, aiRole) || [];
+  const aiEquipment = planSetupEquipment(aiRoster, aiKey, scenario?.secondaryEquipment?.[aiKey]);
   const formationError = partisanStartingForcesError(scenario, playerFaction, setupState.groups.flat()) ||
-    partisanStartingForcesError(scenario, aiKey,
-      window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, aiKey, aiRole) || []);
+    partisanStartingForcesError(scenario, aiKey, aiRoster);
   if (formationError) {
     alert(formationError);
     return false;
   }
 
   state.campaignEnded = false; // 新シナリオ開始: 終了フラグリセット
-  ufReportReset(); state._ufEndText = ''; state._ufReportShown = false; // 対戦レポートの記録を空に
+  if (!secondSegment) {
+    state.selectedHand = new Set();
+    state.selectedAction = state.fireSource = state.fireTarget = state.sniperTarget = null;
+    ufReportReset();
+    state._ufEndText = '';
+    state._ufReportShown = false;
+    state.editorSegment = null;
+    state.randomReinforcements = null;
+    state.turnCount = 0;
+    state.starshells = [];
+    state.woundCheckPending = false;
+    state.playerSnipeCheckRnc = state.aiSnipeCheckRnc = null;
+    state.playerSnipeRncThisTurn = state.aiSnipeRncThisTurn = null;
+    state.playerSniperDisabled = state.aiSniperDisabled = false;
+    state.aiExtraSnipers = 0;
+  } else {
+    state.selectedHand.clear();
+    state.selectedAction = state.fireSource = state.fireTarget = state.sniperTarget = null;
+    state.playerSnipeCheckRnc = state.aiSnipeCheckRnc = null;
+    state.playerSnipeRncThisTurn = state.aiSnipeRncThisTurn = null;
+    document.querySelectorAll('.action-btn.active').forEach(button => button.classList.remove('active'));
+    if (scenario.restoreSegmentWeapons) {
+      state.playerSniperDisabled = state.aiSniperDisabled = false;
+      state.partisanSniperChecks = {};
+    }
+  }
+  state.phase = 'terrainPlacement';
   state.isCampaign = !!setupState.fromCampaign; // キャンペーン編成から始めた時だけ true
   state.player = FACTIONS[playerFaction];
   state.ai = FACTIONS[aiKey];
   setupState.aiFactionOverride = null;
   state.scenario = scenario;
+  state.surprise = null;
+  state.afvSmokeAction = null;
+  state.playerDiscardPlan = [];
+  state.resolvingPlayerDiscards = false;
+  state.retiredCasualties = null;
   state.britishUnitType = britishUnitType(scenario?.britishUnitType ??
     (playerFaction === 'uk' ? document.getElementById('british-unit-type').value : 'line'));
+  if (!secondSegment) {
+    state.troopTypes = { ...scenario?.troopTypes };
+    if (BASIC_TROOP_TYPES[playerFaction]) {
+      state.troopTypes[playerFaction] = document.getElementById('troop-type-pick')?.value ||
+        state.troopTypes[playerFaction] || 'regular';
+    }
+  }
   // 時間帯選択（昼/夜）
-  const _todPick = document.getElementById('time-of-day-pick');
-  state.isNight = !!(_todPick && _todPick.value === 'night');
+  state.isNight = setupIsNight(scenario);
   // 非対称シナリオの先攻選択を保存
   if (scenario && scenario.asymmetric) {
     const fpPick = document.getElementById('first-player-pick');
@@ -470,6 +588,7 @@ function startGameWithSetup() {
       name: NAMES[gi],
       cards: nums.map(num => {
         const card = makeCardWithMeta(playerFaction, num);
+        if (secondSegment) Object.assign(card, state.editorSegment.survivors.get(num));
         const key = `${gi}:${num}`;
         if (setupState.demoHolders && setupState.demoHolders.has(key)) {
           card.demoCharge = true;
@@ -482,7 +601,8 @@ function startGameWithSetup() {
       _faction: playerFaction,
       crewPairs: extractGroupCrewPairs(gi),
     }))
-    .filter(g => g.cards.length > 0);
+    .filter(group => group.cards.length > 0)
+    .map((group, index) => ({ ...group, name: NAMES[index] }));
   // §42 キャンペーン: 記録にある能力値（モラル・パニック・KIA・CCV）を戦闘で使う
   if (state.isCampaign) applyCampaignStats(playerFaction);
   // AIの性格をゲーム開始時にくじで決める（ソ連・日本は攻撃的、ドイツはバランス、米・英は防御的が出やすい）
@@ -491,7 +611,7 @@ function startGameWithSetup() {
 
   // AI は賢い編成 (リーダー分散 + クルー指定)
   state.groups.ai = (window.SCENARIO_HELPERS && scenario)
-    ? window.SCENARIO_HELPERS.buildAIGroupsSmart(scenario, aiKey, aiRole, state.aiStyle)
+    ? window.SCENARIO_HELPERS.buildAIGroupsSmart(scenario, aiKey, aiRole, state.aiStyle, new Set(aiEquipment.values()))
     : [];
   state.playerRole = setupState.role || null;
   state.aiRole = aiRole || null;
@@ -549,8 +669,28 @@ function startGameWithSetup() {
   // AI 初期クルー設定 (needsCrew 全兵士にアシスタント自動割当)
   initAICrewPairs();
 
-  // 爆薬の割当: シナリオの部隊表にある側だけが持つ
-  if (scenario && window.SCENARIO_HELPERS) {
+  if (scenario?.secondaryEquipment) {
+    const assignmentsBySide = { player: secondSegment ? [] : setupState.equipmentAssignments, ai: aiEquipment };
+    for (const [side, assignments] of Object.entries(assignmentsBySide)) {
+      const cards = state.groups[side].flatMap(group => group.cards);
+      for (const [kind, num] of assignments) {
+        const card = cards.find(card => card.num === num);
+        if (card) setSecondaryWeapon(card, { kind });
+      }
+    }
+  } else if (scenario?.demoHolders) {
+    for (const [side, faction] of [['player', playerFaction], ['ai', aiKey]]) {
+      if (side === 'player' && secondSegment) continue;
+      const holders = scenario.demoHolders[faction] || [];
+      for (const group of state.groups[side]) {
+        for (const card of group.cards) {
+          if (holders.includes(card.num) && secondaryWeaponEligible(card, faction)) {
+            setSecondaryWeapon(card, { kind: 'demo' });
+          }
+        }
+      }
+    }
+  } else if (scenario && window.SCENARIO_HELPERS) {
     const H = window.SCENARIO_HELPERS;
     if (!H.hasDemo(scenario, playerFaction, setupState.role)) {
       state.groups.player.forEach(g => g.cards.forEach(c => { delete c.demoCharge; }));
@@ -572,22 +712,58 @@ function startGameWithSetup() {
     ai: state.groups.ai.reduce((s, g) => s + g.cards.length, 0),
   };
 
+  if (scenario?.twoSegments && !secondSegment) {
+    state.editorSegment = { number: 1, originalAttackers: state.groups.player.flatMap(g => g.cards.map(c => c.num)) };
+  }
   state.playerHand = [];
   state.aiHand = [];
   state.aiHandCount = state.ai.handMax;
   if (TERRAIN_CARDS.length > 0) {
-    initTerrainDeck();
-    if (buildings) {
+    if (!secondSegment) initTerrainDeck();
+    if (scenario?.victoryPreset && (scenario.defenderPillbox || ufUsesVictory(scenario, 'C'))) {
+      const draw = state.terrainDeck.draw;
+      const index = draw.findIndex(i => TERRAIN_CARDS[i].type === 'PILLBOX');
       const defender = state.playerRole === 'defender' ? 'player' : 'ai';
-      if (!placeInitialDefenderBuildings(defender, buildings)) return false;
+      const group = state.groups[defender].find(g => g.name === 'B');
+      if (index >= 0 && group) group.terrain.push(makeTerrainHandCard(draw.splice(index, 1)[0]));
+    }
+    if (buildings || scenario?.openingBuildings) {
+      const defender = state.playerRole === 'defender' ? 'player' : 'ai';
+      if (!placeInitialDefenderBuildings(defender, buildings || state.groups[defender].length, scenario.openingBuildings)) {
+        if (buildings || !secondSegment) {
+          alert(radioText('初期配置に必要な建物カードが足りません。', 'There are not enough Buildings cards for setup.'));
+          return false;
+        }
+      }
+    }
+    let bonusBuilding = null;
+    if (scenario?.defenderBonusBuilding) {
+      const draw = state.terrainDeck.draw;
+      const index = draw.findIndex(i => TERRAIN_CARDS[i]?.type === 'BUILDINGS' &&
+        window.INFANTRY_RULES.calcTerrainMod([{ terrain: TERRAIN_CARDS[i] }], false) === -3);
+      if (index >= 0) bonusBuilding = makeTerrainHandCard(draw.splice(index, 1)[0]);
     }
     for (let i = 0; i < state.player.handMax; i++) {
-      const c = drawTerrainCard();
+      const c = drawTerrainCard('player');
       if (c) state.playerHand.push(c);
     }
     for (let i = 0; i < state.ai.handMax; i++) {
-      const c = drawTerrainCard();
+      const c = drawTerrainCard('ai');
       if (c) state.aiHand.push(c);
+    }
+    if (bonusBuilding) state.aiHand.push(bonusBuilding);
+    if (scenario?.defenderGuaranteedTerrain) {
+      const canPlace = card => isTerrainHandCard(card, 'ai') &&
+        !['SMOKE', 'WIRE', 'MINEFIELD'].includes(card.terrain.type);
+      if (!state.aiHand.some(canPlace)) {
+        const draw = state.terrainDeck.draw;
+        const index = draw.findIndex(i => canPlace(makeTerrainHandCard(i)));
+        if (index >= 0) {
+          const terrain = makeTerrainHandCard(draw.splice(index, 1)[0]);
+          state.terrainDeck.draw = shuffleTerrainIndices(draw);
+          state.aiHand.push(terrain);
+        }
+      }
     }
     // シナリオC: 防御側のグループBにトーチカを初期配置（§C.1）
     if (scenario && scenario.initialTerrain && scenario.initialTerrain.defender) {
@@ -626,11 +802,12 @@ function makeCardWithMeta(factionKey, num) {
   const fac = FACTIONS[factionKey];
   let prefix = fac.prefix;
   if (factionKey === 'rus') prefix = num <= 30 ? 'russian' : 'Rus';
+  const def = getSoldierDef(factionKey, num);
   return {
     id: `${prefix} ${num}`,
     num,
-    img:     encPath(`${fac.dir}/${prefix} ${num}f.gif`),
-    imgBack: encPath(`${fac.dir}/${prefix} ${num}b.gif`),
+    img:     (def?.afv || def?.infantryGun) ? def.imgFront : encPath(`${fac.dir}/${prefix} ${num}f.gif`),
+    imgBack: (def?.afv || def?.infantryGun) ? def.imgBack : encPath(`${fac.dir}/${prefix} ${num}b.gif`),
   };
 }
 
@@ -691,6 +868,10 @@ function initAICrewPairs() {
         grp.crewPairs[card.num] = candidate.num;
       }
     });
+    for (const [owner, assistant] of Object.entries(grp.crewPairs)) {
+      seatCrewAssistant(grp.cards, grp.cards.find(card => card.num === Number(owner)),
+        grp.cards.find(card => card.num === Number(assistant)));
+    }
   });
 }
 
@@ -713,7 +894,12 @@ function startGame(playerFaction) {
   state.player = FACTIONS[playerFaction];
   state.ai = FACTIONS[others[0]];
   state.scenario = scenario || null;
+  state.afvSmokeAction = null;
+  state.playerDiscardPlan = [];
+  state.resolvingPlayerDiscards = false;
+  state.retiredCasualties = null;
   state.britishUnitType = britishUnitType(scenario?.britishUnitType);
+  state.troopTypes = { ...scenario?.troopTypes };
   // 時間帯選択（昼/夜）
   const _todPick2 = document.getElementById('time-of-day-pick');
   state.isNight = !!(_todPick2 && _todPick2.value === 'night');
@@ -741,7 +927,7 @@ function startGame(playerFaction) {
   if (TERRAIN_CARDS.length > 0) {
     initTerrainDeck();
     for (let i = 0; i < state.player.handMax; i++) {
-      const c = drawTerrainCard();
+      const c = drawTerrainCard('player');
       if (c) state.playerHand.push(c);
     }
   }
@@ -776,9 +962,18 @@ function extractFP(sub) {
   return m ? circledToNum(m[1]) : 0;
 }
 
-function makeTerrainHandCard(terrainIndex) {
-  const t = TERRAIN_CARDS[terrainIndex];
-  if (!t) return null;
+function makeTerrainHandCard(terrainIndex, side, game = state) {
+  const printed = TERRAIN_CARDS[terrainIndex];
+  if (!printed) return null;
+  const faces = side && nationalActionFaces(printed, getFactionKey(game[side]));
+  const scenario = game.scenario;
+  const disabled = type => window.SCENARIO_HELPERS.isScenarioCardTypeDisabled(scenario, type, game[side + 'Role']);
+  let t = faces ? faces.find(face => !disabled(face.type)) || { ...printed, type: 'COWER', modifier: '0', sub: '' } : printed;
+  if (!faces && scenario?.victoryPreset && disabled(printed.type)) {
+    t = { ...printed, type: 'PLAIN', modifier: '0', sub: '' };
+  } else if (scenario?.jungleMode && printed.type === 'BUILDINGS') {
+    t = { ...printed, type: 'WOODS', denseJungle: printed.modifier.includes('-3') };
+  }
   return {
     id: `AD ${t.num}`,
     img: t.img,
@@ -786,39 +981,107 @@ function makeTerrainHandCard(terrainIndex) {
     terrain: t,
     terrainIndex,
     fp: extractFP(t.sub),
+    ...(faces ? { nationalFaces: faces } : {}),
   };
 }
 
-function drawTerrainCard() {
-  if (TERRAIN_CARDS.length === 0) return null;
-  ensureTerrainDeck();
-  const d = state.terrainDeck;
-  if (!d || d.gameOver) return null;
-  const lim = getScenarioDeckCycles();
-  if (d.draw.length === 0) {
-    if (d.discard.length === 0) return null;
-    if (d.cycle >= lim) {
-      // §16.3 最後の山札が攻撃解決の途中でなくなった時は、捨て札をもう一度混ぜて今の攻撃を最後まで解決し、
-      // それが終わった時点でゲーム終了（今の一連の処理が終わってから終了処理を行う）
-      if (d.finalExtension) { showTerrainDeckGameOver(); return null; }
-      d.finalExtension = true;
-      d.draw = shuffleTerrainIndices(d.discard.slice());
-      d.discard = [];
-      updateDeckCounts();
-      setTimeout(() => { if (!state.terrainDeck.gameOver) showTerrainDeckGameOver(); }, 0);
-      const tiX = d.draw.shift();
-      updateDeckCounts();
-      return makeTerrainHandCard(tiX);
+function restoreNationalActionHands(game) {
+  for (const side of ['player', 'ai']) {
+    const hand = game[side + 'Hand'] || [];
+    for (const card of hand) {
+      if (!card?.nationalFaces && TERRAIN_CARDS[card?.terrainIndex]?.rightType) {
+        Object.assign(card, makeTerrainHandCard(card.terrainIndex, side, game));
+      }
     }
-    d.draw = shuffleTerrainIndices(d.discard.slice());
-    d.discard = [];
-    d.cycle++;
-    state.woundCheckPending = true; // §33.7 新しいデッキの最初のターンの開始時に負傷兵の耐久判定
-    updateDeckCounts();
   }
-  const ti = d.draw.shift();
+}
+
+// 山札を使い切った時点で、解決中の攻撃だけが残りの判定を引ける。
+const deckAttackDepth = new WeakMap();
+
+function deckAttackInProgress(deck = state.terrainDeck) {
+  return Boolean(deck && deckAttackDepth.get(deck));
+}
+
+function settleDeckTimeLimit(deck = state.terrainDeck) {
+  if (!deck?.timeLimitReached || deck !== state.terrainDeck || deckAttackInProgress(deck)) return false;
+  if (!deck.gameOver && state.phase === 'play') showTerrainDeckGameOver();
+  if (state.phase === 'gameover') {
+    deck.gameOver = true;
+    queueGameOverDisplay();
+  }
+  return deck.gameOver || state.phase === 'segmentSetup';
+}
+
+function withDeckAttack(resolve) {
+  if (state.phase === 'gameover') return false;
+  const deck = state.terrainDeck;
+  if (!deck) return resolve();
+  if (!deckAttackInProgress(deck) && !deck.draw.length && deck.cycle + 1 >= getScenarioDeckCycles()) {
+    deck.timeLimitReached = true;
+  }
+  if (deck.gameOver || settleDeckTimeLimit(deck)) return false;
+
+  deckAttackDepth.set(deck, (deckAttackDepth.get(deck) || 0) + 1);
+  const finish = () => {
+    const depth = deckAttackDepth.get(deck) - 1;
+    if (depth) deckAttackDepth.set(deck, depth);
+    else {
+      deckAttackDepth.delete(deck);
+      if (deck !== state.terrainDeck) return;
+      checkDefeat();
+      if (state.phase === 'play' && !checkBuildingParityVictory()) checkEditorVictory();
+      settleDeckTimeLimit(deck);
+      queueGameOverDisplay();
+    }
+  };
+  let result;
+  try {
+    result = resolve();
+  } catch (error) {
+    finish();
+    throw error;
+  }
+  if (result && typeof result.then === 'function') return Promise.resolve(result).finally(finish);
+  finish();
+  return result;
+}
+
+function noteDeckTimeLimit(deck) {
+  deck.timeLimitReached = true;
+  // 単独の判定は、最後に引いたカードを適用してから時間切れを判定する。
+  if (!deckAttackInProgress(deck)) setTimeout(() => settleDeckTimeLimit(deck), 0);
+}
+
+function drawTerrainCard(side) {
+  if (state.phase === 'gameover' || !TERRAIN_CARDS.length) return null;
+  ensureTerrainDeck();
+  const deck = state.terrainDeck;
+  if (!deck || deck.gameOver) return null;
+  const limit = getScenarioDeckCycles();
+  if (!deck.draw.length && deck.cycle + 1 >= limit) {
+    if (!deck.timeLimitReached) noteDeckTimeLimit(deck);
+    if (!deckAttackInProgress(deck) || !deck.discard.length) return null;
+    deck.draw = shuffleTerrainIndices(deck.discard);
+    deck.discard = [];
+  } else if (!deck.draw.length) {
+    if (!deck.discard.length) {
+      noteDeckTimeLimit(deck);
+      return null;
+    }
+    deck.draw = shuffleTerrainIndices(deck.discard);
+    deck.discard = [];
+    deck.cycle++;
+    offerRandomReinforcementCheck();
+    state.woundCheckPending = { player: true, ai: true };
+  }
+
+  const index = deck.draw.shift();
+  if (!deck.draw.length && deck.cycle + 1 >= limit && !deck.timeLimitReached) {
+    noteDeckTimeLimit(deck);
+  }
   updateDeckCounts();
-  return makeTerrainHandCard(ti);
+  return makeTerrainHandCard(index, side);
 }
 
 function makeCard(faction, num) {

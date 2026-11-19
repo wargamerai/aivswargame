@@ -30,14 +30,14 @@ function partisanSide(side) {
   return partisanFaction(getFactionKey(state[side]));
 }
 
-function partisanActionRoom(side) {
+function partisanActionRoom(side, actions = 1) {
   if (!partisanSide(side)) return true;
   const rules = window.INFANTRY_RULES;
   const aliveGroups = state.groups[side].filter(g => g && !g.eliminated && g.cards.some(rules.isAlive)).length;
   const acted = side === 'player' ? state.actedGroups : state.aiActedGroups;
   const fired = side === 'ai' ? state.aiFiredGroups : null;
   const spent = new Set([...(acted || []), ...(fired || [])]);
-  return spent.size < Math.max(1, aliveGroups - 1);
+  return spent.size + actions <= Math.max(1, aliveGroups - 1);
 }
 
 function partisanSniperCheck(side) {
