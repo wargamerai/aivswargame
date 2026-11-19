@@ -85,6 +85,7 @@ function axisAiMove(){
   const pw = s => (s.atk || 0) + (s.air || 0);
   const sum = arr => arr.reduce((t, s) => t + pw(s), 0);
   const alive = s => !s.sunk && !s.removed;
+  const readyToMove = s => alive(s) && !s.landed && !s.returnPending && !attemptedMoveThisTurn(s);
   const alliedAt = sea => SHIPS.filter(s => alive(s) && s.side === 'allies' && s.location === sea && s.type !== 'UBOAT');
   const placed = {}; Object.keys(SEAS).forEach(k => placed[k] = []);
   const log = [];
@@ -99,6 +100,7 @@ function axisAiMove(){
     return 0;
   };
   const move = (s, sea) => {
+    if(!readyToMove(s)) return false;
     const r = reach(s, sea);
     if(!r) return false;
     s.originThisTurn = s.originThisTurn || s.location;
@@ -123,7 +125,7 @@ function axisAiMove(){
   let assaultNow = null; // このターンに突撃する海域
   // POC の予想で配置する（ユーザーの指示 2026-11-03）。連合の配置は見えているので、それに対する一番よい手を探す
   const AX_MODE = (typeof window !== 'undefined' && window.__axisPlanMode !== undefined) ? window.__axisPlanMode : AXIS_PLAN_MODE;
-  const ubs = SHIPS.filter(s => alive(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany' && !s.movedThisTurn && !s.returnPending);
+  const ubs = SHIPS.filter(s => readyToMove(s) && s.type === 'UBOAT' && s.side === 'axis' && s.location === 'Germany');
   let ubPlan = null, ubTarget = null;
   if(AX_MODE >= 1){
     const seaList = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic', 'Mediterranean', 'Baltic'];
@@ -131,11 +133,11 @@ function axisAiMove(){
       s.atk > 0 && !s.returnPending && !s.failedMove;
     // 中立港のイタリア重巡も、南大西洋では戦力比を見てから出撃する。
     const neutralItalianCruiser = s => AX_MODE >= 6 && s.location === 'Neutral' && s.country === 'IT' && s.type === 'CA';
-    const movers = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.type !== 'UBOAT' && !s.movedThisTurn &&
+    const movers = SHIPS.filter(s => readyToMove(s) && s.side === 'axis' && s.type !== 'UBOAT' &&
       (!(s.damage > 0) || canSendBaltic(s) || neutralItalianCruiser(s)) && !(s.location === 'France' && turn > 6) &&
       (PORTS[s.location] || (SEAS[s.location] && s.refuelTurn === turn - 1)));
-    const neutral = SHIPS.filter(s => alive(s) && s.side === 'axis' && s.location === 'Neutral' &&
-      !s.movedThisTurn && !neutralItalianCruiser(s));
+    const neutral = SHIPS.filter(s => readyToMove(s) && s.side === 'axis' && s.location === 'Neutral' &&
+      !neutralItalianCruiser(s));
     neutral.forEach(s => { move(s, 'SouthAtlantic'); });
     const ships = movers.filter(s => !s.movedThisTurn).map(s => {
       const o = seaList.filter(sea => {
@@ -346,6 +348,33 @@ function axisAiMove(){
   }
 
   } // POC の予想を使わない時の処理ここまで
+
+  // ドイツ港は連合のLBA目標。出撃に割り当てなかった艦は、修理できる分を除いて安全な隣接海域へ。
+  const refuge = ['Baltic', ...(PORT_SEAS.Germany || []).filter(sea => sea !== 'Baltic')]
+    .find(sea => (PORT_SEAS.Germany || []).includes(sea) && !alliedAt(sea).length &&
+      !['allies', 'both'].includes(SEAS[sea].lba));
+  if(refuge && ['allies', 'both'].includes(PORTS.Germany.lba)){
+    let repairBudget = portRepairCapacity('Germany');
+    const evacuated = [];
+    for(const ship of SHIPS){
+      if(!readyToMove(ship) || ship.side !== 'axis' || ship.country !== 'DE' || ship.type === 'UBOAT' ||
+        ship.location !== 'Germany') continue;
+      if(repairBudget > 0 && canRepairInPort(ship, 'Germany')){
+        repairBudget -= Math.min(repairBudget, ship.damage);
+        continue;
+      }
+      if(move(ship, refuge)) evacuated.push(ship);
+    }
+    if(evacuated.length){
+      const names = evacuated.map(ship => ship.name);
+      log.push(`連合LBAを避けて ${SEAS[refuge].name} へ出港: ${names.join(', ')}`);
+      if(refuge === 'Baltic'){
+        ops.baltic ??= { ships: [], ru: [], ruAtk: 0, atk: 0 };
+        ops.baltic.ships.push(...names);
+        ops.baltic.atk += sum(evacuated);
+      }
+    }
+  }
 
   // フランスは第6ターンで閉鎖。損傷艦も港に残さず、隣接海域へ出す。
   if(turn === 6){

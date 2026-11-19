@@ -79,6 +79,26 @@
             color: var(--text-main);
         }
 
+        .updates {
+            margin: 16px 0 20px;
+            padding: 16px 20px;
+            border-left: 5px solid var(--burgundy);
+            background-color: var(--bg-color);
+            text-align: left;
+            line-height: 1.6;
+        }
+
+        .updates h2 {
+            margin: 0 0 6px;
+            color: var(--indigo);
+            font-size: 1.1em;
+        }
+
+        .updates ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
         .btn-group {
             display: flex;
             flex-direction: column;
@@ -154,6 +174,13 @@
 <div class="container">
     <h1>作戦司令室 (HQ)</h1>
 
+    <section class="updates" aria-labelledby="war-at-sea-20261119">
+        <h2 id="war-at-sea-20261119">11月19日の更新 — 海の戦い（War at Sea）</h2>
+        <ul>
+            <li>枢軸AIは、通常の出撃と修理の割り当てを済ませたあと、ドイツ港に残る出撃可能な水上艦を、連合軍の基地航空隊が届かないバルト海へ出します。バルト海に敵艦がいれば、ほかの安全な隣接海域を探します。</li>
+            <li>移動を試みた艦は、速力判定に失敗して帰港しても、そのターンは修理できません。プレイヤーとAIの両方に適用しました。</li>
+        </ul>
+    </section>
 
     <div class="btn-group">
         <a href="sanngikushi/index.html" class="theater-btn">

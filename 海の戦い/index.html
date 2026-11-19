@@ -735,6 +735,7 @@ function resolveTwoAreaMoves(){
   const log = [];
   for(const s of list){
     s.twoAreaPending = false;
+    s.movedThisTurn = true; // 速力判定の結果にかかわらず、このターンは移動を試みた。
     const origin = s.originThisTurn;
     const dest = s.location;
     const roll = rollD6();
@@ -3812,6 +3813,21 @@ async function playOneEvent(e){
   }
 }
 
+function canRepairInPort(ship, portKey){
+  return ship.location === portKey && PORTS[portKey]?.side === ship.side &&
+    !ship.sunk && !ship.landed && !ship.removed && !ship.returnPending && ship.damage > 0 &&
+    !attemptedMoveThisTurn(ship);
+}
+
+function attemptedMoveThisTurn(ship){
+  return Boolean(ship.movedThisTurn || ship.failedMove || ship.twoAreaPending || ship.originThisTurn);
+}
+
+function portRepairCapacity(portKey){
+  const port = PORTS[portKey];
+  return currentTurn < 8 && port?.available.includes(currentTurn) ? port.repair : 0;
+}
+
 // 修理 (13): AI側は自動、人間側は選択画面で修理量を指定
 async function executeRepair(side){
   const log = [];
@@ -3823,15 +3839,15 @@ async function executeRepair(side){
     if(damagedShipsAll.length){
       console.log(`[executeRepair] ${portKey} (repair=${port.repair}, avail=${port.available}, side=${port.side}):`, damagedShipsAll.map(s => `${s.name}(${s.side},dmg${s.damage})`));
     }
-    if(port.repair <= 0){ if(damagedShipsAll.length) console.log(`  → skip: repair<=0`); return; }
-    if(!port.available.includes(currentTurn)){ if(damagedShipsAll.length) console.log(`  → skip: turn ${currentTurn} not in available`); return; }
+    const capacity = portRepairCapacity(portKey);
+    if(capacity <= 0) return;
     if(side && port.side !== 'neutral' && port.side !== side){ if(damagedShipsAll.length) console.log(`  → skip: side filter (${side} vs ${port.side})`); return; }
     const ships = SHIPS.filter(s =>
-      s.location === portKey && !s.sunk && !s.landed && s.damage > 0 &&
+      canRepairInPort(s, portKey) &&
       (!side || s.side === side) && s.side !== humanSide
     );
     if(!ships.length){ console.log(`  → no ships match filter`); return; }
-    let budget = port.repair;
+    let budget = capacity;
     const lines = [];
     for(const ship of ships){
       if(budget <= 0) break;
@@ -3864,10 +3880,9 @@ function showRepairUI(side){
   const entries = [];
   Object.keys(PORTS).forEach(portKey => {
     const port = PORTS[portKey];
-    if(port.repair <= 0) return;
-    if(!port.available.includes(currentTurn)) return;
+    if(portRepairCapacity(portKey) <= 0) return;
     if(port.side !== 'neutral' && port.side !== side) return;
-    const ships = SHIPS.filter(s => s.location === portKey && !s.sunk && !s.landed && s.damage > 0 && s.side === side);
+    const ships = SHIPS.filter(s => canRepairInPort(s, portKey) && s.side === side);
     if(ships.length) entries.push({ portKey, port, ships });
   });
   if(!entries.length) return Promise.resolve([]);
