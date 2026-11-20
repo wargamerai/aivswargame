@@ -260,7 +260,7 @@ const carrier=f=>['Victorious','Ark'].includes(f.name),dice=()=>1+Math.floor(Mat
 let s,selected,eventTimer,showGermanPosition=false;
 function reset(){
  clearInterval(eventTimer);for(const id of ['actionDialog','endDialog'])if($(id).open)$(id).close();
- s={turn:1,lastConvoyRaid:null,plannedConvoy:false,phase:'setup',pos:null,ge:4,gv:0,bv:0,trail:[],voyage:[],moves:[],seen:null,tracked:[],enabled:[],moved:[],scanned:[],air:[],log:[],fleet:seeds.map(([name,a,d,v,h,where],id)=>({name,a,d,v,h,max:h,where,id}))};
+ s={turn:1,lastConvoyRaid:null,plannedConvoy:false,headingToBrest:false,phase:'setup',pos:null,ge:4,gv:0,bv:0,trail:[],voyage:[],moves:[],seen:null,tracked:[],enabled:[],moved:[],scanned:[],air:[],log:[],fleet:seeds.map(([name,a,d,v,h,where],id)=>({name,a,d,v,h,max:h,where,id}))};
  selected=null;showGermanPosition=false;render();
 }
 function log(...event){s.log.unshift({turn:s.turn,event});s.voyage.at(-1)?.events.push(event)}
@@ -270,25 +270,36 @@ function startAI(){
 const mayRaidConvoy=()=>s.gv<6&&!s.tracked.length&&s.lastConvoyRaid!==s.turn-1;
 const convoyPoints=roll=>roll===6?3:roll>=4?2:0;
 const brest='F7';
+const turnLimit=18;
 const leadsOnPoints=()=>s.gv>s.bv;
+function distancesTo(goals,mayRouteThrough){
+ const distances=new Map();
+ for(const goal of goals)for(const [hex,path] of paths(goal,Object.keys(locations).length,mayRouteThrough)){
+  const distance=path.length-1;
+  if(distance<(distances.get(hex)??Infinity))distances.set(hex,distance);
+ }
+ return distances;
+}
 function orders(){
  s.moved=[];s.moves=[];s.air=[];s.scanned=[];s.seen=null;
  const occupied=new Set(live().map(f=>f.where));
  const canWinAtBrest=leadsOnPoints();
  const mayEnter=h=>h===brest?canWinAtBrest:h!=='D8'&&!britishPorts.has(h)&&!occupied.has(h);
- const possible=paths(s.pos,geSpeed(),mayEnter);
- const home=canWinAtBrest&&(possible.has(brest)||s.ge<=2||s.turn>=12);
+ const speed=geSpeed();
+ const possible=paths(s.pos,speed,mayEnter);
  const mayRouteThrough=h=>h===s.pos||mayEnter(h);
- const convoyHexes=[...routes].filter(h=>mayEnter(h));
- const goals=home?[brest]:convoyHexes;
- const distances=new Map();
- for(const goal of goals)for(const [hex,path] of paths(goal,Object.keys(locations).length,mayRouteThrough)){
-  if(path.length-1<(distances.get(hex)??Infinity))distances.set(hex,path.length-1);
- }
+ const brestDistances=canWinAtBrest?distancesTo([brest],mayRouteThrough):new Map();
+ const distanceToBrest=brestDistances.get(s.pos)??Infinity;
+ const remainingMovement=(turnLimit-s.turn)*speed;
  const patrols=live().filter(f=>unlocked(f)&&f.name!=='Dummy').map(f=>{
   const moves=reach(f.where,f.v);
   return {f,moves,air:carrier(f)?new Set([...moves].flatMap(adj)):new Set()};
  });
+ const reinforcementsAfterRaid=s.lastConvoyRaid!==null&&patrols.some(({f})=>f.id>=2);
+ const home=distanceToBrest<=remainingMovement+speed&&
+  (s.headingToBrest||reinforcementsAfterRaid||possible.has(brest)||s.ge<=2||s.turn>=12);
+ s.headingToBrest=home;
+ const distances=home?brestDistances:distancesTo([...routes].filter(mayEnter),mayRouteThrough);
  const danger=h=>patrols.reduce((sum,{f,moves,air})=>{
   const hull=carrier(f)?2.1:2.3+pow(f)*.55;
   return sum+(moves.has(h)?hull*.72:air.has(h)?1.6:0);
@@ -299,11 +310,11 @@ function orders(){
  }));
  const canRaidHere=candidates.some(candidate=>candidate.raid);
  const alternatives=candidates.filter(({hex})=>hex!==s.pos);
- // Prefer a raid while seeking convoys. Otherwise advance toward the current goal.
+ // Give up a shorter route if a safer move still makes progress and can meet the deadline.
  const eligible=canRaidHere?candidates.filter(candidate=>candidate.raid):
-  home&&candidates.some(candidate=>Number.isFinite(candidate.distance))?candidates:
+  home?candidates.filter(({hex,distance})=>distance<=remainingMovement&&(distance<distanceToBrest||hex===brest)):
   alternatives.length?alternatives:candidates;
- const destination=eligible.sort((a,b)=>canRaidHere?a.risk-b.risk||a.tie-b.tie:
+ const destination=eligible.sort((a,b)=>canRaidHere||home?a.risk-b.risk||a.distance-b.distance||a.tie-b.tie:
   a.distance-b.distance||a.risk-b.risk||a.tie-b.tie)[0];
  s.plannedConvoy=destination.raid;
  commitMove(possible.get(destination.hex));
@@ -406,7 +417,7 @@ function fight(target){
 function finishTurn(){
  if(!s.ge)s.winner='bisWinSunk';
  else if(s.gv>=6||(s.pos===brest&&leadsOnPoints()))s.winner='gWin';
- else if(s.turn>=18)s.winner='bisWinTime';
+ else if(s.turn>=turnLimit)s.winner='bisWinTime';
  if(s.winner){s.phase='end';s.seen=s.pos;render();showEnd();return}
  s.phase='result';render();
 }
@@ -574,7 +585,7 @@ function render(){
  inspect.setAttribute('aria-pressed',String(showGermanPosition));
  inspect.textContent=tr('inspect')+' · '+tr(showGermanPosition?'on':'off');
  $('chart').alt=tr('map');$('ruleSheet').alt=tr('rules');$('endRoute').setAttribute('aria-label',tr('bisVoyage'));
- $('turn').textContent=tr('turn',s.turn)+' / 18';$('phase').textContent=tr(phases[s.phase]);$('score').textContent=factionScore(s);$('hint').textContent=tr(s.winner||instructions[s.phase]);
+ $('turn').textContent=tr('turn',s.turn)+' / '+turnLimit;$('phase').textContent=tr(phases[s.phase]);$('score').textContent=factionScore(s);$('hint').textContent=tr(s.winner||instructions[s.phase]);
  const buttons=$('actions');buttons.replaceChildren();
  const put=(...args)=>buttons.append(button(...args));
  switch(s.phase){
