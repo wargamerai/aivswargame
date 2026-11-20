@@ -127,7 +127,6 @@ function pgOnlineBoard(guest) {
     id: u.id, name: u.name, type: u.type, side: u.side, nation: u.nation,
     x: u.x, y: u.y, col: u.col, row: u.row, hexId: u.hexId, src: u.src,
     status: u.status, marchMode: u.marchMode, outOfAmmo: u.outOfAmmo, abilities: u.abilities,
-    pgMovementOrder: u.side === guest ? u.pgMovementOrder : undefined,
   }));
 }
 
@@ -148,7 +147,6 @@ function pgOnlineSnapshot() {
     markers: {
       target: supportState.targetHexId, artillery: enable ? supportState.selectedArtillery : [],
       entry: enable ? reinforcementState.entryHexes : [],
-      orderDraft: enable && pgOrderDraft ? { id: pgOrderDraft.unit.id, target: pgOrderDraft.target } : null,
       moving: enable ? moveState.movingUnit?.id : null,
       reachable: enable ? Object.keys(moveState.validHexes || {}) : [],
       path: moveState.path, retreat: enable ? assaultState._validRetreats : null,
@@ -194,9 +192,6 @@ function pgOnlineUseView(state) {
   supportState.targetHexId = state.markers.target;
   supportState.selectedArtillery = state.markers.artillery;
   reinforcementState.entryHexes = state.markers.entry;
-  const draft = state.markers.orderDraft;
-  const draftUnit = draft && testUnits.find(u => u.id === draft.id);
-  pgOrderDraft = draftUnit ? { unit: draftUnit, target: draft.target } : null;
   moveState.movingUnit = testUnits.find(u => u.id === state.markers.moving) || null;
   moveState.validHexes = Object.fromEntries(state.markers.reachable.map(hex => [hex, true]));
   moveState.path = state.markers.path || [];

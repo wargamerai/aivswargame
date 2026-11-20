@@ -383,7 +383,7 @@ async function ukAI_moveAllStacks(canFire) {
   const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
 
   const alliedUnits = testUnits.filter(u =>
-    u.side === 'allied' && u.status !== 'eliminated' && !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
+    u.side === 'allied' && u.status !== 'eliminated' &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip' &&
     u.col >= 0 && u.col < MAP_CONFIG.cols
   );
@@ -460,98 +460,9 @@ async function ukAI_moveAllStacks(canFire) {
       }
       movableStack.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
 
-      // ストップ射撃チェック（ドイツ側から）
-      const livingStack = movableStack.filter(u => u.status !== 'eliminated');
-      if (livingStack.length === 0) break;
-
-      const stopShooters = testUnits.filter(e =>
-        e.side === 'german' && e.status === 'ok' &&
-        e.type !== 'dummy' && e.type !== 'A' && e.type !== 'leader' &&
-        (e.fpAT > 0 || e.fpSoft > 0)
-      ).filter(e => {
-        const dist = hexDistance(e.col, e.row, best.col, best.row);
-        if (dist <= 0 || dist > (e.range || 1)) return false;
-        return hasLOS(e.col, e.row, best.col, best.row);
-      });
-
-      const reviewedFire = review && await pgResolveAIStopFire(livingStack, review.fire);
-      if (!review && stopShooters.length > 0) {
-        // ストップ射撃処理
-        const sortedTargets = [...livingStack].sort((a, b) => (a.def || 5) - (b.def || 5));
-        const firedThisStep = new Set();
-        stopShooters.forEach(e => {
-          if (e.status === 'eliminated') return;
-          if (firedThisStep.has(e.id || e.name)) return;
-          const target = sortedTargets.find(t => t.status !== 'eliminated');
-          if (target) {
-            const isArmored = target.type === 'T' || target.type === 'AC';
-            const fp = isArmored ? (e.fpAT || 0) : (e.fpSoft || 0);
-            if (fp > 0) {
-              const roll = Math.floor(Math.random() * 10);
-              const fpIdx = getFPColumnIndex(fp);
-              const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
-              const def = target.def || 5;
-              if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-                target.status = 'eliminated';
-                addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: 壊滅 (ダイス${roll})`);
-              } else if (typeof dmg === 'number' && dmg >= def + 2) {
-                target.status = target.status === 'd' ? 'eliminated' : 'dd';
-                addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: DD (ダイス${roll})`);
-              } else if (typeof dmg === 'number' && dmg >= def) {
-                target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-                addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: D (ダイス${roll})`);
-              } else {
-                addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: 効果なし (ダイス${roll})`);
-              }
-            }
-            firedThisStep.add(e.id || e.name);
-          }
-        });
-
-        // 反撃（D/DD・砲兵・指揮官除外）
-        const counterShooters = livingStack.filter(u => u.status === 'ok' && u.type !== 'A' && u.type !== 'leader');
-        if (counterShooters.length > 0 && canFire) {
-          const counterTargets = [...stopShooters].filter(e => e.status === 'ok')
-            .sort((a, b) => (a.def || 5) - (b.def || 5));
-          if (counterTargets.length > 0) {
-            const target = counterTargets[0];
-            const isArmored = target.type === 'T' || target.type === 'AC';
-            let totalFP = 0;
-            const firingUnits = [];
-            counterShooters.forEach(u => {
-              const dist = hexDistance(u.col, u.row, target.col, target.row);
-              if (dist > 0 && dist <= (u.range || 1) && hasLOS(u.col, u.row, target.col, target.row)) {
-                totalFP += isArmored ? (u.fpAT || 0) : (u.fpSoft || 0);
-                firingUnits.push(u);
-              }
-            });
-            if (totalFP > 0) {
-              const roll = Math.floor(Math.random() * 10);
-              const fpIdx = getFPColumnIndex(totalFP);
-              const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
-              const def = target.def || 5;
-              const nameStr = firingUnits.length > 2
-                ? firingUnits[0].name + '他' + (firingUnits.length - 1)
-                : firingUnits.map(u => u.name).join('+');
-              if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-                target.status = 'eliminated';
-                addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: 壊滅 (ダイス${roll})`);
-              } else if (typeof dmg === 'number' && dmg >= def + 2) {
-                target.status = target.status === 'd' ? 'eliminated' : 'dd';
-                addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: DD (ダイス${roll})`);
-              } else if (typeof dmg === 'number' && dmg >= def) {
-                target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-                addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: D (ダイス${roll})`);
-              } else {
-                addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: 効果なし (ダイス${roll})`);
-              }
-              firingUnits.forEach(u => { u._counterFired = true; });
-            }
-          }
-        }
-      }
-
-      if (reviewedFire || (!review && stopShooters.length > 0)) {
+      const livingStack = movableStack.filter(unit => unit.status !== 'eliminated');
+      if (!livingStack.length) break;
+      if (review && await pgResolveAIStopFire(livingStack, review.fire)) {
         // D/DDユニット離脱
         const damaged = movableStack.filter(u => u.status === 'd' || u.status === 'dd');
         if (damaged.length > 0) {
@@ -568,61 +479,6 @@ async function ukAI_moveAllStacks(canFire) {
     if (trail.length > 1) {
       drawMap();
       await _moveDelay();
-    }
-  }
-}
-
-// ===== 射撃フェイズ: 広く浅く攻撃 =====
-async function ukAI_firePhase() {
-  const _fireDelay = () => new Promise(r => setTimeout(r, 1200));
-
-  // ヘクスごとにイギリス射手をグループ化
-  const shooterHexes = {};
-  testUnits.filter(u =>
-    u.side === 'allied' && u.status === 'ok' &&
-    !u.firedThisTurn && !u._counterFired && u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'A'
-  ).forEach(u => {
-    if (!shooterHexes[u.hexId]) shooterHexes[u.hexId] = [];
-    shooterHexes[u.hexId].push(u);
-  });
-
-  for (const [hexId, shooters] of Object.entries(shooterHexes)) {
-    if (shooters.length === 0) continue;
-
-    const assignments = ukAI_assignFireTargets(hexId, shooters);
-    if (assignments.length === 0) continue;
-
-    // 射撃行動 → ダミー除去
-    onUnitAction(shooters[0], shooters);
-
-    for (const { shooters: firingUnits, target, totalFP } of assignments) {
-      if (target.status === 'eliminated') continue;
-
-      const nameStr = firingUnits.length > 2
-        ? firingUnits[0].name + '他' + (firingUnits.length - 1)
-        : firingUnits.map(u => u.name).join('+');
-
-      const roll = Math.floor(Math.random() * 10);
-      const fpIdx = getFPColumnIndex(totalFP);
-      const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
-      const def = target.def || 5;
-
-      if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-        target.status = 'eliminated';
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: 壊滅 (ダイス${roll})`);
-      } else if (typeof dmg === 'number' && dmg >= def + 2) {
-        target.status = target.status === 'd' ? 'eliminated' : 'dd';
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: DD (ダイス${roll})`);
-      } else if (typeof dmg === 'number' && dmg >= def) {
-        target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: D (ダイス${roll})`);
-      } else {
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: 効果なし (ダイス${roll})`);
-      }
-
-      firingUnits.forEach(u => { u.firedThisTurn = true; });
-      drawMap();
-      await _fireDelay();
     }
   }
 }

@@ -604,74 +604,10 @@ function applyDamageToUnit(unit, damage) {
   }
 }
 
-// ===== AI自動支援砲撃 =====
-function aiAutoSupportFire(side) {
-  const attacks = [];
-  const enemyHexes = new Set(testUnits.filter(u => pgOnMap(u) && u.side !== side &&
-    !['dummy', 'leader', 'ip'].includes(u.type)).map(u => u.hexId));
-  const visible = [...enemyHexes].filter(hex => isTargetSpottedByFriendly(hex, side));
-  const artillery = testUnits.filter(u => u.side === side && canIndirectFire(u));
-  const offBoard = SCENARIO_OFF_BOARD.filter(ob => ob.side === side && ob.usedCount < ob.uses);
-  const groups = artillery.map(unit => ({artillery: [unit], offBoard: []}));
-  artillery.forEach((unit, i) => {
-    for (const other of artillery.slice(i + 1)) {
-      if (canCombineSupport([unit, other])) groups.push({artillery: [unit, other], offBoard: []});
-    }
-  });
-  offBoard.forEach(ob => groups.push({artillery: [], offBoard: [ob]}));
-
-  for (;;) {
-    let best = null;
-    for (const firing of groups) {
-      if (firing.artillery.some(u => !canIndirectFire(u)) ||
-          firing.offBoard.some(ob => ob.usedCount >= ob.uses || ob._aiFiredTurn === G.turn)) continue;
-      for (const hex of visible) {
-        if (firing.artillery.some(u => !isInIndirectRange(u, hex))) continue;
-        const targets = supportTargets(hex, side);
-        const fort = targets.find(u => u.type === 'fortification');
-        const score = (fort ? [fort] : targets).reduce((sum, target) => {
-          const fp = supportFirepower(target, firing.artillery,
-            firing.offBoard.reduce((n, ob) => n + (ob.fpMode === 'dice' ? 5 : ob.fp || 0), 0),
-            firing.offBoard.reduce((n, ob) => n + (ob.fpATModifier || 0), 0));
-          if (fp <= 0) return sum;
-          const mod = supportRollModifier(hex, target);
-          for (let roll = 0; roll < 10; roll++) {
-            const {damageLevel} = getFireCombatResult(fp, roll + mod);
-            const damage = resolveDamage(damageLevel, target.def || 0);
-            sum += damage === 'eliminated' ? 5 : damage === 'dd' ? 3 : damage === 'd' ? 1 : 0;
-          }
-          return sum;
-        }, 0) / (firing.artillery.length || 1);
-        if (score > 0 && (!best || score > best.score)) best = {firing, hex, score};
-      }
-    }
-    if (!best) return attacks;
-    const {hex, firing} = best;
-    const attack = resolveSupportAttack(side, hex, firing.artillery, firing.offBoard);
-    if (!attack) {
-      visible.splice(visible.indexOf(hex), 1);
-      continue;
-    }
-    firing.offBoard.forEach(ob => { ob._aiFiredTurn = G.turn; });
-    attacks.push(attack);
-  }
-}
-
-function renderAISupportPhase(side) {
-  const phase = `${G.turn}:${G.phase}`;
-  const first = supportState._aiPhase !== phase;
-  if (first) {
-    supportState._aiPhase = phase;
-    supportState._aiAttacks = aiAutoSupportFire(side);
-  }
-  const attacks = supportState._aiAttacks;
-  document.getElementById('phaseContent').innerHTML = `<div class="phase-info">${attacks.length
-    ? 'AIの支援射撃が終了しました。' : 'AIの支援射撃はありません。'}</div>`;
-  if (first && attacks.length) {
-    showFireOverlay('AI支援射撃', side === 'german' ? 'ドイツ軍' : '連合軍',
-      attacks.flatMap(attack => attack.rows.map(row => ({
-        ...row, targetName: `${attack.hex} ${row.targetName}`,
-      }))));
-  }
+function renderAISupportPhase() {
+  const notice = document.createElement('div');
+  notice.className = 'phase-info';
+  notice.textContent = 'AIの支援射撃はありません。';
+  document.getElementById('phaseContent').replaceChildren(notice);
   drawMap();
 }

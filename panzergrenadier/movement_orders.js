@@ -1,23 +1,10 @@
-// Movement orders and review are shared by the two movement phases.
+// Movement review is shared by the two movement phases.
 let pgAIReview = null;
-let pgOrderRun = null;
-let pgOrderDraft = null;
-let pgOrderHex = null;
-let pgOrderUnit = null;
+let pgReviewHex = null;
+let pgReviewUnit = null;
 const pgManualMoves = new Map();
 const pgManualMoveHistory = [];
 let pgAIMovePreview = null;
-let pgManualOrderPhase = null;
-
-function pgRenderManualMovement(side) {
-  const phase = `${G.turn}:${G.phase}`;
-  if (pgManualOrderPhase === phase || G.gameMode === 'aivai') {
-    renderMoveFirePhase();
-    return;
-  }
-  pgManualOrderPhase = phase;
-  pgMovementOrders(side, renderMoveFirePhase);
-}
 
 function pgOnMap(unit) {
   return unit && !['eliminated', 'resupply'].includes(unit.status) &&
@@ -25,27 +12,13 @@ function pgOnMap(unit) {
     (!unit.reinforcement || unit.reinforcement.deployed);
 }
 
-function pgCanReceiveOrder(unit) {
+function pgCanMoveUnit(unit) {
   return pgOnMap(unit) && unit.move > 0 && !STACK_EXEMPT_TYPES.includes(unit.type);
 }
 
 function pgEnemyAt(side, hex) {
   return testUnits.some(unit => pgOnMap(unit) && unit.side !== side &&
     unit.type !== 'dummy' && unit.hexId === hex);
-}
-
-function pgReconcileOrders() {
-  for (const unit of testUnits) {
-    const order = unit.pgMovementOrder;
-    if (!order) continue;
-    if (!pgOnMap(unit) || pgEnemyAt(unit.side, order.target)) {
-      delete unit.pgMovementOrder;
-      addLog('move', `${unit.name}：死守・移動予約を解除（${order.target}）`);
-    } else if (order.type === 'reserve' && unit.hexId === order.target) {
-      delete unit.pgMovementOrder;
-      addLog('move', `${unit.name}：移動予約完了（${order.target}）`);
-    }
-  }
 }
 
 function pgCanEnter(unitsToMove, hex) {
@@ -57,45 +30,6 @@ function pgCanEnter(unitsToMove, hex) {
     unitsToMove.every(unit => canStackWithOrg(unit, hex));
 }
 
-function pgMovementOrders(side, done) {
-  const candidates = testUnits.filter(unit => unit.side === side && unit.pgMovementOrder);
-  pgReconcileOrders();
-  if (!candidates.length) { done(); return; }
-  pgOrderRun = {candidates, done};
-  pgContinueOrders();
-}
-
-function pgContinueOrders() {
-  if (!pgOrderRun) return;
-  pgReconcileOrders();
-  for (let unit; (unit = pgOrderRun.candidates.shift());) {
-    const order = unit.pgMovementOrder;
-    if (!order || !pgCanReceiveOrder(unit) || unit.hexId === order.target ||
-        unit.status === 'dd' || unit.moveComplete || unit.firedThisTurn || unit._counterFired) continue;
-
-    const target = fromHexId(order.target);
-    const formation = unit.marchMode ? 'march' : 'combat';
-    const group = pgMoveGroup(unit);
-    const options = calculateMovableHexes(unit, formation, false, group);
-    let destination = options[`${target.col},${target.row}`] ? target : null;
-    if (!destination) {
-      const route = bfsShortestPath(unit, unit.col, unit.row, target.col, target.row,
-        formation, group, true).path;
-      destination = route.findLast(pos => options[`${pos.col},${pos.row}`]);
-    }
-    if (!destination) continue;
-    startMove(unit, true);
-    if (moveState.movingUnit !== unit) continue;
-    unit.pgOrderedMoveTurn = G.turn;
-    moveToHex(destination.col, destination.row);
-    if (!moveState.stopFirePending) confirmMove();
-    return;
-  }
-  const {done} = pgOrderRun;
-  pgOrderRun = null;
-  done();
-}
-
 function pgMoveGroup(unit) {
   return [unit, ...testUnits.filter(other => other !== unit && pgOnMap(other) &&
     other.hexId === unit.hexId && other.side === unit.side && other.type === 'leader')];
@@ -103,7 +37,7 @@ function pgMoveGroup(unit) {
 
 function pgStartAIReview(side, run) {
   if (pgAIReview) return;
-  const review = {side, stage: 'orders', origins: new Map(), returned: new Set(), combat: new Set()};
+  const review = {side, stage: 'ai', origins: new Map(), returned: new Set(), combat: new Set()};
   pgAIReview = review;
   resetDirectFireState();
   directFireState.activeSide = side;
@@ -116,17 +50,16 @@ function pgStartAIReview(side, run) {
       if (pgOnMap(unit) && unit.hexId !== origin.hexId) unit.moveComplete = true;
     }
     review.finish = resolve;
-    pgOrderHex = null;
-    pgOrderUnit = null;
+    pgReviewHex = null;
+    pgReviewUnit = null;
     window._aiMoveTrails = [];
     renderMoveFirePhase();
     drawMap();
   });
-  pgMovementOrders(side, async () => {
-    review.stage = 'ai';
+  void (async () => {
     document.getElementById('phaseContent').textContent = 'AIが移動中…';
     for (const unit of testUnits) {
-      if (unit.side === side && pgOnMap(unit) && unit.move > 0) {
+      if (unit.side === side && pgOnMap(unit) && (unit.move > 0 || unit.type === 'leader')) {
         const {col, row, x, y, hexId, status, moveComplete, marchMode, cautious} = unit;
         review.origins.set(unit, {col, row, x, y, hexId, status, moveComplete, marchMode, cautious});
       }
@@ -139,7 +72,7 @@ function pgStartAIReview(side, run) {
     }
     pgAIReview = null;
     nextPhase();
-  });
+  })();
 }
 
 function pgNoteMovementCombat(shooters, target) {
@@ -151,7 +84,7 @@ function pgNoteMovementCombat(shooters, target) {
 }
 
 function pgStartManualMoveRecord(ms) {
-  if (G.gameMode === 'aivai' || pgAIReview?.stage === 'ai' || pgOrderRun) return;
+  if (G.gameMode === 'aivai' || pgAIReview?.stage === 'ai') return;
   const moving = ms._stackMoving || [ms.movingUnit];
   ms.pgMoveRecord = {
     origins: new Map(moving.filter(pgOnMap).map(unit => {
@@ -200,7 +133,7 @@ function pgReturnRecord(unit) {
 
 function pgCanReturn(unit, record, returning = [unit]) {
   const uid = unit.id || unit.name;
-  return record && !record.blocked && !moveState.movingUnit && !pgOrderDraft && unit.status === record.origin.status &&
+  return record && !record.blocked && !moveState.movingUnit && unit.status === record.origin.status &&
     unit.status !== 'dd' && !unit.firedThisTurn && !unit._counterFired &&
     !directFireState.firedUnits.has(uid) && !directFireState.counterFiredUnits.has(uid) &&
     (unit.hexId === record.origin.hexId || pgCanEnter(returning, record.origin.hexId));
@@ -248,16 +181,16 @@ function pgReturnMovement(entries) {
   }
   recoverDummies.forEach(dummy => { dummy.status = 'ok'; });
   for (const [hex, side] of departures) cleanupOrphanDummies(hex, side);
-  const unit = entries.find(entry => pgCanReceiveOrder(entry.unit))?.unit || entries[0].unit;
-  pgOrderUnit = unit;
-  pgOrderHex = unit.hexId;
+  const unit = entries.find(entry => pgCanMoveUnit(entry.unit))?.unit || entries[0].unit;
+  pgReviewUnit = unit;
+  pgReviewHex = unit.hexId;
   if (pgAIReview?.stage !== 'review') {
     directFireState.atkHexId = unit.hexId;
     directFireState.atkAdjacentHexes = [unit.hexId];
     checkState.atk.clear();
     for (const entry of entries) {
       const moved = entry.unit;
-      if (pgCanReceiveOrder(moved) && moved.status === 'ok' && moved.hexId === unit.hexId) checkState.atk.add(moved.id || moved.name);
+      if (pgCanMoveUnit(moved) && moved.status === 'ok' && moved.hexId === unit.hexId) checkState.atk.add(moved.id || moved.name);
     }
     updateFireRange();
   }
@@ -449,33 +382,82 @@ async function pgResolveAIStopFire(moving, fire) {
 }
 
 function pgFinishAIReview() {
-  if (pgAIReview?.stage !== 'review' || moveState.movingUnit || pgOrderDraft) return;
+  if (pgAIReview?.stage !== 'review' || moveState.movingUnit) return;
   pgAIReview.stage = 'ai';
-  pgReconcileOrders();
   document.getElementById('phaseContent').textContent = 'フェイズの残りを処理しています。';
   pgAIReview.finish();
 }
 
-function pgSelectOrderHex(col, row) {
-  if (!pgOrderDraft) return false;
-  const hex = toHexId(col, row);
-  const terrain = TERRAIN_MODIFIERS[getHexTerrain(hex)];
-  const {unit, type} = pgOrderDraft;
-  if (!terrain || terrain.move === -1 || pgEnemyAt(unit.side, hex) ||
-      (type === 'reserve' && unit.hexId === hex)) {
-    addLog('move', 'このヘクスは命令の目的地に指定できません。');
-    return true;
-  }
-  pgOrderDraft.target = hex;
-  renderMoveFirePhase();
-  drawMap();
-  return true;
+function pgReviewCanMove(unit) {
+  const id = unit.id || unit.name;
+  return pgCanMoveUnit(unit) && unit.status !== 'dd' && !unit.moveComplete &&
+    !unit.firedThisTurn && !unit._counterFired &&
+    !directFireState.firedUnits.has(id) && !directFireState.counterFiredUnits.has(id);
 }
 
-function pgMovementPanel(showPicker = true) {
+function pgReviewStack(section, text, button) {
+  const review = pgAIReview;
+  const units = testUnits.filter(unit =>
+    unit.side === review.side && unit.hexId === pgReviewHex && pgOnMap(unit));
+  const moved = units.filter(unit => pgReturnRecord(unit));
+  const entries = pgReturnEntries(moved);
+  const ready = units.filter(pgReviewCanMove);
+  const returned = ready.filter(unit => review.returned.has(unit));
+  const group = [...returned, ...units.filter(unit => unit.type === 'leader' && !unit.moveComplete &&
+    unit.status !== 'dd' && review.returned.has(unit))];
+  review.ranges = new Map();
+  review.previewRange = null;
+  if (entries) {
+    for (const {unit, record} of entries) {
+      const hex = record.origin.hexId;
+      if (!review.ranges.has(hex)) review.ranges.set(hex, []);
+      review.ranges.get(hex).push({...unit, ...record.origin});
+    }
+  } else if (!moved.length && ready.length) {
+    review.ranges.set(pgReviewHex, group.length ? group : ready);
+  }
+  text(section, 'AIの移動完了。地図でスタックを選んで確認します。');
+  button(section, '確認を終えて進む', pgFinishAIReview);
+  if (!units.length) return;
+
+  const listed = moved.length ? moved : units;
+  text(section, `${pgReviewHex} · ${listed.map(unit => unit.name).join('＋')}`);
+  if (moved.length) {
+    button(section, 'スタックの移動を取り消す', () => pgReturnMovement(pgReturnEntries(moved)), !entries);
+    if (!entries) text(section, '戦闘済みの駒がいるか、移動前のヘクスに戻せません。');
+  }
+  if (returned.length && !moved.length)
+    button(section, 'スタックを移動し直す', () => pgBeginMove(group));
+  if (review.ranges.size) {
+    const hexes = [...review.ranges.keys()].join('、');
+    text(section, `${moved.length ? '移動前 ' : ''}${hexes} からの移動範囲を地図に表示します。`);
+  }
+}
+
+function pgCalculateReviewRange() {
+  const ranges = pgAIReview?.stage === 'review' && pgAIReview.ranges;
+  if (!ranges || moveState.movingUnit) return null;
+  if (pgAIReview.previewRange) return pgAIReview.previewRange;
+  const hexes = new Set();
+  const origins = [];
+  for (const group of ranges.values()) {
+    const combat = group.filter(unit => unit.type !== 'leader' && pgReviewCanMove(unit));
+    if (!combat.length) continue;
+    const lead = combat[0];
+    const formation = lead.marchMode ? 'march' : 'combat';
+    const participants = group.filter(unit => unit.type === 'leader' || combat.includes(unit));
+    const mp = Math.min(...combat.map(unit => unit.move));
+    const reachable = calculateMovableHexes({...lead, move: mp}, formation, false, participants);
+    for (const key of Object.keys(reachable)) hexes.add(key);
+    origins.push({col: lead.col, row: lead.row});
+  }
+  pgAIReview.previewRange = {hexes, origins};
+  return pgAIReview.previewRange;
+}
+
+function pgMovementPanel() {
   const section = document.createElement('section');
   section.className = 'phase-info';
-  const review = pgAIReview?.stage === 'review' ? pgAIReview : null;
   const text = (parent, content) => {
     const line = document.createElement('div');
     line.textContent = content;
@@ -488,110 +470,22 @@ function pgMovementPanel(showPicker = true) {
     node.textContent = label;
     node.disabled = disabled;
     node.onclick = action;
-    return parent.appendChild(node);
+    parent.append(node);
   };
-  const redraw = () => { renderMoveFirePhase(); drawMap(); };
-  if (!pgAIReview && !pgOrderDraft) {
-    const last = pgManualMoveHistory.findLast(group => group.records.size);
-    button(section, '味方の移動を一手戻す', pgUndoLastManualMove, !pgReturnEntries(last ? [...last.records.keys()] : []));
-  }
-  if (review) {
-    const status = document.createElement('strong');
-    status.className = 'pg-ai-move-complete';
-    status.textContent = 'AIの移動完了';
-    section.append(status);
-    text(section, '戻した駒は移動し直すか、予約・死守を設定できます。');
-    button(section, '確認を終えて進む', pgFinishAIReview, Boolean(pgOrderDraft));
-  }
-  if (pgOrderDraft) {
-    const {unit, type, target} = pgOrderDraft;
-    text(section, `${unit.name} · ${type === 'hold' ? '死守命令' : '移動予約'} · ${target ?? '地図で目的地を選択'}`);
-    button(section, '命令を確定', () => {
-      unit.pgMovementOrder = {type, target};
-      pgOrderDraft = null;
-      addLog('move', `${unit.name}：${target} に${type === 'hold' ? '死守命令' : '移動予約'}を設定。`);
-      if (unit.side === directFireState.activeSide) pgMovementOrders(unit.side, redraw);
-      else redraw();
-    }, !target);
-    button(section, '選択を取り消す', () => { pgOrderDraft = null; redraw(); });
+  if (pgAIReview?.stage === 'review') {
+    pgReviewStack(section, text, button);
     return section;
   }
-
-  const selectedHex = pgOrderHex || directFireState.atkHexId;
-  const activeSide = review?.side ?? directFireState.activeSide;
-  const units = testUnits.filter(unit => pgCanReceiveOrder(unit) &&
-    unit.side === activeSide && unit.hexId === selectedHex);
-  if (review && !units.length) text(section, '修正する駒を地図で選べます。');
-  const selected = units.includes(pgOrderUnit) ? pgOrderUnit : showPicker && units.length === 1 ? units[0] : null;
-  if (showPicker && units.length > 1) {
-    const picker = document.createElement('div');
-    picker.className = 'pg-order-picker';
-    for (const unit of units) {
-      const pick = button(picker, '', () => { pgOrderUnit = unit; redraw(); });
-      pick.append(pgUnitLabel(unit));
-      pick.setAttribute('aria-pressed', String(unit === selected));
-      pick.classList.toggle('is-selected', unit === selected);
-    }
-    section.append(picker);
-  }
-  if (selected) {
-    const unit = selected;
+  const last = pgManualMoveHistory.findLast(group => group.records.size);
+  button(section, '味方の移動を一手戻す', pgUndoLastManualMove, !pgReturnEntries(last ? [...last.records.keys()] : []));
+  const unit = pgReviewUnit;
+  if (unit?.side === directFireState.activeSide && unit.hexId === pgReviewHex) {
     const record = pgReturnRecord(unit);
-    const order = unit.pgMovementOrder;
-    const status = order ? (order.type === 'hold' ? '死守先 ' : '予約先 ') + order.target : '';
-    const holding = order?.type === 'hold' && order.target === unit.hexId;
-    if (showPicker && units.length === 1) section.append(pgUnitLabel(unit));
-    if (showPicker && pgUnitHasFired(unit)) {
-      const fired = document.createElement('span');
-      fired.className = 'pg-action-state pg-fired';
-      fired.textContent = '射撃済';
-      section.append(fired);
-    }
-    text(section, [!showPicker && unit.name, record && record.origin.hexId !== unit.hexId ? `${record.origin.hexId} → ${unit.hexId}` : unit.hexId, holding ? '死守中' : status].filter(Boolean).join(' · '));
     if (record) {
-      const allowed = pgCanReturn(unit, record);
+      const allowed = pgReturnEntries([unit]);
+      text(section, `${unit.name} · ${record.origin.hexId} → ${unit.hexId}`);
       button(section, '移動前のヘクスに戻す', () => pgReturnMovement(pgReturnEntries([unit])), !allowed);
-      if (!allowed) text(section, '戦闘・偵察済み、または元のヘクスに配置できません。');
     }
-    if (review?.returned.has(unit) && !order && !unit.moveComplete)
-      button(section, '移動し直す', () => startMove(unit));
-    for (const [type, label] of [['reserve', '移動予約'], ['hold', '死守命令']]) {
-      button(section, label, () => { pgOrderDraft = {unit, type, target: null}; redraw(); });
-    }
-    if (order) button(section, '命令を解除', () => { delete unit.pgMovementOrder; redraw(); });
   }
   return section;
-}
-
-function pgDrawMovementOrders(ctx) {
-  const draft = pgOrderDraft;
-  for (const unit of testUnits) {
-    if (!pgOnMap(unit) || (G.gameMode === 'online' && unit.side !== G.playerSide)) continue;
-    const target = draft?.unit === unit && draft.target ? draft.target : unit.pgMovementOrder?.target;
-    if (!target) continue;
-    const destination = fromHexId(target);
-    const end = getHexCenter(destination.col, destination.row);
-    const angle = Math.atan2(end.y - unit.y, end.x - unit.x);
-    ctx.save();
-    ctx.strokeStyle = '#943ed1';
-    ctx.lineWidth = 3;
-    if (unit.hexId === target) {
-      ctx.beginPath();
-      ctx.arc(end.x, end.y, 18, 0, 2 * Math.PI);
-      ctx.stroke();
-    } else {
-      ctx.setLineDash([7, 4]);
-      ctx.beginPath();
-      ctx.moveTo(unit.x, unit.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(end.x - 11 * Math.cos(angle - .45), end.y - 11 * Math.sin(angle - .45));
-      ctx.lineTo(end.x, end.y);
-      ctx.lineTo(end.x - 11 * Math.cos(angle + .45), end.y - 11 * Math.sin(angle + .45));
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
 }

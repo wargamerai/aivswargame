@@ -1326,17 +1326,17 @@ function renderPhase() {
   // pvaiモードでAI側のフェイズなら自動実行
   if (isAIPhase()) {
     if (phase.id === 'supportDef') {
-      renderAISupportPhase(currentSupportSide());
+      renderAISupportPhase();
       return;
     }
     if (phase.id === 'supportAtk' && (!SCENARIO.diceAirSupport || G._airSupportRolled ||
        G.turn < SCENARIO.diceAirSupport.startTurn)) {
-      renderAISupportPhase(currentSupportSide());
+      renderAISupportPhase();
       return;
     }
     addLog('ai', `AI自動実行: ${phase.name}フェイズ`);
     if (phase.id === 'moveFire') {
-      pgStartAIReview(G.initiative, showReview => aiAutoMoveFire(showReview));
+      pgStartAIReview(G.initiative, showReview => aiAutoMove(showReview));
       return;
     }
     if (phase.id === 'assault') {
@@ -1443,7 +1443,7 @@ function renderPhase() {
         resultText: resultText,
         resultClass: resultClass,
       }], function() {
-        if (isAIPhase()) renderAISupportPhase(G.initiative);
+        if (isAIPhase()) renderAISupportPhase();
         else renderSupportPhase(G.initiative);
       });
       return;
@@ -1471,7 +1471,7 @@ function renderPhase() {
     const defUndeployed = testUnits.filter(u => u.reinforcement && !u.reinforcement.deployed && u.col < 0 && u.side === defSide);
 
     // AI同士なら援軍を自動配置してスキップ
-    // AI同士の援軍配置はaiAutoMoveFireで処理する
+    // AI同士の援軍配置はaiAutoMoveで処理する
 
     if (atkUndeployed.length > 0 && G.gameMode !== 'aivai') {
       renderReinforcementPhase(atkUndeployed);
@@ -1482,7 +1482,7 @@ function renderPhase() {
       return;
     }
     if (!directFireState.activeSide) resetDirectFireState();
-    pgRenderManualMovement(G.initiative);
+    renderMoveFirePhase();
     return;
   }
 
@@ -1496,7 +1496,7 @@ function renderPhase() {
       directFireState.activeSide = G.initiative === 'german' ? 'allied' : 'german';
       directFireState.defenderSide = G.initiative;
       directFireState.mode = 'selectShooter';
-      pgRenderManualMovement(directFireState.activeSide);
+      renderMoveFirePhase();
       return;
     case 'turnEnd':
       html += `ターン ${G.turn} 終了。<br>`;
@@ -1514,10 +1514,9 @@ function renderPhase() {
 function nextPhase() {
   if (G.gameMode === 'online' && !pgOnlineMayAdvance()) return;
   if (pgAIReview) { pgFinishAIReview(); return; }
-  if (pgOrderRun || pgOrderDraft || (['moveFire', 'defMove'].includes(PHASES[G.phase].id) && moveState.movingUnit)) return;
-  pgReconcileOrders();
-  pgOrderHex = null;
-  pgOrderUnit = null;
+  if ((['moveFire', 'defMove'].includes(PHASES[G.phase].id) && moveState.movingUnit)) return;
+  pgReviewHex = null;
+  pgReviewUnit = null;
   pgManualMoves.clear();
   pgManualMoveHistory.length = 0;
   if (G.phase === 0 && !G.diceRolled) {
@@ -1577,19 +1576,13 @@ function runAIvAILoop() {
       break;
 
     case 'supportAtk':
-      aiAutoSupportFire(G.initiative);
-      drawMap();
-      setTimeout(nextAI, 1000);
-      break;
     case 'supportDef':
-      const _defSide = G.initiative === 'german' ? 'allied' : 'german';
-      aiAutoSupportFire(_defSide);
       drawMap();
       setTimeout(nextAI, 1000);
       break;
 
     case 'moveFire':
-      aiAutoMoveFire().then(() => { drawMap(); _showAIConfirmButton('移動・射撃完了', nextAI); });
+      aiAutoMove().then(() => { drawMap(); _showAIConfirmButton('移動・射撃完了', nextAI); });
       break;
 
     case 'assault':
@@ -1624,50 +1617,6 @@ function toggleAIStepMode() {
   _aiStepMode = !_aiStepMode;
   const btn = document.getElementById('btnAIStep');
   if (btn) btn.textContent = _aiStepMode ? '確認:ON' : '確認:OFF';
-}
-
-// AI射撃実行＋結果表示（OKクリックで解決するPromise）
-function _aiFireAndShow(shooters, target, typeLabel) {
-  return new Promise(resolve => {
-    if (target.status === 'eliminated') { resolve(null); return; }
-    const validShooters = shooters.filter(s => s.status !== 'eliminated' &&
-      pgSightStatus(s.col, s.row, target.col, target.row) === 'visible');
-    if (validShooters.length === 0) { resolve(null); return; }
-    // 射撃矢印を表示
-    const shooterHexId = validShooters[0].hexId || toHexId(validShooters[0].col, validShooters[0].row);
-    const targetHexId = target.hexId || toHexId(target.col, target.row);
-    fireArrowData = { from: shooterHexId, to: targetHexId, side: validShooters[0].side };
-    const result = executeDirectFire(validShooters, target);
-    if (!result) { fireArrowData = null; resolve(null); return; }
-    drawMap();
-    if (!_aiStepMode) { setTimeout(() => { fireArrowData = null; drawMap(); resolve(result); }, 400); return; }
-    const c = document.getElementById('phaseContent');
-    const shooterNames = shooters.length > 2
-      ? shooters[0].name + '他' + (shooters.length - 1)
-      : shooters.map(u => u.name).join('+');
-
-    const dmgText = result.newStatus === 'eliminated' ? '壊滅' :
-                    result.damage === 'dd' ? 'DD' :
-                    result.damage === 'd' ? 'D' : '効果なし';
-    const dmgColor = result.newStatus === 'eliminated' ? '#f00' :
-                     result.damage === 'dd' ? '#f80' :
-                     result.damage === 'd' ? '#ff0' : '#888';
-
-    let html = `<div style="padding:10px;background:var(--pg-shade);border:2px solid var(--pg-line);border-radius:6px;text-align:center;">`;
-    html += `<div style="color:var(--pg-muted);font-size:0.85em;">${typeLabel}</div>`;
-    html += `<div style="color:var(--pg-green);margin:4px 0;">${shooterNames} (fp${result.totalFP})</div>`;
-    html += `<div style="color:var(--pg-red);">→ ${target.name} (def${target.def || 0})</div>`;
-    html += `<div style="font-size:2.5em;font-weight:bold;color:var(--pg-accent);margin:8px 0;">D10: ${result.roll}</div>`;
-    if (result.totalMod) html += `<div style="font-size:0.85em;color:var(--pg-muted);">修正: ${result.totalMod} → ${result.modifiedRoll}</div>`;
-    html += `<div style="font-size:1.5em;font-weight:bold;color:${dmgColor};margin:8px 0;">${dmgText}</div>`;
-    html += `<div style="font-size:0.85em;color:var(--pg-ink);">${target.name}: ${(result.prevStatus||'?').toUpperCase()} → ${(result.newStatus||target.status||'?').toUpperCase()}</div>`;
-    html += `<button class="dice-btn" style="padding:8px 30px;margin-top:10px;" onclick="window._aiFireOK()">OK</button>`;
-    html += `</div>`;
-    c.innerHTML = html;
-    drawMap();
-
-    window._aiFireOK = () => { fireArrowData = null; drawMap(); resolve(result); };
-  });
 }
 
 // AI確認ボタン表示（Promiseで待つ）
@@ -1705,43 +1654,18 @@ function _showAIConfirmButton(label, callback) {
   _aiWaitConfirm(label).then(callback);
 }
 
-// AI自動移動・射撃
-async function aiAutoMoveFire(reviewMovement = null) {
-  const _fireDelay = () => new Promise(r => setTimeout(r, 1200));
+// AI自動移動と直接射撃
+async function aiAutoMove(reviewMovement = null) {
   const _moveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
   const atkSide = G.initiative;
-  const defSide = atkSide === 'german' ? 'allied' : 'german';
 
   // 移動軌跡をクリア
   window._aiMoveTrails = window._aiMoveTrails || [];
   window._aiMoveTrails = [];
 
-  // ===== ヘルパー: 射撃判定（1ユニット→1目標） =====
-  function aiSingleFire(shooter, target, logType) {
-    const isArmored = target.type === 'T' || target.type === 'AC';
-    const fp = isArmored ? (shooter.fpAT || 0) : (shooter.fpSoft || 0);
-    if (fp <= 0 || target.status === 'eliminated') return;
-    const roll = Math.floor(Math.random() * 10);
-    const fpIdx = getFPColumnIndex(fp);
-    const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
-    const def = target.def || 5;
-    if (dmg !== 'E' && (typeof dmg === 'number' && dmg < def)) return;
-    if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-      target.status = 'eliminated';
-      addLog(logType, `${shooter.name} → ${target.name}: 壊滅 (fp${fp}, ダイス${roll})`);
-    } else if (typeof dmg === 'number' && dmg >= def + 2) {
-      target.status = target.status === 'd' ? 'eliminated' : 'dd';
-      addLog(logType, `${shooter.name} → ${target.name}: DD (fp${fp}, ダイス${roll})`);
-    } else {
-      target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-      addLog(logType, `${shooter.name} → ${target.name}: D (fp${fp}, ダイス${roll})`);
-    }
-  }
-
   // ===== 先攻側をスタック単位でまとめる（4台ずつに分割） =====
   const hexUnitsMap = {};
-  testUnits.filter(u => u.side === atkSide && u.status !== 'eliminated' && u.type !== 'dummy' &&
-    !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn)
+  testUnits.filter(u => u.side === atkSide && u.status !== 'eliminated' && u.type !== 'dummy')
     .forEach(u => {
       if (u.type === 'AT' || u.type === 'A') return; // AT砲は移動不可。砲兵(A)は別スタックで移動
       if (u.col < 0 || u.col >= MAP_CONFIG.cols) return; // マップ外は除外
@@ -1752,73 +1676,6 @@ async function aiAutoMoveFire(reviewMovement = null) {
   for (const [hexId, units] of Object.entries(hexUnitsMap)) {
     for (let i = 0; i < units.length; i += 4) {
       atkStackList.push(units.slice(i, i + 4));
-    }
-  }
-
-  // ===== ドイツ先攻: 先制射撃（各ユニットが別の敵を個別に撃って最大数を混乱させる） =====
-  if (atkSide === 'german') {
-    const preFireUnits = testUnits.filter(u =>
-      u.side === 'german' && u.status === 'ok' && !u.firedThisTurn &&
-      u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'A' && (u.range || 0) >= 1
-    );
-    const preFireFiredAt = new Set(); // 先制射撃済みの敵
-
-    for (const s of preFireUnits) {
-      if (s.firedThisTurn) continue;
-      const sRange = Math.min(s.range || 1, G.visionRange || 12);
-
-      // OK状態の敵で射程内＋LOS通る（未攻撃優先、防御低い順）
-      const candidates = testUnits.filter(t => {
-        if (t.side !== 'allied' || t.status !== 'ok' || t.type === 'dummy' || t.type === 'leader') return false;
-        const dist = hexDistance(s.col, s.row, t.col, t.row);
-        if (dist <= 0 || dist > sRange) return false;
-        return canTargetUnit(s, t).can;
-      });
-      if (candidates.length === 0) continue;
-
-      // 未攻撃の敵を優先、次に防御低い順
-      candidates.sort((a, b) => {
-        const aFired = preFireFiredAt.has(a.id || a.name) ? 1 : 0;
-        const bFired = preFireFiredAt.has(b.id || b.name) ? 1 : 0;
-        if (aFired !== bFired) return aFired - bFired;
-        // 西側の敵を優先（突破路上の敵を先に排除）
-        const aWest = 30 - (a.col || 30);
-        const bWest = 30 - (b.col || 30);
-        if (Math.abs(aWest - bWest) >= 3) return bWest - aWest;
-        // 突破路から離れた敵は後回し
-        const aRowDist = Math.abs(a.row - s.row);
-        const bRowDist = Math.abs(b.row - s.row);
-        if (aRowDist > 3 && bRowDist <= 3) return 1;
-        if (bRowDist > 3 && aRowDist <= 3) return -1;
-        // 敵射程外の敵を優先（撃ち返されない）
-        const aDist = hexDistance(s.col, s.row, a.col, a.row);
-        const bDist = hexDistance(s.col, s.row, b.col, b.row);
-        const aSafe = (a.range || 0) < aDist ? 1 : 0;
-        const bSafe = (b.range || 0) < bDist ? 1 : 0;
-        if (aSafe !== bSafe) return bSafe - aSafe;
-        return (a.def || 0) - (b.def || 0);
-      });
-
-      const target = candidates[0];
-      const isArmored = target.type === 'T' || target.type === 'AC';
-      const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
-      if (fp <= 0) continue;
-
-      // ダミー除去（初回のみ）
-      if (!s.moveComplete && !s.firedThisTurn) {
-        onUnitAction(s, [s]);
-      }
-      s.firedThisTurn = true;
-      preFireFiredAt.add(target.id || target.name);
-
-      // 射撃矢印
-      const sHexId = s.hexId || toHexId(s.col, s.row);
-      const tHexId = target.hexId || toHexId(target.col, target.row);
-      fireArrowData = { from: sHexId, to: tHexId, side: 'german' };
-      aiFireAt(s.name, fp, target, false);
-      addLog('fire', `先制射撃: ${s.name} (fp${fp}) → ${target.name}`);
-      drawMap(); await _fireDelay();
-      fireArrowData = null;
     }
   }
 
@@ -1960,85 +1817,7 @@ async function aiAutoMoveFire(reviewMovement = null) {
       // 移動後: 平地/荒地で敵に視認されたらダミー除去
       aliveStack.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
 
-      // ===== ストップ射撃 → 反撃 =====
-      const livingStack = aliveStack.filter(u => u.status !== 'eliminated');
-      if (livingStack.length === 0) break;
-
-      // 防御側の射程内＋LOS通るユニット
-      const stopShooters = testUnits.filter(e =>
-        e.side !== atkSide && e.status === 'ok' &&
-        e.type !== 'dummy' && e.type !== 'A' && e.type !== 'leader' &&
-        (e.fpAT > 0 || e.fpSoft > 0)
-      ).filter(e => {
-        const dist = hexDistance(e.col, e.row, best.col, best.row);
-        if (dist <= 0 || dist > (e.range || 1)) return false;
-        return hasLOS(e.col, e.row, best.col, best.row);
-      });
-
-      if (review) await pgResolveAIStopFire(livingStack, review.fire);
-      else if (stopShooters.length > 0) {
-        // ストップ射撃実行 → 射撃側ダミー除去
-        const sfHexes = new Set(stopShooters.map(e => e.hexId || toHexId(e.col, e.row)));
-        sfHexes.forEach(h => {
-          const mate = testUnits.find(u => u.hexId === h && u.status !== 'eliminated' && u.type !== 'dummy');
-          if (mate) onUnitAction(mate, testUnits.filter(u => u.hexId === h && u.status !== 'eliminated'));
-        });
-        // ストップ射撃: Q学習のpolicyに基づく
-        const sortedTargets = [...livingStack].sort((a, b) => (a.def || 5) - (b.def || 5));
-        const defSide = stopShooters[0].side;
-        const qw = defSide === 'german' ? _pgWeightsGerman : _pgWeightsAllied;
-        const sfPolicy = (qw && qw.stopFirePolicy) || 'spread';
-
-        if (sfPolicy === 'concentrate') {
-          const target = sortedTargets.find(t => t.status !== 'eliminated');
-          if (target) {
-            const shootersAlive = stopShooters.filter(e => e.status !== 'eliminated');
-            if (shootersAlive.length > 0) await _aiFireAndShow(shootersAlive, target, 'ストップ射撃(集中)');
-          }
-        } else if (sfPolicy === 'split') {
-          const available = stopShooters.filter(e => e.status !== 'eliminated');
-          const half = Math.ceil(available.length / 2);
-          const g1 = available.slice(0, half);
-          const g2 = available.slice(half);
-          const t1 = sortedTargets.find(t => t.status !== 'eliminated');
-          if (t1 && g1.length > 0) await _aiFireAndShow(g1, t1, 'ストップ射撃(分割)');
-          const t2 = sortedTargets.find(t => t.status !== 'eliminated' && t !== t1);
-          if (t2 && g2.length > 0) await _aiFireAndShow(g2, t2, 'ストップ射撃(分割)');
-          else if (t1 && g2.length > 0 && t1.status !== 'eliminated') await _aiFireAndShow(g2, t1, 'ストップ射撃(分割)');
-        } else {
-          const firedThisStep = new Set();
-          for (const e of stopShooters) {
-            if (e.status === 'eliminated') continue;
-            if (firedThisStep.has(e.id || e.name)) continue;
-            const target = sortedTargets.find(t => t.status !== 'eliminated');
-            if (target) {
-              await _aiFireAndShow([e], target, 'ストップ射撃');
-              firedThisStep.add(e.id || e.name);
-            }
-          }
-        }
-
-        // 反撃: スタック合算で射程内の敵に反撃（砲兵・指揮官除外）
-        const counterShooters = livingStack.filter(u =>
-          u.status === 'ok' && u.type !== 'A' && u.type !== 'leader'
-        );
-        if (counterShooters.length > 0) {
-          // 射程内のストップ射撃者を全て集めて合算射撃
-          const counterTargets = [...stopShooters].filter(e => e.status === 'ok')
-            .sort((a, b) => (a.def || 5) - (b.def || 5));
-          if (counterTargets.length > 0) {
-            const target = counterTargets[0]; // 最弱の敵に集中
-            const inRange = counterShooters.filter(u => {
-              const dist = hexDistance(u.col, u.row, target.col, target.row);
-              return dist > 0 && dist <= (u.range || 1) && hasLOS(u.col, u.row, target.col, target.row);
-            });
-            if (inRange.length > 0) {
-              await _aiFireAndShow(inRange, target, '反撃');
-              inRange.forEach(u => { u._counterFired = true; });
-            }
-          }
-        }
-      }
+      if (review) await pgResolveAIStopFire(aliveStack, review.fire);
 
       // D/DDユニットをスタックから離脱 → 残りMPでLOS外/遮蔽地形へ退避
       const damaged = aliveStack.filter(u => u.status === 'd' || u.status === 'dd');
@@ -2091,7 +1870,7 @@ async function aiAutoMoveFire(reviewMovement = null) {
   function moveArtillery() {
     const artilleryUnitsToMove = testUnits.filter(u =>
       u.side === atkSide && u.type === 'A' && u.status === 'ok' &&
-      !u.moveComplete && !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
+      !u.moveComplete &&
       u.col >= 0 && u.col < MAP_CONFIG.cols
     );
     for (const arty of artilleryUnitsToMove) {
@@ -2110,10 +1889,8 @@ async function aiAutoMoveFire(reviewMovement = null) {
       }
     }
   }
-  if (reviewMovement) {
-    moveArtillery();
-    await reviewMovement();
-  }
+  moveArtillery();
+  if (reviewMovement) await reviewMovement();
 
   // スタック超過チェック（先攻側のみ）
   const hexGroups = {};
@@ -2137,334 +1914,7 @@ async function aiAutoMoveFire(reviewMovement = null) {
       });
     }
   }
-
-  // ===== 射撃処理（火力合算・ダミー除外・サプライズ対応） =====
-  // ヘルパー: 射撃実行（合算火力で1ユニットを攻撃）
-  function aiFireAt(shooterNames, totalFP, target, isSurprise) {
-    if (totalFP <= 0 || target.status === 'eliminated') return;
-    const roll = Math.floor(Math.random() * 10);
-    const fpIdx = getFPColumnIndex(totalFP);
-    const dieKey = String(roll);
-    const dmg = FIRE_COMBAT_TABLE[dieKey] ? FIRE_COMBAT_TABLE[dieKey][fpIdx] : 0;
-    const def = target.def || 5;
-    const prefix = isSurprise ? 'サプライズ: ' : '';
-
-    if (dmg !== 'E' && (typeof dmg === 'number' && dmg < def)) {
-      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: 効果なし (ダイス${roll}, 損害${dmg}, 防御${def})`);
-      return;
-    }
-    if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-      target.status = 'eliminated';
-      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: 壊滅 (ダイス${roll}, 損害${dmg})`);
-    } else if (typeof dmg === 'number' && dmg >= def + 2) {
-      target.status = target.status === 'd' ? 'eliminated' : 'dd';
-      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: DD (ダイス${roll})`);
-    } else {
-      target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-      addLog('fire', `${prefix}${shooterNames} (fp${totalFP}) → ${target.name}: D (ダイス${roll})`);
-    }
-  }
-
-  // イギリス先攻時: 新AIの広く浅く射撃
-  if (atkSide === 'allied') {
-    await ukAI_firePhase();
-  }
-
-  // 先攻側の射撃（反撃済みユニットは除外 — 反撃したら先制射撃不可）
-  const atkShooterHexes = {};
-  testUnits.filter(u => u.side === atkSide && u.status === 'ok' && !u.firedThisTurn && !u._counterFired && u.type !== 'dummy' && u.type !== 'A' && u.type !== 'leader')
-    .forEach(u => {
-      if (!atkShooterHexes[u.hexId]) atkShooterHexes[u.hexId] = [];
-      atkShooterHexes[u.hexId].push(u);
-    });
-
-  // 敵ユニット（ダミー除外）
-  const realTargets = testUnits.filter(u => u.side === defSide && u.status !== 'eliminated' && u.type !== 'dummy');
-  // 攻撃済み追跡: まだ攻撃されていない敵を優先
-  const _atkFiredAt = new Set();
-
-  // ヘルパー: 火力fpで防御defの敵にD以上を与える確率(0-1)を計算（地形修正込み）
-  function calcDamageProb(fp, def, terrainMod) {
-    if (fp <= 0) return 0;
-    const colIdx = getFPColumnIndex(fp);
-    const mod = terrainMod || 0;
-    let hits = 0;
-    for (let d = 0; d <= 9; d++) {
-      const modifiedRoll = d + mod;
-      const row = FIRE_COMBAT_TABLE[String(modifiedRoll)];
-      if (!row) continue;
-      const dmg = row[colIdx];
-      if (dmg === 99 || (typeof dmg === 'number' && dmg >= def)) hits++;
-    }
-    return hits / 10;
-  }
-
-  // ===== ドイツ軍: 最適火力配分で射撃 =====
-  if (atkSide === 'german') {
-    // 全射撃可能ユニットを収集（ヘクス問わず）
-    const allShooters = testUnits.filter(u =>
-      u.side === 'german' && u.status !== 'eliminated' && !u.firedThisTurn && !u._counterFired &&
-      u.type !== 'dummy' && u.type !== 'leader' && (u.range || 0) >= 1
-    );
-    // 全ターゲットを収集
-    const allTargets = realTargets.filter(t => t.status !== 'eliminated');
-
-    // 各シューターが各ターゲットに対して撃てるかと火力を計算
-    function canShootAt(s, t) {
-      const dist = hexDistance(s.col, s.row, t.col, t.row);
-      const sRange = Math.min(s.range || 1, G.visionRange || 12);
-      if (dist <= 0 || dist > sRange) return null;
-      if (!hasLOS(s.col, s.row, t.col, t.row)) return null;
-      const isArmored = t.type === 'T' || t.type === 'AC';
-      const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
-      if (fp <= 0) return null;
-      const tMod = getTerrainFireMod(t.hexId);
-      const rangeMod = (dist === (s.range || 1)) ? -1 : 0;
-      return { fp, mod: tMod + rangeMod, dist };
-    }
-
-    // 各ターゲットに対して「確実にD以上（100%）になる最小ユニット数」を計算
-    function findMinUnitsForGuaranteedD(shooterList, target) {
-      const validShooters = shooterList.filter(s => canShootAt(s, target));
-      if (validShooters.length === 0) return { count: Infinity, shooters: [] };
-      let totalFP = 0;
-      const chosen = [];
-      for (const s of validShooters) {
-        const info = canShootAt(s, target);
-        totalFP += info.fp;
-        chosen.push(s);
-        const prob = calcDamageProb(totalFP, target.def || 5, info.mod);
-        if (prob >= 1.0) return { count: chosen.length, shooters: chosen, totalFP };
-      }
-      // 100%に到達しなくても最高確率を返す
-      return { count: chosen.length, shooters: chosen, totalFP, partial: true };
-    }
-
-    // OK状態の敵を優先（反撃できる敵を先に潰す）
-    const okTargets = allTargets.filter(t => t.status === 'ok');
-    const ddTargets = allTargets.filter(t => t.status === 'd' || t.status === 'dd');
-
-    // 最適配分: OK敵に対して確実D以上の最小火力を割り振る
-    const assignments = []; // [{ shooters: [], target, totalFP }]
-    const usedShooters = new Set();
-
-    // Phase1: OK敵に確実D以上の最小火力を割り振る
-    // 優先: 西側の敵（突破路上）→ 少ない台数で倒せる敵
-    const avgGermanRow = allShooters.length > 0
-      ? allShooters.reduce((s, u) => s + u.row, 0) / allShooters.length : 5;
-    const targetsByMinUnits = okTargets.map(t => {
-      const available = allShooters.filter(s => !usedShooters.has(s.id || s.name));
-      const result = findMinUnitsForGuaranteedD(available, t);
-      // 西側の敵ほど優先（colが小さい）、突破路から離れた敵は後回し
-      const rowDist = Math.abs(t.row - avgGermanRow);
-      const westPriority = (30 - (t.col || 30)); // 西ほど高い
-      const pathRelevance = rowDist <= 3 ? 1 : 0; // 突破路から3行以内
-      return { target: t, ...result, westPriority, pathRelevance };
-    }).filter(r => r.count < Infinity).sort((a, b) => {
-      // 突破路上の敵を最優先
-      if (a.pathRelevance !== b.pathRelevance) return b.pathRelevance - a.pathRelevance;
-      // 西側の敵を優先
-      if (a.westPriority !== b.westPriority) return b.westPriority - a.westPriority;
-      // 同じなら少ない台数で倒せる敵から
-      return a.count - b.count;
-    });
-
-    for (const entry of targetsByMinUnits) {
-      const available = allShooters.filter(s => !usedShooters.has(s.id || s.name));
-      const result = findMinUnitsForGuaranteedD(available, entry.target);
-      if (result.count === Infinity) continue;
-      // 割り振り
-      const assigned = result.shooters.slice(0, result.count);
-      assigned.forEach(s => usedShooters.add(s.id || s.name));
-      let fp = 0;
-      assigned.forEach(s => { const info = canShootAt(s, entry.target); if (info) fp += info.fp; });
-      assignments.push({ shooters: assigned, target: entry.target, totalFP: fp });
-    }
-
-    // Phase2: 余りのシューターをD/DD敵や未カバーの敵に割り振る
-    const remaining = allShooters.filter(s => !usedShooters.has(s.id || s.name));
-    for (const s of remaining) {
-      // 撃てるターゲットの中で最もスコアの高いものを選ぶ
-      let bestT = null, bestScore = -Infinity;
-      for (const t of allTargets) {
-        if (t.status === 'eliminated') continue;
-        const info = canShootAt(s, t);
-        if (!info) continue;
-        let score = calcDamageProb(info.fp, t.def || 5, info.mod) * 100;
-        if (t.status === 'ok') score += 50;
-        else if (t.status === 'd' || t.status === 'dd') score -= 20;
-        // 敵射程外なら優先
-        if ((t.range || 0) < info.dist) score += 30;
-        // 西側の敵を優先、突破路から離れた敵は後回し
-        score += (30 - (t.col || 30)) * 2;
-        const rowDist = Math.abs(t.row - s.row);
-        if (rowDist > 3) score -= 30;
-        if (score > bestScore) { bestScore = score; bestT = t; }
-      }
-      if (bestT) {
-        const info = canShootAt(s, bestT);
-        usedShooters.add(s.id || s.name);
-        assignments.push({ shooters: [s], target: bestT, totalFP: info.fp });
-      }
-    }
-
-    // 射撃実行
-    for (const { shooters: firingUnits, target, totalFP } of assignments) {
-      if (target.status === 'eliminated') continue;
-      const validUnits = firingUnits.filter(u => u.status !== 'eliminated' && !u.firedThisTurn);
-      if (validUnits.length === 0) continue;
-
-      // ダミー除去
-      validUnits.forEach(u => {
-        if (!u.moveComplete && !u.firedThisTurn) {
-          onUnitAction(u, [u]);
-        }
-      });
-
-      let fp = 0;
-      const names = [];
-      validUnits.forEach(u => {
-        const info = canShootAt(u, target);
-        if (info) { fp += info.fp; names.push(u.name); u.firedThisTurn = true; }
-      });
-      if (fp <= 0) continue;
-
-      const nameStr = names.length > 2 ? names[0] + '他' + (names.length - 1) : names.join('+');
-      const sHexId = validUnits[0].hexId || toHexId(validUnits[0].col, validUnits[0].row);
-      const tHexId = target.hexId || toHexId(target.col, target.row);
-      fireArrowData = { from: sHexId, to: tHexId, side: 'german' };
-      aiFireAt(nameStr, fp, target, false);
-      addLog('fire', `射撃(${names.length}台,fp${fp}) → ${target.name}`);
-      drawMap(); await _fireDelay();
-      fireArrowData = null;
-    }
-  }
-
-  if (!reviewMovement) moveArtillery();
-
-  // ===== 連合軍（または非ドイツ）: 従来のヘクス単位射撃 =====
-  if (atkSide !== 'german') {
-  for (const [hexId, shooters] of Object.entries(atkShooterHexes)) {
-    if (shooters.length === 0) continue;
-
-    const maxRange = Math.max(...shooters.map(s => s.range || 1));
-    const effectiveRange = Math.min(maxRange, G.visionRange || 12);
-    const inRangeTargets = realTargets.filter(t => {
-      if (t.status === 'eliminated') return false;
-      const dist = hexDistance(shooters[0].col, shooters[0].row, t.col, t.row);
-      if (dist <= 0 || dist > effectiveRange) return false;
-      return canTargetUnit(shooters[0], t).can;
-    });
-    if (inRangeTargets.length === 0) continue;
-
-    onUnitAction(shooters[0], shooters);
-    const allInHex = testUnits.filter(u => u.hexId === hexId && u.status !== 'eliminated');
-    const allHaveDummy = allInHex.every(u => u.type === 'dummy' || u.hasDummy);
-    const isSurprise = allHaveDummy && allInHex.some(u => u.type === 'dummy');
-    const shotCount = isSurprise ? 2 : 1;
-
-    const availableShooters = shooters.filter(s => !s.firedThisTurn);
-    const okTargets = inRangeTargets.filter(t => t.status === 'ok' && !_atkFiredAt.has(t.id || t.name));
-
-    let useIndividualFire = false;
-    if (availableShooters.length >= 2 && okTargets.length >= 2) {
-      let canDCount = 0;
-      for (const s of availableShooters) {
-        const sampleTarget = okTargets[0];
-        const isArmored = sampleTarget.type === 'T' || sampleTarget.type === 'AC';
-        const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
-        const dist = hexDistance(s.col, s.row, sampleTarget.col, sampleTarget.row);
-        const tMod = getTerrainFireMod(sampleTarget.hexId);
-        const rangeMod = (dist === (s.range || 1)) ? -1 : 0;
-        if (dist > 0 && dist <= (s.range || 1) && calcDamageProb(fp, sampleTarget.def || 5, tMod + rangeMod) >= 0.3) {
-          canDCount++;
-        }
-      }
-      if (canDCount >= 2) useIndividualFire = true;
-    }
-
-    if (useIndividualFire) {
-      const targetPool = [...okTargets];
-      for (const s of availableShooters) {
-        if (s.firedThisTurn) continue;
-        if (targetPool.length === 0) break;
-        let bestT = null, bestScore = -Infinity;
-        for (const t of targetPool) {
-          if (t.status === 'eliminated') continue;
-          const dist = hexDistance(s.col, s.row, t.col, t.row);
-          const sEffRange = Math.min(s.range || 1, G.visionRange || 12);
-          if (dist <= 0 || dist > sEffRange) continue;
-          if (!hasLOS(s.col, s.row, t.col, t.row)) continue;
-          const isArmored = t.type === 'T' || t.type === 'AC';
-          const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
-          const prob = calcDamageProb(fp, t.def || 0);
-          let score = prob * 100;
-          if (!_atkFiredAt.has(t.id || t.name)) score += 50;
-          if (t.status === 'ok') score += 30;
-          else if (t.status === 'd' || t.status === 'dd') score -= 40;
-          if (score > bestScore) { bestScore = score; bestT = t; }
-        }
-        if (!bestT) continue;
-        const isArmored = bestT.type === 'T' || bestT.type === 'AC';
-        const fp = isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
-        if (fp <= 0) continue;
-        s.firedThisTurn = true;
-        _atkFiredAt.add(bestT.id || bestT.name);
-        const idx = targetPool.indexOf(bestT);
-        if (idx >= 0) targetPool.splice(idx, 1);
-        for (let shot = 0; shot < shotCount; shot++) {
-          if (bestT.status === 'eliminated') break;
-          aiFireAt(s.name, fp, bestT, isSurprise);
-        }
-        drawMap(); await _fireDelay();
-      }
-    } else {
-      let bestTarget = null, bestScore = -Infinity;
-      inRangeTargets.forEach(t => {
-        if (t.status === 'eliminated') return;
-        const dist = hexDistance(shooters[0].col, shooters[0].row, t.col, t.row);
-        const tid = t.id || t.name;
-        let score = 0;
-        if (!_atkFiredAt.has(tid)) score += 100;
-        if (t.status === 'ok') score += 50;
-        else if (t.status === 'd' || t.status === 'dd') score -= 40;
-        score -= (t.def || 0) * 5;
-        score -= dist * 2;
-        if (score > bestScore) { bestScore = score; bestTarget = t; }
-      });
-      if (!bestTarget) continue;
-      _atkFiredAt.add(bestTarget.id || bestTarget.name);
-
-      const isArmored = bestTarget.type === 'T' || bestTarget.type === 'AC';
-      let totalFP = 0;
-      const firingNames = [];
-      shooters.forEach(s => {
-        const dist = hexDistance(s.col, s.row, bestTarget.col, bestTarget.row);
-        if (dist > 0 && dist <= (s.range || 1)) {
-          totalFP += isArmored ? (s.fpAT || 0) : (s.fpSoft || 0);
-          firingNames.push(s.name);
-          s.firedThisTurn = true;
-        }
-      });
-      if (totalFP <= 0) continue;
-      const nameStr = firingNames.length > 2 ? firingNames[0] + '他' + (firingNames.length - 1) : firingNames.join('+');
-      for (let shot = 0; shot < shotCount; shot++) {
-        if (bestTarget.status === 'eliminated') break;
-        aiFireAt(nameStr, totalFP, bestTarget, isSurprise);
-      }
-      drawMap(); await _fireDelay();
-    }
-
-    if (isSurprise) {
-      allInHex.forEach(u => { u.hasDummy = false; });
-      const dummies = testUnits.filter(u => u.hexId === hexId && u.type === 'dummy');
-      dummies.forEach(d => { d.status = 'eliminated'; });
-      addLog('fire', `サプライズ後ダミー除去 (${hexId})`);
-    }
-  }
-  } // end if atkSide !== 'german'
-
-  // 後攻側はストップ射撃のみ（移動中に処理済み）— 別途の射撃フェイズなし
+  pgRunAIDirectFire(atkSide);
 }
 
 // AI自動突撃
@@ -2523,8 +1973,7 @@ async function aiAutoDefMove() {
   // ドイツが後攻の場合: 左へ突進（移動のみ、射撃不可）
   if (defSide === 'german') {
     const geStacks = {};
-    testUnits.filter(u => u.side === 'german' && u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'AT' && u.type !== 'A' &&
-      !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn)
+    testUnits.filter(u => u.side === 'german' && u.status !== 'eliminated' && u.type !== 'dummy' && u.type !== 'AT' && u.type !== 'A')
       .forEach(u => {
         if (!geStacks[u.hexId]) geStacks[u.hexId] = [];
         geStacks[u.hexId].push(u);
@@ -2579,79 +2028,9 @@ async function aiAutoDefMove() {
         alive.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
         if (alive.every(u => u.status === 'eliminated')) break;
 
-        // ストップ射撃チェック（敵の射程内に入ったか）
-        const defStopThreats = checkStopFireAt(best.col, best.row, alive[0].side);
         if (review) {
           const fired = await pgResolveAIStopFire(alive, review.fire);
           if (fired || review.changed) break;
-          continue;
-        }
-        // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
-        const filteredThreats = defStopThreats.filter(e => {
-          if ((e.range || 1) >= 3) {
-            const dist = hexDistance(e.col, e.row, best.col, best.row);
-            if (dist === e.range && mp > 0) {
-              // 移動前の位置からの距離と比較: 近づいてるなら控える、離れてるなら撃つ
-              const prevDist = hexDistance(e.col, e.row, alive[0].col, alive[0].row);
-              if (dist < prevDist) return false; // 向かってくる → 控える
-            }
-          }
-          return true;
-        });
-        if (filteredThreats.length > 0) {
-          // 敵スタック単位でグループ化
-          const defEnemyStacks = {};
-          filteredThreats.forEach(e => {
-            const eHex = e.hexId || toHexId(e.col, e.row);
-            if (!defEnemyStacks[eHex]) defEnemyStacks[eHex] = [];
-            defEnemyStacks[eHex].push(e);
-          });
-          // 各敵スタックが1回ストップ射撃（火力合算）→ サプライズ判定→ダミー除去
-          for (const [eHex, eStack] of Object.entries(defEnemyStacks)) {
-            const aliveE = eStack.filter(e => e.status === 'ok');
-            if (aliveE.length === 0) continue;
-            // サプライズ判定（ダミー除去前に行う）
-            const sfSurprise = isSurpriseAttack(eHex, aliveE[0].side);
-            const sfShotCount = sfSurprise ? 2 : 1;
-            onUnitAction(aliveE[0], aliveE);
-            const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
-            let sfFP = 0;
-            aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
-            if (sfFP <= 0) continue;
-            for (let sfShot = 0; sfShot < sfShotCount; sfShot++) {
-              const sfTarget = alive.find(u => u.status !== 'eliminated' && u.type !== 'leader') || alive.find(u => u.status !== 'eliminated') || alive[0];
-              if (!sfTarget || sfTarget.status === 'eliminated') break;
-              const sfResult = executeDirectFire(aliveE, sfTarget);
-              const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
-              const sfLabel = sfSurprise ? `サプライズ${sfShot + 1}回目` : 'ストップ射撃';
-              addLog('stop', `${sfLabel}: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
-            }
-          }
-          // 反撃（AI自動: 火力合算で1回）
-          const aliveAfter = alive.filter(u => u.status !== 'eliminated');
-          if (aliveAfter.length > 0) {
-            const counterTarget = defStopThreats.filter(e => e.status !== 'eliminated')
-              .sort((a, b) => (a.def || 5) - (b.def || 5))[0];
-            if (counterTarget) {
-              const dist2 = hexDistance(aliveAfter[0].col, aliveAfter[0].row, counterTarget.col, counterTarget.row);
-              if (dist2 > 0 && dist2 <= Math.max(...aliveAfter.map(u => u.range || 1))) {
-                const isArmoredT = counterTarget.type === 'T' || counterTarget.type === 'AC';
-                let crFP = 0;
-                const crUnits = [];
-                aliveAfter.forEach(u => {
-                  const fp = isArmoredT ? (u.fpAT || 0) : (u.fpSoft || 0);
-                  if (fp > 0 && dist2 <= (u.range || 1)) { crFP += fp; crUnits.push(u); }
-                });
-                if (crFP > 0) {
-                  const crResult = executeDirectFire(crUnits, counterTarget);
-                  const crNames = crUnits.length > 2 ? crUnits[0].name + '他' + (crUnits.length - 1) : crUnits.map(u => u.name).join('+');
-                  addLog('counter', `反撃: ${crNames} (fp${crFP}) → ${counterTarget.name}`);
-                }
-              }
-            }
-          }
-          if (alive.every(u => u.status === 'eliminated')) break;
-          break; // ストップ射撃を受けたら移動停止
         }
       }
       // 突破判定（シナリオ対応）
@@ -2666,7 +2045,7 @@ async function aiAutoDefMove() {
   }
 }
 
-// ヘルパー: AIスタック移動（1歩ずつ目標方向へ、ストップ射撃付き）
+// ヘルパー: AIスタック移動（1歩ずつ目標方向へ）
 const _globalMoveDelay = (ms) => new Promise(r => setTimeout(r, ms || 1500));
 
 // BFS最短経路計算（移動コストベース、スタック制限考慮）
@@ -2759,7 +2138,6 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
     const startCenter = getHexCenter(alive[0].col, alive[0].row);
     _aiMoveTrail = [{ x: startCenter.x, y: startCenter.y }];
 
-    let stoppedByFire = false; // ストップ射撃を受けたか
     while (mp > 0 && pathIdx < path.length) {
       const curCol = alive[0].col;
       const curRow = alive[0].row;
@@ -2773,8 +2151,8 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
       }
       const mc = getMoveCost(alive[0], curCol, curRow, next.col, next.row, formation);
       if (mc.cost === Infinity) break;
-      // 最初の1ヘクスはコスト超過でも進入可（ストップ射撃後を除く）
-      const isFirstStep = (pathIdx === 0 && !stoppedByFire);
+      // 最初の1ヘクスはコスト超過でも進入可
+      const isFirstStep = pathIdx === 0;
       if (!isFirstStep && mp < mc.cost) break;
 
       // スタック制限チェック
@@ -2808,77 +2186,9 @@ async function aiMoveToward(units, targetCol, targetRow, isTank) {
       // 移動後: 平地/荒地で敵に視認されたらダミー除去
       alive.forEach(u => { if (u.status !== 'eliminated') checkDummyVisibility(u); });
       if (alive.every(u => u.status === 'eliminated')) break;
-      // ストップ射撃チェック
-      const threats = checkStopFireAt(next.col, next.row, alive[0].side);
       if (review) {
         const fired = await pgResolveAIStopFire(alive, review.fire);
         if (fired || review.changed) break;
-        continue;
-      }
-      // 射程3以上で最大射程の敵は、向かってくる場合のみ控える（逃げる敵は撃つ）
-      const filteredThreats = threats.filter(e => {
-        if ((e.range || 1) >= 3) {
-          const eDist = hexDistance(e.col, e.row, next.col, next.row);
-          if (eDist === e.range && mp > 0) {
-            const prevDist = hexDistance(e.col, e.row, alive[0].col, alive[0].row);
-            if (eDist < prevDist) return false; // 向かってくる → 控える
-          }
-        }
-        return true;
-      });
-      if (filteredThreats.length > 0) {
-        const enemyStacks = {};
-        filteredThreats.forEach(e => {
-          const eHex = e.hexId || toHexId(e.col, e.row);
-          if (!enemyStacks[eHex]) enemyStacks[eHex] = [];
-          enemyStacks[eHex].push(e);
-        });
-        for (const [eHex, eStack] of Object.entries(enemyStacks)) {
-          const aliveE = eStack.filter(e => e.status === 'ok');
-          if (aliveE.length === 0) continue;
-          // サプライズ判定（ダミー除去前に行う）
-          const sfSurprise = isSurpriseAttack(eHex, aliveE[0].side);
-          const sfShotCount = sfSurprise ? 2 : 1;
-          onUnitAction(aliveE[0], aliveE); // ストップ射撃 → 射撃側ダミー除去
-          const isArmored = alive[0].type === 'T' || alive[0].type === 'AC';
-          let sfFP = 0;
-          aliveE.forEach(e => { sfFP += isArmored ? (e.fpAT || 0) : (e.fpSoft || 0); });
-          if (sfFP <= 0) continue;
-          for (let sfShot = 0; sfShot < sfShotCount; sfShot++) {
-            const sfTarget = alive.find(u => u.status !== 'eliminated' && u.type !== 'leader') || alive.find(u => u.status !== 'eliminated') || alive[0];
-            if (!sfTarget || sfTarget.status === 'eliminated') break;
-            executeDirectFire(aliveE, sfTarget);
-            const sfNames = aliveE.length > 2 ? aliveE[0].name + '他' + (aliveE.length - 1) : aliveE.map(e => e.name).join('+');
-            const sfLabel = sfSurprise ? `サプライズ${sfShot + 1}回目` : 'ストップ射撃';
-            addLog('stop', `${sfLabel}: ${sfNames} (fp${sfFP}) → ${sfTarget.name}`);
-          }
-        }
-        // 反撃
-        const aliveAfter = alive.filter(u => u.status !== 'eliminated');
-        if (aliveAfter.length > 0) {
-          const counterTarget = threats.filter(e => e.status !== 'eliminated')
-            .sort((a, b) => (a.def || 5) - (b.def || 5))[0];
-          if (counterTarget) {
-            const dist2 = hexDistance(aliveAfter[0].col, aliveAfter[0].row, counterTarget.col, counterTarget.row);
-            if (dist2 > 0 && dist2 <= Math.max(...aliveAfter.map(u => u.range || 1))) {
-              const isArmoredT = counterTarget.type === 'T' || counterTarget.type === 'AC';
-              let crFP = 0;
-              const crUnits = [];
-              aliveAfter.forEach(u => {
-                const fp = isArmoredT ? (u.fpAT || 0) : (u.fpSoft || 0);
-                if (fp > 0 && dist2 <= (u.range || 1)) { crFP += fp; crUnits.push(u); }
-              });
-              if (crFP > 0) {
-                executeDirectFire(crUnits, counterTarget);
-                const crNames = crUnits.length > 2 ? crUnits[0].name + '他' + (crUnits.length - 1) : crUnits.map(u => u.name).join('+');
-                addLog('counter', `反撃: ${crNames} (fp${crFP}) → ${counterTarget.name}`);
-              }
-            }
-          }
-        }
-        if (alive.every(u => u.status === 'eliminated')) break;
-        stoppedByFire = true;
-        break; // ストップ射撃を受けたら移動停止
       }
     }
     // 移動完了フラグ
@@ -2916,7 +2226,6 @@ async function _aiAutoDefMoveContinue() {
   const alliedStacks = {};
   testUnits.filter(u =>
     u.side === 'allied' && u.status !== 'eliminated' &&
-    !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip' &&
     u.col >= 0 && u.col < MAP_CONFIG.cols
   ).forEach(u => {
@@ -4173,6 +3482,15 @@ function drawMap() {
     }
   }
 
+  const reviewRange = pgCalculateReviewRange();
+  if (reviewRange) {
+    for (const key of reviewRange.hexes) {
+      const [col, row] = key.split(',').map(Number);
+      pgDrawMoveHex(ctx, col, row, hexSize, false);
+    }
+    for (const {col, row} of reviewRange.origins) pgDrawMoveHex(ctx, col, row, hexSize, true);
+  }
+
   // ユニット描画（カスケード方式：右上ずらし、起点を枚数に応じて左下に）
   const unitSize = hexSize * 0.9;
   const cascadeOffX = unitSize * 0.18;  // 右方向ずらし量
@@ -4650,7 +3968,6 @@ function drawMap() {
     });
   }
 
-  pgDrawMovementOrders(ctx);
 
   // 移動軌跡を描画
   if (window._aiMoveTrails && window._aiMoveTrails.length > 0) {
@@ -4750,7 +4067,7 @@ function initMap() {
 
     // ユニットのヒットテスト
     const hitU = hitTestUnit(mx, my);
-    if (G.gameMode !== 'online' && hitU && !hitU.pgMovementOrder && !pgAIReview && !pgOrderRun && !pgOrderDraft) {
+    if (G.gameMode !== 'online' && hitU && !pgAIReview) {
       // スタック解除モードなら個別、通常ならスタック単位
       if (stackSplitMode) {
         dragUnit = hitU;
@@ -4759,7 +4076,7 @@ function initMap() {
         dragUnit = hitU;
         const hexId = hitU.hexId || toHexId(hitU.col, hitU.row);
         dragStack = testUnits.filter(u =>
-          (u.hexId || toHexId(u.col, u.row)) === hexId && u.status !== 'eliminated' && !u.pgMovementOrder
+          (u.hexId || toHexId(u.col, u.row)) === hexId && u.status !== 'eliminated'
         );
       }
       dragOffX = mx - hitU.x;
@@ -5129,10 +4446,10 @@ window.addEventListener('popstate', () => {
 <!-- フェイズ別JS読み込み -->
 <script src="phase_initiative.js"></script>
 <script src="phase_recovery.js"></script>
-<script src="phase_support.js"></script>
-<script src="phase_movefire.js?v=20261116-pg-move-los"></script>
-<script src="movement_orders.js?v=20261116-pg-move-los"></script>
-<script src="online.js"></script>
+<script src="phase_support.js?v=20261120-pg-stack"></script>
+<script src="phase_movefire.js?v=20261120-pg-fire"></script>
+<script src="movement_orders.js?v=20261120-pg-stack"></script>
+<script src="online.js?v=20261120-pg-stack"></script>
 <script src="phase_air.js"></script>
 <script src="ai_placement.js"></script>
 <script>
@@ -5149,10 +4466,10 @@ window.addEventListener('popstate', () => {
 (function() {
   var sid = parseInt(new URLSearchParams(window.location.search).get('scenario')) || 2;
   if (sid >= 3) {
-    document.write('<script src="ai_blackboard.js"><\/script>');
+    document.write('<script src="ai_blackboard.js?v=20261120-pg-stack"><\/script>');
   } else {
-    document.write('<script src="ai_german_s2.js"><\/script>');
-    document.write('<script src="ai_allied_s2.js"><\/script>');
+    document.write('<script src="ai_german_s2.js?v=20261120-pg-stack"><\/script>');
+    document.write('<script src="ai_allied_s2.js?v=20261120-pg-stack"><\/script>');
   }
 })();
 </script>

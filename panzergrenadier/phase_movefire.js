@@ -880,8 +880,8 @@ function pgPickFriendlyUnit(uid) {
   const unit = (directFireState.atkAdjacentHexes || [directFireState.atkHexId])
     .flatMap(pgFriendlyUnits).find(unit => (unit.id || unit.name) === uid);
   if (!unit) return;
-  pgOrderUnit = unit;
-  pgOrderHex = unit.hexId;
+  pgReviewUnit = unit;
+  pgReviewHex = unit.hexId;
   if (checkState.atk.has(uid) || pgCanPickFriendlyUnit(unit)) {
     toggleUnitCheck('atk', uid, !checkState.atk.has(uid));
   } else {
@@ -920,7 +920,7 @@ function updateFireRange() {
 function pgSelectedFireLines() {
   const df = directFireState;
   if (!pgMayInitiateDirectFire() || df.mode !== 'selectShooter' || pgAIReview ||
-      pgOrderDraft || losMode || losCheckMode || fireArrowData?.from || !df.defHexId) return [];
+      losMode || losCheckMode || fireArrowData?.from || !df.defHexId) return [];
   const target = testUnits.find(unit => unit.hexId === df.defHexId && checkState.def.has(unit.id || unit.name))
     || getActiveFortification(df.defHexId);
   if (!target) return [];
@@ -976,6 +976,111 @@ function calcFirePreview(shooters, target) {
   };
 }
 
+function pgAIFireTargetInRange(shooter, target) {
+  const {can, dist} = canTargetUnit(shooter, target);
+  if (!can) return false;
+  const enemyRange = target.range || 0;
+  if (shooter.range - enemyRange <= 1) return dist === shooter.range;
+  return dist > enemyRange && dist < shooter.range;
+}
+
+function pgAIFireOptions(stack, targets) {
+  const groups = [];
+  for (let mask = 1; mask < (1 << stack.length); mask++) {
+    const shooters = stack.filter((_, index) => (mask & (1 << index)) !== 0);
+    const canCombine = shooters.every((shooter, index) =>
+      shooters.slice(0, index).every(other => canCoopDirectFire(shooter, other)));
+    if (canCombine) groups.push({mask, shooters});
+  }
+
+  return new Map(targets.map(target => {
+    const armored = target.type === 'T' || target.type === 'AC';
+    const dist = hexDistance(stack[0].col, stack[0].row, target.col, target.row);
+    const eligible = new Set(stack.filter(shooter =>
+      (armored ? shooter.fpAT : shooter.fpSoft) > 0 && pgAIFireTargetInRange(shooter, target)));
+    const options = new Map();
+    for (const {mask, shooters} of groups) {
+      if (!shooters.every(shooter => eligible.has(shooter))) continue;
+      // Range modifiers are applied to the lead shooter in the direct-fire rules.
+      const lead = shooters.find(unit => unit.range < 3 || unit.range !== dist);
+      const firing = lead ? [lead, ...shooters.filter(unit => unit !== lead)] : shooters;
+      const chance = 100 - calcFirePreview(firing, target).none;
+      if (chance > 0) options.set(mask, {mask, shooters: firing, target, chance});
+    }
+    return [target, options];
+  }));
+}
+
+function pgAllocateAIFire(stack, optionsByTarget, threshold) {
+  // Keep the best assignment for each set of used shooters, with one shot per target.
+  let plans = new Map([[0, {shots: [], used: 0, chance: 0}]]);
+  let fallback = null;
+  for (const options of optionsByTarget.values()) {
+    const next = new Map(plans);
+    for (const shot of options.values()) {
+      if (!fallback || shot.chance > fallback.chance ||
+          (shot.chance === fallback.chance && shot.shooters.length > fallback.shooters.length)) fallback = shot;
+      if (shot.chance <= threshold) continue;
+      for (const [mask, plan] of plans) {
+        if (mask & shot.mask) continue;
+        const combined = mask | shot.mask;
+        const previous = next.get(combined);
+        const count = plan.shots.length + 1;
+        const chance = plan.chance + shot.chance;
+        if (previous && (previous.shots.length > count ||
+            (previous.shots.length === count && previous.chance >= chance))) continue;
+        next.set(combined, {shots: [...plan.shots, shot], used: plan.used + shot.shooters.length, chance});
+      }
+    }
+    plans = next;
+  }
+
+  const [mask, best] = [...plans].sort(([, a], [, b]) =>
+    b.shots.length - a.shots.length || a.used - b.used || b.chance - a.chance)[0];
+  if (!best.shots.length && !fallback) return [];
+
+  const shots = best.shots.length ? best.shots.slice() : [fallback];
+  const used = best.shots.length ? mask : fallback.mask;
+  for (let index = 0; index < stack.length; index++) {
+    const bit = 1 << index;
+    if (used & bit) continue;
+    for (let i = 0; i < shots.length; i++) {
+      const shot = shots[i];
+      const combined = optionsByTarget.get(shot.target).get(shot.mask | bit);
+      if (!combined || combined.chance < shot.chance) continue;
+      shots[i] = combined;
+      break;
+    }
+  }
+  return shots;
+}
+
+function pgPlanAIFire(stack, targets, random = Math.random) {
+  const options = pgAIFireOptions(stack, targets);
+  const usual = pgAllocateAIFire(stack, options, 70);
+  if (random() < 0.7) return usual;
+  const spread = pgAllocateAIFire(stack, options, 60);
+  return spread.length > usual.length ? spread : usual;
+}
+
+function pgRunAIDirectFire(side) {
+  const stacks = new Map();
+  for (const unit of testUnits) {
+    if (unit.side !== side || !pgOnMap(unit) || STACK_EXEMPT_TYPES.includes(unit.type) ||
+        unit.firedThisTurn || unit._counterFired ||
+        !canDirectFireSimple(unit) || !canDirectFire(unit).can) continue;
+    if (!stacks.has(unit.hexId)) stacks.set(unit.hexId, []);
+    stacks.get(unit.hexId).push(unit);
+  }
+  for (const stack of stacks.values()) {
+    const targets = testUnits.filter(unit =>
+      unit.side !== side && pgOnMap(unit) && !STACK_EXEMPT_TYPES.includes(unit.type) &&
+      !getActiveFortification(unit.hexId));
+    for (const {shooters, target} of pgPlanAIFire(stack, targets))
+      executeDirectFire(shooters, target);
+  }
+}
+
 function pgMayInitiateDirectFire() {
   return PHASES[G.phase]?.id === 'moveFire';
 }
@@ -984,7 +1089,7 @@ function renderMoveFirePhase() {
   const c = document.getElementById('phaseContent');
   const df = directFireState;
   let html = '';
-  if ((pgAIReview?.stage === 'review' || pgOrderDraft) && df.mode !== 'moving') {
+  if (pgAIReview?.stage === 'review' && df.mode !== 'moving') {
     c.replaceChildren(pgMovementPanel());
     return;
   }
@@ -1016,17 +1121,17 @@ function renderMoveFirePhase() {
         html += `<div style="margin-top:4px;display:flex;gap:4px;">`;
         html += `<button class="btn-sm" style="background:var(--pg-red-bg);" onclick="resolveStopFire()">ストップ射撃を実行</button>`;
         html += `<button class="btn-sm" onclick="skipStopFire()">射撃なし（移動続行）</button>`;
-        if (!ms._stopFired && !pgOrderRun) html += '<button class="btn-sm" onclick="cancelMove()">移動を取り消す</button>';
+        if (!ms._stopFired) html += '<button class="btn-sm" onclick="cancelMove()">移動を取り消す</button>';
         html += `</div></div>`;
       }
 
       html += `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">`;
       if (!ms.stopFirePending) {
         html += `<button class="btn-sm" onclick="confirmMove()">移動確定</button>`;
-        if (!ms._stopFired && !pgOrderRun) {
+        if (!ms._stopFired) {
           html += `<button class="btn-sm" onclick="cancelMove()">移動を取り消す</button>`;
         }
-        if (ms.path.length === 1 && !ms._stopFired && !pgOrderRun) {
+        if (ms.path.length === 1 && !ms._stopFired) {
           const inMarch = combatUnits.some(unit => unit.marchMode);
           if ((inMarch || combatUnits.some(isVehicle)) &&
               combatUnits.every(unit => unit.status === 'ok' && (inMarch || !unit.noTransport))) {
@@ -1037,7 +1142,7 @@ function renderMoveFirePhase() {
           }
         }
         // オーバーラン (12-5): 隣接敵がいれば表示
-        if (!pgAIReview && !pgOrderRun && combatUnits.every(unit => !unit.marchMode && unit.status === 'ok') && !u.outOfAmmo && !ms.cautious) {
+        if (!pgAIReview && combatUnits.every(unit => !unit.marchMode && unit.status === 'ok') && !u.outOfAmmo && !ms.cautious) {
           const adjEnemies = getAdjacentEnemyStacks(u);
           if (Object.keys(adjEnemies).length > 0) {
             html += `</div><div style="margin-top:4px;padding:4px;background:var(--pg-red-bg);border:1px solid var(--pg-line);border-radius:3px;">`;
@@ -1214,7 +1319,7 @@ function renderMoveFirePhase() {
 
 
   c.innerHTML = html;
-  if (G.gameMode !== 'aivai') c.querySelector('.pg-friendly-controls').append(pgMovementPanel(false));
+  if (G.gameMode !== 'aivai') c.querySelector('.pg-friendly-controls').append(pgMovementPanel());
 }
 
 // チェック済みユニットで射撃実行
@@ -1362,10 +1467,9 @@ function onMoveFireUnitClick(uid) {
 function onMoveFireMapClick(col, row, cmdKey, hitUnit) {
   if (pgPickAIMoveCorrection(col, row)) return;
   if (pgAIReview?.stage === 'ai' || _pendingReconState) return;
-  if (pgSelectOrderHex(col, row)) return;
   if (directFireState.mode !== 'moving') {
-    pgOrderHex = toHexId(col, row);
-    pgOrderUnit = hitUnit?.hexId === pgOrderHex ? hitUnit : null;
+    pgReviewHex = toHexId(col, row);
+    pgReviewUnit = hitUnit?.hexId === pgReviewHex ? hitUnit : null;
     if (pgAIReview?.stage === 'review') {
       renderMoveFirePhase();
       drawMap();
@@ -1393,7 +1497,7 @@ function onMoveFireMapClick(col, row, cmdKey, hitUnit) {
   if (df.mode === 'moving' && moveState.movingUnit) {
     // 移動可能ヘクスをクリック→移動
     const key = `${col},${row}`;
-    if (!pgOrderRun && moveState.validHexes[key]) {
+    if (moveState.validHexes[key]) {
       moveToHex(col, row);
       return;
     }
@@ -1948,11 +2052,6 @@ function finishStopFire() {
 
   // ストップ射撃完了後にダミー視認チェック
   if (ms.movingUnit) checkDummyVisibility(ms.movingUnit);
-  if (pgOrderRun) {
-    if (ms.movingUnit) confirmMove();
-    else queueMicrotask(pgContinueOrders);
-    return;
-  }
 
   renderMoveFirePhase();
   drawMap();
@@ -2308,12 +2407,12 @@ function calculateMovableHexes(unit, formation, cautious, movingGroup = moveStat
 
 function pgCanMoveSelection(units) {
   return units.length > 0 && units.every(unit =>
-    unit.hexId === units[0].hexId && pgCanReceiveOrder(unit) &&
-    unit.status !== 'dd' && !unit.moveComplete && !pgUnitHasFired(unit) && !unit.pgMovementOrder);
+    unit.hexId === units[0].hexId && pgCanMoveUnit(unit) &&
+    unit.status !== 'dd' && !unit.moveComplete && !pgUnitHasFired(unit));
 }
 
 function startStackMove() {
-  if (pgOrderDraft || pgAIReview || pgOrderRun || directFireState.mode === 'moving') return;
+  if (pgAIReview || directFireState.mode === 'moving') return;
   const units = pgPickedFriendlyUnits();
   if (!pgCanMoveSelection(units)) return;
   if (units.length === 1) {
@@ -2372,8 +2471,8 @@ function clearSelection() {
   directFireState.atkHexId = null;
   directFireState.defHexId = null;
   directFireState.atkAdjacentHexes = null;
-  pgOrderHex = null;
-  pgOrderUnit = null;
+  pgReviewHex = null;
+  pgReviewUnit = null;
   directFireState.mode = 'selectShooter';
   fireArrowData = null;
   if (typeof fireRangeHexes !== 'undefined') {
@@ -2386,10 +2485,9 @@ function clearSelection() {
   drawMap();
 }
 
-function startMove(unit, followingOrder = false) {
-  if (!pgCanReceiveOrder(unit) || unit.status === 'dd' || unit.moveComplete || pgOrderDraft ||
-      (unit.pgMovementOrder && !followingOrder) ||
-      (pgAIReview && !followingOrder && !pgAIReview.returned.has(unit))) return;
+function startMove(unit) {
+  if (!pgCanMoveUnit(unit) || unit.status === 'dd' || unit.moveComplete ||
+      (pgAIReview && !pgAIReview.returned.has(unit))) return;
   if (unit.side !== directFireState.activeSide) return;
   const uid = unit.id || unit.name;
   if (directFireState.firedUnits.has(uid)) {
@@ -2700,15 +2798,14 @@ function finishConfirmMove() {
   }
   pgRecordConfirmedMove(moveState);
   if (pgOnMap(moveState.movingUnit)) {
-    pgOrderHex = moveState.movingUnit.hexId;
-    if (pgOrderUnit?.hexId !== pgOrderHex) pgOrderUnit = moveState.movingUnit;
-    if (!pgAIReview && !pgOrderRun) {
-      directFireState.atkHexId = pgOrderHex;
-      directFireState.atkAdjacentHexes = [pgOrderHex];
+    pgReviewHex = moveState.movingUnit.hexId;
+    if (pgReviewUnit?.hexId !== pgReviewHex) pgReviewUnit = moveState.movingUnit;
+    if (!pgAIReview) {
+      directFireState.atkHexId = pgReviewHex;
+      directFireState.atkAdjacentHexes = [pgReviewHex];
       checkState.atk.clear();
     }
   }
-  pgReconcileOrders();
   resetMoveState();
   directFireState.mode = 'selectShooter';
   fireArrowData = null;
@@ -2720,13 +2817,12 @@ function finishConfirmMove() {
   }
   renderMoveFirePhase();
   drawMap();
-  if (pgOrderRun) queueMicrotask(pgContinueOrders);
 }
 
 // 移動キャンセル（元の位置に戻す）
 function cancelMove() {
   const ms = moveState;
-  if (!ms.movingUnit || pgOrderRun || ms._stopFired) return;
+  if (!ms.movingUnit || ms._stopFired) return;
 
   // 最初の位置に戻す
   if (ms.path.length > 0) {
@@ -2760,7 +2856,7 @@ function isVehicle(unit) {
 // 隊形変換 (12-4)
 function toggleFormation() {
   const ms = moveState;
-  if (!ms.movingUnit || ms.path.length !== 1 || ms._stopFired || pgOrderRun) return;
+  if (!ms.movingUnit || ms.path.length !== 1 || ms._stopFired) return;
   const units = ms._stackMoving.filter(unit => unit.type !== 'leader');
   const newMode = !units.some(unit => unit.marchMode);
   if (units.some(unit => unit.status !== 'ok' || (newMode && unit.noTransport)) ||
@@ -2794,7 +2890,7 @@ function toggleFormation() {
 // 警戒移動切り替え (12-6)
 function toggleCautious() {
   const ms = moveState;
-  if (!ms.movingUnit || ms.path.length !== 1 || ms._stopFired || pgOrderRun ||
+  if (!ms.movingUnit || ms.path.length !== 1 || ms._stopFired ||
       ms._stackMoving.some(unit => unit.type !== 'leader' && (unit.marchMode || unit.status !== 'ok'))) return;
   ms.cautious = !ms.cautious;
   pgResetStartingMoveRange();
@@ -3754,7 +3850,7 @@ function assaultAdvance() {
   const center = getHexCenter(defPos.col, defPos.row);
 
   // 攻撃側の生存ユニット + 同ヘクスの指揮官も前進
-  const aliveAtk = r.attackers.filter(u => u.status !== 'eliminated' && !u.pgMovementOrder);
+  const aliveAtk = r.attackers.filter(u => u.status !== 'eliminated');
   const atkHexId = assaultState.atkHexId;
   const leaders = atkHexId ? testUnits.filter(u =>
     u.hexId === atkHexId && u.type === 'leader' && u.status !== 'eliminated' &&

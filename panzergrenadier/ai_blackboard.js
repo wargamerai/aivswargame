@@ -1014,7 +1014,7 @@ async function aiMoveAllStacks(side, canFire) {
 
   // 自軍ユニット抽出
   const myUnits = testUnits.filter(u =>
-    u.side === side && u.status !== 'eliminated' && !u.pgMovementOrder && u.pgOrderedMoveTurn !== G.turn &&
+    u.side === side && u.status !== 'eliminated' &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'fortification' && u.type !== 'ip' &&
     !params.excludeMoveFire.includes(u.type) &&
     u.col >= 0 && u.col < MAP_CONFIG.cols
@@ -1087,7 +1087,7 @@ async function aiMoveAllStacks(side, canFire) {
           // ストップ射撃処理
           if (review) {
             if (await pgResolveAIStopFire(movableStack, review.fire)) movableStack = movableStack.filter(unit => unit.status === 'ok');
-          } else movableStack = _handleStopFire(movableStack, step, side, canFire).stack;
+          }
           if (review?.changed) break;
           if (movableStack.length === 0 || movableStack.every(u => u.status === 'eliminated')) break;
         }
@@ -1129,7 +1129,7 @@ async function aiMoveAllStacks(side, canFire) {
         // ストップ射撃
         if (review) {
           if (await pgResolveAIStopFire(movableStack, review.fire)) movableStack = movableStack.filter(unit => unit.status === 'ok');
-        } else movableStack = _handleStopFire(movableStack, best, side, canFire).stack;
+        }
         if (review?.changed) break;
         if (movableStack.length === 0 || movableStack.every(u => u.status === 'eliminated')) break;
       }
@@ -1352,166 +1352,9 @@ function _getBestNeighborGreedy(side, stack, mp) {
   return bestHex;
 }
 
-function _handleStopFire(movableStack, dest, side, canFire) {
-  const enemySide = side === 'german' ? 'allied' : 'german';
-  const livingStack = movableStack.filter(u => u.status !== 'eliminated');
-  if (livingStack.length === 0) return { stack: [] };
-
-  const stopShooters = testUnits.filter(e =>
-    e.side === enemySide && e.status === 'ok' &&
-    e.type !== 'dummy' && e.type !== 'A' && e.type !== 'leader' &&
-    (e.fpAT > 0 || e.fpSoft > 0)
-  ).filter(e => {
-    const dist = hexDistance(e.col, e.row, dest.col, dest.row);
-    if (dist <= 0 || dist > (e.range || 1)) return false;
-    return hasLOS(e.col, e.row, dest.col, dest.row);
-  });
-
-  if (stopShooters.length > 0) {
-    // ストップ射撃
-    const sortedTargets = [...livingStack].sort((a, b) => (a.def || 5) - (b.def || 5));
-    const firedThisStep = new Set();
-    stopShooters.forEach(e => {
-      if (e.status === 'eliminated') return;
-      if (firedThisStep.has(e.id || e.name)) return;
-      const target = sortedTargets.find(t => t.status !== 'eliminated');
-      if (target) {
-        const isArmored = target.type === 'T' || target.type === 'AC';
-        const fp = isArmored ? (e.fpAT || 0) : (e.fpSoft || 0);
-        if (fp > 0) {
-          const roll = Math.floor(Math.random() * 10);
-          const fpIdx = getFPColumnIndex(fp);
-          const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
-          const def = target.def || 5;
-          if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-            target.status = 'eliminated';
-            addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: 壊滅 (ダイス${roll})`);
-          } else if (typeof dmg === 'number' && dmg >= def + 2) {
-            target.status = target.status === 'd' ? 'eliminated' : 'dd';
-            addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: DD (ダイス${roll})`);
-          } else if (typeof dmg === 'number' && dmg >= def) {
-            target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-            addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: D (ダイス${roll})`);
-          } else {
-            addLog('stop', `ストップ射撃: ${e.name} (fp${fp}) → ${target.name}: 効果なし (ダイス${roll})`);
-          }
-        }
-        firedThisStep.add(e.id || e.name);
-      }
-    });
-
-    // 反撃
-    const counterShooters = livingStack.filter(u => u.status === 'ok' && u.type !== 'A' && u.type !== 'leader');
-    if (counterShooters.length > 0 && canFire) {
-      const counterTargets = [...stopShooters].filter(e => e.status !== 'eliminated')
-        .sort((a, b) => (a.def || 5) - (b.def || 5));
-      if (counterTargets.length > 0) {
-        const target = counterTargets[0];
-        const isArmored = target.type === 'T' || target.type === 'AC';
-        let totalFP = 0;
-        const firingUnits = [];
-        counterShooters.forEach(u => {
-          const dist = hexDistance(u.col, u.row, target.col, target.row);
-          if (dist > 0 && dist <= (u.range || 1) && hasLOS(u.col, u.row, target.col, target.row)) {
-            totalFP += isArmored ? (u.fpAT || 0) : (u.fpSoft || 0);
-            firingUnits.push(u);
-          }
-        });
-        if (totalFP > 0) {
-          const roll = Math.floor(Math.random() * 10);
-          const fpIdx = getFPColumnIndex(totalFP);
-          const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
-          const def = target.def || 5;
-          const nameStr = firingUnits.length > 2
-            ? firingUnits[0].name + '他' + (firingUnits.length - 1)
-            : firingUnits.map(u => u.name).join('+');
-          if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-            target.status = 'eliminated';
-            addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: 壊滅 (ダイス${roll})`);
-          } else if (typeof dmg === 'number' && dmg >= def + 2) {
-            target.status = target.status === 'd' ? 'eliminated' : 'dd';
-            addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: DD (ダイス${roll})`);
-          } else if (typeof dmg === 'number' && dmg >= def) {
-            target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-            addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: D (ダイス${roll})`);
-          } else {
-            addLog('counter', `反撃: ${nameStr} (fp${totalFP}) → ${target.name}: 効果なし (ダイス${roll})`);
-          }
-          firingUnits.forEach(u => { u._counterFired = true; });
-        }
-      }
-    }
-
-    // D/DDユニット離脱
-    const damaged = movableStack.filter(u => u.status === 'd' || u.status === 'dd');
-    if (damaged.length > 0) {
-      movableStack = movableStack.filter(u => u.status === 'ok');
-      damaged.forEach(u => {
-        addLog('move', `${u.name} (${u.status.toUpperCase()}) スタックから離脱`);
-      });
-    }
-  }
-
-  return { stack: movableStack };
-}
-
 // ============================================================
 // 統合射撃フェイズ
 // ============================================================
-
-async function aiFirePhase(side) {
-  const _fireDelay = () => new Promise(r => setTimeout(r, 1200));
-
-  AI_CONTROLLER.buildBoard(side);
-
-  const shooterHexes = {};
-  testUnits.filter(u =>
-    u.side === side && u.status === 'ok' &&
-    !u.firedThisTurn && !u._counterFired && u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'A'
-  ).forEach(u => {
-    if (!shooterHexes[u.hexId]) shooterHexes[u.hexId] = [];
-    shooterHexes[u.hexId].push(u);
-  });
-
-  for (const [hexId, shooters] of Object.entries(shooterHexes)) {
-    if (shooters.length === 0) continue;
-
-    const assignments = AI_CONTROLLER.allocateFire(side, hexId, shooters);
-    if (assignments.length === 0) continue;
-
-    onUnitAction(shooters[0], shooters);
-
-    for (const { shooters: firingUnits, target, totalFP } of assignments) {
-      if (target.status === 'eliminated') continue;
-
-      const nameStr = firingUnits.length > 2
-        ? firingUnits[0].name + '他' + (firingUnits.length - 1)
-        : firingUnits.map(u => u.name).join('+');
-
-      const roll = Math.floor(Math.random() * 10);
-      const fpIdx = getFPColumnIndex(totalFP);
-      const dmg = FIRE_COMBAT_TABLE[String(roll)] ? FIRE_COMBAT_TABLE[String(roll)][fpIdx] : 0;
-      const def = target.def || 5;
-
-      if (dmg === 'E' || (typeof dmg === 'number' && dmg >= def + 3)) {
-        target.status = 'eliminated';
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: 壊滅 (ダイス${roll})`);
-      } else if (typeof dmg === 'number' && dmg >= def + 2) {
-        target.status = target.status === 'd' ? 'eliminated' : 'dd';
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: DD (ダイス${roll})`);
-      } else if (typeof dmg === 'number' && dmg >= def) {
-        target.status = target.status === 'dd' ? 'eliminated' : (target.status === 'd' ? 'dd' : 'd');
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: D (ダイス${roll})`);
-      } else {
-        addLog('fire', `射撃: ${nameStr} (fp${totalFP}) → ${target.name}: 効果なし (ダイス${roll})`);
-      }
-
-      firingUnits.forEach(u => { u.firedThisTurn = true; });
-      drawMap();
-      await _fireDelay();
-    }
-  }
-}
 
 // ============================================================
 // 統合突撃フェイズ
@@ -1524,7 +1367,7 @@ function aiAutoAssault(side) {
   AI_CONTROLLER.buildBoard(side);
 
   const myUnits = testUnits.filter(u =>
-    u.side === side && u.status !== 'eliminated' && u.status !== 'dd' && !u.pgMovementOrder &&
+    u.side === side && u.status !== 'eliminated' && u.status !== 'dd' &&
     u.type !== 'dummy' && u.type !== 'leader' && u.type !== 'AT' && u.type !== 'A'
   );
 
@@ -1612,10 +1455,6 @@ function ukAI_getBestNeighbor(stack, mp) {
 
 function ukAI_moveAllStacks(canFire) {
   return aiMoveAllStacks('allied', canFire);
-}
-
-function ukAI_firePhase() {
-  return aiFirePhase('allied');
 }
 
 function ukAI_assignFireTargets(shooterHex, shooters) {
