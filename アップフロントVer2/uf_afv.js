@@ -358,10 +358,16 @@
   function tryMagneticMineAgainstOverrun(man, defendingSide, vehicleGroup, vehicle, attackRoll) {
     const rules = R();
     if (!attackRoll.red || !rules.isAlive(man) || !hasMagneticMine(man, defendingSide)) return null;
+    const name = rules.lookupSoldier(man, getFactionKey(state[defendingSide]))?.name || man.id;
     if (rules.isPinned(man)) {
-      if (!_useHeroFromHand(defendingSide, 'ヒーローで兵を回復し、対戦車磁気地雷を使いますか？')) return null;
+      if (!_useHeroFromHand(defendingSide, radioText(
+        `${name} をヒーローで回復させ、対戦車磁気地雷で反撃しますか？`,
+        `Use a Hero to rally ${name} and counterattack with an ATMM?`))) return null;
       rules.unpinSoldier(man);
       man.heroRecovery = true;
+    } else if (defendingSide === 'player' && !confirm(radioText(
+      `${name} は対戦車磁気地雷で反撃しますか？`, `Counterattack with ${name}’s ATMM?`))) {
+      return null;
     }
     const judge = draw();
     if (!judge || rncOf(judge).red) return null;
@@ -451,7 +457,7 @@
       else if (res.result === 'PANIC_ROUT') { Rr.routSoldier(man); stats.overrunKills++; }
       else if (res.result === 'PIN') res.result = applyPersonnelPin(man);
       results.push({ name: def ? def.name : man.id, result: res.result, rnc: signed });
-      const counter = tryMagneticMineAgainstOverrun(man, side === 'player' ? 'ai' : 'player', g, c, r2);
+      const counter = tryMagneticMineAgainstOverrun(man, defendingSide, g, c, r2);
       if (counter) {
         results.push({ name: defOf(c).name + '（対戦車磁気地雷）', result: counter });
         break;

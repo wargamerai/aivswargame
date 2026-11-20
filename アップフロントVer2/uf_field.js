@@ -734,7 +734,7 @@ function renderHands() {
     const c = document.createElement('div'); c.className = 'hand-card';
     if (state.selectedHand.has(idx)) c.classList.add('selected');
     if (state.phase === 'terrainPlacement' && state.terrainTurn === 'player') {
-      if (isTerrainHandCard(card)) {
+      if (isInitialTerrainCard(card)) {
         c.classList.add('terrain-pickable');
         if (state.terrainSelected === idx) c.classList.add('selected');
       } else {
@@ -776,7 +776,7 @@ function renderHands() {
   const aiCards = state.aiHand || [];
   for (let i = 0; i < state.aiHandCount; i++) {
     const c = document.createElement('div'); c.className = 'hand-card';
-    if (aiInPlace && aiCards[i] && isTerrainHandCard(aiCards[i], 'ai')) {
+    if (aiInPlace && isInitialTerrainCard(aiCards[i], 'ai')) {
       c.classList.add('terrain-pickable');
     }
     const img = document.createElement('img');

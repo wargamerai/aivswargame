@@ -11,6 +11,12 @@
 
 let _aiActionQueue = Promise.resolve();
 let _lastActingGroupIdx = null;
+function showAIDiscard(text, cards) {
+  if (document.getElementById('show-ai-discard-front')?.checked !== false) return showAIAction(text, cards);
+  const back = { img: encPath('upfrontimages/地形カード/AD Back.gif') };
+  return showAIAction(text, cards.map(() => back));
+}
+
 function showAIAction(text, cards, groupIdx, fireSummary) {
   try { ufReportLog('ai', text, 'ai'); } catch (e) {}
   // グループが切り替わったら中継オーバーレイを挟む（カード非表示・テキストのみ）
@@ -355,8 +361,8 @@ async function aiTurn() {
   });
   if (dumpedCards.length || cowerCards.length) state.aiDumpedThisTurn = true;
   renderHands();
-  if (cowerCards.length) await showAIAction('AI: cower 捨て札 ' + cowerCards.length + '枚', cowerCards);
-  if (dumpedCards.length) await showAIAction('AI: 捨て札 ' + dumpedCards.length + '枚', dumpedCards);
+  if (cowerCards.length) await showAIDiscard('AI: cower 捨て札 ' + cowerCards.length + '枚', cowerCards);
+  if (dumpedCards.length) await showAIDiscard('AI: 捨て札 ' + dumpedCards.length + '枚', dumpedCards);
   return endAITurn();
 }
 
@@ -779,7 +785,7 @@ function aiFireCardEffectiveAt(c, ti) {
     if (rel === 'blocked') return false;
     const base = R.relativeRange(src.distance, tgt.distance);
     const dist = Math.abs(si - ti) <= 1 ? base : Math.max(0, base - 1);
-    if ((R.isInGully(src) && dist !== 5) || (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {}))) return false;
+    if (!R.gullyFireAllowed(src, tgt, dist)) return false;
     const moving = isMovingIgnoringOverlays(src);
     const fp = R.calcGroupFirepower(src, aiKey, dist, { moving, crewMap: buildCrewMapFromPairs(src) });
     if (fp < infantryFireNeed(aiKey, src, need)) return false;
@@ -1108,7 +1114,7 @@ async function aiFireAt(targetIdxList, opts) {
         const adjacent = Math.abs(si - ti) <= 1;
         const baseDist = R.relativeRange(src.distance, tgt.distance);
         const dist = adjacent ? baseDist : Math.max(0, baseDist - 1);
-        if ((R.isInGully(src) && dist !== 5) || (R.isInGully(tgt) && !R.canFireAtGully(src, dist, {}))) continue;
+        if (!R.gullyFireAllowed(src, tgt, dist)) continue;
         const _pbRelAI = pillboxRelation('ai', si, ti); // §23.7
         if (_pbRelAI === 'blocked') continue;
         const crewMap = buildCrewMapFromPairs(src);
@@ -3026,8 +3032,8 @@ async function resolveAiDiscardAttacks(plan) {
 
 function tryAdvanceTerrainPhase() {
   // 両者が完了/配置不可なら終了
-  const pHas = state.playerHand.some(c => isTerrainHandCard(c)) && !state.terrainDone.player;
-  const aHas = state.aiHand.some(c => isTerrainHandCard(c, 'ai')) && !state.terrainDone.ai;
+  const pHas = state.playerHand.some(c => isInitialTerrainCard(c)) && !state.terrainDone.player;
+  const aHas = state.aiHand.some(c => isInitialTerrainCard(c, 'ai')) && !state.terrainDone.ai;
   if (!pHas && !aHas) { endTerrainPlacementPhase(); return; }
   // 手番交代 (相手にまだ置く余地があれば)
   if (state.terrainTurn === 'player') {
@@ -3044,6 +3050,7 @@ function tryAdvanceTerrainPhase() {
 function placeTerrainOnGroup(side, groupIdx, card, fromHand /* 'player'|'ai' */) {
   const group = state.groups[side][groupIdx];
   if (!group || !jungleTerrainAllowed(group, card, side)) return false;
+  if (state.phase === 'terrainPlacement' && !isInitialTerrainCard(card, fromHand)) return false;
   if (state.scenario?.victoryPreset && !isTerrainHandCard(card, fromHand)) return false;
   if (state.phase === 'terrainPlacement' && state.scenario?.openingTrenches &&
       side !== fromHand && state[side + 'Role'] === 'defender' && groupCanEntrench(group, side)) {
@@ -3103,11 +3110,9 @@ function placeTerrainOnGroup(side, groupIdx, card, fromHand /* 'player'|'ai' */)
 function aiPlaceTerrain() {
   if (state.phase !== 'terrainPlacement' || state.terrainTurn !== 'ai') return;
   // 相手に不利な地形 → 相手に配置
-  const badForEnemy = ['WIRE','STREAM','MARSH'];
-  // 人工地形（初期配置では使えない、ゲーム中は既存地形の上にのみ）
-  const artificial = ['SMOKE','WIRE','MINEFIELD'];
+  const badForEnemy = ['STREAM','MARSH'];
   const R = window.INFANTRY_RULES;
-  const usable = state.aiHand.filter(c => isTerrainHandCard(c, 'ai') && artificial.indexOf(c.terrain.type) < 0);
+  const usable = state.aiHand.filter(c => isInitialTerrainCard(c, 'ai') && c.terrain.type !== 'MINEFIELD');
   const plays = [];
   for (const c of usable) {
     const type = c.terrain.type;
@@ -3139,7 +3144,7 @@ function aiPlaceTerrain() {
 
 function onPlayerHandClickTerrainPhase(idx) {
   const card = state.playerHand[idx];
-  if (!isTerrainHandCard(card)) return;
+  if (!isInitialTerrainCard(card)) return;
   state.terrainSelected = (state.terrainSelected === idx) ? null : idx;
   renderHands();
   highlightTerrainTargets(state.terrainSelected != null);
@@ -3153,7 +3158,7 @@ function onGroupClickTerrainPhase(side, groupIdx) {
   if (state.phase !== 'terrainPlacement' || state.terrainTurn !== 'player') return;
   if (state.terrainSelected == null) return;
   const card = state.playerHand[state.terrainSelected];
-  if (!isTerrainHandCard(card)) return;
+  if (!isInitialTerrainCard(card)) return;
   placeTerrainOnGroup(side, groupIdx, card, 'player');
   highlightTerrainTargets(false);
   tryAdvanceTerrainPhase();
@@ -3232,12 +3237,14 @@ async function chartTurn0(nat) {
     const n = Math.min(cand.length, aiRemainingDiscard());
     if (!n) return false;
     const pick = []; for (let k = 0; k < n; k++) { const j = Math.floor(Math.random() * cand.length); pick.push(cand.splice(j, 1)[0]); }
-    pick.sort((a, b) => b.i - a.i).forEach(x => { const c = hand().splice(x.i, 1)[0]; pushTerrainToDiscard(c); });
+    pick.sort((a, b) => b.i - a.i);
+    const dumpedCards = pick.map(({ i }) => hand().splice(i, 1)[0]);
+    dumpedCards.forEach(pushTerrainToDiscard);
     state.aiDumpedThisTurn = true;
     state.aiDiscardedThisTurn += n;
     state.aiHandCount = hand().length; renderHands();
     inc(label + `（${n}枚）`);
-    await showAIAction('AI: 捨て札 ' + n + '枚', null);
+    await showAIDiscard('AI: 捨て札 ' + n + '枚', dumpedCards);
     return true;
   };
   // --- アクション ---

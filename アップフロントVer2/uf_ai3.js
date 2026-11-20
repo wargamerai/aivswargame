@@ -178,7 +178,7 @@
     });
     if (discards) st.aiDumpedThisTurn = true;
     global.renderHands();
-    if (dumped.length) await global.showAIAction('AI: 捨て札 ' + dumped.length + '枚', dumped);
+    if (dumped.length) await global.showAIDiscard('AI: 捨て札 ' + dumped.length + '枚', dumped);
     try { record(key, ss2, st.aiActedThisTurn, discards); } catch (e) { /* 記録だけ */ }
     global.endAITurn();
   }

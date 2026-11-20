@@ -780,9 +780,11 @@ function _resolveFireActionInner() {
   const baseDistance = R.relativeRange(srcGroup.distance, tgtGroup.distance);
   const distance = adjacent ? baseDistance : Math.max(0, baseDistance - 1);
 
-  // §8.2 GULLY チェック
-  if (R.isInGully(srcGroup) && distance !== 5) { alert('涸れ谷からの通常射撃には相対距離5が必要です（§8.2）'); return; }
-  if (R.isInGully(tgtGroup) && !R.canFireAtGully(srcGroup, distance, {})) { alert('涸れ谷にいるグループは攻撃できません（例外: 狙撃、迫撃砲、丘上、相対距離5）'); return; }
+  if (!R.gullyFireAllowed(srcGroup, tgtGroup, distance)) {
+    alert(radioText('涸れ谷が関わる通常射撃は、丘と涸れ谷の間か相対距離5で可能です（§8.2）',
+      'Regular fire involving a Gully is allowed between a Hill and a Gully or at Relative Range 5 (§8.2).'));
+    return;
+  }
 
   // §6.2 火力（地形スタック末尾がMOVEMENTなら移動中＝火力半減）
   const lastTerrain = srcGroup.terrain.length > 0 ? srcGroup.terrain[srcGroup.terrain.length - 1] : null;

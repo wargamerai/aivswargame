@@ -633,14 +633,17 @@ state.terrainDone = { player: false, ai: false };
 function isTerrainHandCard(card, side = 'player') {
   if (!card || !card.terrain) return false;
   const t = card.terrain.type;
-  // §3.6 配置可能なのは地形カード(平地以外); 移動カード等は不可
-  // 平地相当として除外: MOVEMENT, FIRE, RALLY, HERO, SNIPER, CONCEALED
-  // 配置可能: WOODS, BUILDINGS, HILL, GULLY, WALL, BRUSH, STREAM, MARSH, SMOKE, WIRE, MINEFIELD, PILLBOX
   const placeable = ['WOODS','BUILDINGS','HILL','GULLY','WALL','BRUSH','STREAM','MARSH','SMOKE','WIRE','MINEFIELD','PILLBOX'];
   if (placeable.indexOf(t) < 0) return false;
   return !window.SCENARIO_HELPERS.isCardDisabledAsTerrain(
     state.scenario, card, state[side + 'Role'] === 'attacker'
   );
+}
+
+function isInitialTerrainCard(card, side = 'player') {
+  // §3.6 煙幕・鉄条網・裏向きの平地は不可。
+  return isTerrainHandCard(card, side) && !card._faceDown && !card._isPlain &&
+    !['SMOKE', 'WIRE'].includes(card.terrain.type);
 }
 
 /** 山札から引かない仮の平地カード（地形のないグループ用・裏向き表示） */
@@ -694,8 +697,8 @@ function updatePhaseBanner() {
   if (state.phase !== 'terrainPlacement') return;
   const turnName = state.terrainTurn === 'player' ? state.player.name : state.ai.name;
   const placeable = state.terrainTurn === 'player'
-    ? state.playerHand.filter(c => isTerrainHandCard(c)).length
-    : state.aiHand.filter(c => isTerrainHandCard(c, 'ai')).length;
+    ? state.playerHand.filter(c => isInitialTerrainCard(c)).length
+    : state.aiHand.filter(c => isInitialTerrainCard(c, 'ai')).length;
   msg.innerHTML = `<b>地形配置フェーズ §3.6</b> ／ 手番: <b>${turnName}</b> ／ 配置可能な地形カード: <b>${placeable}枚</b>`;
 }
 
@@ -784,7 +787,7 @@ function endTerrainPlacementPhase() {
   } else {
     state.currentTurn = (firstFac === playerKey) ? 'player' : 'ai';
   }
-  recordTransferStartingRanges();
+  recordStartingRanges();
   if (state.currentTurn === 'player' && window.DISCARD_RULES) window.DISCARD_RULES.resetTurn();
   if (settleDeckTimeLimit() || checkBuildingParityVictory() || checkEditorVictory()) {
     renderField('player');
@@ -1156,7 +1159,7 @@ function endPlayerTurn(draw = true) {
   state.actedGroups = new Set();
   try { ufSnapshot('自軍の手番の終わり', 'player'); } catch (e) {}
   state.turnCount = (state.turnCount || 0) + 1;
-  recordTransferStartingRanges();
+  recordStartingRanges();
   // §21 爆薬は侵入したターンだけ使える: ターンが終わったら「侵入したターン」の印を消す
   ['player', 'ai'].forEach(sd => (state.groups[sd] || []).forEach(g => g && g.cards.forEach(c => { c.infiltratedThisTurn = false; })));
   // 認知状態はターン終了でリセット
@@ -1195,7 +1198,7 @@ async function endAITurn() {
     state.aiIdleLastTurn = false;
     state.aiHandCount = state.aiHand.length;
     renderHands();
-    await showAIAction('AI: 捨て札 1枚', null);
+    await showAIDiscard('AI: 捨て札 1枚', [card]);
   }
   // §15.53 処刑の判定は自分のターン終了時だけ
   commissarExecutionCheck('ai');
@@ -1214,7 +1217,7 @@ async function endAITurn() {
   state.actedGroups = new Set();
   try { ufSnapshot('敵の手番の終わり', 'ai'); } catch (e) {}
   state.turnCount = (state.turnCount || 0) + 1;
-  recordTransferStartingRanges();
+  recordStartingRanges();
   // §21 爆薬は侵入したターンだけ使える: ターンが終わったら「侵入したターン」の印を消す
   ['player', 'ai'].forEach(sd => (state.groups[sd] || []).forEach(g => g && g.cards.forEach(c => { c.infiltratedThisTurn = false; })));
   // 認知状態はターン終了でリセット

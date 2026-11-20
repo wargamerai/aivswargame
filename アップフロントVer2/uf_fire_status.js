@@ -1109,7 +1109,7 @@ function checkScenarioAVictory() {
           if (!eg || eg.eliminated || !eg.cards.some(c => R.isAlive(c) && !R.isPinned(c))) return false;
           const base = R.relativeRange(eg.distance, grp.distance);
           const dist = Math.abs(ei - gi) <= 1 ? base : Math.max(0, base - 1);
-          return (!R.isInGully(eg) || dist === 5) && R.canFireAtGully(eg, dist, {});
+          return R.gullyFireAllowed(eg, grp, dist);
         });
         if (canBeShot) continue;
       }

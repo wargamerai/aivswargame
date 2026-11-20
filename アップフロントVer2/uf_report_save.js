@@ -793,8 +793,7 @@ function startGameWithSetup() {
     }
     if (bonusBuilding) state.aiHand.push(bonusBuilding);
     if (scenario?.defenderGuaranteedTerrain) {
-      const canPlace = card => isTerrainHandCard(card, 'ai') &&
-        !['SMOKE', 'WIRE', 'MINEFIELD'].includes(card.terrain.type);
+      const canPlace = card => isInitialTerrainCard(card, 'ai') && card.terrain.type !== 'MINEFIELD';
       if (!state.aiHand.some(canPlace)) {
         const draw = state.terrainDeck.draw;
         const index = draw.findIndex(i => canPlace(makeTerrainHandCard(i)));

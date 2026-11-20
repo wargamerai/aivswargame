@@ -366,7 +366,7 @@
   #action-pane .ai-deck-area .cycle-box .value { font-size: 18px; }
   /* 確定・終了: 1列目の捨て札の下に、大きめに */
   #action-pane .action-btn.ap-big { height: 44px; font-size: 15px; font-weight: bold; margin-top: 4px; }
-  #action-pane .hand-refill-option {
+  #action-pane .ap-option {
     display: flex; flex: 0 0 auto; align-items: center; gap: 6px;
     margin: auto 0 6px; font-size: 12px; white-space: nowrap;
   }
@@ -1009,7 +1009,8 @@
     <div class="ap-controls">
     <!-- 勝利条件・勝利点・損害（画面の描き直しのたびに updateInfoPanel で更新） -->
     <div id="ap-info"></div>
-    <label class="hand-refill-option">手札補充 <select id="end-turn-refill"><option value="">上限まで</option></select></label>
+    <label class="ap-option">手札補充 <select id="end-turn-refill"><option value="">上限まで</option></select></label>
+    <label class="ap-option"><input type="checkbox" id="show-ai-discard-front" checked>相手の捨て札を表向きに表示</label>
     <div class="ap-cols">
       <div class="ap-col">
         <div class="ap-head">アクション外</div>

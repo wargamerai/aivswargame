@@ -43,28 +43,26 @@ function reinforcementOptions(side) {
       !(hasVehicle && card.terrain.denseJungle) &&
       !(card.terrain.type === 'MARSH' && (hasVehicle || hasInfantryGun)))
     : [];
-  return { ...plan, hand, moves, concealment, terrain, hasVehicle };
+  return { ...plan, hand, moves, concealment, terrain };
 }
 
-function reinforcementMaxDistance(side) {
+function recordReinforcementStartingRange(side) {
   const start = (state.reinforcementStart ||= {});
-  if (start[side]?.turn !== (state.turnCount || 0)) {
-    const distance = Math.max(0, ...state.groups[side].map(g =>
-      g && !g.eliminated && g.cards.some(window.INFANTRY_RULES.isAlive) ? (g.distance || 0) : 0));
-    start[side] = { turn: state.turnCount || 0, distance };
-  }
-  return start[side].distance;
+  const distance = Math.max(0, ...state.groups[side].filter(_groupAlive).map(g => g.distance || 0));
+  start[side] = { turn: state.turnCount || 0, distance };
+  return distance;
 }
 
-function reinforcementEntryRange(side, move, options) {
-  return options.hasVehicle || handActionFace(move, 'MOVEMENT', side)?.sub !== '側面'
-    ? 0 : reinforcementMaxDistance(side);
+function reinforcementEntryRange(side, move) {
+  if (handActionFace(move, 'MOVEMENT', side)?.sub !== '側面') return 0;
+  const start = state.reinforcementStart?.[side];
+  return start?.turn === (state.turnCount || 0) ? start.distance : recordReinforcementStartingRange(side);
 }
 
 function enterReinforcements(side, move, distance, concealed, terrain) {
   const opts = reinforcementOptions(side);
   if (!opts?.moves.includes(move) || !Number.isInteger(distance) || distance < 0 ||
-      distance > reinforcementEntryRange(side, move, opts) ||
+      distance > reinforcementEntryRange(side, move) ||
       Boolean(concealed) !== Boolean(terrain) ||
       (terrain && (move === concealed || !opts.terrain.includes(terrain) || !opts.concealment.includes(concealed)))) return false;
   useHandActionFace(move, handActionFace(move, 'MOVEMENT', side));
@@ -114,7 +112,7 @@ function playerReinforcements() {
   const move = chooseReinforcementCard(opts.moves, en ? 'Choose a Movement card.' : '移動カードを選んでください。', 'MOVEMENT');
   if (!move) return;
   let distance = 0;
-  const max = reinforcementEntryRange('player', move, opts);
+  const max = reinforcementEntryRange('player', move);
   if (max > 0) {
     const answer = prompt(en ? `Entry range chit (0–${max})` : `登場する距離チット（0〜${max}）`, '0');
     if (!answer?.trim()) return;
@@ -142,7 +140,6 @@ function playerReinforcements() {
 function updateReinforcementButton() {
   const button = document.getElementById('btn-reinforcements');
   button.hidden = !state.scenario?.reinforcements?.[getFactionKey(state.player)];
-  if (!button.hidden && state.phase === 'play' && state.currentTurn === 'player') reinforcementMaxDistance('player');
   button.disabled = !reinforcementOptions('player');
   button.textContent = LANG === 'ja' ? '増援' : 'Reinforcements';
 }
@@ -151,7 +148,7 @@ async function aiEnterReinforcements() {
   const opts = reinforcementOptions('ai');
   if (!opts) return false;
   const move = opts.moves.find(card => handActionFace(card, 'MOVEMENT', 'ai')?.sub === '側面') || opts.moves[0];
-  const distance = reinforcementEntryRange('ai', move, opts);
+  const distance = reinforcementEntryRange('ai', move);
   if (!enterReinforcements('ai', move, distance)) return false;
   await showAIAction('AI: 増援 → GROUP E', null, reinforcementSlot('E'));
   return true;
@@ -291,7 +288,7 @@ async function aiEnterRandomReinforcements() {
   const numbers = vehicle == null ? pending.soldiers.splice(0, 10) :
     pending.soldiers.splice(pending.soldiers.indexOf(vehicle), 1);
   entry.cards = numbers.map(num => makeCardWithMeta(faction, num));
-  entry.distance = reinforcementEntryRange('ai', move, { hasVehicle: vehicle != null });
+  entry.distance = reinforcementEntryRange('ai', move);
   if (!pending.soldiers.length) rule.waiting.shift();
   rule.losses.push(...groups[slot].cards);
   entry.terrain = [makeDummyPlain()];

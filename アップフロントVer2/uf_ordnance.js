@@ -190,8 +190,7 @@ function ordnancePlans(side, source, targetIndex, continuing = false) {
   const distance = R.relativeRangeBetweenGroups(own, target, {
     sameOpposing: source === targetIndex, adjacent: Math.abs(source - targetIndex) === 1
   });
-  const lineOfSight = (!R.isInGully(own) || distance === 5) &&
-    (!R.isInGully(target) || R.canFireAtGully(own, distance, {}));
+  const lineOfSight = R.gullyFireAllowed(own, target, distance);
   return own.cards.filter(c => R.isAlive(c) && !R.isPinned(c) && !c.transfer && !c.infiltrating)
     .flatMap(card => ordnanceWeapons(card, side).flatMap(weapon => {
       const vehicleWeapon = weapon.kind === 'afv' || weapon.kind === 'afvFlame';
@@ -326,7 +325,7 @@ function sameOrdnance(a, b) {
   return a.card === b.card && a.weapon.kind === b.weapon.kind && a.againstCrew === b.againstCrew;
 }
 
-// §25.2 同じ目標への射撃を一つの行動として宣言し、兵器・射撃カード・判定は一回ずつ使う。
+// §25.2 同じ目標への射撃カードを一度に出し、兵器ごとに命中と効果を判定する。
 async function resolveOrdnance(plans, fireCards, confirmPlayer = true) {
   if (state.radioResolving || !plans.length || plans.length !== fireCards.length) return false;
   const { side, source, targetIndex } = plans[0];
@@ -339,29 +338,28 @@ async function resolveOrdnance(plans, fireCards, confirmPlayer = true) {
       fireCards.some((card, i) => !hand.includes(card) || !canUseOrdnanceFireCard(plans[i], card))) return false;
   state.radioResolving = true;
   try {
-    radioActionUsed(side, source);
-    for (const [i, selected] of plans.entries()) {
-      if (state.phase !== 'play' || settleDeckTimeLimit()) break;
-      const plan = (i === 0 ? available : ordnancePlans(side, source, targetIndex, true))
-        .find(candidate => sameOrdnance(candidate, selected));
-      const fireCard = fireCards[i];
-      if (!plan || !hand.includes(fireCard)) break;
-      hand.splice(hand.indexOf(fireCard), 1);
-      pushTerrainToDiscard(fireCard);
+    return await withDeckAttack(async () => {
+      radioActionUsed(side, source);
+      for (const card of fireCards) {
+        hand.splice(hand.indexOf(card), 1);
+        pushTerrainToDiscard(card);
+      }
       if (side === 'ai') state.aiHandCount = hand.length;
-      if (!await fireOrdnanceShot(plan, fireCard, side === 'player' && confirmPlayer)) break; // §25.3 外れ・中止で攻撃終了
-    }
-    return true;
+      for (const [i, selected] of plans.entries()) {
+        if (state.phase !== 'play') break;
+        const plan = (i === 0 ? available : ordnancePlans(side, source, targetIndex, true))
+          .find(candidate => sameOrdnance(candidate, selected));
+        if (!plan) continue;
+        if (!await fireOrdnanceShot(plan, fireCards[i], side === 'player' && confirmPlayer)) break;
+      }
+      return true;
+    });
   } finally {
     state.radioResolving = false;
   }
 }
 
 async function fireOrdnanceShot(plan, fireCard, confirmJudgement = false) {
-  return withDeckAttack(() => fireOrdnanceShotInProgress(plan, fireCard, confirmJudgement));
-}
-
-async function fireOrdnanceShotInProgress(plan, fireCard, confirmJudgement = false) {
   const { side, source, targetIndex, target, enemySide, weapon } = plan;
   const title = ordnanceName(plan) + ' → GROUP ' + target.name;
   if (side === 'ai') {
@@ -413,8 +411,8 @@ async function fireOrdnanceShotInProgress(plan, fireCard, confirmJudgement = fal
   if (confirmJudgement) {
     const [low, high] = profile.range;
     const threshold = `${low === high ? low : low + '–' + high}${profile.blackOnly ? '（黒のみ）' : ''}`;
-    if (!confirm(radioText(`命中 ${threshold}。射撃を判定しますか？ 中止しても射撃カードと行動は消費します。`,
-      `To Hit: ${threshold}. Resolve the shot? Cancelling spends the Fire card and action.`))) return false;
+    if (!confirm(radioText(`命中 ${threshold}。射撃を判定しますか？ 中止しても出した射撃カードと行動は消費します。`,
+      `To Hit: ${threshold}. Resolve the shot? The Fire cards played and the action are spent even if you cancel.`))) return false;
   }
   if (weapon.kind === 'afv') window.AFV.stats.gun++;
   if (weapon.kind === 'faust') plan.card._panzerfaustSpent = true;
@@ -478,7 +476,7 @@ async function fireOrdnanceShotInProgress(plan, fireCard, confirmJudgement = fal
   ];
   await showFireResultOverlay(title + ' · ' + status, results, [judge, ...conceal], cardLabels);
   cleanupEliminatedGroups(); renderField('player'); renderField('ai'); renderHands(); updateDeckCounts();
-  return accepted;
+  return true;
 }
 
 function mortarVehicleOutcome(target, strength, damageDraw, hitDraw, hullDown = false) {
@@ -587,8 +585,7 @@ function canFireAfvSmoke(side, sourceIndex, targetSide, targetIndex, smoke) {
   const base = targetSide === side ? Math.abs(group.distance - target.distance) :
     R.relativeRange(group.distance, target.distance);
   const distance = Math.max(0, base - Number(Math.abs(sourceIndex - targetIndex) > 1));
-  return (!R.isInGully(group) || distance === 5) &&
-    (!R.isInGully(target) || R.canFireAtGully(group, distance, {}));
+  return R.gullyFireAllowed(group, target, distance);
 }
 
 function fireAfvSmoke(side, sourceIndex, targetSide, targetIndex, smoke) {

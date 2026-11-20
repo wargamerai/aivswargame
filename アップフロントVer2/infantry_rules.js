@@ -562,8 +562,14 @@
     if (opts && opts.isSniper) return true;
     if (opts && opts.isMortar) return true;
     if (opts && opts.isCC) return true;
-    if (distance >= 5) return true;
+    if (distance === 5) return true;
     return currentTerrainType(srcGroup) === 'HILL';
+  }
+
+  /** §8.2 丘と涸れ谷の間は双方向に射撃できる。 */
+  function gullyFireAllowed(source, target, distance) {
+    return (!isInGully(source) || canFireAtGully(target, distance)) &&
+      (!isInGully(target) || canFireAtGully(source, distance));
   }
 
   // ===== §8.4 湿地 (MARSH) ==========================================
@@ -1093,7 +1099,7 @@
     calcGroupFirepower, calcTerrainMod, getTerrainModBreakdown,
 
     // gully
-    isInGully, canFireAtGully, gullyMoveCount, canPlaceTerrainOnGully,
+    isInGully, canFireAtGully, gullyFireAllowed, gullyMoveCount, canPlaceTerrainOnGully,
 
     // marsh
     isInMarsh, marshMoveCount, canPlaceTerrainOnMarsh,

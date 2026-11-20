@@ -484,7 +484,7 @@ function _hasActiveLeader(g, side) {
     return !!(d && d.leader);
   }));
 }
-function recordTransferStartingRanges() {
+function recordStartingRanges() {
   const side = state.currentTurn;
   state.shiftOccupiedAtTurnStart = new Set();
   for (const [factionSide, groups] of Object.entries(state.groups)) {
@@ -497,6 +497,7 @@ function recordTransferStartingRanges() {
       if (group.forming || _groupAlive(group)) state.shiftOccupiedAtTurnStart.add(index);
     });
   }
+  recordReinforcementStartingRange(side);
 }
 function sameTransferRange(source, destination) {
   const sourceNow = source.distance || 0;

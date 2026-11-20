@@ -183,6 +183,7 @@ window.UF_I18N.scenarioUI = [
   ["守備側のグループを1つでも全滅させ、攻撃側の損害が守備側より少ない場合も攻撃側の勝利。時間切れは守備側の勝利。", "The attacker also wins by eliminating a defending group while taking fewer losses than the defender. The defender wins at the time limit.", "L’attaccante vince anche eliminando un gruppo del difensore e subendo meno perdite. Allo scadere del tempo vince il difensore."],
   ["選択してください", "Choose…", "Scegli…"],
   ["手札補充", "Hand refill", "Rifornimento mano"],
+  ["相手の捨て札を表向きに表示", "Show opponent’s discards face up", "Scarti avversari scoperti"],
   ["上限まで", "To hand limit", "Fino al limite"],
   ["{0#}枚", "{0} cards", "{0} carte"],
   ["エディタで選んだカードをすべて配置してください。", "Place all cards selected in the editor.", "Schiera tutte le carte selezionate nell’editor."],
