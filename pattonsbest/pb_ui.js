@@ -94,8 +94,29 @@ function logIntro() {
   say(L(`1944年7月27日、サン・ロー西方。M4シャーマン「${g.tankName}」の車長 ${g.crew.C.name} 軍曹、着任。`, `July 27, 1944, west of St. Lo. Sgt. ${g.crew.C.name} takes command of M4 Sherman "${g.tankName}".`), 'head');
   say(L(`砲手${g.crew.G.name}（腕前${g.crew.G.rating}）、装填手${g.crew.L.name}（${g.crew.L.rating}）、操縦手${g.crew.D.name}（${g.crew.D.rating}）、副操縦手${g.crew.A.name}（${g.crew.A.rating}）。`, `Gunner ${g.crew.G.name} (${g.crew.G.rating}), loader ${g.crew.L.name} (${g.crew.L.rating}), driver ${g.crew.D.name} (${g.crew.D.rating}), assistant ${g.crew.A.name} (${g.crew.A.rating}).`));
 }
-function save() { try { const g = E.G; if (!g || g.day) return; localStorage.setItem('pb_save', JSON.stringify(g)); } catch (e) {} }
-function loadGame() { try { const g = JSON.parse(localStorage.getItem('pb_save')); E.G = g; g.phase = g.over ? 'over' : 'calendar'; g.day = null; g.bb = null; $('over').style.display = 'none'; render(); } catch (e) { startScreen(); } }
+function save() {
+  const g = E.G;
+  if (!g || g.day) return false;
+  try {
+    localStorage.setItem('pb_save', JSON.stringify(g));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+function loadGame() {
+  try {
+    const g = JSON.parse(localStorage.getItem('pb_save'));
+    if (!g) { startScreen(); return; }
+    E.G = g;
+    g.phase = g.over ? 'over' : 'calendar';
+    g.day = null;
+    g.bb = null;
+    $('over').style.display = 'none';
+    if (g.over) showOver();
+    render();
+  } catch (e) { startScreen(); }
+}
 
 // ===== 上の帯 =====
 function renderBar() {
@@ -508,9 +529,15 @@ function afterAct(r) {
   const g = E.G;
   if (g.phase === 'battle') VIEW = 'battle';
   else if (g.phase === 'move') VIEW = 'map';
-  if (r && r.debrief) showDebrief(r.debrief);
-  if (g.phase === 'over' || g.over) showOver();
-  if (g.phase === 'debrief') { const keep = g.day; g.day = null; g.bb = null; g.phase = 'calendar'; void keep; save(); }
+  let saved;
+  if (r && r.debrief) {
+    g.day = null;
+    g.bb = null;
+    g.phase = g.over ? 'over' : 'calendar';
+    saved = save();
+    showDebrief(r.debrief, saved);
+  }
+  if (g.phase === 'over' || g.over) showOver(saved);
   render();
 }
 function doNext() { play(() => E.nextDay(), r => { if (r && r.combat) VIEW = 'map'; if (r && r.refit) refitBox(r.refit); if (r && r.over) showOver(); afterAct(r); if (r && r.combat) loadBox(); }); }
@@ -644,7 +671,14 @@ function saveReport(i, pngButton) {
 }
 function saveLastReport(pngButton) { return saveReport(REPORTS.length - 1, pngButton); }
 function saveAllReports() { if (!REPORTS.length) return alert(L('まだレポートがありません', 'No reports yet')); downloadHtml('pattons_best_campaign.html', REPORTS.map(reportHtml).join('')); }
-function showDebrief(r) {
+function autosaveMessage(saved) {
+  if (saved === undefined) return '';
+  const message = saved
+    ? L('自動保存しました。同じブラウザの開始画面で「続きから」を選べます。', 'Autosaved. Choose Continue on the start screen in this browser.')
+    : L('自動保存できませんでした。', 'Could not autosave.');
+  return `<p role="status">${message}</p>`;
+}
+function showDebrief(r, saved) {
   keepJudge();
   if (r.report) REPORTS.push(Object.assign(r.report, { log: ALLLOG.slice(DAYSTART) }));
   const g = E.G;
@@ -652,13 +686,16 @@ function showDebrief(r) {
   <p>${L('戦車の戦果', 'Your tank')}: ${r.your} / ${L('味方', 'Friendly forces')}: ${r.fr} / ${L('地域', 'Territory')}: ${r.terr}</p><p><b>${L('合計', 'Total')} ${r.total} VP — ${r.total > 0 && !r.ko ? L('今日は勝った', 'A victory today') : L('今日は負けた', 'A defeat today')}</b></p>
   ${r.ko ? `<p>${L(`新しい戦車: #${g.tankId} ${E.tank().model}`, `New tank: #${g.tankId} ${E.tank().model}`)} ${tankChoice()}</p>` : ''}${r.promoted ? `<p style="color:var(--good)">${L('昇進した！', 'Promoted!')}</p>` : ''}${r.medal ? `<p style="color:var(--good)">🎖 ${r.medal}</p>` : ''}
   ${g.medals.length ? `<p style="color:var(--mute);font-size:.9em">${L('勲章', 'Medals')}: ${g.medals.join('、')}</p>` : ''}
+  ${autosaveMessage(saved)}
   <p><button class="go" onclick="closeOver()">${L('続ける', 'Continue')}</button> <button onclick="saveLastReport()">${L('レポート HTML', 'Report HTML')}</button> <button onclick="saveLastReport(this)">${L('レポート PNG', 'Report PNG')}</button></p>`);
 }
-function showOver() {
+function showOver(saved) {
   const g = E.G, o = g.over; if (!o) return;
   const kills = Object.keys(g.kills).map(k => `${L((PB.UNIT[k] || {}).name || k, (PB.UNIT[k] || {}).en || k)} ×${g.kills[k]}`).join('、') || L('なし', 'none');
+  const reports = REPORTS.length ? `<button onclick="saveLastReport()">${L('最後のレポート HTML', 'Last report HTML')}</button> <button onclick="saveLastReport(this)">${L('最後のレポート PNG', 'Last report PNG')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> ` : '';
   inlineBox(`<h2>${o.win ? L('終戦', 'War\'s end') : L('戦いの終わり', 'The end')}</h2><p>${o.why}</p><p>${L(`出撃 ${g.days}日、戦闘 ${g.battles}回、累計 ${g.totalVP}VP`, `${g.days} days in action, ${g.battles} battles, ${g.totalVP} VP`)}</p><p>${L('撃破', 'Kills')}: ${esc(kills)}</p>${g.medals.length ? `<p>${L('勲章', 'Medals')}: ${g.medals.join('、')}</p>` : ''}
-  <p>${o.canContinue ? `<button class="go" onclick="E.continueAsReplacement();closeOver();save()">${L('次の車長として続ける', 'Continue as the replacement')}</button> ` : ''}<button onclick="saveLastReport()">${L('最後のレポート HTML', 'Last report HTML')}</button> <button onclick="saveLastReport(this)">${L('最後のレポート PNG', 'Last report PNG')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <button onclick="try{localStorage.removeItem('pb_save')}catch(e){};location.reload()">${L('最初から', 'New campaign')}</button></p>`);
+  ${autosaveMessage(saved)}
+  <p>${o.canContinue ? `<button class="go" onclick="E.continueAsReplacement();closeOver();save()">${L('次の車長として続ける', 'Continue as the replacement')}</button> ` : ''}${reports}<button onclick="try{localStorage.removeItem('pb_save')}catch(e){};location.reload()">${L('最初から', 'New campaign')}</button></p>`);
 }
 function helpBox() {
   $('over').style.display = 'flex';
