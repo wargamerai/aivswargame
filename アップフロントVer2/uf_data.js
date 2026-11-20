@@ -58,12 +58,15 @@ function parseTerrainCSV(text) {
   return out;
 }
 
-const ACTION_CARD_NATIONALITY = { ger: '独', rus: 'ソ', jpn: '日', uk: '英', us: '米' };
+const ACTION_CARD_NATIONALITY = { ger: '独', rus: 'ソ', jpn: '日', uk: '英', us: '米', fra: '独' };
 
 // §2.21 斜線の両側は別の用途。判定カードの原表と盤面に出した面は切り替えない。
-function nationalActionFaces(printed, faction) {
-  const mark = ACTION_CARD_NATIONALITY[faction];
-  if (!printed.rightType || !mark) return null;
+function nationalActionFaces(printed, faction, game = state) {
+  if (!printed.rightType) return null;
+  const troop = troopTypeOf(faction, game);
+  if (faction === 'ita' && troop !== 'bersaglieri' || troop === 'reservists') return [];
+  const mark = faction === 'ita' ? '独' : ACTION_CARD_NATIONALITY[faction];
+  if (!mark) return null;
   const faces = [];
   if (printed.leftFactions.includes(mark)) {
     faces.push({ ...printed, nationalFace: 0 });
@@ -139,8 +142,8 @@ function placeEntrenchment(group) {
 function discardUnclaimedWeapons(group) {
   if (group.weaponPool?.length) group.weaponPool.length = 0;
 }
-/** §45.6: 日本軍の重いMMG・ATRは、負傷していない2名のクルーがいなければ移動時に失う。 */
-function abandonUnsupportedHeavyWeapons(group) {
+/** §45.6 / §50.7: 重いMMG・ATRの移動に必要なクルーを確認する。 */
+function abandonUnsupportedHeavyWeapons(group, usingMovementCard = true) {
   const side = _groupSideIdx(group)?.side;
   if (!side) return;
   const R = window.INFANTRY_RULES;
@@ -149,12 +152,18 @@ function abandonUnsupportedHeavyWeapons(group) {
   for (const card of group.cards) {
     if (!R.isAlive(card) || card.transfer) continue;
     const weapon = weaponOfCard(card, faction);
-    if (weapon?.fac !== 'jpn' || !/^(中機関銃|対戦車ライフル)/.test(weapon.weaponCat)) continue;
+    const italian = weapon?.fac === 'ita';
+    if (!(weapon?.fac === 'jpn' || italian && usingMovementCard) ||
+        !/^(中機関銃|対戦車ライフル)/.test(weapon.weaponCat)) continue;
     const assistant = group.cards.find(other => other.num === Number(group.crewPairs?.[card.num]));
-    if (ready(card) && ready(assistant)) continue;
+    const eligible = ready(card) && ready(assistant) && (!italian ||
+      (!card.wounded && !assistant.wounded && !secondaryWeaponOn(card, faction) && !secondaryWeaponOn(assistant, faction) &&
+       !weaponOfCard(assistant, faction)?.needsCrew));
+    if (eligible) continue;
     installAcquiredWeapon(group, card, UNARMED_WEAPON);
-    const message = radioText(`${weapon.weaponName} は移動に必要なクルーを欠き、放棄されました（§45.6）。`,
-      `${weapon.weaponName} was abandoned for lack of a crew able to move it (§45.6).`);
+    const section = italian ? '§50.7' : '§45.6';
+    const message = radioText(`${weapon.weaponName} は移動に必要なクルーを欠き、放棄されました（${section}）。`,
+      `${weapon.weaponName} was abandoned for lack of a crew able to move it (${section}).`);
     if (side === 'player') alert(message);
     else ufReportLog(side, message, side);
   }
@@ -168,7 +177,7 @@ function pushTerrainWithFaction(grp, card) {
   }
   if (type && type !== 'SMOKE' && type !== 'WIRE') {
     discardUnclaimedWeapons(grp);
-    if (state.phase === 'play') abandonUnsupportedHeavyWeapons(grp);
+    if (state.phase === 'play') abandonUnsupportedHeavyWeapons(grp, type === 'MOVEMENT');
   }
   if (type === 'MOVEMENT' || type === 'WIRE') clearOutgoingFlanks(grp); // §17.41
   if (!['MOVEMENT','SMOKE','WIRE'].includes(card.terrain?.type)) delete grp._overrunTargets;
@@ -729,7 +738,7 @@ function placedOpenGround(card) {
 /** §13.5 裏向きの平地を煙幕・鉄条網の下に置き、移動カードと元の地形を捨てる。 */
 function placePlainOnGroup(grp, card) {
   discardUnclaimedWeapons(grp);
-  if (state.phase === 'play') abandonUnsupportedHeavyWeapons(grp);
+  if (state.phase === 'play') abandonUnsupportedHeavyWeapons(grp, false);
   const overlays = [];
   for (let i = grp.terrain.length - 1; i >= 0; i--) {
     const ty = grp.terrain[i] && grp.terrain[i].terrain && grp.terrain[i].terrain.type;

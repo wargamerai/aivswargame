@@ -6,6 +6,18 @@
   const passwordDigest = '910c44e8133981963af2577052a53f9b89ca16fd05d3f9797125e542118c98af';
   const aiPolicies = ['advance', 'hold', 'retreat'];
   const equipmentKinds = ['demo', 'panzerfaustHolders', 'antiTankMines', 'radioHolders'];
+  const desertFactions = ['ita', 'fra'];
+  const canPurchasePartisans = (faction, year) => faction === 'fra' || faction === 'ita' && year >= 1943;
+
+  function formationPoints(team, cardCosts) {
+    const radio = team.equipment?.includes('radioHolders') && desertFactions.includes(team.faction)
+      ? desertRadioCost(team.faction, team.troopType, team.radioStrength ?? 5) : 0;
+    const troopMultiplier = team.partisans ? 0.95 :
+      ['bersaglieri', 'legionnaires'].includes(team.troopType) ? 1.15 :
+      ['blackshirts', 'reservists'].includes(team.troopType) ? 0.85 : 1;
+    const personnel = cardCosts.reduce((sum, cost) => sum + (cost ?? 0), 0);
+    return Math.ceil(personnel * troopMultiplier) + radio;
+  }
   const terrainLabels = {
     BUILDINGS: '建物', WOODS: '森林', HILL: '丘', WALL: '障壁', BRUSH: '繁み',
     GULLY: '涸れ谷', STREAM: '河川', MARSH: '湿地', PILLBOX: 'トーチカ',
@@ -327,6 +339,10 @@
       <div class="uf-editor-formation-layout">
         <div data-roster-controls>
           <label>陣営 <select></select></label>
+          <div data-desert-troops hidden>
+            <label>部隊種別 <select data-troop-type></select></label>
+            <label><input type="checkbox" data-partisans> パルチザン（§37）</label>
+          </div>
           <p><label>ポイント上限 <input data-point-limit type="number" min="1" max="99999" placeholder="上限なし" style="width:7em"></label>
           <span data-count aria-live="polite"></span></p>
           <div data-roster class="uf-editor-roster"></div>
@@ -338,6 +354,10 @@
           </details>
           <div data-equipment style="margin-top:12px">
             <b>持ち込む装備</b>
+            <label data-radio-strength-control hidden>無線支援の射撃力
+              <select data-radio-strength><option>5</option><option>6</option><option>7</option></select>
+              <span data-radio-cost></span>
+            </label>
           </div>
         </div>
         <aside class="uf-editor-formation-preview">
@@ -367,6 +387,12 @@
     const selected = () => numbersOf(roster);
     const selectedReserves = () => numbersOf(reserves);
     const equipment = field.querySelector('[data-equipment]');
+    const troopControls = field.querySelector('[data-desert-troops]');
+    const troopType = field.querySelector('[data-troop-type]');
+    const partisans = field.querySelector('[data-partisans]');
+    const radioStrength = field.querySelector('[data-radio-strength]');
+    const radioStrengthControl = field.querySelector('[data-radio-strength-control]');
+    const radioCost = field.querySelector('[data-radio-cost]');
     const equipmentControls = equipmentKinds.map(kind => {
       const label = document.createElement('label');
       label.style.display = 'block';
@@ -382,6 +408,11 @@
     });
     const selectedEquipment = () => equipmentControls.filter(({ input }) => input.checked && !input.disabled)
       .map(({ kind }) => kind);
+    const options = () => troopControls.hidden ? {} : {
+      troopType: partisans.checked ? 'regular' : troopType.value,
+      partisans: partisans.checked,
+      radioStrength: Number(radioStrength.value),
+    };
     function showCards(gallery, numbers) {
       const cards = numbers.map(num => {
         const def = getSoldierDef(faction.value, num);
@@ -426,10 +457,17 @@
       const reinforcements = selectedReserves();
       const chosen = [...starters, ...reinforcements];
       const costs = chosen.map(num => printedPoints(getSoldierDef(faction.value, num)));
-      const known = costs.reduce((sum, value) => sum + (value ?? 0), 0);
+      const selectedYear = year.valueAsNumber;
+      partisans.disabled = !canPurchasePartisans(faction.value, selectedYear);
+      if (partisans.disabled) partisans.checked = false;
+      troopType.disabled = partisans.checked;
+      const team = { faction: faction.value, equipment: selectedEquipment(), ...options() };
+      radioStrengthControl.hidden = troopControls.hidden || !team.equipment.includes('radioHolders');
+      radioCost.textContent = radioStrengthControl.hidden ? '' :
+        `${desertRadioCost(team.faction, team.troopType, team.radioStrength)} pt`;
+      const known = formationPoints(team, costs);
       const total = costs.includes(null) ? `${known} pt ＋未登録` : `${known} pt`;
       count.textContent = ` 選択 ${starters.length}枚 / ${total}${pointLimit.value ? ' / 上限 ' + pointLimit.value : ''}`;
-      const selectedYear = year.valueAsNumber;
       for (const input of [...roster.querySelectorAll('input'), ...reserves.querySelectorAll('input')]) {
         const num = Number(input.value);
         const allowed = cardAvailableInYear(getSoldierDef(faction.value, num), selectedYear);
@@ -439,7 +477,13 @@
       }
       updatePreview();
     }
-    function draw(numbers = [], reserveNumbers = [], equipment = []) {
+    function draw(numbers = [], reserveNumbers = [], equipment = [], team = {}) {
+      troopControls.hidden = !desertFactions.includes(faction.value);
+      troopType.replaceChildren(new Option('通常部隊', 'regular'), ...(troopControls.hidden ? [] :
+        BASIC_TROOP_TYPES[faction.value].map(([key, label]) => new Option(label, key))));
+      troopType.value = team.troopType || 'regular';
+      partisans.checked = team.partisans === true;
+      radioStrength.value = team.radioStrength ?? 5;
       for (const { kind, input, icon } of equipmentControls) {
         input.disabled = (kind === 'panzerfaustHolders' && faction.value !== 'ger') ||
           (kind === 'antiTankMines' && !['ger','rus'].includes(faction.value));
@@ -474,10 +518,12 @@
     faction.addEventListener('change', () => draw());
     roster.addEventListener('change', () => updateRoster());
     reserves.addEventListener('change', () => updateRoster());
+    equipment.addEventListener('change', () => updateRoster());
+    troopControls.addEventListener('change', () => updateRoster());
     pointLimit.addEventListener('input', () => updateRoster());
     year.addEventListener('input', () => updateRoster());
     dialog.querySelector('[data-sides]').append(panel);
-    return { panel, faction, selected, selectedReserves, selectedEquipment, draw, reserveDeck, pointLimit };
+    return { panel, faction, selected, selectedReserves, selectedEquipment, options, draw, reserveDeck, pointLimit };
   });
   const sideTabs = Array.from(dialog.querySelector('[data-side-tabs]').children);
   const selectSideTab = bindTabs(sideTabs, sides.map(side => side.panel), 'uf-editor-side');
@@ -514,6 +560,7 @@
       reserves: side.selectedReserves(),
       equipment: side.selectedEquipment(),
       pointLimit: side.pointLimit.valueAsNumber || null,
+      ...side.options(),
     }));
     if (player.faction === opponent.faction) {
       showTab('sides');
@@ -539,8 +586,16 @@
         return null;
       }
       const costs = cardDefinitions.map(printedPoints);
-      const total = costs.reduce((sum, points) => sum + (points ?? 0), 0);
+      const total = formationPoints(team, costs);
       const name = index ? '相手軍' : '自軍';
+      if (team.partisans) {
+        const error = partisanFormationError({ partisans: team.faction }, team.faction, [...team.soldiers, ...team.reserves]);
+        if (error) {
+          showFormation(index);
+          message.textContent = error;
+          return null;
+        }
+      }
       if (unavailable || (team.pointLimit && (costs.includes(null) || total > team.pointLimit))) {
         showFormation(index);
         if (unavailable) message.textContent = `${name}の #${unavailable.cardNumber ?? unavailable.num} ${unavailable.name} は${formationYear}年に編成できません。`;
@@ -725,7 +780,8 @@
       }
       const equipment = saved ? (team?.equipment || equipmentKinds.filter(kind =>
         team?.secondary?.[kind === 'demo' ? 'demoHolders' : kind]?.length)) : side.selectedEquipment();
-      side.draw(team?.soldiers || side.selected(), saved ? (team?.reserves || []) : side.selectedReserves(), equipment);
+      side.draw(team?.soldiers || side.selected(), saved ? (team?.reserves || []) : side.selectedReserves(), equipment,
+        team || side.options());
     });
     if (saved) {
       form.elements.scenarioName.value = saved.name;
@@ -846,6 +902,12 @@
         (Array.isArray(team.reserves) && team.reserves.every(Number.isInteger))) &&
       (team.reserveDeck == null || (Number.isInteger(team.reserveDeck) &&
         team.reserveDeck >= 1 && team.reserveDeck <= (config.deckCycles ?? 3))) &&
+      (team.troopType == null || desertFactions.includes(team.faction) &&
+        (team.troopType === 'regular' || BASIC_TROOP_TYPES[team.faction].some(([key]) => key === team.troopType))) &&
+      (team.radioStrength == null || desertFactions.includes(team.faction) && [5, 6, 7].includes(team.radioStrength)) &&
+      (team.partisans == null || team.partisans === false ||
+        team.partisans === true && canPurchasePartisans(team.faction, config.formationYear) &&
+        (team.troopType == null || team.troopType === 'regular')) &&
       (team.equipment == null || (Array.isArray(team.equipment) &&
         team.equipment.every(kind => equipmentKinds.includes(kind))))) && config.player.faction !== config.opponent.faction;
   }
@@ -904,6 +966,9 @@
     const victories = config.victories?.length ? config.victories : [config.victory || 'B'];
     const special = config.special || [];
     const rules = special.map(key => specialChoices.get(key)?.rule).filter(Boolean);
+    const teams = [player, opponent];
+    const partisans = [...rules.flatMap(rule => rule.partisans || []),
+      ...teams.filter(team => team.partisans).map(team => team.faction)];
     const scenario = {
       id: 'custom', name, attackerRole: 'player', firstPlayer: player.faction,
       onlyFactions: [player.faction, opponent.faction],
@@ -914,7 +979,11 @@
       defenderPillbox: rules.some(rule => rule.defenderPillbox),
       defenderBonusBuilding: rules.some(rule => rule.defenderBonusBuilding),
       defenderGuaranteedTerrain: rules.some(rule => rule.defenderGuaranteedTerrain),
-      partisans: rules.find(rule => rule.partisans)?.partisans,
+      partisans: partisans.length <= 1 ? partisans[0] : partisans,
+      troopTypes: Object.fromEntries(teams.filter(team => desertFactions.includes(team.faction))
+        .map(team => [team.faction, team.troopType || 'regular'])),
+      radioStrength: Object.fromEntries(teams.filter(team => team.radioStrength)
+        .map(team => [team.faction, team.radioStrength])),
       reinforcements: Object.fromEntries([player, opponent]
         .filter(team => team.reserves?.length)
         .map(team => [team.faction, { afterCycles: (team.reserveDeck ?? h1Deck) - 1, soldiers: team.reserves }])),
@@ -961,6 +1030,8 @@
       for (const team of [config.player, config.opponent]) {
         if (!team.soldiers.length || [...team.soldiers, ...(team.reserves || [])].some(number =>
             !getSoldierDef(team.faction, number))) return false;
+        if (team.partisans && partisanFormationError({ partisans: team.faction }, team.faction,
+            [...team.soldiers, ...(team.reserves || [])])) return false;
       }
       startEditorScenario(config, false);
       return true;

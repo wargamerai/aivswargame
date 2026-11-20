@@ -29,6 +29,8 @@
     ger: 5,
     us:  6,
     rus: 4,
+    ita: 4,
+    fra: 6,
   };
 
   // §4.3 国籍別 1ターンに捨てられる未使用手札の上限
@@ -39,6 +41,8 @@
     ger: { withAction: 1, withoutAction: 1 },
     us:  { withAction: 0, withoutAction: 2 },
     rus: { withAction: 0, withoutAction: Infinity },
+    ita: { withAction: 0, withoutAction: 2 },
+    fra: { withAction: 0, withoutAction: 1 },
   };
 
   // §3.2 グループ編成の上下限 (歩兵)
@@ -109,15 +113,17 @@
     // または "Ger 1" など (区切り問わず最後の数値を拾う)
     const m = String(card.id).match(/(\d+)\s*$/);
     if (!m) return null;
-    const num = parseInt(m[1], 10);
-    const base = list.find(s => s.num === num) || null;
+    const number = parseInt(m[1], 10);
+    const base = list.find(s => s.num === number) || null;
     const partisan = base && typeof global.partisanFaction === 'function' && global.partisanFaction(factionKey);
-    const ig = base && global.state?.scenario?.infantryGuns?.[factionKey]?.[num];
+    const ig = base && global.state?.scenario?.infantryGuns?.[factionKey]?.[number];
     const eliteMorale = base && !base.afv && !base.infantryGun &&
       global.isEditorEliteFaction?.(factionKey) && Number(base.morale) === 1;
+    const italianPanic = factionKey === 'ita' && base && !base.afv && !base.infantryGun &&
+      global.italianFacingSoviets?.();
     // §18.2 拾った兵器を持っていれば、カードに印刷された兵器の代わりにそれを使う
     // §42 キャンペーンで変わった能力値（モラル・パニック・KIA・CCV）
-    if (base && (eliteMorale || partisan || ig || card._statOverride || card.acquiredWeapon || card.destroyed || card.flameDiscarded)) {
+    if (base && (eliteMorale || italianPanic || partisan || ig || card._statOverride || card.acquiredWeapon || card.destroyed || card.flameDiscarded)) {
       const d = { ...base, ...card._statOverride, ...card.acquiredWeapon, printedMorale: base.morale };
       // §22.4 印刷されていない火炎放射器を持つ間は KIA 値 -1、印刷されている火炎放射器を失ったら KIA 値 +1
       if (card.acquiredWeapon || card.destroyed || card.flameDiscarded) {
@@ -137,7 +143,11 @@
         }
       }
       if (eliteMorale) d.morale = '2';
+      if (factionKey === 'ita' && card._statOverride?.panic != null) {
+        d.panic = String(Math.max(num(d.panic), num(d.morale) - 1));
+      }
       if (partisan) d.panic = String(Math.max(0, (parseInt(d.panic, 10) || 0) - 1));
+      if (italianPanic) d.panic = String(num(d.panic) + 1);
       if (ig) {
         d.weaponCat = '歩兵砲';
         d.weaponName = ig.name || '歩兵砲';
@@ -495,6 +505,7 @@
 
   // §6.531 0rはカード裏面の潰走条件で判定する。攻撃時のパニック修正とは別。
   function routThreshold(soldier) {
+    if (soldier?.rncRoute === 'unless KIA') return -1;
     const printed = />\s*(\d+)/.exec(soldier?.rncRoute || '');
     return printed ? Number(printed[1]) : num(soldier?.panic);
   }

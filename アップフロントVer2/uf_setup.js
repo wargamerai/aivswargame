@@ -1,7 +1,7 @@
 // アップフロント: 兵士カード・陣営のデータ・ゲームの状態・初期化・開始と編成の画面・キャンペーン編成・戦歴
 // （index.html から切り出したもの。読み込む順番が大事: index.html の <script src> の順で読み込む）
 // ===== 兵士カードデータ =====
-var SOLDIER_CARDS = { us: [], ger: [], rus: [], jpn: [], uk: [] };
+var SOLDIER_CARDS = { us: [], ger: [], rus: [], jpn: [], uk: [], ita: [], fra: [] };
 
 function splitCSVLine(line) {
   // クォート対応CSV行分割
@@ -25,6 +25,8 @@ function splitCSVLine(line) {
 }
 
 function soldierImgPath(faction, num) {
+  if (faction === 'ita') return { dir: 'upfrontimages/イタリア', prefix: 'It' };
+  if (faction === 'fra') return { dir: 'upfrontimages/フランス', prefix: 'French' };
   if (faction === 'us')  return { dir: 'upfrontimages/ありか', prefix: 'US' };
   if (faction === 'ger') return { dir: 'upfrontimages/ドイツ', prefix: 'Ger' };
   if (faction === 'rus') {
@@ -136,12 +138,17 @@ if (_embedSoldiers) {
 }
 
 // ===== 陣営データ =====
+for (const [faction, csv] of Object.entries(UF_DESERT_SOLDIERS)) {
+  SOLDIER_CARDS[faction] = parseSoldierCSV(csv, faction);
+}
 const FACTIONS = {
   ger: { name: 'ドイツ', flag: '🇩🇪', dir: 'upfrontimages/ドイツ', prefix: 'Ger', count: 46, handMax: 5, handDraw: 1, breakLvl: 0.51 },
   rus: { name: 'ソ連',   flag: '🇷🇺', dir: 'upfrontimages/ソ連',   prefix: 'russian', count: 30, handMax: 4, handDraw: 4, breakLvl: 0.51 },
   us:  { name: 'アメリカ', flag: '🇺🇸', dir: 'upfrontimages/ありか', prefix: 'US', count: 44, handMax: 6, handDraw: 2, breakLvl: 0.51 },
   jpn: { name: '日本',   flag: '🇯🇵', dir: 'upfrontimages/日本',   prefix: 'Jap', count: 38, handMax: 4, handDraw: 2, breakLvl: 0.75 },
   uk:  { name: 'イギリス', flag: '🇬🇧', dir: 'upfrontimages/イギリス', prefix: 'Brit', count: 40, handMax: 5, handDraw: 2, breakLvl: 0.51 },
+  ita: { name: 'イタリア', flag: '🇮🇹', dir: 'upfrontimages/イタリア', prefix: 'It', count: 35, handMax: 4, handDraw: 2, breakLvl: 0.4, editorOnly: true },
+  fra: { name: 'フランス', flag: '🇫🇷', dir: 'upfrontimages/フランス', prefix: 'French', count: 35, handMax: 6, handDraw: 1, breakLvl: 0.5, editorOnly: true },
 };
 // scenarios.js などの外部スクリプトから参照できるようにグローバル公開
 window.FACTIONS = FACTIONS;
@@ -518,6 +525,7 @@ function buildSetupCard(num, location) {
 const WPN_CHIT_FOLDER = {
   ger: ['ドイツマーカ', 'Ger'], rus: ['ソ連マーカー', 'Russian'], us: ['アメリカマーカ', 'US'],
   jpn: ['日本マーカー', 'Jap'], uk: ['共通マーカー/イギリスマーカー', 'Brit'],
+  ita: ['共通マーカー/イタリアマーカ', 'Ita'], fra: ['共通マーカー/フランスマーカー', 'French'],
 };
 /** 兵器の種類 → 兵器チットの記号 */
 function weaponChitCode(weaponCat, fac) {
@@ -532,7 +540,7 @@ function weaponChitCode(weaponCat, fac) {
   if (w.indexOf('軽機関銃') === 0) return fac === 'jpn' ? 'LMG1' : 'LMG';
   if (w.indexOf('中機関銃') === 0) return 'MMG';
   if (w.indexOf('擲弾筒') === 0) return fac === 'jpn' ? 'GL' : 'MTR';
-  if (w.indexOf('迫撃砲') >= 0) return 'MTR';
+  if (w.indexOf('迫撃砲') >= 0) return fac === 'fra' ? (w.startsWith('60') ? '6cm MTR' : '5cm MTR') : 'MTR';
   if (w.indexOf('火炎放射器') === 0) return 'FTR';
   if (w.indexOf('対戦車ライフル') === 0) return 'ATR';
   if (w.indexOf('バズーカ') === 0) return 'BAZ';
@@ -547,6 +555,8 @@ const WPN_CHIT_BACK = {
   rus: ['BAR', 'FTR', 'LMG ATR', 'MOR', 'MP', 'RAD', 'SAR MMG'],
   jpn: ['BAR', 'FTR', 'LMG ATR GL', 'MMG', 'MP', 'RAD'],
   uk: ['ATR', 'BAR', 'FTR', 'LMG MMG', 'MOR', 'MP', 'PIAT', 'RAD'],
+  ita: ['BAR', 'FTR', 'LMG ATR MOR', 'MMG', 'MP', 'RAD'],
+  fra: ['BAR', 'FTR', 'LMG MOR', 'MMG', 'RAD'],
 };
 function weaponChitImage(w, broken) {
   if (!w) return null;
@@ -555,7 +565,7 @@ function weaponChitImage(w, broken) {
   const code = weaponChitCode(w.weaponCat, fac);
   if (!f || !code) return null;
   if (!broken) return encPath(`images/${f[0]}/Wpn Front ${code} ${f[1]}.gif`);
-  const bc = code === 'MTR' ? 'MOR' : code === 'LMG1' ? 'LMG' : code;
+  const bc = code.endsWith('MTR') ? 'MOR' : code === 'LMG1' ? 'LMG' : code;
   const name = (WPN_CHIT_BACK[fac] || []).find(n => n.split(' ').indexOf(bc) >= 0);
   return name ? encPath(`images/${f[0]}/Wpn Back ${name} ${f[1]}.gif`) : null;
 }
@@ -603,6 +613,8 @@ function getDemoImagePath(factionKey) {
     us:  'images/アメリカマーカ/Wpn Front DEMO US.gif',
     jpn: 'images/日本マーカー/Wpn Front DEMO Jap.gif',
     uk:  'images/共通マーカー/イギリスマーカー/Wpn Front DEMO Brit.gif',
+    ita: 'images/共通マーカー/イタリアマーカ/Wpn Front DEMO Ita.gif',
+    fra: 'images/共通マーカー/フランスマーカー/Wpn Front DEMO French.gif',
   };
   return map[factionKey] || '';
 }

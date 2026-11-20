@@ -1,8 +1,10 @@
-// §37 自作シナリオが partisans: 'rus' を指定した場合だけ適用する。
+// §37 partisans に指定した陣営に適用する。従来の単一陣営キーも受け付ける。
 'use strict';
 
 function partisanFaction(faction, scenario = state.scenario) {
-  return faction === 'rus' && scenario?.partisans === 'rus';
+  const partisans = scenario?.partisans;
+  return ['rus', 'ita', 'fra'].includes(faction) &&
+    (Array.isArray(partisans) ? partisans.includes(faction) : partisans === faction);
 }
 
 function partisanFormationError(scenario, faction, numbers) {
@@ -42,7 +44,7 @@ function partisanActionRoom(side, actions = 1) {
 
 function partisanSniperCheck(side) {
   if (!partisanSide(side)) return true;
-  if (getFactionKey(state[_enemySide(side)]) !== 'ger') return false;
+  if (getFactionKey(state[side]) === 'rus' && getFactionKey(state[_enemySide(side)]) !== 'ger') return false;
   const checks = (state.partisanSniperChecks ||= {});
   checks[side] = (checks[side] || 0) + 1;
   return checks[side] >= 2;

@@ -13,6 +13,8 @@
     rus: { withAction: 0, withoutAction: Infinity },
     jpn: { withAction: 0, withoutAction: 2 },     // §45.1 Line/2nd Line: 未行動時2枚 (精鋭は1行動時2枚)
     uk:  { withAction: 0, withoutAction: 2 },     // §44.1 Line: 未行動時2枚（アクション後は不可、独のみ唯一同時可）
+    ita: { withAction: 0, withoutAction: 2 },
+    fra: { withAction: 0, withoutAction: 1 },
   };
 
   let actionCount = 0;
@@ -32,6 +34,8 @@
     const troopType = global.troopTypeOf?.(key);
     if (troopType === 'conscripts') return actions === 0 ? 2 : 0;
     if (troopType === 'green') return actions === 0 ? 1 : 0;
+    if (troopType === 'blackshirts') return Number(actions === 0);
+    if (troopType === 'legionnaires') return Number(actions <= 1);
     if (global.isEditorEliteFaction?.(key)) {
       if (key === 'ger' || key === 'rus' || key === 'jpn') return actions <= 1 ? 2 : 0;
       if (key === 'us' || key === 'uk') return actions === 0 ? 2 : Number(actions === 1);

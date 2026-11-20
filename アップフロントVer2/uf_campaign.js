@@ -850,7 +850,7 @@ function _resolveFireActionInner() {
   const heroPreCard = [...state.selectedHand].map(i => state.playerHand[i]).find(c => c && c.terrain && c.terrain.type === 'HERO');
   let _heroPicked = null;
   if (heroPreCard) {
-    const cands = heroCandidates(firingGroup, srcFacKey, distance, fireOpts);
+    const cands = heroCandidates(firingGroup, srcFacKey, distance, fireOpts, heroPreCard);
     if (cands.length === 0) { alert('ヒーローカードで火力が上がる兵士がいません'); return; }
     if (cands.length === 1) {
       _heroPicked = cands[0].card;

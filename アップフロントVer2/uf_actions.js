@@ -276,6 +276,7 @@ function pickByRPC(rpcCard, group, eligible = window.INFANTRY_RULES.isAlive) {
 
 /** §14.3 / §33.1: 狙撃の最小KIA値または敗走で、7wが印刷士気と等しい場合だけ負傷する。 */
 function resolveSniperShot(card, soldier, group, side, judge) {
+  italianSurrenderAttacked(group);
   const R = window.INFANTRY_RULES;
   const readRange = label => {
     const match = String(card.terrain.modifier || '').match(new RegExp(label + '[:\\s]*(\\d)(?:-(\\d))?'));
@@ -560,6 +561,12 @@ async function confirmPlayerAction(asOpenGround = false) {
   const btn = document.getElementById('btn-confirm');
   const act = state.selectedAction;
   if (state.radioResolving || (asOpenGround ? act !== 'terrain' : btn.disabled)) return;
+  const select = state.fireSource || state.fireTarget;
+  if (select?.side === 'player' && state.groups.player[select.idx]?.italianSurrender &&
+      ['move','groupshift','flank','encircle','fire','ordnance','mortar','radio','terrain','recover','voluntary-panic','wire-remove'].includes(act)) {
+    alert(radioText('降伏中のグループは行動できません（§50.41）。', 'This surrendered group cannot perform that action (§50.41).'));
+    return;
+  }
   let playerDidRuleAction = false;
   try { const _b = document.querySelector('.action-btn[data-act="' + act + '"]'); ufReportLog('player', '行動: ' + (_b ? _b.textContent : act), 'player'); } catch (e) {}
   // §4.3/§14.1 捨て札（狙撃・相手への地形配置を含む）をしたターンは、国籍によってはアクションできない

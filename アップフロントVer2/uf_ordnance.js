@@ -125,8 +125,7 @@ function ordnanceWeapons(card, side) {
   const data = state.scenario?.ordnanceProfiles?.[faction]?.[card.num];
   const ig = infantryGunProfile(card, side);
   const weapons = [];
-  const vehicleGun = window.AFV?.gunProfile(card);
-  if (vehicleGun) weapons.push({ ...vehicleGun, def });
+  for (const gun of window.AFV?.gunProfiles(card) || []) weapons.push({ ...gun, def });
   if (/^火炎放射器/.test(name) && !card.flameDiscarded) weapons.push({ kind:'flame', def });
   if (window.INFANTRY_RULES.isArtillery(name)) weapons.push({ kind:'mortar', def });
   if (/^対戦車ライフル/.test(name)) weapons.push({ kind:'atr', def });
@@ -164,7 +163,7 @@ function ordnanceMalfunction(judge, plan) {
   const { weapon, own, shooter, usesBracket } = plan;
   if (weapon.kind === 'mortar') return checkMortarMalfunction(judge, own, shooter);
   const { red, number } = ordnanceRNC(judge);
-  const threshold = { rocket: 4, piat: 3, ig: 5, afv: 5 }[weapon.kind] ?? 6;
+  const threshold = weapon.malfunctionAt ?? { rocket: 4, piat: 3, ig: 5 }[weapon.kind] ?? 6;
   return weapon.kind !== 'faust' && red && number >= threshold - Number(Boolean(usesBracket));
 }
 
@@ -194,9 +193,10 @@ function ordnancePlans(side, source, targetIndex, continuing = false) {
   return own.cards.filter(c => R.isAlive(c) && !R.isPinned(c) && !c.transfer && !c.infiltrating)
     .flatMap(card => ordnanceWeapons(card, side).flatMap(weapon => {
       const vehicleWeapon = weapon.kind === 'afv' || weapon.kind === 'afvFlame';
-      if (vehicleWeapon ? window.AFV.mainArmamentUnavailable(card) :
+      if (vehicleWeapon ? window.AFV.mainArmamentUnavailable(card, weapon) :
           weapon.kind !== 'faust' && (card.malfunctioned || card.destroyed)) return [];
       if (moving && ((!vehicleWeapon && weapon.kind !== 'flame') || weapon.fixedGun)) return [];
+      if (weapon.hullGun && window.AFV.isHullDown(own, target, isFlankFire(enemySide, targetIndex, source))) return [];
       if (weapon.kind === 'mortar') {
         const M = window.MORTAR_RULES;
         if (weapon.def.range?.[distance]?.startsWith('NA') || !M.canFire(own, target).ok) return [];
@@ -271,6 +271,7 @@ function ordnanceHitProfile(plan, conceal, hero = false, defendingCard = null) {
   if (['ig', 'afv', 'mortar'].includes(weapon.kind) &&
       isAcquiredBy(own, targetIndex, card)) modifier++;
   if (weapon.kind === 'afv') {
+    modifier += weapon.hitModifier || 0;
     modifier -= weapon.commanderLost || 0;
     if (firingOnMove && (move || hullDown)) modifier--;
     if (weapon.fixedGun && move) modifier--;
@@ -322,7 +323,8 @@ function canUseOrdnanceFireCard(plan, card) {
 }
 
 function sameOrdnance(a, b) {
-  return a.card === b.card && a.weapon.kind === b.weapon.kind && a.againstCrew === b.againstCrew;
+  return a.card === b.card && a.weapon.kind === b.weapon.kind &&
+    Boolean(a.weapon.hullGun) === Boolean(b.weapon.hullGun) && a.againstCrew === b.againstCrew;
 }
 
 // §25.2 同じ目標への射撃カードを一度に出し、兵器ごとに命中と効果を判定する。
@@ -430,7 +432,7 @@ async function fireOrdnanceShot(plan, fireCard, confirmJudgement = false) {
   const mortar = weapon.kind === 'mortar';
   const malfunction = ordnanceMalfunction(judge, plan);
   if (malfunction) {
-    if (weapon.kind === 'afv') plan.card._mainGunMalfunctioned = true;
+    if (weapon.kind === 'afv') plan.card[weapon.hullGun ? '_hullGunMalfunctioned' : '_mainGunMalfunctioned'] = true;
     else plan.card.malfunctioned = true;
   }
   const hits = malfunction ? [] : targetProfiles.filter(([, hitProfile]) => ordnanceHitAllowed(hitProfile, judge));

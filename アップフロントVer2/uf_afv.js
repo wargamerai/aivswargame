@@ -38,7 +38,7 @@
   }
   const stats = global.__afvStats = { fire: 0, overrun: 0, overrunKills: 0, gun: 0, gunHits: 0, boxed: 0, killed: 0, buttoned: 0, ck: 0, bog: 0, cc: 0 };
 
-  const factionByPrefix = { Ger:'ger', US:'us', Rus:'rus', russian:'rus', Brit:'uk', Jap:'jpn' };
+  const factionByPrefix = { Ger:'ger', US:'us', Rus:'rus', russian:'rus', Brit:'uk', Jap:'jpn', It:'ita', French:'fra' };
   function factionOfCard(c) { return factionByPrefix[String(c?.id || '').split(/[ _]/, 1)[0]]; }
   function numOf(c) { const m = String(c && c.id).match(/(\d+)\s*$/); return m ? +m[1] : 0; }
   function defOf(c) {
@@ -57,12 +57,23 @@
     const side = sideOf(c);
     if (side.flame) return { kind:'afvFlame', name:model.name + ' 火炎放射器', flame:side.flame, commanderLost:ckMod(c) };
     if (!model.effect) return null;
-    return { kind:'afv', name:model.name + ' 主砲', armor:model.effect.box, infantry:model.effect.infantry,
-      range:side.hit, fixedGun:model.fixedGun, commanderLost:ckMod(c) };
+    return { kind:'afv', name:model.name + (model.hullGun ? ' 47mm' : ' 主砲'), armor:model.effect.box, infantry:model.effect.infantry,
+      range:side.hit, fixedGun:model.fixedGun, commanderLost:ckMod(c),
+      malfunctionAt: Number(model.mainGunMalfunction?.[1]) || 5 };
+  }
+  function gunProfiles(card) {
+    const primary = gunProfile(card);
+    if (!primary) return [];
+    const model = defOf(card);
+    if (!model.hullGun) return [primary];
+    return [primary, { ...primary, name: model.name + ' 75mm', hullGun: true, fixedGun: true,
+      hitModifier: -1, armor: model.hullGun.box, infantry: model.hullGun.infantry }];
   }
   function ckMod(c) { return (c && c._ck) || 0; }
-  function mainArmamentUnavailable(card) {
-    return Boolean(card._mainGunMalfunctioned || card._gunGone);
+  function mainArmamentUnavailable(card, weapon) {
+    return weapon?.hullGun
+      ? Boolean(card._hullGunGone || card._hullGunMalfunctioned)
+      : Boolean(card._gunGone || card._mainGunMalfunctioned);
   }
 
   // ===== 兵士の表に AFV を足す =====
@@ -917,7 +928,7 @@
     const result = options.againstCrew ? applyExposedCrewHit(card, final) : armorResult(target, card, final, flank, hullDown);
     return { name: defOf(card).name, result: result === 'KILL' ? 'KIA' : result, terrainModifier };
   }
-  global.AFV = Object.assign({ applyMinefieldHit, adjacentArmorSupport, applyExposedCrewHit, mainArmamentUnavailable,
+  global.AFV = Object.assign({ applyMinefieldHit, adjacentArmorSupport, applyExposedCrewHit, mainArmamentUnavailable, gunProfiles,
     canHeroOpenHatch, closeCombatColumn, canAttackVehicleInCloseCombat, resolveVehicleCloseCombat, applyOrdnanceHit, isHullDown, radioCritical, hasMagneticMine, isAfvCard, isAfvGroup, afvCard, isButtoned, applySniperHit, wire, boxedAfterFire, aiTryGun, aiTryOverrun, aiTryCCAfv, aiTryUnbog, canTryUnbog, tryUnbog, canOverrun, humanPanel, stats, defOf, gunProfile, registerCards: inject, E, splitAfv }, AFVAPI);
   wire();
   // シナリオEは公開した（ユーザーの指示 2026-11-06）。以前の scenarioE=1 の制限は外した

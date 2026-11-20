@@ -153,7 +153,6 @@ async function aiTryInfiltrate(opts) {
     // 火炎放射器は相対距離5なら射撃を優先（射撃カードがなければ手札を入れ替えて待つ）。爆薬も一緒にいて射撃カードがなければ、爆薬で侵入する
     const _hasFireCard = state.aiHand.some(c => c && c.terrain && String(c.terrain.type).indexOf('FIRE') === 0);
     if (aiFlameShouldFire(src, gi) && !(_demoHere && !_hasFireCard)) continue;
-    if (!window.__inChart && !_demoHere && !aiCCRankOK(src, _would).ok) continue; // 爆薬の兵がいれば止めない（火力8の攻撃）
     // チャート（2026-11-08 ユーザーの決め）: 相手のグループに、自分の一番強い兵（CCV）と同じか弱い兵が1人でもいれば侵入する。爆薬の兵がいれば止めない
     const _ccvOf = (c, key, grp) => CC.getCCV ? CC.getCCV(c, R.lookupSoldier(c, key) || {}, { group: grp }) : 0;
     const _myBest = _would.length ? Math.max(..._would.map(c => _ccvOf(c, aiKey, src))) : -Infinity;
@@ -163,8 +162,13 @@ async function aiTryInfiltrate(opts) {
       const tgt = state.groups.player[ti];
       if (!tgt.cards.some(c => R.isAlive(c))) continue;
       if (opts && opts.noAfv && window.AFV && window.AFV.isAfvGroup(tgt)) continue; // チャート: 対人への侵入（AFV のグループは肉薄の行で）
-      if (window.__inChart) { if (!_demoHere) { const _pkI = getFactionKey(state.player); const _weak = tgt.cards.filter(c => R.isAlive(c)).map(c => _ccvOf(c, _pkI, tgt)); if (!_weak.length || Math.min(..._weak) > _myBest) continue; } }
-      else if (!_demoHere && !aiCCRankOK(src, _would, tgt).ok) continue; // 相手の白兵戦の値と比べて不利なら侵入しない
+      if (!_demoHere && !tgt.italianSurrender) {
+        if (window.__inChart) {
+          const playerKey = getFactionKey(state.player);
+          const weakest = Math.min(...tgt.cards.filter(R.isAlive).map(c => _ccvOf(c, playerKey, tgt)));
+          if (weakest > _myBest) continue;
+        } else if (!aiCCRankOK(src, _would).ok || !aiCCRankOK(src, _would, tgt).ok) continue;
+      }
       if (!aiCanTargetRecognized(gi, ti)) continue; // 夜間: 未認知は侵入不可
       const chk = CC.canAttemptInfiltration(src, tgt, 'ai');
       if (!chk.ok) continue;
@@ -649,6 +653,7 @@ function markFiredAt(srcGrp, tgtGrp) {
   if (srcGrp) srcGrp._firedTurn = t;
   if (tgtGrp) {
     tgtGrp._firedUponTurn = t;
+    italianSurrenderAttacked(tgtGrp);
   }
   if (srcGrp && tgtGrp) loseAfvAcquisitionOnFire(srcGrp, tgtGrp);
   if (state.surprise && srcGrp && tgtGrp) {
@@ -1052,22 +1057,27 @@ function heroGainForSoldier(group, card, factionKey, distance, opts) {
 }
 
 /** §10.45 ヒーローで火力が上がる兵士の候補 [{card, gain}]（増加の大きい順） */
-function heroCandidates(group, factionKey, distance, opts) {
+function heroCandidates(group, factionKey, distance, opts, heroCard) {
   const R = window.INFANTRY_RULES;
   if (!R) return [];
   return group.cards
     .filter(c => R.isAlive(c) && !R.isPinned(c) && !c.malfunctioned && !c.destroyed)
-    .filter(c => { const d = R.lookupSoldier(c, factionKey); return !(d && d.afv); }) // §10.41・§10.45 ヒーローは AFV に使えない
+    .filter(c => {
+      const def = R.lookupSoldier(c, factionKey);
+      return !def?.afv && !(heroCard?.terrain.rncColor === '赤' &&
+        def?.weaponCat.startsWith('軽機関銃') && !def.needsCrew);
+    })
     .map(c => ({ card: c, gain: heroGainForSoldier(group, c, factionKey, distance, opts) }))
     .filter(x => x.gain > 0)
     .sort((a, b) => b.gain - a.gain);
 }
 
 // AI 用: ヒーローで増やせる最大のグループ火力 (HERO ボーナス計算)
-function aiCalcGroupMaxFP(group, factionKey, distance) {
+function aiCalcGroupMaxFP(group, factionKey, distance,
+  heroCard = state.aiHand.find(card => card?.terrain?.type === 'HERO')) {
   const crewMap = group.crewPairs ? buildCrewMapFromPairs(group) : {};
   const moving = isMovingIgnoringOverlays(group);
-  const cands = heroCandidates(group, factionKey, distance, { moving, crewMap });
+  const cands = heroCandidates(group, factionKey, distance, { moving, crewMap }, heroCard);
   return cands.length ? cands[0].gain : 0;
 }
 
@@ -1365,11 +1375,11 @@ function aiPerformFireInProgress(plan) {
     let heroBonus = 0;
     if (plan.useHero && plan.heroIdx != null && plan.heroIdx >= 0) {
       if (heroCard && heroCard.terrain && heroCard.terrain.type === 'HERO') {
-        heroBonus = aiCalcGroupMaxFP(firingGroup, getFactionKey(state.ai), plan.dist);
+        heroBonus = aiCalcGroupMaxFP(firingGroup, getFactionKey(state.ai), plan.dist, heroCard);
         // §10.45 英雄効果: ターン中、火力が一番増える兵士1名を2倍（2枚目なら3倍）
         const _crewMapAi = buildCrewMapFromPairs(firingGroup);
         const _heroCandsAi = heroCandidates(firingGroup, getFactionKey(state.ai), plan.dist,
-          { moving: isMovingIgnoringOverlays(src), crewMap: _crewMapAi });
+          { moving: isMovingIgnoringOverlays(src), crewMap: _crewMapAi }, heroCard);
         if (_heroCandsAi.length > 0) {
           const _pickedAi = _heroCandsAi[0].card;
           _pickedAi._heroEnhanced = _pickedAi._heroEnhanced ? 2 : 1;
@@ -2074,7 +2084,7 @@ async function aiTryPlaceOwnTerrain(onlyGi) {
     if (onlyGi != null && gi !== onlyGi) continue;
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const g = state.groups.ai[gi];
-    if (!g || g.eliminated || !g.cards.some(R.isAlive)) continue;
+    if (!g || g.eliminated || g.italianSurrender || !g.cards.some(R.isAlive)) continue;
     if (g.terrain.length === 0) continue;
     const top = topIgnoringSmoke(g); // §13.23 移動カード上の煙幕は妨げにならない
     if (!top || !top.terrain || top.terrain.type !== 'MOVEMENT') continue;
@@ -2140,7 +2150,7 @@ async function aiTryPlaceOwnPlain(onlyGi) {
     if (onlyGi != null && gi !== onlyGi) continue;
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const g = state.groups.ai[gi];
-    if (!isMovingIgnoringOverlays(g) || openGroundBlockReason(g, 'ai')) continue;
+    if (g?.italianSurrender || !isMovingIgnoringOverlays(g) || openGroundBlockReason(g, 'ai')) continue;
     targetGi = gi; break;
   }
   if (targetGi < 0) return false;
@@ -2167,6 +2177,7 @@ async function aiTryPlaceOwnSmoke() {
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const g = state.groups.ai[gi];
+    if (g.italianSurrender) continue;
     // §13.1 煙幕は地形・移動カードの上、地形なしのグループにも置ける
     const top = g.terrain && g.terrain.length > 0 ? g.terrain[g.terrain.length - 1] : null;
     const topType = top && top.terrain && top.terrain.type;
@@ -2515,7 +2526,7 @@ async function aiTryRally() {
   for (let gi = 0; gi < state.groups.ai.length; gi++) {
     if (acted.has(gi) || (state.aiFiredGroups && state.aiFiredGroups.has(gi))) continue;
     const g = state.groups.ai[gi];
-    if (!g || g.eliminated) continue;
+    if (!g || g.eliminated || g.italianSurrender) continue;
     const pinnedIdx = g.cards.map((c, i) => (R.isPinned(c) && R.isAlive(c)) ? i : -1).filter(i => i >= 0);
     const rallyCard = state.aiHand[rallyIdx];
     if (pinnedIdx.length === 0 && !(rallyCard.terrain.type === 'HERO' &&

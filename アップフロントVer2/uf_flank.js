@@ -559,6 +559,7 @@ function transferBlockReason(side, fromIdx, dest, soldiers) {
 }
 /** §17.81: 未渡河の兵士は、自分の移動カードで渡河できた場合に移送を始める。 */
 function troopsAbleToTransfer(side, source, soldiers, movementCards) {
+  if (getFactionKey(state[side]) === 'ita') abandonUnsupportedHeavyWeapons(source);
   const R = window.INFANTRY_RULES;
   if (!R.isInStream(source) || R.hasCrossedStream(source)) return soldiers;
   return soldiers.filter((card, index) => {
@@ -609,6 +610,7 @@ function receiveTransfers(side, toIdx, choosePosition) {
     finishIndividualTransfer(card, source, destination);
   }
   destination.cards = formation;
+  delete destination.italianSurrender;
   return transfers.length;
 }
 /** §17.92 地形を受け入れて新しいグループが成立。 */

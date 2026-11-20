@@ -945,14 +945,14 @@ function rallyAllPartnerCandidates(side, srcIdx) {
   const R = window.INFANTRY_RULES;
   const groups = state.groups[side] || [];
   const src = groups[srcIdx];
-  if (!src || !R) return [];
+  if (!src || !R || src.italianSurrender) return [];
   const teamCanRally = group => !window.AFV.isAfvGroup(group) || window.AFV.defOf(window.AFV.afvCard(group))?.ot;
   if (!teamCanRally(src)) return [];
   const acted = side === 'player' ? state.actedGroups : state.aiActedGroups;
   const srcLeader = hasActiveRallyLeader(src, side);
   const out = [];
   groups.forEach((g, gi) => {
-    if (gi === srcIdx || !g || g.eliminated || acted?.has(gi) || !teamCanRally(g) ||
+    if (gi === srcIdx || !g || g.eliminated || g.italianSurrender || acted?.has(gi) || !teamCanRally(g) ||
         (side === 'ai' && state.aiFiredGroups?.has(gi))) return;
     if (!g.cards.some(c => R.isPinned(c) && R.isAlive(c) && !c.transfer)) return;
     const gLeader = hasActiveRallyLeader(g, side);
@@ -977,7 +977,7 @@ function rallyAllWithPartner(side, index, card) {
     return !afvSmokeActionUsed(side) && (state.aiDiscardedThisTurn || 0) <=
       Math.max(0, discard.turnLimit(faction, actions + count) - entrenchments);
   };
-  if (!primary?.cards.some(c => R.isAlive(c) && R.isPinned(c) && !c.transfer) || !canRallyGroups(1)) return 0;
+  if (primary?.italianSurrender || !primary?.cards.some(c => R.isAlive(c) && R.isPinned(c) && !c.transfer) || !canRallyGroups(1)) return 0;
   const partner = canRallyGroups(2) ? rallyAllPartnerCandidates(side, index).find(gi => side === 'ai' ||
     confirm(radioText(`GROUP ${groups[gi].name} も全回復しますか？ このグループの行動も使います。`,
       `Also rally GROUP ${groups[gi].name}? This spends its action as well.`))) : undefined;
@@ -1144,6 +1144,7 @@ function endPlayerTurn(draw = true) {
   state.playerSnipeRncThisTurn = null;
   // §15.53 処刑の判定は自分のターン終了時だけ
   commissarExecutionCheck('player');
+  updateItalianSurrenders();
   if (state.phase !== 'play' || settleDeckTimeLimit()) return;
   updateCommissarMarker('player');
   updateCommissarMarker('ai');
@@ -1202,6 +1203,7 @@ async function endAITurn() {
   }
   // §15.53 処刑の判定は自分のターン終了時だけ
   commissarExecutionCheck('ai');
+  updateItalianSurrenders();
   if (state.phase !== 'play' || settleDeckTimeLimit()) return;
   updateCommissarMarker('player');
   updateCommissarMarker('ai');

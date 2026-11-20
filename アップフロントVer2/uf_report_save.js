@@ -552,6 +552,7 @@ function startGameWithSetup() {
     return false;
   }
   const others = Object.keys(FACTIONS).filter(k => k !== playerFaction &&
+    (!FACTIONS[k].editorOnly || scenario?.factions?.[k]) &&
     (!scenario?.onlyFactions || scenario.onlyFactions.includes(k)));
   const aiKey = others.includes(setupState.aiFactionOverride)
     ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
@@ -567,6 +568,7 @@ function startGameWithSetup() {
 
   state.campaignEnded = false; // 新シナリオ開始: 終了フラグリセット
   if (!secondSegment) {
+    state.italianSurrenderClosed = false;
     state.selectedHand = new Set();
     state.selectedAction = state.fireSource = state.fireTarget = state.sniperTarget = null;
     ufReportReset();
@@ -915,7 +917,7 @@ function initAICrewPairs() {
 }
 
 function startGame(playerFaction) {
-  const others = Object.keys(FACTIONS).filter(k => k !== playerFaction);
+  const others = Object.keys(FACTIONS).filter(k => k !== playerFaction && !FACTIONS[k].editorOnly);
   // 選択中のシナリオから初期グループを生成
   const scenarioId = (document.getElementById('scenario-pick') || {}).value || 'A';
   const scenario = (window.SCENARIOS || {})[scenarioId];
@@ -937,6 +939,7 @@ function startGame(playerFaction) {
   state.playerDiscardPlan = [];
   state.resolvingPlayerDiscards = false;
   state.retiredCasualties = null;
+  state.italianSurrenderClosed = false;
   state.britishUnitType = britishUnitType(scenario?.britishUnitType);
   state.troopTypes = { ...scenario?.troopTypes };
   // 時間帯選択（昼/夜）
@@ -1004,7 +1007,7 @@ function extractFP(sub) {
 function makeTerrainHandCard(terrainIndex, side, game = state) {
   const printed = TERRAIN_CARDS[terrainIndex];
   if (!printed) return null;
-  const faces = side && nationalActionFaces(printed, getFactionKey(game[side]));
+  const faces = side && nationalActionFaces(printed, getFactionKey(game[side]), game);
   const scenario = game.scenario;
   const disabled = type => window.SCENARIO_HELPERS.isScenarioCardTypeDisabled(scenario, type, game[side + 'Role']);
   let t = faces ? faces.find(face => !disabled(face.type)) || { ...printed, type: 'COWER', modifier: '0', sub: '' } : printed;

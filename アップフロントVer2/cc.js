@@ -301,6 +301,7 @@
   }
 
   function calcInfiltrationColumnDetailed(tgtGroup, srcGroup, opts) {
+    if (tgtGroup.italianSurrender) return { column: 1, breakdown: [{ label: '降伏（§50.41）', value: 1 }] };
     opts = opts || {};
     const breakdown = [];
     const vehicle = global.AFV?.isAfvGroup(tgtGroup) ? global.AFV.afvCard(tgtGroup) : null;
@@ -761,7 +762,8 @@
       const _sFlared = Boolean(global.isGroupFlared?.(tgtGroup)); // §38.6 潜入される側が照らされているか
       const col = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey, night: _isNight && !_sFlared });
       const info = el('div', { color:'#ccc', fontSize:'13px', marginBottom:'12px' },
-        `防御兵数: ${baseCol} | 最終コラム: ${col}`);
+        tgtGroup.italianSurrender ? '降伏中 · 侵入コラム1（§50.41）' :
+          `防御兵数: ${baseCol} | 最終コラム: ${col}`);
       if (!multiple) frag.appendChild(info);
 
       // 移動カード数
@@ -827,7 +829,11 @@
               option.textContent = `GROUP ${target.group.name}`;
               select.appendChild(option);
             });
-            select.onchange = () => { entry.target = available[Number(select.value)]; };
+            select.onchange = () => {
+              entry.target = available[Number(select.value)];
+              updateMethod();
+              updateMoveCount();
+            };
             targetCell.appendChild(select);
             tr.appendChild(targetCell);
           }
@@ -860,6 +866,18 @@
           lblMove.appendChild(document.createTextNode('移動'));
           tdMethod.appendChild(lblMove);
 
+          const noCheck = el('span', { fontSize:'12px', color:'#adf' }, 'モラル判定なし');
+          tdMethod.appendChild(noCheck);
+          function updateMethod() {
+            const surrender = entry.target.group.italianSurrender && !mustFord;
+            noCheck.hidden = !surrender;
+            lblMorale.hidden = lblMove.hidden = Boolean(surrender);
+            if (surrender) {
+              entry.useMove = false;
+              rMorale.checked = true;
+            }
+          }
+          updateMethod();
           tr.appendChild(tdMethod);
         }
         listTable.appendChild(tr);
@@ -1307,12 +1325,15 @@
         continue;
       }
 
-      if (sel.useMove) {
+      if (sel.target.group.italianSurrender && !_inStream) {
+        entry.method = '降伏（§50.41）';
+        entry.exempted = entry.passed = true;
+      } else if (sel.useMove) {
         entry.method = '移動カード(免除)';
         entry.exempted = true;
         entry.passed = true;
         const mc = moveCards.shift();
-        if (!spendMovementCard('player', mc)) {
+        if (!spendMovementCard('player', mc, srcGroup)) {
           entry.passed = false;
           moralResults.push(entry);
           continue;
@@ -1369,9 +1390,10 @@
     let detonation = null;
     for (const sel of passedSoldiers) {
       const { group: tgtGroup, side: tgtSide, index: tgtIdx } = sel.target;
+      if (!global._groupAlive(tgtGroup)) continue;
       const night = Boolean(global.state.isNight && !global.isGroupFlared(tgtGroup));
       // §9.4 侵入の援護には兵士1名につき隠ぺいカード1枚。
-      const concealValue = useSingleConcealedCard('player', global.radioText(
+      const concealValue = tgtGroup.italianSurrender ? 0 : useSingleConcealedCard('player', global.radioText(
         `${sel.soldierDef.name} の侵入を援護する隠ぺいカードを選んでください。0で使いません。`,
         `Choose a Concealed card to support ${sel.soldierDef.name}'s infiltration. Enter 0 to decline.`));
       const colDetail = calcInfiltrationColumnDetailed(tgtGroup, srcGroup, { srcFacKey, night, concealValue });
@@ -1389,12 +1411,14 @@
       entry.infiltrated = rpcResult.success;
 
       if (rpcResult.success) {
-        sel.card.infiltrating = true;
-        sel.card.infiltratedGroupSide = tgtSide;
-        sel.card.infiltratedGroupIdx = tgtIdx;
-        sel.card.infiltratedThisTurn = true;
-        if (global.AFV?.isAfvGroup(tgtGroup)) vehicles.add(tgtGroup);
-        if (sel.card === plannedCharge) detonation = sel.target;
+        if (!global.captureItalianSurrender(tgtGroup, tgtSide, srcGroup, 'player', sel.card)) {
+          sel.card.infiltrating = true;
+          sel.card.infiltratedGroupSide = tgtSide;
+          sel.card.infiltratedGroupIdx = tgtIdx;
+          sel.card.infiltratedThisTurn = true;
+          if (global.AFV?.isAfvGroup(tgtGroup)) vehicles.add(tgtGroup);
+          if (sel.card === plannedCharge) detonation = sel.target;
+        }
       }
       infResults.push(entry);
     }
@@ -1432,10 +1456,11 @@
     return global.state[side + 'Hand'].filter(card => global.handActionFace(card, 'MOVEMENT', side));
   }
 
-  function spendMovementCard(side, card) {
+  function spendMovementCard(side, card, group) {
     const hand = global.state[side + 'Hand'];
     const index = hand.indexOf(card);
     if (index < 0 || !global.useHandActionFace(card, global.handActionFace(card, 'MOVEMENT', side))) return false;
+    if (global.getFactionKey(global.state[side]) === 'ita') global.abandonUnsupportedHeavyWeapons(group);
     global.pushTerrainToDiscard(hand.splice(index, 1)[0]);
     if (side === 'ai') global.state.aiHandCount = hand.length;
     return true;
@@ -1451,7 +1476,7 @@
       const def = R().lookupSoldier(card, faction);
       if (!def || !R().isAlive(card) || R().isPinned(card)) continue;
       let entered = false;
-      if (useMove) entered = spendMovementCard(side, moves.shift());
+      if (useMove) entered = spendMovementCard(side, moves.shift(), srcGroup);
       else {
         for (;;) {
           const judge = drawFn(side);
@@ -1798,10 +1823,14 @@
       abandonHeavyWeapon(srcGroup, card, aiFacKey, 'ai');
 
       let reusedRpc = null;
-      const move = moveCards.shift();
-      if (move) {
+      const surrendered = tgtGroup.italianSurrender && !fording;
+      const move = surrendered ? null : moveCards.shift();
+      if (surrendered) {
+        entry.method = '降伏（§50.41）';
+        entry.moraleResult = true;
+      } else if (move) {
         entry.method = '移動';
-        if (!spendMovementCard('ai', move)) continue;
+        if (!spendMovementCard('ai', move, srcGroup)) continue;
         if (fording && !R().isFordCard(move)) reusedRpc = drawFn(st.currentTurn);
         entry.moraleResult = !fording || R().isFordCard(move) ||
           Boolean(reusedRpc && reusedRpc.terrain.rncColor !== '赤');
@@ -1830,12 +1859,12 @@
 
     const resolve = async () => {
       for (const { card, entry, reusedRpc } of attempts) {
-        if (!entry.moraleResult) { entry.infiltrated = false; continue; }
+        if (!entry.moraleResult || !global._groupAlive(tgtGroup)) { entry.infiltrated = false; continue; }
         // 侵入RPC判定
         const _isNight3 = !!(global.state && global.state.isNight);
         const _sFlared3 = Boolean(global.isGroupFlared?.(tgtGroup)); // §38.6 潜入される側が照らされているか
         // §9.4 AI も侵入する兵士1名につき隠ぺいカード1枚で援護する（持っていれば使う）
-        const concealValue = useSingleConcealedCard('ai');
+        const concealValue = tgtGroup.italianSurrender ? 0 : useSingleConcealedCard('ai');
         const column = calcInfiltrationColumn(tgtGroup, srcGroup, { srcFacKey: aiFacKey, night: _isNight3 && !_sFlared3, concealValue });
         entry.column = column;
         const rpcCard = reusedRpc || drawFn();
@@ -1845,10 +1874,12 @@
         entry.rpcValue = rpcResult.posValue;
         entry.infiltrated = rpcResult.success;
         if (rpcResult.success) {
-          card.infiltrating = true;
-          card.infiltratedGroupSide = tgtSide;
-          card.infiltratedGroupIdx = tgtIdx;
-          card.infiltratedThisTurn = true; // §21.2 爆薬使用可能期間
+          if (!global.captureItalianSurrender(tgtGroup, tgtSide, srcGroup, 'ai', card)) {
+            card.infiltrating = true;
+            card.infiltratedGroupSide = tgtSide;
+            card.infiltratedGroupIdx = tgtIdx;
+            card.infiltratedThisTurn = true; // §21.2 爆薬使用可能期間
+          }
         }
       }
 

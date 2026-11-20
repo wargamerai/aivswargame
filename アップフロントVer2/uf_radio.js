@@ -3,6 +3,12 @@
 
 function radioText(ja, en) { return LANG === 'ja' ? ja : langX(en); }
 
+function desertRadioCost(faction, troop, strength) {
+  const base = { ita: 22, fra: 42 }[faction] || 0;
+  const halfPrice = faction === 'ita' ? troop !== 'bersaglieri' : troop === 'reservists';
+  return (strength - 4) * base / (halfPrice ? 2 : 1);
+}
+
 function radioHolders(side) {
   const faction = getFactionKey(state[side]);
   const R = window.INFANTRY_RULES;
@@ -12,12 +18,14 @@ function radioHolders(side) {
 }
 
 function isRadioCard(card, side) {
-  const terrain = card?.terrain;
+  const faction = getFactionKey(state[side]);
+  const borrowed = faction === 'ita' || faction === 'fra';
+  const terrain = borrowed ? TERRAIN_CARDS[card?.terrainIndex] || card?.terrain : card?.terrain;
   if (!terrain || !/RADIO|無線機/i.test(terrain.sub || '') ||
       !String(terrain.type).startsWith('RALLY') ||
-      window.SCENARIO_HELPERS.isCardDisabledAsTerrain(state.scenario, card, state[side+'Role'] === 'attacker')) return false;
-  const faction = getFactionKey(state[side]);
-  const mark = { ger:'独', rus:'ソ', us:'米', jpn:'日', uk:'英' }[faction];
+      window.SCENARIO_HELPERS.isCardDisabledAsTerrain(state.scenario, { ...card, terrain },
+        state[side+'Role'] === 'attacker')) return false;
+  const mark = { ger:'独', rus:'ソ', us:'米', jpn:'日', uk:'英', ita:'ソ', fra:'独' }[faction];
   return !terrain.leftFactions?.length || terrain.leftFactions.includes(mark);
 }
 
@@ -158,7 +166,9 @@ async function resolveRadioMissionInProgress(side, source, targetIndex, card) {
       radioText(red ? '赤' : '黒', red ? 'Red ' : 'Black ') + value + ' · ' +
       (operator._radioBroken ? radioText('無線機故障', 'Radio malfunction') :
         success ? radioText('砲撃成立', 'Fire mission accepted') : radioText('砲撃不成立', 'Fire mission denied'));
-    const results = success ? resolveSupportHits(target, defender, 5, true) : [];
+    if (success) italianSurrenderAttacked(target);
+    const strength = state.scenario?.radioStrength?.[getFactionKey(state[side])] ?? 5;
+    const results = success ? resolveSupportHits(target, defender, strength, true) : [];
     ufReportLog(side, title + ' · ' + status, side);
     await showFireResultOverlay(title + ' · ' + status, results, [card, ...conceal, draw].filter(Boolean));
     cleanupEliminatedGroups();

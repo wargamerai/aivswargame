@@ -156,7 +156,7 @@ function askPlayerConcealment() {
  *  （アクションに数えない。使った分の補充は自分のターンの終わりまで無し §9.3） */
 async function askPlayerHeroRally(tgtGroup, targets = tgtGroup?.cards || []) {
   const R = window.INFANTRY_RULES;
-  if (!R || !tgtGroup) return;
+  if (!R || !tgtGroup || tgtGroup.italianSurrender) return;
   const heroIdx = state.playerHand.findIndex(c => c && c.terrain && c.terrain.type === 'HERO');
   if (heroIdx < 0) return;
   const pinned = targets.filter(c => R.isAlive(c) && R.isPinned(c));
@@ -363,6 +363,7 @@ function noteSniperCheck(group, number) {
 
 function voluntaryPanicCandidates(group, side) {
   const R = window.INFANTRY_RULES;
+  if (group?.italianSurrender) return [];
   return group?.cards.filter(card => R.isPinned(card) && R.isAlive(card) && !card._commissar &&
     !card.berserk && !card.transfer && !window.AFV.isAfvCard(card) && !infantryGunProfile(card, side)) || [];
 }
@@ -617,12 +618,12 @@ function changePrisonerGuard(group, previousGuards, nextGuard) {
 }
 
 /** §32 捕虜にする。成功したら true。 */
-function capturePrisoner(prisoner, prisonerSide, captorGroup, captorSide) {
+function capturePrisoner(prisoner, prisonerSide, captorGroup, captorSide, chosenGuard) {
   const R = window.INFANTRY_RULES;
   if (!R || !R.isAlive(prisoner) || prisoner.captured || !captorGroup ||
       captorGroup.eliminated || captorGroup.forming || window.AFV?.isAfvCard(prisoner) ||
       infantryGunProfile(prisoner, prisonerSide)) return false;
-  const guard = choosePrisonerGuard(captorGroup, captorSide, guardCandidates(captorGroup, captorSide));
+  const guard = chosenGuard || choosePrisonerGuard(captorGroup, captorSide, guardCandidates(captorGroup, captorSide));
   if (!guard) return false;
   prisoner.routed = true;
   prisoner.captured = true;
@@ -868,6 +869,9 @@ function breakForceSize(side) {
 function breakLossLimit(side) {
   const initial = breakForceSize(side);
   if (!initial) return 0;
+  const faction = getFactionKey(state[side]);
+  if (faction === 'fra') return Math.ceil(initial / 2);
+  if (faction === 'ita' && !italianFacingSoviets()) return Math.floor(initial * 2 / 5) + 1;
   const breakLevel = state[side]?.breakLvl;
   if (state.scenario?.victoryPresets?.includes('V') && breakLevel > 0.51) {
     return Math.ceil(initial * breakLevel);

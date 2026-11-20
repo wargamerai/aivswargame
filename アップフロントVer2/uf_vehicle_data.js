@@ -25,6 +25,7 @@ const UF_GERMAN_GUNS = [
 
 // その他の陣営。各カードの表裏を照合。
 const UF_VEHICLES_BY_FACTION = {
+  ...UF_DESERT_VEHICLES,
   ger: UF_GERMAN_VEHICLES,
   us: [
     {"image": 32,"name": "M8 Greyhound","pt": 192,"ot": true,"fixedGun": false,"ce": {"ovr": 2,"fp": [5,6,7,8,9,10],"hit": ["0","0-1","0-2","0-3","0-4","0-5"],"bog": "4c","bogW": "7w","armor": {"is": 1,"k": 2},"flank": {"is": 0,"k": 1},"morale": 4,"ceVal": 9},"bu": null,"effect": {"infantry": 1,"box": 2},"mgMalfunction": "X6"},
@@ -77,6 +78,7 @@ const UF_VEHICLES_BY_FACTION = {
 };
 
 const UF_GUNS_BY_FACTION = {
+  ...UF_DESERT_GUNS,
   ger: UF_GERMAN_GUNS,
   us: [
     {"number": 29,"name": "37mm M3A1","armor": 2,"infantry": 1,"range": ["0","0-1","0-2","0-3","0-4","0-5"],"pt": 185,"ccvFront": "4/4","ccvBack": "0/0","morale": "4","kiaFront": "9","kiaBack": "9","panic": "6","boxedDefense": {"morale": "2","kiaFront": "7","kiaBack": "7","panic": "4"},"xVal": "X5-6","rncRoute": "0r RNC > 6"},

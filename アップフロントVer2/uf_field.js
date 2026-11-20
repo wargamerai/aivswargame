@@ -180,6 +180,13 @@ function makeMainGroup(side, group, idx) {
   const fmTag = group.forming ? '<span style="color:#9f9;margin-left:8px;font-size:12px;">設立中</span>' : '';
   const shTag = group.pendingShift ? `<span style="color:#f9c;margin-left:8px;font-size:12px;">→${groupSlotName(group.pendingShift.toIdx)}へ側方移送中</span>` : '';
   header.innerHTML = `<span class="gname">GROUP ${group.name}</span>${flankTag}${encTag}${ppTag}${trTag}${fmTag}${shTag}${nightTag}${fpRow}`;
+  if (group.italianSurrender) {
+    const marker = document.createElement('img');
+    marker.src = encPath('images/共通マーカー/Surrender Front.gif');
+    marker.alt = marker.title = radioText('降伏（§50.41）', 'Surrendered (§50.41)');
+    marker.width = 36;
+    header.append(marker);
+  }
   if (group.weaponPool?.length) header.querySelector('.gname').after(buildDroppedWeaponChits(group.weaponPool));
 
   const dctrl = document.createElement('div');
@@ -545,6 +552,25 @@ const REPAIR_TABLE = {
     '火炎放射器':        { repair: '黒6',       destroy: '赤0-6', moralePenalty: -1 }, // FTR
     '無線機':            { repair: '黒4-6',     destroy: '赤4-6', moralePenalty: -1 }, // RAD
   },
+  ita: {
+    'ボルトアクション小銃': { repair: '黒0-6', destroy: '赤6', moralePenalty: -1 },
+    '短機関銃': { repair: '黒0-6', destroy: '赤4-6', moralePenalty: -1 },
+    '中機関銃': { repair: '黒2-6', destroy: '赤4-6', moralePenalty: -1 },
+    '軽機関銃': { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
+    '対戦車ライフル': { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
+    '45mm迫撃砲': { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
+    '火炎放射器': { repair: '黒6', destroy: '赤0-6', moralePenalty: -1 },
+    '無線機': { repair: '黒4-6', destroy: '赤3-6', moralePenalty: -1 },
+  },
+  fra: {
+    'ボルトアクション小銃': { repair: '黒0-6,赤0', destroy: '赤6', moralePenalty: -1 },
+    '中機関銃': { repair: '黒0-6', destroy: '赤5-6', moralePenalty: -1 },
+    '軽機関銃': { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
+    '50mm迫撃砲': { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
+    '60mm迫撃砲': { repair: '黒1-6', destroy: '赤4-6', moralePenalty: -1 },
+    '火炎放射器': { repair: '黒6', destroy: '赤0-6', moralePenalty: -1 },
+    '無線機': { repair: '黒4-6', destroy: '赤3-6', moralePenalty: -1 },
+  },
 };
 
 
@@ -578,12 +604,14 @@ function repairOptions(group, side) {
   return group.cards.filter(card => R.isAlive(card) && !R.isPinned(card) && !card.transfer).flatMap(card => {
     const def = R.lookupSoldier(card, faction);
     if (!def) return [];
-    const gun = def.afv ? window.AFV.gunProfile(card) : null;
     const repairs = [];
-    if (gun && card._mainGunMalfunctioned && !card._gunGone) {
+    for (const gun of def.afv ? window.AFV.gunProfiles(card) : []) {
+      const malfunction = gun.hullGun ? '_hullGunMalfunctioned' : '_mainGunMalfunctioned';
+      const destroyed = gun.hullGun ? '_hullGunGone' : '_gunGone';
+      if (!card[malfunction] || card[destroyed]) continue;
       const rule = gun.kind === 'afvFlame' ? getRepairEntry(faction, '火炎放射器') :
         { repair:'黒0-6', destroy:'赤6' };
-      if (rule) repairs.push({ card, def, name: gun.name, rule, main: true });
+      if (rule) repairs.push({ card, def, name: gun.name, rule, main: true, malfunction, destroyed });
     }
     if (card.malfunctioned && !card.destroyed) {
       let rule = getRepairEntry(faction, def.weaponCat);
@@ -603,8 +631,8 @@ function applyWeaponRepair(repair, judge) {
   const restored = !destroyed && matchesRange(parseRepairRange(rule.repair), color, number);
   if (destroyed || restored) {
     if (main) {
-      card._mainGunMalfunctioned = false;
-      if (destroyed) card._gunGone = true;
+      card[repair.malfunction] = false;
+      if (destroyed) card[repair.destroyed] = true;
     } else {
       card.malfunctioned = false;
       if (destroyed) card.destroyed = true;

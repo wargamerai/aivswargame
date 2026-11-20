@@ -3,16 +3,18 @@
 const BASIC_TROOP_TYPES = {
   rus: [['conscripts', '徴集兵', 'Conscripts'], ['guards', '親衛兵', 'Guards']],
   us: [['green', '新兵', 'Green troops'], ['paratroops', '空挺兵', 'Paratroops']],
-  ger: [['volksgrenadiers', '国民擲弾兵', 'Volksgrenadiers'], ['ss', 'SS', 'SS']]
+  ger: [['volksgrenadiers', '国民擲弾兵', 'Volksgrenadiers'], ['ss', 'SS', 'SS']],
+  ita: [['blackshirts', '黒シャツ隊', 'Blackshirts'], ['bersaglieri', 'ベルサリエリ（精鋭）', 'Bersaglieri']],
+  fra: [['reservists', '予備役兵', 'Reservists'], ['legionnaires', '外人部隊（精鋭）', 'Legionnaires']]
 };
 
-function troopTypeOf(faction) {
-  const type = state.troopTypes?.[faction] ?? state.scenario?.troopTypes?.[faction];
+function troopTypeOf(faction, game = state) {
+  const type = game.troopTypes?.[faction] ?? game.scenario?.troopTypes?.[faction];
   return BASIC_TROOP_TYPES[faction]?.some(([value]) => value === type) ? type : 'regular';
 }
 
 function isEditorEliteFaction(faction) {
-  if (['guards', 'paratroops', 'ss'].includes(troopTypeOf(faction))) return true;
+  if (['guards', 'paratroops', 'ss', 'bersaglieri', 'legionnaires'].includes(troopTypeOf(faction))) return true;
   if (!state.scenario?.eliteAttackers) return false;
   const attacker = state.playerRole === 'defender' ? 'ai' : 'player';
   return getFactionKey(state[attacker]) === faction;
@@ -27,7 +29,58 @@ function usesBritishFireBonus(faction, group) {
 }
 
 function infantryFireNeed(faction, group, printedNeed) {
+  if (faction === 'ita') return printedNeed + 1;
   return usesBritishFireBonus(faction, group) ? Math.max(1, printedNeed - 1) : printedNeed;
+}
+
+function italianFacingSoviets() {
+  const factions = [getFactionKey(state.player), getFactionKey(state.ai)];
+  return factions.includes('ita') && factions.includes('rus');
+}
+
+function italianSurrenderAttacked(group) {
+  if (!group?.italianSurrender) return;
+  delete group.italianSurrender;
+  state.italianSurrenderClosed = true;
+}
+
+function captureItalianSurrender(target, targetSide, captors, captorSide, infiltrator) {
+  if (!target?.italianSurrender) return false;
+  const R = window.INFANTRY_RULES;
+  const prisoners = target.cards.filter(R.isAlive);
+  const guard = choosePrisonerGuard(captors, captorSide, guardCandidates(captors, captorSide));
+  if (!guard || !prisoners.length) return false;
+  prisoners.forEach(card => capturePrisoner(card, targetSide, captors, captorSide, guard));
+  delete target.italianSurrender;
+  window.CC_ACTION.clearSoldierInfiltration(infiltrator);
+  ufReportLog(captorSide, radioText(`${target.name}の降伏兵${prisoners.length}人を捕獲（§50.41）`,
+    `Captured ${prisoners.length} surrendered soldiers from Group ${target.name} (§50.41).`), captorSide);
+  cleanupEliminatedGroups();
+  return true;
+}
+
+function updateItalianSurrenders() {
+  if (state.phase !== 'play' || italianFacingSoviets()) return;
+  const side = ['player', 'ai'].find(key => getFactionKey(state[key]) === 'ita');
+  if (!side || troopTypeOf('ita') === 'bersaglieri' || isEditorEliteFaction('ita')) return;
+  const R = window.INFANTRY_RULES;
+  const enemy = _enemySide(side);
+  for (const [index, group] of state.groups[side].entries()) {
+    if (!_groupAlive(group) || group.forming || groupHasInfantryGun(group, side) || window.AFV.isAfvGroup(group)) continue;
+    if (!group.cards.filter(R.isAlive).every(R.isPinned)) continue;
+    if (!group.italianSurrender) {
+      if (state.italianSurrenderClosed) continue;
+      group.italianSurrender = true;
+      ufReportLog(side, radioText(`グループ${group.name}が降伏（§50.41）`, `Group ${group.name} surrendered (§50.41).`), side);
+    }
+    for (const captors of state.groups[enemy]) {
+      const infiltrator = captors?.cards.find(card => R.isAlive(card) && card.infiltrating &&
+        card.infiltratedGroupSide === side && card.infiltratedGroupIdx === index);
+      if (!infiltrator || !captureItalianSurrender(group, side, captors, enemy, infiltrator)) continue;
+      if (state.phase !== 'play') return;
+      break;
+    }
+  }
 }
 
 function markAIAction(count = 1) {
