@@ -17,7 +17,7 @@
   }
   function applies() {
     const st = global.state;
-    if (!sideOn() || st.isNight) return false;
+    if (!sideOn() || st.isNight || global.aiMovementPolicy()) return false;
     if (st.scenario && st.scenario.id === 'E') return false;
     return !(st.groups.ai || []).some(g => g && g._role === 'hold');
   }
@@ -68,7 +68,9 @@
   }
   function canAdvance(s) {
     const r = R();
-    if (s.stage !== 'move' || !global.aiGroupWantsAdvance(s.g, s.i)) return false;
+    const roleMoves = global.aiProtectedGroup(s.g) || s.g._role === 'cycle';
+    if ((!roleMoves && s.stage !== 'move') || !global.aiGroupWantsAdvance(s.g, s.i) ||
+        !global.aiHasCoverToMove(s.g, s.i, true)) return false;
     return !s.g.cards.some(c => r.isPinned(c)) && !r.hasTerrainType(s.g, 'WIRE');
   }
   function ready(ss) {
@@ -103,6 +105,8 @@
       cc: async () => await global.aiTryBanzai() || global.aiTryCC(), infiltrate: global.aiTryInfiltrate, ccRetreat: global.aiTryRetreatFromCC, uninfiltrate: global.aiTryUninfiltrate,
       flameFire: global.aiTryFlameFire, demoInfil: () => global.aiTryInfiltrate({ demoOnly: true }),
       fireAny: global.aiTryFireAny, flank: global.aiTryFlankEncircle, smoke: global.aiTryPlaceOwnSmoke, move: global.aiTryMove, trench: global.aiTryTrench,
+      cycleFire: global.aiTryCycleFire,
+      cycle: global.aiTryCycleMove,
       guard: global.aiTryGuardChange, heroWound: global.aiTryHeroWound, shift: global.aiTryGroupShift,
     };
     const run = async keys => {
@@ -138,7 +142,7 @@
       const keys = [];
       if (anyFireStage || P.fireAlways) keys.push('flank', 'mortar', 'fireAny');
       if (rd.move || key === 'jpn') keys.push('smoke', 'shift', 'move');
-      keys.push('ownTerrain');
+      keys.push('ownTerrain', 'cycleFire', 'cycle');
       if (P.misc) keys.push('guard', 'repair', 'crew');
       await run(keys);
       if (!st.aiActedThisTurn && key === 'ger') await run(['move']);
@@ -155,9 +159,10 @@
     }
     const ss2 = stages(), dumped = [];
     while (global.aiRemainingDiscard() - dumped.length > 0 && st.aiHand.length > 0) {
+      const reservedCover = global.aiReservedCover();
       let bi = -1, bv = Infinity;
       st.aiHand.forEach((c, i) => {
-        if (global.aiProtectRally(i, key) || !global.DISCARD_RULES.discardCardAllowed(c, 'ai')) return;
+        if (reservedCover.has(c) || global.aiProtectRally(i, key) || !global.DISCARD_RULES.discardCardAllowed(c, 'ai')) return;
         const v = value(c, ss2);
         if (v < bv) { bv = v; bi = i; }
       });
@@ -184,7 +189,7 @@
   }
 
   global.aiGroupWantsAdvance = function (g, i) {
-    if (!applies()) return oldWants(g, i);
+    if (!applies() || global.aiProtectedGroup(g) || g._role === 'cycle') return oldWants(g, i);
     if (g._role === 'hold') return false;
     if (global.aiStrikeNeedsPillbox(g, i)) return true;
     const s = stageOf(g, i);

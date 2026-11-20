@@ -857,7 +857,7 @@ function makeCardWithMeta(factionKey, num) {
 function aiGiveDemoCharge(aiKey) {
   const R = window.INFANTRY_RULES;
   const isFlame = c => { const d = R.lookupSoldier(c, aiKey); return !!(d && d.weaponCat && d.weaponCat.indexOf('火炎放射器') === 0); };
-  const man = state.groups.ai.filter(g => g._role === 'maneuver' || g._role === 'assault');
+  const man = state.groups.ai.filter(g => ['maneuver', 'assault', 'main'].includes(g._role));
   const order = man.filter(g => !g.cards.some(isFlame)).concat(man.filter(g => g.cards.some(isFlame)), state.groups.ai);
   const morale = c => { const d = R.lookupSoldier(c, aiKey); return d ? (parseInt(d.morale, 10) || 0) : 0; };
   const isLd = c => { const d = R.lookupSoldier(c, aiKey); return !!(d && d.leader && d.leader.trim()); };

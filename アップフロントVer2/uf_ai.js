@@ -224,7 +224,7 @@ async function aiTurn() {
     const _shown = (state.groups.ai || []).some(g => g && g._strategyShown);
     if (false && _stg && !_shown) { // 作戦はゲームの間は見せない（興ざめするため）。終わった後のレポートには残す
       (state.groups.ai || []).forEach(g => { if (g) g._strategyShown = true; }); // 並びが作り直されても 1回だけ
-      const _roles = (state.groups.ai || []).filter(g => g && g._role).map(g => `${g.name}=${{ fire: '火力', maneuver: '機動', assault: '突撃', support: '支援', hold: '守備' }[g._role]}`).join(' ');
+      const _roles = (state.groups.ai || []).filter(g => g && g._role).map(g => `${g.name}=${{ fire: '火力', maneuver: '機動', assault: '突撃', support: '支援', hold: '守備', flank: '側面', main: '主力', cycle: '手札回し' }[g._role]}`).join(' ');
       await showAIAction(`AI作戦: ${_names[_stg] || _stg}${_roles ? '（' + _roles + '）' : ''}`, null);
     }
   }
@@ -336,6 +336,8 @@ async function aiTurn() {
       }
       break;
     }
+    if (state.phase === 'play' && await aiTryCycleFire()) markAIAction();
+    if (state.phase === 'play' && partisanActionRoom('ai') && await aiTryCycleMove()) markAIAction();
   }
 
   // §4.3・§14.5 攻撃と通常の捨て札を決めてから攻撃を解決する。
@@ -536,8 +538,10 @@ function aiDiscardChooser() {
   const nightFocus = aiNightFocusFire(); // 射撃に専念する段階は、射撃カードと英雄だけ残して入れ替える
   const keep = c => nightFocus ? (isHero(c) || aiFireCardEffectiveAny(c)) : isHero(c) || (_hold && isConceal(c)) || (nightNeedMove && isMove(c)) || (needMoveCards && isMove(c)) || (canFireNow ? (isFire(c) || isConceal(c)) : (isMove(c) || isTerrainCard(c)));
   return function pick() {
+    const reservedCover = aiReservedCover();
     const findDiscard = test => state.aiHand.findIndex((card, i) =>
-      window.DISCARD_RULES.discardCardAllowed(card, 'ai') && !aiProtectRally(i, aiKey) && test(card));
+      !reservedCover.has(card) && window.DISCARD_RULES.discardCardAllowed(card, 'ai') &&
+      !aiProtectRally(i, aiKey) && test(card));
     let dumpIdx = -1;
     // 優先0: 非機能 (cower) カード
     dumpIdx = findDiscard(isCower);
@@ -1016,6 +1020,14 @@ async function aiTryFireAny() {
   return await aiFireAt(all);
 }
 
+/** 主力の射撃のあと、低士気の組は射撃カード1枚で手札を回せる。 */
+async function aiTryCycleFire() {
+  if (!state.groups.ai.some(group => group?._role === 'cycle') || !partisanActionRoom('ai')) return false;
+  const faction = getFactionKey(state.ai);
+  if ((state.aiDiscardedThisTurn || 0) > window.DISCARD_RULES.turnLimit(faction, (state.aiActionCount || 0) + 1)) return false;
+  return aiFireAt(state.groups.player.map((_, i) => i), { cycleOnly: true });
+}
+
 // 夜間用: aiFireAt 内で各 src/tgt 組合せに対し認知チェックする
 function aiFireAtTargetVisible(srcGrpIdx, tgtGrpIdx) {
   return aiCanTargetRecognized(srcGrpIdx, tgtGrpIdx);
@@ -1084,6 +1096,7 @@ function aiCalcGroupMaxFP(group, factionKey, distance,
 async function aiFireAt(targetIdxList, opts) {
   const flameOnly = !!(opts && opts.flameOnly);
   const preview = !!(opts && opts.preview);
+  const cycleOnly = Boolean(opts?.cycleOnly);
   const onlyGroup = opts?.onlyGroup;
   const R = window.INFANTRY_RULES;
   const aiKey = getFactionKey(state.ai);
@@ -1109,6 +1122,8 @@ async function aiFireAt(targetIdxList, opts) {
   for (const fc of fireCardList) {
     const fi = fc.fi;
     const card = state.aiHand[fi];
+    const rawBase = parseInt(card.terrain.type.replace('FIRE ', ''), 10) || 0;
+    if (cycleOnly && rawBase > 3) continue;
     for (let si = 0; si < state.groups.ai.length; si++) {
       // §6.6 1グループは1ターンに1回しか射撃できない
       if (acted.has(si) || fired.has(si)) continue;
@@ -1116,6 +1131,7 @@ async function aiFireAt(targetIdxList, opts) {
       if (preview && si === opts.exceptGroup) continue;
       const src = state.groups.ai[si];
       if (!src || src.eliminated) continue;
+      if (cycleOnly !== (src._role === 'cycle')) continue;
       for (const ti of targetIdxList) {
         const tgt = state.groups.player[ti];
         if (!tgt) continue;
@@ -1151,8 +1167,7 @@ async function aiFireAt(targetIdxList, opts) {
         const _flameCand = dist === 5 && aiGroupHasUsableFlame(firingGroup);
         if (flameOnly && !_flameCand) continue;
         if (fp <= 0) continue;
-        const heroBonus = heroIdx >= 0 ? aiCalcGroupMaxFP(firingGroup, aiKey, dist) : 0;
-        const rawBase = parseInt(card.terrain.type.replace('FIRE ', ''), 10) || 0;
+        const heroBonus = heroIdx >= 0 && !cycleOnly ? aiCalcGroupMaxFP(firingGroup, aiKey, dist) : 0;
         let adjBase = rawBase;
         const _tgtFlaredJudge = isGroupFlared(tgt);
         const _effNightJudge = state.isNight && !_tgtFlaredJudge && !(preview && opts.assumeLit);
@@ -1173,9 +1188,9 @@ async function aiFireAt(targetIdxList, opts) {
         const baseExp = adjBase + atkMod + defMod + gullyMod + marshDefMod + japanRuleMod;
         let useHero = false;
         let effectiveFP = fp;
-        if (fp >= need && baseExp > 0) {
+        if (fp >= need && (cycleOnly || baseExp > 0)) {
           useHero = false;
-        } else if (heroIdx >= 0 && (fp + heroBonus) >= need && (baseExp + heroBonus) > 0) {
+        } else if (!cycleOnly && heroIdx >= 0 && (fp + heroBonus) >= need && (baseExp + heroBonus) > 0) {
           useHero = true;
           effectiveFP = fp + heroBonus;
         } else {
@@ -1199,7 +1214,7 @@ async function aiFireAt(targetIdxList, opts) {
   _cands.forEach(c => {
     const source = state.groups.ai[c.si];
     let needSum = c.printedNeed, rawSum = _rawOf(c.fi);
-    fireCardList.filter(x => x.fi !== c.fi).map(x => ({ need: x.need, raw: _rawOf(x.fi) })).sort((a, b) => b.raw - a.raw)
+    fireCardList.filter(x => !cycleOnly && x.fi !== c.fi).map(x => ({ need: x.need, raw: _rawOf(x.fi) })).sort((a, b) => b.raw - a.raw)
       .forEach(x => { if (c._turned + infantryFireNeed(aiKey, source, needSum + x.need) <= c.fp) {
         needSum += x.need; rawSum += x.raw;
       } });
@@ -1218,9 +1233,9 @@ async function aiFireAt(targetIdxList, opts) {
   const _okFire = c => window.__inChart
     ? Boolean(opts?.anyFire || c._flame || c._est > 0)
     : _okFire0(c);
-  const preferTerrain = aiKey !== 'ger' && !flameOnly && aiRemainingDiscard() > 0 &&
+  const preferTerrain = !cycleOnly && aiKey !== 'ger' && !flameOnly && aiRemainingDiscard() > 0 &&
     aiFindHarassPlay(['STREAM', 'MARSH']);
-  const takeShot = c => _okFire(c) && (!preferTerrain || c._est > 3 || c._flame ||
+  const takeShot = c => cycleOnly || _okFire(c) && (!preferTerrain || c._est > 3 || c._flame ||
     (c._tgtMoving && c._defMod >= 0 && c._est >= 2 &&
       state.groups.player[c.ti].cards.some(card => R.isAlive(card) && R.isPinned(card))));
   if (preview) return _cands.some(takeShot);
@@ -1232,7 +1247,7 @@ async function aiFireAt(targetIdxList, opts) {
   if (best && window.__inChart && window.__fireLog) { const g = state.groups.ai[best.si], t = state.groups.player[best.ti]; window.__fireLog.push({ nat: aiKey, scn: state.scenario && state.scenario.id, night: !!state.isNight, src: g.name, tgt: t.name, mg: _hasMG(g), est: best._est, minMor: _minMor(t), pill: !!best._pill, oldOK: _okFire0(best), dist: best.dist, n: _cands.filter(_okFire).length, turn: state.turnCount }); }
   if (!best) return false;
   // §10.45 ヒーローの火力2倍: 使うと射撃の値の合計が 2以上増えるなら使う（ピン状態の兵がいるグループでは回復に取っておく）
-  if (!best.useHero && heroIdx >= 0) {
+  if (!cycleOnly && !best.useHero && heroIdx >= 0) {
     const _hs = state.groups.ai[best.si];
     if (_hs && !_hs.cards.some(c => R.isAlive(c) && R.isPinned(c))) {
       const _turned = _hs.firedFPThisTurn || 0;
@@ -1259,7 +1274,7 @@ async function aiFireAt(targetIdxList, opts) {
   let _curNeed = best.printedNeed;
   const _usedFi = new Set([best.fi]);
   const _extraCandidates = fireCardList
-    .filter(x => !_usedFi.has(x.fi))
+    .filter(x => !cycleOnly && !_usedFi.has(x.fi))
     .map(x => {
       const c = state.aiHand[x.fi];
       const rb = parseInt(c.terrain.type.replace('FIRE ', ''), 10) || 0;
@@ -1610,6 +1625,7 @@ async function aiTryFlankEncircle() {
     for (let si = 0; si < state.groups.ai.length; si++) {
       if (acted.has(si) || fired.has(si)) continue;
       const src = state.groups.ai[si];
+      if (!_groupAlive(src) || ['main', 'cycle'].includes(src._role) || !aiHasCoverToMove(src, si, false)) continue;
       if (hasPillbox(src)) continue; // トーチカ持ちグループは移動不可
       if (src.cards.some(c => R.isPinned(c))) continue;
       for (let ti = 0; ti < state.groups.player.length; ti++) {
@@ -1656,6 +1672,7 @@ async function aiTryFlankEncircle() {
     for (let si = 0; si < state.groups.ai.length; si++) {
       if (acted.has(si) || fired.has(si)) continue;
       const src = state.groups.ai[si];
+      if (!_groupAlive(src) || ['main', 'cycle'].includes(src._role) || !aiHasCoverToMove(src, si, false)) continue;
       if (hasPillbox(src)) continue; // トーチカ持ちグループは移動不可
       if (src.cards.some(c => R.isPinned(c))) continue;
       if (window.__inChart) { const _f = state.groups.player[si]; if (_f && !_f.eliminated && _f.cards.some(c => R.isAlive(c))) continue; } // チャート: 包囲は正面に敵がいない時だけ（2026-11-08 ユーザーの決め）
@@ -1747,12 +1764,25 @@ function aiFlameShouldFire(g, gi) {
   });
 }
 
+function aiFlankNeedsAdvance(group, index) {
+  return group._role === 'flank' && [index - 1, index + 1].some(target => {
+    const enemy = state.groups.player[target];
+    return _groupAlive(enemy) && _groupAlive(state.groups.ai[target]) && !enemy.encircled &&
+      !hasPillbox(enemy) && !window.AFV?.isAfvGroup(enemy) && !_isBehind('ai', index, target);
+  });
+}
+
 /** AI の性格で、このグループが前進したいか（3未満は必ず、防御的=3以上で止まる、バランス=6未満、攻撃的=相対距離5まで）。
  *  作戦の役割: 火力のグループは撃てる所（3以上）で止まる。機動・突撃のグループは相対距離5まで前進する */
 function aiGroupWantsAdvance(g, i) {
+  if (g._role === 'cycle') return aiTerrainRange({ ...g, distance: g.distance + 1 }, i, 'player') <= 1;
   const { eff, closest } = aiGroupFireNow(g, i);
   if (g._role === 'hold') return false; // 守備（シナリオC の防御側）: 前に出ない
   if (aiStrikeNeedsPillbox(g, i)) return true; // 火炎放射器・爆薬はトーチカの相対距離5まで
+  if (g._role === 'flank') {
+    if ([i - 1, i + 1].some(target => isFlankFire('ai', i, target))) return false;
+    return closest < 5 || aiFlankNeedsAdvance(g, i);
+  }
   if (closest >= 5) return false;
   // 使える火炎放射器（相対距離5でだけ火力がある）・爆薬を持つグループは、性格・役割に関係なく相対距離5まで前進する
   if (aiGroupHasUsableFlame(g) || aiGroupHasDemo(g)) return true;
@@ -1760,8 +1790,9 @@ function aiGroupWantsAdvance(g, i) {
   if (g._role === 'fire') return eff < 3;
   // 国の個性: 前進を止める火力（AI_FACTION_TRAITS）
   const _advT = (window.AI_FACTION_TRAITS || {})[getFactionKey(state.ai)];
-  if (_advT && _advT.stopAtEff != null && (g._role !== 'maneuver' && g._role !== 'assault')) return eff < _advT.stopAtEff;
-  if (g._role === 'maneuver' || g._role === 'assault') return true;
+  if (_advT && _advT.stopAtEff != null && !aiProtectedGroup(g) &&
+      (g._role !== 'maneuver' && g._role !== 'assault')) return eff < _advT.stopAtEff;
+  if (g._role === 'maneuver' || g._role === 'assault' || aiProtectedGroup(g)) return true;
   const style = state.aiStyle || 'bal';
   return eff < 3 || (style === 'bal' && eff < 6) || style === 'aggr';
 }
@@ -1769,6 +1800,7 @@ function aiGroupWantsAdvance(g, i) {
 function aiMovementPolicy() {
   const scenario = state.scenario;
   if (scenario?.aiPolicy) return scenario.aiPolicy;
+  if (state.aiRole === 'defender' && scenario?.defenderInitialBuildings) return 'hold';
   if (state.aiRole === 'defender' && (scenario?.id === 'D' || scenario?.id === 'E')) return 'retreat';
 }
 
@@ -1792,12 +1824,15 @@ async function aiTryMove(opts) {
 
   const acted = state.aiActedGroups || new Set();
   const fired = state.aiFiredGroups || new Set();
+  const canAdvance = (g, i) => aiHasCoverToMove(g, i, true) &&
+    (!['cycle', 'flank'].includes(g._role) || aiGroupWantsAdvance(g, i));
   const isSkipped = (i) => {
     const g = state.groups.ai[i];
     if (!_groupAlive(g)) return true;
     if (acted.has(i) || fired.has(i)) return true;
     if (opts?.only && !opts.only.has(i)) return true;
-    if (opts?.lateral && (R.currentTerrainType(g) !== 'PLAIN' ||
+    if (g._role === 'cycle' && !opts?.cycle && !R.isInStream(g) && !R.isInMarsh(g)) return true;
+    if (opts?.lateral && ((!opts.cycle && R.currentTerrainType(g) !== 'PLAIN') ||
         R.hasTerrainType(g, 'TRENCH') || isMovingIgnoringOverlays(g))) return true;
     if (g.cards.some(c => R.isPinned(c))) return true;
     if (g._immob || g._bog || g._stun) return true; // §28 AFV の移動不能・スタック・スタン
@@ -1824,8 +1859,9 @@ async function aiTryMove(opts) {
       if (isSkipped(i)) continue;
       const g = state.groups.ai[i];
       if (R.isInStream(g) && R.hasCrossedStream(g)) {
-        bestIdx = i;
         moveMode = R.isBlocked(g, state.groups.player[i]) ? 'lateral' : 'advance';
+        if (moveMode === 'advance' && !canAdvance(g, i)) continue;
+        bestIdx = i;
         break;
       }
     }
@@ -1847,7 +1883,8 @@ async function aiTryMove(opts) {
     for (let i = 0; i < state.groups.ai.length; i++) {
       if (isSkipped(i)) continue;
       const g = state.groups.ai[i];
-      if (!state.aiHand.some(c => aiCanUseOwnTerrain(c)
+      if (!aiHasCoverToMove(g, i, false)) continue;
+      if (!opts.cycle && !state.aiHand.some(c => aiCanUseOwnTerrain(c)
         && aiOwnTerrainPreference(c.terrain.type, g, i) >= 0)) continue;
       bestIdx = i;
       moveMode = 'lateral';
@@ -1860,11 +1897,13 @@ async function aiTryMove(opts) {
   //   止まるのは、正面に敵がいれば相対距離5（isBlocked）、正面に敵がいなければ相対距離6（包囲のため）
   //   動けるグループからくじで選ぶ。重みは 移動グループ50・射撃グループ30・AFV 20（ユーザーの決め）。突撃=移動、支援=射撃
   if (bestIdx < 0 && window.__inChart) {
-    const W = g => (window.AFV && window.AFV.isAfvGroup(g)) ? 20 : (g._role === 'fire' || g._role === 'support') ? 30 : (g._role === 'maneuver' || g._role === 'assault') ? 50 : 30;
+    const W = g => g._role === 'main' ? 60 : g._role === 'flank' ? 50 : g._role === 'cycle' ? 10 :
+      (window.AFV && window.AFV.isAfvGroup(g)) ? 20 : (g._role === 'maneuver' || g._role === 'assault') ? 50 : 30;
     const cand = [];
     for (let i = 0; i < state.groups.ai.length; i++) {
       if (isSkipped(i)) continue;
       const g = state.groups.ai[i];
+      if (!canAdvance(g, i)) continue;
       if (R.isInStream(g) && !R.hasCrossedStream(g)) continue;
       if (R.isInMarsh && R.isInMarsh(g) && R.marshMoveCount && R.marshMoveCount(g) === 0) continue;
       const opp = state.groups.player[i];
@@ -1893,6 +1932,7 @@ async function aiTryMove(opts) {
     for (let i = 0; i < state.groups.ai.length; i++) {
       if (isSkipped(i)) continue;
       const g = state.groups.ai[i];
+      if (!canAdvance(g, i)) continue;
       // 河川は未渡河なら除外
       if (R.isInStream(g) && !R.hasCrossedStream(g)) continue;
       // 湿地で移動カード0枚（=1枚目）のグループは前進不可（横移動強制）
@@ -1900,7 +1940,8 @@ async function aiTryMove(opts) {
       const opposing = state.groups.player[i];
       if (opposing && R.isBlocked && R.isBlocked(g, opposing)) continue;
       const { eff, closest } = fireNow(g, i);
-      if (closest >= 5 && !g._overrunTargets?.includes(opposing) && !aiStrikeNeedsPillbox(g, i)) continue; // 相対距離5（白兵戦の距離）より先へは進まない
+      if (closest >= 5 && !g._overrunTargets?.includes(opposing) && !aiStrikeNeedsPillbox(g, i) &&
+          !aiFlankNeedsAdvance(g, i)) continue;
       if (aiCCThreat(i, false)) continue; // 侵入されていて白兵戦が不利なら、白兵戦の距離へ戻らない（§20.55）
       if (!aiGroupWantsAdvance(g, i)) continue; // 性格と作戦の役割で決める
       const alive = g.cards.filter(c => R.isAlive(c)).length;
@@ -1930,6 +1971,18 @@ async function aiTryMove(opts) {
   await showAIAction(inEscapeTerrain && moveMode === 'lateral' ? 'AI: 横移動（脱出）' : 'AI: 移動', moveCard, bestIdx);
   acted.add(bestIdx);
   return true;
+}
+
+// C は主力が移動札を使ったあとに手札を回し、前進は相対距離1まで。
+async function aiTryCycleMove({ lateralOnly = false } = {}) {
+  const index = state.groups.ai.findIndex(group => group?._role === 'cycle' && _groupAlive(group));
+  if (index < 0 || aiMovementPolicy() === 'retreat') return false;
+  const group = state.groups.ai[index];
+  const only = new Set([index]);
+  if (!lateralOnly && aiMovementPolicy() !== 'hold' && aiGroupWantsAdvance(group, index) &&
+      await aiTryMove({ only, cycle: true })) return true;
+  const moves = state.aiHand.filter(card => handActionFace(card, 'MOVEMENT', 'ai')).length;
+  return moves > 1 && await aiTryMove({ only, lateral: true, cycle: true });
 }
 
 // 地雷原内のグループに横移動カードを置く（脱出開始）
@@ -2031,7 +2084,7 @@ function aiTerrainRange(g, gi, opposingSide) {
 }
 
 function aiFiringGroup(g, factionKey) {
-  if (g._role === 'fire' || g._role === 'support') return true;
+  if (g._role === 'fire' || g._role === 'support' || g._role === 'main') return true;
   const R = window.INFANTRY_RULES;
   return g.cards.some(c => {
     if (!R.isAlive(c) || c.destroyed) return false;
@@ -2041,7 +2094,7 @@ function aiFiringGroup(g, factionKey) {
 }
 
 function aiGullyApproach(g, gi) {
-  return (g._role === 'maneuver' || g._role === 'assault')
+  return (g._role === 'maneuver' || g._role === 'assault' || g._role === 'flank')
     && !(window.AFV && window.AFV.isAfvGroup(g))
     && aiTerrainRange(g, gi, 'player') <= 1;
 }
@@ -2074,6 +2127,35 @@ function aiCanUseOwnTerrain(c) {
     && !(SH && SH.isCardDisabledAsTerrain(state.scenario, c, state.aiRole === 'attacker'));
 }
 
+function aiProtectedGroup(group) {
+  return group?._role === 'flank' || group?._role === 'main';
+}
+
+function aiCoverFits(card, group, index) {
+  return aiCanUseOwnTerrain(card) && aiOwnTerrainPreference(card.terrain.type, group, index) >= 0 &&
+    infantryGunCanEnter(group, card.terrain.type, 'ai') && jungleTerrainAllowed(group, card, 'ai') &&
+    window.INFANTRY_RULES.calcTerrainMod([card], false, { japanBuildings: isJapanInGame() }) < 0;
+}
+
+// 先に動いたA・Bの地形を確保し、同じカードを別のグループの移動に使わない。
+function aiReservedCover() {
+  const reservations = new Map();
+  state.groups.ai.forEach((group, index) => {
+    if (!aiProtectedGroup(group) || !_groupAlive(group) || !isMovingIgnoringOverlays(group)) return;
+    const cover = state.aiHand.find(card => !reservations.has(card) && aiCoverFits(card, group, index));
+    if (cover) reservations.set(cover, group);
+  });
+  return reservations;
+}
+
+function aiHasCoverToMove(group, index, advance) {
+  if (!aiProtectedGroup(group)) return true;
+  const projected = advance ? { ...group, distance: group.distance + 1 } : group;
+  const reserved = aiReservedCover();
+  return state.aiHand.some(card => (!reserved.has(card) || reserved.get(card) === group) &&
+    aiCoverFits(card, projected, index));
+}
+
 async function aiTryPlaceOwnTerrain(onlyGi) {
   const R = window.INFANTRY_RULES;
 
@@ -2095,17 +2177,22 @@ async function aiTryPlaceOwnTerrain(onlyGi) {
     targets.push(gi);
   }
   if (!targets.length) return false;
+  const reservedCover = aiReservedCover();
   let best = null;
   for (const [idx, c] of state.aiHand.entries()) {
     if (!aiCanUseOwnTerrain(c)) continue;
     const cover = window.__inChart ? -(R.calcTerrainMod([c], false, {}) || 0) : 0;
     for (const gi of targets) {
-      if (!infantryGunCanEnter(state.groups.ai[gi],c.terrain.type,'ai') ||
-          !jungleTerrainAllowed(state.groups.ai[gi], c, 'ai')) continue;
-      const preference = aiOwnTerrainPreference(c.terrain.type, state.groups.ai[gi], gi);
+      const group = state.groups.ai[gi];
+      if (reservedCover.has(c) && reservedCover.get(c) !== group) continue;
+      if (aiProtectedGroup(group) && !aiCoverFits(c, group, gi)) continue;
+      if (!infantryGunCanEnter(group,c.terrain.type,'ai') || !jungleTerrainAllowed(group, c, 'ai')) continue;
+      const preference = aiOwnTerrainPreference(c.terrain.type, group, gi);
       if (preference < 0) continue;
-      if (!best || preference > best.preference || (preference === best.preference && cover > best.cover)) {
-        best = { idx, gi, preference, cover };
+      const priority = Number(reservedCover.get(c) === group);
+      if (!best || priority > best.priority || (priority === best.priority &&
+          (preference > best.preference || (preference === best.preference && cover > best.cover)))) {
+        best = { idx, gi, preference, cover, priority };
       }
     }
   }
@@ -2296,6 +2383,7 @@ async function aiTryGroupShift() {
     if (groupShiftBlockReason('ai', gi)) continue;
     const g = state.groups.ai[gi];
     if (hasPillbox(g) || (!window.__inChart && g._role === 'hold') || enemyNear(gi)) continue;
+    if (!aiHasCoverToMove(g, gi, false)) continue;
     const dest = shiftDestinations('ai', gi).find(j => enemyNear(j));
     if (dest == null) continue;
     const card = state.aiHand.splice(mi, 1)[0];
@@ -2824,7 +2912,8 @@ function aiFindHarassPlay(types = AI_HARASS_TYPES, reserved = new Set(), blocked
   const SH = window.SCENARIO_HELPERS;
   const R = window.INFANTRY_RULES;
   const enemy = state.groups.player;
-  const cardFor = type => state.aiHand.findIndex(c => c?.terrain?.type === type && !reserved.has(c) &&
+  const protectedTerrain = aiReservedCover();
+  const cardFor = type => state.aiHand.findIndex(c => c?.terrain?.type === type && !reserved.has(c) && !protectedTerrain.has(c) &&
     !SH?.isCardDisabledAsTerrain?.(state.scenario, c, state.aiRole === 'attacker'));
   const gully = types.includes('GULLY') ? cardFor('GULLY') : -1;
   if (gully >= 0) {
@@ -3244,7 +3333,8 @@ async function chartTurn0(nat) {
     const keepMove = !hold && !goodTerrain(); // 前進で地形カードがない時は、移動カードは残して地形を引きに行く
     // 移動カードは1枚だけ残す（2枚目からは捨ててよい。ユーザーの指示 2026-11-07）
     const firstMove = hand().findIndex(c => handActionFace(c, 'MOVEMENT', 'ai'));
-    const cand = hand().map((c, i) => ({ c, i })).filter(x => !isHero(x.c) && !(keepMove && x.i === firstMove));
+    const reservedCover = aiReservedCover();
+    const cand = hand().map((c, i) => ({ c, i })).filter(x => !isHero(x.c) && !reservedCover.has(x.c) && !(keepMove && x.i === firstMove));
     const n = Math.min(cand.length, aiRemainingDiscard());
     if (!n) return false;
     const pick = []; for (let k = 0; k < n; k++) { const j = Math.floor(Math.random() * cand.length); pick.push(cand.splice(j, 1)[0]); }
@@ -3344,6 +3434,8 @@ async function chartTurn0(nat) {
     ['夜:射撃/索敵/照明弾', [nightOnly(aiTryFireLit), nightOnly(aiTryFireAny), nightOnly(aiTryScout), nightOnly(aiTryFlare)]],
     ['相手が移動中なら撃つ', [aiTryFireMovingEnemy]],
     ['射撃カード2枚→射撃', [async () => nFire() >= (window.__fire1 ? 1 : 2) ? aiTryFireAny() : false]],
+    ['手札回しの射撃', [aiTryCycleFire]],
+    ['手札回しの移動', [aiTryCycleMove]],
     ['大砲', [aiTryMortar, async () => window.AFV ? window.AFV.aiTryGun() : false]],
     ['鉄条網除去', [aiTryRemoveWire]],
     ['狙撃兵チェック', [aiTrySniperCheck]],
@@ -3378,6 +3470,8 @@ async function chartTurn0(nat) {
     ['夜:射撃/索敵/照明弾', [nightOnly(aiTryFireLit), nightOnly(aiTryFireAny), nightOnly(aiTryScout), nightOnly(aiTryFlare)]],
     ['相手が移動中なら撃つ', [aiTryFireMovingEnemy]],
     ['射撃カード1枚→射撃', [async () => nFire() >= 1 ? aiTryFireAny() : false]], // チャートの待機29行目（2026-11-08 ユーザーが1枚に変更）
+    ['手札回しの射撃', [aiTryCycleFire]],
+    ...(holdingPosition ? [] : [['手札回しの横移動', [() => aiTryCycleMove({ lateralOnly: true })]]]),
     ['大砲', [aiTryMortar, async () => window.AFV ? window.AFV.aiTryGun() : false]],
     ['鉄条網除去', [aiTryRemoveWire]],
     ['狙撃兵チェック', [aiTrySniperCheck]],

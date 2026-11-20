@@ -703,12 +703,91 @@ function ufUsesVictory(scenario, id) {
     if (victory?.type === 'reachAndHold') return victory.minSoldiers;
     return role === 'attacker' ? victory?.attackerMinSoldiers || 0 : 0;
   }
+  function formMissionGroups(enriched, factionKey, { maneuverGoal, requiredGroups, minimumGroups, equipped }) {
+    const { GROUP_MIN, GROUP_MAX, MAX_GROUPS_INITIAL } = global.INFANTRY_RULES;
+    const vehicles = enriched.filter(unit => unit.def?.afv);
+    const infantry = enriched.filter(unit => !unit.def?.afv);
+    const total = infantry.length;
+    const available = MAX_GROUPS_INITIAL - vehicles.length;
+    const fixed = requiredGroups ? requiredGroups - vehicles.length : 0;
+    const minimum = Math.max(Math.ceil(total / GROUP_MAX), minimumGroups - vehicles.length, fixed);
+    if (total < GROUP_MIN || minimum > available || minimum * GROUP_MIN > total ||
+        (requiredGroups && fixed !== minimum)) return null;
+    const requiredInMain = Math.min(total - (minimum - 1) * GROUP_MIN, GROUP_MAX, Math.max(GROUP_MIN, maneuverGoal));
+    const limit = fixed || Math.min(available, 1 + Math.floor((total - requiredInMain) / GROUP_MIN));
+    const leaders = infantry.filter(unit => unit.leader && !unit.crew &&
+      !unit.def?.infantryGun && !unit.flame).sort((a, b) => b.morale - a.morale);
+    const leader = leaders.find(unit => unit.def.leader !== '分隊長') || leaders[0];
+    const riflemen = infantry.filter(unit => !unit.leader && !unit.crew && !unit.def?.infantryGun &&
+      !equipped(unit) && /^(ボルトアクション小銃|半自動小銃|カービン|突撃銃)/.test(unit.def?.weaponCat || ''));
+    const partner = riflemen.slice().sort((a, b) => b.morale - a.morale)[0];
+
+    // 主力の必要人数と車両の枠を確保し、残る枠に側面・手札回しを加える。
+    const main = { role: 'main', members: [], size: GROUP_MIN };
+    const plan = [main];
+    if (limit >= 2 && leader && partner) {
+      plan.unshift({ role: 'flank', members: [leader, partner], size: GROUP_MIN });
+    }
+    const unassignedRifles = riflemen.filter(unit => !plan.some(group => group.members.includes(unit)));
+    const privates = unassignedRifles.filter(unit => /^(兵卒|二等兵)$/.test(unit.def.rank));
+    const cycle = (privates.length >= GROUP_MIN ? privates : unassignedRifles)
+      .slice().sort((a, b) => a.morale - b.morale).slice(0, GROUP_MIN);
+    if (plan.length < limit && cycle.length === GROUP_MIN) {
+      plan.push({ role: 'cycle', members: cycle, size: GROUP_MIN });
+    }
+    const capacity = () => plan.reduce((sum, group) =>
+      sum + (group.role === 'main' || group.role === 'fire' ? GROUP_MAX : GROUP_MIN), 0);
+    while (plan.length < limit && (capacity() < total || plan.length < minimum)) {
+      plan.push({ role: 'fire', members: [], size: GROUP_MIN });
+    }
+
+    let extra = total - plan.length * GROUP_MIN;
+    const fillOrder = [main, ...plan.filter(group => group.role === 'fire'),
+      ...plan.filter(group => group.role === 'flank'), ...plan.filter(group => group.role === 'cycle')];
+    for (const group of fillOrder) {
+      const added = Math.min(extra, GROUP_MAX - GROUP_MIN);
+      group.size += added;
+      extra -= added;
+    }
+    if (extra > 0) return null;
+    const assigned = new Set(plan.flatMap(group => group.members));
+    const important = unit => Number(unit.leader || unit.crew || equipped(unit));
+    const pool = infantry.filter(unit => !assigned.has(unit))
+      .sort((a, b) => important(b) - important(a) || b.morale - a.morale);
+    for (const group of fillOrder) {
+      group.members.push(...pool.splice(0, group.size - group.members.length));
+      if (group.role === 'cycle' && group.size > GROUP_MIN) group.role = 'fire';
+    }
+    const groups = plan.map(({ role, members }, index) => {
+      const group = _newGroup('ABCD'[index], factionKey);
+      group._role = role;
+      if (role === 'main') group._strategy = 'fireMove';
+      members.forEach(unit => addCard(group, unit));
+      return group;
+    });
+    _assignCrew(groups, infantry);
+    for (const unit of vehicles) {
+      const group = _newGroup('ABCD'[groups.length], factionKey);
+      addCard(group, unit);
+      groups.push(group);
+    }
+    return groups;
+  }
   function buildAIGroupsSmart0(scenario, factionKey, role, style, equipmentHolders) {
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
     const maneuverGoal = maneuverGoalSize(scenario, role, enriched.length);
     const isEditor = Boolean(scenario?.victoryPreset);
+    const fixedDefense = role === 'defender' && (scenario?.evacuationSetup || scenario?.defenderPillbox || ufUsesVictory(scenario, 'C'));
+    if (!fixedDefense && !global.__forceSplit) {
+      const requiredGroups = role === 'defender' ? scenario?.defenderInitialBuildings : 0;
+      const equipped = unit => equipmentHolders.has(unit.num) ||
+        reservedSecondaryWeapon(scenario, factionKey, unit.num);
+      const groups = formMissionGroups(enriched, factionKey,
+        { maneuverGoal, requiredGroups, minimumGroups: isEditor ? 1 : 2, equipped });
+      if (groups) return groups;
+    }
     if (isEditor || (scenario?.id === 'E' && role === 'attacker')) {
       if (scenario.evacuationSetup && role === 'defender') {
         const count = enriched.length > 30 ? 4 : 3;
@@ -743,6 +822,7 @@ function ufUsesVictory(scenario, id) {
         const groups = infantry.length ? _forcedSplit(infantry, factionKey, sizes) : [];
         if (pillbox) {
           const shelter = groups[1];
+          shelter._role = 'hold';
           const allowed = card => {
             const def = getSoldierDef(factionKey, card.num);
             return def && !def.infantryGun && !pillboxForbiddenWeapon(def.weaponCat) && !secondaryHolders.has(card.num);

@@ -846,7 +846,7 @@
     const SH = global.SCENARIO_HELPERS;
     if (SH && SH.buildAIGroupsSmart && !SH._afvWrapped) {
       const o = SH.buildAIGroupsSmart; SH._afvWrapped = true;
-      SH.buildAIGroupsSmart = function (sc, f, role, st) { const g = o(sc, f, role, st); if (!sc || (sc.id !== 'E' && !sc.victoryPreset)) return g; inject(); return splitAfv(g); };
+      SH.buildAIGroupsSmart = function (sc, ...args) { const g = o(sc, ...args); if (!sc || (sc.id !== 'E' && !sc.victoryPreset)) return g; inject(); return splitAfv(g); };
     }
     const Rr = R();
     if (Rr && !Rr._afvWrapped) {
