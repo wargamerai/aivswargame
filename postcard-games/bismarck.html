@@ -237,7 +237,9 @@ const bisName=key=>tr(key==='Dummy'?'DUMMY':key);
 const factionScore=state=>tr('gFleet')+' '+tr('vp',state.gv)+' / '+tr('fleet')+' '+tr('vp',state.bv);
 function bisEvent([key,...parts]){return eventText([key,...parts]);}
 </script><script>'use strict';
-const $=id=>document.getElementById(id),locations={},routes=new Set('E1 D2 D3 C3 C4 D4 D5 E4 E5 F4'.split(' '));
+const $=id=>document.getElementById(id),locations={};
+// 航路線が通るヘクス。大西洋航路は C3・C4 を経由して D5 に入る。
+const routes=new Set(['E1','D2','D3','C3','C4','D5','E4','E5','F4']);
 const raw={A:[3,4,5,6],B:[2,3,4,5,6,7],C:[1,2,3,4,5,6,7],D:[1,2,3,4,5,6,8],E:[1,2,3,4,5],F:[1,2,3,4,5,6,7]};
 for(const [r,cols] of Object.entries(raw)){
  const i=r.charCodeAt(0)-65;for(const c of cols)locations[r+c]={x:135+177.2*(c-1)+(i%2===0?88.6:0),y:67+i*155};
@@ -267,15 +269,18 @@ function startAI(){
 }
 const mayRaidConvoy=()=>s.gv<6&&!s.tracked.length&&s.lastConvoyRaid!==s.turn-1;
 const convoyPoints=roll=>roll===6?3:roll>=4?2:0;
+const brest='F7';
+const leadsOnPoints=()=>s.gv>s.bv;
 function orders(){
  s.moved=[];s.moves=[];s.air=[];s.scanned=[];s.seen=null;
- const home=s.gv>=6;
  const occupied=new Set(live().map(f=>f.where));
- const mayEnter=h=>h==='F7'?home:h!=='D8'&&!britishPorts.has(h)&&!occupied.has(h);
+ const canWinAtBrest=leadsOnPoints();
+ const mayEnter=h=>h===brest?canWinAtBrest:h!=='D8'&&!britishPorts.has(h)&&!occupied.has(h);
  const possible=paths(s.pos,geSpeed(),mayEnter);
+ const home=canWinAtBrest&&(possible.has(brest)||s.ge<=2||s.turn>=12);
  const mayRouteThrough=h=>h===s.pos||mayEnter(h);
  const convoyHexes=[...routes].filter(h=>mayEnter(h));
- const goals=home?['F7']:convoyHexes;
+ const goals=home?[brest]:convoyHexes;
  const distances=new Map();
  for(const goal of goals)for(const [hex,path] of paths(goal,Object.keys(locations).length,mayRouteThrough)){
   if(path.length-1<(distances.get(hex)??Infinity))distances.set(hex,path.length-1);
@@ -289,12 +294,12 @@ function orders(){
   return sum+(moves.has(h)?hull*.72:air.has(h)?1.6:0);
  },0);
  const candidates=[...possible.keys()].map(hex=>({
-  hex,raid:mayRaidConvoy()&&routes.has(hex)&&!occupied.has(hex),
+  hex,raid:!home&&mayRaidConvoy()&&routes.has(hex)&&!occupied.has(hex),
   distance:distances.get(hex)??Infinity,risk:danger(hex),tie:Math.random()
  }));
  const canRaidHere=candidates.some(candidate=>candidate.raid);
  const alternatives=candidates.filter(({hex})=>hex!==s.pos);
- // A real raid takes precedence. Otherwise spend the turn advancing instead of hovering in a safe hex.
+ // Prefer a raid while seeking convoys. Otherwise advance toward the current goal.
  const eligible=canRaidHere?candidates.filter(candidate=>candidate.raid):
   home&&candidates.some(candidate=>Number.isFinite(candidate.distance))?candidates:
   alternatives.length?alternatives:candidates;
@@ -400,7 +405,7 @@ function fight(target){
 }
 function finishTurn(){
  if(!s.ge)s.winner='bisWinSunk';
- else if(s.pos==='F7'&&(s.gv>=6||s.gv>s.bv))s.winner='gWin';
+ else if(s.gv>=6||(s.pos===brest&&leadsOnPoints()))s.winner='gWin';
  else if(s.turn>=18)s.winner='bisWinTime';
  if(s.winner){s.phase='end';s.seen=s.pos;render();showEnd();return}
  s.phase='result';render();
@@ -419,7 +424,8 @@ function convoy(){
   rows.push({ship:'GE'+s.ge,label:tr('Bismarck')+' · '+tr('convoyRaid'),rolls:[n],result:[outcome,visibility].map(translated).join(' · '),
    reference:[['1',tr('noContact'),n===1],['2–3',tr('radio')+' · '+tr('publicHex'),n>=2&&n<=3],['4–5',tr('vp','+'+convoyPoints(4)),n>=4&&n<=5],['6',tr('vp','+'+convoyPoints(6))+' · '+tr('publicHex'),n===6]]});
  }else log('convoyNone');
- presentAction(tr('gFleet')+' · '+tr('convoyRaid'),tr(rows.length?'convoyTip':'convoyNone'),rows,finishTurn);
+ const heading=rows.length?tr('gFleet')+' · '+tr('convoyRaid'):tr('gFleet');
+ presentAction(heading,tr(rows.length?'convoyTip':'convoyNone'),rows,finishTurn);
 }
 function allowed(){
  const f=by(selected);
@@ -558,8 +564,8 @@ function presentAction(heading,summary,rows,continuation,acknowledge=tr('ack'),s
   else tiles.forEach(({die},i)=>die.textContent=1+(Math.floor(elapsed/100)+i*3)%6);
  },100);
 }
-const instructions={setup:'bisSetupTip',move:'bisMoveTip',search:'searchTip',release:'releaseTip',battle:'confirmCombat',convoy:'convoyTip',result:'resultTip'};
-const phases={setup:'bisSetup',move:'britain',search:'search',release:'release',battle:'combat',convoy:'convoyRaid',result:'result',end:'end'};
+const instructions={setup:'bisSetupTip',move:'bisMoveTip',search:'searchTip',release:'releaseTip',battle:'confirmCombat',convoy:'',result:'resultTip'};
+const phases={setup:'bisSetup',move:'britain',search:'search',release:'release',battle:'combat',convoy:'gFleet',result:'result',end:'end'};
 function render(){
  for(const n of document.querySelectorAll('[data-text]'))n.textContent=tr(n.dataset.text);
  document.documentElement.lang=locale;document.title=tr('bisTitle');
