@@ -2229,6 +2229,7 @@ async function advancePhase() {
       processReinforcements(state.turn);
       addLog(`=== ターン ${state.turn} ===`);
       state.phase = PHASE_ORDER[0];
+      if (i === PHASE_ORDER.length - 1) recordScenarioPlay();
     } else {
       state.phase = PHASE_ORDER[i + 1];
     }
@@ -4776,6 +4777,21 @@ function drawMoveRange(ship) {
 // ============================================================
 // 全艦プロット同時実行（アニメーション）
 // ============================================================
+let scenarioPlayRecorded = false;
+function recordScenarioPlay() {
+  if (scenarioPlayRecorded || !['human-vs-ai', 'human-vs-human'].includes(state.gameMode)) return;
+  const root = document.documentElement;
+  const { analyticsScenario, analyticsTitle } = root.dataset;
+  if (!analyticsScenario) return;
+  const language = root.lang.toLowerCase().split('-')[0];
+  const event = { path: `wsim-play-sc${analyticsScenario}-${language}`, title: `Played: ${analyticsTitle}`, event: true };
+  scenarioPlayRecorded = true;
+  const send = () => {
+    try { window.goatcounter?.count?.(event); } catch { /* Keep analytics out of gameplay. */ }
+  };
+  if (typeof window.goatcounter?.count === 'function') send();
+  else document.addEventListener('game-analytics-ready', send, {once: true});
+}
 let isExecuting = false;
 function executeAllPlots() {
   debugLog(`[DEBUG executeAllPlots] 呼出 isExecuting=${isExecuting}`);
@@ -4902,6 +4918,7 @@ function executeAllPlots() {
       try { paths.forEach(p => { if (p.path && p.path.length) blEvent('path', { ship: p.ship.name, steps: p.path.map(x => [x.col, x.row, x.dir]).concat([[p.ship.col, p.ship.row, p.ship.dir]]) }); }); } catch (e) {}
       addLog('=== プロット実行完了 ===');
       setInfo('プロット実行完了');
+      recordScenarioPlay();
       draw();
       return;
     }
@@ -5362,18 +5379,13 @@ if (mapImgLoaded) { initCanvas(); draw(); }
 (() => {
   const scenarioNo = Number(state.scenarioNo);
   if (!Number.isSafeInteger(scenarioNo) || !Object.hasOwn(SCENARIOS, scenarioNo)) return;
-  const language = typeof LANG === 'string' ? LANG : 'ja';
-  const folder = decodeURI(location.pathname).replace(/[^/]*$/, '');
-  window.goatcounter = window.goatcounter || {};
-  window.goatcounter.path = () => folder + 'scenario/' + scenarioNo + '?lang=' + language;
-  window.goatcounter.title = () => SCENARIOS[scenarioNo].name;
-  const script = document.createElement('script');
-  script.async = true;
-  script.src = 'https://gc.zgo.at/count.js';
-  script.dataset.goatcounter = 'https://shigerusuzuki.goatcounter.com/count';
-  document.head.appendChild(script);
+  const folder = location.pathname.replace(/[^/]*$/, '');
+  const data = document.documentElement.dataset;
+  data.analyticsPath = folder + 'scenario/' + scenarioNo;
+  data.analyticsTitle = SCENARIOS[scenarioNo].name;
+  data.analyticsScenario = String(scenarioNo);
 })();
 </script>
-<script defer src="../game-analytics.js"></script>
+<script defer src="../game-analytics.js?v=wsim-play-20261121"></script>
 </body>
 </html>

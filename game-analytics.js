@@ -16,16 +16,19 @@
     if (typeof counter.count !== 'function') return;
     const language = root.lang.toLowerCase().split('-')[0];
     if (!/^[a-z]{2}$/.test(language) || language === lastLanguage) return;
-    let path = location.pathname;
+    let path = root.dataset.analyticsPath || location.pathname;
     try { path = decodeURI(path); } catch { /* Keep the original path if decoding fails. */ }
-    counter.count({path: path + '?lang=' + language});
+    counter.count({path: path + '?lang=' + language, title: root.dataset.analyticsTitle});
     lastLanguage = language;
   };
 
   const start = () => {
     countLanguage();
     new MutationObserver(countLanguage).observe(root, {attributes: true, attributeFilter: ['lang']});
-    script.addEventListener('load', countLanguage, {once: true});
+    script.addEventListener('load', () => {
+      countLanguage();
+      document.dispatchEvent(new Event('game-analytics-ready'));
+    }, {once: true});
     document.head.append(script);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true});
