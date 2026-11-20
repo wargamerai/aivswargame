@@ -594,16 +594,19 @@ function ufUsesVictory(scenario, id) {
    *  火力: 真ん中。クルー兵器・副分隊長・士気の低い兵で約半分。止まって撃つ
    *  移動: 分隊長・火炎放射器・士気の高い兵。火炎放射器と爆薬が両方あれば 2つに分ける（片方がやられても攻撃が続く）
    *  hasDemo: このシナリオでこの部隊に爆薬があるか。爆薬を持つ兵は uf_report_save.js で移動グループから選ぶ */
-  function _formFireMove(enriched, factionKey, hasDemo) {
+  function _formFireMove(enriched, factionKey, hasDemo, maneuverGoal = 0) {
     const N = enriched.length;
-    const fireSize = Math.min(10, Math.max(3, Math.round(N / 2)));
+    const { GROUP_MIN, GROUP_MAX } = global.INFANTRY_RULES;
+    const availableForFire = N - Math.min(maneuverGoal, N);
+    const fireLimit = maneuverGoal ? (availableForFire >= GROUP_MIN ? Math.min(GROUP_MAX, availableForFire) : 0) : N;
+    const fireSize = Math.min(fireLimit, GROUP_MAX, Math.max(3, Math.round(N / 2)));
     const isSL = e => !!(e.def && e.def.leader === '分隊長');
     const fire = [], pool = enriched.slice();
     const take = e => { pool.splice(pool.indexOf(e), 1); fire.push(e); };
-    pool.filter(e => e.crew && !e.flame).forEach(take);
+    pool.filter(e => e.crew && !e.flame).slice(0, fireLimit).forEach(take);
     // 分隊長以外の指揮官は火力へ（指揮官のいないグループを作らない）。分隊長がいなければ最初の指揮官は移動へ残す
     const lds = pool.filter(e => e.leader && !isSL(e)).sort((a, b) => b.morale - a.morale);
-    (enriched.some(isSL) ? lds : lds.slice(1)).forEach(take);
+    (enriched.some(isSL) ? lds : lds.slice(1)).slice(0, fireLimit - fire.length).forEach(take);
     // 残りは士気の低い兵から（士気の高い兵は撃たれる移動グループへ）
     pool.filter(e => !e.leader && !e.flame).sort((a, b) => a.morale - b.morale).forEach(e => { if (fire.length < fireSize) take(e); });
     const rest = pool;
@@ -686,11 +689,27 @@ function ufUsesVictory(scenario, id) {
     _assignCrew(gs, enriched);
     return gs.filter(g => g.cards.length);
   }
+  function maneuverGoalSize(scenario, role, startingCount) {
+    if (scenario?.victoryPreset) {
+      const usesAny = ids => ids.some(id => ufUsesVictory(scenario, id));
+      const attacking = role === 'attacker';
+      const halfForce = attacking && ufUsesVictory(scenario, 'I') ? Math.ceil(startingCount / 2) : 0;
+      let fixedGoal = 0;
+      if (attacking && usesAny(['D', 'H', 'Q'])) fixedGoal = 5;
+      else if (usesAny(['A', 'E', 'F', 'K', 'M', 'T', 'U']) || (attacking && usesAny(['L', 'P', 'S']))) fixedGoal = 4;
+      return Math.min(global.INFANTRY_RULES.GROUP_MAX, Math.max(fixedGoal, halfForce));
+    }
+    const victory = scenario?.victory;
+    if (victory?.type === 'reachAndHold') return victory.minSoldiers;
+    return role === 'attacker' ? victory?.attackerMinSoldiers || 0 : 0;
+  }
   function buildAIGroupsSmart0(scenario, factionKey, role, style, equipmentHolders) {
     const units = buildUnitCards(scenario, factionKey, role);
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
-    if (scenario?.victoryPreset) {
+    const maneuverGoal = maneuverGoalSize(scenario, role, enriched.length);
+    const isEditor = Boolean(scenario?.victoryPreset);
+    if (isEditor || (scenario?.id === 'E' && role === 'attacker')) {
       if (scenario.evacuationSetup && role === 'defender') {
         const count = enriched.length > 30 ? 4 : 3;
         const sizes = Array.from({ length: count }, (_, i) =>
@@ -701,15 +720,25 @@ function ufUsesVictory(scenario, id) {
       }
       const vehicles = enriched.filter(unit => unit.def?.afv);
       const pillboxStart = role === 'defender' && (scenario.defenderPillbox || ufUsesVictory(scenario, 'C'));
-      if (vehicles.length || pillboxStart || enriched.length === 1) {
+      if (vehicles.length || pillboxStart || enriched.length === 1 || (isEditor && maneuverGoal)) {
         const infantry = enriched.filter(unit => !unit.def?.afv);
         const secondaryHolders = new Set(infantry.map(unit => unit.num).filter(num =>
           equipmentHolders.has(num) || reservedSecondaryWeapon(scenario, factionKey, num)));
         const pillbox = pillboxStart ? editorPillboxSize(infantry.map(unit => unit.num), factionKey, secondaryHolders) : 0;
         const field = infantry.length - pillbox;
-        const groupCount = Math.ceil(field / 10);
-        const sizes = Array.from({ length: groupCount }, (_, i) =>
-          Math.floor(field / groupCount) + Number(i < field % groupCount));
+        const { GROUP_MIN, GROUP_MAX, MAX_GROUPS_INITIAL } = global.INFANTRY_RULES;
+        const minFieldGroups = Math.ceil(field / GROUP_MAX);
+        const minManeuver = Math.max(GROUP_MIN, Math.min(maneuverGoal, field));
+        // 移動グループに目標の人数を確保し、余った歩兵を射撃グループに回す。
+        const canSplitInfantry = !pillbox && field >= minManeuver + GROUP_MIN &&
+          vehicles.length + 2 <= MAX_GROUPS_INITIAL;
+        const groupCount = canSplitInfantry ? Math.max(2, minFieldGroups) : minFieldGroups;
+        const fireGroups = groupCount - 1;
+        const moving = groupCount ? Math.max(Math.ceil(field / groupCount),
+          Math.min(minManeuver, field - fireGroups * GROUP_MIN)) : 0;
+        const supporting = field - moving;
+        const sizes = Array.from({ length: groupCount }, (_, i) => i === 0 ? moving :
+          Math.floor(supporting / fireGroups) + Number(i <= supporting % fireGroups));
         if (pillbox) sizes.splice(1, 0, pillbox);
         const groups = infantry.length ? _forcedSplit(infantry, factionKey, sizes) : [];
         if (pillbox) {
@@ -746,7 +775,15 @@ function ufUsesVictory(scenario, id) {
     const _isChart = typeof window !== 'undefined' && window.__chartAI && (window.__chartNat === 'all' || factionKey === (window.__chartNat || 'us'));
     const _splitA = _isChart && window.__splitA ? (typeof window.__splitA === 'object' ? window.__splitA[factionKey] : window.__splitA) : null;
     const _defAdv = _isChart && window.__defAdv && role === 'defender' && (window.__defAdv !== 'D' || (scenario && scenario.id === 'D'));
-    if (_splitA && !(scenario && scenario.id === 'C' && role === 'defender')) { const k = Math.min(enriched.length, +_splitA); const sz = enriched.length - k >= 2 ? [k, enriched.length - k] : [enriched.length]; return _forcedSplit(enriched, factionKey, sz); }
+    if (_splitA && !(scenario && scenario.id === 'C' && role === 'defender')) {
+      const { GROUP_MIN, GROUP_MAX } = global.INFANTRY_RULES;
+      const total = enriched.length;
+      const preferred = maneuverGoal
+        ? Math.min(GROUP_MAX, Math.max(+_splitA, maneuverGoal, total - GROUP_MAX)) : +_splitA;
+      const moving = Math.min(total, preferred);
+      const sizes = total - moving >= GROUP_MIN ? [moving, total - moving] : [total];
+      return _forcedSplit(enriched, factionKey, sizes);
+    }
     if (_isChart && window.__pillboxFixed3 && scenario && scenario.id === 'C' && role === 'defender') {
       const fix = { ger: [3, 10, 23], us: [1, 3, 4], rus: [2, 4, 24], jpn: [4, 21, 27], uk: [1, 5, 12] }[factionKey] || [];
       const gA = _newGroup('A', factionKey), gB = _newGroup('B', factionKey); gA._role = 'hold'; gB._role = 'hold'; gA._strategy = gB._strategy = 'hold';
@@ -769,7 +806,7 @@ function ufUsesVictory(scenario, id) {
     const strategy = enriched.length >= 5 ? 'fireMove' : chooseAIStrategy(scenario, enriched, style, factionKey);
     let groups;
     const _hasDemo = hasDemo(scenario, factionKey, role);
-    if (strategy === 'fireMove') { groups = _formFireMove(enriched, factionKey, _hasDemo); _assignCrew(groups, enriched); }
+    if (strategy === 'fireMove') { groups = _formFireMove(enriched, factionKey, _hasDemo, maneuverGoal); _assignCrew(groups, enriched); }
     else if (strategy === 'assault') { groups = _formAssault(enriched, factionKey); _assignCrew(groups, enriched); }
     else groups = _buildGroupsWaveOrSplit(scenario, factionKey, role, strategy);
     groups = groups.filter(g => g.cards.length > 0);
