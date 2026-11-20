@@ -77,6 +77,8 @@ body.hit #board { animation:hitflash .5s; }
 #log .date { color:#fff; background:#33361f; font-weight:bold; padding:2px 6px; margin-top:12px; border-radius:3px; }
 #over { position:fixed; inset:0; background:rgba(0,0,0,.84); display:flex; align-items:center; justify-content:center; z-index:50; padding:14px; }
 #over .box { background:var(--panel); border:1px solid var(--acc); border-radius:6px; max-width:680px; width:100%; max-height:92vh; overflow:auto; padding:16px 20px; }
+#over .box.report-preview { max-width:1020px; }
+#over .report-preview iframe { display:block; width:100%; height:min(68vh,42rem); border:0; background:#fff; }
 #over h2 { color:var(--acc); margin:0 0 8px; }
 #over p { margin:6px 0; }
 .tankimg { display:block; margin:0 auto; }
@@ -101,9 +103,9 @@ body.hit #board { animation:hitflash .5s; }
 <script src="pb_tables.js"></script>
 <script src="pb_lang.js"></script>
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
-<script src="pb_engine.js?v=20261116-field-fixes"></script>
+<script src="pb_engine.js?v=20261121-debrief"></script>
 <script src="../report-limit.js"></script>
 <script src="../report-image.js"></script>
-<script src="pb_ui.js?v=20261120-autosave"></script>
+<script src="pb_ui.js?v=20261121-debrief"></script>
 </body>
 </html>

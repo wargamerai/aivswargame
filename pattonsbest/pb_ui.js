@@ -55,7 +55,14 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 var FS = (() => { try { return +localStorage.getItem('pb_fs') || 17; } catch (e) { return 17; } })();
 function applyFs() { document.documentElement.style.setProperty('--fs', FS + 'px'); }
 function zoom(k) { FS = Math.max(12, Math.min(28, FS + k * 2)); try { localStorage.setItem('pb_fs', FS); } catch (e) {} applyFs(); }
-function saveLog() { const t = ALLLOG.map(x => x.t).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.text(t)], { type: 'text/plain;charset=utf-8' })); a.download = `pattons_best_log_${E.G ? E.G.days : 0}.txt`; a.click(); }
+function saveLog(log = ALLLOG, filename = `pattons_best_log_${E.G ? E.G.days : 0}.txt`) {
+  const text = log.map(entry => entry.t).join('\n');
+  const url = URL.createObjectURL(new Blob([GameReportLimit.text(text)], { type: 'text/plain;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  try { link.click(); } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+}
 applyFs();
 var JUDGE_ON = true;
 function setJudgeOn(v) { JUDGE_ON = v; E.setJudge(v); }
@@ -671,6 +678,21 @@ function saveReport(i, pngButton) {
 }
 function saveLastReport(pngButton) { return saveReport(REPORTS.length - 1, pngButton); }
 function saveAllReports() { if (!REPORTS.length) return alert(L('まだレポートがありません', 'No reports yet')); downloadHtml('pattons_best_campaign.html', REPORTS.map(reportHtml).join('')); }
+function saveOperationLog(report) {
+  saveLog(report.log, `pattons_best_log_${report.date.replace(/\//g, '-')}.txt`);
+}
+function showReportPreview(report) {
+  const overlay = $('over');
+  overlay.innerHTML = `<div class="box report-preview">
+    <p><button class="go" data-close-report>${L('閉じる', 'Close')}</button>
+    <button data-save-operation-log>${L('この作戦のログを保存', 'Save this operation log')}</button></p>
+    <iframe sandbox title="${L('戦闘レポート', 'After Action Report')}"></iframe>
+  </div>`;
+  overlay.querySelector('iframe').srcdoc = reportDocument(reportHtml(report));
+  overlay.querySelector('[data-close-report]').onclick = () => { overlay.style.display = 'none'; };
+  overlay.querySelector('[data-save-operation-log]').onclick = () => saveOperationLog(report);
+  overlay.style.display = 'flex';
+}
 function autosaveMessage(saved) {
   if (saved === undefined) return '';
   const message = saved
@@ -680,7 +702,8 @@ function autosaveMessage(saved) {
 }
 function showDebrief(r, saved) {
   keepJudge();
-  if (r.report) REPORTS.push(Object.assign(r.report, { log: ALLLOG.slice(DAYSTART) }));
+  const report = r.report && { ...r.report, log: ALLLOG.slice(DAYSTART) };
+  if (report) REPORTS.push(report);
   const g = E.G;
   inlineBox(`<h2>${r.ko ? L('戦車を失った', 'Tank lost') : L('夕方の報告', 'Evening report')}</h2>
   <p>${L('戦車の戦果', 'Your tank')}: ${r.your} / ${L('味方', 'Friendly forces')}: ${r.fr} / ${L('地域', 'Territory')}: ${r.terr}</p><p><b>${L('合計', 'Total')} ${r.total} VP — ${r.total > 0 && !r.ko ? L('今日は勝った', 'A victory today') : L('今日は負けた', 'A defeat today')}</b></p>
@@ -688,6 +711,10 @@ function showDebrief(r, saved) {
   ${g.medals.length ? `<p style="color:var(--mute);font-size:.9em">${L('勲章', 'Medals')}: ${g.medals.join('、')}</p>` : ''}
   ${autosaveMessage(saved)}
   <p><button class="go" onclick="closeOver()">${L('続ける', 'Continue')}</button> <button onclick="saveLastReport()">${L('レポート HTML', 'Report HTML')}</button> <button onclick="saveLastReport(this)">${L('レポート PNG', 'Report PNG')}</button></p>`);
+  if (report) {
+    showReportPreview(report);
+    try { saveOperationLog(report); } catch { /* The report stays available if the download fails. */ }
+  }
 }
 function showOver(saved) {
   const g = E.G, o = g.over; if (!o) return;

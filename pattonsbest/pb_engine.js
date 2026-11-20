@@ -222,7 +222,12 @@ function placeStart() {
   m.start = st.id; m.cur = st.id; st.us = true;
   const ex = PB.EXIT[d10(L('出口区域', 'Exit area')) - 1][s - 1];
   m.exit = m.areas.find(a => a.edge === ex).id;
-  say(L(`任務: 地図の${s}番から${ex}番の区域まで進め。`, `Orders: drive from area ${s} to area ${ex}.`));
+  if (G.day.sc === 'C') {
+    say(L(`任務: 地図の${s}番の陣地で敵の反撃を待ち受けろ。`,
+      `Orders: hold area ${s} and wait for the enemy counterattack.`));
+  } else {
+    say(L(`任務: 地図の${s}番から${ex}番の区域まで進め。`, `Orders: drive from area ${s} to area ${ex}.`));
+  }
 }
 function rollResistance(a) {
   const mod = a.type === 'A' ? 1 : a.type === 'C' ? 2 : 0;
@@ -374,7 +379,8 @@ function startBattle(area, advZones) {
   b.seq = 0; b.area = area.type; b.areaId = area.id; b.ended = false; b.firstAmbush = true;
   G.phase = 'battle'; G.battles++;
   const n = { L: 2, M: 3, H: 4 }[area.res || 'M'];
-  say(L(`敵だ！ ${areaName(area)}で戦闘開始。`, `Contact! Battle in ${areaName(area)}.`), 'head');
+  say(d.sc === 'C' ? L(`敵の反撃だ！ ${areaName(area)}で戦闘開始。`, `Enemy counterattack! Battle in ${areaName(area)}.`)
+    : L(`敵だ！ ${areaName(area)}で戦闘開始。`, `Contact! Battle in ${areaName(area)}.`), 'head');
   for (let i = 0; i < n; i++) placeUnit(activate(), area);
   area.left.forEach(u => { u.spot = 'none'; b.units.push(u); u.id = ++b.seq; }); area.left = [];
   // 敵の配置を地図で確かめてから、支援や待ち伏せへ進む（ユーザーの指示 2026-11-08）
@@ -976,19 +982,21 @@ function resolveRound(o) {
   // 気絶の回復
   POS.forEach(p => { if (G.crew[p].status === 'uncon' && d10(L(`${G.crew[p].name}の意識(1-5回復)`, `${G.crew[p].name} recovers (1-5)`)) <= 5) { G.crew[p].status = 'ok'; say(L(`${G.crew[p].name}が意識を取り戻した。`, `${G.crew[p].name} comes to.`), 'good'); } });
   stepDone(n0);
-  if (checkBattleEnd()) return afterBattle();
+  let result = checkBattleEnd();
+  if (result) return result;
   // 5) 敵（20.43 反撃で待ち伏せた最初のラウンドは動かない）
   if (b.freeRound) b.freeRound = false; else enemyPhase(false);
   if (G.phase !== 'battle') return afterBattle();
-  if (checkBattleEnd()) return afterBattle();
+  result = checkBattleEnd();
+  if (result) return result;
   // 6) 味方
   friendlyAll(0, 'friend', null);
-  if (checkBattleEnd()) return afterBattle();
+  result = checkBattleEnd();
+  if (result) return result;
   // 7) ランダム
   randomEvent();
   if (G.phase !== 'battle') return afterBattle();
-  if (checkBattleEnd()) return afterBattle();
-  return beginRound();
+  return checkBattleEnd() || beginRound();
 }
 function afterBattle() { if (G.phase === 'postko') return debrief(); return { ended: true }; }
 // 8.36 弾架の補充: 戦闘前に選んだ配分を、手持ちの弾薬で補う。
@@ -1305,6 +1313,7 @@ function caTick() {
   a.res = res === 'L' ? (r <= 7 ? 'L' : 'M') : res === 'M' ? (r <= 5 ? 'L' : r <= 9 ? 'M' : 'H') : (r <= 4 ? 'L' : r <= 8 ? 'M' : 'H');
   const need = { L: 8, M: 6, H: 4 }[a.res];
   if (r >= need) { a.id = d.map.cur; const ar = d.map.areas[d.map.cur]; a.left = ar.left; ar.left = []; return startBattle(Object.assign(ar, { res: a.res }), false); }
+  say(L(`${clock(d.time)}　15分待機。敵の反撃なし。`, `${clock(d.time)} — Waited 15 minutes. No enemy counterattack.`));
   return dayEndCheck();
 }
 // ===== 4.9 夕方 =====
