@@ -56,6 +56,13 @@ dialog{width:min(720px,calc(100% - 30px));border:1px solid #94a287;border-radius
 .sortie-options summary{cursor:pointer;padding:7px 12px;font-weight:700}
 .sortie-options .options-body{display:grid;gap:8px;padding:0 12px 10px}
 .crew-assignment{display:grid;gap:6px}.crew-assignment summary{cursor:pointer}.crew-assignment select,.crew-assignment button{max-width:100%;margin-top:6px}.crew-assignment select{width:100%}
+.crew-assignment label{display:block;margin-top:6px;font-size:12px}
+.reassignment-preview{margin:8px 0;padding:6px 9px;border-left:3px solid var(--line);font-size:12px}
+.reassignment-preview ul{margin:0;padding-left:16px}
+.reassignment-preview li span{display:block}
+.reassignment-preview p{margin:4px 0 0}
+.pilot-status{margin:8px 0;padding:6px 9px;border-left:3px solid var(--line);font-size:12px}
+.pilot-status p{margin:2px 0}
 .sortie-options label{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .sortie-options select{font:inherit;color:var(--paper);background:#fffaf0;border:1px solid var(--line);border-radius:4px;padding:3px 6px}
 .sortie-options #restart-campaign{justify-self:start}
@@ -261,6 +268,7 @@ body{font-size:16px}
   <section class="control" aria-label="任務操作">
     <div class="signal"><span class="lamp" aria-hidden="true"></span><div><strong id="event-title">出撃準備</strong><p id="event-detail" aria-live="polite">任務番号を選び、目標と編隊位置を決定します。</p></div></div>
     <div id="captain-brief" aria-live="polite"></div>
+    <div id="pilot-status" class="pilot-status" hidden></div>
     <div id="command-advice"></div>
     <div id="order" class="order" aria-live="polite" hidden></div>
     <div id="flight-options"></div>
@@ -295,7 +303,7 @@ body{font-size:16px}
 </main>
 <dialog id="detail-dialog"><div class="dialog-head"><h2 id="dialog-title">判定ログ</h2><form method="dialog"><button class="subtle" aria-label="閉じる">閉じる</button></form></div><div id="dialog-content"></div><div id="report-exports" hidden><button id="download" type="button" class="subtle">HTMLで保存</button><button id="download-image" type="button" class="subtle">PNGで保存</button></div></dialog>
 <script src="../report-image.js"></script>
-<script src="b17-lang.js?v=20261120-report" translate="no"></script>
+<script src="b17-lang.js?v=20261121-crew" translate="no"></script>
 <script translate="no">
 const tables = {
   "cities": {
@@ -1135,8 +1143,7 @@ function landingModifier(water,includeCrew=true){
   if(s.burst)mod-=4;
   if(!includeCrew)return mod;
   const pilot=actingPilot();
-  if(!pilot)mod-=11;
-  else if(!pilots.includes(pilot))mod-=ruleEnabled("training")&&s.service[pilot]?.training?.includes("操縦訓練")?5:11;
+  mod-=pilotReplacementPenalty(pilot);
   if(pilot)mod-=fatiguePenalty(pilot);
   if(s.manualJettison&&bombsAboard())mod-=4;
   if(pilots.some(p=>canWork(p)&&(s.wounds[p]||0)<2&&crewExperience(p)>=11))mod++;
@@ -1514,6 +1521,10 @@ function actingPilot(){
   const trained=ruleEnabled("training")&&available.find(person=>s.service[person]?.training?.includes("操縦訓練"));
   return trained||(available.includes("航空機関士")?"航空機関士":available[0]);
 }
+function pilotReplacementPenalty(pilot){
+  if(pilots.includes(pilot))return 0;
+  return pilot&&ruleEnabled("training")&&s.service[pilot]?.training?.includes("操縦訓練")?5:11;
+}
 function prepareGroundCrew(){
   if(!ruleEnabled("ground"))return;
   if(!campaign.ground||campaign.ground.airframe!==s.airframe)newCrewChief();
@@ -1805,10 +1816,11 @@ function exchangeSeats(person,seat){
   for(const post of [from,seat])if(assignments[post]===post)delete assignments[post];
   return other;
 }
+const reassignmentBlocksFire = (from,seat) => s.phase==="combat"&&seatArea(from)!==seatArea(seat);
 function reassignCrew(person,seat){
   if(!canReassign(person,seat))return false;
   const from=crewSeat(person), other=exchangeSeats(person,seat);
-  const moving=s.phase==="combat"&&seatArea(from)!==seatArea(seat);
+  const moving=reassignmentBlocksFire(from,seat);
   if(moving){
     const changes=s.crewMoving??={};
     changes[person]=crewWave();
@@ -1822,46 +1834,107 @@ function reassignCrew(person,seat){
   event("乗員の配置替え",crewName(person)+"を"+seatLabel(seat)+"の位置へ移しました。"+(moving?"この攻撃波の間は射撃できません。":""));
   return true;
 }
+function readyStationGuns(seat){
+  return Object.keys(gunners).filter(key=>gunners[key]===seat&&gunReady(key));
+}
+function recommendedReplacement(people,seat){
+  const weapons=readyStationGuns(seat);
+  if(canWork(seatOccupant(seat))||!weapons.length)return null;
+  const delayed=person=>Number(reassignmentBlocksFire(crewSeat(person),seat));
+  const limited=person=>Number(weapons.every(key=>!familiarGun(key,person))||
+    s.wounds[person]===2||s.frost.includes(person));
+  return [...people].sort((a,b)=>delayed(a)-delayed(b)||limited(a)-limited(b)||
+    readyStationGuns(crewSeat(a)).length-readyStationGuns(crewSeat(b)).length||
+    (s.wounds[a]||0)-(s.wounds[b]||0)||fatiguePenalty(a)-fatiguePenalty(b))[0];
+}
+function renderReassignmentPreview(preview,person,seat){
+  const from=crewSeat(person), other=seatOccupant(seat);
+  const moving=reassignmentBlocksFire(from,seat);
+  const list=make("ul");
+  for(const [member,oldPost,newPost] of [[person,from,seat],[other,seat,from]]){
+    const entry=make("li");
+    entry.append(make("strong",crewName(member))," ／ "+crewCondition(member),
+      make("span",seatLabel(oldPost)+" → "+seatLabel(newPost)));
+    const weapons=readyStationGuns(newPost);
+    if(weapons.length){
+      const names=weapons.map(key=>guns[key][0]).join("、");
+      if(!canWork(member))entry.append(make("span","使えなくなる銃："+names));
+      else{
+        entry.append(make("span","担当する銃："+names));
+        if(moving)entry.append(make("span","この攻撃波は射撃不可"));
+        if(weapons.some(key=>!familiarGun(key,member))||s.wounds[member]===2||s.frost.includes(member))
+          entry.append(make("span","命中は基本6。エース補正なし。"));
+      }
+    }else if(Object.values(gunners).includes(newPost)&&canWork(member)&&seatLabel(newPost)!=="レーダー員"){
+      entry.append(make("span","この持ち場に使える銃がありません。"));
+    }
+    list.append(entry);
+  }
+  preview.replaceChildren(list);
+  if(Object.keys(gunners).some(key=>[from,seat].includes(gunners[key])&&
+    (s.orders[key]!=null||s.sprayOrders?.[key]!=null)))
+    preview.append(make("p","交換する持ち場の射撃指示を解除します。"));
+}
 function renderCrewAssignments(options){
-  const people=crew.filter(([person])=>crew.some(([seat])=>canReassign(person,seat)));
-  if(!people.length)return;
+  const members=crew.map(([member])=>member);
+  const postOptions=new Map();
+  for(const post of members){
+    const candidates=members.filter(member=>canReassign(member,post));
+    if(candidates.length)postOptions.set(post,candidates);
+  }
+  if(!postOptions.size)return;
   const panel=make("details");
   panel.className="crew-assignment";
   panel.open=Boolean(s.crewAssignmentOpen);
   panel.addEventListener("toggle",()=>{s.crewAssignmentOpen=panel.open;});
   panel.append(make("summary","乗員の配置替え"));
   const person=make("select"), seat=make("select");
-  person.setAttribute("aria-label","配置替えする乗員");
-  seat.setAttribute("aria-label","移動先の持ち場");
-  for(const [role] of people){
-    const option=make("option",crewName(role)+"（"+seatLabel(crewSeat(role))+"）");
-    option.value=role;
-    person.append(option);
+  for(const [post] of postOptions){
+    const current=seatOccupant(post);
+    const option=make("option",seatLabel(post)+" ／ "+crewName(current)+" ／ "+crewCondition(current));
+    option.value=post;
+    seat.append(option);
   }
+  seat.value=[...postOptions.keys()].find(post=>!canWork(seatOccupant(post)))||seat.value;
   const button=make("button","配置替えを指示","subtle");
   const advice=make("p",undefined,"flight-advice");
-  function setDestination(){
+  const preview=make("div",undefined,"reassignment-preview");
+  preview.setAttribute("aria-live","polite");
+  const recommended=make("p",undefined,"flight-advice");
+  function showSelection(){
     const label=seatLabel(seat.value);
     advice.textContent=crewLine(person.value,"機長、"+label+"の持ち場に移りますか？");
     button.textContent=playMode==="story"?quoteLine(crewName(person.value)+"、"+label+"の持ち場へ"):"配置替えを指示";
+    renderReassignmentPreview(preview,person.value,seat.value);
   }
-  function setSeats(){
-    seat.replaceChildren(...crew.filter(([post])=>canReassign(person.value,post)).map(([post])=>{
-      const option=make("option",seatLabel(post)+"（"+crewName(seatOccupant(post))+"）");
-      option.value=post;
+  function setCandidates(){
+    const people=postOptions.get(seat.value);
+    const choice=recommendedReplacement(people,seat.value);
+    person.replaceChildren(...people.map(member=>{
+      const option=make("option",crewName(member)+" ／ "+seatLabel(crewSeat(member))+
+        (member===choice?" ／ 射撃の補充候補":""));
+      option.value=member;
       return option;
     }));
-    setDestination();
+    if(choice)person.value=choice;
+    recommended.hidden=!choice;
+    recommended.replaceChildren();
+    if(choice)recommended.append(make("strong","射撃の補充候補"),"　"+crewName(choice),
+      make("br"),"射撃再開までの時間、銃の習熟、空く銃の数で選んでいます。");
+    showSelection();
   }
-  person.addEventListener("change",setSeats);
-  seat.addEventListener("change",setDestination);
+  person.addEventListener("change",showSelection);
+  seat.addEventListener("change",setCandidates);
   button.addEventListener("click",()=>{
     captainReply(crewName(person.value)+"、"+seatLabel(seat.value)+"の持ち場へ。",[person.value,"機長、配置を替えますか？"]);
     if(reassignCrew(person.value,seat.value))boardView="crew";
     render();
   });
-  setSeats();
-  panel.append(person,seat);
+  setCandidates();
+  const destination=make("label","移動先の持ち場"), replacement=make("label","配置替えする乗員");
+  destination.append(seat);
+  replacement.append(person);
+  panel.append(destination,replacement,recommended,preview);
   if(playMode==="story")panel.append(advice);
   panel.append(button);
   options.append(panel);
@@ -2761,11 +2834,13 @@ function threshold(key,f){
   if(p===18)return ["top","radio"].includes(key)?6:0;
   return key==="ball"?3:0;
 }
+function gunReady(key){
+  return s.ammo[key]>0&&!s.disabled.has(key)&&!s.sprayJams?.[key]&&!s.randomEvents?.coldGuns?.includes(key);
+}
 function canFire(key,f){
   const other=key==="sc"?"pc":key==="pc"?"sc":null;
   const gunner=gunnerAt(key);
-  return s.ammo[key]>0&&canWork(gunner)&&!gunnerMoving(gunner)&&!(s.careTurn===s.turn&&s.careMedic===gunner)&&actingPilot()!==gunner&&
-    !s.disabled.has(key)&&!s.sprayJams?.[key]&&!s.randomEvents?.coldGuns?.includes(key)&&
+  return gunReady(key)&&canWork(gunner)&&!gunnerMoving(gunner)&&!(s.careTurn===s.turn&&s.careMedic===gunner)&&actingPilot()!==gunner&&
     (!other||!s.orders[other]&&s.sprayOrders?.[other]==null)&&threshold(key,f)>0;
 }
 function resolveCombat(){
@@ -3167,6 +3242,23 @@ function renderCombat(){
     renderFireAssignments();
   }
 }
+function renderPilotStatus(){
+  const panel=el("pilot-status");
+  panel.hidden=!s||s.phase==="end";
+  if(panel.hidden)return;
+  const pilot=actingPilot();
+  const role=pilots.includes(pilot)?"操縦担当":"操縦代行";
+  const line=make("p");
+  line.append(make("strong",pilot?role:"操縦担当"),"　",pilot?crewName(pilot)+"（"+pilot+"）":"操縦可能な乗員なし");
+  panel.replaceChildren(line);
+  if(pilots.some(person=>!canWork(person)||s.wounds[person]>0)){
+    for(const person of pilots)
+      panel.append(make("p",person+"　"+crewName(person)+" ／ "+crewCondition(person)+" ／ "+
+        (canWork(person)?"操縦可":"操縦不能")));
+  }
+  if(pilot&&!pilots.includes(pilot))
+    panel.append(make("p","操縦代行による着陸判定の修正 −"+pilotReplacementPenalty(pilot)+" ／ 回避機動不可"));
+}
 function renderCrew(){
   const counters=el("crew-counters"), roster=el("crew-roster"), markers=el("crew-hit-markers"), damage=el("crew-damage");
   counters.replaceChildren();
@@ -3366,6 +3458,7 @@ function render(autosave=true){
   renderMap();
   renderCombat();
   renderCrew();
+  renderPilotStatus();
   renderBase();
   showBoard(boardView);
   const action=el("advance");
