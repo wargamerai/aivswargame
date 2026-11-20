@@ -54,6 +54,7 @@ const BulgeRules = (() => {
   const unitById = (state,id) => state.units.find(unit => unit.id === id);
   const at = (state, hex) => state.units.filter(unit => unit.hex === hex);
   const chit = id => D.chits[id?.split(':')[0]];
+  const ownedSupport = (side,id) => Boolean(side) && typeof id==='string' && id.startsWith(side[0]+'-') && Boolean(chit(id));
   const chitImage = id => `assets/marker-${chit(id).image}.jpg`;
   const copy = value => structuredClone(value);
   function actor(state) {
@@ -81,6 +82,37 @@ const BulgeRules = (() => {
     const side = id.startsWith('g-') ? 'german' : 'allied';
     if (!state.cups[side].includes(id)) state.cups[side].push(id);
   }
+  function repairSupportOwnership(state) {
+    const misplaced = new Set();
+    const filter = (ids,side) => ids.filter(id=>{
+      if (ownedSupport(side,id)) return true;
+      misplaced.add(id);
+      return false;
+    });
+    for (const unit of state.units) {
+      const support = filter(unit.support,unit.side);
+      if (support.length===unit.support.length) continue;
+      unit.support = support;
+      unit.usedSupport = unit.usedSupport.filter(id=>support.includes(id));
+      if (unit.revealedSupport) unit.revealedSupport = unit.revealedSupport.filter(id=>support.includes(id));
+      if (!support.includes(unit.fortified)) unit.fortified = null;
+    }
+    const side = actor(state);
+    if (side) {
+      state.hand = filter(state.hand,side);
+      if (state.supportDraw) state.supportDraw = filter(state.supportDraw,side);
+    }
+    if (state.captureHold) state.captureHold = filter(state.captureHold,'german');
+    for (const army of ['german','allied']) state.cups[army] = filter(state.cups[army],army);
+    if (!misplaced.size) return state;
+    const held = new Set([...state.hand, ...state.events, ...(state.captureHold ?? []),
+      ...state.units.flatMap(unit=>unit.support), ...Object.values(state.bridges)]);
+    for (const id of misplaced) if (typeof id==='string' && chit(id) && !held.has(id)) returnChit(state,id);
+    if (state.setupOrders) state.setupOrders = state.setupOrders.filter(order=>ownedSupport(side,order.chit));
+    if (state.supportUndo) state.supportUndo = [];
+    if (state.combat?.openSupport) delete state.combat.openSupport;
+    return state;
+  }
   function dummyReserve(state, side) {
     const key = `${side[0]}-dummy`;
     const inUse = new Set([...state.units.flatMap(unit => unit.support), ...(state.captureHold ?? [])]);
@@ -88,7 +120,7 @@ const BulgeRules = (() => {
       .filter(id => !inUse.has(id));
   }
   function hasSupportInHand(state, side, id) {
-    return (chit(id)?.kind === 'dummy' ? dummyReserve(state,side) : state.hand).includes(id);
+    return ownedSupport(side,id) && (chit(id).kind === 'dummy' ? dummyReserve(state,side) : state.hand).includes(id);
   }
   function removableDummy(state, unit) {
     if (!['support','move','reaction'].includes(state.phase) || !unit?.hex || unit.side !== actor(state)) return;
@@ -335,15 +367,18 @@ const BulgeRules = (() => {
     const unit=unitById(state,id);
     return neighbors(unit?.hex).filter(hex=>at(state,hex).some(other=>other.side==='allied'));
   }
-  function peiperRoutes(state, id) {
+  function peiperRoutes(state, id, returns) {
     const unit=unitById(state,id);
-    if (state.peiper?.unit===id && state.peiper.stage==='second') return movementRoutes(state,unit,{},2);
+    if (state.peiper?.unit===id && state.peiper.stage==='second') return movementRoutes(state,unit,{returns},2);
     if (!canUsePeiper(state,unit) || (state.phase==='reaction' && peiperTargets(state,id).length)) return new Map();
     const support=unit.support.find(chip=>chip.startsWith('g-peiper:'));
-    return movementRoutes(state,unit,{support},1);
+    return movementRoutes(state,unit,{support,returns},1);
   }
   function transportableSupport(unit) {
     return unit.support.filter(id => id !== unit.fortified);
+  }
+  function returnableSupport(unit, support) {
+    return transportableSupport(unit).filter(id=>id!==support || unit.transport===0);
   }
   function excessSupport(unit, support) {
     if (chit(support)?.move === 'carry') return [];
@@ -365,7 +400,7 @@ const BulgeRules = (() => {
   function movementOptions(state, id, options) {
     return movementRoutes(state, unitById(state, id), options);
   }
-  function movementRoutes(state, unit, { mode='normal', support=null, repairBridge=false } = {}, peiperLeg=0) {
+  function movementRoutes(state, unit, { mode='normal', support=null, repairBridge=false, returns } = {}, peiperLeg=0) {
     const id = unit?.id;
     const side = actor(state);
     const out = new Map();
@@ -391,7 +426,10 @@ const BulgeRules = (() => {
     const max = peiperLeg ? 5 : infiltrating ? infiltration.die : mechanized ? 10 : unit.movement;
     const enemies = new Set(onMap(state,enemy(side)).map(u=>u.hex));
     const stopOccupied = new Set(onMap(state,side).filter(u=>u.id!==id && !u.marker).map(u=>u.hex));
-    const excess = excessSupport(unit,support);
+    const suggested = excessSupport(unit,support);
+    const excess = returns ?? suggested;
+    if (returns != null && (!Array.isArray(returns) || returns.length!==suggested.length ||
+        new Set(returns).size!==returns.length || returns.some(id=>!returnableSupport(unit,support).includes(id)))) return out;
     if (repairBridge && excess.includes(support)) return out;
     const start = { hex:unit.hex, path:[], cost:0, lost:false };
     const queue = [start], best = new Set([unit.hex+'|false']);
@@ -437,7 +475,7 @@ const BulgeRules = (() => {
     if (route.lost) dropAll(state,unit);
     else if (route.support && chit(route.support).discard) drop(state,unit,route.support);
     else if (route.support && !unit.usedSupport.includes(route.support)) unit.usedSupport.push(route.support);
-    const trail = { id:unit.id, side:unit.side, path, forestEntries, cost:route.cost,
+    const trail = { id:unit.id, side:unit.side, path, forestEntries, cost:route.cost, support:route.support,
       lost:route.lost, excess:route.excess, mode:route.mode, repairBridge:route.repairBridge };
     state.trails.push(trail);
     return trail;
@@ -904,6 +942,12 @@ const BulgeRules = (() => {
     return { target:current.target, attackers, defenders, attack, defense,
       number:state.combat.total-state.combat.queue.length+1, total:state.combat.total };
   }
+  function awaitingBattleDecision(state) {
+    if (state.phase!=='resolve' || !state.combat) return false;
+    const {side,from,queue,approvedTarget,revealed,openSupport}=state.combat;
+    return side==='allied' && ['attack','counter'].includes(from) && Boolean(queue[0]) &&
+      approvedTarget!==queue[0].target && !revealed && !openSupport;
+  }
   const isTankOrArtillery = id => ['tank','artillery'].includes(chit(id).kind);
   function possibleSupport(unit, defensive, restricted = false) {
     if (unit.marker) return [];
@@ -980,7 +1024,8 @@ const BulgeRules = (() => {
             nextAT=candidates.map(({entry,id})=>({unit:entry.unit.id,id}));
             break;
           }
-          target=candidates.find(({id})=>id===atTargets[atIndex++]);
+          const selected=atTargets[atIndex++];
+          target=candidates.find(({id})=>id===selected);
           if (!target) throw Error('除去する戦車系チットを選んでください。');
         }
         target.entry.cards=target.entry.cards.filter(id=>id!==target.id);
@@ -1231,7 +1276,7 @@ const BulgeRules = (() => {
     const reactionAdjacent=state.phase==='reaction' && peiperTargets(prior.state,unit.id).length>0;
     if (reactionAdjacent !== (action.to==null)) return false;
     const initialZoc=onMap(prior.state,'allied').filter(enemy=>unitZoc(enemy).includes(unit.hex)).map(enemy=>enemy.id);
-    const route=reactionAdjacent ? null : peiperRoutes(prior.state,unit.id).get(action.to);
+    const route=reactionAdjacent ? null : peiperRoutes(prior.state,unit.id,action.returns).get(action.to);
     if (!reactionAdjacent && !route) return false;
     if (route) move(prior.state,unit,route);
     const chip=unit.support.find(id=>id.startsWith('g-peiper:'));
@@ -1325,7 +1370,7 @@ const BulgeRules = (() => {
       }
       case 'assign': {
         if (phase==='setup') {
-          if (!state.hand.includes(action.chit) || !unit?.hex || unit.marker || unit.side!==side) return false;
+          if (!ownedSupport(side,action.chit) || !state.hand.includes(action.chit) || !unit?.hex || unit.marker || unit.side!==side) return false;
           assignInitialSupport(state,unit,action.chit);
           return true;
         }
@@ -1446,7 +1491,7 @@ const BulgeRules = (() => {
       case 'peiper-remobilize': {
         if (!['move','reaction'].includes(phase) || state.peiper?.stage!=='second' ||
             action.unit!==state.peiper.unit) return false;
-        const route=peiperRoutes(state,action.unit).get(action.to);
+        const route=peiperRoutes(state,action.unit,action.returns).get(action.to);
         if (!route) return false;
         const firstTrail=state.trails.length;
         move(state,unit,route);
@@ -1483,6 +1528,19 @@ const BulgeRules = (() => {
           state.phase='resolve';
         }
         return true;
+      case 'decide-battle': {
+        if (!awaitingBattleDecision(state) || typeof action.fight!=='boolean') return false;
+        const {target,attackers,defenders}=battleInfo(state);
+        if (action.fight) {
+          if (!attackers.length || !defenders.length) return false;
+          state.combat.approvedTarget=target;
+        } else {
+          state.combat.queue.shift();
+          log(state,`${target} の戦闘を見送りました。`);
+          finishBattle(state);
+        }
+        return true;
+      }
       case 'prioritize-battle': {
         if (phase!=='resolve' || state.combat.revealed || state.combat.openSupport) return false;
         const index=state.combat.queue.findIndex(order=>order.target===action.target);
@@ -1491,7 +1549,7 @@ const BulgeRules = (() => {
         return true;
       }
       case 'reveal-battle': {
-        if (phase!=='resolve' || state.combat.revealed || state.combat.openSupport) return false;
+        if (phase!=='resolve' || state.combat.revealed || state.combat.openSupport || awaitingBattleDecision(state)) return false;
         const profile=combatProfile(state,action.support,[]);
         if (!profile) return false;
         if (!profile.nextAT) return revealBattle(state,action.support,[]);
@@ -1512,7 +1570,7 @@ const BulgeRules = (() => {
       case 'continue-battle':
         return phase==='resolve' && continueBattle(state);
       case 'roll':
-        return phase==='resolve' && rollBattle(state,action.support,action.die);
+        return phase==='resolve' && !awaitingBattleDecision(state) && rollBattle(state,action.support,action.die);
       case 'advance': {
         if (phase!=='advance' || (action.unit && (!state.combat.advance.ids.includes(action.unit) || !advanceCandidates(state).includes(action.unit)))) return false;
         if (action.unit) {
@@ -1542,8 +1600,8 @@ const BulgeRules = (() => {
   }
   return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest, unitZoc,
     unitCoverage, isEncircled,
-    onMap, at, unitById, chit, chitImage, source, lines, zoc, moveChits, canDeclareInfiltration, canUsePeiper, peiperTargets, peiperRoutes, transportableSupport, movementOptions, previewMoves, offRoadForest, roadLinks,
+    onMap, at, unitById, chit, chitImage, repairSupportOwnership, source, lines, zoc, moveChits, canDeclareInfiltration, canUsePeiper, peiperTargets, peiperRoutes, transportableSupport, returnableSupport, movementOptions, previewMoves, offRoadForest, roadLinks,
     placements, eligiblePlacements, previewReinforcements, upcomingAlliedReinforcements, supportTargets, automaticSupport, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
     eventOptions, setupBridgeOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
-    battleInfo, possibleSupport, defaultSupport, combatProfile, inflictsUnitDamage, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured, germanCityCounts };
+    battleInfo, awaitingBattleDecision, possibleSupport, defaultSupport, combatProfile, inflictsUnitDamage, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured, germanCityCounts };
 })();

@@ -8,9 +8,9 @@
   <link rel="stylesheet" href="style.css?v=1.7&amp;rev=3">
   <script defer src="map-data.js?v=1.7"></script>
   <script defer src="data.js?v=1.7"></script>
-  <script defer src="rules.js?v=1.7&amp;rev=7"></script>
-  <script defer src="ai.js?v=1.7&amp;rev=11"></script>
-  <script defer src="app.js?v=1.7&amp;rev=7"></script>
+  <script defer src="rules.js?v=1.7&amp;rev=9"></script>
+  <script defer src="ai.js?v=1.7&amp;rev=14"></script>
+  <script defer src="app.js?v=1.7&amp;rev=11"></script>
   <script defer src="../game-analytics.js"></script>
 </head>
 <body>
@@ -123,6 +123,7 @@
     <form method="dialog">
       <h2 id="transport-title">輸送能力を超えます</h2>
       <p id="transport-warning"></p>
+      <div id="transport-returns"></div>
       <div class="header-actions">
         <button value="cancel" autofocus>戻る</button>
         <button id="transport-confirm" class="primary" value="proceed">このまま配置</button>
@@ -139,18 +140,18 @@
   </dialog>
   <dialog id="help">
     <div class="dialog-title"><h2>遊び方</h2><form method="dialog"><button>閉じる</button></form></div>
-    <p>同じ端末でドイツ軍と連合軍を交代で操作します。支援チットはAIが担当します。</p>
+    <p>ドイツ軍はプレイヤーが操作します。連合軍の攻撃・反撃はAIが宣言し、戦うかどうかはプレイヤーが決めます。</p>
     <dl>
       <dt>駒と支援チット</dt>
-      <dd>支援チットは駒の下に重なっています。駒にマウスを乗せると右パネルに内訳が表示され、クリックすると右パネル下部に拡大表示されます。相手の未公開チットは裏向きで表示します。</dd>
+      <dd>支援チットは駒の下に重なっています。駒にマウスを乗せると右パネルに内訳が表示され、クリックすると右パネル下部に拡大表示されます。連合軍の未公開チットは裏向きで表示します。</dd>
       <dt>移動</dt>
-      <dd>駒を選び、色の付いたヘクスをクリックすると移動案に加わります。右パネルの「変更」「取消」で移動先を訂正できます。「移動を確定」でまとめて進めます。輸送力を超える移動案は確定前に警告が出ます。</dd>
+      <dd>駒を選び、色の付いたヘクスをクリックすると移動案に加わります。右パネルの「変更」「取消」で移動先を訂正できます。「移動を確定」でまとめて進めます。ドイツ軍の輸送力を超えた場合は、返却するチットを部隊ごとに選びます。</dd>
       <dt>増援</dt>
       <dd>補給源ヘクスに増援を置くたびに、その部隊の輸送能力と同じ枚数を引き、支援チットをその部隊に配属します。イベントチットを引いた場合は、その場で処理します。</dd>
       <dt>ZOC（支配地域）</dt>
       <dd>森林河川を含む河川ヘクスではZOCを失います。都市河川ヘクス（例 2207）ではZOCが隣接ヘクスに及びます。</dd>
       <dt>攻撃・反撃</dt>
-      <dd>味方の駒を複数選んでから、隣接する敵の駒を選びます。「攻撃案を確定」すると今回の攻撃先が強調されます。両軍が使う支援チットはAIが選びます。チットの効果を確認して判定し、結果を見てから損害を適用します。</dd>
+      <dd>ドイツ軍は、地図上で部隊と攻撃・反撃の目標を選びます。連合軍は、AIが勝算を見込んだ攻撃・反撃を宣言します。宣言ごとに、戦うか見送るかをプレイヤーが選びます。戦う場合はドイツ軍の支援チットを選び、判定へ進みます。ドイツ軍だけが有効な砲兵支援を使った場合は、出目を1〜6から指定します。</dd>
       <dt>戦闘後前進</dt>
       <dd>敵のいなくなったヘクスに、混乱していない参加部隊を1個前進させられます。</dd>
       <dt>勝利</dt>
@@ -161,7 +162,7 @@
   </dialog>
   <dialog id="start-dialog" aria-labelledby="start-title">
     <h2 id="start-title">バルジ</h2>
-    <p>両軍は人間が操作し、支援チットはAIが担当します。</p>
+    <p>ドイツ軍はプレイヤーが操作します。連合軍の攻撃・反撃はAIが宣言し、戦うかどうかはプレイヤーが決めます。</p>
     <p id="start-replace-note" hidden>新しい対局を始めると、現在の対局の保存内容を置き換えます。</p>
     <div class="game-mode-options">
       <button type="button" id="start-local" class="primary" autofocus>対局を始める</button>

@@ -334,33 +334,39 @@ const BulgeAI = (() => {
       yield* defensiveSupport(cards,index+1,[...selected,id],hasArtillery||artillery);
     }
   }
-  function guaranteedAgainstDefense(state, choices, outcome, targets=[], checked=new Set()) {
+  function favorableAgainstDefense(state, choices, outcome, minimumWins, targets=[], checked=new Set()) {
     // The same set of tanks removed by German AT gives the same remaining support.
     const key=targets.slice().sort().join(',');
     if (checked.has(key)) return true;
     checked.add(key);
     const profile=R.combatProfile(state,choices,targets);
     if (profile.nextAT)
-      return profile.nextAT.every(({id})=>guaranteedAgainstDefense(state,choices,outcome,[...targets,id],checked));
+      return profile.nextAT.every(({id})=>favorableAgainstDefense(state,choices,outcome,minimumWins,[...targets,id],checked));
     if (profile.artillerySide==='allied') return outcome(profile,R.suggestedDie(profile));
-    // Every face is possible with either a random roll or German artillery.
-    return D.crt.every((_,index)=>outcome(profile,index+1));
+    const wins=(_,index)=>outcome(profile,index+1);
+    if (profile.artillerySide==='german' || minimumWins===D.crt.length) return D.crt.every(wins);
+    return D.crt.filter(wins).length>=minimumWins;
   }
-  function guaranteedAttack(state, target, attackers, outcome=R.decisiveAttack) {
+  function favorableAttack(state, target, attackers, {
+    outcome=R.decisiveAttack, minimumWins=D.crt.length, requireSupport=true,
+  }={}) {
     const board={...state,phase:'resolve',combat:{side:'allied',queue:[{target,attackers}],total:1}};
     const info=R.battleInfo(board);
     const defaults=R.defaultSupport(info);
     const choices=Object.fromEntries(attackers.map(id=>[id,defaults[id]]));
     const combatKinds=['tank','artillery','damage','dice'];
-    if (!Object.values(choices).some(ids=>ids.some(id=>combatKinds.includes(R.chit(id).kind)))) return false;
+    if (requireSupport && !Object.values(choices).some(ids=>ids.some(id=>combatKinds.includes(R.chit(id).kind)))) return false;
     const defender=info.defenders.find(unit=>!unit.marker);
     const cards=defender ? R.possibleSupport(defender,true).filter(id=>
       !['dummy','engineer'].includes(R.chit(id).kind)) : [];
     for (const selected of defensiveSupport(cards)) {
       const response=defender ? {...choices,[defender.id]:selected} : choices;
-      if (!guaranteedAgainstDefense(board,response,outcome)) return false;
+      if (!favorableAgainstDefense(board,response,outcome,minimumWins)) return false;
     }
     return true;
+  }
+  function guaranteedAttack(state, target, attackers, outcome=R.decisiveAttack) {
+    return favorableAttack(state,target,attackers,{outcome});
   }
   function nutsAttack(state, id, chit) {
     const unit=R.unitById(state,id);
@@ -391,7 +397,6 @@ const BulgeAI = (() => {
   }
   function attacks(state) {
     if (R.actor(state)!=='allied' || !['attack','counter'].includes(state.phase)) return [];
-    if (state.turn>=2 && !hasOffensiveAdvantage(state)) return [];
     const supply=R.lines(state,'allied',true);
     const coverage=R.unitCoverage(R.onMap(state,'german'));
     const targets=[...new Set(R.onMap(state,'german').map(u=>u.hex))];
@@ -415,7 +420,8 @@ const BulgeAI = (() => {
           (supply.has(unit.hex) && !R.isEncircled(unit.hex,coverage))));
         if (!units.length) continue;
         const attackers=units.map(unit=>unit.id);
-        if (!guaranteedAttack(state,target,attackers) || !preservesLine(attackers)) continue;
+        if (!favorableAttack(state,target,attackers,{minimumWins:4,requireSupport:false}) ||
+            !preservesLine(attackers)) continue;
         const defense=R.at(state,target).filter(unit=>unit.side==='german').reduce((sum,unit)=>sum+unit.defense,0);
         const strength=units.reduce((sum,unit)=>sum+unit.attack,0);
         const score=strength/defense+Number(R.city(target))*0.23;
