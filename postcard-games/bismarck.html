@@ -14,13 +14,14 @@ aside{background:var(--panel);border:1px solid var(--edge);border-radius:9px;pad
 .chart{container-type:inline-size}.marker .counter{width:clamp(25px,6.2cqw,74px)}.marker.stack{display:grid;grid-template-columns:repeat(2,max-content);gap:2px}.marker.stack .counter{width:clamp(20px,5.2cqw,64px)}.marker .counter:hover{outline:2px solid #fff}#actionRows.two-sides{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.action-side h3{margin:.25rem 0;font-size:1.05rem}.action-dialog:has(.two-sides){width:min(920px,96vw)}
 @media(max-width:560px){.two-sides .action-row{grid-template-columns:1fr;gap:4px}.two-sides .action-row img{width:44px}.two-sides .action-row .action-label{font-size:.9rem}}
 select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;border-radius:8px;padding:.4rem .55rem}
+#hint.release-required{color:#ffe099;font-weight:700}
 </style>
 <style id="endStyle">
 #endDialog{width:min(840px,96vw);max-height:92dvh;text-align:center;padding:clamp(12px,3vw,24px)}#endTitle{font-size:clamp(1.6rem,4vw,2.6rem);margin:0}#endScore{font-weight:750;color:#ffe099;font-size:1.15rem;margin:.35rem 0}.end-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:.7rem 0}#endRoute{width:100%;height:auto;display:block;border-radius:8px}#endRoute polyline{fill:none;stroke:#ffda6b;stroke-width:6;stroke-linecap:round;stroke-linejoin:round}#endRoute .route-border{stroke:#17252d;stroke-width:12}#endRoute circle,#endRoute .route-arrow{fill:#ffda6b;stroke:#17252d;stroke-width:3}#endRoute text{fill:#fff8db;stroke:#17252d;stroke-width:6;paint-order:stroke;font:700 26px system-ui,sans-serif}#endLegs{text-align:left;padding:0;list-style:none}#endLegs li{border-top:1px solid #567079;padding:.5rem .15rem}#endLegs li div{font-size:.85rem;margin-top:.22rem}
 </style>
 <main><header><h1 data-text="bisTitle">ビスマルク号を撃沈せよ</h1><span class="sides" data-text="roles">イギリス：人間 ／ ドイツ：AI</span><select id="language" aria-label="言語"></select><button id="help" data-text="rules">ルール</button><button id="restart" data-text="restart">やり直す</button><button id="inspectGerman" type="button" aria-pressed="false"></button></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span id="score"></span></span><div id="actions"></div></div>
-<p id="hint"></p>
+<p id="hint" aria-live="polite"></p>
 <div id="airChoices" aria-label="航空索敵に出す空母" hidden></div>
 <div class="layout">
 <div class="chart"><img id="chart" alt="ビスマルク号を撃沈せよの北大西洋マップ"><div class="layer" id="layer"></div></div>
@@ -198,8 +199,7 @@ bisSetup|英軍 初期配置|British deployment|Déploiement britannique|Britisc
 bisSetupTip|フッド、ウェールズ、ダミー3枚の初期位置を選びます。ほかの艦は地図に印刷された位置に配置済みです。|Place Hood, Prince of Wales and the three decoys. Other ships begin at their printed locations.|Placez le Hood, le Prince of Wales et les trois leurres. Les autres navires commencent aux positions imprimées.|Platziere Hood, Prince of Wales und die drei Attrappen. Die übrigen Schiffe starten in ihren aufgedruckten Positionen.|Piazza Hood, Prince of Wales e i tre diversivi. Le altre navi iniziano nelle posizioni stampate.|Coloca al Hood, al Prince of Wales y los tres señuelos. Los demás buques comienzan en sus posiciones impresas.|部署胡德号、威尔士亲王号和三枚诱饵。其余舰船从地图标注处出发。|후드, 프린스 오브 웨일스, 더미 3개를 배치하세요. 나머지 함선의 위치는 지도에 인쇄되어 있습니다.|Разместите «Худ», «Принс оф Уэлс» и три ложные цели. Остальные корабли начинают в обозначенных на карте местах.
 bisMoveTip|使用可能な艦を選んで移動します。|Select an available ship, then its destination.|Choisissez un navire disponible, puis sa destination.|Wähle ein verfügbares Schiff und sein Ziel.|Scegli una nave disponibile e la destinazione.|Elige un buque disponible y su destino.|选择可用舰船，再选择目的地。|이동 가능한 함선과 목적지를 선택하세요.|Выберите доступный корабль и пункт назначения.
 release|英軍 艦隊を解放|Release a British force|Libérer une force britannique|Britischen Verband freigeben|Sblocca una forza britannica|Habilitar una fuerza británica|解锁英国舰队|영국 함대 이동 제한 해제|Разблокировать британское соединение
-releaseTip|移動を解禁する艦隊のマスを1つ選びます。|Select one hex to release the fleet there.|Choisissez un hexagone pour libérer la flotte qui l’occupe.|Wähle ein Hexfeld, um seinen Verband freizugeben.|Scegli un esagono per sbloccare la flotta che lo occupa.|Elige un hexágono para habilitar su flota.|选择一个六角格，解锁其中的舰队。|이동 제한을 해제할 함대의 칸 하나를 선택하세요.|Выберите одну клетку, чтобы разблокировать находящиеся там корабли.
-releaseSkip|解放せずに進む|Continue without releasing|Continuer sans libérer|Ohne Freigabe fortfahren|Continua senza sbloccare|Continuar sin habilitar|不解锁并继续|해제 없이 진행|Продолжить без разблокировки
+releaseTip|英艦隊の解放が必要です。地図上の光っているマスを1つ選んでください。|You must release a British force. Select one highlighted hex on the map.|Vous devez libérer une force britannique. Choisissez un hexagone surligné sur la carte.|Du musst einen britischen Verband freigeben. Wähle ein markiertes Hexfeld auf der Karte.|Devi sbloccare una forza britannica. Scegli un esagono evidenziato sulla mappa.|Debes habilitar una fuerza británica. Elige un hexágono resaltado en el mapa.|必须解锁一支英国舰队。请选择地图上一个高亮的六角格。|영국 함대의 이동 제한을 해제해야 합니다. 지도에서 강조된 칸 하나를 선택하세요.|Нужно разблокировать британское соединение. Выберите один подсвеченный гекс на карте.
 releaseLog|英軍が {0} の艦隊を解放|British force released at {0}|Force britannique libérée en {0}|Britischer Verband in {0} freigegeben|Forza britannica sbloccata in {0}|Fuerza británica habilitada en {0}|已解锁 {0} 的英国舰队|{0}의 영국 함대 이동 제한 해제|Британские корабли разблокированы в {0}
 locked|未解放|Locked|Non libéré|Gesperrt|Bloccata|Sin habilitar|未解锁|이동 제한|Заблокировано
 hexChoose|{0} を選択|Select {0}|Sélectionner {0}|{0} wählen|Seleziona {0}|Seleccionar {0}|选择 {0}|{0} 선택|Выбрать {0}
@@ -245,7 +245,8 @@ const raw={A:[3,4,5,6],B:[2,3,4,5,6,7],C:[1,2,3,4,5,6,7],D:[1,2,3,4,5,6,8],E:[1,
 for(const [r,cols] of Object.entries(raw)){
  const i=r.charCodeAt(0)-65;for(const c of cols)locations[r+c]={x:135+177.2*(c-1)+(i%2===0?88.6:0),y:67+i*155};
 }
-const barred=new Set(['B4-B5','A4-B5','A5-B4','B4-C4','C6-E7','D6-D7','D6-E7','D7-E5','E5-E7','E5-F6','E7-F6']);
+// アイスランドとグリーンランドを横切る境界。
+const barred=new Set(['A4-B4','A4-B5','B4-B5','C1-D1']);
 const adj=h=>Object.keys(locations).filter(q=>q!==h&&Math.hypot(locations[h].x-locations[q].x,locations[h].y-locations[q].y)<185&&!barred.has([h,q].sort().join('-')));
 function paths(h,n,mayEnter=()=>true){
  const found=new Map([[h,[h]]]);
@@ -343,7 +344,7 @@ function find(){
  }
  discover(local);
 }
-function release(h){for(const f of live().filter(f=>f.where===h))if(!s.enabled.includes(f.id))s.enabled.push(f.id)}
+const releaseHexes=()=>new Set(live().filter(f=>!unlocked(f)).map(f=>f.where));
 function discover(local,airScout){
  s.seen=s.pos;
  const method=airScout?{key:airScout.name}:{key:'seaSearch'};
@@ -358,9 +359,12 @@ function discover(local,airScout){
   log('DUMMY',f.id-8,{key:'rollValue',args:[roll]},{key:result});
  }
  s.tracked=next;selected=null;
- const canRelease=live().some(f=>!unlocked(f));
- s.phase='release';render();
- presentAction(tr(rows.length?'decoyCheck':'bisFound'),tr('bisFoundAt',method,s.pos),rows,()=>{if(!canRelease)readyForBattle()},tr(canRelease?'release':'ack'));
+ const needsRelease=releaseHexes().size>0;
+ const found=tr('bisFoundAt',method,s.pos);
+ s.phase='release';
+ if(needsRelease)render();
+ presentAction(tr(rows.length?'decoyCheck':'bisFound'),needsRelease?found+' '+tr('releaseTip'):found,
+  rows,()=>{if(!needsRelease)readyForBattle()},tr(needsRelease?'release':'ack'));
 }
 function search(h){
  const f=by(selected);
@@ -370,7 +374,16 @@ function search(h){
  log('searchedAt',{key:f.name},h,{key:'noContact'});selected=nextCarrier();render();
  presentAction(tr('search')+' · '+tr('noContact'),tr('searchedAt',bisName(f.name),h),[],()=>{},tr('searchBack'));
 }
-function readyForBattle(){
+function readyForBattle(releaseAt){
+ if(s.phase==='release'){
+  if($('actionDialog').open)return;
+  const hexes=releaseHexes();
+  if(hexes.size){
+   if(!hexes.has(releaseAt))return;
+   for(const f of live().filter(f=>f.where===releaseAt&&!unlocked(f)))s.enabled.push(f.id);
+   log('releaseLog',releaseAt);
+  }
+ }
  const local=live().filter(f=>f.where===s.pos&&f.name!=='Dummy');
  const air=live().filter(f=>carrier(f)&&unlocked(f)&&(!s.scanned.includes(f.id)||s.air.includes(f.id))&&(f.where===s.pos||adj(f.where).includes(s.pos))&&s.seen===s.pos);
  s.air=[...new Set([...s.air,...air.map(f=>f.id)])];
@@ -444,7 +457,7 @@ function allowed(){
  if(s.phase==='setup'&&f&&(f.id<2||f.name==='Dummy'))return new Set(Object.keys(locations));
  if(s.phase==='move'&&f&&unlocked(f)&&!s.moved.includes(f.id))return reach(f.where,f.v);
  if(canSearch(f))return new Set(adj(f.where));
- if(s.phase==='release')return new Set(live().filter(f=>!unlocked(f)).map(f=>f.where));
+ if(s.phase==='release')return releaseHexes();
  return new Set();
 }
 function clickHex(h){
@@ -456,7 +469,7 @@ function clickHex(h){
   selected=null;
  }
  if(s.phase==='search'){search(h);return}
- if(s.phase==='release'){release(h);log('releaseLog',h);readyForBattle();return}
+ if(s.phase==='release'){readyForBattle(h);return}
  render();
 }
 function button(t,fn,p=false){const b=document.createElement('button');b.textContent=t;b.onclick=fn;if(p)b.className='main';return b}
@@ -587,13 +600,13 @@ function render(){
  inspect.textContent=tr('inspect')+' · '+tr(showGermanPosition?'on':'off');
  $('chart').alt=tr('map');$('ruleSheet').alt=tr('rules');$('endRoute').setAttribute('aria-label',tr('bisVoyage'));
  $('turn').textContent=tr('turn',s.turn)+' / '+turnLimit;$('phase').textContent=tr(phases[s.phase]);$('score').textContent=factionScore(s);$('hint').textContent=tr(s.winner||instructions[s.phase]);
+ $('hint').classList.toggle('release-required',s.phase==='release');
  const buttons=$('actions');buttons.replaceChildren();
  const put=(...args)=>buttons.append(button(...args));
  switch(s.phase){
   case'setup':put(tr('confirmSetup'),startAI,true);put(tr('undoSetup'),undoMove);buttons.lastChild.disabled=!s.moves.length;break;
   case'move':put(tr('finishMove'),find,true);put(tr('undo'),undoMove);buttons.lastChild.disabled=!s.moves.length;break;
   case'search':put(tr('finishSearch'),readyForBattle);break;
-  case'release':if(live().some(f=>!unlocked(f)))put(tr('releaseSkip'),readyForBattle);break;
   case'battle':put(tr('combat'),()=>{
    const target=live().filter(f=>f.where===s.pos&&f.name!=='Dummy').map(f=>[f,(7-f.d)*(1+pow(f)*.12)*(f.h===1?1.2:1)+(carrier(f)?.25:0)]).sort((a,b)=>b[1]-a[1])[0]?.[0];
    fight(target?.id??null);
@@ -616,7 +629,7 @@ function render(){
   const b=button('',()=>pick(f.id));b.className='fleet-card '+(selected===f.id?' selected':'');
   b.disabled=s.phase==='setup'?!(f.id<2||f.name==='Dummy'):s.phase==='move'?(!unlocked(f)||s.moved.includes(f.id)):!canSearch(f);
   const img=document.createElement('img');img.src=assets[f.name];img.alt=bisName(f.name);
-  const small=document.createElement('small');small.textContent=f.where+' ｜ '+(carrier(f)&&!unlocked(f)?tr('locked'):tr('stages',f.h));b.append(img,small);tray.append(b);
+  const small=document.createElement('small');small.textContent=f.where+' ｜ '+(!unlocked(f)?tr('locked'):tr('stages',f.h));b.append(img,small);tray.append(b);
  }
  const list=$('log');list.replaceChildren(...s.log.slice(0,16).map(t=>{const li=document.createElement('li');li.textContent=tr('turn',t.turn)+' · '+bisEvent(t.event);return li}));
  const layer=$('layer');layer.replaceChildren();
