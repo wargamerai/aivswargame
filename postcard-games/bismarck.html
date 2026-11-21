@@ -285,8 +285,9 @@ function distancesTo(goals,mayRouteThrough){
 function orders(){
  s.moved=[];s.moves=[];s.air=[];s.scanned=[];s.seen=null;
  const occupied=new Set(live().map(f=>f.where));
+ const warships=new Set(live().filter(f=>f.name!=='Dummy').map(f=>f.where));
  const canWinAtBrest=leadsOnPoints();
- const mayEnter=h=>h===brest?canWinAtBrest:h!=='D8'&&!britishPorts.has(h)&&!occupied.has(h);
+ const mayEnter=h=>h===brest?canWinAtBrest:h!=='D8'&&!britishPorts.has(h)&&!warships.has(h);
  const speed=geSpeed();
  const possible=paths(s.pos,speed,mayEnter);
  const mayRouteThrough=h=>h===s.pos||mayEnter(h);
@@ -317,7 +318,7 @@ function orders(){
   home?candidates.filter(({hex,distance})=>distance<=remainingMovement&&(distance<distanceToBrest||hex===brest)):
   alternatives.length?alternatives:candidates;
  const destination=eligible.sort((a,b)=>canRaidHere||home?a.risk-b.risk||a.distance-b.distance||a.tie-b.tie:
-  a.distance-b.distance||a.risk-b.risk||a.tie-b.tie)[0];
+  a.distance-b.distance||(s.turn===1?locations[b.hex].y-locations[a.hex].y:0)||a.risk-b.risk||a.tie-b.tie)[0];
  s.plannedConvoy=destination.raid;
  commitMove(possible.get(destination.hex));
 }

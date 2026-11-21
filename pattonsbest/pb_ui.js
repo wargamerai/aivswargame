@@ -76,7 +76,6 @@ function saveJudge() { const a = document.createElement('a'); a.href = URL.creat
 function renderLogHead() { $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> <button onclick="saveLog()">${L('ログ保存', 'Save log')}</button> <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`; } // 自動で進めるは、ログの見出しへ（ユーザーの指示 2026-11-08）
 // ===== 開始の画面 =====
 function startScreen() {
-  const has = (() => { try { return !!localStorage.getItem('pb_save'); } catch (e) { return false; } })();
   $('over').style.display = 'flex';
   $('over').innerHTML = `<div class="box">
   <h2>Patton's Best</h2>
@@ -87,7 +86,7 @@ function startScreen() {
     'A solo campaign. Your crew grows with each day of combat, and better tanks arrive as the war goes on. You need not know the rules: just give orders to your crew. But the dead do not come back.')}</p>
   <p style="color:var(--mute);font-size:.9em">${L('原作: Patton\'s Best（Avalon Hill, 1987）のルールをもとに作りました。', 'Based on the rules of Patton\'s Best (Avalon Hill, 1987).')}</p>
   <p>${L('あなたの名前', 'Your name')}: <input id="fName" value="${L('スミス', 'Smith')}" size="12"> ${L('戦車の名前', 'Tank name')}: <input id="fTank" value="${L('ロージー', 'Rosie')}" size="12"></p>
-  <p><button class="go" onclick="newGame()">${L('出撃する', 'Roll out')}</button> ${has ? `<button onclick="loadGame()">${L('続きから', 'Continue')}</button>` : ''}</p></div>`;
+  <p><button class="go" onclick="newGame()">${L('出撃する', 'Roll out')}</button> <button onclick="loadGame()">${L('保存データを読み込む', 'Load saved game')}</button></p></div>`;
 }
 function newGame() {
   E.newCampaign({ name: $('fName').value || 'Smith', tank: $('fTank').value || 'Rosie' });
@@ -114,7 +113,10 @@ function save() {
 function loadGame() {
   try {
     const g = JSON.parse(localStorage.getItem('pb_save'));
-    if (!g) { startScreen(); return; }
+    if (!g) {
+      alert(L('このブラウザには保存データがありません。', 'This browser has no saved game.'));
+      return;
+    }
     E.G = g;
     g.phase = g.over ? 'over' : 'calendar';
     g.day = null;
@@ -122,7 +124,10 @@ function loadGame() {
     $('over').style.display = 'none';
     if (g.over) showOver();
     render();
-  } catch (e) { startScreen(); }
+  } catch (e) {
+    startScreen();
+    alert(L('保存データを読み込めませんでした。', 'Could not load the saved game.'));
+  }
 }
 
 // ===== 上の帯 =====
@@ -696,7 +701,7 @@ function showReportPreview(report) {
 function autosaveMessage(saved) {
   if (saved === undefined) return '';
   const message = saved
-    ? L('自動保存しました。同じブラウザの開始画面で「続きから」を選べます。', 'Autosaved. Choose Continue on the start screen in this browser.')
+    ? L('自動保存しました。同じブラウザの開始画面で「保存データを読み込む」を選べます。', 'Autosaved. Choose Load saved game on the start screen in this browser.')
     : L('自動保存できませんでした。', 'Could not autosave.');
   return `<p role="status">${message}</p>`;
 }
