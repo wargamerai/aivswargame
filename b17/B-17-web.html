@@ -39,7 +39,7 @@ const missionDebug = (() => {
     });
     panel.append(title, select, output);
     const button = document.getElementById("mission-debug");
-    button.closest(".commands").after(panel);
+    document.body.append(panel);
     button.addEventListener("click", () => {
       panel.hidden = false;
       panel.open = true;
@@ -322,7 +322,7 @@ body{font-size:16px}
     <div id="command-advice"></div>
     <div id="order" class="order" aria-live="polite" hidden></div>
     <div id="flight-options"></div>
-    <div class="commands"><label id="mission-input">任務 <input id="number" type="number" required min="1" max="25" value="1"></label><button id="abort" class="subtle" hidden>任務中止・帰投</button><button id="advance" class="primary">新しく始める <span aria-hidden="true">›</span></button><button id="mission-debug" type="button" class="subtle" translate="no">診断ログ / Debug log</button></div>
+    <div class="commands"><label id="mission-input">任務 <input id="number" type="number" required min="1" max="25" value="1"></label><button id="abort" class="subtle" hidden>任務中止・帰投</button><button id="advance" class="primary">新しく始める <span aria-hidden="true">›</span></button></div>
     <div class="record-actions"><button id="save-game" type="button" class="subtle" title="進行をファイルに保存" disabled>SAVE</button><button id="load-game" type="button" class="subtle" title="進行ファイルを読み込む">LOAD</button><input id="load-game-file" type="file" accept=".json,application/json" hidden><button id="show-log" type="button" class="subtle">判定ログ</button><button id="report" type="button" class="subtle" disabled>出撃レポート</button></div>
     <p id="file-save-status" role="status"></p>
   </section>
@@ -3683,5 +3683,6 @@ el("base-plane").src=asset("b17.png");
 restoreGame();
 render();
 </script>
+<button id="mission-debug" type="button" class="subtle" style="position:fixed;right:12px;bottom:12px;z-index:5;font-size:11px;padding:4px 8px;min-height:0" translate="no">Debug log</button>
 </body>
 </html>
