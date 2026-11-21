@@ -1,6 +1,56 @@
 <!doctype html>
 <html lang="ja">
 <head>
+<script translate="no">
+const missionDebug = (() => {
+  const lines = ["B-17 mission startup diagnostics v1", navigator.userAgent];
+  let output;
+  function log(message) {
+    lines.push(new Date().toISOString() + " " + message);
+    if (lines.length > 202) lines.splice(2, 1);
+    if (output) output.value = lines.join("\n");
+  }
+  window.addEventListener("error", event => {
+    if (!event.message) return;
+    log("Error: " + (event.error?.stack || event.message));
+  });
+  window.addEventListener("unhandledrejection", event => {
+    log("Unhandled rejection: " + (event.reason?.stack || String(event.reason)));
+  });
+  window.addEventListener("DOMContentLoaded", () => {
+    const panel = document.createElement("details");
+    panel.setAttribute("translate", "no");
+    panel.open = new URLSearchParams(location.search).get("debug") === "1";
+    panel.hidden = !panel.open;
+    const title = document.createElement("summary");
+    title.textContent = "Mission diagnostics / 出撃診断";
+    output = document.createElement("textarea");
+    output.readOnly = true;
+    output.rows = 8;
+    output.style.width = "100%";
+    output.setAttribute("aria-label", "Mission diagnostic log");
+    output.value = lines.join("\n");
+    const select = document.createElement("button");
+    select.type = "button";
+    select.textContent = "Select log to copy / ログを選択";
+    select.addEventListener("click", () => {
+      output.focus();
+      output.select();
+    });
+    panel.append(title, select, output);
+    const button = document.getElementById("mission-debug");
+    button.closest(".commands").after(panel);
+    button.addEventListener("click", () => {
+      panel.hidden = false;
+      panel.open = true;
+      panel.scrollIntoView({ block: "nearest" });
+      output.focus();
+    });
+  });
+  return log;
+})();
+</script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script defer src="../game-analytics.js"></script>
@@ -272,7 +322,7 @@ body{font-size:16px}
     <div id="command-advice"></div>
     <div id="order" class="order" aria-live="polite" hidden></div>
     <div id="flight-options"></div>
-    <div class="commands"><label id="mission-input">任務 <input id="number" type="number" required min="1" max="25" value="1"></label><button id="abort" class="subtle" hidden>任務中止・帰投</button><button id="advance" class="primary">新しく始める <span aria-hidden="true">›</span></button></div>
+    <div class="commands"><label id="mission-input">任務 <input id="number" type="number" required min="1" max="25" value="1"></label><button id="abort" class="subtle" hidden>任務中止・帰投</button><button id="advance" class="primary">新しく始める <span aria-hidden="true">›</span></button><button id="mission-debug" type="button" class="subtle" translate="no">診断ログ / Debug log</button></div>
     <div class="record-actions"><button id="save-game" type="button" class="subtle" title="進行をファイルに保存" disabled>SAVE</button><button id="load-game" type="button" class="subtle" title="進行ファイルを読み込む">LOAD</button><input id="load-game-file" type="file" accept=".json,application/json" hidden><button id="show-log" type="button" class="subtle">判定ログ</button><button id="report" type="button" class="subtle" disabled>出撃レポート</button></div>
     <p id="file-save-status" role="status"></p>
   </section>
@@ -3510,19 +3560,25 @@ function render(autosave=true){
   );
 }
 function advance(){
+  missionDebug("Advance clicked; phase=" + (s ? s.phase : "initial"));
   if(s?.phase==="hits"&&boardView==="map")showBoard("crew");
   if(campaignComplete())return;
   if(!s||s.phase==="end"){
     const input=el("number");
     if(!input.reportValidity())return;
+    missionDebug("Preparing mission " + input.value);
     start(Number(input.value));
+    missionDebug("Mission prepared; phase=" + s.phase);
   }else{
     const step=({briefing:takeoff,takeoffChoice:takeoff,randomEvent:nextWave,move,air:startAir,combat:resolveCombat,hits:nextHit,flak,bomb,land})[s.phase];
     if(!step||el("advance").disabled)return;
     captainReply(advanceLine(),headingReport());
+    missionDebug("Running phase action: " + s.phase);
     step();
   }
+  missionDebug("Rendering; phase=" + s.phase);
   render();
+  missionDebug("Rendered; phase=" + s.phase + "; button=" + el("advance").textContent.trim());
 }
 el("base-tab").addEventListener("click",()=>showBoard("base"));
 el("map-tab").addEventListener("click",()=>showBoard("map"));
