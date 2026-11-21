@@ -225,30 +225,10 @@
     <!-- 今日のお知らせ（ボタンの上）。翌日になったら下の News & Updates へ移す -->
     <div class="news" style="margin:0 0 16px;">
         <h2>Today's Updates</h2>
-        <h3>November 21 — Italian and French forces in Up Front</h3>
+        <h3 id="b17-patton-fixes-20261122">November 22 — B-17 and Patton’s Best</h3>
         <ul>
-            <li>Choose Italy or France for either side in the Scenario Editor. Each nation has 35 cards, including infantry, guns, and vehicles.</li>
-            <li>Added national rules for hand size, discards, and squad break, plus Italian surrender and the option to fire either of the Char B1’s two guns. Custom scenarios can also configure artillery support and partisans.</li>
-        </ul>
-        <h3>November 21 — Up Front AI deployment</h3>
-        <ul>
-            <li>In built-in and custom scenarios, the AI uses the victory conditions to size its maneuver group. If the objective calls for five soldiers, it assigns at least five to that group when enough soldiers are available.</li>
-            <li>In custom scenarios with vehicles, the AI forms separate maneuver and fire groups when the roster allows it. Each vehicle occupies its own group.</li>
-        </ul>
-        <h3>November 21 — Patton’s Best</h3>
-        <ul>
-            <li>Counterattack orders now tell you where to hold. The battle log records whether the enemy attacks each time you wait 15 minutes.</li>
-            <li>The after-action report opens automatically at the end of an operation, including when the last battle ends at sunset.</li>
-            <li>The game automatically downloads a dated text file containing that operation’s battle log.</li>
-        </ul>
-        <h3>November 21 — Up Front</h3>
-        <ul>
-            <li>Groups in a Gully and groups on a Hill can fire at one another at any relative range their weapons allow.</li>
-            <li>Two ordnance weapons in the same group can fire at the same target as one action. Each weapon uses its own Fire card and resolves its own shot, even if the first weapon misses.</li>
-            <li>When an eligible defender is overrun, the player can choose whether to counterattack with an anti-tank magnetic mine (ATMM).</li>
-            <li>Reinforcements enter at range chit 0 with a regular Movement card. A Flank Movement card lets them enter up to the highest range chit their side held at the start of the turn. Flanking Fire applies when its conditions are met.</li>
-            <li>Wire, Smoke, and Open Ground cards cannot be played during initial terrain placement.</li>
-            <li>Use “Show opponent’s discards face up” to switch the opponent’s discarded cards between their fronts and backs.</li>
+            <li><strong>B-17</strong> — Updated flight startup to address stalls during briefing or the first move. If the flight script fails to initialize, the mission controls stay disabled and the Debug log identifies the failed script, with the line and column when available. Automated tests reached Zone 2 in Japanese and English.</li>
+            <li><strong>Patton’s Best</strong> — Load saved game is always visible on the start screen. It resumes your existing autosave in the same browser and tells you when there is no saved game.</li>
         </ul>
     </div>
 
@@ -331,6 +311,31 @@
 
     <div class="news" style="margin-top:20px;">
         <h2>News &amp; Updates</h2>
+        <h3>November 21 — Italian and French forces in Up Front</h3>
+        <ul>
+            <li>Choose Italy or France for either side in the Scenario Editor. Each nation has 35 cards, including infantry, guns, and vehicles.</li>
+            <li>Added national rules for hand size, discards, and squad break, plus Italian surrender and the option to fire either of the Char B1’s two guns. Custom scenarios can also configure artillery support and partisans.</li>
+        </ul>
+        <h3>November 21 — Up Front AI deployment</h3>
+        <ul>
+            <li>In built-in and custom scenarios, the AI uses the victory conditions to size its maneuver group. If the objective calls for five soldiers, it assigns at least five to that group when enough soldiers are available.</li>
+            <li>In custom scenarios with vehicles, the AI forms separate maneuver and fire groups when the roster allows it. Each vehicle occupies its own group.</li>
+        </ul>
+        <h3>November 21 — Patton’s Best</h3>
+        <ul>
+            <li>Counterattack orders now tell you where to hold. The battle log records whether the enemy attacks each time you wait 15 minutes.</li>
+            <li>The after-action report opens automatically at the end of an operation, including when the last battle ends at sunset.</li>
+            <li>The game automatically downloads a dated text file containing that operation’s battle log.</li>
+        </ul>
+        <h3>November 21 — Up Front</h3>
+        <ul>
+            <li>Groups in a Gully and groups on a Hill can fire at one another at any relative range their weapons allow.</li>
+            <li>Two ordnance weapons in the same group can fire at the same target as one action. Each weapon uses its own Fire card and resolves its own shot, even if the first weapon misses.</li>
+            <li>When an eligible defender is overrun, the player can choose whether to counterattack with an anti-tank magnetic mine (ATMM).</li>
+            <li>Reinforcements enter at range chit 0 with a regular Movement card. A Flank Movement card lets them enter up to the highest range chit their side held at the start of the turn. Flanking Fire applies when its conditions are met.</li>
+            <li>Wire, Smoke, and Open Ground cards cannot be played during initial terrain placement.</li>
+            <li>Use “Show opponent’s discards face up” to switch the opponent’s discarded cards between their fronts and backs.</li>
+        </ul>
         <h3 id="b17-save-fire-20261120">November 20 — B-17 save files and gun assignments</h3>
         <ul>
             <li>Use SAVE and LOAD in Mission Controls to download your progress as a JSON file and resume from it later. The file includes gun assignments you have already made during combat.</li>
