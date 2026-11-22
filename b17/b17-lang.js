@@ -1,6 +1,8 @@
 // Localizes the interface only. Mission and save data retain their original identifiers.
 window.B17Language = (() => {
-  const code = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'ja';
+  const url = new URL(location.href);
+  const requested = url.searchParams.get('lang');
+  const code = requested === 'ja' || requested === 'en' ? requested : /^en(?:-|$)/i.test(navigator.language) ? 'en' : 'ja';
   const messages = {
   "B-17 出撃管制": "B-17 Sortie Control",
   "操縦訓練": "Pilot training",
@@ -764,6 +766,8 @@ window.B17Language = (() => {
   "エンジンが停止しました。": "The engine’s out.",
   "空中事故": "Mid-air incident",
   "離陸時の": "During takeoff: ",
+  "離陸時編隊が乱れる": "Formation disrupted during takeoff",
+  "離陸時編隊機の脱落": "Aircraft leaves the formation during takeoff",
   "ニアミス": "Near miss",
   "すれすれでした。他の機は離れました。": "That was close. The other aircraft has pulled away.",
   "急な降下": "Sudden descent",
@@ -874,6 +878,19 @@ window.B17Language = (() => {
     [/^目標上空は(.+)です。$/, (_, weather) => 'Over the target: ' + translate(weather) + '.'],
     [/^機長、(.+)に命中しています。損傷の程度を調べますか？$/, (_, area) =>
       'The ' + translate(area).toLowerCase() + ' took a hit. I’ll see how bad it is.'],
+    [/^機長、(.+)は重傷です。いま手当てしますか？$/, (_, person) =>
+      'Captain, ' + translate(person) + ' is badly wounded. Shall I treat him now?'],
+    [/^機長、(.+)が凍っています。修理を試してもいいですか？$/, (_, gun) =>
+      'Captain, the ' + translate(gun).toLowerCase() + ' is frozen. Shall I try to free it?'],
+    [/^護衛、(.+)の((?:Me|Fw|Do) \d+)を頼む！$/, (_, position, fighter) =>
+      'Escort, take the ' + fighter + ' at ' + translate(position) + '!'],
+    [/^(.+)の((?:Me|Fw|Do) \d+)だ。撃てる銃座は？$/, (_, position, fighter) =>
+      fighter + ' at ' + translate(position) + '. Who has a shot?'],
+    [/^(.+)(、待て|、後ろに抜けたところを撃て|、あいつを狙え|、散布射撃は取り消し|、その方向に弾幕を張れ)$/, (_, gun, order) =>
+      translate(gun) + messages[order]],
+    [/^(.+)に命中！\s*まだ飛んでいます。$/, (_, target) => translate(target) + ' took a hit. He’s still flying!'],
+    [/^(.+)に命中！\s*(.+)$/, (_, target, detail) => 'Hit to the ' + translate(target).toLowerCase() + '! ' + translate(detail)],
+    [/^機長、緊急です！\s*(.+)$/, (_, detail) => 'Captain, it’s an emergency! ' + translate(detail)],
     [/^機長、(.+)の持ち場に移りますか？$/, (_, station) =>
       'Shall I move to the ' + translate(station).toLowerCase() + ' station?'],
     [/^(.+)、(.+)の持ち場へ。?$/, (_, person, station) =>
@@ -895,16 +912,20 @@ window.B17Language = (() => {
     [/^(.+)の損傷$/, (_, area) => 'Damage to ' + translate(area).toLowerCase()],
     [/^(\d+)（機体 (\d+) 回目）$/, (_, n, sortie) => n + ' (sortie ' + sortie + ' for this aircraft)'],
     [/^(\d+) ?機$/, (_, n) => countText(n, 'aircraft', 'aircraft')],
+    [/^(\d+) ?発$/, (_, n) => countText(n, 'round')],
     [/^(.+) · (\d+) 件$/, (_, area, n) => translate(area) + ' · ' + countText(n, 'hit')],
     [/^(\d+) ?件の被弾。位置と損傷を順に確認します。$/, (_, n) => countText(n, 'hit') + '. Check locations and damage in order.'],
     [/^([弱中強―](?:\/[弱中強―])+)$/, (_, cover) => cover.split('/').map(translate).join(' / ')],
     [/^第(\d+)エンジン(.*)$/, (_, number, rest) =>
       'No. ' + number + ' engine' + (rest ? ' ' + translate(rest.trim()).replace(/^Stopped\b/, 'shut down') : '')],
+    [/^B1-1 第(\d+)エンジン消火(\s+.+)?$/, (_, number, roll = '') =>
+      'B1-1 No. ' + number + ' engine fire extinguisher' + roll],
     [/^オイル漏れ・残り (\d+) ゾーン$/, (_, n) => 'oil leak (' + countText(n, 'zone') + ' before shutdown)'],
-    [/^(.+)漏れ・残り (\d+) ターン$/, (_, tank, n) => translate(tank) + ' leaking (' + countText(n, 'turn') + ' remaining)'],
-    [/^(左翼|右翼)(外側|内側)タンク(.*)$/, (_, side, position, rest) =>
+    [/^([^／]+)漏れ・残り (\d+) ターン$/, (_, tank, n) => translate(tank) + ' leaking (' + countText(n, 'turn') + ' remaining)'],
+    [/^(左翼|右翼)(外側|内側)タンク([^／]*)$/, (_, side, position, rest) =>
       translate(position) + ' ' + translate(side).toLowerCase() + ' fuel tank' + (rest ? ' ' + translate(rest) : '')],
     [/^(.+) 根元損傷 (\d+\/\d+)$/, (_, part, hits) => translate(part) + ' root damage ' + hits],
+    [/^損傷 (.+)$/, (_, details) => 'Damage: ' + translate(details)],
     [/^((?:往路|復路) Z\d+) (\S+)　(.+)$/, (_, leg, area, damage) =>
       translate(leg) + ' · ' + translate(area) + ': ' + translate(damage)],
     [/^(機首|操縦室|爆弾倉|無線室|胴体側部|尾部|左翼|右翼)：(.+)$/, (_, area, details) =>
@@ -919,6 +940,7 @@ window.B17Language = (() => {
       'Aimed with H2X radar. Weather penalty reduced by ' + n + '.'],
     [/^(.+?)（第(\d+)任務）(.*)$/, (_, name, n, result) =>
       translate(name) + ' (Mission ' + n + ')' + (result.trim() ? ' ' + translate(result.trim()) : '')],
+    [/^機長、(.+)$/, (_, report) => 'Captain. ' + translate(report)],
   ];
 
   const patterns = [
@@ -1019,6 +1041,13 @@ window.B17Language = (() => {
     node.childNodes.forEach(localize);
   }
 
+  const switchLanguage = document.getElementById('switch-language');
+  if (switchLanguage) {
+    const other = code === 'en' ? 'ja' : 'en';
+    url.searchParams.set('lang', other);
+    switchLanguage.href = url.href;
+    switchLanguage.textContent = code === 'en' ? 'Japanese' : 'English';
+  }
   if (code === 'en') {
     document.documentElement.lang = code;
     document.title = translate(document.title);
@@ -1036,5 +1065,5 @@ window.B17Language = (() => {
     window.confirm = message => confirm(translate(String(message)));
   }
 
-  return { code, localize };
+  return { code, localize, translate };
 })();
