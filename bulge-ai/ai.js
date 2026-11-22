@@ -213,6 +213,7 @@ const BulgeAI = (() => {
 
   function moves(state) {
     if (R.actor(state)!=='allied' || !['move','reaction','highbeam'].includes(state.phase)) return [];
+    if (state.phase==='move') return tankMoves(state);
     const opponents=R.onMap(state,'german');
     if (!opponents.length) return [];
     const opponentHexes=new Set(opponents.map(unit=>unit.hex));
@@ -334,25 +335,25 @@ const BulgeAI = (() => {
       yield* defensiveSupport(cards,index+1,[...selected,id],hasArtillery||artillery);
     }
   }
-  function favorableAgainstDefense(state, choices, outcome, minimumWins, targets=[], checked=new Set()) {
+  function favorableAgainstDefense(state, choices, outcome, minimumWins, purpose, targets=[], checked=new Set()) {
     // The same set of tanks removed by German AT gives the same remaining support.
     const key=targets.slice().sort().join(',');
     if (checked.has(key)) return true;
     checked.add(key);
     const profile=R.combatProfile(state,choices,targets);
     if (profile.nextAT)
-      return profile.nextAT.every(({id})=>favorableAgainstDefense(state,choices,outcome,minimumWins,[...targets,id],checked));
-    if (profile.artillerySide==='allied') return outcome(profile,R.suggestedDie(profile));
+      return profile.nextAT.every(({id})=>favorableAgainstDefense(state,choices,outcome,minimumWins,purpose,[...targets,id],checked));
+    if (profile.artillerySide==='allied') return outcome(profile,R.suggestedDie(profile,purpose));
     const wins=(_,index)=>outcome(profile,index+1);
     if (profile.artillerySide==='german' || minimumWins===D.crt.length) return D.crt.every(wins);
     return D.crt.filter(wins).length>=minimumWins;
   }
   function favorableAttack(state, target, attackers, {
-    outcome=R.decisiveAttack, minimumWins=D.crt.length, requireSupport=true,
+    outcome=R.decisiveAttack, minimumWins=D.crt.length, requireSupport=true, support=null,
   }={}) {
     const board={...state,phase:'resolve',combat:{side:'allied',queue:[{target,attackers}],total:1}};
     const info=R.battleInfo(board);
-    const defaults=R.defaultSupport(info);
+    const defaults=support ?? R.defaultSupport(info);
     const choices=Object.fromEntries(attackers.map(id=>[id,defaults[id]]));
     const combatKinds=['tank','artillery','damage','dice'];
     if (requireSupport && !Object.values(choices).some(ids=>ids.some(id=>combatKinds.includes(R.chit(id).kind)))) return false;
@@ -361,9 +362,115 @@ const BulgeAI = (() => {
       !['dummy','engineer'].includes(R.chit(id).kind)) : [];
     for (const selected of defensiveSupport(cards)) {
       const response=defender ? {...choices,[defender.id]:selected} : choices;
-      if (!favorableAgainstDefense(board,response,outcome,minimumWins)) return false;
+      if (!favorableAgainstDefense(board,response,outcome,minimumWins,support ? outcome : R.decisiveAttack)) return false;
     }
     return true;
+  }
+  const tanks=ids=>ids.filter(id=>R.chit(id).kind==='tank').length;
+  const armored=unit=>unit.mechanized && !unit.name.endsWith(' PGD');
+  const tankObjective=unit=>!unit.marker && (armored(unit) || tanks(unit.support)>=2);
+  const entryId=entry=>entry.unit.id ?? entry.unit;
+  function tankOutcome(id) {
+    return (profile,die)=>{
+      const unit=profile.defenders.find(defender=>defender.id===id);
+      const entry=profile.defendGroup.find(defender=>entryId(defender)===id);
+      if (!unit || !entry) return false;
+      const result=D.crt[Math.min(6,die+profile.dieAdd)-1][profile.col];
+      const committed=tanks(entry.cards);
+      const screened=profile.defenders.some(defender=>defender.marker);
+      const damage=Math.max(0,R.combatDamage(profile,result).defendDamage-Number(screened));
+      const destroyed=damage>=committed+(unit.disrupted ? 1 : 2);
+      if (destroyed && armored(unit)) return true;
+      const shotDown=profile.shotDown.filter(hit=>entryId(hit)===id);
+      const startingTanks=tanks(unit.support)+shotDown.filter(hit=>!unit.support.includes(hit.id)).length;
+      return startingTanks>=2 && (destroyed || shotDown.length+Math.min(damage,committed)>=2);
+    };
+  }
+  const damagePriority=card=>card.kind==='engineer' ? 12
+    : card.inflict || card.dieAdd ? 8+(card.inflict||card.dieAdd)
+      : card.kind==='artillery' ? 7 : 4+(card.shift||0);
+  const antiTankPriority=card=>card.at ? 11 : damagePriority(card);
+  function tankBattle(state,defender,attackers) {
+    if (!attackers.length) return null;
+    const target=defender.hex;
+    const board={...state,phase:'resolve',combat:{side:'allied',queue:[{target,attackers}],total:1}};
+    const info=R.battleInfo(board);
+    const outcome=tankOutcome(defender.id);
+    const tried=new Set();
+    for (const priority of [null,damagePriority,antiTankPriority]) {
+      const defaults=R.defaultSupport(info,priority);
+      const support=Object.fromEntries(attackers.map(id=>[id,defaults[id]]));
+      const key=JSON.stringify(support);
+      if (tried.has(key)) continue;
+      tried.add(key);
+      if (favorableAttack(state,target,attackers,{outcome,support,requireSupport:false}))
+        return {target,attackers,support,tankTarget:defender.id};
+    }
+    return null;
+  }
+  function attackersAt(state,target,committed) {
+    return R.battleCandidates({...state,phase:'attack'},target).filter(unit=>!committed.has(unit.id));
+  }
+  function approachTank(state,defender,committed) {
+    const adjacent=new Set(R.neighbors(defender.hex));
+    const initial=attackersAt(state,defender.hex,committed);
+    if (tankBattle(state,defender,initial.map(unit=>unit.id))) return null;
+    let trials=[{board:state,orders:[],cost:0}];
+    const seen=new Set();
+    for (let depth=0;depth<adjacent.size && trials.length;depth++) {
+      const next=[];
+      let best=null;
+      for (const {board,orders,cost} of trials) {
+        const moved=new Set(orders.map(order=>order.unit));
+        for (const unit of R.onMap(board,'allied')) {
+          if (unit.marker || unit.disrupted || committed.has(unit.id) || moved.has(unit.id) ||
+              ![...adjacent].some(hex=>distance(unit.hex,hex)<=(unit.mechanized ? 10 : unit.movement))) continue;
+          for (const support of [null,...R.moveChits(unit)]) for (const mode of unit.mechanized ? ['normal','mechanized'] : ['normal']) {
+            for (const route of R.movementOptions(board,unit.id,{mode,support}).values()) {
+              if (!adjacent.has(route.hex)) continue;
+              const order={unit:unit.id,to:route.hex,mode,support};
+              const projected=R.previewMoves(board,[order]);
+              if (!projected.valid.length) continue;
+              const after=projected.state;
+              const attackers=attackersAt(after,defender.hex,committed);
+              const key=attackers.map(member=>`${member.id}:${member.hex}:${member.support.join(',')}`).join('|');
+              if (seen.has(key)) continue;
+              seen.add(key);
+              const surrounded=R.isEncircled(defender.hex,R.unitCoverage(R.onMap(after,'allied')));
+              const newCost=cost+route.cost+Number(Boolean(support))*0.5+route.excess.length+Number(route.lost)*2;
+              const attack=tankBattle(after,defender,attackers.map(member=>member.id));
+              const candidate={board:after,orders:[...orders,order],cost:newCost};
+              if (attack) {
+                if (!best || Number(surrounded)>Number(best.surrounded) ||
+                    (surrounded===best.surrounded && newCost<best.cost)) best={...candidate,attack,surrounded};
+              } else if (!best) {
+                const strength=attackers.reduce((sum,member)=>sum+member.attack+realSupportCount(member)*0.65,0);
+                next.push({...candidate,score:strength+Number(surrounded)-newCost*0.06});
+              }
+            }
+          }
+        }
+      }
+      if (best) return best;
+      trials=next.sort((a,b)=>b.score-a.score).slice(0,4);
+    }
+    return null;
+  }
+  function tankMoves(state) {
+    let board=state;
+    const orders=[],committed=new Set();
+    for (const defender of R.onMap(state,'german').filter(tankObjective)) {
+      const plan=approachTank(board,defender,committed);
+      if (!plan) continue;
+      board=plan.board;
+      orders.push(...plan.orders);
+      for (const id of plan.attack.attackers) committed.add(id);
+    }
+    return orders;
+  }
+  function battleDie(state,profile) {
+    const target=state.combat?.queue[0]?.tankTarget;
+    return R.suggestedDie(profile,target ? tankOutcome(target) : R.decisiveAttack);
   }
   function guaranteedAttack(state, target, attackers, outcome=R.decisiveAttack) {
     return favorableAttack(state,target,attackers,{outcome});
@@ -416,22 +523,25 @@ const BulgeAI = (() => {
       let best=null;
       for (const target of targets) {
         if (planned.some(order=>order.target===target)) continue;
-        const units=R.battleCandidates(state,target).filter(unit=>!used.has(unit.id) && (state.turn<2 ||
-          (supply.has(unit.hex) && !R.isEncircled(unit.hex,coverage))));
+        const available=R.battleCandidates(state,target).filter(unit=>!used.has(unit.id));
+        const defender=state.phase==='attack' && R.at(state,target).find(unit=>unit.side==='german' && tankObjective(unit));
+        const tankPlan=defender ? tankBattle(state,defender,available.map(unit=>unit.id)) : null;
+        const units=tankPlan ? available : available.filter(unit=>state.turn<2 ||
+          (supply.has(unit.hex) && !R.isEncircled(unit.hex,coverage)));
         if (!units.length) continue;
         const attackers=units.map(unit=>unit.id);
-        if (!favorableAttack(state,target,attackers,{minimumWins:4,requireSupport:false}) ||
-            !preservesLine(attackers)) continue;
+        if (!tankPlan && (!favorableAttack(state,target,attackers,{minimumWins:4,requireSupport:false}) ||
+            !preservesLine(attackers))) continue;
         const defense=R.at(state,target).filter(unit=>unit.side==='german').reduce((sum,unit)=>sum+unit.defense,0);
         const strength=units.reduce((sum,unit)=>sum+unit.attack,0);
         const score=strength/defense+Number(R.city(target))*0.23;
-        const usesNuts=units.some(unit=>unit.support.some(id=>id.startsWith('a-nuts:')));
-        if (!best || Number(usesNuts)>Number(best.usesNuts) || (usesNuts===best.usesNuts && score>best.score))
-          best={target,attackers,score,usesNuts};
+        const priority=tankPlan ? 2 : Number(units.some(unit=>unit.support.some(id=>id.startsWith('a-nuts:'))));
+        if (!best || priority>best.priority || (priority===best.priority && score>best.score))
+          best={order:tankPlan ?? {target,attackers},score,priority};
       }
       if (!best) break;
-      for (const id of best.attackers) used.add(id);
-      planned.push({target:best.target,attackers:best.attackers});
+      for (const id of best.order.attackers) used.add(id);
+      planned.push(best.order);
     }
     return planned;
   }
@@ -558,5 +668,5 @@ const BulgeAI = (() => {
       board=R.previewReinforcements(board,[order]).state;
     }
   }
-  return {moves,attacks,reinforcements,administration,distance};
+  return {moves,attacks,battleDie,reinforcements,administration,distance};
 })();

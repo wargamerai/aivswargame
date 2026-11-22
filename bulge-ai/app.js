@@ -31,6 +31,7 @@
   const moving = () => ['move', 'reaction', 'highbeam'].includes(state.phase);
   const planning = () => ['attack', 'counter'].includes(state.phase);
   const germanTurn = () => R.actor(state) === playerSide;
+  const aiMovement = () => !practice && state.phase === 'move' && !germanTurn();
   const manualAttackPlanning = () => planning() && (practice || germanTurn());
   const manualEvent = () => eventPractice || germanTurn();
   const hasPendingEvent = () => !supportPractice && ['event', 'reinforce'].includes(state.phase) && state.events.length > 0;
@@ -273,7 +274,7 @@
     const phase = state.phase;
     prepare();
     if (state.phase === phase) {
-      if (moving()) movePlan = R.previewMoves(state, saved.movePlan).valid;
+      if (moving() && (!aiMovement() || saved.movePlan.length)) movePlan = R.previewMoves(state, saved.movePlan).valid;
       if (manualAttackPlanning()) attackPlan = saved.attackPlan;
     }
     recoveryOrders = saved.recoveryOrders ?? [];
@@ -668,6 +669,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         if (result.ok) state = result.state;
       }
     }
+    if (automate && aiMovement()) movePlan = AI.moves(state);
     if (automate && !practice && planning() && !germanTurn()) {
       const attacks = AI.attacks(state);
       if (attacks.length) {
@@ -683,7 +685,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       inspected = selected;
     }
     const battle = R.battleInfo(state);
-    supportChoices = R.defaultSupport(battle);
+    supportChoices = {...R.defaultSupport(battle), ...state.combat?.queue[0]?.support};
     if (battle) {
       for (const unit of [...battle.attackers, ...battle.defenders]) {
         if (unit.side === playerSide && supportChoices[unit.id]) supportChoices[unit.id] = [];
@@ -1391,7 +1393,9 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
         orders.append(row);
       }
     }
-    actions.append(button('移動を確定', () => step({type: 'moves', moves: movePlan}),
+    const aiHolds = aiMovement() && !movePlan.length;
+    actions.append(button(aiHolds ? '移動せず次のフェイズへ' : '移動を確定',
+      () => step({type: 'moves', moves: movePlan}, {emptyPhaseConfirmed: aiHolds}),
       {primary: true, disabled: peiperDraft, id: 'confirm-moves'}));
   }
 
@@ -1673,7 +1677,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (revealed.dieAdd) overview.append(element('p', `出目に +${revealed.dieAdd}（上限6）`));
     if (revealed.deniedAT) overview.append(element('p', 'バルクマン軍曹により連合軍の対戦車火力は無効です。'));
     const humanDie = revealed.artillerySide === playerSide;
-    const die = humanDie ? chosenBattleDie : R.suggestedDie({...info, ...revealed});
+    const die = humanDie ? chosenBattleDie : AI.battleDie(state, {...info, ...revealed});
     if (humanDie) {
       overview.append(element('p', 'ドイツ軍の砲兵支援：使う出目を選んでください。'));
       const faces = element('div', null, 'controls');
@@ -2267,6 +2271,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       : supportPractice && phase !== 'support' ? '支援チット取得の練習はここまでです。'
       : reentryPractice ? '再登場できる部隊と配置先を確認します。'
       : supplyPractice ? '補給チットを選び、ポイントと増援の有無を確認します。'
+      : aiMovement() ? (movePlan.length ? '連合軍AIの移動案を確認して確定します。' : '連合軍AIは移動を見送りました。')
       : moving() ? '駒をクリックし、色の付いた移動先を選びます。移動案は右パネルから変更・取消できます。'
       : planning() ? (manualAttackPlanning() ? '味方の駒を選び、隣接する敵の駒を選びます。'
         : '連合軍AIの判断を右パネルに表示します。')

@@ -973,7 +973,7 @@ const BulgeRules = (() => {
   function hasFortifiedDefense(defenders, choices) {
     return defenders.some(unit=>unit.fortified || (choices[unit.id] ?? []).some(id=>chit(id).kind==='fort'));
   }
-  function defaultSupport(info) {
+  function defaultSupport(info, attackPriority = null) {
     if (!info) return {};
     const result={};
     for (const [units,defensive] of [[info.defenders,true],[info.attackers,false]]) {
@@ -982,7 +982,8 @@ const BulgeRules = (() => {
       for (const u of units) {
         const available=possibleSupport(u,defensive).filter(id=>chit(id).kind!=='dummy');
         const priorities={fort:9,engineer:6,artillery:5,tank:4,damage:3,dice:2};
-        const rank=id=>id.startsWith('a-nuts:') ? 10 : priorities[chit(id).kind];
+        const rank=id=>!defensive && attackPriority ? attackPriority(chit(id))
+          : id.startsWith('a-nuts:') ? 10 : priorities[chit(id).kind];
         available.sort((a,b)=>rank(b)-rank(a));
         const selected=result[u.id]=[];
         for (const id of available) {
@@ -1085,11 +1086,11 @@ const BulgeRules = (() => {
     },0);
     return defendDamage>=steps;
   }
-  function suggestedDie(profile) {
+  function suggestedDie(profile, purpose = decisiveAttack) {
     if (!profile?.artillerySide) return null;
     const attacking=profile.artillerySide===profile.attackers[0].side;
     if (attacking && profile.artillerySide==='allied') {
-      for (let die=1;die<=6;die++) if (decisiveAttack(profile,die)) return die;
+      for (let die=1;die<=6;die++) if (purpose(profile,die)) return die;
     }
     let best=1, value=-Infinity;
     for (let die=1;die<=6;die++) {
@@ -1615,5 +1616,5 @@ const BulgeRules = (() => {
     onMap, at, unitById, chit, chitImage, repairSupportOwnership, source, lines, zoc, moveChits, canDeclareMovementSupport, canUsePeiper, peiperTargets, peiperRoutes, transportableSupport, returnableSupport, movementOptions, previewMoves, offRoadForest, roadLinks,
     placements, eligiblePlacements, previewReinforcements, upcomingAlliedReinforcements, supportTargets, automaticSupport, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
     eventOptions, setupBridgeOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
-    battleInfo, awaitingBattleDecision, possibleSupport, defaultSupport, combatProfile, inflictsUnitDamage, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured, germanCityCounts };
+    battleInfo, awaitingBattleDecision, possibleSupport, defaultSupport, combatProfile, combatDamage, inflictsUnitDamage, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured, germanCityCounts };
 })();
