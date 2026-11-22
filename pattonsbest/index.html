@@ -81,6 +81,10 @@ body.hit #board { animation:hitflash .5s; }
 #over .report-preview iframe { display:block; width:100%; height:min(68vh,42rem); border:0; background:#fff; }
 #over h2 { color:var(--acc); margin:0 0 8px; }
 #over p { margin:6px 0; }
+#log-reader { width:min(860px,94vw); padding:16px; border:1px solid var(--acc); border-radius:6px; background:var(--panel); color:inherit; }
+#log-reader::backdrop { background:rgba(0,0,0,.78); }
+#log-reader h2 { margin:0 0 8px; color:var(--acc); font-size:1.05em; overflow-wrap:anywhere; }
+#log-reader-text { max-height:65vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
 .tankimg { display:block; margin:0 auto; }
 @media (max-width:860px) { #main { grid-template-columns:1fr; grid-template-rows:minmax(340px,60vh) 40vh; overflow:auto; } #left { overflow:auto; } .crewgrid { grid-template-columns:repeat(2,minmax(0,1fr)); } #tank { flex:none; height:auto; } #pop { position:fixed; bottom:8px; } #board { min-height:240px; } }
 </style>
@@ -100,12 +104,18 @@ body.hit #board { animation:hitflash .5s; }
   <div id="right"><div id="logh"></div><div id="log"></div><div id="ops"></div></div>
 </div>
 <div id="over"></div>
+<input id="log-file-input" type="file" accept=".txt,text/plain" hidden>
+<dialog id="log-reader" aria-labelledby="log-reader-title">
+  <h2 id="log-reader-title"></h2>
+  <pre id="log-reader-text" tabindex="0"></pre>
+  <form method="dialog"><button id="log-reader-close" class="go"></button></form>
+</dialog>
 <script src="pb_tables.js"></script>
 <script src="pb_lang.js"></script>
 <script data-goatcounter="https://shigerusuzuki.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <script src="pb_engine.js?v=20261121-debrief"></script>
 <script src="../report-limit.js"></script>
 <script src="../report-image.js"></script>
-<script src="pb_ui.js?v=20261122-load"></script>
+<script src="pb_ui.js?v=20261123-log-reader"></script>
 </body>
 </html>

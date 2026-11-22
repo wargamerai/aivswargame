@@ -48,7 +48,7 @@ function stepPlay() {
   E.G = P.real; PLAY = null;
   P.then(P.r);
 }
-document.addEventListener('keydown', ev => { if ((ev.key === ' ' || ev.key === 'Enter') && PLAY && !$('lb') && $('over').style.display === 'none') { ev.preventDefault(); stepPlay(); } });
+document.addEventListener('keydown', ev => { if ((ev.key === ' ' || ev.key === 'Enter') && PLAY && !$('lb') && !$('log-reader').open && $('over').style.display === 'none') { ev.preventDefault(); stepPlay(); } });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ===== 文字の大きさとログ =====
@@ -63,6 +63,26 @@ function saveLog(log = ALLLOG, filename = `pattons_best_log_${E.G ? E.G.days : 0
   link.download = filename;
   try { link.click(); } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
 }
+function chooseLogFile() {
+  const input = $('log-file-input');
+  input.value = '';
+  input.click();
+}
+$('log-file-input').addEventListener('change', async event => {
+  const file = event.currentTarget.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    $('log-reader-title').textContent = file.name;
+    const content = $('log-reader-text');
+    content.textContent = text;
+    $('log-reader-close').textContent = L('閉じる', 'Close');
+    if (!$('log-reader').open) $('log-reader').showModal();
+    content.scrollTop = 0;
+  } catch {
+    alert(L('ログファイルを読み込めませんでした。', 'Could not read the log file.'));
+  }
+});
 applyFs();
 var JUDGE_ON = true;
 function setJudgeOn(v) { JUDGE_ON = v; E.setJudge(v); }
@@ -73,7 +93,7 @@ function judgeBox() {
   const j = $('jlist'); j.scrollTop = j.scrollHeight;
 }
 function saveJudge() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.text(JUDGELOG.join('\n'))], { type: 'text/plain;charset=utf-8' })); a.download = 'pattons_best_dice.txt'; a.click(); }
-function renderLogHead() { $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> <button onclick="saveLog()">${L('ログ保存', 'Save log')}</button> <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`; } // 自動で進めるは、ログの見出しへ（ユーザーの指示 2026-11-08）
+function renderLogHead() { $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> <button onclick="saveLog()">${L('ログ保存', 'Save log')}</button> <button onclick="chooseLogFile()">${L('ログを読み込む', 'Open log file')}</button> <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`; } // 自動で進めるは、ログの見出しへ（ユーザーの指示 2026-11-08）
 // ===== 開始の画面 =====
 function startScreen() {
   $('over').style.display = 'flex';
@@ -86,7 +106,7 @@ function startScreen() {
     'A solo campaign. Your crew grows with each day of combat, and better tanks arrive as the war goes on. You need not know the rules: just give orders to your crew. But the dead do not come back.')}</p>
   <p style="color:var(--mute);font-size:.9em">${L('原作: Patton\'s Best（Avalon Hill, 1987）のルールをもとに作りました。', 'Based on the rules of Patton\'s Best (Avalon Hill, 1987).')}</p>
   <p>${L('あなたの名前', 'Your name')}: <input id="fName" value="${L('スミス', 'Smith')}" size="12"> ${L('戦車の名前', 'Tank name')}: <input id="fTank" value="${L('ロージー', 'Rosie')}" size="12"></p>
-  <p><button class="go" onclick="newGame()">${L('出撃する', 'Roll out')}</button> <button onclick="loadGame()">${L('保存データを読み込む', 'Load saved game')}</button></p></div>`;
+  <p><button class="go" onclick="newGame()">${L('出撃する', 'Roll out')}</button> <button onclick="loadGame()">${L('保存データを読み込む', 'Load saved game')}</button> <button onclick="chooseLogFile()">${L('ログを読み込む', 'Open log file')}</button></p></div>`;
 }
 function newGame() {
   E.newCampaign({ name: $('fName').value || 'Smith', tank: $('fTank').value || 'Rosie' });
