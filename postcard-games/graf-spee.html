@@ -26,6 +26,7 @@ aside{background:var(--panel);border:1px solid var(--edge);border-radius:9px;pad
 .inspection-fleet .inspection-spee{width:clamp(33px,6.2cqw,73px);border:2px solid #e6b95a;border-radius:4px;overflow:hidden;box-shadow:0 1px 5px #0009}.inspection-spee img{display:block;width:100%}
 .inspection-fleet .inspection-supply{background:#132a32;color:#ffe59a;border:1px solid #e6b95a;border-radius:4px;padding:3px 5px;font-size:clamp(.58rem,1.4cqw,.88rem);font-weight:750;line-height:1.15;white-space:nowrap;box-shadow:0 1px 4px #0008}
 select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;border-radius:8px;padding:.4rem .55rem}
+#hint.no-detection{color:var(--accent);font-weight:750}
 </style>
 <style id="reportStyle">
 .voyage-report{margin:18px 0;text-align:left}.voyage-report h3{font-size:1.22rem;margin:0 0 8px}.voyage-report figure{margin:0}.voyage-report svg{width:100%;height:auto;display:block;overflow:hidden;border-radius:8px}.voyage-report figcaption{margin:6px 0 12px;font-size:.86rem;color:#c3d9df}.voyage-report ol{list-style:none;margin:0;padding:0}.voyage-report li{display:grid;grid-template-columns:5.5rem minmax(0,1fr) auto;gap:6px 12px;padding:9px 4px;border-top:1px solid #45636a;align-items:baseline}.voyage-report .leg-turn{color:#bcd4db;font-weight:700}.voyage-report .leg-score{color:#ffd987;white-space:nowrap}.voyage-report .leg-events{grid-column:2/-1;color:#e4eff2;font-size:.87rem;overflow-wrap:anywhere}.voyage-report .route-path{fill:none;stroke:#ffd85b;stroke-width:5;stroke-linecap:round;stroke-linejoin:round}.voyage-report .route-outline{stroke:#132a32;stroke-width:10}.voyage-report .route-arrow{fill:#ffd85b;stroke:#132a32;stroke-width:2}.voyage-report .route-label{font:700 25px system-ui,sans-serif;fill:#fff7d7;stroke:#132a32;stroke-width:6;paint-order:stroke;stroke-linejoin:round}.voyage-report .route-dot{fill:#ffd85b;stroke:#132a32;stroke-width:3}.voyage-report .route-end{fill:#f77e5a}
@@ -34,7 +35,7 @@ select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;bo
 <main>
 <header><h1 data-text="title">シュペー号追撃戦</h1><span class="sides" data-text="roles">イギリス：人間 ／ ドイツ：AI</span><label><span data-text="germanStyle">ドイツAI</span> <select id="germanStyle"><option value="aggressive" data-text="aggressive">攻勢</option><option value="cautious" data-text="cautious">慎重</option></select></label><button id="help" data-text="rules">ルール</button><button id="restart" data-text="restart">やり直す</button><div class="language-controls"><select id="language" aria-label="言語"></select><button id="inspectGerman" type="button" aria-pressed="false">ドイツ軍を確認：オフ</button></div></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span data-text="points">ドイツ得点</span> <span id="score"></span></span><div id="actions"></div></div>
-<p id="hint"></p>
+<p id="hint" role="status"></p>
 <div id="rollResult" class="roll-result" role="status" hidden></div>
 <div class="layout">
 <section class="map-pane"><div class="map-tools"><span id="mapStatus" role="status"></span></div><div class="map-view" id="mapView"><div class="chart" id="chartBoard"><img id="chart" alt="シュペー号追撃戦の南大西洋・インド洋マップ"><div class="layer" id="layer"></div></div></div></section>
@@ -100,8 +101,6 @@ undo|移動を1手戻す|Undo last move|Annuler le dernier déplacement|Letzte B
 extra|1点を渡し追加移動（D6）|Give Germany 1 VP for extra moves (D6)|Céder 1 PV pour des déplacements en plus (D6)|1 SP für zusätzliche Bewegungen abgeben (W6)|Cedi 1 PV per movimenti extra (D6)|Ceder 1 PV por movimientos extra (D6)|给德国1分以额外移动（D6）|독일에 1점 주고 추가 이동(D6)|Отдать Германии 1 очко за доп. перемещения (D6)
 extraUsed|追加移動を取得済み|Extra moves granted|Déplacements supplémentaires accordés|Zusatzbewegungen erhalten|Movimenti extra ottenuti|Movimientos extra concedidos|已获得额外移动|추가 이동 획득 완료|Дополнительные перемещения получены
 extraLog|英国がドイツに1点を与え、移動可能数 +{0}|Britain gives Germany 1 VP and gains {0} moves|Le Royaume-Uni cède 1 PV et gagne {0} déplacements|Briten geben Deutschland 1 SP und erhalten {0} Bewegungen|Il Regno Unito cede 1 PV e ottiene {0} movimenti|Reino Unido cede 1 PV y gana {0} movimientos|英国给德国1分，可额外移动 {0} 艘|영국이 독일에 1점을 주고 {0}척을 더 이동할 수 있습니다|Британия отдаёт Германии 1 очко и получает {0} доп. перемещений
-finishSearch|索敵を終える|End search|Terminer la recherche|Suche beenden|Termina la ricognizione|Terminar la búsqueda|结束搜索|수색 종료|Завершить поиск
-finishSortie|出撃可能な全空母で戦闘へ|Fight with all eligible carriers|Combattre avec tous les porte-avions à portée|Mit allen Trägern in Reichweite kämpfen|Combatti con tutte le portaerei a portata|Combatir con todos los portaaviones al alcance|所有射程内航母参战|출격 가능 항모 모두 참전|В бой со всеми авианосцами в радиусе
 airNext|航空攻撃へ|Proceed to air attack|Passer à l’attaque aérienne|Zum Luftangriff|Passa all’attacco aereo|Pasar al ataque aéreo|进入空袭|항공 공격으로|К авиаудару
 battleNext|戦闘へ|Proceed to combat|Passer au combat|Zum Gefecht|Passa al combattimento|Pasar al combate|进入战斗|전투로|К бою
 next|次のターン|Next turn|Tour suivant|Nächste Runde|Turno successivo|Turno siguiente|下一回合|다음 턴|Следующий ход
@@ -128,15 +127,14 @@ scuttle|モンテビデオで自沈|Scuttled at Montevideo|Sabordé à Montevide
 gFleet|ドイツ海軍|German Navy|Marine allemande|Deutsche Marine|Marina tedesca|Armada alemana|德国海军|독일 해군|Германский флот
 extraLeft|残り {0} 隻|{0} moves left|Déplacements restants : {0}|Verbleibende Bewegungen: {0}|Movimenti rimasti: {0}|Movimientos restantes: {0}|还可移动 {0} 艘|이동 가능 {0}척|Перемещений осталось: {0}
 searchLeft|索敵可能 {0} 隻|{0} carriers can search|Porte-avions disponibles : {0}|Träger für Suche verfügbar: {0}|Portaerei per ricognizione: {0}|Portaaviones para buscar: {0}|可搜索 {0} 艘|수색 가능 {0}척|Авианосцев для поиска: {0}
-sortieLeft|出撃可能 {0} 隻|{0} carriers can join|Porte-avions pouvant attaquer : {0}|Verfügbare Träger: {0}|Portaerei disponibili: {0}|Portaaviones que pueden atacar: {0}|可出击 {0} 艘|출격 가능 {0}척|Авианосцев для удара: {0}
-searchTip|空母1隻につき、隣接する1マスを索敵できます。|Each carrier can search one adjacent hex.|Chaque porte-avions peut fouiller un hexagone adjacent.|Jeder Träger kann ein benachbartes Hexfeld absuchen.|Ogni portaerei può perlustrare un esagono adiacente.|Cada portaaviones puede buscar en un hexágono adyacente.|每艘航母可搜索一个相邻六角格。|항모마다 인접한 한 칸을 수색할 수 있습니다.|Каждый авианосец может проверить одну соседнюю клетку.
+searchTip|索敵できる空母ごとに隣接ヘクスを1つ指定してください。全艦の指定後に発見判定を行います。|Choose one adjacent hex for each available carrier. Detection is resolved after all choices are made.|Choisissez un hexagone adjacent par porte-avions disponible. La détection est résolue après tous les choix.|Wähle für jeden verfügbaren Träger ein Nachbarfeld. Die Entdeckung wird nach allen Auswahlen geprüft.|Scegli un esagono adiacente per ogni portaerei disponibile. L'avvistamento si risolve dopo tutte le scelte.|Elige un hexágono adyacente por portaaviones disponible. La detección se resuelve tras todas las elecciones.|为每艘可用航母指定一个相邻六角格。全部指定后进行发现判定。|수색 가능한 항공모함마다 인접 헥스를 하나 지정하세요. 모두 지정한 뒤 발견을 판정합니다.|Укажите соседний гекс для каждого доступного авианосца. Обнаружение проверяется после выбора всех целей.
 moveTip|駒を選び、地図上の移動先を選んでください。増援は順番に、どちらかの海域から進入できます。|Select a ship, then a highlighted destination. Reinforcements enter in order from either ocean.|Choisissez un navire puis une destination. Les renforts entrent dans l’ordre, depuis l’un ou l’autre océan.|Wähle ein Schiff und ein markiertes Ziel. Verstärkungen kommen der Reihe nach über einen der beiden Ozeane.|Scegli una nave e una destinazione evidenziata. I rinforzi entrano in ordine da uno dei due oceani.|Elige un buque y un destino resaltado. Los refuerzos entran por orden desde cualquiera de los dos océanos.|选择舰船，再点高亮目标格。增援按顺序从任一大洋进入。|함선을 선택한 뒤 강조된 목적지를 누르세요. 증원은 두 해역 중 한 곳에서 순서대로 들어옵니다.|Выберите корабль, затем подсвеченную клетку. Подкрепления входят по очереди из любого океана.
 trackedTip|巡洋艦がシュペー号を追尾中。|A cruiser is shadowing the Graf Spee.|Un croiseur suit le Graf Spee.|Ein Kreuzer verfolgt die Graf Spee.|Un incrociatore segue la Graf Spee.|Un crucero sigue al Graf Spee.|巡洋舰正在跟踪施佩伯爵号。|순양함이 그라프 슈페를 추적 중입니다.|Крейсер следит за «Графом Шпее».
 clickHex|水色の海域をクリック|Click a highlighted sea hex|Cliquez sur un hexagone en surbrillance|Klicke auf ein hellblaues Hexfeld|Clicca su un esagono evidenziato|Haz clic en un hexágono resaltado|点击浅蓝色海域|하늘색 해역을 클릭하세요|Щёлкните по подсвеченной морской клетке
 pickCarrier|空母を選択|Select a carrier|Sélectionnez un porte-avions|Wähle einen Flugzeugträger|Seleziona una portaerei|Selecciona un portaaviones|选择航母|항공모함 선택|Выберите авианосец
-joinAt|未出撃の空母で {0} をクリックすると、航空攻撃に加わります。|Select an unused carrier and click {0} to join the air attack.|Choisissez un porte-avions disponible et cliquez sur {0} pour attaquer.|Wähle einen freien Träger und klicke auf {0}, um am Luftangriff teilzunehmen.|Scegli una portaerei disponibile e clicca su {0} per attaccare.|Elige un portaaviones disponible y pulsa {0} para atacar.|选择尚未出击的航母并点击 {0} 以参加空袭。|미출격 항모를 선택한 뒤 {0}을 누르면 공격에 참여합니다.|Выберите свободный авианосец и щёлкните {0}, чтобы присоединиться к авиаудару.
 located|{0} で発見|Located at {0}|Repéré en {0}|In {0} entdeckt|Individuato in {0}|Localizado en {0}|在 {0} 发现|{0}에서 발견|Обнаружен в {0}
 noContact|敵影なし|No contact|Aucun contact|Kein Kontakt|Nessun contatto|Sin contacto|未发现敌舰|적함 미발견|Цель не обнаружена
+noDetectionReport|発見判定の結果、ドイツ軍を発見できませんでした。|The German ship was not detected.|Le navire allemand n’a pas été détecté.|Das deutsche Schiff wurde nicht entdeckt.|La nave tedesca non è stata avvistata.|No se detectó el buque alemán.|未发现德国军舰。|독일 함선을 발견하지 못했습니다.|Немецкий корабль не обнаружен.
 airCount|航空攻撃に参加する空母：{0}|Carriers in air attack: {0}|Porte-avions engagés : {0}|Träger am Luftangriff: {0}|Portaerei all’attacco: {0}|Portaaviones en el ataque: {0}|参加空袭的航母：{0}|항공 공격 참가 항모: {0}척|Авианосцев в атаке: {0}
 air|航空攻撃|Air attack|Attaque aérienne|Luftangriff|Attacco aereo|Ataque aéreo|空袭|항공 공격|Авиаудар
 gun|砲撃|Gunfire|Tir naval|Geschützfeuer|Fuoco navale|Fuego naval|炮击|포격|Артиллерия
@@ -157,9 +155,7 @@ off|オフ|Off|Non|Aus|No|No|关闭|끄기|Выкл.
 nextShip|次の増援|Next reinforcement|Prochain renfort|Nächste Verstärkung|Prossimo rinforzo|Próximo refuerzo|下一支增援|다음 증원|Следующее подкрепление
 reserve|増援待ち|In reserve|En réserve|In Reserve|In riserva|En reserva|增援待命|증원 대기|В резерве
 readySearch|索敵可|Can search|Recherche possible|Suchbereit|Ricognizione pronta|Puede buscar|可搜索|수색 가능|Готов к поиску
-readySortie|出撃可|Can attack|Attaque possible|Angriffsbereit|Attacco pronto|Puede atacar|可出击|출격 가능|Готов к удару
-searched|索敵済み|Searched|Recherche effectuée|Suche erfolgt|Ricognizione conclusa|Ya buscó|已搜索|수색 완료|Поиск выполнен
-joined|攻撃参加|Attacking|En attaque|Greift an|In attacco|Atacando|参加攻击|공격 참가|Атакует
+searched|索敵先指定済み|Search plotted|Zone assignée|Suchziel festgelegt|Ricognizione pianificata|Búsqueda asignada|已指定搜索区域|수색 위치 지정 완료|Цель поиска выбрана
 contact|接触中|In contact|En contact|In Kontakt|In contatto|En contacto|接触中|접촉 중|В контакте
 outOfRange|範囲外|Out of range|Hors de portée|Außer Reichweite|Fuori portata|Fuera de alcance|超出范围|범위 밖|Вне дальности
 voyage|シュペー号の航路|Voyage of the Graf Spee|Parcours du Graf Spee|Route der Graf Spee|Rotta della Graf Spee|Ruta del Graf Spee|施佩伯爵号航线|그라프 슈페 항로|Маршрут «Графа Шпее»
@@ -200,7 +196,7 @@ const ruleTexts={
 ja:[
  ['準備','この版ではドイツ軍はB2かC3をランダムに選んでシュペー号を置き、別の3マスに補給艦を1隻ずつ配置します。位置は非公開です。英軍の9枚（ダミー2、空母2、戦艦1、巡洋艦4）は無作為に並べ、盤外で待機します。'],
  ['ターンと移動','シュペー号の秘密移動、英軍の移動、索敵、戦闘または通商破壊の順です。戦艦と損傷したシュペー号は1マスまで、ほかは2マスまで移動できます。補給艦と同じマスから出発するシュペー号は、補給艦を消費して1マス余計に移動できます。英軍はターンにつき3隻まで移動でき、ドイツ軍に1点を与えれば1D6隻分を追加できます。増援の進入も1隻分に数えます。A1〜A3は大西洋、B6はインド洋への出入口です。重ねる数に制限はありません。'],
- ['索敵','英軍の移動終了時に同じマスにいれば発見し、接触したダミーを除去します。空母の索敵は1隻につき隣接1マスで、対象をクリックすると判定します。この版では、発見後も隣接する未出撃の空母を指定して航空攻撃を追加できます。'],
+ ['索敵','空母1隻につき隣接する1ヘクスを指定します。索敵できる全空母の指定後、同じヘクスの英軍艦と指定された索敵先をまとめて判定します。接触したダミーを除去し、発見したヘクスに隣接する空母を航空攻撃に加えます。'],
  ['戦闘','シュペー号と空母はダイス3個、巡洋艦は2個、戦艦は9個。英軍は6で命中、シュペー号は戦艦に6、それ以外に5以上で命中します。シュペー号は同じマスの英軍艦を1隻選び、空母以外がいればそちらを狙います。空母の航空攻撃にシュペー号は反撃できません。空母だけが同じマスにいる場合はシュペー号だけが砲撃します。1発で損傷、2発で撃沈。損傷した英艦は大西洋へ退避します。無傷で残った英巡洋艦は追尾し、次ターンのシュペー号の移動先が公開されます。'],
  ['通商破壊','発見されなかったシュペー号は、輸送船マークのあるヘクスでのみ、現在位置を公開して通商破壊を行えます。各ヘクスの初回は自動で2点。同じヘクスの2回目以降はD6で、4〜6なら2点を得ます。'],
  ['勝敗','シュペー号の撃沈、脱出、またはE1（モンテビデオ）での自沈で終局します。ドイツ軍は英艦の損傷で1点、撃沈でその艦の戦闘力分（空母は6点）を得ます。シュペー号撃沈で1D6点、自沈で1D3点を失います。最終得点15点以上でドイツ軍の勝利です。'],
@@ -208,7 +204,7 @@ ja:[
 en:[
  ['Setup','In this version, Germany randomly places the Graf Spee at B2 or C3 in secret, then places three supply ships in three other hexes. The nine British counters are shuffled off-map: two decoys, two carriers, one battleship and four cruisers.'],
  ['Turn and movement','The Graf Spee moves secretly, then Britain moves and searches, followed by combat or commerce raiding. The battleship and a damaged Graf Spee can move one hex; other ships can move two. Starting with a supply ship lets the Graf Spee spend it for one extra hex. Britain can move up to three ships, including entering reinforcements, and may give Germany 1 VP to add D6 moves. A1–A3 connect to the Atlantic and B6 to the Indian Ocean. Stacking is unlimited.'],
- ['Search','A British counter in the same hex after British movement automatically locates the Graf Spee. Decoys in contact are removed. Each carrier can search one adjacent hex. Select the carrier and click that hex to check it. In this version, unused carriers adjacent to a known contact can also be assigned to the air attack.'],
+ ['Search','Choose one adjacent hex per available carrier. After all choices, check for British ships in the same hex and for searches in the selected hexes. Remove decoys in contact. Carriers adjacent to the contact join the air attack.'],
  ['Combat','Roll three dice for the Graf Spee or a carrier, two for a cruiser and nine for the battleship. Britain hits on 6. The Graf Spee hits the battleship on 6 and other ships on 5–6. It targets one ship in its own hex, choosing a non-carrier if present. It cannot return fire against an air strike. A carrier alone in the same hex can be attacked but cannot fire. One hit damages a ship; two sink it. Damaged British ships withdraw to the Atlantic. Surviving undamaged cruisers shadow the Graf Spee and reveal where it moves next turn.'],
  ['Commerce raids','If undetected, the Graf Spee may reveal its position to raid only in hexes marked with merchant ships. The first raid in each marked hex gives 2 VP automatically. On subsequent raids in the same hex, 4–6 on a die gives 2 VP.'],
  ['Victory','Play ends when the Graf Spee is sunk, escapes or scuttles at E1 (Montevideo). Germany gains 1 VP per British ship damaged and VP equal to the combat strength of a ship sunk (6 for a carrier). Losing the Graf Spee costs D6 VP, or D3 if scuttled. Germany wins with at least 15 VP.'],
@@ -216,7 +212,7 @@ en:[
 fr:[
  ['Mise en place','Dans cette version, l’Allemagne place secrètement le Graf Spee au hasard en B2 ou C3, puis trois ravitailleurs dans trois autres hexagones. Les neuf pions britanniques sont mélangés hors carte : deux leurres, deux porte-avions, un cuirassé et quatre croiseurs.'],
  ['Tour et mouvement','Déplacement secret du Graf Spee, déplacement et recherche britanniques, puis combat ou attaque du commerce. Le cuirassé et le Graf Spee endommagé avancent d’un hexagone, les autres navires de deux. Le Graf Spee peut consommer un ravitailleur présent au départ pour avancer d’un hexagone de plus. Les Britanniques déplacent trois navires par tour, renforts compris, et peuvent céder 1 PV pour ajouter D6 déplacements. A1–A3 mènent à l’Atlantique, B6 à l’océan Indien. Empilement illimité.'],
- ['Recherche','Après le mouvement britannique, un pion dans le même hexagone détecte automatiquement le Graf Spee. Les leurres au contact sont retirés. Chaque porte-avions peut fouiller un hexagone adjacent : sélectionnez-le puis cliquez sur l’hexagone. Dans cette version, les porte-avions adjacents encore disponibles peuvent aussi rejoindre l’attaque après le contact.'],
+ ['Recherche','Choisissez un hexagone adjacent par porte-avions disponible. Après tous les choix, vérifiez les pions dans le même hexagone et les zones recherchées. Retirez les leurres au contact. Les porte-avions adjacents au contact rejoignent l’attaque.'],
  ['Combat','Lancez trois dés pour le Graf Spee ou un porte-avions, deux pour un croiseur et neuf pour le cuirassé. Les Britanniques touchent sur 6. Le Graf Spee touche le cuirassé sur 6 et les autres navires sur 5–6. Il vise un navire du même hexagone, en donnant priorité aux navires autres que les porte-avions. Il ne peut pas riposter à une attaque aérienne. Un porte-avions seul dans le même hexagone peut être pris pour cible mais ne tire pas. Une touche endommage, deux coulent. Un navire britannique endommagé se replie dans l’Atlantique. Les croiseurs intacts poursuivent le Graf Spee et révèlent sa position après son prochain déplacement.'],
  ['Attaque du commerce','S’il n’a pas été repéré, le Graf Spee peut révéler sa position pour attaquer uniquement dans les hexagones marqués d’un convoi. La première attaque dans chaque hexagone marqué rapporte automatiquement 2 PV. Pour les attaques suivantes dans le même hexagone, un résultat de 4 à 6 rapporte 2 PV.'],
  ['Victoire','La partie s’achève si le Graf Spee s’échappe, est coulé ou se saborde en E1 (Montevideo). L’Allemagne reçoit 1 PV par navire britannique endommagé et la valeur de combat de chaque navire coulé (6 pour un porte-avions). Elle perd D6 PV si le Graf Spee est coulé, D3 s’il se saborde. L’Allemagne gagne à partir de 15 PV.'],
@@ -224,7 +220,7 @@ fr:[
 de:[
  ['Aufstellung','In dieser Fassung setzt Deutschland die Graf Spee verdeckt per Zufall nach B2 oder C3 und je ein Versorgungsschiff in drei andere Hexfelder. Die neun britischen Spielsteine bleiben gemischt außerhalb der Karte: zwei Attrappen, zwei Flugzeugträger, ein Schlachtschiff und vier Kreuzer.'],
  ['Runde und Bewegung','Zuerst bewegt sich die Graf Spee verdeckt, dann bewegen sich die Briten und suchen. Danach folgt ein Gefecht oder ein Angriff auf Handelsschiffe. Schlachtschiff und beschädigte Graf Spee fahren bis zu einem Hexfeld, alle anderen bis zu zwei. Hat die Graf Spee beim Start ein Versorgungsschiff im selben Feld, kann sie es für ein zusätzliches Feld einsetzen. Die Briten bewegen bis zu drei Schiffe, einschließlich der Einfahrt von Verstärkungen. Für 1 SP an Deutschland erhalten sie W6 zusätzliche Bewegungen. A1–A3 führen zum Atlantik, B6 zum Indischen Ozean. Stapel sind unbegrenzt.'],
- ['Suche','Nach der britischen Bewegung wird die Graf Spee automatisch entdeckt, wenn ein britischer Stein im selben Feld liegt. Beteiligte Attrappen werden entfernt. Jeder Träger kann ein Nachbarfeld absuchen. Wähle den Träger und klicke auf das Feld. In dieser Fassung können freie Träger auf Nachbarfeldern nach einer Entdeckung ebenfalls zum Luftangriff starten.'],
+ ['Suche','Wähle ein Nachbarfeld pro verfügbarem Träger. Prüfe danach britische Schiffe im selben Feld und alle gewählten Suchfelder. Beteiligte Attrappen werden entfernt. Träger neben dem Kontakt nehmen am Luftangriff teil.'],
  ['Gefecht','Graf Spee und Träger würfeln je dreimal, Kreuzer zweimal, das Schlachtschiff neunmal. Britische Schiffe treffen bei 6. Die Graf Spee trifft das Schlachtschiff bei 6, sonst bei 5–6. Sie wählt ein Schiff im eigenen Feld und bevorzugt andere Schiffe vor Trägern. Gegen Luftangriffe kann sie nicht zurückschießen. Trifft sie im eigenen Feld nur auf Träger, schießen diese nicht. Ein Treffer beschädigt, zwei versenken. Beschädigte britische Schiffe ziehen sich in den Atlantik zurück. Unbeschädigte Kreuzer verfolgen die Graf Spee und enthüllen ihr nächstes Bewegungsziel.'],
  ['Handelskrieg','Solange die Graf Spee nicht entdeckt ist, darf sie ihre Position für einen Angriff nur in Hexfeldern mit Handelsschiffsymbol offenlegen. Der erste Angriff in jedem markierten Hexfeld bringt automatisch 2 SP. Bei weiteren Angriffen im selben Hexfeld bringt ein Würfelwurf von 4–6 jeweils 2 SP.'],
  ['Sieg','Das Spiel endet bei Versenkung, Flucht oder Selbstversenkung der Graf Spee in E1 (Montevideo). Deutschland erhält 1 SP für jedes beschädigte britische Schiff und SP in Höhe der Kampfstärke eines versenkten Schiffs (6 für einen Träger). Versenkung der Graf Spee kostet W6 SP, Selbstversenkung W3 SP. Ab 15 SP gewinnt Deutschland.'],
@@ -232,7 +228,7 @@ de:[
 it:[
  ['Preparazione','In questa versione la Germania colloca in segreto la Graf Spee a caso in B2 o C3 e piazza tre navi rifornitrici in tre altri esagoni. Le nove pedine britanniche vengono mescolate fuori mappa: due diversivi, due portaerei, una corazzata e quattro incrociatori.'],
  ['Turno e movimento','La Graf Spee muove in segreto. Seguono il movimento e la ricognizione britannici, quindi il combattimento o l’incursione mercantile. La corazzata e la Graf Spee danneggiata possono muovere di un esagono, le altre navi di due. La Graf Spee può usare un rifornitore presente nell’esagono di partenza per muovere di un esagono in più. I britannici muovono al massimo tre navi, inclusi i rinforzi, e possono cedere 1 PV per ottenere D6 movimenti extra. A1–A3 collegano l’Atlantico, B6 l’Oceano Indiano. Nessun limite di pedine per esagono.'],
- ['Ricognizione','Dopo il movimento britannico, una pedina nello stesso esagono scopre automaticamente la Graf Spee. I diversivi coinvolti sono rimossi. Ogni portaerei può controllare un esagono adiacente: selezionala e clicca sull’esagono. In questa versione anche le portaerei adiacenti ancora disponibili possono unirsi all’attacco dopo il contatto.'],
+ ['Ricognizione','Scegli un esagono adiacente per ogni portaerei disponibile. Dopo tutte le scelte, verifica le unità britanniche nel medesimo esagono e le zone ricercate. Rimuovi i diversivi in contatto. Le portaerei adiacenti partecipano all’attacco.'],
  ['Combattimento','Tira tre dadi per la Graf Spee o una portaerei, due per un incrociatore e nove per la corazzata. Le navi britanniche colpiscono con 6. La Graf Spee colpisce la corazzata con 6 e le altre navi con 5–6. Sceglie un bersaglio nello stesso esagono evitando le portaerei se ci sono altre navi. Non può rispondere agli attacchi aerei. Le portaerei sole nel suo esagono possono essere attaccate, ma non sparano. Un colpo danneggia, due affondano. Le navi britanniche danneggiate si ritirano nell’Atlantico. Gli incrociatori intatti seguono la Graf Spee e ne rivelano la destinazione nel turno successivo.'],
  ['Incursioni mercantili','Se non è stata individuata, la Graf Spee può rivelare la propria posizione e attaccare soltanto negli esagoni con il simbolo di una nave mercantile. Il primo attacco in ogni esagono contrassegnato vale automaticamente 2 PV. Negli attacchi successivi nello stesso esagono, un tiro di 4–6 vale 2 PV.'],
  ['Vittoria','La partita termina se la Graf Spee fugge, affonda o si autoaffonda in E1 (Montevideo). La Germania ottiene 1 PV per nave britannica danneggiata e la forza di combattimento di ogni nave affondata in PV (6 per una portaerei). La perdita della Graf Spee costa D6 PV, o D3 se si autoaffonda. La Germania vince con almeno 15 PV.'],
@@ -240,7 +236,7 @@ it:[
 es:[
  ['Preparación','En esta versión, Alemania sitúa en secreto y al azar el Graf Spee en B2 o C3, y tres buques de suministro en otros tres hexágonos. Las nueve fichas británicas se barajan fuera del mapa: dos señuelos, dos portaaviones, un acorazado y cuatro cruceros.'],
  ['Turno y movimiento','El Graf Spee se mueve en secreto. Después se resuelven el movimiento y la búsqueda británicos, y luego el combate o el ataque al tráfico mercante. El acorazado y el Graf Spee dañado pueden mover un hexágono, los demás buques dos. El Graf Spee puede gastar un buque de suministro en su hexágono de partida para mover un hexágono más. Los británicos mueven hasta tres buques, incluidos los refuerzos, y pueden ceder 1 PV para añadir D6 movimientos. A1–A3 conectan con el Atlántico y B6 con el Índico. Apilamiento ilimitado.'],
- ['Búsqueda','Al terminar el movimiento británico, una ficha en el mismo hexágono localiza automáticamente al Graf Spee. Los señuelos en contacto se retiran. Cada portaaviones puede buscar en un hexágono adyacente: selecciónalo y pulsa el hexágono. En esta versión, los portaaviones adyacentes disponibles también pueden unirse al ataque tras el contacto.'],
+ ['Búsqueda','Elige un hexágono adyacente por portaaviones disponible. Tras todas las elecciones se comprueban las fichas británicas en el mismo hexágono y las zonas buscadas. Se retiran los señuelos en contacto. Los portaaviones adyacentes se suman al ataque.'],
  ['Combate','Tira tres dados para el Graf Spee o un portaaviones, dos para un crucero y nueve para el acorazado. Los británicos impactan con 6. El Graf Spee impacta al acorazado con 6 y a otros buques con 5–6. Elige un blanco en su propio hexágono, dando prioridad a otros buques sobre los portaaviones. No puede responder a un ataque aéreo. Los portaaviones solos en su hexágono pueden ser atacados pero no disparan. Un impacto causa daños, dos hunden. Los buques británicos dañados se retiran al Atlántico. Los cruceros intactos siguen al Graf Spee y revelan su destino en el siguiente turno.'],
  ['Ataque al tráfico mercante','Si no ha sido localizado, el Graf Spee puede revelar su posición y atacar solo en hexágonos con un símbolo de barco mercante. El primer ataque en cada hexágono marcado da 2 PV automáticamente. En ataques posteriores en el mismo hexágono, un 4–6 en el dado da 2 PV.'],
  ['Victoria','La partida termina si el Graf Spee escapa, es hundido o se autohunde en E1 (Montevideo). Alemania gana 1 PV por buque británico dañado y tantos PV como la fuerza de combate del buque hundido (6 para un portaaviones). Si el Graf Spee es hundido pierde D6 PV; si se autohunde pierde D3 PV. Alemania gana con al menos 15 PV.'],
@@ -248,7 +244,7 @@ es:[
 zh:[
  ['准备','此版本中，德国秘密随机选择B2或C3作为施佩伯爵号的初始位置，并在另外三个格各放一艘补给舰。英国的九枚棋子随机排列，在地图外待命：两枚诱饵、两艘航母、一艘战列舰和四艘巡洋舰。'],
  ['回合与移动','先由施佩伯爵号秘密移动，再由英国移动和搜索，最后进行战斗或破交袭击。战列舰与受损的施佩伯爵号最多移动一格，其他舰船最多两格。若出发时同格有补给舰，施佩伯爵号可消耗该补给舰，多移动一格。英国每回合最多移动三艘舰船，增援入场也计入。可给德国1分以额外移动D6艘。A1–A3通往大西洋，B6通往印度洋。堆叠不限。'],
- ['搜索','英国移动结束后，如果有英国棋子同格，就会自动发现施佩伯爵号，并移除接触的诱饵。每艘航母可搜索一格相邻海域，选择航母后点击目标格。在本版本中，发现目标后，停在相邻格且尚未出击的航母也可参加空袭。'],
+ ['搜索','每艘可用航母指定一个相邻六角格。全部指定后，统一判定同格的英军舰艇和已指定的搜索区域，并移除接触的诱饵。与接触位置相邻的航母参加空袭。'],
  ['战斗','施佩伯爵号和航母各掷三颗骰子，巡洋舰掷两颗，战列舰掷九颗。英国掷出6命中。施佩伯爵号攻击战列舰时掷出6命中，攻击其他舰船时5或6命中。它选择同格内一艘舰船为目标，优先选择航母以外的舰船。它不能反击空袭。如果同格内只有航母，则只有施佩伯爵号能开火。一发命中造成受损，两发击沉。受损英舰撤往大西洋。未受损的巡洋舰会继续跟踪，公开施佩伯爵号下回合的移动终点。'],
  ['破交袭击','未被发现时，施佩伯爵号只能在带有商船标志的六角格公开位置并袭击。每个标记格的首次袭击自动获得2分。再次袭击同一格时，掷出4至6才获得2分。'],
  ['胜负','施佩伯爵号被击沉、脱逃或在E1（蒙得维的亚）自沉时，游戏结束。德国每击伤一艘英舰得1分，每击沉一艘得其战斗力对应的分数（航母6分）。施佩伯爵号被击沉扣D6分，自沉扣D3分。德国最终达到15分即获胜。'],
@@ -256,7 +252,7 @@ zh:[
 ko:[
  ['준비','이 버전에서 독일은 B2 또는 C3에 그라프 슈페를 무작위로 비밀 배치하고, 서로 다른 다른 세 칸에 보급함을 한 척씩 배치합니다. 영국 말 9개는 섞어 지도 밖에서 대기시킵니다. 더미 2개, 항모 2척, 전함 1척, 순양함 4척입니다.'],
  ['턴과 이동','그라프 슈페가 은밀히 이동한 뒤 영국이 이동과 수색을 합니다. 이어 전투나 통상 파괴를 처리합니다. 전함과 손상된 그라프 슈페는 한 칸, 나머지 함선은 두 칸까지 이동합니다. 출발점에 보급함이 있는 그라프 슈페는 보급함을 소비해 한 칸 더 이동할 수 있습니다. 영국은 증원 진입을 포함해 턴마다 최대 3척을 이동시키며, 독일에 1점을 주면 D6척을 추가로 이동시킬 수 있습니다. A1–A3는 대서양, B6는 인도양과 연결됩니다. 한 칸에 놓을 수 있는 함선 수에는 제한이 없습니다.'],
- ['수색','영국의 이동이 끝났을 때 같은 칸에 영국 말이 있으면 그라프 슈페가 자동으로 발견됩니다. 접촉한 더미는 제거합니다. 항모는 한 척당 인접한 한 칸을 수색합니다. 항모를 선택한 뒤 해당 칸을 누르세요. 이 버전에서는 발견 후 인접 칸의 미출격 항모도 공격에 참가할 수 있습니다.'],
+ ['수색','수색 가능한 항모마다 인접한 한 헥스를 지정합니다. 모두 지정한 뒤 같은 헥스의 영국 함선과 지정한 수색 위치를 함께 판정합니다. 접촉한 더미는 제거하고, 접촉 지점에 인접한 항모는 공습에 참가합니다.'],
  ['전투','그라프 슈페와 항모는 주사위 3개, 순양함은 2개, 전함은 9개를 굴립니다. 영국군은 6이 명중입니다. 그라프 슈페는 전함에 6, 나머지에는 5–6으로 명중합니다. 같은 칸에 있는 영국 함선 한 척을 공격하며, 항모 외의 함선이 있으면 그중에서 고릅니다. 그라프 슈페는 항공 공격에 반격할 수 없습니다. 같은 칸에 항모만 있으면 그라프 슈페만 포격합니다. 1회 명중은 손상, 2회는 격침입니다. 손상된 영국 함선은 대서양으로 퇴피합니다. 손상되지 않은 순양함은 추적을 계속해 다음 턴의 이동 목적지를 공개합니다.'],
  ['통상 파괴','발견되지 않은 그라프 슈페는 수송선 표시가 있는 헥스에서만 위치를 공개하고 통상 파괴를 할 수 있습니다. 표시된 각 헥스의 첫 공격은 자동으로 2점을 얻습니다. 같은 헥스의 두 번째 공격부터는 주사위가 4~6일 때 2점을 얻습니다.'],
  ['승패','그라프 슈페가 격침되거나 탈출하거나 E1(몬테비데오)에서 자침하면 종료됩니다. 독일은 영국 함선 손상에 1점, 격침에 해당 함선의 전투력만큼 점수를 얻습니다(항모는 6점). 그라프 슈페 격침에는 D6점, 자침에는 D3점을 잃습니다. 독일은 최종 15점 이상이면 승리합니다.'],
@@ -264,7 +260,7 @@ ko:[
 ru:[
  ['Подготовка','В этой версии Германия тайно размещает «Граф Шпее» случайным образом в B2 или C3, а три судна снабжения — в трёх других клетках. Девять британских фишек перемешиваются вне карты: две ложные цели, два авианосца, линкор и четыре крейсера.'],
  ['Ход и движение','Сначала «Граф Шпее» тайно перемещается, затем Британия перемещает корабли и ведёт поиск, после чего разыгрывается бой или атака торговых судов. Линкор и повреждённый «Граф Шпее» проходят до одной клетки, остальные — до двух. Судно снабжения в исходной клетке можно израсходовать для дополнительной клетки. Британия перемещает до трёх кораблей, включая вход подкреплений, и может дать Германии 1 очко за D6 дополнительных перемещений. A1–A3 ведут в Атлантику, B6 — в Индийский океан. Число кораблей в клетке не ограничено.'],
- ['Поиск','После движения британская фишка в той же клетке автоматически обнаруживает «Граф Шпее». Ложные цели в контакте снимаются. Каждый авианосец может проверить одну соседнюю клетку: выберите корабль и щёлкните клетку. В этой версии после обнаружения также можно назначить соседние авианосцы, ещё не выполнявшие вылет, на авиаудар.'],
+ ['Поиск','Укажите соседний гекс для каждого доступного авианосца. После всех назначений проверяются британские корабли в том же гексе и выбранные зоны поиска. Обнаруженные ложные цели снимаются. Авианосцы в соседних гексах участвуют в авиаударе.'],
  ['Бой','«Граф Шпее» и авианосцы бросают по три кубика, крейсеры по два, линкор девять. Британия попадает на 6, «Граф Шпее» — на 6 по линкору и на 5–6 по остальным кораблям. Он выбирает цель в своей клетке, причём авианосец можно выбрать, только если нет других целей. На авиаудар он ответить не может. Если в одной клетке с ним только авианосцы, стреляет лишь «Граф Шпее». Одно попадание повреждает корабль, два топят. Повреждённые британские корабли отходят в Атлантику. Неповреждённые крейсеры продолжают слежение и раскрывают место, куда «Граф Шпее» переместится в следующем ходу.'],
  ['Атака торговых судов','Если «Граф Шпее» не обнаружен, он может раскрыть позицию и атаковать только в гексах со значком торгового судна. Первая атака в каждом отмеченном гексе автоматически даёт 2 очка. При повторных атаках в том же гексе результат 4–6 на кубике даёт 2 очка.'],
  ['Победа','Игра заканчивается, если «Граф Шпее» потоплен, ушёл с карты или затоплен экипажем в E1 (Монтевидео). Германия получает 1 очко за повреждённый британский корабль и очки по боевой силе потопленного (6 за авианосец). Потеря «Графа Шпее» стоит D6 очков, самозатопление — D3 очков. Для победы Германии нужно не менее 15 очков.'],
@@ -407,8 +403,7 @@ const game=(()=>{
    s.known=null;s.contact=null;s.revealed=null;s.searches={};s.strikes=[];s.lastRoll=null;
    if(['ATL','IND'].includes(where)){end(s,['exit',{key:where}],'escape');return true}
    s.pos=where;
-   if(s.tracked){s.known=where;s.contact={hex:where,method:'track'};}s.moved=[];s.moveHistory=[];s.limit=britishMoveLimit;s.extra=false;s.stage='britain';
-   if(s.tracked)note(s,'track',where);
+   s.moved=[];s.moveHistory=[];s.limit=britishMoveLimit;s.extra=false;s.stage='britain';
    return true;
  }
  const onMap=f=>!!all[f.pos];
@@ -961,18 +956,11 @@ const game=(()=>{
    s.fleet.find(f=>f.id===id).pos=from;s.moved.pop();return id;
  }
  function finishBrit(s){
+   if(s.stage!=='britain')return;
    rememberBritish(s,'afterMove');
    s.previousContact=null;
-   const contacts=active(s);
-   if(contacts.length){
-     for(const {id,type} of contacts)s.knownBritish[id]=type;
-     s.known=s.pos;s.contact={hex:s.pos,method:'surface'};
-     note(s,'surface',s.pos);
-     contacts.filter(f=>f.type==='DUMMY').forEach(f=>f.pos='lost');
-     if(!active(s).length)note(s,'discardDummy');
-   }
    s.stage='search';
-   if(!s.fleet.some(f=>searchTargets(s,f).length))finishSearch(s);
+   finishSearch(s);
  }
  function carriersInRange(s){
    const hex=s.contact?.hex;
@@ -980,7 +968,6 @@ const game=(()=>{
  }
  function searchTargets(s,f){
    if(s.stage!=='search'||!f||f.type!=='CV'||!onMap(f))return [];
-   if(s.contact)return !s.strikes.includes(f.id)&&carriersInRange(s).includes(f)?[s.contact.hex]:[];
    return s.searches[f.id]?[]:adj(f.pos);
  }
  function airAttackers(s){
@@ -997,33 +984,49 @@ const game=(()=>{
    }
  }
  function finishSearch(s){
-   if(s.stage!=='search')return;
-   confirmSorties(s);
-   if(airAttackers(s).length||active(s).length)s.stage='combat';
-   else if(s.contact){
-     s.results=null;s.tracked=false;s.stage='result';note(s,'noBattle');
-   }else s.stage='raid';
- }
- function search(s,id,h){
-   const f=s.fleet.find(v=>v.id===id);
-   if(!searchTargets(s,f).includes(h))return false;
-   if(s.contact)addStrike(s,id,h);
-   else{
-     s.searches[id]=h;
+   if(s.stage!=='search'||s.fleet.some(f=>searchTargets(s,f).length))return false;
+   if(s.tracked){
+     s.known=s.pos;s.contact={hex:s.pos,method:'track'};
+     note(s,'track',s.pos);
+   }
+   const contacts=active(s);
+   if(contacts.length){
+     for(const {id,type} of contacts)s.knownBritish[id]=type;
+     s.known=s.pos;s.contact={hex:s.pos,method:'surface'};
+     note(s,'surface',s.pos);
+     contacts.filter(f=>f.type==='DUMMY').forEach(f=>f.pos='lost');
+     if(!active(s).length)note(s,'discardDummy');
+   }
+   const intel=intelligenceForTurn(s);
+   const seen=intel.positions.afterMove??intel.positions.start??[];
+   for(const [id,h] of Object.entries(s.searches)){
      const found=h===s.pos;
-     const intel=intelligenceForTurn(s);
-     const seen=intel.positions.afterMove??intel.positions.start??[];
      const nearby=new Set(adj(h));
      const candidates=seen.filter(ship=>nearby.has(ship.pos)).map(ship=>ship.id);
      intel.searches.push({hex:h,found,candidates});
      if(candidates.length===1)s.knownBritish[candidates[0]]='CV';
-     const name={key:'CV',suffix:' '+(id+1)};
+     const name={key:'CV',suffix:' '+(Number(id)+1)};
      if(found){
-       s.known=h;s.contact={hex:h,method:'airContact'};s.strikes.push(id);
+       s.known=h;
+       s.contact??={hex:h,method:'airContact'};
        note(s,'airContact',name,h);
      }else note(s,'noContact',name,h);
    }
-   if(!s.fleet.some(v=>searchTargets(s,v).length))finishSearch(s);
+   confirmSorties(s);
+   if(airAttackers(s).length||active(s).length)s.stage='combat';
+   else if(s.contact){
+     s.results=null;s.tracked=false;s.stage='result';note(s,'noBattle');
+   }else{
+     note(s,'noDetectionReport');
+     s.stage='raid';
+   }
+   return true;
+ }
+ function search(s,id,h){
+   const f=s.fleet.find(v=>v.id===id);
+   if(!searchTargets(s,f).includes(h))return false;
+   s.searches[id]=h;
+   finishSearch(s);
    return true;
  }
  function battleForces(s){
@@ -1209,7 +1212,7 @@ let germanStyle='aggressive';
 try{if(localStorage.getItem('spee-ai-style')==='cautious')germanStyle='cautious'}catch{}
 const searchReady=f=>game.searchTargets(state,f).length>0;
 const searchedCount=()=>game.airAttackers(state).length;
-const searchAction=()=>state.contact?tr('air'):tr('search');
+const visibleContact=()=>state.contact||(state.stage==='britain'&&state.tracked?{hex:state.pos,method:'track'}:null);
 const rand=a=>a[Math.floor(Math.random()*a.length)];
 const caption=f=>tr(f.type)+' '+(f.id+1);
 const button=(txt,fn,{main=false,disabled=false}={})=>{const b=document.createElement('button');b.textContent=txt;b.onclick=fn;b.disabled=disabled;if(main)b.className='main';return b};
@@ -1234,14 +1237,9 @@ function begin(){
 function selectShip(id){
  selected=selected===id?null:id;render();
 }
-function afterSearch(){
- selected=null;game.finishSearch(state);
- if(state.stage==='raid')resolveRaid();else render();
-}
 function resolveRaid(){
  if(!state.plannedRaid||!game.raid(state)){
   state.tracked=false;state.results=null;state.stage='result';
-  game.note(state,'noContact');
  }
  render();
 }
@@ -1268,6 +1266,7 @@ function tile(f,show){
 function map(){
  const layer=$('layer');layer.replaceChildren();
  const f=current(),targets=!f?new Set():state.stage==='britain'?game.britMoves(f):new Set(game.searchTargets(state,f));
+ const sighting=visibleContact();
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
  svg.setAttribute('viewBox','0 0 1340 785');svg.setAttribute('aria-label',tr('map'));
  layer.append(svg);
@@ -1281,13 +1280,13 @@ function map(){
   const target=targets.has(h)&&h!==f?.pos;
   const marks=[];
   if(target){marks.push('target');if(state.stage==='search')marks.push('search-target');}
-  if(state.contact?.hex===h)marks.push('contact');
+  if(sighting?.hex===h)marks.push('contact');
   else if(state.previousContact?.hex===h&&state.stage==='britain')marks.push('previous-contact');
   else if(Object.values(state.searches||{}).includes(h))marks.push('searched');
   if(state.usedRoutes.includes(h))marks.push('spent');
   p.setAttribute('class',marks.join(' '));
   if(target){
-   p.setAttribute('tabindex','0');p.setAttribute('role','button');p.setAttribute('aria-label',h+' '+(state.stage==='search'?searchAction():tr('britain')));
+   p.setAttribute('tabindex','0');p.setAttribute('role','button');p.setAttribute('aria-label',h+' '+tr(state.stage==='search'?'search':'britain'));
    p.onclick=()=>chooseMap(h);p.onkeydown=e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();chooseMap(h)}};
   }
   svg.append(p);
@@ -1305,7 +1304,7 @@ function map(){
    if(here.length>3){const more=document.createElement('small');more.textContent='+'+(here.length-3);marker.append(more)}
    layer.append(marker);
   }
-  const contact=state.contact?.hex===h?state.contact:null;
+  const contact=sighting?.hex===h?sighting:null;
   const previous=!contact&&state.stage==='britain'&&state.previousContact?.hex===h;
   if(contact||previous){
    const indicator=document.createElement('div');indicator.className='contact-indicator';indicator.dataset.hex=h;
@@ -1341,15 +1340,10 @@ function renderSearch(){
  const heading=document.createElement('strong'),f=current();
  heading.textContent=f?tr('clickHex'):tr('pickCarrier');
  info.append(heading);
- const p=document.createElement('p');
- p.textContent=state.contact?tr('joinAt',state.contact.hex):tr('searchTip');
- info.append(p);
- const old=Object.values(state.searches).filter(hex=>hex!==state.contact?.hex);
- if(old.length){const line=document.createElement('p');line.className='searched-note';line.textContent=tr('noContact')+' · '+old.join(', ');info.append(line);}
- const joining=game.carriersInRange(state);
- if(joining.length){
+ const plotted=state.fleet.filter(ship=>state.searches[ship.id]);
+ if(plotted.length){
   const line=document.createElement('p');line.className='searched-note';
-  line.textContent=tr('airCount',joining.length)+' · '+joining.map(caption).join(' / ');
+  line.textContent=tr('searched')+' · '+plotted.map(ship=>caption(ship)+' '+state.searches[ship.id]).join(' / ');
   info.append(line);
  }
 }
@@ -1466,13 +1460,16 @@ function render(){
  $('mapView').setAttribute('aria-label',tr('map'));
  $('chart').alt=tr('map');$('ruleSheet').alt=tr('rules');
  const {stage}=state;
+ const detectionMissed=stage==='result'&&(!state.contact||state.contact.method==='raid');
  const titles={britain:tr('britain'),search:tr('search'),combat:tr('combat'),result:tr('result'),end:state.score>=15?tr('gWin'):tr('bWin')};
  $('phase').textContent=titles[stage];$('turn').textContent=tr('turn',state.turn);$('score').textContent=state.score+' / 15';
- $('hint').textContent={
+ const hint=$('hint');
+ hint.classList.toggle('no-detection',detectionMissed);
+ hint.textContent={
   britain:(state.tracked?tr('trackedTip')+' ':'')+tr('moveTip'),
-  search:state.contact?tr('located',state.contact.hex)+' · '+tr('joinAt',state.contact.hex):tr('searchTip'),
+  search:tr('searchTip'),
   combat:tr('located',state.contact?.hex)+(searchedCount()?' · '+tr('airCount',searchedCount()):''),
-  result:tr('resultTip'),
+  result:tr(detectionMissed?'noDetectionReport':'resultTip'),
   end:stage==='end'?tr(...state.cause):''
  }[stage];
  const lastRoll=state.lastRoll;
@@ -1489,14 +1486,14 @@ function render(){
     state.lastRoll={kind:'extra',value:n};game.note(state,'extraLog',n);render();
    },{disabled:state.extra}));
  }
- if(stage==='search')controls.append(button(state.contact?tr('finishSortie'):tr('finishSearch'),afterSearch,{main:true}));
  if(stage==='combat')controls.append(button(searchedCount()&&!game.active(state).length?tr('airNext'):tr('battleNext'),openBattle,{main:true}));
  if(stage==='result')controls.append(button(tr('next'),()=>{state.turn++;state.results=null;begin()},{main:true}));
  if(stage==='end'){controls.append(button(tr('showReport'),showEnd,{main:true}));if(!$('battleDialog').open&&!state.endShown){state.endShown=true;showEnd();}}
  const inspection=$('inspectGerman');
  inspection.setAttribute('aria-pressed',String(showGerman));
  inspection.textContent=tr('inspect')+' · '+(showGerman?tr('on'):tr('off'));
- const contact=state.contact?state.contact.hex+' · '+tr(state.contact.method):'';
+ const sighting=visibleContact();
+ const contact=sighting?sighting.hex+' · '+tr(sighting.method):'';
  const hiddenInfo=showGerman?tr('SPEE')+' '+(state.stage==='end'?tr('end'):state.pos)+' / '+tr('supply')+' '+state.supplies.length:'';
  $('mapStatus').textContent=[contact,hiddenInfo].filter(Boolean).join(' ・ ');
  renderSearch();
@@ -1512,12 +1509,12 @@ function render(){
   label.textContent=f.pos==='ATL'?tr('ATL'):f.pos|| (f===queue[0]?tr('nextShip'):tr('reserve'));
   if(stage==='search'&&f.type==='CV'&&game.onMap(f)){
    const searched=state.searches[f.id];
-   const status=state.strikes.includes(f.id)?tr('joined'):searchReady(f)?(state.contact?tr('readySortie'):tr('readySearch')):searched?tr('searched'):state.contact?.hex===f.pos?tr('contact'):tr('outOfRange');
+   const status=searched?tr('searched')+' '+searched:tr(searchReady(f)?'readySearch':'outOfRange');
    p.title=caption(f);label.textContent+=' ｜ '+status;
   }
   p.append(label);tray.append(p);
  }
- $('remaining').textContent=stage==='britain'?tr('extraLeft',remaining()):stage==='search'?tr(state.contact?'sortieLeft':'searchLeft',state.fleet.filter(searchReady).length):'';
+ $('remaining').textContent=stage==='britain'?tr('extraLeft',remaining()):stage==='search'?tr('searchLeft',state.fleet.filter(searchReady).length):'';
  const history=$('log');history.replaceChildren();
  for(const line of state.log.slice(0,12)){const li=document.createElement('li');li.textContent=tr('turn',line.turn)+' · '+eventText(line.event);history.append(li)}
  map();
