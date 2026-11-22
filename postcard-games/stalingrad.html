@@ -197,7 +197,7 @@ function settle(){
   else if(ca.r!==cd.r){loser=ca.r<cd.r?d:a;reason='小さい数字のカードを出した側が勝利。';}
   else{b.tie=true;b.reason='両軍のカードが同点。';handoff(a.side,'battleResult');return}
  }
- note(battleCardLog(ca,a.side)+' 対 '+battleCardLog(cd,d.side)+' ｜ '+loser.n+' 敗北');
+ note((ca?suit(ca):'なし')+' 対 '+(cd?suit(cd):'なし')+' ｜ '+loser.n+' 敗北');
  b.loser=loser.n;b.reason=loser.side+' '+loser.n+' 敗北。'+reason;handoff(loser.side,'battleResult');
 }
 function dropBattle(){for(const k of [G,R])s.drop.push(...s.b.cards[k]);s.b.shown=s.b.cards;s.b.cards={[G]:[],[R]:[]}}
@@ -244,11 +244,6 @@ function eventFor(c,side){
 function cardLabel(card,side){
  const ability=eventFor(card,side);
  return ability?suit(card)+'（'+ability+'）':suit(card);
-}
-const opposingFaceCard=(card,side)=>side===R&&card.r>=11;
-function battleCardLog(card,side){
- if(!card)return 'なし';
- return opposingFaceCard(card,side)?'伏せ札':suit(card);
 }
 const isStrike=name=>name==='砲撃'||name==='空軍支援';
 function strikeTargets(unit,name){
@@ -653,7 +648,7 @@ function renderCombat(){
   const abilities=document.createElement('div');abilities.className='battle-card-abilities';
   const pile=(b.shown||b.cards)[side];
   pile.forEach((card,i)=>{
-   const visible=side===G||(reveal&&!opposingFaceCard(card,side)),n=document.createElement('div');n.className='battle-card';
+   const visible=reveal||side===G,n=document.createElement('div');n.className='battle-card';
    if(!visible)n.classList.add('hidden-card');else if(!black(card))n.classList.add('red');
    if(i===pile.length-1)n.classList.add('latest');
    n.textContent=visible?suit(card):'◆';n.title=visible?(i?'レイズ':'最初のカード')+' · '+cardLabel(card,side):'裏向きのカード';stack.append(n);
