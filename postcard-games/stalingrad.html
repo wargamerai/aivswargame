@@ -107,7 +107,7 @@ function replenish(t,n){while(n--){const c=draw();if(c)t.st.push(c)}}
 const by=id=>s.units.find(t=>t.n===id), active=()=>by(s.active), at=h=>s.units.filter(t=>t.h===h);
 function note(text){s.log.unshift('第'+s.turn+'ターン｜'+text);s.log=s.log.slice(0,100)}
 function handoff(side,phase){
- clearTimeout(aiTimer);held=null;s.side=side;s.phase=phase;battleMapOpen=phase==='def'&&side===G;render();
+ clearTimeout(aiTimer);held=null;s.side=side;s.phase=phase;battleMapOpen=phase==='def'&&side===G&&!s.b?.d;render();
  if(side===R&&phase!=='end'&&phase!=='battleResult'&&phase!=='battleAfter')aiTimer=setTimeout(aiStep,410);
 }
 function controls(){
@@ -131,16 +131,17 @@ function selectUnit(t){
  if(s.phase!=='act'||t.side!==s.side||t.done||!areas[t.h]||(s.active&&s.active!==t.n))return;
  s.active=t.n;held=null;moving=false;render();
 }
-function reachable(t){
+function reachable(t,{resupply=false}={}){
  const out=new Set();if(!t||t.isolate)return out;
  const enemyRear=t.side===G?'SOV':'DEP';
  const q=[t.h],seen=new Set(q);
  while(q.length){
   const h=q.shift();
   for(const to of Object.keys(areas).filter(v=>neighbor(h,v))){
-   if(to===enemyRear||seen.has(to)||t.side===R&&to==='SOV')continue;
+   if(to===enemyRear||seen.has(to)||t.side===R&&to==='SOV'&&!resupply)continue;
+   if(resupply&&(s.control[to]!==t.side||at(to).some(v=>v.side!==t.side)))continue;
    seen.add(to);out.add(to);
-   if(s.control[to]===t.side&&!at(to).some(v=>v.side!==t.side&&!v.isolate))q.push(to);
+   if(to!=='SOV'&&s.control[to]===t.side&&!at(to).some(v=>v.side!==t.side&&!v.isolate))q.push(to);
   }
  }
  return out;
@@ -156,13 +157,21 @@ function relocate(t,h){t.h=h;if(s.companion&&t.n!=='T-34')by('T-34').h=h;control
 function moveTo(h){
  const t=active();if(!reachable(t).has(h))return;
  const enemies=at(h).filter(v=>v.side!==t.side);
- if(enemies.length){s.from=t.h;relocate(t,h);s.b={a:t.n,d:null,h,from:s.from,cards:{[G]:[],[R]:[]}};cover='';moving=false;handoff(t.side,'atk');return}
+ if(enemies.length){s.from=t.h;relocate(t,h);cover='';moving=false;beginBattle(t,s.from);return}
  if(s.control[h]===t.side){relocate(t,h);moving=false;render();return}
  cover=h;render();
 }
 function battleHere(){
  const t=active(),en=at(t.h).filter(v=>v.side!==t.side);
- if(!en.length)return;s.b={a:t.n,d:null,h:t.h,from:null,cards:{[G]:[],[R]:[]}};handoff(t.side,'atk');
+ if(en.length)beginBattle(t);
+}
+function beginBattle(t,from=null){
+ s.b={a:t.n,d:null,h:t.h,from,cards:{[G]:[],[R]:[]}};
+ openBattleCards(t);
+}
+function openBattleCards(attacker){
+ if(attacker.side===R&&s.chuikov)handoff(G,'def');
+ else handoff(attacker.side,'atk');
 }
 function chooseDefender(t){s.b.d=t.n;battleMapOpen=false;render()}
 function power(t,def){
@@ -171,8 +180,8 @@ function power(t,def){
 }
 function playCard(t,v){
  const c=pull(t,v);if(!c)return;s.b.cards[t.side].push(c);s.b.last=t.side;
- if(s.phase==='atk'){handoff(opp(t.side),'def');return}
- if(s.phase==='def'){handoff(opp(t.side),'raise');return}
+ if(s.phase==='atk'){handoff(opp(t.side),s.b.cards[opp(t.side)].length?'raise':'def');return}
+ if(s.phase==='def'){handoff(opp(t.side),s.b.cards[opp(t.side)].length?'raise':'atk');return}
  handoff(opp(t.side),'raise');
 }
 function settle(){
@@ -194,7 +203,7 @@ function settle(){
 function dropBattle(){for(const k of [G,R])s.drop.push(...s.b.cards[k]);s.b.shown=s.b.cards;s.b.cards={[G]:[],[R]:[]}}
 function nextBattleStep(){const b=s.b;dropBattle();handoff(b.tie?by(b.a).side:by(b.loser).side,b.tie?'tie':'loss')}
 function surrender(t){const b=s.b;b.tie=false;b.loser=t.n;b.reason=t.side+' '+t.n+' はカードを出さずに損害を受けます。';handoff(t.side,'battleResult')}
-function replayBattle(){const b=s.b;b.shown=null;b.reason='';b.tie=false;handoff(by(b.a).side,'atk')}
+function replayBattle(){const b=s.b;b.shown=null;b.reason='';b.tie=false;openBattleCards(by(b.a))}
 function retreats(t){
  if(t.isolate)return [];
  return Object.keys(areas).filter(h=>neighbor(t.h,h)&&s.control[h]===t.side&&h!=='SOV'&&!at(h).some(u=>u.side!==t.side&&!u.isolate));
@@ -314,6 +323,14 @@ function refill(){
  handoff(G,'act');
 }
 const crossings=['Fact','Ten','Red'];
+const rearDistance=(()=>{
+ const distance={SOV:0},queue=['SOV'];
+ for(const from of queue)for(const h of edges(from)){
+  if(h==='DEP'||h in distance)continue;
+  distance[h]=distance[from]+1;queue.push(h);
+ }
+ return distance;
+})();
 function aiAreaValue(h){
  if(h==='SOV')return 2;
  const contested=at(h).filter(t=>t.side===G&&!t.isolate);
@@ -329,15 +346,17 @@ function aiCards(t,def){
  });
 }
 const sovietEvents=name=>s.hands[R].filter(card=>eventFor(card,R)===name);
-const artilleryValue=t=>aiAreaValue(t.h)+t.val+(t.st.length?0:5)-2*(t.val+strikeTerrain(t,'砲撃'));
-function aiArtilleryTarget(unit){
- return strikeTargets(unit,'砲撃').sort((a,b)=>artilleryValue(b)-artilleryValue(a))[0];
+const artilleryValue=t=>aiAreaValue(t.h)+(crossings.includes(t.h)?5:0)+t.val+(t.st.length?0:5)-2*(t.val+strikeTerrain(t,'砲撃'));
+function aiArtilleryTarget(unit,objective){
+ const value=t=>artilleryValue(t)+(t.h===objective?8:0);
+ return strikeTargets(unit,'砲撃').sort((a,b)=>value(b)-value(a))[0];
 }
 function aiExhaustedUnits(){
  return s.units.filter(t=>t.side===R&&t.done&&areas[t.h]&&!t.isolate)
-  .sort((a,b)=>b.val+aiAreaValue(b.h)-a.val-aiAreaValue(a.h));
+  .sort((a,b)=>Number(Boolean(b.rejoining))-Number(Boolean(a.rejoining))||
+   b.val+aiAreaValue(b.h)-a.val-aiAreaValue(a.h));
 }
-function aiUseSupport(unit){
+function aiUseSupport(unit,objective){
  let used=false;
  for(const card of sovietEvents('狙撃兵')){
   if(!s.hands[G].length)break;
@@ -349,28 +368,49 @@ function aiUseSupport(unit){
   useEvent(card,target);used=true;
  }
  for(const card of sovietEvents('砲撃')){
-  const target=aiArtilleryTarget(unit);
+  const target=aiArtilleryTarget(unit,objective);
   if(!target||!s.deck.length&&!s.drop.length)break;
   useEvent(card,target);used=true;
  }
  return used;
 }
-function aiPlan(units){
+function aiRecoveryZone(unit){
+ if(!unit.max||unit.st.length)return null;
+ if(unit.h==='SOV')return 'SOV';
+ const safe=[...reachable(unit,{resupply:true})].filter(h=>rearDistance[h]<rearDistance[unit.h]);
+ return safe.sort((a,b)=>rearDistance[a]-rearDistance[b])[0];
+}
+function aiMovementValue(unit,h,enemies){
+ const objective=crossings.includes(h);
+ const leavesGoal=crossings.includes(unit.h)&&!at(unit.h).some(t=>t!==unit&&t.side===R&&!t.isolate);
+ const guarded=at(h).some(t=>t.side===R&&!t.isolate);
+ const goalBonus=objective?(s.control[h]!==R?9:guarded?1:6):0;
+ return aiAreaValue(h)-aiAreaValue(unit.h)*.75+(enemies.length?-3:0)+(unit.val>=4?1.4:0)
+  +goalBonus-(leavesGoal?7:0)+(unit.rejoining&&objective?6:0);
+}
+function aiPlan(units,{canReplenish=true}={}){
  const candidates=[];
  const molotov=sovietEvents('モロトフ・カクテル');
+ const canRefill=canReplenish&&(s.deck.length||s.drop.length);
  for(const t of units){
+  const rear=aiRecoveryZone(t);
+  if(rear){
+   if(rear===t.h){if(canRefill)candidates.push({t,replenish:true,value:30});}
+   else candidates.push({t,h:rear,value:26-rearDistance[rear]});
+   continue;
+  }
   const options=aiCards(t,false);
   const hit=options.some(o=>!molotov.includes(o.c)&&o.c.r<=power(t,false)+2*molotov.length);
   const enemyHere=at(t.h).some(v=>v.side===G);
-  if(enemyHere&&hit)candidates.push({t,h:t.h,value:aiAreaValue(t.h)+4});
-  if(t.h==='SOV'&&t.st.length<t.max)candidates.push({t,replenish:true,value:6+(t.max-t.st.length)*2});
+  if(enemyHere&&(hit||crossings.includes(t.h)&&options.length))candidates.push({t,h:t.h,value:aiAreaValue(t.h)+4});
+  if(canRefill&&t.h==='SOV'&&!t.rejoining&&t.st.length<t.max)candidates.push({t,replenish:true,value:6+(t.max-t.st.length)*2});
   if(t.n==='T-34')continue;
   for(const h of reachable(t)){
-   if(s.aiMoves?.[t.n]?.includes(h))continue;
+   if(!t.rejoining&&s.aiMoves?.[t.n]?.includes(h))continue;
    const enemies=at(h).filter(v=>v.side===G);
-   if(enemies.length&&(!hit||t.n.startsWith('Rifle')&&t.st.length<1))continue;
-   if(!enemies.length&&s.control[h]!==R&&!options.length)continue;
-   const value=aiAreaValue(h)-aiAreaValue(t.h)*.75+(enemies.length?-3:0)+(t.val>=4?1.4:0);
+   if(enemies.length&&!(crossings.includes(h)?options.length:hit&&(!t.n.startsWith('Rifle')||t.st.length)))continue;
+   if(!enemies.length&&s.control[h]!==R&&(!options.length||t.rejoining&&!s.hands[R].length))continue;
+   const value=aiMovementValue(t,h,enemies);
    if(value>2.2)candidates.push({t,h,value});
   }
  }
@@ -391,18 +431,27 @@ function aiAction(){
  if(!unit){s.active=null;endAct(true);return}
 
  s.active=unit.n;
- const used=aiUseSupport(unit);
- const plan=aiPlan([unit]);
+ let plan=aiPlan([unit]);
+ const objective=crossings.includes(plan?.h)?plan.h:null;
+ const used=!plan?.replenish&&aiUseSupport(unit,objective);
+ if(used)plan=aiPlan([unit],{canReplenish:false});
  if(!plan){s.active=null;endAct(!used);return}
  s.aiActs=(s.aiActs||0)+1;
  const {t,h}=plan;
  if(h&&h!==t.h){s.aiMoves??={};(s.aiMoves[t.n]??=[]).push(t.h,h);}
- if(plan.replenish){replenish(t,1);t.done=true;note(R+' '+t.n+' がステップを補充');endAct();return}
+ if(plan.replenish){
+  if(!t.st.length)t.rejoining=true;
+  replenish(t,1);t.done=true;note(R+' '+t.n+' がステップを1枚補充');endAct();return;
+ }
+ if(t.h==='SOV')t.rejoining=false;
  const enemy=at(h).some(v=>v.side===G);
  if(enemy){
   const [chuikov]=sovietEvents('チュイコフ将軍');
-  if(chuikov)useEvent(chuikov);
-  for(const card of sovietEvents('モロトフ・カクテル'))useEvent(card);
+  if(chuikov&&cardOptions(R,t).length>1)useEvent(chuikov);
+  for(const card of sovietEvents('モロトフ・カクテル')){
+   if(cardOptions(R,t).length<=1)break;
+   useEvent(card);
+  }
   const tank=by('T-34');
   if(t!==tank&&tank.h===t.h&&!tank.done)s.companion=true;
   if(h===t.h)battleHere();else moveTo(h);
@@ -413,16 +462,21 @@ function aiAction(){
   const cost=options.filter(o=>o.k==='hand').sort((a,b)=>Number(a.c.r>=11)-Number(b.c.r>=11)||b.c.r-a.c.r)[0]||options[0];
   const paid=pull(t,cost);if(paid)s.drop.push(paid);
  }
- relocate(t,h);aiUseSupport(t);endAct();
+ relocate(t,h);aiUseSupport(t,objective);endAct();
 }
 function yieldCombat(t){surrender(t)}
+function cardStrength(card,unit,defending){
+ return card&&card.r<=power(unit,defending)?(suited(card,unit.side)?30:15)-card.r:0;
+}
 function aiStep(){
  if(s.side!==R||s.phase==='end')return;
  const b=s.b,a=b&&by(b.a),d=b&&by(b.d);
  switch(s.phase){
   case'act':if(active())endAct();else aiAction();break;
   case'atk':{
-   const opts=aiCards(a,false);if(opts.length)playCard(a,opts[0]);else yieldCombat(a);break;
+   const opts=aiCards(a,false),enemy=b.cards[G].at(-1);
+   const best=s.chuikov&&enemy&&opts.find(o=>cardStrength(o.c,a,false)>cardStrength(enemy,d,true));
+   const option=best||opts[0];if(option)playCard(a,option);else yieldCombat(a);break;
   }
   case'def':{
    const opts=at(b.h).filter(t=>t.side===R);
@@ -431,19 +485,28 @@ function aiStep(){
     return value(y)-value(x);
    })[0];
    b.d=defender.n;
-   const card=aiCards(defender,true).find(o=>o.c.r<=power(defender,true));
+   const cards=aiCards(defender,true);
+   const card=cards.find(o=>o.c.r<=power(defender,true))||
+    (crossings.includes(b.h)&&cards.find(o=>o.k==='hand'));
    if(card)playCard(defender,card);else yieldCombat(defender);break;
   }
   case'raise':{
-   const t=a.side===R?a:d,old=b.cards[R].at(-1),p=power(t,t===d);
-   const quality=c=>c&&c.r<=p?(suited(c,R)?30:15)-c.r:0;
+   const t=a.side===R?a:d,old=b.cards[R].at(-1);
+   const quality=c=>cardStrength(c,t,t===d);
    const own=quality(old),cards=aiCards(t,t===d);
    const enemy=b.cards[G].at(-1);
    let better;
    if(s.chuikov&&t===a&&enemy){
-    const enemyScore=enemy.r<=power(d,true)?(suited(enemy,G)?30:15)-enemy.r:0;
+    const enemyScore=cardStrength(enemy,d,true);
     if(own<=enemyScore)better=cards.find(o=>quality(o.c)>own&&quality(o.c)>=enemyScore);
-   }else better=cards.find(o=>quality(o.c)>own+2);
+   }else{
+    better=cards.find(o=>quality(o.c)>own);
+    if(!better&&old&&!b.sovietBluffed){
+     const bluffs=cards.filter(o=>o.k==='hand'&&quality(o.c)===own)
+      .sort((x,y)=>Number(x.c.r>=11)-Number(y.c.r>=11)||y.c.r-x.c.r);
+     if(bluffs.length&&Math.random()<1/8){better=bluffs[0];b.sovietBluffed=true;}
+    }
+   }
    if(better)playCard(t,better);else settle();break;
   }
   case'loss':{
