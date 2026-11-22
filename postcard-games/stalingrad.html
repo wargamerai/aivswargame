@@ -324,6 +324,7 @@ function refill(){
 }
 const crossings=['Fact','Ten','Red'];
 const priorityArea=h=>h==='Mam'||crossings.includes(h);
+const maxRearResupplyUnits=2;
 const rearDistance=(()=>{
  const distance={SOV:0},queue=['SOV'];
  for(const from of queue)for(const h of edges(from)){
@@ -397,15 +398,16 @@ function aiPlan(units,{canReplenish=true}={}){
  const candidates=[];
  const molotov=sovietEvents('モロトフ・カクテル');
  const canRefill=canReplenish&&(s.deck.length||s.drop.length);
+ const canSendToRear=s.units.filter(t=>t.rearResupply&&areas[t.h]).length<maxRearResupplyUnits;
  for(const t of units){
   if(t.replenishFirst&&needsRearRefill(t)){
    if(canRefill)candidates.push({t,replenish:true,value:31});
    continue;
   }
-  const rear=aiRecoveryZone(t);
+  const rear=t.h==='SOV'||t.rearResupply||canSendToRear?aiRecoveryZone(t):null;
   if(rear){
    if(rear===t.h){if(canRefill)candidates.push({t,replenish:true,value:30});}
-   else candidates.push({t,h:rear,value:26-rearDistance[rear]});
+   else candidates.push({t,h:rear,rearResupply:true,value:26-rearDistance[rear]});
    continue;
   }
   const options=aiCards(t,false);
@@ -455,6 +457,7 @@ function aiAction(){
   t.replenishFirst=false;
   replenish(t,1);t.done=true;note(R+' '+t.n+' がステップを1枚補充');endAct();return;
  }
+ t.rearResupply=Boolean(plan.rearResupply);
  if(t.h==='SOV')t.rejoining=false;
  const enemy=at(h).some(v=>v.side===G);
  if(enemy){
