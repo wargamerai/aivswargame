@@ -1045,6 +1045,7 @@ class Game {
         this.lineups  = [l0, l1];
         this.benches  = [b0, b1];
         this.positions=this.lineups.map((lineup,side)=>rosters[side].positions || assignFieldPositions(lineup));
+        this.fieldingReview=[[],[]];
         this.curPit   = [p0[0]||null, p1[0]||null];
         for (const pitcher of this.curPit) if (pitcher) pitcher.enter(1, true);
         this.scores=[0,0]; this.inning=1; this.half=0; this.outs=0;
@@ -1419,7 +1420,11 @@ class Game {
         this.removed.add(departing);
         const positions = this.positions[side];
         const position = FIELD_POSITIONS.find(pos => positions[pos] === departing);
-        if (position) positions[position] = incoming;
+        this.fieldingReview[side]=this.fieldingReview[side].filter(id=>id!==String(departing.Index));
+        if (position) {
+            positions[position]=incoming;
+            if (side===this.batSide) this.fieldingReview[side].push(String(incoming.Index));
+        }
         if (side === this.batSide) {
             this.bases = this.bases.map(player => player === departing ? incoming : player);
         }
@@ -1435,6 +1440,53 @@ class Game {
         const runner=this.bases[base];
         this.substitute(this.batSide,this.lineup.indexOf(runner),benchIndex,`代走・${base+1}塁`);
         this.stealBlocked.delete(runner);
+        return true;
+    }
+    queueFieldingReview() {
+        const side=this.defSide;
+        const review=this.fieldingReview[side];
+        if (!review.length || this.pending || this.gameOver || this.called) return false;
+        const positions=this.defPositions;
+        const pos=FIELD_POSITIONS.find(position=>{
+            const row=positions[position];
+            return row && review.includes(String(row.Index)) && !suitedToFieldPosition(row,position);
+        });
+        if (!pos || this.versusAI && side!==this.humanSide) {
+            this.fieldingReview[side]=[];
+            return false;
+        }
+
+        const row=positions[pos];
+        const id=String(row.Index);
+        const index=this.defLineup.indexOf(row);
+        const position=FNAME[pos];
+        const name=displayName(row);
+        const card=fieldCard(row,pos);
+        const reason=card.rating===0?'守備力0':`主な守備位置以外・守備力${card.rating}`;
+        const keep=()=>{this.fieldingReview[side]=this.fieldingReview[side].filter(value=>value!==id);};
+        const choices=[['このまま守る',keep]];
+
+        for (const candidate of this.defLineup) {
+            if (candidate===row || !suitedToFieldPosition(candidate,pos)) continue;
+            const other=FIELD_POSITIONS.find(field=>positions[field]===candidate);
+            if (other && !suitedToFieldPosition(row,other)) continue;
+            const target=other ? FNAME[other] : 'DH';
+            const label=`${displayName(candidate)}を${position}、${name}を${target}へ`;
+            choices.push([label,()=>{
+                positions[pos]=candidate;
+                if (other) positions[other]=row;
+                keep();
+                this.logAdd(`【守備位置変更】${label}`,'l-sub',side);
+            }]);
+        }
+        for (const [benchIndex,candidate] of this.defBench.entries()) {
+            const defense=fieldCard(candidate,pos);
+            if (!suitedToFieldPosition(candidate,pos)) continue;
+            choices.push([`${displayName(candidate)}に交代（${position}・守備力${defense.rating}）`,
+                ()=>this.substitute(side,index,benchIndex,'守備交代')]);
+        }
+        this.pending={title:`守備の確認｜${name}が${position}（${reason}）。このまま守りますか？`,
+            choices,side,defaultIndex:0,beforePlate:true};
         return true;
     }
     handleRarePlay(batter,isForward,isEndRun,rollStr='') {
@@ -1786,6 +1838,11 @@ function battingHand(row) {
 // ============================================================
 // FIELD POSITION MAPPING
 // ============================================================
+function suitedToFieldPosition(row,pos) {
+    const card=fieldCard(row,pos);
+    return card.rating>0 && card.preference>=2;
+}
+
 function assignFieldPositions(lineup,fixed={}) {
     const positions={...fixed};
     const assigned=new Map(Object.entries(fixed).map(([pos,row])=>[row,pos]));
@@ -2805,8 +2862,19 @@ function showNext(label) {
 // ============================================================
 // GAME FLOW
 // ============================================================
+function showFieldingReview(g,keepPlayResult=false) {
+    if (!g.queueFieldingReview()) return false;
+    clearAutoTimer();
+    g.isAuto=false;
+    if (g.semiAuto) interruptSemiAuto(g);
+    updateUI(keepPlayResult);
+    showPending();
+    return true;
+}
+
 function startAtBat(keepPlayResult=false) {
     const g = gameInst;
+    if (showFieldingReview(g,keepPlayResult)) return;
     g.preparePlate();
     g.autoPitChange(true);
     if (g.pending) { updateUI(keepPlayResult); showPending(); return; }
@@ -2921,6 +2989,7 @@ function endHalf(openTactics=false) {
     g.logAdd(`\n▶ ${g.inning}回${hstr} ${teamShort(batting)}の攻撃`, 'l-inning');
     updateUI();
     playInningFlash(g.inning, hstr, batting);
+    if (showFieldingReview(g,true)) return;
     if (openTactics) startAtBat(true);
     else showNext(`▶ ${g.inning}回${hstr}開始`);
 }
@@ -3102,7 +3171,7 @@ function doAction(action) {
         renderButtons([...g.bench.map((p,i)=>[displayName(p),`pinch:${i}`,'bs']),['戻る',back,'bn']],g.batSide,'代打を選択');
     } else if (action.startsWith('pinch:')) {
         if (g.offenseLocked) return;
-        g.substitute(g.batSide,g.batIdx[g.batSide],Number(action.slice(6)));
+        g.substitute(g.batSide,g.batIdx[g.batSide],Number(action.slice(6)),'代打');
         updateUI();
         if (g.state==='defense') showDefenseMenu();
         else showOffenseMenu();
@@ -3341,12 +3410,12 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 <script src="report-limit.js?v=report-credit"></script>
 <script src="../report-image.js"></script>
 <script src="pfb-results.js?v=report-png"></script>
-<script src="pfb-match.js?v=pennant-tactics"></script>
+<script src="pfb-match.js?v=fielding-review"></script>
 <script src="pfb-season.js?v=pennant-tactics"></script>
 <script src="pfb-season-ui.js?v=report-credit"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
-<script src="pfb-online-core.js?v=pinch-runner"></script>
+<script src="pfb-online-core.js?v=fielding-review"></script>
 <script src="pfb-online.js?v=pinch-runner"></script>
 <script src="pfb-coach.js?v=coach-dialogue"></script>
 <script src="pfb-default-roster.js"></script>

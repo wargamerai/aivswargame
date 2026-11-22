@@ -16,6 +16,7 @@ const PFBOnlineCore=(()=>{
         try { return fn(); } finally { diceRandom=old; }
     }
     function openPlate(game){
+        if(game.onlineFieldingReview && game.queueFieldingReview())return;
         game.preparePlate();
         game.autoPitChange(true);
         if(game.pending)return;
@@ -23,7 +24,7 @@ const PFBOnlineCore=(()=>{
         game.beginPitchingInning();
         game.state='defense';
     }
-    function create(teams,rows,images,seed,forcedSubs=true){
+    function create(teams,rows,images,seed,forcedSubs=true,fieldingReview=true){
         if(!teams||teams.away===teams.home||![teams.away,teams.home].every(team=>rows.filter(row=>row['チーム']===team).length>=25)){
             throw new Error('対戦する球団を選んでください。');
         }
@@ -31,6 +32,7 @@ const PFBOnlineCore=(()=>{
         room.game=scopedRandom(room,()=>{
             const game=new Game(teams.away,rows,teams.home,undefined,PFBSeason.DOMES.has(onwardTeam(teams.home)));
             game.onlineMatch=true;
+            game.onlineFieldingReview=fieldingReview;
             game.manualForcedSubs=forcedSubs;
             game.logAdd(`オンライン対戦　${teamShort(teams.away)} 対 ${teamShort(teams.home)}`,'l-inning');
             openPlate(game);
@@ -138,12 +140,13 @@ const PFBOnlineCore=(()=>{
         return accepted;
     }
     function pack(room){
-        return JSON.stringify({teams:room.teams,seed:room.seed,checksum:room.checksum,forcedSubs:room.game.manualForcedSubs,actions:room.actions});
+        return JSON.stringify({teams:room.teams,seed:room.seed,checksum:room.checksum,
+            forcedSubs:room.game.manualForcedSubs,fieldingReview:room.game.onlineFieldingReview,actions:room.actions});
     }
     function unpack(teams,rows,images,value){
         const parsed=JSON.parse(value);
         if(parsed.checksum!==fingerprint(rows))throw new Error('作成者と同じ Data_25.csv を読み込んでください。');
-        const room=create(parsed.teams,rows,null,parsed.seed,parsed.forcedSubs===true);
+        const room=create(parsed.teams,rows,null,parsed.seed,parsed.forcedSubs===true,parsed.fieldingReview===true);
         for(const {seat,action} of parsed.actions){
             if(!perform(room,room.teams,seat,'play',[action]))throw new Error('対戦の操作履歴を読み込めません。');
         }

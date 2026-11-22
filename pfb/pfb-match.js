@@ -96,7 +96,7 @@ const SAVE_GAME_FIELDS=[
     'gameOver','called','endReason','state','squeezeUsed','endRunUsed','isForward','isCautious',
     'isSqueezeCautious','shockChecked','stealAttempted','startFailed','buntContinuation','plateOutcome',
     'plateComplete','offenseLocked','waitingForCpuDefense','matchStats','matchId','pitchingOrder','hrEvents',
-    'responsible','leadingPitchers','injuryEvents','finalReport','seasonMatch','semiAutoInterrupted'
+    'responsible','leadingPitchers','injuryEvents','finalReport','seasonMatch','semiAutoInterrupted','fieldingReview'
 ];
 const SAVE_PITCHER_FIELDS=[
     'baseG','baseC','tempG','tempC','outsPitched','inningsPitched','facedBatters','appearanceInning','lastInning',
@@ -164,6 +164,16 @@ function importMatch(save) {
         return rows;
     });
     const g=Object.assign(Object.create(Game.prototype),fields(state,SAVE_GAME_FIELDS));
+    g.fieldingReview = [0,1].map(side=>Array.isArray(state.fieldingReview?.[side])
+        ? state.fieldingReview[side].filter(id=>lineup[side].some(row=>rowId(row)===id))
+        : []);
+    if (!state.fieldingReview) {
+        const subs=state.log.filter(([text,kind,inning,half,side])=>kind==='l-sub' &&
+            inning===state.inning && half===state.half && side===half &&
+            /^【(?:交代|代打|代走・[1-3]塁)】/.test(text));
+        g.fieldingReview[state.half]=lineup[state.half].filter(row=>
+            subs.some(([text])=>text.endsWith(` → ${playerName(row)}`))).map(rowId);
+    }
     g.playerTeam=teams[0];
     g.oppTeam=teams[1];
     g.lineups=lineup;
