@@ -132,14 +132,15 @@ const PFBSeasonUI=(()=>{
     function starterSelect(fixture){
         if(busy || ![fixture.away,fixture.home].includes(season.team) ||
             fixture.result || fixture.cancelled || fixture.skipped || fixture.id===season.active) return '';
-        const {starterCandidates}=PFBSeason.roster(season,data,season.team,fixture.day,true);
-        const unavailable=fixture.starter && !starterCandidates.some(row=>rowId(row)===fixture.starter);
-        const missing=unavailable ? '<option selected disabled>登録投手は登板不可</option>' : '';
+        const {starterCandidates,starterUnavailable,registeredName}=PFBSeason.namedRoster(season,data,season.team,fixture.day,fixture);
+        const label=registeredName||'登録投手';
+        const missing=starterUnavailable ? `<option selected disabled>${esc(label)}（登板不可）</option>` : '';
         const options=starterCandidates.map(row=>{
             const id=rowId(row);
             return `<option value="${esc(id)}"${id===fixture.starter?' selected':''}>${esc(displayName(row))}</option>`;
         }).join('');
-        return `<label class="season-starter">先発<select data-starter-fixture="${esc(fixture.id)}"
+        const name=fixture.starter ? `<span class="season-starter-name${starterUnavailable?' unavailable':''}">${esc(label)}${starterUnavailable?'（登板不可）':''}</span>` : '';
+        return `<label class="season-starter">先発${name}<select data-starter-fixture="${esc(fixture.id)}"
             aria-label="${esc(PFBSeason.dayText(fixture.day))}の先発投手"><option value="">自動選択</option>${missing}${options}</select></label>`;
     }
     function calendar(){
@@ -243,8 +244,11 @@ const PFBSeasonUI=(()=>{
     }
     function beginMatch(fixture){
         const home=fixture.home===season.team;
-        const plan={...PFBSeason.roster(season,data,season.team,fixture.day,true,fixture),records:season.stats};
-        const rosters=[fixture.away,fixture.home].map(team=>team===season.team ? plan : PFBSeason.roster(season,data,team,fixture.day));
+        const opponent=home?fixture.away:fixture.home;
+        const plan={...PFBSeason.namedRoster(season,data,season.team,fixture.day,fixture),records:season.stats};
+        const visitingPlan=PFBSeason.namedRoster(season,data,opponent,fixture.day);
+        requireStartingRoster(opponent,visitingPlan);
+        const rosters=home?[visitingPlan,plan]:[plan,visitingPlan];
         setup={away:fixture.away,home:fixture.home,humanSide:Number(home),versusAI:true,
             dome:PFBSeason.DOMES.has(onwardTeam(fixture.home))};
         close();
@@ -254,8 +258,8 @@ const PFBSeasonUI=(()=>{
             gameInst.versusAI=true;
             players=[...new Map([...data,...gameInst.lineups.flat(),...gameInst.benches.flat(),...gameInst.pitchers.flat().map(p=>p.row)].map(p=>[rowId(p),p])).values()];
             season.active=fixture.id;
+            if(plan.starterUnavailable) fixture.starter=rowId(selection.starter);
             gameInst.logAdd(`試合開始　${teamShort(fixture.away)} 対 ${teamShort(fixture.home)}`,'l-inning');
-            if(plan.starterUnavailable) gameInst.logAdd(`登録した先発投手は登板できないため、${displayName(selection.starter)}が先発します。`,'l-info');
             PFBSeason.rememberRoster(season,fixture.day,selection);
             startAtBat();
             autosave();
@@ -316,6 +320,8 @@ const PFBSeasonUI=(()=>{
             if(event.target.value) fixture.starter=event.target.value;
             else delete fixture.starter;
             autosave();
+            render();
+            body().querySelector(`[data-starter-fixture="${CSS.escape(fixture.id)}"]`)?.focus();
             return;
         }
         if(event.target.id==='season-league'){dashboardLeague=event.target.value;statTeam=''}

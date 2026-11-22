@@ -133,7 +133,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css?v=coach-dialogue">
+<link rel="stylesheet" href="pfb-screen.css?v=roster-warning">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
 </head>
 <body>
@@ -222,6 +222,7 @@ body, html {
 <dialog id="roster-dialog" aria-labelledby="roster-title">
     <form>
         <h2 id="roster-title"></h2>
+        <p class="roster-warning" role="alert" hidden></p>
         <fieldset class="roster-stat-source" hidden>
             <legend>表示する成績</legend>
             <label><input type="radio" name="roster-stats" value="real" checked> リアル成績</label>
@@ -1016,6 +1017,21 @@ function defaultRoster(rows, team) {
     return {selected,lineup,starter};
 }
 
+function requireStartingRoster(team,{selected,lineup,starter,positions}) {
+    const label=teamShort(team);
+    if (!starter || !isPitcher(starter) || !selected.includes(starter)) {
+        throw new Error(`${label}の先発投手が決まっていません。`);
+    }
+    const batters=lineup.filter(row=>row&&!isPitcher(row)&&selected.includes(row));
+    if (lineup.length!==9 || new Set(batters).size!==9) {
+        throw new Error(`${label}の打順は野手9人が必要です（現在${new Set(batters).size}人）。`);
+    }
+    if (positions && (FIELD_POSITIONS.some(pos=>!positions[pos]||!lineup.includes(positions[pos])) ||
+        new Set(FIELD_POSITIONS.map(pos=>positions[pos])).size!==8)) {
+        throw new Error(`${label}の守備位置に未選択があります。`);
+    }
+}
+
 // ============================================================
 // GAME CLASS
 // ============================================================
@@ -1033,6 +1049,7 @@ class Game {
         const oppRows = allPlayers.filter(r=>r['チーム']===this.oppTeam);
         const teams = [playerRows,oppRows];
         const rosters = selectedRosters || teams.map((rows,side) => defaultRoster(rows,[playerTeam,this.oppTeam][side]));
+        rosters.forEach((roster,side)=>requireStartingRoster([playerTeam,this.oppTeam][side],roster));
         const [[p0,l0,b0],[p1,l1,b1]] = rosters.map(({selected,lineup,starter,pitchForms}) => {
             const pitchers = [starter,...selected.filter(p => p !== starter && isPitcher(p))].filter(Boolean);
             return [pitchers.map(row=>{
@@ -1827,7 +1844,7 @@ function handedness(row,batting) {
 }
 
 function pitcherChoiceLabel(pitcher) {
-    return `${pitcher.name}（${handedness(pitcher.row,false) || '—'}・G${pitcher.cardG}・C${pitcher.cardC}・S${pitcher.S}）`;
+    return `${displayName(pitcher.row)}\n${handedness(pitcher.row,false) || '—'}・G${pitcher.cardG}・C${pitcher.cardC}・S${pitcher.S}`;
 }
 
 function battingHand(row) {
@@ -1843,13 +1860,16 @@ function suitedToFieldPosition(row,pos) {
     return card.rating>0 && card.preference>=2;
 }
 
-function assignFieldPositions(lineup,fixed={}) {
+function assignFieldPositions(lineup,fixed={}, {allowUnqualified=true}={}) {
     const positions={...fixed};
     const assigned=new Map(Object.entries(fixed).map(([pos,row])=>[row,pos]));
     const locked=new Set(assigned.keys());
     const candidates = {};
     for (const pos of FIELD_POSITIONS) {
-        candidates[pos] = lineup.filter(p => fieldCard(p, pos).preference > 0)
+        candidates[pos] = lineup.filter(p=>{
+            const card=fieldCard(p,pos);
+            return allowUnqualified ? card.preference>0 : card.rating>0;
+        })
             .sort((a,b) => fieldCard(b,pos).preference - fieldCard(a,pos).preference);
     }
     function fill(pos, tried) {
@@ -1865,6 +1885,7 @@ function assignFieldPositions(lineup,fixed={}) {
         return false;
     }
     for (const pos of [...FIELD_POSITIONS].reverse()) if (!positions[pos]) fill(pos,new Set());
+    if (!allowUnqualified) return positions;
     for (const pos of FIELD_POSITIONS) {
         if (!positions[pos]) {
             const player = lineup.find(p => !assigned.has(p));
@@ -1925,7 +1946,7 @@ function renderField(keepPlayResult=false) {
 function matchupRow(label,row,meta,current=false,record='') {
     return `<button type="button" class="matchup-row${current?' is-current':''}" data-player="${esc(row.Index)}">
         <span class="player-role">${esc(label)}</span>
-        <span class="player-name">${esc(playerName(row))}</span>
+        <span class="player-name">${esc(displayName(row))}</span>
         <span class="player-meta">${esc(meta)}</span>
         ${record?`<span class="player-record">${esc(record)}</span>`:''}
     </button>`;
@@ -2400,6 +2421,9 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     const statsOption=dialog.querySelector('.roster-stat-source');
     const gameStatsOption=statsOption.querySelector('input[value="game"]');
     const message = dialog.querySelector('.roster-message');
+    const warning=dialog.querySelector('.roster-warning');
+    warning.textContent=seasonRoster?.warnings?.join('\n')||'';
+    warning.hidden=!warning.textContent;
     list.replaceChildren();
     message.textContent = '';
     const groups=new Map([...ROSTER_FIELD_GROUPS,...ROSTER_PITCH_GROUPS].map(([key])=>[key,[]]));
@@ -2415,7 +2439,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         const name=document.createElement('b');
         const card=document.createElement('span');
         const record=document.createElement('span');
-        label.className='roster-candidate';
+        label.className=pitcher?'roster-candidate pitcher-candidate':'roster-candidate';
         record.className='roster-record';
         check.type = 'checkbox';
         check.checked = preset.selected.includes(row);
@@ -2489,8 +2513,14 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     }
     const boardPositions=['LF','CF','RF','SS','2B','3B','P','1B','C','DH'];
     const positionName=pos=>pos==='DH' ? 'DH' : pos==='P' ? '先発投手' : FNAME[pos];
-    let slots=Array(9).fill(null);
-    let starter=fixedStarter ? preset.starter : null;
+    const restoredFielders=Object.values(preset.positions||{});
+    const restoredDH=preset.restored&&preset.lineup.find(row=>row&&!restoredFielders.includes(row));
+    let slots=Array.from({length:9},(_,index)=>{
+        const row=preset.restored&&preset.lineup[index];
+        const pos=FIELD_POSITIONS.find(field=>row&&preset.positions?.[field]===row);
+        return row&&(pos||row===restoredDH) ? {row,pos:pos||'DH'} : null;
+    });
+    let starter=seasonRoster ? preset.starter : null;
     let activeSlot=0;
     let activePosition=null;
     let boardOpen=false;
@@ -2504,14 +2534,16 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     }
     function suggested() {
         const bats=selected.filter(row=>!isPitcher(row));
-        const lineup=[...new Set([...preset.lineup.filter(row=>bats.includes(row)),...bats])].slice(0,9);
-        const fixed=Object.fromEntries(Object.entries(preset.positions||{}).filter(([,row])=>lineup.includes(row)));
-        const field=assignFieldPositions(lineup,fixed);
-        slots=lineup.map(row=>({row,pos:FIELD_POSITIONS.find(pos=>field[pos]===row)||'DH'}));
+        const order=[...new Set([...preset.lineup.filter(row=>bats.includes(row)),...bats])];
+        const fixed=Object.fromEntries(Object.entries(preset.positions||{}).filter(([pos,row])=>bats.includes(row)&&fieldCard(row,pos).rating>0));
+        const field=assignFieldPositions(order,fixed,{allowUnqualified:false});
+        const fielders=Object.values(field);
+        const dh=order.find(row=>!fielders.includes(row));
+        const lineup=order.filter(row=>fielders.includes(row)||row===dh);
+        slots=Array.from({length:9},(_,i)=>lineup[i]?{row:lineup[i],pos:FIELD_POSITIONS.find(pos=>field[pos]===lineup[i])||'DH'}:null);
         starter=selected.includes(preset.starter)&&starterCandidates.has(preset.starter)
-            ? preset.starter : selected.find(row=>starterCandidates.has(row));
-        activeSlot=0;
-        activePosition=null;
+            ? preset.starter : seasonRoster?.starterUnavailable ? starter : selected.find(row=>starterCandidates.has(row))||null;
+        advanceSlot();
     }
     function button(label,action) {
         const control=document.createElement('button');
@@ -2539,6 +2571,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     }
     function renderBoard() {
         message.textContent='';
+        warning.hidden=!warning.textContent||Boolean(starterCandidates.has(starter)&&slots.every(Boolean));
         diamond.replaceChildren();
         order.replaceChildren();
         picks.replaceChildren();
@@ -2579,7 +2612,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         swapTarget.value=Array.from(swapTarget.options).some(option=>option.value===target) ? target : '';
         swapButton.disabled=activePosition==='P'||!slots[activeSlot]||swapTarget.value==='';
         swapTarget.disabled=activePosition==='P'||!slots[activeSlot]||swapTarget.options.length===1;
-        removeButton.disabled=activePosition==='P' ? !starter : !slots[activeSlot];
+        removeButton.disabled=activePosition==='P' ? !starter||fixedStarter : !slots[activeSlot];
         undoButton.disabled=!history.length;
         if (!activePosition) {
             pickNote.textContent=slots[activeSlot]&&starter ? '打順または守備位置を選んで編集できます。' :
@@ -2651,6 +2684,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         boardStage.hidden=!showBoard;
         cancelButton.textContent=showBoard ? 'ベンチ選択に戻る' : 'チーム選択へ戻る';
         nextButton.textContent=showBoard ? gameButton : '25人を確定して打順・守備へ';
+        if (!showBoard) warning.hidden=!warning.textContent;
         message.textContent='';
     }
     statsOption.onchange=()=>{
@@ -2681,17 +2715,12 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
             if (checked.filter(row=>!isPitcher(row)).length<9) errors.push('野手を9人以上選んでください。');
             if (!checked.some(row=>starterCandidates.has(row))) errors.push('登板可能でスタミナ4以上の投手をベンチ入りさせてください。');
             if (errors.length) {message.textContent=errors.join('\n');return;}
-            if (!selected.length&&preset.restored) {
-                selected=checked;
-                suggested();
-            } else {
-                const eligible=new Set(checked);
-                if (selected.some(row=>!eligible.has(row))) history.length=0;
-                slots=slots.map(slot=>slot&&eligible.has(slot.row) ? slot : null);
-                if (!eligible.has(starter)) starter=null;
-                selected=checked;
-                advanceSlot();
-            }
+            const eligible=new Set(checked);
+            if (selected.some(row=>!eligible.has(row))) history.length=0;
+            slots=slots.map(slot=>slot&&eligible.has(slot.row) ? slot : null);
+            if (!eligible.has(starter)) starter=null;
+            selected=checked;
+            advanceSlot();
             showStage(true);
             renderBoard();
             dialog.querySelector('.roster-board-title').focus();
@@ -2700,7 +2729,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         const emptySlots=slots.flatMap((slot,index)=>slot ? [] : [index+1]);
         const errors=[];
         if (emptySlots.length) errors.push(`打順の${emptySlots.join('・')}番の選手を選んでください。`);
-        if (!starter) errors.push('「先発投手」から投手を選んでください。');
+        if (!starterCandidates.has(starter)) errors.push('「先発投手」から登板可能な投手を選んでください。');
         if (errors.length) {message.textContent=errors.join('\n');return;}
         const lineup=slots.map(({row})=>row);
         const positions=Object.fromEntries(slots.filter(({pos})=>pos!=='DH').map(({row,pos})=>[pos,row]));
@@ -2718,8 +2747,12 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         if (!setup.versusAI && side===0) { openRosterSetup(1); return; }
         setup.dome=domeInput.checked;
         if (setup.versusAI) setup.rosters[1-side]=cpuRoster(setup.opponent);
-        dialog.close();
-        newExhibition();
+        try {
+            newExhibition();
+            dialog.close();
+        } catch (error) {
+            message.textContent=`試合開始エラー：${error.message || error}`;
+        }
     };
     if (!dialog.open) dialog.showModal();
 }
@@ -3411,8 +3444,8 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 <script src="../report-image.js"></script>
 <script src="pfb-results.js?v=report-png"></script>
 <script src="pfb-match.js?v=fielding-review"></script>
-<script src="pfb-season.js?v=pennant-tactics"></script>
-<script src="pfb-season-ui.js?v=report-credit"></script>
+<script src="pfb-season.js?v=roster-warning"></script>
+<script src="pfb-season-ui.js?v=roster-warning"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
 <script src="pfb-online-core.js?v=fielding-review"></script>
