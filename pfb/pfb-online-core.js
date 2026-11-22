@@ -51,6 +51,7 @@ const PFBOnlineCore=(()=>{
         if(g.state==='offense'){
             const buttons=[ATTACK_ACTIONS[0]];
             if(g.bench.length&&!g.offenseLocked)buttons.push(ATTACK_ACTIONS[1]);
+            if(g.pinchRunnerBases().length)buttons.push(PINCH_RUN_ACTION);
             if(g.canBunt(false)&&!g.buntContinuation?.squeeze)buttons.push(ATTACK_ACTIONS[2]);
             if(g.stealGroups().length)buttons.push(ATTACK_ACTIONS[3]);
             if(g.canEndRun())buttons.push(ATTACK_ACTIONS[4]);
@@ -118,6 +119,8 @@ const PFBOnlineCore=(()=>{
         if(pinch&&!g.offenseLocked&&g.bench[Number(pinch[1])]){
             g.substitute(g.batSide,g.batIdx[g.batSide],Number(pinch[1]));return true;
         }
+        const pinchRun=action.match(/^prsub:([0-2]):(\d+)$/);
+        if(pinchRun)return g.pinchRunner(Number(pinchRun[1]),Number(pinchRun[2]));
         const steal=action.match(/^steal:(\d+)$/);
         if(steal){
             const attempt=g.stealGroups()[Number(steal[1])];

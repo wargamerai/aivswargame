@@ -63,12 +63,18 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     flex: none;
     margin: 2px 7px 4px;
     padding: 4px 8px;
+    max-height: min(10.5rem, 25vh);
+    overflow-y: auto;
     border-left: 3px solid #ac7724;
     background: #fcf0ca;
     color: #352d1e;
-    font-size: clamp(12px,1.13vw,16px);
-    font-weight: 650;
+    font-size: clamp(12px,1.03vw,14px);
+    line-height: 1.35;
 }
+.coach-tip {
+    margin: 3px 0;
+}
+.coach-speaker { color: #704b18; font-size: .9em; }
 #dialog-stat-source { padding: 4px 7px; color: var(--ink); background: white; }
 
 #scoreboard {
@@ -403,7 +409,6 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
 }
 .game-action-grid.is-choice { grid-template-columns: repeat(auto-fit,minmax(105px,1fr)); }
 .game-action-grid.is-choice .ab { grid-column: auto; font-size: clamp(11px,1vw,16px); white-space: pre-line; }
-.game-action-grid.batting-grid .ab:nth-child(n+4):nth-child(-n+5) { grid-column: span 3; }
 .action-panel .panel-heading { padding: 6px 8px; }
 .action-context { flex: none; color: #234934; font-size: 12px; padding: 4px 3px 0; font-weight: 700; }
 .action-context:empty { display: none; }
@@ -454,7 +459,7 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
         height:var(--action-area-height,clamp(265px,52dvh,380px)); max-height:max(120px,65dvh);
     }
     .game-action-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
-    .game-action-grid .ab, .game-action-grid.batting-grid .ab:nth-child(n+4):nth-child(-n+5) { grid-column: auto; }
+    .game-action-grid .ab { grid-column: auto; }
     .panel-heading { font-size: 15px; }
     .game-toolbar { min-height: 44px; }
 }

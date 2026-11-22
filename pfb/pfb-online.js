@@ -98,6 +98,7 @@ const PFBOnline=(()=>{
     function localMenu(g,action){
         const back=['戻る','online-back','bn'];
         if(action==='online-back'){render();return true}
+        if(showPinchRunnerMenu(g,action,'online-back'))return true;
         if(action==='pinch'){
             renderButtons([...g.bench.map((row,i)=>[playerName(row),`pinch:${i}`,'bs']),back],g.batSide,'代打を選択');return true;
         }

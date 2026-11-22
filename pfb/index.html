@@ -133,7 +133,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css?v=report-credit">
+<link rel="stylesheet" href="pfb-screen.css?v=coach-dialogue">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
 </head>
 <body>
@@ -187,7 +187,7 @@ body, html {
   <div id="pitcher-changes" role="status" aria-atomic="true"></div>
   <p id="player-change" role="status" aria-atomic="true"></p>
   <div id="game-log" role="status"></div>
-  <p id="coach-advice" aria-live="polite" hidden></p>
+  <section id="coach-advice" aria-label="コーチの助言" aria-live="polite" tabindex="0" hidden></section>
   <div id="action-splitter" role="separator" aria-orientation="horizontal" aria-label="下部パネルの高さ"
        aria-controls="action-area" tabindex="0" hidden></div>
   <div id="action-area" aria-label="試合操作">
@@ -330,11 +330,36 @@ function isPitcher(row) {
         (extractPitcherStats(row).G !== undefined || /^P=/.test(row[DEF_COL(1)] || ''));
 }
 
-function gradeRoll(value) {
+function gradeRollParts(value) {
     const tenths = Math.round(value * 10);
     const whole = Math.floor(tenths / 10);
-    const fraction = tenths - whole * 10;
-    return Math.max(0, Math.min(4, whole + Number(fraction > 0 && d10() <= fraction)));
+    return {whole, fraction:tenths - whole * 10};
+}
+
+const clampGrade = value => Math.max(0, Math.min(4, value));
+
+function gradeRoll(value) {
+    const {whole,fraction}=gradeRollParts(value);
+    return clampGrade(whole + Number(fraction > 0 && d10() <= fraction));
+}
+
+function effectivePitchGrade(value,fatigued,shock) {
+    return shock === 2 ? 0 : clampGrade(value - Number(fatigued) - Number(shock === 1));
+}
+
+function leftMatchup(pitcher,batter) {
+    return pitcher.arm.startsWith('左投') && (batter['利き腕'] || '').endsWith('左打');
+}
+
+function swingPitchModifiers(game,batter,pitcher,{
+    cautious=game.isCautious,squeezeCautious=game.isSqueezeCautious,endRun=false
+}={}) {
+    const relief=Number(pitcher.isRelief && !pitcher.facedBatters);
+    return {
+        tempG:Number(leftMatchup(pitcher,batter)) + relief - Number(Boolean(cautious)) +
+            Number(Boolean(game.startFailed || game.buntContinuation?.twoStrikes)) + Number(Boolean(endRun)),
+        tempC:Number(game.bases.every(Boolean)) + relief - Number(Boolean(squeezeCautious)) + Number(Boolean(endRun))
+    };
 }
 
 class PitcherState {
@@ -385,20 +410,8 @@ class PitcherState {
     }
     get staminaRemaining() { return this.S-this.inningsPitched-(this.form?.previousInnings||0); }
     get fatigued() { return this.staminaRemaining<0; }
-    get G() {
-        if (this.shock === 2) return 0;
-        let v = this.baseG + this.tempG;
-        if (this.fatigued) v--;
-        if (this.shock === 1) v--;
-        return Math.max(0, Math.min(4, v));
-    }
-    get C() {
-        if (this.shock === 2) return 0;
-        let v = this.baseC + this.tempC;
-        if (this.fatigued) v--;
-        if (this.shock === 1) v--;
-        return Math.max(0, Math.min(4, v));
-    }
+    get G() { return effectivePitchGrade(this.baseG + this.tempG,this.fatigued,this.shock); }
+    get C() { return effectivePitchGrade(this.baseC + this.tempC,this.fatigued,this.shock); }
     // §9.2.1 一時ショック状態チェック: 失点時D10で3以下→ショック
     shockExempt(inning) {
         return !this.fatigued && (this.isStarter && inning <= 3 && this.runsAllowed <= 3 ||
@@ -760,8 +773,7 @@ function injuryDays(player) {
 // ============================================================
 // AT-BAT / BUNT / STEAL
 // ============================================================
-function resolveAtBat(batter, pitcher, outs, runners) {
-    const roll = d100();
+function resolveAtBat(batter, pitcher, outs, runners, roll = d100()) {
     const g = pitcher.G;
     let hrVal = getVal(batter['HR'], g);
     if(hrVal !== -1) { if(pitcher.HR_mod==='*') hrVal--; if(pitcher.HR_mod==='**') hrVal++; }
@@ -879,6 +891,18 @@ function advanceForceBB(bases, batter) {
     if (!r1) return [[batter,r2,r3], 0];
     if (!r2) return [[batter,r1,r3], 0];
     return [[batter,r1,r2],Number(Boolean(r3)),r3?[r3]:[]];
+}
+
+const HIT_ADVANCE = {
+    HR:[4,4,4,4], '3H':[3,3,1,3], '3B':[3,3,1,3],
+    '2H+':[3,2,1,2], '2H':[2,2,1,2], '2B':[2,2,1,2],
+    '1H*':[2,2,1,1], '1H+':[1,2,1,1], '1H':[1,1,1,1], '1B':[1,1,1,1]
+};
+
+function advanceForHit(type,bases,batter) {
+    if (type==='BB' || type==='HBP') return advanceForceBB(bases,batter);
+    const moves=HIT_ADVANCE[type];
+    return moves ? advanceRunners(bases,batter,...moves) : null;
 }
 
 // ============================================================
@@ -1202,21 +1226,13 @@ class Game {
         }
     }
     applyHitResult(type, batter, text) {
-        const r=this.bases;
-        let nb,runs,scorers;
-        if(type==='HR'){
-            [nb,runs,scorers]=advanceRunners(r,batter,4,4,4,4);
+        const advance=advanceForHit(type,this.bases,batter);
+        if (!advance) return;
+        const [nb,runs,scorers]=advance;
+        if (type==='HR') {
             this.homeRuns.push(playerName(batter));
             this.hrEvents.push({id:String(batter.Index),name:displayName(batter),side:this.batSide,inning:this.inning,runs});
         }
-        else if(type==='3H'||type==='3B'){ [nb,runs,scorers]=advanceRunners(r,batter,3,3,1,3); }
-        else if(type==='2H+'){ [nb,runs,scorers]=advanceRunners(r,batter,3,2,1,2); }
-        else if(type==='2H'||type==='2B'){ [nb,runs,scorers]=advanceRunners(r,batter,2,2,1,2); }
-        else if(type==='1H*'){ [nb,runs,scorers]=advanceRunners(r,batter,2,2,1,1); }
-        else if(type==='1H+'){ [nb,runs,scorers]=advanceRunners(r,batter,1,2,1,1); }
-        else if(type==='1H'||type==='1B'){ [nb,runs,scorers]=advanceRunners(r,batter,1,1,1,1); }
-        else if(type==='BB'||type==='HBP'){ [nb,runs,scorers]=advanceForceBB(r,batter); }
-        else { return; }
         this.bases=nb;
         this.plateOutcome=type;
         const previousScore = this.scores[this.batSide];
@@ -1392,7 +1408,7 @@ class Game {
             }
         }
     }
-    substitute(side, lineupIndex, benchIndex) {
+    substitute(side, lineupIndex, benchIndex, label = '交代') {
         const lineup = this.lineups[side];
         const departing = lineup[lineupIndex];
         const incoming = this.benches[side].splice(benchIndex,1)[0];
@@ -1407,7 +1423,19 @@ class Game {
         if (side === this.batSide) {
             this.bases = this.bases.map(player => player === departing ? incoming : player);
         }
-        this.logAdd(`【交代】${playerName(departing)} → ${playerName(incoming)}`,'l-sub',side);
+        this.logAdd(`【${label}】${playerName(departing)} → ${playerName(incoming)}`,'l-sub',side);
+    }
+    pinchRunnerBases() {
+        if (this.gameOver || this.pending || this.isAuto || this.state!=='offense' ||
+            this.outs>=3 || !this.bench.length) return [];
+        return this.bases.flatMap((runner,index)=>runner && this.lineup.includes(runner) ? [index] : []);
+    }
+    pinchRunner(base,benchIndex) {
+        if (!this.pinchRunnerBases().includes(base) || !this.bench[benchIndex]) return false;
+        const runner=this.bases[base];
+        this.substitute(this.batSide,this.lineup.indexOf(runner),benchIndex,`代走・${base+1}塁`);
+        this.stealBlocked.delete(runner);
+        return true;
     }
     handleRarePlay(batter,isForward,isEndRun,rollStr='') {
         const play = table17(this.pitcher,batter,this.bases,this.dome);
@@ -1660,18 +1688,8 @@ class Game {
             return;
         }
         this.beginPitchingInning();
-        this.pitcher.resetTemp();
-        if (this.pitcher.arm.startsWith('左投') && (batter['利き腕'] || '').endsWith('左打')) this.pitcher.tempG++;
-        if (this.bases.every(Boolean)) this.pitcher.tempC++;
-        if (this.pitcher.isRelief && !this.pitcher.facedBatters) { this.pitcher.tempG++; this.pitcher.tempC++; }
-        if (this.isCautious) this.pitcher.tempG--;
-        if (this.isSqueezeCautious) this.pitcher.tempC--;
-        if (this.startFailed || this.buntContinuation?.twoStrikes) this.pitcher.tempG++;
-        if (isEndRun) {
-            this.pitcher.tempG++;
-            this.pitcher.tempC++;
-            this.endRunUsed = true;
-        }
+        Object.assign(this.pitcher,swingPitchModifiers(this,batter,this.pitcher,{endRun:isEndRun}));
+        if (isEndRun) this.endRunUsed=true;
 
         this.resolveSwing(batter,isForward,isEndRun);
     }
@@ -1978,7 +1996,8 @@ function renderLog() {
     feed.scrollTop=atEnd?feed.scrollHeight:scroll;
 }
 
-const ATTACK_ACTIONS=[['打つ','hit','bp'],['代打','pinch','bs'],['バント','bunt','bn'],['盗塁','steal_menu','bn'],['ヒットエンドラン','hr','bn']];
+const PINCH_RUN_ACTION=['代走','pinch_run','bs'];
+const ATTACK_ACTIONS=[['打つ','hit','bp'],['代打','pinch','bs'],['バント','bunt','bn'],['盗塁','steal_menu','bn'],['ヒットエンドラン','hr','bn'],PINCH_RUN_ACTION];
 const DEFENSE_ACTIONS=[['通常守備','def_normal','bp'],['前進守備','def_forward','bn'],['敬遠','def_ibb','bw'],['盗塁警戒','def_steal','bn'],['投手交代','def_pitcher','bs'],['野手交代','def_fielder','bs']];
 function actionHtml([label,action,cls],enabled=true) {
     return `<button type="button" class="ab ${esc(cls)}" data-action="${esc(action)}"${enabled?'':' disabled'}>${esc(label)}</button>`;
@@ -2002,7 +2021,7 @@ function renderButtons(buttons,owner=null,context='') {
         const listed=bats?ATTACK_ACTIONS:DEFENSE_ACTIONS;
         const onSide=owner===null ? (g.state==='defense'?g.defSide:g.batSide) : owner;
         const active=side===onSide && !((g.versusAI||g.onlineMatch)&&side!==assigned);
-        const menu=active && extras.some(([,action])=>/^(next$|final_report$|stop_auto$|choice:|defout:|defsub:|chpitch:|pinch:|steal:)/.test(action));
+        const menu=active && extras.some(([,action])=>/^(next$|final_report$|stop_auto$|choice:|defout:|defsub:|chpitch:|pinch:|prbase:|prsub:|steal:)/.test(action));
         const beforeDefense=!g.onlineMatch&&!g.versusAI && g.state==='defense' && owner===g.defSide && possible.has('pinch');
         const buttonsHtml=menu ? extras.map(button=>actionHtml(button)).join('') :
             listed.map(button=>{
@@ -2655,22 +2674,29 @@ function laterCPU(g,work) {
         if (gameInst===g && !g.gameOver) work();
     },350);
 }
+function cpuDefensePlan(g) {
+    const close=Math.abs(g.scores[0]-g.scores[1])<=1;
+    const forward=Boolean(g.bases[2] && g.outs<2 && close && g.inning>=6);
+    const cautious=!forward&&Boolean(g.bases[0] && !g.bases[1] && Number(g.bases[0].S2)>=80 && g.pitcher.G>0);
+    const profile=g.profiles?.[g.defSide];
+    const replace=g.pitcher.shock===2 || (g.pitcher.fatigued&&(!profile||g.inning>=profile.pen));
+    const reliever=g.canReplacePitcher() && replace ? g.pitchers[g.defSide].find(p=>!p.isUsed) : null;
+    const fieldingChange=profile?.lateDefense&&g.inning===8&&g.outs===0&&
+        g.scores[g.defSide]>g.scores[g.batSide]&&g.fielderChangeInning!==g.inning;
+    return {forward,cautious,reliever,fieldingChange};
+}
+
 function applyCpuDefense(g) {
     if (!g.waitingForCpuDefense) return;
     g.waitingForCpuDefense=false;
-    const close=Math.abs(g.scores[0]-g.scores[1])<=1;
-    g.isForward=Boolean(g.bases[2] && g.outs<2 && close && g.inning>=6);
-    g.isCautious=!g.isForward&&Boolean(g.bases[0] && !g.bases[1] && Number(g.bases[0].S2)>=80 && g.pitcher.G>0);
-    const profile=g.profiles?.[g.defSide];
-    const replace=g.pitcher.shock===2 || (g.pitcher.fatigued&&(!profile||g.inning>=profile.pen));
-    if (g.canReplacePitcher() && replace) {
-        const next=g.pitchers[g.defSide].find(p=>!p.isUsed);
-        if (next) {
-            g.replacePitcher(next);
-            updateUI();
-        }
+    const {forward,cautious,reliever,fieldingChange}=cpuDefensePlan(g);
+    g.isForward=forward;
+    g.isCautious=cautious;
+    if (reliever) {
+        g.replacePitcher(reliever);
+        updateUI();
     }
-    if(profile?.lateDefense&&g.inning===8&&g.outs===0&&g.scores[g.defSide]>g.scores[g.batSide]&&g.fielderChangeInning!==g.inning){
+    if(fieldingChange){
         PFBSeason.improveDefense(g);g.fielderChangeInning=g.inning;updateUI();
     }
     announceDefense(g);
@@ -2694,6 +2720,25 @@ function cpuAttack(g) {
         execAtBat('hit');
     }
 }
+function showPinchRunnerMenu(g,action,menuBack) {
+    const bases=g.pinchRunnerBases();
+    const back=['戻る',menuBack,'bn'];
+    if (action==='pinch_run') {
+        if (!bases.length) return false;
+        renderButtons([...bases.map(base=>[`${base+1}塁　${displayName(g.bases[base])}`,`prbase:${base}`,'bs']),
+            back],g.batSide,'代走を出す走者を選択');
+        return true;
+    }
+    const match=action.match(/^prbase:([0-2])$/);
+    if (!match || !bases.includes(Number(match[1]))) return false;
+    const base=Number(match[1]);
+    const candidates=g.bench.map((row,i)=>[
+        `${displayName(row)}（走${row['走']||'―'}・S1 ${row.S1||'―'}・S2 ${row.S2||'―'}）`,
+        `prsub:${base}:${i}`,'bs'
+    ]);
+    renderButtons([...candidates,['戻る','pinch_run','bn']],g.batSide,`${base+1}塁の代走を選択`);
+    return true;
+}
 function showOffenseMenu() {
     const g=gameInst;
     g.state='offense';
@@ -2704,6 +2749,7 @@ function showOffenseMenu() {
     }
     const btns=[ATTACK_ACTIONS[0]];
     if (g.bench.length && !g.offenseLocked) btns.push(ATTACK_ACTIONS[1]);
+    if (g.pinchRunnerBases().length) btns.push(PINCH_RUN_ACTION);
     if (g.canBunt(false) && !g.buntContinuation?.squeeze) btns.push(ATTACK_ACTIONS[2]);
     if (g.stealGroups().length) btns.push(ATTACK_ACTIONS[3]);
     if (g.canEndRun()) btns.push(ATTACK_ACTIONS[4]);
@@ -3044,6 +3090,13 @@ function doAction(action) {
         const logStart=g.log.length;
         g.runSteal(group);
         finishPlay(determineAnim(g.log.slice(logStart),playerName(g.batter),g.batIdx[g.batSide]+1));
+    } else if (action==='pinch_run' || action.startsWith('prbase:')) {
+        showPinchRunnerMenu(g,action,'cancel_offense');
+    } else if (action.startsWith('prsub:')) {
+        const match=action.match(/^prsub:([0-2]):(\d+)$/);
+        if (!match || !g.pinchRunner(Number(match[1]),Number(match[2]))) return;
+        updateUI();
+        showOffenseMenu();
     } else if (action === 'pinch') {
         const back=g.state==='defense'?'cancel':'cancel_offense';
         renderButtons([...g.bench.map((p,i)=>[displayName(p),`pinch:${i}`,'bs']),['戻る',back,'bn']],g.batSide,'代打を選択');
@@ -3293,9 +3346,9 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 <script src="pfb-season-ui.js?v=report-credit"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
-<script src="pfb-online-core.js"></script>
-<script src="pfb-online.js?v=judgment-details"></script>
-<script src="pfb-coach.js"></script>
+<script src="pfb-online-core.js?v=pinch-runner"></script>
+<script src="pfb-online.js?v=pinch-runner"></script>
+<script src="pfb-coach.js?v=coach-dialogue"></script>
 <script src="pfb-default-roster.js"></script>
 <script>void loadDefaultRoster();</script>
 </body>
