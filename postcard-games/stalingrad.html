@@ -23,6 +23,8 @@ aside h2{margin:0 0 7px}#availableUnits{display:grid;grid-template-columns:repea
 #cardDialog .inspect-row{display:flex;gap:6px;flex-wrap:wrap;margin:.4rem 0 1rem}#cardDialog .card{display:inline-grid;place-items:center;min-width:44px;min-height:55px;background:#fffdf4;border:1px solid #b2a58b;border-radius:5px;font-weight:700}#cardDialog .red{color:#a42824}
 #cardDialog .card.has-ability,.strike-cards .card.has-ability{width:auto;padding:.25rem .55rem;font-size:.95rem}
 .battle-card-abilities{display:flex;flex-wrap:wrap;justify-content:center;gap:.2rem .6rem;margin-top:4px;font-size:.76rem}
+#actions .unit-orders{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex-basis:100%}
+#actions .face-command{border-color:var(--accent)}
 </style>
 <main><header><h1>ラッテン・クリーク スターリングラード</h1><span class="sides">ドイツ：人間 ／ ソ連：AI</span><button id="inspectCards">自分のカード</button><button id="help">ルール</button><button id="restart">やり直す</button></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span id="score"></span></span><small id="variant"></small></div>
@@ -472,6 +474,31 @@ function aiStep(){
 }
 function btn(txt,fn,main=false){const b=document.createElement('button');b.type='button';b.textContent=txt;b.onclick=fn;if(main)b.className='main';return b}
 function put(...a){$('actions').append(btn(...a))}
+function renderUnitOrders(unit,destinations){
+ const row=document.createElement('div');row.className='unit-orders';
+ row.setAttribute('role','group');row.setAttribute('aria-label','作戦コマンド');
+ const move=btn(moving?'移動を取り消す':'移動',()=>{moving=!moving;held=null;render()},true);
+ const battle=btn('戦闘',battleHere,true);
+ move.disabled=!destinations?.size;
+ battle.disabled=!unit||!at(unit.h).some(enemy=>enemy.side!==unit.side);
+ battle.title='同じエリアの敵を攻撃';
+ row.append(move,battle);
+ for(const card of s.hands[s.side].filter(c=>c.r>=11)){
+  const name=eventFor(card,s.side);
+  const command=btn(cardLabel(card,s.side),()=>{
+   if(isStrike(name)||name==='チュイコフ将軍')beginEvent(card);else useEvent(card);
+  });
+  command.className='face-command';
+  command.disabled=!unit;
+  if(unit&&isStrike(name)){
+   const noTarget=!strikeTargets(unit,name).length;
+   command.disabled=noTarget||!s.deck.length&&!s.drop.length;
+   if(command.disabled){const reason=document.createElement('small');reason.textContent=noTarget?'範囲内に目標なし':'判定用カードなし';command.append(reason);}
+  }
+  row.append(command);
+ }
+ $('actions').append(row);
+}
 function inspectCards(){
  const dialog=$('cardDialog'),select=$('inspectUnit');
  const own=s.units.filter(t=>t.side===G&&areas[t.h]);
@@ -569,7 +596,7 @@ function render(){
  else if(s.phase==='battleAfter'){put('盤面に反映して進む',continueAfterBattle,true);}
  else if(s.side===R&&s.phase!=='end'){$('hint').textContent='ソ連軍AIが'+({act:'作戦を選んでいます',refill:'手札を補充しています',atk:'攻撃カードを選んでいます',def:'防御を選んでいます',raise:'レイズを検討しています',loss:'損害と退却を判断しています',scatter:'残った部隊の退却を判断しています',continueBattle:'攻撃を続けるか判断しています',tie:'再戦を判断しています'}[s.phase]||'行動しています')+'…';}
  else if(s.phase==='act'){
-  if(!t){$('hint').textContent='行動する部隊を1個選んでください。';put('手番をパス',()=>endAct(true));}
+  if(!t){$('hint').textContent='行動する部隊を1個選んでください。';renderUnitOrders();put('手番をパス',()=>endAct(true));}
   else if(cover){
    $('hint').textContent=areas[cover][2]+' に進むには手札またはステップ1枚を捨てます。';
    showCards(cardOptions(t.side,t),x=>costMove(t,cover,x));put('取り消し',()=>{cover='';render()});
@@ -580,7 +607,7 @@ function render(){
   }else{
    $('hint').textContent=t.n+' ｜ '+areas[t.h][2];
    const destinations=reachable(t);
-   if(destinations.size)put(moving?'移動を取り消す':'移動',()=>{moving=!moving;held=null;render()},true);
+   renderUnitOrders(t,destinations);
    if(moving){
     const row=document.createElement('div');row.className='move-destinations';
     for(const h of destinations){const b=btn(areas[h][2],()=>moveTo(h));b.title=at(h).some(v=>v.side!==G)?'進入して戦闘':s.control[h]!==G?'移動にカード1枚必要':'移動';row.append(b);}
@@ -589,19 +616,6 @@ function render(){
    const tank=by('T-34');
    if(t.side===R&&t!==tank&&!tank.done&&tank.h===t.h)put(s.companion?'T-34の同行を解除':'T-34を同行',()=>{s.companion=!s.companion;render()});
    if((t.h==='DEP'||t.h==='SOV')&&t.st.length<t.max&&(!s.sovietReplenish||t.side===R))put('部隊のカードを1枚補充し終了',()=>{replenish(t,1);t.done=true;endAct()});
-   if(at(t.h).some(v=>v.side!==t.side))put('同じエリアの敵を攻撃',battleHere,true);
-   for(const c of s.hands[s.side].filter(c=>c.r>=11)){
-    const name=eventFor(c,s.side);
-    const action=btn(cardLabel(c,s.side),()=>{
-     if(isStrike(name)||name==='チュイコフ将軍')beginEvent(c);else useEvent(c);
-    });
-    if(isStrike(name)){
-     const noTarget=!strikeTargets(t,name).length;
-     action.disabled=noTarget||!s.deck.length&&!s.drop.length;
-     if(action.disabled){const why=document.createElement('small');why.textContent=noTarget?'範囲内に目標なし':'判定用カードなし';action.append(why);}
-    }
-    $('actions').append(action);
-   }
    if(held){
     const n=eventFor(held,s.side);$('hint').textContent=n+' の対象を選択';
     if(n==='チュイコフ将軍'){put('次の戦闘に使用',()=>useEvent(held));for(const v of s.units.filter(v=>v.side===R&&v.done&&areas[v.h]))put(v.n+' を表に戻す',()=>useEvent(held,v));}
