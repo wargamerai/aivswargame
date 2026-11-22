@@ -48,41 +48,13 @@ function stepPlay() {
   E.G = P.real; PLAY = null;
   P.then(P.r);
 }
-document.addEventListener('keydown', ev => { if ((ev.key === ' ' || ev.key === 'Enter') && PLAY && !$('lb') && !$('log-reader').open && $('over').style.display === 'none') { ev.preventDefault(); stepPlay(); } });
+document.addEventListener('keydown', ev => { if ((ev.key === ' ' || ev.key === 'Enter') && PLAY && !$('lb') && $('over').style.display === 'none') { ev.preventDefault(); stepPlay(); } });
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ===== 文字の大きさとログ =====
 var FS = (() => { try { return +localStorage.getItem('pb_fs') || 17; } catch (e) { return 17; } })();
 function applyFs() { document.documentElement.style.setProperty('--fs', FS + 'px'); }
 function zoom(k) { FS = Math.max(12, Math.min(28, FS + k * 2)); try { localStorage.setItem('pb_fs', FS); } catch (e) {} applyFs(); }
-function saveLog(log = ALLLOG, filename = `pattons_best_log_${E.G ? E.G.days : 0}.txt`) {
-  const text = log.map(entry => entry.t).join('\n');
-  const url = URL.createObjectURL(new Blob([GameReportLimit.text(text)], { type: 'text/plain;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  try { link.click(); } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
-}
-function chooseLogFile() {
-  const input = $('log-file-input');
-  input.value = '';
-  input.click();
-}
-$('log-file-input').addEventListener('change', async event => {
-  const file = event.currentTarget.files[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    $('log-reader-title').textContent = file.name;
-    const content = $('log-reader-text');
-    content.textContent = text;
-    $('log-reader-close').textContent = L('閉じる', 'Close');
-    if (!$('log-reader').open) $('log-reader').showModal();
-    content.scrollTop = 0;
-  } catch {
-    alert(L('ログファイルを読み込めませんでした。', 'Could not read the log file.'));
-  }
-});
 applyFs();
 var JUDGE_ON = true;
 function setJudgeOn(v) { JUDGE_ON = v; E.setJudge(v); }
@@ -93,7 +65,10 @@ function judgeBox() {
   const j = $('jlist'); j.scrollTop = j.scrollHeight;
 }
 function saveJudge() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([GameReportLimit.text(JUDGELOG.join('\n'))], { type: 'text/plain;charset=utf-8' })); a.download = 'pattons_best_dice.txt'; a.click(); }
-function renderLogHead() { $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> <button onclick="saveLog()">${L('ログ保存', 'Save log')}</button> <button onclick="chooseLogFile()">${L('ログを読み込む', 'Open log file')}</button> <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`; } // 自動で進めるは、ログの見出しへ（ユーザーの指示 2026-11-08）
+function renderLogHead() {
+  const saveFile = !E.G.day && !PLAY ? `<button onclick="exportGameFile()">${L('セーブファイルを保存', 'Save game file')}</button>` : '';
+  $('logh').innerHTML = `<b>${L('戦闘ログ', 'Battle log')}</b> ${saveFile} <button onclick="judgeBox()">${L('判定の記録', 'Dice record')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> <label class="small"><input type="checkbox" ${AUTO ? 'checked' : ''} onchange="AUTO=this.checked;if(AUTO)stepPlay()"> ${L('自動で進める', 'Auto')}</label>`;
+}
 // ===== 開始の画面 =====
 function startScreen() {
   $('over').style.display = 'flex';
@@ -106,7 +81,9 @@ function startScreen() {
     'A solo campaign. Your crew grows with each day of combat, and better tanks arrive as the war goes on. You need not know the rules: just give orders to your crew. But the dead do not come back.')}</p>
   <p style="color:var(--mute);font-size:.9em">${L('原作: Patton\'s Best（Avalon Hill, 1987）のルールをもとに作りました。', 'Based on the rules of Patton\'s Best (Avalon Hill, 1987).')}</p>
   <p>${L('あなたの名前', 'Your name')}: <input id="fName" value="${L('スミス', 'Smith')}" size="12"> ${L('戦車の名前', 'Tank name')}: <input id="fTank" value="${L('ロージー', 'Rosie')}" size="12"></p>
-  <p><button class="go" onclick="newGame()">${L('出撃する', 'Roll out')}</button> <button onclick="loadGame()">${L('保存データを読み込む', 'Load saved game')}</button> <button onclick="chooseLogFile()">${L('ログを読み込む', 'Open log file')}</button></p></div>`;
+  <p><button class="go" onclick="newGame()">${L('出撃する', 'Roll out')}</button> <button onclick="chooseSaveFile()">${L('セーブファイルを読み込む', 'Open game file')}</button></p>
+  <p><button onclick="loadGame()">${L('ブラウザの自動保存から再開', 'Resume browser autosave')}</button> <button onclick="exportGameFile(true)">${L('自動保存をファイルに保存', 'Export browser autosave')}</button></p>
+  <p id="save-file-message" role="alert"></p></div>`;
 }
 function newGame() {
   E.newCampaign({ name: $('fName').value || 'Smith', tank: $('fTank').value || 'Rosie' });
@@ -130,25 +107,74 @@ function save() {
     return false;
   }
 }
-function loadGame() {
-  try {
-    const g = JSON.parse(localStorage.getItem('pb_save'));
-    if (!g) {
-      alert(L('このブラウザには保存データがありません。', 'This browser has no saved game.'));
-      return;
-    }
-    E.G = g;
-    g.phase = g.over ? 'over' : 'calendar';
-    g.day = null;
-    g.bb = null;
-    $('over').style.display = 'none';
-    if (g.over) showOver();
-    render();
-  } catch (e) {
-    startScreen();
-    alert(L('保存データを読み込めませんでした。', 'Could not load the saved game.'));
-  }
+const CAMPAIGN_FILE_FORMAT = 'pattons-best-campaign-v1';
+function validCampaign(g) {
+  return g && !g.day && !g.bb && Number.isInteger(g.tankId) && Object.hasOwn(PB.TANKS, g.tankId) &&
+    typeof g.tankName === 'string' && Number.isInteger(g.rank) && g.rank >= 0 && g.rank <= 4 &&
+    Number.isInteger(g.calIdx) && g.calIdx >= 0 && g.calIdx <= PB.CAL.length &&
+    [g.totalVP, g.days, g.battles].every(Number.isFinite) &&
+    ['C', 'G', 'L', 'D', 'A'].every(pos => typeof g.crew?.[pos]?.name === 'string' && Number.isFinite(g.crew[pos].rating)) &&
+    Array.isArray(g.medals) && g.medals.every(medal => typeof medal === 'string') &&
+    Array.isArray(g.wounded) && Array.isArray(g.journal) && g.kills && typeof g.kills === 'object' &&
+    (!g.over || typeof g.over.why === 'string');
 }
+function saveFileMessage(message) {
+  const status = $('save-file-message');
+  if (status) status.textContent = message;
+  else alert(message);
+}
+function readAutosave() {
+  const game = JSON.parse(localStorage.getItem('pb_save'));
+  if (!game) throw new Error(L('このブラウザには自動保存がありません。', 'There is no autosave in this browser.'));
+  return game;
+}
+function resumeCampaign(g) {
+  if (!validCampaign(g)) throw new Error(L('セーブデータを読み込めませんでした。', 'Could not load the saved game.'));
+  E.G = g;
+  g.phase = g.over ? 'over' : 'calendar';
+  g.day = null;
+  g.bb = null;
+  $('over').style.display = 'none';
+  if (g.over) showOver();
+  render();
+}
+function loadGame() {
+  try { resumeCampaign(readAutosave()); }
+  catch (error) { saveFileMessage(error.message); }
+}
+function downloadGameFile(game) {
+  const blob = new Blob([JSON.stringify({ format: CAMPAIGN_FILE_FORMAT, game })], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `pattons_best_save_day_${game.days}.json`;
+  try { link.click(); } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+}
+function exportGameFile(fromBrowser = false) {
+  try {
+    const g = fromBrowser ? readAutosave() : E.G;
+    if (!validCampaign(g) || PLAY) throw new Error(L('セーブファイルを作成できませんでした。', 'Could not create a save file.'));
+    downloadGameFile(g);
+  } catch (error) { saveFileMessage(error.message); }
+}
+function chooseSaveFile() {
+  const input = $('save-file-input');
+  input.value = '';
+  input.click();
+}
+$('save-file-input').addEventListener('change', async event => {
+  const file = event.currentTarget.files[0];
+  if (!file) return;
+  const screen = $('save-file-message');
+  try {
+    const saved = JSON.parse((await file.text()).replace(/^\uFEFF/, ''));
+    if (screen !== $('save-file-message') || $('over').style.display !== 'flex') return;
+    if (saved?.format !== CAMPAIGN_FILE_FORMAT) throw new Error();
+    resumeCampaign(saved.game);
+  } catch {
+    saveFileMessage(L('パットンのセーブファイル（.json）を選んでください。', 'Choose a Patton save file (.json).'));
+  }
+});
 
 // ===== 上の帯 =====
 function renderBar() {
@@ -157,7 +183,7 @@ function renderBar() {
   const date = d ? `${d.c.year}/${d.c.mon}/${d.c.day}` : (c && c.mon ? `${c.year}/${c.mon}/${c.day}` : L('再編', 'Refit'));
   const w = d ? weatherStr(d.w) : '';
   $('bar').innerHTML = `<b>Patton's Best</b><span>${date}</span>${d ? `<span>${clockStr(d.time)} / ${L('日没', 'sunset')} ${clockStr(d.set)}</span><span>${w}</span><span class="s">${{ A: L('進撃', 'Advance'), B: L('戦闘', 'Battle'), C: L('反撃阻止', 'Counterattack') }[d.sc]}・${L('抵抗', 'resist.')} ${{ L: L('軽', 'L'), M: L('中', 'M'), H: L('重', 'H') }[d.res]}</span>` : ''}
-    <span class="s">${g.tankName}（${t.model}）</span><span>${['軍曹', '二等軍曹', '少尉', '中尉', '大尉'].map((x, i) => [x, ['Sgt.', 'S/Sgt.', '2Lt.', '1Lt.', 'Capt.'][i]])[g.rank][LANG === 'en' ? 1 : 0]} ${esc(g.crew.C.name)}</span><span class="s">${L('戦車の累計', 'Tank total')} ${g.totalVP}VP</span>${g.medals.length ? `<span class="s">🎖${g.medals.length}</span>` : ''}
+    <span class="s">${esc(g.tankName)}（${t.model}）</span><span>${['軍曹', '二等軍曹', '少尉', '中尉', '大尉'].map((x, i) => [x, ['Sgt.', 'S/Sgt.', '2Lt.', '1Lt.', 'Capt.'][i]])[g.rank][LANG === 'en' ? 1 : 0]} ${esc(g.crew.C.name)}</span><span class="s">${L('戦車の累計', 'Tank total')} ${g.totalVP}VP</span>${g.medals.length ? `<span class="s">🎖${g.medals.length}</span>` : ''}
     <span style="margin-left:auto"><button onclick="zoom(-1)" title="${L('文字を小さく', 'Smaller text')}">A−</button> <button onclick="zoom(1)" title="${L('文字を大きく', 'Larger text')}">A＋</button> <button onclick="helpBox()">${L('遊び方', 'Help')}</button></span>`;
 }
 const weatherStr = w => { const a = []; if (w.fog) a.push(L('霧', 'Fog')); if (w.fall) a.push(L('降雪', 'Snow')); if (w.deep) a.push(L('深雪', 'Deep snow')); else if (w.ground) a.push(L('積雪', 'Ground snow')); if (w.mud) a.push(L('泥濘', 'Mud')); if (w.rain) a.push(L('雨', 'Rain')); if (w.overcast) a.push(L('曇り', 'Overcast')); return a.join('・') || L('晴れ', 'Clear'); };
@@ -567,6 +593,7 @@ function afterAct(r) {
     g.bb = null;
     g.phase = g.over ? 'over' : 'calendar';
     saved = save();
+    try { downloadGameFile(g); } catch { /* The save button can retry the download. */ }
     showDebrief(r.debrief, saved);
   }
   if (g.phase === 'over' || g.over) showOver(saved);
@@ -703,25 +730,22 @@ function saveReport(i, pngButton) {
 }
 function saveLastReport(pngButton) { return saveReport(REPORTS.length - 1, pngButton); }
 function saveAllReports() { if (!REPORTS.length) return alert(L('まだレポートがありません', 'No reports yet')); downloadHtml('pattons_best_campaign.html', REPORTS.map(reportHtml).join('')); }
-function saveOperationLog(report) {
-  saveLog(report.log, `pattons_best_log_${report.date.replace(/\//g, '-')}.txt`);
-}
 function showReportPreview(report) {
   const overlay = $('over');
   overlay.innerHTML = `<div class="box report-preview">
     <p><button class="go" data-close-report>${L('閉じる', 'Close')}</button>
-    <button data-save-operation-log>${L('この作戦のログを保存', 'Save this operation log')}</button></p>
+    <button data-save-game>${L('セーブファイルを保存', 'Save game file')}</button></p>
     <iframe sandbox title="${L('戦闘レポート', 'After Action Report')}"></iframe>
   </div>`;
   overlay.querySelector('iframe').srcdoc = reportDocument(reportHtml(report));
   overlay.querySelector('[data-close-report]').onclick = () => { overlay.style.display = 'none'; };
-  overlay.querySelector('[data-save-operation-log]').onclick = () => saveOperationLog(report);
+  overlay.querySelector('[data-save-game]').onclick = () => exportGameFile();
   overlay.style.display = 'flex';
 }
 function autosaveMessage(saved) {
   if (saved === undefined) return '';
   const message = saved
-    ? L('自動保存しました。同じブラウザの開始画面で「保存データを読み込む」を選べます。', 'Autosaved. Choose Load saved game on the start screen in this browser.')
+    ? L('自動保存しました。同じブラウザの開始画面で「ブラウザの自動保存から再開」を選べます。', 'Autosaved. Choose Resume browser autosave on the start screen.')
     : L('自動保存できませんでした。', 'Could not autosave.');
   return `<p role="status">${message}</p>`;
 }
@@ -733,19 +757,16 @@ function showDebrief(r, saved) {
   inlineBox(`<h2>${r.ko ? L('戦車を失った', 'Tank lost') : L('夕方の報告', 'Evening report')}</h2>
   <p>${L('戦車の戦果', 'Your tank')}: ${r.your} / ${L('味方', 'Friendly forces')}: ${r.fr} / ${L('地域', 'Territory')}: ${r.terr}</p><p><b>${L('合計', 'Total')} ${r.total} VP — ${r.total > 0 && !r.ko ? L('今日は勝った', 'A victory today') : L('今日は負けた', 'A defeat today')}</b></p>
   ${r.ko ? `<p>${L(`新しい戦車: #${g.tankId} ${E.tank().model}`, `New tank: #${g.tankId} ${E.tank().model}`)} ${tankChoice()}</p>` : ''}${r.promoted ? `<p style="color:var(--good)">${L('昇進した！', 'Promoted!')}</p>` : ''}${r.medal ? `<p style="color:var(--good)">🎖 ${r.medal}</p>` : ''}
-  ${g.medals.length ? `<p style="color:var(--mute);font-size:.9em">${L('勲章', 'Medals')}: ${g.medals.join('、')}</p>` : ''}
+  ${g.medals.length ? `<p style="color:var(--mute);font-size:.9em">${L('勲章', 'Medals')}: ${esc(g.medals.join('、'))}</p>` : ''}
   ${autosaveMessage(saved)}
   <p><button class="go" onclick="closeOver()">${L('続ける', 'Continue')}</button> <button onclick="saveLastReport()">${L('レポート HTML', 'Report HTML')}</button> <button onclick="saveLastReport(this)">${L('レポート PNG', 'Report PNG')}</button></p>`);
-  if (report) {
-    showReportPreview(report);
-    try { saveOperationLog(report); } catch { /* The report stays available if the download fails. */ }
-  }
+  if (report) showReportPreview(report);
 }
 function showOver(saved) {
   const g = E.G, o = g.over; if (!o) return;
   const kills = Object.keys(g.kills).map(k => `${L((PB.UNIT[k] || {}).name || k, (PB.UNIT[k] || {}).en || k)} ×${g.kills[k]}`).join('、') || L('なし', 'none');
   const reports = REPORTS.length ? `<button onclick="saveLastReport()">${L('最後のレポート HTML', 'Last report HTML')}</button> <button onclick="saveLastReport(this)">${L('最後のレポート PNG', 'Last report PNG')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> ` : '';
-  inlineBox(`<h2>${o.win ? L('終戦', 'War\'s end') : L('戦いの終わり', 'The end')}</h2><p>${o.why}</p><p>${L(`出撃 ${g.days}日、戦闘 ${g.battles}回、累計 ${g.totalVP}VP`, `${g.days} days in action, ${g.battles} battles, ${g.totalVP} VP`)}</p><p>${L('撃破', 'Kills')}: ${esc(kills)}</p>${g.medals.length ? `<p>${L('勲章', 'Medals')}: ${g.medals.join('、')}</p>` : ''}
+  inlineBox(`<h2>${o.win ? L('終戦', 'War\'s end') : L('戦いの終わり', 'The end')}</h2><p>${esc(o.why)}</p><p>${L(`出撃 ${g.days}日、戦闘 ${g.battles}回、累計 ${g.totalVP}VP`, `${g.days} days in action, ${g.battles} battles, ${g.totalVP} VP`)}</p><p>${L('撃破', 'Kills')}: ${esc(kills)}</p>${g.medals.length ? `<p>${L('勲章', 'Medals')}: ${esc(g.medals.join('、'))}</p>` : ''}
   ${autosaveMessage(saved)}
   <p>${o.canContinue ? `<button class="go" onclick="E.continueAsReplacement();closeOver();save()">${L('次の車長として続ける', 'Continue as the replacement')}</button> ` : ''}${reports}<button onclick="try{localStorage.removeItem('pb_save')}catch(e){};location.reload()">${L('最初から', 'New campaign')}</button></p>`);
 }
