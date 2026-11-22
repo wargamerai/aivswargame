@@ -30,7 +30,7 @@ select{font:inherit;color:inherit;background:#213b47;border:1px solid #517480;bo
 <footer data-text="bisCredit">盤面・駒：提供された国際通信社のハガキ版</footer>
 </main>
 <dialog id="rules" aria-labelledby="rule-title"><header><h2 id="rule-title" data-text="rules">ルール</h2><button id="closeRules" data-text="close">閉じる</button></header>
-<p data-text="bisGuide">イギリス海軍を操作します。艦を選択して移動・航空索敵を行い、ビスマルクを追ってください。ドイツ軍の移動と砲撃目標はAIが決めます。</p><img id="ruleSheet" alt="原版ハガキ裏面のルール抜粋"></dialog>
+<p data-text="bisGuide">イギリス海軍を操作します。艦を選択して移動・航空索敵を行い、ビスマルクを追ってください。ドイツ軍の移動と砲撃目標はAIが決めます。</p><p data-text="bisBrestRule"></p><img id="ruleSheet" alt="原版ハガキ裏面のルール抜粋"></dialog>
 <dialog id="actionDialog" class="action-dialog" aria-labelledby="actionTitle">
  <div id="actionTurn" class="event-turn"></div><h2 id="actionTitle"></h2><p id="actionSummary" role="status"></p>
  <div id="actionRows"></div><button id="actionContinue" class="main">結果を確認</button>
@@ -70,7 +70,7 @@ search|空母で索敵|Carrier search|Recherche aérienne|Trägersuche|Ricognizi
 combat|戦闘|Combat|Combat|Gefecht|Combattimento|Combate|战斗|전투|Бой
 result|ターン結果|Turn results|Bilan du tour|Rundenergebnis|Esito del turno|Resultado del turno|回合结果|턴 결과|Итоги хода
 end|対局終了|Game over|Partie terminée|Spielende|Partita conclusa|Fin de la partida|对局结束|대국 종료|Конец игры
-gWin|ドイツ海軍の勝利|German victory|Victoire allemande|Deutscher Sieg|Vittoria tedesca|Victoria alemana|德国海军获胜|독일 해군 승리|Победа Германии
+gWin|独軍の勝利：6VP以上でブレスト入港|German victory: Brest reached with at least 6 VP|Victoire allemande : Brest atteint avec au moins 6 PV|Deutscher Sieg: Brest mit mindestens 6 SP erreicht|Vittoria tedesca: Brest raggiunta con almeno 6 PV|Victoria alemana: llegada a Brest con al menos 6 PV|德国获胜：以至少6胜利点抵达布雷斯特|독일 승리: 6VP 이상으로 브레스트 입항|Победа Германии: «Бисмарк» в Бресте с 6 или более ПО
 bWin|イギリス海軍の勝利|British victory|Victoire britannique|Britischer Sieg|Vittoria britannica|Victoria británica|英国海军获胜|영국 해군 승리|Победа Британии
 gReason|ドイツ軍は勝利に必要な15点に到達しました。|Germany reached the 15 points needed to win.|L’Allemagne atteint les 15 points nécessaires pour gagner.|Deutschland erreicht die nötigen 15 Punkte.|La Germania raggiunge i 15 punti necessari per vincere.|Alemania alcanza los 15 puntos necesarios para ganar.|德国达到获胜所需的15分。|독일이 승리에 필요한 15점을 얻었습니다.|Германия набрала необходимые для победы 15 очков.
 bReason|ドイツ軍は勝利に必要な15点に届きませんでした。|Germany fell short of the 15 points needed to win.|L’Allemagne n’atteint pas les 15 points nécessaires pour gagner.|Deutschland verfehlt die nötigen 15 Punkte.|La Germania non raggiunge i 15 punti necessari per vincere.|Alemania no alcanza los 15 puntos necesarios para ganar.|德国未达到获胜所需的15分。|독일이 승리에 필요한 15점을 얻지 못했습니다.|Германия не набрала необходимых для победы 15 очков.
@@ -229,6 +229,7 @@ publicHex|位置公開|Position revealed|Position révélée|Position aufgedeckt
 privateHex|位置は非公開|Position remains hidden|Position encore secrète|Position bleibt geheim|Posizione nascosta|Posición oculta|位置保密|위치 비공개|Позиция остаётся скрытой
 bisWinSunk|英軍の勝利：ビスマルク撃沈|British victory: Bismarck sunk|Victoire britannique : Bismarck coulé|Britischer Sieg: Bismarck versenkt|Vittoria britannica: Bismarck affondata|Victoria británica: Bismarck hundido|英国获胜：击沉俾斯麦号|영국 승리: 비스마르크 격침|Победа Британии: «Бисмарк» потоплен
 bisWinTime|英軍の勝利：18ターン経過|British victory: 18 turns elapsed|Victoire britannique : 18 tours écoulés|Britischer Sieg: 18 Runden abgelaufen|Vittoria britannica: trascorsi 18 turni|Victoria británica: han pasado 18 turnos|英国获胜：18回合结束|영국 승리: 18턴 경과|Победа Британии: истекли 18 ходов
+bisBrestRule|この版では、独軍は6VP以上を獲得し、ターン終了時にブレスト港にいれば勝利します。|In this version, Germany wins if Bismarck ends the turn in Brest with at least 6 VP.|Dans cette version, l’Allemagne gagne si le Bismarck termine le tour à Brest avec au moins 6 PV.|In dieser Version gewinnt Deutschland, wenn die Bismarck die Runde mit mindestens 6 SP in Brest beendet.|In questa versione la Germania vince se la Bismarck termina il turno a Brest con almeno 6 PV.|En esta versión, Alemania gana si el Bismarck termina el turno en Brest con al menos 6 PV.|此版本中，德国获得至少6胜利点且俾斯麦号在回合结束时位于布雷斯特港即可获胜。|이 버전에서는 독일이 6VP 이상을 얻고 턴 종료 시 비스마르크가 브레스트에 있으면 승리합니다.|В этой версии Германия побеждает, если к концу хода «Бисмарк» находится в Бресте и набрано не менее 6 ПО.
 bisVoyage|ビスマルク号の航跡|Bismarck’s route|Route du Bismarck|Route der Bismarck|Rotta della Bismarck|Ruta del Bismarck|俾斯麦号航迹|비스마르크 항적|Маршрут «Бисмарка»
 bisGuide|イギリス海軍を操作します。艦を選択して移動・航空索敵を行い、ビスマルクを追ってください。ドイツ軍の移動と砲撃目標はAIが決めます。|Command the British fleet. Select a ship to move or search for Bismarck; only released carriers can search. The AI moves Bismarck and chooses its gunnery targets.|Commandez la flotte britannique. Sélectionnez un navire pour le déplacer ou rechercher le Bismarck. Seuls les porte-avions libérés peuvent fouiller. L’IA contrôle le Bismarck.|Führe die britische Flotte. Wähle ein Schiff zum Bewegen oder Suchen; nur freigegebene Träger dürfen suchen. Die KI steuert die Bismarck.|Comanda la flotta britannica. Scegli una nave per muovere o cercare. Solo le portaerei sbloccate possono perlustrare. L’IA controlla la Bismarck.|Dirige la flota británica. Selecciona un buque para mover o buscar. Solo pueden buscar los portaaviones habilitados. La IA dirige al Bismarck.|指挥英国舰队，选择舰船移动或搜索。仅已解锁的航母可以搜索。AI控制俾斯麦号。|영국 함대를 지휘하세요. 함선을 선택해 이동하거나 수색합니다. 이동 제한이 해제된 항모만 수색할 수 있습니다. 비스마르크는 AI가 조종합니다.|Командуйте британским флотом. Выбирайте корабли для движения и поиска. Поиск ведут только разблокированные авианосцы. «Бисмарком» управляет ИИ.
 `.trim().split('\n')){
@@ -262,18 +263,19 @@ const carrier=f=>['Victorious','Ark'].includes(f.name),dice=()=>1+Math.floor(Mat
 let s,selected,eventTimer,showGermanPosition=false;
 function reset(){
  clearInterval(eventTimer);for(const id of ['actionDialog','endDialog'])if($(id).open)$(id).close();
- s={turn:1,lastConvoyRaid:null,plannedConvoy:false,headingToBrest:false,phase:'setup',pos:null,ge:4,gv:0,bv:0,trail:[],voyage:[],moves:[],seen:null,tracked:[],enabled:[],moved:[],scanned:[],air:[],log:[],fleet:seeds.map(([name,a,d,v,h,where],id)=>({name,a,d,v,h,max:h,where,id}))};
+ s={turn:1,lastConvoyRaid:null,plannedConvoy:false,phase:'setup',pos:null,ge:4,gv:0,bv:0,trail:[],voyage:[],moves:[],seen:null,tracked:[],enabled:[],moved:[],scanned:[],air:[],log:[],fleet:seeds.map(([name,a,d,v,h,where],id)=>({name,a,d,v,h,max:h,where,id}))};
  selected=null;showGermanPosition=false;render();
 }
 function log(...event){s.log.unshift({turn:s.turn,event});s.voyage.at(-1)?.events.push(event)}
 function startAI(){
  s.pos=['A5','A6','B7'][Math.floor(Math.random()*3)];orders();
 }
-const mayRaidConvoy=()=>s.gv<6&&!s.tracked.length&&s.lastConvoyRaid!==s.turn-1;
-const convoyPoints=roll=>roll===6?3:roll>=4?2:0;
 const brest='F7';
 const turnLimit=18;
-const leadsOnPoints=()=>s.gv>s.bv;
+const germanVictoryPoints=6;
+const hasVictoryPoints=()=>s.gv>=germanVictoryPoints;
+const mayRaidConvoy=()=>!hasVictoryPoints()&&!s.tracked.length&&s.lastConvoyRaid!==s.turn-1;
+const convoyPoints=roll=>roll===6?3:roll>=4?2:0;
 function distancesTo(goals,mayRouteThrough){
  const distances=new Map();
  for(const goal of goals)for(const [hex,path] of paths(goal,Object.keys(locations).length,mayRouteThrough)){
@@ -286,22 +288,19 @@ function orders(){
  s.moved=[];s.moves=[];s.air=[];s.scanned=[];s.seen=null;
  const occupied=new Set(live().map(f=>f.where));
  const warships=new Set(live().filter(f=>f.name!=='Dummy').map(f=>f.where));
- const canWinAtBrest=leadsOnPoints();
- const mayEnter=h=>h===brest?canWinAtBrest:h!=='D8'&&!britishPorts.has(h)&&!warships.has(h);
+ const returning=hasVictoryPoints();
+ const mayEnter=h=>h===brest?returning:h!=='D8'&&!britishPorts.has(h)&&!warships.has(h);
  const speed=geSpeed();
  const possible=paths(s.pos,speed,mayEnter);
  const mayRouteThrough=h=>h===s.pos||mayEnter(h);
- const brestDistances=canWinAtBrest?distancesTo([brest],mayRouteThrough):new Map();
+ const brestDistances=returning?distancesTo([brest],mayRouteThrough):new Map();
  const distanceToBrest=brestDistances.get(s.pos)??Infinity;
  const remainingMovement=(turnLimit-s.turn)*speed;
  const patrols=live().filter(f=>unlocked(f)&&f.name!=='Dummy').map(f=>{
   const moves=reach(f.where,f.v);
   return {f,moves,air:carrier(f)?new Set([...moves].flatMap(adj)):new Set()};
  });
- const reinforcementsAfterRaid=s.lastConvoyRaid!==null&&patrols.some(({f})=>f.id>=2);
- const home=distanceToBrest<=remainingMovement+speed&&
-  (s.headingToBrest||reinforcementsAfterRaid||possible.has(brest)||s.ge<=2||s.turn>=12);
- s.headingToBrest=home;
+ const home=distanceToBrest<=remainingMovement+speed;
  const distances=home?brestDistances:distancesTo([...routes].filter(mayEnter),mayRouteThrough);
  const danger=h=>patrols.reduce((sum,{f,moves,air})=>{
   const hull=carrier(f)?2.1:2.3+pow(f)*.55;
@@ -325,6 +324,7 @@ function orders(){
 const geSpeed=()=>s.ge>=3?2:1;
 const by=id=>s.fleet.find(f=>f.id===id);
 const live=()=>s.fleet.filter(f=>f.h);
+const localBattleShips=()=>live().filter(f=>f.where===s.pos&&f.name!=='Dummy');
 const unlocked=f=>f.id<2||f.name==='Dummy'||s.enabled.includes(f.id)||s.tracked.includes(f.id);
 const britishPorts=new Set(['C6','D6','F1','F4']);
 const canSearch=f=>s.phase==='search'&&f?.h&&carrier(f)&&unlocked(f)&&!s.scanned.includes(f.id)&&adj(f.where).length>0;
@@ -337,6 +337,7 @@ function commitMove(path){
  s.phase='move';selected=null;render();
 }
 function find(){
+ if(s.phase!=='move')return;
  const local=live().filter(f=>f.where===s.pos);
  if(!local.length){
   log('seaSearch',{key:'noContact'});s.phase='search';selected=nextCarrier();
@@ -369,15 +370,15 @@ function discover(local,airScout){
 }
 function search(h){
  const f=by(selected);
- if(!canSearch(f)||!adj(f.where).includes(h))return;
+ if($('actionDialog').open||!canSearch(f)||!adj(f.where).includes(h))return;
  s.scanned.push(f.id);
  if(h===s.pos){s.air.push(f.id);discover([],f);return}
  log('searchedAt',{key:f.name},h,{key:'noContact'});selected=nextCarrier();render();
  presentAction(tr('search')+' · '+tr('noContact'),tr('searchedAt',bisName(f.name),h),[],()=>{},tr('searchBack'));
 }
 function readyForBattle(releaseAt){
+ if((s.phase!=='release'&&s.phase!=='search')||$('actionDialog').open)return;
  if(s.phase==='release'){
-  if($('actionDialog').open)return;
   const hexes=releaseHexes();
   if(hexes.size){
    if(!hexes.has(releaseAt))return;
@@ -385,11 +386,12 @@ function readyForBattle(releaseAt){
    log('releaseLog',releaseAt);
   }
  }
- const local=live().filter(f=>f.where===s.pos&&f.name!=='Dummy');
- const air=live().filter(f=>carrier(f)&&unlocked(f)&&(!s.scanned.includes(f.id)||s.air.includes(f.id))&&(f.where===s.pos||adj(f.where).includes(s.pos))&&s.seen===s.pos);
- s.air=[...new Set([...s.air,...air.map(f=>f.id)])];
- if(local.length||s.air.length){s.phase='battle';render();return}
- s.phase='convoy';selected=null;render();
+ if(s.air.length){
+  s.air=live().filter(f=>carrier(f)&&unlocked(f)&&(!s.scanned.includes(f.id)||s.air.includes(f.id))&&
+   (f.where===s.pos||adj(f.where).includes(s.pos))).map(f=>f.id);
+ }
+ s.phase=s.air.length?'airBattle':localBattleShips().length?'battle':'convoy';
+ selected=null;render();
 }
 const pow=f=>Math.max(0,f.a-(f.max===2&&f.h===1?2:0));
 function hit(target,n){
@@ -409,13 +411,24 @@ function volley(ship,attacker,attack,a,d,t){
  log(attack,{key:attacker},'→',{key:target},rolls.join(' · '),...outcome);
  return {ship,label,rolls,hit:d,detail:tr('hitOn',d),result:outcome.map(translated).join(' · ')};
 }
+function battleSummary(startHull){
+ return s.seen+' · '+tr('Bismarck')+' · '+tr(!s.ge?'sunk':s.ge<startHull?'damage':'unscratched')+' · '+tr('stages',s.ge);
+}
+function fightAir(){
+ if(s.phase!=='airBattle'||$('actionDialog').open)return;
+ const startHull=s.ge;
+ const rows=s.air.map(by).map(f=>volley(f.name,f.name,'air',pow(f),6,'GE'));
+ presentAction(tr('air'),battleSummary(startHull),rows,()=>{
+  if(!s.ge||!localBattleShips().length){finishTurn();return}
+  s.phase='battle';render();
+ });
+}
 function fight(target){
  if(s.phase!=='battle'||$('actionDialog').open)return;
  const rows=[],startHull=s.ge;
- const air=s.air.map(by).filter(f=>f?.h);
- for(const f of air)rows.push(volley(f.name,f.name,'air',pow(f),6,'GE'));
- const surface=live().filter(f=>f.where===s.pos&&f.name!=='Dummy'&&!carrier(f));
- const t=target==null?live().find(f=>f.where===s.pos&&f.name!=='Dummy'):by(target);
+ const local=localBattleShips();
+ const surface=local.filter(f=>!carrier(f));
+ const t=local.find(f=>f.id===target)??local[0];
  const fired=new Set();
  for(let a=5;a>=1;a--){
   if(!s.ge)break;
@@ -426,12 +439,11 @@ function fight(target){
   if(geFires){fired.add('GE');rows.push(volley('GE'+s.ge,'Bismarck','gun',a,t.d,t.id))}
   for(const args of simultaneous)rows.push(volley(...args));
  }
- const result=tr('Bismarck')+' · '+tr(!s.ge?'sunk':s.ge<startHull?'damage':'unscratched')+' · '+tr('stages',s.ge);
- presentAction(tr('battleOutcome'),s.seen+' · '+result,rows,finishTurn,tr('ack'),true);
+ presentAction(tr('gun'),battleSummary(startHull),rows,finishTurn,tr('ack'),true);
 }
 function finishTurn(){
  if(!s.ge)s.winner='bisWinSunk';
- else if(s.gv>=6||(s.pos===brest&&leadsOnPoints()))s.winner='gWin';
+ else if(s.pos===brest&&hasVictoryPoints())s.winner='gWin';
  else if(s.turn>=turnLimit)s.winner='bisWinTime';
  if(s.winner){s.phase='end';s.seen=s.pos;render();showEnd();return}
  s.phase='result';render();
@@ -591,7 +603,7 @@ function presentAction(heading,summary,rows,continuation,acknowledge=tr('ack'),s
  },100);
 }
 const instructions={setup:'bisSetupTip',move:'bisMoveTip',search:'searchTip',release:'releaseTip',battle:'confirmCombat',convoy:'',result:'resultTip'};
-const phases={setup:'bisSetup',move:'britain',search:'search',release:'release',battle:'combat',convoy:'gFleet',result:'result',end:'end'};
+const phases={setup:'bisSetup',move:'britain',search:'search',release:'release',airBattle:'air',battle:'gun',convoy:'gFleet',result:'result',end:'end'};
 function render(){
  for(const n of document.querySelectorAll('[data-text]'))n.textContent=tr(n.dataset.text);
  document.documentElement.lang=locale;document.title=tr('bisTitle');
@@ -600,7 +612,8 @@ function render(){
  inspect.setAttribute('aria-pressed',String(showGermanPosition));
  inspect.textContent=tr('inspect')+' · '+tr(showGermanPosition?'on':'off');
  $('chart').alt=tr('map');$('ruleSheet').alt=tr('rules');$('endRoute').setAttribute('aria-label',tr('bisVoyage'));
- $('turn').textContent=tr('turn',s.turn)+' / '+turnLimit;$('phase').textContent=tr(phases[s.phase]);$('score').textContent=factionScore(s);$('hint').textContent=tr(s.winner||instructions[s.phase]);
+ $('turn').textContent=tr('turn',s.turn)+' / '+turnLimit;$('phase').textContent=tr(phases[s.phase]);$('score').textContent=factionScore(s);
+ $('hint').textContent=s.phase==='airBattle'?tr('airCount',s.air.length):tr(s.winner||instructions[s.phase]);
  $('hint').classList.toggle('release-required',s.phase==='release');
  const buttons=$('actions');buttons.replaceChildren();
  const put=(...args)=>buttons.append(button(...args));
@@ -608,8 +621,9 @@ function render(){
   case'setup':put(tr('confirmSetup'),startAI,true);put(tr('undoSetup'),undoMove);buttons.lastChild.disabled=!s.moves.length;break;
   case'move':put(tr('finishMove'),find,true);put(tr('undo'),undoMove);buttons.lastChild.disabled=!s.moves.length;break;
   case'search':put(tr('finishSearch'),readyForBattle);break;
-  case'battle':put(tr('combat'),()=>{
-   const target=live().filter(f=>f.where===s.pos&&f.name!=='Dummy').map(f=>[f,(7-f.d)*(1+pow(f)*.12)*(f.h===1?1.2:1)+(carrier(f)?.25:0)]).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  case'airBattle':put(tr('rollAir'),fightAir,true);break;
+  case'battle':put(tr('gun'),()=>{
+   const target=localBattleShips().map(f=>[f,(7-f.d)*(1+pow(f)*.12)*(f.h===1?1.2:1)+(carrier(f)?.25:0)]).sort((a,b)=>b[1]-a[1])[0]?.[0];
    fight(target?.id??null);
   },true);break;
   case'convoy':put(tr('resolveGerman'),convoy,true);break;
