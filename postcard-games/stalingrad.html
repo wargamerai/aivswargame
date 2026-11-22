@@ -325,6 +325,9 @@ function refill(){
 const crossings=['Fact','Ten','Red'];
 const priorityArea=h=>h==='Mam'||crossings.includes(h);
 const maxRearResupplyUnits=2;
+const guardStepTarget=4;
+const isSovietGuard=t=>t.side===R&&t.type==='inf'&&t.val===4;
+const guardNeedsSteps=t=>isSovietGuard(t)&&t.st.length<guardStepTarget;
 const rearDistance=(()=>{
  const distance={SOV:0},queue=['SOV'];
  for(const from of queue)for(const h of edges(from)){
@@ -353,7 +356,7 @@ function aiArtilleryTarget(unit,objective){
  const value=t=>artilleryValue(t)+(t.h===objective?8:0);
  return strikeTargets(unit,'砲撃').sort((a,b)=>value(b)-value(a))[0];
 }
-const needsRearRefill=t=>t.h==='SOV'&&t.st.length<t.max;
+const needsRearRefill=t=>t.h==='SOV'&&(guardNeedsSteps(t)||t.st.length<t.max);
 function aiExhaustedUnits(){
  const priority=t=>needsRearRefill(t)?(t.st.length?2:3):Number(Boolean(t.rejoining));
  return s.units.filter(t=>t.side===R&&t.done&&areas[t.h]&&!t.isolate)
@@ -380,7 +383,7 @@ function aiUseSupport(unit,objective){
  return used;
 }
 function aiRecoveryZone(unit){
- if(!unit.max||unit.st.length)return null;
+ if(!unit.max||(unit.st.length&&!guardNeedsSteps(unit)))return null;
  if(unit.h==='SOV')return 'SOV';
  const safe=[...reachable(unit,{resupply:true})].filter(h=>rearDistance[h]<rearDistance[unit.h]);
  return safe.sort((a,b)=>rearDistance[a]-rearDistance[b])[0];
@@ -391,7 +394,8 @@ function aiMovementValue(unit,h,enemies){
  const guarded=at(h).some(t=>t.side===R&&!t.isolate);
  const goalBonus=objective?(s.control[h]!==R?9:guarded?1:6):0;
  const mamayevBonus=h==='Mam'&&(s.control[h]!==R||enemies.length)?14:0;
- return aiAreaValue(h)-aiAreaValue(unit.h)*.75+(enemies.length?-3:0)+(unit.val>=4?1.4:0)
+ const attackValue=enemies.length?(isSovietGuard(unit)&&unit.st.length>=guardStepTarget?7:-3):0;
+ return aiAreaValue(h)-aiAreaValue(unit.h)*.75+attackValue+(unit.val>=4?1.4:0)
   +goalBonus+mamayevBonus-(leavesGoal?7:0)+(unit.rejoining&&objective?6:0);
 }
 function aiPlan(units,{canReplenish=true}={}){
@@ -400,8 +404,9 @@ function aiPlan(units,{canReplenish=true}={}){
  const canRefill=canReplenish&&(s.deck.length||s.drop.length);
  const canSendToRear=s.units.filter(t=>t.rearResupply&&areas[t.h]).length<maxRearResupplyUnits;
  for(const t of units){
-  if(t.replenishFirst&&needsRearRefill(t)){
-   if(canRefill)candidates.push({t,replenish:true,value:31});
+  const rebuilding=guardNeedsSteps(t);
+  if((t.replenishFirst||rebuilding)&&needsRearRefill(t)){
+   if(canRefill)candidates.push({t,replenish:true,value:rebuilding?34:31});
    continue;
   }
   const rear=t.h==='SOV'||t.rearResupply||canSendToRear?aiRecoveryZone(t):null;
@@ -410,13 +415,14 @@ function aiPlan(units,{canReplenish=true}={}){
    else candidates.push({t,h:rear,rearResupply:true,value:26-rearDistance[rear]});
    continue;
   }
+  if(rebuilding)continue;
   const options=aiCards(t,false);
   const hit=options.some(o=>!molotov.includes(o.c)&&o.c.r<=power(t,false)+2*molotov.length);
   const enemyHere=at(t.h).some(v=>v.side===G);
   if(enemyHere&&(hit||priorityArea(t.h)&&options.length)){
    candidates.push({t,h:t.h,value:aiAreaValue(t.h)+(t.h==='Mam'?14:4)});
   }
-  if(canRefill&&t.h==='SOV'&&!t.rejoining&&t.st.length<t.max)candidates.push({t,replenish:true,value:6+(t.max-t.st.length)*2});
+  if(canRefill&&!t.rejoining&&needsRearRefill(t))candidates.push({t,replenish:true,value:6+(t.max-t.st.length)*2});
   if(t.n==='T-34')continue;
   for(const h of reachable(t)){
    if(!t.rejoining&&s.aiMoves?.[t.n]?.includes(h))continue;
@@ -435,7 +441,8 @@ function aiAction(){
  const support=Boolean(s.hands[G].length&&sovietEvents('狙撃兵').length ||
   aiExhaustedUnits().length&&sovietEvents('チュイコフ将軍').length);
  let unit=preferred?.t;
- if(!preferred?.t.replenishFirst&&sovietEvents('砲撃').length&&(s.deck.length||s.drop.length||support)&&(!unit||!aiArtilleryTarget(unit))){
+ const guardRefill=preferred?.replenish&&isSovietGuard(preferred.t);
+ if(!guardRefill&&!preferred?.t.replenishFirst&&sovietEvents('砲撃').length&&(s.deck.length||s.drop.length||support)&&(!unit||!aiArtilleryTarget(unit))){
   const [shot]=units.map(t=>({t,target:aiArtilleryTarget(t)})).filter(({target})=>target)
    .sort((a,b)=>artilleryValue(b.target)-artilleryValue(a.target));
   if(shot)unit=shot.t;
@@ -453,7 +460,7 @@ function aiAction(){
  const {t,h}=plan;
  if(h&&h!==t.h){s.aiMoves??={};(s.aiMoves[t.n]??=[]).push(t.h,h);}
  if(plan.replenish){
-  if(!t.st.length||t.replenishFirst)t.rejoining=true;
+  if(!t.st.length||t.replenishFirst||isSovietGuard(t))t.rejoining=true;
   t.replenishFirst=false;
   replenish(t,1);t.done=true;note(R+' '+t.n+' がステップを1枚補充');endAct();return;
  }
