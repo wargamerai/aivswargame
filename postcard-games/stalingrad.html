@@ -21,6 +21,8 @@ aside h2{margin:0 0 7px}#availableUnits{display:grid;grid-template-columns:repea
 .battle-heading{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;text-align:left}.battle-heading button{flex:none}.strike-dialog{width:min(620px,95vw);padding:clamp(12px,3vw,24px);text-align:center}.strike-dialog h2{font-size:clamp(1.45rem,4vw,2.1rem);margin:.22rem 0}.strike-cards{display:flex;justify-content:center;gap:16px;margin:.7rem 0}.strike-cards figure{margin:0;display:grid;gap:.25rem;justify-items:center}.strike-cards .card{display:grid;place-items:center;width:56px;height:68px;border-radius:6px;font-size:1.4rem}.strike-cards figcaption{font-size:.78rem;color:#dce6df}.strike-dialog #eventClose{min-height:44px}.strike-dialog p{margin:.4rem 0}
 #actions button small{display:block}#cards button.card small{border-top:1px solid #c9a777;margin-top:2px;padding-top:2px}
 #cardDialog .inspect-row{display:flex;gap:6px;flex-wrap:wrap;margin:.4rem 0 1rem}#cardDialog .card{display:inline-grid;place-items:center;min-width:44px;min-height:55px;background:#fffdf4;border:1px solid #b2a58b;border-radius:5px;font-weight:700}#cardDialog .red{color:#a42824}
+#cardDialog .card.has-ability,.strike-cards .card.has-ability{width:auto;padding:.25rem .55rem;font-size:.95rem}
+.battle-card-abilities{display:flex;flex-wrap:wrap;justify-content:center;gap:.2rem .6rem;margin-top:4px;font-size:.76rem}
 </style>
 <main><header><h1>ラッテン・クリーク スターリングラード</h1><span class="sides">ドイツ：人間 ／ ソ連：AI</span><button id="inspectCards">自分のカード</button><button id="help">ルール</button><button id="restart">やり直す</button></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span id="score"></span></span><small id="variant"></small></div>
@@ -228,6 +230,10 @@ function eventFor(c,side){
  if(side===G)return black(c)?['空軍支援','突撃砲','戦闘工兵'][c.r-11]:'砲撃';
  return !black(c)?['狙撃兵','モロトフ・カクテル','チュイコフ将軍'][c.r-11]:'砲撃';
 }
+function cardLabel(card,side){
+ const ability=eventFor(card,side);
+ return ability?suit(card)+'（'+ability+'）':suit(card);
+}
 const isStrike=name=>name==='砲撃'||name==='空軍支援';
 function strikeTargets(unit,name){
  return s.units.filter(t=>t.side!==unit.side&&areas[t.h]&&!['DEP','SOV'].includes(t.h)
@@ -264,8 +270,9 @@ function showStrike(event,result){
   const box=$(id),img=new Image();img.src=assets[unit.n];img.alt='';
   box.replaceChildren(img,unit.side+' '+unit.n);
  }
- for(const [id,value] of [['eventPlayedCard',event],['eventDrawnCard',card]]){
-  const box=$(id);box.textContent=suit(value);box.classList.toggle('red',!black(value));
+ for(const [id,value,side] of [['eventPlayedCard',event,caster.side],['eventDrawnCard',card]]){
+  const box=$(id);box.textContent=side?cardLabel(value,side):suit(value);
+  box.classList.toggle('red',!black(value));box.classList.toggle('has-ability',Boolean(side));
  }
  $('eventThreshold').textContent='目標の戦闘力 '+base+(terrain?' ／ 市街地修正 '+(terrain>0?'+':'')+terrain:'')+' ／ 命中に必要な値 '+threshold+' 以上';
  $('eventReason').textContent=reason;
@@ -423,7 +430,8 @@ function inspectCards(){
    for(const card of cards){
     const face=document.createElement('span');
     face.className='card '+(black(card)?'black':'red');
-    face.textContent=suit(card);row.append(face);
+    face.classList.toggle('has-ability',card.r>=11);
+    face.textContent=cardLabel(card,G);row.append(face);
    }
   }
  };
@@ -438,7 +446,7 @@ function showCards(opts,fn,discard=false){
   if(source==='step')heading.title='この部隊が持つカード。戦闘や損害の支払いなどに使います（原版の「ステップ」）。';
   row.append(heading);
   for(const o of available){
-   const c=o.c||o,b=btn(suit(c),()=>fn(o));b.className='card '+(black(c)?'black':'red');
+   const c=o.c||o,b=btn(cardLabel(c,s.side),()=>fn(o));b.className='card '+(black(c)?'black':'red');
    if(discard){const label=document.createElement('small');label.textContent='捨てる';b.append(label);}
    row.append(b);
   }
@@ -475,15 +483,19 @@ function renderCombat(){
   if(unit){const img=new Image();img.src=assets[unit.n];img.alt='';fighter.append(img,unit.n+' · 戦闘力 '+power(unit,unit===d));}
   else fighter.textContent='防御部隊の選択待ち';
   const stack=document.createElement('div');stack.className='played';
+  const abilities=document.createElement('div');abilities.className='battle-card-abilities';
   const pile=(b.shown||b.cards)[side];
   pile.forEach((card,i)=>{
    const visible=reveal||side===G,n=document.createElement('div');n.className='battle-card';
    if(!visible)n.classList.add('hidden-card');else if(!black(card))n.classList.add('red');
    if(i===pile.length-1)n.classList.add('latest');
-   n.textContent=visible?suit(card):'◆';n.title=visible?(i?'レイズ':'最初のカード')+' · '+suit(card):'裏向きのカード';stack.append(n);
+   n.textContent=visible?suit(card):'◆';n.title=visible?(i?'レイズ':'最初のカード')+' · '+cardLabel(card,side):'裏向きのカード';stack.append(n);
+   if(visible&&card.r>=11){const label=document.createElement('span');label.textContent=cardLabel(card,side);abilities.append(label);}
   });
   const count=document.createElement('div');count.className='battle-card-count';count.textContent=pile.length?pile.length+'枚'+(pile.length>1?'（レイズ '+(pile.length-1)+'回）':''):'カード未提出';
-  area.append(heading,fighter,stack,count);root.append(area);
+  area.append(heading,fighter,stack,count);
+  if(abilities.childElementCount)area.append(abilities);
+  root.append(area);
  }
  if(!dialog.open)dialog.showModal();
 }
@@ -523,7 +535,7 @@ function render(){
    if(at(t.h).some(v=>v.side!==t.side))put('同じエリアの敵を攻撃',battleHere,true);
    for(const c of s.hands[s.side].filter(c=>c.r>=11)){
     const name=eventFor(c,s.side);
-    const action=btn(suit(c)+' '+name,()=>{
+    const action=btn(cardLabel(c,s.side),()=>{
      if(isStrike(name)||name==='チュイコフ将軍')beginEvent(c);else useEvent(c);
     });
     if(isStrike(name)){
