@@ -346,21 +346,23 @@ const BulgeRules = (() => {
   function moveChits(unit) {
     return unit.support.filter(id => {
       const effect=chit(id)?.move;
-      return effect && (effect!=='ignoreZoc' || !unit.usedSupport.includes(id));
+      return effect && (effect!=='ignoreZoc' ||
+        (!unit.usedSupport.includes(id) && !unit.revealedSupport?.includes(id)));
     });
   }
-  function canDeclareInfiltration(state, unit, support) {
+  function canDeclareMovementSupport(state, unit, support) {
     return ['move','reaction'].includes(state.phase) && actor(state)==='german' &&
-      unit?.side==='german' && unit.hex && unit.movement && !unit.disrupted &&
-      (!state.peiper || (state.peiper.stage==='done' && state.peiper.unit!==unit.id &&
-        !state.trails.some(trail=>trail.id===unit.id))) &&
-      !state.infiltration?.[unit.id] && unit.support.includes(support) && chit(support)?.move==='infiltrate' &&
+      unit?.side==='german' && unit.hex && unit.movement && !unit.disrupted && !unit.marker &&
+      (!state.peiper || (state.peiper.stage==='done' && state.peiper.unit!==unit.id)) &&
+      !state.trails.some(trail=>trail.id===unit.id) &&
+      !state.infiltration?.[unit.id] && !state.trojanMovement?.[unit.id] &&
+      ['infiltrate','ignoreZoc'].includes(chit(support)?.move) && moveChits(unit).includes(support) &&
       (state.phase!=='reaction' || !zoc(state,'german').has(unit.hex));
   }
   function canUsePeiper(state, unit) {
     return !state.peiper && ['move','reaction'].includes(state.phase) && actor(state)==='german' &&
       unit?.side==='german' && unit.hex && unit.movement && !unit.disrupted &&
-      unit.support.some(id=>id.startsWith('g-peiper:')) && !state.infiltration?.[unit.id] &&
+      unit.support.some(id=>id.startsWith('g-peiper:')) && !state.infiltration?.[unit.id] && !state.trojanMovement?.[unit.id] &&
       !state.trails.some(trail=>trail.id===unit.id);
   }
   function peiperTargets(state, id) {
@@ -409,7 +411,10 @@ const BulgeRules = (() => {
     if (state.phase === 'highbeam' && !state.highbeamUnits.includes(id)) return out;
     if (unit.group === 'RS' && !state.flags.monty) return out;
     if (state.phase === 'reaction' && side === 'allied' && state.flags.greif === state.turn) return out;
-    if (!['normal','mechanized'].includes(mode) || (!peiperLeg && support && !moveChits(unit).includes(support))) return out;
+    const trojan=state.trojanMovement?.[id];
+    if (trojan && (support!==trojan || !unit.support.includes(trojan))) return out;
+    if (!['normal','mechanized'].includes(mode) ||
+        (!peiperLeg && support && support!==trojan && !moveChits(unit).includes(support))) return out;
     if (repairBridge && (!['move','reaction'].includes(state.phase) || mode!=='normal' ||
         chit(support)?.move!=='river')) return out;
     const effect = repairBridge ? null : chit(support)?.move;
@@ -845,6 +850,7 @@ const BulgeRules = (() => {
     state.phase=phase;
     delete state.phaseActions;
     delete state.infiltration;
+    delete state.trojanMovement;
     delete state.peiper;
     delete state.recoveryUndo;
     delete state.supportDraw;
@@ -1470,12 +1476,18 @@ const BulgeRules = (() => {
         state.events.splice(state.events.indexOf(action.chit),1);
         state.phaseActions=(state.phaseActions ?? 0)+1;
         return true;
-      case 'declare-infiltration': {
-        if (!canDeclareInfiltration(state,unit,action.chit)) return false;
+      case 'declare-movement-support': {
+        if (!canDeclareMovementSupport(state,unit,action.chit)) return false;
+        if (chit(action.chit).move==='ignoreZoc') {
+          (state.trojanMovement ??= {})[unit.id]=action.chit;
+          unit.usedSupport.push(action.chit);
+          log(state,`${unit.name}：トロイの木馬旅団を公開。このフェイズの移動では敵ZOCを無視します。`);
+          return true;
+        }
         const die=roll(state,6)+1;
         (state.infiltration ??= {})[unit.id]={chit:action.chit,die};
         if (die===6) drop(state,unit,action.chit);
-        log(state,`${unit.name}：浸透移動の出目 ${die}。${die===6 ? '浸透失敗、移動なし。' : `移動力 ${die}。`}`);
+        log(state,`${unit.name}：浸透移動の出目 ${die}。${die===6 ? '失敗。移動不可、チット返却。' : `成功。移動力 ${die}。`}`);
         return true;
       }
       case 'start-peiper': return startPeiper(state,action);
@@ -1600,7 +1612,7 @@ const BulgeRules = (() => {
   }
   return { create, apply, actor, enemy, sideName, phaseNames, map, neighbors, terrainName, city, river, riverTerrain, ridge, forest, unitZoc,
     unitCoverage, isEncircled,
-    onMap, at, unitById, chit, chitImage, repairSupportOwnership, source, lines, zoc, moveChits, canDeclareInfiltration, canUsePeiper, peiperTargets, peiperRoutes, transportableSupport, returnableSupport, movementOptions, previewMoves, offRoadForest, roadLinks,
+    onMap, at, unitById, chit, chitImage, repairSupportOwnership, source, lines, zoc, moveChits, canDeclareMovementSupport, canUsePeiper, peiperTargets, peiperRoutes, transportableSupport, returnableSupport, movementOptions, previewMoves, offRoadForest, roadLinks,
     placements, eligiblePlacements, previewReinforcements, upcomingAlliedReinforcements, supportTargets, automaticSupport, supportPlacementStatus, alliedSupportTarget, dummyReserve, removableDummy, distance, finalVictoryCities,
     eventOptions, setupBridgeOptions, setupPlacementRequired, canHoldCapturedSupport, battleCandidates, validateAttacks,
     battleInfo, awaitingBattleDecision, possibleSupport, defaultSupport, combatProfile, inflictsUnitDamage, decisiveAttack, suggestedDie, damageFor, advanceCandidates, ratioColumn, germanCaptured, germanCityCounts };

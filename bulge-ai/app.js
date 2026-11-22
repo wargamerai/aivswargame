@@ -536,6 +536,12 @@
     const result = R.apply(state, {...command, side: R.actor(state), revision: state.revision});
     if (!result.ok) return note(result.error, true);
 
+    if (command.type === 'declare-movement-support' && movePlan.some(order => order.unit === command.unit)) {
+      const remaining = movePlanWithout(command.unit);
+      if (!remaining) return;
+      movePlan = remaining;
+    }
+
     if (!emptyPhaseConfirmed && skipsEmptyPhase(command, before)) {
       byId('empty-phase-title').textContent = emptyPhaseTitle(before);
       return confirmAction(byId('empty-phase-dialog'), () => {
@@ -589,7 +595,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       byId('battle-overview').scrollTop = 0;
       return;
     }
-    if (command.type === 'declare-infiltration') {
+    if (command.type === 'declare-movement-support') {
       peiperDraft = false;
       message = null;
       render();
@@ -728,15 +734,22 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     render();
   }
 
-  function returnMove(id) {
-    if (!moving() || !movePlan.some(order => order.unit === id)) return;
+  function movePlanWithout(id) {
     const remaining = movePlan.filter(order => order.unit !== id);
     const revised = R.previewMoves(state, remaining);
     if (revised.rejected.length) {
       const names = revised.rejected.map(order => nameOf(order.unit)).join('、');
-      return note(`${names}の移動が成立しなくなります。先にそちらの移動を変更または取消してください。`, true);
+      note(`${names}の移動が成立しなくなります。先にそちらの移動を変更または取消してください。`, true);
+      return null;
     }
-    movePlan = revised.valid;
+    return revised.valid;
+  }
+
+  function returnMove(id) {
+    if (!moving() || !movePlan.some(order => order.unit === id)) return;
+    const remaining = movePlanWithout(id);
+    if (!remaining) return;
+    movePlan = remaining;
     peiperDraft = false;
     germanMovement = {mode: 'normal', support: null, repairBridge: false};
     selected = id;
@@ -769,15 +782,15 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
     if (!board) return destinations;
     if (peiperDraft || state.peiper?.stage === 'second') return R.peiperRoutes(board, selected);
     const unit = R.unitById(board, selected);
-    const infiltrating = board.infiltration?.[selected]?.chit;
-    const choices = infiltrating ? [infiltrating] : [null, ...R.moveChits(unit)
+    const declared = board.infiltration?.[selected]?.chit ?? board.trojanMovement?.[selected];
+    const choices = declared ? [declared] : [null, ...R.moveChits(unit)
       .filter(id => R.chit(id).move !== 'infiltrate')];
     const index = movePlan.findIndex(order => order.unit === selected);
     const hasLaterMoves = index >= 0 && index < movePlan.length - 1;
     const weight = route => Number(route.lost) * 1000 + route.excess.length * 30 +
       Number(Boolean(route.support)) * 11 + route.cost - Number(route.repairBridge) * 22;
     if (unit.side === playerSide) {
-      const options = infiltrating ? {support: infiltrating} : germanMovement;
+      const options = declared ? {support: declared} : germanMovement;
       for (const route of R.movementOptions(board, selected, options).values()) {
         if (!hasLaterMoves || !R.previewMoves(state, movementPlanWith(route, index)).rejected.length)
           destinations.set(route.hex, route);
@@ -1268,6 +1281,17 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
   }
 
   function renderMovement(panel, actions, moveBase) {
+    for (const [id, {die}] of Object.entries(state.infiltration ?? {})) {
+      const outcome = die === 6 ? '失敗。移動不可、チット返却。' : `成功。移動力 ${die}、敵ZOCと地形効果を無視。`;
+      const result = element('p', `${nameOf(id)}　浸透移動の出目 ${die}。${outcome}`, 'result');
+      result.setAttribute('role', 'status');
+      panel.append(result);
+    }
+    for (const id of Object.keys(state.trojanMovement ?? {})) {
+      const result = element('p', `${nameOf(id)}　トロイの木馬旅団を公開。このフェイズは敵ZOCを無視。`, 'result');
+      result.setAttribute('role', 'status');
+      panel.append(result);
+    }
     const peiper = state.peiper;
     if (['attack', 'second'].includes(peiper?.stage)) {
       const attacking = peiper.stage === 'attack';
@@ -1285,20 +1309,28 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
       const unit = R.unitById(projection.state, selected);
       panel.append(element('h3', `${unit.name} · ${unit.hex}`));
       const infiltration = state.infiltration?.[unit.id];
-      if (infiltration) {
-        const outcome = infiltration.die === 6 ? '移動できません。チットを消費しました。'
-          : `移動力 ${infiltration.die}。敵ZOCと地形効果を無視します。`;
-        const result = element('p', null, 'result');
-        result.append(element('strong', `浸透移動の出目 ${infiltration.die}`), document.createElement('br'), outcome);
-        result.setAttribute('role', 'status');
-        panel.append(result);
-        if (infiltration.die < 6 && moveBase)
+      const trojan = state.trojanMovement?.[unit.id];
+      if (infiltration || trojan) {
+        if (infiltration?.die !== 6 && moveBase)
           panel.append(element('p', range.size ? '色の付いた移動先をクリックしてください。'
             : '移動できるヘクスはありません。', 'hint'));
       }
-      if (moveBase && !unit.disrupted && !infiltration) {
+      if (moveBase && !unit.disrupted && !infiltration && !trojan) {
         const controls = element('div', null, 'controls');
         const originalUnit = R.unitById(state, unit.id);
+        const hasDraft = movePlan.some(order => order.unit === unit.id);
+        const moves = R.moveChits(originalUnit);
+        for (const [effect, label] of [
+          ['infiltrate', '浸透移動を判定（ダイス1個）'],
+          ['ignoreZoc', 'トロイの木馬旅団を公開して使用'],
+        ]) {
+          const id = moves.find(id => R.chit(id).move === effect);
+          if (!id || !R.canDeclareMovementSupport(state, originalUnit, id)) continue;
+          controls.append(button(hasDraft ? `移動案を変更：${label}` : label,
+            () => step({type: 'declare-movement-support', unit: unit.id, chit: id})));
+        }
+        if (originalUnit.support.some(id => R.chit(id).move === 'ignoreZoc' && !moves.includes(id)))
+          panel.append(element('p', '公開済みのトロイの木馬旅団は戦車系支援として使用できます。', 'hint'));
         const peiperSupport = R.canUsePeiper(projection.state, unit);
         if (unit.side === playerSide && !peiperDraft) {
           const mover = R.unitById(moveBase, unit.id);
@@ -1308,7 +1340,7 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
             germanMovement = {...germanMovement, mode: value, repairBridge: false};
             render();
           }));
-          const support = R.moveChits(mover).filter(id => R.chit(id).move !== 'infiltrate');
+          const support = R.moveChits(mover).filter(id => !['infiltrate', 'ignoreZoc'].includes(R.chit(id).move));
           const options = [['', '使用しない'], ...support.map(id => [id, R.chit(id).label])];
           if (germanMovement.mode === 'normal') {
             for (const id of support.filter(id => R.chit(id).move === 'river'))
@@ -1332,12 +1364,6 @@ AIが返却する超過分 ${trail.excess.length}枚　${chits}${loss}`;
           if (peiperDraft) panel.append(element('p', range.size
             ? '移動力5。色の付いた移動先を選びます。森林・尾根を道路外から通りチットを失うと、単独攻撃はできません。'
             : 'パイパー連隊で移動できるヘクスがありません。', 'hint'));
-        }
-        const infiltrationChit = !peiperSupport && originalUnit.support.find(id => R.canDeclareInfiltration(state, originalUnit, id));
-        if (infiltrationChit && !movePlan.some(order => order.unit === unit.id)) {
-          controls.append(button('浸透移動支援を使う',
-            () => step({type: 'declare-infiltration', unit: unit.id, chit: infiltrationChit}),
-            {id: 'declare-infiltration'}));
         }
         if (controls.childElementCount) panel.append(controls);
         const blockedByZoc = state.phase === 'reaction' && R.zoc(state, unit.side).has(unit.hex);
