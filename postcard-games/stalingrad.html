@@ -24,7 +24,8 @@ aside h2{margin:0 0 7px}#availableUnits{display:grid;grid-template-columns:repea
 #cardDialog .card.has-ability,.strike-cards .card.has-ability{width:auto;padding:.25rem .55rem;font-size:.95rem}
 .battle-card-abilities{display:flex;flex-wrap:wrap;justify-content:center;gap:.2rem .6rem;margin-top:4px;font-size:.76rem}
 #actions .unit-orders{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex-basis:100%}
-#actions .face-command{border-color:var(--accent)}
+#cards .face-command{border-color:var(--accent)}
+#cards .face-command small{display:block}
 </style>
 <main><header><h1>ラッテン・クリーク スターリングラード</h1><span class="sides">ドイツ：人間 ／ ソ連：AI</span><button id="inspectCards">自分のカード</button><button id="help">ルール</button><button id="restart">やり直す</button></header>
 <div class="brief"><span id="turn" class="pill"></span><b id="phase" aria-live="polite"></b><span class="pill"><span id="score"></span></span><small id="variant"></small></div>
@@ -90,7 +91,7 @@ const edges=h=>areas[h][3].split(' ');
 const neighbor=(a,b)=>edges(a).includes(b)||edges(b).includes(a);
 const arr=['♥','♦','♠','♣'],black=c=>['♠','♣'].includes(c.s), suited=(c,side)=>black(c)===(side===G), suit=c=>c.s+(['','A','2','3','4','5','6','7','8','9','10','J','Q','K'][c.r]);
 const seeds=[['14Pz',G,7,4,'DEP','armor'],['16Pz',G,7,4,'reserve','armor'],['29M',G,5,3,'DEP','motor'],['94',G,3,2,'DEP','inf'],['71',G,3,2,'DEP','inf'],['295',G,3,2,'DEP','inf'],['389',G,3,2,'DEP','inf'],['100J',G,3,2,'reserve','inf'],['13G',R,4,3,'SOV','inf'],['39G',R,4,3,'reserve','inf'],...normal.map((h,i)=>['Rifle-'+(i+1),R,2,1,h,'inf']),['T-34',R,2,0,'Trac','tank']];
-let s,held,cover='',aiTimer,moving=false;
+let s,held,cover='',aiTimer,moving=false,commandMenu='';
 let targetArea=null,targetUnit=null,battleMapOpen=false;
 function mix(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function draw(){if(!s.deck.length)s.deck=mix(s.drop.splice(0));return s.deck.pop()}
@@ -107,7 +108,7 @@ function replenish(t,n){while(n--){const c=draw();if(c)t.st.push(c)}}
 const by=id=>s.units.find(t=>t.n===id), active=()=>by(s.active), at=h=>s.units.filter(t=>t.h===h);
 function note(text){s.log.unshift('第'+s.turn+'ターン｜'+text);s.log=s.log.slice(0,100)}
 function handoff(side,phase){
- clearTimeout(aiTimer);held=null;s.side=side;s.phase=phase;battleMapOpen=phase==='def'&&side===G&&!s.b?.d;render();
+ clearTimeout(aiTimer);held=null;commandMenu='';s.side=side;s.phase=phase;battleMapOpen=phase==='def'&&side===G&&!s.b?.d;render();
  if(side===R&&phase!=='end'&&phase!=='battleResult'&&phase!=='battleAfter')aiTimer=setTimeout(aiStep,410);
 }
 function controls(){
@@ -122,7 +123,7 @@ function endAct(passed=false){
  const t=active();
  if(t&&passed)t.done=true;
  if(s.companion&&passed)by('T-34').done=true;
- s.companion=false;s.active=null;s.b=null;s.buff=0;s.molotov=0;s.engineer=false;s.chuikov=false;cover='';moving=false;controls();
+ s.companion=false;s.active=null;s.activationUsed=false;s.b=null;s.buff=0;s.molotov=0;s.engineer=false;s.chuikov=false;cover='';moving=false;controls();
  s.pass=passed?s.pass+1:0;
  if(s.pass>=2||!s.units.some(t=>!t.done&&areas[t.h])){handoff(G,'refill');return}
  handoff(opp(s.side),'act');
@@ -153,7 +154,7 @@ function pull(t,c){const pile=c.k==='hand'?s.hands[t.side]:t.st;const i=pile.ind
 function costMove(t,h,c){
  const q=pull(t,c);if(!q)return;s.drop.push(q);relocate(t,h);cover='';moving=false;render();
 }
-function relocate(t,h){t.h=h;if(s.companion&&t.n!=='T-34')by('T-34').h=h;controls();note(t.side+' '+t.n+' が '+areas[h][2]+' へ移動')}
+function relocate(t,h){s.activationUsed=true;t.h=h;if(s.companion&&t.n!=='T-34')by('T-34').h=h;controls();note(t.side+' '+t.n+' が '+areas[h][2]+' へ移動')}
 function moveTo(h){
  const t=active();if(!reachable(t).has(h))return;
  const enemies=at(h).filter(v=>v.side!==t.side);
@@ -166,6 +167,8 @@ function battleHere(){
  if(en.length)beginBattle(t);
 }
 function beginBattle(t,from=null){
+ s.activationUsed=true;
+ cover='';moving=false;
  s.b={a:t.n,d:null,h:t.h,from,cards:{[G]:[],[R]:[]}};
  openBattleCards(t);
 }
@@ -246,12 +249,30 @@ function cardLabel(card,side){
  return ability?suit(card)+'（'+ability+'）':suit(card);
 }
 const isStrike=name=>name==='砲撃'||name==='空軍支援';
+function eventCards(unit){
+ const options=[...s.hands[unit.side].map(c=>({c,k:'hand'})),...unit.st.map(c=>({c,k:'step'}))];
+ return options.filter(({c})=>eventFor(c,unit.side));
+}
+function eventUnavailable(unit,name){
+ if(!unit||unit.side!==s.side||unit.done) return '行動する部隊を選んでください。';
+ if(s.phase!=='act'){
+  const preparing=s.phase==='atk'||s.phase==='continueBattle';
+  if(!preparing||s.b?.a!==unit.n||!['突撃砲','戦闘工兵'].includes(name)) return 'この絵札は通常の作戦画面で使います。';
+ }
+ if(name==='突撃砲'&&unit.type==='armor')return '装甲師団には使用できません。';
+ if(name==='狙撃兵'&&!s.hands[G].length)return 'ドイツ軍の手札がありません。';
+ if(isStrike(name)){
+  if(!strikeTargets(unit,name).length)return '範囲内に目標がありません。';
+  if(!s.deck.length&&!s.drop.length)return '命中判定に引けるカードがありません。';
+ }
+ return '';
+}
 function strikeTargets(unit,name){
  return s.units.filter(t=>t.side!==unit.side&&areas[t.h]&&!['DEP','SOV'].includes(t.h)
   &&(t.h===unit.h||neighbor(t.h,unit.h))&&!(name==='砲撃'&&unit.side===G&&t.n==='T-34'));
 }
 function beginEvent(card){
- held=card;targetArea=null;targetUnit=null;moving=false;render();
+ held=card;targetArea=null;targetUnit=null;render();
 }
 function chooseStrikeArea(h,unit){
  const candidates=strikeTargets(active(),eventFor(held,s.side)).filter(t=>t.h===h);
@@ -293,21 +314,44 @@ function showStrike(event,result){
  $('eventDialog').showModal();
 }
 function useEvent(c,target){
- const t=active(),name=eventFor(c,t.side);if(!name)return;
- const i=s.hands[t.side].indexOf(c);if(i<0)return;
- if(isStrike(name)&&(!strikeTargets(t,name).includes(target)||!s.deck.length&&!s.drop.length))return;
- s.hands[t.side].splice(i,1);note(t.side+'：'+name);
+ const t=active();if(!t||!c)return false;
+ const name=eventFor(c,t.side),option=eventCards(t).find(item=>item.c===c);
+ if(!option||eventUnavailable(t,name))return false;
+ if(isStrike(name)&&!strikeTargets(t,name).includes(target))return false;
+ if(name==='チュイコフ将軍'&&target&&(target.side!==R||!target.done||!areas[target.h]))return false;
+ if(!pull(t,option))return false;
+ s.activationUsed=true;
+ note(t.side+'：'+name+'（'+(option.k==='hand'?'手札':'部隊カード')+' '+suit(c)+'）');
  const result=isStrike(name)?strike(t,target,name):null;
  s.drop.push(c);
- if(name==='突撃砲'&&t.type!=='armor')s.buff=(s.buff||0)+2;
+ if(name==='突撃砲')s.buff=(s.buff||0)+2;
  if(name==='戦闘工兵')s.engineer=true;
  if(name==='モロトフ・カクテル'){s.buff=(s.buff||0)+2;s.molotov=(s.molotov||0)+2}
  if(name==='狙撃兵'){
   const hand=s.hands[G];if(hand.length)s.drop.push(hand.splice(Math.floor(Math.random()*hand.length),1)[0]);
  }
  if(name==='チュイコフ将軍'){if(target){target.done=false}else s.chuikov=true}
- held=null;controls();render();
+ held=null;commandMenu='';controls();render();
  if(result&&t.side===G)showStrike(c,result);
+ return true;
+}
+function replenishUnavailable(unit){
+ if(!unit||unit.side!==s.side||unit.done)return '行動できる部隊を選んでください。';
+ if(s.phase!=='act'||s.active&&s.active!==unit.n)return 'その部隊は現在補充できません。';
+ if(s.sovietReplenish&&unit.side===G)return '選択ルールにより、ドイツ軍のステップ補充はできません。';
+ if(unit.h!==(unit.side===G?'DEP':'SOV'))return 'ステップ補充は自軍後方で行います。';
+ if(s.activationUsed)return 'この行動ですでに作戦を行いました。';
+ if(unit.st.length>=unit.max)return 'この部隊のステップは上限です。';
+ if(!s.deck.length&&!s.drop.length)return '補充に引けるカードがありません。';
+ return '';
+}
+function replenishUnit(unit){
+ if(replenishUnavailable(unit))return;
+ s.active=unit.n;
+ replenish(unit,1);
+ unit.done=true;
+ note(unit.side+' '+unit.n+' がステップを1枚補充');
+ endAct();
 }
 const handLimit=side=>s.control.Mam===side?4:3;
 function refill(){
@@ -559,30 +603,86 @@ function aiStep(){
 }
 function btn(txt,fn,main=false){const b=document.createElement('button');b.type='button';b.textContent=txt;b.onclick=fn;if(main)b.className='main';return b}
 function put(...a){$('actions').append(btn(...a))}
+function toggleCommand(name){
+ commandMenu=commandMenu===name?'':name;
+ held=null;
+ render();
+}
+function eventCommand(){
+ const button=btn('イベント',()=>toggleCommand('event'),true);
+ button.setAttribute('aria-pressed',String(commandMenu==='event'));
+ return button;
+}
 function renderUnitOrders(unit,destinations){
  const row=document.createElement('div');row.className='unit-orders';
  row.setAttribute('role','group');row.setAttribute('aria-label','作戦コマンド');
- const move=btn(moving?'移動を取り消す':'移動',()=>{moving=!moving;held=null;render()},true);
+ const move=btn(moving?'移動を取り消す':'移動',()=>{
+  moving=!moving;cover='';held=null;commandMenu='';render();
+ },true);
  const battle=btn('戦闘',battleHere,true);
+ const supply=btn('補充',()=>{
+  if(unit&&!replenishUnavailable(unit))replenishUnit(unit);
+  else toggleCommand('replenish');
+ },true);
  move.disabled=!destinations?.size;
  battle.disabled=!unit||!at(unit.h).some(enemy=>enemy.side!==unit.side);
  battle.title='同じエリアの敵を攻撃';
- row.append(move,battle);
- for(const card of s.hands[s.side].filter(c=>c.r>=11)){
-  const name=eventFor(card,s.side);
-  const command=btn(cardLabel(card,s.side),()=>{
-   if(isStrike(name)||name==='チュイコフ将軍')beginEvent(card);else useEvent(card);
-  });
-  command.className='face-command';
-  command.disabled=!unit;
-  if(unit&&isStrike(name)){
-   const noTarget=!strikeTargets(unit,name).length;
-   command.disabled=noTarget||!s.deck.length&&!s.drop.length;
-   if(command.disabled){const reason=document.createElement('small');reason.textContent=noTarget?'範囲内に目標なし':'判定用カードなし';command.append(reason);}
-  }
-  row.append(command);
- }
+ supply.setAttribute('aria-pressed',String(commandMenu==='replenish'));
+ row.append(move,battle,eventCommand(),supply);
  $('actions').append(row);
+}
+function renderReplenish(unit){
+ if(unit){$('hint').textContent=replenishUnavailable(unit)||unit.n+' のステップを補充できます。';return}
+ const eligible=s.units.filter(t=>!replenishUnavailable(t));
+ $('hint').textContent=eligible.length?'ステップを1枚補充する部隊を選んでください。':
+  s.sovietReplenish&&s.side===G?'選択ルールにより、ドイツ軍のステップ補充はできません。':
+  '自軍後方に、今すぐステップを補充できる部隊がいません。';
+ for(const t of eligible)put(t.n+' に1枚補充（'+t.st.length+'/'+t.max+'）',()=>replenishUnit(t),true);
+}
+function renderEventChoices(unit){
+ if(!unit){$('hint').textContent='イベントを使う部隊を選んでください。';return}
+ const options=eventCards(unit);
+ $('hint').textContent=options.length?unit.n+' ｜ イベントに使う絵札を選んでください。':
+  unit.n+' ｜ 手札と、この部隊のカードに絵札がありません。';
+ for(const [key,label] of [['hand','手札'],['step','部隊のカード']]){
+  const available=options.filter(o=>o.k===key);
+  if(!available.length)continue;
+  const row=document.createElement('div');row.className='card-actions';
+  const title=document.createElement('div');title.className='source';title.textContent=label;row.append(title);
+  for(const {c} of available){
+   const name=eventFor(c,unit.side),reason=eventUnavailable(unit,name);
+   const action=btn(cardLabel(c,unit.side),()=>{
+    if(isStrike(name)||name==='チュイコフ将軍')beginEvent(c);
+    else useEvent(c);
+   });
+   action.className='face-command';action.disabled=!!reason;
+   if(reason){const why=document.createElement('small');why.textContent=reason;action.append(why);}
+   row.append(action);
+  }
+  $('cards').append(row);
+ }
+}
+function renderEventTarget(unit,name,targets){
+ if(isStrike(name)){
+  $('hint').textContent=name+' ｜ '+(targetUnit?areas[targetArea][2]+' の '+targetUnit.n+' を選択中。':
+   '地図上の駒か、一覧から目標を選んでください。');
+  for(const t of targets){
+   const b=btn(areas[t.h][2]+' ｜ '+t.n,()=>chooseStrikeArea(t.h,t));
+   b.setAttribute('aria-pressed',String(t===targetUnit));$('cards').append(b);
+  }
+  if(targetUnit)put(name+'を実行',()=>useEvent(held,targetUnit),true);
+ }else{
+  $('hint').textContent=name+' ｜ 次の戦闘に使うか、表に戻す部隊を選んでください。';
+  put('次の戦闘に使用',()=>useEvent(held));
+  for(const v of s.units.filter(v=>v.side===unit.side&&v.done&&areas[v.h]))put(v.n+' を表に戻す',()=>useEvent(held,v));
+ }
+ put('目標選択を取り消す',()=>{held=null;render()});
+}
+function effectHint(){
+ const items=[];
+ if(s.buff)items.push('戦闘力 +'+s.buff);
+ if(s.engineer)items.push('次の戦闘の市街地修正なし');
+ return items.length?' ｜ '+items.join(' ／ '):'';
 }
 function inspectCards(){
  const dialog=$('cardDialog'),select=$('inspectUnit');
@@ -681,18 +781,17 @@ function render(){
  else if(s.phase==='battleAfter'){put('盤面に反映して進む',continueAfterBattle,true);}
  else if(s.side===R&&s.phase!=='end'){$('hint').textContent='ソ連軍AIが'+({act:'作戦を選んでいます',refill:'手札を補充しています',atk:'攻撃カードを選んでいます',def:'防御を選んでいます',raise:'レイズを検討しています',loss:'損害と退却を判断しています',scatter:'残った部隊の退却を判断しています',continueBattle:'攻撃を続けるか判断しています',tie:'再戦を判断しています'}[s.phase]||'行動しています')+'…';}
  else if(s.phase==='act'){
-  if(!t){$('hint').textContent='行動する部隊を1個選んでください。';renderUnitOrders();put('手番をパス',()=>endAct(true));}
+  const destinations=reachable(t);
+  renderUnitOrders(t,destinations);
+  if(heldName)renderEventTarget(t,heldName,targets);
+  else if(commandMenu==='event')renderEventChoices(t);
+  else if(commandMenu==='replenish')renderReplenish(t);
+  else if(!t){$('hint').textContent='行動する部隊を1個選んでください。';put('手番をパス',()=>endAct(true));}
   else if(cover){
    $('hint').textContent=areas[cover][2]+' に進むには手札またはステップ1枚を捨てます。';
    showCards(cardOptions(t.side,t),x=>costMove(t,cover,x));put('取り消し',()=>{cover='';render()});
-  }else if(isStrike(heldName)){
-   $('hint').textContent=heldName+' ｜ '+(targetUnit?areas[targetArea][2]+' の '+targetUnit.n+' を選択中。':targetArea?areas[targetArea][2]+' の光っている敵の駒をクリック。':'地図上で光っているエリアをクリック。');
-   if(targetUnit)put(heldName+'を実行',()=>useEvent(held,targetUnit),true);
-   put('目標選択を取り消す',()=>{held=null;render()});
   }else{
-   $('hint').textContent=t.n+' ｜ '+areas[t.h][2];
-   const destinations=reachable(t);
-   renderUnitOrders(t,destinations);
+   $('hint').textContent=t.n+' ｜ '+areas[t.h][2]+effectHint();
    if(moving){
     const row=document.createElement('div');row.className='move-destinations';
     for(const h of destinations){const b=btn(areas[h][2],()=>moveTo(h));b.title=at(h).some(v=>v.side!==G)?'進入して戦闘':s.control[h]!==G?'移動にカード1枚必要':'移動';row.append(b);}
@@ -700,20 +799,18 @@ function render(){
    }
    const tank=by('T-34');
    if(t.side===R&&t!==tank&&!tank.done&&tank.h===t.h)put(s.companion?'T-34の同行を解除':'T-34を同行',()=>{s.companion=!s.companion;render()});
-   if((t.h==='DEP'||t.h==='SOV')&&t.st.length<t.max&&(!s.sovietReplenish||t.side===R))put('部隊のカードを1枚補充し終了',()=>{replenish(t,1);t.done=true;endAct()});
-   if(held){
-    const n=eventFor(held,s.side);$('hint').textContent=n+' の対象を選択';
-    if(n==='チュイコフ将軍'){put('次の戦闘に使用',()=>useEvent(held));for(const v of s.units.filter(v=>v.side===R&&v.done&&areas[v.h]))put(v.n+' を表に戻す',()=>useEvent(held,v));}
-    put('イベント選択解除',()=>{held=null;render()});
-   }
-   put('部隊の選択を解除',()=>{s.active=null;held=null;moving=false;render()});
+   if(!s.activationUsed)put('部隊の選択を解除',()=>{s.active=null;held=null;moving=false;render()});
    put('この部隊の行動を終える',()=>endAct(false));put('何もせずパスして裏返す',()=>endAct(true));
   }
  }
  if(s.side===G&&s.phase==='atk'){
-  $('hint').textContent=t.n+' の戦闘力 '+power(t,false)+'。攻撃に使うカードを1枚選びます。';
-  const opts=cardOptions(s.side,t);showCards(opts,o=>playCard(t,o));
-  if(!opts.length)put('カードなし：攻撃側の損害',()=>surrender(t));
+  $('actions').append(eventCommand());
+  if(commandMenu==='event')renderEventChoices(t);
+  else{
+   $('hint').textContent=t.n+' の戦闘力 '+power(t,false)+'。攻撃に使うカードを1枚選びます。'+effectHint();
+   const opts=cardOptions(s.side,t);showCards(opts,o=>playCard(t,o));
+   if(!opts.length)put('カードなし：攻撃側の損害',()=>surrender(t));
+  }
  }
  if(s.side===G&&s.phase==='def'){
   if(!d){$('hint').textContent=areas[b.h][2]+' ｜ '+by(b.a).n+' が攻撃。地図上で光っている味方の駒を選んでください。';}
@@ -745,16 +842,20 @@ function render(){
   showRetreats(retreats(m),go);put('孤立',()=>go(null));
  }
  if(s.side===G&&s.phase==='continueBattle'){
-  $('hint').textContent='同じエリアに両軍が残っています。再攻撃または退却してください。';
-  if(cardOptions(t.side,t).length)put('再攻撃',battleHere,true);
-  showRetreats(retreats(t),h=>{t.h=h;endAct()});
-  if(!retreats(t).length&&!cardOptions(t.side,t).length)put('退却不能：攻撃部隊を除去',()=>{remove(t);endAct()});
+  $('actions').append(eventCommand());
+  if(commandMenu==='event')renderEventChoices(t);
+  else{
+   $('hint').textContent='同じエリアに両軍が残っています。再攻撃または退却してください。'+effectHint();
+   if(cardOptions(t.side,t).length)put('再攻撃',battleHere,true);
+   showRetreats(retreats(t),h=>{t.h=h;endAct()});
+   if(!retreats(t).length&&!cardOptions(t.side,t).length)put('退却不能：攻撃部隊を除去',()=>{remove(t);endAct()});
+  }
  }
  if(s.side===G&&s.phase==='refill'){
   const hand=s.hands[G],limit=handLimit(G),count=Math.min(Math.max(0,limit-hand.length),s.deck.length+s.drop.length);
   $('hint').textContent='手札 '+hand.length+'枚 ／ 補充後の基準 '+limit+'枚。'+(hand.length?'不要なカードの「捨てる」を押してください。':'捨てられる手札はありません。');
   showCards(hand,c=>{const i=hand.indexOf(c);if(i>=0){s.drop.push(hand.splice(i,1)[0]);render();}},true);
-  put(count?'手札を'+count+'枚引く':'補充を終える',refill,true);
+  put(count?'手札を'+count+'枚補充':'補充を終える',refill,true);
  }
  if(s.phase==='end'){$('hint').textContent=s.winner+'の勝利';put('新しいゲーム',setupDialog,true)}
  if(b&&combatPhases.has(s.phase)&&battleMapOpen&&(s.phase!=='def'||d))put('戦闘画面に戻る',()=>setBattleMap(false),true);
@@ -765,7 +866,7 @@ function render(){
 }
 function renderBoard(targets,retreatsOnMap){
  const b=s.b;
- const choices=s.side===G&&s.phase==='act'&&!cover&&moving?reachable(active()):new Set();
+ const choices=s.side===G&&s.phase==='act'&&!cover&&!commandMenu&&moving?reachable(active()):new Set();
  const defense=battleMapOpen&&s.side===G&&s.phase==='def'&&!b.d;
  const targetAreas=new Set(targets.map(v=>v.h));
  const board=$('layer');board.replaceChildren();
