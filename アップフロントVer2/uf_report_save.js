@@ -534,9 +534,9 @@ function advanceEditorSegment() {
 
 function startGameWithSetup() {
   const playerFaction = setupState.faction;
-  const scenario = setupState.scenario;
+  let scenario = setupState.scenario;
   const secondSegment = setupState.secondSegment;
-  if (scenario?.victoryPresets && setupState.pool.length) {
+  if ((scenario?.victoryPresets || scenario?.challenge) && setupState.pool.length) {
     alert('エディタで選んだカードをすべて配置してください。');
     return false;
   }
@@ -554,8 +554,26 @@ function startGameWithSetup() {
   const others = Object.keys(FACTIONS).filter(k => k !== playerFaction &&
     (!FACTIONS[k].editorOnly || scenario?.factions?.[k]) &&
     (!scenario?.onlyFactions || scenario.onlyFactions.includes(k)));
-  const aiKey = others.includes(setupState.aiFactionOverride)
-    ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
+  let aiKey;
+  if (scenario?.challenge) {
+    const { budget } = scenario.challenge;
+    const opponent = UF_CHALLENGE.opponents(playerFaction, setupState.groups.flat(), budget, scenario.formationYear);
+    if (!opponent) {
+      alert(radioText('AIの予算で対戦できる編成を作れません。AIのDYO倍率を上げてください。',
+        'No opposing force fits the AI budget. Increase its DYO multiplier.'));
+      return false;
+    }
+    aiKey = opponent.faction;
+    scenario = {
+      ...scenario,
+      factions: { ...scenario.factions, [aiKey]: { soldierList: opponent.soldiers } },
+      secondaryEquipment: { ...scenario.secondaryEquipment, [aiKey]: opponent.equipment },
+      challenge: { ...scenario.challenge, aiPoints: opponent.spent },
+    };
+  } else {
+    aiKey = others.includes(setupState.aiFactionOverride)
+      ? setupState.aiFactionOverride : others[Math.floor(Math.random() * others.length)];
+  }
   const aiRole = setupState.role === 'attacker' ? 'defender' : (setupState.role === 'defender' ? 'attacker' : undefined);
   const aiRoster = window.SCENARIO_HELPERS?.getSoldierNumbers(scenario, aiKey, aiRole) || [];
   const aiEquipment = planSetupEquipment(aiRoster, aiKey, scenario?.secondaryEquipment?.[aiKey]);
@@ -714,10 +732,12 @@ function startGameWithSetup() {
   if (scenario?.secondaryEquipment) {
     const assignmentsBySide = { player: secondSegment ? [] : setupState.equipmentAssignments, ai: aiEquipment };
     for (const [side, assignments] of Object.entries(assignmentsBySide)) {
+      const faction = side === 'player' ? playerFaction : aiKey;
+      const kinds = scenario.secondaryEquipment[faction] || [];
       const cards = state.groups[side].flatMap(group => group.cards);
-      for (const [kind, num] of assignments) {
+      for (const [slot, num] of assignments) {
         const card = cards.find(card => card.num === num);
-        if (card) setSecondaryWeapon(card, { kind });
+        if (card) setSecondaryWeapon(card, { kind: kinds[slot] });
       }
     }
   } else if (scenario?.demoHolders) {
@@ -841,14 +861,16 @@ function startGameWithSetup() {
 
 function makeCardWithMeta(factionKey, num) {
   const fac = FACTIONS[factionKey];
+  const printed = printedSoldierNumber(num);
+  const copy = Math.floor(num / CHALLENGE_CARD_STRIDE);
   let prefix = fac.prefix;
-  if (factionKey === 'rus') prefix = num <= 30 ? 'russian' : 'Rus';
+  if (factionKey === 'rus') prefix = printed <= 30 ? 'russian' : 'Rus';
   const def = getSoldierDef(factionKey, num);
   return {
-    id: `${prefix} ${num}`,
+    id: `${prefix}${copy ? ' copy' + (copy + 1) : ''} ${printed}`,
     num,
-    img:     (def?.afv || def?.infantryGun) ? def.imgFront : encPath(`${fac.dir}/${prefix} ${num}f.gif`),
-    imgBack: (def?.afv || def?.infantryGun) ? def.imgBack : encPath(`${fac.dir}/${prefix} ${num}b.gif`),
+    img:     (def?.afv || def?.infantryGun) ? def.imgFront : encPath(`${fac.dir}/${prefix} ${printed}f.gif`),
+    imgBack: (def?.afv || def?.infantryGun) ? def.imgBack : encPath(`${fac.dir}/${prefix} ${printed}b.gif`),
   };
 }
 

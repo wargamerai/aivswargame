@@ -5,7 +5,9 @@
   const passwordSalt = '0f7cc864426bf9357c72520c5bec80d6';
   const passwordDigest = '910c44e8133981963af2577052a53f9b89ca16fd05d3f9797125e542118c98af';
   const aiPolicies = ['advance', 'hold', 'retreat'];
-  const equipmentKinds = ['demo', 'panzerfaustHolders', 'antiTankMines', 'radioHolders'];
+  const panzerfaustKind = 'panzerfaustHolders';
+  const maxPanzerfaust = 2;
+  const equipmentKinds = ['demo', panzerfaustKind, 'antiTankMines', 'radioHolders'];
   const desertFactions = ['ita', 'fra'];
   const canPurchasePartisans = (faction, year) => faction === 'fra' || faction === 'ita' && year >= 1943;
 
@@ -65,6 +67,7 @@
         <button type="button" role="tab" data-tab="sides">両軍の編成</button>
         <button type="button" role="tab" data-tab="cards">カード・山札</button>
         <button type="button" role="tab" data-tab="saved">保存</button>
+        <button type="button" role="tab" data-tab="challenge">チャレンジ</button>
       </div>
       <section class="uf-editor-panel" role="tabpanel" data-panel="victory">
         <div data-victories></div>
@@ -103,11 +106,19 @@
         <p><button type="button" data-open-file>ファイルから読み込む</button><input type="file" data-scenario-file accept=".json,application/json" hidden></p>
         <p data-browser-saves hidden><label>以前のブラウザ保存 <select name="saved"></select></label> <button type="button" data-load>呼び出す</button></p>
       </section>
+      <section class="uf-editor-panel" role="tabpanel" data-panel="challenge">
+        <p>シナリオA「パトロール」。自軍は攻撃側です。AIの陣営と部隊は対局を開始するまで伏せられます。</p>
+        <p><label>年代 <input type="number" id="challenge-year" min="1936" max="1945" value="1944" required style="width:5em"></label>
+          <label>AIのDYO倍率 × <input type="number" id="challenge-multiplier" min="1" step="0.1" value="1.0" style="width:5em"></label>
+          <span data-challenge-budget aria-live="polite"></span></p>
+        <div data-challenge-formation></div>
+      </section>
       <div class="uf-editor-footer">
       <p data-message role="status"></p>
       <button type="button" data-close>閉じる</button>
       <button type="button" data-save>ファイルに保存</button>
-      <button type="submit">決定して試遊</button>
+      <button type="submit" data-try-scenario>決定して試遊</button>
+      <button type="submit" data-try-challenge hidden>編成へ</button>
       </div>
     </form>`;
   document.body.append(dialog);
@@ -125,7 +136,7 @@
   cardZoom.addEventListener('click', event => {
     if (event.target === cardZoom) cardZoom.close();
   });
-  function bindTabs(tabs, panels, idPrefix) {
+  function bindTabs(tabs, panels, idPrefix, onSelect) {
     function selectTab(index, focus = false) {
       tabs.forEach((tab, position) => {
         const active = position === index;
@@ -134,6 +145,7 @@
         panels[position].hidden = !active;
       });
       if (focus) tabs[index].focus();
+      onSelect?.(index);
     }
     tabs.forEach((tab, index) => {
       const panel = panels[index];
@@ -154,7 +166,17 @@
     return selectTab;
   }
   const tabs = Array.from(dialog.querySelectorAll('[data-tab]'));
-  const selectTab = bindTabs(tabs, tabs.map(tab => dialog.querySelector(`[data-panel="${tab.dataset.tab}"]`)), 'uf-editor');
+  const challengePanel = dialog.querySelector('[data-panel="challenge"]');
+  const challengeYear = challengePanel.querySelector('#challenge-year');
+  const multiplierField = challengePanel.querySelector('#challenge-multiplier');
+  const challengeBudget = challengePanel.querySelector('[data-challenge-budget]');
+  const selectTab = bindTabs(tabs, tabs.map(tab => dialog.querySelector(`[data-panel="${tab.dataset.tab}"]`)), 'uf-editor', index => {
+    const isChallenge = tabs[index].dataset.tab === 'challenge';
+    dialog.querySelector('[data-save]').hidden = isChallenge;
+    dialog.querySelector('[data-try-scenario]').hidden = isChallenge;
+    dialog.querySelector('[data-try-challenge]').hidden = !isChallenge;
+    message.textContent = '';
+  });
   function showTab(name) {
     selectTab(tabs.findIndex(tab => tab.dataset.tab === name));
   }
@@ -330,10 +352,10 @@
   const h1Choice = specialChoices.get('H1');
   const h1Deck = h1Choice.rule.reservesAfter + 1;
   let deckCycles = 3;
-  const sides = ['自軍', '相手軍'].map((label, index) => {
+  function createFormation(label, index, challenge = false) {
     const panel = document.createElement('section');
     panel.className = 'uf-editor-panel';
-    panel.setAttribute('role', 'tabpanel');
+    if (!challenge) panel.setAttribute('role', 'tabpanel');
     panel.innerHTML = `<fieldset class="uf-editor-formation">
       <legend>${label}</legend>
       <div class="uf-editor-formation-layout">
@@ -378,13 +400,20 @@
     const roster = field.querySelector('[data-roster]');
     const count = field.querySelector('[data-count]');
     const pointLimit = field.querySelector('[data-point-limit]');
-    const year = form.elements.formationYear;
+    const year = challenge ? challengeYear : form.elements.formationYear;
+    if (challenge) {
+      pointLimit.parentElement.hidden = true;
+      field.querySelector('[data-reserve-panel]').hidden = true;
+    }
     const reserveDeck = field.querySelector('[data-reserve-deck]');
     const reserves = field.querySelector('[data-reserves]');
     for (const [key, team] of Object.entries(FACTIONS)) faction.add(new Option(team.name, key));
     faction.value = index ? 'us' : 'ger';
     const numbersOf = list => Array.from(list.querySelectorAll('input:checked'), input => Number(input.value));
-    const selected = () => numbersOf(roster);
+    const maxQuantity = window.INFANTRY_RULES.GROUP_MAX * window.INFANTRY_RULES.MAX_GROUPS_INITIAL;
+    const quantity = input => input.validity.valid ? input.valueAsNumber || 0 : 0;
+    const selected = () => challenge ? Array.from(roster.querySelectorAll('[data-card-number]'))
+      .flatMap(input => Array(quantity(input)).fill(Number(input.dataset.cardNumber))) : numbersOf(roster);
     const selectedReserves = () => numbersOf(reserves);
     const equipment = field.querySelector('[data-equipment]');
     const troopControls = field.querySelector('[data-desert-troops]');
@@ -396,9 +425,22 @@
     const equipmentControls = equipmentKinds.map(kind => {
       const label = document.createElement('label');
       label.style.display = 'block';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
+      const input = document.createElement(!challenge && kind === panzerfaustKind ? 'select' : 'input');
       input.dataset.equipmentKind = kind;
+      if (challenge) {
+        input.type = 'number';
+        input.min = '0';
+        input.max = String(maxQuantity);
+        input.step = '1';
+        input.value = '0';
+        input.style.width = '4em';
+      } else if (kind === panzerfaustKind) {
+        for (let count = 0; count <= maxPanzerfaust; count++) {
+          input.add(new Option(String(count), String(count)));
+        }
+      } else {
+        input.type = 'checkbox';
+      }
       const icon = document.createElement('img');
       icon.className = 'uf-editor-weapon-chit';
       icon.alt = '';
@@ -406,8 +448,11 @@
       equipment.append(label);
       return { kind, input, icon };
     });
-    const selectedEquipment = () => equipmentControls.filter(({ input }) => input.checked && !input.disabled)
-      .map(({ kind }) => kind);
+    const selectedEquipment = () => equipmentControls.flatMap(({ kind, input }) => {
+      if (input.disabled) return [];
+      const count = challenge ? quantity(input) : kind === panzerfaustKind ? Number(input.value) : Number(input.checked);
+      return Array(count).fill(kind);
+    });
     const options = () => troopControls.hidden ? {} : {
       troopType: partisans.checked ? 'regular' : troopType.value,
       partisans: partisans.checked,
@@ -469,62 +514,94 @@
       const total = costs.includes(null) ? `${known} pt ＋未登録` : `${known} pt`;
       count.textContent = ` 選択 ${starters.length}枚 / ${total}${pointLimit.value ? ' / 上限 ' + pointLimit.value : ''}`;
       for (const input of [...roster.querySelectorAll('input'), ...reserves.querySelectorAll('input')]) {
-        const num = Number(input.value);
-        const allowed = cardAvailableInYear(getSoldierDef(faction.value, num), selectedYear);
+        const num = Number(challenge ? input.dataset.cardNumber : input.value);
+        const def = getSoldierDef(faction.value, num);
+        const allowed = challenge ? UF_CHALLENGE.availableInYear(def, selectedYear, faction.value) : cardAvailableInYear(def, selectedYear);
         const otherCards = reserves.contains(input) ? starters : reinforcements;
-        input.disabled = !input.checked && (!allowed || otherCards.includes(num));
+        input.disabled = challenge ? !allowed && !Number(input.value) : !input.checked && (!allowed || otherCards.includes(num));
         input.parentElement.querySelector('[data-year-warning]').hidden = allowed;
+      }
+      if (challenge) {
+        const points = UF_CHALLENGE.points(faction.value, starters, selectedEquipment());
+        count.textContent = ` 選択 ${starters.length}枚 / DYO ${points} pt`;
+        const amount = multiplierField.valueAsNumber;
+        challengeBudget.textContent = multiplierField.validity.valid && Number.isFinite(amount)
+          ? `AIの予算 ${UF_CHALLENGE.budget(points, amount)} pt` : '';
       }
       updatePreview();
     }
     function draw(numbers = [], reserveNumbers = [], equipment = [], team = {}) {
-      troopControls.hidden = !desertFactions.includes(faction.value);
+      troopControls.hidden = challenge || !desertFactions.includes(faction.value);
       troopType.replaceChildren(new Option('通常部隊', 'regular'), ...(troopControls.hidden ? [] :
         BASIC_TROOP_TYPES[faction.value].map(([key, label]) => new Option(label, key))));
       troopType.value = team.troopType || 'regular';
       partisans.checked = team.partisans === true;
       radioStrength.value = team.radioStrength ?? 5;
       for (const { kind, input, icon } of equipmentControls) {
-        input.disabled = (kind === 'panzerfaustHolders' && faction.value !== 'ger') ||
+        input.disabled = (kind === panzerfaustKind && faction.value !== 'ger') ||
           (kind === 'antiTankMines' && !['ger','rus'].includes(faction.value));
-        input.checked = !input.disabled && equipment.includes(kind);
+        if (challenge && !Number.isFinite(UF_CHALLENGE.equipmentPrice(kind, faction.value))) input.disabled = true;
+        if (challenge || kind === panzerfaustKind) {
+          input.value = String(input.disabled ? 0 : equipment.filter(item => item === kind).length);
+        } else {
+          input.checked = !input.disabled && equipment.includes(kind);
+        }
         icon.src = setupEquipmentImage(kind, faction.value);
       }
       roster.replaceChildren();
       reserves.replaceChildren();
-      const cards = SOLDIER_CARDS[faction.value]
+      const cards = challenge ? UF_CHALLENGE.playableCards(faction.value) : SOLDIER_CARDS[faction.value]
         .filter(def => def.weaponCat !== 'AFV' || (def.afv && !def.afvButtoned))
-        .filter(def => !def.weaponCat.startsWith('対戦車砲') || def.infantryGun)
-        .sort((a, b) => (a.cardNumber ?? a.num) - (b.cardNumber ?? b.num));
+        .filter(def => !def.weaponCat.startsWith('対戦車砲') || def.infantryGun);
+      cards.sort((a, b) => (a.cardNumber ?? a.num) - (b.cardNumber ?? b.num));
       for (const def of cards) {
         const row = document.createElement('label');
         row.style.display = 'block';
         const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.value = def.num;
-        input.checked = numbers.includes(def.num);
+        if (challenge) {
+          input.type = 'number';
+          input.min = '0';
+          input.max = String(maxQuantity);
+          input.step = '1';
+          input.value = String(numbers.filter(num => num === def.num).length);
+          input.dataset.cardNumber = def.num;
+          input.style.width = '4em';
+        } else {
+          input.type = 'checkbox';
+          input.value = def.num;
+          input.checked = numbers.includes(def.num);
+        }
         const yearWarning = document.createElement('small');
         yearWarning.dataset.yearWarning = '';
         yearWarning.textContent = '（指定年代の対象外）';
         const points = printedPoints(def);
         row.append(input, ` #${def.cardNumber ?? def.num} ${def.name} ${def.weaponCat} · ${points ?? '未登録'} pt`, yearWarning);
         roster.append(row);
-        const reserveRow = row.cloneNode(true);
-        reserveRow.firstChild.checked = reserveNumbers.includes(def.num);
-        reserves.append(reserveRow);
+        if (!challenge) {
+          const reserveRow = row.cloneNode(true);
+          reserveRow.firstChild.checked = reserveNumbers.includes(def.num);
+          reserves.append(reserveRow);
+        }
       }
       updateRoster();
     }
     faction.addEventListener('change', () => draw());
     roster.addEventListener('change', () => updateRoster());
     reserves.addEventListener('change', () => updateRoster());
-    equipment.addEventListener('change', () => updateRoster());
+    if (!challenge) equipment.addEventListener('change', () => updateRoster());
     troopControls.addEventListener('change', () => updateRoster());
     pointLimit.addEventListener('input', () => updateRoster());
-    year.addEventListener('input', () => updateRoster());
-    dialog.querySelector('[data-sides]').append(panel);
+    if (challenge) {
+      equipment.addEventListener('change', updateRoster);
+      multiplierField.addEventListener('input', updateRoster);
+    }
+    year.addEventListener('input', updateRoster);
     return { panel, faction, selected, selectedReserves, selectedEquipment, options, draw, reserveDeck, pointLimit };
-  });
+  }
+  const sides = ['自軍', '相手軍'].map((label, index) => createFormation(label, index));
+  dialog.querySelector('[data-sides]').append(...sides.map(side => side.panel));
+  const challengeFormation = createFormation('自軍（攻撃側）', 0, true);
+  challengePanel.querySelector('[data-challenge-formation]').append(challengeFormation.panel);
   const sideTabs = Array.from(dialog.querySelector('[data-side-tabs]').children);
   const selectSideTab = bindTabs(sideTabs, sides.map(side => side.panel), 'uf-editor-side');
   function showFormation(index) {
@@ -615,7 +692,7 @@
         return !def?.afv && !def?.infantryGun;
       }).length;
       const max = limit * Math.ceil(infantry / squadSizes[team.faction]);
-      const antiTank = team.equipment.filter(kind => kind === 'panzerfaustHolders' || kind === 'antiTankMines').length;
+      const antiTank = team.equipment.filter(kind => kind === panzerfaustKind || kind === 'antiTankMines').length;
       if (limit && antiTank > max) {
         showFormation(index);
         message.textContent = `この編成で指定できる対戦車用の副次兵器は${max}個までです。`;
@@ -778,8 +855,10 @@
         side.pointLimit.value = team?.pointLimit ?? '';
         side.reserveDeck.value = team?.reserveDeck ?? h1Deck;
       }
-      const equipment = saved ? (team?.equipment || equipmentKinds.filter(kind =>
-        team?.secondary?.[kind === 'demo' ? 'demoHolders' : kind]?.length)) : side.selectedEquipment();
+      const equipment = saved ? (team?.equipment || equipmentKinds.flatMap(kind => {
+        const count = team?.secondary?.[kind === 'demo' ? 'demoHolders' : kind]?.length || 0;
+        return Array(Math.min(count, kind === panzerfaustKind ? maxPanzerfaust : 1)).fill(kind);
+      })) : side.selectedEquipment();
       side.draw(team?.soldiers || side.selected(), saved ? (team?.reserves || []) : side.selectedReserves(), equipment,
         team || side.options());
     });
@@ -827,6 +906,7 @@
     window.AFV?.registerCards();
     registerOrdnanceCards();
     load();
+    challengeFormation.draw(challengeFormation.selected(), [], challengeFormation.selectedEquipment());
     refreshLibrary();
     if (usingDefaultName) form.elements.scenarioName.value = LANG === 'ja' ? '自由シナリオ' : langTranslate('自由シナリオ');
     showTab('victory');
@@ -884,6 +964,15 @@
     return validScenarioFile(config) ? config : null;
   }
 
+  function validEquipment(team) {
+    const equipment = team.equipment;
+    if (equipment == null) return true;
+    if (!Array.isArray(equipment) || equipment.some(kind => !equipmentKinds.includes(kind))) return false;
+    if (team.faction !== 'ger' && equipment.includes(panzerfaustKind)) return false;
+    return equipmentKinds.every(kind =>
+      equipment.filter(item => item === kind).length <= (kind === panzerfaustKind ? maxPanzerfaust : 1));
+  }
+
   function validScenarioFile(config) {
     if (typeof config?.name !== 'string' || !config.name.trim() || /[<>]/.test(config.name)) return false;
     if (config.deckCycles != null && (!Number.isInteger(config.deckCycles) || config.deckCycles < 1)) return false;
@@ -908,8 +997,7 @@
       (team.partisans == null || team.partisans === false ||
         team.partisans === true && canPurchasePartisans(team.faction, config.formationYear) &&
         (team.troopType == null || team.troopType === 'regular')) &&
-      (team.equipment == null || (Array.isArray(team.equipment) &&
-        team.equipment.every(kind => equipmentKinds.includes(kind))))) && config.player.faction !== config.opponent.faction;
+      validEquipment(team)) && config.player.faction !== config.opponent.faction;
   }
 
   const scenarioFileInput = dialog.querySelector('[data-scenario-file]');
@@ -1013,6 +1101,53 @@
     return { faction: player.faction, scenario };
   }
 
+  // シナリオエディタで作成された、米軍攻撃・独軍防御のシナリオ。
+  const contributedScenarios = {
+    F: {
+      name: "INFANTRY'S IRON FIST",
+      player: {"faction": "us", "soldiers": [3, 4, 5, 6, 7, 8, 9, 11, 18, 20, 32], "reserves": [], "equipment": [], "pointLimit": null},
+      opponent: {"faction": "ger", "soldiers": [3, 4, 5, 6, 7, 8, 9, 10, 23, 24], "reserves": [], "equipment": ["panzerfaustHolders"], "pointLimit": null},
+      formationYear: null,
+      deckCycles: 3,
+      timeOfDay: "day",
+      treatAsPlainAttacker: [],
+      treatAsPlainDefender: [],
+      terrainRemovalCounts: {},
+      victories: ["E"],
+      special: ["EtreatAsPlain", "Eremove0"],
+    },
+    G: {
+      name: "BLOCK CLEARING",
+      player: {"faction": "us", "soldiers": [3, 4, 5, 6, 7, 8, 9, 18, 20, 25, 34], "reserves": [], "equipment": [], "pointLimit": null},
+      opponent: {"faction": "ger", "soldiers": [1, 2, 3, 4, 5, 7, 9, 10, 17, 18, 20], "reserves": [], "equipment": ["panzerfaustHolders"], "pointLimit": null},
+      formationYear: null,
+      deckCycles: 3,
+      timeOfDay: "day",
+      treatAsPlainAttacker: ["MARSH", "PILLBOX", "MINEFIELD", "SNIPER"],
+      treatAsPlainDefender: ["MARSH", "PILLBOX", "MINEFIELD"],
+      terrainRemovalCounts: {"WOODS": 4},
+      victories: ["G"],
+      special: ["G1", "G2", "G3"],
+    },
+    H: {
+      name: "ARMORED ADVANCE",
+      player: {"faction": "us", "soldiers": [3, 4, 5, 7, 8, 9, 11, 12, 18, 20, 23, 25, 41], "reserves": [], "equipment": [], "pointLimit": null},
+      opponent: {"faction": "ger", "soldiers": [3, 5, 8, 9, 10, 23, 28], "reserves": [2, 6, 16, 17], "equipment": ["panzerfaustHolders"], "pointLimit": null, "reserveDeck": 2},
+      formationYear: null,
+      deckCycles: 3,
+      timeOfDay: "day",
+      treatAsPlainAttacker: ["PILLBOX", "MINEFIELD", "SNIPER"],
+      treatAsPlainDefender: ["PILLBOX", "MINEFIELD"],
+      terrainRemovalCounts: {"BUILDINGS": 4},
+      victories: ["H"],
+      special: ["H2", "H3", "Hbuildings"],
+    },
+  };
+  for (const [id, config] of Object.entries(contributedScenarios)) {
+    const { scenario } = buildEditorScenario(config);
+    window.SCENARIOS[id] = { ...scenario, id, fixedAttackerFaction: config.player.faction, allowSecondPanzerfaust: true };
+  }
+
   function startEditorScenario(config, returnToEditor) {
     const { faction, scenario } = buildEditorScenario(config);
     setupState.fromCampaign = false;
@@ -1029,7 +1164,8 @@
       registerOrdnanceCards();
       for (const team of [config.player, config.opponent]) {
         if (!team.soldiers.length || [...team.soldiers, ...(team.reserves || [])].some(number =>
-            !getSoldierDef(team.faction, number))) return false;
+            printedSoldierNumber(number) !== number || !getSoldierDef(team.faction, number))) return false;
+        if (planSetupEquipment(team.soldiers, team.faction, team.equipment).size < (team.equipment?.length || 0)) return false;
         if (team.partisans && partisanFormationError({ partisans: team.faction }, team.faction,
             [...team.soldiers, ...(team.reserves || [])])) return false;
       }
@@ -1038,8 +1174,78 @@
     },
   };
 
+  function startChallenge() {
+    const faction = challengeFormation.faction.value;
+    const formationYear = challengeYear.valueAsNumber;
+    if (!challengeYear.validity.valid || !Number.isInteger(formationYear)) {
+      message.textContent = radioText('1936年から1945年までの年代を指定してください。',
+        'Choose a year between 1936 and 1945.');
+      challengeYear.focus();
+      return;
+    }
+    const invalidCount = challengeFormation.panel.querySelector('input:invalid');
+    if (invalidCount) {
+      message.textContent = radioText('兵士と装備の数を整数で指定してください。', 'Use whole numbers for soldiers and equipment.');
+      invalidCount.focus();
+      return;
+    }
+    const selections = challengeFormation.selected();
+    const unavailable = selections.map(number => getSoldierDef(faction, number))
+      .find(def => !UF_CHALLENGE.availableInYear(def, formationYear, faction));
+    if (unavailable) {
+      message.textContent = radioText(
+        `${unavailable.name}は${formationYear}年に編成できません。個数を0にするか、年代を変更してください。`,
+        `${unavailable.name} is unavailable in ${formationYear}. Set its quantity to 0 or change the year.`);
+      return;
+    }
+    const soldiers = UF_CHALLENGE.uniqueSoldiers(selections);
+    const equipment = challengeFormation.selectedEquipment();
+    const multiplier = multiplierField.valueAsNumber;
+    if (!multiplierField.validity.valid || !Number.isSafeInteger(Math.round(multiplier * 10))) {
+      message.textContent = radioText('AIのDYO倍率は1.0以上、0.1刻みで指定してください。',
+        'Use an AI DYO multiplier of at least 1.0, in steps of 0.1.');
+      multiplierField.focus();
+      return;
+    }
+    if (!UF_CHALLENGE.validFormation(faction, soldiers)) {
+      message.textContent = radioText('戦力を選び、4グループ以内に収めてください。車両は1両で1グループです。',
+        'Choose a force that fits in four groups. Each vehicle forms its own group.');
+      return;
+    }
+    if (planSetupEquipment(soldiers, faction, equipment).size < equipment.length) {
+      message.textContent = radioText('選んだ装備を分担できる兵士を編成してください。',
+        'Select enough eligible soldiers to carry the equipment.');
+      return;
+    }
+    const points = UF_CHALLENGE.points(faction, soldiers, equipment);
+    const budget = UF_CHALLENGE.budget(points, multiplier);
+    if (!Number.isSafeInteger(budget)) {
+      message.textContent = radioText('AIのDYO倍率を下げてください。', 'Choose a smaller AI DYO multiplier.');
+      return;
+    }
+    const scenario = {
+      ...window.SCENARIOS.A,
+      name: radioText('チャレンジ', 'Challenge'),
+      attackerRole: 'player',
+      firstPlayer: faction,
+      timeOfDay: 'day',
+      formationYear,
+      factions: { [faction]: { soldierList: soldiers } },
+      secondaryEquipment: { [faction]: equipment },
+      challenge: { points, budget, multiplier },
+    };
+    setupState.fromCampaign = false;
+    setupState.aiFactionOverride = null;
+    dialog.close();
+    openSetupScreen(faction, scenario, false, true);
+  }
+
   form.addEventListener('submit', event => {
     event.preventDefault();
+    if (!challengePanel.hidden) {
+      startChallenge();
+      return;
+    }
     const config = collect();
     if (!config) return;
     dialog.close();

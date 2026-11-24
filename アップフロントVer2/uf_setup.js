@@ -217,7 +217,9 @@ function openSetupScreen(factionKey, customScenario = null, secondSegment = fals
   const scenario = customScenario || (window.SCENARIOS || {})[scenarioId];
   if (!scenario) { alert('シナリオ未読込'); return; }
   if (scenario.onlyFactions && !scenario.onlyFactions.includes(factionKey)) {
-    if (scenario.defenderInitialBuildings) {
+    if (scenario.fixedAttackerFaction) {
+      alert(radioText('このシナリオはアメリカ軍とドイツ軍の対局です。', 'This scenario is played by the US and Germany.'));
+    } else if (scenario.defenderInitialBuildings) {
       alert(radioText('「奇襲」は日本軍とイギリス軍の対局です。', 'Surprise Attack is played by Japan and Britain.'));
     } else {
       alert('シナリオEはドイツ・ソ連・アメリカだけです');
@@ -229,6 +231,12 @@ function openSetupScreen(factionKey, customScenario = null, secondSegment = fals
   setupState.secondSegment = secondSegment;
   setupState.returnToEditor = returnToEditor;
   document.getElementById('setup-back').hidden = secondSegment;
+  const panzerfaustLabel = document.getElementById('setup-panzerfaust');
+  panzerfaustLabel.hidden = !scenario.allowSecondPanzerfaust || secondSegment;
+  if (!panzerfaustLabel.hidden) {
+    panzerfaustLabel.querySelector('span').textContent = radioText('ドイツ軍のパンツァーファウスト', 'German Panzerfausts');
+    document.getElementById('setup-panzerfaust-count').value = '1';
+  }
   const british = document.getElementById('british-unit-type');
   const britishLabel = document.getElementById('setup-british-type');
   britishLabel.hidden = factionKey !== 'uk';
@@ -249,7 +257,9 @@ function openSetupScreen(factionKey, customScenario = null, secondSegment = fals
   setupState.equipmentAssignments = new Map();
   // 非対称シナリオの先攻選択 → プレイヤーの役割 (attacker/defender)
   let playerRole;
-  if (scenario.asymmetric) {
+  if (scenario.fixedAttackerFaction) {
+    playerRole = factionKey === scenario.fixedAttackerFaction ? 'attacker' : 'defender';
+  } else if (scenario.asymmetric) {
     const fpPick = document.getElementById('first-player-pick');
     const firstSide = (fpPick && fpPick.value) ? fpPick.value : 'player';
     playerRole = (firstSide === 'player') ? 'attacker' : 'defender';
@@ -289,9 +299,9 @@ function openSetupScreen(factionKey, customScenario = null, secondSegment = fals
   document.getElementById('faction-select').style.display = 'none';
   document.getElementById('setup-screen').classList.add('active');
   const fac = FACTIONS[factionKey];
-  const roleLabel = (scenario.id === 'C' || scenario.defenderInitialBuildings) ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
+  const roleLabel = (scenario.fixedAttackerFaction || scenario.id === 'C' || scenario.defenderInitialBuildings) ? (playerRole === 'attacker' ? '攻撃側・先攻' : '防御側・後攻') : '';
   document.getElementById('setup-title').textContent =
-    `${fac.flag} ${fac.name} 編成 — ${scenario.victoryPreset ? scenario.name : `シナリオ${scenario.id}「${scenario.name}」`}${roleLabel ? ' ['+roleLabel+']' : ''} (兵士 ${nums.length}名)`;
+    `${fac.flag} ${fac.name} 編成 — ${scenario.victoryPreset || scenario.challenge ? scenario.name : `シナリオ${scenario.id}「${scenario.name}」`}${roleLabel ? ' ['+roleLabel+']' : ''} (兵士 ${nums.length}名)`;
   if (secondSegment) document.getElementById('setup-title').textContent += ' — 第2区間';
   document.getElementById('setup-scenario-note').hidden =
     !(scenario.defenderInitialBuildings && playerRole === 'defender');
@@ -390,9 +400,17 @@ function showSetupScenarioInfo() {
 
 document.getElementById('setup-scenario-info-open').addEventListener('click', showSetupScenarioInfo);
 
+const CHALLENGE_CARD_STRIDE = 10000;
+
+function printedSoldierNumber(num) {
+  return Number.isInteger(num) ? num % CHALLENGE_CARD_STRIDE : num;
+}
+
 function getSoldierDef(factionKey, num) {
   const list = (SOLDIER_CARDS && SOLDIER_CARDS[factionKey]) || [];
-  return list.find(s => s.num === num) || null;
+  const printed = printedSoldierNumber(num);
+  const def = list.find(s => s.num === printed) || null;
+  return def && num !== printed ? { ...def, num, cardNumber: def.cardNumber ?? printed } : def;
 }
 
 function canFormSoloGroup(def) {
@@ -412,6 +430,7 @@ function isCrewWeaponSoldier(def) {
 
 function soldierFrontImage(faction, num, def = getSoldierDef(faction, num)) {
   if (def?.afv || def?.infantryGun) return def.imgFront;
+  num = printedSoldierNumber(num);
   const fac = FACTIONS[faction];
   const prefix = faction === 'rus' ? (num <= 30 ? 'russian' : 'Rus') : fac.prefix;
   return encPath(`${fac.dir}/${prefix} ${num}f.gif`);
@@ -439,7 +458,8 @@ function buildSetupCard(num, location) {
 
   const nm = document.createElement('div');
   nm.className = 'nm';
-  nm.textContent = def ? def.name : `#${num}`;
+  const copy = Math.floor(num / CHALLENGE_CARD_STRIDE);
+  nm.textContent = def ? def.name + (copy ? ` (${copy + 1})` : '') : `#${num}`;
   el.appendChild(nm);
 
   const wp = document.createElement('div');
@@ -483,8 +503,9 @@ function buildSetupCard(num, location) {
   const editorDemo = setupState.secondSegment
     ? state.editorSegment?.survivors?.get(num)?.demoCharge
     : setupState.scenario?.demoHolders?.[setupState.faction]?.includes(num);
+  const equipmentKinds = requiredSetupEquipment();
   const assignedDemo = typeof location === 'number' && (setupState.demoHolders?.has(`${location}:${num}`) ||
-    setupState.equipmentAssignments.get('demo') === num);
+    equipmentKinds.some((kind, slot) => kind === 'demo' && setupState.equipmentAssignments.get(slot) === num));
   if (editorDemo || assignedDemo) {
     const demo = document.createElement('img');
     demo.src = encPath(getDemoImagePath(setupState.faction));
@@ -494,8 +515,9 @@ function buildSetupCard(num, location) {
     el.appendChild(demo);
   }
 
-  for (const [kind, holder] of setupState.equipmentAssignments) {
-    if (holder !== num || kind === 'demo') continue;
+  for (const [slot, holder] of setupState.equipmentAssignments) {
+    const kind = equipmentKinds[slot];
+    if (holder !== num || !kind || kind === 'demo') continue;
     const name = secondaryWeaponLabel(kind);
     const src = setupEquipmentImage(kind, setupState.faction);
     const marker = document.createElement(src ? 'img' : 'span');
@@ -631,8 +653,10 @@ function setupEquipmentImage(kind, faction) {
 }
 
 function planSetupEquipment(numbers, faction, kinds = []) {
-  const holders = numbers.filter(num => secondaryWeaponEligible({ num }, faction));
-  return new Map(kinds.slice(0, holders.length).map((kind, index) => [kind, holders[index]]));
+  if (!kinds?.length) return new Map();
+  // Each slot corresponds to one entry in the scenario's equipment list.
+  const holders = [...new Set(numbers)].filter(num => secondaryWeaponEligible({ num }, faction));
+  return new Map(holders.slice(0, kinds.length).entries());
 }
 
 function requiredSetupEquipment() {
@@ -640,9 +664,20 @@ function requiredSetupEquipment() {
   return setupState.scenario?.secondaryEquipment?.[setupState.faction] || [];
 }
 
+function setupEquipmentLabel(kinds, slot) {
+  const kind = kinds[slot];
+  const name = secondaryWeaponLabel(kind, false);
+  const first = kinds.indexOf(kind);
+  if (first === kinds.lastIndexOf(kind)) return name;
+  const number = kinds.slice(first, slot + 1).filter(item => item === kind).length;
+  return `${name} ${number}`;
+}
+
 function setupEquipmentError() {
-  const pending = requiredSetupEquipment().filter(kind => !setupState.equipmentAssignments.has(kind));
-  return pending.length ? `${pending.map(kind => secondaryWeaponLabel(kind, false)).join('・')}の所持者を選んでください。` : '';
+  const kinds = requiredSetupEquipment();
+  const pending = kinds.flatMap((_, slot) =>
+    setupState.equipmentAssignments.has(slot) ? [] : [setupEquipmentLabel(kinds, slot)]);
+  return pending.length ? `${pending.join('・')}の所持者を選んでください。` : '';
 }
 
 function renderSetupEquipment() {
@@ -657,9 +692,9 @@ function renderSetupEquipment() {
   const eligible = setupState.groups.flatMap((group, index) => group
     .filter(num => secondaryWeaponEligible({ num }, setupState.faction))
     .map(num => ({ num, group: INITIAL_GROUP_NAMES[index] })));
-  for (const kind of kinds) {
+  for (const [slot, kind] of kinds.entries()) {
     const label = document.createElement('label');
-    const name = secondaryWeaponLabel(kind, false);
+    const name = setupEquipmentLabel(kinds, slot);
     const src = setupEquipmentImage(kind, setupState.faction);
     if (src) {
       const icon = document.createElement('img');
@@ -669,19 +704,22 @@ function renderSetupEquipment() {
     }
     const select = document.createElement('select');
     select.dataset.setupEquipment = kind;
+    select.dataset.equipmentSlot = slot;
     select.add(new Option('選択してください', ''));
-    const current = assignments.get(kind);
+    const current = assignments.get(slot);
     for (const { num, group } of eligible) {
       if (assigned.has(num) && num !== current) continue;
       const def = getSoldierDef(setupState.faction, num);
-      select.add(new Option(`GROUP ${group} · #${def.cardNumber ?? num} ${def.name}`, num));
+      const copy = Math.floor(num / CHALLENGE_CARD_STRIDE);
+      const suffix = copy ? ` (${copy + 1})` : '';
+      select.add(new Option(`GROUP ${group} · #${def.cardNumber ?? num} ${def.name}${suffix}`, num));
     }
     select.value = current == null ? '' : String(current);
     select.addEventListener('change', () => {
-      if (select.value) assignments.set(kind, Number(select.value));
-      else assignments.delete(kind);
+      if (select.value) assignments.set(slot, Number(select.value));
+      else assignments.delete(slot);
       renderSetup();
-      equipment.querySelector(`[data-setup-equipment="${kind}"]`).focus();
+      equipment.querySelector(`[data-equipment-slot="${slot}"]`).focus();
     });
     label.append(name, select);
     equipment.append(label);
@@ -798,8 +836,8 @@ function moveSelectedTo(targetLoc) {
   removeFromAnywhere(sel.num);
   // 行先へ追加
   if (targetLoc === 'pool') {
-    for (const [kind, holder] of setupState.equipmentAssignments) {
-      if (holder === sel.num) setupState.equipmentAssignments.delete(kind);
+    for (const [slot, holder] of setupState.equipmentAssignments) {
+      if (holder === sel.num) setupState.equipmentAssignments.delete(slot);
     }
     setupState.pool.push(sel.num);
     sortSetupPool();
@@ -888,7 +926,7 @@ function renderSetup() {
     g.length === 0 || (g.length >= 2 && g.length <= 10) || soloUnit(g));
   renderSetupEquipment();
   const formationError = setupGroupCountError() || setupEquipmentError();
-  const editorRoster = setupState.secondSegment || Boolean(setupState.scenario?.victoryPresets);
+  const editorRoster = setupState.secondSegment || Boolean(setupState.scenario?.victoryPresets || setupState.scenario?.challenge);
   const allAssigned = !editorRoster || setupState.pool.length === 0;
   const start = document.getElementById('setup-start');
   start.disabled = !(sizesOk && !formationError && allAssigned);
@@ -910,7 +948,7 @@ function setupGroupCountError() {
     return radioText(`守備側は${buildings}グループに編成します。`,
       `The defending force must form ${buildings} groups.`);
   }
-  if (!secondSegment && !scenario?.victoryPresets &&
+  if (!secondSegment && !scenario?.victoryPresets && !scenario?.challenge &&
       (count < 2 || count > 4 || groups.slice(0, count).some(group => !group.length))) {
     return radioText('Aから空き枠を作らず、2〜4グループに編成してください（§3.2）。',
       'Form two to four groups in consecutive slots starting with A (§3.2).');
@@ -929,7 +967,10 @@ function countLeadersInGroup(gi) {
 document.getElementById('setup-back').addEventListener('click', () => {
   document.getElementById('setup-screen').classList.remove('active');
   document.getElementById('faction-select').style.display = '';
-  if (setupState.returnToEditor) document.getElementById('open-scenario-editor').click();
+  if (setupState.returnToEditor) {
+    document.getElementById('open-scenario-editor').click();
+    if (setupState.scenario?.challenge) document.querySelector('[data-tab="challenge"]').click();
+  }
 });
 document.getElementById('setup-reset').addEventListener('click', () => {
   setupState.pool = setupState.pool.concat(...setupState.groups);
@@ -967,6 +1008,24 @@ document.getElementById('setup-sort').addEventListener('click', () => {
   sortSetupPool();
   renderSetup();
 });
+document.getElementById('setup-panzerfaust-count').addEventListener('change', event => {
+  const { scenario, faction, equipmentAssignments, secondSegment } = setupState;
+  if (!scenario?.allowSecondPanzerfaust || secondSegment) return;
+
+  const kind = 'panzerfaustHolders';
+  const germanEquipment = scenario.secondaryEquipment.ger;
+  const secondSlot = germanEquipment.lastIndexOf(kind);
+  const hasSecond = secondSlot !== germanEquipment.indexOf(kind);
+  const wantsSecond = event.target.value === '2';
+  if (wantsSecond === hasSecond) return;
+
+  // The extra item is appended so the first holder keeps their slot.
+  const ger = wantsSecond ? [...germanEquipment, kind] : germanEquipment.slice(0, secondSlot);
+  if (!wantsSecond && faction === 'ger') equipmentAssignments.delete(secondSlot);
+  setupState.scenario = { ...scenario, secondaryEquipment: { ...scenario.secondaryEquipment, ger } };
+  renderSetup();
+});
+
 document.getElementById('setup-start').addEventListener('click', () => {
   startGameWithSetup();
 });
@@ -1142,7 +1201,9 @@ document.querySelectorAll('#camp-fac-pick button').forEach(btn => {
 
 // シナリオ開始: シナリオ・AI陣営・役割をランダム決定し、setup-screen へ
 document.getElementById('camp-start-scenario').addEventListener('click', () => {
-  const ids = ['A', 'B', 'C', 'D'];
+  const ids = ['A', 'B', 'C', 'D', ...Object.values(window.SCENARIOS)
+    .filter(scenario => scenario.fixedAttackerFaction && scenario.onlyFactions.includes(campState.faction))
+    .map(scenario => scenario.id)];
   const scenarioId = ids[Math.floor(Math.random() * ids.length)];
   const sp = document.getElementById('scenario-pick');
   if (sp) sp.value = scenarioId;
@@ -1153,7 +1214,8 @@ document.getElementById('camp-start-scenario').addEventListener('click', () => {
     const fp = document.getElementById('first-player-pick');
     if (fp) fp.value = role;
   }
-  const others = ['ger', 'rus', 'us', 'jpn', 'uk'].filter(f => f !== campState.faction);
+  const others = (scenario?.onlyFactions || ['ger', 'rus', 'us', 'jpn', 'uk'])
+    .filter(f => f !== campState.faction);
   const aiFaction = others[Math.floor(Math.random() * others.length)];
   setupState.aiFactionOverride = aiFaction;
   setupState.fromCampaign = true;

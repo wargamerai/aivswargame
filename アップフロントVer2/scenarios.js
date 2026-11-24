@@ -778,7 +778,7 @@ function ufUsesVictory(scenario, id) {
     if (!units.length) return [];
     const enriched = _enrichUnits(units, factionKey);
     const maneuverGoal = maneuverGoalSize(scenario, role, enriched.length);
-    const isEditor = Boolean(scenario?.victoryPreset);
+    const isEditor = Boolean(scenario?.victoryPreset || scenario?.challenge);
     const fixedDefense = role === 'defender' && (scenario?.evacuationSetup || scenario?.defenderPillbox || ufUsesVictory(scenario, 'C'));
     if (!fixedDefense && !global.__forceSplit) {
       const requiredGroups = role === 'defender' ? scenario?.defenderInitialBuildings : 0;

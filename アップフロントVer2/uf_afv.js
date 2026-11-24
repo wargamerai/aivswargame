@@ -203,7 +203,7 @@
     if (!model || model.ot || isButtoned(c) === closed) return;
     if (closed) loseAcquisitionForCards([c]);
     const face = model.number + (closed ? 100 : 0);
-    c.num = face;
+    c.num = (c.num ?? numOf(c)) - numOf(c) + face;
     c.id = c.id.replace(/\d+\s*$/, String(face));
     const def = R().lookupSoldier(c, factionOfCard(c));
     c.img = def.imgFront;

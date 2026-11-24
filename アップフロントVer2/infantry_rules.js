@@ -114,7 +114,9 @@
     const m = String(card.id).match(/(\d+)\s*$/);
     if (!m) return null;
     const number = parseInt(m[1], 10);
-    const base = list.find(s => s.num === number) || null;
+    const printed = global.printedSoldierNumber?.(card.num);
+    const base = Number.isInteger(printed) && printed !== card.num
+      ? global.getSoldierDef(factionKey, card.num) : list.find(s => s.num === number) || null;
     const partisan = base && typeof global.partisanFaction === 'function' && global.partisanFaction(factionKey);
     const ig = base && global.state?.scenario?.infantryGuns?.[factionKey]?.[number];
     const eliteMorale = base && !base.afv && !base.infantryGun &&

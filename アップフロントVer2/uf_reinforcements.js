@@ -273,7 +273,7 @@ async function aiCheckRandomReinforcements() {
 
 async function aiEnterRandomReinforcements() {
   const rule = state.scenario?.randomDefenderReinforcements && state.randomReinforcements;
-  const pending = rule?.waiting[0];
+  const pending = rule?.waiting?.[0];
   if (!pending || pending.turn > state.turnCount) return false;
   const faction = getFactionKey(state.ai);
   const groups = state.groups.ai;
