@@ -4872,11 +4872,18 @@ function drawRevealedMovePaths(svg) {
 function drawUnitCounter(svg, unit, x, y, size, showPilot) {
   const ns = 'http://www.w3.org/2000/svg';
   const teamColor = unit.team === 'given' ? '#68bcff' : '#ff7272';
-  const angle = (HEX_VIEW_DIR_DEG[unit.dir] || 0) + 90;
+  const angle = (HEX_VIEW_DIR_DEG[unit.dir] ?? -90) + 90;
+  const radians = angle * Math.PI / 180;
+  // Keep rotated counters within their original footprint when units share a hex.
+  const scale = 1 / Math.max(1, Math.abs(Math.cos(radians)) + Math.abs(Math.sin(radians)));
   const group = document.createElementNS(ns, 'g');
   group.setAttribute('transform', `translate(${x},${y})`);
   group.setAttribute('pointer-events', 'none');
   group.setAttribute('data-unit-id', unit.id);
+  const counter = document.createElementNS(ns, 'g');
+  counter.setAttribute('class', 'unit-counter-face');
+  counter.setAttribute('transform', `rotate(${angle}) scale(${scale})`);
+  group.appendChild(counter);
 
   const frame = document.createElementNS(ns, 'rect');
   frame.setAttribute('x', -size / 2);
@@ -4887,7 +4894,7 @@ function drawUnitCounter(svg, unit, x, y, size, showPilot) {
   frame.setAttribute('fill', '#202a36');
   frame.setAttribute('stroke', teamColor);
   frame.setAttribute('stroke-width', '2.3');
-  group.appendChild(frame);
+  counter.appendChild(frame);
 
   const artPath = counterArtworkPath(unit);
   if (artPath) {
@@ -4897,7 +4904,7 @@ function drawUnitCounter(svg, unit, x, y, size, showPilot) {
     sprite.setAttribute('y', 1 - size / 2);
     sprite.setAttribute('width', size - 2);
     sprite.setAttribute('height', size - 2);
-    group.appendChild(sprite);
+    counter.appendChild(sprite);
   } else {
     const initials = document.createElementNS(ns, 'text');
     initials.setAttribute('class', 'counter-name');
@@ -4906,19 +4913,21 @@ function drawUnitCounter(svg, unit, x, y, size, showPilot) {
     group.appendChild(initials);
   }
 
-  const arrow = document.createElementNS(ns, 'polygon');
-  const tip = size / 2 + 7;
-  arrow.setAttribute('points', `0,${-tip} 4,${-tip + 6} -4,${-tip + 6}`);
-  arrow.setAttribute('transform', `rotate(${angle})`);
-  arrow.setAttribute('fill', teamColor);
-  arrow.setAttribute('stroke', '#151d28');
-  arrow.setAttribute('stroke-width', '1.1');
-  group.appendChild(arrow);
+  const front = document.createElementNS(ns, 'line');
+  front.setAttribute('class', 'unit-counter-front');
+  front.setAttribute('x1', -size * 0.32);
+  front.setAttribute('x2', size * 0.32);
+  front.setAttribute('y1', -size / 2);
+  front.setAttribute('y2', -size / 2);
+  front.setAttribute('stroke', '#fff5ca');
+  front.setAttribute('stroke-width', '2.5');
+  front.setAttribute('stroke-linecap', 'round');
+  counter.appendChild(front);
 
   if (showPilot) {
     const pilot = document.createElementNS(ns, 'text');
     pilot.setAttribute('class', 'counter-name');
-    pilot.setAttribute('y', unit.dir === 3 ? -size / 2 - 4 : size / 2 + 7);
+    pilot.setAttribute('y', size / 2 + 7);
     pilot.textContent = unit.pilot.slice(0, 4);
     group.appendChild(pilot);
   }
