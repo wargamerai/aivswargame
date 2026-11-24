@@ -1,4 +1,4 @@
-/* Convert the game's report document into a downloadable PNG. */
+/* Convert the game's report document into a downloadable image. */
 window.ReportImage = (() => {
   'use strict';
 
@@ -84,9 +84,18 @@ window.ReportImage = (() => {
     }
   }
 
-  async function render(html, { width = 1100, prepare = '' } = {}) {
+  function imageType(language = document.documentElement.lang) {
+    return /^ja(?:-|$)/i.test(language) ? 'image/jpeg' : 'image/png';
+  }
+
+  function formatLabel(language) {
+    return imageType(language) === 'image/jpeg' ? 'JPEG' : 'PNG';
+  }
+
+  async function render(html, { width = 1100, prepare = '', language } = {}) {
     const draw = await loadRenderer();
     const report = reportDocument(prepare ? await snapshot(html, prepare, width) : html);
+    const type = imageType(language || report.documentElement.lang || document.documentElement.lang);
     for (const details of report.querySelectorAll('details')) details.open = true;
     const frame = createFrame(report.documentElement.outerHTML, 'allow-same-origin', width);
     let canvas;
@@ -106,7 +115,8 @@ window.ReportImage = (() => {
         scrollX: 0, scrollY: 0, allowTaint: false, logging: false, backgroundColor: '#fff',
       });
       return await new Promise((resolve, reject) => canvas.toBlob(
-        blob => blob?.size ? resolve(blob) : reject(new Error('Image encoding failed')), 'image/png'));
+        blob => blob?.size && blob.type === type ? resolve(blob) : reject(new Error('Image encoding failed')),
+        type, type === 'image/jpeg' ? 0.92 : undefined));
     } finally {
       if (canvas) canvas.width = canvas.height = 0;
       frame.remove();
@@ -119,7 +129,8 @@ window.ReportImage = (() => {
       const blob = await render(html, options);
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = filename.replace(/\.(?:html?|png)$/i, '') + '.png';
+      const extension = blob.type === 'image/jpeg' ? '.jpeg' : '.png';
+      link.download = filename.replace(/\.(?:html?|png|jpe?g)$/i, '') + extension;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -133,5 +144,5 @@ window.ReportImage = (() => {
     }
   }
 
-  return { download, render };
+  return { download, render, formatLabel };
 })();

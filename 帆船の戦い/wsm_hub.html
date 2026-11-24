@@ -129,7 +129,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
 #infoLabel { color:#ffcc88; align-self:center; flex:1; }
 </style>
 <script src="../report-limit.js"></script>
-<script src="../report-image.js"></script>
+<script src="../report-image.js?v=jp-jpeg"></script>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
 </head>
 <body>
@@ -263,7 +263,7 @@ button.back { background:#555; color:#fff; border:none; padding:5px 10px; border
   <button onclick="centerMapView()" title="選んだ艦（選んでいなければ全艦の真ん中）を画面の中央へ" style="background:#2a5a7a;color:#fff;border:1px solid #4a8ab0;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">◎ 中央へ</button>
   <button onclick="saveGameToFile()" style="background:#864;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">💾 保存</button>
   <button onclick="downloadBattleLog()" title="ここまでの戦闘報告をファイルに書き出す。不具合のときはこのファイルを送ってください" style="background:#456;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">📜 レポート作成</button>
-  <button onclick="downloadBattleLog(this)" type="button" style="background:#456;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">PNG</button>
+  <button id="battleLogImage" onclick="downloadBattleLog(this)" type="button" style="background:#456;color:#fff;border:none;padding:4px 10px;border-radius:3px;cursor:pointer;font-size:0.85em;">JPEG</button>
   <button class="back" onclick="location.href='sandbox.html'">← 編成へ</button>
 </div>
 
@@ -5376,6 +5376,7 @@ if (mapImgLoaded) { initCanvas(); draw(); }
 </script>
 
 <script src="lang.js"></script>
+<script>document.getElementById('battleLogImage').textContent = ReportImage.formatLabel(typeof LANG === 'string' ? LANG : undefined);</script>
 <script>
 (() => {
   const scenarioNo = Number(state.scenarioNo);

@@ -260,7 +260,7 @@ function ufShowGameOver() {
     <div data-result style="margin:8px 0 12px;"></div>
     <div style="font-size:12px;color:#ccc;margin-bottom:12px;">勝敗・損害・行動の回数・手番ごとの出来事のレポートを、このパソコンに保存できます。</div>
     <button class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;background:#2266cc;" onclick="ufSaveReport()">レポートを保存</button>
-    <button type="button" class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;" onclick="ufSaveReport(this)">PNG</button>
+    <button type="button" class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;" onclick="ufSaveReport(this)">${ReportImage.formatLabel()}</button>
     <button class="action-btn" style="width:auto;height:auto;padding:6px 16px;font-size:14px;margin-left:8px;" onclick="document.getElementById('ufGameOver').remove()">閉じる</button>
   </div>`;
   el.querySelector('[data-result]').textContent = _ufStrip(state._ufEndText || '');

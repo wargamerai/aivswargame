@@ -759,13 +759,13 @@ function showDebrief(r, saved) {
   ${r.ko ? `<p>${L(`新しい戦車: #${g.tankId} ${E.tank().model}`, `New tank: #${g.tankId} ${E.tank().model}`)} ${tankChoice()}</p>` : ''}${r.promoted ? `<p style="color:var(--good)">${L('昇進した！', 'Promoted!')}</p>` : ''}${r.medal ? `<p style="color:var(--good)">🎖 ${r.medal}</p>` : ''}
   ${g.medals.length ? `<p style="color:var(--mute);font-size:.9em">${L('勲章', 'Medals')}: ${esc(g.medals.join('、'))}</p>` : ''}
   ${autosaveMessage(saved)}
-  <p><button class="go" onclick="closeOver()">${L('続ける', 'Continue')}</button> <button onclick="saveLastReport()">${L('レポート HTML', 'Report HTML')}</button> <button onclick="saveLastReport(this)">${L('レポート PNG', 'Report PNG')}</button></p>`);
+  <p><button class="go" onclick="closeOver()">${L('続ける', 'Continue')}</button> <button onclick="saveLastReport()">${L('レポート HTML', 'Report HTML')}</button> <button onclick="saveLastReport(this)">${L('レポート JPEG', 'Report PNG')}</button></p>`);
   if (report) showReportPreview(report);
 }
 function showOver(saved) {
   const g = E.G, o = g.over; if (!o) return;
   const kills = Object.keys(g.kills).map(k => `${L((PB.UNIT[k] || {}).name || k, (PB.UNIT[k] || {}).en || k)} ×${g.kills[k]}`).join('、') || L('なし', 'none');
-  const reports = REPORTS.length ? `<button onclick="saveLastReport()">${L('最後のレポート HTML', 'Last report HTML')}</button> <button onclick="saveLastReport(this)">${L('最後のレポート PNG', 'Last report PNG')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> ` : '';
+  const reports = REPORTS.length ? `<button onclick="saveLastReport()">${L('最後のレポート HTML', 'Last report HTML')}</button> <button onclick="saveLastReport(this)">${L('最後のレポート JPEG', 'Last report PNG')}</button> <button onclick="saveAllReports()">${L('レポート一式', 'All reports')}</button> ` : '';
   inlineBox(`<h2>${o.win ? L('終戦', 'War\'s end') : L('戦いの終わり', 'The end')}</h2><p>${esc(o.why)}</p><p>${L(`出撃 ${g.days}日、戦闘 ${g.battles}回、累計 ${g.totalVP}VP`, `${g.days} days in action, ${g.battles} battles, ${g.totalVP} VP`)}</p><p>${L('撃破', 'Kills')}: ${esc(kills)}</p>${g.medals.length ? `<p>${L('勲章', 'Medals')}: ${esc(g.medals.join('、'))}</p>` : ''}
   ${autosaveMessage(saved)}
   <p>${o.canContinue ? `<button class="go" onclick="E.continueAsReplacement();closeOver();save()">${L('次の車長として続ける', 'Continue as the replacement')}</button> ` : ''}${reports}<button onclick="try{localStorage.removeItem('pb_save')}catch(e){};location.reload()">${L('最初から', 'New campaign')}</button></p>`);

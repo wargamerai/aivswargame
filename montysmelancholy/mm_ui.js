@@ -106,6 +106,7 @@
     clearTimeout(endTimer);
     $('end').style.display = 'none';
     const rp = $('rp'); rp.style.display = 'flex';
+    $('rpPng').textContent = ReportImage.formatLabel(MMLang.lang);
     $('rpBlogBox').style.display = 'none';
     if (!rpData) {
       const data = MMReport.build(G.S.seed, G.answers);

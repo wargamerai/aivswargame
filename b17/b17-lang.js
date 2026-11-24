@@ -854,7 +854,7 @@ window.B17Language = (() => {
   "基地へ向けて反転します。": "Turning for base.",
   "乗員の記録をまとめました。": "The crew report is complete.",
   "HTMLで保存": "Save as HTML",
-  "PNGで保存": "Save as PNG",
+  "JPEGで保存": "Save as PNG",
   "第8航空軍基地と欧州の目標都市を描いたB-17戦略地図": "B-17 route map with the Eighth Air Force base and targets in Europe",
   "着陸地点 英国基地": "Landing site: base in England",
   "B-17の10人の乗員持ち場を描いたクルー盤": "B-17 crew board with all ten stations"

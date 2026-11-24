@@ -3071,7 +3071,7 @@ function renderFinalResult(automaticDownload = false) {
     overlay.innerHTML=PFBResults.reportHtml(report)+`<div class="report-actions">
         <button type="button" class="go-btn" onclick="doAction('restart')">${next}</button>
         <button type="button" class="go-btn report-download">HTMLを保存</button>
-        <button type="button" class="go-btn report-image-download">PNGを保存</button>
+        <button type="button" class="go-btn report-image-download">JPEGを保存</button>
         </div>`+standings+PFBResults.reportCreditHtml;
     overlay.querySelector('.report-download').onclick=()=>PFBResults.downloadReport(report,standings);
     overlay.querySelector('.report-image-download').onclick=e=>PFBResults.downloadReport(report,standings,false,e.currentTarget);
@@ -3441,7 +3441,7 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 });
 </script>
 <script src="report-limit.js?v=report-credit"></script>
-<script src="../report-image.js"></script>
+<script src="../report-image.js?v=jp-jpeg"></script>
 <script src="pfb-results.js?v=report-png"></script>
 <script src="pfb-match.js?v=fielding-review"></script>
 <script src="pfb-season.js?v=roster-warning"></script>
