@@ -108,6 +108,7 @@ const AURA_BATTLERS = {
   'ライネック':       { power: 'b', reqAura: 4, limitAura: 9, type: 'AB' },
   'ズワース':         { power: 'a', reqAura: 4, limitAura: 8, type: 'AB' },
   'ガラバ':           { power: 'b', reqAura: 3, limitAura: 8, type: 'AB' },
+  'ブブリィ':         { power: 'b', reqAura: 4, limitAura: 10, type: 'AB' },
 };
 
 // ===== WC・オーラボム性能表（仮実装） =====
@@ -115,7 +116,6 @@ const WING_CALIBERS = {
   'フォウ':   { power: 'd', reqAura: 2, limitAura: 6, type: 'WC' },
   'バラウ':   { power: 'e', reqAura: 2, limitAura: 6, type: 'WC' },
   'ズロン':   { power: 'd', reqAura: 3, limitAura: 6, type: 'WC' },
-  'グラバイ': { power: 'b', reqAura: 3, limitAura: 8, type: 'WC' },
   'ドロ':     { power: 'f', reqAura: 2, limitAura: 5, type: 'OB' },
   'グナン':   { power: 'e', reqAura: 2, limitAura: 5, type: 'OB' },
   'タンギー': { power: 'e', reqAura: 2, limitAura: 5, type: 'OB' },
@@ -134,7 +134,7 @@ const WEAPON_HIT = {
   'ガッシュ':               [4, 5, 6, 6, 5, 4, 4, 3],
   'ボゾン砲':               [3, 4, 5, 5, 4, 3, null, null],
   'オーラバルカン':         [5, 6, 7, 6, 5, 3, null, null],
-  'オーラショット':         [3, 5, 6, 6, 5, 5, 4, 3],
+  'オーラショット':         [4, 5, 6, 6, 5, 5, 4, 3],
   'オーラキャノン':         [3, 4, 5, 6, 6, 5, 5, 4],
   '手榴弾':                 [6, 5, 4, null, null, null, null, null],
   'オーラキャノン(ビルバイン)': [3, 3, 4, 4, 5, 5, 5, 4],
@@ -178,6 +178,7 @@ const TARGET_ACTION_MOD = {
   '変形': 2,
   '合体': 2,
   '積載': 2,
+  '回復': 1,
 };
 
 // ===== 格闘命中率表 =====
@@ -195,7 +196,7 @@ const MELEE_POWER = {
   '斬る': { a: 10, b: 9, c: 8, d: 7, e: 6, f: 5, g: 4 },
   '殴る': { a: 7, b: 6, c: 5, d: 5, e: 4, f: 3, g: 2 },
   '武器で殴る': { a: 5, b: 4, c: 3, d: 3, e: 3, f: 2, g: 2 },
-  '蹴る': { a: 8, b: 7, c: 6, d: 6, e: 5, f: 4, g: 3 },
+  '蹴る': { a: 8, b: 7, c: 6, d: 6, e: 6, f: 4, g: 3 },
 };
 
 // ===== パワーによる威力の修正値 =====
@@ -210,7 +211,7 @@ const MELEE_LOCATION_MOD = {
 
 /** Sheet9 用：命中箇所 → 列キー（翼・オーラC等は補正対象外で 0） */
 function meleeHitPartSheet9Category(part) {
-  if (part === '頭' || part === '右手' || part === '左手' || part === '右足' || part === '左足') return '頭手足';
+  if (part === '頭' || part === '手' || part === '足' || part === '右手' || part === '左手' || part === '右足' || part === '左足') return '頭手足';
   if (part === '胴' || part === 'コクピット') return '胴コクピット';
   return null;
 }
@@ -253,7 +254,7 @@ const HIT_LOCATION_AB2 = {
 
 // ===== WC/OB 命中箇所判定表 =====
 const HIT_LOCATION_WC = {
-  'ウイングキャリバー': ['ウイング','胴','コクピット','オーラコンバーター','胴','ウイング','胴','武器','胴','ウイング','頭'],
+  'ウイングキャリバー': ['ウイング','胴','コクピット','オーラコンバーター','胴','ウイング','胴','武器','翼','胴','ウイング'],
   'オーラボム':         ['オーラコンバーター','胴','胴','コクピット','胴','オーラコンバーター','武器','胴','胴','オーラコンバーター','頭'],
 };
 
@@ -290,16 +291,16 @@ const DURABILITY = {
   'AB': {
     '頭': 2, '胴': 4, 'コクピット': 4,
     '右手': 3, '左手': 3, '右足': 3, '左足': 3,
-    '翼': 2, 'オーラコンバーター': 2,
+    '翼': 2, 'オーラコンバーター': 3,
     '剣': 5, '盾': 5, '武器': 1,
   },
   'WC': {
     '頭': 2, '胴': 3, 'コクピット': 3, '翼': 2, 'ウイング': 4,
-    'オーラコンバーター': 2, '武器': 3,
+    'オーラコンバーター': 3, '武器': 3,
   },
   'OB': {
     '頭': 2, '胴': 3, 'コクピット': 3, '翼': 2,
-    'オーラコンバーター': 2, '武器': 3,
+    'オーラコンバーター': 3, '武器': 3,
   },
 };
 
@@ -326,7 +327,7 @@ const COMMON_ARMOR = { '剣': 7, '盾': 7, '武器': 2 };
 // ===== 装甲等級表 AB（名称未設定フォルダ 2/1dunbine_data_csv/オーラバトラー装甲厚.csv と同期。HTML は CSV を直接読まない）=====
 const ARMOR_AB = {
   'ダンバイン':   { '頭': 3, '胴': 4, 'コクピット': 4, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 3 },
-  'ビルバイン':   { '頭': 4, '胴': 5, 'コクピット': 5, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 4 },
+  'ビルバイン':   { '頭': 4, '胴': 5, 'コクピット': 5, 'オーラコンバーター': 2, '翼': 1, '手': 3, '足': 4 },
   'ダーナオシー': { '頭': 2, '胴': 3, 'コクピット': 3, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 2 },
   'ボチューン':   { '頭': 3, '胴': 4, 'コクピット': 4, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 3 },
   'ボゾン':       { '頭': 3, '胴': 4, 'コクピット': 4, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 3 },
@@ -338,6 +339,7 @@ const ARMOR_AB = {
   'ビアレス':     { '頭': 4, '胴': 5, 'コクピット': 5, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 4 },
   'ライネック':   { '頭': 3, '胴': 4, 'コクピット': 4, 'オーラコンバーター': 2, '翼': 1, '手': 3, '足': 3 },
   'ズワース':     { '頭': 4, '胴': 5, 'コクピット': 5, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 4 },
+  'ブブリィ':     { '頭': null, '胴': 3, 'コクピット': 2, 'オーラコンバーター': 3, 'ウイング': 3, '足': 2 },
   'ガラバ':       { '頭': null, '胴': 3, 'コクピット': 3, 'オーラコンバーター': 2, '翼': 1, '手': 2, '足': 2 },
 };
 
@@ -361,6 +363,7 @@ const MOVEMENT_AB = {
   '通常移動': { a: 4, b: 3, c: 2, d: 2, e: 2, f: 1, g: 1 },
   '高速移動': { a: 5, b: 4, c: 3, d: 3, e: 2, f: 2, g: 2 },
   '突撃':     { a: 6, b: 5, c: 4, d: 4, e: 3, f: 3, g: 3 },
+  '回復':     { a: 1, b: 1, c: 1, d: 0, e: 0, f: 0, g: 0 },
   '変形・合体': { a: 4, b: 3, c: 2, d: 1, e: 1, f: 1, g: 0 },
 };
 
@@ -375,7 +378,7 @@ const COLLISION_TABLE = [
   [null, null, null, null],
   [null, null, null, null],
   [null, null, null, 'w'],
-  [null, null, 'w', 'w'],
+  [null, 'w', 'w', 'w'],
   ['w', 'w', 'd', 'd'],
   ['d', 'd', 'd', 'd'],
 ];
@@ -415,10 +418,10 @@ const WEAPON_HAND = {
   'ミサイルランチャー': '左',
   '火焔砲': '両',
   '鉤爪': '両',
-  '機関砲': '両',
-  'オーラキャノン': '両',
+  '機関砲': '胴',
+  'オーラキャノン': '胴',
   'オーラライフル': '右',
-  'オーラキャノン(ビルバイン)': '両',
+  'オーラキャノン(ビルバイン)': '胴',
   'ミサイル': '両',
 };
 
@@ -430,12 +433,14 @@ function getWeaponHand(weaponName, unitWeaponHands) {
 }
 
 /** 右手／左手破壊時、その手の武器が使えないか */
-function canOperateWeaponWithHands(destroyed, weaponName, unitWeaponHands) {
-  const h = getWeaponHand(weaponName, unitWeaponHands);
+function canOperateWeaponWithHands(destroyed, weaponName, unitWeaponHands, mount) {
+  const h = mount || getWeaponHand(weaponName, unitWeaponHands);
   const d = destroyed || {};
   if (h === '右') return !d['右手'];
   if (h === '左') return !d['左手'];
-  if (h === '両') return !d['右手'] && !d['左手'];
+  if (h === '両') return !d['右手'] || !d['左手'];
+  if (h === '胴' && d['武器']) return false;
+  if (h === '足') return !d['右足'] || !d['左足'];
   return true;
 }
 
@@ -480,9 +485,12 @@ function getArmor(machineName, part) {
     const v = ARMOR_AB[base][p];
     return v != null ? v : 0;
   }
-  if (ARMOR_WC[base]) {
-    const v = ARMOR_WC[base][p];
-    return v != null ? v : 0;
+  const vehicle = WING_CALIBERS[base];
+  if (vehicle) {
+    const armor = vehicle.type === 'OB'
+      ? { '胴': 2, 'コクピット': 1, 'オーラコンバーター': 2, '武器': 2 }
+      : { '胴': 2, 'コクピット': 2, 'オーラコンバーター': 2, '武器': 2, '翼': 1, 'ウイング': 3 };
+    return armor[p] || 0;
   }
   return 0;
 }
@@ -516,3 +524,76 @@ function resolveDamage(weaponPower, armor) {
   const die = roll1d6();
   return row[die - 1];
 }
+
+
+// 武装一覧表の機体別射程、発射回数、装備位置。両手の数字は合計。
+const MACHINE_RANGED_WEAPONS = {
+  'ダンバイン': { 'オーラショット': [9, 4, '左'], '鉤爪': [4, 4, '両'] },
+  'ビルバイン': { 'オーラキャノン': [12, 6, '胴'], 'オーラライフル': [10, 6, '右'], '鉤爪': [4, 4, '両'] },
+  'ダーナオシー': { 'ミサイルランチャー': [8, 4, '左'] },
+  'ボゾン': { 'ボゾン砲': [6, 4, '両'], 'ガッシュ': [8, 3, '左'] },
+  'ボチューン': { 'オーラバルカン': [6, Infinity, '両'], 'ガッシュ': [8, 3, '左'] },
+  'ドラムロ': { '火焔砲': [8, 6, '両'] },
+  'ビランビー': { 'ミサイルランチャー': [9, 5, '左'], '鉤爪': [5, 2, '両'] },
+  'バストール': { 'ミサイルランチャー': [9, 5, '左'], '鉤爪': [5, 2, '両'] },
+  'レプラカーン': { 'オーラバルカン': [6, 4, '胴'], 'オーラショット': [9, 2, '左'],
+    'オーラキャノン': [9, 3, '胴'], '手榴弾': [3, 2, '足'], '火焔砲': [8, 2, '右'] },
+  'ビアレス': { 'オーラバルカン': [6, 8, '両'], '火焔砲': [8, 3, '胴'], '鉤爪': [4, 4, '両'] },
+  'ライネック': { 'オーラバルカン': [6, 6, '両'], '鉤爪': [5, 6, '両'], 'ミサイル': [8, 16, '胴'] },
+  'ズワース': { 'オーラキャノン': [9, 5, '胴'], 'オーラショット': [9, 2, '左'],
+    '火焔砲': [8, 6, '胴'], '鉤爪': [4, 2, '右'] },
+  'フォウ': { 'ミサイル': [9, 6, '胴'], '機関砲': [9, 6, '胴'], 'オーラショット': [9, 4, '胴'] },
+  'バラウ': { 'ミサイル': [9, 4, '胴'], '機関砲': [8, 6, '胴'] },
+  'ズロン': { 'ミサイル': [9, 6, '胴'], '機関砲': [8, 6, '胴'] },
+  'ドロ': { '火焔砲': [8, 8, '胴'] },
+  'グナン': { '火焔砲': [8, 6, '胴'], 'オーラバルカン': [3, 4, '胴'] },
+  'タンギー': { '火焔砲': [8, 8, '胴'], '鉤爪': [5, 4, '胴'] },
+  'ガラバ': { 'オーラキャノン': [12, 6, '胴'], 'オーラショット': [8, 8, '両'], 'オーラバルカン': [5, 4, '胴'] },
+  'ブブリィ': { 'オーラキャノン': [12, 8, '胴'], '火焔砲': [8, 6, '胴'], '鉤爪': [6, 2, '両'] },
+};
+
+function rangedWeaponData(unit, label) {
+  if (!label || label === 'ソード' || label === 'オーラソード') return null;
+  const machine = getBaseMachineName(unit.machine);
+  let key = label === 'ミサイル' ? 'ミサイルランチャー' : label;
+  if (machine === 'ビルバイン' && key === 'オーラキャノン') key += '(ビルバイン)';
+  const specialClaw = machine === 'ブブリィ' && key === '鉤爪';
+  const hit = specialClaw ? [5, 6, 5, 4, 3, 2] : WEAPON_HIT[key];
+  if (!hit) return null;
+  const mounts = MACHINE_RANGED_WEAPONS[machine];
+  const specs = mounts?.[label] || (key === 'オーラキャノン(ビルバイン)' ? mounts?.['オーラキャノン'] : null);
+  const last = hit.findLastIndex(value => value != null);
+  const [range, shots, mount] = specs || [last + 1, Infinity, getWeaponHand(label)];
+  const power = specialClaw ? [6, 6, 5, 5, 4, 3]
+    : machine === 'ブブリィ' && key === '火焔砲' ? [8, 8, 8, 7, 6, 5, 4, 3]
+    : WEAPON_POWER[key];
+  return { key, range, shots, mount: unit.weaponHands?.[label] || mount, hit, power };
+}
+
+
+const VEHICLE_MOVE_ACTIONS = ['射撃', '回避', '通常移動', '高速移動', '回復', '格闘', '合体', '積載'];
+const VEHICLE_MOVEMENT_ROWS = {
+  'フォウ': [7, 8, 8, 11, 8, null, 5, 6],
+  'バラウ': [7, 7, 8, 11, 8, null, 5, 6],
+  'ズロン': [8, 8, 9, 11, 8, null, 5, 7],
+  'ビルバイン': [6, 6, 7, 9, 6],
+  'ドロ': [3, 3, 4, 5, 4],
+  'グナン': [4, 4, 4, 5, 4],
+  'タンギー': [5, 6, 6, 7, 5],
+  'ガラバ': [8, 9, 10, 11, 8, 6],
+  'ブブリィ': [8, 8, 9, 10, 8, 6],
+};
+const VEHICLE_MOVEMENT = Object.fromEntries(Object.entries(VEHICLE_MOVEMENT_ROWS)
+  .map(([machine, row]) => [machine, Object.fromEntries(row.map((value, i) => [VEHICLE_MOVE_ACTIONS[i], value]))]));
+const VEHICLE_POWER_MOVE_MOD = { a: 4, b: 4, c: 2, d: 2, e: 0, f: -1, g: -2 };
+const MACHINE_EXTERNAL_WEAPONS = {
+  'ダンバイン': ['オーラショット'],
+  'ビルバイン': ['オーラライフル'],
+  'ダーナオシー': ['ミサイルランチャー'],
+  'ボゾン': ['ガッシュ'],
+  'ボチューン': ['ガッシュ'],
+  'ビランビー': ['ミサイルランチャー'],
+  'バストール': ['ミサイルランチャー'],
+  'レプラカーン': ['オーラショット'],
+  'ズワース': ['オーラショット', '鉤爪'],
+};

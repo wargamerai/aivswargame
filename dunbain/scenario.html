@@ -1,170 +1,273 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<script defer src="../board-zoom.js"></script>
 <script src="../nobrowserback.js"></script>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>聖戦士ダンバイン - シナリオ選択</title>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-h1 { font-size:2em; color:#c8a020; margin-bottom:8px; text-shadow:0 0 10px rgba(200,160,32,0.5); }
-.subtitle { color:#888; font-size:0.9em; margin-bottom:30px; }
-.scenario-list { display:flex; flex-direction:column; gap:16px; width:500px; max-width:90vw; }
-.scenario-card {
-  background:#222; border:2px solid #444; border-radius:8px; padding:16px; cursor:pointer; transition:all 0.2s;
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+body {
+  margin:0; min-height:100vh; padding:clamp(18px,4vw,48px) 16px;
+  background:radial-gradient(ellipse at top,#252840 0%,#171827 65%);
+  color:#f1f2f7; font-family:'Hiragino Sans','Meiryo',sans-serif;
 }
-.scenario-card:hover { border-color:#c8a020; background:#2a2a3e; }
-.scenario-card.selected { border-color:#c8a020; background:#2a2a3e; box-shadow:0 0 12px rgba(200,160,32,0.3); }
-.sc-name { font-size:1.2em; font-weight:bold; color:#eee; }
-.sc-desc { color:#aaa; font-size:0.85em; margin-top:6px; line-height:1.4; }
-.sc-info { display:flex; gap:12px; margin-top:8px; font-size:0.75em; color:#aaa; }
-.sc-info span { background:#333; padding:2px 8px; border-radius:3px; }
-
-.setup-panel {
-  display:none; width:500px; max-width:90vw; margin-top:20px; background:#222; border:2px solid #555; border-radius:8px; padding:20px;
+main { max-width:1080px; margin:auto; }
+h1 { margin:0 0 20px; font-size:clamp(24px,4vw,40px); color:#efc980; }
+fieldset { min-width:0; }
+.mode-picker { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 0 14px; padding:0; border:0; }
+.mode-picker legend { padding:0; margin-bottom:8px; color:#c2cadd; font-size:13px; font-weight:700; }
+.mode-picker label {
+  display:grid; grid-template-columns:auto 1fr; align-items:center; gap:4px 9px;
+  padding:11px 12px; border:1px solid #55617a; border-radius:8px;
+  background:#22283a; cursor:pointer;
 }
-.setup-panel.show { display:block; }
-.setup-title { font-size:1.1em; color:#c8a020; margin-bottom:12px; }
-
-.side-btns { display:flex; gap:10px; margin-bottom:16px; }
-.side-btn {
-  flex:1; padding:12px; border:2px solid #555; border-radius:6px; background:#2a2a2a; color:#eee;
-  cursor:pointer; text-align:center; font-size:1em; transition:all 0.2s;
+.mode-picker label:hover { background:#2c3449; }
+.mode-picker label:has(:checked) { border-color:#d6aa54; background:#332e2e; }
+.mode-picker input { margin:0; accent-color:#efc980; }
+.mode-picker small { grid-column:2; color:#ccd3e3; font-size:12px; }
+.setup { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); align-items:start; gap:14px; }
+.setup-main, .map-preview { min-width:0; padding:14px; border:1px solid #48546d; border-radius:8px; background:#202536; }
+.settings { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:0 0 13px; font-size:13px; }
+.settings fieldset { display:flex; flex-wrap:wrap; gap:8px; padding:0; margin:0; border:0; }
+.settings legend { float:left; margin-right:5px; padding:0; font-weight:700; }
+.settings fieldset:disabled { opacity:.55; }
+.settings label { white-space:nowrap; }
+.map-preview { margin:0; }
+.map-preview label { display:flex; align-items:center; gap:9px; margin-bottom:10px; font-size:13px; font-weight:700; }
+.map-preview select { width:auto; max-width:100%; }
+.map-preview img {
+  display:block; width:100%; height:auto; aspect-ratio:3200/2762; object-fit:contain;
+  border:1px solid #47536a; border-radius:4px; background:#181c2a;
 }
-.side-btn:hover { border-color:#888; }
-.side-btn.selected { border-color:#c8a020; background:#3a3a2a; }
-.side-btn .side-name { font-weight:bold; font-size:1.1em; }
-.side-btn .side-units { color:#aaa; font-size:0.8em; margin-top:4px; }
-
-.start-btn {
-  width:100%; padding:14px; background:#c8a020; color:#000; border:none; border-radius:6px;
-  font-size:1.1em; font-weight:bold; cursor:pointer; transition:all 0.2s;
+.description { margin:0 0 10px; color:#ccd3e3; font-size:13px; line-height:1.5; }
+.formations { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.formation { min-width:0; padding:8px; border:1px solid #536582; border-radius:5px; }
+.formation:last-child { border-color:#8c555f; }
+.formation h2 { font-size:13px; margin:0 0 6px; }
+.formation ul { list-style:none; margin:0; padding:0; font-size:12px; }
+.formation li { display:grid; gap:2px; padding:5px 0; border-bottom:1px solid #41495b; }
+.formation li:last-child { border-bottom:0; }
+.formation li span { color:#bdc8df; font-size:11px; }
+.formation-rows { display:grid; gap:4px; }
+.formation-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:4px; }
+.edit-choice { display:block; min-width:0; font-size:10px; color:#bdc8df; }
+button, select {
+  padding:5px 7px; color:#f1f4fa; background:#192231; border:1px solid #586780;
+  border-radius:5px; font:inherit; font-size:12px;
 }
-.start-btn:hover { background:#dab030; }
-.start-btn:disabled { background:#555; color:#888; cursor:not-allowed; }
-
-.campaign-link {
-  margin-top:30px; color:#888; font-size:0.85em;
-}
-.campaign-link a { color:#6a8; text-decoration:none; }
-.campaign-link a:hover { color:#8cb; text-decoration:underline; }
+button { cursor:pointer; }
+button:hover:not(:disabled) { background:#394864; }
+button:disabled { opacity:.45; cursor:default; }
+select { display:block; width:100%; }
+.remove { align-self:end; padding:5px; font-size:11px; }
+.formation button[data-add] { margin-top:7px; }
+.start { width:100%; margin-top:12px; padding:9px; background:#e2b765; border-color:#e2b765; color:#1d170a; font-size:14px; font-weight:700; }
+.start:hover:not(:disabled) { background:#f4cd82; }
+:focus-visible { outline:2px solid #efc980; outline-offset:2px; }
+@media (max-width:760px) { .setup { grid-template-columns:minmax(0,1fr); } }
+@media (max-width:510px) { #practiceSetup { grid-template-columns:minmax(0,1fr); } }
 </style>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
 </head>
 <body>
-
-<h1>聖戦士ダンバイン</h1>
-<div class="subtitle">オーラバトラー戦闘シミュレーション</div>
-
-<div class="scenario-list" id="scenarioList"></div>
-
-<div class="setup-panel" id="setupPanel">
-  <div class="setup-title" id="setupTitle">対戦設定</div>
-  <label class="spectator-opt" style="display:flex;align-items:center;gap:8px;margin:10px 0;color:#bbb;font-size:0.9em;cursor:pointer;">
-    <input type="checkbox" id="spectatorModeCb" onchange="onSpectatorToggle()">
-    <span>AI観戦モード（両軍AI・オーラ判定・同時実行まで自動／ログと演出で処理確認）</span>
-  </label>
-  <div class="side-btns" id="sideBtns"></div>
-  <button class="start-btn" id="startBtn" disabled onclick="startGame()">開始</button>
-</div>
-
-<div class="campaign-link">
-  <a href="campaign.html">キャンペーンモードはこちら →</a>
-</div>
-<p style="color:#666;font-size:0.82em;margin-top:14px;max-width:500px;line-height:1.45;text-align:center;">
-  URLで観戦開始: <a href="index.html?spectator=1&amp;scenarioId=practice" style="color:#6a8">練習シナリオ</a>
-  （<code>?spectator=1</code>・<code>scenarioId=…</code>・無双の敵数固定 <code>musouEnemyCount=</code>）
-</p>
-
+<main>
+  <h1>聖戦士ダンバイン</h1>
+  <form id="scenarioSetup">
+    <fieldset class="mode-picker">
+      <legend>シナリオ選択</legend>
+      <label>
+        <input type="radio" name="mode" value="campaign" checked>
+        <strong>キャンペーン</strong>
+        <small>ラース・ワウの攻防</small>
+      </label>
+      <label>
+        <input type="radio" name="mode" value="practice">
+        <strong>練習</strong>
+        <small>両軍の編成を自由に選ぶ</small>
+      </label>
+    </fieldset>
+    <div class="setup">
+      <div class="setup-main">
+        <div class="settings">
+          <fieldset id="sidePicker">
+            <legend>操作する陣営</legend>
+            <label><input type="radio" name="playerSide" value="given" checked> ギブン軍</label>
+            <label><input type="radio" name="playerSide" value="drake"> ドレイク軍</label>
+          </fieldset>
+          <label><input type="checkbox" name="spectatorMode"> AI観戦</label>
+        </div>
+        <div id="campaignSetup">
+          <p id="campaignDescription" class="description"></p>
+          <div class="formations">
+            <section class="formation"><h2>ギブン軍</h2><ul id="givenForce"></ul></section>
+            <section class="formation"><h2>ドレイク軍</h2><ul id="drakeForce"></ul></section>
+          </div>
+        </div>
+        <div id="practiceSetup" class="formations" hidden>
+          <section class="formation">
+            <h2>ギブン軍</h2>
+            <div id="givenRows" class="formation-rows"></div>
+            <button type="button" data-add="given">機体を追加</button>
+          </section>
+          <section class="formation">
+            <h2>ドレイク軍</h2>
+            <div id="drakeRows" class="formation-rows"></div>
+            <button type="button" data-add="drake">機体を追加</button>
+          </section>
+        </div>
+        <button type="submit" id="startGame" class="start">キャンペーンを開始</button>
+      </div>
+      <figure class="map-preview">
+        <label>地図
+          <select name="boardArtwork">
+            <option value="wing">ウィングキャリバー</option>
+            <option value="battler">オーラバトラー</option>
+          </select>
+        </label>
+        <img id="boardPreview" src="images/vassal/board-wing.png" alt="ウィングキャリバーの地図" width="3200" height="2762">
+      </figure>
+    </div>
+  </form>
+</main>
 <script src="data.js"></script>
 <script src="シナリオ.js"></script>
 <script>
-let selectedScenario = null;
-let selectedSide = null;
+const setup = document.getElementById('scenarioSetup');
+const { mode, playerSide, spectatorMode, boardArtwork } = setup.elements;
+const campaign = getScenario('campaign1');
+const practice = getScenario('practice');
+const machineNames = [...Object.keys(AURA_BATTLERS), ...Object.keys(WING_CALIBERS)];
+const pilotNames = Object.keys(PILOTS);
+const teams = ['given', 'drake'];
 
-function init() {
-  const list = document.getElementById('scenarioList');
-  // 練習シナリオのみ表示（キャンペーンはcampaign.htmlから）
-  const practiceScenarios = Object.values(SCENARIOS).filter(s => !s.id.startsWith('campaign'));
-  practiceScenarios.forEach(sc => {
-    const card = document.createElement('div');
-    card.className = 'scenario-card';
-    card.onclick = () => selectScenario(sc);
-    card.id = 'sc_' + sc.id;
-    const givenCount = sc.given.length;
-    const drakeCount = sc.drake.length;
-    card.innerHTML = `
-      <div class="sc-name">${sc.name}</div>
-      <div class="sc-desc">${sc.description}</div>
-      <div class="sc-info">
-        <span>ターン: ${sc.maxTurn}</span>
-        <span>マップ: ${sc.mapCols}x${sc.mapRows}</span>
-        <span>ギブン軍 ${givenCount} vs ドレイク軍 ${drakeCount}</span>
-      </div>
-    `;
-    list.appendChild(card);
+let saved = {};
+try {
+  saved = JSON.parse(sessionStorage.getItem('dunbineConfig') || '{}') || {};
+} catch (error) {
+  console.warn('シナリオ設定を読み込めませんでした', error);
+}
+const forces = Object.fromEntries(teams.map(team => {
+  const selected = saved.practiceForces?.[team];
+  const valid = Array.isArray(selected) && selected.length &&
+    selected.every(unit => pilotNames.includes(unit.pilot) && machineNames.includes(unit.machine));
+  return [team, (valid ? selected : practice[team]).map(unit => ({ pilot:unit.pilot, machine:unit.machine }))];
+}));
+
+function selectEditor(labelText, names, selected, apply) {
+  const label = document.createElement('label');
+  label.className = 'edit-choice';
+  label.append(labelText);
+  const select = document.createElement('select');
+  for (const name of names) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    select.append(option);
+  }
+  select.value = selected;
+  select.addEventListener('change', () => apply(select.value));
+  label.append(select);
+  return label;
+}
+
+function renderFormation(team) {
+  const container = document.getElementById(team + 'Rows');
+  container.replaceChildren();
+  forces[team].forEach((unit, index) => {
+    const row = document.createElement('div');
+    row.className = 'formation-row';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove';
+    remove.textContent = '外す';
+    remove.disabled = forces[team].length === 1;
+    remove.setAttribute('aria-label', `${unit.pilot}の機体を外す`);
+    remove.addEventListener('click', () => {
+      forces[team].splice(index, 1);
+      renderFormation(team);
+    });
+    row.append(
+      selectEditor('パイロット', pilotNames, unit.pilot, value => {
+        unit.pilot = value;
+        remove.setAttribute('aria-label', `${unit.pilot}の機体を外す`);
+      }),
+      selectEditor('機体', machineNames, unit.machine, value => { unit.machine = value; }),
+      remove,
+    );
+    container.append(row);
+  });
+  document.querySelector(`[data-add="${team}"]`).disabled = forces[team].length >= 184;
+}
+
+for (const team of teams) {
+  renderFormation(team);
+  document.querySelector(`[data-add="${team}"]`).addEventListener('click', () => {
+    forces[team].push({ pilot:'一般兵', machine:team === 'given' ? 'ボゾン B' : 'ドラムロ B' });
+    renderFormation(team);
+    document.getElementById(team + 'Rows').lastElementChild.querySelector('select').focus();
   });
 }
-
-function onSpectatorToggle() {
-  const cb = document.getElementById('spectatorModeCb');
-  if (cb.checked && selectedScenario) {
-    selectSide('given');
-  } else if (!cb.checked) {
-    document.getElementById('startBtn').disabled = !selectedSide;
+document.getElementById('campaignDescription').textContent = campaign.description;
+for (const team of teams) {
+  const list = document.getElementById(team + 'Force');
+  for (const unit of campaign[team]) {
+    const item = document.createElement('li');
+    item.textContent = unit.pilot;
+    const machine = document.createElement('span');
+    machine.textContent = unit.machine;
+    item.append(machine);
+    list.append(item);
   }
 }
 
-function selectScenario(sc) {
-  selectedScenario = sc;
-  selectedSide = null;
-  document.querySelectorAll('.scenario-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById('sc_' + sc.id).classList.add('selected');
+const requestedMode = new URLSearchParams(window.location.search).get('mode');
+if (requestedMode === 'campaign' || requestedMode === 'practice') mode.value = requestedMode;
+else if (saved.scenarioId === practice.id) mode.value = 'practice';
+if (saved.playerSide === 'drake') playerSide.value = 'drake';
+if (saved.boardArtwork === 'battler') boardArtwork.value = 'battler';
+spectatorMode.checked = !!saved.spectatorMode;
 
-  const panel = document.getElementById('setupPanel');
-  panel.classList.add('show');
-  document.getElementById('setupTitle').textContent = sc.name + ' — 対戦設定';
-
-  const sideBtns = document.getElementById('sideBtns');
-  const givenUnits = sc.given.map(u => u.pilot + '(' + u.machine + ')').join(', ');
-  const drakeUnits = sc.drake.map(u => u.pilot + '(' + u.machine + ')').join(', ');
-  sideBtns.innerHTML = `
-    <div class="side-btn" onclick="selectSide('given')" id="sideGiven">
-      <div class="side-name">ギブン軍</div>
-      <div class="side-units">${givenUnits}</div>
-    </div>
-    <div class="side-btn" onclick="selectSide('drake')" id="sideDrake">
-      <div class="side-name">ドレイク軍</div>
-      <div class="side-units">${drakeUnits}</div>
-    </div>
-  `;
-  const spec = document.getElementById('spectatorModeCb');
-  if (spec && spec.checked) {
-    selectSide('given');
-  } else {
-    document.getElementById('startBtn').disabled = true;
-  }
+function showMode() {
+  const practicing = mode.value === 'practice';
+  document.getElementById('practiceSetup').hidden = !practicing;
+  document.getElementById('campaignSetup').hidden = practicing;
+  document.getElementById('startGame').textContent = practicing ? '練習を開始' : 'キャンペーンを開始';
 }
 
-function selectSide(side) {
-  selectedSide = side;
-  document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('selected'));
-  document.getElementById(side === 'given' ? 'sideGiven' : 'sideDrake').classList.add('selected');
-  document.getElementById('startBtn').disabled = false;
+function updateSidePicker() {
+  document.getElementById('sidePicker').disabled = spectatorMode.checked;
 }
 
-function startGame() {
-  if (!selectedScenario || !selectedSide) return;
-  const config = {
-    scenarioId: selectedScenario.id,
-    playerSide: selectedSide,
-    spectatorMode: !!(document.getElementById('spectatorModeCb') && document.getElementById('spectatorModeCb').checked),
-  };
-  sessionStorage.setItem('dunbineConfig', JSON.stringify(config));
+function showBoardPreview() {
+  const image = document.getElementById('boardPreview');
+  const filename = boardArtwork.value === 'battler' ? 'board-battler.png' : 'board-wing.png';
+  image.src = 'images/vassal/' + filename;
+  image.alt = boardArtwork.selectedOptions[0].textContent + 'の地図';
+}
+
+setup.addEventListener('change', event => {
+  if (event.target.name === 'mode') showMode();
+});
+spectatorMode.addEventListener('change', updateSidePicker);
+boardArtwork.addEventListener('change', showBoardPreview);
+showMode();
+updateSidePicker();
+showBoardPreview();
+
+setup.addEventListener('submit', event => {
+  event.preventDefault();
+  sessionStorage.setItem('dunbineConfig', JSON.stringify({
+    scenarioId:mode.value === 'practice' ? practice.id : campaign.id,
+    playerSide:playerSide.value,
+    spectatorMode:spectatorMode.checked,
+    boardArtwork:boardArtwork.value,
+    practiceForces:forces,
+  }));
   window.location.href = 'index.html';
-}
-
-init();
+});
 </script>
 </body>
 </html>
