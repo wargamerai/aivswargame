@@ -490,7 +490,7 @@
     <summary>How to play</summary>
     <div class="manual-content">
       <p><b>Setup and objective</b>Choose Egypt, Syria, Iraq, Iran, or Saudi Arabia. The other four countries are controlled by the AI. Pick one of two leader cards. A sole royal candidate takes priority. Your leader provides starting prestige. Each country starts with zero military strength and five action cards. Any event in the opening deal is drawn again. The first country to reach 16 prestige wins.</p>
-      <p><b>Taking a turn</b>Use up to two different actions or card types. Select an action or card beneath the map, then select its target if applicable. You can pass at any time. When you confirm a discard, you spend one action, refill to five, and move to the next country. Refilling the hand costs no action. The progress button on the right advances AI actions, responses, and the turn order. Shift-click a card to enlarge it.</p>
+      <p><b>Taking a turn</b>Use up to two different actions or card types. Select an action or card beneath the map, then select its target if applicable. You can pass at any time. When you confirm a discard, you spend one action and play moves to the next country. At the start of your own turn, refill your hand to five cards without spending an action. The progress button on the right advances AI actions, responses, and the turn order. Shift-click a card to enlarge it.</p>
       <p><b>Income and events</b>At the start of your turn, collect $1 per oil field you control. A leader with dollar symbols rolls one die for an additional $1. With one symbol, you need a 6. With two, you need 5–6. With three, you need 4–6. After the opening deal, events resolve immediately. Oil Prices Rise pays every country by its controlled oil fields. Leader Dies affects the country that drew it.</p>
       <p><b>Actions and alignment</b>Buy one regular weapon for $2, or spend $1 on aid to the PLO. The aid succeeds on 1–4 for +1 prestige. Choose a neutral, pro-US, or pro-Soviet alignment. Staying neutral throughout the turn earns +1 prestige. The US and Soviet cards import one unit for a matching alignment. France can also import one unit while neutral. At the start of a battle, a matching US or Soviet card can provide three or two reinforcements respectively.</p>
       <p><b>Diplomacy and revolution</b>Diplomacy succeeds if the roll is no higher than your military strength. A 6 fails against adjacent countries, and 4–6 fail against nonadjacent countries. Success earns +2 prestige and allies the target if it is a minor state. A Revolution card can annex your allied minor state on 1–4 for +4 prestige.</p>
@@ -741,10 +741,7 @@ const Gulf = (() => {
     if(!id||!appoint(s,id,key))return false;
     s.succession=null;
     refillHands(s);
-    if(!s.succession&&!s.winner){
-      if(s.closingTurn)completeTurn(s);
-      else if(!s.left)endTurn(s);
-    }
+    if(!s.succession&&!s.winner&&!s.left)endTurn(s);
     return true;
   }
   function create(player,seed=Date.now(),{reviewTurns=false}={}){
@@ -806,9 +803,7 @@ const Gulf = (() => {
       log(s,name(id)+" stays neutral and gains 1 prestige.");
       score(s,id,1);
     }
-    if(s.winner)return;
-    refillToFive(s,id);
-    if(!s.succession)completeTurn(s);
+    if(!s.winner)completeTurn(s);
   }
   function completeTurn(s){
     if(s.reviewTurns&&!s.skipTurnReview)s.turnReport.complete=true;
@@ -1162,7 +1157,6 @@ const Gulf = (() => {
           s.left=0;
           s.skipTurnReview=true;
         }
-        refillToFive(s,id);
         break;
       }
       case 'usImport':
@@ -1858,7 +1852,7 @@ const GulfMap = (() => {
     const opts=G.options(s,group);
     detail.append(make('h3',null,G.cards[group]?.name||G.labels[group]));
     if(discarding){
-      detail.append(make('p','note',"Select cards to discard. Your hand refills before the turn advances."));
+      detail.append(make('p','note',"Select cards to discard. Refill at the start of your next turn."));
       const confirm=button('primary',selectedCards.size?selectedCards.size+" cards · end turn":"Discard and end turn",()=>{
         play({...opts[0],indices:[...selectedCards],advanceAfterDiscard:true});
       });

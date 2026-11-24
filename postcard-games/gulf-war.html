@@ -444,7 +444,7 @@
   <details class="panel manual">
     <summary>ルールと実装上の補足</summary>
     <div class="manual-content">
-      <p><b>手番と勝利</b>手番の開始時に、支配する油田マーク1つにつき$1を得ます。元首にドルマークがあればダイスを1個振ります。マーク1つなら6、2つなら5～6、3つなら4～6で$1を得ます。手番終了時（パスを含む）に、行動を使わず手札を5枚まで補充します。手番開始時も不足していれば補充します。初期手札にイベントが出たら引き直します。対局開始後のイベントはその場で処理し、行動回数は消費しません。1手番は異なる行動を2回まで。途中でパスできます。あなたが「捨て札」を確定すると、1行動でカードを捨て、手札を5枚まで補充して次の手番へ進みます。威信16以上で即勝利し、中立を維持した手番の終了時は威信+1です。</p>
+      <p><b>手番と勝利</b>手番の開始時に、支配する油田マーク1つにつき$1を得ます。元首にドルマークがあればダイスを1個振ります。マーク1つなら6、2つなら5～6、3つなら4～6で$1を得ます。自分の手番開始時に、行動を使わず手札を5枚まで補充します。初期手札にイベントが出たら引き直します。対局開始後のイベントはその場で処理し、行動回数は消費しません。1手番は異なる行動を2回まで。途中でパスできます。あなたが「捨て札」を確定すると、1行動でカードを捨て、次のプレイヤーへ手番が移ります。威信16以上で即勝利し、中立を維持した手番の終了時は威信+1です。</p>
       <p><b>戦闘</b>攻撃が成立すると、交戦国は路線に合うカードを戦闘前に出して援軍を呼べます。親ソ連はソ連カードで戦力＋2、親米はアメリカカードで戦力＋3です。武器輸入は戦力＋1で、ソ連・アメリカは対応する路線、フランスは中立でも使えます。戦力を1対1で相殺します。中立・同盟中の中小国の戦力は1です。相殺された通常兵器は元首の星、外国軍はそのマーカーの星以下で復活します。星の少ない部隊から相殺し、双方に残れば繰り返します。地上・空軍および米軍・ソ連軍・仏軍のマーカーは★1です。</p>
       <p><b>イスラエルへの武力攻撃</b>攻撃成功で威信＋5、失敗で＋3です。イスラエルと陸続きの国も攻撃に加われます。協力国は成功で威信＋2、失敗で＋1です。</p>
       <p><b>外交</b>判定の出目が自国の戦力以下なら成功します。隣接国へは6、非隣接国へは4～6で必ず失敗します。成功すると威信＋2です。</p>
@@ -695,10 +695,7 @@ const Gulf = (() => {
     if(!id||!appoint(s,id,key))return false;
     s.succession=null;
     refillHands(s);
-    if(!s.succession&&!s.winner){
-      if(s.closingTurn)completeTurn(s);
-      else if(!s.left)endTurn(s);
-    }
+    if(!s.succession&&!s.winner&&!s.left)endTurn(s);
     return true;
   }
   function create(player,seed=Date.now(),{reviewTurns=false}={}){
@@ -760,9 +757,7 @@ const Gulf = (() => {
       log(s,name(id)+'が中立を維持。威信 +1。');
       score(s,id,1);
     }
-    if(s.winner)return;
-    refillToFive(s,id);
-    if(!s.succession)completeTurn(s);
+    if(!s.winner)completeTurn(s);
   }
   function completeTurn(s){
     if(s.reviewTurns&&!s.skipTurnReview)s.turnReport.complete=true;
@@ -1116,7 +1111,6 @@ const Gulf = (() => {
           s.left=0;
           s.skipTurnReview=true;
         }
-        refillToFive(s,id);
         break;
       }
       case 'usImport':
@@ -1753,7 +1747,7 @@ const GulfMap = (() => {
     const opts=G.options(s,group);
     detail.append(make('h3',null,G.cards[group]?.name||G.labels[group]));
     if(discarding){
-      detail.append(make('p','note','捨てるカードを選んでください。補充後に次の手番へ進みます。'));
+      detail.append(make('p','note','捨てるカードを選んでください。補充は自分の次の手番の開始時です。'));
       const confirm=button('primary',selectedCards.size?selectedCards.size+'枚捨てて手番終了':'捨てて手番終了',()=>{
         play({...opts[0],indices:[...selectedCards],advanceAfterDiscard:true});
       });
