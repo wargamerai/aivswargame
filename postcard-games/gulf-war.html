@@ -449,7 +449,7 @@
       <p><b>イスラエルへの武力攻撃</b>攻撃成功で威信＋5、失敗で＋3です。イスラエルと陸続きの国も攻撃に加われます。協力国は成功で威信＋2、失敗で＋1です。</p>
       <p><b>外交</b>判定の出目が自国の戦力以下なら成功します。隣接国へは6、非隣接国へは4～6で必ず失敗します。成功すると威信＋2です。</p>
       <p><b>元首と原発</b>元首は2枚を比較し、王族を優先します。死ぬと元首に属する威信を失い、残した1枚と新たな1枚を比較します。中小国との同盟・併合で得た威信は元首が交代しても残り、その中小国が他国と同盟するか他国に併合されると失います。新元首はそのカードの初期威信で就任します。原発は建設した国の次の手番まで空爆で破壊され得ます。その後はフランスカードで核兵器に転換できます。核兵器を保有すると威信＋4を得て、元首が交代してもその4点は残ります。</p>
-      <p><b>割り込み</b>中小国への攻撃はその場で戦闘を処理します。別の国が自分の手番にアメリカカードで占領国への多国籍軍派遣を宣言すると、通常手番が止まります。一周の間にアメリカ・フランスで増派し、ソ連は派遣を拒否でき、国連はその拒否を取り消せます。一周の終了時に拒否が残っていれば制裁は中止です。</p>
+      <p><b>割り込み</b>中小国への攻撃はその場で戦闘を処理します。占領したプレイヤーに手番が戻るまでに、別のプレイヤーは自分の手番でアメリカカードを出し、その中小国への多国籍軍派遣を宣言できます。宣言すると通常手番が止まります。一周の間にアメリカ・フランスで増派し、ソ連は派遣を拒否でき、国連はその拒否を取り消せます。一周の終了時に拒否が残っていれば制裁は中止です。</p>
       <p><b>初期値と未指定の処理</b>開始時、担当5か国の戦力は0です。元首の能力は添付のカードに従います。革命による併合は1～4で成功し、イスラエルへのテロ成功で威信+1です。石油価格上昇では各国が支配する油田数だけドルを得ます。核兵器の保有は盤面に表示します。</p>
     </div>
   </details>
@@ -717,7 +717,7 @@ const Gulf = (() => {
       s.states[n.id]={options,leader:null,reserve:null,score:0,cash:0,units:units('regular',n.army),hand:[],route:'neutral',switched:false,facility:null};
       if(n.id!==player)chooseAiLeader(s,n.id);
     }
-    for(const m of minors)s.territory[m.id]={ally:null,occupier:null,annexed:null,army:m.army,prestige:null};
+    for(const m of minors)s.territory[m.id]={ally:null,occupier:null,occupiedTurn:null,annexed:null,army:m.army,prestige:null};
     return s;
   }
   function setup(s,key){
@@ -782,6 +782,7 @@ const Gulf = (() => {
   function release(t){
     t.ally=null;
     t.occupier=null;
+    t.occupiedTurn=null;
     t.annexed=null;
   }
   function battle(s,a,d){
@@ -850,6 +851,7 @@ const Gulf = (() => {
     if(t&&offense.length){
       release(t);
       t.occupier=actor;
+      t.occupiedTurn=s.turn;
       log(s,name(actor)+'が'+name(target)+'を占領。');
     }
     if(target==='israel'){
@@ -1005,7 +1007,12 @@ const Gulf = (() => {
     for(const type of cardActions[group]){
       if((type==='usImport'||type==='suImport')&&c.route!==group)continue;
       if(type==='coalition'){
-        result.push(...make(type,minors.filter(m=>s.territory[m.id].occupier&&s.territory[m.id].occupier!==id).map(m=>m.id)));
+        const eligible=minors.filter(m=>{
+          const {occupier,occupiedTurn}=s.territory[m.id];
+          return occupier&&occupier!==id&&Number.isInteger(occupiedTurn)&&
+            s.turn>occupiedTurn&&s.turn<occupiedTurn+s.order.length;
+        });
+        result.push(...make(type,eligible.map(m=>m.id)));
       }else if(type==='attack'){
         if(c.units.length)result.push(...make(type,allTargets.filter(target=>{
           const t=s.territory[target];

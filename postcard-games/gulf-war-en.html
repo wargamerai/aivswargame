@@ -495,7 +495,7 @@
       <p><b>Actions and alignment</b>Buy one regular weapon for $2, or spend $1 on aid to the PLO. The aid succeeds on 1–4 for +1 prestige. Choose a neutral, pro-US, or pro-Soviet alignment. Staying neutral throughout the turn earns +1 prestige. The US and Soviet cards import one unit for a matching alignment. France can also import one unit while neutral. At the start of a battle, a matching US or Soviet card can provide three or two reinforcements respectively.</p>
       <p><b>Diplomacy and revolution</b>Diplomacy succeeds if the roll is no higher than your military strength. A 6 fails against adjacent countries, and 4–6 fail against nonadjacent countries. Success earns +2 prestige and allies the target if it is a minor state. A Revolution card can annex your allied minor state on 1–4 for +4 prestige.</p>
       <p><b>Combat and Israel</b>Opposing units cancel one for one, starting with the fewest stars. Cancelled units with stars return on a die roll no higher than their stars. Regular units use their leader’s stars. Foreign military units normally have one star. Repeat while both sides have units. A successful military attack on Israel gives the attacker +5 prestige, and a failed one gives +3. Eligible countries with a land connection may join, earning +2 on a win or +1 on a loss.</p>
-      <p><b>Coalition deployment</b>An attack on a minor state resolves immediately. On a later turn, another country can play United States to declare a coalition to liberate the occupied state. Pause the turn for one circuit. US and French cards add three or one strength. The Soviet Union can veto, and the UN Security Council can overturn the veto. If the veto still stands after the circuit, cancel the deployment. A successful coalition attack restores neutrality.</p>
+      <p><b>Coalition deployment</b>An attack on a minor state resolves immediately. Before the occupying country's next turn begins, another player can play a United States card on their own turn to declare a coalition for that minor state. Pause the turn for one circuit. US and French cards add three or one strength. The Soviet Union can veto, and the UN Security Council can overturn the veto. If the veto still stands after the circuit, cancel the deployment. A successful coalition attack restores neutrality.</p>
       <p><b>Leaders and nuclear weapons</b>On a leader’s death, compare the reserve card with one newly drawn card. The old leader’s prestige is lost. Prestige from minor-state alliances, annexations, and nuclear weapons survives succession. A rival alliance or annexation removes the prestige earned from that state. France builds a nuclear plant and can convert it on a later turn. An Israel card can destroy a plant before the builder’s next turn. A completed nuclear weapon earns +4 permanent prestige.</p>
     </div>
   </details>
@@ -763,7 +763,7 @@ const Gulf = (() => {
       s.states[n.id]={options,leader:null,reserve:null,score:0,cash:0,units:units('regular',n.army),hand:[],route:'neutral',switched:false,facility:null};
       if(n.id!==player)chooseAiLeader(s,n.id);
     }
-    for(const m of minors)s.territory[m.id]={ally:null,occupier:null,annexed:null,army:m.army,prestige:null};
+    for(const m of minors)s.territory[m.id]={ally:null,occupier:null,occupiedTurn:null,annexed:null,army:m.army,prestige:null};
     return s;
   }
   function setup(s,key){
@@ -828,6 +828,7 @@ const Gulf = (() => {
   function release(t){
     t.ally=null;
     t.occupier=null;
+    t.occupiedTurn=null;
     t.annexed=null;
   }
   function battle(s,a,d){
@@ -896,6 +897,7 @@ const Gulf = (() => {
     if(t&&offense.length){
       release(t);
       t.occupier=actor;
+      t.occupiedTurn=s.turn;
       log(s,name(actor)+" occupies "+name(target)+".");
     }
     if(target==='israel'){
@@ -1051,7 +1053,12 @@ const Gulf = (() => {
     for(const type of cardActions[group]){
       if((type==='usImport'||type==='suImport')&&c.route!==group)continue;
       if(type==='coalition'){
-        result.push(...make(type,minors.filter(m=>s.territory[m.id].occupier&&s.territory[m.id].occupier!==id).map(m=>m.id)));
+        const eligible=minors.filter(m=>{
+          const {occupier,occupiedTurn}=s.territory[m.id];
+          return occupier&&occupier!==id&&Number.isInteger(occupiedTurn)&&
+            s.turn>occupiedTurn&&s.turn<occupiedTurn+s.order.length;
+        });
+        result.push(...make(type,eligible.map(m=>m.id)));
       }else if(type==='attack'){
         if(c.units.length)result.push(...make(type,allTargets.filter(target=>{
           const t=s.territory[target];
