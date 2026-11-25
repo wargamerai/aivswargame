@@ -267,6 +267,7 @@ const AI = {
     },
     // このターン、自分より後に動く敵か
     movesAfter: function(unit, e) {
+        if (unit.team === 'Blue' && window.fastSimMovedUnits) return !window.fastSimMovedUnits.has(e.id);
         try {
             if (typeof turnOrder !== 'undefined' && typeof currentOrderIndex !== 'undefined' && turnOrder && turnOrder.length) {
                 let mine = turnOrder.findIndex(o => o.u === unit || (o.u && o.u.id === unit.id));
@@ -326,7 +327,7 @@ const AI = {
         if (unit.missiles && unit.missiles.rh < unit._rh0) unit._rhFirstDone = true;
         // 最初のすれ違いを過ぎたら（1発撃って、敵が距離7以内に来たら）HS の戦いへ
         if (unit._rhFirstDone && nearest <= 7) unit._merged = true;
-        let rhMode = unit.team !== 'Red' && unit.missiles && !unit._merged && (unit.missiles.rh > 0 || inFlight >= 0);
+        let rhMode = unit.team !== 'Red' && unit.missiles && (inFlight >= 0 || unit.missiles.rh > 0 && nearest >= 5);
         let rhTgt = rhMode ? this.rhAssign(unit, myUnits, foes) : null;
         let locked = unit.lockOnTargetId ? foes.find(e => e.id === unit.lockOnTargetId) : null;
         if (inFlight >= 0) rhTgt = foes[inFlight];
@@ -358,11 +359,21 @@ const AI = {
             let threat = 0;
             // 後から動く MiG は、撃てる位置に来られるなら必ず来るとみる（取りうる動きを全部調べて一番高い確率）
             foes.forEach((e, i) => {
-                if (!foeAfterAll[i] || !foeAfterAll[i].length) return;
+                const pending = foeAfterAll[i]?.length ? foeAfterAll[i] : null;
+                if (!pending && unit.team === 'Red') return;
                 let mx = 0;
-                for (let t of foeAfterAll[i]) { let v = this.fireValue(e, t, s, { noRH: true }); if (v > mx) mx = v; }
+                for (let t of pending || [foeNow[i]]) { let v = this.fireValue(e, t, s, { noRH: true }); if (v > mx) mx = v; }
                 threat += mx;
             });
+
+            if (unit.team === 'Blue') {
+                const exposure = 2.4;
+                const lead = allUnits.reduce((n,e) => n + (e.team === 'Red' ? 1 : -1) *
+                    (e.status === 'destroyed' ? 3 : e.damage === '損害あり' ? 1 : 0), 0);
+                k.lead = lead;
+                k.risk = threat;
+                threat *= exposure;
+            }
             // 3) 位置取りの補助
             let t = this.stateOf(focus), ti = foes.indexOf(focus);
             if (foeAfter[ti] && foeAfter[ti].length) t = foeNext[ti];
@@ -602,7 +613,57 @@ const AI = {
                 k.keep = keep / ts.length;
             }
             let mk = Math.max(...cands.map(k => k.keep));
-            if (mk > 0) cands = cands.filter(k => k.keep >= mk - 1e-9);
+            if (mk > 0) for (const k of cands) k.score += 240 * k.keep;
+        }
+        if (unit.team === 'Blue') for (const k of cands) {
+            const ahead = k.lead > 0;
+            const damaged = unit.damage === '損害あり';
+            const position = k.s;
+            const avoid = foes.map((e, i) => ({
+                distance: this.getHexDistance(position.x, position.y, foeNext[i].x, foeNext[i].y),
+                altitude: position.alt - foeNext[i].alt,
+                armed: e.gun > 0 || e.missiles?.hs > 0
+            })).filter(e => e.armed);
+            const dangerouslyClose = avoid.reduce((n, e) => n + Math.max(0, 11 - e.distance) *
+                (Math.abs(e.altitude) <= 3 ? 1 : Math.abs(e.altitude) <= 5 ? .4 : .1), 0);
+            const highEnough = avoid.filter(e => e.altitude >= 3).length;
+            const pullAway = ahead || damaged;
+            k.score -= dangerouslyClose * 85 * (pullAway ? 1.55 : 1);
+            k.score -= k.risk * (pullAway ? 1650 : 450);
+            k.score += highEnough * 160 * (rhMode ? .4 : 1);
+            k.score -= this.edgePenalty(position) * (pullAway ? 1.3 : 1);
+            if (rhMode && !ahead) k.score += 530 * (k.imm || 0);
+            const avoidContact = ahead || damaged;
+            if (avoidContact) {
+                k.score -= 3200 * k.risk;
+                k.score -= dangerouslyClose * 150;
+                k.score += highEnough * 155;
+            }
+            if (inFlight < 0 && k.risk > 0.28) k.score -= 525;
+            if (!rhMode && Math.min(...avoid.map(e => e.distance)) > 6) {
+                const closeToCentre = Math.abs(position.x - gameConfig.mapMaxC / 2) + Math.abs(position.y - gameConfig.mapMaxR / 2) * .5;
+                k.score -= closeToCentre * 8;
+            }
+        }
+        if (unit.team === 'Blue') {
+            const turn = window.fastSimTurn ?? (typeof gameTurn === 'number' ? gameTurn : 1);
+            const feasible = cands.filter(k=>this.edgePenalty(k.s)<1000);
+            const lead = cands[0]?.lead ?? 0;
+            const riskFloor = Math.min(...feasible.map(k=>k.risk));
+            for (const k of cands) {
+                if (this.edgePenalty(k.s)>=1000 && feasible.length) { k.score-=30000;continue; }
+                if (lead < 0) continue;
+                const risk = Math.max(0,k.risk-riskFloor);
+                const allowance = lead>0 || turn>=15 ? .035 : .065;
+                if (risk > allowance) k.score -= 1500 + 3600 * risk;
+                const envelope = foes.map(e=>({e, d:this.getHexDistance(k.s.x,k.s.y,e.x,e.y)}))
+                    .filter(({e,d})=> (e.gun||e.missiles?.hs) && d <= 12);
+                for(const {e,d} of envelope) {
+                    const separation=k.s.alt-e.altitude;
+                    const breathingRoom=separation>0?Math.min(separation,5):Math.min(Math.abs(separation),3)*.25;
+                    k.score += breathingRoom * (d<7?42:30);
+                }
+            }
         }
         cands.forEach(k => { if (!isFinite(k.score)) { if (!this._nanWarned) { console.log('[AI_MOVE2] NaN', JSON.stringify(k)); this._nanWarned = true; } k.score = -1e9; } });
         cands.sort((a, b) => b.score - a.score);

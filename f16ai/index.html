@@ -2893,13 +2893,15 @@ window.COMBAT_CHARTS.RH = {
                         return 0;
                     });
 
-                // 移動フェーズ
+                window.fastSimMovedUnits = new Set();
+                window.fastSimTurn = turn;
                 for (let u of order) {
                     if (u.status !== 'alive') continue;
                     // validateAndSimulateがunits[activeUnitIndex]を参照するので合わせる
                     activeUnitIndex = units.indexOf(u);
                     let enemies = units.filter(t => t.team !== u.team && t.status !== 'destroyed');
                     let moveInfo = AI.decideMove(u, enemies);
+                    window.fastSimMovedUnits?.add(u.id);
                     u.cursorRow = moveInfo.r;
                     u.cursorCol = moveInfo.c;
                     u.speed = planeData[u.aircraft].speed[u.cursorRow][u.cursorCol];
@@ -2982,6 +2984,8 @@ window.COMBAT_CHARTS.RH = {
             }
 
             // 結果表示
+            window.fastSimMovedUnits = null;
+            window.fastSimTurn = null;
             showSimulationResult(trailHistory, simLogs);
         }
 
