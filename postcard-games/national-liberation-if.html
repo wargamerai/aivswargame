@@ -262,6 +262,9 @@ function infantrySpacing(h,friends){
  const adjacentCount=friends.filter(t=>adjacent(h,t.pos)).length;
  return Math.min(adjacentCount,1)-Math.max(0,adjacentCount-1)*3;
 }
+const communistOffensiveAI=()=>!japanSimulating&&aiControls('C');
+const communistKeepsPressing=()=>s.side==='C'&&communistOffensiveAI()&&s.vp<10;
+const hakodate='0202';
 const communistSectors=[['1107','0804','0202'],['1009','0706','0506','0404'],['0413','0510','0506']];
 const sectorFor=t=>{
  if(t.id==='CT1')return 0;
@@ -316,6 +319,7 @@ function applySetup(side,sites,record=true){
 function aiSetup(){
  const side=s.side;
  if(s.rulebookSetup){applySetup(side,rulebookSetup[side]);return}
+ if(side==='C'&&communistOffensiveAI()){applySetup('C',["1009", "0413", "1107", "0910", "0612", "0909", "0810", "1007", "1008"],false);return}
  if(side==='U'&&s.rearSetup){applySetup(side,rearSetupSites());return}
  const units=initialUnits(side).filter(t=>!t.pos);
  if(side==='C'){
@@ -386,9 +390,11 @@ const fieldEnemies=side=>s.u.filter(t=>t.side!==side&&hex[t.pos]&&t.face);
 const isLandingUnit=t=>t.side==='U'&&(s.landingUnits??(s.landed?['UM']:[])).includes(t.id);
 function garrison(unit){
  const city=unit.pos;
+ if(unit.side==='C'&&unit.tank&&communistOffensiveAI()&&marchToHakodate()&&
+    ![sapporo,'1009'].includes(city))return false;
  if(!hex[city]?.city||s.control[city]!==unit.side)return false;
  if(unit.side==='U'&&defendingSapporo()&&japaneseStrongpoints.includes(city))return true;
- if(unit.side==='C'&&!s.landed)return true;
+ if(unit.side==='C'&&(!s.landed||communistOffensiveAI()&&city===sapporo))return true;
  const projected={...s,used:[],blocked:[],usedStrategy:[]};
  const threats=fieldEnemies(unit.side);
  return (unit.side==='C'?threats.filter(isLandingUnit):threats).some(t=>{
@@ -425,6 +431,13 @@ function communistTargets(){
  const needed=2-conquestCities.filter(h=>s.control[h]==='C').length;
  const goals=sites.sort((a,b)=>effort(a)-effort(b)).slice(0,Math.max(0,needed));
  if(s.control[sapporo]!=='C')goals.unshift(sapporo);
+ if(communistKeepsPressing()&&goals.length<2){
+  const available=conquestCities.filter(site=>s.control[site]!=='C'&&!goals.includes(site));
+  const units=s.u.filter(unit=>unit.side==='C'&&unit.face&&hex[unit.pos]&&!garrison(unit));
+  const distance=site=>Math.min(20,...units.map(unit=>aiDistance(unit.pos,site)));
+  available.sort((a,b)=>distance(a)-distance(b));
+  goals.push(...available.slice(0,2-goals.length));
+ }
  return goals;
 }
 function preferredReinforcementCity(sites,tank=false){
@@ -516,8 +529,25 @@ function attackingMove(unit,choices,opponents){
  return attacks[0];
 }
 function offensiveMove(unit,choices,opponents){
+ if(communistOffensiveAI()&&unit.side==='C'&&unit.tank){
+  if(s.control[sapporo]==='C'&&s.control[hakodate]==='U'){
+   const destinations=at(s,hakodate)?mapHexes.filter(site=>adjacent(site,hakodate)):[hakodate];
+   if(destinations.includes(unit.pos))return null;
+   const advance=approachObjective(unit,destinations,choices);
+   if(advance)return advance;
+  }
+  const citiesInReach=communistTargets().filter(site=>aiDistance(unit.pos,site)<=5);
+  const city=citiesInReach.includes(sapporo)?sapporo
+   :citiesInReach.sort((a,b)=>aiDistance(unit.pos,a)-aiDistance(unit.pos,b))[0];
+  if(city){
+   const goals=at(s,city)?mapHexes.filter(site=>adjacent(site,city)):[city];
+   if(goals.includes(unit.pos)&&s.phase==='tank')return null;
+   const approach=approachObjective(unit,goals,choices);
+   if(approach)return approach;
+  }
+ }
  const communist=unit.side==='C';
- const holdingObjective=communist&&hasCommunistObjective();
+ const holdingObjective=communist&&hasCommunistObjective()&&!communistKeepsPressing();
  const attack=(unit.tank||!communist||holdingObjective)&&attackingMove(unit,choices,opponents);
  if(attack)return attack.choice;
  const attackSites=enemies=>mapHexes.filter(h=>enemies.some(t=>adjacent(h,t.pos)));
@@ -613,9 +643,59 @@ function encirclementRisk(unit,site,opponents){
 const communistCityPriority=h=>hex[h].city&&s.control[h]!=='C'?(h===sapporo?2:1):0;
 function cityCapture(choices){
  const captures=choices.filter(([h])=>communistCityPriority(h));
- return captures.find(([h])=>h===sapporo)||captures[0];
+ return (communistOffensiveAI()&&s.control[hakodate]==='U'&&captures.find(([h])=>h===hakodate))
+  ||captures.find(([h])=>h===sapporo)||captures[0];
 }
+function communistWestRoute(unit, choices, march, hardTarget = hakodate) {
+  const enemies = fieldEnemies('C');
+  const objective = at(s, hardTarget)?.side === 'U' ? mapHexes.filter(site => adjacent(site, hardTarget)) : [hardTarget];
+  if (objective.includes(unit.pos) && at(s, hardTarget)?.side === 'U') return null;
+  const routes = new Map(objective.map(site => [site, 0]));
+  const settled = new Set();
+  const movementCost = (from, to) => {
+    const road = roadNeighbors[from]?.includes(to);
+    const extra = road ? 0 : hex[to].t === 'mountain' ? 1.5 : hex[to].t === 'rough' ? .75 : .15;
+    const threat = enemies.filter(enemy => adjacent(enemy.pos, to)).length;
+    return 1 + extra + threat * (march === 'wide' ? 1.25 : .45) + (at(s, to)?.side === 'U' ? 3 : 0);
+  };
+  while (routes.size > settled.size) {
+    let next = null;
+    for (const [site, cost] of routes) {
+      if (!settled.has(site) && (!next || cost < next[1])) next = [site, cost];
+    }
+    if (!next) break;
+    const [site, distance] = next;
+    settled.add(site);
+    if (site === unit.pos && choices.every(([to]) => routes.has(to))) break;
+    for (const neighbor of mapHexes.filter(to => adjacent(site, to))) {
+      const cost = distance + movementCost(neighbor, site);
+      if (cost < (routes.get(neighbor) ?? Infinity)) routes.set(neighbor, cost);
+    }
+  }
+  const here = routes.get(unit.pos) ?? Infinity;
+  const measure = site => {
+    const adjacentEnemies = enemies.filter(enemy => adjacent(enemy.pos, site));
+    const risk = adjacentEnemies.length ? (combatForecast(adjacentEnemies, { ...unit, pos: site }).col + 1) : 0;
+    const guard = hex[site].city && s.control[site] === 'U' ? .6 : 0;
+    return (routes.get(site) ?? Infinity) + Math.max(0, risk) * .35 - guard;
+  };
+  return choices.filter(([site]) => measure(site) < here).sort(([a], [b]) => measure(a) - measure(b))[0];
+}
+
+const communistMarch="slow";
+const marchToHakodate=()=>s.control[sapporo]==='C'||communistMarch.startsWith('north');
 function communistMove(unit,choices,opponents){
+ if(communistOffensiveAI()&&marchToHakodate()&&unit.tank&&unit.face&&hex[unit.pos]&&
+    ![sapporo,'1009'].includes(unit.pos)){
+  const north=communistMarch.startsWith('north')&&(communistMarch!=='north-one'||unit.id==='CT1');
+  if(north||s.control[sapporo]==='C'){
+   const candidates=choices.filter(([site])=>!hex[site].city||s.control[site]==='C'||site===hakodate);
+   const destination=north&&s.control['0804']!=='C'?'0804':hakodate;
+   const route=communistWestRoute(unit,candidates,communistMarch,destination);
+   if(route)return route;
+   if(communistMarch==='slow'&&s.turn<=6)return null;
+  }
+ }
  const currentRisk=encirclementRisk(unit,unit.pos,opponents);
  const trapped=encircledEnemies(opponents);
  const positions=[];
@@ -672,7 +752,95 @@ function sapporoDefenseMove(unit,choices,opponents){
  const best=defensiveChoices[0];
  return best&&(!inLine(unit.pos)||!safe(unit.pos)||score(best[0])>score(unit.pos))?best:null;
 }
+function relieveCommunistGarrisons() {
+  const opponents = fieldEnemies('C');
+  const goals = conquestCities.filter(site => s.control[site] === 'U');
+  if (s.control[sapporo] === 'U') goals.unshift(sapporo);
+  if (!goals.length) return;
+  const distance = site => Math.min(...goals.map(city => aiDistance(site, city)));
+  const tanks = s.u.filter(unit => unit.tank && selectable(unit) && hex[unit.pos]?.city && garrison(unit));
+  for (const tank of tanks) {
+    const city = tank.pos;
+    const infantry = s.u.filter(unit => !unit.tank && unit.face === 2 && selectable(unit) &&
+      !hex[unit.pos]?.city && aiDistance(unit.pos, city) <= 2);
+    if (!infantry.length) continue;
+    const destinations = movementChoices(tank).filter(([site]) => distance(site) < distance(city) &&
+      !favorable(opponents.filter(enemy => adjacent(enemy.pos, site)), { ...tank, pos: site }));
+    destinations.sort(([a], [b]) => distance(a) - distance(b));
+    for (const [site, travel] of destinations) {
+      let relief;
+      const usedStrategy = s.usedStrategy;
+      tank.pos = site;
+      if (travel === 'strategy' && !usedStrategy.includes(tank.id)) {
+        s.usedStrategy = [...usedStrategy, tank.id];
+      }
+      try {
+        relief = infantry.map(unit => ({ unit, order: movementChoices(unit).find(([target]) => target === city) }))
+          .find(plan => plan.order);
+      } finally {
+        tank.pos = city;
+        s.usedStrategy = usedStrategy;
+      }
+      if (!relief) continue;
+      sel = tank.id;
+      mode = travel;
+      choose(site);
+      if (s.phase === 'end') break;
+      sel = relief.unit.id;
+      mode = relief.order[1];
+      choose(city);
+      break;
+    }
+    if (s.phase === 'end') break;
+  }
+  sel = null;
+  mode = 'normal';
+}
+
+function communistFormationOptions(unit) {
+  const normal = IF.range(s, unit);
+  const strategic = IF.range(s, unit, true);
+  const choices = [];
+  for (const [site, path] of Object.entries(normal)) {
+    if (!path.slice(0, -1).some(hexId => hex[hexId].city && s.control[hexId] !== 'C')) {
+      choices.push({ site, path, travel: 'normal' });
+    }
+  }
+  const normalSites = new Set(choices.map(({ site }) => site));
+  for (const [site, path] of Object.entries(strategic)) {
+    if (!normalSites.has(site)) choices.push({ site, path, travel: 'strategy' });
+  }
+  return choices;
+}
+
+function moveCommunistArmorTo(unit, site){
+ if(!selectable(unit))return false;
+ const move=communistFormationOptions(unit).find(option=>option.site===site);
+ if(!move)return false;
+ sel=unit.id;
+ mode=move.travel;
+ choose(site);
+ return true;
+}
 function aiMovement(){
+ if(s.side==='C'&&s.phase==='move'&&s.control[sapporo]==='C'&&communistOffensiveAI()){
+  if(s.turn===2&&moveCommunistArmorTo(u('CT1'),'0804')){
+   moveCommunistArmorTo(u('CT2'),"0805");
+  }
+  if(s.turn===3&&at(s,'0602')?.side==='U'){
+   const first=u('CT1');
+   const second=u('CT2');
+   if(!garrison(first))moveCommunistArmorTo(first,'0703');
+   if(!garrison(second))moveCommunistArmorTo(second,'0704');
+  }
+  sel=null;
+  mode='normal';
+  if(s.phase==='end')return;
+ }
+ if(s.side==='C'&&s.phase==='move'&&communistOffensiveAI()){
+  relieveCommunistGarrisons();
+  if(s.phase==='end')return;
+ }
  const units=s.u.filter(selectable).sort((a,b)=>Number(b.tank)-Number(a.tank)||strength(b)-strength(a));
  if(s.side==='C'){
   moveAIUnits(units.filter(t=>t.tank));
@@ -685,7 +853,8 @@ function moveAIUnits(units){
   while(s.phase!=='end'){
    const captures=units.filter(t=>selectable(t)&&!garrison(t))
     .map(t=>({unit:t,choice:cityCapture(movementChoices(t))})).filter(p=>p.choice);
-   const capture=captures.find(p=>p.choice[0]===sapporo)||captures[0];
+   const capture=(communistOffensiveAI()&&captures.find(p=>p.choice[0]===hakodate))
+    ||captures.find(p=>p.choice[0]===sapporo)||captures[0];
    if(!capture)break;
    sel=capture.unit.id;
    mode=capture.choice[1];
@@ -761,17 +930,79 @@ function moveAIUnits(units){
   sel=null;mode='normal';
  }
 }
+const hakodateApproaches = ['0303', '0401', '0402', '0502', '0602'];
+
+function communistBattleValue(defender, attackers) {
+  if (!attackers.length) return 0;
+  const site = defender.pos;
+  const city = Boolean(hex[site].city);
+  const forecast = combatForecast(attackers, defender);
+  const column = Math.max(-1, forecast.col);
+  if (column < 0) return -4;
+  const trapped = !IF.retreatPaths(s, defender).length;
+  const obstacle = hakodateApproaches.includes(site);
+  const objective = site === hakodate ? 32 : site === sapporo ? 18
+    : obstacle ? 20 : city ? 10 : defender.tank ? 8 : 5;
+  const cost = s.vp >= 7 ? 5.5 : 3.5;
+  let value = 0;
+  for (const row of crt) {
+    switch (row[column]) {
+      case 'DE': value += objective; break;
+      case 'DLR': value += !city || trapped || defender.face === 1 ? objective : objective * .85; break;
+      case 'DR': value += !city && !trapped ? objective * .35 : objective * .65; break;
+      case 'EX': value += objective * (defender.face === 1 ? .75 : .34) - cost; break;
+      case 'AL': value -= cost * (attackers.every(unit => unit.tank) ? 1.7 : 1); break;
+    }
+  }
+  return value / 6;
+}
+
+function communistCombatPlans() {
+  const plans = [];
+  for (const defender of fieldEnemies('C')) {
+    if (s.attacked.includes(defender.id)) continue;
+    if (![hakodate, ...hakodateApproaches].includes(defender.pos)) continue;
+    const eligible = adjacentAttackers('C', defender);
+    const controlledCity = hex[defender.pos].city && s.control[defender.pos] === 'U';
+    const threatening = isLandingUnit(defender) || [sapporo, '1009'].some(site => adjacent(site, defender.pos));
+    let best;
+    for (let mask = 1; mask < 2 ** eligible.length; mask++) {
+      const group = eligible.filter((_, index) => mask & (1 << index));
+      const benefit = communistBattleValue(defender, group);
+      const canAdvance = group.some(unit => !garrison(unit));
+      const risk = group.filter(unit => unit.tank && unit.face === 1).length * 2.5;
+      const goal = defender.pos === hakodate ? 4 : defender.pos === sapporo ? 3 : controlledCity ? 1 : 0;
+      const score = benefit + goal + (threatening ? 2 : 0) - risk - (controlledCity && !canAdvance ? 2 : 0)
+        - group.length * .12;
+      if (!best || score > best.score) best = { defender, group, score, benefit };
+    }
+    if (best?.benefit > .4) plans.push(best);
+  }
+  return plans.sort((a, b) => b.score - a.score);
+}
+
 function aiCombat(){
+ if(s.side==='C'&&communistOffensiveAI()&&s.turn>=4){
+  while(s.phase==='combat'){
+   const [plan]=communistCombatPlans();
+   if(!plan)break;
+   target=plan.defender.id;
+   group=plan.group.map(unit=>unit.id);
+   declare();
+   if(versusAI())return;
+   while(combat)finishAIBattle();
+  }
+ }
  while(s.phase==='combat'){
   const candidates=[];
   const communist=s.side==='C';
-  const holdingObjective=communist&&hasCommunistObjective();
+  const holdingObjective=communist&&hasCommunistObjective()&&!communistKeepsPressing();
   const defending=!communist&&defendingSapporo();
   const goals=communist?communistTargets():cities.filter(h=>s.control[h]!=='U');
   for(const d of s.u.filter(t=>t.side!==s.side&&t.face&&hex[t.pos]&&!s.attacked.includes(t.id))){
    const landing=communist&&isLandingUnit(d);
    const directThreat=holdingObjective&&cities.some(h=>s.control[h]==='C'&&adjacent(h,d.pos));
-   if(defending&&!d.tank&&!japaneseStrongpoints.some(h=>h===d.pos||adjacent(h,d.pos)))continue;
+   if(defending&&!d.tank&&!japaneseStrongpoints.some(h=>h===d.pos||adjacent(h,d.pos))&&!(japanPressesCity()&&hex[d.pos].city))continue;
    const units=adjacentAttackers(s.side,d);
    if(!units.length)continue;
    const forecast=combatForecast(units,d);
@@ -781,7 +1012,7 @@ function aiCombat(){
    const priority=landing?3:goals.includes(d.pos)?2:hex[d.pos].city?1:0;
    candidates.push({d,units,forecast,priority});
   }
-  const capturePriority=h=>communist?communistCityPriority(h):0;
+  const capturePriority=h=>communist?communistCityPriority(h):japanPressesCity()?japanCityPriority(h):0;
   candidates.sort((a,b)=>capturePriority(b.d.pos)-capturePriority(a.d.pos)||b.forecast.col-a.forecast.col||b.priority-a.priority);
   const best=candidates[0];if(!best)break;
   target=best.d.id;group=best.units.map(t=>t.id);declare();
@@ -811,15 +1042,17 @@ function aiAdvance(){
    const site=combat.t;
    const communist=combat.side==='C';
    const defending=!communist&&defendingSapporo();
-   const eligible=advanceChoices().filter(t=>!garrison(t)&&(!defending||japaneseStrongpoints.includes(site)));
+   const eligible=advanceChoices().filter(t=>!garrison(t)&&(!defending||japaneseStrongpoints.includes(site)||japanPressesCity()&&hex[site].city));
    const capturesCity=communist&&communistCityPriority(site)>0;
    const opponents=communist?fieldEnemies('C'):[];
    const alreadyTrapped=encircledEnemies(opponents);
    const advances=eligible.filter(t=>!communist||capturesCity||
     encirclementRisk(t,site,opponents)<=encirclementRisk(t,t.pos,opponents))
     .map(t=>({unit:t,trapped:encirclementAfter(t,site,opponents)}));
+   const advancePriority=unit=>capturesCity&&communistOffensiveAI()&&!unit.tank&&unit.face===2
+    ?2:Number(unit.tank);
    const unit=advances.filter(a=>capturesCity||alreadyTrapped.every(o=>a.trapped.includes(o)))
-    .sort((a,b)=>Number(b.unit.tank)-Number(a.unit.tank)||b.trapped.length-a.trapped.length||b.unit.face-a.unit.face)[0]?.unit;
+    .sort((a,b)=>advancePriority(b.unit)-advancePriority(a.unit)||b.trapped.length-a.trapped.length||b.unit.face-a.unit.face)[0]?.unit;
    if(unit)advance(unit);else clearCombat();
 }
 function runAIBattleStep(){
@@ -852,9 +1085,9 @@ const results={AL:'攻撃側損害',AS:'攻撃停止',EX:'相互損害',DR:'防�
 const add=(text,fn,kind='')=>{const b=document.createElement('button');b.type='button';b.className=kind;b.textContent=tr(text);b.onclick=fn;$('buttons').append(b);return b};
 const snapshot=()=>({s,combat,landing,review,sel,group,target,lastPath,mode,rpChoice,viewBattle,aiPaths});
 function note(t){s.log.unshift('GT'+s.turn+'｜'+t);s.log=s.log.slice(0,120)}
-function commit(){const w=IF.win(s);if(w&&!setup()&&!combat){if(s.phase!=='end')highlightPhase();s.phase='end';s.winner=w}if(aiRunning)return;try{localStorage.setItem('ifwar-v1',JSON.stringify({s,combat,landing,review}))}catch{}render()}
+function commit(){const w=IF.win(s);if(w&&!setup()&&!combat){if(s.phase!=='end')highlightPhase();s.phase='end';s.winner=w}if(aiRunning||japanSimulating)return;try{localStorage.setItem('ifwar-v1',JSON.stringify({s,combat,landing,review}))}catch{}render()}
 function remember(){
- if(aiRunning)return;
+ if(aiRunning||japanSimulating)return;
  undoHistory.push(JSON.stringify(snapshot()));
 }
 function saveGame(){
@@ -915,6 +1148,7 @@ function undo(){
 function setup(){return s.phase.startsWith('setup')}
 const u=id=>s.u.find(t=>t.id===id), selected=()=>u(sel);
 function highlightPhase(){
+ if(japanSimulating)return;
  clearTimeout(bannerTimer);
  const label=$('phase');
  label.classList.toggle('phase-changed',s.playMode!=='ai');
@@ -1094,7 +1328,7 @@ function finishCombat(){
  commit();
 }
 function advance(t){if(!advanceChoices().includes(t))return;remember();IF.move(s,t,combat.t);note(t.name+' が '+combat.t+' に戦闘後前進');clearCombat(false)}
-function clearCombat(record=true){if(record)remember();review={...combat,after:Object.fromEntries([...combat.a,combat.d].map(id=>[id,u(id).face]))};combat=null;group=[];target=null;sel=null;viewBattle=false;if(dialog().open)dialog().close();commit()}
+function clearCombat(record=true){if(record)remember();review={...combat,after:Object.fromEntries([...combat.a,combat.d].map(id=>[id,u(id).face]))};combat=null;group=[];target=null;sel=null;viewBattle=false;if(!japanSimulating&&dialog().open)dialog().close();commit()}
 const initialUnits=side=>s.u.filter(t=>t.side===side&&(side==='C'||!t.tank));
 function place(t,h){remember();(s.placements??=[]).push({id:t.id,pos:t.pos});t.pos=h;sel=null;commit()}
 function undoPlacement(){
@@ -1410,6 +1644,374 @@ function render(){
  const hist=$('log');hist.replaceChildren(...s.log.slice(0,20).map(l=>{const li=document.createElement('li');li.textContent=localizeLog(l);return li}));
  ruleControls();board();renderBattle();
 }
+// 日本側AIの初期配置・再建・作戦判断。
+let japanesePolicy = {"opening": ["0202", "0404", "0506", "0510", "0804"], "rebuild": "wait", "defend": ["0202"], "marine": "late-protect", "reclaim": "late", "landingSearch": null, "armor": null, "landingExtra": true, "movementSearch": null, "combatSearch": null, "pressure": 6};
+let japanSimulating = false;
+function seedRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let mixed = Math.imul(state ^ (state >>> 15), state | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function withRolloutSeed(seed, run) {
+  const then = Math.random;
+  Math.random = seedRandom(seed);
+  try {
+    return run();
+  } finally {
+    Math.random = then;
+  }
+}
+
+function restorePosition(position) {
+  ({s, combat, landing, review, sel, group, target, lastPath, mode,
+    rpChoice, viewBattle, aiPaths} = position);
+  aiRunning = true;
+}
+
+
+function finishAIBattle() {
+  switch (combat.stage) {
+    case 'supportA': support(combat.side, true, true, true); break;
+    case 'supportD': support(u(combat.d).side, false, true, true); break;
+    case 'roll': roll(); break;
+    case 'result': aiApplyResult(); break;
+    case 'retreat': aiRetreat(); break;
+    case 'advance': aiAdvance(); break;
+    case 'close': clearCombat(false); break;
+    default: throw new Error('Unknown combat stage ' + combat.stage);
+  }
+}
+
+function advanceScriptedAI(stop) {
+  for (let step = 0; !stop() && s.phase !== 'end'; step++) {
+    if (step >= 400) throw new Error('The scripted AI did not finish');
+    if (combat) finishAIBattle();
+    else if (s.aiDone) next(false);
+    else runAIPhase();
+  }
+}
+
+
+function japanPressesCity() {
+  return japanesePolicy?.pressure && s.side === 'U' && s.turn >= japanesePolicy.pressure && s.vp >= 6;
+}
+
+function japanCityPriority(site) {
+  return site === '1009' ? 3 : site === sapporo ? 2 : hex[site].city ? 1 : 0;
+}
+
+const originalSetup = aiSetup;
+aiSetup = () => {
+  if (!japanesePolicy || s.side !== 'U' || s.rulebookSetup || s.rearSetup || !japanesePolicy.opening) return originalSetup();
+  const sites = japanesePolicy.opening === 'rear' ? rearSetupSites()
+    : japanesePolicy.opening === 'rulebook' ? rulebookSetup.U
+    : japanesePolicy.opening;
+  if (sites.length !== initialUnits('U').length || new Set(sites).size !== sites.length
+      || sites.some(site => hex[site]?.owner !== 'U')) throw new Error('Illegal Japanese setup');
+  return applySetup('U', sites, false);
+};
+
+function japanRebuildSite(site) {
+  const strategy = japanesePolicy?.rebuild;
+  if (japanesePolicy?.rebuildAfter && s.turn >= japanesePolicy.rebuildAfter) return site;
+  if (strategy === 'wait' || strategy === 'sapporo-wait' && site === sapporo) return 'wait';
+  if (strategy === 'tested' && site === sapporo) return 'wait';
+  if (strategy === 'tested' && [tomakomai, '0804'].includes(site) && rebuildSites().includes('0404')) {
+    return '0404';
+  }
+  return site;
+}
+
+const isReducedMarine = unit => unit.id === 'UM' && unit.face === 1;
+const protectMarine = () => japanesePolicy?.marine === 'protect' || japanesePolicy?.marine === 'late-protect';
+const atRiskArmor = unit => unit.face === 1 && hex[unit.pos] &&
+  ((protectMarine() && isReducedMarine(unit)) || (japanesePolicy?.armor === 'both' && unit.tank));
+function preparingEscort() {
+  return japanesePolicy?.escort && !s.landed && s.turn >= Math.max(2, japanesePolicy.landingSearch - 2) &&
+    s.turn <= 8 && s.u.filter(unit => unit.side === 'U' && !unit.tank && unit.face && hex[unit.pos]).length >= 2;
+}
+
+const originalGarrison = garrison;
+garrison = unit => {
+  if (unit.side === 'U') {
+    const cities = japanesePolicy?.defend;
+    if (cities?.includes(unit.pos) && s.control[unit.pos] === 'U') return true;
+    if (atRiskArmor(unit)) return true;
+  }
+  return originalGarrison(unit);
+};
+
+const originalLanding = aiLanding;
+aiLanding = () => {
+  const policy = japanesePolicy?.marine;
+  if (policy === 'no-landing') return;
+  if (japanesePolicy?.landingSearch) {
+    if (s.turn >= japanesePolicy.landingSearch) searchLanding();
+    return;
+  }
+  if (policy !== 'late-protect' || s.turn >= 6) originalLanding();
+};
+
+function landAt(plan) {
+  const [site, zone] = plan;
+  const escorts = s.u.filter(unit => unit.side === 'U' && unit.pos === 'wait' && unit.face === 2).slice(0, 2);
+  const sites = landingSites(zone).filter(h => h !== site)
+    .sort((a, b) => aiDistance(site, a) - aiDistance(site, b));
+  const placements = { UM: site };
+  for (const [index, unit] of escorts.entries()) {
+    if (sites[index]) placements[unit.id] = sites[index];
+  }
+  landing = { zone, placements };
+  executeLanding();
+}
+
+function searchLanding() {
+  const possible = [null];
+  const enemies = fieldEnemies('U');
+  for (let zone = 0; zone < coastGroups.length; zone++) {
+    const sites = landingSites(zone);
+    const score = site => Math.min(5, ...enemies.map(unit => aiDistance(unit.pos, site)));
+    const openCities = sites.filter(site => hex[site].city && s.control[site] === 'C');
+    const safest = sites.slice().sort((a, b) => score(b) - score(a)).at(0);
+    const attack = sites.slice().sort((a, b) => aiDistance(a, '1009') - aiDistance(b, '1009')).at(0);
+    const nearSapporo = japanesePolicy.landingWings
+      ? sites.slice().sort((a, b) => aiDistance(a, sapporo) - aiDistance(b, sapporo)).at(0) : null;
+    for (const site of new Set([...openCities, ...[safest, attack, nearSapporo].filter(Boolean)])) {
+      possible.push([site, zone]);
+    }
+  }
+  const preferred = bestContinuation(possible, plan => {
+    if (plan) landAt(plan);
+    if (s.phase !== 'end') next(false);
+  }, japanesePolicy.landingExtra);
+  if (preferred) landAt(preferred);
+}
+
+function bestContinuation(possible, applyPlan, extra = false) {
+  const position = structuredClone(snapshot());
+  const wasSimulating = japanSimulating;
+  const policy = japanesePolicy;
+  const seeds = [1082748811, 1271830954, 3195724602, 3801149049];
+  const extraSeeds = [1535245924, 2254113568, 2871750359, 3982419001];
+  const scored = possible.map(plan => ({ plan, losses: 0, wins: 0, vp: 0 }));
+  const compare = policy.winsFirst
+    ? (a, b) => b.wins - a.wins || a.losses - b.losses || a.vp - b.vp
+    : (a, b) => a.losses - b.losses || b.wins - a.wins || a.vp - b.vp;
+  function score(choice, sample) {
+    for (const seed of sample) {
+      withRolloutSeed(seed + position.s.turn, () => {
+        restorePosition(structuredClone(position));
+          s.playMode = 'ai';
+        applyPlan(choice.plan);
+        advanceScriptedAI(() => false);
+        choice.losses += Number(s.winner === 'C');
+        choice.wins += Number(s.winner === 'U');
+        choice.vp += s.vp;
+      });
+    }
+  }
+  try {
+    japanSimulating = true;
+    japanesePolicy = { ...policy, landingSearch: null, combatSearch: null, movementSearch: null, retreatSearch: null };
+    scored.forEach(choice => score(choice, seeds));
+    scored.sort(compare);
+    const finalists = extra ? scored.slice(0, 2) : scored.slice(0, 1);
+    if (extra) finalists.forEach(choice => score(choice, extraSeeds));
+    return finalists.sort(compare)[0].plan;
+  } finally {
+    japanSimulating = wasSimulating;
+    japanesePolicy = policy;
+    restorePosition(position);
+  }
+}
+
+const originalAdjacentAttackers = adjacentAttackers;
+adjacentAttackers = (side, defender) => {
+  const attackers = originalAdjacentAttackers(side, defender);
+  return side === 'U' && japanesePolicy ? attackers.filter(unit => !atRiskArmor(unit)) : attackers;
+};
+
+function beginCounterattack(plan) {
+  target = plan.id;
+  group = plan.attackers;
+  declare();
+}
+
+const originalAICombat = aiCombat;
+aiCombat = () => {
+  if (s.side !== 'U' || !japanesePolicy?.combatSearch || s.turn < japanesePolicy.combatSearch || s.vp < 6) {
+    return originalAICombat();
+  }
+  const choices = [null];
+  for (const defender of fieldEnemies('U')) {
+    if ((!defender.tank && !hex[defender.pos].city) || s.attacked.includes(defender.id)) continue;
+    const attackers = adjacentAttackers('U', defender);
+    if (attackers.length && combatForecast(attackers, defender).col >= 0) {
+      choices.push({ id: defender.id, attackers: attackers.map(unit => unit.id) });
+    }
+  }
+  if (choices.length === 1) return originalAICombat();
+  const preferred = bestContinuation(choices, plan => {
+    if (plan) beginCounterattack(plan);
+  });
+  if (preferred) {
+    beginCounterattack(preferred);
+    if (versusAI()) return;
+    while (combat) finishAIBattle();
+  }
+  if (s.phase === 'combat') originalAICombat();
+};
+
+const originalAIRetreat = aiRetreat;
+aiRetreat = () => {
+  const unit = u(combat.d);
+  if (unit.side !== 'U' || !japanesePolicy?.retreatSearch || s.turn < japanesePolicy.retreatSearch ||
+      !hex[unit.pos].city && !unit.tank) return originalAIRetreat();
+  const hold = combat.out === 'DR' && unit.face === 2 && hex[unit.pos].city;
+  const paths = combat.paths.slice().sort((a, b) => a.length - b.length);
+  const plans = hold ? [null, ...paths] : paths;
+  if (plans.length < 2) return originalAIRetreat();
+  const apply = plan => plan ? retreat(plan) : holdCity(u(combat.d));
+  apply(bestContinuation(plans, apply));
+};
+
+const originalAIReplenish = aiReplenish;
+aiReplenish = () => {
+  if (s.side === 'U' && japanesePolicy && s.rp) {
+    const armor = [u('UM'), u('UG')].find(unit => atRiskArmor(unit) && rpEligible('recover', unit));
+    const reserve = u('UM');
+    if (armor) replenish('recover', armor);
+    else if (protectMarine() && rpEligible('recover', reserve)) replenish('recover', reserve);
+  }
+  originalAIReplenish();
+};
+
+function pullBackArmor(unit) {
+  const proactive = japanesePolicy.armor === 'both' || Boolean(japanesePolicy.screenArmor);
+  if (!proactive && !ez(s, unit.pos, 'U')) return;
+  const enemies = fieldEnemies('U');
+  const allies = s.u.filter(t => t !== unit && t.side === 'U' && t.face && hex[t.pos]);
+  const risk = site => {
+    const from = unit.pos;
+    unit.pos = site;
+    try {
+      const projected = { ...s, used: [], blocked: [], usedStrategy: [] };
+      const threats = enemies.filter(t => adjacent(t.pos, site) || t.tank &&
+        Object.keys(IF.range(projected, t)).some(destination => adjacent(destination, site)));
+      return threats.length ? IF.odds(s, threats, unit, 0).col : -2;
+    } finally {
+      unit.pos = from;
+    }
+  };
+  const current = risk(unit.pos);
+  if (proactive && current < 1) return;
+  const choices = movementChoices(unit).filter(([site]) => !ez(s, site, 'U'));
+  const positionValue = site => Math.min(5, ...allies.map(other => aiDistance(other.pos, site)));
+  const safer = choices.map(choice => ({ choice, risk: risk(choice[0]), support: positionValue(choice[0]) }));
+  safer.sort((a, b) => a.risk - b.risk || a.support - b.support);
+  const best = safer[0];
+  if (best && best.risk <= current && (!proactive || best.risk < current)) {
+    sel = unit.id;
+    mode = best.choice[1];
+    choose(best.choice[0]);
+  }
+  sel = null;
+  mode = 'normal';
+}
+
+function reclaimCities(units) {
+  while (s.phase !== 'end') {
+    const lastMove = s.turn === 10 && s.phase === 'move';
+    const late = japanesePolicy.reclaim === 'late' && s.turn >= 7 && s.vp >= 6;
+    const opponents = fieldEnemies('U');
+    const destinations = [];
+    for (const unit of units) {
+      if (!selectable(unit) || !lastMove && garrison(unit)) continue;
+      for (const choice of movementChoices(unit)) {
+        const [site] = choice;
+        if (!hex[site].city || s.control[site] !== 'C' || site !== '1009' && !lastMove && !late) continue;
+        const neighbors = opponents.filter(other => adjacent(other.pos, site));
+        if (site !== '1009' && !lastMove && favorable(neighbors, { ...unit, pos: site })) continue;
+        destinations.push({ unit, choice, critical: site === '1009' ? 3 : site === sapporo ? 2 : 1 });
+      }
+    }
+    destinations.sort((a, b) => b.critical - a.critical || strength(b.unit) - strength(a.unit));
+    const best = destinations[0];
+    if (!best) break;
+    sel = best.unit.id;
+    mode = best.choice[1];
+    choose(best.choice[0]);
+  }
+  sel = null;
+  mode = 'normal';
+}
+
+function moveTowardVictory(units) {
+  const plans = [null];
+  const goals = cities.filter(city => s.control[city] === 'C')
+    .sort((a, b) => japanCityPriority(b) - japanCityPriority(a));
+  const threats = fieldEnemies('U');
+  const choices = units.filter(unit => selectable(unit) && !garrison(unit)).flatMap(unit =>
+    movementChoices(unit).filter(([site]) =>
+      !favorable(threats.filter(enemy => adjacent(enemy.pos, site)), { ...unit, pos: site }))
+      .map(([site, travel]) => ({ id: unit.id, site, travel, from: unit.pos, strength: strength(unit) })));
+  for (const city of goals) {
+    const closer = choices.filter(choice => aiDistance(choice.site, city) < aiDistance(choice.from, city));
+    closer.sort((a, b) => aiDistance(a.site, city) - aiDistance(b.site, city) || b.strength - a.strength);
+    const plan = closer[0];
+    if (plan && !plans.includes(plan)) plans.push(plan);
+    if (plans.length === 5) break;
+  }
+  if (plans.length === 1) return;
+  function move(plan) {
+    if (!plan) return;
+    sel = plan.id;
+    mode = plan.travel;
+    choose(plan.site);
+  }
+  move(bestContinuation(plans, move));
+}
+
+const originalMoveAIUnits = moveAIUnits;
+moveAIUnits = units => {
+  if (s.side !== 'U' || !japanesePolicy) return originalMoveAIUnits(units);
+  if (japanesePolicy.movementSearch && s.turn >= japanesePolicy.movementSearch && s.vp >= 6) {
+    const ids = units.map(unit => unit.id);
+    moveTowardVictory(units);
+    units = ids.map(u);
+  }
+  if (s.phase === 'end') return;
+  if (japanesePolicy.reclaim) reclaimCities(units);
+  if (s.phase === 'end') return;
+  const screening = japanesePolicy.screenArmor && s.turn >= 6 && s.vp <= japanesePolicy.screenArmor;
+  const armor = units.filter(unit => selectable(unit) &&
+    (atRiskArmor(unit) || screening && unit.tank && hex[unit.pos] && !hex[unit.pos].city));
+  const escort = preparingEscort() ? units.find(unit => !unit.tank && unit.face === 2 && unit.pos === 'wait') : null;
+  for (const unit of armor) {
+    if (s.phase === 'end') return;
+    pullBackArmor(unit);
+  }
+  if (s.phase !== 'end') originalMoveAIUnits(units.filter(unit => !armor.includes(unit) && unit !== escort));
+};
+
+
+const originalJapanReplenish = replenish;
+replenish = (kind, unit, site) => {
+  if (aiRunning && s.side === 'U') {
+    if (kind === 'guard' && japanesePolicy?.armor === 'hold-guard') kind = s.naval ? 'reserve' : 'naval';
+    if (kind === 'mobilize' && preparingEscort() &&
+        !s.u.some(t => t.side === 'U' && !t.tank && t.face === 2 && t.pos === 'wait')) {
+      unit = s.u.find(t => t.pos === 'wait' && !t.tank && rpEligible('mobilize', t)) || unit;
+    }
+    if (kind === 'rebuild' && unit?.side === 'U' && unit.id !== 'UM') site = japanRebuildSite(site);
+  }
+  return originalJapanReplenish(kind, unit, site);
+};
 try{restore=JSON.parse(localStorage.getItem('ifwar-v1'));if(restore?.s?.control){({s,combat,landing,review=null}=restore)}}catch{}
 function start(modeName){
  remember();
@@ -1424,7 +2026,7 @@ $('playMode').onchange=()=>{
  if((s.phase!=='setupU'||s.placements?.length||s.aiDone)&&!confirm(tr('対戦モードを変更して初期配置から始めますか？'))){$('playMode').value=current;return}
  start(nextMode);
 };
-function hideBattleView(){viewBattle=false;if(dialog().open)dialog().close()}
+function hideBattleView(){viewBattle=false;if(!japanSimulating&&dialog().open)dialog().close()}
 function closeBattleView(){hideBattleView();render()}
 $('battleMap').onclick=closeBattleView;
 $('undo').onclick=$('battleUndo').onclick=undo;
