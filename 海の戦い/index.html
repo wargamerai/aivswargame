@@ -347,6 +347,11 @@ body.hide-force .force-label { display:none; }
       <label><input type="radio" name="sidePick" value="axis" checked onchange="pickHumanSide(this.value)"> ドイツ軍（枢軸）を担当する。連合軍はAIが動かす</label>
       <label><input type="radio" name="sidePick" value="allies" onchange="pickHumanSide(this.value)"> 連合軍を担当する。ドイツ軍（枢軸）はAIが動かす</label>
     </div>
+    <details id="britishSetupPanel" hidden style="margin:8px 0 12px;color:#cde;">
+      <summary style="cursor:pointer;color:#88ccff;">英国艦の初期配置（4.3）</summary>
+      <p style="margin:6px 0;font-size:.85em;">マルタに置く艦にチェックしてください。残りの初期艦と増援は英国本土から登場します。</p>
+      <div id="britishSetupShips" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:4px 12px;max-height:28vh;overflow-y:auto;"></div>
+    </details>
     <h3>オプションルール</h3>
     <div style="display:flex;flex-direction:column;gap:8px;color:#cde;margin:8px 0 14px;">
       <label><input type="checkbox" class="optRule" data-opt="ubNoLimit" onchange="setOptionRule(this)"> Uボート上限なし</label>
@@ -633,6 +638,7 @@ function pickHumanSide(side){
   setHumanSide(side);
   const sel = document.getElementById('humanSideSelect');
   if(sel) sel.value = side;
+  showBritishSetupIfAvailable();
 }
 function setHumanSide(side){
   humanSide = side;
@@ -677,7 +683,43 @@ function applyOob(){
   });
   placeAllShips();
 }
+function britishStartingShips(){
+  return SHIPS.filter(ship => ship.country === 'UK' && !ship.enterTurn && !ship.removed);
+}
+
+function showBritishSetupIfAvailable(){
+  const panel = document.getElementById('britishSetupPanel');
+  panel.hidden = humanSide !== 'allies';
+  if(panel.hidden) return;
+
+  const list = document.getElementById('britishSetupShips');
+  if(list.childElementCount) return;
+  for(const ship of britishStartingShips()){
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = ship.id;
+    checkbox.checked = ship.location === 'Malta';
+    label.append(checkbox, ' ' + ship.name);
+    list.append(label);
+  }
+}
+
+function applyBritishSetup(){
+  if(humanSide !== 'allies' || currentTurn !== 1) return;
+  const choices = new Map(Array.from(document.querySelectorAll('#britishSetupShips input'),
+    input => [input.value, input.checked]));
+  for(const ship of britishStartingShips()){
+    if(!choices.has(ship.id)) continue;
+    const port = choices.get(ship.id) ? 'Malta' : 'England';
+    ship.location = port;
+    ship.homePort = port;
+  }
+  if(choices.size) renderLocShipList();
+}
+
 function startWithOptions(){
+  applyBritishSetup();
   applyOob();
   lockOptionRules();
   document.getElementById('optionStartModal').style.display = 'none';
@@ -3280,6 +3322,9 @@ function aiShouldRetreat(candidates, seaKey){
   // 戦闘可能艦のみ（atk>=1, CV等は除外）
   const myFighters = candidates.filter(s => s.atk >= 1);
   const enemy = SHIPS.filter(s => s.location === seaKey && !s.sunk && s.side === humanSide && s.type !== 'UBOAT' && !s.returnPending);
+  if (candidates[0]?.side === 'axis' && axisPlanMode() === 7) {
+    return axisShouldRetreat(candidates, enemy, currentTurn, poc);
+  }
   const enemyFighters = enemy.filter(s => s.atk >= 1);
   // 攻撃力合計で比較（損害艦も atk が落ちているので現状値で計算）
   const myStrength = myFighters.reduce((sum, s) => sum + (s.atk || 0), 0);

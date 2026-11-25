@@ -323,10 +323,10 @@ var PocPlanner = (function () {
     return r;
   }
   // 公式: 海域の点 ＝ 勝率 × POC ＋（イギリスの沈没数 − ドイツの沈没数）× k × 残りのターン数
-  function seaScore(sea, al, ax, turn, seas) {
+  function seaScore(sea, al, ax, turn, seas, lossK = P.lossK) {
     const r = roundStats(sea, al, ax);
     const cv = al.filter(s => s.type === 'CONVOY').length * convoyValue(sea);
-    return { score: r.w * (seas[sea].axis + cv) + (r.sa - r.sx) * P.lossK * Math.max(0, 8 - turn), w: r.w, sx: r.sx, sa: r.sa };
+    return { score: r.w * (seas[sea].axis + cv) + (r.sa - r.sx) * lossK * Math.max(0, 8 - turn), w: r.w, sx: r.sx, sa: r.sa };
   }
   const aswOf = arr => arr.reduce((t, s) => t + ((s.type === 'CV' || s.type === 'CONVOY') ? 3 : 1), 0);
   const uNeed = arr => Math.floor(aswOf(arr) / 3) + 1;     // ASW3につき1隻
@@ -335,14 +335,14 @@ var PocPlanner = (function () {
   const swing = (sea, arr, seas) => seas[sea].axis + seas[sea].allies + convoysIn(arr) * convoyValue(sea) * 2;
 
   // ドイツ・イタリア: 見えている連合の配置に対して決める
-  function planAxisSimple(a) {
+  function planAxisSimple(a, settings = P, coverage = null) {
     const plan = {};
     const notes = [];
     let free = a.ships.slice();
     const take = (u, sea) => { plan[u.s.id] = sea; free = free.filter(x => x !== u); };
     const al = sea => a.allied[sea] || [];
     const last = a.turn >= 8;
-    const winMin = last ? 0.2 : P.winMin;
+    const winMin = last ? 0.2 : settings.winMin;
     const canGo = sea => free.filter(u => u.opts.includes(sea));
     // 弱い艦から足して、目標の勝率に届く組を返す
     const force = (sea, target, order) => {
@@ -367,7 +367,7 @@ var PocPlanner = (function () {
       const list = [];
       for (const u of order) {
         list.push(u);
-        const r = seaScore(sea, al(sea), list.map(x => x.s), a.turn, a.seas);
+        const r = seaScore(sea, al(sea), list.map(x => x.s), a.turn, a.seas, settings.lossK);
         if (!best || r.score > best.score + 0.1) best = { score: r.score, w: r.w, sx: r.sx, sa: r.sa, list: list.slice() };   // 同じくらいなら少ない隻数で足りる
       }
       return best;
@@ -385,11 +385,15 @@ var PocPlanner = (function () {
       }
     }
     const main = ['NorthSea', 'Barents', 'NorthAtlantic', 'SouthAtlantic'];
-    // 3) 連合のいない海域は、弱い艦を1隻でタダで取る
-    for (const sea of main.slice().sort((p, q) => a.seas[q].axis - a.seas[p].axis)) {
-      if (al(sea).length) continue;
-      const c = canGo(sea).sort((p, q) => (pwS(p.s) + (p.s.def || 0)) - (pwS(q.s) + (q.s.def || 0)));
-      if (c.length) take(c[0], sea);
+    if (coverage) {
+      for (const [unit, sea] of coverage(a, main, free)) take(unit, sea);
+    } else {
+      // 3) 連合のいない海域は、弱い艦を1隻でタダで取る
+      for (const sea of main.slice().sort((p, q) => a.seas[q].axis - a.seas[p].axis)) {
+        if (al(sea).length) continue;
+        const c = canGo(sea).sort((p, q) => (pwS(p.s) + (p.s.def || 0)) - (pwS(q.s) + (q.s.def || 0)));
+        if (c.length) take(c[0], sea);
+      }
     }
     // 4) 残りの海域: 今・次のターン・その次のターンの勝率を、両軍の増援を入れて比べる
     //    今が一番よい海域だけ攻める。先の方がよければ保留して港で待つ
@@ -407,7 +411,7 @@ var PocPlanner = (function () {
       }
       return res;
     };
-    const minWin = last ? 0.2 : P.winMin;
+    const minWin = last ? 0.2 : settings.winMin;
     for (let round = 0; round < 3; round++) {
       const rows = contested.filter(sea => !doneSea.has(sea)).map(sea => {
         const c = canGo(sea).sort((x, y) => pwS(y.s) - pwS(x.s));
@@ -429,6 +433,129 @@ var PocPlanner = (function () {
     }
     Object.keys(plan).forEach(k => { if (k[0] === '_') delete plan[k]; });
     return { plan, value: 0, notes };
+  }
+
+  function axisOpenSeaAssignments(options, main, available) {
+    const empty = main.filter(sea=>!options.allied[sea]?.length && !options.fixed[sea]?.length);
+    const material = u => (u.s.atk||0)+(u.s.air||0)+u.s.def*.2;
+    const points = (u,sea) => {
+      const forward = sea === 'NorthSea' ? .7 : 0;
+      const arrival = u.arrival?.[sea] ?? 1;
+      const reserve = u.opts.filter(target=>options.allied[target]?.length).length;
+      return (options.seas[sea].axis+forward)*arrival-(.04+.055*reserve)*material(u);
+    };
+    const candidates = Object.fromEntries(empty.map(sea=>[sea, available.filter(u=>u.opts.includes(sea))
+      .sort((a,b)=>points(b,sea)-points(a,sea)).slice(0,empty.length+2)]));
+    let best = {value:0,orders:[]};
+    const used = new Set();
+    function pick(index,value,orders) {
+      if (index===empty.length) {
+        if(value>best.value) best={value,orders:orders.slice()};
+        return;
+      }
+      const sea=empty[index];
+      pick(index+1,value,orders);
+      for (const unit of candidates[sea]) {
+        if (used.has(unit)) continue;
+        used.add(unit);orders.push([unit,sea]);
+        pick(index+1,value+points(unit,sea),orders);
+        orders.pop();used.delete(unit);
+      }
+    }
+    pick(0,0,[]);
+    return best.orders;
+  }
+  function axisLateReinforcements(options, fleet) {
+    const {seaList,ships,fixed,allied,seas,turn} = options;
+    const totalIn = (plan,sea) => [...(fixed[sea]||[]),...ships.filter(u=>plan[u.s.id]===sea).map(u=>u.s)];
+    const score = plan => seaList.reduce((n,sea)=>{
+      const theirs=allied[sea]||[];
+      const ours=totalIn(plan,sea);
+      const projected = outcome(sea, theirs, ours);
+      const convoy=theirs.filter(s=>s.type==='CONVOY').length*(sea==='Barents'?3:sea==='NorthAtlantic'?1:0);
+      let point = projected.pA * seas[sea].allies - projected.pX * seas[sea].axis +
+        convoy * (1-projected.pX) + (projected.lossX-projected.lossA)*Math.max(0,8-turn)*.05;
+      if (ours.length && theirs.length) {
+        const lack=ships.filter(u=>plan[u.s.id]===sea).reduce((n,u)=>n+1-(u.arrival?.[sea]??1),0);
+        point += Math.min(lack,3)*.24;
+      }
+      return n+point;
+    },0);
+    const base = score(fleet.plan);
+    if (options.cumPoc + base*(9-turn) < -.45) return fleet;
+    const open=ships.filter(u=>!fleet.plan[u.s.id]||fleet.plan[u.s.id]==='port');
+    let best = {plan:fleet.plan,value:base};
+    for (const sea of seaList) {
+      if (!allied[sea]?.length || ['Baltic','Mediterranean'].includes(sea)) continue;
+      const ready=open.filter(u=>u.opts.includes(sea)).sort((a,b)=>
+        (b.arrival?.[sea]??1)*(b.s.atk+b.s.air+b.s.def*.2) -
+        (a.arrival?.[sea]??1)*(a.s.atk+a.s.air+a.s.def*.2));
+      const plan={...fleet.plan};
+      for (const u of ready) {
+        plan[u.s.id]=sea;
+        const value=score(plan);
+        if (value < best.value-.15) best={plan:{...plan},value};
+      }
+    }
+    return {...fleet,...best};
+  }
+  function axisSubmarineAssignments(options, fleet) {
+    const { turn, seaList, seas, allied, ships, ubs } = options;
+    const defenseValue = 1.75, convoyValue = .9, threshold = .4;
+    if (!ubs) return {};
+    const remaining = (8 - turn) / 7;
+    const assessments = seaList.filter(sea => allied[sea]?.length).map(sea => {
+      const enemy = allied[sea];
+      const escort = enemy.reduce((n,s) => n + (s.type === 'CV' || s.type === 'CONVOY' ? 3 : 1), 0);
+      const hasFleet = ships.some(u => fleet.plan[u.s.id] === sea);
+      const carriesConvoy = enemy.some(s => s.type === 'CONVOY');
+      const convoy = carriesConvoy ? (sea === 'Barents' ? 4 : sea === 'NorthAtlantic' ? 2 : 0) : 0;
+      const odds = [1];
+      for (let roll = 0; roll < escort; roll++) {
+        for (let hit = roll + 1; hit >= 0; hit--) odds[hit] = (odds[hit] || 0) * 2 / 3 + (odds[hit-1] || 0) / 3;
+      }
+      const weights = Array.from({length:ubs+1}, (_,count) => {
+        if (!count) return 0;
+        const survives = odds.slice(0,count).reduce((n,odds) => n+odds,0);
+        if (survives < threshold && remaining > 0) return -100;
+        const survivingSubmarines = odds.reduce((n,p,hit) => n + p * Math.max(0,count-hit),0);
+        const expectedLoss = Math.min(escort / 6,count) * (0.28 + remaining * .44);
+        const deny = hasFleet ? 0 : seas[sea].allies * survives * defenseValue;
+        const surfaceSupport = hasFleet ? .54 : .25;
+        return deny + (convoy * convoyValue + surfaceSupport) * (1-(2/3)**survivingSubmarines)-expectedLoss;
+      });
+      return {sea,weights};
+    });
+    let plans = Array.from({length:ubs+1}, () => ({ plan:{}, score:0 }));
+    for (const {sea,weights} of assessments) {
+      plans = plans.map((entry, total) => {
+        let best = entry;
+        for (let count = 1; count <= total; count++) {
+          const prior = plans[total-count];
+          const score = prior.score + weights[count];
+          if (score > best.score + .001) best = {score,plan:{...prior.plan,[sea]:count}};
+        }
+        return best;
+      });
+    }
+    const plan = plans[ubs].plan;
+    const safe = ['Baltic',...seaList].find(sea => !allied[sea]?.length);
+    if (safe) plan[safe] = ubs - Object.values(plan).reduce((n,c) => n+c,0);
+    return plan;
+  }
+
+  // 枢軸は空いた海域への配備、Uボートの対潜損失、終盤の得点を同時に考える。
+  function planAxisBalanced(options) {
+    const { turn, cumPoc, lastTurnGain, seas, allied } = options;
+    const urgent = cumPoc >= 0 || cumPoc + Math.max(0, lastTurnGain) * (9 - turn) > 1;
+    const settings = { winMin: urgent ? .39 : .52, lossK: urgent ? .68 * .8 : .68 };
+    const values = Object.fromEntries(Object.entries(seas).map(([sea, value]) => [sea, {
+      ...value,
+      axis: value.axis + (allied[sea]?.length ? value.allies * .86 : 0),
+    }]));
+    const initial = planAxisSimple({ ...options, seas: values }, settings, axisOpenSeaAssignments);
+    const fleet = turn >= 6 ? axisLateReinforcements(options, initial) : initial;
+    return { ...fleet, ubPlan: axisSubmarineAssignments(options, fleet) };
   }
 
   // 連合: ドイツが一番得な所へ集中してくる、Uボートが ASW3につき1隻で支配を消す、と見て配置を試す
@@ -1194,5 +1321,5 @@ var PocPlanner = (function () {
     return { plan: out, value: pick.v };
   }
 
-  return { P, cache, outcome, seaValue, planAxisV6, planAlliesV4, planAlliesV5, planAlliesG, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
+  return { P, cache, outcome, seaValue, planAxisBalanced, planAxisV6, planAlliesV4, planAlliesV5, planAlliesG, planAxis, planAxisConcentrate, planAxisSimple, planAllies, planAlliesSimple, planAxisV2, planAlliesV2, seaWorth, ITALY, axisBest, pWin, roundStats, seaScore };
 })();
