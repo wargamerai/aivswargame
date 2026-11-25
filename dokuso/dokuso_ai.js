@@ -183,8 +183,8 @@
     s89: '3625', s90: '3716', s91: '3625', s92: '3716',
   };
   const SOV_RESERVE_GROUPS = [
-    { ids: ['s75', 's77', 's92'], rows: [3, 11] },
-    { ids: ['s74', 's76', 's91'], rows: [12, 21] },
+    { ids: ['s75', 's77', 's92'], rows: [10, 19] },
+    { ids: ['s74', 's76', 's91'], rows: [18, 29] },
   ];
 
   function setupSovietPreset(game) {
@@ -571,6 +571,79 @@
     return { order, held, occupied };
   }
 
+
+  function routeDefense(game, ctx, held) {
+    const map = game.map;
+    const objectives = new Map();
+    for (const h of map.tags.fuel || []) {
+      const armor = game.onMap('ger').filter(u => D.BREAK_POINTS[u.type] && !u.broke && map.dist(h, u.hex) <= 8);
+      if (armor.length) objectives.set(h, 4.5 + armor.reduce((n,u)=>n+D.BREAK_POINTS[u.type],0)*.7);
+    }
+    for (const [h, side] of Object.entries(game.control)) {
+      if (side === 'ger') objectives.set(h, (objectives.get(h)||0) + D.CITY_POINTS[map.facility(h)]*2);
+    }
+    const occupied = new Map();
+    for (const unit of game.onMap('sov')) occupied.set(unit.hex, (occupied.get(unit.hex)||0)+1);
+    const route = (h, from, to) => {
+      const blocker = site => site === to || (occupied.get(site)||0) > Number(site === from);
+      return game.breakthroughRoute.call({ map, enemyAt: blocker,
+        adjEnemy: site => map.neighbors(site).some(blocker) }, h);
+    };
+    const connected = [...objectives].map(([h, value]) => ({ h, value, road: route(h) }));
+    if (!connected.length) return null;
+    const lanes = new Set(connected.flatMap(({road}) => road.flatMap(h=>[h,...map.neighbors(h)])));
+    const fuel = new Set((map.tags.fuel||[]).filter(h=>objectives.has(h)));
+    const safeCity = h => game.control[h]==='ger' && !game.enemyAt(h,'sov');
+    let best = null;
+    for (const unit of game.onMap('sov')) {
+      if (held.has(unit.id) || game.moveState[unit.id]._done || !game.canMove(unit) ||
+          isCity(game,unit.hex) && game.friendCount(unit.hex,'sov')<2 || fuel.has(unit.hex)) continue;
+      for (const [h, move] of game.reachable(unit)) {
+        if ((!lanes.has(h)&&!fuel.has(h)&&!safeCity(h)) || (occupied.get(h)||0)>=D.STACK_MAX) continue;
+        const adjacent = map.neighbors(h);
+        const defense = game.defMult(h, adjacent.filter(n=>game.enemyAt(n,'sov')));
+        const germanReach = ctx.germanDistance.get(h)??12;
+        const reclaim = safeCity(h) ? 2 * D.CITY_POINTS[map.facility(h)] : 0;
+        const protectFuel = fuel.has(h) && !occupied.has(h) ? 4.5*1.2 : 0;
+        const roadValue = connected.reduce((score, o) =>
+          score + (Number(o.road.length > 0)-Number(route(o.h,unit.hex,h).length > 0))*o.value, 0);
+        const score = roadValue + protectFuel + reclaim + (defense-1)*.8 - move.cost*.18 -
+          (germanReach<=1 ? 4 : germanReach<=2 ? 1.75 : 0);
+        if (score >= 4.2 && (!best || score>best.score)) best = { type:'move', unit:unit.id, hex:h, score };
+      }
+    }
+    return best;
+  }
+
+  function cityGarrison(game, ctx, westernHeld) {
+    const map = game.map;
+    const enemies = game.onMap('ger');
+    const priorities = new Map();
+    for (const city of ctx.cities) {
+      if (game.control[city.h] !== 'sov' || game.enemyAt(city.h,'sov')) continue;
+      const defenders = game.unitsAt(city.h).filter(u=>u.side==='sov');
+      if (defenders.length >= D.STACK_MAX) continue;
+      const threats = enemies.filter(u=>map.dist(u.hex,city.h)<=3);
+      if (!threats.length) continue;
+      const enemyPower = threats.reduce((n,u)=>n+u.str/(Math.max(1,map.dist(u.hex,city.h))),0);
+      const guardPower = defenders.reduce((n,u)=>n+game.estStr(u),0)*game.defMult(city.h,null);
+      if (defenders.length && guardPower >= enemyPower * .9) continue;
+      priorities.set(city.h, city.value * 2 + Math.min(10,enemyPower/3) - defenders.length*2.6);
+    }
+    if (!priorities.size) return null;
+    let best = null;
+    for (const u of game.onMap('sov')) {
+      if (!game.canMove(u)||game.moveState[u.id]._done||westernHeld.has(u.id)||
+          isCity(game,u.hex)&&game.friendCount(u.hex,'sov')<=1) continue;
+      for (const [h, move] of game.reachable(u)) {
+        if (!priorities.has(h)) continue;
+        const score = priorities.get(h)+game.estStr(u)*.8-move.cost*.18+
+          Number(game.adjEnemy(u.hex,'sov'))*2.5;
+        if (!best || score>best.score) best={type:'move',unit:u.id,hex:h,score};
+      }
+    }
+    return best;
+  }
   function sovNextMove(game) {
     const ctx = sovMovementContext(game);
     const western = sovWesternDefense(game, ctx);
@@ -578,8 +651,14 @@
       game.moveState[western.order.unit]._done = true;
       return western.order;
     }
+    if (game.turn > 1) {
+      const protect = routeDefense(game, ctx, western.held);
+      if (protect) { game.moveState[protect.unit]._done = true; return protect; }
+    }
     const reserve = sovReserveMove(game, ctx);
     if (reserve) return reserve;
+    const defensive = cityGarrison(game, ctx, western.held);
+    if (defensive) { game.moveState[defensive.unit]._done = true; return defensive; }
     const { order, held, occupied } = sovCityDefense(game, ctx, western.held);
     if (order) {
       game.moveState[order.unit]._done = true;
@@ -636,8 +715,11 @@
       const defensive = defensiveMoves[0];
       if (defensive) return { type: 'move', unit: u.id, hex: defensive.h };
 
-      const candidates = positions.filter(p => retreat ? column(p.h) > from : column(p.h) <= from && !p.danger);
-      candidates.sort((a, b) => Number(a.danger) - Number(b.danger) || b.city - a.city ||
+      const candidates = positions.filter(p => !p.danger || p.defense >= 2 || p.h === u.hex);
+      const point = p => p.city*10 + p.defense*3 + p.terrain*1.5
+        + Number(p.supportsLine)*2 - Number(p.danger)*9
+        - p.friends*5 - Math.min(10,p.distance)*.6 - p.cost*.15;
+      candidates.sort((a, b) => point(b)-point(a) || Number(a.danger) - Number(b.danger) || b.city - a.city ||
         b.terrain - a.terrain || a.distance - b.distance || b.cover - a.cover ||
         a.friends - b.friends || Number(b.supportsLine) - Number(a.supportsLine) ||
         (retreat ? a.cost - b.cost : column(a.h) - column(b.h)) || a.cost - b.cost);
