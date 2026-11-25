@@ -313,6 +313,36 @@ function orders(){
   hex,occupied:occupied.has(hex),risk:danger(hex),distance:distances.get(hex)??Infinity,
   stays:hex===s.pos,tie:Math.random()
  }));
+
+ const clear0=candidates.filter(candidate=>!candidate.occupied);
+ const allowed0=(clear0.length?clear0:candidates);
+ const retreatDistances=leadsInPoints()?distancesTo([brest],mayPass):null;
+ const estimate=hex=>{
+  const convoy=routes.has(hex),risk=danger(hex),need=6-s.gv;
+  const visible=s.tracked.length>0;
+  const overtake=patrols.filter(({f,moves})=>!carrier(f)&&moves.has(hex)).reduce((n,{f})=>n+pow(f),0);
+  const future=distances.get(hex)??8;
+  const safety=(s.ge<=2?1.5:1);
+  const escape=retreatDistances?.get(hex);
+  const canExit=escape!=null;
+  const harborRisk=patrols.filter(({f,moves})=>!carrier(f)&&moves.has(brest)).length;
+  const home=canExit&&harborRisk<2?3/(escape+1):0;
+  const carrierRisk=patrols.filter(({f,air})=>carrier(f)&&air.has(hex)).length;
+  const deadline=s.turn>=11||s.ge<=2;
+  const nearBrest=escape!=null&&escape<=Math.max(1,18-s.turn)*geSpeed();
+  const escapeProgress=nearBrest ? 2*
+    (deadline?2.1:1)*((retreatDistances.get(s.pos)??escape)-escape) : 0;
+  const discourageSight=carrierRisk*2.6*(deadline?1.8:1);
+  const raidValue=convoy?(need<=3?13:9)-discourageSight:0;
+  const recent=s.trail.slice(-3).filter(site=>site===hex).length;
+  return raidValue+home+escapeProgress-future*(s.turn>=13&&!nearBrest?3:1.5)-risk*1*safety
+   -overtake*(visible?.8:.15)*safety-recent*(convoy?.5:1.3);
+ };
+ if(leadsInPoints()&&possible.has(brest)&&!occupied.has(brest)&&
+    (patrols.every(({f,moves})=>carrier(f)||!moves.has(brest))||
+     (s.turn===18||s.turn>=15&&s.ge>=3&&danger(brest)<9))){commitMove(possible.get(brest));return}
+ allowed0.sort((a,b)=>estimate(b.hex)-estimate(a.hex)||a.tie-b.tie);
+ if(allowed0[0]){commitMove(possible.get(allowed0[0].hex));return}
  const clear=candidates.filter(candidate=>!candidate.occupied);
  const raids=clear.filter(candidate=>routes.has(candidate.hex));
  const moves=(clear.length?clear:candidates).filter(candidate=>!candidate.stays);

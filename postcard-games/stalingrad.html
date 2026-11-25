@@ -369,7 +369,7 @@ function refill(){
 const crossings=['Fact','Ten','Red'];
 const priorityArea=h=>h==='Mam'||crossings.includes(h);
 const maxRearResupplyUnits=2;
-const guardStepTarget=4;
+const guardStepTarget=3;
 const isSovietGuard=t=>t.side===R&&t.type==='inf'&&t.val===4;
 const guardNeedsSteps=t=>isSovietGuard(t)&&t.st.length<guardStepTarget;
 const rearDistance=(()=>{
@@ -447,13 +447,16 @@ function aiPlan(units,{canReplenish=true}={}){
  const molotov=sovietEvents('モロトフ・カクテル');
  const canRefill=canReplenish&&(s.deck.length||s.drop.length);
  const canSendToRear=s.units.filter(t=>t.rearResupply&&areas[t.h]).length<maxRearResupplyUnits;
+ const anchor=(s.control['Fact']===G
+  ? crossings.filter(h=>s.control[h]===R).sort((a,b)=>at(b).filter(t=>t.side===R).length-at(a).filter(t=>t.side===R).length)[0]
+  : 'Fact') || 'Fact';
  for(const t of units){
   const rebuilding=guardNeedsSteps(t);
   if((t.replenishFirst||rebuilding)&&needsRearRefill(t)){
    if(canRefill)candidates.push({t,replenish:true,value:rebuilding?34:31});
    continue;
   }
-  const rear=t.h==='SOV'||t.rearResupply||canSendToRear?aiRecoveryZone(t):null;
+  const rear=t.h!==anchor&&(t.h==='SOV'||t.rearResupply||canSendToRear)?aiRecoveryZone(t):null;
   if(rear){
    if(rear===t.h){if(canRefill)candidates.push({t,replenish:true,value:30});}
    else candidates.push({t,h:rear,rearResupply:true,value:26-rearDistance[rear]});
@@ -463,17 +466,29 @@ function aiPlan(units,{canReplenish=true}={}){
   const options=aiCards(t,false);
   const hit=options.some(o=>!molotov.includes(o.c)&&o.c.r<=power(t,false)+2*molotov.length);
   const enemyHere=at(t.h).some(v=>v.side===G);
-  if(enemyHere&&(hit||priorityArea(t.h)&&options.length)){
+  if(enemyHere&&(hit||s.turn===6&&priorityArea(t.h)&&options.length)&&
+      (t.h!==anchor||s.control[anchor]===G&&hit)){
    candidates.push({t,h:t.h,value:aiAreaValue(t.h)+(t.h==='Mam'?14:4)});
   }
   if(canRefill&&!t.rejoining&&needsRearRefill(t))candidates.push({t,replenish:true,value:6+(t.max-t.st.length)*2});
-  if(t.n==='T-34')continue;
+  if(t.n==='T-34'&&t.h===anchor)continue;
   for(const h of reachable(t)){
    if(!t.rejoining&&s.aiMoves?.[t.n]?.includes(h))continue;
    const enemies=at(h).filter(v=>v.side===G);
+   if(t.n==='T-34'&&(h!==anchor||enemies.length||s.control[h]!==R))continue;
    if(enemies.length&&!(priorityArea(h)?options.length:hit&&(!t.n.startsWith('Rifle')||t.st.length)))continue;
    if(!enemies.length&&s.control[h]!==R&&(!options.length||t.rejoining&&!s.hands[R].length))continue;
-   const value=aiMovementValue(t,h,enemies);
+   const anchorDefenders=at(anchor).filter(v=>v.side===R&&!v.isolate);
+   if(t.h===anchor&&h!==anchor&&anchorDefenders.length<=3)continue;
+   if(crossings.includes(t.h)&&s.control[t.h]===R&&
+     at(t.h).filter(v=>v.side===R&&!v.isolate).length<=1&&s.turn>=2)continue;
+   const reinforcement=h===anchor&&anchorDefenders.length<3&&(hit||!enemies.length)
+     ?Math.max(0,29-anchorDefenders.length*6)+t.st.length*2+(t.n==='T-34'?14:0):0;
+   const reinforceSecond=crossings.includes(h)&&!at(h).some(v=>v.side===R&&!v.isolate)&&!enemies.length
+     ?12+Number(s.turn>=4)*11:0;
+   const contestedStrength=enemies.reduce((n,v)=>n+v.val+v.st.length,0);
+   const approachCost=enemies.length&&h!==anchor&&s.turn<6?7+contestedStrength*.6:0;
+   const value=aiMovementValue(t,h,enemies)+reinforcement+reinforceSecond-approachCost;
    if(value>2.2)candidates.push({t,h,value});
   }
  }
@@ -545,16 +560,20 @@ function aiStep(){
    const option=best||opts[0];if(option)playCard(a,option);else yieldCombat(a);break;
   }
   case'def':{
-   const opts=at(b.h).filter(t=>t.side===R);
-   const defender=opts.sort((x,y)=>{
-    const value=t=>power(t,true)+(aiCards(t,true).some(o=>o.c.r<=power(t,true))?8:0)+t.st.length*.6;
-    return value(y)-value(x);
-   })[0];
-   b.d=defender.n;
-   const cards=aiCards(defender,true);
-   const card=cards.find(o=>o.c.r<=power(defender,true))||
-    (priorityArea(b.h)&&cards.find(o=>o.k==='hand'));
-   if(card)playCard(defender,card);else yieldCombat(defender);break;
+   const enemy=cardStrength(b.cards[G].at(-1),a,false);
+   const options=at(b.h).filter(t=>t.side===R&&!t.isolate).map(unit=>{
+    const cards=aiCards(unit,true);
+    const score=option=>cardStrength(option.c,unit,true);
+    const legal=cards.filter(o=>score(o)>0&&score(o)>=enemy);
+    legal.sort((x,y)=>Number(y.k==='hand')-Number(x.k==='hand')||score(y)-score(x));
+    const card=legal[0]||(enemy===0&&cards.find(o=>o.k==='hand'&&o.c.r<11));
+    const value=card?120+score(card)+(card.k==='hand'?6:0)+power(unit,true)*.25:
+      (unit.n==='T-34'?-50:0)+unit.st.length*2+power(unit,true)*.2;
+    return {unit,card,value};
+   }).sort((x,y)=>y.value-x.value);
+   const {unit,card}=options[0]||{unit:at(b.h).find(t=>t.side===R),card:null};
+   b.d=unit.n;
+   if(card)playCard(unit,card);else yieldCombat(unit);break;
   }
   case'raise':{
    const t=a.side===R?a:d,old=b.cards[R].at(-1);
@@ -566,12 +585,10 @@ function aiStep(){
     const enemyScore=cardStrength(enemy,d,true);
     if(own<=enemyScore)better=cards.find(o=>quality(o.c)>own&&quality(o.c)>=enemyScore);
    }else{
-    better=cards.find(o=>quality(o.c)>own);
-    if(!better&&old&&!b.sovietBluffed){
-     const bluffs=cards.filter(o=>o.k==='hand'&&quality(o.c)===own)
-      .sort((x,y)=>Number(x.c.r>=11)-Number(y.c.r>=11)||y.c.r-x.c.r);
-     if(bluffs.length&&Math.random()<1/8){better=bluffs[0];b.sovietBluffed=true;}
-    }
+    const enemyQuality=cardStrength(enemy,t===d?a:d,t!==d);
+    if(own<=enemyQuality)better=cards.filter(o=>quality(o.c)>own && quality(o.c)>=enemyQuality)
+      .sort((x,y)=>Number(y.k==='hand')-Number(x.k==='hand')||quality(y.c)-quality(x.c))[0];
+
    }
    if(better)playCard(t,better);else settle();break;
   }
