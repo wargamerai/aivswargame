@@ -48,6 +48,7 @@ const LANG_EXACT = {
   '艦一覧の表示/非表示': 'Show / hide ship list',
   '担当する軍': 'Your side',
   '英国艦の初期配置（4.3）': 'British starting ports (4.3)',
+  '地中海からの帰港': 'Return from the Mediterranean',
   'マルタに置く艦にチェックしてください。残りの初期艦と増援は英国本土から登場します。': 'Check the ships you want to start in Malta. All other starting ships and reinforcements start in England.',
   'ドイツ軍（枢軸）を担当する。連合軍はAIが動かす': 'Play Germany (Axis). The AI plays the Allies',
   '連合軍を担当する。ドイツ軍（枢軸）はAIが動かす': 'Play the Allies. The AI plays Germany (Axis)',

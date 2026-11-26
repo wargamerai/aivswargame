@@ -177,6 +177,16 @@ body.hide-force .force-label { display:none; }
 #axisReturnTable .ret-btn.refuel:hover:not(:disabled) { background:#754; }
 #axisReturnTable .ret-btn:disabled { background:#222; color:#666; border-color:#333; cursor:not-allowed; }
 #axisReturnTable .ret-result { color:#ffcc44; font-weight:bold; }
+#britishReturnDialog {
+  background:#1a2a3a; color:#eee; border:2px solid #ffcc44; border-radius:8px;
+  width:min(92vw, 540px); max-height:85vh; padding:14px 18px;
+}
+#britishReturnDialog::backdrop { background:rgba(0,0,0,.85); }
+#britishReturnDialog h3 { color:#ffcc44; }
+#britishReturnTable { width:100%; border-collapse:collapse; }
+#britishReturnTable th, #britishReturnTable td { padding:5px 4px; border-bottom:1px solid #456; text-align:left; }
+#britishReturnTable button { margin:2px; min-height:34px; padding:4px 8px; }
+#britishReturnTable button[aria-pressed="true"] { background:#2a6941; border-color:#78ce96; }
 .combat-box {
   background:#1a2a3a; border:2px solid #ffcc44; border-radius:8px;
   padding:14px 18px; width:90vw; max-width:1100px; max-height:88vh;
@@ -392,6 +402,18 @@ body.hide-force .force-label { display:none; }
     </div>
   </div>
 </div>
+<dialog id="britishReturnDialog" aria-labelledby="britishReturnTitle">
+  <form id="britishReturnForm">
+    <h3 id="britishReturnTitle">地中海からの帰港</h3>
+    <table id="britishReturnTable">
+      <thead><tr><th>艦名</th><th>損害</th><th>帰還先</th></tr></thead>
+      <tbody id="britishReturnBody"></tbody>
+    </table>
+    <div style="margin-top:8px;text-align:right;">
+      <button type="submit" class="locBtn" style="background:#365d46;padding:6px 14px;">帰還</button>
+    </div>
+  </form>
+</dialog>
 <div id="axisRepairModal">
   <div class="combat-box" style="max-width:700px;">
     <h3>枢軸艦 修理フェイズ</h3>
@@ -821,7 +843,7 @@ function applyNeutralPenalty(){
   alert(log.join('\n'));
 }
 async function advancePhase(){
-  if(phaseIdx >= 9) return; // 9 (POC) で止まる、ターン終了ボタンで次ターンへ
+  if(phaseIdx >= 9 || document.getElementById('britishReturnDialog').open) return;
   // 枢軸の移動のフェイズで1隻も動かしていなければ、確かめてから進む（移動を忘れたまま進まないように）
   // 8ターン目に港に残っている枢軸の艦があれば、確かめてから進む（スティーブさんの提案 2026-11-08）
   if(phaseIdx === 3 && humanSide === 'axis' && !simMode && currentTurn >= 8){
@@ -856,7 +878,6 @@ async function advancePhase(){
     Object.keys(seaControl).forEach(k => delete seaControl[k]);
     placeControlMarkers();
   } else if(phaseIdx === 8){
-    // マルタの艦はマルタで完結（英国へは帰さない）。マルタの余力は連合AIの配分で南大西洋へ送る
     // バレンツ海の UK・US 水上艦は England に直接帰還（Russia には行かない、コンボイは除外）
     const barUkUs = SHIPS.filter(s =>
       s.location === 'Barents' && !s.sunk && !s.removed &&
@@ -923,8 +944,19 @@ async function advancePhase(){
       s.location && SEAS[s.location] && !s.sunk && !s.removed &&
       s.type !== 'CONVOY' && s.refuelTurn !== currentTurn
     );
-    // 連合艦は既存の自動配置
-    const alliesToReturn = shipsToReturn.filter(s => s.side === 'allies');
+    const alliedShips = shipsToReturn.filter(s => s.side === 'allies');
+    const chosen = humanSide === 'allies' && !simMode
+      ? await chooseBritishMediterraneanReturns(alliedShips)
+      : new Map();
+    for(const [ship, port] of chosen){
+      ship.location = port;
+      ship.homePort = port;
+      ship.atDock = false;
+      ship._toMalta = false;
+      ship.fromMalta = false;
+      console.log(`[帰還] ${ship.name}: 地中海 → ${port}`);
+    }
+    const alliesToReturn = alliedShips.filter(s => !chosen.has(s));
     // 地中海から帰還する損害英国艦: マルタの修理能力内に収まる艦（損害の小さい順）はマルタ、収まらない艦は英国
     const maltaPort = PORTS.Malta;
     let maltaBudget = maltaPort.available.includes(currentTurn) ? maltaPort.repair : 0;
@@ -2957,6 +2989,56 @@ function getReturnPorts(ship){
     if(port.side === 'neutral' && ship.country === 'UK') return false; // UK艦は中立港使用不可
     if(p === 'Russia' && ship.country !== 'UK' && ship.country !== 'RU') return false; // ロシアへ帰還できるのは英国艦（ターン3〜8）とソ連艦
     return true;
+  });
+}
+
+function chooseBritishMediterraneanReturns(ships){
+  const eligible = ships.filter(ship => ship.country === 'UK' &&
+    ship.location === 'Mediterranean' && !ship.forcedReturn)
+    .map(ship => ({ ship, ports: getReturnPorts(ship) }))
+    .filter(({ ports }) => ports.length > 1);
+  const choices = new Map();
+  if(!eligible.length) return choices;
+
+  const dialog = document.getElementById('britishReturnDialog');
+  const form = document.getElementById('britishReturnForm');
+  const rows = document.getElementById('britishReturnBody');
+  rows.replaceChildren();
+  for(const { ship, ports } of eligible){
+    const row = rows.insertRow();
+    row.insertCell().textContent = ship.name;
+    row.insertCell().textContent = ship.damage > 0 ? `${ship.damage}/${ship.def}` : '—';
+    const destinations = row.insertCell();
+    destinations.setAttribute('role', 'group');
+    destinations.setAttribute('aria-label', ship.name);
+    choices.set(ship, ports.includes(ship.originThisTurn) ? ship.originThisTurn :
+      ports.includes(ship.homePort) ? ship.homePort : ports[0]);
+    for(const port of ports){
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'locBtn';
+      button.textContent = wasL(locLabel(port));
+      button.dataset.port = port;
+      button.setAttribute('aria-pressed', String(port === choices.get(ship)));
+      button.onclick = () => {
+        choices.set(ship, port);
+        for(const choice of destinations.children){
+          choice.setAttribute('aria-pressed', String(choice.dataset.port === port));
+        }
+      };
+      destinations.appendChild(button);
+    }
+  }
+
+  return new Promise(resolve => {
+    dialog.oncancel = event => event.preventDefault();
+    form.onsubmit = event => {
+      event.preventDefault();
+      dialog.close();
+      form.onsubmit = null;
+      resolve(choices);
+    };
+    dialog.showModal();
   });
 }
 
@@ -6904,7 +6986,7 @@ function wasPlayLogGet(){ try { return JSON.parse(localStorage.getItem('wasPlayL
 function wasPlayLogAdd(entry){ try { const a = wasPlayLogGet(); a.push(entry); localStorage.setItem('wasPlayLog:' + wasGameId, JSON.stringify(a)); } catch(e){} }
 function saveBlockedReason(){
   if(phaseIdx === 6) return '戦闘フェイズ中はセーブできません。戦闘が終わって次のフェイズに進んでからセーブしてください';
-  if(document.querySelector('#modal.show, #combatModal.show, #axisReturnModal.show, #axisRepairModal.show, #combatLogModal.show')) return '画面を閉じてからセーブしてください';
+  if(document.querySelector('#modal.show, #combatModal.show, #axisReturnModal.show, #axisRepairModal.show, #combatLogModal.show, #britishReturnDialog[open]')) return '画面を閉じてからセーブしてください';
   if(document.getElementById('optionStartModal').style.display !== 'none') return 'ゲームを開始してからセーブしてください';
   return null;
 }
