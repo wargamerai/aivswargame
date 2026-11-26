@@ -133,7 +133,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css?v=roster-warning">
+<link rel="stylesheet" href="pfb-screen.css?v=pitcher-choice">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
 </head>
 <body>
@@ -2078,7 +2078,12 @@ const PINCH_RUN_ACTION=['代走','pinch_run','bs'];
 const ATTACK_ACTIONS=[['打つ','hit','bp'],['代打','pinch','bs'],['バント','bunt','bn'],['盗塁','steal_menu','bn'],['ヒットエンドラン','hr','bn'],PINCH_RUN_ACTION];
 const DEFENSE_ACTIONS=[['通常守備','def_normal','bp'],['前進守備','def_forward','bn'],['敬遠','def_ibb','bw'],['盗塁警戒','def_steal','bn'],['投手交代','def_pitcher','bs'],['野手交代','def_fielder','bs']];
 function actionHtml([label,action,cls],enabled=true) {
-    return `<button type="button" class="ab ${esc(cls)}" data-action="${esc(action)}"${enabled?'':' disabled'}>${esc(label)}</button>`;
+    let content=esc(label);
+    if (action.startsWith('chpitch:')) {
+        const [name,ratings]=label.split('\n');
+        content=`<span class="pitcher-choice-name">${esc(name)}</span> <span class="pitcher-choice-ratings">${esc(ratings)}</span>`;
+    }
+    return `<button type="button" class="ab ${esc(cls)}" data-action="${esc(action)}"${enabled?'':' disabled'}>${content}</button>`;
 }
 
 function renderButtons(buttons,owner=null,context='') {
@@ -2100,6 +2105,7 @@ function renderButtons(buttons,owner=null,context='') {
         const onSide=owner===null ? (g.state==='defense'?g.defSide:g.batSide) : owner;
         const active=side===onSide && !((g.versusAI||g.onlineMatch)&&side!==assigned);
         const menu=active && extras.some(([,action])=>/^(next$|final_report$|stop_auto$|choice:|defout:|defsub:|chpitch:|pinch:|prbase:|prsub:|steal:)/.test(action));
+        const pitcherMenu=menu && extras.some(([,action])=>action.startsWith('chpitch:'));
         const beforeDefense=!g.onlineMatch&&!g.versusAI && g.state==='defense' && owner===g.defSide && possible.has('pinch');
         const buttonsHtml=menu ? extras.map(button=>actionHtml(button)).join('') :
             listed.map(button=>{
@@ -2110,7 +2116,7 @@ function renderButtons(buttons,owner=null,context='') {
         const resume=showResume ? actionHtml(['半自動運転を再開','resume_semi','bn']) : '';
         return `<section class="action-panel${side===assigned?'':' opponent'}">
             <h2 class="panel-heading">${esc(teamShort(teamAt(g,side)))} <span>${bats?'攻撃':'守備'}</span></h2>
-            <div class="game-action-grid${menu?' is-choice':bats?' batting-grid':''}">${buttonsHtml}</div>${resume}${side===onSide&&context?`<p class="action-context">${esc(context)}</p>`:''}
+            <div class="game-action-grid${menu?' is-choice':bats?' batting-grid':''}${pitcherMenu?' is-pitcher-choice':''}">${buttonsHtml}</div>${resume}${side===onSide&&context?`<p class="action-context">${esc(context)}</p>`:''}
         </section>`;
     }).join('');
 }
