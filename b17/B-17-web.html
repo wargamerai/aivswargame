@@ -89,9 +89,22 @@ dialog{width:min(720px,calc(100% - 30px));border:1px solid #94a287;border-radius
 .control .order{padding:9px 0 0;min-height:0;border-top:1px solid var(--line)}
 .control .order p{margin:0 0 7px}
 .control .gunlist{margin-top:7px}
-.control .gunlist button[aria-pressed=true]{background:var(--paper);border-color:var(--paper);color:#fff9e9}
-.control .gunlist button[aria-pressed=true]:hover{background:var(--green)}
-.control .gunlist .gun-assigned-mark{margin-left:7px;font-size:12px}
+.control .gunlist button[data-fire-assignment="current"]{background:var(--paper);border-color:var(--paper);color:#fff9e9}
+.control .gunlist button[data-fire-assignment="elsewhere"]{background:#e3e9dc;border-color:var(--green);color:var(--paper)}
+.control .gunlist .gun-assigned-mark,.control .gunlist .gun-assignment-action{display:block;font-size:12px}
+.control .gunlist .gun-assigned-mark{font-weight:800}
+.control .gunlist button[data-fire-assignment="elsewhere"]:disabled{opacity:1;cursor:default}
+.control .gunlist button[data-fire-assignment="elsewhere"]:disabled .gun-assignment-action{color:#455847}
+.control .gunlist button[data-fire-assignment="current"] .gun-assigned-mark{color:#ffdc85}
+.contact-assigned{display:block;background:#254a3b;color:white;font-size:10px;font-weight:800;white-space:nowrap;border-radius:3px;margin-top:2px}
+.crew-controls:not(:empty){display:grid;gap:8px;margin:0 0 10px}
+.crew-controls form,.pilot-readout{display:grid;gap:5px;padding:6px 8px;border:1px solid var(--line);border-radius:4px}
+.crew-controls label{display:grid;gap:3px;font-size:12px}
+.crew-controls select{width:100%;min-width:0;font:inherit;color:var(--paper);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:3px 5px}
+.crew-controls button{justify-self:start}
+.pilot-readout{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:7px;font-size:12px}
+#crew-roster li[data-piloting="true"]{background:#e1e8da}
+.control .gunlist button[data-fire-assignment="current"]:hover{background:var(--green)}
 .fire-assignments{margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:4px}
 .fire-assignments ul{margin:4px 0 0;padding-left:18px}
 .contact-marker{pointer-events:none}
@@ -361,7 +374,7 @@ body{font-size:16px}
   </div>
 </main>
 <dialog id="detail-dialog"><div class="dialog-head"><h2 id="dialog-title">判定ログ</h2><form method="dialog"><button class="subtle" aria-label="閉じる">閉じる</button></form></div><div id="dialog-content"></div><div id="report-exports" hidden><button id="download" type="button" class="subtle">HTMLで保存</button><button id="download-image" type="button" class="subtle">JPEGで保存</button></div></dialog>
-<script src="b17-lang.js?v=jp-jpeg" translate="no"></script>
+<script src="b17-lang.js?v=20261127-fire-assignments" translate="no"></script>
 <script src="../report-image.js?v=jp-jpeg"></script>
 <script translate="no">
 const tables = {
@@ -2722,6 +2735,15 @@ function renderFireAssignments(){
   group.append(make("strong","設定済みの射撃"),list);
   el("order").append(group);
 }
+function markFireAssignment(button,assigned,target,position){
+  if(!assigned&&!target&&position==null)return;
+  button.dataset.fireAssignment=assigned?"current":"elsewhere";
+  const mark=make("span",undefined,"gun-assigned-mark");
+  mark.append("✓ ",make("span","設定済み"));
+  if(!assigned&&target)mark.append(" · "+names[target.type]+" #"+target.id);
+  else if(!assigned&&position!=null)mark.append(" · ",make("span","散布射撃")," · ",make("span",tables.positions[position]));
+  button.append(mark);
+}
 function renderCombat(){
   const board=el("contacts");
   const order=el("order");
@@ -2761,6 +2783,16 @@ function renderCombat(){
     }
     marker.append(make("b",names[f.type]+" #"+f.id));
     if(hit)marker.append(make("span","★ "+hit,"contact-hit"));
+    if(!record&&s.phase==="combat"){
+      const assigned=Object.values(s.orders).filter(id=>id===f.id).length;
+      const spraying=Object.values(s.sprayOrders||{}).some(position=>position===f.p);
+      if(assigned||spraying){
+        const badge=make("span",undefined,"contact-assigned");
+        if(assigned)badge.append(make("span","設定済み")," "+assigned);
+        if(spraying)badge.append(assigned?" · ":"",make("span","散布射撃"));
+        marker.append(badge);
+      }
+    }
     const rockets=f.rockets&&!f.rocketResolved;
     if(rockets)marker.append(make("small","ロケット弾"));
     board.append(marker);
@@ -2785,29 +2817,46 @@ function renderCombat(){
     if(playMode==="story")order.append(make("p",crewLine("尾部銃手","機長、この敵をどの銃座に任せますか？")));
     const list=make("div",undefined,"gunlist");
     for(const key of Object.keys(guns)){
-      const assigned=s.orders[key]===f.id;
-      const spraying=s.sprayOrders?.[key]===f.p;
-      if(!assigned&&!canFire(key,f))continue;
-      const passing=passingShot(key,f);
-      const reply=guns[key][0]+(assigned?"、待て":passing?"、後ろに抜けたところを撃て":"、あいつを狙え");
-      const gunLabel=guns[key][0]+(passing?" すれ違い射撃":"");
-      const button=make("button",assigned?gunLabel:playMode==="story"?quoteLine(reply):gunLabel+" "+s.ammo[key]+"発","subtle");
-      if(assigned)button.append(make("span","✓ 設定済み","gun-assigned-mark"));
-      button.setAttribute("aria-pressed",String(assigned));
-      button.title=assigned?"射撃の割り当てを解除":"射撃を割り当てる";
-      button.addEventListener("click",()=>{
-        captainReply(reply,["尾部銃手","機長、この敵をどの銃座に任せますか？"]);
-        if(assigned)delete s.orders[key];else {s.orders[key]=f.id;if(s.sprayOrders)delete s.sprayOrders[key];}
-        render();
-      });
-      list.append(button);
+      const previousTarget=s.contacts.find(item=>item.id===s.orders[key]);
+      const previousSpray=s.sprayOrders?.[key];
+      const assigned=previousTarget===f;
+      const spraying=previousSpray===f.p;
+      const alreadyOrdered=Boolean(previousTarget)||previousSpray!=null;
+      const direct=canFire(key,f);
+      if(assigned||direct||(alreadyOrdered&&!spraying)){
+        const passing=passingShot(key,f);
+        const reply=guns[key][0]+(assigned?"、待て":passing?"、後ろに抜けたところを撃て":"、あいつを狙え");
+        const gunLabel=guns[key][0]+(passing?" すれ違い射撃":"");
+        const label=alreadyOrdered?gunLabel:playMode==="story"?quoteLine(reply):gunLabel+" "+s.ammo[key]+"発";
+        const button=make("button",label,"subtle");
+        button.type="button";
+        button.disabled=!assigned&&!direct;
+        markFireAssignment(button,assigned,previousTarget,previousSpray);
+        button.setAttribute("aria-pressed",String(assigned));
+        const action=assigned?"射撃の割り当てを解除":!direct?"この敵機には射撃不可":alreadyOrdered?"射撃先をこの敵機に変更":"射撃を割り当てる";
+        button.title=action;
+        if(alreadyOrdered&&!assigned)button.append(make("span",action,"gun-assignment-action"));
+        button.addEventListener("click",()=>{
+          captainReply(reply,["尾部銃手","機長、この敵をどの銃座に任せますか？"]);
+          if(assigned)delete s.orders[key];
+          else {
+            s.orders[key]=f.id;
+            if(s.sprayOrders)delete s.sprayOrders[key];
+          }
+          render();
+        });
+        list.append(button);
+      }
       if(spraying||canSpray(key,f)){
         const sprayReply=guns[key][0]+(spraying?"、散布射撃は取り消し":"、その方向に弾幕を張れ");
         const sprayLabel=guns[key][0]+" 散布射撃（3発）";
         const sprayButton=make("button",!spraying&&playMode==="story"?quoteLine(sprayReply):sprayLabel,"subtle");
-        if(spraying)sprayButton.append(make("span","✓ 設定済み","gun-assigned-mark"));
+        sprayButton.type="button";
+        markFireAssignment(sprayButton,spraying,previousTarget,previousSpray);
         sprayButton.setAttribute("aria-pressed",String(spraying));
-        sprayButton.title=spraying?"散布射撃の割り当てを解除":"散布射撃を割り当てる";
+        const action=spraying?"散布射撃の割り当てを解除":alreadyOrdered?"射撃をこの方向の散布射撃に変更":"散布射撃を割り当てる";
+        sprayButton.title=action;
+        if(alreadyOrdered&&!spraying)sprayButton.append(make("span",action,"gun-assignment-action"));
         sprayButton.addEventListener("click",()=>{
           captainReply(sprayReply,headingReport());
           s.sprayOrders??={};
