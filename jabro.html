@@ -48,13 +48,26 @@
   .d-pad { display:grid; grid-template-columns:repeat(2,1fr); gap:4px; }
   .d-pad button { min-width:45px; padding:4px 7px; font-size:13px; }
   .orders { flex:1; min-width:0; display:grid; gap:6px; }
-  .shot-controls, .phase-actions { display:flex; flex-wrap:wrap; gap:5px; }
+  .phase-actions, .shot-controls { display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+  .phase-choice { display:flex; flex-wrap:wrap; gap:5px; }
   .shot-controls select { min-width:0; max-width:100%; }
   #actionHint { margin:0; font-size:12px; color:#b6c7d9; }
   .side-pane { padding:10px; gap:8px; background:#0c1015; }
   #unitStatus { margin:0; line-height:1.5; padding:8px; border:1px solid #2b3a4b; font-size:13px; white-space:pre-line; }
   .side-pane h2 { margin:0; font-size:14px; color:#a6dfff; }
-  #radioLog { flex:1; overflow:auto; border:1px solid #2b3a4b; padding:7px; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+  #radioLog, #judgmentLog { min-height:0; overflow:auto; border:1px solid #2b3a4b; padding:7px; font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+  #radioLog { flex:1 1 0; }
+  .judgment-pane { flex:1.1 1 0; min-height:0; display:flex; flex-direction:column; gap:5px; }
+  #judgmentLog { flex:1; font-size:12px; color:#d4e1ee; }
+  .judgment-entry { margin:0; padding:5px 0; white-space:pre-line; }
+  .judgment-entry + .judgment-entry { border-top:1px solid #2b3a4b; }
+  .judgment-entry strong { color:#ffdc8c; }
+  .mission-rule { color:#b5c4d2; font-size:13px; text-align:left; }
+  @media (max-height:690px) {
+    .side-pane { overflow:auto; }
+    #radioLog { min-height:70px; }
+    .judgment-pane { min-height:114px; }
+  }
   .radio-line { margin:0 0 6px; }
   .voice { font-weight:700; color:#80cfb1; }
   .player-voice { color:#9cd2ff; }
@@ -111,6 +124,9 @@
   #rollDialog h2 { margin:0 0 12px; color:#a6dfff; text-align:center; }
   .roll-result { padding:10px 0; border-top:1px solid #344b5d; text-align:center; }
   .roll-result h3, .roll-result p { margin:4px 0; }
+  .roll-radio { margin:6px 0 4px; padding:4px 8px; text-align:left; background:#182434; border-left:2px solid #54748c; }
+  .roll-radio p { font-size:13px; }
+  .unknown-marker { display:grid; place-items:center; border-radius:50%; font-weight:700; }
   .roll-group { display:inline-flex; flex-direction:column; gap:4px; padding:6px; vertical-align:top; }
   .roll-dice { display:flex; justify-content:center; gap:6px; }
   .roll-die { display:grid; place-items:center; width:1.4em; height:1.4em; border-radius:.15em; background:#f5f5ef; color:#152333; font-size:clamp(32px,8vw,55px); line-height:1; }
@@ -128,6 +144,7 @@
     .map-pane { border-right:0; }
     .side-pane { overflow:auto; }
     #radioLog { min-height:70px; }
+    .judgment-pane { min-height:114px; }
   }
 </style>
   <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
@@ -139,7 +156,8 @@
     <h1>ガンダム</h1>
     <h2>連邦軍の編成</h2>
     <ul id="startingSquad" aria-label="出撃する機体とパイロット"></ul>
-    <label class="loadout-option"><input id="startDualSabers" type="checkbox"> ビームサーベル二刀流（盾・射撃武器なし）</label>
+    <label class="loadout-option"><input id="startDualSabers" type="checkbox"> ビームサーベル二刀流（頭部バルカンあり／盾・主射撃武器なし）</label>
+    <p class="mission-rule" id="missionRule"></p>
     <button type="submit" class="main-action">出撃</button>
   </form>
 </div>
@@ -212,15 +230,19 @@
       </div>
       <div class="orders">
         <p id="actionHint" aria-live="polite"></p>
-        <div id="shotControls" class="shot-controls" hidden>
-          <select id="targetSelect" aria-label="射撃目標"></select>
-          <select id="weaponSelect" aria-label="射撃武器"></select>
-          <button id="fireButton" class="main-action" type="button">射撃</button>
-        </div>
         <div class="phase-actions">
-          <button id="equipDualSabers" type="button" hidden>盾・射撃武器を捨てて二刀流</button>
-          <button id="skipReaction" type="button" hidden>見送る</button>
-          <button id="nextPhase" class="main-action" type="button"></button>
+          <div id="shotControls" class="shot-controls" hidden>
+            <select id="targetSelect" aria-label="射撃目標"></select>
+            <select id="weaponSelect" aria-label="射撃武器"></select>
+          </div>
+          <button id="equipDualSabers" type="button" hidden>盾・主射撃武器を外して二刀流</button>
+          <button id="scout" type="button" hidden>索敵移動</button>
+          <div class="phase-choice">
+            <button id="fireButton" class="main-action" type="button" hidden></button>
+            <button id="meleeButton" class="main-action" type="button" hidden>白兵戦する</button>
+            <button id="skipReaction" type="button" hidden>防御射撃しない</button>
+            <button id="nextPhase" type="button"></button>
+          </div>
         </div>
       </div>
     </div>
@@ -241,6 +263,10 @@
       <button type="submit">送信</button>
     </form>
     <p class="radio-help play-only">「前に出ろ」「後ろに下がれ」「カイ、丘に登れ」</p>
+    <section class="judgment-pane" aria-labelledby="judgmentHeading">
+      <h2 id="judgmentHeading">判定ログ</h2>
+      <div id="judgmentLog" role="log" aria-label="判定ログ"></div>
+    </section>
   </aside>
 </main>
 <dialog id="chartDialog" aria-label="ジャブロー戦役のチャート">
@@ -442,7 +468,7 @@ const MELEE_TABLE = [
 const JABRO_WEAPONS = {
   rifle: { name: 'ビームライフル', hit: 1, fire: [13, 13, 12, 12, 11, 11, 10, 8] },
   bazooka: { name: 'ハイパーバズーカ', hit: -1, fire: [11], solid: true },
-  vulcan: { name: '60mm機関砲', hit: -1, fire: [5, 4, 3, 2, 1, 0, 0, 0], solid: true },
+  vulcan: { name: '頭部バルカン（60mm機関砲）', hit: -1, fire: [5, 4, 3, 2, 1, 0, 0, 0], solid: true },
   cannon: { name: 'ガンキャノン砲', hit: -2, fire: [10, 10, 9, 9, 8, 8, 7, 5] },
   tankCannon: { name: 'ガンタンク砲', hit: -2, fire: [16, 16, 15, 15, 15, 14, 14, 12] },
   missile: { name: 'ホップミサイル', hit: 0, fire: [8, 8, 8, 7, 7, 6, 6, 5], solid: true },
@@ -558,18 +584,30 @@ function formationStrength(units) {
   }, 0);
 }
 
+const AMURO_STRONG_LEVEL = 3;
+
+function amuroLoadout(level, template) {
+  const weapons = template.slice();
+  if (!weapons.includes('vulcan')) weapons.unshift('vulcan');
+  if (level < AMURO_STRONG_LEVEL && !weapons.some(id => id !== 'vulcan' && JABRO_WEAPONS[id].fire)) {
+    weapons.unshift('rifle');
+  }
+  return weapons;
+}
+
 function rollFederationUnits(enemies, enemyTier, loadout, pick) {
   const [gundam] = JABRO_UNITS;
   const opponentStrength = formationStrength(enemies);
   const preferredStrength = opponentStrength * 1.04;
-  const levels = AMURO_CARDS.map((_, index) => index).filter(index => index > 0 &&
-    amuroCanFight(index, loadout, enemies[0].pilot, enemies[0], enemies[0].weapons));
+  const loadouts = AMURO_CARDS.map((_, level) => amuroLoadout(level, loadout));
+  const levels = AMURO_CARDS.map((_, index) => index).filter(index =>
+    index > 0 && amuroCanFight(index, loadouts[index], enemies[0].pilot, enemies[0], enemies[0].weapons));
   const candidates = [];
   for (let i = 0; i < 36; i++) {
     const count = 3 + i % (FEDERATION_PILOTS.length - 2);
     const allies = federationCandidates(pick, count);
     for (const level of levels.length ? levels : [AMURO_CARDS.length - 1]) {
-      const player = { ...gundam, ability: AMURO_CARDS[level], weapons: loadout };
+      const player = { ...gundam, ability: AMURO_CARDS[level], weapons: loadouts[level] };
       const units = [player, ...allies];
       const strength = formationStrength(units);
       const gap = Math.abs(strength - preferredStrength);
@@ -654,7 +692,7 @@ function pilotAbility(unit) {
 }
 
 const RANGES = [2, 5, 10, 15, 20, 25, 30, Infinity];
-const FEDERATION_DEPLOYMENT_EDGE = 6;
+const MAX_INNINGS = 10;
 const MORALE_MODIFIERS = { A: 3, M: 2, W: 1, S: 0 };
 const DICE_TOTALS = Array.from({ length: 11 }, (_, index) => [index + 2, (6 - Math.abs(index - 5)) / 36]);
 const DAMAGE_VALUE = { D: 1, A: .72, M: .32, W: .42, S: .28 };
@@ -703,6 +741,7 @@ class JabroBattle {
     this.phase = 'prep';
     this.inning = 1;
     this.result = '';
+    this.resultReason = '';
     this.contacts = [];
     this.units = roster.map(data => activeUnit(data));
     this.player = this.units[0];
@@ -710,15 +749,22 @@ class JabroBattle {
     this.enemyCount = enemies.length;
     this.hexes = new Map();
     this.cubes = new Map();
-    const patrolRows = new Map();
-    for (const [id, hex] of Object.entries(this.map)) {
+    const hexes = Object.entries(this.map);
+    for (const [id, hex] of hexes) {
       const r = hex.r - 1;
       const q = (hex.c - r) / 2;
       this.cubes.set(id, { q, r, s: -q-r });
       this.hexes.set(q + ',' + r, id);
-      if (this.openForMovement(hex) && hex.c <= FEDERATION_DEPLOYMENT_EDGE) {
-        const previous = patrolRows.get(hex.r);
-        if (!previous || Math.abs(hex.c - 4) < Math.abs(this.map[previous].c - 4)) patrolRows.set(hex.r, id);
+    }
+    this.deploymentZones = this.makeDeploymentZones(hexes);
+    const west = this.deploymentZones.f;
+    const patrolCenter = west.reduce((sum, id) => sum + this.map[id].c, 0) / west.length;
+    const patrolRows = new Map();
+    for (const id of west) {
+      const { r, c } = this.map[id];
+      const previous = this.map[patrolRows.get(r)];
+      if (!previous || Math.abs(c - patrolCenter) < Math.abs(previous.c - patrolCenter)) {
+        patrolRows.set(r, id);
       }
     }
     this.patrolHexes = [...patrolRows.entries()].sort((a, b) => a[0] - b[0]).map(([, id]) => id);
@@ -757,17 +803,61 @@ class JabroBattle {
     return this.layout.id !== 'city' || hex.t === '道路';
   }
 
+  makeDeploymentZones(hexes) {
+    const columns = hexes.map(([, hex]) => hex.c);
+    const rows = hexes.map(([, hex]) => hex.r);
+    const left = Math.min(...columns);
+    const right = Math.max(...columns);
+    const top = Math.min(...rows);
+    const bottom = Math.max(...rows);
+    const width = right - left;
+    const height = bottom - top;
+    const middle = (left + right) / 2;
+    const margin = Math.max(1, Math.floor(height * .15));
+    const open = hexes.filter(([, hex]) => this.openForMovement(hex));
+    const zones = {};
+    for (const side of ['f', 'e']) {
+      const half = open.filter(([, hex]) => side === 'f' ? hex.c < middle : hex.c > middle);
+      const [near, far] = side === 'f' ? [.15, .40] : [.60, .85];
+      const standard = half.filter(([, hex]) => hex.c >= left + width * near &&
+        hex.c <= left + width * far && hex.r >= top + margin && hex.r <= bottom - margin);
+      const interior = half.filter(([, hex]) =>
+        hex.c > left && hex.c < right && hex.r > top && hex.r < bottom);
+      const needed = this.living(side).length;
+      const zone = [standard, interior, half, open].find(pool => pool.length >= needed) ?? open;
+      zones[side] = zone.map(([id]) => id);
+    }
+    return zones;
+  }
+
   deploy() {
-    const keys = Object.keys(this.map).filter(id => this.openForMovement(this.map[id]));
-    const west = keys.filter(id => this.map[id].c <= FEDERATION_DEPLOYMENT_EDGE);
-    const east = keys.filter(id => this.map[id].c >= 32);
-    const occupied = new Set();
-    for (const u of this.units) {
-      const pool = (u.side === 'f' ? west : east).filter(id => !occupied.has(id));
-      const hidden = u.id === 0 ? pool : pool.filter(id => !this.sight(this.player.coord, id));
-      u.coord = this.pick(hidden.length ? hidden : pool.length ? pool : keys.filter(id => !occupied.has(id)));
-      u.startWeapons = u.weapons.slice();
-      occupied.add(u.coord);
+    const west = this.deploymentZones.f.slice();
+    const east = this.deploymentZones.e;
+    const open = Object.keys(this.map).filter(id => this.openForMovement(this.map[id]));
+    // 可能な限り敵にまだ会っていない状態で出撃する。
+    let start = this.pick(west);
+    let hidden = east.filter(id => !this.sight(start, id));
+    let best = { start, hidden };
+    while (hidden.length < this.enemyCount && west.length > 1) {
+      west.splice(west.indexOf(start), 1);
+      start = this.pick(west);
+      hidden = east.filter(id => !this.sight(start, id));
+      if (hidden.length > best.hidden.length) best = { start, hidden };
+    }
+    if (hidden.length >= this.enemyCount) best = { start, hidden };
+
+    const occupied = new Set([best.start]);
+    this.player.coord = best.start;
+    this.player.startWeapons = this.player.weapons.slice();
+    for (const unit of this.units) {
+      if (unit === this.player) continue;
+      const zone = this.deploymentZones[unit.side];
+      const pool = zone.filter(id => !occupied.has(id));
+      const concealed = unit.side === 'e' ? best.hidden.filter(id => !occupied.has(id)) :
+        pool.filter(id => !this.sight(this.player.coord, id));
+      unit.coord = this.pick(concealed.length ? concealed : pool.length ? pool : open.filter(id => !occupied.has(id)));
+      unit.startWeapons = unit.weapons.slice();
+      occupied.add(unit.coord);
     }
     this.beginSide('f');
   }
@@ -1001,8 +1091,23 @@ class JabroBattle {
     if (!this.player.alive && !this.living('e').length) this.result = '引き分け';
     else if (!this.player.alive) this.result = 'ガンダム戦闘不能';
     else if (!this.living('e').length) this.result = '連邦軍の勝利';
-    if (this.result) this.emit('result', { result: this.result });
+    if (this.result) {
+      this.resultReason = 'combat';
+      this.emit('result', { result: this.result, reason: this.resultReason });
+    }
     return Boolean(this.result);
+  }
+
+  finishInning() {
+    if (this.checkOutcome()) return;
+    if (this.inning >= MAX_INNINGS) {
+      this.result = '引き分け';
+      this.resultReason = 'time';
+      this.emit('result', { result: this.result, reason: this.resultReason });
+      return;
+    }
+    this.inning++;
+    this.beginSide('f');
   }
 
   terrainStep(coord, direction) {
@@ -1068,24 +1173,38 @@ class JabroBattle {
 
   aiPrep(unit) {
     if (unit.order && unit.order !== 'hold' && unit.order !== 'onHill') return false;
-    if (!unit.order && this.tacticalDirection(unit, new Set(), true)) return false;
+    if (unit.side === 'e') {
+      const targets = this.targets(unit, 'prep').sort((a, b) =>
+        this.distance(unit.coord, a.coord) - this.distance(unit.coord, b.coord));
+      // 接近戦を好む機体は射撃で移動権を使わずに詰める。
+      const ranged = targets.find(target => this.distance(unit.coord, target.coord) <= 2 &&
+        this.prefersFire(unit, target));
+      return ranged ? this.aiShot(unit, 'prep', ranged) : false;
+    } else if (!unit.order && this.tacticalDirection(unit, new Set(), true)) {
+      return false;
+    }
     return this.aiShot(unit, 'prep');
+  }
+
+  prefersFire(unit, target) {
+    return this.closePower(unit) < this.closePower(target) - 2 ||
+      Boolean(unit.mountImage) || unit.name === MAGELLA_TOP.name;
   }
 
   canEquipDualSabers() {
     const player = this.player;
-    return !this.result && !player.dualSabers && this.side === 'f' && this.phase === 'prep' &&
+    return !this.result && this.amuroLevel >= AMURO_STRONG_LEVEL && !player.dualSabers && this.side === 'f' && this.phase === 'prep' &&
       this.canAct(player) && !player.prepared && !this.engaged(player);
   }
 
   equipDualSabers() {
     if (!this.canEquipDualSabers()) return false;
     this.player.dualSabers = true;
-    this.player.weapons = JABRO_LOADOUTS.s2.slice();
+    this.player.weapons = amuroLoadout(this.amuroLevel, JABRO_LOADOUTS.s2);
     return true;
   }
 
-  routeDirection(unit, visited, isGoal, opponent) {
+  routeDirection(unit, visited, isGoal, opponent, planning = false) {
     const occupied = new Set(this.units.filter(other => other.alive && other !== unit &&
       other !== opponent).map(other => other.coord));
     const bestCost = new Map([[unit.coord, 0]]);
@@ -1097,13 +1216,41 @@ class JabroBattle {
       if (first && isGoal(coord)) return first;
       for (const direction of Object.keys(JABRO_DIRECTIONS)) {
         const step = this.terrainStep(coord, direction);
-        if (!step || occupied.has(step.to) || visited.has(step.to) ||
+        if (!step || (!first && !this.moveOption(unit, direction, planning)) ||
+            occupied.has(step.to) || visited.has(step.to) ||
             cost + step.cost >= (bestCost.get(step.to) ?? Infinity)) continue;
         bestCost.set(step.to, cost + step.cost);
         queue.push({ coord: step.to, cost: cost + step.cost, first: first ?? direction });
       }
     }
     return null;
+  }
+
+  scoutDirection(unit, visited, explored = new Set(), east = unit.side === 'f') {
+    // 経路探索の目標は未確認のヘクス。未視認の敵位置は目標にしない。
+    const from = this.map[unit.coord];
+    const targets = [
+      coord => !explored.has(coord) && (this.map[coord].c - from.c) * (east ? 1 : -1) > 0,
+      coord => !explored.has(coord),
+    ];
+    for (const isGoal of targets) {
+      const direction = this.routeDirection(unit, visited, isGoal);
+      if (direction) return direction;
+    }
+    // 進路を僚機に塞がれたときは、移動できる場所へいったん回る。
+    const viable = Object.keys(JABRO_DIRECTIONS).flatMap(direction => {
+      const move = this.moveOption(unit, direction);
+      if (!move || visited.has(move.to)) return [];
+      const forward = (this.map[move.to].c - from.c) * (east ? 1 : -1);
+      return [{direction, score: 2 * forward - move.cost}];
+    });
+    return viable.sort((a, b) => b.score - a.score)[0]?.direction ?? null;
+  }
+
+  rememberGround(unit, explored) {
+    for (const [coord, hex] of Object.entries(this.map)) {
+      if (this.openForMovement(hex) && !explored.has(coord) && this.sight(unit.coord, coord)) explored.add(coord);
+    }
   }
 
   visibleOpponents(unit) {
@@ -1148,7 +1295,7 @@ class JabroBattle {
     if (!planning && retreat && best) unit.fallingBack = true;
     if (best && (retreat || canCharge || best.score > 0)) return best.direction;
     if (!retreat && canCharge) {
-      const route = this.routeDirection(unit, visited, coord => coord === target.coord, target);
+      const route = this.routeDirection(unit, visited, coord => coord === target.coord, target, planning);
       if (this.moveOption(unit, route, planning)) return route;
     }
     return null;
@@ -1165,11 +1312,13 @@ class JabroBattle {
       const occupied = this.units.some(other => other.alive && other.coord === destination);
       if (!occupied && !visited.has(destination)) {
         const direction = this.routeDirection(unit, visited, coord => coord === destination);
-        if (direction) return this.moveOption(unit, direction) ? direction : null;
+        if (direction) return direction;
       }
       unit.patrolIndex = (unit.patrolIndex + (enemyIndex === 0 ? 1 : -1) + waypoints.length) % waypoints.length;
     }
-    return null;
+    unit.searched ??= new Set();
+    this.rememberGround(unit, unit.searched);
+    return this.scoutDirection(unit, visited, unit.searched);
   }
 
   aiDirection(unit, visited) {
@@ -1186,24 +1335,46 @@ class JabroBattle {
         return move && !visited.has(move.to) && !this.units.some(other => other.alive && other.coord === move.to);
       }) ?? null;
     }
-    if (JABRO_DIRECTIONS[unit.order]) return this.moveOption(unit, unit.order) ? unit.order : null;
-    if (this.movementBlock(unit)) return null;
-    if (this.visibleOpponents(unit).length) return this.tacticalDirection(unit, visited);
-    if (unit.fallingBack) return null;
+    if (JABRO_DIRECTIONS[unit.order]) {
+      const move = this.moveOption(unit, unit.order);
+      return move && !visited.has(move.to) ? unit.order : null;
+    }
+    // ジオンAIには連邦機の位置が伝わる。射撃の可否は従来どおり射線と射程で判定する。
+    const enemies = this.units.filter(other => other.alive && other.side !== unit.side &&
+      (unit.side === 'e' || this.sight(unit.coord, other.coord))).sort((a, b) =>
+        this.distance(unit.coord, a.coord) - this.distance(unit.coord, b.coord) || a.id - b.id);
+    const target = enemies[0];
     if (unit.side === 'e') {
+      if (!unit.alive || unit.stunned || unit.prepared || unit.noMove || this.engaged(unit) || !unit.ap) return null;
+      if (!target) return this.patrolDirection(unit, visited);
+      for (const foe of enemies) {
+        if (this.engaged(foe)) continue;
+        const ranged = this.prefersFire(unit, foe);
+        const distance = this.distance(unit.coord, foe.coord);
+        if (ranged || unit.noAction) {
+          const canShootFrom = coord => !unit.noAction && this.sight(coord, foe.coord) &&
+            this.weaponOptions(unit, this.distance(coord, foe.coord)).length > 0;
+          if (distance <= 2 && canShootFrom(unit.coord)) return null;
+          const firingPosition = this.routeDirection(unit, visited, coord =>
+            this.distance(coord, foe.coord) <= 2 && (unit.noAction || canShootFrom(coord)));
+          if (firingPosition) return firingPosition;
+        } else {
+          const direction = this.routeDirection(unit, visited, coord => coord === foe.coord, foe);
+          if (direction) return direction;
+        }
+      }
+      // 道を塞がれた場合も射撃位置や別の進路を探す。
       return this.patrolDirection(unit, visited);
     }
-    const from = this.map[unit.coord];
-    const candidates = Object.keys(JABRO_DIRECTIONS).flatMap(direction => {
-      const move = this.moveOption(unit, direction);
-      if (!move || visited.has(move.to)) return [];
-      const forward = (this.map[move.to].c - from.c) * (unit.side === 'f' ? 1 : -1);
-      if (forward <= 0) return [];
-      const towardCenter = Math.abs(from.r - 8) - Math.abs(this.map[move.to].r - 8);
-      const score = 3 * forward + towardCenter;
-      return [{ direction, score: score - move.cost + this.random() }];
-    });
-    return candidates.sort((a, b) => b.score - a.score)[0]?.direction ?? null;
+    if (this.movementBlock(unit) || unit.fallingBack) return null;
+    if (enemies.length) {
+      const tactical = this.tacticalDirection(unit, visited);
+      if (tactical) return tactical;
+      if (enemies.some(foe => this.weaponOptions(unit, this.distance(unit.coord, foe.coord)).length)) return null;
+    }
+    unit.searched ??= new Set();
+    this.rememberGround(unit, unit.searched);
+    return this.scoutDirection(unit, visited, unit.searched);
   }
 
   closePower(unit) {
@@ -1237,17 +1408,17 @@ class JabroBattle {
     return result;
   }
 
-  resolveMelee() {
+  resolveMelee(skipPlayerAttack = false) {
     for (const contact of this.contacts) {
       const [first, second] = contact.fighters;
       if (this.result || !first.alive || !second.alive) continue;
+      const [attacker, defender] = first.side === this.side ? [first, second] : [second, first];
+      if (attacker === this.player && (skipPlayerAttack || !this.canAct(attacker))) continue;
       if (!contact.started) {
         contact.started = true;
-        if (this.closeRoll(first, second, 'contact') === 'F') this.closeRoll(first, second, 'melee');
-      } else {
-        const [attacker, defender] = first.side === this.side ? [first, second] : [second, first];
-        this.closeRoll(attacker, defender, 'melee');
+        if (this.closeRoll(attacker, defender, 'contact') !== 'F') continue;
       }
+      this.closeRoll(attacker, defender, 'melee');
     }
     this.contacts = this.contacts.filter(contact => contact.fighters.every(unit => unit.alive));
   }
@@ -1283,16 +1454,22 @@ const startingLoadout = standardLoadouts[Math.floor(Math.random() * standardLoad
 let busy = false;
 let reaction = null;
 let reviewingBattle = false;
+const scoutExplored = new Set();
+const playerMoveTrail = new Set();
+const contactsSeen = new Set();
+const radioUsed = new Map();
+let contactInning = 0;
+let combatInning = 0;
+let playerCombatInning = 0;
+let resumeSearchInning = 0;
 const battleHistory = [];
 const knownWrecks = new Set();
-const lastContactReport = new Map();
 
 const enemyRoutes = new Map();
 const friendlyRoutes = new Map();
-const heardEnemies = new Set();
-const heardChatter = new Set();
 const pendingRolls = [];
 const pendingRollMessages = [];
+const pendingJudgments = [];
 let lostWeaponUnit = null;
 let resolveRolls;
 const PILOT_RADIO = {
@@ -1315,79 +1492,216 @@ const PILOT_RADIO = {
   },
 };
 PILOT_RADIO.リュウ = PILOT_RADIO.セイラ = PILOT_RADIO.連邦パイロット;
-const TRIPLE_DOM = ['ガイア', 'オルテガ', 'マッシュ'];
+// 登場人物の設定を参考にした、このシナリオ用の新規無線台詞。
 const ZEON_RADIO = {
-  ジーン: ['先に出ます。ここで手柄を立ててやる。', '逃がすもんか、今だ！'],
-  コズン: ['こちらコズン。先に敵の動きを見てきます。', '止まったな。そこを撃つ！'],
-  アコース: ['こちらアコース。僚機の横につきます。', '前を頼む。こっちで横を押さえる！'],
-  スレンダー: ['こちらスレンダー。少し下がって援護します。', '今なら射線が通る。援護射撃に入ります！'],
-  タチ: ['こっちの通りを見てくる。何かあれば知らせる。', '動くな、こっちから狙える！'],
-  ヒッチ: ['了解。離れないようについていく。', 'そっちは任せた。目の前の一機を撃つ！'],
-  デニム: ['先走るな。互いに援護できる位置を取るんだ。', 'よし、今だ。撃てる機体から撃て！'],
-  ドアン: ['無理に追うことはない。こちらから迎えに行く。', 'それ以上近づくなら、相手をする。'],
-  マッシュ: ['任せろ。あいつの前に回り込む。', 'よし、横はもらった！'],
-  オルテガ: ['先に出るぞ。でかいのは俺に任せろ。', 'どけっ、こいつは俺がいただく！'],
-  ガイア: ['各機、散開しろ。敵を一方向だけ見るな。', '見えた。こっちに引きつけるぞ！'],
-  ランバ・ラル: ['急ぐな。敵が動けば、こちらの出番も来る。', '腕は悪くない。だが、次は私の番だ。'],
-  シャア: ['各機、その位置で待ってくれ。私が先に出る。', 'いい反応だ。さて、次もかわしきれるかな。'],
+  ジーン: {
+    sight: ['先に出ます、見つけたのは自分だ！', '連邦機だ。こいつは俺が押さえる！'],
+    attack: ['今度は逃がさないぞ！', '振り切れると思うな！'],
+    evade: ['そんなところから撃ってくるのか！', 'まだこっちは動けるぞ！'],
+    melee: ['距離なんか取らせるか！', 'ここまで来たら引かないぞ！'],
+  },
+  コズン: {
+    sight: ['接触した。こっちで動きを見る。', '前方に一機。様子を見ながら近づく。'],
+    attack: ['そこなら追える！', '横に出たぞ、今だ！'],
+    evade: ['見通しがよすぎたか。位置を変える。', 'こっちをよく見ているな。'],
+    melee: ['踏み込みが早い。こっちも詰める！', '押し返せば、まだ間合いを取れる。'],
+  },
+  アコース: {
+    sight: ['連邦機だ。こっちに気づいたようだぞ。', 'こちらで接触。横は任せてくれ。'],
+    attack: ['横はもらった！', '止まるな、こっちから援護する！'],
+    evade: ['射線が重なった。動くぞ！', 'そちらも狙われてる、離れろ！'],
+    melee: ['ここは通さない！', '押し込まれる前に受け止める！'],
+  },
+  スレンダー: {
+    sight: ['敵影確認。こちらから援護できます。', '見えました。後ろは任せてください。'],
+    attack: ['援護します。今のうちに！', '射線が開きました。こちらから撃てます！'],
+    evade: ['こちらにも気づきました。まだ動けます！', '後方まで狙ってきます！'],
+    melee: ['近すぎます！　立て直さないと！', '押し返します、援護を！'],
+  },
+  タチ: {
+    sight: ['敵機だ。先の通りはふさがったぞ。', 'こちらタチ。前方で接触した。'],
+    attack: ['そこは見えているぞ！', '向きを変える前に仕掛ける！'],
+    evade: ['ここも安全じゃないな。', 'まだ見失ってはいないぞ！'],
+    melee: ['前を開けるわけにはいかない！', 'ここで止めるぞ！'],
+  },
+  ヒッチ: {
+    sight: ['連邦機を見つけた。そっちから見えるか？', '前方に反応。足並みをそろえてくれ。'],
+    attack: ['目の前の一機は任せろ！', 'こっちを向いた。合わせてくれ！'],
+    evade: ['思ったより切り返しが速い！', 'こっちの狙いを読んだか。'],
+    melee: ['おい、そんなに近づくな！', 'これ以上は下がれないぞ！'],
+  },
+  デニム: {
+    sight: ['連邦機だ。追いすぎるな、隊列を保て。', '敵を確認した。先走るなよ。'],
+    attack: ['今だ。こちらで足を止める！', '間を空けるな。私が先に仕掛ける。'],
+    evade: ['慌てるな。互いに援護できる位置へ。', 'こっちが崩れるのを待っているな。'],
+    melee: ['踏ん張れ。抜かれるな！', '接触した。私が押し返す。'],
+  },
+  ドアン: {
+    sight: ['そこまでだ。これ以上は近づくな。', '引くなら今だ。私は無理には追わない。'],
+    attack: ['まだ向かってくるのか。', 'ここを通すわけにはいかない。'],
+    evade: ['撃ち合いで決める気か。', '力任せに見えて、よく見ている。'],
+    melee: ['間合いを誤ると、そちらも危ないぞ。', 'その動きはもう見た。'],
+  },
+  マッシュ: {
+    sight: ['見えた。回り込むぞ。', '見つけた。正面はそっちに任せた。'],
+    attack: ['こっちが見えてなかったようだな！', '横を取った。今ならいける！'],
+    evade: ['こっちの回り込みに気づいたか。', 'こっちを見るなら、横が空くぞ。'],
+    melee: ['向き直るのが遅いぞ！', '正面ばかり見ているからだ！'],
+  },
+  オルテガ: {
+    sight: ['いたぞ。先に行かせてもらうぜ。', '待ってたぜ。正面は俺に任せろ。'],
+    attack: ['まずはこっちを相手にしてもらうぞ！', '受けてみろ、連邦の！'],
+    evade: ['この程度で引くと思うなよ！', 'へっ、やってくれるじゃないか。'],
+    melee: ['その距離ならこっちのもんだ！', '腕一本で押し返してやる！'],
+  },
+  ガイア: {
+    sight: ['見つけたぞ。各機、動きを合わせろ。', '一機ずつ飛び出すな。こいつは速いぞ。'],
+    attack: ['こちらに引きつける。続け！', '追い込んだ。合わせるなら今だ！'],
+    evade: ['狙いがいい。次は同じ手で来るなよ。', '間を詰めすぎたか。隊列を取り直す。'],
+    melee: ['ここで止める。横を頼んだぞ！', '切り込んできたな。正面は私が受ける！'],
+  },
+  ランバ・ラル: {
+    sight: ['姿を見せたな。各機、焦って追うんじゃない。', 'いい構えだ。まず相手の出方を見よう。'],
+    attack: ['こちらの間合いだ。受けてみろ。', '次の一手を見ておくんだな。'],
+    evade: ['なるほど。撃つべき所は知っている。', 'いい判断だ。だが、まだ戦いは終わらん。'],
+    melee: ['踏み込んだか。ならば正面から受けよう。', '機体の力だけでは、この間合いは取れんぞ。'],
+  },
+  シャア: {
+    sight: ['ようやく姿を見せたか。私が出よう。', 'あの動き、ただの新型と片づけるには惜しいな。'],
+    attack: ['そこへ動くと思っていたよ。', '次も避けられるか、見せてもらおう。'],
+    evade: ['よく合わせてきた。こちらも手を変えよう。', '追いついてきたか。面白い。'],
+    melee: ['その踏み込みを待っていた。', 'ずいぶん思い切ったな。だが近すぎる。'],
+  },
 };
-const ANIME = {
-  // TV第24話「迫撃！トリプル・ドム」
-  miraiStatus: ['ミライ', 'ガンダムはどうなっていて？'],
-  hayatoReady: ['ハヤト', 'できますよ'],
-  amuroSpots: ['アムロ', 'あそこか。これ以上やらせるか'],
-  amuroVulcan: ['アムロ', 'バルカンが効かないのか？'],
-  gaiaWarns: ['ガイア', '思ったより素早いぞ、いいな？'],
-  ortegaReady: ['オルテガ', 'おお'],
-  mashReady: ['マッシュ', 'おう！'],
-  // TV第25話「オデッサの激戦」
-  brightLaunch: ['ブライト', 'ガンタンク、ガンキャノン、出撃用意'],
-  brightFire: ['ブライト', '無駄弾を撃つなよ'],
-  kaiReply: ['カイ', 'へいへい'],
-  kaiAlert: ['カイ', 'は、速い'],
-  kaiRetreat: ['カイ', '下がれ、下がれ'],
-  hayatoAlert: ['ハヤト', '来たっ'],
-  frawDamage: ['フラウ', 'キャタピラをやられたって'],
-  gaiaAttack: ['ガイア', 'もらった'],
-  ortegaAvenges: ['オルテガ', 'マッシュの仇だ'],
-  brightCall: ['ブライト', 'アムロ、聞こえるか？'],
-  // TV第39話「ニュータイプ、シャリア・ブル」
-  hayatoRecovery: ['ハヤト', '休んだ分、取り返します！'],
-  // バンダイチャンネルの作中台詞検索で紹介されている出撃の台詞。
-  amuroLaunch: ['アムロ', 'アムロ 行きまーす！'],
+const FED_RADIO = {
+  アムロ: {
+    sight: ['敵機を見つけた。僕が前を見ます。', '見えた。こちらに気づいたみたいだ。', '敵影確認。みんな、位置を変えないで！'],
+    attack: ['よし、僕が引きつけます。', 'ここで押さえれば、みんなが動ける！', '今の位置なら狙える！'],
+    evade: ['動きを読まれた？　次は合わせる！', 'まだガンダムは動く。ここで止まれない！', 'そっちの動きは見えている！'],
+    melee: ['逃がさない。ここで止める！', 'そんなに簡単には押し切らせない！', '近い！　向きだけは見失うな！'],
+    hit: ['うっ……まだ操縦はできる！', 'やられた！　どこを食ったんだ？'],
+  },
+  カイ: {
+    sight: ['おい、向こうもこっちに気づいたぜ。', '見つけたぞ。嫌なところにいるな。'],
+    attack: ['悪いな、先にこっちからだ。', 'こっちも飾りで乗ってんじゃないぜ！'],
+    evade: ['危ねえな！　そう何度も食うかよ。', 'へっ、まだこっちは持つぜ。'],
+    melee: ['近いって言ってんだろ！', 'おいおい、押し返すしかねえぞ！'],
+    hit: ['いてっ、まともにもらった！', '当てやがった！　こっちも無事じゃねえぞ。'],
+  },
+  ハヤト: {
+    sight: ['敵を見つけました。こちらからも見えます！', 'アムロ、敵です！　今、確認しました。'],
+    attack: ['こちらから援護します。今です！', '待ってください、僕も狙えます！'],
+    evade: ['なんとかかわしました。まだ行けます！', '危なかった……次は気をつけます。'],
+    melee: ['こんな近くに！　僕が押さえます！', 'このままじゃ抜かれます。押し返します！'],
+    hit: ['被弾しました！　機体を確認します！', '当たりました。でも応答はできます！'],
+  },
+  リュウ: {
+    sight: ['敵を確認した。前はこっちで見る。', '見えたぞ。みんな、落ち着いて合わせるんだ。'],
+    attack: ['私が抑える。そっちは前を頼む。', '狙えるところまで来た。合わせてくれ！'],
+    evade: ['まだ持つ。周りの確認を続けろ。', '慌てるな、立て直せる。'],
+    melee: ['ここで受ける。横には抜かせない。', '踏ん張るぞ。こっちは気にするな。'],
+    hit: ['こちらは被弾した。そっちまで崩れるな。', '一発もらった。まだ通信は生きている。'],
+  },
+  セイラ: {
+    sight: ['敵影を確認。こちらから追えるわ。', '接触したわ。落ち着いて、距離を見て。'],
+    attack: ['こちらで抑えるわ。続いて。', '見えた。その動きなら取れる！'],
+    evade: ['まだ動ける。私より前を見て。', '同じ動きはしないわ。続けましょう。'],
+    melee: ['そこは通さない。私が止めるわ！', '近いわね。向きを変えさせない。'],
+    hit: ['こちらも被弾したわ。状況を確認する。', '一発もらったけど、通信はできるわ。'],
+  },
+  連邦パイロット: {
+    sight: ['敵機を確認。こちらから見えます。', '前方に敵影。進路を確認します。'],
+    attack: ['こちらからも攻撃できます。', '援護に入ります。前をお願いします！'],
+    evade: ['回避しました。まだ動けます。', 'こちらは無事です。次に備えます。'],
+    melee: ['接触しました。押し返します！', 'この先へは通しません！'],
+    hit: ['こちら被弾。機体を確認します！', '当たりました。応答はできます！'],
+  },
 };
-const QUOTES = {
-  start: [
-    {n:"ガイア", c:"#d500f9", t:"オルテガ、マッシュ！ジェットストリームアタックをかけるぞ！"},
-    {n:"アムロ", c:"#fff", t:"くっ、３機のドムが…来る！"},
-    {n:"カイ", c:"#ffcc80", t:"へっ、こっちにはキャノンとタンクがいるんだ！"},
-    {n:"ハヤト", c:"#ffcc80", t:"アムロ、僕たちも援護します！"}
+const COMMAND_RADIO = {
+  launch: [
+    ['セイラ', 'こちらホワイトベース。敵影があれば知らせて。'],
+    ['ブライト', '各機、出撃。確認できた情報から回してくれ。'],
+    ['セイラ', '通信は通っているわ。僚機の位置は無線で確認して。'],
   ],
-  action: [
-    {n:"カイ", c:"#ffcc80", t:"へっ、おっかねえこと！敵は2時の方向だ！"},
-    {n:"カイ", c:"#ffcc80", t:"弾幕薄いぞ！左の森から来るぞ！"},
-    {n:"カイ", c:"#ffcc80", t:"おいアムロ、敵影確認！"},
-    {n:"ハヤト", c:"#ffcc80", t:"カイさん、敵です！右の丘陵地帯！"},
-    {n:"ハヤト", c:"#ffcc80", t:"レーダーに反応！敵機です！"},
-    {n:"ハヤト", c:"#ffcc80", t:"アムロ、すごいや…敵を森の中に追い込んだ！"},
-    {n:"ブライト", c:"#00e676", t:"左舷、砲撃手なにやってる！敵は目の前だぞ！"},
-    {n:"セイラ", c:"#ff80ab", t:"アムロ、後ろ！敵機接近！"}
+  ready: [
+    ['アムロ', '了解。ガンダム、出ます！'],
+    ['アムロ', 'こちらガンダム。前を確認します。'],
+    ['アムロ', '通信了解。周りを見ながら出ます。'],
   ],
-  hit: [
-    {n:"カイ", c:"#ffcc80", t:"うわっ！直撃かよ！"},
-    {n:"カイ", c:"#ffcc80", t:"くそっ、装甲が持たねえ！"},
-    {n:"ハヤト", c:"#ffcc80", t:"きゃああっ！"},
-    {n:"ハヤト", c:"#ffcc80", t:"被弾！キャタピラが…！"},
-    {n:"連邦兵", c:"#90caf9", t:"も、もうダメだぁ！"}
+  search: [
+    ['セイラ', 'まだ敵機が残っているわ。見えていない方面を探して。'],
+    ['ブライト', '目の前の敵は片づいた。次の敵影を探せ。'],
+    ['セイラ', '視界内に敵影なし。次の区画を確認して。'],
   ],
-  eject: [
-    {n:"カイ", c:"#ffcc80", t:"ちっ、ここまでかよ！脱出する！"},
-    {n:"カイ", c:"#ffcc80", t:"悪い、アムロ！後は頼む！"},
-    {n:"ハヤト", c:"#ffcc80", t:"機体が持ちません。脱出します！"},
-    {n:"ハヤト", c:"#ffcc80", t:"アムロ、すみません！"}
+  victory: [
+    ['ブライト', '敵の反応が消えた。各機、帰投しろ。'],
+    ['セイラ', '敵影はなくなったわ。味方機の確認をお願い。'],
+    ['ブライト', '作戦終了だ。よくやった、各機。'],
+  ],
+  defeat: [
+    ['セイラ', 'ガンダム、応答して。こちらホワイトベース。'],
+    ['ブライト', 'ガンダムの反応が消えた。各機、いったん引け。'],
+    ['セイラ', 'アムロ、聞こえる？　応答を待っているわ。'],
+  ],
+  draw: [
+    ['ブライト', 'ここまでだ。各機、戦闘を打ち切れ。'],
+    ['セイラ', '作戦時間終了よ。味方機、応答して。'],
+    ['ブライト', 'これ以上は追うな。各機、帰投せよ。'],
+  ],
+};
 
-
-  ]
+// 原作での操縦ぶりを参考にした新規の掛け合い。勝敗や射撃の成否は先に断定しない。
+const ACTION_SCENES = {
+  シャア: {
+    fed: [
+      ['正面に見えてるのに、振り切れない……でも今なら！', 'そこまで追えるようになったか。次の動きはどうかな。'],
+      ['速い！　でも、切り返す瞬間なら追える！', 'いい読みだ。私も同じところにはいないよ。'],
+      ['今度は動き出すほうを狙う！', '撃つ場所を変えたか。ずいぶん慣れてきたな。'],
+    ],
+    zeon: [
+      ['追いつけるか、ここで試してみよう。', '逆を取られた？　いや、まだ間に合う！'],
+      ['そこを急いで抜けるとはね。私ならこうする。', '待ち構えていたのか！　こっちだって！'],
+    ],
+    melee: [
+      ['振り抜く前に止める！', '踏み込む気になったか。ならば私も退かん。'],
+      ['この距離なら、もう見失わない！', '見えてから動くのでは少し遅いな。'],
+    ],
+  },
+  ランバ・ラル: {
+    fed: [
+      ['正面を空けた？　誘っているのか！', '気づいたか。なら、次にどう動くか見せてもらおう。'],
+      ['見た目だけで判断しちゃだめだ。あの操縦……！', 'うむ、機体の癖まで見るようになったか。'],
+    ],
+    zeon: [
+      ['間合いが詰まったぞ。まだ逃げるつもりか？', '逃げるんじゃない。この距離で受けるんだ！'],
+      ['焦るな、という顔をしているな。だが今だ。', '先に仕掛けてきた！　なら僕は横へ！'],
+    ],
+    melee: [
+      ['間合いなら、僕だって取れる！', '言うじゃないか。それなら力を見せてみろ。'],
+      ['機体が同じでも、その腕までは真似できない。でも！', 'そう思うなら、今の一歩を引くんじゃないぞ。'],
+    ],
+  },
+  ガイア: {
+    fed: [
+      ['一機目だけ見てたらやられる。横も見ないと！', 'こっちの動きが気になるか。なら、合わせて動くぞ。'],
+      ['あの間隔、ばらばらに動いてるんじゃない！', '見抜いたなら止めてみろ。先頭は私が引き受ける！'],
+    ],
+    zeon: [
+      ['私が先に出る。各機、私に合わせろ！', '続けて来るつもりだ！　最初の一機から目を離すな！'],
+      ['正面は任せろ。相手が向きを変えたら続け！', '一方向じゃない！　よし、間を抜く！'],
+    ],
+    melee: [
+      ['正面を抜ければ、次も見える！', '抜ける前に私を押し返してみろ！'],
+      ['踏み込むなら今しかない！', 'いい度胸だ。だが、こっちは一人で来たわけじゃない。'],
+    ],
+  },
+  vulcan: {
+    fed: [
+      ['ライフルの間合いじゃない。頭のバルカンで止める！', 'まだ撃てるのか！　正面からは詰められないぞ。'],
+      ['近い！　バルカンなら向けられる！', '頭のほうから来るぞ。離れろ！'],
+      ['足を止められればいい。バルカン、いけっ！', '寄せる気がないな。なら横からだ。'],
+    ],
+  },
 };
 
 function fieldPoint(col, row) {
@@ -1440,7 +1754,6 @@ function addLine(message, pilot = '', kind = 'notice', color = '') {
   if (pilot) {
     const name = document.createElement('span');
     name.className = 'voice' + (pilot === 'アムロ' ? ' player-voice' : Object.hasOwn(ZEON_RADIO, pilot) ? ' enemy-voice' : '');
-    if (Object.hasOwn(ZEON_RADIO, pilot)) line.setAttribute('aria-label', 'ジオン側の通信');
     name.textContent = pilot + ' ';
     if (color) name.style.color = color;
     line.append(name);
@@ -1451,70 +1764,87 @@ function addLine(message, pilot = '', kind = 'notice', color = '') {
   list.scrollTop = list.scrollHeight;
 }
 
-function addQuote(quote) {
-  addLine(quote.t, quote.n, 'notice', quote.c);
+function radioPick(key, choices) {
+  if (!choices?.length) return '';
+  const used = radioUsed.get(key) ?? new Set();
+  if (used.size >= choices.length) used.clear();
+  const options = choices.filter((_, i) => !used.has(i));
+  const choice = options[Math.floor(Math.random() * options.length)];
+  used.add(choices.indexOf(choice));
+  radioUsed.set(key, used);
+  return choice;
 }
 
-function quoteFor(group, pilot) {
-  const options = QUOTES[group].filter(quote => quote.n === pilot);
-  if (options.length) addQuote(options[Math.floor(Math.random() * options.length)]);
+function pilotLine(unit, scene) {
+  if (!unit?.alive || unit.stunned || (unit.side === 'e' && !battle.visible(unit))) return;
+  const bank = unit.side === 'e' ? ZEON_RADIO : FED_RADIO;
+  const text = radioPick(unit.pilot + ':' + scene, bank[unit.pilot]?.[scene]);
+  if (text) addLine(text, unit.pilot);
 }
 
-function quoteOnce(key, quote) {
-  if (heardChatter.has(key)) return;
-  heardChatter.add(key);
-  addQuote(quote);
+function commandLine(scene) {
+  const [pilot, text] = radioPick('command:' + scene, COMMAND_RADIO[scene]);
+  addLine(text, pilot);
 }
 
-function animeLine(key, once = true) {
-  const [n, t] = ANIME[key];
-  if (once) quoteOnce(key, { n, t });
-  else addLine(t, n);
-}
-
-function tripleDom(enemies) {
-  return TRIPLE_DOM.every(pilot => enemies.some(unit => unit.pilot === pilot && unit.name === 'ドム'));
-}
-
-function zeonLine(unit, action) {
-  const line = ZEON_RADIO[unit.pilot]?.[action];
-  if (line) quoteOnce('zeon-' + unit.id + '-' + action, { n: unit.pilot, t: line });
-}
-
-function enemyExchange() {
-  const enemies = battle.living('e').filter(unit => !unit.stunned);
-  if (tripleDom(enemies) && !heardChatter.has('enemy-opening')) {
-    quoteOnce('enemy-opening', QUOTES.start[0]);
-    animeLine('ortegaReady');
-    animeLine('mashReady');
-    return;
+function reportContact() {
+  const newlySeen = battle.living('e').filter(enemy => battle.visible(enemy) && !contactsSeen.has(enemy.id));
+  if (!newlySeen.length) return;
+  if (contactInning !== battle.inning) {
+    const enemy = newlySeen.find(unit => !unit.stunned);
+    const ally = battle.living('f').find(unit => !unit.stunned && enemy && battle.sight(unit.coord, enemy.coord));
+    if (ally && enemy) {
+      contactInning = battle.inning;
+      pilotLine(ally, 'sight');
+      pilotLine(enemy, 'sight');
+    }
   }
-  const speaker = enemies.find(unit => !heardChatter.has('zeon-' + unit.id + '-0'));
-  if (speaker) zeonLine(speaker, 0);
+  for (const enemy of newlySeen) {
+    contactsSeen.add(enemy.id);
+    addJudgment('敵機発見', unitLabel(enemy) + 'を視認');
+  }
 }
 
-function reportContact(unit) {
-  if (!unit.alive || unit.stunned || !PILOT_RADIO[unit.pilot] || lastContactReport.get(unit.id) === battle.inning) return;
-  const enemy = battle.living('e').find(target => battle.sight(unit.coord, target.coord));
-  if (!enemy) return;
-  lastContactReport.set(unit.id, battle.inning);
-  if (unit.pilot !== 'カイ' && unit.pilot !== 'ハヤト') {
-    addLine('敵機を確認しました。', unit.pilot);
-    return;
-  }
-  const here = battle.map[battle.player.coord];
-  const there = battle.map[enemy.coord];
-  const dx = there.c - here.c;
-  const dy = there.r - here.r;
-  const ground = there.t;
-  animeLine(unit.pilot === 'カイ' ? 'kaiAlert' : 'hayatoAlert');
-  if (unit.pilot === 'カイ') {
-    if (dx > 0 && dy < 0 && Math.abs(dx / dy) > 1) addQuote(QUOTES.action[0]);
-    else if (dx < 0 && ground === '森') addQuote(QUOTES.action[1]);
-    else addQuote(QUOTES.action[2]);
+function combatExchange(event, mode) {
+  const { unit, target, weapon, damage } = event;
+  const enemy = unit.side === 'e' ? unit : target;
+  const ally = unit.side === 'f' ? unit : target;
+  const playerInvolved = unit === battle.player || target === battle.player;
+  if (!battle.visible(enemy) || enemy.stunned || ally.stunned ||
+      (combatInning === battle.inning && (!playerInvolved || playerCombatInning === battle.inning))) return [];
+  combatInning = battle.inning;
+  if (playerInvolved) playerCombatInning = battle.inning;
+  const role = mode === 'melee' ? 'melee' : unit.side === 'f' ? 'fed' : 'zeon';
+  const key = weapon === JABRO_WEAPONS.vulcan ? 'vulcan' : enemy.pilot;
+  const featured = ally === battle.player ? ACTION_SCENES[key]?.[role] : null;
+  let lines;
+  if (featured?.length) {
+    const [first, second] = radioPick('scene:' + key + ':' + role, featured);
+    lines = [[first, unit.pilot], [second, target.pilot]];
   } else {
-    addQuote(ground === '丘' && dx > 0 ? QUOTES.action[3] : QUOTES.action[4]);
+    const bankLine = (piece, scene) => radioPick(piece.pilot + ':' + scene,
+      (piece.side === 'e' ? ZEON_RADIO : FED_RADIO)[piece.pilot]?.[scene]);
+    const first = mode === 'melee' ? 'melee' : 'attack';
+    const second = mode === 'melee' ? 'melee' : target.side === 'f' && damage !== '-' ? 'hit' : 'evade';
+    lines = [[bankLine(unit, first), unit.pilot], [bankLine(target, second), target.pilot]].filter(([text]) => text);
   }
+  for (const [text, pilot] of lines) addLine(text, pilot);
+  return lines;
+}
+
+function makeRollRadio(lines) {
+  const radio = document.createElement('div');
+  radio.className = 'roll-radio';
+  radio.setAttribute('aria-label', '戦闘中の掛け合い');
+  for (const [text, pilot] of lines) {
+    const line = document.createElement('p');
+    const voice = document.createElement('strong');
+    voice.className = 'voice' + (Object.hasOwn(ZEON_RADIO, pilot) ? ' enemy-voice' : ' player-voice');
+    voice.textContent = pilot + '：';
+    line.append(voice, text);
+    radio.append(line);
+  }
+  return radio;
 }
 
 function extendRoute(routes, id, from, to) {
@@ -1526,25 +1856,18 @@ function extendRoute(routes, id, from, to) {
 }
 
 function recordEnemyStep(unit, from, to) {
-  if (battle.visible(unit)) {
-    extendRoute(enemyRoutes, unit.id, from, to);
-    const distance = battle.distance(battle.player.coord, to);
-    animeLine('amuroSpots');
-    if (distance <= 2) quoteOnce('close', QUOTES.action[6]);
-    if (battle.map[to].c < battle.map[battle.player.coord].c) quoteOnce('behind', QUOTES.action[7]);
-    if (battle.map[to].t === '森' && battle.map[from].t !== '森' &&
-        battle.player.previousTarget === unit.id && battle.living('f').some(ally =>
-          ally.pilot === 'ハヤト' && !ally.stunned && battle.sight(ally.coord, unit.coord))) {
-      quoteOnce('forest', QUOTES.action[5]);
-    }
-    if (!heardEnemies.has(unit.id)) {
-      heardEnemies.add(unit.id);
-      if (unit.pilot === 'ガイア') animeLine('gaiaWarns');
-      else zeonLine(unit, 0);
-      const identified = battle.living('e').filter(enemy => heardEnemies.has(enemy.id));
-      if (tripleDom(identified)) quoteOnce('triple-dom-contact', QUOTES.start[1]);
-    }
-  }
+  if (battle.visible(unit)) extendRoute(enemyRoutes, unit.id, from, to);
+}
+
+function addJudgment(title, details) {
+  const log = el('judgmentLog');
+  const line = document.createElement('p');
+  line.className = 'judgment-entry';
+  const heading = document.createElement('strong');
+  heading.textContent = battle.inning + '／' + MAX_INNINGS + '　' + title;
+  line.append(heading, '\n' + details);
+  log.append(line);
+  log.scrollTop = log.scrollHeight;
 }
 
 const DIE_FACES = '⚀⚁⚂⚃⚄⚅';
@@ -1572,7 +1895,7 @@ function makeRollGroup(label, dice, total, verdict = '') {
   outcome.hidden = true;
   node.append(label, tray, result);
   if (verdict) node.append(outcome);
-  return { node, tray, dice, diceNodes, result, outcome, verdict };
+  return { node, tray, diceNodes, dice, label, total, verdict, result, outcome };
 }
 
 async function animateDice(group) {
@@ -1600,11 +1923,15 @@ async function revealRolls(rows, animated) {
       if (animated && group.verdict && i + 1 < groups.length) await pause(440);
     }
     summary.hidden = false;
+    addJudgment(row.querySelector('h3').textContent, groups.map(group =>
+      group.label + '　[' + group.dice.join(' + ') + ']　' + group.total +
+      (group.verdict ? '　' + group.verdict : '')).concat(summary.textContent).join('\n'));
   }
   el('weaponLossLabel').hidden = !lostWeaponUnit;
   if (lostWeaponUnit) {
     fillOptions(el('weaponLossSelect'), lostWeaponUnit.weapons.map((id, index) => [index, JABRO_WEAPONS[id].name]));
   }
+  for (const line of pendingJudgments.splice(0)) addJudgment(...line);
   for (const line of pendingRollMessages.splice(0)) addLine(...line);
   drawBoard();
   el('rollOkay').disabled = false;
@@ -1624,7 +1951,9 @@ function showRolls() {
     summary.textContent = check.outcome;
     summary.hidden = true;
     const groups = check.groups.map(group => makeRollGroup(...group));
-    row.append(heading, ...groups.map(group => group.node), summary);
+    row.append(heading);
+    if (check.dialogue?.length) row.append(makeRollRadio(check.dialogue));
+    row.append(...groups.map(group => group.node), summary);
     return { row, groups, summary };
   });
   results.replaceChildren(...rows.map(entry => entry.row));
@@ -1674,39 +2003,48 @@ function reportEvent(event) {
   if (type === 'phase') {
     if (event.side === 'f' && event.phase === 'move') {
       friendlyRoutes.clear();
+      playerMoveTrail.clear();
+      playerMoveTrail.add(battle.player.coord);
+      battle.rememberGround(battle.player, scoutExplored);
       drawFriendlyRoutes();
     }
     return;
   }
   recordBattleEvent(event);
   if (type === 'result') {
-    addLine(event.result === '連邦軍の勝利' ? '各機、よくやった。ホワイトベースへ戻れ。' :
-      event.result === '引き分け' ? 'ここまでだ。応答できるか、各機。' : 'アムロ、応答しろ。アムロ！', 'ブライト');
+    const details = event.reason === 'time' ? '時間切れ。両軍の第' + MAX_INNINGS + 'イニング終了。' :
+      event.result === '引き分け' ? 'ガンダムとジオン軍最後の機体が同時に撃破。' :
+      event.result === '連邦軍の勝利' ? 'ジオン軍の残存機なし。' : 'ガンダムが撃破された。';
+    if (pendingRolls.length) pendingJudgments.push(['作戦終了：' + event.result, details]);
+    else addJudgment('作戦終了：' + event.result, details);
+    commandLine(event.result === '連邦軍の勝利' ? 'victory' : event.result === '引き分け' ? 'draw' : 'defeat');
     return;
   }
   if (type === 'step') {
-    if (unit.side === 'e') {
-      recordEnemyStep(unit, event.from, event.to);
-      for (const ally of battle.living('f')) reportContact(ally);
-    } else {
-      if (unit === battle.player ||
-          (battle.visible(unit) && battle.sight(battle.player.coord, event.from))) {
+    if (unit.side === 'e') recordEnemyStep(unit, event.from, event.to);
+    else {
+      if (unit === battle.player) {
+        playerMoveTrail.add(event.from);
+        playerMoveTrail.add(event.to);
+        battle.rememberGround(unit, scoutExplored);
+      }
+      if (unit === battle.player || (battle.visible(unit) && battle.sight(battle.player.coord, event.from))) {
         extendRoute(friendlyRoutes, unit.id, event.from, event.to);
       }
       drawFriendlyRoutes();
-      reportContact(unit);
     }
+    reportContact();
     return;
   }
-  const involved = unit?.side === 'f' || target?.side === 'f';
-  const seen = unit && battle.sight(battle.player.coord, unit.coord);
-  const targetSeen = target && battle.sight(battle.player.coord, target.coord);
-  const callsign = (piece, visible) => piece.side === 'f' || visible ? piece.name : '敵機';
+  const involved = unit?.side === 'f' || target?.side === 'f' || event.source?.side === 'f';
+  const seen = unit && Boolean(battle.sight(battle.player.coord, unit.coord));
+  const targetSeen = target && Boolean(battle.sight(battle.player.coord, target.coord));
+  const callsign = (piece, visible) => piece.side === 'f' || visible ? unitLabel(piece) : '未視認の敵機';
   if (!involved && !seen && !targetSeen) return;
 
   if (type === 'shot') {
     showVisibleShot(unit, target);
-    if (unit.side === 'f') reportContact(unit);
+    reportContact();
     const phase = JABRO_PHASES[event.mode];
     const shooter = callsign(unit, seen);
     const defender = callsign(target, targetSeen);
@@ -1719,55 +2057,20 @@ function reportEvent(event) {
         signed(event.damageModifier) + '） → ' + event.damageRoll]);
     }
     const damage = event.power ? '火力 ' + event.power + '・' + damageResult(event) : '被害なし';
-    pendingRolls.push({ title: phase + '　' + shooter + ' → ' + defender, groups, outcome: damage });
-    if (unit.side === 'f') {
-      animeLine('brightFire');
-      if (unit.id === 0) {
-        if (event.weapon === JABRO_WEAPONS.vulcan && event.damage === '-') animeLine('amuroVulcan');
-        else addLine(event.hit ? '当たった！' : 'かわされた！', unit.pilot);
-      } else if (unit.pilot === 'カイ') {
-        addLine(event.hit ? 'へっ、捉えたぞ！' : 'ちっ、外したか。', unit.pilot);
-      } else {
-        addLine(event.hit ? '当たりました、アムロ！' : '外しました。次は当てます！', unit.pilot);
-      }
-    } else if (target.id === 0) {
-      if (event.damage !== '-') {
-        addLine('うっ、やられた！', 'アムロ');
-        animeLine('miraiStatus');
-      } else {
-        addLine('よし、まだいける。', 'アムロ');
-      }
-    } else if (target.side === 'f' && event.damage === '-') {
-      addLine(target.pilot === 'カイ' ? 'こっちは無事だ。' : '僕は大丈夫です！', target.pilot);
-    }
-    if (unit.side === 'e') {
-      if (unit.pilot === 'ガイア' && event.hit) animeLine('gaiaAttack');
-      else zeonLine(unit, 1);
-    }
-    if (event.damage !== '-') quoteFor('hit', target.pilot);
+    pendingRolls.push({
+      title: phase + '　' + shooter + ' → ' + defender + (seen || unit.side === 'f' ? '　' + event.weapon.name : ''),
+      groups, outcome: damage,
+    });
+    pendingRolls.at(-1).dialogue = combatExchange(event, 'shot');
     return;
   }
   if (type === 'morale') {
     const reason = event.reason === 'recover' ? '覚醒' : DAMAGE_JA[event.reason];
-    const outcome = reason + '　' + (event.passed ? '成功' : '失敗');
     pendingRolls.push({
       title: callsign(unit, seen) + '　士気判定',
       groups: [['出目', event.dice, diceTotal(event.dice) + '（修正 ' + signed(event.modifier) + '） → ' + event.total + '／' + event.morale + '以下で成功']],
-      outcome,
+      outcome: reason + '　' + (event.passed ? '成功' : '失敗'),
     });
-    if (unit.side === 'f') {
-      if (!event.passed && event.reason === 'M') {
-        if (unit.name === 'ガンタンク') {
-          animeLine('frawDamage');
-          if (battle.living('f').some(ally => ally.pilot === 'カイ' && !ally.stunned)) animeLine('kaiRetreat');
-        }
-        addLine(unit.pilot === 'カイ' ? '足をやられた。動けねえ！' :
-          unit.name === 'ガンタンク' ? 'キャタピラが……これでは動けません！' : '足をやられた！', unit.pilot);
-      } else if (!event.passed && event.reason === 'A') {
-        addLine(unit.pilot === 'カイ' ? 'こいつじゃもう撃てねえ！' :
-          '攻撃できません！', unit.pilot);
-      }
-    }
     return;
   }
   if (type === 'chooseWeaponLoss') {
@@ -1775,42 +2078,15 @@ function reportEvent(event) {
     return;
   }
   if (type === 'topSurvival') {
-    const outcome = event.top ? 'マゼラ・トップが離脱して生存' : 'マゼラ・トップも撃破';
+    if (event.top && battle.visible(event.top)) contactsSeen.add(event.top.id);
+    const topName = seen ? 'マゼラ・トップ' : '敵車両の分離機';
+    const outcome = topName + (event.top ? 'が離脱して生存' : 'も撃破');
     pendingRolls.push({
-      title: 'マゼラ・トップの生存判定',
+      title: callsign(unit, seen) + '　' + topName + 'の生存判定',
       groups: [['出目', [event.roll], '4〜6で生存']],
       outcome,
     });
-    if (event.top) addLine('ベースをやられた。トップで離脱する！', unit.pilot);
     return;
-  }
-  if (type === 'destroy') {
-    quoteFor('eject', unit.pilot);
-    if (unit.side === 'f') {
-      if (unit.id === 0) animeLine('brightCall');
-      else addLine(unit.pilot + 'からの応答が途絶えたわ。', 'セイラ');
-    } else {
-      if (unit.pilot === 'マッシュ' && battle.units.some(ally => ally.pilot === 'オルテガ' && ally.alive && !ally.stunned)) {
-        animeLine('ortegaAvenges');
-      }
-      if (seen) addLine('敵機が止まったわ。', 'セイラ');
-    }
-    return;
-  }
-  if (type === 'weaponLoss') {
-    const damage = unit.pilot === 'アムロ' || unit.pilot === 'カイ' ? 'が使えない！' : 'が使えません！';
-    addLine(event.weapon.name + damage, unit.pilot);
-  }
-  if (type === 'stun' && unit.side === 'f') addLine(unit.pilot + '、聞こえる？　返事をして。', 'セイラ');
-  if (type === 'recover' && unit.side === 'f') {
-    if (unit.pilot === 'ハヤト') animeLine('hayatoRecovery', false);
-    else addLine(unit.pilot === 'カイ' ? 'ああ、聞こえてるぜ。戻ったぞ。' : 'こちら、通信に復帰しました。', unit.pilot);
-  }
-  if (type === 'engage') {
-    const ally = unit.side === 'f' ? unit : target;
-    addLine(ally.pilot === 'カイ' ? '近すぎるぞ、こいつ！' : '敵がすぐそばに！', ally.pilot);
-    const enemy = unit.side === 'e' ? unit : target;
-    if (seen && targetSeen) zeonLine(enemy, 1);
   }
   if (type === 'contact' || type === 'melee') {
     const name = type === 'contact' ? '接触戦' : '白兵戦';
@@ -1824,7 +2100,22 @@ function reportEvent(event) {
       ],
       outcome: '戦力差 ' + signed(event.power) + '　ダイス差 ' + signed(event.dice) + '　' + closeOutcome(event.result, attacker, defender),
     });
-    if (event.result === 'F' && (seen || targetSeen)) addLine('アムロ、敵が近いわ。気をつけて。', 'セイラ');
+    pendingRolls.at(-1).dialogue = combatExchange(event, 'melee');
+    return;
+  }
+  const name = callsign(unit, seen);
+  const status = { destroy: '撃破', weaponLoss: '武装破損', stun: '気絶', recover: '覚醒' }[type];
+  if (status) {
+    const detail = name + (type === 'weaponLoss' && (seen || unit.side === 'f') ? '：' + event.weapon.name : '');
+    if (pendingRolls.length) pendingJudgments.push([status, detail]);
+    else addJudgment(status, detail);
+  }
+  if (type === 'destroy' && unit.side === 'e' && !unit.mountImage && resumeSearchInning !== battle.inning) {
+    const remaining = battle.living('e');
+    if (remaining.length && !remaining.some(enemy => battle.visible(enemy))) {
+      resumeSearchInning = battle.inning;
+      commandLine('search');
+    }
   }
 }
 
@@ -1998,6 +2289,14 @@ function unitLabel(unit) {
   return name + '・' + unit.pilot;
 }
 
+function reportIdentified(unit) {
+  return unit.side === 'f' || contactsSeen.has(unit.id);
+}
+
+function reportLabel(unit) {
+  return reportIdentified(unit) ? unitLabel(unit) : '未視認の敵機';
+}
+
 function abilityLabel(unit) {
   const { close, morale, hit, evasion, combat } = pilotAbility(unit);
   return '射撃 ' + signed(hit) + ' ／ 回避 ' + signed(evasion) + ' ／ 白兵 ' + signed(close) +
@@ -2029,10 +2328,10 @@ function recordBattleEvent(event) {
     from: unit.coord, to: target.coord, weapon: event.weapon.name, mode: JABRO_PHASES[event.mode],
     hit: event.hit, outcome: (event.hit ? '命中' : event.power ? '至近弾' : '外れ') + '・' + damageResult(event),
   });
-  if (type === 'contact' || type === 'melee') entry.outcome = closeOutcome(event.result, unitLabel(unit), unitLabel(target));
+  if (type === 'contact' || type === 'melee') entry.closeResult = event.result;
   if (type === 'topSurvival') {
     entry.targetId = event.top?.id;
-    entry.outcome = '出目 ' + event.roll + ' ／ ' + (event.top ? 'マゼラ・トップ生存' : 'マゼラ・トップも撃破');
+    entry.outcome = '出目 ' + event.roll + ' ／ 分離機' + (event.top ? '生存' : 'も撃破');
   }
   battleHistory.push(entry);
 }
@@ -2065,8 +2364,8 @@ function reportUnitNumber(unit) {
 function reportRow(unit, stats) {
   const { moved, shots, hits, taken, melee, kills } = stats;
   return [
-    String(reportUnitNumber(unit)), SIDE_NAMES[unit.side], unitLabel(unit), abilityLabel(unit),
-    weaponSummary(unit.startWeapons),
+    String(reportUnitNumber(unit)), SIDE_NAMES[unit.side], reportLabel(unit), reportIdentified(unit) ? abilityLabel(unit) : '非表示',
+    reportIdentified(unit) ? weaponSummary(unit.startWeapons) : '非表示',
     '移動 ' + moved + 'ヘクス ／ 射撃 ' + shots + '・命中 ' + hits + ' ／ 被弾 ' + taken +
       ' ／ 白兵戦 ' + melee + ' ／ 撃破 ' + kills,
     unitCondition(unit),
@@ -2077,16 +2376,17 @@ function recordText(record, includeHexes = false) {
   const unit = battle.units.find(piece => piece.id === record.unitId);
   const target = battle.units.find(piece => piece.id === record.targetId);
   const source = battle.units.find(piece => piece.id === record.sourceId);
-  const prefix = record.inning + 'イニング　' + unitLabel(unit);
+  const prefix = record.inning + 'イニング　' + reportLabel(unit);
   const position = includeHexes && record.from ? '（' + record.from + ' → ' + record.to + '）' : '';
   if (record.type === 'step') return prefix + ' 移動' + position;
-  if (record.type === 'shot') return prefix + ' → ' + unitLabel(target) + ' ' + record.mode + ' ' + record.weapon + '・' + record.outcome + position;
+  if (record.type === 'shot') return prefix + ' → ' + reportLabel(target) + ' ' + record.mode +
+    (reportIdentified(unit) ? ' ' + record.weapon : '') + '・' + record.outcome + position;
   if (record.type === 'topSurvival') return prefix + ' 生存判定・' + record.outcome;
   if (record.type === 'destroy') {
-    const destroyed = unit.mountImage ? record.inning + 'イニング　' + unit.name + '・' + unit.pilot : prefix;
-    return destroyed + ' 撃破' + (source ? '（' + unitLabel(source) + 'による）' : '');
+    return prefix + ' 撃破' + (source ? '（' + reportLabel(source) + 'による）' : '');
   }
-  return prefix + ' → ' + unitLabel(target) + ' ' + (record.type === 'melee' ? '白兵戦' : '接触戦') + '・' + record.outcome;
+  return prefix + ' → ' + reportLabel(target) + ' ' + (record.type === 'melee' ? '白兵戦' : '接触戦') +
+    '・' + closeOutcome(record.closeResult, reportLabel(unit), reportLabel(target));
 }
 
 function drawBattleRecord() {
@@ -2116,7 +2416,7 @@ function drawRecordRoutes(layer, inning = 'all', kind = 'all', unitId = 'all') {
   const flush = record => {
     const unit = battle.units.find(piece => piece.id === record.unitId);
     const style = record.side === 'f' ? 'friendly' : 'enemy';
-    const label = record.inning + 'イニング ' + unitLabel(unit) + 'の移動';
+    const label = record.inning + 'イニング ' + reportLabel(unit) + 'の移動';
     const arrow = routeArrow(record.trail, style + '-route', style + 'Arrow', label);
     if (arrow) moves.push(arrow);
   };
@@ -2144,14 +2444,14 @@ function drawRecordRoutes(layer, inning = 'all', kind = 'all', unitId = 'all') {
 
 function beginBattleReview() {
   reviewingBattle = true;
-  el('battleResult').textContent = '対局終了 — ' + battle.result;
+  el('battleResult').textContent = '対局終了　' + battle.result + (battle.resultReason === 'time' ? '（時間切れ）' : '');
   el('battleResult').hidden = false;
   el('game').classList.add('after-action');
   el('mapTerrain').removeAttribute('clip-path');
   el('recordControls').hidden = el('recordList').hidden = el('postBattle').hidden = false;
   const innings = [...new Set(battleHistory.map(event => event.inning))];
   fillOptions(el('recordInning'), [['all', '全イニング'], ...innings.map(inning => [inning, String(inning)])]);
-  fillOptions(el('recordUnit'), [['all', '全機'], ...battle.units.map(unit => [unit.id, unitLabel(unit)])]);
+  fillOptions(el('recordUnit'), [['all', '全機'], ...battle.units.map(unit => [unit.id, reportLabel(unit)])]);
   const body = el('debriefUnits');
   const stats = battleStats();
   for (const unit of battle.units) {
@@ -2172,7 +2472,7 @@ function beginBattleReview() {
 }
 
 function battleReportSummary() {
-  return battle.result + ' ／ ' + battle.layout.name + ' ／ 第' + battle.inning + 'イニング終了 ／ ' + amuroLabel();
+  return battle.result + (battle.resultReason === 'time' ? '（時間切れ）' : '') + ' ／ ' + battle.layout.name + ' ／ 第' + battle.inning + 'イニング終了 ／ ' + amuroLabel();
 }
 
 function saveBattleReport() {
@@ -2478,12 +2778,32 @@ function drawBoard(follow = false) {
     }
   }
   for (const unit of battle.units) {
+    if (reviewingBattle && !reportIdentified(unit)) {
+      const p = hexPoint(unit.coord);
+      const marker = document.createElement('div');
+      marker.className = 'marker enemy unknown-marker';
+      marker.textContent = (unit.alive ? '' : '×') + reportUnitNumber(unit);
+      marker.title = reportLabel(unit);
+      marker.style.left = (p.x * MAP_SCALE) + 'px';
+      marker.style.top = (p.y * MAP_SCALE) + 'px';
+      pieces.append(marker);
+      continue;
+    }
     if (!unit.alive) {
-      if (battle.sight(battle.player.coord, unit.coord)) knownWrecks.add(unit.id);
+      if (!reviewingBattle && battle.sight(battle.player.coord, unit.coord)) knownWrecks.add(unit.id);
       if (!knownWrecks.has(unit.id) && !reviewingBattle) continue;
       const point = hexPoint(unit.coord);
       const wreck = document.createElement('div');
       wreck.className = 'marker wreck';
+      if (!reportIdentified(unit)) {
+        wreck.classList.add('unknown-marker');
+        wreck.title = '未識別の残骸';
+        wreck.textContent = '×';
+        wreck.style.left = (point.x * MAP_SCALE) + 'px';
+        wreck.style.top = (point.y * MAP_SCALE) + 'px';
+        pieces.append(wreck);
+        continue;
+      }
       wreck.title = (unit.topSurvived ? unit.name + '・' + unit.pilot : unitLabel(unit)) + ' 残骸';
       const image = document.createElement('img');
       image.className = 'wreck-piece';
@@ -2605,12 +2925,22 @@ function refreshWeapons() {
 function showControls() {
   const { player, inning, side, phase, result } = battle;
   const ownTurn = side === 'f';
-  const nextLabel = { prep: '移動へ', move: '前進射撃へ', advance: '白兵戦へ', melee: '敵軍の手番へ' };
-  const targetOptions = reaction ? [reaction.target] :
-    ownTurn && !busy && (phase === 'prep' || phase === 'advance') ? battle.targets(player, phase) : [];
+  const nextLabel = {
+    prep: player.prepared ? '準備射撃を終了' : '準備射撃しない',
+    move: player.moved ? '移動を終了' : '移動しない',
+    advance: player.advanced ? '前進射撃を終了' : '前進射撃しない',
+    melee: '白兵戦しない',
+  };
+  const choosePhase = ownTurn && !busy && !result && !reaction;
+  const canMelee = choosePhase && phase === 'melee' && battle.canAct(player) && battle.engaged(player);
+  const targetOptions = reaction ? (battle.visible(reaction.target) ? [reaction.target] : []) :
+    ownTurn && !busy && (phase === 'prep' || phase === 'advance') ?
+      battle.targets(player, phase).filter(target => battle.visible(target)) : [];
   const phaseName = reaction ? '防御射撃' : JABRO_PHASES[phase];
   el('downloadBattleReport').hidden = el('downloadBattleImage').hidden = !reviewingBattle;
-  el('phaseLabel').textContent = result || inning + 'イニング　' + SIDE_NAMES[side] + '　' + phaseName;
+  el('phaseLabel').textContent = result ?
+    (battle.resultReason === 'time' ? result + '（' + MAX_INNINGS + 'イニング終了）' : result) :
+    '第' + inning + '／' + MAX_INNINGS + 'イニング　' + SIDE_NAMES[side] + '　' + phaseName;
   el('apLabel').textContent = 'AP ' + player.ap;
   el('unitStatus').textContent = 'ガンダム　白兵戦力 ' + battle.closePower(player) +
     (player.stunned ? '　気絶' : '') + (player.noAction ? '　戦闘不能' : '') + (player.noMove ? '　移動不能' : '') +
@@ -2620,31 +2950,39 @@ function showControls() {
     unitLabel(unit) + ' ／ ' + (unit.alive ? weaponSummary(unit.weapons) + '\n' + abilityLabel(unit) : '戦線離脱')).join('\n');
   const visibleEnemies = battle.living('e').filter(unit => battle.visible(unit));
   el('enemyStatus').hidden = !visibleEnemies.length;
-  el('enemyStatus').textContent = visibleEnemies.map(unit => unitLabel(unit) + ' ／ ' + abilityLabel(unit)).join('\n');
+  el('enemyStatus').textContent = visibleEnemies.map(unit =>
+    unitLabel(unit) + ' ／ ' + unitCondition(unit) + '\n' + abilityLabel(unit)).join('\n');
   const moving = ownTurn && phase === 'move' && !busy && !result;
+  const hunting = moving && !visibleEnemies.length;
+  el('scout').hidden = !hunting;
+  el('scout').disabled = !Object.keys(JABRO_DIRECTIONS).some(dir => battle.moveOption(player, dir));
   el('movement').hidden = !moving;
   let hasMove = false;
   for (const button of el('movement').querySelectorAll('[data-dir]')) {
     button.disabled = !moving || !battle.moveOption(player, button.dataset.dir);
     hasMove ||= !button.disabled;
   }
-  el('equipDualSabers').hidden = busy || !battle.canEquipDualSabers();
-  el('equipDualSabers').disabled = !el('equipDualSabers').hidden && Boolean(reaction);
-  el('shotControls').hidden = !targetOptions.length || Boolean(result);
+  const showShot = targetOptions.length > 0 && !result;
+  el('shotControls').hidden = !showShot;
+  el('fireButton').hidden = !showShot;
+  el('meleeButton').hidden = !canMelee;
   fillOptions(el('targetSelect'), targetOptions.map(t => [t.id, unitLabel(t)]));
   refreshWeapons();
-  el('fireButton').textContent = reaction ? '防御射撃' : '射撃';
+  el('fireButton').textContent = JABRO_PHASES[reaction ? 'defense' : phase];
   el('skipReaction').hidden = !reaction || Boolean(result);
-  el('nextPhase').hidden = !ownTurn || busy || Boolean(result);
+  el('nextPhase').hidden = !choosePhase;
+  el('nextPhase').classList.toggle('main-action', !showShot && !canMelee);
   el('nextPhase').textContent = nextLabel[phase];
   const hasFirearm = player.weapons.some(id => JABRO_WEAPONS[id].fire);
   const hints = {
     prep: !hasFirearm ? '射撃兵器はありません。' : player.prepared ? '準備射撃を行いました。この手番は移動できません。' :
       targetOptions.length ? '視認した敵を準備射撃できます。' : '準備射撃できる目標がありません。',
-    move: hasMove ? 'ガンダムを移動できます。僚機への指示は右の無線から送れます。' :
-      battle.movementBlock(player) || '残りの移動力で進めるヘクスがありません。前進射撃へ進めます。',
-    advance: !hasFirearm ? '射撃兵器はありません。' : targetOptions.length ? '移動後の前進射撃を行えます。' : '前進射撃できる目標がありません。',
-    melee: '接触した機体の白兵戦判定が終了しました。',
+    move: !hasMove ? battle.movementBlock(player) || '移動できるヘクスがありません。' :
+      hunting ? '敵影なし。「索敵移動」で未確認の方向へ1ヘクス進みます。' :
+      'ガンダムを移動できます。僚機への指示は無線から送れます。',
+    advance: player.advanced ? '前進射撃を行いました。' : !hasFirearm ? '射撃兵器はありません。' :
+      targetOptions.length ? '移動後の前進射撃を行えます。' : '前進射撃できる目標がありません。',
+    melee: canMelee ? 'ガンダムが白兵戦を仕掛けるか選べます。' : 'ガンダムが仕掛けられる白兵戦はありません。',
   };
   el('actionHint').textContent = result ? '' : reaction ? '移動中の敵機に防御射撃できます。' :
     busy ? 'AIの行動を処理中。' : hints[phase];
@@ -2712,7 +3050,6 @@ async function aiFire(side, mode) {
 
 async function enemyTurn() {
   battle.beginSide('e');
-  enemyExchange();
   render();
   await showRolls();
   await pause(350);
@@ -2734,13 +3071,12 @@ async function enemyTurn() {
   await showRolls();
   if (!battle.result) {
     await pause(350);
-    battle.inning++;
-    battle.beginSide('f');
+    battle.finishInning();
     await showRolls();
   }
 }
 
-async function advancePhase() {
+async function advancePhase(attackInMelee = false) {
   if (!battle || busy || battle.side !== 'f' || battle.result) return;
   busy = true;
   const phase = battle.phase;
@@ -2756,13 +3092,13 @@ async function advancePhase() {
     }
     if (phase === 'advance') {
       await aiFire('f', 'advance');
-      if (!battle.result) {
-        battle.setPhase('melee');
-        battle.resolveMelee();
-        await showRolls();
-      }
+      if (!battle.result) battle.setPhase('melee');
     }
-    if (phase === 'melee') await enemyTurn();
+    if (phase === 'melee') {
+      battle.resolveMelee(!attackInMelee);
+      await showRolls();
+      if (!battle.result) await enemyTurn();
+    }
   } finally {
     busy = false;
     render();
@@ -2830,7 +3166,6 @@ function squadRadio(message) {
       continue;
     }
     unit.order = order;
-    if (unit.pilot === 'カイ' && order === 'hold') animeLine('kaiReply');
     addLine(voice[order] ?? (voice.moving + DIRECTIONS_JA[order] + (unit.pilot === 'カイ' ? 'へ行くぜ。' : 'へ行きます。')), unit.pilot);
   }
   render();
@@ -2838,15 +3173,20 @@ function squadRadio(message) {
 
 battle = new JabroBattle({ loadout: startingLoadout, report: reportEvent, playerChoosesWeapon: true });
 showStartingSquad();
-el('startDualSabers').addEventListener('change', event => {
+el('missionRule').textContent = '最大' + MAX_INNINGS +
+  'イニング。ジオン軍の全機撃破で勝利、ガンダム撃破で敗北。時間切れは引き分け。';
+const startDualSabers = el('startDualSabers');
+startDualSabers.disabled = battle.amuroLevel < AMURO_STRONG_LEVEL;
+startDualSabers.addEventListener('change', event => {
+  if (startDualSabers.disabled) return;
   const dualSabers = event.target.checked;
   battle.player.dualSabers = dualSabers;
-  battle.player.weapons = JABRO_LOADOUTS[dualSabers ? 's2' : startingLoadout].slice();
+  battle.player.weapons = amuroLoadout(battle.amuroLevel, JABRO_LOADOUTS[dualSabers ? 's2' : startingLoadout]);
   showStartingSquad();
 });
 el('equipDualSabers').addEventListener('click', () => {
   if (busy || reaction || !battle.equipDualSabers()) return;
-  addLine('盾と射撃武器を捨てた。ビームサーベル二刀流で行く！', 'アムロ');
+  addLine('盾と主武装を外した。ビームサーベル二刀流で行く！', 'アムロ');
   render();
 });
 el('launchForm').addEventListener('submit', event => {
@@ -2856,20 +3196,14 @@ el('launchForm').addEventListener('submit', event => {
   el('game').hidden = false;
   setBattleMap();
   battle.deploy();
-  addLine('アムロ、こちらホワイトベース。僚機の位置はまだつかめていない。無線で確認して。', 'セイラ');
-  if (battle.units.some(unit => unit.name === 'ガンタンク') &&
-      battle.units.some(unit => unit.name === 'ガンキャノン')) animeLine('brightLaunch');
-  animeLine('amuroLaunch');
-  const present = new Set(battle.living('f').map(unit => unit.pilot));
-  if (present.has('ハヤト')) {
-    addQuote(QUOTES.start[3]);
-    animeLine('hayatoReady');
-  }
+  commandLine('launch');
+  commandLine('ready');
+  addJudgment('作戦開始', '第' + MAX_INNINGS + 'イニングの両軍手番終了で時間切れ。');
+  reportContact();
   render(true);
 });
-el('movement').addEventListener('click', async event => {
-  const direction = event.target.closest('[data-dir]')?.dataset.dir;
-  if (!direction || busy || battle?.result || !battle.step(battle.player, direction)) return;
+async function movePlayer(direction) {
+  if (!direction || busy || battle.result || !battle.step(battle.player, direction)) return;
   busy = true;
   try {
     await handleDefenders(battle.player);
@@ -2877,6 +3211,15 @@ el('movement').addEventListener('click', async event => {
     busy = false;
     render(true);
   }
+}
+el('movement').addEventListener('click', event => {
+  movePlayer(event.target.closest('[data-dir]')?.dataset.dir);
+});
+el('scout').addEventListener('click', () => {
+  if (busy || battle.result || battle.living('e').some(unit => battle.visible(unit))) return;
+  const direction = battle.scoutDirection(battle.player, playerMoveTrail, scoutExplored);
+  if (direction) movePlayer(direction);
+  else addJudgment('索敵移動', 'この手番に未確認方面へ進める経路がありません。');
 });
 el('targetSelect').addEventListener('change', refreshWeapons);
 el('fireButton').addEventListener('click', async () => {
@@ -2896,7 +3239,8 @@ el('skipReaction').addEventListener('click', () => {
   resolve();
   render();
 });
-el('nextPhase').addEventListener('click', advancePhase);
+el('nextPhase').addEventListener('click', () => advancePhase());
+el('meleeButton').addEventListener('click', () => advancePhase(true));
 el('radioForm').addEventListener('submit', event => {
   event.preventDefault();
   const message = el('radioInput').value.trim();
