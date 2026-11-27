@@ -59,26 +59,24 @@
             letter-spacing: 3px;
         }
 
-        .briefing-text {
-            text-align: left;
-            margin-bottom: 40px;
-            line-height: 1.6;
-            background-color: var(--paper);
-            padding: 20px;
-            border-left: 5px solid var(--accent-olive);
-            font-family: monospace;
-            font-size: 1.4em;
+        .peasant-intro {
+            margin: 0 0 24px;
             color: var(--text-main);
         }
 
-        .author-note,
-        .site-note {
-            color: var(--text-muted);
+        .peasant-intro img {
+            display: block;
+            width: 100%;
+            height: auto;
         }
 
-        .author-note {
-            margin: 0 0 12px;
-            font-style: italic;
+        .peasant-intro p {
+            margin: 12px 0 0;
+            line-height: 1.5;
+        }
+
+        .site-note {
+            color: var(--text-muted);
         }
 
         .site-note a,
@@ -213,12 +211,13 @@
 
 <div class="container">
     <h1>Operations HQ</h1>
-    <!-- 作者の一言（毎日変えるかも） -->
-    <p class="author-note">More people visit this site from Singapore than from any other country. To my brothers in Singapore, thanks for always stopping by! And to my brothers in America, come on, let’s see a comeback! It makes this old man sad to see America lose at anything to do with wargames.</p>
-
-    <div class="briefing-text">
-    A collection of wargames you can play in your browser. Select a title to begin.
-    </div>
+    <section class="peasant-intro" aria-label="Pe@sant">
+        <a href="https://peasant-homepage.savorymedal9.chatgpt.site/?lang=en" data-umami-event="peasant-banner-click">
+            <img src="./peasant-banner.png" alt="Pe@sant — Classic board wargames in your browser" width="2172" height="724">
+        </a>
+        <p>I’ve made a new app called Pe@sant. Think of it as a VASSAL-like tabletop that runs in your browser, even on a smartphone. It includes a simple tool for converting VASSAL modules into Pe@sant’s Parcel format, along with a terrain editor for adding the map data that more advanced features need.</p>
+        <p>Pe@sant is designed to make it easier to ask an AI to write JavaScript extensions. The idea is to combine those scripts with terrain data to do things like highlight where a unit can move or automatically resolve combat.</p>
+    </section>
     <p class="site-note" style="margin:0 0 16px;">Note: AI tuning and bug fixing are not finished. The new features are at a playable level for now.<br>You may run into bugs. If you find one, please let us know: <a href="mailto:gbgty203@yahoo.co.jp">gbgty203@yahoo.co.jp</a></p>
     <p class="site-note" style="margin:-8px 0 16px;">About me: I'm a 60-year-old wargamer in Japan. I have no one to play against, so I made this site to play the wargames I miss, at least against an AI. I made it public in case there are other gamers like me somewhere in the world.</p>
 
