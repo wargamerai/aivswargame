@@ -92,6 +92,9 @@
   #recordList { padding:5px 10px; background:#101721; font-size:12px; }
   #recordList summary { cursor:pointer; }
   #game.after-action .play-only { display:none; }
+  #battleResult { flex:none; margin:0; padding:10px 16px; background:#292016; color:#ffe19b;
+    border-block:2px solid #e3a950; text-align:center; font-size:clamp(22px, 4vw, 42px); }
+  .loadout-option { display:flex; align-items:center; gap:8px; margin:12px 0; }
   #postBattle { padding:10px; overflow:auto; }
   #postBattle h2, #postBattle p { margin:0 0 8px; }
   #debriefTable { width:100%; border-collapse:collapse; font-size:12px; }
@@ -128,6 +131,7 @@
   }
 </style>
   <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
+<script defer src="peasant/banner.js" data-peasant-before="#launchForm &gt; h1"></script>
 </head>
 <body>
 <div id="setup">
@@ -135,6 +139,7 @@
     <h1>ガンダム</h1>
     <h2>連邦軍の編成</h2>
     <ul id="startingSquad" aria-label="出撃する機体とパイロット"></ul>
+    <label class="loadout-option"><input id="startDualSabers" type="checkbox"> ビームサーベル二刀流（盾・射撃武器なし）</label>
     <button type="submit" class="main-action">出撃</button>
   </form>
 </div>
@@ -153,6 +158,7 @@
       <button id="downloadBattleImage" type="button" class="main-action" hidden>JPEG保存</button>
       <span id="imageReportStatus" role="status"></span>
     </div>
+    <h2 id="battleResult" role="status" hidden></h2>
     <div id="recordControls" hidden>
       <label>機体 <select id="recordUnit"></select></label>
       <label>イニング <select id="recordInning"></select></label>
@@ -212,6 +218,7 @@
           <button id="fireButton" class="main-action" type="button">射撃</button>
         </div>
         <div class="phase-actions">
+          <button id="equipDualSabers" type="button" hidden>盾・射撃武器を捨てて二刀流</button>
           <button id="skipReaction" type="button" hidden>見送る</button>
           <button id="nextPhase" class="main-action" type="button"></button>
         </div>
@@ -469,7 +476,7 @@ const JABRO_WEAPONS = {
 const JABRO_LOADOUTS = {
   br: ['rifle', 'vulcan', 'saber', 'shield'],
   bz: ['bazooka', 'vulcan', 'saber', 'shield'],
-  s2: ['vulcan', 'saber', 'saber'],
+  s2: ['saber', 'saber'],
   hammer: ['gundamHammer', 'shield'],
   hyper: ['saber', 'hyperHammer'],
 };
@@ -555,7 +562,7 @@ function rollFederationUnits(enemies, enemyTier, loadout, pick) {
   const [gundam] = JABRO_UNITS;
   const opponentStrength = formationStrength(enemies);
   const preferredStrength = opponentStrength * 1.04;
-  const levels = AMURO_CARDS.map((_, index) => index).filter(index =>
+  const levels = AMURO_CARDS.map((_, index) => index).filter(index => index > 0 &&
     amuroCanFight(index, loadout, enemies[0].pilot, enemies[0], enemies[0].weapons));
   const candidates = [];
   for (let i = 0; i < 36; i++) {
@@ -649,7 +656,17 @@ function pilotAbility(unit) {
 const RANGES = [2, 5, 10, 15, 20, 25, 30, Infinity];
 const FEDERATION_DEPLOYMENT_EDGE = 6;
 const MORALE_MODIFIERS = { A: 3, M: 2, W: 1, S: 0 };
+const DICE_TOTALS = Array.from({ length: 11 }, (_, index) => [index + 2, (6 - Math.abs(index - 5)) / 36]);
+const DAMAGE_VALUE = { D: 1, A: .72, M: .32, W: .42, S: .28 };
 const diceTotal = dice => dice.reduce((sum, value) => sum + value, 0);
+
+function diceChance(threshold) {
+  return DICE_TOTALS.reduce((chance, [roll, probability]) => chance + (roll <= threshold ? probability : 0), 0);
+}
+
+function shotDamage(roll, power) {
+  return DAMAGE_TABLE[roll]?.[tableIndex(power, [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, Infinity])] || '-';
+}
 
 function tableIndex(value, bounds) {
   return bounds.findIndex(max => value <= max);
@@ -689,6 +706,7 @@ class JabroBattle {
     this.contacts = [];
     this.units = roster.map(data => activeUnit(data));
     this.player = this.units[0];
+    this.player.dualSabers = loadout === 's2';
     this.enemyCount = enemies.length;
     this.hexes = new Map();
     this.cubes = new Map();
@@ -764,6 +782,7 @@ class JabroBattle {
       }
       u.ap = u.mov;
       u.moved = u.prepared = u.advanced = false;
+      u.fallingBack = false;
       if (u.alive && u.stunned && this.checkMorale(u, 'recover', 0)) {
         u.stunned = false;
         this.emit('recover', { unit: u });
@@ -855,6 +874,46 @@ class JabroBattle {
       (mode === 'defense' || !this.engaged(target)) && this.sight(unit.coord, target.coord) && this.weaponOptions(unit, this.distance(unit.coord, target.coord)).length);
   }
 
+  shotProfile(unit, target, weapon, mode, from = unit.coord, to = target.coord) {
+    const sight = this.sight(from, to);
+    const distance = this.distance(from, to);
+    const power = this.firePower(weapon, distance);
+    if (!sight || !power) return null;
+    const partial = sight === 'partial' || this.map[to].t === '建物';
+    const forest = this.map[to].t === '森';
+    const cover = partial ? 'partial' : forest ? 'forest' : 'clear';
+    const baseHit = HIT_TABLE[cover][tableIndex(distance, [2, 6, 12, 24, 39, Infinity])];
+    const shooter = pilotAbility(unit);
+    const defender = pilotAbility(target);
+    const repeatTarget = unit.previousTarget === target.id ? 2 : 0;
+    const threshold = baseHit + shooter.hit + weapon.hit + target.mobility + defender.evasion + repeatTarget -
+      (mode === 'advance' ? 2 : 0) - (mode === 'defense' ? 1 : 0) - ((target.moved || to !== target.coord) ? 2 : 0);
+    return { threshold, power, missPower: weapon.solid ? Math.floor(power / 2) : 0,
+      damageModifier: target.armor + defender.combat - shooter.combat + Number(forest) + Number(partial) };
+  }
+
+  bestShot(unit, target, mode, from = unit.coord, to = target.coord) {
+    if (!this.canAct(unit) || this.engaged(unit)) return null;
+    const morale = pilotAbility(target).morale;
+    let best = null;
+    for (const id of new Set(unit.weapons)) {
+      const profile = this.shotProfile(unit, target, JABRO_WEAPONS[id], mode, from, to);
+      if (!profile) continue;
+      const hitChance = diceChance(profile.threshold);
+      const damageExpectation = power => power ? DICE_TOTALS.reduce((total, [roll, chance]) => {
+        const damage = shotDamage(Math.max(0, roll + profile.damageModifier), power);
+        const effectChance = Object.hasOwn(MORALE_MODIFIERS, damage)
+          ? 1 - diceChance(morale - MORALE_MODIFIERS[damage]) : 1;
+        return total + chance * effectChance * (DAMAGE_VALUE[damage] ?? 0);
+      }, 0) : 0;
+      const value = hitChance * damageExpectation(profile.power) + (1 - hitChance) * damageExpectation(profile.missPower);
+      if (!best || value > best.value || (value === best.value && hitChance > best.hitChance)) {
+        best = { id, value, hitChance };
+      }
+    }
+    return best;
+  }
+
   fire(unit, target, weaponId, mode) {
     if (!this.targets(unit, mode).includes(target)) return false;
     const distance = this.distance(unit.coord, target.coord);
@@ -864,26 +923,17 @@ class JabroBattle {
     if (mode === 'advance') unit.advanced = true;
     if (mode === 'defense') unit.defended = true;
 
-    const partial = this.sight(unit.coord, target.coord) === 'partial' || this.map[target.coord].t === '建物';
-    const forest = this.map[target.coord].t === '森';
-    const cover = partial ? 'partial' : forest ? 'forest' : 'clear';
-    const baseHit = HIT_TABLE[cover][tableIndex(distance, [2, 6, 12, 24, 39, Infinity])];
     const shooter = pilotAbility(unit);
     const defender = pilotAbility(target);
-    const repeatTarget = unit.previousTarget === target.id ? 2 : 0;
-    const threshold = baseHit + shooter.hit + weapon.hit + target.mobility + defender.evasion + repeatTarget -
-      (mode === 'advance' ? 2 : 0) - (mode === 'defense' ? 1 : 0) - (target.moved ? 2 : 0);
+    const { threshold, power: fullPower, missPower, damageModifier } = this.shotProfile(unit, target, weapon, mode);
     unit.previousTarget = target.id;
     const hitDice = this.rollDice();
     const roll = diceTotal(hitDice);
     const hit = roll <= threshold;
-    const fullPower = this.firePower(weapon, distance);
-    const power = hit ? fullPower : weapon.solid ? Math.floor(fullPower / 2) : 0;
+    const power = hit ? fullPower : missPower;
     const damageDice = power ? this.rollDice() : null;
-    const damageModifier = target.armor + defender.combat - shooter.combat + Number(forest) + Number(partial);
     const damageRoll = damageDice ? Math.max(0, diceTotal(damageDice) + damageModifier) : null;
-    const damage = damageRoll === null ? '-' : DAMAGE_TABLE[damageRoll]?.[tableIndex(power,
-      [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, Infinity])] || '-';
+    const damage = damageRoll === null ? '-' : shotDamage(damageRoll, power);
     this.emit('shot', {
       unit, target, weapon, mode, threshold, roll, hit, hitDice, power, damageRoll, damageDice, damageModifier, damage,
       pilotHit: shooter.hit, pilotEvasion: defender.evasion
@@ -971,9 +1021,18 @@ class JabroBattle {
     return { to, cost };
   }
 
-  moveOption(unit, direction) {
-    if (this.phase !== 'move' || unit.side !== this.side || !unit.alive || unit.stunned ||
-        unit.prepared || unit.noMove || this.engaged(unit)) return null;
+  movementBlock(unit) {
+    if (this.result || !unit.alive) return '対局は終了しました。';
+    if (unit.stunned) return '気絶しているため移動できません。';
+    if (unit.noMove) return '足回りが損傷しているため移動できません。';
+    if (unit.prepared) return '準備射撃を行ったため、この手番は移動できません。';
+    if (this.engaged(unit)) return '敵と接触中です。白兵戦へ進めます。';
+    if (!unit.ap) return '移動力を使い切りました。';
+    return '';
+  }
+
+  moveOption(unit, direction, planning = false) {
+    if ((!planning && this.phase !== 'move') || unit.side !== this.side || this.movementBlock(unit)) return null;
     const move = this.terrainStep(unit.coord, direction);
     if (!move || move.cost > unit.ap || this.units.some(other => other.alive && other.coord === move.to &&
         (other.side === unit.side || this.engaged(other) || unit.noAction))) return null;
@@ -999,34 +1058,31 @@ class JabroBattle {
   }
 
   aiShot(unit, mode, fixedTarget) {
-    const targets = this.targets(unit, mode);
-    const target = fixedTarget || targets.sort((a, b) => this.distance(unit.coord, a.coord) -
-      this.distance(unit.coord, b.coord))[0];
-    if (!target || !targets.includes(target)) return false;
-    const distance = this.distance(unit.coord, target.coord);
-    const options = this.weaponOptions(unit, distance);
-    const weapon = options.reduce((best, id) =>
-      this.firePower(JABRO_WEAPONS[id], distance) > this.firePower(JABRO_WEAPONS[best], distance) ? id : best);
-    return this.fire(unit, target, weapon, mode);
-  }
-
-  prefersFire(unit, target) {
-    return this.closePower(unit) < this.closePower(target) - 2 ||
-      Boolean(unit.mountImage) || unit.name === MAGELLA_TOP.name;
+    const shots = this.targets(unit, mode).filter(target => !fixedTarget || target === fixedTarget)
+      .map(target => ({ target, shot: this.bestShot(unit, target, mode) }))
+      .filter(({ shot }) => shot)
+      .sort((a, b) => b.shot.value - a.shot.value || b.shot.hitChance - a.shot.hitChance);
+    const best = shots[0];
+    return Boolean(best && best.shot.value > 0 && this.fire(unit, best.target, best.shot.id, mode));
   }
 
   aiPrep(unit) {
     if (unit.order && unit.order !== 'hold' && unit.order !== 'onHill') return false;
-    if (unit.side === 'e') {
-      const targets = this.targets(unit, 'prep').sort((a, b) =>
-        this.distance(unit.coord, a.coord) - this.distance(unit.coord, b.coord));
-      const ranged = targets.find(target => this.prefersFire(unit, target));
-      if (ranged) return this.aiShot(unit, 'prep', ranged);
-      const nearby = targets.filter(target => this.distance(unit.coord, target.coord) <= 4);
-      if (!nearby.length || nearby.some(target => this.distance(unit.coord, target.coord) <= 2)) return false;
-      return this.aiShot(unit, 'prep', nearby[0]);
-    }
+    if (!unit.order && this.tacticalDirection(unit, new Set(), true)) return false;
     return this.aiShot(unit, 'prep');
+  }
+
+  canEquipDualSabers() {
+    const player = this.player;
+    return !this.result && !player.dualSabers && this.side === 'f' && this.phase === 'prep' &&
+      this.canAct(player) && !player.prepared && !this.engaged(player);
+  }
+
+  equipDualSabers() {
+    if (!this.canEquipDualSabers()) return false;
+    this.player.dualSabers = true;
+    this.player.weapons = JABRO_LOADOUTS.s2.slice();
+    return true;
   }
 
   routeDirection(unit, visited, isGoal, opponent) {
@@ -1046,6 +1102,54 @@ class JabroBattle {
         bestCost.set(step.to, cost + step.cost);
         queue.push({ coord: step.to, cost: cost + step.cost, first: first ?? direction });
       }
+    }
+    return null;
+  }
+
+  visibleOpponents(unit) {
+    return this.units.filter(other => other.alive && other.side !== unit.side && this.sight(unit.coord, other.coord));
+  }
+
+  tacticalDirection(unit, visited, planning = false) {
+    const opponents = this.visibleOpponents(unit);
+    if (!opponents.length) return null;
+    const position = unit.coord;
+    const attack = (target, from) => this.bestShot(unit, target, 'advance', from)?.value ?? 0;
+    const danger = to => Math.max(...opponents.map(target => this.bestShot(target, unit, 'defense', target.coord, to)?.value ?? 0));
+    const target = opponents.map(other => ({ other, distance: this.distance(position, other.coord),
+      threat: this.bestShot(other, unit, 'prep')?.value ?? 0 }))
+      .sort((a, b) => a.distance - b.distance || b.threat - a.threat)[0].other;
+    const distance = this.distance(position, target.coord);
+    const meleeEdge = this.closePower(unit) - this.closePower(target);
+    const ownShot = this.bestShot(unit, target, 'prep')?.value ?? 0;
+    const currentAttack = attack(target, position);
+    const currentExposure = danger(position);
+    const threat = Math.max(...opponents.map(other => this.bestShot(other, unit, 'prep')?.value ?? 0));
+    const canCharge = !unit.noAction && meleeEdge >= 3 && !unit.mountImage && unit.name !== MAGELLA_TOP.name;
+    const retreat = !canCharge && (threat > ownShot + .09 || (distance <= 2 && meleeEdge < -3));
+    const candidates = Object.keys(JABRO_DIRECTIONS).flatMap(direction => {
+      const move = this.moveOption(unit, direction, planning);
+      if (!move || visited.has(move.to) || (!canCharge && move.to === target.coord)) return [];
+      if (opponents.some(other => other !== target && other.coord === move.to)) return [];
+      const nextDistance = this.distance(move.to, target.coord);
+      const exposure = danger(move.to);
+      if (retreat) {
+        return nextDistance >= distance && exposure <= currentExposure + 1e-9 &&
+          (nextDistance > distance || exposure < currentExposure - .02)
+          ? [{ direction, score: (nextDistance - distance) * .16 - exposure * 1.6 - move.cost * .015 }] : [];
+      }
+      if (canCharge && nextDistance >= distance) return [];
+      const improvement = attack(target, move.to) - currentAttack;
+      if (nextDistance >= distance && improvement < .08) return [];
+      return [{ direction, score: (distance - nextDistance) * (canCharge ? .22 : .09) +
+        improvement - exposure * .8 - move.cost * .015 + (move.to === target.coord ? .9 : 0) }];
+    });
+    const best = candidates.sort((a, b) => b.score - a.score)[0];
+    if (!planning && retreat && best) unit.fallingBack = true;
+    if (best && (retreat || canCharge || best.score > 0)) return best.direction;
+    if (!retreat && canCharge) {
+      const route = this.routeDirection(unit, visited, coord => coord === target.coord, target);
+      if (this.moveOption(unit, route, planning)) return route;
     }
     return null;
   }
@@ -1083,29 +1187,20 @@ class JabroBattle {
       }) ?? null;
     }
     if (JABRO_DIRECTIONS[unit.order]) return this.moveOption(unit, unit.order) ? unit.order : null;
-    const enemies = this.units.filter(other => other.alive && other.side !== unit.side &&
-      this.sight(unit.coord, other.coord)).sort((a, b) => this.distance(unit.coord, a.coord) -
-        this.distance(unit.coord, b.coord));
-    const target = enemies[0];
+    if (this.movementBlock(unit)) return null;
+    if (this.visibleOpponents(unit).length) return this.tacticalDirection(unit, visited);
+    if (unit.fallingBack) return null;
     if (unit.side === 'e') {
-      if (!unit.alive || unit.stunned || unit.prepared || unit.noMove || this.engaged(unit) || !unit.ap) return null;
-      if (!target) return this.patrolDirection(unit, visited);
-      const ranged = this.prefersFire(unit, target);
-      if (ranged && !unit.noAction && this.weaponOptions(unit, this.distance(unit.coord, target.coord)).length) return null;
-      const direction = this.routeDirection(unit, visited,
-        coord => ranged || unit.noAction ? this.distance(coord, target.coord) <= 2 : coord === target.coord,
-        ranged || unit.noAction ? null : target);
-      return this.moveOption(unit, direction) ? direction : null;
+      return this.patrolDirection(unit, visited);
     }
     const from = this.map[unit.coord];
-    if (target && this.weaponOptions(unit, this.distance(unit.coord, target.coord)).length) return null;
     const candidates = Object.keys(JABRO_DIRECTIONS).flatMap(direction => {
       const move = this.moveOption(unit, direction);
       if (!move || visited.has(move.to)) return [];
       const forward = (this.map[move.to].c - from.c) * (unit.side === 'f' ? 1 : -1);
-      if (!target && forward <= 0) return [];
+      if (forward <= 0) return [];
       const towardCenter = Math.abs(from.r - 8) - Math.abs(this.map[move.to].r - 8);
-      const score = target ? -8 * this.distance(move.to, target.coord) : 3 * forward + towardCenter;
+      const score = 3 * forward + towardCenter;
       return [{ direction, score: score - move.cost + this.random() }];
     });
     return candidates.sort((a, b) => b.score - a.score)[0]?.direction ?? null;
@@ -1183,7 +1278,8 @@ const ZOOM_LEVELS = [0.65, 0.8, 1, 1.25, 1.5, 2];
 let zoomIndex = ZOOM_LEVELS.indexOf(1);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 let battle;
-const startingLoadout = Object.keys(JABRO_LOADOUTS)[Math.floor(Math.random() * Object.keys(JABRO_LOADOUTS).length)];
+const standardLoadouts = Object.keys(JABRO_LOADOUTS).filter(name => name !== 's2');
+const startingLoadout = standardLoadouts[Math.floor(Math.random() * standardLoadouts.length)];
 let busy = false;
 let reaction = null;
 let reviewingBattle = false;
@@ -1538,7 +1634,19 @@ function showRolls() {
   const animated = !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   return new Promise(resolve => {
     resolveRolls = resolve;
-    revealRolls(rows, animated);
+    revealRolls(rows, animated).catch(error => {
+      console.error(error);
+      for (const { row, summary } of rows) {
+        row.hidden = summary.hidden = false;
+      }
+      el('weaponLossLabel').hidden = !lostWeaponUnit;
+      if (lostWeaponUnit) {
+        fillOptions(el('weaponLossSelect'), lostWeaponUnit.weapons.map((id, index) => [index, JABRO_WEAPONS[id].name]));
+      }
+      for (const line of pendingRollMessages.splice(0)) addLine(...line);
+      el('rollOkay').disabled = false;
+      el('rollOkay').focus();
+    });
   });
 }
 
@@ -2036,6 +2144,8 @@ function drawRecordRoutes(layer, inning = 'all', kind = 'all', unitId = 'all') {
 
 function beginBattleReview() {
   reviewingBattle = true;
+  el('battleResult').textContent = '対局終了 — ' + battle.result;
+  el('battleResult').hidden = false;
   el('game').classList.add('after-action');
   el('mapTerrain').removeAttribute('clip-path');
   el('recordControls').hidden = el('recordList').hidden = el('postBattle').hidden = false;
@@ -2513,9 +2623,13 @@ function showControls() {
   el('enemyStatus').textContent = visibleEnemies.map(unit => unitLabel(unit) + ' ／ ' + abilityLabel(unit)).join('\n');
   const moving = ownTurn && phase === 'move' && !busy && !result;
   el('movement').hidden = !moving;
+  let hasMove = false;
   for (const button of el('movement').querySelectorAll('[data-dir]')) {
     button.disabled = !moving || !battle.moveOption(player, button.dataset.dir);
+    hasMove ||= !button.disabled;
   }
+  el('equipDualSabers').hidden = busy || !battle.canEquipDualSabers();
+  el('equipDualSabers').disabled = !el('equipDualSabers').hidden && Boolean(reaction);
   el('shotControls').hidden = !targetOptions.length || Boolean(result);
   fillOptions(el('targetSelect'), targetOptions.map(t => [t.id, unitLabel(t)]));
   refreshWeapons();
@@ -2527,7 +2641,8 @@ function showControls() {
   const hints = {
     prep: !hasFirearm ? '射撃兵器はありません。' : player.prepared ? '準備射撃を行いました。この手番は移動できません。' :
       targetOptions.length ? '視認した敵を準備射撃できます。' : '準備射撃できる目標がありません。',
-    move: 'ガンダムを移動できます。僚機への指示は右の無線から送れます。',
+    move: hasMove ? 'ガンダムを移動できます。僚機への指示は右の無線から送れます。' :
+      battle.movementBlock(player) || '残りの移動力で進めるヘクスがありません。前進射撃へ進めます。',
     advance: !hasFirearm ? '射撃兵器はありません。' : targetOptions.length ? '移動後の前進射撃を行えます。' : '前進射撃できる目標がありません。',
     melee: '接触した機体の白兵戦判定が終了しました。',
   };
@@ -2723,6 +2838,17 @@ function squadRadio(message) {
 
 battle = new JabroBattle({ loadout: startingLoadout, report: reportEvent, playerChoosesWeapon: true });
 showStartingSquad();
+el('startDualSabers').addEventListener('change', event => {
+  const dualSabers = event.target.checked;
+  battle.player.dualSabers = dualSabers;
+  battle.player.weapons = JABRO_LOADOUTS[dualSabers ? 's2' : startingLoadout].slice();
+  showStartingSquad();
+});
+el('equipDualSabers').addEventListener('click', () => {
+  if (busy || reaction || !battle.equipDualSabers()) return;
+  addLine('盾と射撃武器を捨てた。ビームサーベル二刀流で行く！', 'アムロ');
+  render();
+});
 el('launchForm').addEventListener('submit', event => {
   event.preventDefault();
   if (el('setup').hidden) return;
