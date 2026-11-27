@@ -133,7 +133,7 @@ body, html {
 .roster-dome { margin-left:12px; }
 .roster-message { color:#ffcc9d; margin:5px 0; }
 </style>
-<link rel="stylesheet" href="pfb-screen.css?v=pitcher-choice">
+<link rel="stylesheet" href="pfb-screen.css?v=fit-action-rows">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
 <script defer src="../peasant/banner.js" data-peasant-before="#game-screen .game-toolbar"></script>
 </head>
@@ -2049,13 +2049,33 @@ function isPlayerChange([text,kind]) {
     return kind==='l-sub' || kind==='l-rare' && text.endsWith('が退場');
 }
 
+function resultFeedAtEnd(feed) {
+    return feed.scrollHeight-feed.clientHeight-feed.scrollTop<20;
+}
+
+function showLatestResultRows(feed) {
+    feed.style.removeProperty('--result-end-space');
+    const height=feed.clientHeight;
+    if (!height) return;
+    const bottom=feed.scrollHeight-height;
+    // Align the first fully visible result with the top of the scroll area.
+    let first=feed.lastElementChild;
+    if (bottom>0 && first && first.offsetTop>=bottom) {
+        while (first.previousElementSibling && first.previousElementSibling.offsetTop>=bottom) {
+            first=first.previousElementSibling;
+        }
+        feed.style.setProperty('--result-end-space',`${first.offsetTop-bottom}px`);
+    }
+    feed.scrollTop=feed.scrollHeight;
+}
+
 function renderLog() {
     const feed=document.getElementById('result-feed');
     const notice=document.getElementById('player-change');
     const pitching=document.getElementById('pitcher-changes');
     const g=gameInst;
-    const scroll=feed.scrollTop || 0;
-    const atEnd=(feed.scrollHeight || 0)-(feed.clientHeight || 0)-scroll<20;
+    const scroll=feed.scrollTop;
+    const atEnd=resultFeedAtEnd(feed);
     const records=(g?.log || []).filter(([,kind])=>!['l-sep','l-status','l-pitch','l-batter'].includes(kind));
     const halfNow=g ? g.inning*2+g.half : 0;
     const changes=records.filter(([,kind,inning,half])=>kind==='l-pitch-down' && inning*2+half===halfNow ||
@@ -2070,12 +2090,14 @@ function renderLog() {
         latest[0]
     ].filter(Boolean).join('　') : '';
     if (notice.textContent!==noticeText) notice.textContent=noticeText;
-    feed.innerHTML=records.map(record=>{
+    const resultMarkup=records.map(record=>{
         const [msg,kind,inning,half,side]=record;
         const team=side===null||side===undefined?'':teamShort(teamAt(g,side));
         return `<li data-kind="${esc(kind)}"${isPlayerChange(record)?' class="player-change-entry"':''}><time>${inning?inning+'回'+(half===0?'表':'裏'):''}</time><span>${team?`<b>${esc(team)} </b>`:''}${esc(msg.trim())}</span></li>`;
     }).join('');
-    feed.scrollTop=atEnd?feed.scrollHeight:scroll;
+    if (feed.innerHTML!==resultMarkup) feed.innerHTML=resultMarkup;
+    if (atEnd) showLatestResultRows(feed);
+    else feed.scrollTop=scroll;
 }
 
 const PINCH_RUN_ACTION=['代走','pinch_run','bs'];
@@ -2086,6 +2108,10 @@ function actionHtml([label,action,cls],enabled=true) {
     if (action.startsWith('chpitch:')) {
         const [name,ratings]=label.split('\n');
         content=`<span class="pitcher-choice-name">${esc(name)}</span> <span class="pitcher-choice-ratings">${esc(ratings)}</span>`;
+    } else if (action.startsWith('prsub:')) {
+        const [name,...ratings]=label.split('\n');
+        content=`<span class="runner-choice-name">${esc(name)}</span> <span class="runner-choice-ratings">${ratings.map(rating=>
+            `<span>${esc(rating)}</span>`).join(' ')}</span>`;
     }
     return `<button type="button" class="ab ${esc(cls)}" data-action="${esc(action)}"${enabled?'':' disabled'}>${content}</button>`;
 }
@@ -2837,7 +2863,7 @@ function showPinchRunnerMenu(g,action,menuBack) {
     if (!match || !bases.includes(Number(match[1]))) return false;
     const base=Number(match[1]);
     const candidates=g.bench.map((row,i)=>[
-        `${displayName(row)}（走${row['走']||'―'}・S1 ${row.S1||'―'}・S2 ${row.S2||'―'}）`,
+        [displayName(row),`走${row['走']||'―'}`,`S1 ${row.S1||'―'}`,`S2 ${row.S2||'―'}`].join('\n'),
         `prsub:${base}:${i}`,'bs'
     ]);
     renderButtons([...candidates,['戻る','pinch_run','bn']],g.batSide,`${base+1}塁の代走を選択`);
@@ -3371,7 +3397,10 @@ function announceActionAreaSize(size,maximum) {
 function resizeActionArea(height) {
     const maximum=actionAreaLimit();
     const size=Math.min(maximum,Math.max(120,Math.round(height)));
+    const feed=document.getElementById('result-feed');
+    const following=resultFeedAtEnd(feed);
     actionArea.style.setProperty('--action-area-height',size+'px');
+    if (following) showLatestResultRows(feed);
     announceActionAreaSize(size,maximum);
 }
 actionSplitter.addEventListener('focus',()=>announceActionAreaSize(

@@ -369,10 +369,19 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     border:1px solid var(--line); border-radius:8px;
 }
 .result-stream h2 { margin:1px 0 3px; font-size:clamp(12px,1.1vw,17px); color:var(--green); }
-#result-feed { overflow:auto; min-height:0; list-style:none; margin:0; scrollbar-gutter:stable; }
-#result-feed li { display:grid; grid-template-columns:3.5em 1fr; gap:5px; padding:3px 1px; border-top:1px solid #ded4b9; font-size:clamp(11px,1.08vw,15px); }
+#result-feed {
+    position:relative; flex:1; overflow:auto; min-height:0;
+    list-style:none; margin:0; scrollbar-gutter:stable;
+}
+#result-feed::after { content:""; display:block; height:var(--result-end-space,0px); }
+#result-feed li {
+    display:grid; grid-template-columns:3.5em minmax(0,1fr); align-items:start;
+    gap:5px; padding:3px 1px; border-top:1px solid #ded4b9;
+    font-size:clamp(11px,1.08vw,15px); line-height:1.35;
+}
+#result-feed li > span { overflow-wrap:anywhere; }
 #result-feed .player-change-entry { background: #fff0bd; color: #513608; font-weight: 750; }
-#result-feed time { color:#435747; font-weight:800; }
+#result-feed time { color:#435747; font-weight:800; white-space:nowrap; }
 #result-feed li[data-kind="l-score"] { color:#7a3908; font-weight:800; }
 .game-action-grid {
     display: grid;
@@ -407,8 +416,19 @@ button:focus-visible, summary:focus-visible, .file-label:focus-within {
     box-shadow: none;
     transform: none;
 }
-.game-action-grid.is-choice { grid-template-columns: repeat(auto-fit,minmax(105px,1fr)); }
-.game-action-grid.is-choice .ab { grid-column: auto; font-size: clamp(11px,1vw,16px); white-space: pre-line; }
+.game-action-grid.is-choice {
+    grid-template-columns:repeat(auto-fit,minmax(min(100%,105px),1fr));
+    grid-auto-rows:max-content;
+    scrollbar-gutter:stable;
+}
+.game-action-grid.is-choice .ab {
+    display:block; grid-column:auto; padding:5px 4px;
+    font-size:clamp(11px,1vw,16px); line-height:1.3; white-space:pre-line;
+}
+.runner-choice-name, .runner-choice-ratings { display:block; }
+.runner-choice-name { font-size:max(13px,1em); }
+.runner-choice-ratings { font-size:max(11px,.88em); color:#eef5e9; }
+.runner-choice-ratings > span { display:inline-block; white-space:nowrap; }
 .game-action-grid.is-pitcher-choice {
     grid-template-columns: repeat(auto-fit,minmax(min(100%, 10rem),1fr));
     grid-auto-rows: max-content;
