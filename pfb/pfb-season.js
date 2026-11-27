@@ -219,12 +219,22 @@ const PFBSeason = (() => {
             (!isPitcher(row) || readyPitcher(season,row,day));
     }
 
+    let defaultAnonymousCards;
     function anonymous(data,team,role,number) {
         const ids = {P:[501,502],C:[503,504],IF:[505,506],OF:[507,508]};
-        const source = data.find(row => Number(row.Index) === ids[role][number%2]);
+        const template = ids[role][number%2];
+        let source = data.find(row => Number(row.Index) === template);
+        if (!source) {
+            defaultAnonymousCards ??= parseCSV(new TextDecoder('shift-jis').decode(
+                Uint8Array.from(atob(PFB_DEFAULT_CSV_BASE64), value=>value.charCodeAt(0))))
+                .filter(row=>Number(row.Index)>=501&&Number(row.Index)<=508);
+            source=defaultAnonymousCards.find(row=>Number(row.Index)===template);
+        }
         const id=`${team}/${role}/${number+1}`;
         const row={...source,Index:id,'チーム':team,_anonymous:'1',_seasonId:id};
-        row['氏名'] = `無名${{P:'投手',C:'捕手',IF:'内野手',OF:'外野手'}[role]}${number+1}`;
+        const order = role === 'P' ? number : number * 3 + {C:0,IF:1,OF:2}[role];
+        const name = ['一郎','次郎','三郎','四郎','五郎','六郎','七郎','八郎','九郎','十郎','十一郎','十二郎'][order] || `${order+1}郎`;
+        row['氏名'] = (role === 'P' ? '球' : '無名') + name;
         if (role === 'OF' && ![1,2,3,4,5,6,7].some(i => row[DEF_COL(i)]?.startsWith('OF='))) {
             row[DEF_COL(2)] = 'OF=2';
         }
@@ -250,21 +260,31 @@ const PFBSeason = (() => {
             positions:Object.fromEntries(Object.entries(positions).map(([pos,row])=>[pos,idOf(row)]))};
     }
 
-    function namedRoster(season,data,team,day,scheduledGame=null) {
+    function namedRoster(season,data,team,day,scheduledGame=null,forSchedule=false) {
         const restingStarter=yesterdayStarter(season,team,day);
-        const pool=data.filter(row=>real(row)&&row['チーム']===team&&idOf(row)!==restingStarter&&available(season,row,day))
+        const registered=scheduledGame?.starter;
+        const reserved=new Set(scheduledGame&&!forSchedule ? season.fixtures
+            .filter(game=>game.day>=day&&game.id!==scheduledGame.id&&!game.result&&!game.cancelled&&!game.skipped&&
+                (game.away===team||game.home===team))
+            .map(game=>game.starter).filter(id=>id&&id!==registered) : []);
+        const regular=data.filter(row=>real(row)&&row['チーム']===team&&idOf(row)!==restingStarter&&
+                !reserved.has(idOf(row))&&available(season,row,day))
             .sort((a,b)=>Number(b['試合数'])-Number(a['試合数']));
-        const bats=pool.filter(row=>!isPitcher(row));
-        const pits=pool.filter(isPitcher);
-        const starterCandidates=pits.filter(row=>{
+        const replacements=Object.entries({C:2,IF:4,OF:3,P:2}).flatMap(([role,count])=>
+            Array.from({length:count},(_,number)=>anonymous(data,team,role,number)))
+            .filter(row=>idOf(row)!==restingStarter&&!reserved.has(idOf(row))&&available(season,row,day));
+        const pool=[...regular,...replacements];
+        const bats=regular.filter(row=>!isPitcher(row));
+        const pits=regular.filter(isPitcher);
+        const replacementBats=replacements.filter(row=>!isPitcher(row));
+        const starterCandidates=pool.filter(isPitcher).filter(row=>{
             const form=readyPitcher(season,row,day);
             return starterStamina(row)&&form.previousInnings===0&&form.adjust>=0&&form.penalty===0;
         });
-        const registered=scheduledGame?.starter;
         const listed=starterCandidates.find(row=>idOf(row)===registered);
         const starter=registered ? listed||null : starterCandidates[0]||null;
         const starterUnavailable=Boolean(registered&&!listed);
-        const registeredName=data.find(row=>row['チーム']===team&&idOf(row)===registered);
+        const registeredName=[...data,...replacements].find(row=>row['チーム']===team&&idOf(row)===registered);
         const previous=team===season.team ? season.lastRoster : null;
         const byId=new Map(pool.map(row=>[idOf(row),row]));
         const warnings=[];
@@ -273,8 +293,7 @@ const PFBSeason = (() => {
             warnings.push(`予定先発の${name}は登板できません。先発を選び直してください。`);
         }
         if (!starterCandidates.length) warnings.push('登板可能な先発投手がいません。');
-        if (bats.length<9) warnings.push(`出場可能な野手は${bats.length}人です。打順には9人必要です。`);
-        if (team===season.team&&pool.length<25) warnings.push(`ベンチ入りできる選手は${pool.length}人です。25人必要です。`);
+        if (bats.length+replacementBats.length<9) warnings.push('打順に入れる野手が9人いません。');
 
         let lineup,positions,selected;
         if (previous) {
@@ -287,24 +306,23 @@ const PFBSeason = (() => {
             if (missing.length) warnings.push(`前回の打順の${missing.join('・')}番に出場できない選手がいます。空欄の野手を選び直してください。`);
             positions=Object.fromEntries(Object.entries(previous.positions||{})
                 .map(([pos,id])=>[pos,byId.get(id)]).filter(([,row])=>row&&lineup.includes(row)));
-            selected=[...new Set([...previous.selected.map(id=>byId.get(id)),starter].filter(Boolean))];
-            if (selected.length!==25 && pool.length>=25) {
-                warnings.push(`前回の編成から引き継いだベンチは${selected.length}人です。25人に調整してください。`);
-            }
+            selected=[...new Set([starter,...lineup,...previous.selected.map(id=>byId.get(id))].filter(Boolean))].slice(0,25);
         } else {
             positions=assignFieldPositions(bats,{}, {allowUnqualified:false});
+            positions=assignFieldPositions([...bats,...replacementBats],positions,{allowUnqualified:false});
             const vacant=FIELD_POSITIONS.filter(pos=>!positions[pos]);
-            if (bats.length>=9&&vacant.length) warnings.push(`守備に入れる野手が足りません（${vacant.map(pos=>FNAME[pos]).join('・')}）。`);
+            if (vacant.length) warnings.push(`守備に入れる野手が足りません（${vacant.map(pos=>FNAME[pos]).join('・')}）。`);
             const fielders=Object.values(positions);
-            const dh=bats.find(row=>!fielders.includes(row));
-            lineup=bats.filter(row=>fielders.includes(row)||row===dh);
+            const lineupPool=[...bats,...replacementBats];
+            const dh=lineupPool.find(row=>!fielders.includes(row));
+            lineup=lineupPool.filter(row=>fielders.includes(row)||row===dh);
             const reserves=bats.filter(row=>!lineup.includes(row)).slice(0,14-lineup.length);
             selected=[...lineup,...reserves,starter,...pits.filter(row=>row!==starter)].filter(Boolean).slice(0,25);
             selected.push(...bats.filter(row=>!selected.includes(row)).slice(0,25-selected.length));
         }
         const profile=PROFILES[season.clubs[leagueOf(team)].indexOf(team)%PROFILES.length];
         return {pool,selected,lineup,positions,starter,starterCandidates,profile,starterUnavailable,warnings,
-            registeredName:registeredName?displayName(registeredName):'',fixedStarter:Boolean(scheduledGame&&starter),restored:Boolean(previous)};
+            registeredName:registeredName?displayName(registeredName):'',fixedStarter:Boolean(listed),restored:Boolean(previous)};
     }
 
     // Unattended fixtures between other clubs use the league's existing replacement players.
@@ -350,7 +368,7 @@ const PFBSeason = (() => {
             : roster(season,data,team,game.day));
         if (ownGame&&!rosters) {
             const plan=selected[teams.indexOf(season.team)];
-            if (plan.warnings.length||plan.selected.length!==25) {
+            if (plan.warnings.length||plan.selected.length>25) {
                 throw new Error([...plan.warnings, '「次の試合へ」で選手を確認し、編成してください。'].join(' '));
             }
         }

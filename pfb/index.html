@@ -2433,7 +2433,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     list.replaceChildren();
     message.textContent = '';
     const groups=new Map([...ROSTER_FIELD_GROUPS,...ROSTER_PITCH_GROUPS].map(([key])=>[key,[]]));
-    const entries=rows.map(row=>{
+    const entries=rows.filter(row=>!fixedStarter||row!==preset.starter).map(row=>{
         const pitcher=isPitcher(row);
         const stats=pitcher ? extractPitcherStats(row) : null;
         const defense=pitcher ? null : rosterDefense(row);
@@ -2449,7 +2449,6 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         record.className='roster-record';
         check.type = 'checkbox';
         check.checked = preset.selected.includes(row);
-        check.disabled = fixedStarter && row===preset.starter;
         name.textContent=displayName(row);
         check.setAttribute('aria-label',name.textContent+'をベンチ入り');
         card.textContent=pitcher ? `${handedness(row,false) || '—'}　G${stats.G ?? '—'}　S${stats.S ?? '—'}` :
@@ -2512,9 +2511,13 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
     const domeInput=dialog.querySelector('.roster-dome input');
     dialog.querySelector('.roster-dome').hidden=Boolean(seasonRoster)||!setup.versusAI&&side===0;
     domeInput.checked=setup.dome;
-    const chosenRows=()=>entries.filter(({check})=>check.checked).map(({row})=>row);
+    const chosenRows=()=>[
+        ...(fixedStarter ? [preset.starter] : []),
+        ...entries.filter(({check})=>check.checked).map(({row})=>row)
+    ];
     function refreshBench() {
-        dialog.querySelector('.roster-count').textContent=`ベンチ入り ${chosenRows().length}／25人`;
+        dialog.querySelector('.roster-count').textContent=`登録 ${chosenRows().length}／上限25人`+
+            (fixedStarter ? `（先発予定：${displayName(preset.starter)}）` : '');
         filterRows();
     }
     const boardPositions=['LF','CF','RF','SS','2B','3B','P','1B','C','DH'];
@@ -2689,7 +2692,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         benchStage.hidden=showBoard;
         boardStage.hidden=!showBoard;
         cancelButton.textContent=showBoard ? 'ベンチ選択に戻る' : 'チーム選択へ戻る';
-        nextButton.textContent=showBoard ? gameButton : '25人を確定して打順・守備へ';
+        nextButton.textContent=showBoard ? gameButton : '登録を確定して打順・守備へ';
         if (!showBoard) warning.hidden=!warning.textContent;
         message.textContent='';
     }
@@ -2717,7 +2720,7 @@ function openRosterSetup(side=setup.humanSide,seasonRoster=null,onConfirm=null,o
         if (!boardOpen) {
             const checked=chosenRows();
             const errors=[];
-            if (checked.length!==25) errors.push(`ベンチ入りは25人必要です（現在${checked.length}人）。`);
+            if (checked.length>25) errors.push(`登録は25人までです（現在${checked.length}人）。`);
             if (checked.filter(row=>!isPitcher(row)).length<9) errors.push('野手を9人以上選んでください。');
             if (!checked.some(row=>starterCandidates.has(row))) errors.push('登板可能でスタミナ4以上の投手をベンチ入りさせてください。');
             if (errors.length) {message.textContent=errors.join('\n');return;}
@@ -3450,8 +3453,8 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 <script src="../report-image.js?v=jp-jpeg"></script>
 <script src="pfb-results.js?v=report-png"></script>
 <script src="pfb-match.js?v=fielding-review"></script>
-<script src="pfb-season.js?v=roster-warning"></script>
-<script src="pfb-season-ui.js?v=roster-warning"></script>
+<script src="pfb-season.js?v=bench-registration"></script>
+<script src="pfb-season-ui.js?v=bench-registration"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
 <script src="pfb-online-core.js?v=fielding-review"></script>

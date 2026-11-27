@@ -132,7 +132,7 @@ const PFBSeasonUI=(()=>{
     function starterSelect(fixture){
         if(busy || ![fixture.away,fixture.home].includes(season.team) ||
             fixture.result || fixture.cancelled || fixture.skipped || fixture.id===season.active) return '';
-        const {starterCandidates,starterUnavailable,registeredName}=PFBSeason.namedRoster(season,data,season.team,fixture.day,fixture);
+        const {starterCandidates,starterUnavailable,registeredName}=PFBSeason.namedRoster(season,data,season.team,fixture.day,fixture,true);
         const label=registeredName||'登録投手';
         const missing=starterUnavailable ? `<option selected disabled>${esc(label)}（登板不可）</option>` : '';
         const options=starterCandidates.map(row=>{
