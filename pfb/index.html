@@ -269,6 +269,8 @@ let diceRandom=()=>Math.random();
 const rnd=(lo,hi)=>Math.floor(diceRandom()*(hi-lo+1))+lo;
 const d10 = () => rnd(1, 10);
 const d100 = () => rnd(1, 100);
+const PFB_BALANCE_VERSION = 2;
+const RUNNING_SUCCESS_BONUS = 10;
 
 function getVal(s, idx) {
     if (!s || String(s).trim() === '' || s === 'nan') return -1;
@@ -498,22 +500,26 @@ function extraAdvanceModifier(speed, ofDef, outs, leftToThird, tagUp) {
         (outs === 2 && !tagUp ? -2 : 0) + (leftToThird ? 4 : 0);
 }
 
-function extraAdvanceOutcome(total) {
-    return total <= 3 ? 'safe' : total <= 6 ? 'hold' : 'out';
+function extraAdvanceOutcome(roll, modifier, adjustedBalance = true) {
+    const total=roll+modifier;
+    // 通常のセーフに続く最初の出目をセーフにする。
+    const bonusRoll=Math.max(1,4-modifier);
+    if (total<=3 || adjustedBalance && roll===bonusRoll) return 'safe';
+    return total<=6 ? 'hold' : 'out';
 }
 
-function extraAdvanceOdds(modifier) {
+function extraAdvanceOdds(modifier, adjustedBalance = true) {
     const odds={safe:0,hold:0,out:0};
-    for (let roll=1;roll<=10;roll++) odds[extraAdvanceOutcome(roll+modifier)]+=10;
+    for (let roll=1;roll<=10;roll++) odds[extraAdvanceOutcome(roll,modifier,adjustedBalance)]+=10;
     return `セーフ ${odds.safe}%・進塁できず ${odds.hold}%・アウト ${odds.out}%`;
 }
 
-function table2_boso(speed, ofDef, outs, leftToThird, tagUp) {
+function table2_boso(speed, ofDef, outs, leftToThird, tagUp, adjustedBalance = true) {
     const modifier=extraAdvanceModifier(speed,ofDef,outs,leftToThird,tagUp);
     const roll=d10();
     const total=roll+modifier;
     return {
-        result:extraAdvanceOutcome(total),
+        result:extraAdvanceOutcome(roll,modifier,adjustedBalance),
         extra:total > 1 && total <= 3 || total > 6 && total <= 10,
         total,roll,modifier
     };
@@ -764,9 +770,11 @@ function rarePlayLabel(play) {
     }[play.type];
 }
 
-function injuryDays(player) {
+function injuryDays(player, adjustedBalance = true) {
     const column = 'SABCDE'.indexOf(player['ﾀﾌﾈｽ']);
-    const roll = d100();
+    // 1〜100には従来の負傷表を適用し、101〜200は続行。乱数は1回だけ使う。
+    const roll = rnd(1, adjustedBalance ? 200 : 100);
+    if (roll > 100) return null;
     const row = [2,5,20,40,60,80,95,98,100].findIndex(limit => roll <= limit);
     return [
         [null,null,null,null,0,0], [null,null,0,1,3,4], [null,null,2,4,6,8],
@@ -860,22 +868,40 @@ function stealThreshold(attempts,pitcher,cautious) {
 
 function stealProbabilities(attempts,target,pitcher,catcherT,options) {
     const threshold=stealThreshold(attempts,pitcher,options.cautious);
-    const successValue=stealSuccessValue(target,catcherT,options);
-    const start=options.forced ? 100 : rollChance(threshold,10);
-    const afterStart=rollChance(successValue,100);
-    return {threshold,successValue,start,afterStart,success:start*afterStart/100};
+    const startFaces=options.forced ? 10 : rollChance(threshold,10)/10;
+    const successFaces=rollChance(stealSuccessValue(target,catcherT,options),100);
+    const bonus=options.adjustedBalance===false ? 0 : RUNNING_SUCCESS_BONUS*10;
+    // D10 × D100 の1,000通りのうち、成功する組み合わせを最大100通り増やす。
+    const successes=Math.min(1000,startFaces*successFaces+bonus);
+    const normalStartSuccesses=Math.min(successes,startFaces*100);
+    const bonusStarts=successes-normalStartSuccesses;
+    const allStarts=startFaces*100+bonusStarts;
+    return {
+        startFaces,normalStartSuccesses,bonusStarts,
+        start:allStarts/10,afterStart:allStarts ? successes*100/allStarts : 0,success:successes/10
+    };
 }
 
 function resolveSteal(attempts, pitcher, catcherT, options = {}) {
     const {forced=false,target=attempts[0]}=options;
     const odds=stealProbabilities(attempts,target,pitcher,catcherT,options);
-    const startRoll=forced ? null : d10();
-    if (!forced && startRoll > odds.threshold) {
-        return {started:false,text:`${playerName(target.runner)}：盗塁のスタートを切れず（出目 ${startRoll}／スタート値 ${odds.threshold}、スタート ${odds.start}%）`};
-    }
-    const roll = d100();
-    const success = roll <= odds.successValue;
-    return {started:true,success,text:`${playerName(target.runner)}が${success ? '盗塁成功' : '盗塁失敗'}（出目 ${roll}／成功値 ${odds.successValue}、スタート後の成功率 ${odds.afterStart}%）`};
+    const startRoll=forced ? 1 : d10();
+    const normalStart=startRoll<=odds.startFaces;
+    // 通常のスタートだけでは上乗せしきれない分は、成功するスタートに回す。
+    const bonusLimit=odds.bonusStarts-(startRoll-odds.startFaces-1)*100;
+    const noStart=(detail='')=>({started:false,text:
+        `${playerName(target.runner)}：盗塁のスタートを切れず（出目 ${startRoll}${detail}、スタート ${odds.start}%）`});
+    if (!normalStart && bonusLimit<=0) return noStart();
+
+    const roll=d100();
+    if (!normalStart && roll>bonusLimit) return noStart(`／追加判定 ${roll}`);
+    const successValue=normalStart
+        ? Math.floor(odds.normalStartSuccesses/odds.startFaces)+
+            Number(startRoll<=odds.normalStartSuccesses%odds.startFaces)
+        : bonusLimit;
+    const success=roll<=successValue;
+    const afterStart=Number(odds.afterStart.toFixed(1));
+    return {started:true,success,text:`${playerName(target.runner)}が${success ? '盗塁成功' : '盗塁失敗'}（出目 ${roll}／成功値 ${successValue}、スタート後の成功率 ${afterStart}%）`};
 }
 
 // ============================================================
@@ -1043,6 +1069,7 @@ class Game {
     constructor(playerTeam, allPlayers, fixedOpp, selectedRosters, dome = false) {
         this.playerTeam = playerTeam;
         this.dome = dome;
+        this.adjustedBalance = true;
         const playerRows = allPlayers.filter(r=>r['チーム']===playerTeam);
         if (fixedOpp) {
             this.oppTeam = fixedOpp;
@@ -1280,7 +1307,8 @@ class Game {
         for (let mask = 1; mask < (1 << eligible.length); mask++) {
             const moves = eligible.filter((_,index) => mask & (1 << index));
             if (moves.some(([,to]) => to < 3 && this.bases[to] && !moves.some(([from]) => from === to))) continue;
-            const odds=moves.map(move=>extraAdvanceOdds(extraAdvanceModifier(...this.extraAdvanceCheck(move,direction,tagUp))));
+            const odds=moves.map(move=>extraAdvanceOdds(
+                extraAdvanceModifier(...this.extraAdvanceCheck(move,direction,tagUp)),this.adjustedBalance));
             const label=moves.map(([from,to],index)=>
                 `${from+1}塁走者→${to===3?'本塁':to+1+'塁'}（${odds[index]}）`).join('\n');
             choices.push([label, () => {
@@ -1300,9 +1328,9 @@ class Game {
         let result = {result:'safe',extra:false};
         if (target >= 0) {
             const [from,to] = moves[target];
-            result=table2_boso(...this.extraAdvanceCheck(moves[target],direction,tagUp));
+            result=table2_boso(...this.extraAdvanceCheck(moves[target],direction,tagUp),this.adjustedBalance);
             const label = {safe:'セーフ',hold:'進塁できず',out:'アウト'}[result.result];
-            this.logAdd(`${playerName(old[from])}：${to===3?'本塁':to+1+'塁'}への進塁は${label}（出目 ${result.roll}、補正後 ${result.total}／${extraAdvanceOdds(result.modifier)}）`,'l-running');
+            this.logAdd(`${playerName(old[from])}：${to===3?'本塁':to+1+'塁'}への進塁は${label}（出目 ${result.roll}、補正後 ${result.total}／${extraAdvanceOdds(result.modifier,this.adjustedBalance)}）`,'l-running');
         } else {
             this.logAdd('送球なし、選んだ走者が進塁','l-running');
         }
@@ -1523,7 +1551,7 @@ class Game {
             const [player,side] = participant(role);
             if (!player) return;
             if (play.days && this.longInjuries?.[String(player.Index)]) return;
-            const days=play.days ?? injuryDays(player);
+            const days=play.days ?? injuryDays(player,this.adjustedBalance);
             if (days!==null) this.removePlayer(player,side,`負傷・${days}日`,{kind:'injury',days,long:Boolean(play.days)});
             else this.logAdd(`${playerName(player)}はプレー続行`,'l-rare');
         };
@@ -1616,7 +1644,10 @@ class Game {
         if (play.eject) this.removePlayer(...participant(play.eject),play.eject==='P'?'危険球':'退場処分',{kind:'eject',days:play.suspension||0});
     }
     stealConditions(options) {
-        return {cautious:this.isCautious,corners:Boolean(this.bases[0]&&!this.bases[1]&&this.bases[2]),...options};
+        return {
+            cautious:this.isCautious,corners:Boolean(this.bases[0]&&!this.bases[1]&&this.bases[2]),
+            adjustedBalance:this.adjustedBalance,...options
+        };
     }
     stealLabel(group,options={}) {
         const conditions=this.stealConditions(options);
@@ -1625,8 +1656,10 @@ class Game {
             label:target.from===2?'本盗':`${target.from+2}盗`,
             ...stealProbabilities(group,target,this.pitcher,catcherT,conditions)
         }));
-        const success=targets.map(({label,success})=>`${label} ${Number(success.toFixed(1))}%`).join('・');
-        return `成功 ${success}${options.forced?'':`（スタート ${targets[0].start}%）`}`;
+        const sameStart=targets.every(item=>item.start===targets[0].start);
+        const success=targets.map(({label,success,start})=>
+            `${label} ${Number(success.toFixed(1))}%${sameStart?'':`（スタート ${start}%）`}`).join('・');
+        return `成功 ${success}${options.forced || !sameStart?'':`（スタート ${targets[0].start}%）`}`;
     }
     canBunt(isSqueeze) {
         if (this.outs >= 2 || this.stealAttempted || this.buntStrength(isSqueeze) <= 0) return false;
@@ -1750,7 +1783,7 @@ class Game {
         else this.choose('守備側は盗塁の送球先を選択', attempts.map(target => {
             const {afterStart}=stealProbabilities(attempts,target,this.pitcher,catcherT,conditions);
             const base=target.from===2?'本塁':`${target.from+2}塁`;
-            return [`${base}（スタート後の阻止 ${100-afterStart}%）`,()=>complete(target)];
+            return [`${base}（スタート後の阻止 ${Number((100-afterStart).toFixed(1))}%）`,()=>complete(target)];
         }),attempts.length-1,this.defSide);
     }
     processAtBat(action, isForward = this.isForward, isEndRun = false) {
@@ -3492,7 +3525,7 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 <script src="pfb-season-ui.js?v=bench-registration"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
-<script src="pfb-online-core.js?v=roster-csv-26"></script>
+<script src="pfb-online-core.js?v=balance-v2"></script>
 <script src="pfb-online.js?v=pinch-runner"></script>
 <script src="pfb-coach.js?v=coach-dialogue"></script>
 <script src="pfb-default-roster.js?v=26"></script>

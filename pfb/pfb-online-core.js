@@ -10,6 +10,10 @@ const PFBOnlineCore=(()=>{
         }
         return (hash>>>0).toString(36);
     }
+    function matchChecksum(rows,balanceVersion){
+        const roster=fingerprint(rows);
+        return balanceVersion===1 ? roster : `balance-${balanceVersion}:${roster}`;
+    }
     function scopedRandom(room,fn){
         const old=diceRandom;
         diceRandom=()=>{room.rng=(Math.imul(room.rng,1664525)+1013904223)>>>0;return room.rng/4294967296};
@@ -24,14 +28,16 @@ const PFBOnlineCore=(()=>{
         game.beginPitchingInning();
         game.state='defense';
     }
-    function create(teams,rows,images,seed,forcedSubs=true,fieldingReview=true){
+    function create(teams,rows,images,seed,forcedSubs=true,fieldingReview=true,balanceVersion=PFB_BALANCE_VERSION){
         if(!teams||teams.away===teams.home||![teams.away,teams.home].every(team=>rows.filter(row=>row['チーム']===team).length>=25)){
             throw new Error('対戦する球団を選んでください。');
         }
-        const room={teams,checksum:fingerprint(rows),seed:seed>>>0,rng:seed>>>0,actions:[],game:null};
+        const room={teams,balanceVersion,checksum:matchChecksum(rows,balanceVersion),
+            seed:seed>>>0,rng:seed>>>0,actions:[],game:null};
         room.game=scopedRandom(room,()=>{
             const game=new Game(teams.away,rows,teams.home,undefined,PFBSeason.DOMES.has(onwardTeam(teams.home)));
             game.onlineMatch=true;
+            game.adjustedBalance=balanceVersion>=2;
             game.onlineFieldingReview=fieldingReview;
             game.manualForcedSubs=forcedSubs;
             game.logAdd(`オンライン対戦　${teamShort(teams.away)} 対 ${teamShort(teams.home)}`,'l-inning');
@@ -140,13 +146,15 @@ const PFBOnlineCore=(()=>{
         return accepted;
     }
     function pack(room){
-        return JSON.stringify({teams:room.teams,seed:room.seed,checksum:room.checksum,
+        return JSON.stringify({teams:room.teams,seed:room.seed,checksum:room.checksum,balanceVersion:room.balanceVersion,
             forcedSubs:room.game.manualForcedSubs,fieldingReview:room.game.onlineFieldingReview,actions:room.actions});
     }
     function unpack(teams,rows,images,value){
         const parsed=JSON.parse(value);
-        if(parsed.checksum!==fingerprint(rows))throw new Error('作成者と同じ選手データCSVを読み込んでください。');
-        const room=create(parsed.teams,rows,null,parsed.seed,parsed.forcedSubs===true,parsed.fieldingReview===true);
+        const version=parsed.balanceVersion ?? 1;
+        if (version!==1 && version!==PFB_BALANCE_VERSION) throw new Error('最新のページを開いて対戦に参加してください。');
+        if(parsed.checksum!==matchChecksum(rows,version))throw new Error('作成者と同じ選手データCSVを読み込んでください。');
+        const room=create(parsed.teams,rows,null,parsed.seed,parsed.forcedSubs===true,parsed.fieldingReview===true,version);
         for(const {seat,action} of parsed.actions){
             if(!perform(room,room.teams,seat,'play',[action]))throw new Error('対戦の操作履歴を読み込めません。');
         }
