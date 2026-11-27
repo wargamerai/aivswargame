@@ -145,7 +145,7 @@ const PFBOnlineCore=(()=>{
     }
     function unpack(teams,rows,images,value){
         const parsed=JSON.parse(value);
-        if(parsed.checksum!==fingerprint(rows))throw new Error('作成者と同じ Data_25.csv を読み込んでください。');
+        if(parsed.checksum!==fingerprint(rows))throw new Error('作成者と同じ選手データCSVを読み込んでください。');
         const room=create(parsed.teams,rows,null,parsed.seed,parsed.forcedSubs===true,parsed.fieldingReview===true);
         for(const {seat,action} of parsed.actions){
             if(!perform(room,room.teams,seat,'play',[action]))throw new Error('対戦の操作履歴を読み込めません。');

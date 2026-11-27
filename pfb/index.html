@@ -141,7 +141,7 @@ body, html {
 <div id="load-screen">
   <h1>⚾ PFB Professional Baseball 2026</h1>
   <p id="csv-load-status" role="status">選手データを読み込んでいます…</p>
-  <label class="file-label" id="csv-fallback" for="file-input" hidden>📂 Data_25.csv を開く</label>
+  <label class="file-label" id="csv-fallback" for="file-input" hidden>📂 選手データCSVを開く</label>
   <input type="file" id="file-input" accept=".csv">
   <button type="button" class="file-label load-tool" onclick="openSaveFile()">ロード</button>
   <button type="button" class="file-label load-tool" id="resume-season" onclick="PFBSeasonUI.load(PFBSeasonUI.stored())" hidden>前回のペナントを続ける</button>
@@ -303,8 +303,11 @@ function parseCSV(text) {
     for (let i = 1; i < lines.length; i++) {
         const vals = lines[i].split(',');
         const obj = {};
-        headers.forEach((h, j) => { obj[h] = (vals[j] || '').trim(); });
-        if (obj['氏名']) rows.push(obj);
+        headers.forEach((h, j) => { if (h) obj[h] = (vals[j] || '').trim(); });
+        if (!obj['氏名']) continue;
+        // Data_26.csv lists appearances in 個人DATA instead of a separate column.
+        obj['試合数'] ||= obj['個人DATA']?.normalize('NFKC').match(/(\d+)\s*試/)?.[1] || '';
+        rows.push(obj);
     }
     return rows;
 }
@@ -2346,6 +2349,7 @@ function showTeamSelect() {
     updateUI();
     const choices=[['セ・リーグ','league:CL','bp'],['パ・リーグ','league:PL','bp']];
     if (PFBSeasonUI.stored()) choices.push(['前回のペナントを続ける','continue_season','bs']);
+    choices.push(['選手データCSVを開く','pick_roster','bn']);
     renderButtons(choices);
 }
 function onwardTeam(team) {
@@ -3395,7 +3399,7 @@ actionSplitter.addEventListener('keydown',event=>{
 // ============================================================
 let playerLoadRequest=0;
 
-function loadPlayerData(bytes) {
+function loadPlayerData(bytes,filename) {
     let text;
     try { text=new TextDecoder('utf-8',{fatal:true}).decode(bytes); }
     catch { text=new TextDecoder('shift-jis').decode(bytes); }
@@ -3406,10 +3410,11 @@ function loadPlayerData(bytes) {
     players=roster;
     showGameScreen();
     showTeamSelect();
+    if (filename) document.getElementById('game-log').textContent=`${filename} を読み込みました。担当球団のリーグを選択してください。`;
 }
 
 function promptForCsv() {
-    document.getElementById('csv-load-status').textContent='Data_25.csv を選択してゲームを開始';
+    document.getElementById('csv-load-status').textContent='選手データCSVを選択してゲームを開始';
     document.getElementById('csv-fallback').hidden=false;
 }
 
@@ -3420,7 +3425,7 @@ async function loadDefaultRoster() {
         if (location.protocol==='file:') {
             bytes=Uint8Array.from(atob(PFB_DEFAULT_CSV_BASE64),value=>value.charCodeAt(0));
         } else {
-            const response=await fetch('Data_25.csv');
+            const response=await fetch('Data_26.csv');
             if (!response.ok) throw new Error('選手データがありません。');
             bytes=await response.arrayBuffer();
         }
@@ -3441,7 +3446,7 @@ document.getElementById('file-input').addEventListener('change', function(e) {
     };
     reader.onload = function(ev) {
         if (request!==playerLoadRequest) return;
-        try { loadPlayerData(ev.target.result); }
+        try { loadPlayerData(ev.target.result,file.name); }
         catch { failed(); }
     };
     reader.onerror=failed;
@@ -3453,14 +3458,14 @@ document.getElementById('file-input').addEventListener('change', function(e) {
 <script src="../report-image.js?v=jp-jpeg"></script>
 <script src="pfb-results.js?v=report-png"></script>
 <script src="pfb-match.js?v=fielding-review"></script>
-<script src="pfb-season.js?v=bench-registration"></script>
+<script src="pfb-season.js?v=roster-csv-26"></script>
 <script src="pfb-season-ui.js?v=bench-registration"></script>
 <script src="pfb-online-config.js"></script>
 <script src="pfb-room.js"></script>
-<script src="pfb-online-core.js?v=fielding-review"></script>
+<script src="pfb-online-core.js?v=roster-csv-26"></script>
 <script src="pfb-online.js?v=pinch-runner"></script>
 <script src="pfb-coach.js?v=coach-dialogue"></script>
-<script src="pfb-default-roster.js"></script>
+<script src="pfb-default-roster.js?v=26"></script>
 <script>void loadDefaultRoster();</script>
 </body>
 </html>

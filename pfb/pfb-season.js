@@ -66,7 +66,7 @@ const PFBSeason = (() => {
     function create(data,league,team) {
         const clubs = {CL:teamsIn(data,'CL'),PL:teamsIn(data,'PL')};
         if (clubs.CL.length !== 6 || clubs.PL.length !== 6 || !clubs[league]?.includes(team)) {
-            throw new Error('12球団がそろった Data_25.csv を読み込んでください。');
+            throw new Error('12球団がそろった選手データCSVを読み込んでください。');
         }
         const days = [...leagueCalendar(clubs.CL,'CL'),...leagueCalendar(clubs.PL,'PL')].sort((a,b) => a.day-b.day);
         return {version:VERSION,league,team,clubs,day:0,fixtures:days,stage:'regular',
