@@ -103,8 +103,6 @@ function drawSetup() {
   document.title = T('title');
   $('sTitle').textContent = T('title');
   $('sSub').textContent = T('sub');
-  $('toTop').textContent = T('backTop');
-  $('toTop').setAttribute('href', lang === 'ja' ? '../index1.html' : '../en/index.html');
   $('btnRules1').textContent = T('rules');
   $('h0').textContent = T('h0');
   $('diffBtns').innerHTML = '';
