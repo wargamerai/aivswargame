@@ -36,15 +36,15 @@ const SCENARIOS = {
     drake: [
       {
         pilot: 'バーン・バニングス', machine: 'ドラムロ B', weapons: [...CHART_WEAPONS_DRUMLO], x: 10, y: 5, dir: 3,
-        rareLoadout: { chance: 0.05, machine: 'ズワース', weapons: ['オーラソード', 'オーラショット'] },
+        rareLoadout: { chance: 0.2, machine: 'ズワース', weapons: ['オーラソード', 'オーラショット'] },
       },
       {
         pilot: 'トッド・ギネス', machine: 'ビアレス', weapons: ['オーラバルカン', '火焔砲'], x: 10, y: 5, dir: 3,
-        rareLoadout: { chance: 0.05, machine: 'ダンバイン A', weapons: ['オーラソード', 'オーラショット'] },
+        rareLoadout: { chance: 0.2, machine: 'ダンバイン A', weapons: ['オーラソード', 'オーラショット'] },
       },
       {
         pilot: 'ガラリア・ニャムヒー', machine: 'バストール B', weapons: ['オーラソード', 'オーラショット'], x: 10, y: 5, dir: 3,
-        rareLoadout: { chance: 0.05, machine: 'ドロ', weapons: ['火焔砲'] },
+        rareLoadout: { chance: 0.2, machine: 'ドロ', weapons: ['火焔砲'] },
       },
     ],
   },
