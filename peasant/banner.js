@@ -7,10 +7,11 @@
     // バナーは最初のタイトル／設定画面の中にだけ置く。
     // 最初から盤面を操作するページでは、プレイ画面に広告を重ねない。
     const startScreens = {
-        'b17/B-17-web.html': ['#base-scene[data-scene=ready]', '#base-scene', true],
+        'b17/B-17-web-6f3c9a82.html': ['#base-scene[data-scene=ready]', '#base-scene', true],
         'battleofnomonhan-6f3c9a82/nomonhan.html': ['#start-screen'],
         'buldge-6f3c9a82/bulge.html': ['#startScreen'],
         'CC/index.html': ['body.cc-intro', '#bar', false, 'body'],
+        'CC/index-6f3c9a82.html': ['body.cc-intro', '#bar', false, 'body'],
         'bulge-ai-6f3c9a82/index.html': ['#start-dialog', '#start-dialog > h2'],
         'dokuso-6f3c9a82/game.html': ['#modal', '#modalBox', true],
         'dunbain/scenario.html': ['#scenarioSetup', '#scenarioSetup', true],
@@ -21,18 +22,20 @@
         'nobunaga-6f3c9a82/index.html': ['#startScreen'],
         'nobunaga-gj-6f3c9a82/index.html': ['#gjGate'],
         'panzergrenadier-6f3c9a82/title.html': ['body'],
-        'pattonsbest/index.html': ['#over', '#over > .box', true],
+        'pattonsbest/index-6f3c9a82.html': ['#over', '#over > .box', true],
         'pfb-6f3c9a82/index.html': ['#load-screen', '#load-screen', true],
         'postcard-games/gulf-war.html': ['#overlay'],
-        'postcard-games/gulf-war-en.html': ['#overlay'],
+        'postcard-games/gulf-war-en-6f3c9a82.html': ['#overlay'],
         'postcard-games/stalingrad-6f3c9a82.html': ['#setupDialog'],
         'sanngikushi-6f3c9a82/index.html': ['#start'],
         'startrick/index.html': ['#title'],
+        'startrick/index-6f3c9a82.html': ['#title'],
         'tanks-plus-6f3c9a82/hub.html': ['#scenarioScreen'],
-        'アップフロントVer2/index.html': ['#faction-select'],
+        'アップフロントVer2/index-6f3c9a82.html': ['#faction-select'],
         'ドンキーコマンド/index.html': ['#setup'],
-        '帆船の戦い/sandbox.html': ['#scenGrid', 'body > div > h1'],
-        '海の戦い/index.html': ['#optionStartModal'],
+        'ドンキーコマンド/index-6f3c9a82.html': ['#setup'],
+        '帆船の戦い/sandbox-6f3c9a82.html': ['#scenGrid', 'body > div > h1'],
+        '海の戦い/index-6f3c9a82.html': ['#optionStartModal'],
     };
 
     const route = startScreens[decodeURI(page)];
