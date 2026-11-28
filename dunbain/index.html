@@ -70,6 +70,8 @@ body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans
 /* 右パネルは操作欄の下で味方・敵を縦にスクロール */
 #rightPanel { width:320px; min-width:270px; max-width:44vw; display:flex; flex-direction:column; background:#181828; border-left:1px solid #333; overflow:hidden; }
 #unitRoster { flex:1; min-height:0; overflow-y:auto; padding:0 8px 10px; }
+.right-panel-banner { display:block; flex:none; width:min(216px, calc(100% - 16px)); margin:4px auto 8px; }
+.right-panel-banner img { display:block; width:100%; height:auto; }
 .roster-heading { position:sticky; top:0; z-index:1; margin:0; padding:6px 3px; font-size:12px; color:#cbd6ea; background:#181828; }
 .roster-card { margin:0 0 5px; padding:5px 6px 6px; border:1px solid #394057; border-left:3px solid #6486af; border-radius:5px; background:#1e2333; }
 .roster-card.drake { border-left-color:#d16b6f; }
@@ -308,6 +310,9 @@ body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans
   <div id="rightPanel">
     <section id="mapHud" class="map-hud" aria-label="行動操作"><div id="mapHudPanel" class="map-hud-panel"></div></section>
     <section id="unitRoster" aria-label="味方と敵の機体一覧"></section>
+    <a class="right-panel-banner" href="https://peasant-homepage.savorymedal9.chatgpt.site/?lang=ja" target="_blank" rel="noopener">
+      <img src="../peasant/banner-ja.png" width="216" height="72" alt="Pe@sant — ブラウザで楽しむクラシック・ボードウォーゲーム">
+    </a>
   </div>
 </div>
 
