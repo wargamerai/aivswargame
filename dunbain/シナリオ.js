@@ -24,6 +24,20 @@ const SCENARIOS = {
     },
   },
 
+  duel_sho_drumlo: {
+    id: 'duel_sho_drumlo',
+    name: 'ショウのダンバイン 対 ドラムロ',
+    mapCols: 18,
+    mapRows: 16,
+    maxTurn: 10,
+    given: [
+      { pilot: 'ショウ・ザマ', machine: 'ダンバイン A', weapons: ['オーラソード', 'オーラショット'], x: 10, y: 11, dir: 0 },
+    ],
+    drake: [
+      { pilot: '一般兵', machine: 'ドラムロ B', weapons: [...CHART_WEAPONS_DRUMLO], x: 10, y: 5, dir: 3 },
+    ],
+  },
+
   // キャンペーンシナリオ（campaign.htmlから使用）
   campaign1: {
     id: 'campaign1',

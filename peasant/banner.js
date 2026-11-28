@@ -10,6 +10,7 @@
         'b17/B-17-web.html': ['#base-scene[data-scene=ready]', '#base-scene', true],
         'battleofnomonhan/nomonhan.html': ['#start-screen'],
         'buldge/bulge.html': ['#startScreen'],
+        'CC/index.html': ['body.cc-intro', '#bar', false, 'body'],
         'bulge-ai/index.html': ['#start-dialog', '#start-dialog > h2'],
         'dokuso/game.html': ['#modal', '#modalBox', true],
         'dunbain/scenario.html': ['#scenarioSetup', '#scenarioSetup', true],
@@ -36,8 +37,8 @@
 
     const route = startScreens[decodeURI(page)];
     if (!route) return;
-    const [screenSelector, placement, prepend] = route;
-    const screen = document.querySelector(screenSelector);
+    const [screenSelector, placement, prepend, screenRoot] = route;
+    const screen = document.querySelector(screenRoot || screenSelector);
     if (!screen) return;
 
     const pageLanguage = document.documentElement;

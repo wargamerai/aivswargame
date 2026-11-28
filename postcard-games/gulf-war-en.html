@@ -284,7 +284,31 @@
 }
 .preview::backdrop { background: #302218aa; }
 .preview.chart-preview { width: min(750px, 94vw); }
-.chart-open { width: 100%; padding: 6px 4px; font-size: 11px; }
+.chart-open { width: auto; padding: 6px 8px; font-size: 11px; white-space: nowrap; }
+.map-panel .panel-head { flex-wrap: wrap; }
+.map-legend { flex-wrap: wrap; }
+.gulf-banner { display: block; flex: 0 1 230px; min-width: 84px; }
+.gulf-banner img { display: block; width: 100%; height: auto; }
+.top { justify-content: flex-start; }
+.top > .status { flex: 0 0 auto; margin-left: auto; }
+.setup-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.setup-heading .gulf-banner { flex: 0 1 205px; }
+@media(max-width:600px) {
+  .top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(84px, 31%); gap: 8px; }
+  .top > .title { gap: 8px; }
+  .top > .status { grid-column: 1 / -1; margin-left: 0; }
+  .top > .gulf-banner { width: 100%; }
+}
+.node-strength {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #3f3327;
+  color: #fff9e8;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .preview header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .preview img { display: block; width: 100%; max-height: 70dvh; object-fit: contain; }
 .turn-controls {
@@ -417,12 +441,12 @@
 .preview .manual-content b { display: block; }
 
 </style>
-<script defer src="../peasant/banner.js" data-peasant-before="#setup-title"></script>
 </head>
 <body>
 <div class="app" id="app">
   <header class="top">
     <div class="title"><span class="emblem" aria-hidden="true">✦</span><div><h1>Gulf Wars</h1><p>Five countries · You against four AI opponents · <a href="#how-to-play" id="open-how-to">How to play</a></p></div></div>
+    <a class="gulf-banner" id="gulf-banner" href="https://peasant-homepage.savorymedal9.chatgpt.site/?lang=en" target="_blank" rel="noopener" lang="en"><img src="../peasant/banner-en.png" width="2172" height="724" alt="Pe@sant — Classic board wargames in your browser"></a>
     <div class="status" id="status" role="status"><strong id="turn-name">Setup</strong><span id="turn-detail">Win at 16 prestige</span></div>
   </header>
   <div class="scores" id="scores" aria-label="Prestige, cash, and strength for all five countries"></div>
@@ -430,7 +454,7 @@
     <section class="panel map-panel" aria-labelledby="map-title">
       <div class="panel-head">
         <h2 id="map-title">Operations map</h2>
-        <div class="map-legend"><span class="note"><i class="oil-dot" aria-hidden="true"></i> Oil field</span><span class="note">Shift-click a leader card to enlarge it</span></div>
+        <div class="map-legend"><button class="secondary chart-open" id="open-prestige-chart" type="button">Prestige chart</button><span class="note"><i class="oil-dot" aria-hidden="true"></i> Oil field</span><span class="note">Shift-click a leader card to enlarge it</span></div>
       </div>
       <div class="map-stage">
         <div class="map-shell"><div class="map" id="map">
@@ -444,7 +468,6 @@
               <div class="map-scale" aria-hidden="true"><span>16</span><span>12</span><span>8</span><span>4</span><span>0</span></div>
               <div class="prestige-track" id="prestige-track" role="img"></div>
             </div>
-            <button class="secondary chart-open" id="open-prestige-chart" type="button">Prestige chart</button>
           </div>
           <button class="played-card" id="played-card" type="button" aria-label="Enlarge the last card played" hidden></button>
         </div>
@@ -495,13 +518,14 @@
       <p><b>Income and events</b>At the start of your turn, collect $1 per oil field you control. A leader with dollar symbols rolls one die for an additional $1. With one symbol, you need a 6. With two, you need 5–6. With three, you need 4–6. After the opening deal, events resolve immediately. Oil Prices Rise pays every country by its controlled oil fields. Leader Dies affects the country that drew it.</p>
       <p><b>Actions and alignment</b>Buy one regular weapon for $2, or spend $1 on aid to the PLO. The aid succeeds on 1–4 for +1 prestige. Choose a neutral, pro-US, or pro-Soviet alignment. Staying neutral throughout the turn earns +1 prestige. The US and Soviet cards import one unit for a matching alignment. France can also import one unit while neutral. At the start of a battle, a matching US or Soviet card can provide three or two reinforcements respectively.</p>
       <p><b>Diplomacy and revolution</b>Diplomacy succeeds if the roll is no higher than your military strength. A 6 fails against adjacent countries, and 4–6 fail against nonadjacent countries. Success earns +2 prestige and allies the target if it is a minor state. A Revolution card can annex your allied minor state on 1–4 for +4 prestige.</p>
+      <p><b>Joint attacks and prestige</b>Defeating another player country earns the attacker +3 prestige and costs the defender 2. Countries adjacent to the target may join the attack and gain +1 if successful. Occupying a minor state earns +4 until it is liberated or taken by a rival.</p>
       <p><b>Combat and Israel</b>Opposing units cancel one for one, starting with the fewest stars. Cancelled units with stars return on a die roll no higher than their stars. Regular units use their leader’s stars. Foreign military units normally have one star. Repeat while both sides have units. A successful military attack on Israel gives the attacker +5 prestige, and a failed one gives +3. Eligible countries with a land connection may join, earning +2 on a win or +1 on a loss.</p>
       <p><b>Coalition deployment</b>An attack on a minor state resolves immediately. Before the occupying country's next turn begins, another player can play a United States card on their own turn to declare a coalition for that minor state. Pause the turn for one circuit. US and French cards add three or one strength. The Soviet Union can veto, and the UN Security Council can overturn the veto. If the veto still stands after the circuit, cancel the deployment. A successful coalition attack restores neutrality.</p>
       <p><b>Leaders and nuclear weapons</b>On a leader’s death, compare the reserve card with one newly drawn card. The old leader’s prestige is lost. Prestige from minor-state alliances, annexations, and nuclear weapons survives succession. A rival alliance or annexation removes the prestige earned from that state. France builds a nuclear plant and can convert it on a later turn. An Israel card can destroy a plant before the builder’s next turn. A completed nuclear weapon earns +4 permanent prestige.</p>
     </div>
   </details>
 </div>
-<div class="overlay" id="overlay" hidden><section class="setup" role="dialog" aria-modal="true" aria-labelledby="setup-title"><h2 id="setup-title"></h2><p class="note" id="setup-note"></p><div class="setup-grid" id="setup-options"></div><button class="secondary back" id="back" type="button" hidden>Choose a different country</button> <button class="secondary back" id="setup-how-to" type="button">How to play</button></section></div>
+<div class="overlay" id="overlay" hidden><section class="setup" role="dialog" aria-modal="true" aria-labelledby="setup-title"><div class="setup-heading" id="setup-heading"><h2 id="setup-title"></h2></div><p class="note" id="setup-note"></p><div class="setup-grid" id="setup-options"></div><button class="secondary back" id="back" type="button" hidden>Choose a different country</button> <button class="secondary back" id="setup-how-to" type="button">How to play</button></section></div>
 <dialog class="preview" id="card-preview" aria-labelledby="preview-title">
   <header><h2 id="preview-title"></h2><button class="secondary" id="preview-close" type="button">Close</button></header>
   <div id="preview-image"></div>
@@ -593,6 +617,9 @@ const Gulf = (() => {
   };
   const limit=16;
   const nuclearPrestige=4;
+  const minorAnnexPrestige=4;
+  const israelAirStrength=2;
+  const playerAttackPrestige={attacker:3,partner:1,defender:2};
   const israelAttackPrestige={
     success:{attacker:5,partner:2},
     failure:{attacker:3,partner:1},
@@ -647,14 +674,17 @@ const Gulf = (() => {
       log(s,name(id)+" reaches "+c.score+" prestige. "+name(id)+" wins!");
     }
   }
-  function scoreMinorPrestige(s,id,target,points){
+  function removeMinorPrestige(s,target){
     const area=s.territory[target];
     const previous=area.prestige;
-    if(previous&&previous.owner!==id){
-      area.prestige=null;
-      score(s,previous.owner,-previous.points);
-      log(s,name(previous.owner)+" loses the prestige from "+name(target)+" ("+previous.points+" points).");
-    }
+    if(!previous)return;
+    area.prestige=null;
+    score(s,previous.owner,-previous.points);
+    log(s,name(previous.owner)+" loses the prestige from "+name(target)+" ("+previous.points+" points).");
+  }
+  function scoreMinorPrestige(s,id,target,points){
+    const area=s.territory[target];
+    if(area.prestige&&area.prestige.owner!==id)removeMinorPrestige(s,target);
     area.prestige={owner:id,points:(area.prestige?.points??0)+points};
     score(s,id,points);
   }
@@ -836,6 +866,7 @@ const Gulf = (() => {
     };
     const ordered=side=>[...side.units].sort((x,y)=>stars(side,x)-stars(side,y));
     let offense=ordered(a),defense=ordered(d);
+    log(s,'All forces committed: '+a.label+' '+offense.length+' vs '+d.label+' '+defense.length);
     function restore(side,remaining,count){
       const removed=remaining.splice(0,count);
       const rolls=[];
@@ -851,11 +882,12 @@ const Gulf = (() => {
       if(rolls.length)log(s,side.label+" recovery rolls: "+rolls.join(', '));
       return remaining.sort((x,y)=>stars(side,x)-stars(side,y));
     }
-    while(offense.length&&defense.length){
+    for(let phase=1;offense.length&&defense.length;phase++){
       const count=Math.min(offense.length,defense.length);
-      log(s,a.label+" and "+d.label+" each cancel "+count+" opposing unit(s).");
+      log(s,'Round '+phase+': '+a.label+' '+offense.length+' vs '+d.label+' '+defense.length+'; '+count+' canceled on each side.');
       offense=restore(a,offense,count);
       defense=restore(d,defense,count);
+      log(s,'After round '+phase+' recovery: '+a.label+' '+offense.length+' vs '+d.label+' '+defense.length);
     }
     log(s,a.label+' '+a.units.length+'→'+offense.length+' ／ '+d.label+' '+d.units.length+'→'+defense.length);
     return {offense,defense};
@@ -866,15 +898,26 @@ const Gulf = (() => {
   const strength=(s,id)=>s.states[id].units.length;
   const diplomacyLimit=(s,id,target)=>Math.min(strength(s,id),neighbors(s,id,target)?5:3);
   function defendingNation(s,target){
-    if(s.states[target])return target;
-    const region=s.territory[target];
+    if(s?.states[target])return target;
+    const region=s?.territory[target];
     return region?.occupier||region?.annexed||null;
+  }
+  function defenseStrength(s,target){
+    const defender=defendingNation(s,target);
+    return defender?strength(s,defender):s?.territory[target]?.army??board[target].army;
   }
   function defense(s,target){
     const owner=defendingNation(s,target);
     if(owner)return army(s,owner);
     if(target==='israel')return {label:name(target),units:units('israel',israel.army),stars:0};
-    return {label:name(target),units:units('regular',1),stars:0};
+    return {label:name(target),units:units('regular',defenseStrength(s,target)),stars:0};
+  }
+  function awardAttackPartners(s,attackers,target,points){
+    if(!points)return;
+    for(const partner of attackers.slice(1)){
+      log(s,name(partner)+' joins the attack against '+name(target)+'. Prestige +'+points+'.');
+      score(s,partner,points);
+    }
   }
   function resolveAttack(s,{actor,target,attackers}){
     const joint=attackers.length>1;
@@ -886,39 +929,50 @@ const Gulf = (() => {
     if(joint){
       for(const id of attackers)s.states[id].units=offense.filter(unit=>unit.nation===id).map(unit=>unit.type);
     }else s.states[actor].units=offense;
+    const defender=defendingNation(s,target);
+    if(defender)s.states[defender].units=survivors;
+    const successful=offense.length>0;
     const t=s.territory[target];
-    const owner=t&&(t.occupier||t.annexed);
-    if(owner)s.states[owner].units=survivors;
-    else if(s.states[target])s.states[target].units=survivors;
-    if(t&&offense.length){
+    if(t&&successful){
       release(t);
       t.occupier=actor;
       t.occupiedTurn=s.turn;
-      log(s,name(actor)+" occupies "+name(target)+".");
+      log(s,name(actor)+' occupies '+name(target)+' by force. Prestige +'+minorAnnexPrestige+'.');
+      scoreMinorPrestige(s,actor,target,minorAnnexPrestige);
+      return;
     }
     if(target==='israel'){
-      const successful=offense.length>0;
       const prestige=israelAttackPrestige[successful?'success':'failure'];
-      log(s,name(actor)+"'s military attack against Israel "+(successful?"succeeds":"fails")+". Prestige +"+prestige.attacker+'.');
+      log(s,name(actor)+"'s military attack against Israel "+(successful?'succeeds':'fails')+'. Prestige +'+prestige.attacker+'.');
       score(s,actor,prestige.attacker);
-      for(const partner of attackers.slice(1)){
-        log(s,name(partner)+" joins the attack against Israel. Prestige +"+prestige.partner+'.');
-        score(s,partner,prestige.partner);
-      }
-    }else if(!offense.length)log(s,name(actor)+"'s attack fails to take its objective.");
+      awardAttackPartners(s,attackers,target,prestige.partner);
+      return;
+    }
+    if(!successful){
+      log(s,name(actor)+"'s attack fails to take its objective.");
+      return;
+    }
+    const prestige=playerAttackPrestige;
+    const before=s.states[target].score;
+    score(s,target,-prestige.defender);
+    log(s,name(target)+' loses '+(before-s.states[target].score)+' prestige.');
+    log(s,name(actor)+' defeats '+name(target)+' in a military attack. Prestige +'+prestige.attacker+'.');
+    score(s,actor,prestige.attacker);
+    awardAttackPartners(s,attackers,target,prestige.partner);
   }
   function resolveCoalition(s,p){
     const t=s.territory[p.target],owner=t.occupier;
     const result=battle(s,{label:"Coalition",units:p.units,stars:0},army(s,owner));
     s.states[owner].units=result.defense;
     if(result.offense.length){
+      removeMinorPrestige(s,p.target);
       release(t);
       t.army=board[p.target].army;
       log(s,name(p.target)+" returns to neutrality.");
     }else log(s,"The coalition fails to liberate "+name(p.target)+".");
   }
   function resolveFirstStrike(s,target){
-    const force=connected('israel',target)?3:2;
+    const force=connected('israel',target)?israel.army:israelAirStrength;
     const result=battle(s,{label:"Israel",units:units('israel',force),stars:0},army(s,target));
     s.states[target].units=result.defense;
   }
@@ -948,9 +1002,9 @@ const Gulf = (() => {
   };
   function startAttack(s,actor,target){
     const attackers=[actor];
-    if(target==='israel'){
-      const queue=after(s,actor).filter(id=>
-        neighbors(s,id,target)&&s.states[id].route!=='usa'&&strength(s,id)>0
+    if(target==='israel'||s.states[target]){
+      const queue=after(s,actor).filter(id=>id!==target&&neighbors(s,id,target)&&
+        strength(s,id)>0&&(target!=='israel'||s.states[id].route!=='usa')
       );
       if(queue.length){
         s.pending={type:'cooperation',actor,target,attackers,queue};
@@ -972,7 +1026,7 @@ const Gulf = (() => {
     if(!p)return [];
     const id=p.queue[0];
     const country=s.states[id];
-    if(p.type==='cooperation')return [{type:'joinAttack',label:"Join the attack against Israel"}];
+    if(p.type==='cooperation')return [{type:'joinAttack',label:'Join the attack against '+name(p.target)}];
     if(p.type==='reinforcements'){
       const aid=militaryAid[country?.route];
       return aid&&country.hand.includes(aid.card)?[aid]:[];
@@ -1017,7 +1071,7 @@ const Gulf = (() => {
     p.queue.shift();
     if(type==='joinAttack'){
       p.attackers.push(id);
-      log(s,name(id)+" joins the attack against Israel.");
+      log(s,name(id)+' joins the attack against '+name(p.target)+'.');
     }else if(response){
       spend(s,id,response.card);
       if(p.type==='reinforcements'){
@@ -1086,8 +1140,8 @@ const Gulf = (() => {
   function description(s,o){
     if(o.type==='attack'){
       const d=defense(s,o.target);
-      const prestige=o.target==='israel'?" / Prestige: +5 if successful, +3 if unsuccessful":'';
-      return "Defense: "+d.units.length+" / Leader ★"+d.stars+prestige;
+      const prestige=o.target==='israel' ? 'Prestige: +5 on a win, +3 on a loss' : s.states[o.target] ? 'On a win: attacker +'+playerAttackPrestige.attacker+', defender −'+playerAttackPrestige.defender : 'Occupation: +'+minorAnnexPrestige+' prestige';
+      return 'Committed: '+strength(s,current(s))+' / Defense: '+d.units.length+' / '+prestige;
     }
     if(o.type==='diplom'){
       const id=current(s);
@@ -1200,7 +1254,7 @@ const Gulf = (() => {
           release(t);
           t.annexed=id;
           log(s,name(id)+" annexes "+name(target)+". Prestige +4.");
-          scoreMinorPrestige(s,id,target,4);
+          scoreMinorPrestige(s,id,target,minorAnnexPrestige);
         }
         break;
       case 'raid':
@@ -1242,7 +1296,10 @@ const Gulf = (() => {
       if(p.type==='cooperation'){
         const id=p.queue[0];
         const force=[...p.attackers,id].reduce((sum,attacker)=>sum+strength(s,attacker),0);
-        return force>=israel.army||s.states[id].score+israelAttackPrestige.failure.partner>=limit?'joinAttack':'pass';
+        const isIsrael=p.target==='israel';
+        const enough=isIsrael?force>=israel.army:force>defenseStrength(s,p.target);
+        const failurePoints=isIsrael?israelAttackPrestige.failure.partner:0;
+        return enough||s.states[id].score+failurePoints>=limit?'joinAttack':'pass';
       }
       const available=responses(s);
       if(p.type==='reinforcements')return available[0]?.type||'pass';
@@ -1312,7 +1369,8 @@ const Gulf = (() => {
     return ranked[0]?.value>=2.6?ranked[0].o:{group:'pass'};
   }
   return {nations,minors,nodes,board,links,figure,cards,routes,labels,cardActions,markers,limit,
-    create,candidates,setup,succeed,current,round,leader,incomeTarget,oil,strength,options,description,act,responses,react,ai,nextPlayer};
+    create,candidates,setup,succeed,current,round,leader,incomeTarget,oil,strength,defendingNation,defenseStrength,
+    israelAirStrength,playerAttackPrestige,israelAttackPrestige,minorAnnexPrestige,options,description,act,responses,react,ai,nextPlayer};
 })();
 if(typeof module!=='undefined')module.exports=Gulf;
 
@@ -1541,11 +1599,21 @@ const GulfMap = (() => {
   function territoryInfo(node){
     const state=s?.states[node.id];
     if(state)return {text:G.routes[state.route],color:node.color};
-    if(node.id==='israel')return {text:"Ground 3 · Air 2",color:'#b5c1e1'};
+    if(node.id==='israel')return {text:mapStrength(node).detail,color:'#b5c1e1'};
     const t=s?.territory[node.id];
     const owner=t&&(t.annexed||t.occupier||t.ally);
     const status=t?.annexed?"Annexed":t?.occupier?"Occupied":t?.ally?"Allied":"Neutral";
     return {text:owner?status+' by '+G.board[owner].name:status,color:owner?G.board[owner].color:'#626a5d',mark:owner&&(t.annexed?'A':t.occupier?'O':'L')};
+  }
+  function mapStrength(node){
+    const value=G.defenseStrength(s,node.id);
+    if(node.id==='israel')return {
+      label:'G'+value+' · A'+G.israelAirStrength,detail:'Ground '+value+' · Air '+G.israelAirStrength
+    };
+    const defending=G.defendingNation(s,node.id);
+    if(defending&&defending!==node.id)return {label:'D'+value,detail:'Defending strength '+value};
+    const detail='Strength '+value;
+    return {label:node.tag?detail:String(value),detail};
   }
   function renderMap(){
     GulfMap.draw(byId('map-art'),s?.territory,G.board);
@@ -1554,6 +1622,7 @@ const GulfMap = (() => {
     const choices=group&&chooseTurn()?G.options(s,group):[];
     for(const n of G.nodes){
       const data=territoryInfo(n);
+      const force=mapStrength(n);
       const country=s?.states[n.id];
       const isTarget=choices.some(o=>o.target===n.id);
       const el=button('node'+(n.tag?' major':''),undefined,()=>onMap(n.id));
@@ -1563,11 +1632,11 @@ const GulfMap = (() => {
       el.classList.toggle('ai-target',lastAiStep?.target===n.id);
       el.style.setProperty('--tint',data.color);
       const title=make('span','node-heading');
-      title.append(make('span','dot'),make('b',null,n.short||n.name));
+      title.append(make('span','dot'),make('b',null,n.short||n.name),make('span','node-strength',force.label));
       if(country)title.append(make('span','node-route '+country.route,data.text));
       if(data.mark)title.append(make('span','node-mark',data.mark));
       el.append(title);
-      el.title=n.name+' · '+data.text+(n.oil?" · Oil fields "+n.oil:'');
+      el.title=n.name+' · '+data.text+(n.id==='israel'?'':' · '+force.detail)+(n.oil?" · Oil fields "+n.oil:'');
       el.setAttribute('aria-label',el.title+(isTarget?" · Available target":''));
       const l=country&&G.leader(s,n.id);
       const location=n.tag?make('div','map-country'):el;
@@ -1609,7 +1678,7 @@ const GulfMap = (() => {
     japan:'Roll one die and receive that many dollars as an economic loan.',
     un:'Overturn a Soviet veto during a coalition response circuit.',
     terror:'Assassinate a rival leader on 1–3 or your own on 1–4. An attack against Israel succeeds on 1–4 for +1 prestige. Israeli retaliation costs one weapon on 1–3.',
-    attack:'Attack a country you border directly or through annexed territory. Pro-US countries cannot attack Israel. Against Israel, gain 5 prestige on a win or 3 on a loss.',
+    attack:'Attack a country you border directly or through annexed territory. Pro-US countries cannot attack Israel. Against Israel, gain 5 prestige on a win or 3 on a loss. Defeat another player country for 3 prestige, or occupy a minor state for 4.',
     revolution:'Overthrow a rival leader by rolling no more than the prestige difference, or your own leader on 1–4. You may also annex an allied minor state on 1–4 for +4 prestige.',
     israel:'Destroy another country’s nuclear plant before its next turn, or launch a preemptive strike with three ground units against a bordering country and two air units otherwise.',
     unrest:'Choose another country. It loses 2 prestige on a roll of 1–4, subject to its protected prestige.',
@@ -1644,6 +1713,9 @@ const GulfMap = (() => {
       ['Terrorism against Israel succeeds','+1','—','No'],
       ['Military attack on Israel succeeds','+5','+2','No'],
       ['Military attack on Israel fails','+3','+1','No'],
+      ['Defeat another player country','+'+G.playerAttackPrestige.attacker,'+'+G.playerAttackPrestige.partner,'No'],
+      ['Another player defeats your country','−'+G.playerAttackPrestige.defender,'—','Protected prestige is retained'],
+      ['Occupy a minor state by force','+'+G.minorAnnexPrestige,'—','Until it is liberated or taken by a rival'],
       ['Aid the PLO successfully','+1','—','No'],
       ['Remain neutral for the full turn','+1','—','No'],
       ['Diplomacy succeeds','+2','—','Minor-state alliance only'],
@@ -1692,11 +1764,10 @@ const GulfMap = (() => {
     const n=G.board[inspected];
     const c=s?.states[inspected];
     const l=c&&G.leader(s,inspected);
-    const t=s?.territory[inspected];
-    const owner=t&&(t.annexed||t.occupier);
+    const force=mapStrength(n).detail;
     const detail=n.tag&&c
-      ? [G.routes[c.route],l&&l.name+'(★'+l.stars+')',"Oil fields "+G.oil(s,n.id),c.facility?.type==='nuke'?"Nuclear weapon":c.facility?.type==='plant'?(s.turn>=c.facility.ready?"Nuclear plant (ready for conversion)":"Nuclear plant (vulnerable)"):''].filter(Boolean).join('  ·  ')
-      : [territoryInfo(n).text,n.id!=='israel'?"Strength "+(owner?G.strength(s,owner):n.army):'',n.oil?"Oil fields "+n.oil:''].filter(Boolean).join('  ·  ');
+      ? [G.routes[c.route],force,l&&l.name+'(★'+l.stars+')',"Oil fields "+G.oil(s,n.id),c.facility?.type==='nuke'?"Nuclear weapon":c.facility?.type==='plant'?(s.turn>=c.facility.ready?"Nuclear plant (ready for conversion)":"Nuclear plant (vulnerable)"):''].filter(Boolean).join('  ·  ')
+      : [territoryInfo(n).text,n.id==='israel'?'':force,n.oil?"Oil fields "+n.oil:''].filter(Boolean).join('  ·  ');
     el.replaceChildren(make('strong',null,n.name),make('span','note',detail));
   }
   function leaders(container,who,callback){
@@ -1724,6 +1795,12 @@ const GulfMap = (() => {
     const wasVisible=!overlay.hidden;
     overlay.hidden=!visible;
     byId('app').inert=visible;
+    const banner=byId('gulf-banner');
+    const bannerPlacement=visible?byId('setup-heading'):byId('status').parentElement;
+    if(banner.parentElement!==bannerPlacement){
+      if(visible)bannerPlacement.append(banner);
+      else byId('status').before(banner);
+    }
     if(!visible)return;
     root.replaceChildren();
     byId('back').hidden=!s||s.phase!=='setup';
@@ -1779,8 +1856,9 @@ const GulfMap = (() => {
     let heading;
     let subject;
     if(p.type==='cooperation'){
-      heading="Joint attack against Israel";
-      subject=actor+" declares an attack. "+G.board[p.queue[0]].name+" may join. Cooperators gain 2 prestige on a win and 1 on a loss.";
+      heading='Joint attack against '+target;
+      subject=actor+' attacks '+target+'. '+G.board[p.queue[0]].name+' may join. '+
+        (p.target==='israel'?'Cooperators gain 2 prestige on a win or 1 on a loss.':'Cooperators gain '+G.playerAttackPrestige.partner+' prestige on a win.');
     }else if(p.type==='reinforcements'){
       const attacker=p.combat==='firstStrike'?"Israel":p.combat==='coalition'?"The coalition":actor;
       heading="Reinforcements";

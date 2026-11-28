@@ -1480,6 +1480,7 @@ function mapHtml() {
 // ===================== 始め方 =====================
 async function newGame() {
   S = { version: 1, phase: 'new', settings: { step: true, showAll: false, hideEnemy: true, hideBad: true, autoFile: true }, logLines: [] };
+  document.body.classList.add('cc-intro');
   $('log').innerHTML = '';
   UI.head(L('コルベット・コマンド　北大西洋船団護送作戦 1941-1943', 'Corvette Command: North Atlantic Convoy Escort 1941-1943'));
   // 最初の画面: 言語の選択とゲームの説明。次にオプションを決めてからゲームを始める
@@ -1492,6 +1493,7 @@ async function newGame() {
    L('無料での公開を快諾してくれたゲームデザイナーの Alan と、許諾してくれたボンサイ・ゲームズ社に感謝します。', 'My thanks to the game\'s designer, Alan, who gladly agreed to its free release, and to Bonsai Games, who gave their permission.'),
   ].forEach(t => UI.story(t));
   await UI.choose('', [{ label: L('▶ 次へ', '▶ Next'), value: 1 }]);
+  document.body.classList.remove('cc-intro');
   await new Promise(resolve => openOptions(resolve));
   saveLocal();
   UI.story(L('あなたはフラワー級コルベットの艦長として、大西洋を渡る船団を U ボートから護衛する。', 'You are the captain of a Flower-class corvette, escorting convoys across the Atlantic against the U-boats.'));

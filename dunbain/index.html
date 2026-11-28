@@ -284,7 +284,7 @@ body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans
       <button onclick="zoomMap(1)">&#43;</button>
       <button type="button" onclick="fitBoardOnScreen()" style="width:48px;">全体</button>
     </div>
-  <a class="debug-log-btn" href="scenario.html" style="text-decoration:none;">シナリオ</a>
+  <a class="debug-log-btn" href="scenario.html" id="scenarioBackLink" style="text-decoration:none;">シナリオ</a>
   <button type="button" class="debug-log-btn" id="debugLogSaveBtn" title="デバッグ用・全ログをJSONでダウンロード">ログ保存</button>
   <button type="button" class="debug-log-btn" id="debugLogClearBtn" title="メモリ上のログバッファを空にする">ログ消去</button>
 </div>
@@ -341,7 +341,7 @@ body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans
 </div>
 
 <script src="data.js"></script>
-<script src="シナリオ.js"></script>
+<script src="シナリオ.js?v=sho-drumlo"></script>
 <script src="qlearning.js"></script>
 <script>
 // ===== ゲーム状態 =====
@@ -494,11 +494,12 @@ function initGame() {
     spectatorAutoExecuteTimer = null;
   }
   const cfg = JSON.parse(sessionStorage.getItem('dunbineConfig') || '{}');
-  playerSide = cfg.playerSide || 'given';
-  spectatorMode = !!cfg.spectatorMode;
+  const duel = new URLSearchParams(window.location.search).get('scenarioId') === 'duel_sho_drumlo';
+  playerSide = duel ? 'given' : cfg.playerSide || 'given';
+  spectatorMode = !duel && !!cfg.spectatorMode;
   try {
     const sp = new URLSearchParams(window.location.search || '');
-    if (sp.get('spectator') === '1' || sp.get('watch') === '1') spectatorMode = true;
+    if (!duel && (sp.get('spectator') === '1' || sp.get('watch') === '1')) spectatorMode = true;
     if (sp.get('ql') === '1') localStorage.setItem('dunbain_ql', '1');
     if (sp.get('ql') === '0') localStorage.setItem('dunbain_ql', '0');
     const sid = sp.get('scenarioId');
@@ -524,19 +525,26 @@ function initGame() {
     }
   } catch (e) { /* ignore */ }
   const scenarioIds = { campaign1:'campaign1', campaign_musou:'campaign1', campaign_gauntlet:'campaign1' };
-  scenario = getScenario(Object.hasOwn(scenarioIds, cfg.scenarioId) ? scenarioIds[cfg.scenarioId] : 'practice');
-  boardArtwork = Object.hasOwn(BOARD_ARTWORK, cfg.boardArtwork) ? cfg.boardArtwork : 'wing';
+  const configuredScenario = Object.hasOwn(scenarioIds, cfg.scenarioId) ? scenarioIds[cfg.scenarioId] : 'practice';
+  scenario = getScenario(duel ? 'duel_sho_drumlo' : configuredScenario);
+  boardArtwork = duel ? 'battler' : Object.hasOwn(BOARD_ARTWORK, cfg.boardArtwork) ? cfg.boardArtwork : 'wing';
+  if (duel) document.getElementById('scenarioBackLink').href = 'sho-vs-drumlo.html';
   if (typeof window !== 'undefined') window.scenario = scenario;
-  if (!scenario.gauntlet && sessionStorage.getItem('campaignGauntletActive') === '1') {
+  if (!duel && !scenario.gauntlet && sessionStorage.getItem('campaignGauntletActive') === '1') {
     clearGauntletSession();
   }
-  if (!scenario.musou && sessionStorage.getItem('musouRunWins') != null) {
+  if (!duel && !scenario.musou && sessionStorage.getItem('musouRunWins') != null) {
     sessionStorage.removeItem('musouRunWins');
   }
   units = [];
   let id = 0;
   let givenDefs = scenario.id === 'practice' ? buildPracticeFormation('given', cfg.practiceForces?.given) : [...(scenario.given || [])];
   let drakeDefs = scenario.id === 'practice' ? buildPracticeFormation('drake', cfg.practiceForces?.drake) : [...(scenario.drake || [])];
+  if (duel) {
+    const eligiblePilots = Object.keys(PILOTS).filter(name => PILOTS[name].side === 'drake' || name === '一般兵');
+    const pilot = eligiblePilots[Math.floor(Math.random() * eligiblePilots.length)];
+    drakeDefs = [{ ...drakeDefs[0], pilot }];
+  }
   if (scenario.gauntlet && scenario.gauntletBosses && scenario.gauntletBosses.length) {
     if (sessionStorage.getItem('campaignGauntletActive') !== '1') {
       sessionStorage.setItem('campaignGauntletActive', '1');
@@ -4243,8 +4251,9 @@ function showVictory(result, detail) {
   } else {
     if (hint) hint.style.display = 'none';
     if (btn) {
-      btn.textContent = 'シナリオ選択に戻る';
-      btn.onclick = () => { window.location.href = 'scenario.html'; };
+      const duel = scenario.id === 'duel_sho_drumlo';
+      btn.textContent = duel ? 'もう一戦' : 'シナリオ選択に戻る';
+      btn.onclick = () => { window.location.href = duel ? 'sho-vs-drumlo.html' : 'scenario.html'; };
     }
   }
   document.getElementById('victoryOverlay').classList.add('show');

@@ -284,7 +284,31 @@
 }
 .preview::backdrop { background: #302218aa; }
 .preview.chart-preview { width: min(750px, 94vw); }
-.chart-open { width: 100%; padding: 6px 4px; font-size: 11px; }
+.chart-open { width: auto; padding: 6px 8px; font-size: 11px; white-space: nowrap; }
+.map-panel .panel-head { flex-wrap: wrap; }
+.map-legend { flex-wrap: wrap; }
+.gulf-banner { display: block; flex: 0 1 230px; min-width: 84px; }
+.gulf-banner img { display: block; width: 100%; height: auto; }
+.top { justify-content: flex-start; }
+.top > .status { flex: 0 0 auto; margin-left: auto; }
+.setup-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.setup-heading .gulf-banner { flex: 0 1 205px; }
+@media(max-width:600px) {
+  .top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(84px, 31%); gap: 8px; }
+  .top > .title { gap: 8px; }
+  .top > .status { grid-column: 1 / -1; margin-left: 0; }
+  .top > .gulf-banner { width: 100%; }
+}
+.node-strength {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #3f3327;
+  color: #fff9e8;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .preview header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .preview img { display: block; width: 100%; max-height: 70dvh; object-fit: contain; }
 .turn-controls {
@@ -373,12 +397,12 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important}}
 </style>
   <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
-<script defer src="../peasant/banner.js" data-peasant-before="#setup-title"></script>
 </head>
 <body>
 <div class="app" id="app">
   <header class="top">
     <div class="title"><span class="emblem" aria-hidden="true">✦</span><div><h1>湾岸戦争</h1><p>5か国対戦 · あなた1人とAI4人</p></div></div>
+    <a class="gulf-banner" id="gulf-banner" href="https://peasant-homepage.savorymedal9.chatgpt.site/?lang=ja" target="_blank" rel="noopener" lang="ja"><img src="../peasant/banner-ja.png" width="2172" height="724" alt="Pe@sant — ブラウザで楽しむクラシック・ボードウォーゲーム"></a>
     <div class="status" id="status" role="status"><strong id="turn-name">対局準備</strong><span id="turn-detail">勝利条件　威信16</span></div>
   </header>
   <div class="scores" id="scores" aria-label="5か国の威信・資金・戦力"></div>
@@ -386,7 +410,7 @@
     <section class="panel map-panel" aria-labelledby="map-title">
       <div class="panel-head">
         <h2 id="map-title">作戦地図</h2>
-        <div class="map-legend"><span class="note"><i class="oil-dot" aria-hidden="true"></i> 油田</span><span class="note">元首カードは Shift＋クリックで拡大</span></div>
+        <div class="map-legend"><button class="secondary chart-open" id="open-prestige-chart" type="button">威信チャート</button><span class="note"><i class="oil-dot" aria-hidden="true"></i> 油田</span><span class="note">元首カードは Shift＋クリックで拡大</span></div>
       </div>
       <div class="map-stage">
         <div class="map-shell"><div class="map" id="map">
@@ -400,7 +424,6 @@
               <div class="map-scale" aria-hidden="true"><span>16</span><span>12</span><span>8</span><span>4</span><span>0</span></div>
               <div class="prestige-track" id="prestige-track" role="img"></div>
             </div>
-            <button class="secondary chart-open" id="open-prestige-chart" type="button">威信チャート</button>
           </div>
           <button class="played-card" id="played-card" type="button" aria-label="最後に使われたカードを拡大" hidden></button>
         </div>
@@ -448,6 +471,7 @@
     <div class="manual-content">
       <p><b>手番と勝利</b>手番の開始時に、支配する油田マーク1つにつき$1を得ます。元首にドルマークがあればダイスを1個振ります。マーク1つなら6、2つなら5～6、3つなら4～6で$1を得ます。自分の手番開始時に、行動を使わず手札を5枚まで補充します。初期手札にイベントが出たら引き直します。対局開始後のイベントはその場で処理し、行動回数は消費しません。1手番は異なる行動を2回まで。途中でパスできます。あなたが「捨て札」を確定すると、1行動でカードを捨て、次のプレイヤーへ手番が移ります。威信16以上で即勝利し、中立を維持した手番の終了時は威信+1です。</p>
       <p><b>戦闘</b>攻撃が成立すると、交戦国は路線に合うカードを戦闘前に出して援軍を呼べます。親ソ連はソ連カードで戦力＋2、親米はアメリカカードで戦力＋3です。武器輸入は戦力＋1で、ソ連・アメリカは対応する路線、フランスは中立でも使えます。戦力を1対1で相殺します。中立・同盟中の中小国の戦力は1です。相殺された通常兵器は元首の星、外国軍はそのマーカーの星以下で復活します。星の少ない部隊から相殺し、双方に残れば繰り返します。地上・空軍および米軍・ソ連軍・仏軍のマーカーは★1です。</p>
+      <p><b>共同攻撃と威信</b>他の担当国への武力攻撃に成功すると、攻撃国は威信＋3、攻撃を受けた国は−2です。攻撃先に隣接する国が協力でき、成功すると威信＋1です。中小国の武力占領は威信＋4で、解放または他国の支配で失います。</p>
       <p><b>イスラエルへの武力攻撃</b>攻撃成功で威信＋5、失敗で＋3です。イスラエルと陸続きの国も攻撃に加われます。協力国は成功で威信＋2、失敗で＋1です。</p>
       <p><b>外交</b>判定の出目が自国の戦力以下なら成功します。隣接国へは6、非隣接国へは4～6で必ず失敗します。成功すると威信＋2です。</p>
       <p><b>元首と原発</b>元首は2枚を比較し、王族を優先します。死ぬと元首に属する威信を失い、残した1枚と新たな1枚を比較します。中小国との同盟・併合で得た威信は元首が交代しても残り、その中小国が他国と同盟するか他国に併合されると失います。新元首はそのカードの初期威信で就任します。原発は建設した国の次の手番まで空爆で破壊され得ます。その後はフランスカードで核兵器に転換できます。核兵器を保有すると威信＋4を得て、元首が交代してもその4点は残ります。</p>
@@ -456,7 +480,7 @@
     </div>
   </details>
 </div>
-<div class="overlay" id="overlay" hidden><section class="setup" role="dialog" aria-modal="true" aria-labelledby="setup-title"><h2 id="setup-title"></h2><p class="note" id="setup-note"></p><div class="setup-grid" id="setup-options"></div><button class="secondary back" id="back" type="button" hidden>担当国を選び直す</button></section></div>
+<div class="overlay" id="overlay" hidden><section class="setup" role="dialog" aria-modal="true" aria-labelledby="setup-title"><div class="setup-heading" id="setup-heading"><h2 id="setup-title"></h2></div><p class="note" id="setup-note"></p><div class="setup-grid" id="setup-options"></div><button class="secondary back" id="back" type="button" hidden>担当国を選び直す</button></section></div>
 <dialog class="preview" id="card-preview" aria-labelledby="preview-title">
   <header><h2 id="preview-title"></h2><button class="secondary" id="preview-close" type="button">閉じる</button></header>
   <div id="preview-image"></div>
@@ -548,6 +572,9 @@ const Gulf = (() => {
   };
   const limit=16;
   const nuclearPrestige=4;
+  const minorAnnexPrestige=4;
+  const israelAirStrength=2;
+  const playerAttackPrestige={attacker:3,partner:1,defender:2};
   const israelAttackPrestige={
     success:{attacker:5,partner:2},
     failure:{attacker:3,partner:1},
@@ -602,14 +629,17 @@ const Gulf = (() => {
       log(s,name(id)+'が威信'+c.score+'に到達。'+name(id)+'の勝利！');
     }
   }
-  function scoreMinorPrestige(s,id,target,points){
+  function removeMinorPrestige(s,target){
     const area=s.territory[target];
     const previous=area.prestige;
-    if(previous&&previous.owner!==id){
-      area.prestige=null;
-      score(s,previous.owner,-previous.points);
-      log(s,name(previous.owner)+'は'+name(target)+'から得た威信 '+previous.points+' を失った。');
-    }
+    if(!previous)return;
+    area.prestige=null;
+    score(s,previous.owner,-previous.points);
+    log(s,name(previous.owner)+'は'+name(target)+'から得た威信 '+previous.points+' を失った。');
+  }
+  function scoreMinorPrestige(s,id,target,points){
+    const area=s.territory[target];
+    if(area.prestige&&area.prestige.owner!==id)removeMinorPrestige(s,target);
     area.prestige={owner:id,points:(area.prestige?.points??0)+points};
     score(s,id,points);
   }
@@ -791,6 +821,7 @@ const Gulf = (() => {
     };
     const ordered=side=>[...side.units].sort((x,y)=>stars(side,x)-stars(side,y));
     let offense=ordered(a),defense=ordered(d);
+    log(s,'全戦力を投入　'+a.label+' '+offense.length+' 対 '+d.label+' '+defense.length);
     function restore(side,remaining,count){
       const removed=remaining.splice(0,count);
       const rolls=[];
@@ -806,11 +837,12 @@ const Gulf = (() => {
       if(rolls.length)log(s,side.label+'の復活判定　'+rolls.join('、'));
       return remaining.sort((x,y)=>stars(side,x)-stars(side,y));
     }
-    while(offense.length&&defense.length){
+    for(let phase=1;offense.length&&defense.length;phase++){
       const count=Math.min(offense.length,defense.length);
-      log(s,a.label+'と'+d.label+'が戦力 '+count+' ずつ相殺。');
+      log(s,'第'+phase+'回：'+a.label+' '+offense.length+' 対 '+d.label+' '+defense.length+'、戦力 '+count+' ずつ相殺。');
       offense=restore(a,offense,count);
       defense=restore(d,defense,count);
+      log(s,'第'+phase+'回の復活判定後：'+a.label+' '+offense.length+' 対 '+d.label+' '+defense.length);
     }
     log(s,a.label+' '+a.units.length+'→'+offense.length+' ／ '+d.label+' '+d.units.length+'→'+defense.length);
     return {offense,defense};
@@ -821,15 +853,26 @@ const Gulf = (() => {
   const strength=(s,id)=>s.states[id].units.length;
   const diplomacyLimit=(s,id,target)=>Math.min(strength(s,id),neighbors(s,id,target)?5:3);
   function defendingNation(s,target){
-    if(s.states[target])return target;
-    const region=s.territory[target];
+    if(s?.states[target])return target;
+    const region=s?.territory[target];
     return region?.occupier||region?.annexed||null;
+  }
+  function defenseStrength(s,target){
+    const defender=defendingNation(s,target);
+    return defender?strength(s,defender):s?.territory[target]?.army??board[target].army;
   }
   function defense(s,target){
     const owner=defendingNation(s,target);
     if(owner)return army(s,owner);
     if(target==='israel')return {label:name(target),units:units('israel',israel.army),stars:0};
-    return {label:name(target),units:units('regular',1),stars:0};
+    return {label:name(target),units:units('regular',defenseStrength(s,target)),stars:0};
+  }
+  function awardAttackPartners(s,attackers,target,points){
+    if(!points)return;
+    for(const partner of attackers.slice(1)){
+      log(s,name(partner)+'が'+name(target)+'への共同攻撃に協力。威信 +'+points+'。');
+      score(s,partner,points);
+    }
   }
   function resolveAttack(s,{actor,target,attackers}){
     const joint=attackers.length>1;
@@ -841,39 +884,50 @@ const Gulf = (() => {
     if(joint){
       for(const id of attackers)s.states[id].units=offense.filter(unit=>unit.nation===id).map(unit=>unit.type);
     }else s.states[actor].units=offense;
+    const defender=defendingNation(s,target);
+    if(defender)s.states[defender].units=survivors;
+    const successful=offense.length>0;
     const t=s.territory[target];
-    const owner=t&&(t.occupier||t.annexed);
-    if(owner)s.states[owner].units=survivors;
-    else if(s.states[target])s.states[target].units=survivors;
-    if(t&&offense.length){
+    if(t&&successful){
       release(t);
       t.occupier=actor;
       t.occupiedTurn=s.turn;
-      log(s,name(actor)+'が'+name(target)+'を占領。');
+      log(s,name(actor)+'が'+name(target)+'を武力で占領。威信 +'+minorAnnexPrestige+'。');
+      scoreMinorPrestige(s,actor,target,minorAnnexPrestige);
+      return;
     }
     if(target==='israel'){
-      const successful=offense.length>0;
       const prestige=israelAttackPrestige[successful?'success':'failure'];
       log(s,name(actor)+'のイスラエルへの武力攻撃'+(successful?'成功':'失敗')+'。威信 +'+prestige.attacker+'。');
       score(s,actor,prestige.attacker);
-      for(const partner of attackers.slice(1)){
-        log(s,name(partner)+'がイスラエルへの攻撃に協力。威信 +'+prestige.partner+'。');
-        score(s,partner,prestige.partner);
-      }
-    }else if(!offense.length)log(s,name(actor)+'の攻撃は目標を達成できなかった。');
+      awardAttackPartners(s,attackers,target,prestige.partner);
+      return;
+    }
+    if(!successful){
+      log(s,name(actor)+'の攻撃は目標を達成できなかった。');
+      return;
+    }
+    const prestige=playerAttackPrestige;
+    const before=s.states[target].score;
+    score(s,target,-prestige.defender);
+    log(s,name(target)+'の威信 −'+(before-s.states[target].score)+'。');
+    log(s,name(actor)+'が'+name(target)+'への武力攻撃に成功。威信 +'+prestige.attacker+'。');
+    score(s,actor,prestige.attacker);
+    awardAttackPartners(s,attackers,target,prestige.partner);
   }
   function resolveCoalition(s,p){
     const t=s.territory[p.target],owner=t.occupier;
     const result=battle(s,{label:'多国籍軍',units:p.units,stars:0},army(s,owner));
     s.states[owner].units=result.defense;
     if(result.offense.length){
+      removeMinorPrestige(s,p.target);
       release(t);
       t.army=board[p.target].army;
       log(s,name(p.target)+'は中立に戻った。');
     }else log(s,'多国籍軍は'+name(p.target)+'を解放できなかった。');
   }
   function resolveFirstStrike(s,target){
-    const force=connected('israel',target)?3:2;
+    const force=connected('israel',target)?israel.army:israelAirStrength;
     const result=battle(s,{label:'イスラエル',units:units('israel',force),stars:0},army(s,target));
     s.states[target].units=result.defense;
   }
@@ -903,9 +957,9 @@ const Gulf = (() => {
   };
   function startAttack(s,actor,target){
     const attackers=[actor];
-    if(target==='israel'){
-      const queue=after(s,actor).filter(id=>
-        neighbors(s,id,target)&&s.states[id].route!=='usa'&&strength(s,id)>0
+    if(target==='israel'||s.states[target]){
+      const queue=after(s,actor).filter(id=>id!==target&&neighbors(s,id,target)&&
+        strength(s,id)>0&&(target!=='israel'||s.states[id].route!=='usa')
       );
       if(queue.length){
         s.pending={type:'cooperation',actor,target,attackers,queue};
@@ -927,7 +981,7 @@ const Gulf = (() => {
     if(!p)return [];
     const id=p.queue[0];
     const country=s.states[id];
-    if(p.type==='cooperation')return [{type:'joinAttack',label:'イスラエルへの攻撃に協力する'}];
+    if(p.type==='cooperation')return [{type:'joinAttack',label:name(p.target)+'への共同攻撃に参加する'}];
     if(p.type==='reinforcements'){
       const aid=militaryAid[country?.route];
       return aid&&country.hand.includes(aid.card)?[aid]:[];
@@ -972,7 +1026,7 @@ const Gulf = (() => {
     p.queue.shift();
     if(type==='joinAttack'){
       p.attackers.push(id);
-      log(s,name(id)+'がイスラエルへの攻撃に参加。');
+      log(s,name(id)+'が'+name(p.target)+'への共同攻撃に参加。');
     }else if(response){
       spend(s,id,response.card);
       if(p.type==='reinforcements'){
@@ -1041,8 +1095,8 @@ const Gulf = (() => {
   function description(s,o){
     if(o.type==='attack'){
       const d=defense(s,o.target);
-      const prestige=o.target==='israel'?' ／ 威信 成功＋5・失敗＋3':'';
-      return '防御 '+d.units.length+' ／ 元首 ★'+d.stars+prestige;
+      const prestige=o.target==='israel' ? '威信 成功＋5・失敗＋3' : s.states[o.target] ? '成功で威信＋'+playerAttackPrestige.attacker+'・守備側−'+playerAttackPrestige.defender : '占領で威信＋'+minorAnnexPrestige;
+      return '投入 '+strength(s,current(s))+' ／ 防御 '+d.units.length+' ／ '+prestige;
     }
     if(o.type==='diplom'){
       const id=current(s);
@@ -1155,7 +1209,7 @@ const Gulf = (() => {
           release(t);
           t.annexed=id;
           log(s,name(id)+'が'+name(target)+'を併合。威信 +4。');
-          scoreMinorPrestige(s,id,target,4);
+          scoreMinorPrestige(s,id,target,minorAnnexPrestige);
         }
         break;
       case 'raid':
@@ -1197,7 +1251,10 @@ const Gulf = (() => {
       if(p.type==='cooperation'){
         const id=p.queue[0];
         const force=[...p.attackers,id].reduce((sum,attacker)=>sum+strength(s,attacker),0);
-        return force>=israel.army||s.states[id].score+israelAttackPrestige.failure.partner>=limit?'joinAttack':'pass';
+        const isIsrael=p.target==='israel';
+        const enough=isIsrael?force>=israel.army:force>defenseStrength(s,p.target);
+        const failurePoints=isIsrael?israelAttackPrestige.failure.partner:0;
+        return enough||s.states[id].score+failurePoints>=limit?'joinAttack':'pass';
       }
       const available=responses(s);
       if(p.type==='reinforcements')return available[0]?.type||'pass';
@@ -1267,7 +1324,8 @@ const Gulf = (() => {
     return ranked[0]?.value>=2.6?ranked[0].o:{group:'pass'};
   }
   return {nations,minors,nodes,board,links,figure,cards,routes,labels,cardActions,markers,limit,
-    create,candidates,setup,succeed,current,round,leader,incomeTarget,oil,strength,options,description,act,responses,react,ai,nextPlayer};
+    create,candidates,setup,succeed,current,round,leader,incomeTarget,oil,strength,defendingNation,defenseStrength,
+    israelAirStrength,playerAttackPrestige,israelAttackPrestige,minorAnnexPrestige,options,description,act,responses,react,ai,nextPlayer};
 })();
 if(typeof module!=='undefined')module.exports=Gulf;
 
@@ -1496,11 +1554,21 @@ const GulfMap = (() => {
   function territoryInfo(node){
     const state=s?.states[node.id];
     if(state)return {text:G.routes[state.route],color:node.color};
-    if(node.id==='israel')return {text:'地上3・空軍2',color:'#b5c1e1'};
+    if(node.id==='israel')return {text:mapStrength(node).detail,color:'#b5c1e1'};
     const t=s?.territory[node.id];
     const owner=t&&(t.annexed||t.occupier||t.ally);
     const status=t?.annexed?'併合':t?.occupier?'占領':t?.ally?'同盟':'中立';
     return {text:owner?G.board[owner].name+' '+status:status,color:owner?G.board[owner].color:'#626a5d',mark:owner&&status[0]};
+  }
+  function mapStrength(node){
+    const value=G.defenseStrength(s,node.id);
+    if(node.id==='israel')return {
+      label:'地'+value+'・空'+G.israelAirStrength,detail:'地上 '+value+'・空軍 '+G.israelAirStrength
+    };
+    const defending=G.defendingNation(s,node.id);
+    if(defending&&defending!==node.id)return {label:'防'+value,detail:'防御戦力 '+value};
+    const detail='戦力 '+value;
+    return {label:node.tag?detail:String(value),detail};
   }
   function renderMap(){
     GulfMap.draw(byId('map-art'),s?.territory,G.board);
@@ -1509,6 +1577,7 @@ const GulfMap = (() => {
     const choices=group&&chooseTurn()?G.options(s,group):[];
     for(const n of G.nodes){
       const data=territoryInfo(n);
+      const force=mapStrength(n);
       const country=s?.states[n.id];
       const isTarget=choices.some(o=>o.target===n.id);
       const el=button('node'+(n.tag?' major':''),undefined,()=>onMap(n.id));
@@ -1518,11 +1587,11 @@ const GulfMap = (() => {
       el.classList.toggle('ai-target',lastAiStep?.target===n.id);
       el.style.setProperty('--tint',data.color);
       const title=make('span','node-heading');
-      title.append(make('span','dot'),make('b',null,n.short||n.name));
+      title.append(make('span','dot'),make('b',null,n.short||n.name),make('span','node-strength',force.label));
       if(country)title.append(make('span','node-route '+country.route,data.text));
       if(data.mark)title.append(make('span','node-mark',data.mark));
       el.append(title);
-      el.title=n.name+' · '+data.text+(n.oil?' · 油田 '+n.oil:'');
+      el.title=n.name+' · '+data.text+(n.id==='israel'?'':' · '+force.detail)+(n.oil?' · 油田 '+n.oil:'');
       el.setAttribute('aria-label',el.title+(isTarget?' · 行動の対象':''));
       const l=country&&G.leader(s,n.id);
       const location=n.tag?make('div','map-country'):el;
@@ -1588,11 +1657,10 @@ const GulfMap = (() => {
     const n=G.board[inspected];
     const c=s?.states[inspected];
     const l=c&&G.leader(s,inspected);
-    const t=s?.territory[inspected];
-    const owner=t&&(t.annexed||t.occupier);
+    const force=mapStrength(n).detail;
     const detail=n.tag&&c
-      ? [G.routes[c.route],l&&l.name+'（★'+l.stars+'）','油田 '+G.oil(s,n.id),c.facility?.type==='nuke'?'核兵器':c.facility?.type==='plant'?(s.turn>=c.facility.ready?'原発（転換可能）':'原発（空爆可能）'):''].filter(Boolean).join('  ·  ')
-      : [territoryInfo(n).text,n.id!=='israel'?'戦力 '+(owner?G.strength(s,owner):n.army):'',n.oil?'油田 '+n.oil:''].filter(Boolean).join('  ·  ');
+      ? [G.routes[c.route],force,l&&l.name+'（★'+l.stars+'）','油田 '+G.oil(s,n.id),c.facility?.type==='nuke'?'核兵器':c.facility?.type==='plant'?(s.turn>=c.facility.ready?'原発（転換可能）':'原発（空爆可能）'):''].filter(Boolean).join('  ·  ')
+      : [territoryInfo(n).text,n.id==='israel'?'':force,n.oil?'油田 '+n.oil:''].filter(Boolean).join('  ·  ');
     el.replaceChildren(make('strong',null,n.name),make('span','note',detail));
   }
   function leaders(container,who,callback){
@@ -1620,6 +1688,12 @@ const GulfMap = (() => {
     const wasVisible=!overlay.hidden;
     overlay.hidden=!visible;
     byId('app').inert=visible;
+    const banner=byId('gulf-banner');
+    const bannerPlacement=visible?byId('setup-heading'):byId('status').parentElement;
+    if(banner.parentElement!==bannerPlacement){
+      if(visible)bannerPlacement.append(banner);
+      else byId('status').before(banner);
+    }
     if(!visible)return;
     root.replaceChildren();
     byId('back').hidden=!s||s.phase!=='setup';
@@ -1675,8 +1749,9 @@ const GulfMap = (() => {
     let heading;
     let subject;
     if(p.type==='cooperation'){
-      heading='イスラエルへの共同攻撃';
-      subject=actor+'が武力攻撃を宣言。'+G.board[p.queue[0]].name+'が参加を決めます。協力の威信は成功＋2、失敗＋1です。';
+      heading=target+'への共同攻撃';
+      subject=actor+'が'+target+'を攻撃。'+G.board[p.queue[0]].name+'が参加を決めます。'+
+        (p.target==='israel'?'協力国の威信は成功＋2、失敗＋1。':'協力国の威信は成功＋'+G.playerAttackPrestige.partner+'。');
     }else if(p.type==='reinforcements'){
       const attacker=p.combat==='firstStrike'?'イスラエル':p.combat==='coalition'?'多国籍軍':actor;
       heading='戦闘前の援軍';

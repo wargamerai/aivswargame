@@ -107,7 +107,10 @@
   #game.after-action .play-only { display:none; }
   #battleResult { flex:none; margin:0; padding:10px 16px; background:#292016; color:#ffe19b;
     border-block:2px solid #e3a950; text-align:center; font-size:clamp(22px, 4vw, 42px); }
-  .loadout-option { display:flex; align-items:center; gap:8px; margin:12px 0; }
+  .setup-banner { display:block; width:min(100%,360px,54svh); margin:0 auto 10px; }
+  .setup-banner img { display:block; width:100%; height:auto; }
+  #setupStatus { margin:0 0 8px; color:#ffdc8c; text-align:left; font-weight:700; }
+  #setupStatus:empty { display:none; }
   #postBattle { padding:10px; overflow:auto; }
   #postBattle h2, #postBattle p { margin:0 0 8px; }
   #debriefTable { width:100%; border-collapse:collapse; font-size:12px; }
@@ -148,17 +151,17 @@
   }
 </style>
   <script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
-<script defer src="peasant/banner.js" data-peasant-before="#launchForm &gt; h1"></script>
 </head>
 <body>
 <div id="setup">
   <form class="setup-card" id="launchForm">
+    <a class="setup-banner" href="https://peasant-homepage.savorymedal9.chatgpt.site/?lang=ja" target="_blank" rel="noopener"><img src="peasant/banner-ja.png" width="2172" height="724" alt="Pe@sant — ブラウザで楽しむクラシック・ボードウォーゲーム"></a>
     <h1>ガンダム</h1>
     <h2>連邦軍の編成</h2>
-    <ul id="startingSquad" aria-label="出撃する機体とパイロット"></ul>
-    <label class="loadout-option"><input id="startDualSabers" type="checkbox"> ビームサーベル二刀流（頭部バルカンあり／盾・主射撃武器なし）</label>
+    <p id="setupStatus" role="status">編成中…</p>
+    <ul id="startingSquad" aria-label="出撃する機体とパイロット" aria-busy="true"></ul>
     <p class="mission-rule" id="missionRule"></p>
-    <button type="submit" class="main-action">出撃</button>
+    <button type="submit" class="main-action" id="launchButton" disabled>出撃</button>
   </form>
 </div>
 <main id="game" hidden>
@@ -235,7 +238,6 @@
             <select id="targetSelect" aria-label="射撃目標"></select>
             <select id="weaponSelect" aria-label="射撃武器"></select>
           </div>
-          <button id="equipDualSabers" type="button" hidden>盾・主射撃武器を外して二刀流</button>
           <button id="scout" type="button" hidden>索敵移動</button>
           <div class="phase-choice">
             <button id="fireButton" class="main-action" type="button" hidden></button>
@@ -502,7 +504,6 @@ const JABRO_WEAPONS = {
 const JABRO_LOADOUTS = {
   br: ['rifle', 'vulcan', 'saber', 'shield'],
   bz: ['bazooka', 'vulcan', 'saber', 'shield'],
-  s2: ['saber', 'saber'],
   hammer: ['gundamHammer', 'shield'],
   hyper: ['saber', 'hyperHammer'],
 };
@@ -745,7 +746,6 @@ class JabroBattle {
     this.contacts = [];
     this.units = roster.map(data => activeUnit(data));
     this.player = this.units[0];
-    this.player.dualSabers = loadout === 's2';
     this.enemyCount = enemies.length;
     this.hexes = new Map();
     this.cubes = new Map();
@@ -1191,19 +1191,6 @@ class JabroBattle {
       Boolean(unit.mountImage) || unit.name === MAGELLA_TOP.name;
   }
 
-  canEquipDualSabers() {
-    const player = this.player;
-    return !this.result && this.amuroLevel >= AMURO_STRONG_LEVEL && !player.dualSabers && this.side === 'f' && this.phase === 'prep' &&
-      this.canAct(player) && !player.prepared && !this.engaged(player);
-  }
-
-  equipDualSabers() {
-    if (!this.canEquipDualSabers()) return false;
-    this.player.dualSabers = true;
-    this.player.weapons = amuroLoadout(this.amuroLevel, JABRO_LOADOUTS.s2);
-    return true;
-  }
-
   routeDirection(unit, visited, isGoal, opponent, planning = false) {
     const occupied = new Set(this.units.filter(other => other.alive && other !== unit &&
       other !== opponent).map(other => other.coord));
@@ -1449,7 +1436,7 @@ const ZOOM_LEVELS = [0.65, 0.8, 1, 1.25, 1.5, 2];
 let zoomIndex = ZOOM_LEVELS.indexOf(1);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 let battle;
-const standardLoadouts = Object.keys(JABRO_LOADOUTS).filter(name => name !== 's2');
+const standardLoadouts = Object.keys(JABRO_LOADOUTS);
 const startingLoadout = standardLoadouts[Math.floor(Math.random() * standardLoadouts.length)];
 let busy = false;
 let reaction = null;
@@ -3171,37 +3158,58 @@ function squadRadio(message) {
   render();
 }
 
-battle = new JabroBattle({ loadout: startingLoadout, report: reportEvent, playerChoosesWeapon: true });
-showStartingSquad();
+function allowSetupPaint() {
+  return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+const launchButton = el('launchButton');
+const setupStatus = el('setupStatus');
+const startScreen = el('setup');
+const startingSquad = el('startingSquad');
 el('missionRule').textContent = '最大' + MAX_INNINGS +
   'イニング。ジオン軍の全機撃破で勝利、ガンダム撃破で敗北。時間切れは引き分け。';
-const startDualSabers = el('startDualSabers');
-startDualSabers.disabled = battle.amuroLevel < AMURO_STRONG_LEVEL;
-startDualSabers.addEventListener('change', event => {
-  if (startDualSabers.disabled) return;
-  const dualSabers = event.target.checked;
-  battle.player.dualSabers = dualSabers;
-  battle.player.weapons = amuroLoadout(battle.amuroLevel, JABRO_LOADOUTS[dualSabers ? 's2' : startingLoadout]);
-  showStartingSquad();
-});
-el('equipDualSabers').addEventListener('click', () => {
-  if (busy || reaction || !battle.equipDualSabers()) return;
-  addLine('盾と主武装を外した。ビームサーベル二刀流で行く！', 'アムロ');
-  render();
-});
-el('launchForm').addEventListener('submit', event => {
+
+async function prepareSquad() {
+  await allowSetupPaint();
+  try {
+    battle = new JabroBattle({ loadout: startingLoadout, report: reportEvent, playerChoosesWeapon: true });
+    showStartingSquad();
+    setupStatus.textContent = '';
+    launchButton.disabled = false;
+  } catch (error) {
+    setupStatus.textContent = '編成に失敗しました。ページを読み込み直してください。';
+    console.error(error);
+  } finally {
+    startingSquad.setAttribute('aria-busy', 'false');
+  }
+}
+el('launchForm').addEventListener('submit', async event => {
   event.preventDefault();
-  if (el('setup').hidden) return;
-  el('setup').hidden = true;
+  if (startScreen.hidden || launchButton.disabled) return;
+  launchButton.disabled = true;
+  setupStatus.textContent = '編成中…';
+  startScreen.setAttribute('aria-busy', 'true');
+  await allowSetupPaint();
+  try {
+    battle.deploy();
+    setBattleMap();
+  } catch (error) {
+    setupStatus.textContent = '出撃準備に失敗しました。ページを読み込み直してください。';
+    console.error(error);
+    return;
+  } finally {
+    startScreen.setAttribute('aria-busy', 'false');
+  }
+  startScreen.hidden = true;
   el('game').hidden = false;
-  setBattleMap();
-  battle.deploy();
   commandLine('launch');
   commandLine('ready');
   addJudgment('作戦開始', '第' + MAX_INNINGS + 'イニングの両軍手番終了で時間切れ。');
   reportContact();
   render(true);
 });
+prepareSquad();
+
 async function movePlayer(direction) {
   if (!direction || busy || battle.result || !battle.step(battle.player, direction)) return;
   busy = true;
