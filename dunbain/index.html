@@ -26,6 +26,7 @@ body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans
 #mapArea { flex:1; position:relative; overflow:hidden; background:#102634; border:2px solid #555; border-radius:5px; }
 #mapArea svg { width:100%; height:100%; }
 .counter-name { text-anchor:middle; fill:#fff; stroke:#172335; stroke-width:2px; paint-order:stroke fill; font:700 7.5px system-ui,sans-serif; pointer-events:none; }
+.counter-status { fill:#ffde7a; stroke:#172335; stroke-width:2.4px; paint-order:stroke fill; font:800 9px system-ui,sans-serif; }
 #mapArea #fxSvg { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:8; overflow:visible; }
 
 /* 右パネル上段の操作欄 */
@@ -693,6 +694,7 @@ function createUnit(id, def, team) {
     type: typeKey,
     weaponHands: def.weaponHands ? { ...def.weaponHands } : undefined,
     collisionInactiveTurn: null,
+    droppedWeaponCount: 0,
   };
 }
 
@@ -1260,7 +1262,7 @@ function showPlanReadyUI() {
   mapHudPanel.classList.remove('map-hud-ranged-phase');
   mapHudPanel.innerHTML = `
     <div class="map-hud-title">全員の命令入力済み</div>
-    <div style="color:#aaa;font-size:11px;line-height:1.45;margin-bottom:10px;">移動はまだ反映されていません。「同時実行」で全機の移動を一度に解決し、その後ターン順に射撃・格闘を処理します。<br>移動終了時に同じマスにいる機体は、双方が衝突を判定します。</div>
+    <div style="color:#aaa;font-size:11px;line-height:1.45;margin-bottom:10px;">移動はまだ反映されていません。「同時実行」で全機の移動を一度に解決し、その後ターン順に射撃・格闘を処理します。<br>移動終了時に同じマスにいる機体は、双方が衝突を判定し、オーラ力が低い方が隣の空きヘクスに押し出されます。</div>
     <button type="button" class="action-btn" id="executeSimultaneousBtn" style="width:100%;">同時実行</button>
   `;
   showMapHud();
@@ -1282,6 +1284,7 @@ function collisionMaybeDropWeapon(unit) {
     const roll = roll1d6();
     if (roll > (sword ? 3 : 1)) continue;
     unit.weapons.splice(unit.weapons.indexOf(label), 1);
+    if (!sword || (!unit.swordDisarmed && !unit.destroyed['剣'])) unit.droppedWeaponCount++;
     if (sword) unit.swordDisarmed = true;
     addLog(unit.team, `${unit.pilot}: 衝突で${label}を失う（1d6=${roll}）`);
   }
@@ -1300,6 +1303,26 @@ function completeAiMovementPlan(unit) {
   unit.planComplete = true;
 }
 
+function pushCollisionUnit(weaker, stronger) {
+  const strongerEntry = stronger.planPathHexes?.at(-2);
+  const weakerEntry = weaker.planPathHexes?.at(-2);
+  let direction = stronger.dir;
+  if (strongerEntry) {
+    direction = (bestFaceDirToward(weaker.x, weaker.y, strongerEntry.x, strongerEntry.y) + 3) % 6;
+  } else if (weakerEntry) {
+    direction = bestFaceDirToward(weaker.x, weaker.y, weakerEntry.x, weakerEntry.y);
+  }
+  for (const offset of [0, -1, 1, -2, 2, 3]) {
+    const { x, y } = hexNeighbor(weaker.x, weaker.y, (direction + offset + 6) % 6);
+    if (!isPlayableBoardHex(x, y) || units.some(u => u.status === 'alive' && u.x === x && u.y === y)) continue;
+    weaker.x = x;
+    weaker.y = y;
+    addLog('system', `${weaker.pilot}: ${stronger.pilot}との衝突で1ヘクス押し出し → (${x},${y})`);
+    return;
+  }
+  addLog('system', `${weaker.pilot}: 衝突で押し出せるヘクスがない`);
+}
+
 function executePlannedMovesWithConflicts() {
   const destinations = new Map();
   for (const unit of turnOrder) {
@@ -1313,21 +1336,31 @@ function executePlannedMovesWithConflicts() {
     destinations.get(key).push(unit);
     addLog(unit.team, `${unit.pilot}: 移動 → (${unit.x},${unit.y}) 向き${unit.dir}`);
   }
-  const collisions = new Set();
+  const collisions = [];
+  const pushes = new Map();
   for (const [hex, group] of destinations) {
+    // 同じヘクスの判定をすべて終えてから押し出す。1機につき最大1ヘクス。
     for (let i = 0; i < group.length; i++) {
+      const unit = group[i];
       for (const other of group.slice(i + 1)) {
-        const unit = group[i];
         const pair = [unit.id, other.id].sort().join(',');
         const key = `${hex}:${pair}`;
-        collisions.add(key);
+        collisions.push({ key, unit, other });
         if (lastCollisionPairs.has(key)) continue;
         resolveCollisionTableOutcome(unit, other);
         resolveCollisionTableOutcome(other, unit);
+        const auraDifference = getAuraForPower(unit) - getAuraForPower(other);
+        if (auraDifference === 0) continue;
+        const [weaker, stronger] = auraDifference < 0 ? [unit, other] : [other, unit];
+        const previous = pushes.get(weaker);
+        if (!previous || getAuraForPower(stronger) > getAuraForPower(previous)) pushes.set(weaker, stronger);
       }
     }
   }
-  lastCollisionPairs = collisions;
+  for (const [weaker, stronger] of pushes) pushCollisionUnit(weaker, stronger);
+  lastCollisionPairs = new Set(collisions
+    .filter(({ unit, other }) => unit.x === other.x && unit.y === other.y)
+    .map(({ key }) => key));
 }
 
 function executeSimultaneousTurn() {
@@ -1339,28 +1372,20 @@ function executeSimultaneousTurn() {
   hideMapHud();
   addLog('system', spectatorMode ? '--- 移動を解決 ---' : '--- 移動を同時解決 ---');
   moveRevealPaths = [];
+  executePlannedMovesWithConflicts();
   if (planSnapshot) {
-    for (let i = 0; i < turnOrder.length; i++) {
-      const u = turnOrder[i];
+    for (const u of turnOrder) {
       if (u.status !== 'alive' || !planSnapshot[u.id]) continue;
-      const hexes = u.planPathHexes;
-      if (!hexes || hexes.length < 2) continue;
-      moveRevealPaths.push({ unitId: u.id, team: u.team, hexes: hexes.slice() });
+      const hexes = u.planPathHexes?.length ? u.planPathHexes.slice() : [planSnapshot[u.id]];
+      const last = hexes.at(-1);
+      if (last.x !== u.x || last.y !== u.y) hexes.push({ x: u.x, y: u.y });
+      if (hexes.length >= 2) moveRevealPaths.push({ unitId: u.id, team: u.team, hexes });
     }
   }
-  executePlannedMovesWithConflicts();
   for (const u of turnOrder) {
     if (u.selectedAction === '変形' && u.status === 'alive' && u.machine === 'ビルバイン') {
       u.type = u.type === 'WC' ? 'AB' : 'WC';
       addLog(u.team, `${u.pilot}: ${u.type === 'WC' ? 'ウィングキャリバー' : 'オーラバトラー'}に変形`);
-    }
-  }
-  if (moveRevealPaths.length) {
-    for (let j = 0; j < moveRevealPaths.length; j++) {
-      const row = moveRevealPaths[j];
-      const u = units.find(ux => ux.id === row.unitId);
-      const dest = u && u.planEndState;
-      row.canceled = !!(u && dest && (u.x !== dest.x || u.y !== dest.y));
     }
   }
   drawMap();
@@ -3676,6 +3701,7 @@ function applyParryEquipmentStressAfterRoll(defender, stress) {
   if (!stress || !defender) return;
   applyParryEquipmentDamageResult(defender, stress.part, stress.dmgResult);
   if (stress.dropped) {
+    if (!defender.swordDisarmed) defender.droppedWeaponCount++;
     defender.swordDisarmed = true;
     addLog('system', `${defender.pilot}: 剣を落とした（落下判定1d6=${stress.dropRoll}）`);
   }
@@ -4858,7 +4884,6 @@ function drawRevealedMovePaths(svg) {
     const group = document.createElementNS(ns, 'g');
     group.setAttribute('pointer-events', 'none');
     group.setAttribute('data-move-route', route.unitId);
-    if (route.canceled) group.setAttribute('opacity', '0.55');
     for (const [stroke, width] of [[edge, 9], [color, 5]]) {
       const line = document.createElementNS(ns, 'polyline');
       line.setAttribute('points', geometry);
@@ -4868,7 +4893,6 @@ function drawRevealedMovePaths(svg) {
       line.setAttribute('stroke-linecap', 'round');
       line.setAttribute('stroke-linejoin', 'round');
       line.setAttribute('vector-effect', 'non-scaling-stroke');
-      if (route.canceled) line.setAttribute('stroke-dasharray', '10,7');
       group.appendChild(line);
     }
     const arrow = document.createElementNS(ns, 'polygon');
@@ -4938,6 +4962,28 @@ function drawUnitCounter(svg, unit, x, y, size, showPilot) {
   front.setAttribute('stroke-linecap', 'round');
   counter.appendChild(front);
 
+  const marks = [];
+  if (unitCannotAct(unit)) {
+    marks.push({ text: 'D', label: '行動不能', x: size / 2 - 2, y: 7 - size / 2, align: 'end' });
+  }
+  const losses = unit.droppedWeaponCount;
+  if (losses > 0) {
+    marks.push({ text: 'W'.repeat(losses), label: `武器${losses}個喪失`, x: 0, y: size / 2 - 1, align: 'middle' });
+  }
+  for (const { text, label, x, y, align } of marks) {
+    const marker = document.createElementNS(ns, 'text');
+    marker.setAttribute('class', 'counter-status');
+    marker.setAttribute('x', x);
+    marker.setAttribute('y', y);
+    marker.setAttribute('text-anchor', align);
+    marker.setAttribute('aria-label', label);
+    if (text.length * 9 > size - 2) {
+      marker.setAttribute('textLength', size - 2);
+      marker.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+    }
+    marker.textContent = text;
+    group.appendChild(marker);
+  }
   if (showPilot) {
     const pilot = document.createElementNS(ns, 'text');
     pilot.setAttribute('class', 'counter-name');
