@@ -482,11 +482,11 @@ function sendToCampaign() {
   const forCampaign = { endTurn: state.combatTurn || 0, ships: ships, jpHandicap: JP_HANDICAP };
   localStorage.setItem('battleResultForCampaign', JSON.stringify(forCampaign));
   localStorage.removeItem('manualBattleEnd');
-  // シナリオモードならトップへ、キャンペーンならcampaign.htmlへ
+  // 単発シナリオは編成画面に、キャンペーン戦闘はキャンペーン画面に戻る。
   var scenarioMode = localStorage.getItem('scenarioMode');
   if (scenarioMode) {
     localStorage.removeItem('scenarioMode');
-    window.top.location.href = '../index1.html';
+    window.top.location.href = 'savo.html';
   } else {
     window.top.location.href = 'campaign.html';
   }
