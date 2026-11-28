@@ -49,8 +49,8 @@
     link.style.cssText = 'display:block;flex:0 0 auto;width:min(calc(100% - 16px),560px,66svh);margin:8px auto 12px';
 
     const image = document.createElement('img');
-    image.width = 2172;
-    image.height = 724;
+    image.width = 648;
+    image.height = 216;
     image.decoding = 'async';
     image.style.cssText = 'display:block;width:100%;height:auto';
     link.append(image);
@@ -64,7 +64,7 @@
         image.alt = japanese
             ? 'Pe@sant — ブラウザで楽しむクラシック・ボードウォーゲーム'
             : 'Pe@sant — Classic board wargames in your browser';
-        image.src = new URL(`banner-${locale}.png`, script.src);
+        image.src = new URL(`banner-${locale}-compact.webp`, script.src);
     }
 
     function screenIsVisible() {
