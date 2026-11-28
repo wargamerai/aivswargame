@@ -602,7 +602,7 @@ function rollFederationUnits(enemies, enemyTier, loadout, pick) {
   const preferredStrength = opponentStrength * 1.04;
   const loadouts = AMURO_CARDS.map((_, level) => amuroLoadout(level, loadout));
   const levels = AMURO_CARDS.map((_, index) => index).filter(index =>
-    index > 0 && amuroCanFight(index, loadouts[index], enemies[0].pilot, enemies[0], enemies[0].weapons));
+    amuroCanFight(index, loadouts[index], enemies[0].pilot, enemies[0], enemies[0].weapons));
   const candidates = [];
   for (let i = 0; i < 36; i++) {
     const count = 3 + i % (FEDERATION_PILOTS.length - 2);
@@ -1444,8 +1444,7 @@ let reviewingBattle = false;
 const scoutExplored = new Set();
 const playerMoveTrail = new Set();
 const contactsSeen = new Set();
-const radioUsed = new Map();
-let contactInning = 0;
+const spokenAnimeLines = new Set();
 let combatInning = 0;
 let playerCombatInning = 0;
 let resumeSearchInning = 0;
@@ -1459,237 +1458,36 @@ const pendingRollMessages = [];
 const pendingJudgments = [];
 let lostWeaponUnit = null;
 let resolveRolls;
-const PILOT_RADIO = {
-  カイ: {
-    forward: 'ああ、前に出るぜ。', back: 'わかった、いったん下がるぜ。', hill: '丘だな。上がってみるぜ。',
-    hold: 'ああ、ここで待つ。', moving: '任せとけ。', moved: '言われた方へ動いたぜ。',
-    onHill: '丘まで上がったぞ。ここから援護する。', climbing: 'まだ途中だ。丘まであと少しだぜ。',
-    blocked: 'こっちは通れねえ。今はここまでだ。', retry: '悪い、もう一度言ってくれ。', immobile: '足をやられた。今は動けねえ。',
-  },
-  ハヤト: {
-    forward: '了解です。前に出ます。', back: '了解、後ろへ下がります。', hill: 'はい、近くの丘に上がります。',
-    hold: 'はい、この位置で待機します。', moving: '了解です。', moved: '指示の方向へ移動しました。',
-    onHill: '丘に着きました。ここから援護します。', climbing: 'まだ上りきれていません。丘へ向かいます。',
-    blocked: '今はこれ以上進めません。', retry: 'すみません、もう一度お願いします。', immobile: '足をやられました。今は動けません。',
-  },
-  連邦パイロット: {
-    forward: '了解、前に出ます。', back: '後退します。', hill: '高台へ向かいます。', hold: 'ここで待機します。',
-    moving: '了解。', moved: '指示の方向へ進みました。', onHill: '高台に着きました。', climbing: 'まだ向かっている途中です。',
-    blocked: 'この先は通れません。', retry: 'もう一度お願いします。', immobile: '足回りをやられました。',
-  },
+// TVアニメ『機動戦士ガンダム』第29話「ジャブローに散る！」からの短い抜粋。
+// https://www.youtube.com/watch?v=RLBTA8NRv24
+// https://gungamfan.seesaa.net/article/116055236.html
+const JABRO_SORTIE_LINES = [
+  ['出撃できるか？', 'ブライト'],
+  ['アムロ、いいわね？', 'セイラ'],
+];
+const JABRO_CHAR_CONTACT = ['奴が来たんだ。', 'アムロ'];
+const JABRO_CHAR_EXCHANGE = [
+  ['シャアか？', 'アムロ'],
+  ['さらにできるようになったな、ガンダム！', 'シャア'],
+];
+const ANIME_ATTACK_LINES = {
+  アムロ: 'そこっ！',
+  カイ: 'なめるな！',
+  ハヤト: 'ホワイトベースには近づけさせるものか！',
+  // 第1話「ガンダム大地に立つ!!」 https://gungamfan.seesaa.net/article/114626025.html
+  ジーン: '手柄を立てちまえばこっちのもんよ！',
 };
-PILOT_RADIO.リュウ = PILOT_RADIO.セイラ = PILOT_RADIO.連邦パイロット;
-// 登場人物の設定を参考にした、このシナリオ用の新規無線台詞。
-const ZEON_RADIO = {
-  ジーン: {
-    sight: ['先に出ます、見つけたのは自分だ！', '連邦機だ。こいつは俺が押さえる！'],
-    attack: ['今度は逃がさないぞ！', '振り切れると思うな！'],
-    evade: ['そんなところから撃ってくるのか！', 'まだこっちは動けるぞ！'],
-    melee: ['距離なんか取らせるか！', 'ここまで来たら引かないぞ！'],
-  },
-  コズン: {
-    sight: ['接触した。こっちで動きを見る。', '前方に一機。様子を見ながら近づく。'],
-    attack: ['そこなら追える！', '横に出たぞ、今だ！'],
-    evade: ['見通しがよすぎたか。位置を変える。', 'こっちをよく見ているな。'],
-    melee: ['踏み込みが早い。こっちも詰める！', '押し返せば、まだ間合いを取れる。'],
-  },
-  アコース: {
-    sight: ['連邦機だ。こっちに気づいたようだぞ。', 'こちらで接触。横は任せてくれ。'],
-    attack: ['横はもらった！', '止まるな、こっちから援護する！'],
-    evade: ['射線が重なった。動くぞ！', 'そちらも狙われてる、離れろ！'],
-    melee: ['ここは通さない！', '押し込まれる前に受け止める！'],
-  },
-  スレンダー: {
-    sight: ['敵影確認。こちらから援護できます。', '見えました。後ろは任せてください。'],
-    attack: ['援護します。今のうちに！', '射線が開きました。こちらから撃てます！'],
-    evade: ['こちらにも気づきました。まだ動けます！', '後方まで狙ってきます！'],
-    melee: ['近すぎます！　立て直さないと！', '押し返します、援護を！'],
-  },
-  タチ: {
-    sight: ['敵機だ。先の通りはふさがったぞ。', 'こちらタチ。前方で接触した。'],
-    attack: ['そこは見えているぞ！', '向きを変える前に仕掛ける！'],
-    evade: ['ここも安全じゃないな。', 'まだ見失ってはいないぞ！'],
-    melee: ['前を開けるわけにはいかない！', 'ここで止めるぞ！'],
-  },
-  ヒッチ: {
-    sight: ['連邦機を見つけた。そっちから見えるか？', '前方に反応。足並みをそろえてくれ。'],
-    attack: ['目の前の一機は任せろ！', 'こっちを向いた。合わせてくれ！'],
-    evade: ['思ったより切り返しが速い！', 'こっちの狙いを読んだか。'],
-    melee: ['おい、そんなに近づくな！', 'これ以上は下がれないぞ！'],
-  },
-  デニム: {
-    sight: ['連邦機だ。追いすぎるな、隊列を保て。', '敵を確認した。先走るなよ。'],
-    attack: ['今だ。こちらで足を止める！', '間を空けるな。私が先に仕掛ける。'],
-    evade: ['慌てるな。互いに援護できる位置へ。', 'こっちが崩れるのを待っているな。'],
-    melee: ['踏ん張れ。抜かれるな！', '接触した。私が押し返す。'],
-  },
-  ドアン: {
-    sight: ['そこまでだ。これ以上は近づくな。', '引くなら今だ。私は無理には追わない。'],
-    attack: ['まだ向かってくるのか。', 'ここを通すわけにはいかない。'],
-    evade: ['撃ち合いで決める気か。', '力任せに見えて、よく見ている。'],
-    melee: ['間合いを誤ると、そちらも危ないぞ。', 'その動きはもう見た。'],
-  },
-  マッシュ: {
-    sight: ['見えた。回り込むぞ。', '見つけた。正面はそっちに任せた。'],
-    attack: ['こっちが見えてなかったようだな！', '横を取った。今ならいける！'],
-    evade: ['こっちの回り込みに気づいたか。', 'こっちを見るなら、横が空くぞ。'],
-    melee: ['向き直るのが遅いぞ！', '正面ばかり見ているからだ！'],
-  },
-  オルテガ: {
-    sight: ['いたぞ。先に行かせてもらうぜ。', '待ってたぜ。正面は俺に任せろ。'],
-    attack: ['まずはこっちを相手にしてもらうぞ！', '受けてみろ、連邦の！'],
-    evade: ['この程度で引くと思うなよ！', 'へっ、やってくれるじゃないか。'],
-    melee: ['その距離ならこっちのもんだ！', '腕一本で押し返してやる！'],
-  },
-  ガイア: {
-    sight: ['見つけたぞ。各機、動きを合わせろ。', '一機ずつ飛び出すな。こいつは速いぞ。'],
-    attack: ['こちらに引きつける。続け！', '追い込んだ。合わせるなら今だ！'],
-    evade: ['狙いがいい。次は同じ手で来るなよ。', '間を詰めすぎたか。隊列を取り直す。'],
-    melee: ['ここで止める。横を頼んだぞ！', '切り込んできたな。正面は私が受ける！'],
-  },
-  ランバ・ラル: {
-    sight: ['姿を見せたな。各機、焦って追うんじゃない。', 'いい構えだ。まず相手の出方を見よう。'],
-    attack: ['こちらの間合いだ。受けてみろ。', '次の一手を見ておくんだな。'],
-    evade: ['なるほど。撃つべき所は知っている。', 'いい判断だ。だが、まだ戦いは終わらん。'],
-    melee: ['踏み込んだか。ならば正面から受けよう。', '機体の力だけでは、この間合いは取れんぞ。'],
-  },
-  シャア: {
-    sight: ['ようやく姿を見せたか。私が出よう。', 'あの動き、ただの新型と片づけるには惜しいな。'],
-    attack: ['そこへ動くと思っていたよ。', '次も避けられるか、見せてもらおう。'],
-    evade: ['よく合わせてきた。こちらも手を変えよう。', '追いついてきたか。面白い。'],
-    melee: ['その踏み込みを待っていた。', 'ずいぶん思い切ったな。だが近すぎる。'],
-  },
-};
-const FED_RADIO = {
-  アムロ: {
-    sight: ['敵機を見つけた。僕が前を見ます。', '見えた。こちらに気づいたみたいだ。', '敵影確認。みんな、位置を変えないで！'],
-    attack: ['よし、僕が引きつけます。', 'ここで押さえれば、みんなが動ける！', '今の位置なら狙える！'],
-    evade: ['動きを読まれた？　次は合わせる！', 'まだガンダムは動く。ここで止まれない！', 'そっちの動きは見えている！'],
-    melee: ['逃がさない。ここで止める！', 'そんなに簡単には押し切らせない！', '近い！　向きだけは見失うな！'],
-    hit: ['うっ……まだ操縦はできる！', 'やられた！　どこを食ったんだ？'],
-  },
-  カイ: {
-    sight: ['おい、向こうもこっちに気づいたぜ。', '見つけたぞ。嫌なところにいるな。'],
-    attack: ['悪いな、先にこっちからだ。', 'こっちも飾りで乗ってんじゃないぜ！'],
-    evade: ['危ねえな！　そう何度も食うかよ。', 'へっ、まだこっちは持つぜ。'],
-    melee: ['近いって言ってんだろ！', 'おいおい、押し返すしかねえぞ！'],
-    hit: ['いてっ、まともにもらった！', '当てやがった！　こっちも無事じゃねえぞ。'],
-  },
-  ハヤト: {
-    sight: ['敵を見つけました。こちらからも見えます！', 'アムロ、敵です！　今、確認しました。'],
-    attack: ['こちらから援護します。今です！', '待ってください、僕も狙えます！'],
-    evade: ['なんとかかわしました。まだ行けます！', '危なかった……次は気をつけます。'],
-    melee: ['こんな近くに！　僕が押さえます！', 'このままじゃ抜かれます。押し返します！'],
-    hit: ['被弾しました！　機体を確認します！', '当たりました。でも応答はできます！'],
-  },
-  リュウ: {
-    sight: ['敵を確認した。前はこっちで見る。', '見えたぞ。みんな、落ち着いて合わせるんだ。'],
-    attack: ['私が抑える。そっちは前を頼む。', '狙えるところまで来た。合わせてくれ！'],
-    evade: ['まだ持つ。周りの確認を続けろ。', '慌てるな、立て直せる。'],
-    melee: ['ここで受ける。横には抜かせない。', '踏ん張るぞ。こっちは気にするな。'],
-    hit: ['こちらは被弾した。そっちまで崩れるな。', '一発もらった。まだ通信は生きている。'],
-  },
-  セイラ: {
-    sight: ['敵影を確認。こちらから追えるわ。', '接触したわ。落ち着いて、距離を見て。'],
-    attack: ['こちらで抑えるわ。続いて。', '見えた。その動きなら取れる！'],
-    evade: ['まだ動ける。私より前を見て。', '同じ動きはしないわ。続けましょう。'],
-    melee: ['そこは通さない。私が止めるわ！', '近いわね。向きを変えさせない。'],
-    hit: ['こちらも被弾したわ。状況を確認する。', '一発もらったけど、通信はできるわ。'],
-  },
-  連邦パイロット: {
-    sight: ['敵機を確認。こちらから見えます。', '前方に敵影。進路を確認します。'],
-    attack: ['こちらからも攻撃できます。', '援護に入ります。前をお願いします！'],
-    evade: ['回避しました。まだ動けます。', 'こちらは無事です。次に備えます。'],
-    melee: ['接触しました。押し返します！', 'この先へは通しません！'],
-    hit: ['こちら被弾。機体を確認します！', '当たりました。応答はできます！'],
-  },
-};
-const COMMAND_RADIO = {
-  launch: [
-    ['セイラ', 'こちらホワイトベース。敵影があれば知らせて。'],
-    ['ブライト', '各機、出撃。確認できた情報から回してくれ。'],
-    ['セイラ', '通信は通っているわ。僚機の位置は無線で確認して。'],
-  ],
-  ready: [
-    ['アムロ', '了解。ガンダム、出ます！'],
-    ['アムロ', 'こちらガンダム。前を確認します。'],
-    ['アムロ', '通信了解。周りを見ながら出ます。'],
-  ],
-  search: [
-    ['セイラ', 'まだ敵機が残っているわ。見えていない方面を探して。'],
-    ['ブライト', '目の前の敵は片づいた。次の敵影を探せ。'],
-    ['セイラ', '視界内に敵影なし。次の区画を確認して。'],
-  ],
-  victory: [
-    ['ブライト', '敵の反応が消えた。各機、帰投しろ。'],
-    ['セイラ', '敵影はなくなったわ。味方機の確認をお願い。'],
-    ['ブライト', '作戦終了だ。よくやった、各機。'],
-  ],
-  defeat: [
-    ['セイラ', 'ガンダム、応答して。こちらホワイトベース。'],
-    ['ブライト', 'ガンダムの反応が消えた。各機、いったん引け。'],
-    ['セイラ', 'アムロ、聞こえる？　応答を待っているわ。'],
-  ],
-  draw: [
-    ['ブライト', 'ここまでだ。各機、戦闘を打ち切れ。'],
-    ['セイラ', '作戦時間終了よ。味方機、応答して。'],
-    ['ブライト', 'これ以上は追うな。各機、帰投せよ。'],
-  ],
-};
-
-// 原作での操縦ぶりを参考にした新規の掛け合い。勝敗や射撃の成否は先に断定しない。
-const ACTION_SCENES = {
-  シャア: {
-    fed: [
-      ['正面に見えてるのに、振り切れない……でも今なら！', 'そこまで追えるようになったか。次の動きはどうかな。'],
-      ['速い！　でも、切り返す瞬間なら追える！', 'いい読みだ。私も同じところにはいないよ。'],
-      ['今度は動き出すほうを狙う！', '撃つ場所を変えたか。ずいぶん慣れてきたな。'],
-    ],
-    zeon: [
-      ['追いつけるか、ここで試してみよう。', '逆を取られた？　いや、まだ間に合う！'],
-      ['そこを急いで抜けるとはね。私ならこうする。', '待ち構えていたのか！　こっちだって！'],
-    ],
-    melee: [
-      ['振り抜く前に止める！', '踏み込む気になったか。ならば私も退かん。'],
-      ['この距離なら、もう見失わない！', '見えてから動くのでは少し遅いな。'],
-    ],
-  },
-  ランバ・ラル: {
-    fed: [
-      ['正面を空けた？　誘っているのか！', '気づいたか。なら、次にどう動くか見せてもらおう。'],
-      ['見た目だけで判断しちゃだめだ。あの操縦……！', 'うむ、機体の癖まで見るようになったか。'],
-    ],
-    zeon: [
-      ['間合いが詰まったぞ。まだ逃げるつもりか？', '逃げるんじゃない。この距離で受けるんだ！'],
-      ['焦るな、という顔をしているな。だが今だ。', '先に仕掛けてきた！　なら僕は横へ！'],
-    ],
-    melee: [
-      ['間合いなら、僕だって取れる！', '言うじゃないか。それなら力を見せてみろ。'],
-      ['機体が同じでも、その腕までは真似できない。でも！', 'そう思うなら、今の一歩を引くんじゃないぞ。'],
-    ],
-  },
-  ガイア: {
-    fed: [
-      ['一機目だけ見てたらやられる。横も見ないと！', 'こっちの動きが気になるか。なら、合わせて動くぞ。'],
-      ['あの間隔、ばらばらに動いてるんじゃない！', '見抜いたなら止めてみろ。先頭は私が引き受ける！'],
-    ],
-    zeon: [
-      ['私が先に出る。各機、私に合わせろ！', '続けて来るつもりだ！　最初の一機から目を離すな！'],
-      ['正面は任せろ。相手が向きを変えたら続け！', '一方向じゃない！　よし、間を抜く！'],
-    ],
-    melee: [
-      ['正面を抜ければ、次も見える！', '抜ける前に私を押し返してみろ！'],
-      ['踏み込むなら今しかない！', 'いい度胸だ。だが、こっちは一人で来たわけじゃない。'],
-    ],
-  },
-  vulcan: {
-    fed: [
-      ['ライフルの間合いじゃない。頭のバルカンで止める！', 'まだ撃てるのか！　正面からは詰められないぞ。'],
-      ['近い！　バルカンなら向けられる！', '頭のほうから来るぞ。離れろ！'],
-      ['足を止められればいい。バルカン、いけっ！', '寄せる気がないな。なら横からだ。'],
-    ],
-  },
-};
+// 第1話「ガンダム大地に立つ!!」 https://gungamfan.seesaa.net/article/114626025.html
+const JEAN_EXCHANGE = [
+  ['見てろよ、ザクめ！', 'アムロ'],
+  ['やってやる。いくら装甲が厚くたって', 'ジーン'],
+];
+// 第2話「ガンダム破壊命令」 https://gungamfan.seesaa.net/article/114627968.html
+const CHAR_EVASION_LINE = ['当たらなければどうということはない。', 'シャア'];
+// 第12話「ジオンの脅威」 https://www.muddy-walkers.com/GDM/12.html
+const RAL_MELEE_LINE = ['ザクとは違うのだよ、ザクとは！', 'ランバ・ラル'];
+const ENEMY_PILOT_NAMES = new Set([...REGULAR_ZEON_PILOTS, ...ZEON_COMMANDERS.flat()]);
+const RADIO_ORDERS = { forward: '前進', back: '後退', hill: '丘へ移動', hold: '待機' };
 
 function fieldPoint(col, row) {
   return jabroMapPoint(battle.layout, col, row);
@@ -1730,61 +1528,36 @@ function setBattleMap() {
   changeZoom(0);
 }
 
-function addLine(message, pilot = '', kind = 'notice', color = '') {
+function addLine(message, pilot) {
   if (pendingRolls.length) {
-    pendingRollMessages.push([message, pilot, kind, color]);
+    pendingRollMessages.push([message, pilot]);
     return;
   }
   const list = el('radioLog');
   const line = document.createElement('p');
-  line.className = 'radio-line ' + kind;
-  if (pilot) {
-    const name = document.createElement('span');
-    name.className = 'voice' + (pilot === 'アムロ' ? ' player-voice' : Object.hasOwn(ZEON_RADIO, pilot) ? ' enemy-voice' : '');
-    name.textContent = pilot + ' ';
-    if (color) name.style.color = color;
-    line.append(name);
-  }
-  line.append(message);
+  line.className = 'radio-line notice';
+  const name = document.createElement('span');
+  name.className = 'voice' + (pilot === 'アムロ' ? ' player-voice' : ENEMY_PILOT_NAMES.has(pilot) ? ' enemy-voice' : '');
+  name.textContent = pilot + ' ';
+  line.append(name, message);
   list.append(line);
   if (list.childElementCount > 200) list.firstElementChild.remove();
   list.scrollTop = list.scrollHeight;
 }
 
-function radioPick(key, choices) {
-  if (!choices?.length) return '';
-  const used = radioUsed.get(key) ?? new Set();
-  if (used.size >= choices.length) used.clear();
-  const options = choices.filter((_, i) => !used.has(i));
-  const choice = options[Math.floor(Math.random() * options.length)];
-  used.add(choices.indexOf(choice));
-  radioUsed.set(key, used);
-  return choice;
-}
-
-function pilotLine(unit, scene) {
-  if (!unit?.alive || unit.stunned || (unit.side === 'e' && !battle.visible(unit))) return;
-  const bank = unit.side === 'e' ? ZEON_RADIO : FED_RADIO;
-  const text = radioPick(unit.pilot + ':' + scene, bank[unit.pilot]?.[scene]);
-  if (text) addLine(text, unit.pilot);
-}
-
-function commandLine(scene) {
-  const [pilot, text] = radioPick('command:' + scene, COMMAND_RADIO[scene]);
-  addLine(text, pilot);
+function playAnimeLines(candidates) {
+  const lines = candidates.filter(([text]) => text && !spokenAnimeLines.has(text));
+  for (const [text, pilot] of lines) {
+    spokenAnimeLines.add(text);
+    addLine(text, pilot);
+  }
+  return lines;
 }
 
 function reportContact() {
   const newlySeen = battle.living('e').filter(enemy => battle.visible(enemy) && !contactsSeen.has(enemy.id));
-  if (!newlySeen.length) return;
-  if (contactInning !== battle.inning) {
-    const enemy = newlySeen.find(unit => !unit.stunned);
-    const ally = battle.living('f').find(unit => !unit.stunned && enemy && battle.sight(unit.coord, enemy.coord));
-    if (ally && enemy) {
-      contactInning = battle.inning;
-      pilotLine(ally, 'sight');
-      pilotLine(enemy, 'sight');
-    }
+  if (!battle.player.stunned && newlySeen.some(enemy => enemy.pilot === 'シャア' && !enemy.stunned)) {
+    playAnimeLines([JABRO_CHAR_CONTACT]);
   }
   for (const enemy of newlySeen) {
     contactsSeen.add(enemy.id);
@@ -1793,40 +1566,41 @@ function reportContact() {
 }
 
 function combatExchange(event, mode) {
-  const { unit, target, weapon, damage } = event;
+  const { unit, target } = event;
   const enemy = unit.side === 'e' ? unit : target;
   const ally = unit.side === 'f' ? unit : target;
-  const playerInvolved = unit === battle.player || target === battle.player;
+  const playerInvolved = ally === battle.player;
   if (!battle.visible(enemy) || enemy.stunned || ally.stunned ||
       (combatInning === battle.inning && (!playerInvolved || playerCombatInning === battle.inning))) return [];
-  combatInning = battle.inning;
-  if (playerInvolved) playerCombatInning = battle.inning;
-  const role = mode === 'melee' ? 'melee' : unit.side === 'f' ? 'fed' : 'zeon';
-  const key = weapon === JABRO_WEAPONS.vulcan ? 'vulcan' : enemy.pilot;
-  const featured = ally === battle.player ? ACTION_SCENES[key]?.[role] : null;
-  let lines;
-  if (featured?.length) {
-    const [first, second] = radioPick('scene:' + key + ':' + role, featured);
-    lines = [[first, unit.pilot], [second, target.pilot]];
-  } else {
-    const bankLine = (piece, scene) => radioPick(piece.pilot + ':' + scene,
-      (piece.side === 'e' ? ZEON_RADIO : FED_RADIO)[piece.pilot]?.[scene]);
-    const first = mode === 'melee' ? 'melee' : 'attack';
-    const second = mode === 'melee' ? 'melee' : target.side === 'f' && damage !== '-' ? 'hit' : 'evade';
-    lines = [[bankLine(unit, first), unit.pilot], [bankLine(target, second), target.pilot]].filter(([text]) => text);
+
+  let lines = [];
+  if (playerInvolved && enemy.pilot === 'シャア') {
+    lines = playAnimeLines(JABRO_CHAR_EXCHANGE);
+  } else if (playerInvolved && enemy.pilot === 'ジーン' && enemy.name === 'ザク') {
+    lines = playAnimeLines(JEAN_EXCHANGE);
+  } else if (playerInvolved && mode === 'melee' && enemy.pilot === 'ランバ・ラル' && enemy.name === 'グフ') {
+    lines = playAnimeLines([RAL_MELEE_LINE]);
   }
-  for (const [text, pilot] of lines) addLine(text, pilot);
+  if (!lines.length) {
+    const candidates = [[ANIME_ATTACK_LINES[unit.pilot], unit.pilot]];
+    if (mode === 'shot' && !event.hit && target.pilot === 'シャア') candidates.push(CHAR_EVASION_LINE);
+    lines = playAnimeLines(candidates);
+  }
+  if (lines.length) {
+    combatInning = battle.inning;
+    if (playerInvolved) playerCombatInning = battle.inning;
+  }
   return lines;
 }
 
 function makeRollRadio(lines) {
   const radio = document.createElement('div');
   radio.className = 'roll-radio';
-  radio.setAttribute('aria-label', '戦闘中の掛け合い');
+  radio.setAttribute('aria-label', '戦闘中の台詞');
   for (const [text, pilot] of lines) {
     const line = document.createElement('p');
     const voice = document.createElement('strong');
-    voice.className = 'voice' + (Object.hasOwn(ZEON_RADIO, pilot) ? ' enemy-voice' : ' player-voice');
+    voice.className = 'voice' + (ENEMY_PILOT_NAMES.has(pilot) ? ' enemy-voice' : ' player-voice');
     voice.textContent = pilot + '：';
     line.append(voice, text);
     radio.append(line);
@@ -2004,7 +1778,6 @@ function reportEvent(event) {
       event.result === '連邦軍の勝利' ? 'ジオン軍の残存機なし。' : 'ガンダムが撃破された。';
     if (pendingRolls.length) pendingJudgments.push(['作戦終了：' + event.result, details]);
     else addJudgment('作戦終了：' + event.result, details);
-    commandLine(event.result === '連邦軍の勝利' ? 'victory' : event.result === '引き分け' ? 'draw' : 'defeat');
     return;
   }
   if (type === 'step') {
@@ -2101,7 +1874,9 @@ function reportEvent(event) {
     const remaining = battle.living('e');
     if (remaining.length && !remaining.some(enemy => battle.visible(enemy))) {
       resumeSearchInning = battle.inning;
-      commandLine('search');
+      const detail = '視界内に敵影なし。索敵を続行。';
+      if (pendingRolls.length) pendingJudgments.push(['索敵', detail]);
+      else addJudgment('索敵', detail);
     }
   }
 }
@@ -3012,15 +2787,12 @@ async function aiMoves(side) {
       direction = battle.aiDirection(unit, visited);
     }
     if (unit.side === 'f' && unit.order && unit.order !== 'hold' && unit.order !== 'onHill' && unit.alive) {
-      const voice = PILOT_RADIO[unit.pilot];
       const climbing = unit.order === 'hill';
       const reached = climbing && battle.map[unit.coord].t === '丘';
       const moved = unit.coord !== start;
-      const reply = reached ? voice.onHill : unit.noMove ? voice.immobile :
-        moved ? (climbing ? voice.climbing : voice.moved) : voice.blocked;
-      if (!unit.stunned) {
-        addLine(reply + ' ' + radioLocation(unit), unit.pilot);
-      }
+      const status = reached ? '丘に到着' : unit.noMove ? '移動不能' :
+        moved ? (climbing ? '丘へ移動中' : '移動完了') : '進路なし';
+      if (!unit.stunned) addJudgment(unit.pilot + 'の移動', status + ' ／ ' + radioLocation(unit));
       if (reached) unit.order = 'onHill';
       else if (!climbing && !unit.prepared) unit.order = null;
     }
@@ -3097,26 +2869,20 @@ function radioLocation(unit) {
   const to = hexPoint(unit.coord);
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  if (Math.hypot(dx, dy) < 160) return 'そちらの近くです。';
+  if (Math.hypot(dx, dy) < 160) return 'ガンダムの近く';
   const vertical = Math.abs(dy) > Math.abs(dx) * .45 ? (dy < 0 ? '上' : '下') : '';
   const horizontal = Math.abs(dx) > Math.abs(dy) * .45 ? (dx < 0 ? '左' : '右') : '';
-  return 'そちらから見て' + horizontal + vertical + 'の方です。';
+  return 'ガンダムから見て' + horizontal + vertical + 'の方角';
 }
 
 function statusReport(unit) {
   const contacts = battle.units.filter(other => other.alive && other.side !== unit.side &&
     battle.sight(unit.coord, other.coord)).length;
-  const kai = unit.pilot === 'カイ';
-  let response = (kai ? 'こちらカイ！' : 'こちら' + unit.pilot + '。') + radioLocation(unit);
-  if (unit.noAction) response += kai ? 'こいつじゃもう撃てねえ。' : 'すみません、攻撃できません。';
-  if (unit.noMove) response += PILOT_RADIO[unit.pilot].immobile;
-  response += contacts ? '敵機が ' + contacts + (kai ? ' 機見えるぜ。' : ' 機、見えます。') :
-    kai ? 'こっちからは敵が見えない。' : 'こちら、まだ敵影はありません。';
-  return response;
+  return [radioLocation(unit), unitCondition(unit), '視認した敵機 ' + contacts + '機'].join(' ／ ');
 }
 
 function squadRadio(message) {
-  addLine(message, 'アムロ');
+  addJudgment('無線指示', message);
   const allies = battle.units.filter(unit => unit.side === 'f' && unit !== battle.player);
   const text = message.normalize('NFKC');
   const names = text.replace(/[ぁ-ゖ]/g, kana => String.fromCharCode(kana.charCodeAt(0) + 0x60));
@@ -3136,24 +2902,23 @@ function squadRadio(message) {
 
   for (const unit of recipients) {
     if (!unit.alive || unit.stunned) {
-      addLine(unit.pilot + 'から応答がありません。', 'セイラ');
+      addJudgment(unit.pilot, '応答なし');
       continue;
     }
     if (askStatus && !order) {
-      addLine(statusReport(unit), unit.pilot);
+      addJudgment(unit.pilot, statusReport(unit));
       continue;
     }
-    const voice = PILOT_RADIO[unit.pilot];
     if (!order) {
-      addLine(voice.retry, unit.pilot);
+      addJudgment(unit.pilot, '指示を認識できません');
       continue;
     }
     if (unit.noMove && order !== 'hold') {
-      addLine(voice.immobile, unit.pilot);
+      addJudgment(unit.pilot, '移動不能');
       continue;
     }
     unit.order = order;
-    addLine(voice[order] ?? (voice.moving + DIRECTIONS_JA[order] + (unit.pilot === 'カイ' ? 'へ行くぜ。' : 'へ行きます。')), unit.pilot);
+    addJudgment(unit.pilot, RADIO_ORDERS[order] ?? DIRECTIONS_JA[order] + 'へ移動');
   }
   render();
 }
@@ -3202,8 +2967,7 @@ el('launchForm').addEventListener('submit', async event => {
   }
   startScreen.hidden = true;
   el('game').hidden = false;
-  commandLine('launch');
-  commandLine('ready');
+  playAnimeLines(JABRO_SORTIE_LINES);
   addJudgment('作戦開始', '第' + MAX_INNINGS + 'イニングの両軍手番終了で時間切れ。');
   reportContact();
   render(true);
