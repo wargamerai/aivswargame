@@ -347,7 +347,7 @@ body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans
 </div>
 
 <script src="data.js"></script>
-<script src="シナリオ.js?v=sho-drumlo"></script>
+<script src="シナリオ.js?v=sho-duel-machines"></script>
 <script src="qlearning.js"></script>
 <script>
 // ===== ゲーム状態 =====
@@ -547,9 +547,12 @@ function initGame() {
   let givenDefs = scenario.id === 'practice' ? buildPracticeFormation('given', cfg.practiceForces?.given) : [...(scenario.given || [])];
   let drakeDefs = scenario.id === 'practice' ? buildPracticeFormation('drake', cfg.practiceForces?.drake) : [...(scenario.drake || [])];
   if (duel) {
-    const eligiblePilots = ['バーン・バニングス', 'トッド・ギネス', 'ガラリア・ニャムヒー'];
-    const pilot = eligiblePilots[Math.floor(Math.random() * eligiblePilots.length)];
-    drakeDefs = [{ ...drakeDefs[0], pilot }];
+    const { rareLoadout, ...opponent } = drakeDefs[Math.floor(Math.random() * drakeDefs.length)];
+    if (rareLoadout && Math.random() < rareLoadout.chance) {
+      opponent.machine = rareLoadout.machine;
+      opponent.weapons = rareLoadout.weapons;
+    }
+    drakeDefs = [opponent];
   }
   if (scenario.gauntlet && scenario.gauntletBosses && scenario.gauntletBosses.length) {
     if (sessionStorage.getItem('campaignGauntletActive') !== '1') {

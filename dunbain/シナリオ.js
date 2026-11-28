@@ -26,7 +26,7 @@ const SCENARIOS = {
 
   duel_sho_drumlo: {
     id: 'duel_sho_drumlo',
-    name: 'ショウのダンバイン 対 ドラムロ',
+    name: 'ショウのダンバイン 一騎打ち',
     mapCols: 18,
     mapRows: 16,
     maxTurn: 10,
@@ -34,7 +34,18 @@ const SCENARIOS = {
       { pilot: 'ショウ・ザマ', machine: 'ダンバイン A', weapons: ['オーラソード', 'オーラショット'], x: 10, y: 11, dir: 0 },
     ],
     drake: [
-      { pilot: '一般兵', machine: 'ドラムロ B', weapons: [...CHART_WEAPONS_DRUMLO], x: 10, y: 5, dir: 3 },
+      {
+        pilot: 'バーン・バニングス', machine: 'ドラムロ B', weapons: [...CHART_WEAPONS_DRUMLO], x: 10, y: 5, dir: 3,
+        rareLoadout: { chance: 0.05, machine: 'ズワース', weapons: ['オーラソード', 'オーラショット'] },
+      },
+      {
+        pilot: 'トッド・ギネス', machine: 'ビアレス', weapons: ['オーラバルカン', '火焔砲'], x: 10, y: 5, dir: 3,
+        rareLoadout: { chance: 0.05, machine: 'ダンバイン A', weapons: ['オーラソード', 'オーラショット'] },
+      },
+      {
+        pilot: 'ガラリア・ニャムヒー', machine: 'バストール B', weapons: ['オーラソード', 'オーラショット'], x: 10, y: 5, dir: 3,
+        rareLoadout: { chance: 0.05, machine: 'ドロ', weapons: ['火焔砲'] },
+      },
     ],
   },
 
