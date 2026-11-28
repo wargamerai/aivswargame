@@ -64,7 +64,7 @@ function drawTitle() {
   $('lDiff').textContent = T('diffLabel');
   $('btnStart').textContent = T('start');
   $('toTop').textContent = T('backTop');
-  $('toTop').setAttribute('href', C.lang === 'en' ? '../en/index.html' : '../index1.html');
+  $('toTop').setAttribute('href', C.lang === 'en' ? '../en/home-6f3c9a82.html' : '../index1.html');
   $('lang_ja').classList.toggle('on', C.lang === 'ja');
   $('lang_en').classList.toggle('on', C.lang === 'en');
   $('modeBtns').innerHTML = '';

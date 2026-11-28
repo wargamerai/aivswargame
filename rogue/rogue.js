@@ -1537,7 +1537,7 @@ function drawChrome() {
   $('btnHelp').textContent = T('btnHelp');
   $('sheet').textContent = T('sheet');
   $('toTop').textContent = T('top');
-  $('toTop').setAttribute('href', lang === 'ja' ? '../index1.html' : '../en/index.html');
+  $('toTop').setAttribute('href', lang === 'ja' ? '../index1.html' : '../en/home-6f3c9a82.html');
 }
 function setLang(l) {
   if (!languages.includes(l)) return;
