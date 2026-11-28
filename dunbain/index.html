@@ -4,6 +4,13 @@
 <script defer src="../board-zoom.js"></script>
 <meta charset="UTF-8">
 <title>聖戦士ダンバイン - オーラバトラー</title>
+<script>
+  const isPracticeEntry = new URLSearchParams(window.location.search).get('scenarioId') === 'duel_sho_drumlo';
+  if (!isPracticeEntry) {
+    document.documentElement.hidden = true;
+    window.location.replace('sho-vs-drumlo.html');
+  }
+</script>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans-serif; display:flex; flex-direction:column; height:100vh; overflow:hidden; }
@@ -287,7 +294,7 @@ body { background:#1a1a2e; color:#eee; font-family:'Hiragino Sans','Meiryo',sans
       <button onclick="zoomMap(1)">&#43;</button>
       <button type="button" onclick="fitBoardOnScreen()" style="width:48px;">全体</button>
     </div>
-  <a class="debug-log-btn" href="scenario.html" id="scenarioBackLink" style="text-decoration:none;">シナリオ</a>
+  <a class="debug-log-btn" href="scenario.html" id="scenarioBackLink" style="text-decoration:none;" hidden>シナリオ</a>
   <button type="button" class="debug-log-btn" id="debugLogSaveBtn" title="デバッグ用・全ログをJSONでダウンロード">ログ保存</button>
   <button type="button" class="debug-log-btn" id="debugLogClearBtn" title="メモリ上のログバッファを空にする">ログ消去</button>
 </div>
@@ -489,6 +496,7 @@ const DIR_DY_ODD = [-1, 0, 1, 1, 1, 0];   // 奇数列(c%2==1)
 let simultaneousDamage = [];
 
 function initGame() {
+  if (!isPracticeEntry) return;
   simultaneousDamage = [];
   moveRevealPaths = null;
   if (victoryRedirectTimer) {
@@ -500,7 +508,7 @@ function initGame() {
     spectatorAutoExecuteTimer = null;
   }
   const cfg = JSON.parse(sessionStorage.getItem('dunbineConfig') || '{}');
-  const duel = new URLSearchParams(window.location.search).get('scenarioId') === 'duel_sho_drumlo';
+  const duel = isPracticeEntry;
   playerSide = duel ? 'given' : cfg.playerSide || 'given';
   spectatorMode = !duel && !!cfg.spectatorMode;
   try {
