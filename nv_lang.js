@@ -159,7 +159,7 @@
   }
   // ゲームの入口では、最初に画面の正面で言語を聞く（URL に lang= があるとき、この回で聞いたあとは聞かない）
   function askLanguage() {
-    if (window.top !== window || !/(f16ai\/scenario|ijn\/savo|ijn\/campaign|pf\/campaign)\.html$/.test(location.pathname)) { if (window.top === window) count(); return; }
+    if (window.top !== window || !/(f16ai-6f3c9a82\/scenario|ijn-6f3c9a82\/savo|ijn-6f3c9a82\/campaign|pf-6f3c9a82\/campaign)\.html$/.test(location.pathname)) { if (window.top === window) count(); return; }
     // ゲームの入口ごとに1回聞く（別のゲームへ移ったらまた聞く）
     const askKey = 'nvLangAsked:' + location.pathname;
     let asked = false;

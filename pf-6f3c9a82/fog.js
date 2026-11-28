@@ -1,7 +1,7 @@
 // fog.js — 戦場の霧の段階（ユーザーの独自ルール 2026-11-03）
 //   霧1: 敵は 大きさ（大・中・小）、火災、発砲、撃沈だけ分かる。結果は本当に当たったか分からない曖昧な表現
 //   霧2: さらに味方も、自分の乗っている艦（先頭の艦。沈んだら二番艦）以外は損害が分からない
-const FOG_PLAYER_SIDE = decodeURIComponent(location.pathname).includes('/pf/') ? 'us' : 'jp';
+const FOG_PLAYER_SIDE = decodeURIComponent(location.pathname).includes('/pf-6f3c9a82/') ? 'us' : 'jp';
 function fogSavedLevel() {
   try {
     const v = localStorage.getItem('fogLevel');

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>作戦司令室 (HQ)</title>
+    <!-- アクセス解析（GoatCounter） -->
+    <script defer src="game-analytics.js"></script>
+    <style>
+        :root {
+            --bg-color: #e9dfcc;
+            --panel-bg: #faf5e8;
+            --text-main: #312c28;
+            --text-muted: #5b5045;
+            --indigo: #263f52;
+            --indigo-hover: #34566c;
+            --button-text: #fff9ed;
+            --button-detail: #e4e9eb;
+            --border-color: #b8a88e;
+            --burgundy: #8f4051;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-image: repeating-linear-gradient(
+                45deg,
+                rgba(117, 89, 58, 0.05) 0px,
+                rgba(117, 89, 58, 0.05) 1px,
+                transparent 1px,
+                transparent 4px
+            );
+        }
+
+        .container {
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-top: 3px solid var(--burgundy);
+            border-radius: 4px;
+            padding: 40px;
+            width: 90%;
+            max-width: 900px;
+            text-align: center;
+            box-shadow: 0 6px 24px rgba(65, 48, 31, 0.14);
+        }
+
+        h1 {
+            color: var(--indigo);
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            letter-spacing: 3px;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: var(--text-muted);
+            margin-bottom: 40px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        .briefing-text {
+            text-align: left;
+            margin-bottom: 40px;
+            line-height: 1.6;
+            background-color: var(--bg-color);
+            padding: 20px;
+            border-left: 5px solid var(--burgundy);
+            font-family: monospace;
+            font-size: 1.4em;
+            color: var(--text-main);
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .theater-btn {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            text-decoration: none;
+            background-color: var(--indigo);
+            color: var(--button-text);
+            padding: 15px 30px;
+            font-size: 1.8em;
+            font-weight: bold;
+            border: 2px solid var(--indigo);
+            border-radius: 2px;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 2px 4px rgba(38, 63, 82, 0.16);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            font-family: inherit;
+            text-align: center;
+        }
+
+        .theater-btn:hover {
+            background-color: var(--indigo-hover);
+            border-color: var(--indigo-hover);
+            transform: translateY(-2px);
+            box-shadow: inset 4px 0 var(--burgundy), 0 4px 8px rgba(38, 63, 82, 0.20);
+        }
+
+        .theater-btn:focus-visible {
+            outline: 3px solid var(--burgundy);
+            outline-offset: 3px;
+        }
+
+        .theater-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 2px rgba(38, 63, 82, 0.20);
+        }
+
+        .theater-btn span {
+            display: block;
+            font-size: 0.5em;
+            font-weight: normal;
+            color: var(--button-detail);
+            margin-top: 5px;
+            letter-spacing: 1px;
+        }
+
+        .publisher-section,
+        .journal-section {
+            margin-top: 36px;
+            padding-top: 18px;
+            border-top: 2px solid var(--border-color);
+        }
+
+        .publisher-section h2,
+        .journal-section h2 {
+            margin: 0 0 16px;
+            color: var(--indigo);
+            font-size: 1.4em;
+        }
+    </style>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="9941d848-0f49-4aac-a8b1-adaa766abfcd"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>作戦司令室 (HQ)</h1>
+
+
+    <div class="btn-group">
+        <a href="africa-corps-6f3c9a82.html" class="theater-btn" target="_blank" rel="noopener">
+            軍団級アフリカ戦線
+        </a>
+
+        <a href="harpoon-6f3c9a82.html" class="theater-btn" target="_blank" rel="noopener">
+            ハープーン・ライト
+        </a>
+
+        <a href="sanngikushi-6f3c9a82/index.html" class="theater-btn" target="_blank" rel="noopener">
+            孤高の曹操
+            <span>建安元年</span>
+        </a>
+
+        <a href="nobunaga-6f3c9a82/index.html" class="theater-btn" target="_blank" rel="noopener">
+            孤高の信長
+            <span>一五七〇</span>
+        </a>
+
+        <a href="montysmelancholy-6f3c9a82/index.html" class="theater-btn" target="_blank" rel="noopener">
+            モントゴメリーの憂鬱
+            <span>Monty's Melancholy</span>
+        </a>
+
+        <a href="pfb-6f3c9a82/index.html" class="theater-btn" target="_blank" rel="noopener">
+            PFB プロ野球 2026
+            <span>Professional Baseball 2026</span>
+        </a>
+
+
+        <a href="panzer-waffe-west-6f3c9a82/index.html" class="theater-btn" target="_blank" rel="noopener">
+            Panzer Waffe West
+        </a>
+    </div>
+
+    <section class="publisher-section" aria-labelledby="kokusai-tsushinsha">
+        <h2 id="kokusai-tsushinsha">国際通信社</h2>
+        <div class="btn-group">
+            <a href="postcard-games/graf-spee-6f3c9a82.html?lang=ja" class="theater-btn" target="_blank" rel="noopener">
+                シュペー号追撃戦
+                <span>イギリス対ドイツAI</span>
+            </a>
+
+            <a href="postcard-games/bismarck-6f3c9a82.html?lang=ja" class="theater-btn" target="_blank" rel="noopener">
+                ビスマルク号を撃沈せよ
+                <span>イギリス対ドイツAI</span>
+            </a>
+
+            <a href="postcard-games/stalingrad-6f3c9a82.html?lang=ja" class="theater-btn" target="_blank" rel="noopener">
+                スターリングラード
+                <span>ドイツ対ソ連AI</span>
+            </a>
+
+            <a href="postcard-games/national-liberation-if-6f3c9a82.html?lang=ja" class="theater-btn" target="_blank" rel="noopener">
+                祖国解放戦争IF
+                <span>人間対人間・AI対AI</span>
+            </a>
+
+            <a id="dokuso-link" href="dokuso-6f3c9a82/game.html?lang=ja" class="theater-btn" target="_blank" rel="noopener">
+                独ソ電撃戦
+                <span>Operation Barbarossa</span>
+            </a>
+
+            <a href="panzergrenadier-6f3c9a82/title.html" class="theater-btn" target="_blank" rel="noopener">
+                装甲擲弾兵
+                <span>Panzer Grenadier</span>
+            </a>
+
+            <a href="f16ai-6f3c9a82/scenario.html" class="theater-btn" target="_blank" rel="noopener">
+                F-16
+                <span>F-16 Air Combat Simulator</span>
+            </a>
+
+            <a href="ijn-6f3c9a82/savo.html" class="theater-btn" target="_blank" rel="noopener">
+                サボ島沖海戦
+                <span>Battle of Cape Esperance (1942)</span>
+            </a>
+
+            <a href="ijn-6f3c9a82/campaign.html" class="theater-btn" target="_blank" rel="noopener">
+                連合艦隊
+                <span>Grand Fleet (IJN)</span>
+            </a>
+
+            <a href="pf-6f3c9a82/campaign.html" class="theater-btn" target="_blank" rel="noopener">
+                太平洋艦隊
+                <span>Pacific Fleet (USN)</span>
+            </a>
+
+            <a href="tanks-plus-6f3c9a82/hub.html" class="theater-btn" target="_blank" rel="noopener">
+                TANKS+
+                <span>Tactical Armor Combat</span>
+            </a>
+
+            <a href="buldge-6f3c9a82/bulge.html" class="theater-btn" target="_blank" rel="noopener">
+                バルジの戦い
+                <span>Panzers in the Snow (1944)</span>
+            </a>
+
+            <a href="battleofnomonhan-6f3c9a82/nomonhan.html" class="theater-btn" target="_blank" rel="noopener">
+                ノモンハン
+                <span>Nomonhan Incident (1939)</span>
+            </a>
+
+        </div>
+    </section>
+
+    <section class="journal-section" aria-labelledby="game-journal">
+        <h2 id="game-journal">ゲームジャーナル</h2>
+        <div class="btn-group">
+            <a href="nobunaga-gj-6f3c9a82/index.html" class="theater-btn" target="_blank" rel="noopener">
+                孤高の信長
+                <span>GJ版 · パスワード付き</span>
+            </a>
+
+            <a id="monty-password-link" href="montysmelancholy-password-6f3c9a82/index.html?lang=ja" class="theater-btn" target="_blank" rel="noopener">
+                モントゴメリーの憂鬱
+                <span>パスワード版</span>
+            </a>
+
+            <a href="bulge-ai-6f3c9a82/index.html" class="theater-btn" target="_blank" rel="noopener">
+                激突！バルジ突破作戦
+                <span>同じ端末での人間対人間</span>
+            </a>
+
+        </div>
+    </section>
+</div>
+
+</body>
+</html>
