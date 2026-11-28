@@ -541,7 +541,7 @@ function initGame() {
   let givenDefs = scenario.id === 'practice' ? buildPracticeFormation('given', cfg.practiceForces?.given) : [...(scenario.given || [])];
   let drakeDefs = scenario.id === 'practice' ? buildPracticeFormation('drake', cfg.practiceForces?.drake) : [...(scenario.drake || [])];
   if (duel) {
-    const eligiblePilots = Object.keys(PILOTS).filter(name => PILOTS[name].side === 'drake' || name === '一般兵');
+    const eligiblePilots = ['バーン・バニングス', 'トッド・ギネス', 'ガラリア・ニャムヒー'];
     const pilot = eligiblePilots[Math.floor(Math.random() * eligiblePilots.length)];
     drakeDefs = [{ ...drakeDefs[0], pilot }];
   }
